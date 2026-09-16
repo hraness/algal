@@ -644,6 +644,75 @@ describe("scheduler", () => {
     expect(ctx.cells?.prep?.outputs?.value).toBe("SEED: seed");
   });
 
+  test("view.cells port slicing limits which ancestor outputs enter context", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:vcslice",
+      name: "VcSlice",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "text", secret: "text" } },
+        {
+          id: "brain",
+          kind: "agent",
+          inputs: { v: "text" },
+          prompt: "p",
+          view: { inputs: "*", cells: [{ cell: "src", ports: ["v"] }] },
+          output: { kind: "text" },
+        },
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "brain", port: "v" } },
+      ],
+    });
+    let captured: JsonValue | undefined;
+    const receipt = await runOrganism({
+      manifest: m,
+      args: { src: { v: "shown", secret: "hidden" } },
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [{
+        id: "capture",
+        async execute(req) {
+          captured = req.context as unknown as JsonValue;
+          return "ok";
+        },
+      }],
+    });
+    expect(receipt.outcome).toBe("complete");
+    const ctx = captured as {
+      cells: { src: { outputs: Record<string, JsonValue> } };
+    };
+    expect(ctx.cells.src.outputs).toEqual({ v: "shown" });
+    // admission rejects a slice naming a port the ancestor lacks
+    await expect(
+      runOrganism({
+        manifest: manifest({
+          contract: "morphogen.organism.v1",
+          key: "organism:vcslice-bad",
+          name: "Bad",
+          cells: [
+            { id: "src", kind: "input", outputs: { v: "text" } },
+            {
+              id: "brain",
+              kind: "agent",
+              inputs: { v: "text" },
+              prompt: "p",
+              view: { inputs: "*", cells: [{ cell: "src", ports: ["nope"] }] },
+              output: { kind: "text" },
+            },
+          ],
+          edges: [
+            { from: { cell: "src", port: "v" }, to: { cell: "brain", port: "v" } },
+          ],
+        }),
+        args: { src: { v: "x" } },
+        fns: builtinRegistry(),
+        store: new MemoryStore(),
+        executors: [],
+      }),
+    ).rejects.toThrowError(/not an output port/);
+  });
+
   test("view.cells rejects non-ancestor and unknown cells", async () => {
     // sibling commits before "brain" in declared order but is not an ancestor
     const m = manifest({

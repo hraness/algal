@@ -68,12 +68,14 @@ canonicalized, hashed, and embedded. It can never carry code.
 - `view.inputs` selects which declared inputs enter the effect request context
   (`"*"` or a list of declared names). The context is canonical JSON
   `{inputs, note?, cells?, turn, toolLog?}`, byte-bounded before dispatch.
-- `view.cells` (optional, ≤ 16 unique ids) names ancestor cells of the same
-  organism scope. Their committed records —
-  `{status, outputs?}`, or `null` if absent — enter the context under
-  `context.cells.<id>`. Admission rejects unknown ids and any cell that is not
-  an ancestor, so every record exists before the viewer activates. This is how
-  an agent reads beyond its own inputs: the graph declares the slice.
+- `view.cells` (optional, ≤ 16 unique entries) names ancestor cells of the
+  same organism scope. Each entry is a cell id `"prep"` or a slice
+  `{"cell":"prep","ports":["value"]}` limiting which output ports enter the
+  context. Their committed records — `{status, outputs?}`, or `null` if
+  absent — appear under `context.cells.<id>`. Admission rejects unknown ids,
+  non-ancestors, and ports the ancestor does not declare, so every record
+  exists before the viewer activates. This is how an agent reads beyond its
+  own inputs: the graph declares the slice.
 - `output` is `{"kind":"text"}`, `{"kind":"json","schema":{…}}` (a bounded
   schema subset: `type`, `required`, `properties`, depth ≤ 4), or
   `{"kind":"choice","labels":[…],"onMiss"?}`.

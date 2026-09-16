@@ -419,18 +419,26 @@ export async function compileOrganism(
     }
     if (cell.view.cells?.length) {
       const ancestors = ancestorsOf(cell.id);
-      for (const id of cell.view.cells) {
-        if (!ports.has(id)) {
+      for (const cv of cell.view.cells) {
+        if (!ports.has(cv.cell)) {
           throw new MorphogenError(
             "MANIFEST_INVALID",
-            `cell "${cell.id}" view.cells references unknown cell "${id}"`,
+            `cell "${cell.id}" view.cells references unknown cell "${cv.cell}"`,
           );
         }
-        if (!ancestors.has(id)) {
+        if (!ancestors.has(cv.cell)) {
           throw new MorphogenError(
             "MANIFEST_INVALID",
-            `cell "${cell.id}" view.cells names "${id}", which is not an ancestor — its record would not exist at activation`,
+            `cell "${cell.id}" view.cells names "${cv.cell}", which is not an ancestor — its record would not exist at activation`,
           );
+        }
+        for (const p of cv.ports ?? []) {
+          if (!ports.get(cv.cell)!.outputs[p]) {
+            throw new MorphogenError(
+              "MANIFEST_INVALID",
+              `cell "${cell.id}" view.cells names port "${cv.cell}.${p}", which is not an output port`,
+            );
+          }
         }
       }
     }

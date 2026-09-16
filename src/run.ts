@@ -409,14 +409,20 @@ async function activate(
         : "";
       const cellView: JsonObject | undefined = cell.view.cells?.length
         ? Object.fromEntries(
-            cell.view.cells.map((id) => {
-              const rec = ctx.cells[scope ? `${scope}/${id}` : id];
+            cell.view.cells.map((cv) => {
+              const rec = ctx.cells[scope ? `${scope}/${cv.cell}` : cv.cell];
+              let outputs = rec?.outputs;
+              if (outputs && cv.ports) {
+                outputs = Object.fromEntries(
+                  Object.entries(outputs).filter(([p]) => cv.ports!.includes(p)),
+                );
+              }
               return [
-                id,
+                cv.cell,
                 rec
                   ? {
                       status: rec.status,
-                      ...(rec.outputs ? { outputs: rec.outputs } : {}),
+                      ...(outputs ? { outputs } : {}),
                     }
                   : null,
               ] as [string, JsonValue];

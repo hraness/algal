@@ -34,8 +34,9 @@ hint carried through verbatim; honoring it is the executor's business.
 
 `context.cells` appears only when the cell's `view.cells` declares ancestor
 cells; each entry is the ancestor's committed record (`status`, `outputs?`)
-or `null`. It is part of the bounded, canonical request — the same bytes the
-digest signs.
+or `null`. A sliced entry `{"cell":"prep","ports":["value"]}` sends only the
+named outputs. It is part of the bounded, canonical request — the same bytes
+the digest signs.
 
 The response binds to `output` before it can feed edges:
 

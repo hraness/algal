@@ -90,12 +90,15 @@ export type CellBudget = {
   maxTurns?: number;
 };
 
+export type CellView = { cell: string; ports?: PortName[] };
+
 export type AgentView = {
   inputs: "*" | PortName[];
   /** Ancestor cell ids whose records (status + committed outputs) enter the
    * context under `cells`. Ancestor-only: the manifest is rejected when a
-   * named cell cannot have resolved before this cell activates. */
-  cells?: string[];
+   * named cell cannot have resolved before this cell activates. `ports`
+   * slices the ancestor's outputs; absent means all ports. */
+  cells?: CellView[];
   note?: string;
 };
 
@@ -356,18 +359,40 @@ function parseView(u: unknown, what: string): AgentView {
     );
   }
   const cellsRaw = optField(obj, "cells");
-  let cells: string[] | undefined;
+  let cells: CellView[] | undefined;
   if (cellsRaw !== undefined) {
-    cells = asArray(cellsRaw, `${what}.cells`).map((n, i) =>
-      asSafeId(n, `${what}.cells[${i}]`),
-    );
+    cells = asArray(cellsRaw, `${what}.cells`).map((n, i) => {
+      const at = `${what}.cells[${i}]`;
+      if (typeof n === "string") return { cell: asSafeId(n, at) };
+      const e = asObject(n, at);
+      noUnknownKeys(e, ["cell", "ports"], at);
+      const cv: CellView = {
+        cell: asSafeId(reqField(e, "cell", at), `${at}.cell`),
+      };
+      const ps = optField(e, "ports");
+      if (ps !== undefined) {
+        cv.ports = asArray(ps, `${at}.ports`).map((p, j) =>
+          asSafeId(p, `${at}.ports[${j}]`),
+        );
+        if (cv.ports.length === 0 || cv.ports.length > BOUNDS.maxInterfacePorts) {
+          throw new MorphogenError(
+            "PARSE_FAILED",
+            `${at}.ports must have 1..${BOUNDS.maxInterfacePorts} entries`,
+          );
+        }
+        if (new Set(cv.ports).size !== cv.ports.length) {
+          throw new MorphogenError("PARSE_FAILED", `${at}.ports must be unique`);
+        }
+      }
+      return cv;
+    });
     if (cells.length === 0 || cells.length > BOUNDS.maxViewCells) {
       throw new MorphogenError(
         "PARSE_FAILED",
         `${what}.cells must have 1..${BOUNDS.maxViewCells} entries`,
       );
     }
-    if (new Set(cells).size !== cells.length) {
+    if (new Set(cells.map((c) => c.cell)).size !== cells.length) {
       throw new MorphogenError("PARSE_FAILED", `${what}.cells must be unique`);
     }
   }
@@ -966,7 +991,11 @@ function portTypeJson(p: PortType): JsonObject {
 
 function viewJson(v: AgentView): JsonObject {
   const o: JsonObject = { inputs: v.inputs === "*" ? "*" : v.inputs };
-  if (v.cells) o.cells = v.cells;
+  if (v.cells) {
+    o.cells = v.cells.map((c) =>
+      c.ports === undefined ? c.cell : { cell: c.cell, ports: c.ports },
+    );
+  }
   if (v.note !== undefined) o.note = v.note;
   return o;
 }

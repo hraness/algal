@@ -102,11 +102,20 @@ describe("view.cells and repeat parsing", () => {
 
   test("view.cells round-trips through manifestToJson", () => {
     const m = parseOrganismManifest(agent({ cells: ["src"] }));
-    expect(m.cells[1]!.kind === "agent" && m.cells[1]!.view.cells).toEqual(["src"]);
-    const reparsed = parseOrganismManifest(manifestToJson(m));
+    expect(m.cells[1]!.kind === "agent" && m.cells[1]!.view.cells)
+      .toEqual([{ cell: "src" }]);
+    // bare strings serialize back as bare strings; sliced entries keep ports
+    const sliced = parseOrganismManifest(
+      agent({ cells: [{ cell: "src", ports: ["v"] }] }),
+    );
+    const reparsed = parseOrganismManifest(manifestToJson(sliced));
     expect(
       reparsed.cells[1]!.kind === "agent" && reparsed.cells[1]!.view.cells,
-    ).toEqual(["src"]);
+    ).toEqual([{ cell: "src", ports: ["v"] }]);
+    const reparsedBare = parseOrganismManifest(manifestToJson(m));
+    expect(
+      reparsedBare.cells[1]!.kind === "agent" && reparsedBare.cells[1]!.view.cells,
+    ).toEqual([{ cell: "src" }]);
   });
 
   test("view.cells rejects duplicates, bad ids, and over-bound lists", () => {

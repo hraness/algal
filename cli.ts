@@ -40,6 +40,8 @@ usage:
       --write                                 persist manifest + receipt under --dir
   morphogen check <manifest.json> [--modules <dir>] [--dir <path>]
                                               admit a manifest without running it
+  morphogen explain <manifest.json> [--modules <dir>] [--dir <path>]
+                                              print the compiled signature: resolved ports, guards
   morphogen verify <receipt.json> [manifest.json] [--modules <dir>] [--dir <path>]
                                               re-run with recorded receipts and compare;
                                               manifest resolves from the store when omitted
@@ -182,6 +184,55 @@ async function main(): Promise<number> {
         digest: digestCanonical(manifestToJson(manifest)),
         cells: compiled.manifest.cells.map((c) => ({ id: c.id, kind: c.kind })),
         edges: compiled.manifest.edges.length,
+      });
+      return 0;
+    }
+
+    case "explain": {
+      const file = positional[0];
+      if (!file) {
+        usageError("morphogen explain <manifest.json> [--modules <dir>]");
+      }
+      if (flags.modules !== undefined) {
+        const n = await loadModules(String(flags.modules), store);
+        diag(`loaded ${n} module(s) from ${flags.modules}`);
+      }
+      const manifest = parseOrganismManifest(await readJson(resolve(file)));
+      const compiled = await compileOrganism(manifest, fns, store);
+      const ptJson = (p: {
+        type: string;
+        optional?: boolean;
+        many?: boolean;
+        labels?: string[];
+      }): JsonValue => {
+        const o: JsonObject = { type: p.type };
+        if (p.optional) o.optional = true;
+        if (p.many) o.many = true;
+        if (p.labels) o.labels = p.labels;
+        return o as JsonValue;
+      };
+      const cells: JsonObject = {};
+      for (const c of compiled.manifest.cells) {
+        const sig = compiled.ports.get(c.id)!;
+        cells[c.id] = {
+          kind: c.kind,
+          inputs: Object.fromEntries(
+            Object.entries(sig.inputs).map(([k, v]) => [k, ptJson(v)]),
+          ),
+          outputs: Object.fromEntries(
+            Object.entries(sig.outputs).map(([k, v]) => [k, ptJson(v)]),
+          ),
+        };
+      }
+      out({
+        key: manifest.key,
+        digest: digestCanonical(manifestToJson(manifest)),
+        cells,
+        edges: manifest.edges.map((e) => ({
+          from: `${e.from.cell}.${e.from.port}`,
+          to: `${e.to.cell}.${e.to.port}`,
+          ...(e.guard ? { guard: { equals: e.guard.equals } } : {}),
+        })),
       });
       return 0;
     }

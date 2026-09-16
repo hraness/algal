@@ -26,11 +26,12 @@ convention. The check happens at admission — an invalid graph never runs.
 **Context is a view, not a stuffing.** An agent cell declares which of its
 inputs enter the effect request (`view.inputs`), and may also name ancestor
 cells (`view.cells`) whose committed records join the request under
-`context.cells`. Admission rejects non-ancestors, so a cell can never read a
-record that has not committed — the graph declares the slice, and the
-executor sees exactly those bytes, bounded. A composable view language over
-the whole program graph remains deferred; v1 views are per-cell and
-ancestor-only.
+`context.cells` — an entry may slice to named ports, so a producer's secret
+output never reaches a consumer that doesn't need it. Admission rejects
+non-ancestors and undeclared ports, so a cell can never read a record that
+has not committed — the graph declares the slice, and the executor sees
+exactly those bytes, bounded. A composable view language over the whole
+program graph remains deferred; v1 views are per-cell and ancestor-only.
 
 **Agents call back through declared tools.** `cell.tools` names registry fns
 the executor may invoke mid-activation; a `{"tool","inputs"}` response runs

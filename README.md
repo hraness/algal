@@ -88,9 +88,11 @@ bun run cli diff .morphogen/runs/<a>.json .morphogen/runs/<b>.json
 ```
 
 `check` admits a manifest without running it: parse, graph validation, and
-interface resolution only. Organisms that embed others resolve sub-manifests
-by digest from the store; `--modules <dir>` loads a directory of
-`*.morphogen.json` files first.
+interface resolution only. `explain` prints the compiled signature — every
+cell's resolved input/output ports (including ports inherited from embedded
+organisms, `repeat`, and `each`) and the guard on every edge. Organisms that
+embed others resolve sub-manifests by digest from the store; `--modules <dir>`
+loads a directory of `*.morphogen.json` files first.
 
 To go live, point `--executor-cmd` at any program that reads an effect request
 (JSON) on stdin and prints the model's output on stdout. Morphogen does not
@@ -111,9 +113,10 @@ broker provider access; the executor seam is where provider auth lives.
   `onMiss` is declared.
 - An agent cell's context is declared, not ambient: `view.inputs` selects its
   edge-fed inputs, and `view.cells` names ancestor cells whose committed
-  records join the request under `context.cells`. Admission rejects
-  non-ancestors, so an agent can never read a cell that hasn't run — the
-  graph decides what the model sees.
+  records join the request under `context.cells` — optionally sliced to named
+  ports. Admission rejects non-ancestors and undeclared ports, so an agent
+  can never read a cell that hasn't run — the graph decides what the model
+  sees.
 - An agent cell may declare `tools`: a bounded list of registry fns the
   executor may call back mid-activation. A `{"tool","inputs"}` response runs
   the fn, appends to the request's `toolLog`, and re-issues the request —
