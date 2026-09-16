@@ -44,6 +44,7 @@ canonicalized, hashed, and embedded. It can never carry code.
 | `gate` | approval point — a `choice` effect routed to a human/policy, not a model | same as agent; no `tools`/`shadow` |
 | `organism` | embedded sub-manifest by `sha256:` digest | inherited from the sub-manifest `interface` |
 | `repeat` | bounded re-run of a digest-embedded sub-manifest | inherited from the sub-manifest `interface` |
+| `each` | map a delivered list through a digest-embedded sub-manifest | `over` accepts one `json` edge carrying the list; other interface inputs pass through; interface outputs become lists |
 
 ### agent / classifier / gate fields
 
@@ -124,6 +125,33 @@ canonicalized, hashed, and embedded. It can never carry code.
 - The cell record carries `rounds` when more than one round ran. All run
   budgets — steps, agent calls, work — are root-owned across every round.
 
+### each cells
+
+```json
+{
+  "id": "map",
+  "kind": "each",
+  "manifest": "sha256:…",
+  "over": "q",
+  "maxItems": 8
+}
+```
+
+- `manifest` is the `sha256:` digest of a sub-manifest that declares an
+  `interface`. `over` names an interface input; the each cell's `over` port
+  accepts a single `json` edge whose delivered value must be a list.
+- The sub-manifest runs once per element — item *n*'s cells record under
+  `map/i<n>/…` — with `over` bound to the element (checked against the inner
+  input port's declared type) and the cell's other inputs passed through.
+- `maxItems` is 1–64; a delivered list longer than `maxItems` fails the cell
+  (`BUDGET_EXHAUSTED`).
+- Each interface output becomes a list port (`many` producer) collecting the
+  per-item values in item order; items whose inner output skipped contribute
+  nothing. A `many` producer feeding a `many` consumer flattens element-wise;
+  feeding a scalar consumer it binds only when the consumer is `json`.
+- The cell record carries `items` (the element count). All run budgets are
+  root-owned across every item.
+
 ## Edges
 
 ```json
@@ -162,8 +190,9 @@ canonicalized, hashed, and embedded. It can never carry code.
   under `outer/inner` paths. A manifest can never contain its own digest, so
   embedding graphs are acyclic by construction.
 - `repeat` cells run their sub-manifest up to `maxRounds` times, each round
-  recording under `loop/r<n>/…`. Iteration is the only re-entry v1 admits:
-  the edge graph itself stays acyclic.
+  recording under `loop/r<n>/…`; `each` cells run theirs once per list
+  element under `map/i<n>/…`. Iteration and fan-out are the only re-entry
+  v1 admits: the edge graph itself stays acyclic.
 - A run ends `complete`, `failed` (first failure wins, recorded), or `stuck`
   (pending cells remain but none can resolve).
 
@@ -193,7 +222,7 @@ edges. A miss on a `choice` output resolves to `onMiss` or fails the run.
 
 A receipt records `manifestDigest`, `args`, `outcome`, per-cell records
 (`committed | skipped | failed`, outputs, `effectDigest`, `toolCalls`,
-`shadowOut`, `rounds`), the
+`shadowOut`, `rounds`, `items`), the
 `effects` list (`requestDigest`, raw `output`, `executor` id, optional usage),
 the bounded `events` log, the work ledger, and `failure` detail. `digest` is
 over the canonical receipt minus itself.

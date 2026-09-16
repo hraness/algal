@@ -945,6 +945,106 @@ describe("scheduler", () => {
     expect(ctx.inputs.notes).toEqual(["n1", "n2"]);
   });
 
+  test("each maps a list through a sub-manifest and flattens into many", async () => {
+    const store = new MemoryStore();
+    const inner = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:rate-one",
+      name: "RateOne",
+      interface: {
+        inputs: { item: { cell: "in", port: "item" } },
+        outputs: { note: { cell: "rater", port: "out" } },
+      },
+      cells: [
+        { id: "in", kind: "input", outputs: { item: "text" } },
+        {
+          id: "rater",
+          kind: "agent",
+          inputs: { item: "text" },
+          prompt: "Rate the item.",
+          output: { kind: "text" },
+        },
+      ],
+      edges: [
+        { from: { cell: "in", port: "item" }, to: { cell: "rater", port: "item" } },
+      ],
+    });
+    const d = await store.putManifest(inner);
+    const outer = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:batch",
+      name: "Batch",
+      cells: [
+        { id: "src", kind: "input", outputs: { items: "json" } },
+        { id: "map", kind: "each", manifest: d, over: "item", maxItems: 8 },
+        { id: "join", kind: "fn", fn: "join.v1" },
+      ],
+      edges: [
+        { from: { cell: "src", port: "items" }, to: { cell: "map", port: "item" } },
+        { from: { cell: "map", port: "note" }, to: { cell: "join", port: "items" } },
+      ],
+    });
+    const receipt = await runOrganism({
+      manifest: outer,
+      args: { src: { items: ["a", "b", "c"] } },
+      fns: builtinRegistry(),
+      store,
+      executors: [scriptedExecutor({ rater: ["A+", "B-", "C"] })],
+    });
+    expect(receipt.outcome).toBe("complete");
+    expect(receipt.cells["map"]?.items).toBe(3);
+    expect(receipt.cells["map"]?.outputs?.note).toEqual(["A+", "B-", "C"]);
+    expect(receipt.cells["map/i1/in"]?.outputs?.item).toBe("b");
+    // many -> many flattens: join sees the three notes, not one list
+    expect(receipt.cells["join"]?.outputs?.value).toBe("A+\nB-\nC");
+    expect(receipt.work.agentCalls).toBe(3);
+  });
+
+  test("each enforces maxItems and element types", async () => {
+    const store = new MemoryStore();
+    const inner = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:one",
+      name: "One",
+      interface: {
+        inputs: { item: { cell: "in", port: "item" } },
+        outputs: { v: { cell: "in", port: "item" } },
+      },
+      cells: [{ id: "in", kind: "input", outputs: { item: "text" } }],
+    });
+    const d = await store.putManifest(inner);
+    const outer = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:batcher",
+      name: "Batcher",
+      cells: [
+        { id: "src", kind: "input", outputs: { items: "json" } },
+        { id: "map", kind: "each", manifest: d, over: "item", maxItems: 2 },
+      ],
+      edges: [
+        { from: { cell: "src", port: "items" }, to: { cell: "map", port: "item" } },
+      ],
+    });
+    const over = await runOrganism({
+      manifest: outer,
+      args: { src: { items: ["a", "b", "c"] } },
+      fns: builtinRegistry(),
+      store,
+      executors: [],
+    });
+    expect(over.outcome).toBe("failed");
+    expect(over.failure?.code).toBe("BUDGET_EXHAUSTED");
+    const bad = await runOrganism({
+      manifest: outer,
+      args: { src: { items: ["a", 42] } },
+      fns: builtinRegistry(),
+      store,
+      executors: [],
+    });
+    expect(bad.outcome).toBe("failed");
+    expect(bad.failure?.code).toBe("TYPE_MISMATCH");
+  });
+
   test("unresolvable cells produce a stuck outcome", async () => {
     // two pending cells blocked behind a skipped branch with a required input
     const m = manifest({

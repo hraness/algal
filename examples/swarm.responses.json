@@ -1,0 +1,7 @@
+{
+  "researcher": [
+    "A morphogen is the signal that gives cells their structure.",
+    "Manifests are data so they can be checked, hashed, and embedded.",
+    "Model auth lives at the executor boundary, never in the manifest."
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "contract": "morphogen.organism.v1",
+  "key": "organism:swarm-inner",
+  "name": "Answer one question",
+  "note": "The unit of work the swarm maps over: one question in, one answer out.",
+  "interface": {
+    "inputs": { "q": { "cell": "in", "port": "q" } },
+    "outputs": { "answer": { "cell": "researcher", "port": "out" } }
+  },
+  "cells": [
+    { "id": "in", "kind": "input", "outputs": { "q": "text" } },
+    {
+      "id": "researcher",
+      "kind": "agent",
+      "inputs": { "q": "text" },
+      "prompt": "Answer the question in one sentence.",
+      "output": { "kind": "text" }
+    }
+  ],
+  "edges": [
+    { "from": { "cell": "in", "port": "q" }, "to": { "cell": "researcher", "port": "q" } }
+  ]
+}

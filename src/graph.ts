@@ -134,6 +134,30 @@ export function cellSignature(
       }
       return sig;
     }
+    case "each": {
+      const sub = children.get(cell.id);
+      if (!sub?.manifest.interface) {
+        throw new MorphogenError(
+          "INTERFACE_MISMATCH",
+          `each cell "${cell.id}" requires a sub-manifest with an interface`,
+        );
+      }
+      const iface = sub.manifest.interface;
+      const sig = interfaceSignature(cell.id, sub);
+      if (!iface.inputs[cell.over]) {
+        throw new MorphogenError(
+          "INTERFACE_MISMATCH",
+          `each cell "${cell.id}" over "${cell.over}" is not an interface input of "${sub.manifest.key}"`,
+        );
+      }
+      // the over port receives the whole list as a single json value
+      sig.inputs[cell.over] = { type: "json" };
+      // every interface output becomes a list of per-item results
+      for (const name of Object.keys(sig.outputs)) {
+        sig.outputs[name] = { ...sig.outputs[name]!, many: true };
+      }
+      return sig;
+    }
   }
 }
 
@@ -205,8 +229,13 @@ export function agentOutputPortType(o: {
   }
 }
 
-/** producer → consumer compatibility. */
+/** producer → consumer compatibility. A `many` producer carries a list:
+ * it feeds a `many` consumer element-wise (the edge flattens) or a `json`
+ * consumer as a whole list value; scalar non-json consumers reject it. */
 export function portCompatible(producer: PortType, consumer: PortType): boolean {
+  if (producer.many && !consumer.many && consumer.type !== "json") {
+    return false;
+  }
   if (consumer.type === "json") return true;
   if (producer.type === consumer.type) {
     if (producer.type === "choice" && consumer.type === "choice") {
@@ -250,7 +279,7 @@ export async function compileOrganism(
   // construction
   const children = new Map<string, CompiledOrganism>();
   for (const cell of manifest.cells) {
-    if (cell.kind !== "organism" && cell.kind !== "repeat") continue;
+    if (cell.kind !== "organism" && cell.kind !== "repeat" && cell.kind !== "each") continue;
     const digest = asDigest(cell.manifest, `cell "${cell.id}".manifest`);
     const sub = await store.getManifest(digest);
     if (!sub) {
@@ -450,9 +479,10 @@ export async function compileOrganism(
 }
 
 function describePort(p: PortType): string {
-  return p.type === "choice"
+  const t = p.type === "choice"
     ? `choice(${p.labels ? p.labels.join("|") : "*"})`
     : p.type;
+  return p.many ? `${t}[]` : t;
 }
 
 export function ifaceOrEmpty(i: OrganismInterface | undefined): OrganismInterface {

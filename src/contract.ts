@@ -40,6 +40,7 @@ export const BOUNDS = {
   maxTurns: 16,
   maxViewCells: 16,
   maxRounds: 16,
+  maxEachItems: 64,
   maxPortNameLen: 64,
   maxSteps: 1024,
   maxAgentCalls: 64,
@@ -132,6 +133,13 @@ export type Cell =
       maxRounds: number;
       carry?: Record<string, string>;
       until?: { output: string; equals: string };
+    }
+  | {
+      id: string;
+      kind: "each";
+      manifest: Digest;
+      over: PortName;
+      maxItems: number;
     }
   | {
       id: string;
@@ -508,6 +516,25 @@ function parseCell(u: unknown, what: string): Cell {
       }
       return cell;
     }
+    case "each": {
+      noUnknownKeys(obj, ["id", "kind", "manifest", "over", "maxItems"], what);
+      return {
+        id,
+        kind,
+        manifest: asString(
+          reqField(obj, "manifest", what),
+          `${what}.manifest`,
+          72,
+        ) as Digest,
+        over: asSafeId(reqField(obj, "over", what), `${what}.over`),
+        maxItems: asInt(
+          reqField(obj, "maxItems", what),
+          `${what}.maxItems`,
+          1,
+          BOUNDS.maxEachItems,
+        ),
+      };
+    }
     case "agent":
     case "classifier":
     case "gate": {
@@ -855,6 +882,14 @@ export function manifestToJson(m: OrganismManifest): JsonObject {
         if (c.until) o.until = { output: c.until.output, equals: c.until.equals };
         return o;
       }
+      case "each":
+        return {
+          id: c.id,
+          kind: c.kind,
+          manifest: c.manifest,
+          over: c.over,
+          maxItems: c.maxItems,
+        };
       case "agent":
       case "classifier":
       case "gate": {

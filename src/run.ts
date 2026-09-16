@@ -67,6 +67,7 @@ export type CellRecord = {
   toolCalls?: JsonValue[];
   shadowOut?: JsonValue;
   rounds?: number;
+  items?: number;
 };
 
 export type RunReceipt = {
@@ -221,7 +222,8 @@ async function runInto(
       if (!resolved) continue;
 
       // input values: single ports take the one delivered edge; many ports
-      // collect every delivered edge in manifest order
+      // collect every delivered edge in manifest order. A many producer's
+      // edge flattens element-wise into a many consumer.
       const inputs: Record<string, JsonValue> = {};
       const delivered = new Map<string, number>();
       for (const p of inputNames) {
@@ -229,13 +231,20 @@ async function runInto(
         const hits = (inbound.get(cell.id) ?? []).filter(
           (x) => x.port === p && edgeState[x.edge] === "delivered",
         );
-        delivered.set(p, hits.length);
         if (sigp.many) {
-          if (hits.length > 0 || sigp.optional === true) {
-            inputs[p] = hits.map((x) => edgeValue[x.edge]!);
+          const items: JsonValue[] = [];
+          for (const x of hits) {
+            const e = manifest.edges[x.edge]!;
+            const pt = ports.get(e.from.cell)!.outputs[e.from.port]!;
+            const v = edgeValue[x.edge]!;
+            if (pt.many && Array.isArray(v)) items.push(...v);
+            else items.push(v);
           }
-        } else if (hits.length > 0) {
-          inputs[p] = edgeValue[hits[0]!.edge]!;
+          delivered.set(p, items.length);
+          if (items.length > 0 || sigp.optional === true) inputs[p] = items;
+        } else {
+          delivered.set(p, hits.length);
+          if (hits.length > 0) inputs[p] = edgeValue[hits[0]!.edge]!;
         }
       }
 
@@ -273,6 +282,7 @@ async function runInto(
         if (act.toolCalls) rec.toolCalls = act.toolCalls as unknown as JsonValue[];
         if (act.shadowOut !== undefined) rec.shadowOut = act.shadowOut;
         if (act.rounds !== undefined) rec.rounds = act.rounds;
+        if (act.items !== undefined) rec.items = act.items;
         ctx.cells[cellPath(cell.id)] = rec;
         emit(ctx, { kind: "cell.commit", path: cellPath(cell.id) });
       } catch (e) {
@@ -305,6 +315,7 @@ type Activation = {
   toolCalls?: { fn: string; inputs: JsonValue; output: JsonValue }[];
   shadowOut?: JsonValue;
   rounds?: number;
+  items?: number;
 };
 
 /** The reserved tool-call shape. Only recognized when the cell declares the
@@ -571,6 +582,55 @@ async function activate(
       }
       const act: Activation = { outputs: out };
       if (rounds > 1) act.rounds = rounds;
+      return act;
+    }
+    case "each": {
+      const subCompiled = compiled.children.get(cell.id)!;
+      const iface = subCompiled.manifest.interface ?? { inputs: {}, outputs: {} };
+      const list = inputs[cell.over];
+      if (!Array.isArray(list)) {
+        throw new MorphogenError(
+          "TYPE_MISMATCH",
+          `each cell "${cell.id}" over "${cell.over}" expected a list`,
+        );
+      }
+      if (list.length > cell.maxItems) {
+        throw new MorphogenError(
+          "BUDGET_EXHAUSTED",
+          `each cell "${cell.id}" got ${list.length} items, maxItems ${cell.maxItems}`,
+        );
+      }
+      // element type check against the inner input port's declared type
+      const overTarget = iface.inputs[cell.over]!;
+      const elDecl =
+        subCompiled.ports.get(overTarget.cell)?.outputs[overTarget.port];
+      const out: Record<string, JsonValue> = {};
+      for (const name of Object.keys(iface.outputs)) out[name] = [];
+      for (let i = 0; i < list.length; i++) {
+        const item = list[i]!;
+        if (elDecl) checkValue(item, elDecl, `${cell.id}.${cell.over}[${i}]`);
+        const subArgs = argsForSubOrganism(subCompiled.manifest, {
+          ...inputs,
+          [cell.over]: item,
+        });
+        const itemPath = `${path}/i${i}`;
+        const outcome = await runInto(subCompiled, subArgs, itemPath, ctx, depth + 1);
+        if (outcome !== "complete") {
+          const code = ctx.failure?.code ?? "STUCK";
+          throw new MorphogenError(
+            code,
+            ctx.failure?.message ??
+              `each cell "${cell.id}" item ${i}: inner run ${outcome}`,
+          );
+        }
+        for (const [name, target] of Object.entries(iface.outputs)) {
+          const rec = ctx.cells[`${itemPath}/${target.cell}`];
+          const v = rec?.outputs?.[target.port];
+          if (v !== undefined) (out[name] as JsonValue[]).push(v);
+        }
+      }
+      const act: Activation = { outputs: out };
+      if (list.length > 0) act.items = list.length;
       return act;
     }
   }

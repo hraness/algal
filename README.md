@@ -40,6 +40,10 @@ Cell kinds:
   next round's inputs and an optional `until` early-exit on an interface
   output. The evaluator-optimizer pattern as structure — the graph stays a
   DAG while the automaton gets ticks.
+- `each` — a delivered list fans out: the sub-manifest runs once per element
+  (`over` binds the element), and each interface output collects into a list
+  port. Map is a cell; combined with `many` inputs the graph expresses
+  fan-out → compute → collect without a loop construct in sight.
 
 Edges connect a producer port to a consumer port. Ports are typed (`text`,
 `json`, `choice`); guarded edges fire only when the produced choice equals the
@@ -65,8 +69,9 @@ bun run cli suite
 `suite` runs every bundled example — `triage` (classifier routing), `pipeline`
 (agent plan → classifier review → guarded branches), `inbox` (the triage
 organism embedded as one cell), `lookup` (an agent reading a record through a
-`pick.v1` tool call), `refine` (a `repeat` evaluator-optimizer loop), and
-`panel` (three reviewers fanning into one synthesizer's `many` input) — with
+`pick.v1` tool call), `refine` (a `repeat` evaluator-optimizer loop),
+`panel` (three reviewers fanning into one synthesizer's `many` input), and
+`swarm` (an `each` cell mapping a question list through a sub-manifest) — with
 scripted responses, then verifies each receipt offline. To run one yourself:
 
 ```sh

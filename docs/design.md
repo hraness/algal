@@ -53,13 +53,15 @@ interface ports — symbolization without magic. Because a manifest can never
 contain its own digest, embedding graphs are acyclic by construction; the
 run still bounds nesting depth via the root manifest's `maxDepth`.
 
-**Iteration is a cell, not an edge.** `repeat` runs a digest-embedded
-sub-manifest up to `maxRounds`, carrying named interface outputs into the
-next round's inputs, with an optional `until` early-exit. The edge graph
-stays acyclic — re-entry lives behind a cell boundary, rounds record under
-`loop/r<n>/` paths, and the work ledger never resets. `until` is not an
-assertion: an unsatisfied guard just means the last round's outputs commit,
-and downstream guarded edges decide what to do with them.
+**Iteration and fan-out are cells, not edges.** `repeat` runs a
+digest-embedded sub-manifest up to `maxRounds`, carrying named interface
+outputs into the next round's inputs, with an optional `until` early-exit.
+`each` runs one once per element of a delivered list, collecting interface
+outputs into list ports that flatten into `many` consumers. The edge graph
+stays acyclic — re-entry lives behind a cell boundary, items record under
+`loop/r<n>/` and `map/i<n>/` paths, and the work ledger never resets.
+`until` is not an assertion: an unsatisfied exit just means the last round's
+outputs commit, and downstream guarded edges decide what to do with them.
 
 **Run budgets belong to the root manifest.** Steps, agent calls, work units,
 byte bounds, and depth are set by the top-level manifest and apply across
@@ -79,5 +81,5 @@ execution are different jobs.)
 - Workflow breeding/mutation, organisms that emit organisms.
 - Hosted habitats: persistent goal-seeking configurations of many organisms.
 - A real view language over the program graph (beyond `view.cells`).
-- Cycles as ordinary edges and streaming re-activation (`repeat` is the only
-  re-entry v1 admits).
+- Cycles as ordinary edges and streaming re-activation (`repeat` and `each`
+  are the only re-entry v1 admits).
