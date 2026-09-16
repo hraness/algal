@@ -1,0 +1,4 @@
+{
+  "scorer": "not-a-label",
+  "fallback": "DEFAULT-SAFE: scorer failed with EFFECT_UNPARSEABLE — queued for human review"
+}

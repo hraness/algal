@@ -369,6 +369,7 @@ async function main(): Promise<number> {
             const c = v as JsonObject;
             const entry: JsonObject = { status: c.status ?? null };
             if (typeof c.work === "number" && c.work > 0) entry.work = c.work;
+            if (c.failure !== undefined) entry.failure = c.failure;
             if (c.shadowOut !== undefined) entry.shadowOut = c.shadowOut;
             if (c.rounds !== undefined) entry.rounds = c.rounds;
             if (c.items !== undefined) entry.items = c.items;

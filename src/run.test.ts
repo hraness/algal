@@ -1,9 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { parseOrganismManifest, type OrganismManifest } from "./contract";
+import {
+  manifestToJson,
+  parseOrganismManifest,
+  type OrganismManifest,
+} from "./contract";
 import { scriptedExecutor } from "./effects";
+import { MorphogenError } from "./errors";
 import { builtinRegistry } from "./registry";
 import { runOrganism } from "./run";
 import { MemoryStore } from "./store";
+import { verifyReceipt } from "./verify";
 import type { JsonValue } from "./values";
 
 function manifest(u: unknown): OrganismManifest {
@@ -964,6 +970,251 @@ describe("scheduler", () => {
       { from: "src.rec", to: "mid.rec" },
       { from: "mid.out", to: "brain.rec" },
     ]);
+  });
+
+  test("on:fail edge routes a failure record to a recovery cell", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:failroute",
+      name: "FailRoute",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "text" } },
+        {
+          id: "worker",
+          kind: "agent",
+          inputs: { v: "text" },
+          prompt: "p",
+          output: { kind: "text" },
+        },
+        {
+          id: "fallback",
+          kind: "agent",
+          inputs: { err: "json" },
+          prompt: "p",
+          output: { kind: "text" },
+        },
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "worker", port: "v" } },
+        {
+          from: { cell: "worker", port: "out" },
+          to: { cell: "fallback", port: "err" },
+          on: "fail",
+        },
+      ],
+    });
+    let captured: JsonValue | undefined;
+    const exec = {
+      id: "flaky",
+      async execute(req: { cellId: string; context: JsonValue }) {
+        if (req.cellId === "worker") {
+          throw new MorphogenError("EFFECT_FAILED", "boom");
+        }
+        captured = req.context;
+        return "recovered";
+      },
+    };
+    const receipt = await runOrganism({
+      manifest: m,
+      args: { src: { v: "job" } },
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [exec],
+    });
+    expect(receipt.outcome).toBe("complete");
+    expect(receipt.cells["worker"]?.status).toBe("failed");
+    expect(receipt.cells["worker"]?.failure).toEqual({
+      code: "EFFECT_FAILED",
+      message: "boom",
+    });
+    expect(receipt.cells["worker"]?.work).toBeGreaterThan(0);
+    // the recovery cell received the failure record and committed
+    const ctx = captured as { inputs: { err: { code: string; message: string } } };
+    expect(ctx.inputs.err).toEqual({ code: "EFFECT_FAILED", message: "boom" });
+    expect(receipt.cells["fallback"]?.status).toBe("committed");
+    // the failed effect was recorded — replay can reproduce it
+    expect(receipt.effects[0]?.error).toEqual({
+      code: "EFFECT_FAILED",
+      message: "boom",
+    });
+  });
+
+  test("a handled failure replays bit-for-bit through verify", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:failroute",
+      name: "FailRoute",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "text" } },
+        {
+          id: "worker",
+          kind: "agent",
+          inputs: { v: "text" },
+          prompt: "p",
+          output: { kind: "text" },
+        },
+        {
+          id: "fallback",
+          kind: "agent",
+          inputs: { err: "json" },
+          prompt: "p",
+          output: { kind: "text" },
+        },
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "worker", port: "v" } },
+        {
+          from: { cell: "worker", port: "out" },
+          to: { cell: "fallback", port: "err" },
+          on: "fail",
+        },
+      ],
+    });
+    const receipt = await runOrganism({
+      manifest: m,
+      args: { src: { v: "job" } },
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [{
+        id: "flaky",
+        async execute(req) {
+          if (req.cellId === "worker") {
+            throw new MorphogenError("EFFECT_FAILED", "boom");
+          }
+          return "recovered";
+        },
+      }],
+    });
+    const report = await verifyReceipt(
+      receipt as unknown as JsonValue,
+      manifestToJson(m),
+      new MemoryStore(),
+    );
+    expect(report.ok).toBe(true);
+    expect(report.digest).toBe(receipt.digest);
+  });
+
+  test("an unhandled failure still fails the run, with the effect recorded", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:failbare",
+      name: "FailBare",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "text" } },
+        {
+          id: "worker",
+          kind: "agent",
+          inputs: { v: "text" },
+          prompt: "p",
+          output: { kind: "text" },
+        },
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "worker", port: "v" } },
+      ],
+    });
+    const receipt = await runOrganism({
+      manifest: m,
+      args: { src: { v: "job" } },
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [{
+        id: "flaky",
+        async execute() {
+          throw new MorphogenError("EFFECT_FAILED", "boom");
+        },
+      }],
+    });
+    expect(receipt.outcome).toBe("failed");
+    expect(receipt.failure?.code).toBe("EFFECT_FAILED");
+    expect(receipt.cells["worker"]?.failure?.message).toBe("boom");
+    expect(receipt.effects[0]?.error?.code).toBe("EFFECT_FAILED");
+    // and a failed run replays bit-for-bit too
+    const report = await verifyReceipt(
+      receipt as unknown as JsonValue,
+      manifestToJson(m),
+      new MemoryStore(),
+    );
+    expect(report.ok).toBe(true);
+  });
+
+  test("on:fail admission: json consumer, no guard, no port mixing", async () => {
+    const base = (toPort: string, extra: Record<string, unknown> = {}) => ({
+      contract: "morphogen.organism.v1",
+      key: "organism:fadm",
+      name: "FAdm",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "text" } },
+        {
+          id: "worker",
+          kind: "agent",
+          inputs: { v: "text" },
+          prompt: "p",
+          output: { kind: "text" },
+        },
+        {
+          id: "recovery",
+          kind: "agent",
+          inputs: { err: "text", note: "json" },
+          prompt: "p",
+          output: { kind: "text" },
+        },
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "worker", port: "v" } },
+        {
+          from: { cell: "worker", port: "out" },
+          to: { cell: "recovery", port: toPort },
+          on: "fail",
+          ...extra,
+        },
+      ],
+    });
+    // fail edge into a text port — the record is json
+    await expect(
+      runOrganism({
+        manifest: manifest(base("err")),
+        args: { src: { v: "x" } },
+        fns: builtinRegistry(),
+        store: new MemoryStore(),
+        executors: [],
+      }),
+    ).rejects.toThrowError(/must be json/);
+    // guard on a fail edge
+    await expect(
+      runOrganism({
+        manifest: manifest(base("note", { guard: { equals: "x" } })),
+        args: { src: { v: "x" } },
+        fns: builtinRegistry(),
+        store: new MemoryStore(),
+        executors: [],
+      }),
+    ).rejects.toThrowError(/not valid on an on:"fail" edge/);
+    // normal + fail edges into the same port
+    const mixed = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:fmix",
+      name: "FMix",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "json" } },
+        { id: "worker", kind: "agent", inputs: { v: "json" }, prompt: "p", output: { kind: "text" } },
+        { id: "recovery", kind: "agent", inputs: { err: "json" }, prompt: "p", output: { kind: "text" } },
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "worker", port: "v" } },
+        { from: { cell: "src", port: "v" }, to: { cell: "recovery", port: "err" } },
+        { from: { cell: "worker", port: "out" }, to: { cell: "recovery", port: "err" }, on: "fail" },
+      ],
+    });
+    await expect(
+      runOrganism({
+        manifest: mixed,
+        args: {},
+        fns: builtinRegistry(),
+        store: new MemoryStore(),
+        executors: [],
+      }),
+    ).rejects.toThrowError(/mixes normal and on:"fail" edges/);
   });
 
   test("view.cells rejects non-ancestor and unknown cells", async () => {

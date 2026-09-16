@@ -51,6 +51,14 @@ deterministic after model receipts are fixed.)
 skipped, and deadness propagates. That is what makes guarded routing work
 without a scheduler that guesses.
 
+**Failure is data when the graph says so.** A failed cell records
+`status:"failed"` with `{code, message}`; an `on:"fail"` edge delivers that
+record to a `json` consumer, and a cell with a declared fail edge is
+handled — the run continues. With none, the run fails closed. Whether a
+failure is survivable is decided at admission, not discovered at runtime —
+and it composes: an unhandled inner failure fails the enclosing `organism`
+cell, which an outer fail edge can catch.
+
 **Organisms embed by digest.** An `organism` cell references a manifest hash
 resolved from the store. Composition preserves cost and exposes only declared
 interface ports — symbolization without magic. Because a manifest can never

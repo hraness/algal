@@ -166,6 +166,12 @@ export type Edge = {
   /** Bare `{equals}` guards a choice producer by label; `{field, equals}`
    * guards a json producer by a string field of the delivered record. */
   guard?: { equals: string; field?: string };
+  /** "fail": the edge fires when the producer's activation fails and
+   * delivers the failure record {code, message} — the producer port is
+   * still named (uniform grammar) but the delivered value is the record.
+   * A failed cell with no fail edge fails the run; with one, the failure
+   * is handled by structure. */
+  on?: "fail";
 };
 
 export type Budgets = {
@@ -731,7 +737,7 @@ function parseCell(u: unknown, what: string): Cell {
 
 function parseEdge(u: unknown, what: string): Edge {
   const obj = asObject(u, what);
-  noUnknownKeys(obj, ["from", "to", "guard"], what);
+  noUnknownKeys(obj, ["from", "to", "guard", "on"], what);
   const end = (v: unknown, w: string): { cell: string; port: PortName } => {
     const e = asObject(v, w);
     noUnknownKeys(e, ["cell", "port"], w);
@@ -759,6 +765,16 @@ function parseEdge(u: unknown, what: string): Edge {
     if (f !== undefined) {
       edge.guard.field = asSafeId(f, `${what}.guard.field`);
     }
+  }
+  const on = optField(obj, "on");
+  if (on !== undefined) {
+    if (on !== "fail") {
+      throw new MorphogenError(
+        "PARSE_FAILED",
+        `${what}.on: unknown "${String(on)}" — the only value is "fail"`,
+      );
+    }
+    edge.on = "fail";
   }
   return edge;
 }
@@ -984,6 +1000,7 @@ export function manifestToJson(m: OrganismManifest): JsonObject {
         from: { cell: e.from.cell, port: e.from.port },
         to: { cell: e.to.cell, port: e.to.port },
       };
+      if (e.on) o.on = e.on;
       if (e.guard) {
         o.guard = {
           equals: e.guard.equals,

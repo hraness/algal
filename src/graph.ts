@@ -361,7 +361,20 @@ export async function compileOrganism(
         `edge ${i}: cell "${e.to.cell}" has no input port "${e.to.port}"`,
       );
     }
-    if (!portCompatible(pt, ct)) {
+    if (e.on === "fail") {
+      if (e.guard) {
+        throw new MorphogenError(
+          "GUARD_INVALID",
+          `edge ${i}: guard is not valid on an on:"fail" edge`,
+        );
+      }
+      if (ct.type !== "json") {
+        throw new MorphogenError(
+          "TYPE_MISMATCH",
+          `edge ${i}: on:"fail" delivers a failure record — consumer port "${e.to.cell}.${e.to.port}" must be json, got ${describePort(ct)}`,
+        );
+      }
+    } else if (!portCompatible(pt, ct)) {
       throw new MorphogenError(
         "TYPE_MISMATCH",
         `edge ${i}: ${e.from.cell}.${e.from.port} (${describePort(pt)}) cannot feed ${e.to.cell}.${e.to.port} (${describePort(ct)})`,
@@ -391,6 +404,18 @@ export async function compileOrganism(
       }
     }
     const list = inbound.get(to.id) ?? [];
+    if (
+      list.some(
+        (x) =>
+          x.port === e.to.port &&
+          (manifest.edges[x.edge]!.on === "fail") !== (e.on === "fail"),
+      )
+    ) {
+      throw new MorphogenError(
+        "MANIFEST_INVALID",
+        `edge ${i}: input port "${e.to.cell}.${e.to.port}" mixes normal and on:"fail" edges`,
+      );
+    }
     if (!ct.many && list.some((x) => x.port === e.to.port)) {
       throw new MorphogenError(
         "MANIFEST_INVALID",

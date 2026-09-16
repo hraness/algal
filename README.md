@@ -49,10 +49,13 @@ Edges connect a producer port to a consumer port. Ports are typed (`text`,
 `json`, `choice`); guarded edges fire only when the produced choice equals the
 guard label — or, on a `json` producer, when `guard.field` of the delivered
 record strictly equals `guard.equals`, so routing can depend on a structured
-field without a classifier in between. Input ports are single-assignment
-unless declared `many`, in which case every delivered edge collects into a
-list — fan-in, including conditional fan-in through guards. The graph must
-be acyclic.
+field without a classifier in between. An edge declared `"on": "fail"`
+fires when its producer's activation *fails* and delivers the failure
+record `{code, message}` to a `json` consumer — recovery cells are
+structure, and a cell with no fail edge still fails the run closed. Input
+ports are single-assignment unless declared `many`, in which case every
+delivered edge collects into a list — fan-in, including conditional fan-in
+through guards. The graph must be acyclic.
 
 ## Why does it exist?
 
@@ -75,7 +78,8 @@ organism embedded as one cell), `lookup` (an agent reading a record through a
 `pick.v1` tool call), `refine` (a `repeat` evaluator-optimizer loop),
 `panel` (three reviewers fanning into one synthesizer's `many` input),
 `escalate` (field guards routing a ticket record on `severity` — no
-classifier), and
+classifier), `recover` (a classifier miss fails; an `on:"fail"` edge hands
+the record to a fallback cell), and
 `swarm` (an `each` cell mapping a question list through a sub-manifest) — with
 scripted responses, then verifies each receipt offline. To run one yourself:
 

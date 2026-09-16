@@ -104,6 +104,9 @@ export function diffReceipts(a: RunReceipt, b: RunReceipt): string[] {
     if (ac.items !== bc.items) {
       out.push(`cell ${k}: items ${ac.items} vs ${bc.items}`);
     }
+    if (!eq(ac.failure, bc.failure)) {
+      out.push(`cell ${k}: failure differs`);
+    }
     if (!eq(ac.toolCalls, bc.toolCalls)) {
       out.push(`cell ${k}: toolCalls differ`);
     }
@@ -121,6 +124,9 @@ export function diffReceipts(a: RunReceipt, b: RunReceipt): string[] {
       }
       if (!eq(e.output, o.output)) {
         out.push(`effect ${i}: output differs`);
+      }
+      if (!eq(e.error, o.error)) {
+        out.push(`effect ${i}: error differs`);
       }
       if (e.executor !== o.executor) {
         out.push(`effect ${i}: executor ${e.executor} vs ${o.executor}`);

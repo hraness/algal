@@ -85,5 +85,9 @@ default when no route matches.
   contract, budgets. Do not read other files to answer it.
 - Print only the output value on stdout — logs go to stderr.
 - Respect `budget.maxOutputBytes`; oversized output fails the cell.
-- For replay (`verify`), Morphogen serves recorded outputs by request digest
-  itself — executors are not involved.
+- Errors count: a thrown effect is recorded on the receipt as
+  `{requestDigest, error: {code, message}}` so replay reproduces the same
+  failure — and an `on:"fail"` edge in the manifest can route that record
+  to a recovery cell.
+- For replay (`verify`), Morphogen serves recorded outputs — and recorded
+  errors — by request digest itself; executors are not involved.

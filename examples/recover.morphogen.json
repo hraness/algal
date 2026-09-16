@@ -1,0 +1,47 @@
+{
+  "contract": "morphogen.organism.v1",
+  "key": "organism:recover",
+  "name": "Recover",
+  "note": "Failure routing: a classifier that misses its label set fails; an on:fail edge hands the failure record to a fallback cell — the run completes.",
+  "cells": [
+    {
+      "id": "ticket",
+      "kind": "input",
+      "outputs": { "v": "text" }
+    },
+    {
+      "id": "scorer",
+      "kind": "classifier",
+      "inputs": { "v": "text" },
+      "prompt": "Reply with exactly one label: ok",
+      "output": { "kind": "choice", "labels": ["ok"] }
+    },
+    {
+      "id": "fallback",
+      "kind": "agent",
+      "inputs": { "err": "json" },
+      "prompt": "The scorer failed. Emit a safe default response mentioning the failure code.",
+      "output": { "kind": "text" }
+    },
+    { "id": "emit", "kind": "fn", "fn": "join.v1" }
+  ],
+  "edges": [
+    {
+      "from": { "cell": "ticket", "port": "v" },
+      "to": { "cell": "scorer", "port": "v" }
+    },
+    {
+      "from": { "cell": "scorer", "port": "out" },
+      "to": { "cell": "fallback", "port": "err" },
+      "on": "fail"
+    },
+    {
+      "from": { "cell": "scorer", "port": "out" },
+      "to": { "cell": "emit", "port": "items" }
+    },
+    {
+      "from": { "cell": "fallback", "port": "out" },
+      "to": { "cell": "emit", "port": "items" }
+    }
+  ]
+}

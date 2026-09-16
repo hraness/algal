@@ -63,6 +63,7 @@ $ morphogen verify run.receipt.json triage.morphogen.json
       <li>Model output is data. It re-enters the graph only after binding to a declared output contract.</li>
       <li>Agents reach back into the automaton only through <code>tools</code>: declared registry functions, turn-bounded, every call on the receipt. Classifiers can run in shadow — the model's decision is recorded while a declared label stays authoritative.</li>
       <li>Organisms embed: a sealed, content-addressed manifest becomes one cell inside a larger organism, exposing only its declared ports. A <code>repeat</code> cell re-runs one for bounded rounds with carried values; an <code>each</code> cell maps it over a delivered list — iteration and fan-out as structure, with <code>many</code> ports collecting the results.</li>
+      <li>Failure is routable: an <code>on:"fail"</code> edge delivers the failure record to a recovery cell, so whether a failure is survivable is declared in the graph — not discovered mid-run. Without one, the run fails closed.</li>
       <li>Receipts make runs replayable, not reproducible — the same organism on fresh inputs can legitimately diverge.</li>
     </ul>
   </section>

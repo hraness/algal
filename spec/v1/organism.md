@@ -186,6 +186,15 @@ canonicalized, hashed, and embedded. It can never carry code.
   `choice` when the consumer's labels cover the producer's; anything feeds
   `json`; `json` feeds only `json`. For `many` ports the rules apply per
   element.
+- `"on": "fail"` marks a failure edge: it fires when the producer's
+  activation *fails* and delivers the failure record `{"code","message"}`
+  to the consumer, which must be a `json` port. `guard` is not valid on a
+  fail edge, a port may not mix normal and fail edges, and the producer's
+  port is still named though the delivered value is the record. A cell that
+  fails with at least one fail edge outbound is **handled**: the run
+  continues. A cell that fails with none fails the run — failure is fatal
+  unless the structure declares otherwise. A skipped producer is not a
+  failure; its fail edges die with the rest.
 - The graph must be acyclic.
 
 ## Run semantics
@@ -206,8 +215,14 @@ canonicalized, hashed, and embedded. It can never carry code.
   recording under `loop/r<n>/…`; `each` cells run theirs once per list
   element under `map/i<n>/…`. Iteration and fan-out are the only re-entry
   v1 admits: the edge graph itself stays acyclic.
-- A run ends `complete`, `failed` (first failure wins, recorded), or `stuck`
-  (pending cells remain but none can resolve).
+- A cell whose activation throws records `status: "failed"` with the
+  failure detail. With no `on:"fail"` edge outbound, the run fails (first
+  unhandled failure wins). With one, the run continues — the failure record
+  is data routed by structure. This composes through `organism`, `repeat`,
+  and `each`: an inner unhandled failure fails the enclosing cell, which
+  may itself be caught at the outer level.
+- A run ends `complete`, `failed` (first unhandled failure wins, recorded),
+  or `stuck` (pending cells remain but none can resolve).
 
 ## Work ledger
 
@@ -237,11 +252,12 @@ edges. A miss on a `choice` output resolves to `onMiss` or fails the run.
 ## Receipts — morphogen.run.v1
 
 A receipt records `manifestDigest`, `args`, `outcome`, per-cell records
-(`committed | skipped | failed`, outputs, `effectDigest`, `toolCalls`,
-`shadowOut`, `rounds`, `items`), the
-`effects` list (`requestDigest`, raw `output`, `executor` id, optional usage),
-the bounded `events` log, the work ledger, and `failure` detail. `digest` is
-over the canonical receipt minus itself.
+(`committed | skipped | failed`, outputs, `failure` detail, `effectDigest`,
+`toolCalls`, `shadowOut`, `rounds`, `items`, per-cell `work`), the
+`effects` list (`requestDigest`, then `output` *or* `error` — a failed
+effect records `{code, message}` so replay reproduces it — `executor` id,
+optional usage), the bounded `events` log, the work ledger, and run-level
+`failure` detail. `digest` is over the canonical receipt minus itself.
 
 ## Verification
 

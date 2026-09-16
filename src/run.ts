@@ -62,6 +62,8 @@ export type RunEvent = {
 export type CellRecord = {
   status: "committed" | "skipped" | "failed";
   outputs?: Record<string, JsonValue>;
+  /** Present when status is "failed" — what the activation reported. */
+  failure?: { code: ErrorCode; message: string };
   work: number;
   effectDigest?: string;
   toolCalls?: JsonValue[];
@@ -163,7 +165,8 @@ async function runInto(
 
   // produced outputs per cell: cellId -> port -> value
   const produced = new Map<string, Map<string, JsonValue>>();
-  const state = new Map<string, "pending" | "done" | "skipped">();
+  const state = new Map<string, "pending" | "done" | "skipped" | "failed">();
+  const failedInfo = new Map<string, { code: ErrorCode; message: string }>();
   for (const c of manifest.cells) state.set(c.id, "pending");
 
   // edge liveness
@@ -182,7 +185,17 @@ async function runInto(
     const e = manifest.edges[i]!;
     const src = e.from.cell;
     const st = state.get(src);
-    if (st === "skipped") {
+    if (e.on === "fail") {
+      if (st === "failed") {
+        const f = failedInfo.get(src)!;
+        edgeState[i] = "delivered";
+        edgeValue[i] = { code: f.code, message: f.message };
+      } else if (st === "done" || st === "skipped") {
+        edgeState[i] = "dead";
+      }
+      return;
+    }
+    if (st === "skipped" || st === "failed") {
       edgeState[i] = "dead";
       return;
     }
@@ -300,8 +313,25 @@ async function runInto(
         emit(ctx, { kind: "cell.commit", path: cellPath(cell.id) });
       } catch (e) {
         const rep = errorReport(e);
-        ctx.cells[cellPath(cell.id)] = { status: "failed", work: 0 };
+        state.set(cell.id, "failed");
+        failedInfo.set(cell.id, { code: rep.code, message: rep.message });
+        ctx.cells[cellPath(cell.id)] = {
+          status: "failed",
+          failure: { code: rep.code, message: rep.message },
+          work: ctx.work.units - workBefore,
+        };
         emit(ctx, { kind: "cell.fail", path: cellPath(cell.id) });
+        // normal outbound edges die; on:"fail" edges deliver the record.
+        // A declared fail edge means the structure handles this failure —
+        // the run continues and any inner run-level failure is absorbed.
+        const handled = manifest.edges.some(
+          (x) => x.from.cell === cell.id && x.on === "fail",
+        );
+        if (handled) {
+          delete ctx.failure;
+          progress = true;
+          continue;
+        }
         fail(ctx, cellPath(cell.id), rep.code, rep.message);
         break;
       }
@@ -504,7 +534,23 @@ async function activate(
         ctx.work.units += WORK.effectBase + contextBytes * WORK.perContextByte;
         emit(ctx, { kind: "effect", path, digest: requestDigest });
 
-        const raw = await executor.execute(request);
+        const meta = executor.receiptFor?.(request);
+        let raw: JsonValue;
+        try {
+          raw = await executor.execute(request);
+        } catch (e) {
+          // a failed effect is recorded too — replay must reproduce the
+          // same failure for the run to verify bit-for-bit
+          const rep = errorReport(e);
+          const eff: EffectReceipt = {
+            requestDigest,
+            error: { code: rep.code, message: rep.message },
+            executor: meta?.executor ?? executor.id,
+          };
+          if (meta?.usage) eff.usage = meta.usage;
+          ctx.effects.push(eff);
+          throw e;
+        }
         const outBytes = canonicalBytes(raw);
         if (outBytes > maxOut) {
           throw new MorphogenError(
@@ -513,7 +559,6 @@ async function activate(
           );
         }
         ctx.work.units += outBytes * WORK.perOutputByte;
-        const meta = executor.receiptFor?.(request);
         const eff: EffectReceipt = {
           requestDigest,
           output: raw,

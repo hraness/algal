@@ -3,7 +3,7 @@
 // manifest plus delivered inputs; its digest binds request to receipt.
 // Executors are host-supplied — Morphogen never brokers provider access.
 
-import { MorphogenError } from "./errors";
+import { MorphogenError, type ErrorCode } from "./errors";
 import { digestCanonical, type Digest } from "./digest";
 import type { AgentOutput, Route } from "./contract";
 import {
@@ -33,7 +33,10 @@ export type EffectRequest = {
 
 export type EffectReceipt = {
   requestDigest: Digest;
-  output: JsonValue;
+  /** The executor's response. Absent when `error` is present — a failed
+   * effect records what it reported so replay can reproduce the failure. */
+  output?: JsonValue;
+  error?: { code: ErrorCode; message: string };
   executor: string;
   usage?: { model?: string; tokensIn?: number; tokensOut?: number };
 };
@@ -118,7 +121,10 @@ export function replayExecutor(
           `replay has no receipt for request ${digest} (cell "${request.cellId}")`,
         );
       }
-      return hit.output;
+      if (hit.error !== undefined) {
+        throw new MorphogenError(hit.error.code, hit.error.message);
+      }
+      return hit.output!;
     },
   };
 }
@@ -274,7 +280,11 @@ function checkSchemaValue(schema: JsonObject, value: JsonValue, what: string): v
 
 export function parseEffectReceipt(u: unknown): EffectReceipt {
   const obj = asObject(u, "effect receipt");
-  noUnknownKeys(obj, ["requestDigest", "output", "executor", "usage"], "effect receipt");
+  noUnknownKeys(
+    obj,
+    ["requestDigest", "output", "error", "executor", "usage"],
+    "effect receipt",
+  );
   const digest = asString(
     reqField(obj, "requestDigest", "effect receipt"),
     "effect receipt.requestDigest",
@@ -285,8 +295,32 @@ export function parseEffectReceipt(u: unknown): EffectReceipt {
     "effect receipt.executor",
     256,
   );
-  const output = asJson(reqField(obj, "output", "effect receipt"));
-  const receipt: EffectReceipt = { requestDigest: digest, output, executor };
+  const outputRaw = optField(obj, "output");
+  const errorRaw = optField(obj, "error");
+  if ((outputRaw === undefined) === (errorRaw === undefined)) {
+    throw new MorphogenError(
+      "PARSE_FAILED",
+      "effect receipt: exactly one of output or error is required",
+    );
+  }
+  const receipt: EffectReceipt = { requestDigest: digest, executor };
+  if (outputRaw !== undefined) receipt.output = asJson(outputRaw);
+  if (errorRaw !== undefined) {
+    const eo = asObject(errorRaw, "effect receipt.error");
+    noUnknownKeys(eo, ["code", "message"], "effect receipt.error");
+    receipt.error = {
+      code: asString(
+        reqField(eo, "code", "effect receipt.error"),
+        "effect receipt.error.code",
+        64,
+      ) as ErrorCode,
+      message: asString(
+        reqField(eo, "message", "effect receipt.error"),
+        "effect receipt.error.message",
+        2048,
+      ),
+    };
+  }
   const usage = optField(obj, "usage");
   if (usage !== undefined) {
     const uo = asObject(usage, "effect receipt.usage");
