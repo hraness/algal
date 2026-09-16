@@ -44,6 +44,7 @@ usage:
                                               re-run with recorded receipts and compare;
                                               manifest resolves from the store when omitted
   morphogen inspect <receipt.json>            summarize a run receipt
+  morphogen suite                             run and verify all bundled examples
   morphogen digest <manifest.json>            print the manifest's canonical digest
   morphogen --version | --help
 `;
@@ -289,10 +290,15 @@ async function main(): Promise<number> {
         outcome: raw.outcome ?? null,
         work: raw.work ?? null,
         cells: Object.fromEntries(
-          Object.entries(cells).map(([k, v]) => [
-            k,
-            (v as JsonObject).status ?? null,
-          ]),
+          Object.entries(cells).map(([k, v]) => {
+            const c = v as JsonObject;
+            const entry: JsonObject = { status: c.status ?? null };
+            if (c.shadowOut !== undefined) entry.shadowOut = c.shadowOut;
+            const tc = c.toolCalls;
+            if (Array.isArray(tc) && tc.length) entry.toolCalls = tc.length;
+            if (c.effectDigest !== undefined) entry.effectDigest = c.effectDigest;
+            return [k, entry];
+          }),
         ),
         effects: ((raw.effects as JsonValue[]) ?? []).length,
         failure: raw.failure ?? null,

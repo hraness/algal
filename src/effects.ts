@@ -41,6 +41,13 @@ export type EffectReceipt = {
 export type Executor = {
   id: string;
   execute(request: EffectRequest): Promise<JsonValue>;
+  /** Receipt metadata recorded for this request. Executors that replay a
+   * prior run implement this so the rerun reproduces the original receipt's
+   * executor id and usage — making verification bit-for-bit. */
+  receiptFor?(request: EffectRequest): {
+    executor?: string;
+    usage?: EffectReceipt["usage"];
+  };
 };
 
 export function effectRequestDigest(req: EffectRequest): Digest {
@@ -90,9 +97,18 @@ export function replayExecutor(
   effects: readonly EffectReceipt[],
   id = "replay",
 ): Executor {
-  const byDigest = new Map(effects.map((e) => [e.requestDigest, e.output]));
+  const byDigest = new Map(effects.map((e) => [e.requestDigest, e]));
   return {
     id,
+    receiptFor(request) {
+      const rec = byDigest.get(effectRequestDigest(request));
+      if (!rec) return {};
+      const out: { executor?: string; usage?: EffectReceipt["usage"] } = {
+        executor: rec.executor,
+      };
+      if (rec.usage) out.usage = rec.usage;
+      return out;
+    },
     async execute(request) {
       const digest = effectRequestDigest(request);
       const hit = byDigest.get(digest);
@@ -102,7 +118,7 @@ export function replayExecutor(
           `replay has no receipt for request ${digest} (cell "${request.cellId}")`,
         );
       }
-      return hit;
+      return hit.output;
     },
   };
 }

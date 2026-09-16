@@ -5,11 +5,16 @@
 import { digestCanonical, type Digest } from "./digest";
 import { replayExecutor } from "./effects";
 import { builtinRegistry, type FnRegistry } from "./registry";
-import { parseRunReceipt, runOrganism, type RunReceipt } from "./run";
+import {
+  canonicalizeReceipt,
+  parseRunReceipt,
+  runOrganism,
+  type RunReceipt,
+} from "./run";
 import { manifestToJson, parseOrganismManifest } from "./contract";
 import type { Store } from "./store";
 import { MorphogenError } from "./errors";
-import type { JsonValue } from "./values";
+import { canonicalize, type JsonValue } from "./values";
 
 export type VerifyReport = {
   ok: boolean;
@@ -47,12 +52,27 @@ export async function verifyReceipt(
   });
 
   const mismatches = diffReceipts(original, rerun);
+  // bit-for-bit: canonical receipts must be identical — replay reproduces
+  // the recorded executor ids and usage, so the digests must match too
+  if (canonicalizeReceipt(original) !== canonicalizeReceipt(rerun)) {
+    if (mismatches.length === 0) {
+      mismatches.push(
+        `receipt digests differ: ${original.digest} vs ${rerun.digest}`,
+      );
+    }
+  }
   return {
     ok: mismatches.length === 0,
     outcome: rerun.outcome,
     digest: rerun.digest,
     mismatches,
   };
+}
+
+/** Compare canonically — a stored receipt has sorted keys, a fresh run has
+ * insertion order; JSON.stringify would flag equal values as different. */
+function eq(a: JsonValue | undefined, b: JsonValue | undefined): boolean {
+  return canonicalize(a ?? null) === canonicalize(b ?? null);
 }
 
 function diffReceipts(a: RunReceipt, b: RunReceipt): string[] {
@@ -72,8 +92,14 @@ function diffReceipts(a: RunReceipt, b: RunReceipt): string[] {
     if (ac.status !== bc.status) {
       out.push(`cell ${k}: status ${ac.status} vs ${bc.status}`);
     }
-    if (JSON.stringify(ac.outputs ?? {}) !== JSON.stringify(bc.outputs ?? {})) {
+    if (!eq(ac.outputs ?? {}, bc.outputs ?? {})) {
       out.push(`cell ${k}: outputs differ`);
+    }
+    if (!eq(ac.toolCalls, bc.toolCalls)) {
+      out.push(`cell ${k}: toolCalls differ`);
+    }
+    if (!eq(ac.shadowOut, bc.shadowOut)) {
+      out.push(`cell ${k}: shadowOut differs`);
     }
   }
   if (a.effects.length !== b.effects.length) {
@@ -84,14 +110,25 @@ function diffReceipts(a: RunReceipt, b: RunReceipt): string[] {
       if (e.requestDigest !== o.requestDigest) {
         out.push(`effect ${i}: requestDigest differs`);
       }
-      if (JSON.stringify(e.output) !== JSON.stringify(o.output)) {
+      if (!eq(e.output, o.output)) {
         out.push(`effect ${i}: output differs`);
       }
+      if (e.executor !== o.executor) {
+        out.push(`effect ${i}: executor ${e.executor} vs ${o.executor}`);
+      }
+      if (!eq(e.usage, o.usage)) {
+        out.push(`effect ${i}: usage differs`);
+      }
     });
+  }
+  if (!eq(a.events, b.events)) {
+    out.push("events: event logs differ");
   }
   if (a.work.steps !== b.work.steps) out.push(`work.steps: ${a.work.steps} vs ${b.work.steps}`);
   if (a.work.agentCalls !== b.work.agentCalls)
     out.push(`work.agentCalls: ${a.work.agentCalls} vs ${b.work.agentCalls}`);
+  if (a.work.units !== b.work.units)
+    out.push(`work.units: ${a.work.units} vs ${b.work.units}`);
   if ((a.failure === undefined) !== (b.failure === undefined)) {
     out.push(`failure presence differs`);
   } else if (a.failure && b.failure && a.failure.code !== b.failure.code) {

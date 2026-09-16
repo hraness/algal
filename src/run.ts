@@ -416,7 +416,14 @@ async function activate(
           );
         }
         ctx.work.units += outBytes * WORK.perOutputByte;
-        ctx.effects.push({ requestDigest, output: raw, executor: executor.id });
+        const meta = executor.receiptFor?.(request);
+        const eff: EffectReceipt = {
+          requestDigest,
+          output: raw,
+          executor: meta?.executor ?? executor.id,
+        };
+        if (meta?.usage) eff.usage = meta.usage;
+        ctx.effects.push(eff);
 
         const call = asToolCall(raw, cell.tools);
         if (!call) {
