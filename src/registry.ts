@@ -100,6 +100,22 @@ export function builtinRegistry(): FnRegistry {
     },
   });
 
+  reg.set("join.v1", {
+    signature: {
+      inputs: {
+        items: { type: "text", many: true },
+        sep: { type: "text", optional: true },
+      },
+      outputs: { value: { type: "text" } },
+      cost: 10,
+    },
+    fn: (i) => {
+      const items = Array.isArray(i.items) ? i.items : [];
+      const sep = typeof i.sep === "string" ? i.sep : "\n";
+      return { value: items.join(sep) };
+    },
+  });
+
   reg.set("label.v1", {
     signature: {
       inputs: { value: { type: "text" } },

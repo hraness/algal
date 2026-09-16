@@ -16,9 +16,12 @@ registry; agent cells carry prompts and contracts, not programs. A manifest is
 therefore safe to store, diff, embed, and verify. (From Platonik: a name is an
 inspectable definition, never a free computation.)
 
-**Ports are typed and single-assignment.** `text`, `json`, `choice`. Guards are
-valid only on choice producers with matching labels. The check happens at
-admission — an invalid graph never runs. (From Platonik's port contracts.)
+**Ports are typed and single-assignment — unless declared `many`.** `text`,
+`json`, `choice`. Guards are valid only on choice producers with matching
+labels. A `many` input collects every delivered edge in manifest order, so
+fan-in — including conditional fan-in through guards — is structure, not
+convention. The check happens at admission — an invalid graph never runs.
+(From Platonik's port contracts.)
 
 **Context is a view, not a stuffing.** An agent cell declares which of its
 inputs enter the effect request (`view.inputs`), and may also name ancestor

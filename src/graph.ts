@@ -342,7 +342,7 @@ export async function compileOrganism(
       }
     }
     const list = inbound.get(to.id) ?? [];
-    if (list.some((x) => x.port === e.to.port)) {
+    if (!ct.many && list.some((x) => x.port === e.to.port)) {
       throw new MorphogenError(
         "MANIFEST_INVALID",
         `edge ${i}: input port "${e.to.cell}.${e.to.port}" already has an edge; inputs are single-assignment`,

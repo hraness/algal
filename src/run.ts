@@ -220,15 +220,29 @@ async function runInto(
       );
       if (!resolved) continue;
 
-      // input values
+      // input values: single ports take the one delivered edge; many ports
+      // collect every delivered edge in manifest order
       const inputs: Record<string, JsonValue> = {};
-      for (const { edge, port } of inbound.get(cell.id) ?? []) {
-        if (edgeState[edge] === "delivered") inputs[port] = edgeValue[edge]!;
+      const delivered = new Map<string, number>();
+      for (const p of inputNames) {
+        const sigp = sig.inputs[p]!;
+        const hits = (inbound.get(cell.id) ?? []).filter(
+          (x) => x.port === p && edgeState[x.edge] === "delivered",
+        );
+        delivered.set(p, hits.length);
+        if (sigp.many) {
+          if (hits.length > 0 || sigp.optional === true) {
+            inputs[p] = hits.map((x) => edgeValue[x.edge]!);
+          }
+        } else if (hits.length > 0) {
+          inputs[p] = edgeValue[hits[0]!.edge]!;
+        }
       }
 
-      const nonEmpty = inputNames.filter((p) => inputs[p] !== undefined);
+      const nonEmpty = inputNames.filter((p) => (delivered.get(p) ?? 0) > 0);
       const requiredMissing = inputNames.some(
-        (p) => sig.inputs[p]!.optional !== true && inputs[p] === undefined,
+        (p) =>
+          sig.inputs[p]!.optional !== true && (delivered.get(p) ?? 0) === 0,
       );
 
       if (inputNames.length > 0 && (nonEmpty.length === 0 || requiredMissing)) {
@@ -587,6 +601,16 @@ function pickExecutor(executors: Executor[], cell: Cell): Executor {
 }
 
 function checkValue(v: JsonValue, decl: PortType, what: string): void {
+  if (decl.many) {
+    if (!Array.isArray(v)) {
+      throw new MorphogenError("TYPE_MISMATCH", `${what}: expected a list`);
+    }
+    const { many: _many, ...el } = decl;
+    for (let i = 0; i < v.length; i++) {
+      checkValue(v[i]!, el, `${what}[${i}]`);
+    }
+    return;
+  }
   switch (decl.type) {
     case "text":
       if (typeof v !== "string") {

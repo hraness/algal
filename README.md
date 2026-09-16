@@ -43,7 +43,9 @@ Cell kinds:
 
 Edges connect a producer port to a consumer port. Ports are typed (`text`,
 `json`, `choice`); guarded edges fire only when the produced choice equals the
-guard label. Input ports are single-assignment. The graph must be acyclic.
+guard label. Input ports are single-assignment unless declared `many`, in
+which case every delivered edge collects into a list — fan-in, including
+conditional fan-in through guards. The graph must be acyclic.
 
 ## Why does it exist?
 
@@ -61,9 +63,11 @@ bun run cli suite
 ```
 
 `suite` runs every bundled example — `triage` (classifier routing), `pipeline`
-(agent plan → classifier review → guarded branches), and `inbox` (the triage
-organism embedded as one cell) — with scripted responses, then verifies each
-receipt offline. To run one yourself:
+(agent plan → classifier review → guarded branches), `inbox` (the triage
+organism embedded as one cell), `lookup` (an agent reading a record through a
+`pick.v1` tool call), `refine` (a `repeat` evaluator-optimizer loop), and
+`panel` (three reviewers fanning into one synthesizer's `many` input) — with
+scripted responses, then verifies each receipt offline. To run one yourself:
 
 ```sh
 bun run cli check examples/triage.morphogen.json

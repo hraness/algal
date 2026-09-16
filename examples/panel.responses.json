@@ -1,0 +1,6 @@
+{
+  "rev-structure": "The shape is sound but the failure modes are unnamed.",
+  "rev-risk": "Silent retries could double-deliver; add idempotency keys.",
+  "rev-cost": "Cheaper than three crons once volume crosses ~1k jobs/day.",
+  "synth": "Ship it with idempotency keys and a named failure mode."
+}

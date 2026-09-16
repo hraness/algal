@@ -65,9 +65,9 @@ export const DEFAULT_BUDGETS = {
 // ----------------------------------------------------------------- types ---
 
 export type PortType =
-  | { type: "text"; optional?: boolean }
-  | { type: "json"; optional?: boolean }
-  | { type: "choice"; optional?: boolean; labels?: string[] };
+  | { type: "text"; optional?: boolean; many?: boolean }
+  | { type: "json"; optional?: boolean; many?: boolean }
+  | { type: "choice"; optional?: boolean; many?: boolean; labels?: string[] };
 
 export type PortName = string;
 export type PortMap = Record<PortName, PortType>;
@@ -184,18 +184,18 @@ function parsePortType(u: unknown, what: string): PortType {
     throw new MorphogenError("PARSE_FAILED", `${what}: unknown port type "${u}"`);
   }
   const obj = asObject(u, what);
-  noUnknownKeys(obj, ["type", "optional", "labels"], what);
+  noUnknownKeys(obj, ["type", "optional", "many", "labels"], what);
   const type = asString(reqField(obj, "type", what), `${what}.type`, 16);
   if (type !== "text" && type !== "json" && type !== "choice") {
     throw new MorphogenError("PARSE_FAILED", `${what}.type: unknown "${type}"`);
   }
+  const asBool = (v: unknown, name: string) =>
+    v === true || v === false ? v : fail(`${what}.${name} must be a boolean`);
   const optionalRaw = optField(obj, "optional");
   const optional =
-    optionalRaw === undefined
-      ? undefined
-      : optionalRaw === true || optionalRaw === false
-        ? optionalRaw
-        : fail(`${what}.optional must be a boolean`);
+    optionalRaw === undefined ? undefined : asBool(optionalRaw, "optional");
+  const manyRaw = optField(obj, "many");
+  const many = manyRaw === undefined ? undefined : asBool(manyRaw, "many");
   const labelsRaw = optField(obj, "labels");
   let labels: string[] | undefined;
   if (labelsRaw !== undefined) {
@@ -216,15 +216,20 @@ function parsePortType(u: unknown, what: string): PortType {
     }
   }
   if (type === "choice") {
-    const out: { type: "choice"; optional?: boolean; labels?: string[] } = {
-      type,
-    };
+    const out: {
+      type: "choice";
+      optional?: boolean;
+      many?: boolean;
+      labels?: string[];
+    } = { type };
     if (labels !== undefined) out.labels = labels;
     if (optional !== undefined) out.optional = optional;
+    if (many !== undefined) out.many = many;
     return out;
   }
   const out: PortType = { type };
   if (optional !== undefined) out.optional = optional;
+  if (many !== undefined) out.many = many;
   return out;
 }
 
@@ -232,7 +237,11 @@ function fail(msg: string): never {
   throw new MorphogenError("PARSE_FAILED", msg);
 }
 
-function parsePortMap(u: unknown, what: string): PortMap {
+function parsePortMap(
+  u: unknown,
+  what: string,
+  role: "consumer" | "producer" = "consumer",
+): PortMap {
   const obj = asObject(u, what);
   if (Object.keys(obj).length > BOUNDS.maxInterfacePorts) {
     throw new MorphogenError(
@@ -243,7 +252,14 @@ function parsePortMap(u: unknown, what: string): PortMap {
   const out: PortMap = {};
   for (const [name, decl] of Object.entries(obj)) {
     asSafeId(name, `${what} port name`);
-    out[name] = parsePortType(decl, `${what}.${name}`);
+    const pt = parsePortType(decl, `${what}.${name}`);
+    if (role === "producer" && pt.many) {
+      throw new MorphogenError(
+        "PARSE_FAILED",
+        `${what}.${name}: many is only valid on input ports`,
+      );
+    }
+    out[name] = pt;
   }
   return out;
 }
@@ -385,6 +401,7 @@ function parseCell(u: unknown, what: string): Cell {
         outputs: parsePortMap(
           reqField(obj, "outputs", what),
           `${what}.outputs`,
+          "producer",
         ),
       };
     }
@@ -402,6 +419,12 @@ function parseCell(u: unknown, what: string): Cell {
         asSafeId(name, `${what}.outputs port name`);
         const d = asObject(decl, `${what}.outputs.${name}`);
         const pt = parsePortType(d, `${what}.outputs.${name}`);
+        if (pt.many) {
+          throw new MorphogenError(
+            "PARSE_FAILED",
+            `${what}.outputs.${name}: many is only valid on input ports`,
+          );
+        }
         const value = reqField(d, "value", `${what}.outputs.${name}`);
         asJsonValue(value, `${what}.outputs.${name}.value`);
         outputs[name] = { ...pt, value: value as JsonValue };
@@ -901,6 +924,7 @@ function portMapJson(m: PortMap): JsonObject {
 function portTypeJson(p: PortType): JsonObject {
   const o: JsonObject = { type: p.type };
   if (p.optional) o.optional = true;
+  if (p.many) o.many = true;
   if (p.type === "choice" && p.labels) o.labels = p.labels;
   return o;
 }

@@ -824,6 +824,127 @@ describe("scheduler", () => {
     ).rejects.toThrowError(/not an interface output/);
   });
 
+  test("many ports fan in every delivered edge in manifest order", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:fanin",
+      name: "FanIn",
+      cells: [
+        { id: "a", kind: "input", outputs: { v: "text" } },
+        { id: "b", kind: "input", outputs: { v: "text" } },
+        { id: "c", kind: "input", outputs: { v: "text" } },
+        { id: "join", kind: "fn", fn: "join.v1" },
+      ],
+      edges: [
+        { from: { cell: "a", port: "v" }, to: { cell: "join", port: "items" } },
+        { from: { cell: "b", port: "v" }, to: { cell: "join", port: "items" } },
+        { from: { cell: "c", port: "v" }, to: { cell: "join", port: "items" } },
+      ],
+    });
+    const receipt = await run(m, {
+      args: { a: { v: "x" }, b: { v: "y" }, c: { v: "z" } },
+    });
+    expect(receipt.outcome).toBe("complete");
+    expect(receipt.cells["join"]?.outputs?.value).toBe("x\ny\nz");
+  });
+
+  test("guarded fan-in contributes only the edges that fired", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:condfan",
+      name: "CondFan",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "text" } },
+        {
+          id: "route",
+          kind: "classifier",
+          inputs: { v: "text" },
+          prompt: "p",
+          output: { kind: "choice", labels: ["a", "b"] },
+        },
+        { id: "as-a", kind: "fn", fn: "tag.v1" },
+        { id: "as-b", kind: "fn", fn: "tag.v1" },
+        { id: "join", kind: "fn", fn: "join.v1" },
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "route", port: "v" } },
+        {
+          from: { cell: "route", port: "out" }, to: { cell: "as-a", port: "tag" },
+          guard: { equals: "a" },
+        },
+        { from: { cell: "src", port: "v" }, to: { cell: "as-a", port: "value" } },
+        {
+          from: { cell: "route", port: "out" }, to: { cell: "as-b", port: "tag" },
+          guard: { equals: "b" },
+        },
+        { from: { cell: "src", port: "v" }, to: { cell: "as-b", port: "value" } },
+        { from: { cell: "as-a", port: "value" }, to: { cell: "join", port: "items" } },
+        { from: { cell: "as-b", port: "value" }, to: { cell: "join", port: "items" } },
+      ],
+    });
+    const receipt = await run(m, {
+      args: { src: { v: "hi" } },
+      responses: { route: "b" },
+    });
+    expect(receipt.outcome).toBe("complete");
+    expect(receipt.cells["as-a"]?.status).toBe("skipped");
+    expect(receipt.cells["as-b"]?.status).toBe("committed");
+    expect(receipt.cells["join"]?.outputs?.value).toBe("B: hi");
+  });
+
+  test("many on a producer port is rejected", async () => {
+    expect(() =>
+      manifest({
+        contract: "morphogen.organism.v1",
+        key: "organism:badmany",
+        name: "Bad",
+        cells: [
+          { id: "src", kind: "input", outputs: { v: { type: "text", many: true } } },
+        ],
+      }),
+    ).toThrowError(/many is only valid on input ports/);
+  });
+
+  test("an agent many input arrives as a list in context.inputs", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:manyagent",
+      name: "ManyAgent",
+      cells: [
+        { id: "a", kind: "input", outputs: { v: "text" } },
+        { id: "b", kind: "input", outputs: { v: "text" } },
+        {
+          id: "synth",
+          kind: "agent",
+          inputs: { notes: { type: "text", many: true } },
+          prompt: "p",
+          output: { kind: "text" },
+        },
+      ],
+      edges: [
+        { from: { cell: "a", port: "v" }, to: { cell: "synth", port: "notes" } },
+        { from: { cell: "b", port: "v" }, to: { cell: "synth", port: "notes" } },
+      ],
+    });
+    let captured: JsonValue | undefined;
+    const receipt = await runOrganism({
+      manifest: m,
+      args: { a: { v: "n1" }, b: { v: "n2" } },
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [{
+        id: "capture",
+        async execute(req) {
+          captured = req.context as unknown as JsonValue;
+          return "done";
+        },
+      }],
+    });
+    expect(receipt.outcome).toBe("complete");
+    const ctx = captured as { inputs: { notes: JsonValue } };
+    expect(ctx.inputs.notes).toEqual(["n1", "n2"]);
+  });
+
   test("unresolvable cells produce a stuck outcome", async () => {
     // two pending cells blocked behind a skipped branch with a required input
     const m = manifest({

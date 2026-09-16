@@ -134,10 +134,17 @@ canonicalized, hashed, and embedded. It can never carry code.
 
 - A guard is valid only on a `choice` producer, and the label must be in the
   producer's declared labels.
-- An input port accepts at most one edge (single assignment).
+- An input port accepts at most one edge (single assignment) unless it
+  declares `"many": true`. A `many` port collects every delivered edge in
+  manifest edge order into a list. A guarded edge into a `many` port
+  contributes only when its guard fires — that is conditional fan-in. `many`
+  is valid on input ports only (agent/classifier/gate `inputs`, registry fn
+  signature inputs); a required `many` port needs at least one delivery or the
+  cell skips, and an optional one arrives as `[]`.
 - Type compatibility: same type; `choice` may feed `text`; `choice` feeds
   `choice` when the consumer's labels cover the producer's; anything feeds
-  `json`; `json` feeds only `json`.
+  `json`; `json` feeds only `json`. For `many` ports the rules apply per
+  element.
 - The graph must be acyclic.
 
 ## Run semantics
