@@ -21,9 +21,13 @@ valid only on choice producers with matching labels. The check happens at
 admission — an invalid graph never runs. (From Platonik's port contracts.)
 
 **Context is a view, not a stuffing.** An agent cell declares which of its
-inputs enter the effect request. The executor sees exactly those bytes,
-bounded. The harder problem — a composable view language over the whole
-program graph — is deliberately deferred; v1 views are per-cell.
+inputs enter the effect request (`view.inputs`), and may also name ancestor
+cells (`view.cells`) whose committed records join the request under
+`context.cells`. Admission rejects non-ancestors, so a cell can never read a
+record that has not committed — the graph declares the slice, and the
+executor sees exactly those bytes, bounded. A composable view language over
+the whole program graph remains deferred; v1 views are per-cell and
+ancestor-only.
 
 **Agents call back through declared tools.** `cell.tools` names registry fns
 the executor may invoke mid-activation; a `{"tool","inputs"}` response runs
@@ -46,6 +50,14 @@ interface ports — symbolization without magic. Because a manifest can never
 contain its own digest, embedding graphs are acyclic by construction; the
 run still bounds nesting depth via the root manifest's `maxDepth`.
 
+**Iteration is a cell, not an edge.** `repeat` runs a digest-embedded
+sub-manifest up to `maxRounds`, carrying named interface outputs into the
+next round's inputs, with an optional `until` early-exit. The edge graph
+stays acyclic — re-entry lives behind a cell boundary, rounds record under
+`loop/r<n>/` paths, and the work ledger never resets. `until` is not an
+assertion: an unsatisfied guard just means the last round's outputs commit,
+and downstream guarded edges decide what to do with them.
+
 **Run budgets belong to the root manifest.** Steps, agent calls, work units,
 byte bounds, and depth are set by the top-level manifest and apply across
 every nested level. An inner manifest's own budgets apply when it runs as a
@@ -63,4 +75,6 @@ execution are different jobs.)
   Valhalla concern).
 - Workflow breeding/mutation, organisms that emit organisms.
 - Hosted habitats: persistent goal-seeking configurations of many organisms.
-- A real view language over the program graph.
+- A real view language over the program graph (beyond `view.cells`).
+- Cycles as ordinary edges and streaming re-activation (`repeat` is the only
+  re-entry v1 admits).

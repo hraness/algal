@@ -294,6 +294,7 @@ async function main(): Promise<number> {
             const c = v as JsonObject;
             const entry: JsonObject = { status: c.status ?? null };
             if (c.shadowOut !== undefined) entry.shadowOut = c.shadowOut;
+            if (c.rounds !== undefined) entry.rounds = c.rounds;
             const tc = c.toolCalls;
             if (Array.isArray(tc) && tc.length) entry.toolCalls = tc.length;
             if (c.effectDigest !== undefined) entry.effectDigest = c.effectDigest;

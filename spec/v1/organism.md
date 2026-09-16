@@ -43,6 +43,7 @@ canonicalized, hashed, and embedded. It can never carry code.
 | `classifier` | agent restricted to `choice` output | same as agent |
 | `gate` | approval point — a `choice` effect routed to a human/policy, not a model | same as agent; no `tools`/`shadow` |
 | `organism` | embedded sub-manifest by `sha256:` digest | inherited from the sub-manifest `interface` |
+| `repeat` | bounded re-run of a digest-embedded sub-manifest | inherited from the sub-manifest `interface` |
 
 ### agent / classifier / gate fields
 
@@ -52,7 +53,7 @@ canonicalized, hashed, and embedded. It can never carry code.
   "kind": "classifier",
   "inputs": { "ticket": "text" },
   "prompt": "Classify the ticket.",
-  "view": { "inputs": "*", "note": "optional" },
+  "view": { "inputs": "*", "note": "optional", "cells": ["prep"] },
   "output": { "kind": "choice", "labels": ["bug", "feature"], "onMiss": "bug" },
   "route": { "provider": "…", "model": "…", "preset": "…" },
   "tools": ["pick.v1"],
@@ -65,7 +66,13 @@ canonicalized, hashed, and embedded. It can never carry code.
   `fn` cell.
 - `view.inputs` selects which declared inputs enter the effect request context
   (`"*"` or a list of declared names). The context is canonical JSON
-  `{inputs, note?, turn, toolLog?}`, byte-bounded before dispatch.
+  `{inputs, note?, cells?, turn, toolLog?}`, byte-bounded before dispatch.
+- `view.cells` (optional, ≤ 16 unique ids) names ancestor cells of the same
+  organism scope. Their committed records —
+  `{status, outputs?}`, or `null` if absent — enter the context under
+  `context.cells.<id>`. Admission rejects unknown ids and any cell that is not
+  an ancestor, so every record exists before the viewer activates. This is how
+  an agent reads beyond its own inputs: the graph declares the slice.
 - `output` is `{"kind":"text"}`, `{"kind":"json","schema":{…}}` (a bounded
   schema subset: `type`, `required`, `properties`, depth ≤ 4), or
   `{"kind":"choice","labels":[…],"onMiss"?}`.
@@ -88,6 +95,34 @@ canonicalized, hashed, and embedded. It can never carry code.
   turn is a separate effect request and counts against `maxAgentCalls`. A
   `{tool, inputs}` response naming a ref outside `tools` is ordinary output.
   Tool calls that omit a required fn input fail the cell.
+
+### repeat cells
+
+```json
+{
+  "id": "loop",
+  "kind": "repeat",
+  "manifest": "sha256:…",
+  "maxRounds": 4,
+  "carry": { "draft": "draft" },
+  "until": { "output": "verdict", "equals": "ship" }
+}
+```
+
+- `manifest` is the `sha256:` digest of a sub-manifest that declares an
+  `interface`. The repeat cell's ports are inherited from that interface.
+- `maxRounds` is 1–16. Round *n*'s cells record under `loop/r<n>/…` paths.
+- `carry` maps interface output name → interface input name. After each round
+  the named outputs feed the next round's inputs. A carried input port is
+  optional on the repeat cell (round 0 may run without it); edge-fed values
+  supply round 0, carried values override them in later rounds.
+- `until` is an early-exit condition: stop after a round whose interface
+  output `until.output` equals `until.equals` (canonical equality; if the
+  output is `choice`, `equals` must be a declared label). It is **not** an
+  assertion — exhausting `maxRounds` commits the last round's outputs, and
+  downstream `guard`s decide what to do with them.
+- The cell record carries `rounds` when more than one round ran. All run
+  budgets — steps, agent calls, work — are root-owned across every round.
 
 ## Edges
 
@@ -119,6 +154,9 @@ canonicalized, hashed, and embedded. It can never carry code.
   manifest and shared across nested levels. Inner cells appear in the receipt
   under `outer/inner` paths. A manifest can never contain its own digest, so
   embedding graphs are acyclic by construction.
+- `repeat` cells run their sub-manifest up to `maxRounds` times, each round
+  recording under `loop/r<n>/…`. Iteration is the only re-entry v1 admits:
+  the edge graph itself stays acyclic.
 - A run ends `complete`, `failed` (first failure wins, recorded), or `stuck`
   (pending cells remain but none can resolve).
 
@@ -148,7 +186,7 @@ edges. A miss on a `choice` output resolves to `onMiss` or fails the run.
 
 A receipt records `manifestDigest`, `args`, `outcome`, per-cell records
 (`committed | skipped | failed`, outputs, `effectDigest`, `toolCalls`,
-`shadowOut`), the
+`shadowOut`, `rounds`), the
 `effects` list (`requestDigest`, raw `output`, `executor` id, optional usage),
 the bounded `events` log, the work ledger, and `failure` detail. `digest` is
 over the canonical receipt minus itself.

@@ -59,10 +59,10 @@ $ morphogen verify run.receipt.json triage.morphogen.json
     <h2>Boundaries</h2>
     <ul>
       <li>A manifest carries no executable code. <code>fn</code> cells name host-registered functions; agent cells declare prompts, views, and contracts.</li>
-      <li>An agent cell sees only its declared view of the graph — byte-bounded, computed, never a stuffed prompt.</li>
+      <li>An agent cell sees only its declared view of the graph — its inputs, plus ancestor cells named in <code>view.cells</code>. Byte-bounded, computed, never a stuffed prompt.</li>
       <li>Model output is data. It re-enters the graph only after binding to a declared output contract.</li>
       <li>Agents reach back into the automaton only through <code>tools</code>: declared registry functions, turn-bounded, every call on the receipt. Classifiers can run in shadow — the model's decision is recorded while a declared label stays authoritative.</li>
-      <li>Organisms embed: a sealed, content-addressed manifest becomes one cell inside a larger organism, exposing only its declared ports.</li>
+      <li>Organisms embed: a sealed, content-addressed manifest becomes one cell inside a larger organism, exposing only its declared ports. A <code>repeat</code> cell re-runs one for a bounded number of rounds with carried values — the evaluator-optimizer loop as structure.</li>
       <li>Receipts make runs replayable, not reproducible — the same organism on fresh inputs can legitimately diverge.</li>
     </ul>
   </section>

@@ -4,6 +4,7 @@ import { scriptedExecutor } from "./effects";
 import { builtinRegistry } from "./registry";
 import { runOrganism } from "./run";
 import { MemoryStore } from "./store";
+import type { JsonValue } from "./values";
 
 function manifest(u: unknown): OrganismManifest {
   return parseOrganismManifest(u);
@@ -598,6 +599,229 @@ describe("scheduler", () => {
     expect(receipt.outcome).toBe("complete");
     expect(seen).toEqual(["gate"]);
     expect(receipt.cells["ship"]?.outputs?.value).toBe("ALLOW: release-1");
+  });
+
+  test("view.cells delivers ancestor records into the effect context", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:viewcells",
+      name: "ViewCells",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "text" } },
+        { id: "prep", kind: "fn", fn: "tag.v1" },
+        {
+          id: "brain",
+          kind: "agent",
+          inputs: { v: "text" },
+          prompt: "p",
+          view: { inputs: "*", cells: ["prep"] },
+          output: { kind: "text" },
+        },
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "prep", port: "tag" } },
+        { from: { cell: "src", port: "v" }, to: { cell: "prep", port: "value" } },
+        { from: { cell: "prep", port: "value" }, to: { cell: "brain", port: "v" } },
+      ],
+    });
+    let captured: JsonValue | undefined;
+    const receipt = await runOrganism({
+      manifest: m,
+      args: { src: { v: "seed" } },
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [{
+        id: "capture",
+        async execute(req) {
+          captured = req.context as unknown as JsonValue;
+          return "ok";
+        },
+      }],
+    });
+    expect(receipt.outcome).toBe("complete");
+    const ctx = captured as { cells?: Record<string, { status: string; outputs?: Record<string, JsonValue> }> };
+    expect(ctx.cells?.prep?.status).toBe("committed");
+    expect(ctx.cells?.prep?.outputs?.value).toBe("SEED: seed");
+  });
+
+  test("view.cells rejects non-ancestor and unknown cells", async () => {
+    // sibling commits before "brain" in declared order but is not an ancestor
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:viewcells-bad",
+      name: "Bad",
+      cells: [
+        { id: "sibling", kind: "fn", fn: "echo.v1" },
+        {
+          id: "brain",
+          kind: "agent",
+          inputs: {},
+          prompt: "p",
+          view: { cells: ["sibling"] },
+          output: { kind: "text" },
+        },
+      ],
+      edges: [],
+    });
+    await expect(
+      runOrganism({
+        manifest: m,
+        args: {},
+        fns: builtinRegistry(),
+        store: new MemoryStore(),
+        executors: [],
+      }),
+    ).rejects.toThrowError(/not an ancestor|cycle/i);
+  });
+
+  test("repeat cell loops a sub-manifest with carry until the guard", async () => {
+    const store = new MemoryStore();
+    const inner = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:polish",
+      name: "Polish",
+      interface: {
+        inputs: { draft: { cell: "in", port: "draft" } },
+        outputs: {
+          draft: { cell: "editor", port: "out" },
+          verdict: { cell: "critic", port: "out" },
+        },
+      },
+      cells: [
+        { id: "in", kind: "input", outputs: { draft: "text" } },
+        {
+          id: "editor",
+          kind: "agent",
+          inputs: { draft: "text" },
+          prompt: "Improve the draft.",
+          output: { kind: "text" },
+        },
+        {
+          id: "critic",
+          kind: "classifier",
+          inputs: { draft: "text" },
+          prompt: "Ship it?",
+          output: { kind: "choice", labels: ["revise", "ship"] },
+        },
+      ],
+      edges: [
+        { from: { cell: "in", port: "draft" }, to: { cell: "editor", port: "draft" } },
+        { from: { cell: "editor", port: "out" }, to: { cell: "critic", port: "draft" } },
+      ],
+    });
+    const innerDigest = await store.putManifest(inner);
+    const outer = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:refine",
+      name: "Refine",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "text" } },
+        {
+          id: "loop",
+          kind: "repeat",
+          manifest: innerDigest,
+          maxRounds: 4,
+          carry: { draft: "draft" },
+          until: { output: "verdict", equals: "ship" },
+        },
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "loop", port: "draft" } },
+      ],
+    });
+    const receipt = await runOrganism({
+      manifest: outer,
+      args: { src: { v: "v0" } },
+      fns: builtinRegistry(),
+      store,
+      executors: [scriptedExecutor({
+        editor: ["v1-draft", "v2-draft", "v3-draft", "v4-draft"],
+        critic: ["revise", "revise", "ship"],
+      })],
+    });
+    expect(receipt.outcome).toBe("complete");
+    expect(receipt.cells["loop"]?.rounds).toBe(3);
+    expect(receipt.cells["loop"]?.outputs?.draft).toBe("v3-draft");
+    expect(receipt.cells["loop"]?.outputs?.verdict).toBe("ship");
+    // carried draft: round 1's editor saw round 0's output
+    expect(receipt.cells["loop/r1/in"]?.outputs?.draft).toBe("v1-draft");
+    expect(receipt.cells["loop/r2/in"]?.outputs?.draft).toBe("v2-draft");
+    expect(receipt.cells["loop/r3"]).toBeUndefined();
+    expect(receipt.work.agentCalls).toBe(6); // editor+critic × 3 rounds
+  });
+
+  test("repeat without until runs exactly maxRounds", async () => {
+    const store = new MemoryStore();
+    const inner = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:spin",
+      name: "Spin",
+      interface: {
+        inputs: { v: { cell: "in", port: "v" } },
+        outputs: { v: { cell: "pass", port: "value" } },
+      },
+      cells: [
+        { id: "in", kind: "input", outputs: { v: "json" } },
+        { id: "pass", kind: "fn", fn: "echo.v1" },
+      ],
+      edges: [{ from: { cell: "in", port: "v" }, to: { cell: "pass", port: "value" } }],
+    });
+    const d = await store.putManifest(inner);
+    const outer = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:spinner",
+      name: "Spinner",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "json" } },
+        { id: "loop", kind: "repeat", manifest: d, maxRounds: 3, carry: { v: "v" } },
+      ],
+      edges: [{ from: { cell: "src", port: "v" }, to: { cell: "loop", port: "v" } }],
+    });
+    const receipt = await runOrganism({
+      manifest: outer,
+      args: { src: { v: 1 } },
+      fns: builtinRegistry(),
+      store,
+      executors: [],
+    });
+    expect(receipt.outcome).toBe("complete");
+    expect(receipt.cells["loop"]?.rounds).toBe(3);
+    expect(receipt.cells["loop/r0/pass"]?.status).toBe("committed");
+    expect(receipt.cells["loop/r2/pass"]?.status).toBe("committed");
+  });
+
+  test("repeat carry must name interface ports", async () => {
+    const store = new MemoryStore();
+    const inner = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:tiny",
+      name: "Tiny",
+      interface: {
+        inputs: { v: { cell: "in", port: "v" } },
+        outputs: { v: { cell: "in", port: "v" } },
+      },
+      cells: [{ id: "in", kind: "input", outputs: { v: "text" } }],
+    });
+    const d = await store.putManifest(inner);
+    const outer = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:badcarry",
+      name: "BadCarry",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "text" } },
+        { id: "loop", kind: "repeat", manifest: d, maxRounds: 2, carry: { nope: "v" } },
+      ],
+      edges: [{ from: { cell: "src", port: "v" }, to: { cell: "loop", port: "v" } }],
+    });
+    await expect(
+      runOrganism({
+        manifest: outer,
+        args: { src: { v: "x" } },
+        fns: builtinRegistry(),
+        store,
+        executors: [],
+      }),
+    ).rejects.toThrowError(/not an interface output/);
   });
 
   test("unresolvable cells produce a stuck outcome", async () => {

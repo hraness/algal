@@ -66,6 +66,7 @@ export type CellRecord = {
   effectDigest?: string;
   toolCalls?: JsonValue[];
   shadowOut?: JsonValue;
+  rounds?: number;
 };
 
 export type RunReceipt = {
@@ -257,6 +258,7 @@ async function runInto(
         if (act.effectDigest) rec.effectDigest = act.effectDigest;
         if (act.toolCalls) rec.toolCalls = act.toolCalls as unknown as JsonValue[];
         if (act.shadowOut !== undefined) rec.shadowOut = act.shadowOut;
+        if (act.rounds !== undefined) rec.rounds = act.rounds;
         ctx.cells[cellPath(cell.id)] = rec;
         emit(ctx, { kind: "cell.commit", path: cellPath(cell.id) });
       } catch (e) {
@@ -288,6 +290,7 @@ type Activation = {
   effectDigest?: Digest;
   toolCalls?: { fn: string; inputs: JsonValue; output: JsonValue }[];
   shadowOut?: JsonValue;
+  rounds?: number;
 };
 
 /** The reserved tool-call shape. Only recognized when the cell declares the
@@ -370,6 +373,28 @@ async function activate(
       const executor = pickExecutor(ctx.opts.executors, cell);
       const toolLog: { fn: string; inputs: JsonValue; output: JsonValue }[] = [];
 
+      // declared cross-cell context: records of ancestor cells in this scope.
+      // `path` is this cell's own path; the scope is its parent prefix.
+      const scope = path.includes("/")
+        ? path.slice(0, path.lastIndexOf("/"))
+        : "";
+      const cellView: JsonObject | undefined = cell.view.cells?.length
+        ? Object.fromEntries(
+            cell.view.cells.map((id) => {
+              const rec = ctx.cells[scope ? `${scope}/${id}` : id];
+              return [
+                id,
+                rec
+                  ? {
+                      status: rec.status,
+                      ...(rec.outputs ? { outputs: rec.outputs } : {}),
+                    }
+                  : null,
+              ] as [string, JsonValue];
+            }),
+          )
+        : undefined;
+
       for (let turn = 0; ; turn++) {
         if (turn >= maxTurns) {
           throw new MorphogenError(
@@ -379,6 +404,7 @@ async function activate(
         }
         const context: JsonObject = { inputs: viewInputs, turn };
         if (cell.view.note !== undefined) context.note = cell.view.note;
+        if (cellView) context.cells = cellView;
         if (toolLog.length) {
           context.toolLog = toolLog as unknown as JsonValue;
         }
@@ -482,6 +508,57 @@ async function activate(
       }
       return { outputs: out };
     }
+    case "repeat": {
+      const subCompiled = compiled.children.get(cell.id)!;
+      const iface = subCompiled.manifest.interface ?? { inputs: {}, outputs: {} };
+      const carried: Record<string, JsonValue> = {};
+      let out: Record<string, JsonValue> = {};
+      let rounds = 0;
+      for (let r = 0; r < cell.maxRounds; r++) {
+        rounds = r + 1;
+        // round inputs: edge-fed values, overridden by carried outputs
+        const roundInputs = { ...inputs, ...carried };
+        const subArgs = argsForSubOrganism(subCompiled.manifest, roundInputs);
+        const roundPath = `${path}/r${r}`;
+        const outcome = await runInto(
+          subCompiled,
+          subArgs,
+          roundPath,
+          ctx,
+          depth + 1,
+        );
+        if (outcome !== "complete") {
+          const code = ctx.failure?.code ?? "STUCK";
+          throw new MorphogenError(
+            code,
+            ctx.failure?.message ??
+              `repeat cell "${cell.id}" round ${r}: inner run ${outcome}`,
+          );
+        }
+        out = {};
+        for (const [name, target] of Object.entries(iface.outputs)) {
+          const rec = ctx.cells[`${roundPath}/${target.cell}`];
+          const v = rec?.outputs?.[target.port];
+          if (v !== undefined) out[name] = v;
+        }
+        for (const [outName, inName] of Object.entries(cell.carry ?? {})) {
+          const v = out[outName];
+          if (v !== undefined) carried[inName] = v;
+        }
+        if (cell.until) {
+          const v = out[cell.until.output];
+          if (
+            v !== undefined &&
+            canonicalize(v) === canonicalize(cell.until.equals)
+          ) {
+            break;
+          }
+        }
+      }
+      const act: Activation = { outputs: out };
+      if (rounds > 1) act.rounds = rounds;
+      return act;
+    }
   }
 }
 
@@ -558,7 +635,10 @@ function fail(
   code: ErrorCode,
   message: string,
 ): "failed" {
-  ctx.failure = { code, message, ...(path ? { path } : {}) };
+  // first failure wins — a nested failure keeps its innermost path
+  if (!ctx.failure) {
+    ctx.failure = { code, message, ...(path ? { path } : {}) };
+  }
   return "failed";
 }
 

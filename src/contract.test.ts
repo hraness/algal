@@ -79,6 +79,119 @@ describe("manifest parsing", () => {
   });
 });
 
+describe("view.cells and repeat parsing", () => {
+  const agent = (view: unknown) => ({
+    contract: "morphogen.organism.v1",
+    key: "organism:v",
+    name: "V",
+    cells: [
+      { id: "src", kind: "input", outputs: { v: "text" } },
+      {
+        id: "a",
+        kind: "agent",
+        inputs: { v: "text" },
+        prompt: "p",
+        view,
+        output: { kind: "text" },
+      },
+    ],
+    edges: [
+      { from: { cell: "src", port: "v" }, to: { cell: "a", port: "v" } },
+    ],
+  });
+
+  test("view.cells round-trips through manifestToJson", () => {
+    const m = parseOrganismManifest(agent({ cells: ["src"] }));
+    expect(m.cells[1]!.kind === "agent" && m.cells[1]!.view.cells).toEqual(["src"]);
+    const reparsed = parseOrganismManifest(manifestToJson(m));
+    expect(
+      reparsed.cells[1]!.kind === "agent" && reparsed.cells[1]!.view.cells,
+    ).toEqual(["src"]);
+  });
+
+  test("view.cells rejects duplicates, bad ids, and over-bound lists", () => {
+    expect(() => parseOrganismManifest(agent({ cells: ["src", "src"] })))
+      .toThrowError(/unique/);
+    expect(() => parseOrganismManifest(agent({ cells: ["Bad Id"] })))
+      .toThrowError();
+    const tooMany = Array.from({ length: BOUNDS.maxViewCells + 1 }, (_, i) => `c${i}`);
+    expect(() => parseOrganismManifest(agent({ cells: tooMany })))
+      .toThrowError();
+  });
+
+  test("repeat requires a digest manifest and bounded maxRounds", async () => {
+    const store = new MemoryStore();
+    const inner = parseOrganismManifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:inner",
+      name: "Inner",
+      interface: {
+        inputs: { v: { cell: "in", port: "v" } },
+        outputs: { v: { cell: "in", port: "v" } },
+      },
+      cells: [{ id: "in", kind: "input", outputs: { v: "text" } }],
+    });
+    const d = await store.putManifest(inner);
+    const outer = (cell: Record<string, unknown>) => ({
+      contract: "morphogen.organism.v1",
+      key: "organism:o",
+      name: "O",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "text" } },
+        cell,
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "loop", port: "v" } },
+      ],
+    });
+    // valid
+    const ok = parseOrganismManifest(outer({
+      id: "loop", kind: "repeat", manifest: d, maxRounds: 3,
+      carry: { v: "v" }, until: { output: "v", equals: "done" },
+    }));
+    expect(ok.cells[1]!.kind).toBe("repeat");
+    // bounds
+    expect(() => parseOrganismManifest(outer({
+      id: "loop", kind: "repeat", manifest: d, maxRounds: 0,
+    }))).toThrowError();
+    expect(() => parseOrganismManifest(outer({
+      id: "loop", kind: "repeat", manifest: d,
+      maxRounds: BOUNDS.maxRounds + 1,
+    }))).toThrowError();
+    expect(() => parseOrganismManifest(outer({
+      id: "loop", kind: "repeat", manifest: d, maxRounds: 2, extra: 1,
+    }))).toThrowError();
+    // admission: until must name an interface output
+    await expect(
+      compileOrganism(
+        parseOrganismManifest(outer({
+          id: "loop", kind: "repeat", manifest: d, maxRounds: 2,
+          until: { output: "nope", equals: "x" },
+        })),
+        builtinRegistry(),
+        store,
+      ),
+    ).rejects.toThrowError(/not an interface output/);
+    // admission: child without interface is rejected
+    const noIface = parseOrganismManifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:noiface",
+      name: "NI",
+      cells: [{ id: "in", kind: "input", outputs: { v: "text" } }],
+    });
+    const d2 = await store.putManifest(noIface);
+    await expect(
+      compileOrganism(
+        parseOrganismManifest(outer({
+          id: "loop", kind: "repeat", manifest: d2, maxRounds: 2,
+        })),
+        builtinRegistry(),
+        store,
+      ),
+    ).rejects.toThrowError(/interface/);
+  });
+});
+
 describe("graph admission", () => {
   test("rejects cycles", async () => {
     const m = parseOrganismManifest({

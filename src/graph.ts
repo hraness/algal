@@ -87,38 +87,94 @@ export function cellSignature(
           `organism cell "${cell.id}" requires a sub-manifest with an interface`,
         );
       }
-      const inputs: PortMap = {};
-      for (const [name, target] of Object.entries(sub.manifest.interface.inputs)) {
-        const inner = sub.manifest.cells.find((c) => c.id === target.cell);
-        if (!inner || inner.kind !== "input") {
-          throw new MorphogenError(
-            "INTERFACE_MISMATCH",
-            `interface input "${name}" of "${sub.manifest.key}" must target an input cell`,
-          );
-        }
-        const pt = inner.outputs[target.port];
-        if (!pt) {
-          throw new MorphogenError(
-            "INTERFACE_MISMATCH",
-            `interface input "${name}" of "${sub.manifest.key}" targets missing port "${target.cell}.${target.port}"`,
-          );
-        }
-        inputs[name] = pt;
+      return interfaceSignature(cell.id, sub);
+    }
+    case "repeat": {
+      const sub = children.get(cell.id);
+      if (!sub?.manifest.interface) {
+        throw new MorphogenError(
+          "INTERFACE_MISMATCH",
+          `repeat cell "${cell.id}" requires a sub-manifest with an interface`,
+        );
       }
-      const outputs: PortMap = {};
-      for (const [name, target] of Object.entries(sub.manifest.interface.outputs)) {
-        const pt = sub.ports.get(target.cell)?.outputs[target.port];
-        if (!pt) {
+      const sig = interfaceSignature(cell.id, sub);
+      const iface = sub.manifest.interface;
+      // carry: interface output name → interface input name; a carried input
+      // is optional on the repeat cell since round 0 may run without it
+      for (const [outName, inName] of Object.entries(cell.carry ?? {})) {
+        if (!iface.outputs[outName]) {
           throw new MorphogenError(
             "INTERFACE_MISMATCH",
-            `interface output "${name}" of "${sub.manifest.key}" targets missing port "${target.cell}.${target.port}"`,
+            `repeat cell "${cell.id}" carry key "${outName}" is not an interface output of "${sub.manifest.key}"`,
           );
         }
-        outputs[name] = pt;
+        if (!iface.inputs[inName]) {
+          throw new MorphogenError(
+            "INTERFACE_MISMATCH",
+            `repeat cell "${cell.id}" carry target "${inName}" is not an interface input of "${sub.manifest.key}"`,
+          );
+        }
+        sig.inputs[inName] = { ...sig.inputs[inName]!, optional: true };
       }
-      return { inputs, outputs };
+      if (cell.until) {
+        const target = iface.outputs[cell.until.output];
+        if (!target) {
+          throw new MorphogenError(
+            "INTERFACE_MISMATCH",
+            `repeat cell "${cell.id}" until.output "${cell.until.output}" is not an interface output of "${sub.manifest.key}"`,
+          );
+        }
+        const pt = sig.outputs[cell.until.output]!;
+        if (pt.type === "choice" && pt.labels && !pt.labels.includes(cell.until.equals)) {
+          throw new MorphogenError(
+            "GUARD_INVALID",
+            `repeat cell "${cell.id}" until.equals "${cell.until.equals}" not in labels of "${cell.until.output}"`,
+          );
+        }
+      }
+      return sig;
     }
   }
+}
+
+/** Ports a digest-embedded sub-manifest exposes: interface inputs resolve to
+ * the targeted input cell's port types; interface outputs to the targeted
+ * cells' output port types. */
+function interfaceSignature(
+  cellId: string,
+  sub: CompiledOrganism,
+): CellPorts {
+  const iface = sub.manifest.interface!;
+  const inputs: PortMap = {};
+  for (const [name, target] of Object.entries(iface.inputs)) {
+    const inner = sub.manifest.cells.find((c) => c.id === target.cell);
+    if (!inner || inner.kind !== "input") {
+      throw new MorphogenError(
+        "INTERFACE_MISMATCH",
+        `interface input "${name}" of "${sub.manifest.key}" must target an input cell`,
+      );
+    }
+    const pt = inner.outputs[target.port];
+    if (!pt) {
+      throw new MorphogenError(
+        "INTERFACE_MISMATCH",
+        `interface input "${name}" of "${sub.manifest.key}" targets missing port "${target.cell}.${target.port}"`,
+      );
+    }
+    inputs[name] = pt;
+  }
+  const outputs: PortMap = {};
+  for (const [name, target] of Object.entries(iface.outputs)) {
+    const pt = sub.ports.get(target.cell)?.outputs[target.port];
+    if (!pt) {
+      throw new MorphogenError(
+        "INTERFACE_MISMATCH",
+        `interface output "${name}" of "${sub.manifest.key}" targets missing port "${target.cell}.${target.port}"`,
+      );
+    }
+    outputs[name] = pt;
+  }
+  return { inputs, outputs };
 }
 
 function mustCell(m: OrganismManifest, id: string): Cell {
@@ -189,11 +245,12 @@ export async function compileOrganism(
     seen.add(cell.id);
   }
 
-  // resolve organism children recursively; digest references always point to
-  // already-stored manifests, so the embedding graph is acyclic by construction
+  // resolve organism/repeat children recursively; digest references always
+  // point to already-stored manifests, so the embedding graph is acyclic by
+  // construction
   const children = new Map<string, CompiledOrganism>();
   for (const cell of manifest.cells) {
-    if (cell.kind !== "organism") continue;
+    if (cell.kind !== "organism" && cell.kind !== "repeat") continue;
     const digest = asDigest(cell.manifest, `cell "${cell.id}".manifest`);
     const sub = await store.getManifest(digest);
     if (!sub) {
@@ -295,8 +352,29 @@ export async function compileOrganism(
     inbound.set(to.id, list);
   });
 
-  // agent/classifier view inputs must be declared inputs; tools must be
+  // agent/classifier/gate views: inputs must be declared inputs; cells must
+  // be ancestors (resolved before the viewer can activate); tools must be
   // registry fns the host admits
+  const rev = new Map<string, string[]>();
+  for (const e of manifest.edges) {
+    const list = rev.get(e.to.cell) ?? [];
+    list.push(e.from.cell);
+    rev.set(e.to.cell, list);
+  }
+  const ancestorsOf = (id: string): Set<string> => {
+    const out = new Set<string>();
+    const stack = [id];
+    while (stack.length) {
+      const cur = stack.pop()!;
+      for (const p of rev.get(cur) ?? []) {
+        if (!out.has(p)) {
+          out.add(p);
+          stack.push(p);
+        }
+      }
+    }
+    return out;
+  };
   for (const cell of manifest.cells) {
     if (cell.kind !== "agent" && cell.kind !== "classifier" && cell.kind !== "gate")
       continue;
@@ -306,6 +384,23 @@ export async function compileOrganism(
           throw new MorphogenError(
             "MANIFEST_INVALID",
             `cell "${cell.id}" view.inputs references undeclared input "${name}"`,
+          );
+        }
+      }
+    }
+    if (cell.view.cells?.length) {
+      const ancestors = ancestorsOf(cell.id);
+      for (const id of cell.view.cells) {
+        if (!ports.has(id)) {
+          throw new MorphogenError(
+            "MANIFEST_INVALID",
+            `cell "${cell.id}" view.cells references unknown cell "${id}"`,
+          );
+        }
+        if (!ancestors.has(id)) {
+          throw new MorphogenError(
+            "MANIFEST_INVALID",
+            `cell "${cell.id}" view.cells names "${id}", which is not an ancestor — its record would not exist at activation`,
           );
         }
       }

@@ -7,6 +7,7 @@
 // context views, output contracts, and routes. The structure is the program.
 
 import { MorphogenError } from "./errors";
+import type { Digest } from "./digest";
 import {
   asArray,
   asInt,
@@ -37,6 +38,8 @@ export const BOUNDS = {
   maxRefLen: 64,
   maxTools: 16,
   maxTurns: 16,
+  maxViewCells: 16,
+  maxRounds: 16,
   maxPortNameLen: 64,
   maxSteps: 1024,
   maxAgentCalls: 64,
@@ -88,6 +91,10 @@ export type CellBudget = {
 
 export type AgentView = {
   inputs: "*" | PortName[];
+  /** Ancestor cell ids whose records (status + committed outputs) enter the
+   * context under `cells`. Ancestor-only: the manifest is rejected when a
+   * named cell cannot have resolved before this cell activates. */
+  cells?: string[];
   note?: string;
 };
 
@@ -117,6 +124,14 @@ export type Cell =
       tools?: string[];
       budget?: CellBudget;
       shadow?: { take: string };
+    }
+  | {
+      id: string;
+      kind: "repeat";
+      manifest: Digest;
+      maxRounds: number;
+      carry?: Record<string, string>;
+      until?: { output: string; equals: string };
     }
   | {
       id: string;
@@ -308,7 +323,7 @@ function checkSchemaDepth(u: JsonValue, what: string, depth: number): void {
 function parseView(u: unknown, what: string): AgentView {
   if (u === undefined) return { inputs: "*" };
   const obj = asObject(u, what);
-  noUnknownKeys(obj, ["inputs", "note"], what);
+  noUnknownKeys(obj, ["inputs", "cells", "note"], what);
   const inputsRaw = optField(obj, "inputs");
   let inputs: "*" | PortName[] = "*";
   if (inputsRaw !== undefined && inputsRaw !== "*") {
@@ -316,8 +331,25 @@ function parseView(u: unknown, what: string): AgentView {
       asSafeId(n, `${what}.inputs[${i}]`),
     );
   }
+  const cellsRaw = optField(obj, "cells");
+  let cells: string[] | undefined;
+  if (cellsRaw !== undefined) {
+    cells = asArray(cellsRaw, `${what}.cells`).map((n, i) =>
+      asSafeId(n, `${what}.cells[${i}]`),
+    );
+    if (cells.length === 0 || cells.length > BOUNDS.maxViewCells) {
+      throw new MorphogenError(
+        "PARSE_FAILED",
+        `${what}.cells must have 1..${BOUNDS.maxViewCells} entries`,
+      );
+    }
+    if (new Set(cells).size !== cells.length) {
+      throw new MorphogenError("PARSE_FAILED", `${what}.cells must be unique`);
+    }
+  }
   const note = optField(obj, "note");
   const view: AgentView = { inputs };
+  if (cells) view.cells = cells;
   if (note !== undefined) {
     view.note = asString(note, `${what}.note`, BOUNDS.maxNoteLen);
   }
@@ -393,8 +425,65 @@ function parseCell(u: unknown, what: string): Cell {
           reqField(obj, "manifest", what),
           `${what}.manifest`,
           72,
+        ) as Digest,
+      };
+    }
+    case "repeat": {
+      noUnknownKeys(
+        obj,
+        ["id", "kind", "manifest", "maxRounds", "carry", "until"],
+        what,
+      );
+      const cell: Cell = {
+        id,
+        kind,
+        manifest: asString(
+          reqField(obj, "manifest", what),
+          `${what}.manifest`,
+          72,
+        ) as Digest,
+        maxRounds: asInt(
+          reqField(obj, "maxRounds", what),
+          `${what}.maxRounds`,
+          1,
+          BOUNDS.maxRounds,
         ),
       };
+      const carry = optField(obj, "carry");
+      if (carry !== undefined) {
+        const cm = asObject(carry, `${what}.carry`);
+        if (Object.keys(cm).length > BOUNDS.maxInterfacePorts) {
+          throw new MorphogenError(
+            "PARSE_FAILED",
+            `${what}.carry exceeds ${BOUNDS.maxInterfacePorts} entries`,
+          );
+        }
+        const out: Record<string, string> = {};
+        for (const [k, v] of Object.entries(cm)) {
+          out[asSafeId(k, `${what}.carry key`)] = asSafeId(
+            v,
+            `${what}.carry.${k}`,
+          );
+        }
+        cell.carry = out;
+      }
+      const until = optField(obj, "until");
+      if (until !== undefined) {
+        const uo = asObject(until, `${what}.until`);
+        noUnknownKeys(uo, ["output", "equals"], `${what}.until`);
+        cell.until = {
+          output: asSafeId(
+            reqField(uo, "output", `${what}.until`),
+            `${what}.until.output`,
+          ),
+          equals: asString(
+            reqField(uo, "equals", `${what}.until`),
+            `${what}.until.equals`,
+            BOUNDS.maxLabelLen,
+          ),
+        };
+      }
+      return cell;
     }
     case "agent":
     case "classifier":
@@ -732,6 +821,17 @@ export function manifestToJson(m: OrganismManifest): JsonObject {
         return { id: c.id, kind: c.kind, fn: c.fn };
       case "organism":
         return { id: c.id, kind: c.kind, manifest: c.manifest };
+      case "repeat": {
+        const o: JsonObject = {
+          id: c.id,
+          kind: c.kind,
+          manifest: c.manifest,
+          maxRounds: c.maxRounds,
+        };
+        if (c.carry) o.carry = c.carry;
+        if (c.until) o.until = { output: c.until.output, equals: c.until.equals };
+        return o;
+      }
       case "agent":
       case "classifier":
       case "gate": {
@@ -807,6 +907,7 @@ function portTypeJson(p: PortType): JsonObject {
 
 function viewJson(v: AgentView): JsonObject {
   const o: JsonObject = { inputs: v.inputs === "*" ? "*" : v.inputs };
+  if (v.cells) o.cells = v.cells;
   if (v.note !== undefined) o.note = v.note;
   return o;
 }

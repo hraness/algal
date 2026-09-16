@@ -17,7 +17,11 @@ stdout fails the cell.
   "cellId": "plan",
   "kind": "agent",
   "prompt": "Draft a short implementation plan…",
-  "context": { "inputs": { "brief": "…" }, "turn": 0 },
+  "context": {
+    "inputs": { "brief": "…" },
+    "cells": { "prep": { "status": "committed", "outputs": { "value": "…" } } },
+    "turn": 0
+  },
   "output": { "kind": "json", "schema": { "type": "object" } },
   "budget": { "maxContextBytes": 65536, "maxOutputBytes": 4096 },
   "route": { "preset": "plan-standard" }
@@ -27,6 +31,11 @@ stdout fails the cell.
 `kind` is `agent`, `classifier`, or `gate`. A gate is an approval point —
 route those requests to a human or a policy check, not a model. `route` is a
 hint carried through verbatim; honoring it is the executor's business.
+
+`context.cells` appears only when the cell's `view.cells` declares ancestor
+cells; each entry is the ancestor's committed record (`status`, `outputs?`)
+or `null`. It is part of the bounded, canonical request — the same bytes the
+digest signs.
 
 The response binds to `output` before it can feed edges:
 

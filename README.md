@@ -35,6 +35,11 @@ Cell kinds:
 - `organism` — a sealed sub-manifest referenced by digest. The outer graph sees
   only its declared interface ports. This is symbolization: a compound that is
   versioned, inspectable, and not a free primitive.
+- `repeat` — bounded iteration over a digest-embedded sub-manifest: up to
+  `maxRounds` rounds, with `carry` mapping interface outputs back into the
+  next round's inputs and an optional `until` early-exit on an interface
+  output. The evaluator-optimizer pattern as structure — the graph stays a
+  DAG while the automaton gets ticks.
 
 Edges connect a producer port to a consumer port. Ports are typed (`text`,
 `json`, `choice`); guarded edges fire only when the produced choice equals the
@@ -93,6 +98,11 @@ broker provider access; the executor seam is where provider auth lives.
   output, which is bound to the declared output contract before it can feed
   downstream edges. A classifier that misses its label set fails closed unless
   `onMiss` is declared.
+- An agent cell's context is declared, not ambient: `view.inputs` selects its
+  edge-fed inputs, and `view.cells` names ancestor cells whose committed
+  records join the request under `context.cells`. Admission rejects
+  non-ancestors, so an agent can never read a cell that hasn't run — the
+  graph decides what the model sees.
 - An agent cell may declare `tools`: a bounded list of registry fns the
   executor may call back mid-activation. A `{"tool","inputs"}` response runs
   the fn, appends to the request's `toolLog`, and re-issues the request —

@@ -157,6 +157,83 @@ describe("verify", () => {
     expect(report.ok).toBe(true);
   });
 
+  test("a repeat run replays bit-for-bit", async () => {
+    const store = new MemoryStore();
+    const innerRaw = {
+      contract: "morphogen.organism.v1",
+      key: "organism:polish",
+      name: "Polish",
+      interface: {
+        inputs: { draft: { cell: "in", port: "draft" } },
+        outputs: {
+          draft: { cell: "editor", port: "out" },
+          verdict: { cell: "critic", port: "out" },
+        },
+      },
+      cells: [
+        { id: "in", kind: "input", outputs: { draft: "text" } },
+        {
+          id: "editor",
+          kind: "agent",
+          inputs: { draft: "text" },
+          prompt: "Improve the draft.",
+          output: { kind: "text" },
+        },
+        {
+          id: "critic",
+          kind: "classifier",
+          inputs: { draft: "text" },
+          prompt: "Ship it?",
+          output: { kind: "choice", labels: ["revise", "ship"] },
+        },
+      ],
+      edges: [
+        { from: { cell: "in", port: "draft" }, to: { cell: "editor", port: "draft" } },
+        { from: { cell: "editor", port: "out" }, to: { cell: "critic", port: "draft" } },
+      ],
+    } as JsonValue;
+    const innerDigest = await store.putManifest(parseOrganismManifest(innerRaw));
+    const outerRaw = {
+      contract: "morphogen.organism.v1",
+      key: "organism:refine",
+      name: "Refine",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "text" } },
+        {
+          id: "loop",
+          kind: "repeat",
+          manifest: innerDigest,
+          maxRounds: 4,
+          carry: { draft: "draft" },
+          until: { output: "verdict", equals: "ship" },
+        },
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "loop", port: "draft" } },
+      ],
+    } as JsonValue;
+    const receipt = await runOrganism({
+      manifest: parseOrganismManifest(outerRaw),
+      args: { src: { v: "v0" } },
+      fns: builtinRegistry(),
+      store,
+      executors: [scriptedExecutor({
+        editor: ["d1", "d2", "d3"],
+        critic: ["revise", "revise", "ship"],
+      })],
+    });
+    expect(receipt.outcome).toBe("complete");
+    expect(receipt.cells["loop"]?.rounds).toBe(3);
+    const report = await verifyReceipt(
+      receipt as unknown as JsonValue,
+      outerRaw,
+      store,
+      builtinRegistry(),
+    );
+    expect(report.mismatches).toEqual([]);
+    expect(report.ok).toBe(true);
+  });
+
   test("digest over receipt is stable", async () => {
     const { receipt } = await runTriage();
     const again = JSON.parse(
