@@ -713,6 +713,259 @@ describe("scheduler", () => {
     ).rejects.toThrowError(/not an output port/);
   });
 
+  test("field guard routes on a json record field", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:fguard",
+      name: "FGuard",
+      cells: [
+        { id: "src", kind: "input", outputs: { rec: "json" } },
+        {
+          id: "urgent",
+          kind: "agent",
+          inputs: { rec: "json" },
+          prompt: "p",
+          output: { kind: "text" },
+        },
+        {
+          id: "calm",
+          kind: "agent",
+          inputs: { rec: "json" },
+          prompt: "p",
+          output: { kind: "text" },
+        },
+      ],
+      edges: [
+        {
+          from: { cell: "src", port: "rec" },
+          to: { cell: "urgent", port: "rec" },
+          guard: { field: "severity", equals: "high" },
+        },
+        {
+          from: { cell: "src", port: "rec" },
+          to: { cell: "calm", port: "rec" },
+          guard: { field: "severity", equals: "low" },
+        },
+      ],
+    });
+    const run = (rec: JsonValue) =>
+      runOrganism({
+        manifest: m,
+        args: { src: { rec } },
+        fns: builtinRegistry(),
+        store: new MemoryStore(),
+        executors: [scriptedExecutor({ urgent: "URGENT", calm: "CALM" })],
+      });
+    const hi = await run({ severity: "high", msg: "disk full" });
+    expect(hi.outcome).toBe("complete");
+    expect(hi.cells["urgent"]?.status).toBe("committed");
+    expect(hi.cells["urgent"]?.outputs?.out).toBe("URGENT");
+    expect(hi.cells["calm"]?.status).toBe("skipped");
+    // a record without the field matches nothing — both consumers skip
+    const miss = await run({ msg: "hello" });
+    expect(miss.cells["urgent"]?.status).toBe("skipped");
+    expect(miss.cells["calm"]?.status).toBe("skipped");
+    // a non-object value can never match a field guard
+    const scalar = await run("high");
+    expect(scalar.cells["urgent"]?.status).toBe("skipped");
+  });
+
+  test("field guard requires a json producer", async () => {
+    await expect(
+      runOrganism({
+        manifest: manifest({
+          contract: "morphogen.organism.v1",
+          key: "organism:fguard-bad",
+          name: "Bad",
+          cells: [
+            { id: "src", kind: "input", outputs: { rec: "text" } },
+            { id: "dst", kind: "fn", fn: "echo.v1" },
+          ],
+          edges: [
+            {
+              from: { cell: "src", port: "rec" },
+              to: { cell: "dst", port: "value" },
+              guard: { field: "s", equals: "x" },
+            },
+          ],
+        }),
+        args: {},
+        fns: builtinRegistry(),
+        store: new MemoryStore(),
+        executors: [],
+      }),
+    ).rejects.toThrowError(/field guard requires a json producer/);
+  });
+
+  test("until.field exits a repeat when a json field matches", async () => {
+    const store = new MemoryStore();
+    const inner = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:statuser",
+      name: "Statuser",
+      interface: {
+        inputs: { draft: { cell: "in", port: "draft" } },
+        outputs: { report: { cell: "critic", port: "out" } },
+      },
+      cells: [
+        { id: "in", kind: "input", outputs: { draft: "text" } },
+        {
+          id: "critic",
+          kind: "agent",
+          inputs: { draft: "text" },
+          prompt: "Report status.",
+          output: { kind: "json", schema: { type: "object" } },
+        },
+      ],
+      edges: [
+        { from: { cell: "in", port: "draft" }, to: { cell: "critic", port: "draft" } },
+      ],
+    });
+    const d = await store.putManifest(inner);
+    const outer = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:untilfield",
+      name: "UntilField",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "text" } },
+        {
+          id: "loop",
+          kind: "repeat",
+          manifest: d,
+          maxRounds: 5,
+          until: { output: "report", field: "status", equals: "done" },
+        },
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "loop", port: "draft" } },
+      ],
+    });
+    const receipt = await runOrganism({
+      manifest: outer,
+      args: { src: { v: "v0" } },
+      fns: builtinRegistry(),
+      store,
+      executors: [
+        scriptedExecutor({
+          critic: [{ status: "go" }, { status: "go" }, { status: "done" }],
+        }),
+      ],
+    });
+    expect(receipt.outcome).toBe("complete");
+    expect(receipt.cells["loop"]?.rounds).toBe(3);
+    expect(receipt.cells["loop/r3"]).toBeUndefined();
+    // until.field on a non-json output fails admission
+    const innerChoice = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:statuser-c",
+      name: "StatuserC",
+      interface: {
+        inputs: { draft: { cell: "in", port: "draft" } },
+        outputs: { verdict: { cell: "critic", port: "out" } },
+      },
+      cells: [
+        { id: "in", kind: "input", outputs: { draft: "text" } },
+        {
+          id: "critic",
+          kind: "classifier",
+          inputs: { draft: "text" },
+          prompt: "p",
+          output: { kind: "choice", labels: ["go", "done"] },
+        },
+      ],
+      edges: [
+        { from: { cell: "in", port: "draft" }, to: { cell: "critic", port: "draft" } },
+      ],
+    });
+    const dc = await store.putManifest(innerChoice);
+    await expect(
+      runOrganism({
+        manifest: manifest({
+          contract: "morphogen.organism.v1",
+          key: "organism:untilfield-bad",
+          name: "Bad",
+          cells: [
+            { id: "src", kind: "input", outputs: { v: "text" } },
+            {
+              id: "loop",
+              kind: "repeat",
+              manifest: dc,
+              maxRounds: 2,
+              until: { output: "verdict", field: "status", equals: "done" },
+            },
+          ],
+          edges: [
+            { from: { cell: "src", port: "v" }, to: { cell: "loop", port: "draft" } },
+          ],
+        }),
+        args: { src: { v: "x" } },
+        fns: builtinRegistry(),
+        store,
+        executors: [],
+      }),
+    ).rejects.toThrowError(/until\.field requires a json output/);
+  });
+
+  test("view.graph puts the ancestor wiring into context", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:vgraph",
+      name: "VGraph",
+      cells: [
+        { id: "src", kind: "input", outputs: { rec: "json" } },
+        {
+          id: "mid",
+          kind: "agent",
+          inputs: { rec: "json" },
+          prompt: "p",
+          output: { kind: "text" },
+        },
+        {
+          id: "brain",
+          kind: "agent",
+          inputs: { rec: "json" },
+          prompt: "p",
+          view: { cells: ["src", "mid"], graph: true },
+          output: { kind: "text" },
+        },
+        { id: "sink", kind: "fn", fn: "echo.v1" },
+      ],
+      edges: [
+        { from: { cell: "src", port: "rec" }, to: { cell: "mid", port: "rec" } },
+        { from: { cell: "mid", port: "out" }, to: { cell: "brain", port: "rec" } },
+        { from: { cell: "src", port: "rec" }, to: { cell: "sink", port: "value" } },
+      ],
+    });
+    let captured: JsonValue | undefined;
+    const receipt = await runOrganism({
+      manifest: m,
+      args: { src: { rec: { n: 1 } } },
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [
+        {
+          id: "cap",
+          async execute(req) {
+            if (req.cellId === "brain") {
+              captured = req.context as unknown as JsonValue;
+            }
+            return "ok";
+          },
+        },
+      ],
+    });
+    expect(receipt.outcome).toBe("complete");
+    const ctx = captured as {
+      graph: { edges: { from: string; to: string }[] };
+    };
+    // wiring among the named ancestors plus into the viewer — the sink edge
+    // is excluded because sink is not a named cell
+    expect(ctx.graph.edges).toEqual([
+      { from: "src.rec", to: "mid.rec" },
+      { from: "mid.out", to: "brain.rec" },
+    ]);
+  });
+
   test("view.cells rejects non-ancestor and unknown cells", async () => {
     // sibling commits before "brain" in declared order but is not an ancestor
     const m = manifest({

@@ -99,6 +99,10 @@ export type AgentView = {
    * named cell cannot have resolved before this cell activates. `ports`
    * slices the ancestor's outputs; absent means all ports. */
   cells?: CellView[];
+  /** When true and `cells` is declared, the effect context carries `graph`:
+   * the edges among the named cells plus edges from them to this cell —
+   * the wiring of the slice the agent can see. */
+  graph?: boolean;
   note?: string;
 };
 
@@ -135,7 +139,7 @@ export type Cell =
       manifest: Digest;
       maxRounds: number;
       carry?: Record<string, string>;
-      until?: { output: string; equals: string };
+      until?: { output: string; equals: string; field?: string };
     }
   | {
       id: string;
@@ -159,7 +163,9 @@ export type Cell =
 export type Edge = {
   from: { cell: string; port: PortName };
   to: { cell: string; port: PortName };
-  guard?: { equals: string };
+  /** Bare `{equals}` guards a choice producer by label; `{field, equals}`
+   * guards a json producer by a string field of the delivered record. */
+  guard?: { equals: string; field?: string };
 };
 
 export type Budgets = {
@@ -350,7 +356,7 @@ function checkSchemaDepth(u: JsonValue, what: string, depth: number): void {
 function parseView(u: unknown, what: string): AgentView {
   if (u === undefined) return { inputs: "*" };
   const obj = asObject(u, what);
-  noUnknownKeys(obj, ["inputs", "cells", "note"], what);
+  noUnknownKeys(obj, ["inputs", "cells", "graph", "note"], what);
   const inputsRaw = optField(obj, "inputs");
   let inputs: "*" | PortName[] = "*";
   if (inputsRaw !== undefined && inputsRaw !== "*") {
@@ -396,9 +402,19 @@ function parseView(u: unknown, what: string): AgentView {
       throw new MorphogenError("PARSE_FAILED", `${what}.cells must be unique`);
     }
   }
+  const graphRaw = optField(obj, "graph");
   const note = optField(obj, "note");
   const view: AgentView = { inputs };
   if (cells) view.cells = cells;
+  if (graphRaw !== undefined) {
+    if (graphRaw !== true && graphRaw !== false) {
+      throw new MorphogenError(
+        "PARSE_FAILED",
+        `${what}.graph must be a boolean`,
+      );
+    }
+    view.graph = graphRaw;
+  }
   if (note !== undefined) {
     view.note = asString(note, `${what}.note`, BOUNDS.maxNoteLen);
   }
@@ -526,7 +542,7 @@ function parseCell(u: unknown, what: string): Cell {
       const until = optField(obj, "until");
       if (until !== undefined) {
         const uo = asObject(until, `${what}.until`);
-        noUnknownKeys(uo, ["output", "equals"], `${what}.until`);
+        noUnknownKeys(uo, ["output", "equals", "field"], `${what}.until`);
         cell.until = {
           output: asSafeId(
             reqField(uo, "output", `${what}.until`),
@@ -538,6 +554,10 @@ function parseCell(u: unknown, what: string): Cell {
             BOUNDS.maxLabelLen,
           ),
         };
+        const uf = optField(uo, "field");
+        if (uf !== undefined) {
+          cell.until.field = asSafeId(uf, `${what}.until.field`);
+        }
       }
       return cell;
     }
@@ -727,7 +747,7 @@ function parseEdge(u: unknown, what: string): Edge {
   const guard = optField(obj, "guard");
   if (guard !== undefined) {
     const g = asObject(guard, `${what}.guard`);
-    noUnknownKeys(g, ["equals"], `${what}.guard`);
+    noUnknownKeys(g, ["equals", "field"], `${what}.guard`);
     edge.guard = {
       equals: asString(
         reqField(g, "equals", `${what}.guard`),
@@ -735,6 +755,10 @@ function parseEdge(u: unknown, what: string): Edge {
         BOUNDS.maxLabelLen,
       ),
     };
+    const f = optField(g, "field");
+    if (f !== undefined) {
+      edge.guard.field = asSafeId(f, `${what}.guard.field`);
+    }
   }
   return edge;
 }
@@ -904,7 +928,13 @@ export function manifestToJson(m: OrganismManifest): JsonObject {
           maxRounds: c.maxRounds,
         };
         if (c.carry) o.carry = c.carry;
-        if (c.until) o.until = { output: c.until.output, equals: c.until.equals };
+        if (c.until) {
+          o.until = {
+            output: c.until.output,
+            equals: c.until.equals,
+            ...(c.until.field !== undefined ? { field: c.until.field } : {}),
+          };
+        }
         return o;
       }
       case "each":
@@ -954,7 +984,12 @@ export function manifestToJson(m: OrganismManifest): JsonObject {
         from: { cell: e.from.cell, port: e.from.port },
         to: { cell: e.to.cell, port: e.to.port },
       };
-      if (e.guard) o.guard = { equals: e.guard.equals };
+      if (e.guard) {
+        o.guard = {
+          equals: e.guard.equals,
+          ...(e.guard.field !== undefined ? { field: e.guard.field } : {}),
+        };
+      }
       return o;
     }),
   };
@@ -996,6 +1031,7 @@ function viewJson(v: AgentView): JsonObject {
       c.ports === undefined ? c.cell : { cell: c.cell, ports: c.ports },
     );
   }
+  if (v.graph) o.graph = true;
   if (v.note !== undefined) o.note = v.note;
   return o;
 }

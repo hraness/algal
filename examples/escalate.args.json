@@ -1,0 +1,9 @@
+{
+  "ticket": {
+    "rec": {
+      "severity": "high",
+      "system": "billing-api",
+      "summary": "5xx rate at 40% since deploy 218"
+    }
+  }
+}

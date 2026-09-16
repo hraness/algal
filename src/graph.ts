@@ -125,7 +125,18 @@ export function cellSignature(
           );
         }
         const pt = sig.outputs[cell.until.output]!;
-        if (pt.type === "choice" && pt.labels && !pt.labels.includes(cell.until.equals)) {
+        if (cell.until.field !== undefined) {
+          if (pt.type !== "json") {
+            throw new MorphogenError(
+              "GUARD_INVALID",
+              `repeat cell "${cell.id}" until.field requires a json output, got ${describePort(pt)}`,
+            );
+          }
+        } else if (
+          pt.type === "choice" &&
+          pt.labels &&
+          !pt.labels.includes(cell.until.equals)
+        ) {
           throw new MorphogenError(
             "GUARD_INVALID",
             `repeat cell "${cell.id}" until.equals "${cell.until.equals}" not in labels of "${cell.until.output}"`,
@@ -357,17 +368,26 @@ export async function compileOrganism(
       );
     }
     if (e.guard) {
-      if (pt.type !== "choice") {
-        throw new MorphogenError(
-          "GUARD_INVALID",
-          `edge ${i}: guard requires a choice producer, got ${describePort(pt)}`,
-        );
-      }
-      if (pt.labels && !pt.labels.includes(e.guard.equals)) {
-        throw new MorphogenError(
-          "GUARD_INVALID",
-          `edge ${i}: guard label "${e.guard.equals}" not in producer labels`,
-        );
+      if (e.guard.field !== undefined) {
+        if (pt.type !== "json") {
+          throw new MorphogenError(
+            "GUARD_INVALID",
+            `edge ${i}: field guard requires a json producer, got ${describePort(pt)}`,
+          );
+        }
+      } else {
+        if (pt.type !== "choice") {
+          throw new MorphogenError(
+            "GUARD_INVALID",
+            `edge ${i}: guard requires a choice producer, got ${describePort(pt)}`,
+          );
+        }
+        if (pt.labels && !pt.labels.includes(e.guard.equals)) {
+          throw new MorphogenError(
+            "GUARD_INVALID",
+            `edge ${i}: guard label "${e.guard.equals}" not in producer labels`,
+          );
+        }
       }
     }
     const list = inbound.get(to.id) ?? [];
@@ -416,6 +436,12 @@ export async function compileOrganism(
           );
         }
       }
+    }
+    if (cell.view.graph && !cell.view.cells?.length) {
+      throw new MorphogenError(
+        "MANIFEST_INVALID",
+        `cell "${cell.id}" view.graph requires view.cells — the graph fragment covers named ancestors`,
+      );
     }
     if (cell.view.cells?.length) {
       const ancestors = ancestorsOf(cell.id);

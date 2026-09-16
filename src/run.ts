@@ -192,9 +192,18 @@ async function runInto(
       edgeState[i] = "dead";
       return;
     }
-    if (e.guard && v !== e.guard.equals) {
-      edgeState[i] = "dead";
-      return;
+    if (e.guard) {
+      const hit =
+        e.guard.field === undefined
+          ? v === e.guard.equals
+          : typeof v === "object" &&
+            v !== null &&
+            !Array.isArray(v) &&
+            v[e.guard.field] === e.guard.equals;
+      if (!hit) {
+        edgeState[i] = "dead";
+        return;
+      }
     }
     edgeState[i] = "delivered";
     edgeValue[i] = v;
@@ -440,6 +449,31 @@ async function activate(
         const context: JsonObject = { inputs: viewInputs, turn };
         if (cell.view.note !== undefined) context.note = cell.view.note;
         if (cellView) context.cells = cellView;
+        if (cell.view.graph && cell.view.cells?.length) {
+          const named = new Set(cell.view.cells.map((cv) => cv.cell));
+          context.graph = {
+            edges: compiled.manifest.edges
+              .filter(
+                (e) =>
+                  named.has(e.from.cell) &&
+                  (named.has(e.to.cell) || e.to.cell === cell.id),
+              )
+              .map((e) => ({
+                from: `${e.from.cell}.${e.from.port}`,
+                to: `${e.to.cell}.${e.to.port}`,
+                ...(e.guard
+                  ? {
+                      guard: {
+                        equals: e.guard.equals,
+                        ...(e.guard.field !== undefined
+                          ? { field: e.guard.field }
+                          : {}),
+                      },
+                    }
+                  : {}),
+              })),
+          } as unknown as JsonValue;
+        }
         if (toolLog.length) {
           context.toolLog = toolLog as unknown as JsonValue;
         }
@@ -582,12 +616,15 @@ async function activate(
         }
         if (cell.until) {
           const v = out[cell.until.output];
-          if (
+          const hit =
             v !== undefined &&
-            canonicalize(v) === canonicalize(cell.until.equals)
-          ) {
-            break;
-          }
+            (cell.until.field === undefined
+              ? canonicalize(v) === canonicalize(cell.until.equals)
+              : typeof v === "object" &&
+                v !== null &&
+                !Array.isArray(v) &&
+                v[cell.until.field] === cell.until.equals);
+          if (hit) break;
         }
       }
       const act: Activation = { outputs: out };

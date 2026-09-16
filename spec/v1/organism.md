@@ -76,6 +76,11 @@ canonicalized, hashed, and embedded. It can never carry code.
   non-ancestors, and ports the ancestor does not declare, so every record
   exists before the viewer activates. This is how an agent reads beyond its
   own inputs: the graph declares the slice.
+- `view.graph` (optional boolean) requires `view.cells`. When true, the
+  context carries `graph.edges` — the manifest edges among the named cells
+  plus edges from them to the viewer, each `{from, to, guard?}` with
+  dotted `cell.port` endpoints. An agent can see how the records it reads
+  were wired, never the wiring of cells it cannot name.
 - `output` is `{"kind":"text"}`, `{"kind":"json","schema":{…}}` (a bounded
   schema subset: `type`, `required`, `properties`, depth ≤ 4), or
   `{"kind":"choice","labels":[…],"onMiss"?}`.
@@ -121,7 +126,9 @@ canonicalized, hashed, and embedded. It can never carry code.
   supply round 0, carried values override them in later rounds.
 - `until` is an early-exit condition: stop after a round whose interface
   output `until.output` equals `until.equals` (canonical equality; if the
-  output is `choice`, `equals` must be a declared label). It is **not** an
+  output is `choice`, `equals` must be a declared label). With
+  `until.field`, the output must be `json` and the round stops when the
+  delivered record's named field strictly equals `equals`. It is **not** an
   assertion — exhausting `maxRounds` commits the last round's outputs, and
   downstream `guard`s decide what to do with them.
 - The cell record carries `rounds` when more than one round ran. All run
@@ -162,8 +169,12 @@ canonicalized, hashed, and embedded. It can never carry code.
   "guard": { "equals": "bug" } }
 ```
 
-- A guard is valid only on a `choice` producer, and the label must be in the
-  producer's declared labels.
+- A guard is valid only on a `choice` or `json` producer. Bare
+  `{"equals": "bug"}` guards a `choice` producer and the label must be in
+  the producer's declared labels. `{"field": "severity", "equals": "high"}`
+  guards a `json` producer: the edge delivers only when the value is an
+  object whose named field strictly equals `equals`. A non-object value or a
+  missing field never matches — the edge is dead, not an error.
 - An input port accepts at most one edge (single assignment) unless it
   declares `"many": true`. A `many` port collects every delivered edge in
   manifest edge order into a list. A guarded edge into a `many` port

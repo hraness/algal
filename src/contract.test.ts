@@ -199,6 +199,70 @@ describe("view.cells and repeat parsing", () => {
       ),
     ).rejects.toThrowError(/interface/);
   });
+
+  test("field guard and until.field round-trip through manifestToJson", async () => {
+    const store = new MemoryStore();
+    const inner = parseOrganismManifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:rep-json",
+      name: "RepJson",
+      interface: {
+        inputs: { v: { cell: "in", port: "v" } },
+        outputs: { report: { cell: "in", port: "rec" } },
+      },
+      cells: [
+        { id: "in", kind: "input", outputs: { v: "json", rec: "json" } },
+      ],
+    });
+    const d = await store.putManifest(inner);
+    const m = parseOrganismManifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:fg",
+      name: "FG",
+      cells: [
+        { id: "src", kind: "input", outputs: { rec: "json" } },
+        { id: "dst", kind: "fn", fn: "echo.v1" },
+        { id: "loop", kind: "repeat", manifest: d, maxRounds: 4,
+          until: { output: "report", field: "status", equals: "done" } },
+      ],
+      edges: [
+        { from: { cell: "src", port: "rec" }, to: { cell: "dst", port: "value" },
+          guard: { field: "severity", equals: "high" } },
+        { from: { cell: "src", port: "rec" }, to: { cell: "loop", port: "v" } },
+      ],
+    });
+    const reparsed = parseOrganismManifest(manifestToJson(m));
+    expect(reparsed.edges[0]!.guard).toEqual({
+      field: "severity",
+      equals: "high",
+    });
+    const loop = reparsed.cells[2]!;
+    expect(loop.kind === "repeat" && loop.until).toEqual({
+      output: "report",
+      equals: "done",
+      field: "status",
+    });
+  });
+
+  test("view.graph round-trips and requires view.cells", async () => {
+    const m = parseOrganismManifest(
+      agent({ cells: ["src"], graph: true }),
+    );
+    const reparsed = parseOrganismManifest(manifestToJson(m));
+    expect(
+      reparsed.cells[1]!.kind === "agent" && reparsed.cells[1]!.view.graph,
+    ).toBe(true);
+    // graph without named cells fails admission
+    await expect(
+      compileOrganism(
+        parseOrganismManifest(agent({ graph: true })),
+        builtinRegistry(),
+        new MemoryStore(),
+      ),
+    ).rejects.toThrowError(/view\.graph requires view\.cells/);
+    expect(() => parseOrganismManifest(agent({ graph: "yes" })))
+      .toThrowError(/must be a boolean/);
+  });
 });
 
 describe("graph admission", () => {

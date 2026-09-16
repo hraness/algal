@@ -17,17 +17,20 @@ therefore safe to store, diff, embed, and verify. (From Platonik: a name is an
 inspectable definition, never a free computation.)
 
 **Ports are typed and single-assignment — unless declared `many`.** `text`,
-`json`, `choice`. Guards are valid only on choice producers with matching
-labels. A `many` input collects every delivered edge in manifest order, so
-fan-in — including conditional fan-in through guards — is structure, not
-convention. The check happens at admission — an invalid graph never runs.
-(From Platonik's port contracts.)
+`json`, `choice`. A guard is either `{equals}` on a choice producer or
+`{field, equals}` on a json producer — routing on a record's field is
+structure too, not a reason to add a classifier. A `many` input collects
+every delivered edge in manifest order, so fan-in — including conditional
+fan-in through guards — is structure, not convention. The check happens at
+admission — an invalid graph never runs. (From Platonik's port contracts.)
 
 **Context is a view, not a stuffing.** An agent cell declares which of its
 inputs enter the effect request (`view.inputs`), and may also name ancestor
 cells (`view.cells`) whose committed records join the request under
 `context.cells` — an entry may slice to named ports, so a producer's secret
-output never reaches a consumer that doesn't need it. Admission rejects
+output never reaches a consumer that doesn't need it. With `view.graph`, the
+context also carries the edges among the named cells and into the viewer —
+the agent sees the wiring of what it can see. Admission rejects
 non-ancestors and undeclared ports, so a cell can never read a record that
 has not committed — the graph declares the slice, and the executor sees
 exactly those bytes, bounded. A composable view language over the whole
