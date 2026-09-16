@@ -230,6 +230,84 @@ describe("scheduler", () => {
     expect(r.cells["done"]?.outputs?.value).toBe("DEEP: deep");
   });
 
+  test("agent context exceeding maxContextBytes fails the run", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:ctx",
+      name: "Ctx",
+      budgets: { maxContextBytes: 64 },
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "text" } },
+        {
+          id: "a",
+          kind: "agent",
+          inputs: { v: "text" },
+          prompt: "p",
+          output: { kind: "text" },
+        },
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "a", port: "v" } },
+      ],
+    });
+    const r = await run(m, {
+      args: { src: { v: "x".repeat(500) } },
+      responses: { a: "never reached" },
+    });
+    expect(r.outcome).toBe("failed");
+    expect(r.failure?.code).toBe("BUDGET_EXHAUSTED");
+    expect(r.effects).toHaveLength(0);
+  });
+
+  test("organism nesting is bounded by the root manifest's maxDepth", async () => {
+    // A manifest can never contain its own digest, so embedding graphs are
+    // acyclic by construction — but a chain can still exceed maxDepth.
+    const store = new MemoryStore();
+    const mk = (key: string, innerDigest?: string) =>
+      manifest({
+        contract: "morphogen.organism.v1",
+        key,
+        name: key,
+        interface: {
+          inputs: { v: { cell: "in", port: "v" } },
+          outputs: {
+            r: innerDigest
+              ? { cell: "sub", port: "r" }
+              : { cell: "echo", port: "value" },
+          },
+        },
+        cells: [
+          { id: "in", kind: "input", outputs: { v: "text" } },
+          innerDigest
+            ? { id: "sub", kind: "organism", manifest: innerDigest }
+            : { id: "echo", kind: "fn", fn: "echo.v1" },
+        ],
+        edges: innerDigest
+          ? [{ from: { cell: "in", port: "v" }, to: { cell: "sub", port: "v" } }]
+          : [{ from: { cell: "in", port: "v" }, to: { cell: "echo", port: "value" } }],
+      });
+    const d1 = await store.putManifest(mk("organism:l1"));
+    const d2 = await store.putManifest(mk("organism:l2", d1));
+    const d3 = await store.putManifest(mk("organism:l3", d2));
+    const outer = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:outer-chain",
+      name: "Outer",
+      budgets: { maxDepth: 2 },
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "text" } },
+        { id: "sub", kind: "organism", manifest: d3 },
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "sub", port: "v" } },
+      ],
+    });
+    // outer(0) → l3(1) → l2(2) → l1(3): depth 3 exceeds root maxDepth 2
+    const r = await run(outer, { args: { src: { v: "x" } }, store });
+    expect(r.outcome).toBe("failed");
+    expect(r.failure?.code).toBe("DEPTH_EXCEEDED");
+  });
+
   test("unresolvable cells produce a stuck outcome", async () => {
     // two pending cells blocked behind a skipped branch with a required input
     const m = manifest({

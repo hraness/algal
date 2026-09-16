@@ -22,8 +22,8 @@ export type CompiledOrganism = {
   manifest: OrganismManifest;
   ports: Map<string, CellPorts>;
   inbound: Map<string, { edge: number; port: string }[]>;
-  /** Sub-manifests resolved for organism cells, keyed by cell id. */
-  children: Map<string, OrganismManifest>;
+  /** Compiled sub-organisms for organism cells, keyed by cell id. */
+  children: Map<string, CompiledOrganism>;
 };
 
 export function outputPortType(
@@ -46,7 +46,7 @@ export function outputPortType(
 export function cellSignature(
   cell: Cell,
   fns: FnRegistry,
-  children: Map<string, OrganismManifest>,
+  children: Map<string, CompiledOrganism>,
 ): CellPorts {
   switch (cell.kind) {
     case "input":
@@ -80,42 +80,37 @@ export function cellSignature(
       };
     case "organism": {
       const sub = children.get(cell.id);
-      if (!sub?.interface) {
+      if (!sub?.manifest.interface) {
         throw new MorphogenError(
           "INTERFACE_MISMATCH",
           `organism cell "${cell.id}" requires a sub-manifest with an interface`,
         );
       }
       const inputs: PortMap = {};
-      for (const [name, target] of Object.entries(sub.interface.inputs)) {
-        const inner = sub.cells.find((c) => c.id === target.cell);
+      for (const [name, target] of Object.entries(sub.manifest.interface.inputs)) {
+        const inner = sub.manifest.cells.find((c) => c.id === target.cell);
         if (!inner || inner.kind !== "input") {
           throw new MorphogenError(
             "INTERFACE_MISMATCH",
-            `interface input "${name}" of "${sub.key}" must target an input cell`,
+            `interface input "${name}" of "${sub.manifest.key}" must target an input cell`,
           );
         }
         const pt = inner.outputs[target.port];
         if (!pt) {
           throw new MorphogenError(
             "INTERFACE_MISMATCH",
-            `interface input "${name}" of "${sub.key}" targets missing port "${target.cell}.${target.port}"`,
+            `interface input "${name}" of "${sub.manifest.key}" targets missing port "${target.cell}.${target.port}"`,
           );
         }
         inputs[name] = pt;
       }
       const outputs: PortMap = {};
-      for (const [name, target] of Object.entries(sub.interface.outputs)) {
-        const innerSig = cellSignature(
-          mustCell(sub, target.cell),
-          fns,
-          new Map(),
-        );
-        const pt = innerSig.outputs[target.port];
+      for (const [name, target] of Object.entries(sub.manifest.interface.outputs)) {
+        const pt = sub.ports.get(target.cell)?.outputs[target.port];
         if (!pt) {
           throw new MorphogenError(
             "INTERFACE_MISMATCH",
-            `interface output "${name}" of "${sub.key}" targets missing port "${target.cell}.${target.port}"`,
+            `interface output "${name}" of "${sub.manifest.key}" targets missing port "${target.cell}.${target.port}"`,
           );
         }
         outputs[name] = pt;
@@ -168,12 +163,20 @@ export function portCompatible(producer: PortType, consumer: PortType): boolean 
 
 /** Check and compile: resolves organism sub-manifests from the store,
  * validates structure, rejects cycles. Pure — no execution. */
+const MAX_COMPILE_DEPTH = 64;
+
 export async function compileOrganism(
   manifest: OrganismManifest,
   fns: FnRegistry,
   store: Store,
-  _depth = 0,
+  depth = 0,
 ): Promise<CompiledOrganism> {
+  if (depth > MAX_COMPILE_DEPTH) {
+    throw new MorphogenError(
+      "DEPTH_EXCEEDED",
+      `embedding chain exceeds compile depth ${MAX_COMPILE_DEPTH}`,
+    );
+  }
   const seen = new Set<string>();
   for (const cell of manifest.cells) {
     if (seen.has(cell.id)) {
@@ -185,8 +188,9 @@ export async function compileOrganism(
     seen.add(cell.id);
   }
 
-  // resolve organism children (recursive, depth-bounded by caller context)
-  const children = new Map<string, OrganismManifest>();
+  // resolve organism children recursively; digest references always point to
+  // already-stored manifests, so the embedding graph is acyclic by construction
+  const children = new Map<string, CompiledOrganism>();
   for (const cell of manifest.cells) {
     if (cell.kind !== "organism") continue;
     const digest = asDigest(cell.manifest, `cell "${cell.id}".manifest`);
@@ -197,7 +201,7 @@ export async function compileOrganism(
         `organism cell "${cell.id}" manifest ${digest} not in store`,
       );
     }
-    children.set(cell.id, sub);
+    children.set(cell.id, await compileOrganism(sub, fns, store, depth + 1));
   }
 
   // signatures

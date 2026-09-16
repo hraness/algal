@@ -1,0 +1,32 @@
+{
+  "contract": "morphogen.organism.v1",
+  "key": "organism:inbox",
+  "name": "Inbox with embedded triage",
+  "note": "Embeds organism:triage by digest as a single cell. The outer graph sees only its declared interface ports.",
+  "budgets": {
+    "maxSteps": 128,
+    "maxAgentCalls": 8,
+    "maxWork": 200000
+  },
+  "cells": [
+    {
+      "id": "ticket",
+      "kind": "input",
+      "outputs": { "text": "text" }
+    },
+    {
+      "id": "triage",
+      "kind": "organism",
+      "manifest": "sha256:3f5609e96730358697a38c67713552bf1f767cbb327d4df0cc90c325679e4140"
+    },
+    {
+      "id": "sink",
+      "kind": "fn",
+      "fn": "echo.v1"
+    }
+  ],
+  "edges": [
+    { "from": { "cell": "ticket", "port": "text" }, "to": { "cell": "triage", "port": "ticket" } },
+    { "from": { "cell": "triage", "port": "summary" }, "to": { "cell": "sink", "port": "value" } }
+  ]
+}

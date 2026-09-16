@@ -36,7 +36,14 @@ without a scheduler that guesses.
 
 **Organisms embed by digest.** An `organism` cell references a manifest hash
 resolved from the store. Composition preserves cost and exposes only declared
-interface ports — symbolization without magic.
+interface ports — symbolization without magic. Because a manifest can never
+contain its own digest, embedding graphs are acyclic by construction; the
+run still bounds nesting depth via the root manifest's `maxDepth`.
+
+**Run budgets belong to the root manifest.** Steps, agent calls, work units,
+byte bounds, and depth are set by the top-level manifest and apply across
+every nested level. An inner manifest's own budgets apply when it runs as a
+root.
 
 **The store and executor are seams.** `Store` is four methods; an Oh-backed
 adapter lands when Oh's API settles (it is moving weekly). `Executor` is one

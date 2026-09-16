@@ -93,8 +93,11 @@ canonicalized, hashed, and embedded. It can never carry code.
 - A cell with no declared inputs fires unconditionally.
 - Each activation is atomic: outputs commit together or the run fails.
 - `organism` cells run their sub-manifest to completion inside the same run,
-  depth-bounded (`budgets.maxDepth`, ≤ 8). Inner cells appear in the receipt
-  under `outer/inner` paths.
+  depth-bounded by the **root** manifest's `budgets.maxDepth` (≤ 8). All run
+  budgets — steps, agent calls, work, byte bounds — are owned by the root
+  manifest and shared across nested levels. Inner cells appear in the receipt
+  under `outer/inner` paths. A manifest can never contain its own digest, so
+  embedding graphs are acyclic by construction.
 - A run ends `complete`, `failed` (first failure wins, recorded), or `stuck`
   (pending cells remain but none can resolve).
 

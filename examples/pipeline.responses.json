@@ -1,0 +1,4 @@
+{
+  "plan": { "steps": ["reproduce the crash", "guard the export handler", "add a regression test"] },
+  "review": "approve"
+}

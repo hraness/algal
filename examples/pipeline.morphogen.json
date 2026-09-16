@@ -1,0 +1,81 @@
+{
+  "contract": "morphogen.organism.v1",
+  "key": "organism:pipeline",
+  "name": "Plan, review, ship-or-rework",
+  "note": "An agent cell drafts a plan; a classifier cell judges it against the brief; guarded edges carry the verdict to the matching branch.",
+  "budgets": {
+    "maxSteps": 64,
+    "maxAgentCalls": 8,
+    "maxWork": 200000
+  },
+  "interface": {
+    "inputs": {
+      "task": { "cell": "task", "port": "brief" }
+    },
+    "outputs": {
+      "summary": { "cell": "result", "port": "value" }
+    }
+  },
+  "cells": [
+    {
+      "id": "task",
+      "kind": "input",
+      "outputs": { "brief": "text" }
+    },
+    {
+      "id": "plan",
+      "kind": "agent",
+      "inputs": { "brief": "text" },
+      "prompt": "Draft a short implementation plan for the task. Return JSON {\"steps\": [\"...\"]} only.",
+      "view": { "inputs": "*" },
+      "output": {
+        "kind": "json",
+        "schema": {
+          "type": "object",
+          "required": ["steps"],
+          "properties": { "steps": { "type": "array" } }
+        }
+      },
+      "route": { "preset": "plan-standard" }
+    },
+    {
+      "id": "review",
+      "kind": "classifier",
+      "inputs": { "brief": "text", "plan": "json" },
+      "prompt": "Does the plan cover the task? Answer exactly one of: approve, revise.",
+      "view": { "inputs": "*" },
+      "output": {
+        "kind": "choice",
+        "labels": ["approve", "revise"],
+        "onMiss": "revise"
+      },
+      "route": { "preset": "classify-small" }
+    },
+    {
+      "id": "ship",
+      "kind": "fn",
+      "fn": "tag.v1"
+    },
+    {
+      "id": "rework",
+      "kind": "fn",
+      "fn": "tag.v1"
+    },
+    {
+      "id": "result",
+      "kind": "fn",
+      "fn": "coalesce.v1"
+    }
+  ],
+  "edges": [
+    { "from": { "cell": "task", "port": "brief" }, "to": { "cell": "plan", "port": "brief" } },
+    { "from": { "cell": "task", "port": "brief" }, "to": { "cell": "review", "port": "brief" } },
+    { "from": { "cell": "plan", "port": "out" }, "to": { "cell": "review", "port": "plan" } },
+    { "from": { "cell": "review", "port": "out" }, "to": { "cell": "ship", "port": "tag" }, "guard": { "equals": "approve" } },
+    { "from": { "cell": "plan", "port": "out" }, "to": { "cell": "ship", "port": "value" } },
+    { "from": { "cell": "review", "port": "out" }, "to": { "cell": "rework", "port": "tag" }, "guard": { "equals": "revise" } },
+    { "from": { "cell": "plan", "port": "out" }, "to": { "cell": "rework", "port": "value" } },
+    { "from": { "cell": "ship", "port": "value" }, "to": { "cell": "result", "port": "a" } },
+    { "from": { "cell": "rework", "port": "value" }, "to": { "cell": "result", "port": "b" } }
+  ]
+}

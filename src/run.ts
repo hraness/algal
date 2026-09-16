@@ -12,6 +12,7 @@ import {
   type CompiledOrganism,
 } from "./graph";
 import type {
+  Budgets,
   Cell,
   OrganismManifest,
   PortType,
@@ -92,6 +93,8 @@ type EdgeState = "pending" | "delivered" | "dead";
 
 type RunContext = {
   opts: RunOptions;
+  /** The root manifest's budgets govern the whole run, nested levels included. */
+  budgets: Budgets;
   cells: Record<string, CellRecord>;
   effects: EffectReceipt[];
   events: RunEvent[];
@@ -104,6 +107,7 @@ export async function runOrganism(opts: RunOptions): Promise<RunReceipt> {
   const manifestDigest = digestCanonical(manifestToJson(opts.manifest));
   const ctx: RunContext = {
     opts,
+    budgets: opts.manifest.budgets,
     cells: {},
     effects: [],
     events: [],
@@ -148,7 +152,7 @@ async function runInto(
   depth: number,
 ): Promise<"complete" | "failed" | "stuck"> {
   const { manifest, ports, inbound } = compiled;
-  const budgets = manifest.budgets;
+  const budgets = ctx.budgets;
   if (depth > budgets.maxDepth) {
     return fail(ctx, pathPrefix, "DEPTH_EXCEEDED", `depth ${depth} exceeds maxDepth ${budgets.maxDepth}`);
   }
@@ -317,7 +321,7 @@ async function activate(
     }
     case "agent":
     case "classifier": {
-      const budgets = compiled.manifest.budgets;
+      const budgets = ctx.budgets;
       const maxCtx = cell.budget?.maxContextBytes ?? budgets.maxContextBytes;
       const maxOut = cell.budget?.maxOutputBytes ?? budgets.maxOutputBytes;
 
@@ -370,15 +374,14 @@ async function activate(
       return { outputs: { out: bound }, effectDigest: requestDigest };
     }
     case "organism": {
-      const sub = compiled.children.get(cell.id)!;
-      const subCompiled = await compileOrganism(sub, ctx.opts.fns, ctx.opts.store, depth + 1);
-      const subArgs = argsForSubOrganism(sub, inputs);
+      const subCompiled = compiled.children.get(cell.id)!;
+      const subArgs = argsForSubOrganism(subCompiled.manifest, inputs);
       await runInto(subCompiled, subArgs, path, ctx, depth + 1);
       if (ctx.failure) {
         throw new MorphogenError(ctx.failure.code, ctx.failure.message);
       }
       const out: Record<string, JsonValue> = {};
-      const iface = sub.interface ?? { inputs: {}, outputs: {} };
+      const iface = subCompiled.manifest.interface ?? { inputs: {}, outputs: {} };
       for (const [name, target] of Object.entries(iface.outputs)) {
         const rec = ctx.cells[`${path}/${target.cell}`];
         const v = rec?.outputs?.[target.port];

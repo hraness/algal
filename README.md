@@ -49,16 +49,24 @@ bun install
 bun run cli suite
 ```
 
-`suite` runs the bundled `triage` example with scripted agent responses, then
-verifies the receipt offline. To run it yourself:
+`suite` runs every bundled example — `triage` (classifier routing), `pipeline`
+(agent plan → classifier review → guarded branches), and `inbox` (the triage
+organism embedded as one cell) — with scripted responses, then verifies each
+receipt offline. To run one yourself:
 
 ```sh
-echo '{"ticket": {"text": "Export crashes on second click"}}' > args.json
-bun run cli run examples/triage.morphogen.json --args args.json \
+bun run cli check examples/triage.morphogen.json
+bun run cli run examples/triage.morphogen.json \
+  --args examples/triage.args.json \
   --responses examples/triage.responses.json --write
 bun run cli verify .morphogen/runs/<receipt-digest>.json \
   examples/triage.morphogen.json
 ```
+
+`check` admits a manifest without running it: parse, graph validation, and
+interface resolution only. Organisms that embed others resolve sub-manifests
+by digest from the store; `--modules <dir>` loads a directory of
+`*.morphogen.json` files first.
 
 To go live, point `--executor-cmd` at any program that reads an effect request
 (JSON) on stdin and prints the model's output on stdout. Morphogen does not

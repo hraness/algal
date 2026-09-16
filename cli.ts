@@ -7,6 +7,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { manifestToJson, parseOrganismManifest } from "./src/contract";
+import { compileOrganism } from "./src/graph";
 import { digestCanonical } from "./src/digest";
 import {
   commandExecutor,
@@ -32,8 +33,11 @@ usage:
       --args <file>                           input-cell values (JSON)
       --responses <file>                      scripted agent outputs (JSON map)
       --executor-cmd <shell command>          live executor: request on stdin, output on stdout
+      --modules <dir>                         load *.morphogen.json into the store for organism cells
       --dir <path>                            store directory (default .morphogen)
       --write                                 persist manifest + receipt under --dir
+  morphogen check <manifest.json> [--modules <dir>] [--dir <path>]
+                                              admit a manifest without running it
   morphogen verify <receipt.json> <manifest.json> [--dir <path>]
                                               re-run with recorded receipts and compare
   morphogen inspect <receipt.json>            summarize a run receipt
@@ -88,6 +92,30 @@ function diag(msg: string): void {
   process.stderr.write(msg + "\n");
 }
 
+/** Load every *.morphogen.json under dir into the store so organism cells
+ * resolve by digest. */
+async function loadModules(
+  dir: string,
+  store: FileStore,
+): Promise<number> {
+  const { readdir } = await import("node:fs/promises");
+  const resolved = resolve(dir);
+  let files: string[];
+  try {
+    files = await readdir(resolved);
+  } catch {
+    throw new MorphogenError("IO_FAILED", `modules dir not readable: ${dir}`);
+  }
+  let loaded = 0;
+  for (const f of files.sort()) {
+    if (!f.endsWith(".morphogen.json")) continue;
+    const m = parseOrganismManifest(await readJson(join(resolved, f)));
+    await store.putManifest(m);
+    loaded++;
+  }
+  return loaded;
+}
+
 async function main(): Promise<number> {
   const { cmd, positional, flags } = parseArgs(process.argv.slice(2));
   const dir = String(flags.dir ?? ".morphogen");
@@ -133,9 +161,32 @@ async function main(): Promise<number> {
       return 0;
     }
 
+    case "check": {
+      const file = positional[0];
+      if (!file) usageError("morphogen check <manifest.json> [--modules <dir>]");
+      if (flags.modules !== undefined) {
+        const n = await loadModules(String(flags.modules), store);
+        diag(`loaded ${n} module(s) from ${flags.modules}`);
+      }
+      const manifest = parseOrganismManifest(await readJson(resolve(file)));
+      const compiled = await compileOrganism(manifest, fns, store);
+      out({
+        ok: true,
+        key: manifest.key,
+        digest: digestCanonical(manifestToJson(manifest)),
+        cells: compiled.manifest.cells.map((c) => ({ id: c.id, kind: c.kind })),
+        edges: compiled.manifest.edges.length,
+      });
+      return 0;
+    }
+
     case "run": {
       const file = positional[0];
       if (!file) usageError("morphogen run <manifest.json> [options]");
+      if (flags.modules !== undefined) {
+        const n = await loadModules(String(flags.modules), store);
+        diag(`loaded ${n} module(s) from ${flags.modules}`);
+      }
       const manifest = parseOrganismManifest(await readJson(resolve(file)));
 
       const argsRaw =
@@ -176,6 +227,10 @@ async function main(): Promise<number> {
       if (!receiptFile || !manifestFile) {
         usageError("morphogen verify <receipt.json> <manifest.json>");
       }
+      if (flags.modules !== undefined) {
+        const n = await loadModules(String(flags.modules), store);
+        diag(`loaded ${n} module(s) from ${flags.modules}`);
+      }
       const receipt = await readJson(resolve(receiptFile!));
       const manifest = await readJson(resolve(manifestFile!));
       const report = await verifyReceipt(receipt, manifest, store, fns);
@@ -208,41 +263,66 @@ async function main(): Promise<number> {
     }
 
     case "suite": {
-      // Self-check: run the bundled example with its scripted responses,
-      // then verify the receipt offline.
-      const manifestRaw = await readJson(
-        join(EXAMPLES_DIR, "triage.morphogen.json"),
+      // Self-check: run every bundled example with its scripted responses
+      // and default args, then verify each receipt offline.
+      const { readdir } = await import("node:fs/promises");
+      const files = (await readdir(EXAMPLES_DIR)).filter((f) =>
+        f.endsWith(".morphogen.json"),
       );
-      const manifest = parseOrganismManifest(manifestRaw);
-      const responses = asRecord(
-        await readJson(join(EXAMPLES_DIR, "triage.responses.json")),
-        "responses",
-      );
-      const receipt = await runOrganism({
-        manifest,
-        args: {
-          ticket: { text: "App crashes when I press export twice" },
-        },
-        fns,
-        store,
-        executors: [scriptedExecutor(responses as Record<string, JsonValue>)],
-      });
-      const report = await verifyReceipt(
-        receipt as unknown as JsonValue,
-        manifestRaw,
-        store,
-        fns,
-      );
-      out({
-        example: "triage",
-        outcome: receipt.outcome,
-        verifyOk: report.ok,
-        receiptDigest: receipt.digest,
-        cells: Object.fromEntries(
-          Object.entries(receipt.cells).map(([k, v]) => [k, v.status]),
-        ),
-      });
-      return receipt.outcome === "complete" && report.ok ? 0 : 1;
+      const results: JsonObject[] = [];
+      let allOk = true;
+      // preload every example into the store so organism cells resolve
+      // regardless of iteration order
+      const parsed = new Map<string, { raw: JsonValue; manifest: ReturnType<typeof parseOrganismManifest> }>();
+      for (const f of files.sort()) {
+        const id = f.replace(/\.morphogen\.json$/, "");
+        const raw = await readJson(join(EXAMPLES_DIR, f));
+        const manifest = parseOrganismManifest(raw);
+        await store.putManifest(manifest);
+        parsed.set(id, { raw, manifest });
+      }
+      for (const [id, { raw: manifestRaw, manifest }] of parsed) {
+        let responses: Record<string, JsonValue> = {};
+        try {
+          responses = asRecord(
+            await readJson(join(EXAMPLES_DIR, `${id}.responses.json`)),
+            "responses",
+          ) as Record<string, JsonValue>;
+        } catch { /* no responses file: organism has no agent cells */ }
+        const args: Record<string, Record<string, JsonValue>> = {};
+        try {
+          const raw = asRecord(
+            await readJson(join(EXAMPLES_DIR, `${id}.args.json`)),
+            "args",
+          );
+          for (const [k, v] of Object.entries(raw)) {
+            args[k] = asRecord(v, `args.${k}`) as Record<string, JsonValue>;
+          }
+        } catch { /* no args file */ }
+        const receipt = await runOrganism({
+          manifest,
+          args,
+          fns,
+          store,
+          executors: [scriptedExecutor(responses)],
+        });
+        const report = await verifyReceipt(
+          receipt as unknown as JsonValue,
+          manifestRaw,
+          store,
+          fns,
+        );
+        const ok = receipt.outcome === "complete" && report.ok;
+        allOk = allOk && ok;
+        results.push({
+          example: id,
+          outcome: receipt.outcome,
+          verifyOk: report.ok,
+          receiptDigest: receipt.digest,
+        });
+      }
+      out({ suite: "examples", ok: allOk, results });
+      return allOk ? 0 : 1;
     }
 
     default:
