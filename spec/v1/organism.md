@@ -54,7 +54,8 @@ canonicalized, hashed, and embedded. It can never carry code.
   "view": { "inputs": "*", "note": "optional" },
   "output": { "kind": "choice", "labels": ["bug", "feature"], "onMiss": "bug" },
   "route": { "provider": "…", "model": "…", "preset": "…" },
-  "budget": { "maxContextBytes": 65536, "maxOutputBytes": 4096 }
+  "tools": ["pick.v1"],
+  "budget": { "maxContextBytes": 65536, "maxOutputBytes": 4096, "maxTurns": 8 }
 }
 ```
 
@@ -62,11 +63,20 @@ canonicalized, hashed, and embedded. It can never carry code.
   `fn` cell.
 - `view.inputs` selects which declared inputs enter the effect request context
   (`"*"` or a list of declared names). The context is canonical JSON
-  `{inputs, note?}`, byte-bounded before dispatch.
+  `{inputs, note?, turn, toolLog?}`, byte-bounded before dispatch.
 - `output` is `{"kind":"text"}`, `{"kind":"json","schema":{…}}` (a bounded
   schema subset: `type`, `required`, `properties`, depth ≤ 4), or
   `{"kind":"choice","labels":[…],"onMiss"?}`.
 - `route` is a hint the executor may honor. It grants nothing by itself.
+- `tools` (optional, ≤ 16) declares which registry fns the executor may call
+  back. An executor response of the reserved shape
+  `{"tool":"<ref>","inputs":{…}}` where `<ref>` is in `tools` is not bound as
+  output: the host runs the fn, appends `{fn, inputs, output}` to
+  `context.toolLog`, and re-issues the request. The loop is bounded by
+  `budget.maxTurns` (1–16, default 8 when `tools` is present, else 1); each
+  turn is a separate effect request and counts against `maxAgentCalls`. A
+  `{tool, inputs}` response naming a ref outside `tools` is ordinary output.
+  Tool calls that omit a required fn input fail the cell.
 
 ## Edges
 
@@ -126,10 +136,10 @@ edges. A miss on a `choice` output resolves to `onMiss` or fails the run.
 ## Receipts — morphogen.run.v1
 
 A receipt records `manifestDigest`, `args`, `outcome`, per-cell records
-(`committed | skipped | failed`, outputs, `effectDigest`), the `effects` list
-(`requestDigest`, raw `output`, `executor` id, optional usage), the bounded
-`events` log, the work ledger, and `failure` detail. `digest` is over the
-canonical receipt minus itself.
+(`committed | skipped | failed`, outputs, `effectDigest`, `toolCalls`), the
+`effects` list (`requestDigest`, raw `output`, `executor` id, optional usage),
+the bounded `events` log, the work ledger, and `failure` detail. `digest` is
+over the canonical receipt minus itself.
 
 ## Verification
 
@@ -142,6 +152,4 @@ deterministic: receipts fix what the world returned.
 
 - Cycles and streaming re-activation (organisms are DAGs in v1).
 - Inter-organism messaging during a run.
-- Capabilities beyond the executor seam (`agent` cells cannot call back into
-  the graph in v1).
 - Durable multi-run state beyond the content-addressed store.

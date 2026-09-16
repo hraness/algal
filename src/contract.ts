@@ -35,6 +35,8 @@ export const BOUNDS = {
   maxLabels: 32,
   maxLabelLen: 64,
   maxRefLen: 64,
+  maxTools: 16,
+  maxTurns: 16,
   maxPortNameLen: 64,
   maxSteps: 1024,
   maxAgentCalls: 64,
@@ -78,6 +80,12 @@ export type Route = {
   preset?: string;
 };
 
+export type CellBudget = {
+  maxContextBytes?: number;
+  maxOutputBytes?: number;
+  maxTurns?: number;
+};
+
 export type AgentView = {
   inputs: "*" | PortName[];
   note?: string;
@@ -95,7 +103,8 @@ export type Cell =
       view: AgentView;
       output: AgentOutput;
       route?: Route;
-      budget?: { maxContextBytes?: number; maxOutputBytes?: number };
+      tools?: string[];
+      budget?: CellBudget;
     }
   | {
       id: string;
@@ -105,7 +114,8 @@ export type Cell =
       view: AgentView;
       output: { kind: "choice"; labels: string[]; onMiss?: string };
       route?: Route;
-      budget?: { maxContextBytes?: number; maxOutputBytes?: number };
+      tools?: string[];
+      budget?: CellBudget;
     }
   | { id: string; kind: "organism"; manifest: string };
 
@@ -379,7 +389,7 @@ function parseCell(u: unknown, what: string): Cell {
     case "classifier": {
       noUnknownKeys(
         obj,
-        ["id", "kind", "inputs", "prompt", "view", "output", "route", "budget"],
+        ["id", "kind", "inputs", "prompt", "view", "output", "route", "tools", "budget"],
         what,
       );
       const inputs = obj.inputs === undefined
@@ -399,13 +409,18 @@ function parseCell(u: unknown, what: string): Cell {
         obj.route === undefined
           ? undefined
           : parseRoute(obj.route, `${what}.route`);
-      let budget: { maxContextBytes?: number; maxOutputBytes?: number } | undefined;
+      let budget: CellBudget | undefined;
       if (obj.budget !== undefined) {
         const b = asObject(obj.budget, `${what}.budget`);
-        noUnknownKeys(b, ["maxContextBytes", "maxOutputBytes"], `${what}.budget`);
+        noUnknownKeys(
+          b,
+          ["maxContextBytes", "maxOutputBytes", "maxTurns"],
+          `${what}.budget`,
+        );
         budget = {};
         const ctx = optField(b, "maxContextBytes");
         const outB = optField(b, "maxOutputBytes");
+        const turns = optField(b, "maxTurns");
         if (ctx !== undefined) {
           budget.maxContextBytes = asInt(
             ctx,
@@ -420,6 +435,32 @@ function parseCell(u: unknown, what: string): Cell {
             `${what}.budget.maxOutputBytes`,
             1,
             BOUNDS.maxOutputBytes,
+          );
+        }
+        if (turns !== undefined) {
+          budget.maxTurns = asInt(
+            turns,
+            `${what}.budget.maxTurns`,
+            1,
+            BOUNDS.maxTurns,
+          );
+        }
+      }
+      let tools: string[] | undefined;
+      if (obj.tools !== undefined) {
+        tools = asArray(obj.tools, `${what}.tools`).map((t, i) =>
+          asString(t, `${what}.tools[${i}]`, BOUNDS.maxRefLen),
+        );
+        if (tools.length === 0 || tools.length > BOUNDS.maxTools) {
+          throw new MorphogenError(
+            "PARSE_FAILED",
+            `${what}.tools must have 1..${BOUNDS.maxTools} entries`,
+          );
+        }
+        if (new Set(tools).size !== tools.length) {
+          throw new MorphogenError(
+            "PARSE_FAILED",
+            `${what}.tools must be unique`,
           );
         }
       }
@@ -439,11 +480,13 @@ function parseCell(u: unknown, what: string): Cell {
           output,
         };
         if (route) cell.route = route;
+        if (tools) cell.tools = tools;
         if (budget) cell.budget = budget;
         return cell;
       }
       const cell: Cell = { id, kind, inputs, prompt, view, output };
       if (route) cell.route = route;
+      if (tools) cell.tools = tools;
       if (budget) cell.budget = budget;
       return cell;
     }
@@ -655,12 +698,15 @@ export function manifestToJson(m: OrganismManifest): JsonObject {
         };
         if (Object.keys(c.inputs).length > 0) o.inputs = portMapJson(c.inputs);
         if (c.route) o.route = routeJson(c.route);
+        if (c.tools) o.tools = c.tools;
         if (c.budget) {
           const b: JsonObject = {};
           if (c.budget.maxContextBytes !== undefined)
             b.maxContextBytes = c.budget.maxContextBytes;
           if (c.budget.maxOutputBytes !== undefined)
             b.maxOutputBytes = c.budget.maxOutputBytes;
+          if (c.budget.maxTurns !== undefined)
+            b.maxTurns = c.budget.maxTurns;
           o.budget = b;
         }
         return o;

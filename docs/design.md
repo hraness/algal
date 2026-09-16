@@ -25,6 +25,12 @@ inputs enter the effect request. The executor sees exactly those bytes,
 bounded. The harder problem — a composable view language over the whole
 program graph — is deliberately deferred; v1 views are per-cell.
 
+**Agents call back through declared tools.** `cell.tools` names registry fns
+the executor may invoke mid-activation; a `{"tool","inputs"}` response runs
+the fn, appends to `context.toolLog`, and re-issues the request, bounded by
+`budget.maxTurns`. The agent gains reach only into fns the manifest declares
+— the structure carries the capability, not the prompt.
+
 **Effects are receipts.** Request digest binds request to response. Replay
 fixes recorded receipts and re-runs the orchestration deterministically, which
 is what `verify` checks. (From writing-factory's rule: orchestration is

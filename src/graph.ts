@@ -294,15 +294,25 @@ export async function compileOrganism(
     inbound.set(to.id, list);
   });
 
-  // agent/classifier view inputs must be declared inputs
+  // agent/classifier view inputs must be declared inputs; tools must be
+  // registry fns the host admits
   for (const cell of manifest.cells) {
     if (cell.kind !== "agent" && cell.kind !== "classifier") continue;
-    if (cell.view.inputs === "*") continue;
-    for (const name of cell.view.inputs) {
-      if (!ports.get(cell.id)!.inputs[name]) {
+    if (cell.view.inputs !== "*") {
+      for (const name of cell.view.inputs) {
+        if (!ports.get(cell.id)!.inputs[name]) {
+          throw new MorphogenError(
+            "MANIFEST_INVALID",
+            `cell "${cell.id}" view.inputs references undeclared input "${name}"`,
+          );
+        }
+      }
+    }
+    for (const ref of cell.tools ?? []) {
+      if (!fns.has(ref)) {
         throw new MorphogenError(
-          "MANIFEST_INVALID",
-          `cell "${cell.id}" view.inputs references undeclared input "${name}"`,
+          "FN_UNKNOWN",
+          `cell "${cell.id}" declares unknown tool fn "${ref}"`,
         );
       }
     }

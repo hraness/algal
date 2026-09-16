@@ -38,8 +38,9 @@ usage:
       --write                                 persist manifest + receipt under --dir
   morphogen check <manifest.json> [--modules <dir>] [--dir <path>]
                                               admit a manifest without running it
-  morphogen verify <receipt.json> <manifest.json> [--dir <path>]
-                                              re-run with recorded receipts and compare
+  morphogen verify <receipt.json> [manifest.json] [--modules <dir>] [--dir <path>]
+                                              re-run with recorded receipts and compare;
+                                              manifest resolves from the store when omitted
   morphogen inspect <receipt.json>            summarize a run receipt
   morphogen digest <manifest.json>            print the manifest's canonical digest
   morphogen --version | --help
@@ -224,15 +225,35 @@ async function main(): Promise<number> {
 
     case "verify": {
       const [receiptFile, manifestFile] = positional;
-      if (!receiptFile || !manifestFile) {
-        usageError("morphogen verify <receipt.json> <manifest.json>");
+      if (!receiptFile) {
+        usageError("morphogen verify <receipt.json> [manifest.json]");
       }
       if (flags.modules !== undefined) {
         const n = await loadModules(String(flags.modules), store);
         diag(`loaded ${n} module(s) from ${flags.modules}`);
       }
-      const receipt = await readJson(resolve(receiptFile!));
-      const manifest = await readJson(resolve(manifestFile!));
+      const receipt = await readJson(resolve(receiptFile));
+      let manifest: JsonValue;
+      if (manifestFile !== undefined) {
+        manifest = await readJson(resolve(manifestFile));
+      } else {
+        const digest = (receipt as JsonObject).manifestDigest;
+        if (typeof digest !== "string" || !digest.startsWith("sha256:")) {
+          throw new MorphogenError(
+            "PARSE_FAILED",
+            "receipt has no manifestDigest; pass the manifest explicitly",
+          );
+        }
+        const stored = await store.getManifest(digest as `sha256:${string}`);
+        if (!stored) {
+          throw new MorphogenError(
+            "STORE_MISS",
+            `manifest ${digest} not in store; pass it explicitly or use --modules`,
+          );
+        }
+        manifest = manifestToJson(stored);
+        diag(`resolved manifest ${digest} from store`);
+      }
       const report = await verifyReceipt(receipt, manifest, store, fns);
       out(report as unknown as JsonObject);
       return report.ok ? 0 : 1;

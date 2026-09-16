@@ -22,7 +22,8 @@ Cell kinds:
 - `fn` — a pure function from the host's registry (`echo.v1`, `tag.v1`,
   `coalesce.v1`, `pick.v1`, `format.v1` ship built in).
 - `agent` — a bounded model call: a declared context view, a prompt, a typed
-  output contract, an optional route, and byte budgets.
+  output contract, an optional route, declared tool callbacks, and byte and
+  turn budgets.
 - `classifier` — an agent cell restricted to a closed set of labels, with an
   optional `onMiss` fallback. Its output drives `guard`ed edges, which is how
   routing decisions live in the structure instead of in prose.
@@ -61,6 +62,8 @@ bun run cli run examples/triage.morphogen.json \
   --responses examples/triage.responses.json --write
 bun run cli verify .morphogen/runs/<receipt-digest>.json \
   examples/triage.morphogen.json
+# or omit the manifest — it resolves from the store by the receipt's digest
+bun run cli verify .morphogen/runs/<receipt-digest>.json
 ```
 
 `check` admits a manifest without running it: parse, graph validation, and
@@ -83,6 +86,11 @@ broker provider access; the executor seam is where provider auth lives.
   output, which is bound to the declared output contract before it can feed
   downstream edges. A classifier that misses its label set fails closed unless
   `onMiss` is declared.
+- An agent cell may declare `tools`: a bounded list of registry fns the
+  executor may call back mid-activation. A `{"tool","inputs"}` response runs
+  the fn, appends to the request's `toolLog`, and re-issues the request —
+  bounded by `budget.maxTurns` and counted against `maxAgentCalls`. This is
+  how agents call functions inside the automaton without ambient authority.
 - The receipt records every committed/skipped/failed cell, every effect
   request and response, the event log, and the work ledger. `verify` replays
   the run with recorded receipts fixed and reports any divergence.

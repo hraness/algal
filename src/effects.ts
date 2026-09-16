@@ -51,17 +51,28 @@ export function effectRequestDigest(req: EffectRequest): Digest {
 // ------------------------------------------------------------- executors ---
 
 /** Responses map: keys are either cell ids or "sha256:" request digests.
- * Digest keys win. Mirrors the writing-factory rule: fixed receipts in,
- * deterministic orchestration out. */
+ * Digest keys win. A cell-id value may be an array, consumed one response per
+ * turn — that is how tool-call loops are scripted. Mirrors the
+ * writing-factory rule: fixed receipts in, deterministic orchestration out. */
 export function scriptedExecutor(
   responses: Record<string, JsonValue>,
   id = "scripted",
 ): Executor {
+  const queues = new Map<string, JsonValue[]>();
   return {
     id,
     async execute(request) {
       const digest = effectRequestDigest(request);
-      const hit = responses[digest] ?? responses[request.cellId];
+      if (responses[digest] !== undefined) return responses[digest];
+      let hit = responses[request.cellId];
+      if (Array.isArray(hit)) {
+        let q = queues.get(request.cellId);
+        if (!q) {
+          q = [...hit];
+          queues.set(request.cellId, q);
+        }
+        hit = q.shift();
+      }
       if (hit === undefined) {
         throw new MorphogenError(
           "EFFECT_UNBOUND",

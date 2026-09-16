@@ -64,6 +64,7 @@ export type CellRecord = {
   outputs?: Record<string, JsonValue>;
   work: number;
   effectDigest?: string;
+  toolCalls?: JsonValue[];
 };
 
 export type RunReceipt = {
@@ -253,6 +254,7 @@ async function runInto(
         const rec: CellRecord = { status: "committed", work: 0 };
         if (Object.keys(act.outputs).length) rec.outputs = act.outputs;
         if (act.effectDigest) rec.effectDigest = act.effectDigest;
+        if (act.toolCalls) rec.toolCalls = act.toolCalls as unknown as JsonValue[];
         ctx.cells[cellPath(cell.id)] = rec;
         emit(ctx, { kind: "cell.commit", path: cellPath(cell.id) });
       } catch (e) {
@@ -279,7 +281,36 @@ async function runInto(
   return outcome;
 }
 
-type Activation = { outputs: Record<string, JsonValue>; effectDigest?: Digest };
+type Activation = {
+  outputs: Record<string, JsonValue>;
+  effectDigest?: Digest;
+  toolCalls?: { fn: string; inputs: JsonValue; output: JsonValue }[];
+};
+
+/** The reserved tool-call shape. Only recognized when the cell declares the
+ * ref in `tools`; otherwise the value binds as ordinary output. */
+function asToolCall(
+  raw: JsonValue,
+  tools: string[] | undefined,
+): { fn: string; inputs: JsonValue } | undefined {
+  if (!tools || raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    return undefined;
+  }
+  const o = raw as Record<string, JsonValue>;
+  const fn = o.tool;
+  const inputs = o.inputs;
+  if (
+    typeof fn === "string" &&
+    tools.includes(fn) &&
+    inputs !== undefined &&
+    inputs !== null &&
+    typeof inputs === "object" &&
+    !Array.isArray(inputs)
+  ) {
+    return { fn, inputs };
+  }
+  return undefined;
+}
 
 async function activate(
   cell: Cell,
@@ -324,54 +355,96 @@ async function activate(
       const budgets = ctx.budgets;
       const maxCtx = cell.budget?.maxContextBytes ?? budgets.maxContextBytes;
       const maxOut = cell.budget?.maxOutputBytes ?? budgets.maxOutputBytes;
+      const maxTurns = cell.budget?.maxTurns ?? (cell.tools?.length ? 8 : 1);
 
       const viewInputs: Record<string, JsonValue> = {};
       const wanted = cell.view.inputs;
       for (const [k, v] of Object.entries(inputs)) {
         if (wanted === "*" || wanted.includes(k)) viewInputs[k] = v;
       }
-      const context: JsonObject = { inputs: viewInputs };
-      if (cell.view.note !== undefined) context.note = cell.view.note;
-      const contextBytes = canonicalBytes(context);
-      if (contextBytes > maxCtx) {
-        throw new MorphogenError(
-          "BUDGET_EXHAUSTED",
-          `context view ${contextBytes}B exceeds maxContextBytes ${maxCtx}B`,
-        );
-      }
-
-      const request: EffectRequest = {
-        contract: "morphogen.effect.v1",
-        cellId: cell.id,
-        kind: cell.kind,
-        prompt: cell.prompt,
-        context,
-        output: cell.output,
-        budget: { maxContextBytes: maxCtx, maxOutputBytes: maxOut },
-        ...(cell.route ? { route: cell.route } : {}),
-      };
-      const requestDigest = effectRequestDigest(request);
-
-      if (ctx.work.agentCalls + 1 > budgets.maxAgentCalls) {
-        throw new MorphogenError("BUDGET_EXHAUSTED", "maxAgentCalls exhausted");
-      }
-      ctx.work.agentCalls += 1;
-      ctx.work.units += WORK.effectBase + contextBytes * WORK.perContextByte;
-      emit(ctx, { kind: "effect", path, digest: requestDigest });
-
       const executor = pickExecutor(ctx.opts.executors, cell);
-      const raw = await executor.execute(request);
-      const outBytes = canonicalBytes(raw);
-      if (outBytes > maxOut) {
-        throw new MorphogenError(
-          "BUDGET_EXHAUSTED",
-          `effect output ${outBytes}B exceeds maxOutputBytes ${maxOut}B`,
-        );
+      const toolLog: { fn: string; inputs: JsonValue; output: JsonValue }[] = [];
+
+      for (let turn = 0; ; turn++) {
+        if (turn >= maxTurns) {
+          throw new MorphogenError(
+            "BUDGET_EXHAUSTED",
+            `cell "${cell.id}" produced no final output within maxTurns ${maxTurns}`,
+          );
+        }
+        const context: JsonObject = { inputs: viewInputs, turn };
+        if (cell.view.note !== undefined) context.note = cell.view.note;
+        if (toolLog.length) {
+          context.toolLog = toolLog as unknown as JsonValue;
+        }
+        const contextBytes = canonicalBytes(context);
+        if (contextBytes > maxCtx) {
+          throw new MorphogenError(
+            "BUDGET_EXHAUSTED",
+            `context view ${contextBytes}B exceeds maxContextBytes ${maxCtx}B`,
+          );
+        }
+
+        const request: EffectRequest = {
+          contract: "morphogen.effect.v1",
+          cellId: cell.id,
+          kind: cell.kind,
+          prompt: cell.prompt,
+          context,
+          output: cell.output,
+          budget: { maxContextBytes: maxCtx, maxOutputBytes: maxOut },
+          ...(cell.route ? { route: cell.route } : {}),
+        };
+        const requestDigest = effectRequestDigest(request);
+
+        if (ctx.work.agentCalls + 1 > budgets.maxAgentCalls) {
+          throw new MorphogenError("BUDGET_EXHAUSTED", "maxAgentCalls exhausted");
+        }
+        ctx.work.agentCalls += 1;
+        ctx.work.units += WORK.effectBase + contextBytes * WORK.perContextByte;
+        emit(ctx, { kind: "effect", path, digest: requestDigest });
+
+        const raw = await executor.execute(request);
+        const outBytes = canonicalBytes(raw);
+        if (outBytes > maxOut) {
+          throw new MorphogenError(
+            "BUDGET_EXHAUSTED",
+            `effect output ${outBytes}B exceeds maxOutputBytes ${maxOut}B`,
+          );
+        }
+        ctx.work.units += outBytes * WORK.perOutputByte;
+        ctx.effects.push({ requestDigest, output: raw, executor: executor.id });
+
+        const call = asToolCall(raw, cell.tools);
+        if (!call) {
+          const bound = bindOutput(cell.output, raw, cell.id);
+          const act: Activation = {
+            outputs: { out: bound },
+            effectDigest: requestDigest,
+          };
+          if (toolLog.length) act.toolCalls = toolLog;
+          return act;
+        }
+        // bounded callback into the automaton: run the declared fn, log the
+        // result, re-request with the updated tool log
+        const entry = ctx.opts.fns.get(call.fn)!;
+        ctx.work.units += entry.signature.cost;
+        for (const [p, decl] of Object.entries(entry.signature.inputs)) {
+          const v = (call.inputs as Record<string, JsonValue>)[p];
+          if (v === undefined) {
+            if (!decl.optional) {
+              throw new MorphogenError(
+                "EFFECT_FAILED",
+                `cell "${cell.id}" tool call to ${call.fn} missing required input "${p}"`,
+              );
+            }
+            continue;
+          }
+          checkValue(v, decl, `${cell.id}.tool.${p}`);
+        }
+        const toolOut = entry.fn(call.inputs as Record<string, JsonValue>);
+        toolLog.push({ fn: call.fn, inputs: call.inputs, output: toolOut as JsonValue });
       }
-      ctx.work.units += outBytes * WORK.perOutputByte;
-      const bound = bindOutput(cell.output, raw, cell.id);
-      ctx.effects.push({ requestDigest, output: raw, executor: executor.id });
-      return { outputs: { out: bound }, effectDigest: requestDigest };
     }
     case "organism": {
       const subCompiled = compiled.children.get(cell.id)!;

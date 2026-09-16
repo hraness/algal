@@ -112,6 +112,51 @@ describe("verify", () => {
     expect(report.ok).toBe(true);
   });
 
+  test("a tool-call loop replays bit-for-bit", async () => {
+    const manifestRaw = {
+      contract: "morphogen.organism.v1",
+      key: "organism:vtools",
+      name: "VTools",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "json" } },
+        {
+          id: "a",
+          kind: "agent",
+          inputs: { v: "json" },
+          prompt: "p",
+          output: { kind: "text" },
+          tools: ["pick.v1"],
+        },
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "a", port: "v" } },
+      ],
+    } as JsonValue;
+    const responses = {
+      a: [
+        { tool: "pick.v1", inputs: { record: { k: "v1" }, field: "k" } },
+        "done",
+      ],
+    };
+    const manifest = parseOrganismManifest(manifestRaw);
+    const receipt = await runOrganism({
+      manifest,
+      args: { src: { v: { k: "v1" } } },
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [scriptedExecutor(responses)],
+    });
+    expect(receipt.outcome).toBe("complete");
+    const report = await verifyReceipt(
+      receipt as unknown as JsonValue,
+      manifestRaw,
+      new MemoryStore(),
+      builtinRegistry(),
+    );
+    expect(report.mismatches).toEqual([]);
+    expect(report.ok).toBe(true);
+  });
+
   test("digest over receipt is stable", async () => {
     const { receipt } = await runTriage();
     const again = JSON.parse(

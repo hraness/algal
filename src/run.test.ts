@@ -308,6 +308,168 @@ describe("scheduler", () => {
     expect(r.failure?.code).toBe("DEPTH_EXCEEDED");
   });
 
+  test("agent tool calls loop back into declared fns", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:tools",
+      name: "Tools",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "json" } },
+        {
+          id: "a",
+          kind: "agent",
+          inputs: { v: "json" },
+          prompt: "p",
+          output: { kind: "text" },
+          tools: ["pick.v1"],
+          budget: { maxTurns: 4 },
+        },
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "a", port: "v" } },
+      ],
+    });
+    const r = await run(m, {
+      args: { src: { v: { name: "wisp", age: 3 } } },
+      responses: {
+        a: [
+          { tool: "pick.v1", inputs: { record: { name: "wisp", age: 3 }, field: "name" } },
+          "the name is wisp",
+        ],
+      },
+    });
+    expect(r.outcome).toBe("complete");
+    expect(r.cells["a"]?.outputs?.out).toBe("the name is wisp");
+    expect(r.work.agentCalls).toBe(2);
+    expect(r.effects).toHaveLength(2);
+    // each turn is a distinct effect request (turn + toolLog differ)
+    expect(r.effects[0]!.requestDigest).not.toBe(r.effects[1]!.requestDigest);
+    const calls = r.cells["a"]?.toolCalls as { fn: string; output: { value: string } }[];
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.fn).toBe("pick.v1");
+    expect(calls[0]!.output.value).toBe("wisp");
+  });
+
+  test("tool loop that never settles exhausts maxTurns", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:tools-loop",
+      name: "Loop",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "json" } },
+        {
+          id: "a",
+          kind: "agent",
+          inputs: { v: "json" },
+          prompt: "p",
+          output: { kind: "text" },
+          tools: ["pick.v1"],
+          budget: { maxTurns: 3 },
+        },
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "a", port: "v" } },
+      ],
+    });
+    const r = await run(m, {
+      args: { src: { v: { name: "w" } } },
+      responses: {
+        a: [
+          { tool: "pick.v1", inputs: { record: {}, field: "x" } },
+          { tool: "pick.v1", inputs: { record: {}, field: "x" } },
+          { tool: "pick.v1", inputs: { record: {}, field: "x" } },
+          { tool: "pick.v1", inputs: { record: {}, field: "x" } },
+        ],
+      },
+    });
+    expect(r.outcome).toBe("failed");
+    expect(r.failure?.code).toBe("BUDGET_EXHAUSTED");
+  });
+
+  test("tool call to an undeclared ref is just output (fail closed)", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:tools-scope",
+      name: "Scope",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "json" } },
+        {
+          id: "a",
+          kind: "agent",
+          inputs: { v: "json" },
+          prompt: "p",
+          output: { kind: "text" },
+          tools: ["pick.v1"],
+        },
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "a", port: "v" } },
+      ],
+    });
+    // echo.v1 is NOT in tools → the object binds as output → not text → fail
+    const r = await run(m, {
+      args: { src: { v: {} } },
+      responses: { a: { tool: "echo.v1", inputs: { value: 1 } } },
+    });
+    expect(r.outcome).toBe("failed");
+    expect(r.failure?.code).toBe("EFFECT_UNPARSEABLE");
+  });
+
+  test("tool call with missing required input fails the cell", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:tools-req",
+      name: "Req",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "json" } },
+        {
+          id: "a",
+          kind: "agent",
+          inputs: { v: "json" },
+          prompt: "p",
+          output: { kind: "text" },
+          tools: ["pick.v1"],
+        },
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "a", port: "v" } },
+      ],
+    });
+    const r = await run(m, {
+      args: { src: { v: {} } },
+      responses: { a: { tool: "pick.v1", inputs: { field: "name" } } },
+    });
+    expect(r.outcome).toBe("failed");
+    expect(r.failure?.code).toBe("EFFECT_FAILED");
+  });
+
+  test("tools entries must name known registry fns", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:bad-tool",
+      name: "BadTool",
+      cells: [
+        {
+          id: "a",
+          kind: "agent",
+          inputs: {},
+          prompt: "p",
+          output: { kind: "text" },
+          tools: ["nope.v9"],
+        },
+      ],
+    });
+    await expect(
+      runOrganism({
+        manifest: m,
+        args: {},
+        fns: builtinRegistry(),
+        store: new MemoryStore(),
+        executors: [],
+      }),
+    ).rejects.toThrowError(/unknown tool fn/);
+  });
+
   test("unresolvable cells produce a stuck outcome", async () => {
     // two pending cells blocked behind a skipped branch with a required input
     const m = manifest({
