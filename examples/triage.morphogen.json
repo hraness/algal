@@ -1,0 +1,71 @@
+{
+  "contract": "morphogen.organism.v1",
+  "key": "organism:triage",
+  "name": "Ticket triage",
+  "note": "A classifier cell routes a support ticket; the structure carries the routing decision.",
+  "budgets": {
+    "maxSteps": 64,
+    "maxAgentCalls": 4,
+    "maxWork": 100000
+  },
+  "interface": {
+    "inputs": {
+      "ticket": { "cell": "ticket", "port": "text" }
+    },
+    "outputs": {
+      "summary": { "cell": "result", "port": "value" }
+    }
+  },
+  "cells": [
+    {
+      "id": "ticket",
+      "kind": "input",
+      "outputs": { "text": "text" }
+    },
+    {
+      "id": "route",
+      "kind": "classifier",
+      "inputs": { "ticket": "text" },
+      "prompt": "Classify the ticket as exactly one of: bug, feature, question.",
+      "view": { "inputs": "*" },
+      "output": {
+        "kind": "choice",
+        "labels": ["bug", "feature", "question"],
+        "onMiss": "question"
+      },
+      "route": { "preset": "classify-small" }
+    },
+    {
+      "id": "as-bug",
+      "kind": "fn",
+      "fn": "tag.v1"
+    },
+    {
+      "id": "as-feature",
+      "kind": "fn",
+      "fn": "tag.v1"
+    },
+    {
+      "id": "as-question",
+      "kind": "fn",
+      "fn": "tag.v1"
+    },
+    {
+      "id": "result",
+      "kind": "fn",
+      "fn": "coalesce.v1"
+    }
+  ],
+  "edges": [
+    { "from": { "cell": "ticket", "port": "text" }, "to": { "cell": "route", "port": "ticket" } },
+    { "from": { "cell": "route", "port": "out" }, "to": { "cell": "as-bug", "port": "tag" }, "guard": { "equals": "bug" } },
+    { "from": { "cell": "route", "port": "out" }, "to": { "cell": "as-feature", "port": "tag" }, "guard": { "equals": "feature" } },
+    { "from": { "cell": "route", "port": "out" }, "to": { "cell": "as-question", "port": "tag" }, "guard": { "equals": "question" } },
+    { "from": { "cell": "ticket", "port": "text" }, "to": { "cell": "as-bug", "port": "value" } },
+    { "from": { "cell": "ticket", "port": "text" }, "to": { "cell": "as-feature", "port": "value" } },
+    { "from": { "cell": "ticket", "port": "text" }, "to": { "cell": "as-question", "port": "value" } },
+    { "from": { "cell": "as-bug", "port": "value" }, "to": { "cell": "result", "port": "a" } },
+    { "from": { "cell": "as-feature", "port": "value" }, "to": { "cell": "result", "port": "b" } },
+    { "from": { "cell": "as-question", "port": "value" }, "to": { "cell": "result", "port": "c" } }
+  ]
+}

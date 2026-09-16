@@ -1,0 +1,119 @@
+:root {
+  --bg: #fbfaf7;
+  --ink: #1c1b18;
+  --muted: #6b675f;
+  --line: #e6e2d9;
+  --accent: #355e3b;
+  --code-bg: #f1efe9;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141311;
+    --ink: #e8e5de;
+    --muted: #9a948a;
+    --line: #2c2a26;
+    --accent: #8fbb8f;
+    --code-bg: #1e1c19;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 17px/1.65 ui-serif, Georgia, "Times New Roman", serif;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem 0;
+}
+
+.wordmark {
+  font-weight: 400;
+  font-size: 1.15rem;
+  letter-spacing: 0.02em;
+}
+
+nav a {
+  color: var(--muted);
+  text-decoration: none;
+  margin-left: 1.25rem;
+  font-size: 0.95rem;
+}
+nav a:hover { color: var(--ink); }
+
+main {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 0 1.25rem 4rem;
+}
+
+.hero { margin: 4.5rem 0 3.5rem; }
+
+h1 {
+  font-weight: 400;
+  font-size: 2.5rem;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  margin: 0 0 1.5rem;
+}
+
+.lede {
+  font-size: 1.15rem;
+  color: var(--muted);
+  max-width: 38rem;
+}
+
+h2 {
+  font-weight: 400;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin: 3rem 0 1rem;
+}
+
+p { margin: 0 0 1rem; }
+
+a { color: var(--accent); }
+
+.code {
+  font: 400 0.85rem/1.6 ui-monospace, "SF Mono", Menlo, monospace;
+  background: var(--code-bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 1rem 1.25rem;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+code {
+  font: 400 0.9em ui-monospace, "SF Mono", Menlo, monospace;
+  background: var(--code-bg);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+ul { padding-left: 1.4rem; }
+li { margin-bottom: 0.5rem; }
+
+.status { border-top: 1px solid var(--line); margin-top: 3rem; }
+
+footer {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 2rem 1.25rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.9rem;
+}

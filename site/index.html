@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>morphogen — typed, replayable workflow organisms</title>
+<meta name="description" content="Morphogen expresses an agentic workflow as a typed graph: deterministic cells, bounded agent cells, classifier routing, and receipts a verifier can replay.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <div class="wordmark">morphogen</div>
+  <nav>
+    <a href="https://github.com/hraness/morphogen">github</a>
+    <a href="https://github.com/hraness/morphogen/tree/main/docs">docs</a>
+  </nav>
+</header>
+
+<main>
+  <section class="hero">
+    <h1>Structure that does the deciding.</h1>
+    <p class="lede">
+      Morphogen expresses an agentic workflow as a <em>typed graph</em> — an
+      organism. Most cells are deterministic code. A few are bounded agent
+      cells with a declared context view, a typed output contract, and a
+      budget. The graph, not the prompt, carries the decisions.
+    </p>
+  </section>
+
+  <section>
+    <h2>The shape</h2>
+    <pre class="code">cells:
+  - id: route
+    kind: classifier            # bounded LLM call, closed label set
+    output: { kind: choice, labels: [bug, feature, question] }
+  - id: as-bug
+    kind: fn                    # deterministic code
+edges:
+  - from: route.out
+    to: as-bug.tag
+    guard: { equals: bug }      # the structure carries the routing</pre>
+  </section>
+
+  <section>
+    <h2>What a run produces</h2>
+    <p>
+      Every run emits a content-addressed receipt: which cells committed,
+      which skipped, what each agent cell asked and returned, and the work
+      ledger. <code>morphogen verify</code> replays the run offline with the
+      recorded receipts fixed — the same manifest, the same outputs, the same
+      digest — or reports exactly where it diverges.
+    </p>
+    <pre class="code">$ morphogen run triage.morphogen.json --responses triage.responses.json
+$ morphogen verify run.receipt.json triage.morphogen.json
+{"ok":true,"outcome":"complete","digest":"sha256:…"}</pre>
+  </section>
+
+  <section>
+    <h2>Boundaries</h2>
+    <ul>
+      <li>A manifest carries no executable code. <code>fn</code> cells name host-registered functions; agent cells declare prompts, views, and contracts.</li>
+      <li>An agent cell sees only its declared view of the graph — byte-bounded, computed, never a stuffed prompt.</li>
+      <li>Model output is data. It re-enters the graph only after binding to a declared output contract.</li>
+      <li>Organisms embed: a sealed, content-addressed manifest becomes one cell inside a larger organism, exposing only its declared ports.</li>
+      <li>Receipts make runs replayable, not reproducible — the same organism on fresh inputs can legitimately diverge.</li>
+    </ul>
+  </section>
+
+  <section class="status">
+    <h2>Status</h2>
+    <p>
+      Early. <code>morphogen.organism.v1</code> covers the manifest contract,
+      the scheduler, the effect/receipt seam, nested organisms, and offline
+      verification. Hosted habitats, multi-owner messaging, and workflow
+      breeding are deliberately deferred.
+    </p>
+    <p>
+      <a href="https://github.com/hraness/morphogen">hraness/morphogen</a> · MIT
+    </p>
+  </section>
+</main>
+
+<footer>
+  <span>morphogen · a <a href="https://github.com/hraness">hraness</a> project</span>
+</footer>
+</body>
+</html>

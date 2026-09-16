@@ -1,0 +1,29 @@
+# Contents
+
+- `src/` — the contract (`contract.ts`, `graph.ts`), the scheduler (`run.ts`),
+  the effect seam (`effects.ts`), the store (`store.ts`), verification
+  (`verify.ts`), canonical values and digests, and colocated tests.
+- `cli.ts` — the Bun CLI (`run`, `verify`, `inspect`, `example`, `suite`).
+- `index.ts` — the package's public surface.
+- `examples/` — bundled manifests and scripted responses used by `suite`.
+- `spec/v1/organism.md` — the authoritative contract prose.
+- `site/` — the static morphogen.dev source; `build.ts` writes `site/dist`.
+- `README.md`, `CONTRIBUTING.md`, `SECURITY.md` — the public contract.
+
+# Guidelines
+
+- Bun 1.3.x, strict TypeScript, zero required runtime dependencies. Shared
+  foundations attach through the `Store` and `Executor` seams; do not add a
+  package dependency for something the contract can express.
+- Parse foreign values from `unknown` and reject unknown keys. Model invalid
+  states out rather than checking them late.
+- The manifest is data and carries no code. `fn` cells resolve against the
+  host registry; agent cells resolve against an executor the host supplies.
+- Receipts contain no wall-clock fields. `verify` must replay a run
+  bit-for-bit; keep nondeterminism at the executor boundary only.
+- Bound every count, byte size, depth, and list. New contract fields need a
+  bound and a test.
+- Colocate tests with source (`src/*.test.ts`); cover failure modes with a
+  deterministic example, not a mock-heavy harness.
+- Keep the public surfaces honest: README claims match what `bun run check`
+  and the tests actually prove; mark proposals as proposals.
