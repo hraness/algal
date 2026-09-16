@@ -1045,6 +1045,110 @@ describe("scheduler", () => {
     expect(bad.failure?.code).toBe("TYPE_MISMATCH");
   });
 
+  test("each composes inside a repeat round; cell work is attributed", async () => {
+    const store = new MemoryStore();
+    // inner of each: classify one item as keep/drop
+    const voteInner = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:vote",
+      name: "Vote",
+      interface: {
+        inputs: { item: { cell: "in", port: "item" } },
+        outputs: { keep: { cell: "keep", port: "out" } },
+      },
+      cells: [
+        { id: "in", kind: "input", outputs: { item: "text" } },
+        {
+          id: "keep",
+          kind: "classifier",
+          inputs: { item: "text" },
+          prompt: "Keep it?",
+          output: { kind: "choice", labels: ["keep", "drop"] },
+        },
+      ],
+      edges: [
+        { from: { cell: "in", port: "item" }, to: { cell: "keep", port: "item" } },
+      ],
+    });
+    const voteDigest = await store.putManifest(voteInner);
+    // repeat body: run an each over the carried list, emit count + verdict
+    const roundBody = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:round",
+      name: "Round",
+      interface: {
+        inputs: { items: { cell: "in", port: "items" } },
+        outputs: {
+          items: { cell: "in", port: "items" },
+          verdict: { cell: "done", port: "out" },
+        },
+      },
+      cells: [
+        { id: "in", kind: "input", outputs: { items: "json" } },
+        {
+          id: "votes",
+          kind: "each",
+          manifest: voteDigest,
+          over: "item",
+          maxItems: 8,
+        },
+        {
+          id: "done",
+          kind: "classifier",
+          inputs: { items: "json", votes: { type: "choice", many: true } },
+          prompt: "All kept?",
+          output: { kind: "choice", labels: ["again", "finished"] },
+        },
+      ],
+      edges: [
+        { from: { cell: "in", port: "items" }, to: { cell: "votes", port: "item" } },
+        { from: { cell: "in", port: "items" }, to: { cell: "done", port: "items" } },
+        { from: { cell: "votes", port: "keep" }, to: { cell: "done", port: "votes" } },
+      ],
+    });
+    const roundDigest = await store.putManifest(roundBody);
+    const outer = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:winnow",
+      name: "Winnow",
+      cells: [
+        { id: "src", kind: "input", outputs: { items: "json" } },
+        {
+          id: "loop",
+          kind: "repeat",
+          manifest: roundDigest,
+          maxRounds: 3,
+          carry: { items: "items" },
+          until: { output: "verdict", equals: "finished" },
+        },
+      ],
+      edges: [
+        { from: { cell: "src", port: "items" }, to: { cell: "loop", port: "items" } },
+      ],
+    });
+    const receipt = await runOrganism({
+      manifest: outer,
+      args: { src: { items: ["x", "y"] } },
+      fns: builtinRegistry(),
+      store,
+      executors: [scriptedExecutor({
+        keep: ["keep", "drop", "keep", "keep"],
+        done: ["again", "finished"],
+      })],
+    });
+    expect(receipt.outcome).toBe("complete");
+    expect(receipt.cells["loop"]?.rounds).toBe(2);
+    // each inside round 0 and round 1
+    expect(receipt.cells["loop/r0/votes"]?.items).toBe(2);
+    expect(receipt.cells["loop/r1/votes"]?.items).toBe(2);
+    // many->many flatten inside the nested scope: the votes reached `done`
+    // (two items -> two votes per round)
+    expect(receipt.cells["loop/r0/votes"]?.outputs?.keep).toEqual(["keep", "drop"]);
+    // per-cell work is attributed, not zero
+    expect(receipt.cells["loop"]?.work).toBeGreaterThan(0);
+    expect(receipt.cells["loop/r0/votes"]?.work).toBeGreaterThan(0);
+  });
+
   test("unresolvable cells produce a stuck outcome", async () => {
     // two pending cells blocked behind a skipped branch with a required input
     const m = manifest({

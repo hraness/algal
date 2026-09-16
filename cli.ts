@@ -16,9 +16,9 @@ import {
 } from "./src/effects";
 import { errorReport, MorphogenError } from "./src/errors";
 import { builtinRegistry } from "./src/registry";
-import { runOrganism, type RunReceipt } from "./src/run";
+import { parseRunReceipt, runOrganism, type RunReceipt } from "./src/run";
 import { FileStore } from "./src/store";
-import { verifyReceipt } from "./src/verify";
+import { diffReceipts, verifyReceipt } from "./src/verify";
 import { canonicalize, type JsonObject, type JsonValue } from "./src/values";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
@@ -44,6 +44,8 @@ usage:
                                               re-run with recorded receipts and compare;
                                               manifest resolves from the store when omitted
   morphogen inspect <receipt.json>            summarize a run receipt
+  morphogen diff <receipt-a.json> <receipt-b.json>
+                                              compare two receipts, report divergence
   morphogen suite                             run and verify all bundled examples
   morphogen digest <manifest.json>            print the manifest's canonical digest
   morphogen --version | --help
@@ -279,6 +281,28 @@ async function main(): Promise<number> {
       return report.ok ? 0 : 1;
     }
 
+    case "diff": {
+      const [aFile, bFile] = positional;
+      if (!aFile || !bFile) {
+        usageError("morphogen diff <receipt-a.json> <receipt-b.json>");
+      }
+      const a = parseRunReceipt(await readJson(resolve(aFile)));
+      const b = parseRunReceipt(await readJson(resolve(bFile)));
+      const mismatches = diffReceipts(a, b);
+      if (a.manifestDigest !== b.manifestDigest) {
+        mismatches.unshift(
+          `manifestDigest: ${a.manifestDigest} vs ${b.manifestDigest}`,
+        );
+      }
+      out({
+        same: mismatches.length === 0,
+        a: a.digest,
+        b: b.digest,
+        mismatches,
+      });
+      return mismatches.length === 0 ? 0 : 1;
+    }
+
     case "inspect": {
       const file = positional[0];
       if (!file) usageError("morphogen inspect <receipt.json>");
@@ -293,6 +317,7 @@ async function main(): Promise<number> {
           Object.entries(cells).map(([k, v]) => {
             const c = v as JsonObject;
             const entry: JsonObject = { status: c.status ?? null };
+            if (typeof c.work === "number" && c.work > 0) entry.work = c.work;
             if (c.shadowOut !== undefined) entry.shadowOut = c.shadowOut;
             if (c.rounds !== undefined) entry.rounds = c.rounds;
             if (c.items !== undefined) entry.items = c.items;

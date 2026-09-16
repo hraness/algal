@@ -202,6 +202,9 @@ Modeled units, not wall time: 100 per activation, plus the fn signature's
 `cost`, plus 500 + context bytes + output bytes per effect. Bounded by
 `budgets.maxWork`; `maxSteps` bounds activations, `maxAgentCalls` bounds
 effects, `maxContextBytes`/`maxOutputBytes` bound each effect's I/O.
+Each cell record carries the work attributed to it — for `organism`,
+`repeat`, and `each` cells that is the whole subtree's units, while inner
+cells keep their own records.
 
 ## Effects
 

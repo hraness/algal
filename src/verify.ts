@@ -75,7 +75,7 @@ function eq(a: JsonValue | undefined, b: JsonValue | undefined): boolean {
   return canonicalize(a ?? null) === canonicalize(b ?? null);
 }
 
-function diffReceipts(a: RunReceipt, b: RunReceipt): string[] {
+export function diffReceipts(a: RunReceipt, b: RunReceipt): string[] {
   const out: string[] = [];
   if (a.outcome !== b.outcome) {
     out.push(`outcome: ${a.outcome} vs ${b.outcome}`);
@@ -94,6 +94,15 @@ function diffReceipts(a: RunReceipt, b: RunReceipt): string[] {
     }
     if (!eq(ac.outputs ?? {}, bc.outputs ?? {})) {
       out.push(`cell ${k}: outputs differ`);
+    }
+    if (ac.work !== bc.work) {
+      out.push(`cell ${k}: work ${ac.work} vs ${bc.work}`);
+    }
+    if (ac.rounds !== bc.rounds) {
+      out.push(`cell ${k}: rounds ${ac.rounds} vs ${bc.rounds}`);
+    }
+    if (ac.items !== bc.items) {
+      out.push(`cell ${k}: items ${ac.items} vs ${bc.items}`);
     }
     if (!eq(ac.toolCalls, bc.toolCalls)) {
       out.push(`cell ${k}: toolCalls differ`);

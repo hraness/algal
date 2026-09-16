@@ -83,6 +83,8 @@ bun run cli verify .morphogen/runs/<receipt-digest>.json \
   examples/triage.morphogen.json
 # or omit the manifest — it resolves from the store by the receipt's digest
 bun run cli verify .morphogen/runs/<receipt-digest>.json
+# compare two runs: which cells diverged, what each one cost
+bun run cli diff .morphogen/runs/<a>.json .morphogen/runs/<b>.json
 ```
 
 `check` admits a manifest without running it: parse, graph validation, and
@@ -117,9 +119,10 @@ broker provider access; the executor seam is where provider auth lives.
   the fn, appends to the request's `toolLog`, and re-issues the request —
   bounded by `budget.maxTurns` and counted against `maxAgentCalls`. This is
   how agents call functions inside the automaton without ambient authority.
-- The receipt records every committed/skipped/failed cell, every effect
-  request and response, the event log, and the work ledger. `verify` replays
-  the run with recorded receipts fixed and reports any divergence.
+- The receipt records every committed/skipped/failed cell (with per-cell
+  work attribution), every effect request and response, the event log, and
+  the work ledger. `verify` replays the run with recorded receipts fixed and
+  reports any divergence; `diff` compares two receipts canonically.
 - Manifests and receipts are content-addressed canonical JSON. The store is a
   seam: `MemoryStore` and `FileStore` (`.morphogen/`) ship now; an Oh-backed
   store implements the same four methods.

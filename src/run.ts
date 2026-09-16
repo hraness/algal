@@ -269,6 +269,7 @@ async function runInto(
         break;
       }
       ctx.work.steps += 1;
+      const workBefore = ctx.work.units;
       ctx.work.units += WORK.activation;
 
       try {
@@ -276,7 +277,10 @@ async function runInto(
         checkOutputs(cell, sig.outputs, act.outputs);
         produced.set(cell.id, new Map(Object.entries(act.outputs)));
         state.set(cell.id, "done");
-        const rec: CellRecord = { status: "committed", work: 0 };
+        const rec: CellRecord = {
+          status: "committed",
+          work: ctx.work.units - workBefore,
+        };
         if (Object.keys(act.outputs).length) rec.outputs = act.outputs;
         if (act.effectDigest) rec.effectDigest = act.effectDigest;
         if (act.toolCalls) rec.toolCalls = act.toolCalls as unknown as JsonValue[];
