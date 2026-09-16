@@ -79,6 +79,16 @@ export function cellSignature(
         inputs: cell.inputs,
         outputs: { out: agentOutputPortType(cell.output) },
       };
+    case "store":
+      return {
+        inputs: { data: { type: "json" } },
+        outputs: { ref: { type: "ref" } },
+      };
+    case "load":
+      return {
+        inputs: { ref: { type: "ref" } },
+        outputs: { data: { type: "json" } },
+      };
     case "organism": {
       const sub = children.get(cell.id);
       if (!sub?.manifest.interface) {
@@ -244,6 +254,10 @@ export function agentOutputPortType(o: {
  * it feeds a `many` consumer element-wise (the edge flattens) or a `json`
  * consumer as a whole list value; scalar non-json consumers reject it. */
 export function portCompatible(producer: PortType, consumer: PortType): boolean {
+  // a ref token is not the payload — only ref ports can carry it
+  if (producer.type === "ref" || consumer.type === "ref") {
+    return producer.type === "ref" && consumer.type === "ref";
+  }
   if (producer.many && !consumer.many && consumer.type !== "json") {
     return false;
   }

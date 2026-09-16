@@ -1760,3 +1760,194 @@ describe("scheduler", () => {
     expect(r.cells["gate"]?.status).toBe("skipped");
   });
 });
+
+describe("ref ports and store/load cells", () => {
+  const cas = {
+    contract: "morphogen.organism.v1",
+    key: "organism:cas",
+    name: "Cas",
+    cells: [
+      { id: "src", kind: "input", outputs: { doc: "json" } },
+      { id: "put", kind: "store" },
+      { id: "get", kind: "load" },
+      { id: "end", kind: "fn", fn: "echo.v1" },
+    ],
+    edges: [
+      { from: { cell: "src", port: "doc" }, to: { cell: "put", port: "data" } },
+      { from: { cell: "put", port: "ref" }, to: { cell: "get", port: "ref" } },
+      { from: { cell: "get", port: "data" }, to: { cell: "end", port: "value" } },
+    ],
+  };
+
+  test("store writes the payload to CAS; load resolves it back", async () => {
+    const store = new MemoryStore();
+    const doc = { title: "big", body: "x".repeat(1000) };
+    const r = await run(manifest(cas), {
+      args: { src: { doc } },
+      store,
+    });
+    expect(r.outcome).toBe("complete");
+    const token = r.cells["put"]?.outputs?.ref;
+    expect(typeof token).toBe("string");
+    expect(token).toMatch(/^sha256:[0-9a-f]{64}$/);
+    // only the token rode the edge — the payload is in the store
+    expect(await store.getValue(token as never)).toEqual(doc);
+    expect(r.cells["end"]?.outputs?.value).toEqual(doc);
+  });
+
+  test("a caller-supplied ref must already resolve in the store", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:refin",
+      name: "RefIn",
+      cells: [{ id: "src", kind: "input", outputs: { r: "ref" } }],
+    });
+    const store = new MemoryStore();
+    const d = await store.putValue({ kept: true });
+    const ok = await run(m, { args: { src: { r: d } }, store });
+    expect(ok.cells["src"]?.outputs?.r).toBe(d);
+    const r = await run(m, {
+      args: {
+        src: {
+          r: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        },
+      },
+      store,
+    });
+    expect(r.outcome).toBe("failed");
+    expect(r.cells["src"]?.failure?.code).toBe("INPUT_MISSING");
+  });
+
+  test("a non-digest ref value fails the type check", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:badref",
+      name: "BadRef",
+      cells: [{ id: "src", kind: "input", outputs: { r: "ref" } }],
+    });
+    const r = await run(m, { args: { src: { r: "not-a-digest" } } });
+    expect(r.cells["src"]?.failure?.code).toBe("TYPE_MISMATCH");
+  });
+
+  test("a load cell fails closed when the blob is absent", async () => {
+    // a ref minted in one store does not resolve in another
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:dangle",
+      name: "Dangle",
+      cells: [
+        { id: "src", kind: "input", outputs: { r: "ref" } },
+        { id: "get", kind: "load" },
+      ],
+      edges: [
+        { from: { cell: "src", port: "r" }, to: { cell: "get", port: "ref" } },
+      ],
+    });
+    const writer = new MemoryStore();
+    const d = await writer.putValue({ kept: true });
+    const r = await run(m, {
+      args: { src: { r: d } },
+      store: writer,
+    });
+    expect(r.outcome).toBe("complete");
+    // the same manifest against an empty store fails at the input boundary
+    const r2 = await run(m, {
+      args: { src: { r: d } },
+      store: new MemoryStore(),
+    });
+    expect(r2.cells["src"]?.failure?.code).toBe("INPUT_MISSING");
+  });
+
+  test("ref↔ref only: ref cannot feed json, json cannot feed ref", async () => {
+    const bad = (toCell: string, toPort: string, fromCell = "put", fromPort = "ref") =>
+      manifest({
+        contract: "morphogen.organism.v1",
+        key: "organism:rtype",
+        name: "RType",
+        cells: [
+          { id: "src", kind: "input", outputs: { doc: "json" } },
+          { id: "put", kind: "store" },
+          { id: "end", kind: "fn", fn: "echo.v1" },
+          { id: "get", kind: "load" },
+        ],
+        edges: [
+          { from: { cell: "src", port: "doc" }, to: { cell: "put", port: "data" } },
+          { from: { cell: fromCell, port: fromPort }, to: { cell: toCell, port: toPort } },
+        ],
+      });
+    // ref → json consumer (echo.value is json): rejected
+    await expect(run(bad("end", "value"))).rejects.toThrow("cannot feed");
+    // json → ref consumer (load.ref): rejected
+    await expect(run(bad("get", "ref", "src", "doc"))).rejects.toThrow(
+      "cannot feed",
+    );
+  });
+
+  test("payloads over maxBlobBytes fail bounded", async () => {
+    const r = await run(manifest(cas), {
+      args: { src: { doc: { blob: "x".repeat(300_000) } } },
+    });
+    expect(r.outcome).toBe("failed");
+    expect(r.cells["put"]?.failure?.code).toBe("BUDGET_EXHAUSTED");
+  });
+
+  test("store/load runs replay bit-for-bit", async () => {
+    const m = manifest(cas);
+    const store = new MemoryStore();
+    const receipt = await runOrganism({
+      manifest: m,
+      args: { src: { doc: { a: 1 } } },
+      fns: builtinRegistry(),
+      store,
+      executors: [],
+    });
+    const report = await verifyReceipt(
+      receipt as unknown as JsonValue,
+      manifestToJson(m),
+      store,
+    );
+    expect(report.ok).toBe(true);
+    expect(report.digest).toBe(receipt.digest);
+  });
+
+  test("refs compose across organism boundaries (shared store)", async () => {
+    const inner = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:refinner",
+      name: "RefInner",
+      cells: [
+        { id: "in", kind: "input", outputs: { r: "ref" } },
+        { id: "get", kind: "load" },
+      ],
+      edges: [
+        { from: { cell: "in", port: "r" }, to: { cell: "get", port: "ref" } },
+      ],
+      interface: {
+        inputs: { r: { cell: "in", port: "r" } },
+        outputs: { doc: { cell: "get", port: "data" } },
+      },
+    });
+    const store = new MemoryStore();
+    const innerDigest = await store.putManifest(inner);
+    const outer = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:refouter",
+      name: "RefOuter",
+      cells: [
+        { id: "src", kind: "input", outputs: { doc: "json" } },
+        { id: "put", kind: "store" },
+        { id: "sub", kind: "organism", manifest: innerDigest },
+      ],
+      edges: [
+        { from: { cell: "src", port: "doc" }, to: { cell: "put", port: "data" } },
+        { from: { cell: "put", port: "ref" }, to: { cell: "sub", port: "r" } },
+      ],
+      interface: { outputs: { doc: { cell: "sub", port: "doc" } } },
+    });
+    const doc = { nested: [1, 2, 3] };
+    const r = await run(outer, { args: { src: { doc } }, store });
+    expect(r.outcome).toBe("complete");
+    expect(r.cells["sub"]?.outputs?.doc).toEqual(doc);
+    expect(r.cells["sub/get"]?.outputs?.data).toEqual(doc);
+  });
+});

@@ -19,6 +19,9 @@ export interface Store {
   putManifest(manifest: OrganismManifest): Promise<Digest>;
   getReceipt(digest: Digest): Promise<JsonValue | undefined>;
   putReceipt(receipt: JsonValue): Promise<Digest>;
+  /** Generic JSON CAS — `ref` ports point at values stored here. */
+  getValue(digest: Digest): Promise<JsonValue | undefined>;
+  putValue(value: JsonValue): Promise<Digest>;
 }
 
 export class MemoryStore implements Store {
@@ -41,6 +44,15 @@ export class MemoryStore implements Store {
     this.receipts.set(d, receipt);
     return d;
   }
+  private values = new Map<Digest, JsonValue>();
+  async getValue(digest: Digest) {
+    return this.values.get(digest);
+  }
+  async putValue(value: JsonValue) {
+    const d = digestCanonical(value);
+    this.values.set(d, value);
+    return d;
+  }
 }
 
 export class FileStore implements Store {
@@ -51,6 +63,9 @@ export class FileStore implements Store {
   }
   private receiptPath(d: Digest) {
     return join(this.dir, "runs", `${d.slice(7)}.json`);
+  }
+  private valuePath(d: Digest) {
+    return join(this.dir, "values", `${d.slice(7)}.json`);
   }
 
   async getManifest(digest: Digest) {
@@ -102,6 +117,32 @@ export class FileStore implements Store {
     const d = digestCanonical(receipt);
     await mkdir(join(this.dir, "runs"), { recursive: true });
     await writeFile(this.receiptPath(d), canonicalize(receipt));
+    return d;
+  }
+
+  async getValue(digest: Digest) {
+    try {
+      const raw = await readFile(this.valuePath(digest), "utf8");
+      const parsed = JSON.parse(raw) as JsonValue;
+      const actual = digestCanonical(parsed);
+      if (actual !== digest) {
+        throw new MorphogenError(
+          "DIGEST_MISMATCH",
+          `value file ${digest} hashes to ${actual}`,
+        );
+      }
+      return parsed;
+    } catch (e) {
+      if (e instanceof MorphogenError) throw e;
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      throw new MorphogenError("PARSE_FAILED", `value ${digest}: ${e}`);
+    }
+  }
+
+  async putValue(value: JsonValue) {
+    const d = digestCanonical(value);
+    await mkdir(join(this.dir, "values"), { recursive: true });
+    await writeFile(this.valuePath(d), canonicalize(value));
     return d;
   }
 }

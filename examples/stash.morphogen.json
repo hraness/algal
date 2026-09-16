@@ -1,0 +1,22 @@
+{
+  "contract": "morphogen.organism.v1",
+  "key": "organism:stash",
+  "name": "Stash",
+  "cells": [
+    { "id": "src", "kind": "input", "outputs": { "doc": "json" } },
+    { "id": "pin", "kind": "store" },
+    { "id": "get", "kind": "load" },
+    {
+      "id": "writer",
+      "kind": "agent",
+      "inputs": { "doc": "json" },
+      "prompt": "Summarize the document in one line.",
+      "output": { "kind": "text" }
+    }
+  ],
+  "edges": [
+    { "from": { "cell": "src", "port": "doc" }, "to": { "cell": "pin", "port": "data" } },
+    { "from": { "cell": "pin", "port": "ref" }, "to": { "cell": "get", "port": "ref" } },
+    { "from": { "cell": "get", "port": "data" }, "to": { "cell": "writer", "port": "doc" } }
+  ]
+}

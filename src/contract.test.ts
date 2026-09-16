@@ -379,3 +379,59 @@ describe("graph admission", () => {
     ).rejects.toThrow(/undeclared input/);
   });
 });
+
+describe("ref ports and store/load cells", () => {
+  const cas = {
+    contract: "morphogen.organism.v1",
+    key: "organism:cas",
+    name: "Cas",
+    cells: [
+      { id: "src", kind: "input", outputs: { doc: "json" } },
+      { id: "pin", kind: "store" },
+      { id: "get", kind: "load" },
+      { id: "refin", kind: "input", outputs: { r: "ref" } },
+    ],
+    edges: [
+      { from: { cell: "src", port: "doc" }, to: { cell: "pin", port: "data" } },
+      { from: { cell: "pin", port: "ref" }, to: { cell: "get", port: "ref" } },
+    ],
+  };
+
+  test("parses store/load cells and ref ports; round-trips", () => {
+    const m = parseOrganismManifest(cas);
+    const pin = m.cells.find((c) => c.id === "pin")!;
+    expect(pin.kind).toBe("store");
+    const reparsed = parseOrganismManifest(manifestToJson(m));
+    expect(reparsed).toEqual(m);
+  });
+
+  test("ref port accepts optional and many on consumers", () => {
+    const m = parseOrganismManifest({
+      ...cas,
+      cells: [
+        {
+          id: "a",
+          kind: "agent",
+          inputs: { rs: { type: "ref", many: true } },
+          prompt: "p",
+          output: { kind: "text" },
+        },
+      ],
+      edges: [],
+    });
+    const cell = m.cells[0] as {
+      inputs: Record<string, { type: string; many?: boolean }>;
+    };
+    expect(cell.inputs.rs!.type).toBe("ref");
+    expect(cell.inputs.rs!.many).toBe(true);
+  });
+
+  test("store/load reject unknown keys and extra fields", () => {
+    expect(() =>
+      parseOrganismManifest({
+        ...cas,
+        cells: [{ id: "pin", kind: "store", prompt: "nope" }],
+      }),
+    ).toThrow(/unknown key/);
+  });
+});

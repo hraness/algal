@@ -80,11 +80,19 @@ byte bounds, and depth are set by the top-level manifest and apply across
 every nested level. An inner manifest's own budgets apply when it runs as a
 root.
 
-**The store and executor are seams.** `Store` is four methods; an Oh-backed
+**The store and executor are seams.** `Store` is six methods — manifests,
+receipts, and the `getValue`/`putValue` CAS behind `ref` ports; an Oh-backed
 adapter lands when Oh's API settles (it is moving weekly). `Executor` is one
 async call; provider auth lives behind `--executor-cmd` or a host adapter.
 Morphogen never brokers model access. (From Oompa: custody and provider
 execution are different jobs.)
+
+**Payloads are content-addressed too.** A `ref` port carries a `sha256:`
+token, not a value; `store` and `load` cells are the only IO points, so the
+graph shows exactly where data enters and leaves CAS. A large document can
+pass through a hundred cells without ever appearing in a receipt or an
+effect request — only its digest does, and the digest is what the request
+signs.
 
 ## Deferred on purpose
 

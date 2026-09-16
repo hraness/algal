@@ -44,9 +44,15 @@ Cell kinds:
   (`over` binds the element), and each interface output collects into a list
   port. Map is a cell; combined with `many` inputs the graph expresses
   fan-out → compute → collect without a loop construct in sight.
+- `store` / `load` — the only data IO cells. `store` writes a `json` payload
+  into the content-addressed store and emits a `ref` port — a `sha256:` token.
+  `load` resolves the token back to the payload. Payloads live in CAS and are
+  bounded by `maxBlobBytes`; only digests ride edges, receipts, and contexts.
+  A caller-supplied `ref` must already resolve — no dangling pointers — and a
+  store that returns wrong content fails `DIGEST_MISMATCH`.
 
 Edges connect a producer port to a consumer port. Ports are typed (`text`,
-`json`, `choice`); guarded edges fire only when the produced choice equals the
+`json`, `choice`, `ref`); guarded edges fire only when the produced choice equals the
 guard label — or, on a `json` producer, when `guard.field` of the delivered
 record strictly equals `guard.equals`, so routing can depend on a structured
 field without a classifier in between. An edge declared `"on": "fail"`
@@ -80,7 +86,9 @@ organism embedded as one cell), `lookup` (an agent reading a record through a
 `escalate` (field guards routing a ticket record on `severity` — no
 classifier), `recover` (a classifier miss fails; an `on:"fail"` edge hands
 the record to a fallback cell), and
-`swarm` (an `each` cell mapping a question list through a sub-manifest) — with
+`swarm` (an `each` cell mapping a question list through a sub-manifest), and
+`stash` (a document pinned to CAS by a `store` cell — only the `ref` token
+reaches the `load` cell that resolves it) — with
 scripted responses, then verifies each receipt offline. To run one yourself:
 
 ```sh

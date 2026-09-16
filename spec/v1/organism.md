@@ -45,6 +45,25 @@ canonicalized, hashed, and embedded. It can never carry code.
 | `organism` | embedded sub-manifest by `sha256:` digest | inherited from the sub-manifest `interface` |
 | `repeat` | bounded re-run of a digest-embedded sub-manifest | inherited from the sub-manifest `interface` |
 | `each` | map a delivered list through a digest-embedded sub-manifest | `over` accepts one `json` edge carrying the list; other interface inputs pass through; interface outputs become lists |
+| `store` | writes a payload into the content-addressed store | input `data` (`json`), output `ref` (`ref`) |
+| `load` | resolves a `ref` token back to its payload | input `ref` (`ref`), output `data` (`json`) |
+
+### Port types
+
+Every port declares one of:
+
+- `text` — a string
+- `json` — any JSON value
+- `choice` — a string from declared `labels`
+- `ref` — a `sha256:` digest token naming a payload in the store
+
+A `ref` is a pointer, not a value: the payload never rides the edge, so it
+never enters receipts, agent contexts, or request digests — only the token
+does. `store` and `load` cells are the only data IO points; they are the
+only cells whose ports are fixed by the contract. A `ref` token admitted
+through `input` args or a `const` port must already resolve in the store —
+the caller mints tokens by writing the payload first; no cell can invent a
+dangling pointer.
 
 ### agent / classifier / gate fields
 
@@ -134,6 +153,24 @@ canonicalized, hashed, and embedded. It can never carry code.
 - The cell record carries `rounds` when more than one round ran. All run
   budgets — steps, agent calls, work — are root-owned across every round.
 
+### store / load cells
+
+```json
+{ "id": "pin", "kind": "store" }
+{ "id": "get", "kind": "load" }
+```
+
+- `store` takes one `json` input `data`, writes it into the store, and
+  emits `ref` — the canonical digest of the payload. A payload over
+  `maxBlobBytes` (262 144 canonical bytes) fails the cell.
+- `load` takes one `ref` input `ref`, resolves it, and emits the payload on
+  `data` (`json`). A token that does not resolve fails the cell
+  (`INPUT_MISSING`); a store that returns content hashing to a different
+  digest fails it too (`DIGEST_MISMATCH` — FileStore verifies on read).
+- Both are deterministic cells: they emit no effect, and replaying a run
+  re-runs them against the same store. `store` writes are idempotent —
+  same payload, same digest.
+
 ### each cells
 
 ```json
@@ -184,8 +221,9 @@ canonicalized, hashed, and embedded. It can never carry code.
   cell skips, and an optional one arrives as `[]`.
 - Type compatibility: same type; `choice` may feed `text`; `choice` feeds
   `choice` when the consumer's labels cover the producer's; anything feeds
-  `json`; `json` feeds only `json`. For `many` ports the rules apply per
-  element.
+  `json`; `json` feeds only `json`. `ref` feeds only `ref` — a token is not
+  the payload, so it cannot widen into `json`. For `many` ports the rules
+  apply per element.
 - `"on": "fail"` marks a failure edge: it fires when the producer's
   activation *fails* and delivers the failure record `{"code","message"}`
   to the consumer, which must be a `json` port. `guard` is not valid on a
@@ -215,6 +253,10 @@ canonicalized, hashed, and embedded. It can never carry code.
   recording under `loop/r<n>/…`; `each` cells run theirs once per list
   element under `map/i<n>/…`. Iteration and fan-out are the only re-entry
   v1 admits: the edge graph itself stays acyclic.
+- `store`/`load` activations charge the payload's canonical byte size to the
+  work ledger and bound it by `maxBlobBytes`. `ref` tokens compose across
+  `organism`/`repeat`/`each` boundaries — every nested run shares the root
+  store, so a token minted at any depth resolves at any other.
 - A cell whose activation throws records `status: "failed"` with the
   failure detail. With no `on:"fail"` edge outbound, the run fails (first
   unhandled failure wins). With one, the run continues — the failure record

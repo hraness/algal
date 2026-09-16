@@ -50,6 +50,7 @@ export const BOUNDS = {
   maxDepth: 8,
   maxEvents: 4096,
   maxArgsBytes: 1_048_576,
+  maxBlobBytes: 262_144,
   maxSchemaDepth: 4,
   maxInterfacePorts: 32,
 } as const;
@@ -68,7 +69,8 @@ export const DEFAULT_BUDGETS = {
 export type PortType =
   | { type: "text"; optional?: boolean; many?: boolean }
   | { type: "json"; optional?: boolean; many?: boolean }
-  | { type: "choice"; optional?: boolean; many?: boolean; labels?: string[] };
+  | { type: "choice"; optional?: boolean; many?: boolean; labels?: string[] }
+  | { type: "ref"; optional?: boolean; many?: boolean };
 
 export type PortName = string;
 export type PortMap = Record<PortName, PortType>;
@@ -158,7 +160,12 @@ export type Cell =
       route?: Route;
       budget?: CellBudget;
     }
-  | { id: string; kind: "organism"; manifest: string };
+  | { id: string; kind: "organism"; manifest: string }
+  /** `store` writes its `data` input into the content-addressed store and
+   * produces a `ref`; `load` resolves a `ref` back to its payload. The only
+   * IO cells — payloads live in CAS, only digest tokens ride edges. */
+  | { id: string; kind: "store" }
+  | { id: string; kind: "load" };
 
 export type Edge = {
   from: { cell: string; port: PortName };
@@ -203,13 +210,20 @@ export type OrganismManifest = {
 
 function parsePortType(u: unknown, what: string): PortType {
   if (typeof u === "string") {
-    if (u === "text" || u === "json" || u === "choice") return { type: u };
+    if (u === "text" || u === "json" || u === "choice" || u === "ref") {
+      return { type: u };
+    }
     throw new MorphogenError("PARSE_FAILED", `${what}: unknown port type "${u}"`);
   }
   const obj = asObject(u, what);
   noUnknownKeys(obj, ["type", "optional", "many", "labels"], what);
   const type = asString(reqField(obj, "type", what), `${what}.type`, 16);
-  if (type !== "text" && type !== "json" && type !== "choice") {
+  if (
+    type !== "text" &&
+    type !== "json" &&
+    type !== "choice" &&
+    type !== "ref"
+  ) {
     throw new MorphogenError("PARSE_FAILED", `${what}.type: unknown "${type}"`);
   }
   const asBool = (v: unknown, name: string) =>
@@ -493,6 +507,11 @@ function parseCell(u: unknown, what: string): Cell {
         kind,
         fn: asString(reqField(obj, "fn", what), `${what}.fn`, BOUNDS.maxRefLen),
       };
+    }
+    case "store":
+    case "load": {
+      noUnknownKeys(obj, ["id", "kind"], what);
+      return { id, kind };
     }
     case "organism": {
       noUnknownKeys(obj, ["id", "kind", "manifest"], what);
@@ -934,6 +953,9 @@ export function manifestToJson(m: OrganismManifest): JsonObject {
       }
       case "fn":
         return { id: c.id, kind: c.kind, fn: c.fn };
+      case "store":
+      case "load":
+        return { id: c.id, kind: c.kind };
       case "organism":
         return { id: c.id, kind: c.kind, manifest: c.manifest };
       case "repeat": {

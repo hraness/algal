@@ -17,7 +17,7 @@ import type {
   OrganismManifest,
   PortType,
 } from "./contract";
-import { manifestToJson } from "./contract";
+import { BOUNDS, manifestToJson } from "./contract";
 import {
   bindOutput,
   effectRequestDigest,
@@ -403,6 +403,7 @@ async function activate(
         const v = supplied[port];
         if (v === undefined) continue;
         checkValue(v, decl, `${cell.id}.${port}`);
+        await checkRefsResolve(ctx, decl, v, `${cell.id}.${port}`);
         out[port] = v;
       }
       return { outputs: out };
@@ -411,9 +412,43 @@ async function activate(
       const out: Record<string, JsonValue> = {};
       for (const [port, decl] of Object.entries(cell.outputs)) {
         checkValue(decl.value, decl, `${cell.id}.${port}`);
+        await checkRefsResolve(ctx, decl, decl.value, `${cell.id}.${port}`);
         out[port] = decl.value;
       }
       return { outputs: out };
+    }
+    case "store": {
+      const data = inputs.data!;
+      const bytes = canonicalBytes(data);
+      if (bytes > BOUNDS.maxBlobBytes) {
+        throw new MorphogenError(
+          "BUDGET_EXHAUSTED",
+          `${cell.id}: payload ${bytes}B exceeds maxBlobBytes ${BOUNDS.maxBlobBytes}B`,
+        );
+      }
+      ctx.work.units += bytes * WORK.perOutputByte;
+      const d = await ctx.opts.store.putValue(data);
+      return { outputs: { ref: d } };
+    }
+    case "load": {
+      const ref = inputs.ref!;
+      checkValue(ref, { type: "ref" }, `${cell.id}.ref`);
+      const v = await ctx.opts.store.getValue(ref as Digest);
+      if (v === undefined) {
+        throw new MorphogenError(
+          "INPUT_MISSING",
+          `${cell.id}: ref ${ref} not in store`,
+        );
+      }
+      const bytes = canonicalBytes(v);
+      if (bytes > BOUNDS.maxBlobBytes) {
+        throw new MorphogenError(
+          "BUDGET_EXHAUSTED",
+          `${cell.id}: payload ${bytes}B exceeds maxBlobBytes ${BOUNDS.maxBlobBytes}B`,
+        );
+      }
+      ctx.work.units += bytes * WORK.perOutputByte;
+      return { outputs: { data: v } };
     }
     case "fn": {
       const entry = ctx.opts.fns.get(cell.fn)!;
@@ -780,8 +815,39 @@ function checkValue(v: JsonValue, decl: PortType, what: string): void {
         );
       }
       return;
+    case "ref":
+      if (
+        typeof v !== "string" ||
+        !/^sha256:[0-9a-f]{64}$/.test(v)
+      ) {
+        throw new MorphogenError(
+          "TYPE_MISMATCH",
+          `${what}: expected a sha256 ref token`,
+        );
+      }
+      return;
     case "json":
       return;
+  }
+}
+
+/** A ref token admitted through `input`/`const` must already point at CAS —
+ * refs are minted by `store` cells or supplied by the caller, never invented. */
+async function checkRefsResolve(
+  ctx: RunContext,
+  decl: PortType & { value?: JsonValue },
+  v: JsonValue,
+  what: string,
+): Promise<void> {
+  if (decl.type !== "ref") return;
+  const tokens = decl.many ? (v as JsonValue[]) : [v];
+  for (const t of tokens) {
+    if ((await ctx.opts.store.getValue(t as Digest)) === undefined) {
+      throw new MorphogenError(
+        "INPUT_MISSING",
+        `${what}: ref ${t} not in store`,
+      );
+    }
   }
 }
 
