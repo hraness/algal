@@ -1,0 +1,12 @@
+{
+  "reader": [
+    {
+      "tool": "pick.v1",
+      "inputs": {
+        "record": { "title": "Notes on the engine", "author": "Ada", "year": 1843 },
+        "field": "author"
+      }
+    },
+    "Ada wrote the document."
+  ]
+}
