@@ -33,6 +33,8 @@ usage:
       --args <file>                           input-cell values (JSON)
       --responses <file>                      scripted agent outputs (JSON map)
       --executor-cmd <shell command>          live executor: request on stdin, output on stdout
+      --executors <file>                      JSON map of executor name → shell command;
+                                              route.provider/route.preset pick by name
       --modules <dir>                         load *.morphogen.json into the store for organism cells
       --dir <path>                            store directory (default .morphogen)
       --write                                 persist manifest + receipt under --dir
@@ -209,6 +211,23 @@ async function main(): Promise<number> {
       }
       if (flags["executor-cmd"] !== undefined) {
         executors.push(commandExecutor(String(flags["executor-cmd"])));
+      }
+      if (flags.executors !== undefined) {
+        const map = asRecord(
+          await readJson(resolve(String(flags.executors))),
+          "executors",
+        );
+        for (const [name, cmd] of Object.entries(map)) {
+          if (typeof cmd !== "string" || cmd.length === 0) {
+            throw new MorphogenError(
+              "PARSE_FAILED",
+              `executors.${name} must be a shell command string`,
+            );
+          }
+          const inner = commandExecutor(cmd);
+          executors.push({ id: name, execute: (r) => inner.execute(r) });
+        }
+        diag(`loaded ${Object.keys(map).length} named executor(s)`);
       }
 
       const receipt = await runOrganism({ manifest, args, fns, store, executors });

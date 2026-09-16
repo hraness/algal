@@ -26,7 +26,9 @@ Cell kinds:
   turn budgets.
 - `classifier` — an agent cell restricted to a closed set of labels, with an
   optional `onMiss` fallback. Its output drives `guard`ed edges, which is how
-  routing decisions live in the structure instead of in prose.
+  routing decisions live in the structure instead of in prose. A classifier
+  may run in `shadow` mode: the model's decision is recorded on the receipt
+  while a declared label stays authoritative — audition before promotion.
 - `organism` — a sealed sub-manifest referenced by digest. The outer graph sees
   only its declared interface ports. This is symbolization: a compound that is
   versioned, inspectable, and not a free primitive.
@@ -74,6 +76,8 @@ by digest from the store; `--modules <dir>` loads a directory of
 To go live, point `--executor-cmd` at any program that reads an effect request
 (JSON) on stdin and prints the model's output on stdout. Morphogen does not
 broker provider access; the executor seam is where provider auth lives.
+`--executors <file>` takes a JSON map of name → command, so a cell's
+`route.provider`/`route.preset` picks its model.
 
 ## How does it behave?
 

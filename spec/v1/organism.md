@@ -55,6 +55,7 @@ canonicalized, hashed, and embedded. It can never carry code.
   "output": { "kind": "choice", "labels": ["bug", "feature"], "onMiss": "bug" },
   "route": { "provider": "…", "model": "…", "preset": "…" },
   "tools": ["pick.v1"],
+  "shadow": { "take": "bug" },
   "budget": { "maxContextBytes": 65536, "maxOutputBytes": 4096, "maxTurns": 8 }
 }
 ```
@@ -68,6 +69,15 @@ canonicalized, hashed, and embedded. It can never carry code.
   schema subset: `type`, `required`, `properties`, depth ≤ 4), or
   `{"kind":"choice","labels":[…],"onMiss"?}`.
 - `route` is a hint the executor may honor. It grants nothing by itself.
+  `route.provider` and `route.preset` select among host-supplied executors by
+  id (`<name>` or `provider:<name>` / `preset:<name>`); the first executor is
+  the default when no route matches.
+- `shadow` (classifier only) declares an audition: `{"take":"<label>"}` runs
+  the effect and binds the output normally, but commits `take` instead. The
+  model's bound output is recorded on the cell receipt as `shadowOut`. This
+  is how a new classifier earns authority — receipts accumulate shadow
+  decisions for review before `shadow` is removed. `take` must be a declared
+  label.
 - `tools` (optional, ≤ 16) declares which registry fns the executor may call
   back. An executor response of the reserved shape
   `{"tool":"<ref>","inputs":{…}}` where `<ref>` is in `tools` is not bound as
@@ -136,7 +146,8 @@ edges. A miss on a `choice` output resolves to `onMiss` or fails the run.
 ## Receipts — morphogen.run.v1
 
 A receipt records `manifestDigest`, `args`, `outcome`, per-cell records
-(`committed | skipped | failed`, outputs, `effectDigest`, `toolCalls`), the
+(`committed | skipped | failed`, outputs, `effectDigest`, `toolCalls`,
+`shadowOut`), the
 `effects` list (`requestDigest`, raw `output`, `executor` id, optional usage),
 the bounded `events` log, the work ledger, and `failure` detail. `digest` is
 over the canonical receipt minus itself.

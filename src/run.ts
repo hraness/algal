@@ -65,6 +65,7 @@ export type CellRecord = {
   work: number;
   effectDigest?: string;
   toolCalls?: JsonValue[];
+  shadowOut?: JsonValue;
 };
 
 export type RunReceipt = {
@@ -255,6 +256,7 @@ async function runInto(
         if (Object.keys(act.outputs).length) rec.outputs = act.outputs;
         if (act.effectDigest) rec.effectDigest = act.effectDigest;
         if (act.toolCalls) rec.toolCalls = act.toolCalls as unknown as JsonValue[];
+        if (act.shadowOut !== undefined) rec.shadowOut = act.shadowOut;
         ctx.cells[cellPath(cell.id)] = rec;
         emit(ctx, { kind: "cell.commit", path: cellPath(cell.id) });
       } catch (e) {
@@ -285,6 +287,7 @@ type Activation = {
   outputs: Record<string, JsonValue>;
   effectDigest?: Digest;
   toolCalls?: { fn: string; inputs: JsonValue; output: JsonValue }[];
+  shadowOut?: JsonValue;
 };
 
 /** The reserved tool-call shape. Only recognized when the cell declares the
@@ -418,10 +421,18 @@ async function activate(
         const call = asToolCall(raw, cell.tools);
         if (!call) {
           const bound = bindOutput(cell.output, raw, cell.id);
+          // shadow mode: the model's decision is recorded, not taken — the
+          // declared label stays authoritative until shadow data earns the
+          // promotion through review
+          const final =
+            cell.kind === "classifier" && cell.shadow
+              ? cell.shadow.take
+              : bound;
           const act: Activation = {
-            outputs: { out: bound },
+            outputs: { out: final },
             effectDigest: requestDigest,
           };
+          if (final !== bound) act.shadowOut = bound;
           if (toolLog.length) act.toolCalls = toolLog;
           return act;
         }
@@ -472,10 +483,15 @@ function pickExecutor(executors: Executor[], cell: Cell): Executor {
       `no executor available for cell "${cell.id}"`,
     );
   }
-  // route.provider selects an executor by id prefix "provider:<name>" if present
+  // route.provider / route.preset select an executor by id; a bare id or a
+  // "provider:<name>"/"preset:<name>" prefixed id both match
   const route = cell.kind === "agent" || cell.kind === "classifier" ? cell.route : undefined;
-  if (route?.provider) {
-    const hit = executors.find((e) => e.id === `provider:${route.provider}` || e.id === route.provider);
+  if (route) {
+    const wanted = [
+      ...(route.provider ? [route.provider, `provider:${route.provider}`] : []),
+      ...(route.preset ? [route.preset, `preset:${route.preset}`] : []),
+    ];
+    const hit = executors.find((e) => wanted.includes(e.id));
     if (hit) return hit;
   }
   return executors[0]!;

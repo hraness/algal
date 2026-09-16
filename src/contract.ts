@@ -116,6 +116,7 @@ export type Cell =
       route?: Route;
       tools?: string[];
       budget?: CellBudget;
+      shadow?: { take: string };
     }
   | { id: string; kind: "organism"; manifest: string };
 
@@ -389,7 +390,10 @@ function parseCell(u: unknown, what: string): Cell {
     case "classifier": {
       noUnknownKeys(
         obj,
-        ["id", "kind", "inputs", "prompt", "view", "output", "route", "tools", "budget"],
+        [
+          "id", "kind", "inputs", "prompt", "view", "output",
+          "route", "tools", "budget", "shadow",
+        ],
         what,
       );
       const inputs = obj.inputs === undefined
@@ -470,6 +474,34 @@ function parseCell(u: unknown, what: string): Cell {
             "PARSE_FAILED",
             `${what}: classifier output must be {kind:"choice"}`,
           );
+        }
+        if (obj.shadow !== undefined) {
+          const s = asObject(obj.shadow, `${what}.shadow`);
+          noUnknownKeys(s, ["take"], `${what}.shadow`);
+          const take = asString(
+            reqField(s, "take", `${what}.shadow`),
+            `${what}.shadow.take`,
+            BOUNDS.maxLabelLen,
+          );
+          if (!output.labels.includes(take)) {
+            throw new MorphogenError(
+              "PARSE_FAILED",
+              `${what}.shadow.take must be a declared label`,
+            );
+          }
+          const cell: Cell = {
+            id,
+            kind,
+            inputs,
+            prompt,
+            view,
+            output,
+            shadow: { take },
+          };
+          if (route) cell.route = route;
+          if (tools) cell.tools = tools;
+          if (budget) cell.budget = budget;
+          return cell;
         }
         const cell: Cell = {
           id,
@@ -699,6 +731,7 @@ export function manifestToJson(m: OrganismManifest): JsonObject {
         if (Object.keys(c.inputs).length > 0) o.inputs = portMapJson(c.inputs);
         if (c.route) o.route = routeJson(c.route);
         if (c.tools) o.tools = c.tools;
+        if (c.kind === "classifier" && c.shadow) o.shadow = { take: c.shadow.take };
         if (c.budget) {
           const b: JsonObject = {};
           if (c.budget.maxContextBytes !== undefined)

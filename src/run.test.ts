@@ -470,6 +470,91 @@ describe("scheduler", () => {
     ).rejects.toThrowError(/unknown tool fn/);
   });
 
+  test("shadow classifier records the decision but takes the declared label", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:shadow",
+      name: "Shadow",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "text" } },
+        {
+          id: "c",
+          kind: "classifier",
+          inputs: { v: "text" },
+          prompt: "p",
+          output: { kind: "choice", labels: ["live", "shadowed"] },
+          shadow: { take: "live" },
+        },
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "c", port: "v" } },
+      ],
+    });
+    const r = await run(m, {
+      args: { src: { v: "t" } },
+      responses: { c: "shadowed" },
+    });
+    expect(r.outcome).toBe("complete");
+    // the committed output is the declared label; the model's pick is recorded
+    expect(r.cells["c"]?.outputs?.out).toBe("live");
+    expect(r.cells["c"]?.shadowOut).toBe("shadowed");
+  });
+
+  test("shadow.take must be a declared label", () => {
+    expect(() =>
+      manifest({
+        contract: "morphogen.organism.v1",
+        key: "organism:bad-shadow",
+        name: "BadShadow",
+        cells: [
+          {
+            id: "c",
+            kind: "classifier",
+            inputs: {},
+            prompt: "p",
+            output: { kind: "choice", labels: ["a"] },
+            shadow: { take: "not-a-label" },
+          },
+        ],
+      }),
+    ).toThrowError(/declared label/);
+  });
+
+  test("route.preset selects a named executor", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:routed",
+      name: "Routed",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "text" } },
+        {
+          id: "a",
+          kind: "agent",
+          inputs: { v: "text" },
+          prompt: "p",
+          output: { kind: "text" },
+          route: { preset: "small" },
+        },
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "a", port: "v" } },
+      ],
+    });
+    const receipt = await runOrganism({
+      manifest: m,
+      args: { src: { v: "x" } },
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [
+        { id: "preset:small", execute: scriptedExecutor({ a: "from-small" }).execute },
+        { id: "preset:big", execute: scriptedExecutor({ a: "from-big" }).execute },
+      ],
+    });
+    expect(receipt.outcome).toBe("complete");
+    expect(receipt.cells["a"]?.outputs?.out).toBe("from-small");
+    expect(receipt.effects[0]!.executor).toBe("preset:small");
+  });
+
   test("unresolvable cells produce a stuck outcome", async () => {
     // two pending cells blocked behind a skipped branch with a required input
     const m = manifest({
