@@ -23,7 +23,7 @@ export const EFFECT_CONTRACT = "morphogen.effect.v1" as const;
 export type EffectRequest = {
   contract: typeof EFFECT_CONTRACT;
   cellId: string;
-  kind: "agent" | "classifier";
+  kind: "agent" | "classifier" | "gate";
   prompt: string;
   context: JsonObject;
   output: AgentOutput;

@@ -41,9 +41,10 @@ canonicalized, hashed, and embedded. It can never carry code.
 | `fn` | pure registered function | inherited from the host registry signature |
 | `agent` | bounded model call | declared `inputs`; one output port `out` |
 | `classifier` | agent restricted to `choice` output | same as agent |
+| `gate` | approval point — a `choice` effect routed to a human/policy, not a model | same as agent; no `tools`/`shadow` |
 | `organism` | embedded sub-manifest by `sha256:` digest | inherited from the sub-manifest `interface` |
 
-### agent / classifier fields
+### agent / classifier / gate fields
 
 ```json
 {
@@ -130,7 +131,7 @@ effects, `maxContextBytes`/`maxOutputBytes` bound each effect's I/O.
 
 ## Effects
 
-An agent/classifier activation produces an effect request:
+An agent/classifier/gate activation produces an effect request:
 
 ```json
 { "contract": "morphogen.effect.v1", "cellId": "route", "kind": "classifier",

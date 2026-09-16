@@ -354,11 +354,13 @@ async function activate(
       return { outputs: entry.fn(inputs) };
     }
     case "agent":
-    case "classifier": {
+    case "classifier":
+    case "gate": {
       const budgets = ctx.budgets;
       const maxCtx = cell.budget?.maxContextBytes ?? budgets.maxContextBytes;
       const maxOut = cell.budget?.maxOutputBytes ?? budgets.maxOutputBytes;
-      const maxTurns = cell.budget?.maxTurns ?? (cell.tools?.length ? 8 : 1);
+      const tools = cell.kind === "gate" ? undefined : cell.tools;
+      const maxTurns = cell.budget?.maxTurns ?? (tools?.length ? 8 : 1);
 
       const viewInputs: Record<string, JsonValue> = {};
       const wanted = cell.view.inputs;
@@ -425,7 +427,7 @@ async function activate(
         if (meta?.usage) eff.usage = meta.usage;
         ctx.effects.push(eff);
 
-        const call = asToolCall(raw, cell.tools);
+        const call = asToolCall(raw, tools);
         if (!call) {
           const bound = bindOutput(cell.output, raw, cell.id);
           // shadow mode: the model's decision is recorded, not taken — the
@@ -492,7 +494,10 @@ function pickExecutor(executors: Executor[], cell: Cell): Executor {
   }
   // route.provider / route.preset select an executor by id; a bare id or a
   // "provider:<name>"/"preset:<name>" prefixed id both match
-  const route = cell.kind === "agent" || cell.kind === "classifier" ? cell.route : undefined;
+  const route =
+    cell.kind === "agent" || cell.kind === "classifier" || cell.kind === "gate"
+      ? cell.route
+      : undefined;
   if (route) {
     const wanted = [
       ...(route.provider ? [route.provider, `provider:${route.provider}`] : []),

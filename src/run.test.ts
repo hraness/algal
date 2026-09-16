@@ -555,6 +555,51 @@ describe("scheduler", () => {
     expect(receipt.effects[0]!.executor).toBe("preset:small");
   });
 
+  test("gate cells emit kind:gate effect requests and drive guards", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:gate",
+      name: "Gate",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "text" } },
+        {
+          id: "approve",
+          kind: "gate",
+          inputs: { v: "text" },
+          prompt: "Ship it?",
+          output: { kind: "choice", labels: ["allow", "deny"] },
+        },
+        { id: "ship", kind: "fn", fn: "tag.v1" },
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "approve", port: "v" } },
+        {
+          from: { cell: "approve", port: "out" },
+          to: { cell: "ship", port: "tag" },
+          guard: { equals: "allow" },
+        },
+        { from: { cell: "src", port: "v" }, to: { cell: "ship", port: "value" } },
+      ],
+    });
+    const seen: string[] = [];
+    const receipt = await runOrganism({
+      manifest: m,
+      args: { src: { v: "release-1" } },
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [{
+        id: "approver",
+        async execute(req) {
+          seen.push(req.kind);
+          return "allow";
+        },
+      }],
+    });
+    expect(receipt.outcome).toBe("complete");
+    expect(seen).toEqual(["gate"]);
+    expect(receipt.cells["ship"]?.outputs?.value).toBe("ALLOW: release-1");
+  });
+
   test("unresolvable cells produce a stuck outcome", async () => {
     // two pending cells blocked behind a skipped branch with a required input
     const m = manifest({

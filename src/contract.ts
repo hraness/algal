@@ -118,6 +118,16 @@ export type Cell =
       budget?: CellBudget;
       shadow?: { take: string };
     }
+  | {
+      id: string;
+      kind: "gate";
+      inputs: PortMap;
+      prompt: string;
+      view: AgentView;
+      output: { kind: "choice"; labels: string[]; onMiss?: string };
+      route?: Route;
+      budget?: CellBudget;
+    }
   | { id: string; kind: "organism"; manifest: string };
 
 export type Edge = {
@@ -387,7 +397,8 @@ function parseCell(u: unknown, what: string): Cell {
       };
     }
     case "agent":
-    case "classifier": {
+    case "classifier":
+    case "gate": {
       noUnknownKeys(
         obj,
         [
@@ -468,13 +479,26 @@ function parseCell(u: unknown, what: string): Cell {
           );
         }
       }
-      if (kind === "classifier") {
+      if (kind === "gate" && (obj.tools !== undefined || obj.shadow !== undefined)) {
+        throw new MorphogenError(
+          "PARSE_FAILED",
+          `${what}: gate cells take no tools or shadow — a gate is an approval point, not a worker`,
+        );
+      }
+      if (kind === "classifier" || kind === "gate") {
         if (output.kind !== "choice") {
           throw new MorphogenError(
             "PARSE_FAILED",
-            `${what}: classifier output must be {kind:"choice"}`,
+            `${what}: ${kind} output must be {kind:"choice"}`,
           );
         }
+        if (kind === "gate") {
+          const cell: Cell = { id, kind: "gate", inputs, prompt, view, output };
+          if (route) cell.route = route;
+          if (budget) cell.budget = budget;
+          return cell;
+        }
+        let shadow: { take: string } | undefined;
         if (obj.shadow !== undefined) {
           const s = asObject(obj.shadow, `${what}.shadow`);
           noUnknownKeys(s, ["take"], `${what}.shadow`);
@@ -489,34 +513,23 @@ function parseCell(u: unknown, what: string): Cell {
               `${what}.shadow.take must be a declared label`,
             );
           }
-          const cell: Cell = {
-            id,
-            kind,
-            inputs,
-            prompt,
-            view,
-            output,
-            shadow: { take },
-          };
-          if (route) cell.route = route;
-          if (tools) cell.tools = tools;
-          if (budget) cell.budget = budget;
-          return cell;
+          shadow = { take };
         }
         const cell: Cell = {
           id,
-          kind,
+          kind: "classifier",
           inputs,
           prompt,
           view,
           output,
         };
+        if (shadow) cell.shadow = shadow;
         if (route) cell.route = route;
         if (tools) cell.tools = tools;
         if (budget) cell.budget = budget;
         return cell;
       }
-      const cell: Cell = { id, kind, inputs, prompt, view, output };
+      const cell: Cell = { id, kind: "agent", inputs, prompt, view, output };
       if (route) cell.route = route;
       if (tools) cell.tools = tools;
       if (budget) cell.budget = budget;
@@ -720,7 +733,8 @@ export function manifestToJson(m: OrganismManifest): JsonObject {
       case "organism":
         return { id: c.id, kind: c.kind, manifest: c.manifest };
       case "agent":
-      case "classifier": {
+      case "classifier":
+      case "gate": {
         const o: JsonObject = {
           id: c.id,
           kind: c.kind,
@@ -730,7 +744,7 @@ export function manifestToJson(m: OrganismManifest): JsonObject {
         };
         if (Object.keys(c.inputs).length > 0) o.inputs = portMapJson(c.inputs);
         if (c.route) o.route = routeJson(c.route);
-        if (c.tools) o.tools = c.tools;
+        if (c.kind !== "gate" && c.tools) o.tools = c.tools;
         if (c.kind === "classifier" && c.shadow) o.shadow = { take: c.shadow.take };
         if (c.budget) {
           const b: JsonObject = {};

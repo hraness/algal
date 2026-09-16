@@ -29,6 +29,9 @@ Cell kinds:
   routing decisions live in the structure instead of in prose. A classifier
   may run in `shadow` mode: the model's decision is recorded on the receipt
   while a declared label stays authoritative — audition before promotion.
+- `gate` — an approval point: a `choice` cell whose effect request carries
+  `kind:"gate"` so executors route it to a human or a policy check instead of
+  a model. Approval stays visible in the structure and on the receipt.
 - `organism` — a sealed sub-manifest referenced by digest. The outer graph sees
   only its declared interface ports. This is symbolization: a compound that is
   versioned, inspectable, and not a free primitive.

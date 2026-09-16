@@ -74,6 +74,7 @@ export function cellSignature(
     }
     case "agent":
     case "classifier":
+    case "gate":
       return {
         inputs: cell.inputs,
         outputs: { out: agentOutputPortType(cell.output) },
@@ -297,7 +298,8 @@ export async function compileOrganism(
   // agent/classifier view inputs must be declared inputs; tools must be
   // registry fns the host admits
   for (const cell of manifest.cells) {
-    if (cell.kind !== "agent" && cell.kind !== "classifier") continue;
+    if (cell.kind !== "agent" && cell.kind !== "classifier" && cell.kind !== "gate")
+      continue;
     if (cell.view.inputs !== "*") {
       for (const name of cell.view.inputs) {
         if (!ports.get(cell.id)!.inputs[name]) {
@@ -308,7 +310,7 @@ export async function compileOrganism(
         }
       }
     }
-    for (const ref of cell.tools ?? []) {
+    for (const ref of (cell.kind === "gate" ? [] : cell.tools) ?? []) {
       if (!fns.has(ref)) {
         throw new MorphogenError(
           "FN_UNKNOWN",
