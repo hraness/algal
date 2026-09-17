@@ -13,5 +13,6 @@ await mkdir(DIST, { recursive: true });
 for (const f of ["index.html", "styles.css", "robots.txt", "sitemap.xml", "llms.txt", "og.png"]) {
   await cp(join(SITE, f), join(DIST, f));
 }
+await cp(join(SITE, "icons"), join(DIST, "icons"), { recursive: true });
 
 console.log(`site built → ${DIST}`);

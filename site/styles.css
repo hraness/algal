@@ -117,3 +117,5 @@ footer {
   color: var(--muted);
   font-size: 0.9rem;
 }
+
+.morphogen-topic-icon { display: block; width: 88px; height: 88px; margin: 0 0 18px; }
