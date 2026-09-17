@@ -1,0 +1,39 @@
+{
+  "writer": [
+    {
+      "contract": "morphogen.organism.v1",
+      "key": "organism:gen-0",
+      "name": "Gen0",
+      "interface": {
+        "inputs": { "q": { "cell": "src", "port": "v" } },
+        "outputs": { "out": { "cell": "emit", "port": "v" } }
+      },
+      "cells": [
+        { "id": "src", "kind": "input", "outputs": { "v": "text" } },
+        {
+          "id": "emit",
+          "kind": "const",
+          "outputs": { "v": { "type": "text", "value": "draft" } }
+        }
+      ],
+      "edges": []
+    },
+    {
+      "contract": "morphogen.organism.v1",
+      "key": "organism:gen-1",
+      "name": "Gen1",
+      "interface": {
+        "inputs": { "q": { "cell": "src", "port": "v" } },
+        "outputs": { "out": { "cell": "echo", "port": "value" } }
+      },
+      "cells": [
+        { "id": "src", "kind": "input", "outputs": { "v": "text" } },
+        { "id": "echo", "kind": "fn", "fn": "echo.v1" }
+      ],
+      "edges": [
+        { "from": { "cell": "src", "port": "v" }, "to": { "cell": "echo", "port": "value" } }
+      ]
+    }
+  ],
+  "judge": ["bad", "good"]
+}

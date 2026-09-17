@@ -270,6 +270,13 @@ dangling pointer.
   idempotent — `verify` reproduces the run bit-for-bit.
 - Manifests larger than `maxValueBytes` cannot ride an edge — `store` the
   manifest JSON first and deliver it through `load` → `data` → `manifest`.
+- Composition covers the rest of the breeding loop without new mechanism:
+  an `each` cell over a spawn-wrapper runs a bounded *population* (the
+  `child` digests collect as lineage); a `repeat` cell carrying a judge's
+  score back into the writer's input runs bounded *generations* (each
+  round's child records under `loop/r<n>/run`); and a generated manifest
+  may itself declare a `gate` — generated programs can carry their own
+  approval points.
 
 ### each cells
 

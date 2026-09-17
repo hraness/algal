@@ -128,7 +128,10 @@ surfaces through `data`, the admitted digest through `digest`), and `hive`
 (an agent emits a *list* of candidate manifests; `each` maps them through
 a `spawn` wrapper — a bounded population where `result` collects every
 candidate's outputs and `child` collects the admitted digests: lineage on
-the receipt, then a `judge` picks one) — with
+the receipt, then a `judge` picks one), and `lineage` (a `repeat` cell
+runs writer → `spawn` → judge per round, `carry` feeds each score back as
+feedback, `until` exits when the judge is satisfied — generations of
+generated programs, each digest-pinned under `gen/r<n>/run`) — with
 scripted responses, then verifies each receipt offline. To run one yourself:
 
 ```sh
