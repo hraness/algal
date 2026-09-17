@@ -94,7 +94,9 @@ the record to a fallback cell), and
 `stash` (a document pinned to CAS by a `store` cell — only the `ref` token
 reaches the `load` cell that resolves it), and `intake` (a schema'd input
 port rejecting a malformed ticket, the failure record routed to a `repair`
-cell through `on:"fail"`) — with
+cell through `on:"fail"`), and `flaky` (a classifier scripted to emit a bad
+label, then a good one — `retry` re-issues the same signed request and the
+receipt records both attempts under one digest) — with
 scripted responses, then verifies each receipt offline. To run one yourself:
 
 ```sh
@@ -111,6 +113,9 @@ bun run cli diff .morphogen/runs/<a>.json .morphogen/runs/<b>.json
 # mint a ref for a payload — then pass the token as a "ref" arg
 bun run cli store put payload.json        # → {"ref":"sha256:…"}
 bun run cli store get sha256:…            # → the payload
+# a portable closure: the manifest plus everything it embeds and references
+bun run cli pack examples/inbox.morphogen.json --modules examples > bundle.json
+bun run cli unpack bundle.json --dir /tmp/elsewhere   # installs, digests verified
 ```
 
 `check` admits a manifest without running it: parse, graph validation, and
@@ -137,6 +142,10 @@ broker provider access; the executor seam is where provider auth lives.
   output, which is bound to the declared output contract before it can feed
   downstream edges. A classifier that misses its label set fails closed unless
   `onMiss` is declared.
+- Effect cells may declare `retry: {"attempts": n}` (≤8): a failed effect —
+  executor error or contract violation — is recorded with its request digest
+  and the same request re-issued. Every attempt is metered and replayed in
+  order; exhaustion fails the cell, routable through `on:"fail"`.
 - An agent cell's context is declared, not ambient: `view.inputs` selects its
   edge-fed inputs, and `view.cells` names ancestor cells whose committed
   records join the request under `context.cells` — optionally sliced to named
@@ -152,9 +161,12 @@ broker provider access; the executor seam is where provider auth lives.
   work attribution), every effect request and response, the event log, and
   the work ledger. `verify` replays the run with recorded receipts fixed and
   reports any divergence; `diff` compares two receipts canonically.
-- Manifests and receipts are content-addressed canonical JSON. The store is a
-  seam: `MemoryStore` and `FileStore` (`.morphogen/`) ship now; an Oh-backed
-  store implements the same four methods.
+- Manifests and receipts are content-addressed canonical JSON; payloads ride
+  the same CAS through `ref` ports. The store is a seam: `MemoryStore` and
+  `FileStore` (`.morphogen/`) ship now; an Oh-backed store implements the
+  same six methods. `pack`/`unpack` move a manifest's whole embedding
+  closure — sub-manifests and `const`-referenced payloads — between stores
+  as one verified bundle.
 
 ## What not to infer
 

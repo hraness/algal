@@ -2,8 +2,10 @@
 
 - `src/` — the contract (`contract.ts`, `graph.ts`), the scheduler (`run.ts`),
   the effect seam (`effects.ts`), the store (`store.ts`), verification
-  (`verify.ts`), canonical values and digests, and colocated tests.
-- `cli.ts` — the Bun CLI (`run`, `verify`, `inspect`, `example`, `suite`).
+  (`verify.ts`), bundles (`bundle.ts`), canonical values and digests, and
+  colocated tests.
+- `cli.ts` — the Bun CLI (`run`, `verify`, `inspect`, `explain`, `diff`,
+  `store`, `pack`, `unpack`, `example`, `suite`).
 - `index.ts` — the package's public surface.
 - `examples/` — bundled manifests and scripted responses used by `suite`.
 - `spec/v1/organism.md` — the authoritative contract prose.

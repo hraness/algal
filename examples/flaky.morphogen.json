@@ -1,0 +1,38 @@
+{
+  "contract": "morphogen.organism.v1",
+  "key": "organism:flaky",
+  "name": "Flaky",
+  "cells": [
+    {
+      "id": "ticket",
+      "kind": "input",
+      "outputs": { "text": "text" }
+    },
+    {
+      "id": "route",
+      "kind": "classifier",
+      "inputs": { "ticket": "text" },
+      "prompt": "Classify the ticket as exactly one of: bug, feature.",
+      "view": { "inputs": "*" },
+      "output": { "kind": "choice", "labels": ["bug", "feature"] },
+      "retry": { "attempts": 3 }
+    },
+    {
+      "id": "fix",
+      "kind": "agent",
+      "inputs": { "ticket": "text" },
+      "prompt": "Write a one-line fix plan for the bug.",
+      "view": { "inputs": "*" },
+      "output": { "kind": "text" }
+    }
+  ],
+  "edges": [
+    { "from": { "cell": "ticket", "port": "text" },
+      "to": { "cell": "route", "port": "ticket" } },
+    {
+      "from": { "cell": "route", "port": "out" },
+      "to": { "cell": "fix", "port": "ticket" },
+      "guard": { "equals": "bug" }
+    }
+  ]
+}

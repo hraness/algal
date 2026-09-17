@@ -49,6 +49,14 @@ export type { Fn, FnRegistry, FnSignature } from "./src/registry";
 export { FileStore, MemoryStore } from "./src/store";
 export type { Store } from "./src/store";
 
+export {
+  BUNDLE_CONTRACT,
+  packOrganism,
+  parseBundle,
+  unpackBundle,
+} from "./src/bundle";
+export type { Bundle } from "./src/bundle";
+
 export { verifyReceipt } from "./src/verify";
 export type { VerifyReport } from "./src/verify";
 

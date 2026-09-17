@@ -570,49 +570,96 @@ async function activate(
         };
         const requestDigest = effectRequestDigest(request);
 
-        if (ctx.work.agentCalls + 1 > budgets.maxAgentCalls) {
-          throw new MorphogenError("BUDGET_EXHAUSTED", "maxAgentCalls exhausted");
-        }
-        ctx.work.agentCalls += 1;
-        ctx.work.units += WORK.effectBase + contextBytes * WORK.perContextByte;
-        emit(ctx, { kind: "effect", path, digest: requestDigest });
+        // retry: each attempt is a separate effect — request, receipt, work
+        // charge, agent-call count. A failed or contract-violating attempt
+        // is recorded and the same request re-issued until `attempts` is
+        // exhausted; replay serves the recorded attempts in order.
+        const maxAttempts =
+          (cell.kind === "agent" ||
+            cell.kind === "classifier" ||
+            cell.kind === "gate"
+            ? cell.retry?.attempts
+            : undefined) ?? 1;
+        let settled:
+          | { kind: "tool"; fn: string; inputs: JsonValue }
+          | { kind: "final"; bound: JsonValue }
+          | undefined;
+        let lastErr: unknown;
+        for (
+          let attempt = 0;
+          attempt < maxAttempts && settled === undefined;
+          attempt++
+        ) {
+          if (ctx.work.agentCalls + 1 > budgets.maxAgentCalls) {
+            throw new MorphogenError("BUDGET_EXHAUSTED", "maxAgentCalls exhausted");
+          }
+          ctx.work.agentCalls += 1;
+          ctx.work.units += WORK.effectBase + contextBytes * WORK.perContextByte;
+          emit(ctx, { kind: "effect", path, digest: requestDigest });
 
-        const meta = executor.receiptFor?.(request);
-        let raw: JsonValue;
-        try {
-          raw = await executor.execute(request);
-        } catch (e) {
-          // a failed effect is recorded too — replay must reproduce the
-          // same failure for the run to verify bit-for-bit
-          const rep = errorReport(e);
+          const meta = executor.receiptFor?.(request);
+          let raw: JsonValue;
+          try {
+            raw = await executor.execute(request);
+          } catch (e) {
+            // a failed effect is recorded too — replay must reproduce the
+            // same failure for the run to verify bit-for-bit
+            const rep = errorReport(e);
+            const eff: EffectReceipt = {
+              requestDigest,
+              error: { code: rep.code, message: rep.message },
+              executor: meta?.executor ?? executor.id,
+            };
+            if (meta?.usage) eff.usage = meta.usage;
+            ctx.effects.push(eff);
+            lastErr = e;
+            continue;
+          }
+          // the response is a fact of the run: it is recorded before any
+          // contract check so replay reproduces bad output verbatim
           const eff: EffectReceipt = {
             requestDigest,
-            error: { code: rep.code, message: rep.message },
+            output: raw,
             executor: meta?.executor ?? executor.id,
           };
           if (meta?.usage) eff.usage = meta.usage;
           ctx.effects.push(eff);
-          throw e;
-        }
-        const outBytes = canonicalBytes(raw);
-        if (outBytes > maxOut) {
-          throw new MorphogenError(
-            "BUDGET_EXHAUSTED",
-            `effect output ${outBytes}B exceeds maxOutputBytes ${maxOut}B`,
-          );
-        }
-        ctx.work.units += outBytes * WORK.perOutputByte;
-        const eff: EffectReceipt = {
-          requestDigest,
-          output: raw,
-          executor: meta?.executor ?? executor.id,
-        };
-        if (meta?.usage) eff.usage = meta.usage;
-        ctx.effects.push(eff);
 
-        const call = asToolCall(raw, tools);
-        if (!call) {
-          const bound = bindOutput(cell.output, raw, cell.id);
+          const outBytes = canonicalBytes(raw);
+          if (outBytes > maxOut) {
+            lastErr = new MorphogenError(
+              "BUDGET_EXHAUSTED",
+              `effect output ${outBytes}B exceeds maxOutputBytes ${maxOut}B`,
+            );
+            continue;
+          }
+          ctx.work.units += outBytes * WORK.perOutputByte;
+
+          const call = asToolCall(raw, tools);
+          if (call) {
+            settled = { kind: "tool", fn: call.fn, inputs: call.inputs };
+            break;
+          }
+          try {
+            settled = {
+              kind: "final",
+              bound: bindOutput(cell.output, raw, cell.id),
+            };
+          } catch (e) {
+            lastErr = e;
+            continue;
+          }
+        }
+        if (settled === undefined) {
+          throw lastErr instanceof Error
+            ? lastErr
+            : new MorphogenError(
+                "EFFECT_FAILED",
+                `cell "${cell.id}" exhausted ${maxAttempts} attempt(s)`,
+              );
+        }
+        if (settled.kind === "final") {
+          const bound = settled.bound;
           // shadow mode: the model's decision is recorded, not taken — the
           // declared label stays authoritative until shadow data earns the
           // promotion through review
@@ -630,6 +677,7 @@ async function activate(
         }
         // bounded callback into the automaton: run the declared fn, log the
         // result, re-request with the updated tool log
+        const call = settled;
         const entry = ctx.opts.fns.get(call.fn)!;
         ctx.work.units += entry.signature.cost;
         for (const [p, decl] of Object.entries(entry.signature.inputs)) {

@@ -89,5 +89,9 @@ default when no route matches.
   `{requestDigest, error: {code, message}}` so replay reproduces the same
   failure — and an `on:"fail"` edge in the manifest can route that record
   to a recovery cell.
+- Expect re-issue under `retry`: a cell that declares `retry.attempts` sends
+  the *same* request — same digest — again after a failure, up to the bound.
+  Each attempt is a separate call, separately metered, separately recorded.
 - For replay (`verify`), Morphogen serves recorded outputs — and recorded
-  errors — by request digest itself; executors are not involved.
+  errors — by request digest itself, in record order; executors are not
+  involved.

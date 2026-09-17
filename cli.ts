@@ -17,6 +17,7 @@ import {
 import { errorReport, MorphogenError } from "./src/errors";
 import { builtinRegistry } from "./src/registry";
 import { parseRunReceipt, runOrganism, type RunReceipt } from "./src/run";
+import { packOrganism, parseBundle, unpackBundle } from "./src/bundle";
 import { FileStore } from "./src/store";
 import { diffReceipts, verifyReceipt } from "./src/verify";
 import { canonicalize, type JsonObject, type JsonValue } from "./src/values";
@@ -56,6 +57,11 @@ usage:
                                               print the payload a ref resolves to
   morphogen store has <sha256:…> [--dir <path>]
                                               report whether a ref resolves
+  morphogen pack <manifest.json> [--modules <dir>] [--dir <path>]
+                                              print a closure bundle: the manifest plus every
+                                              embedded sub-manifest and const-ref payload
+  morphogen unpack <bundle.json> [--dir <path>]
+                                              install a bundle into the store, digests verified
   morphogen --version | --help
 `;
 
@@ -219,6 +225,28 @@ async function main(): Promise<number> {
         default:
           usageError("morphogen store put|get|has …");
       }
+      return 0;
+    }
+
+    case "pack": {
+      const file = positional[0];
+      if (!file) usageError("morphogen pack <manifest.json> [--modules <dir>]");
+      if (flags.modules !== undefined) {
+        const n = await loadModules(String(flags.modules), store);
+        diag(`loaded ${n} module(s) from ${flags.modules}`);
+      }
+      const manifest = parseOrganismManifest(await readJson(resolve(file)));
+      const bundle = await packOrganism(manifest, store);
+      out(bundle as unknown as JsonValue);
+      return 0;
+    }
+
+    case "unpack": {
+      const file = positional[0];
+      if (!file) usageError("morphogen unpack <bundle.json>");
+      const bundle = parseBundle(await readJson(resolve(file)));
+      const res = await unpackBundle(bundle, store);
+      out({ ok: true, root: bundle.root, ...res });
       return 0;
     }
 

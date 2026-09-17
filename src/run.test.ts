@@ -2041,3 +2041,154 @@ describe("json port schemas", () => {
     expect(r.cells["c"]?.failure?.code).toBe("TYPE_MISMATCH");
   });
 });
+
+describe("retry", () => {
+  const flaky = {
+    contract: "morphogen.organism.v1",
+    key: "organism:retry",
+    name: "Retry",
+    cells: [
+      { id: "src", kind: "input", outputs: { v: "text" } },
+      {
+        id: "worker",
+        kind: "agent",
+        inputs: { v: "text" },
+        prompt: "p",
+        output: { kind: "text" },
+        retry: { attempts: 3 },
+      },
+    ],
+    edges: [
+      { from: { cell: "src", port: "v" }, to: { cell: "worker", port: "v" } },
+    ],
+  };
+
+  test("a failed attempt is recorded and the next attempt can succeed", async () => {
+    let calls = 0;
+    const r = await runOrganism({
+      manifest: manifest(flaky),
+      args: { src: { v: "job" } },
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [{
+        id: "flaky",
+        async execute() {
+          calls++;
+          if (calls === 1) throw new MorphogenError("EFFECT_FAILED", "transient");
+          return "done";
+        },
+      }],
+    });
+    expect(r.outcome).toBe("complete");
+    expect(calls).toBe(2);
+    expect(r.cells["worker"]?.outputs?.out).toBe("done");
+    // both attempts recorded under the same request digest
+    expect(r.effects.length).toBe(2);
+    expect(r.effects[0]?.error?.code).toBe("EFFECT_FAILED");
+    expect(r.effects[1]?.output).toBe("done");
+    expect(r.effects[0]?.requestDigest).toBe(r.effects[1]?.requestDigest);
+    expect(r.work.agentCalls).toBe(2);
+  });
+
+  test("exhausted attempts fail the cell; on:fail still routes the failure", async () => {
+    const m = manifest({
+      ...flaky,
+      key: "organism:retryfail",
+      cells: [
+        ...flaky.cells,
+        { id: "fallback", kind: "agent", inputs: { err: "json" }, prompt: "p", output: { kind: "text" } },
+      ],
+      edges: [
+        ...flaky.edges,
+        { from: { cell: "worker", port: "out" }, to: { cell: "fallback", port: "err" }, on: "fail" },
+      ],
+    });
+    let calls = 0;
+    const r = await runOrganism({
+      manifest: m,
+      args: { src: { v: "job" } },
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [{
+        id: "flaky",
+        async execute(req) {
+          calls++;
+          if (req.cellId === "worker") throw new MorphogenError("EFFECT_FAILED", "down");
+          return "handled";
+        },
+      }],
+    });
+    expect(r.outcome).toBe("complete");
+    expect(calls).toBe(4); // 3 worker attempts + 1 fallback
+    expect(r.cells["worker"]?.status).toBe("failed");
+    expect(r.effects.filter((e) => e.error).length).toBe(3);
+    expect(r.cells["fallback"]?.outputs?.out).toBe("handled");
+  });
+
+  test("a retried run replays bit-for-bit", async () => {
+    const m = manifest(flaky);
+    let calls = 0;
+    const receipt = await runOrganism({
+      manifest: m,
+      args: { src: { v: "job" } },
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [{
+        id: "flaky",
+        async execute() {
+          calls++;
+          if (calls < 3) throw new MorphogenError("EFFECT_FAILED", `f${calls}`);
+          return "done";
+        },
+      }],
+    });
+    expect(receipt.effects.length).toBe(3);
+    const report = await verifyReceipt(
+      receipt as unknown as JsonValue,
+      manifestToJson(m),
+      new MemoryStore(),
+    );
+    expect(report.ok).toBe(true);
+    expect(report.digest).toBe(receipt.digest);
+  });
+
+  test("a contract-violating response is recorded and retried", async () => {
+    let calls = 0;
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:retrybind",
+      name: "RetryBind",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "text" } },
+        {
+          id: "c",
+          kind: "classifier",
+          inputs: { v: "text" },
+          prompt: "p",
+          output: { kind: "choice", labels: ["a", "b"] },
+          retry: { attempts: 2 },
+        },
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "c", port: "v" } },
+      ],
+    });
+    const r = await runOrganism({
+      manifest: m,
+      args: { src: { v: "x" } },
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [{
+        id: "e",
+        async execute() {
+          calls++;
+          return calls === 1 ? "not-a-label" : "a";
+        },
+      }],
+    });
+    expect(r.outcome).toBe("complete");
+    expect(calls).toBe(2);
+    expect(r.cells["c"]?.outputs?.out).toBe("a");
+    expect(r.effects[0]?.output).toBe("not-a-label");
+  });
+});

@@ -83,6 +83,7 @@ dangling pointer.
   "route": { "provider": "…", "model": "…", "preset": "…" },
   "tools": ["pick.v1"],
   "shadow": { "take": "bug" },
+  "retry": { "attempts": 3 },
   "budget": { "maxContextBytes": 65536, "maxOutputBytes": 4096, "maxTurns": 8 }
 }
 ```
@@ -127,6 +128,14 @@ dangling pointer.
   turn is a separate effect request and counts against `maxAgentCalls`. A
   `{tool, inputs}` response naming a ref outside `tools` is ordinary output.
   Tool calls that omit a required fn input fail the cell.
+- `retry` (optional, agent/classifier/gate) is `{"attempts": 2..8}`. A failed
+  effect — executor error, over-bound output, or contract-violating
+  response — is recorded with its request digest and the *same* request
+  re-issued, up to `attempts` per turn. Every attempt counts against
+  `maxAgentCalls` and the work ledger; exhaustion fails the cell (routable
+  through `on:"fail"`). Since attempts share a request digest, the receipt's
+  effects list is ordered: replay serves them in order and reproduces the
+  run bit-for-bit.
 
 ### repeat cells
 
@@ -314,9 +323,20 @@ optional usage), the bounded `events` log, the work ledger, and run-level
 ## Verification
 
 `verify(receipt, manifest)` replays the run with a replay executor that serves
-recorded effect outputs by request digest, then compares cells, effects, work,
-and outcome. Any divergence is reported by name. The check is offline and
-deterministic: receipts fix what the world returned.
+recorded effect outputs by request digest — in record order when a digest
+repeats under `retry` — then compares cells, effects, work, and outcome. Any
+divergence is reported by name. The check is offline and deterministic:
+receipts fix what the world returned.
+
+## Bundles — morphogen.bundle.v1
+
+A bundle is a portable closure: `{"contract","root","manifests","values"}`.
+`pack` walks the root manifest's embedding graph (`organism`/`repeat`/`each`
+cells) and every payload named by a `const` `ref` port, collecting each into
+a digest-keyed map. `unpack` installs the closure into a store — every entry
+re-hashes against its claimed key (`DIGEST_MISMATCH` on tamper) and the root
+must be among the manifests. A bundle is data with no code: the unpacked
+organism runs exactly as if its modules had been loaded individually.
 
 ## Reserved, not implemented
 

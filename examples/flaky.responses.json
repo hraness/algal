@@ -1,0 +1,4 @@
+{
+  "route": ["garbage-not-a-label", "bug"],
+  "fix": "Reproduce with a gift-card cart, guard the discount path on nil."
+}

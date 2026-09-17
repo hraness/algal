@@ -100,11 +100,20 @@ export function replayExecutor(
   effects: readonly EffectReceipt[],
   id = "replay",
 ): Executor {
-  const byDigest = new Map(effects.map((e) => [e.requestDigest, e]));
+  // several receipts may share a request digest — a retried effect issues
+  // the same request again. Serve each digest's receipts in record order.
+  const queues = new Map<Digest, EffectReceipt[]>();
+  for (const e of effects) {
+    const q = queues.get(e.requestDigest) ?? [];
+    q.push(e);
+    queues.set(e.requestDigest, q);
+  }
+  const next = (digest: Digest): EffectReceipt | undefined =>
+    queues.get(digest)?.[0];
   return {
     id,
     receiptFor(request) {
-      const rec = byDigest.get(effectRequestDigest(request));
+      const rec = next(effectRequestDigest(request));
       if (!rec) return {};
       const out: { executor?: string; usage?: EffectReceipt["usage"] } = {
         executor: rec.executor,
@@ -114,7 +123,8 @@ export function replayExecutor(
     },
     async execute(request) {
       const digest = effectRequestDigest(request);
-      const hit = byDigest.get(digest);
+      const q = queues.get(digest);
+      const hit = q?.shift();
       if (hit === undefined) {
         throw new MorphogenError(
           "EFFECT_UNBOUND",

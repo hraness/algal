@@ -64,6 +64,20 @@ resolved from the store. Composition preserves cost and exposes only declared
 interface ports — symbolization without magic. Because a manifest can never
 contain its own digest, embedding graphs are acyclic by construction; the
 run still bounds nesting depth via the root manifest's `maxDepth`.
+`pack`/`unpack` turn that embedding graph into a portable artifact: a bundle
+is the root manifest plus every manifest it reaches plus every `const`-ref'd
+payload, digest-keyed and verified on install — the whole closure moves
+between stores as data.
+
+**Retry is re-issue, not repair.** `retry: {"attempts": n}` on an effect cell
+means: on a failed effect, record the attempt — error or contract violation,
+request digest and all — then issue the *same* request again. The digest is
+unchanged because the request is unchanged; the receipt's ordered effects
+list is what lets replay serve attempts one-for-one and reproduce the run
+bit-for-bit. Attempts count against `maxAgentCalls` and work like any other
+call, and exhaustion is an ordinary cell failure — `on:"fail"` decides what
+happens next. There is no jittered backoff or mutated prompt: resilience is
+bounded repetition of a signed request, fully visible on the receipt.
 
 **Iteration and fan-out are cells, not edges.** `repeat` runs a
 digest-embedded sub-manifest up to `maxRounds`, carrying named interface

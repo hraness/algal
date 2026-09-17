@@ -484,4 +484,51 @@ describe("json port schemas", () => {
       parseOrganismManifest(cell({ r: { type: "json", schema: deep } })),
     ).toThrow(/schema depth/);
   });
+
+  test("retry parses on effect cells, round-trips, and is bounded", () => {
+    const cell = (kind: string, retry?: unknown) => ({
+      contract: "morphogen.organism.v1",
+      key: "organism:rt",
+      name: "RT",
+      cells: [
+        {
+          id: "a",
+          kind,
+          prompt: "p",
+          output:
+            kind === "agent"
+              ? { kind: "text" }
+              : { kind: "choice", labels: ["a", "b"] },
+          ...(retry === undefined ? {} : { retry }),
+        },
+      ],
+      edges: [],
+    });
+    for (const kind of ["agent", "classifier", "gate"]) {
+      const m = parseOrganismManifest(
+        cell(kind, { attempts: 3 }),
+      );
+      const a = m.cells[0] as { retry?: { attempts: number } };
+      expect(a.retry).toEqual({ attempts: 3 });
+      const back = parseOrganismManifest(manifestToJson(m));
+      expect((back.cells[0] as typeof a).retry).toEqual({ attempts: 3 });
+      expect(() =>
+        parseOrganismManifest(cell(kind, { attempts: 1 })),
+      ).toThrow(/attempts/);
+      expect(() =>
+        parseOrganismManifest(
+          cell(kind, { attempts: BOUNDS.maxRetryAttempts + 1 }),
+        ),
+      ).toThrow(/attempts/);
+      expect(() =>
+        parseOrganismManifest(cell(kind, { attempts: "x" })),
+      ).toThrow();
+      expect(() =>
+        parseOrganismManifest(cell(kind, { attempts: 2, extra: 1 })),
+      ).toThrow(/unknown key/);
+    }
+    expect(() =>
+      parseOrganismManifest(cell("fn", { attempts: 2 })),
+    ).toThrow(/unknown key/);
+  });
 });

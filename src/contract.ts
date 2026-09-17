@@ -51,6 +51,7 @@ export const BOUNDS = {
   maxEvents: 4096,
   maxArgsBytes: 1_048_576,
   maxBlobBytes: 262_144,
+  maxRetryAttempts: 8,
   /** A single port value — produced or collected — never exceeds this.
    * Larger payloads go through `store` cells and `ref` tokens. */
   maxValueBytes: 262_144,
@@ -131,6 +132,7 @@ export type Cell =
       route?: Route;
       tools?: string[];
       budget?: CellBudget;
+      retry?: { attempts: number };
     }
   | {
       id: string;
@@ -143,6 +145,7 @@ export type Cell =
       tools?: string[];
       budget?: CellBudget;
       shadow?: { take: string };
+      retry?: { attempts: number };
     }
   | {
       id: string;
@@ -168,6 +171,7 @@ export type Cell =
       output: { kind: "choice"; labels: string[]; onMiss?: string };
       route?: Route;
       budget?: CellBudget;
+      retry?: { attempts: number };
     }
   | { id: string; kind: "organism"; manifest: string }
   /** `store` writes its `data` input into the content-addressed store and
@@ -637,7 +641,7 @@ function parseCell(u: unknown, what: string): Cell {
         obj,
         [
           "id", "kind", "inputs", "prompt", "view", "output",
-          "route", "tools", "budget", "shadow",
+          "route", "tools", "budget", "shadow", "retry",
         ],
         what,
       );
@@ -713,6 +717,19 @@ function parseCell(u: unknown, what: string): Cell {
           );
         }
       }
+      let retry: { attempts: number } | undefined;
+      if (obj.retry !== undefined) {
+        const r = asObject(obj.retry, `${what}.retry`);
+        noUnknownKeys(r, ["attempts"], `${what}.retry`);
+        retry = {
+          attempts: asInt(
+            reqField(r, "attempts", `${what}.retry`),
+            `${what}.retry.attempts`,
+            2,
+            BOUNDS.maxRetryAttempts,
+          ),
+        };
+      }
       if (kind === "gate" && (obj.tools !== undefined || obj.shadow !== undefined)) {
         throw new MorphogenError(
           "PARSE_FAILED",
@@ -730,6 +747,7 @@ function parseCell(u: unknown, what: string): Cell {
           const cell: Cell = { id, kind: "gate", inputs, prompt, view, output };
           if (route) cell.route = route;
           if (budget) cell.budget = budget;
+          if (retry) cell.retry = retry;
           return cell;
         }
         let shadow: { take: string } | undefined;
@@ -761,12 +779,14 @@ function parseCell(u: unknown, what: string): Cell {
         if (route) cell.route = route;
         if (tools) cell.tools = tools;
         if (budget) cell.budget = budget;
+        if (retry) cell.retry = retry;
         return cell;
       }
       const cell: Cell = { id, kind: "agent", inputs, prompt, view, output };
       if (route) cell.route = route;
       if (tools) cell.tools = tools;
       if (budget) cell.budget = budget;
+      if (retry) cell.retry = retry;
       return cell;
     }
     default:
@@ -1022,6 +1042,7 @@ export function manifestToJson(m: OrganismManifest): JsonObject {
         if (c.route) o.route = routeJson(c.route);
         if (c.kind !== "gate" && c.tools) o.tools = c.tools;
         if (c.kind === "classifier" && c.shadow) o.shadow = { take: c.shadow.take };
+        if (c.retry) o.retry = { attempts: c.retry.attempts };
         if (c.budget) {
           const b: JsonObject = {};
           if (c.budget.maxContextBytes !== undefined)
