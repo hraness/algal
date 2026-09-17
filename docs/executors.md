@@ -99,3 +99,9 @@ default when no route matches.
 - For replay (`verify`), Morphogen serves recorded outputs — and recorded
   errors — by request digest itself, in record order; executors are not
   involved.
+- For memoization (`run --cache-effects`), `cachedExecutor` consults the
+  store's effect index before calling the wrapped executor: an identical
+  request digest serves the earlier recorded success without executing.
+  Only successes are memoized — a recorded error may be transient — and
+  the first record for a digest wins. A hit is recorded on the new run's
+  receipt as `cached: true`, so reuse stays auditable.

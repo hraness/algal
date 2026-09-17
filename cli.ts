@@ -10,6 +10,7 @@ import { BOUNDS, manifestToJson, parseOrganismManifest } from "./src/contract";
 import { compileOrganism } from "./src/graph";
 import { digestCanonical } from "./src/digest";
 import {
+  cachedExecutor,
   commandExecutor,
   scriptedExecutor,
   type Executor,
@@ -47,6 +48,8 @@ usage:
                                               via cells resolve remote manifests through it
       --dir <path>                            store directory (default .morphogen)
       --write                                 persist manifest + receipt under --dir
+      --cache-effects                         memoize effects: identical request digests
+                                              serve the store's recorded response
   morphogen check <manifest.json> [--modules <dir>] [--transports <file>] [--dir <path>]
                                               admit a manifest without running it
   morphogen explain <manifest.json> [--modules <dir>] [--transports <file>] [--dir <path>]
@@ -55,6 +58,7 @@ usage:
                                               re-run with recorded receipts and compare;
                                               manifest resolves from the store when omitted
   morphogen inspect <receipt.json>            summarize a run receipt
+  morphogen runs [--dir <path>]               list receipts stored under --dir
   morphogen diff <receipt-a.json> <receipt-b.json>
                                               compare two receipts, report divergence
   morphogen suite                             run and verify all bundled examples
@@ -427,7 +431,10 @@ async function main(): Promise<number> {
         args,
         fns,
         store,
-        executors,
+        executors:
+          flags["cache-effects"] !== undefined
+            ? executors.map((e) => cachedExecutor(e, store))
+            : executors,
         ...(transports ? { transports } : {}),
       });
 
@@ -541,6 +548,38 @@ async function main(): Promise<number> {
       return 0;
     }
 
+    case "runs": {
+      const { readdir } = await import("node:fs/promises");
+      let files: string[] = [];
+      try {
+        files = (await readdir(join(dir, "runs"))).filter((f) =>
+          f.endsWith(".json"),
+        );
+      } catch { /* no runs directory yet */ }
+      const rows: JsonObject[] = [];
+      for (const f of files.sort()) {
+        const digest = `sha256:${f.replace(/\.json$/, "")}`;
+        try {
+          const raw = (await readJson(join(dir, "runs", f))) as JsonObject;
+          rows.push({
+            digest,
+            manifestKey: raw.manifestKey ?? null,
+            outcome: raw.outcome ?? null,
+            effects: Array.isArray(raw.effects) ? raw.effects.length : 0,
+          });
+        } catch (e) {
+          rows.push({ digest, error: errorReport(e).message });
+        }
+      }
+      rows.sort((a, b) =>
+        `${a.manifestKey ?? ""}${a.digest}`.localeCompare(
+          `${b.manifestKey ?? ""}${b.digest}`,
+        ),
+      );
+      out({ dir: join(dir, "runs"), runs: rows });
+      return 0;
+    }
+
     case "suite": {
       // Self-check: run every bundled example with its scripted responses
       // and default args, then verify each receipt offline.
@@ -601,12 +640,44 @@ async function main(): Promise<number> {
         );
         const ok = receipt.outcome === "complete" && report.ok;
         allOk = allOk && ok;
-        results.push({
+        const result: JsonObject = {
           example: id,
           outcome: receipt.outcome,
           verifyOk: report.ok,
           receiptDigest: receipt.digest,
-        });
+        };
+        // a `<id>.cache.json` marker asks for a second run through
+        // cachedExecutor: the first run's recorded effects are seeded into
+        // the memo index, the rerun must serve them (cached: true), and the
+        // memoized run must still verify bit-for-bit
+        try {
+          await readFile(join(EXAMPLES_DIR, `${id}.cache.json`), "utf8");
+          for (const e of receipt.effects) {
+            if (e.output !== undefined) await store.putEffect(e);
+          }
+          const receipt2 = await runOrganism({
+            manifest,
+            args,
+            fns,
+            store,
+            executors: [cachedExecutor(scriptedExecutor(responses), store)],
+            ...(transports ? { transports } : {}),
+          });
+          const report2 = await verifyReceipt(
+            receipt2 as unknown as JsonValue,
+            manifestRaw,
+            store,
+            fns,
+            transports,
+          );
+          const hits = receipt2.effects.filter((e) => e.cached === true);
+          const cacheOk =
+            receipt2.outcome === "complete" && report2.ok && hits.length > 0;
+          result.cacheOk = cacheOk;
+          result.cacheHits = hits.length;
+          allOk = allOk && cacheOk;
+        } catch { /* no cache marker */ }
+        results.push(result);
       }
       out({ suite: "examples", ok: allOk, results });
       return allOk ? 0 : 1;

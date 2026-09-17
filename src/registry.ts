@@ -3,7 +3,7 @@
 // never introduce code — it can only compose what the host admits.
 
 import { MorphogenError } from "./errors";
-import type { JsonObject, JsonValue } from "./values";
+import { canonicalize, type JsonObject, type JsonValue } from "./values";
 import type { PortMap } from "./contract";
 
 export type FnSignature = {
@@ -113,6 +113,31 @@ export function builtinRegistry(): FnRegistry {
       const items = Array.isArray(i.items) ? i.items : [];
       const sep = typeof i.sep === "string" ? i.sep : "\n";
       return { value: items.join(sep) };
+    },
+  });
+
+  // an invariant cell: pass value through only when it canonically equals
+  // expect. A mismatch throws FN_FAILED — routable through on:"fail", so
+  // "this intermediate must look like X" is a declared, enforced assertion.
+  reg.set("assert.v1", {
+    signature: {
+      inputs: {
+        value: { type: "json" },
+        expect: { type: "json" },
+      },
+      outputs: { value: { type: "json" } },
+      cost: 10,
+    },
+    fn: (i) => {
+      const v = i.value ?? null;
+      const e = i.expect ?? null;
+      if (canonicalize(v) !== canonicalize(e)) {
+        throw new MorphogenError(
+          "FN_FAILED",
+          `assert.v1: value ${canonicalize(v).slice(0, 200)} != expect ${canonicalize(e).slice(0, 200)}`,
+        );
+      }
+      return { value: v };
     },
   });
 

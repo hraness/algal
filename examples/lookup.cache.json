@@ -1,0 +1,1 @@
+{ "note": "marker — suite re-runs this example through cachedExecutor and asserts every effect serves from the first run's records" }

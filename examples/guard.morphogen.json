@@ -1,0 +1,30 @@
+{
+  "contract": "morphogen.organism.v1",
+  "key": "organism:guard",
+  "name": "Guard",
+  "cells": [
+    { "id": "src", "kind": "input", "outputs": { "v": "json" } },
+    {
+      "id": "want",
+      "kind": "const",
+      "outputs": { "v": { "type": "json", "value": "ready" } }
+    },
+    { "id": "check", "kind": "fn", "fn": "assert.v1" },
+    {
+      "id": "fname",
+      "kind": "const",
+      "outputs": { "v": { "type": "text", "value": "code" } }
+    },
+    { "id": "hold", "kind": "fn", "fn": "pick.v1" }
+  ],
+  "edges": [
+    { "from": { "cell": "src", "port": "v" }, "to": { "cell": "check", "port": "value" } },
+    { "from": { "cell": "want", "port": "v" }, "to": { "cell": "check", "port": "expect" } },
+    {
+      "from": { "cell": "check", "port": "value" },
+      "to": { "cell": "hold", "port": "record" },
+      "on": "fail"
+    },
+    { "from": { "cell": "fname", "port": "v" }, "to": { "cell": "hold", "port": "field" } }
+  ]
+}

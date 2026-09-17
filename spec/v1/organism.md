@@ -339,8 +339,10 @@ A receipt records `manifestDigest`, `args`, `outcome`, per-cell records
 `toolCalls`, `shadowOut`, `rounds`, `items`, per-cell `work`), the
 `effects` list (`requestDigest`, then `output` *or* `error` — a failed
 effect records `{code, message}` so replay reproduces it — `executor` id,
-optional usage), the bounded `events` log, the work ledger, and run-level
-`failure` detail. `digest` is over the canonical receipt minus itself.
+optional usage, `cached` when the response was served from a prior run's
+record rather than executed), the bounded `events` log, the work ledger,
+and run-level `failure` detail. `digest` is over the canonical receipt
+minus itself.
 
 ## Verification
 
@@ -349,6 +351,19 @@ recorded effect outputs by request digest — in record order when a digest
 repeats under `retry` — then compares cells, effects, work, and outcome. Any
 divergence is reported by name. The check is offline and deterministic:
 receipts fix what the world returned.
+
+### Effect memoization
+
+The store keeps an effect index keyed by request digest — a memo table, not
+CAS: the first recorded *successful* receipt wins and cannot be overwritten.
+An executor wrapped in `cachedExecutor(inner, store)` consults the index
+before calling `inner`; a hit returns the recorded `output` and the new run's
+receipt records it with `cached: true`, so "this response came from a prior
+run" stays a fact of the record. Errors are never memoized — a recorded
+failure may be transient and must not determinize into permanence. A memoized
+effect still occupies its budgeted slot (agent calls, context and output
+bytes), still binds to the declared output contract, and still replays
+bit-for-bit: replay reproduces the `cached` flag from the record.
 
 ## Bundles — morphogen.bundle.v1
 

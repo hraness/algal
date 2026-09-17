@@ -617,7 +617,7 @@ async function activate(
           ctx.work.units += WORK.effectBase + contextBytes * WORK.perContextByte;
           emit(ctx, { kind: "effect", path, digest: requestDigest });
 
-          const meta = executor.receiptFor?.(request);
+          const meta = await executor.receiptFor?.(request);
           let raw: JsonValue;
           // budget.maxEffectMs bounds each call wall-clock; the timeout is
           // recorded as an effect error so retry and replay both see it
@@ -659,6 +659,7 @@ async function activate(
               executor: meta?.executor ?? executor.id,
             };
             if (meta?.usage) eff.usage = meta.usage;
+            if (meta?.cached) eff.cached = true;
             ctx.effects.push(eff);
             lastErr = e;
             continue;
@@ -671,6 +672,7 @@ async function activate(
             executor: meta?.executor ?? executor.id,
           };
           if (meta?.usage) eff.usage = meta.usage;
+          if (meta?.cached) eff.cached = true;
           ctx.effects.push(eff);
 
           const outBytes = canonicalBytes(raw);

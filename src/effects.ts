@@ -6,6 +6,7 @@
 import { MorphogenError, type ErrorCode } from "./errors";
 import { digestCanonical, type Digest } from "./digest";
 import type { AgentOutput, Route } from "./contract";
+import type { Store } from "./store";
 import {
   asArray,
   asObject,
@@ -39,6 +40,10 @@ export type EffectReceipt = {
   error?: { code: ErrorCode; message: string };
   executor: string;
   usage?: { model?: string; tokensIn?: number; tokensOut?: number };
+  /** True when the response was served from a prior run's record via
+   * `cachedExecutor` rather than executed — a fact of the run, so replay
+   * reproduces the flag. Only ever present as `cached: true`. */
+  cached?: boolean;
 };
 
 export type Executor = {
@@ -49,11 +54,20 @@ export type Executor = {
   execute(request: EffectRequest, signal?: AbortSignal): Promise<JsonValue>;
   /** Receipt metadata recorded for this request. Executors that replay a
    * prior run implement this so the rerun reproduces the original receipt's
-   * executor id and usage — making verification bit-for-bit. */
-  receiptFor?(request: EffectRequest): {
-    executor?: string;
-    usage?: EffectReceipt["usage"];
-  };
+   * executor id and usage — making verification bit-for-bit. Called before
+   * `execute` on each attempt. */
+  receiptFor?(request: EffectRequest):
+    | {
+        executor?: string;
+        usage?: EffectReceipt["usage"];
+        /** The response will be served from a memoized record. */
+        cached?: boolean;
+      }
+    | Promise<{
+        executor?: string;
+        usage?: EffectReceipt["usage"];
+        cached?: boolean;
+      }>;
 };
 
 export function effectRequestDigest(req: EffectRequest): Digest {
@@ -118,10 +132,15 @@ export function replayExecutor(
     receiptFor(request) {
       const rec = next(effectRequestDigest(request));
       if (!rec) return {};
-      const out: { executor?: string; usage?: EffectReceipt["usage"] } = {
+      const out: {
+        executor?: string;
+        usage?: EffectReceipt["usage"];
+        cached?: boolean;
+      } = {
         executor: rec.executor,
       };
       if (rec.usage) out.usage = rec.usage;
+      if (rec.cached) out.cached = true;
       return out;
     },
     async execute(request) {
@@ -138,6 +157,50 @@ export function replayExecutor(
         throw new MorphogenError(hit.error.code, hit.error.message);
       }
       return hit.output!;
+    },
+  };
+}
+
+/** Memoizes successful effects across runs. Effect requests are pure — the
+ * request digest covers cell path, kind, prompt, inputs, tools, and budget —
+ * so an identical request issued by a later run may be served the earlier
+ * recorded response instead of executing again. The served effect is still
+ * recorded on the new run's receipt (with `cached: true`), still bounded by
+ * agent-call and context budgets, and still contract-checked. Only successes
+ * are memoized: a recorded error may be transient (a timeout, a flaky
+ * provider) and must never determinize into permanent failure. First record
+ * wins — a later differing response for the same request cannot overwrite. */
+export function cachedExecutor(inner: Executor, store: Store): Executor {
+  const lookup = (request: EffectRequest) =>
+    store.getEffect(effectRequestDigest(request));
+  return {
+    id: inner.id,
+    async receiptFor(request) {
+      const hit = await lookup(request);
+      if (hit?.output !== undefined) {
+        const out: {
+          executor?: string;
+          usage?: EffectReceipt["usage"];
+          cached?: boolean;
+        } = { executor: hit.executor, cached: true };
+        if (hit.usage) out.usage = hit.usage;
+        return out;
+      }
+      return inner.receiptFor?.(request) ?? {};
+    },
+    async execute(request, signal) {
+      const hit = await lookup(request);
+      if (hit?.output !== undefined) return hit.output;
+      const out = await inner.execute(request, signal);
+      const meta = await inner.receiptFor?.(request);
+      const entry: EffectReceipt = {
+        requestDigest: effectRequestDigest(request),
+        executor: meta?.executor ?? inner.id,
+        output: out,
+      };
+      if (meta?.usage) entry.usage = meta.usage;
+      await store.putEffect(entry);
+      return out;
     },
   };
 }
@@ -304,7 +367,7 @@ export function parseEffectReceipt(u: unknown): EffectReceipt {
   const obj = asObject(u, "effect receipt");
   noUnknownKeys(
     obj,
-    ["requestDigest", "output", "error", "executor", "usage"],
+    ["requestDigest", "output", "error", "executor", "usage", "cached"],
     "effect receipt",
   );
   const digest = asString(
@@ -353,6 +416,16 @@ export function parseEffectReceipt(u: unknown): EffectReceipt {
     if (uo.tokensOut !== undefined)
       u2.tokensOut = asIntField(uo.tokensOut, "usage.tokensOut");
     receipt.usage = u2;
+  }
+  const cached = optField(obj, "cached");
+  if (cached !== undefined) {
+    if (cached !== true) {
+      throw new MorphogenError(
+        "PARSE_FAILED",
+        "effect receipt.cached must be true when present",
+      );
+    }
+    receipt.cached = true;
   }
   return receipt;
 }

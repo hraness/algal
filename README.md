@@ -104,7 +104,9 @@ label, then a good one — `retry` re-issues the same signed request and the
 receipt records both attempts under one digest), and `remote` (an organism
 cell whose sub-manifest exists only in a bundle directory — `via` fetches,
 verifies, and runs it), and `approve` (a `gate` cell's decision is a required,
-guard-fed input — the merge cell only activates on "approve") — with
+guard-fed input — the merge cell only activates on "approve"), and `guard`
+(an `assert.v1` invariant fails on a mismatched value — the `on:"fail"` edge
+hands the record to a `hold` cell) — with
 scripted responses, then verifies each receipt offline. To run one yourself:
 
 ```sh
@@ -172,9 +174,14 @@ broker provider access; the executor seam is where provider auth lives.
 - Manifests and receipts are content-addressed canonical JSON; payloads ride
   the same CAS through `ref` ports. The store is a seam: `MemoryStore` and
   `FileStore` (`.morphogen/`) ship now; an Oh-backed store implements the
-  same six methods. `pack`/`unpack` move a manifest's whole embedding
+  same eight methods. `pack`/`unpack` move a manifest's whole embedding
   closure — sub-manifests and `const`-referenced payloads — between stores
   as one verified bundle.
+- `run --cache-effects` memoizes effects across runs through the store's
+  effect index: an identical request digest serves the earlier recorded
+  response (marked `cached` on the new receipt). Only successes memoize —
+  recorded errors may be transient. `morphogen runs` lists the receipts
+  stored under `--dir`.
 
 ## What not to infer
 

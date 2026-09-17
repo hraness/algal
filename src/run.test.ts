@@ -4,7 +4,7 @@ import {
   parseOrganismManifest,
   type OrganismManifest,
 } from "./contract";
-import { scriptedExecutor } from "./effects";
+import { cachedExecutor, scriptedExecutor } from "./effects";
 import { MorphogenError } from "./errors";
 import { builtinRegistry } from "./registry";
 import { runOrganism } from "./run";
@@ -2274,5 +2274,195 @@ describe("effect timeouts", () => {
       ],
     });
     expect(r.cells["worker"]?.outputs?.out).toBe("quick");
+  });
+});
+
+describe("cachedExecutor", () => {
+  const m = manifest({
+    contract: "morphogen.organism.v1",
+    key: "organism:memo",
+    name: "Memo",
+    cells: [
+      { id: "src", kind: "input", outputs: { v: "text" } },
+      {
+        id: "agent",
+        kind: "agent",
+        inputs: { v: "text" },
+        prompt: "p",
+        output: { kind: "text" },
+      },
+    ],
+    edges: [
+      { from: { cell: "src", port: "v" }, to: { cell: "agent", port: "v" } },
+    ],
+  });
+
+  test("a second run serves the recorded response and marks it cached", async () => {
+    const store = new MemoryStore();
+    let calls = 0;
+    const inner = {
+      id: "counting",
+      async execute() {
+        calls++;
+        return "answer";
+      },
+    };
+    const opts = {
+      manifest: m,
+      args: { src: { v: "job" } },
+      fns: builtinRegistry(),
+      store,
+      executors: [cachedExecutor(inner, store)],
+    };
+    const r1 = await runOrganism(opts);
+    expect(calls).toBe(1);
+    expect(r1.effects[0]?.cached).toBeUndefined();
+
+    const r2 = await runOrganism(opts);
+    expect(calls).toBe(1); // memo hit — inner never ran again
+    expect(r2.effects[0]?.cached).toBe(true);
+    expect(r2.effects[0]?.output).toBe("answer");
+    expect(r2.effects[0]?.executor).toBe("counting");
+    // the memoized run is a different receipt — and it verifies bit-for-bit
+    expect(r2.digest).not.toBe(r1.digest);
+    const rep = await verifyReceipt(
+      r2 as unknown as JsonValue,
+      manifestToJson(m),
+      store,
+      builtinRegistry(),
+    );
+    expect(rep.ok).toBe(true);
+  });
+
+  test("errors are not memoized — a retry reaches the executor again", async () => {
+    const store = new MemoryStore();
+    let calls = 0;
+    const inner = {
+      id: "flaky",
+      async execute() {
+        calls++;
+        if (calls === 1) throw new MorphogenError("EFFECT_FAILED", "boom");
+        return "recovered";
+      },
+    };
+    const withRetry = manifest({
+      ...manifestToJson(m),
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "text" } },
+        {
+          id: "agent",
+          kind: "agent",
+          inputs: { v: "text" },
+          prompt: "p",
+          output: { kind: "text" },
+          retry: { attempts: 2 },
+        },
+      ],
+    });
+    const r = await runOrganism({
+      manifest: withRetry,
+      args: { src: { v: "job" } },
+      fns: builtinRegistry(),
+      store,
+      executors: [cachedExecutor(inner, store)],
+    });
+    expect(r.outcome).toBe("complete");
+    expect(calls).toBe(2); // error attempt did not poison the memo
+    expect(await store.getEffect(r.effects[0]!.requestDigest)).toBeDefined();
+  });
+});
+
+describe("assert.v1", () => {
+  const m = manifest({
+    contract: "morphogen.organism.v1",
+    key: "organism:assert",
+    name: "Assert",
+    cells: [
+      { id: "src", kind: "input", outputs: { v: "json" } },
+      { id: "invariant", kind: "fn", fn: "assert.v1" },
+      { id: "recover", kind: "fn", fn: "pick.v1" },
+      {
+        id: "tagger",
+        kind: "const",
+        outputs: { field: { type: "text", value: "code" } },
+      },
+    ],
+    edges: [
+      {
+        from: { cell: "src", port: "v" },
+        to: { cell: "invariant", port: "value" },
+      },
+      {
+        from: { cell: "src", port: "v" },
+        to: { cell: "invariant", port: "expect" },
+      },
+      {
+        from: { cell: "invariant", port: "value" },
+        to: { cell: "recover", port: "record" },
+        on: "fail",
+      },
+      {
+        from: { cell: "tagger", port: "field" },
+        to: { cell: "recover", port: "field" },
+      },
+    ],
+  });
+
+  test("matching expect passes the value through", async () => {
+    const r = await run(m, {
+      args: { src: { v: { status: "ok" } } },
+    });
+    // expect arg delivered to both ports — assert sees value===expect
+    expect(r.cells["invariant"]?.outputs?.value).toEqual({ status: "ok" });
+    expect(r.outcome).toBe("complete");
+  });
+
+  test("a mismatch fails FN_FAILED and routes through on:fail", async () => {
+    const store = new MemoryStore();
+    // separate producers so value and expect can differ
+    const m2 = manifest({
+      ...manifestToJson(m),
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "json", e: "json" } },
+        { id: "invariant", kind: "fn", fn: "assert.v1" },
+        { id: "recover", kind: "fn", fn: "pick.v1" },
+        {
+          id: "tagger",
+          kind: "const",
+          outputs: { field: { type: "text", value: "code" } },
+        },
+      ],
+      edges: [
+        {
+          from: { cell: "src", port: "v" },
+          to: { cell: "invariant", port: "value" },
+        },
+        {
+          from: { cell: "src", port: "e" },
+          to: { cell: "invariant", port: "expect" },
+        },
+        {
+          from: { cell: "invariant", port: "value" },
+          to: { cell: "recover", port: "record" },
+          on: "fail",
+        },
+        {
+          from: { cell: "tagger", port: "field" },
+          to: { cell: "recover", port: "field" },
+        },
+      ],
+    });
+    const r = await runOrganism({
+      manifest: m2,
+      args: { src: { v: { status: "bad" }, e: { status: "ok" } } },
+      fns: builtinRegistry(),
+      store,
+      executors: [],
+    });
+    expect(r.cells["invariant"]?.status).toBe("failed");
+    expect(r.cells["invariant"]?.failure?.code).toBe("FN_FAILED");
+    // on:"fail" delivered {code,message} to recover.record; pick.v1 read .code
+    expect(r.cells["recover"]?.outputs?.value).toBe("FN_FAILED");
+    expect(r.outcome).toBe("complete");
   });
 });

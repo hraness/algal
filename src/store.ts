@@ -12,6 +12,7 @@ import {
   parseOrganismManifest,
   type OrganismManifest,
 } from "./contract";
+import { parseEffectReceipt, type EffectReceipt } from "./effects";
 import { canonicalize, type JsonValue } from "./values";
 
 export interface Store {
@@ -22,6 +23,12 @@ export interface Store {
   /** Generic JSON CAS — `ref` ports point at values stored here. */
   getValue(digest: Digest): Promise<JsonValue | undefined>;
   putValue(value: JsonValue): Promise<Digest>;
+  /** Effect memo index: requestDigest → recorded successful receipt.
+   * Unlike the CAS methods this is keyed by *request*, not content — the
+   * point is that two runs issuing the identical request share one answer.
+   * `putEffect` is first-wins and idempotent. */
+  getEffect(requestDigest: Digest): Promise<EffectReceipt | undefined>;
+  putEffect(receipt: EffectReceipt): Promise<Digest>;
 }
 
 export class MemoryStore implements Store {
@@ -53,6 +60,16 @@ export class MemoryStore implements Store {
     this.values.set(d, value);
     return d;
   }
+  private effects = new Map<Digest, EffectReceipt>();
+  async getEffect(requestDigest: Digest) {
+    return this.effects.get(requestDigest);
+  }
+  async putEffect(receipt: EffectReceipt) {
+    if (!this.effects.has(receipt.requestDigest)) {
+      this.effects.set(receipt.requestDigest, receipt);
+    }
+    return receipt.requestDigest;
+  }
 }
 
 export class FileStore implements Store {
@@ -66,6 +83,9 @@ export class FileStore implements Store {
   }
   private valuePath(d: Digest) {
     return join(this.dir, "values", `${d.slice(7)}.json`);
+  }
+  private effectPath(d: Digest) {
+    return join(this.dir, "effects", `${d.slice(7)}.json`);
   }
 
   async getManifest(digest: Digest) {
@@ -144,5 +164,40 @@ export class FileStore implements Store {
     await mkdir(join(this.dir, "values"), { recursive: true });
     await writeFile(this.valuePath(d), canonicalize(value));
     return d;
+  }
+
+  async getEffect(requestDigest: Digest) {
+    try {
+      const raw = await readFile(this.effectPath(requestDigest), "utf8");
+      const parsed = parseEffectReceipt(JSON.parse(raw));
+      if (parsed.requestDigest !== requestDigest) {
+        throw new MorphogenError(
+          "DIGEST_MISMATCH",
+          `effect file ${requestDigest} claims request ${parsed.requestDigest}`,
+        );
+      }
+      return parsed;
+    } catch (e) {
+      if (e instanceof MorphogenError) throw e;
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      throw new MorphogenError("PARSE_FAILED", `effect ${requestDigest}: ${e}`);
+    }
+  }
+
+  async putEffect(receipt: EffectReceipt) {
+    await mkdir(join(this.dir, "effects"), { recursive: true });
+    try {
+      // flag "wx" fails EEXIST when an entry already claims this request —
+      // the first recorded response wins, so a later differing response for
+      // the same request can never overwrite the memo
+      await writeFile(
+        this.effectPath(receipt.requestDigest),
+        canonicalize(receipt as unknown as JsonValue),
+        { flag: "wx" },
+      );
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+    }
+    return receipt.requestDigest;
   }
 }

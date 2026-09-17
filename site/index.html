@@ -66,6 +66,7 @@ $ morphogen verify run.receipt.json triage.morphogen.json
       <li>Failure is routable: an <code>on:"fail"</code> edge delivers the failure record to a recovery cell, so whether a failure is survivable is declared in the graph — not discovered mid-run. Without one, the run fails closed.</li>
       <li>Payloads are content-addressed: <code>store</code> cells pin data under a <code>sha256:</code> digest and <code>ref</code> ports carry only the token — a payload can flow through the whole graph without entering a receipt or an agent's context until a <code>load</code> cell resolves it.</li>
       <li>Organisms are portable: <code>pack</code> emits a manifest's whole embedding closure as one digest-verified bundle, and a <code>via</code> cell resolves a missing sub-manifest through a named transport — remote resolution, local execution, the digest is the trust.</li>
+      <li>Effects are pure, so they memoize: <code>run --cache-effects</code> serves an identical request digest from the store's recorded response — first record wins, errors never memoize, and the receipt marks the reuse <code>cached</code>.</li>
       <li>Receipts make runs replayable, not reproducible — the same organism on fresh inputs can legitimately diverge.</li>
     </ul>
   </section>

@@ -76,3 +76,53 @@ describe("FileStore", () => {
     }
   });
 });
+
+describe("effect memo index", () => {
+  const rec = {
+    requestDigest: `sha256:${"a".repeat(64)}` as `sha256:${string}`,
+    executor: "test",
+    output: "the answer",
+    usage: { tokensIn: 3 },
+  } as const;
+
+  test("MemoryStore round-trips and is first-wins", async () => {
+    const s = new MemoryStore();
+    await s.putEffect({ ...rec });
+    const got = await s.getEffect(rec.requestDigest);
+    expect(got?.output).toBe("the answer");
+    // a different response for the same request must not overwrite
+    await s.putEffect({ ...rec, output: "different" });
+    expect((await s.getEffect(rec.requestDigest))?.output).toBe("the answer");
+  });
+
+  test("FileStore round-trips, is first-wins, and detects claim mismatch", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "morphogen-test-"));
+    try {
+      const s = new FileStore(dir);
+      await s.putEffect({ ...rec });
+      expect((await s.getEffect(rec.requestDigest))?.output).toBe(
+        "the answer",
+      );
+      await s.putEffect({ ...rec, output: "different" });
+      expect((await s.getEffect(rec.requestDigest))?.output).toBe(
+        "the answer",
+      );
+
+      // a file whose content claims a different request digest is rejected
+      const bad = {
+        requestDigest: `sha256:${"b".repeat(64)}`,
+        executor: "x",
+        output: 1,
+      };
+      await Bun.write(
+        join(dir, "effects", "c".repeat(64) + ".json"),
+        JSON.stringify(bad),
+      );
+      await expect(
+        s.getEffect(`sha256:${"c".repeat(64)}` as `sha256:${string}`),
+      ).rejects.toThrow("claims request");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
