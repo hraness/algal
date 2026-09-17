@@ -47,6 +47,7 @@ canonicalized, hashed, and embedded. It can never carry code.
 | `each` | map a delivered list through a digest-embedded sub-manifest | `over` accepts one `json` edge carrying the list; other interface inputs pass through; interface outputs become lists |
 | `store` | writes a payload into the content-addressed store | input `data` (`json`), output `ref` (`ref`) |
 | `load` | resolves a `ref` token back to its payload | input `ref` (`ref`), output `data` (`json`) |
+| `slot` | durable named state across runs | read: output `data` (`json`); write: input+output `data` |
 
 `organism`, `repeat`, and `each` cells may declare `via`: a transport name
 (a safe id) the host maps to a bundle source — a directory of
@@ -77,8 +78,8 @@ Every port declares one of:
 
 A `ref` is a pointer, not a value: the payload never rides the edge, so it
 never enters receipts, agent contexts, or request digests — only the token
-does. `store` and `load` cells are the only data IO points; they are the
-only cells whose ports are fixed by the contract. A `ref` token admitted
+does. `store`, `load`, and `slot` cells are the only data IO points; they
+are the only cells whose ports are fixed by the contract. A `ref` token admitted
 through `input` args or a `const` port must already resolve in the store —
 the caller mints tokens by writing the payload first; no cell can invent a
 dangling pointer.
@@ -206,6 +207,33 @@ dangling pointer.
 - Both are deterministic cells: they emit no effect, and replaying a run
   re-runs them against the same store. `store` writes are idempotent —
   same payload, same digest.
+
+### slot cells
+
+```json
+{ "id": "mem", "kind": "slot", "name": "count", "mode": "read", "default": 0 }
+{ "id": "sink", "kind": "slot", "name": "count", "mode": "write" }
+```
+
+- `slot` cells are durable, mutable state: a named cell in the store that
+  persists across runs — an organism's memory. `name` is a safe id in one
+  flat space shared by every organism on the store; two manifests naming
+  the same slot share it on purpose.
+- `mode: "read"` takes no inputs and emits `data` (`json`): the stored
+  value, or the declared `default` when the slot is empty, or a cell
+  failure (`INPUT_MISSING`) when neither exists — routable via `on:"fail"`.
+  `default` is rejected on write-mode cells and bounded by `maxValueBytes`.
+- `mode: "write"` takes one `json` input `data`, stores it, and echoes it
+  on `data` — so a write can sit mid-chain and order a downstream read by
+  edge. Payloads are bounded by `maxBlobBytes`.
+- Reads are nondeterministic input: the served value is recorded on the
+  cell receipt (`slot: {name, mode}` plus the usual `outputs`), and
+  `verify` serves the recorded outcome — a live slot may have been
+  overwritten since, and a recorded read failure replays too. Writes are
+  deterministic and idempotent under replay (same value, same slot).
+- Within one run, a read sees whatever the store holds at its activation:
+  wire a read behind a write with an edge to order them, or accept
+  schedule order.
 
 ### each cells
 

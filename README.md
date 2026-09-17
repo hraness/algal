@@ -56,6 +56,11 @@ Cell kinds:
   CAS — only digests ride edges, receipts, and contexts. A caller-supplied
   `ref` must already resolve — `morphogen store put` mints one — and a store
   that returns wrong content fails `DIGEST_MISMATCH`.
+- `slot` — durable named state across runs: an organism's memory. `read`
+  emits the stored value (or a declared `default`; empty-without-default
+  fails, routable via `on:"fail"`), `write` stores its `data` input and
+  echoes it. Reads are recorded on the receipt and served verbatim on
+  replay — a live slot may have moved on since the run being verified.
 
 Edges connect a producer port to a consumer port. Ports are typed (`text`,
 `json`, `choice`, `ref`), and a `json` port may declare a bounded `schema`
@@ -106,7 +111,9 @@ cell whose sub-manifest exists only in a bundle directory — `via` fetches,
 verifies, and runs it), and `approve` (a `gate` cell's decision is a required,
 guard-fed input — the merge cell only activates on "approve"), and `guard`
 (an `assert.v1` invariant fails on a mismatched value — the `on:"fail"` edge
-hands the record to a `hold` cell) — with
+hands the record to a `hold` cell), and `counter` (a `slot` cell reads a
+durable count, `inc.v1` bumps it, a write-mode `slot` stores it back — state
+that survives between runs) — with
 scripted responses, then verifies each receipt offline. To run one yourself:
 
 ```sh
@@ -174,7 +181,7 @@ broker provider access; the executor seam is where provider auth lives.
 - Manifests and receipts are content-addressed canonical JSON; payloads ride
   the same CAS through `ref` ports. The store is a seam: `MemoryStore` and
   `FileStore` (`.morphogen/`) ship now; an Oh-backed store implements the
-  same eight methods. `pack`/`unpack` move a manifest's whole embedding
+  same ten methods. `pack`/`unpack` move a manifest's whole embedding
   closure — sub-manifests and `const`-referenced payloads — between stores
   as one verified bundle.
 - `run --cache-effects` memoizes effects across runs through the store's

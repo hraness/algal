@@ -15,6 +15,7 @@ import {
   asObject,
   asSafeId,
   asString,
+  canonicalBytes,
   noUnknownKeys,
   optField,
   reqField,
@@ -188,7 +189,22 @@ export type Cell =
    * produces a `ref`; `load` resolves a `ref` back to its payload. The only
    * IO cells — payloads live in CAS, only digest tokens ride edges. */
   | { id: string; kind: "store" }
-  | { id: string; kind: "load" };
+  | { id: string; kind: "load" }
+  /** `slot` is durable, mutable state: a named cell in the store that
+   * persists across runs. `read` emits the stored value (or `default` when
+   * the slot is empty); `write` stores its `data` input and echoes it.
+   * Reads are nondeterministic input — like effects, the served value is
+   * recorded on the cell receipt and replayed verbatim by `verify`. Names
+   * share one flat space across organisms: two organisms naming the same
+   * slot share memory on purpose. */
+  | {
+      id: string;
+      kind: "slot";
+      name: string;
+      mode: "read" | "write";
+      /** Read mode only: emitted when the slot has never been written. */
+      default?: JsonValue;
+    };
 
 export type Edge = {
   from: { cell: string; port: PortName };
@@ -551,6 +567,37 @@ function parseCell(u: unknown, what: string): Cell {
     case "load": {
       noUnknownKeys(obj, ["id", "kind"], what);
       return { id, kind };
+    }
+    case "slot": {
+      noUnknownKeys(obj, ["id", "kind", "name", "mode", "default"], what);
+      const name = asSafeId(reqField(obj, "name", what), `${what}.name`);
+      const modeRaw = asString(reqField(obj, "mode", what), `${what}.mode`, 8);
+      if (modeRaw !== "read" && modeRaw !== "write") {
+        throw new MorphogenError(
+          "PARSE_FAILED",
+          `${what}.mode must be "read" or "write"`,
+        );
+      }
+      const mode = modeRaw;
+      const cell: Cell = { id, kind, name, mode };
+      const def = optField(obj, "default");
+      if (def !== undefined) {
+        if (mode !== "read") {
+          throw new MorphogenError(
+            "PARSE_FAILED",
+            `${what}.default is only valid on read-mode slot cells`,
+          );
+        }
+        asJsonValue(def, `${what}.default`);
+        if (canonicalBytes(def as JsonValue) > BOUNDS.maxValueBytes) {
+          throw new MorphogenError(
+            "PARSE_FAILED",
+            `${what}.default exceeds maxValueBytes ${BOUNDS.maxValueBytes}B`,
+          );
+        }
+        cell.default = def as JsonValue;
+      }
+      return cell;
     }
     case "organism": {
       noUnknownKeys(obj, ["id", "kind", "manifest", "via"], what);
@@ -1038,6 +1085,16 @@ export function manifestToJson(m: OrganismManifest): JsonObject {
       case "store":
       case "load":
         return { id: c.id, kind: c.kind };
+      case "slot": {
+        const o: JsonObject = {
+          id: c.id,
+          kind: c.kind,
+          name: c.name,
+          mode: c.mode,
+        };
+        if (c.default !== undefined) o.default = c.default;
+        return o;
+      }
       case "organism": {
         const o: JsonObject = {
           id: c.id,

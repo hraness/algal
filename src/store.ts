@@ -29,6 +29,11 @@ export interface Store {
    * `putEffect` is first-wins and idempotent. */
   getEffect(requestDigest: Digest): Promise<EffectReceipt | undefined>;
   putEffect(receipt: EffectReceipt): Promise<Digest>;
+  /** Slots: named mutable cells that persist across runs — an organism's
+   * memory. Not content-addressed: `setSlot` overwrites. `slot` cells are
+   * the only access, so reads/writes land on the run receipt. */
+  getSlot(name: string): Promise<JsonValue | undefined>;
+  setSlot(name: string, value: JsonValue): Promise<void>;
 }
 
 export class MemoryStore implements Store {
@@ -69,6 +74,13 @@ export class MemoryStore implements Store {
       this.effects.set(receipt.requestDigest, receipt);
     }
     return receipt.requestDigest;
+  }
+  private slots = new Map<string, JsonValue>();
+  async getSlot(name: string) {
+    return this.slots.get(name);
+  }
+  async setSlot(name: string, value: JsonValue) {
+    this.slots.set(name, value);
   }
 }
 
@@ -199,5 +211,24 @@ export class FileStore implements Store {
       if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
     }
     return receipt.requestDigest;
+  }
+
+  private slotPath(name: string) {
+    return join(this.dir, "slots", `${name}.json`);
+  }
+
+  async getSlot(name: string) {
+    try {
+      const raw = await readFile(this.slotPath(name), "utf8");
+      return JSON.parse(raw) as JsonValue;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      throw new MorphogenError("PARSE_FAILED", `slot ${name}: ${e}`);
+    }
+  }
+
+  async setSlot(name: string, value: JsonValue) {
+    await mkdir(join(this.dir, "slots"), { recursive: true });
+    await writeFile(this.slotPath(name), canonicalize(value));
   }
 }

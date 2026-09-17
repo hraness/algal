@@ -46,8 +46,16 @@ export async function verifyReceipt(
   }
 
   const replayVia: Record<string, string> = {};
+  const replaySlots: Record<string, { value?: JsonValue; missing?: boolean }> =
+    {};
   for (const [path, rec] of Object.entries(original.cells)) {
     if (rec.via) replayVia[path] = rec.via;
+    // a recorded slot read is authoritative: the live slot may have been
+    // overwritten since — serve what the original run saw, or its failure
+    if (rec.slot?.mode === "read") {
+      const v = rec.status === "committed" ? rec.outputs?.data : undefined;
+      replaySlots[path] = v !== undefined ? { value: v } : { missing: true };
+    }
   }
   const rerun = await runOrganism({
     manifest,
@@ -56,6 +64,7 @@ export async function verifyReceipt(
     store,
     executors: [replayExecutor(original.effects)],
     replayVia,
+    replaySlots,
     ...(transports ? { transports } : {}),
   });
 
@@ -123,6 +132,9 @@ export function diffReceipts(a: RunReceipt, b: RunReceipt): string[] {
     }
     if (ac.via !== bc.via) {
       out.push(`cell ${k}: via ${ac.via ?? "local"} vs ${bc.via ?? "local"}`);
+    }
+    if (!eq(ac.slot, bc.slot)) {
+      out.push(`cell ${k}: slot differs`);
     }
   }
   if (a.effects.length !== b.effects.length) {

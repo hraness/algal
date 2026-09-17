@@ -74,6 +74,9 @@ export type CellRecord = {
   items?: number;
   /** Present when the cell's sub-manifest resolved through a transport. */
   via?: string;
+  /** `slot` cells record what they touched: the durable name and mode —
+   * enough for `verify` to rebuild the replay map. */
+  slot?: { name: string; mode: "read" | "write" };
 };
 
 export type RunReceipt = {
@@ -104,6 +107,11 @@ export type RunOptions = {
    * store already holds them), so — like recorded effects — the record
    * itself is the source. */
   replayVia?: Record<string, string>;
+  /** Slot-read replay: cell path → the value the recorded run was served
+   * (`missing: true` when the recorded read found an empty slot and had no
+   * default — the failure replays too). A live slot may have been
+   * overwritten since; the record is authoritative. */
+  replaySlots?: Record<string, { value?: JsonValue; missing?: boolean }>;
 };
 
 type EdgeState = "pending" | "delivered" | "dead";
@@ -337,17 +345,22 @@ async function runInto(
           compiled.resolvedVia.get(cell.id) ??
           ctx.opts.replayVia?.[cellPath(cell.id)];
         if (via) rec.via = via;
+        if (cell.kind === "slot") rec.slot = { name: cell.name, mode: cell.mode };
         ctx.cells[cellPath(cell.id)] = rec;
         emit(ctx, { kind: "cell.commit", path: cellPath(cell.id) });
       } catch (e) {
         const rep = errorReport(e);
         state.set(cell.id, "failed");
         failedInfo.set(cell.id, { code: rep.code, message: rep.message });
-        ctx.cells[cellPath(cell.id)] = {
+        const failRec: CellRecord = {
           status: "failed",
           failure: { code: rep.code, message: rep.message },
           work: ctx.work.units - workBefore,
         };
+        if (cell.kind === "slot") {
+          failRec.slot = { name: cell.name, mode: cell.mode };
+        }
+        ctx.cells[cellPath(cell.id)] = failRec;
         emit(ctx, { kind: "cell.fail", path: cellPath(cell.id) });
         // normal outbound edges die; on:"fail" edges deliver the record.
         // A declared fail edge means the structure handles this failure —
@@ -476,6 +489,42 @@ async function activate(
         );
       }
       ctx.work.units += bytes * WORK.perOutputByte;
+      return { outputs: { data: v } };
+    }
+    case "slot": {
+      if (cell.mode === "write") {
+        const data = inputs.data!;
+        const bytes = canonicalBytes(data);
+        if (bytes > BOUNDS.maxBlobBytes) {
+          throw new MorphogenError(
+            "BUDGET_EXHAUSTED",
+            `${cell.id}: slot payload ${bytes}B exceeds maxBlobBytes ${BOUNDS.maxBlobBytes}B`,
+          );
+        }
+        ctx.work.units += bytes * WORK.perOutputByte;
+        await ctx.opts.store.setSlot(cell.name, data);
+        return { outputs: { data } };
+      }
+      // read: replay serves the recorded outcome — a live slot may have
+      // been overwritten since the run being verified
+      const rep = ctx.opts.replaySlots?.[path];
+      if (rep !== undefined) {
+        if (rep.missing) {
+          throw new MorphogenError(
+            "INPUT_MISSING",
+            `slot cell "${cell.id}": slot "${cell.name}" is empty and declares no default`,
+          );
+        }
+        return { outputs: { data: rep.value! } };
+      }
+      const stored = await ctx.opts.store.getSlot(cell.name);
+      const v = stored !== undefined ? stored : cell.default;
+      if (v === undefined) {
+        throw new MorphogenError(
+          "INPUT_MISSING",
+          `slot cell "${cell.id}": slot "${cell.name}" is empty and declares no default`,
+        );
+      }
       return { outputs: { data: v } };
     }
     case "fn": {

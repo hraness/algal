@@ -141,6 +141,24 @@ export function builtinRegistry(): FnRegistry {
     },
   });
 
+  reg.set("inc.v1", {
+    signature: {
+      inputs: { value: { type: "json" } },
+      outputs: { value: { type: "json" } },
+      cost: 5,
+    },
+    fn: (i) => {
+      const v = i.value;
+      if (typeof v !== "number" || !Number.isFinite(v)) {
+        throw new MorphogenError(
+          "FN_FAILED",
+          "inc.v1: value must be a finite number",
+        );
+      }
+      return { value: v + 1 };
+    },
+  });
+
   reg.set("label.v1", {
     signature: {
       inputs: { value: { type: "text" } },

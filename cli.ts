@@ -27,7 +27,12 @@ import {
   type Transport,
 } from "./src/transport";
 import { diffReceipts, verifyReceipt } from "./src/verify";
-import { canonicalize, type JsonObject, type JsonValue } from "./src/values";
+import {
+  canonicalBytes,
+  canonicalize,
+  type JsonObject,
+  type JsonValue,
+} from "./src/values";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const EXAMPLES_DIR = join(ROOT, "examples");
@@ -69,6 +74,10 @@ usage:
                                               print the payload a ref resolves to
   morphogen store has <sha256:…> [--dir <path>]
                                               report whether a ref resolves
+  morphogen slots [--dir <path>]              list durable slot cells' state
+  morphogen slot get <name> [--dir <path>]    print a slot's current value
+  morphogen slot set <name> <value.json> [--dir <path>]
+                                              write a slot directly (seeding)
   morphogen pack <manifest.json> [--modules <dir>] [--dir <path>] [--out <dir>]
                                               print a closure bundle: the manifest plus every
                                               embedded sub-manifest and const-ref payload;
@@ -534,6 +543,7 @@ async function main(): Promise<number> {
             if (c.rounds !== undefined) entry.rounds = c.rounds;
             if (c.items !== undefined) entry.items = c.items;
             if (c.via !== undefined) entry.via = c.via;
+            if (c.slot !== undefined) entry.slot = c.slot;
             const tc = c.toolCalls;
             if (Array.isArray(tc) && tc.length) entry.toolCalls = tc.length;
             if (c.effectDigest !== undefined) entry.effectDigest = c.effectDigest;
@@ -578,6 +588,60 @@ async function main(): Promise<number> {
       );
       out({ dir: join(dir, "runs"), runs: rows });
       return 0;
+    }
+
+    case "slots": {
+      const { readdir } = await import("node:fs/promises");
+      let files: string[] = [];
+      try {
+        files = (await readdir(join(dir, "slots"))).filter((f) =>
+          f.endsWith(".json"),
+        );
+      } catch { /* no slots directory yet */ }
+      const rows: JsonObject[] = [];
+      for (const f of files.sort()) {
+        const name = f.replace(/\.json$/, "");
+        try {
+          const value = await readJson(join(dir, "slots", f));
+          rows.push({ name, value });
+        } catch (e) {
+          rows.push({ name, error: errorReport(e).message });
+        }
+      }
+      out({ dir: join(dir, "slots"), slots: rows });
+      return 0;
+    }
+
+    case "slot": {
+      const [sub, name, valueFile] = positional;
+      if (sub === "get") {
+        if (!name) usageError("morphogen slot get <name>");
+        const v = await store.getSlot(name);
+        if (v === undefined) {
+          throw new MorphogenError("STORE_MISS", `slot "${name}" is empty`);
+        }
+        out(v as JsonObject);
+        return 0;
+      }
+      if (sub === "set") {
+        if (!name || !valueFile) {
+          usageError("morphogen slot set <name> <value.json>");
+        }
+        const v = await readJson(resolve(valueFile));
+        const bytes = canonicalBytes(v);
+        if (bytes > BOUNDS.maxBlobBytes) {
+          throw new MorphogenError(
+            "BUDGET_EXHAUSTED",
+            `slot value ${bytes}B exceeds maxBlobBytes ${BOUNDS.maxBlobBytes}B`,
+          );
+        }
+        await store.setSlot(name, v);
+        out({ name, set: true });
+        return 0;
+      }
+      return usageError(
+        "morphogen slot get <name> | slot set <name> <value.json>",
+      );
     }
 
     case "suite": {

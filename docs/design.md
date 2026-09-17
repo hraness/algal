@@ -100,16 +100,27 @@ byte bounds, and depth are set by the top-level manifest and apply across
 every nested level. An inner manifest's own budgets apply when it runs as a
 root.
 
-**The store and executor are seams.** `Store` is six methods — manifests,
-receipts, and the `getValue`/`putValue` CAS behind `ref` ports; an Oh-backed
+**The store and executor are seams.** `Store` is ten methods — manifests,
+receipts, the `getValue`/`putValue` CAS behind `ref` ports, the
+`getEffect`/`putEffect` memo index behind `--cache-effects`, and the
+`getSlot`/`setSlot` mutable cells behind `slot` cells; an Oh-backed
 adapter lands when Oh's API settles (it is moving weekly). `Executor` is one
 async call; provider auth lives behind `--executor-cmd` or a host adapter.
 Morphogen never brokers model access. (From Oompa: custody and provider
 execution are different jobs.)
 
+**State is a cell.** A `slot` cell reads or writes a named, mutable,
+durable key in the store — memory across runs. This is the one place the
+model relaxes CAS discipline: a slot's content is *not* addressed by its
+digest, and that is why reads are recorded like effects — the receipt pins
+what the run saw, and `verify` serves the record, not the current store.
+Writes stay deterministic: same input, same slot content. Slot names share
+one flat space, so organisms can share memory on purpose — or collide, if
+they weren't paying attention.
+
 **Payloads are content-addressed too.** A `ref` port carries a `sha256:`
-token, not a value; `store` and `load` cells are the only IO points, so the
-graph shows exactly where data enters and leaves CAS. `maxValueBytes` makes
+token, not a value; `store`, `load`, and `slot` cells are the only IO
+points, so the graph shows exactly where data enters and leaves CAS. `maxValueBytes` makes
 this the enforced path, not the optional one: no port may carry more than
 256 KiB canonical, so bulk data goes through CAS by construction. A large
 document can pass through a hundred cells without ever appearing in a

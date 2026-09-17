@@ -532,3 +532,54 @@ describe("json port schemas", () => {
     ).toThrow(/unknown key/);
   });
 });
+
+describe("slot cells", () => {
+  test("slot cells parse, bound, and round-trip", () => {
+    const m = parseOrganismManifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:slots",
+      name: "Slots",
+      cells: [
+        {
+          id: "mem",
+          kind: "slot",
+          name: "count",
+          mode: "read",
+          default: { n: 0 },
+        },
+        { id: "sink", kind: "slot", name: "count", mode: "write" },
+      ],
+      edges: [],
+    });
+    const mem = m.cells[0] as {
+      kind: string;
+      name: string;
+      mode: string;
+      default?: unknown;
+    };
+    expect(mem.mode).toBe("read");
+    expect(mem.default).toEqual({ n: 0 });
+    const back = parseOrganismManifest(manifestToJson(m));
+    expect(manifestToJson(back)).toEqual(manifestToJson(m));
+  });
+
+  test("slot cells reject bad mode, bad name, and unknown keys", () => {
+    const cell = (extra: Record<string, unknown>) => ({
+      contract: "morphogen.organism.v1",
+      key: "organism:s",
+      name: "S",
+      cells: [{ id: "s", kind: "slot", name: "x", mode: "read", ...extra }],
+    });
+    expect(() =>
+      parseOrganismManifest(cell({ mode: "append" })),
+    ).toThrow(/mode/);
+    expect(() =>
+      parseOrganismManifest(
+        cell({ name: "has/slash" }),
+      ),
+    ).toThrow();
+    expect(() =>
+      parseOrganismManifest(cell({ via: "x" })),
+    ).toThrow(/unknown key/);
+  });
+});

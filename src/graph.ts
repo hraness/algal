@@ -94,6 +94,13 @@ export function cellSignature(
         inputs: { ref: { type: "ref" } },
         outputs: { data: { type: "json" } },
       };
+    case "slot":
+      return cell.mode === "write"
+        ? {
+            inputs: { data: { type: "json" } },
+            outputs: { data: { type: "json" } },
+          }
+        : { inputs: {}, outputs: { data: { type: "json" } } };
     case "organism": {
       const sub = children.get(cell.id);
       if (!sub?.manifest.interface) {

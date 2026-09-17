@@ -2466,3 +2466,148 @@ describe("assert.v1", () => {
     expect(r.outcome).toBe("complete");
   });
 });
+
+describe("slot cells", () => {
+  const counter = manifest({
+    contract: "morphogen.organism.v1",
+    key: "organism:counter",
+    name: "Counter",
+    cells: [
+      {
+        id: "mem",
+        kind: "slot",
+        name: "test-counter",
+        mode: "read",
+        default: 0,
+      },
+      { id: "bump", kind: "fn", fn: "inc.v1" },
+      { id: "sink", kind: "slot", name: "test-counter", mode: "write" },
+    ],
+    edges: [
+      {
+        from: { cell: "mem", port: "data" },
+        to: { cell: "bump", port: "value" },
+      },
+      {
+        from: { cell: "bump", port: "value" },
+        to: { cell: "sink", port: "data" },
+      },
+    ],
+  });
+
+  test("an empty slot emits the declared default; a write persists across runs", async () => {
+    const store = new MemoryStore();
+    const opts = {
+      manifest: counter,
+      args: {},
+      fns: builtinRegistry(),
+      store,
+      executors: [],
+    };
+    const r1 = await runOrganism(opts);
+    expect(r1.outcome).toBe("complete");
+    expect(r1.cells["mem"]?.outputs?.data).toBe(0); // default
+    expect(r1.cells["sink"]?.outputs?.data).toBe(1); // bumped
+    expect(r1.cells["mem"]?.slot).toEqual({
+      name: "test-counter",
+      mode: "read",
+    });
+    expect(await store.getSlot("test-counter")).toBe(1);
+
+    // a second run in the same store reads what the first wrote
+    const r2 = await runOrganism(opts);
+    expect(r2.cells["mem"]?.outputs?.data).toBe(1);
+    expect(r2.cells["sink"]?.outputs?.data).toBe(2);
+  });
+
+  test("a recorded read replays verbatim after the live slot moved on", async () => {
+    const store = new MemoryStore();
+    const opts = {
+      manifest: counter,
+      args: {},
+      fns: builtinRegistry(),
+      store,
+      executors: [],
+    };
+    const r1 = await runOrganism(opts);
+    await runOrganism(opts); // slot now holds 2
+    await runOrganism(opts); // 3
+    // r1 recorded a read of 0; replay must serve 0 even though the slot is 3
+    const rep = await verifyReceipt(
+      r1 as unknown as JsonValue,
+      manifestToJson(counter),
+      store,
+      builtinRegistry(),
+    );
+    expect(rep.ok).toBe(true);
+    expect(rep.mismatches).toEqual([]);
+  });
+
+  test("an empty slot with no default fails INPUT_MISSING, routable", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:slot-miss",
+      name: "SlotMiss",
+      cells: [
+        { id: "mem", kind: "slot", name: "never-written", mode: "read" },
+        { id: "recover", kind: "fn", fn: "pick.v1" },
+        {
+          id: "fname",
+          kind: "const",
+          outputs: { f: { type: "text", value: "code" } },
+        },
+      ],
+      edges: [
+        {
+          from: { cell: "mem", port: "data" },
+          to: { cell: "recover", port: "record" },
+          on: "fail",
+        },
+        {
+          from: { cell: "fname", port: "f" },
+          to: { cell: "recover", port: "field" },
+        },
+      ],
+    });
+    const store = new MemoryStore();
+    const r = await runOrganism({
+      manifest: m,
+      args: {},
+      fns: builtinRegistry(),
+      store,
+      executors: [],
+    });
+    expect(r.outcome).toBe("complete");
+    expect(r.cells["mem"]?.status).toBe("failed");
+    expect(r.cells["mem"]?.failure?.code).toBe("INPUT_MISSING");
+    expect(r.cells["recover"]?.outputs?.value).toBe("INPUT_MISSING");
+    // and the failed read replays identically even after the slot is filled
+    await store.setSlot("never-written", "now-it-exists");
+    const rep = await verifyReceipt(
+      r as unknown as JsonValue,
+      manifestToJson(m),
+      store,
+      builtinRegistry(),
+    );
+    expect(rep.ok).toBe(true);
+  });
+
+  test("a write-mode slot rejects default at parse time", () => {
+    expect(() =>
+      manifest({
+        contract: "morphogen.organism.v1",
+        key: "organism:bad",
+        name: "Bad",
+        cells: [
+          {
+            id: "sink",
+            kind: "slot",
+            name: "x",
+            mode: "write",
+            default: 0,
+          },
+        ],
+      }),
+    ).toThrow("only valid on read-mode");
+  });
+});
