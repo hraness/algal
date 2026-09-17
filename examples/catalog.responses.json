@@ -1,0 +1,58 @@
+{
+  "writer": {
+    "manifests": [
+      {
+        "contract": "morphogen.organism.v1",
+        "key": "organism:cand-a",
+        "name": "CandA",
+        "interface": {
+          "outputs": {
+            "out": {
+              "cell": "emit",
+              "port": "v"
+            }
+          }
+        },
+        "cells": [
+          {
+            "id": "emit",
+            "kind": "const",
+            "outputs": {
+              "v": {
+                "type": "text",
+                "value": "alpha"
+              }
+            }
+          }
+        ],
+        "edges": []
+      },
+      {
+        "contract": "morphogen.organism.v1",
+        "key": "organism:cand-b",
+        "name": "CandB",
+        "interface": {
+          "outputs": {
+            "out": {
+              "cell": "emit",
+              "port": "v"
+            }
+          }
+        },
+        "cells": [
+          {
+            "id": "emit",
+            "kind": "const",
+            "outputs": {
+              "v": {
+                "type": "text",
+                "value": "beta"
+              }
+            }
+          }
+        ],
+        "edges": []
+      }
+    ]
+  }
+}

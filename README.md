@@ -131,7 +131,12 @@ candidate's outputs and `child` collects the admitted digests: lineage on
 the receipt, then a `judge` picks one), and `lineage` (a `repeat` cell
 runs writer → `spawn` → judge per round, `carry` feeds each score back as
 feedback, `until` exits when the judge is satisfied — generations of
-generated programs, each digest-pinned under `gen/r<n>/run`) — with
+generated programs, each digest-pinned under `gen/r<n>/run`), and
+`catalog` (a `push.v1` append writes each run's `child` digests into a
+durable `bred` slot — a breeding journal that persists across runs), and
+`consent` (a generated manifest carries its own `gate` — deny skips the
+child's effectful cell entirely, so `run.data` reports the verdict and no
+effect was spent) — with
 scripted responses, then verifies each receipt offline. To run one yourself:
 
 ```sh

@@ -170,5 +170,26 @@ export function builtinRegistry(): FnRegistry {
     fn: (i) => ({ value: i.value === "a" ? "a" : "b" }),
   });
 
+  reg.set("push.v1", {
+    signature: {
+      inputs: {
+        list: { type: "json" },
+        item: { type: "json" },
+      },
+      outputs: { value: { type: "json" } },
+      cost: 5,
+    },
+    fn: (i) => {
+      const list = i.list;
+      if (!Array.isArray(list)) {
+        throw new MorphogenError(
+          "FN_FAILED",
+          "push.v1: list must be an array",
+        );
+      }
+      return { value: [...list, i.item ?? null] };
+    },
+  });
+
   return reg;
 }

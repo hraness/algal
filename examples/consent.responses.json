@@ -1,0 +1,41 @@
+{
+  "writer": {
+    "contract": "morphogen.organism.v1",
+    "key": "organism:consent-child",
+    "name": "ConsentChild",
+    "interface": {
+      "inputs": { "q": { "cell": "topic", "port": "q" } },
+      "outputs": {
+        "verdict": { "cell": "gate", "port": "out" },
+        "answer": { "cell": "act", "port": "out" }
+      }
+    },
+    "cells": [
+      { "id": "topic", "kind": "input", "outputs": { "q": "text" } },
+      {
+        "id": "gate",
+        "kind": "gate",
+        "inputs": { "what": "text" },
+        "prompt": "Approve answering this question?",
+        "output": { "kind": "choice", "labels": ["approve", "deny"] }
+      },
+      {
+        "id": "act",
+        "kind": "agent",
+        "inputs": { "q": "text", "ok": "text" },
+        "prompt": "Answer the question.",
+        "output": { "kind": "text" }
+      }
+    ],
+    "edges": [
+      { "from": { "cell": "topic", "port": "q" }, "to": { "cell": "gate", "port": "what" } },
+      { "from": { "cell": "topic", "port": "q" }, "to": { "cell": "act", "port": "q" } },
+      {
+        "from": { "cell": "gate", "port": "out" },
+        "to": { "cell": "act", "port": "ok" },
+        "guard": { "equals": "approve" }
+      }
+    ]
+  },
+  "gate": "deny"
+}

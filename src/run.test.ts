@@ -2956,4 +2956,84 @@ describe("spawn cells", () => {
     expect(r.cells["map/i1/run/emit"]?.outputs?.v).toBe("beta");
   });
 
+
+  test("push.v1 appends and rejects non-arrays", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:push-t",
+      name: "PushT",
+      cells: [
+        {
+          id: "log",
+          kind: "slot",
+          name: "push-test",
+          mode: "read",
+          default: [],
+        },
+        {
+          id: "item",
+          kind: "const",
+          outputs: { x: { type: "json", value: "new" } },
+        },
+        { id: "acc", kind: "fn", fn: "push.v1" },
+        { id: "sink", kind: "slot", name: "push-test", mode: "write" },
+      ],
+      edges: [
+        { from: { cell: "log", port: "data" }, to: { cell: "acc", port: "list" } },
+        { from: { cell: "item", port: "x" }, to: { cell: "acc", port: "item" } },
+        { from: { cell: "acc", port: "value" }, to: { cell: "sink", port: "data" } },
+      ],
+    });
+    const store = new MemoryStore();
+    const r1 = await runOrganism({
+      manifest: m,
+      args: {},
+      fns: builtinRegistry(),
+      store,
+      executors: [],
+    });
+    expect(r1.outcome).toBe("complete");
+    expect(r1.cells["sink"]?.outputs?.data).toEqual(["new"]);
+    // second run sees the accumulated log
+    const r2 = await runOrganism({
+      manifest: m,
+      args: {},
+      fns: builtinRegistry(),
+      store,
+      executors: [],
+    });
+    expect(r2.cells["sink"]?.outputs?.data).toEqual(["new", "new"]);
+    // non-array list fails FN_FAILED
+    const bad = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:push-bad",
+      name: "PushBad",
+      cells: [
+        {
+          id: "log",
+          kind: "const",
+          outputs: { l: { type: "json", value: { not: "a list" } } },
+        },
+        {
+          id: "item",
+          kind: "const",
+          outputs: { x: { type: "json", value: 1 } },
+        },
+        { id: "acc", kind: "fn", fn: "push.v1" },
+      ],
+      edges: [
+        { from: { cell: "log", port: "l" }, to: { cell: "acc", port: "list" } },
+        { from: { cell: "item", port: "x" }, to: { cell: "acc", port: "item" } },
+      ],
+    });
+    const r3 = await runOrganism({
+      manifest: bad,
+      args: {},
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [],
+    });
+    expect(r3.cells["acc"]?.failure?.code).toBe("FN_FAILED");
+  });
+
 });
