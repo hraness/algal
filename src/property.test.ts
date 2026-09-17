@@ -3,8 +3,11 @@
 // generator, no fuzzing dependency.
 
 import { describe, expect, test } from "bun:test";
+import { join } from "node:path";
+import { readdir } from "node:fs/promises";
 import { canonicalize, type JsonValue } from "./values";
 import { digestCanonical } from "./digest";
+import { manifestToJson, parseOrganismManifest } from "./contract";
 
 // mulberry32: tiny seeded PRNG, deterministic across runs and platforms.
 function rng(seed: number): () => number {
@@ -76,5 +79,34 @@ describe("canonicalization properties", () => {
       const reparsed = JSON.parse(canonicalize(v)) as JsonValue;
       expect(digestCanonical(reparsed)).toBe(digestCanonical(v));
     }
+  });
+});
+
+describe("manifest corpus properties", () => {
+  const EXAMPLES = join(import.meta.dir, "..", "examples");
+
+  test("every bundled example parses to a stable canonical form", async () => {
+    const files = (await readdir(EXAMPLES)).filter((f) =>
+      f.endsWith(".morphogen.json"),
+    );
+    expect(files.length).toBeGreaterThan(10);
+    for (const f of files) {
+      const raw = JSON.parse(
+        await Bun.file(join(EXAMPLES, f)).text(),
+      ) as JsonValue;
+      const once = manifestToJson(parseOrganismManifest(raw));
+      const twice = manifestToJson(parseOrganismManifest(once));
+      expect(twice).toEqual(once);
+    }
+  });
+
+  test("key permutation at any depth preserves the parsed manifest", async () => {
+    const raw = JSON.parse(
+      await Bun.file(join(EXAMPLES, "triage.morphogen.json")).text(),
+    ) as JsonValue;
+    const permuted = shuffleKeys(raw, rng(0xdead));
+    expect(manifestToJson(parseOrganismManifest(permuted))).toEqual(
+      manifestToJson(parseOrganismManifest(raw)),
+    );
   });
 });

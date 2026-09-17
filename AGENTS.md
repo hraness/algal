@@ -4,8 +4,9 @@
   the effect seam (`effects.ts`), the store (`store.ts`), verification
   (`verify.ts`), bundles (`bundle.ts`), transports (`transport.ts`),
   canonical values and digests, and colocated tests.
-- `cli.ts` — the Bun CLI (`run`, `verify`, `inspect`, `explain`, `diff`,
-  `store`, `pack`, `unpack`, `example`, `suite`).
+- `cli.ts` — the Bun CLI (`run`, `check`, `verify`, `inspect`, `explain`,
+  `diff`, `runs`, `digest`, `store`, `manifests`, `manifest`, `slots`,
+  `slot`, `pack`, `unpack`, `example`, `suite`).
 - `index.ts` — the package's public surface.
 - `examples/` — bundled manifests and scripted responses used by `suite`.
 - `spec/v1/organism.md` — the authoritative contract prose.

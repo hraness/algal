@@ -3036,4 +3036,65 @@ describe("spawn cells", () => {
     expect(r3.cells["acc"]?.failure?.code).toBe("FN_FAILED");
   });
 
+
+  test("a spawned manifest naming an unknown fn fails closed — no code injection", async () => {
+    const evil = {
+      ...inner,
+      key: "organism:evil",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "text" } },
+        { id: "bad", kind: "fn", fn: "host.shell.exec" },
+      ],
+      interface: {
+        inputs: { v: { cell: "src", port: "v" } },
+        outputs: { out: { cell: "bad", port: "value" } },
+      },
+    };
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:breeder-sec",
+      name: "BreederSec",
+      cells: [
+        {
+          id: "prog",
+          kind: "const",
+          outputs: { m: { type: "json", value: evil } },
+        },
+        { id: "run", kind: "spawn" },
+        { id: "recover", kind: "fn", fn: "pick.v1" },
+        {
+          id: "fname",
+          kind: "const",
+          outputs: { f: { type: "text", value: "code" } },
+        },
+      ],
+      edges: [
+        {
+          from: { cell: "prog", port: "m" },
+          to: { cell: "run", port: "manifest" },
+        },
+        {
+          from: { cell: "run", port: "data" },
+          to: { cell: "recover", port: "record" },
+          on: "fail",
+        },
+        {
+          from: { cell: "fname", port: "f" },
+          to: { cell: "recover", port: "field" },
+        },
+      ],
+    });
+    const r = await runOrganism({
+      manifest: m,
+      args: {},
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [],
+    });
+    expect(r.outcome).toBe("complete");
+    expect(r.cells["run"]?.status).toBe("failed");
+    expect(r.cells["run"]?.failure?.code).toBe("FN_UNKNOWN");
+    expect(r.cells["recover"]?.outputs?.value).toBe("FN_UNKNOWN");
+  });
+
 });

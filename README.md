@@ -211,7 +211,9 @@ broker provider access; the executor seam is where provider auth lives.
   effect index: an identical request digest serves the earlier recorded
   response (marked `cached` on the new receipt). Only successes memoize —
   recorded errors may be transient. `morphogen runs` lists the receipts
-  stored under `--dir`.
+  stored under `--dir`, and `morphogen manifests` / `manifest <digest>`
+  list and print the manifest CAS — including children admitted by
+  `spawn`, so a `bred` journal's digests resolve to inspectable programs.
 
 ## What not to infer
 

@@ -75,6 +75,9 @@ usage:
   morphogen store has <sha256:…> [--dir <path>]
                                               report whether a ref resolves
   morphogen slots [--dir <path>]              list durable slot cells' state
+  morphogen manifests [--dir <path>]         list manifests stored under --dir
+  morphogen manifest <sha256:…> [--dir <path>]
+                                              print a stored manifest
   morphogen slot get <name> [--dir <path>]    print a slot's current value
   morphogen slot set <name> <value.json> [--dir <path>]
                                               write a slot directly (seeding)
@@ -612,6 +615,50 @@ async function main(): Promise<number> {
       return 0;
     }
 
+    case "manifests": {
+      const { readdir } = await import("node:fs/promises");
+      let files: string[] = [];
+      try {
+        files = (await readdir(join(dir, "manifests"))).filter((f) =>
+          f.endsWith(".json"),
+        );
+      } catch { /* no manifests directory yet */ }
+      const rows: JsonObject[] = [];
+      for (const f of files.sort()) {
+        const digest = `sha256:${f.replace(/\.json$/, "")}`;
+        try {
+          const raw = (await readJson(join(dir, "manifests", f))) as JsonObject;
+          rows.push({
+            digest,
+            key: raw.key ?? null,
+            name: raw.name ?? null,
+            cells: Array.isArray(raw.cells) ? raw.cells.length : 0,
+          });
+        } catch (e) {
+          rows.push({ digest, error: errorReport(e).message });
+        }
+      }
+      rows.sort((a, b) =>
+        `${a.key ?? ""}${a.digest}`.localeCompare(
+          `${b.key ?? ""}${b.digest}`,
+        ),
+      );
+      out({ dir: join(dir, "manifests"), manifests: rows });
+      return 0;
+    }
+
+    case "manifest": {
+      const digest = positional[0];
+      if (!digest) {
+        return usageError("morphogen manifest <sha256:…> [--dir <path>]");
+      }
+      const m = await store.getManifest(digest as `sha256:${string}`);
+      if (!m) {
+        return usageError(`manifest ${digest} not found in ${dir}`);
+      }
+      out(manifestToJson(m));
+      return 0;
+    }
     case "slot": {
       const [sub, name, valueFile] = positional;
       if (sub === "get") {

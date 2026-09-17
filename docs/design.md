@@ -127,6 +127,20 @@ document can pass through a hundred cells without ever appearing in a
 receipt or an effect request — only its digest does, and the digest is what
 the request signs.
 
+**Programs are values too.** A `spawn` cell receives an organism manifest
+as ordinary `json` edge data, parses it through the same contract that
+admits manifests on disk, stores it by digest, and runs it nested under
+the spawning cell's path. Generated manifests inherit the host's registry,
+executors, store, transports, budgets, and depth bound — they are data
+products of cells, never a code-execution mechanism, so "an agent wrote
+this program" is no more dangerous than "an agent wrote this string":
+every cell name, port type, and digest still had to parse. The rest of
+the breeding loop is composition: `each` over a spawn wrapper is a bounded
+population, `repeat` with `carry` is bounded generations, a `slot` plus
+`push.v1` is a durable lineage journal, and a `gate` *inside* a generated
+manifest is consent the program carries with it — denial skips the
+effectful cell rather than asking the model nicely.
+
 ## Deferred on purpose
 
 - Delegated execution — a remote host runs the organism and you trust its
