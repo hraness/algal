@@ -2867,4 +2867,93 @@ describe("spawn cells", () => {
     expect(r.cells["run"]?.outputs?.data).toEqual({ out: { out: "deep" } });
   });
 
+
+  test("each over spawn runs a bounded population of generated manifests", async () => {
+    const store = new MemoryStore();
+    const wrapper = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:spawn-one",
+      name: "SpawnOne",
+      interface: {
+        inputs: { m: { cell: "in", port: "v" } },
+        outputs: {
+          result: { cell: "run", port: "data" },
+          child: { cell: "run", port: "digest" },
+        },
+      },
+      cells: [
+        { id: "in", kind: "input", outputs: { v: "json" } },
+        { id: "run", kind: "spawn" },
+      ],
+      edges: [
+        {
+          from: { cell: "in", port: "v" },
+          to: { cell: "run", port: "manifest" },
+        },
+      ],
+    });
+    const wd = await store.putManifest(wrapper);
+    const cand = (key: string, v: string) => ({
+      contract: "morphogen.organism.v1",
+      key,
+      name: key,
+      interface: { outputs: { out: { cell: "emit", port: "v" } } },
+      cells: [
+        {
+          id: "emit",
+          kind: "const",
+          outputs: { v: { type: "text", value: v } },
+        },
+      ],
+      edges: [],
+    });
+    const outer = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:hive-t",
+      name: "HiveT",
+      cells: [
+        {
+          id: "prog",
+          kind: "const",
+          outputs: {
+            list: {
+              type: "json",
+              value: [
+                cand("organism:cand-a", "alpha"),
+                cand("organism:cand-b", "beta"),
+              ],
+            },
+          },
+        },
+        { id: "map", kind: "each", manifest: wd, over: "m", maxItems: 4 },
+      ],
+      edges: [
+        {
+          from: { cell: "prog", port: "list" },
+          to: { cell: "map", port: "m" },
+        },
+      ],
+    });
+    const r = await runOrganism({
+      manifest: outer,
+      args: {},
+      fns: builtinRegistry(),
+      store,
+      executors: [],
+    });
+    expect(r.outcome).toBe("complete");
+    expect(r.cells["map"]?.items).toBe(2);
+    // population outputs collect in item order; child digests are lineage
+    expect(r.cells["map"]?.outputs?.result).toEqual([
+      { out: "alpha" },
+      { out: "beta" },
+    ]);
+    const kids = r.cells["map"]?.outputs?.child as string[];
+    expect(kids[0]).toMatch(/^sha256:/);
+    expect(await store.getManifest(kids[0] as `sha256:${string}`)).toBeDefined();
+    // per-item spawned cells record under map/i<n>/run/…
+    expect(r.cells["map/i0/run/emit"]?.outputs?.v).toBe("alpha");
+    expect(r.cells["map/i1/run/emit"]?.outputs?.v).toBe("beta");
+  });
+
 });

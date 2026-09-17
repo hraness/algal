@@ -124,7 +124,11 @@ hands the record to a `hold` cell), and `counter` (a `slot` cell reads a
 durable count, `inc.v1` bumps it, a write-mode `slot` stores it back — state
 that survives between runs), and `breed` (an agent emits a manifest as
 `json`; `spawn` admits it to CAS and runs it — the child's `echo` output
-surfaces through `data`, the admitted digest through `digest`) — with
+surfaces through `data`, the admitted digest through `digest`), and `hive`
+(an agent emits a *list* of candidate manifests; `each` maps them through
+a `spawn` wrapper — a bounded population where `result` collects every
+candidate's outputs and `child` collects the admitted digests: lineage on
+the receipt, then a `judge` picks one) — with
 scripted responses, then verifies each receipt offline. To run one yourself:
 
 ```sh
