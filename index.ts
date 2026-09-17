@@ -88,6 +88,13 @@ export type {
 export { parseFoundryReport, verifyFoundryReport } from "./src/foundry-verify";
 export type { FoundryVerifyReport } from "./src/foundry-verify";
 
+export { SEARCH_BOUNDS, SEARCH_CONTRACT, runFoundrySearch } from "./src/search";
+export type {
+  SearchGeneration,
+  SearchOptions,
+  SearchReport,
+} from "./src/search";
+
 export { digestCanonical, digestText } from "./src/digest";
 export type { Digest } from "./src/digest";
 

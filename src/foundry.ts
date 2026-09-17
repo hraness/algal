@@ -259,7 +259,14 @@ async function evaluateCases(
   return results;
 }
 
-export async function runFoundry(opts: FoundryOptions): Promise<FoundryReport> {
+export type FoundrySelection = {
+  candidates: FoundryCandidateResult[];
+  promoted: Digest;
+};
+
+export async function evaluateFoundryPopulation(
+  opts: FoundryOptions,
+): Promise<FoundrySelection> {
   validate(opts);
   const candidates: FoundryCandidateResult[] = [];
   const selectionCases = opts.cases.filter((c) => c.split !== "holdout");
@@ -283,6 +290,11 @@ export async function runFoundry(opts: FoundryOptions): Promise<FoundryReport> {
     });
   }
   const promoted = selectFoundryCandidate(candidates);
+  return { candidates, promoted };
+}
+
+export async function runFoundry(opts: FoundryOptions): Promise<FoundryReport> {
+  const { candidates, promoted } = await evaluateFoundryPopulation(opts);
   const promotedManifest = opts.candidates.find(
     (candidate) => digestCanonical(manifestToJson(candidate)) === promoted,
   )!;

@@ -4,6 +4,7 @@ import { digestCanonical } from "./digest";
 import { generateFoundryCandidates, runFoundry } from "./foundry";
 import { verifyFoundryReport } from "./foundry-verify";
 import { builtinRegistry } from "./registry";
+import { runFoundrySearch } from "./search";
 import { MemoryStore } from "./store";
 
 const echo = parseOrganismManifest({
@@ -39,6 +40,70 @@ const constant = parseOrganismManifest({
 });
 
 describe("foundry", () => {
+  test("search carries validation evidence across bounded generations without exposing holdout", async () => {
+    const generator = parseOrganismManifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:evolving-generator",
+      name: "Evolving generator",
+      interface: {
+        inputs: { feedback: { cell: "src", port: "feedback" } },
+        outputs: { candidates: { cell: "writer", port: "out" } },
+      },
+      cells: [
+        { id: "src", kind: "input", outputs: { feedback: "json" } },
+        {
+          id: "writer",
+          kind: "agent",
+          inputs: { feedback: "json" },
+          prompt: "Improve the candidate population from validation evidence.",
+          view: { inputs: ["feedback"] },
+          output: {
+            kind: "json",
+            schema: {
+              type: "object",
+              required: ["candidates"],
+              properties: { candidates: { type: "array" } },
+            },
+          },
+        },
+      ],
+      edges: [
+        { from: { cell: "src", port: "feedback" }, to: { cell: "writer", port: "feedback" } },
+      ],
+    });
+    let calls = 0;
+    const result = await runFoundrySearch({
+      generator,
+      generatorArgs: {},
+      feedbackInput: "feedback",
+      output: "candidates",
+      field: "candidates",
+      cases: [
+        { id: "train-a", split: "train", args: { q: "a" }, expect: { answer: "a" } },
+        { id: "validation-b", split: "validation", args: { q: "b" }, expect: { answer: "b" } },
+        { id: "holdout-c", split: "holdout", args: { q: "c" }, expect: { answer: "c" } },
+      ],
+      maxGenerations: 2,
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [{
+        id: "evolver",
+        async execute() {
+          return { candidates: [manifestToJson(calls++ === 0 ? constant : echo)] };
+        },
+      }],
+    });
+
+    expect(result.generations).toHaveLength(2);
+    expect(result.generations[0]?.candidates[0]?.validation.passed).toBe(0);
+    expect(result.generations[1]?.candidates).toHaveLength(2);
+    expect(result.generations.every((generation) =>
+      generation.candidates.every((candidate) => candidate.cases.every((c) => c.split !== "holdout")),
+    )).toBe(true);
+    expect(result.result.holdout.passed).toBe(1);
+    expect(result.result.promoted).toBe(digestCanonical(manifestToJson(echo)));
+  });
+
   test("runs an organism that emits candidate manifests and records its lineage", async () => {
     const generator = parseOrganismManifest({
       contract: "morphogen.organism.v1",
