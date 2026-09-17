@@ -1,9 +1,11 @@
 {
   "contract": "morphogen.foundry.config.v1",
-  "candidates": [
-    "foundry-constant.morphogen.json",
-    "foundry-echo.morphogen.json"
-  ],
+  "generator": {
+    "manifest": "foundry-generator.morphogen.json",
+    "args": { "task": "Return the input value unchanged." },
+    "output": "candidates",
+    "field": "candidates"
+  },
   "cases": [
     {
       "id": "train-alpha",
@@ -12,22 +14,16 @@
       "expect": { "answer": "alpha" }
     },
     {
-      "id": "train-beta",
-      "split": "train",
+      "id": "validation-beta",
+      "split": "validation",
       "args": { "q": "beta" },
       "expect": { "answer": "beta" }
     },
     {
-      "id": "validation-gamma",
-      "split": "validation",
+      "id": "holdout-gamma",
+      "split": "holdout",
       "args": { "q": "gamma" },
       "expect": { "answer": "gamma" }
-    },
-    {
-      "id": "holdout-delta",
-      "split": "holdout",
-      "args": { "q": "delta" },
-      "expect": { "answer": "delta" }
     }
   ]
 }

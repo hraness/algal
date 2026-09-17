@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { parseOrganismManifest } from "./contract";
-import { runFoundry } from "./foundry";
+import { manifestToJson, parseOrganismManifest } from "./contract";
+import { digestCanonical } from "./digest";
+import { generateFoundryCandidates, runFoundry } from "./foundry";
+import { verifyFoundryReport } from "./foundry-verify";
 import { builtinRegistry } from "./registry";
 import { MemoryStore } from "./store";
 
@@ -37,6 +39,66 @@ const constant = parseOrganismManifest({
 });
 
 describe("foundry", () => {
+  test("runs an organism that emits candidate manifests and records its lineage", async () => {
+    const generator = parseOrganismManifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:test-generator",
+      name: "Test generator",
+      interface: { inputs: {}, outputs: { candidates: { cell: "batch", port: "value" } } },
+      cells: [{
+        id: "batch",
+        kind: "const",
+        outputs: {
+          value: {
+            type: "json",
+            value: [manifestToJson(constant), manifestToJson(echo)],
+          },
+        },
+      }],
+      edges: [],
+    });
+    const store = new MemoryStore();
+    const generated = await generateFoundryCandidates({
+      generator,
+      args: {},
+      output: "candidates",
+      fns: builtinRegistry(),
+      store,
+      executors: [],
+    });
+    const result = await runFoundry({
+      candidates: generated.candidates,
+      cases: [
+        { id: "train-a", split: "train", args: { q: "a" }, expect: { answer: "a" } },
+        { id: "validation-b", split: "validation", args: { q: "b" }, expect: { answer: "b" } },
+        { id: "holdout-c", split: "holdout", args: { q: "c" }, expect: { answer: "c" } },
+      ],
+      fns: builtinRegistry(),
+      store,
+      executors: [],
+      lineage: {
+        generatorDigest: generated.generatorDigest,
+        receiptDigest: generated.receiptDigest,
+      },
+    });
+
+    expect(generated.candidates).toHaveLength(2);
+    expect(generated.receiptDigest).toMatch(/^sha256:/);
+    expect(result.lineage?.generatorDigest).toBe(generated.generatorDigest);
+    expect(result.promoted).toBe(result.candidates[1]!.manifestDigest);
+    const verified = await verifyFoundryReport(result, store, builtinRegistry());
+    expect(verified.ok).toBe(true);
+    expect(verified.checkedReceipts).toBe(6);
+
+    const tampered = structuredClone(result);
+    tampered.holdout.cases[0]!.expect.answer = "wrong";
+    const { digest: _digest, ...tamperedBase } = tampered;
+    tampered.digest = digestCanonical(tamperedBase as never);
+    const rejected = await verifyFoundryReport(tampered, store, builtinRegistry());
+    expect(rejected.ok).toBe(false);
+    expect(rejected.mismatches).toContain("holdout case holdout-c has an invalid pass claim");
+  });
+
   test("evaluates train and validation cases and promotes the best candidate", async () => {
     const store = new MemoryStore();
     const result = await runFoundry({
@@ -44,6 +106,7 @@ describe("foundry", () => {
       cases: [
         { id: "train-a", split: "train", args: { q: "a" }, expect: { answer: "a" } },
         { id: "validation-b", split: "validation", args: { q: "b" }, expect: { answer: "b" } },
+        { id: "holdout-c", split: "holdout", args: { q: "c" }, expect: { answer: "c" } },
       ],
       fns: builtinRegistry(),
       store,
@@ -56,6 +119,8 @@ describe("foundry", () => {
     expect(result.candidates[0]?.validation.passed).toBe(0);
     expect(result.candidates[1]?.validation.passed).toBe(1);
     expect(result.promoted).toBe(result.candidates[1]!.manifestDigest);
+    expect(result.holdout.passed).toBe(1);
+    expect(result.holdout.cases[0]?.outputs).toEqual({ answer: "c" });
     expect(result.candidates[1]?.cases[1]?.receiptDigest).toMatch(/^sha256:/);
     expect(await store.getReceipt(result.candidates[1]!.cases[1]!.receiptDigest!)).toBeDefined();
   });
@@ -80,6 +145,7 @@ describe("foundry", () => {
       cases: [
         { id: "same", split: "train" as const, args: { q: "a" }, expect: { answer: "a" } },
         { id: "same", split: "validation" as const, args: { q: "b" }, expect: { answer: "b" } },
+        { id: "holdout", split: "holdout" as const, args: { q: "c" }, expect: { answer: "c" } },
       ],
     })).rejects.toThrow("duplicate foundry case id");
     await expect(runFoundry({
@@ -88,6 +154,7 @@ describe("foundry", () => {
       cases: [
         { id: "train", split: "train", args: {}, expect: {} },
         { id: "validation", split: "validation", args: {}, expect: {} },
+        { id: "holdout", split: "holdout", args: {}, expect: {} },
       ],
     })).rejects.toThrow("must declare an interface");
   });

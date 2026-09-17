@@ -1,0 +1,32 @@
+{
+  "contract": "morphogen.organism.v1",
+  "key": "organism:foundry-generator",
+  "name": "Foundry candidate generator",
+  "budgets": { "maxSteps": 8, "maxAgentCalls": 1, "maxWork": 100000 },
+  "interface": {
+    "inputs": { "task": { "cell": "src", "port": "task" } },
+    "outputs": { "candidates": { "cell": "writer", "port": "out" } }
+  },
+  "cells": [
+    { "id": "src", "kind": "input", "outputs": { "task": "text" } },
+    {
+      "id": "writer",
+      "kind": "agent",
+      "inputs": { "task": "text" },
+      "prompt": "Emit a bounded list of morphogen.organism.v1 candidate manifests for the task.",
+      "view": { "inputs": ["task"] },
+      "output": {
+        "kind": "json",
+        "schema": {
+          "type": "object",
+          "required": ["candidates"],
+          "properties": { "candidates": { "type": "array" } }
+        }
+      },
+      "budget": { "maxContextBytes": 4096, "maxOutputBytes": 32768 }
+    }
+  ],
+  "edges": [
+    { "from": { "cell": "src", "port": "task" }, "to": { "cell": "writer", "port": "task" } }
+  ]
+}

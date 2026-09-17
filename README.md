@@ -160,37 +160,56 @@ bun run cli unpack bundle.json --dir /tmp/elsewhere   # installs, digests verifi
 
 ## Foundry: select organisms by evidence
 
-A foundry evaluates a bounded population of organism manifests against explicit
-train and validation cases, persists every child run receipt, and promotes one
-manifest digest. The baseline scorer is deliberately deterministic: a case
-passes only when the organism completes and its interface outputs canonically
-equal the expected record.
+A foundry evaluates a bounded population against explicit train and validation
+cases, promotes one manifest digest, and only then runs that winner on the
+holdout split. A case passes only when the organism completes and its interface
+outputs canonically equal the expected record. Every candidate manifest and run
+receipt is persisted.
+
+Candidates may be named files or manifests emitted as data by a generator
+organism. The generator runs under the same executor, registry, store, and
+budgets as any other organism; its digest and receipt become the population's
+lineage. A generator may itself use `each`, `repeat`, `spawn`, slots, and gates,
+so bounded populations, iterative search, durable journals, and approval are
+composition rather than privileged foundry code.
 
 ```sh
-bun run cli foundry examples/foundry.config.json --dir .morphogen
+bun run cli foundry examples/generated-foundry.config.json \
+  --responses examples/foundry-generator.responses.json \
+  --dir .morphogen --out foundry-report.json
+bun run cli foundry inspect foundry-report.json
+bun run cli foundry verify foundry-report.json --dir .morphogen
+bun run cli foundry pack foundry-report.json --dir .morphogen --out bundles
 ```
 
-A `morphogen.foundry.config.v1` file names candidate manifest paths and cases:
+A `morphogen.foundry.config.v1` file declares the generator, cases, and optionally
+additional candidate paths:
 
 ```json
 {
   "contract": "morphogen.foundry.config.v1",
-  "candidates": ["a.morphogen.json", "b.morphogen.json"],
+  "generator": {
+    "manifest": "generator.morphogen.json",
+    "args": { "task": "Return the input unchanged." },
+    "output": "candidates",
+    "field": "candidates"
+  },
   "cases": [
     { "id": "train-a", "split": "train", "args": { "q": "a" }, "expect": { "answer": "a" } },
-    { "id": "validation-b", "split": "validation", "args": { "q": "b" }, "expect": { "answer": "b" } }
+    { "id": "validation-b", "split": "validation", "args": { "q": "b" }, "expect": { "answer": "b" } },
+    { "id": "holdout-c", "split": "holdout", "args": { "q": "c" }, "expect": { "answer": "c" } }
   ]
 }
 ```
 
-Candidate paths resolve relative to the config file. Candidates must declare the
-same case-facing interface. The report records train and validation scores, work,
-outputs, and receipt digests for every case. Promotion prefers validation pass
-rate, then train pass rate, then fewer agent calls and work units, with manifest
-digest as the final deterministic tie-breaker. `--responses` supplies scripted
-effects for deterministic agent candidates. Model judges, candidate generation,
-and search strategies remain host concerns; the foundry report is the stable,
-replayable evidence layer beneath them.
+Paths resolve relative to the config. Promotion prefers validation pass rate,
+then train pass rate, then fewer agent calls and work units, with manifest digest
+as the final tie-breaker. Non-promoted candidates never run against holdout
+cases. A `morphogen.foundry.v1` report records expectations, outputs, work,
+manifest and receipt digests, generator lineage, and the winner's holdout result.
+`foundry verify` checks the report digest, scores, selection, claimed outputs,
+and every run receipt by offline replay. `foundry pack` verifies that evidence
+before exporting the promoted organism's content-addressed closure.
 
 `check` admits a manifest without running it: parse, graph validation, and
 interface resolution only. `explain` prints the compiled signature — every
@@ -272,6 +291,7 @@ detection.
 ## Deeper documentation
 
 - `spec/v1/organism.md` — the manifest, run, and receipt contract.
+- `spec/v1/foundry.md` — candidate generation, evidence, promotion, and verification.
 - `docs/` — design notes as they land.
 
 ## Related work

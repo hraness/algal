@@ -1,0 +1,36 @@
+{
+  "writer": {
+    "candidates": [
+    {
+      "contract": "morphogen.organism.v1",
+      "key": "organism:generated-constant",
+      "name": "Generated constant candidate",
+      "interface": {
+        "inputs": { "q": { "cell": "src", "port": "value" } },
+        "outputs": { "answer": { "cell": "out", "port": "value" } }
+      },
+      "cells": [
+        { "id": "src", "kind": "input", "outputs": { "value": "json" } },
+        { "id": "out", "kind": "const", "outputs": { "value": { "type": "json", "value": "alpha" } } }
+      ],
+      "edges": []
+    },
+    {
+      "contract": "morphogen.organism.v1",
+      "key": "organism:generated-echo",
+      "name": "Generated echo candidate",
+      "interface": {
+        "inputs": { "q": { "cell": "src", "port": "value" } },
+        "outputs": { "answer": { "cell": "echo", "port": "value" } }
+      },
+      "cells": [
+        { "id": "src", "kind": "input", "outputs": { "value": "json" } },
+        { "id": "echo", "kind": "fn", "fn": "echo.v1" }
+      ],
+      "edges": [
+        { "from": { "cell": "src", "port": "value" }, "to": { "cell": "echo", "port": "value" } }
+      ]
+    }
+    ]
+  }
+}

@@ -68,14 +68,25 @@ export type { Transport } from "./src/transport";
 export { verifyReceipt } from "./src/verify";
 export type { VerifyReport } from "./src/verify";
 
-export { FOUNDRY_BOUNDS, FOUNDRY_CONTRACT, runFoundry } from "./src/foundry";
+export {
+  FOUNDRY_BOUNDS,
+  FOUNDRY_CONTRACT,
+  generateFoundryCandidates,
+  runFoundry,
+  selectFoundryCandidate,
+} from "./src/foundry";
 export type {
   FoundryCandidateResult,
   FoundryCase,
   FoundryCaseResult,
+  FoundryLineage,
   FoundryOptions,
   FoundryReport,
+  GenerateCandidatesOptions,
+  GeneratedCandidates,
 } from "./src/foundry";
+export { parseFoundryReport, verifyFoundryReport } from "./src/foundry-verify";
+export type { FoundryVerifyReport } from "./src/foundry-verify";
 
 export { digestCanonical, digestText } from "./src/digest";
 export type { Digest } from "./src/digest";
