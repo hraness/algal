@@ -19,6 +19,11 @@ import { builtinRegistry } from "./src/registry";
 import { parseRunReceipt, runOrganism, type RunReceipt } from "./src/run";
 import { packOrganism, parseBundle, unpackBundle } from "./src/bundle";
 import { FileStore } from "./src/store";
+import {
+  fileTransport,
+  parseTransportsFile,
+  type Transport,
+} from "./src/transport";
 import { diffReceipts, verifyReceipt } from "./src/verify";
 import { canonicalize, type JsonObject, type JsonValue } from "./src/values";
 
@@ -37,13 +42,15 @@ usage:
       --executors <file>                      JSON map of executor name → shell command;
                                               route.provider/route.preset pick by name
       --modules <dir>                         load *.morphogen.json into the store for organism cells
+      --transports <file>                     JSON map of transport name → bundle directory;
+                                              via cells resolve remote manifests through it
       --dir <path>                            store directory (default .morphogen)
       --write                                 persist manifest + receipt under --dir
-  morphogen check <manifest.json> [--modules <dir>] [--dir <path>]
+  morphogen check <manifest.json> [--modules <dir>] [--transports <file>] [--dir <path>]
                                               admit a manifest without running it
-  morphogen explain <manifest.json> [--modules <dir>] [--dir <path>]
+  morphogen explain <manifest.json> [--modules <dir>] [--transports <file>] [--dir <path>]
                                               print the compiled signature: resolved ports, guards
-  morphogen verify <receipt.json> [manifest.json] [--modules <dir>] [--dir <path>]
+  morphogen verify <receipt.json> [manifest.json] [--modules <dir>] [--transports <file>] [--dir <path>]
                                               re-run with recorded receipts and compare;
                                               manifest resolves from the store when omitted
   morphogen inspect <receipt.json>            summarize a run receipt
@@ -57,9 +64,10 @@ usage:
                                               print the payload a ref resolves to
   morphogen store has <sha256:…> [--dir <path>]
                                               report whether a ref resolves
-  morphogen pack <manifest.json> [--modules <dir>] [--dir <path>]
+  morphogen pack <manifest.json> [--modules <dir>] [--dir <path>] [--out <dir>]
                                               print a closure bundle: the manifest plus every
-                                              embedded sub-manifest and const-ref payload
+                                              embedded sub-manifest and const-ref payload;
+                                              --out also writes <root-hex>.bundle.json
   morphogen unpack <bundle.json> [--dir <path>]
                                               install a bundle into the store, digests verified
   morphogen --version | --help
@@ -134,6 +142,19 @@ async function loadModules(
     loaded++;
   }
   return loaded;
+}
+
+/** `--transports <file>` maps transport names to bundle directories —
+ * what `pack --out` writes. */
+async function loadTransports(
+  file: string,
+): Promise<Record<string, Transport>> {
+  const map = parseTransportsFile(await readJson(resolve(file)));
+  const out: Record<string, Transport> = {};
+  for (const [name, dir] of Object.entries(map)) {
+    out[name] = fileTransport(resolve(dir), name);
+  }
+  return out;
 }
 
 async function main(): Promise<number> {
@@ -237,6 +258,17 @@ async function main(): Promise<number> {
       }
       const manifest = parseOrganismManifest(await readJson(resolve(file)));
       const bundle = await packOrganism(manifest, store);
+      if (flags.out !== undefined) {
+        const { mkdir, writeFile } = await import("node:fs/promises");
+        const dirPath = resolve(String(flags.out));
+        await mkdir(dirPath, { recursive: true });
+        const target = join(
+          dirPath,
+          `${bundle.root.slice("sha256:".length)}.bundle.json`,
+        );
+        await writeFile(target, canonicalize(bundle as unknown as JsonValue));
+        diag(`wrote ${target}`);
+      }
       out(bundle as unknown as JsonValue);
       return 0;
     }
@@ -258,7 +290,15 @@ async function main(): Promise<number> {
         diag(`loaded ${n} module(s) from ${flags.modules}`);
       }
       const manifest = parseOrganismManifest(await readJson(resolve(file)));
-      const compiled = await compileOrganism(manifest, fns, store);
+      const compiled = await compileOrganism(
+        manifest,
+        fns,
+        store,
+        0,
+        flags.transports !== undefined
+          ? await loadTransports(String(flags.transports))
+          : undefined,
+      );
       out({
         ok: true,
         key: manifest.key,
@@ -279,7 +319,15 @@ async function main(): Promise<number> {
         diag(`loaded ${n} module(s) from ${flags.modules}`);
       }
       const manifest = parseOrganismManifest(await readJson(resolve(file)));
-      const compiled = await compileOrganism(manifest, fns, store);
+      const compiled = await compileOrganism(
+        manifest,
+        fns,
+        store,
+        0,
+        flags.transports !== undefined
+          ? await loadTransports(String(flags.transports))
+          : undefined,
+      );
       const ptJson = (p: {
         type: string;
         optional?: boolean;
@@ -366,8 +414,19 @@ async function main(): Promise<number> {
         }
         diag(`loaded ${Object.keys(map).length} named executor(s)`);
       }
+      const transports =
+        flags.transports !== undefined
+          ? await loadTransports(String(flags.transports))
+          : undefined;
 
-      const receipt = await runOrganism({ manifest, args, fns, store, executors });
+      const receipt = await runOrganism({
+        manifest,
+        args,
+        fns,
+        store,
+        executors,
+        ...(transports ? { transports } : {}),
+      });
 
       if (flags.write) {
         const md = await store.putManifest(manifest);
@@ -410,7 +469,15 @@ async function main(): Promise<number> {
         manifest = manifestToJson(stored);
         diag(`resolved manifest ${digest} from store`);
       }
-      const report = await verifyReceipt(receipt, manifest, store, fns);
+      const report = await verifyReceipt(
+        receipt,
+        manifest,
+        store,
+        fns,
+        flags.transports !== undefined
+          ? await loadTransports(String(flags.transports))
+          : undefined,
+      );
       out(report as unknown as JsonObject);
       return report.ok ? 0 : 1;
     }
@@ -456,6 +523,7 @@ async function main(): Promise<number> {
             if (c.shadowOut !== undefined) entry.shadowOut = c.shadowOut;
             if (c.rounds !== undefined) entry.rounds = c.rounds;
             if (c.items !== undefined) entry.items = c.items;
+            if (c.via !== undefined) entry.via = c.via;
             const tc = c.toolCalls;
             if (Array.isArray(tc) && tc.length) entry.toolCalls = tc.length;
             if (c.effectDigest !== undefined) entry.effectDigest = c.effectDigest;
@@ -507,18 +575,26 @@ async function main(): Promise<number> {
             args[k] = asRecord(v, `args.${k}`) as Record<string, JsonValue>;
           }
         } catch { /* no args file */ }
+        let transports: Record<string, Transport> | undefined;
+        try {
+          transports = await loadTransports(
+            join(EXAMPLES_DIR, `${id}.transports.json`),
+          );
+        } catch { /* no transports file */ }
         const receipt = await runOrganism({
           manifest,
           args,
           fns,
           store,
           executors: [scriptedExecutor(responses)],
+          ...(transports ? { transports } : {}),
         });
         const report = await verifyReceipt(
           receipt as unknown as JsonValue,
           manifestRaw,
           store,
           fns,
+          transports,
         );
         const ok = receipt.outcome === "complete" && report.ok;
         allOk = allOk && ok;

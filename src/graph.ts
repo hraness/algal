@@ -14,6 +14,8 @@ import type { FnRegistry } from "./registry";
 import type { Store } from "./store";
 import { asDigest } from "./digest";
 import { parseOrganismManifest } from "./contract";
+import { unpackBundle } from "./bundle";
+import type { Transport } from "./transport";
 import type { JsonValue } from "./values";
 
 export type CellPorts = { inputs: PortMap; outputs: PortMap };
@@ -24,6 +26,9 @@ export type CompiledOrganism = {
   inbound: Map<string, { edge: number; port: string }[]>;
   /** Compiled sub-organisms for organism cells, keyed by cell id. */
   children: Map<string, CompiledOrganism>;
+  /** Cells whose sub-manifest came through a transport this compile —
+   * cell id → transport name. Recorded on the receipt as provenance. */
+  resolvedVia: Map<string, string>;
 };
 
 export function outputPortType(
@@ -281,6 +286,7 @@ export async function compileOrganism(
   fns: FnRegistry,
   store: Store,
   depth = 0,
+  transports?: Record<string, Transport>,
 ): Promise<CompiledOrganism> {
   if (depth > MAX_COMPILE_DEPTH) {
     throw new MorphogenError(
@@ -301,19 +307,43 @@ export async function compileOrganism(
 
   // resolve organism/repeat children recursively; digest references always
   // point to already-stored manifests, so the embedding graph is acyclic by
-  // construction
+  // construction. A `via` cell whose manifest misses locally fetches the
+  // closure bundle through the named transport — digests verify on install.
   const children = new Map<string, CompiledOrganism>();
+  const resolvedVia = new Map<string, string>();
   for (const cell of manifest.cells) {
     if (cell.kind !== "organism" && cell.kind !== "repeat" && cell.kind !== "each") continue;
     const digest = asDigest(cell.manifest, `cell "${cell.id}".manifest`);
-    const sub = await store.getManifest(digest);
+    let sub = await store.getManifest(digest);
+    if (!sub && cell.via) {
+      const t = transports?.[cell.via];
+      if (!t) {
+        throw new MorphogenError(
+          "STORE_MISS",
+          `cell "${cell.id}" manifest ${digest} not in store and transport "${cell.via}" is not configured`,
+        );
+      }
+      const bundle = await t.getBundle(digest);
+      if (!bundle) {
+        throw new MorphogenError(
+          "STORE_MISS",
+          `cell "${cell.id}": transport "${cell.via}" has no bundle rooted at ${digest}`,
+        );
+      }
+      await unpackBundle(bundle, store);
+      sub = await store.getManifest(digest);
+      if (sub) resolvedVia.set(cell.id, cell.via);
+    }
     if (!sub) {
       throw new MorphogenError(
         "STORE_MISS",
         `organism cell "${cell.id}" manifest ${digest} not in store`,
       );
     }
-    children.set(cell.id, await compileOrganism(sub, fns, store, depth + 1));
+    children.set(
+      cell.id,
+      await compileOrganism(sub, fns, store, depth + 1, transports),
+    );
   }
 
   // signatures
@@ -548,7 +578,7 @@ export async function compileOrganism(
     );
   }
 
-  return { manifest, ports, inbound, children };
+  return { manifest, ports, inbound, children, resolvedVia };
 }
 
 function describePort(p: PortType): string {

@@ -52,6 +52,9 @@ export const BOUNDS = {
   maxArgsBytes: 1_048_576,
   maxBlobBytes: 262_144,
   maxRetryAttempts: 8,
+  /** One bundle file a transport reads — closure of manifests + values. */
+  maxBundleBytes: 67_108_864,
+  maxTransports: 16,
   /** A single port value — produced or collected — never exceeds this.
    * Larger payloads go through `store` cells and `ref` tokens. */
   maxValueBytes: 262_144,
@@ -154,6 +157,7 @@ export type Cell =
       maxRounds: number;
       carry?: Record<string, string>;
       until?: { output: string; equals: string; field?: string };
+      via?: string;
     }
   | {
       id: string;
@@ -161,6 +165,7 @@ export type Cell =
       manifest: Digest;
       over: PortName;
       maxItems: number;
+      via?: string;
     }
   | {
       id: string;
@@ -173,7 +178,7 @@ export type Cell =
       budget?: CellBudget;
       retry?: { attempts: number };
     }
-  | { id: string; kind: "organism"; manifest: string }
+  | { id: string; kind: "organism"; manifest: string; via?: string }
   /** `store` writes its `data` input into the content-addressed store and
    * produces a `ref`; `load` resolves a `ref` back to its payload. The only
    * IO cells — payloads live in CAS, only digest tokens ride edges. */
@@ -543,8 +548,8 @@ function parseCell(u: unknown, what: string): Cell {
       return { id, kind };
     }
     case "organism": {
-      noUnknownKeys(obj, ["id", "kind", "manifest"], what);
-      return {
+      noUnknownKeys(obj, ["id", "kind", "manifest", "via"], what);
+      const cell: Cell = {
         id,
         kind,
         manifest: asString(
@@ -553,11 +558,16 @@ function parseCell(u: unknown, what: string): Cell {
           72,
         ) as Digest,
       };
+      const via = optField(obj, "via");
+      if (via !== undefined) {
+        cell.via = asSafeId(via, `${what}.via`);
+      }
+      return cell;
     }
     case "repeat": {
       noUnknownKeys(
         obj,
-        ["id", "kind", "manifest", "maxRounds", "carry", "until"],
+        ["id", "kind", "manifest", "maxRounds", "carry", "until", "via"],
         what,
       );
       const cell: Cell = {
@@ -613,11 +623,19 @@ function parseCell(u: unknown, what: string): Cell {
           cell.until.field = asSafeId(uf, `${what}.until.field`);
         }
       }
+      const via = optField(obj, "via");
+      if (via !== undefined) {
+        cell.via = asSafeId(via, `${what}.via`);
+      }
       return cell;
     }
     case "each": {
-      noUnknownKeys(obj, ["id", "kind", "manifest", "over", "maxItems"], what);
-      return {
+      noUnknownKeys(
+        obj,
+        ["id", "kind", "manifest", "over", "maxItems", "via"],
+        what,
+      );
+      const cell: Cell = {
         id,
         kind,
         manifest: asString(
@@ -633,6 +651,11 @@ function parseCell(u: unknown, what: string): Cell {
           BOUNDS.maxEachItems,
         ),
       };
+      const via = optField(obj, "via");
+      if (via !== undefined) {
+        cell.via = asSafeId(via, `${what}.via`);
+      }
+      return cell;
     }
     case "agent":
     case "classifier":
@@ -1001,8 +1024,15 @@ export function manifestToJson(m: OrganismManifest): JsonObject {
       case "store":
       case "load":
         return { id: c.id, kind: c.kind };
-      case "organism":
-        return { id: c.id, kind: c.kind, manifest: c.manifest };
+      case "organism": {
+        const o: JsonObject = {
+          id: c.id,
+          kind: c.kind,
+          manifest: c.manifest,
+        };
+        if (c.via) o.via = c.via;
+        return o;
+      }
       case "repeat": {
         const o: JsonObject = {
           id: c.id,
@@ -1018,16 +1048,20 @@ export function manifestToJson(m: OrganismManifest): JsonObject {
             ...(c.until.field !== undefined ? { field: c.until.field } : {}),
           };
         }
+        if (c.via) o.via = c.via;
         return o;
       }
-      case "each":
-        return {
+      case "each": {
+        const o: JsonObject = {
           id: c.id,
           kind: c.kind,
           manifest: c.manifest,
           over: c.over,
           maxItems: c.maxItems,
         };
+        if (c.via) o.via = c.via;
+        return o;
+      }
       case "agent":
       case "classifier":
       case "gate": {

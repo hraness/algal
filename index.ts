@@ -57,6 +57,9 @@ export {
 } from "./src/bundle";
 export type { Bundle } from "./src/bundle";
 
+export { fileTransport, parseTransportsFile } from "./src/transport";
+export type { Transport } from "./src/transport";
+
 export { verifyReceipt } from "./src/verify";
 export type { VerifyReport } from "./src/verify";
 

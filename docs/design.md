@@ -67,7 +67,13 @@ run still bounds nesting depth via the root manifest's `maxDepth`.
 `pack`/`unpack` turn that embedding graph into a portable artifact: a bundle
 is the root manifest plus every manifest it reaches plus every `const`-ref'd
 payload, digest-keyed and verified on install — the whole closure moves
-between stores as data.
+between stores as data. A `via` field on an embedding cell names a transport
+(`--transports` maps names to bundle sources); on a local miss the closure
+arrives through it, verified the same way. This is the honest half of remote
+organisms: remote *resolution*, local execution — no signature needed because
+the digest is the authentication. Delegating the run itself to a remote host
+(trusting someone else's receipt) is what needs signed identity, and stays
+deferred to Valhalla.
 
 **Retry is re-issue, not repair.** `retry: {"attempts": n}` on an effect cell
 means: on a failed effect, record the attempt — error or contract violation,
@@ -112,8 +118,9 @@ the request signs.
 
 ## Deferred on purpose
 
-- Multi-owner messaging and remote organisms (needs signed envelopes — a
-  Valhalla concern).
+- Delegated execution — a remote host runs the organism and you trust its
+  receipt (needs signed identity/attestation — a Valhalla concern). Remote
+  *resolution* via `via`/transports is implemented.
 - Workflow breeding/mutation, organisms that emit organisms.
 - Hosted habitats: persistent goal-seeking configurations of many organisms.
 - A real view language over the program graph (beyond `view.cells`).

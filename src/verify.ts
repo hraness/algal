@@ -13,6 +13,7 @@ import {
 } from "./run";
 import { manifestToJson, parseOrganismManifest } from "./contract";
 import type { Store } from "./store";
+import type { Transport } from "./transport";
 import { MorphogenError } from "./errors";
 import { canonicalize, type JsonValue } from "./values";
 
@@ -28,6 +29,7 @@ export async function verifyReceipt(
   manifestJson: JsonValue,
   store: Store,
   fns: FnRegistry = builtinRegistry(),
+  transports?: Record<string, Transport>,
 ): Promise<VerifyReport> {
   const original = parseRunReceipt(receiptJson);
   const manifest = parseOrganismManifest(manifestJson);
@@ -43,12 +45,18 @@ export async function verifyReceipt(
     };
   }
 
+  const replayVia: Record<string, string> = {};
+  for (const [path, rec] of Object.entries(original.cells)) {
+    if (rec.via) replayVia[path] = rec.via;
+  }
   const rerun = await runOrganism({
     manifest,
     args: original.args,
     fns,
     store,
     executors: [replayExecutor(original.effects)],
+    replayVia,
+    ...(transports ? { transports } : {}),
   });
 
   const mismatches = diffReceipts(original, rerun);
@@ -112,6 +120,9 @@ export function diffReceipts(a: RunReceipt, b: RunReceipt): string[] {
     }
     if (!eq(ac.shadowOut, bc.shadowOut)) {
       out.push(`cell ${k}: shadowOut differs`);
+    }
+    if (ac.via !== bc.via) {
+      out.push(`cell ${k}: via ${ac.via ?? "local"} vs ${bc.via ?? "local"}`);
     }
   }
   if (a.effects.length !== b.effects.length) {

@@ -106,6 +106,13 @@ export function parseBundle(u: unknown): Bundle {
   }
   const root = asDigest(reqField(obj, "root", "bundle"), "bundle.root");
   const manifestsRaw = asObject(reqField(obj, "manifests", "bundle"), "bundle.manifests");
+  const cap = BOUNDS.maxCells * BOUNDS.maxDepth;
+  if (Object.keys(manifestsRaw).length > cap) {
+    throw new MorphogenError(
+      "BUDGET_EXHAUSTED",
+      `bundle.manifests exceeds ${cap} entries`,
+    );
+  }
   const manifests: Record<Digest, JsonValue> = {};
   for (const [k, v] of Object.entries(manifestsRaw)) {
     manifests[asDigest(k, "bundle.manifests key")] = v;
@@ -113,6 +120,12 @@ export function parseBundle(u: unknown): Bundle {
   const values: Record<Digest, JsonValue> = {};
   if (obj.values !== undefined) {
     const vraw = asObject(obj.values, "bundle.values");
+    if (Object.keys(vraw).length > cap) {
+      throw new MorphogenError(
+        "BUDGET_EXHAUSTED",
+        `bundle.values exceeds ${cap} entries`,
+      );
+    }
     for (const [k, v] of Object.entries(vraw)) {
       values[asDigest(k, "bundle.values key")] = v;
     }

@@ -34,7 +34,10 @@ Cell kinds:
   a model. Approval stays visible in the structure and on the receipt.
 - `organism` — a sealed sub-manifest referenced by digest. The outer graph sees
   only its declared interface ports. This is symbolization: a compound that is
-  versioned, inspectable, and not a free primitive.
+  versioned, inspectable, and not a free primitive. `via` names a transport
+  the host configures (`--transports`): on a local miss, the closure arrives
+  as a verified bundle — remote resolution, local execution, and the receipt
+  records which transport served it.
 - `repeat` — bounded iteration over a digest-embedded sub-manifest: up to
   `maxRounds` rounds, with `carry` mapping interface outputs back into the
   next round's inputs and an optional `until` early-exit on an interface
@@ -94,9 +97,11 @@ the record to a fallback cell), and
 `stash` (a document pinned to CAS by a `store` cell — only the `ref` token
 reaches the `load` cell that resolves it), and `intake` (a schema'd input
 port rejecting a malformed ticket, the failure record routed to a `repair`
-cell through `on:"fail"`), and `flaky` (a classifier scripted to emit a bad
+cell through `on:"fail"`), `flaky` (a classifier scripted to emit a bad
 label, then a good one — `retry` re-issues the same signed request and the
-receipt records both attempts under one digest) — with
+receipt records both attempts under one digest), and `remote` (an organism
+cell whose sub-manifest exists only in a bundle directory — `via` fetches,
+verifies, and runs it) — with
 scripted responses, then verifies each receipt offline. To run one yourself:
 
 ```sh

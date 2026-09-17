@@ -28,6 +28,7 @@ import {
 } from "./effects";
 import type { FnRegistry } from "./registry";
 import type { Store } from "./store";
+import type { Transport } from "./transport";
 import { digestCanonical, type Digest } from "./digest";
 import {
   canonicalBytes,
@@ -71,6 +72,8 @@ export type CellRecord = {
   shadowOut?: JsonValue;
   rounds?: number;
   items?: number;
+  /** Present when the cell's sub-manifest resolved through a transport. */
+  via?: string;
 };
 
 export type RunReceipt = {
@@ -94,6 +97,13 @@ export type RunOptions = {
   fns: FnRegistry;
   store: Store;
   executors: Executor[];
+  /** Named transports for `via` cells — remote manifest resolution. */
+  transports?: Record<string, Transport>;
+  /** Provenance replay: cell path → transport name recorded by the run
+   * being verified. Replay can't re-derive where bytes came from (the
+   * store already holds them), so — like recorded effects — the record
+   * itself is the source. */
+  replayVia?: Record<string, string>;
 };
 
 type EdgeState = "pending" | "delivered" | "dead";
@@ -122,7 +132,13 @@ export async function runOrganism(opts: RunOptions): Promise<RunReceipt> {
     seq: 0,
   };
   emit(ctx, { kind: "run.start", digest: manifestDigest });
-  const compiled = await compileOrganism(opts.manifest, opts.fns, opts.store);
+  const compiled = await compileOrganism(
+    opts.manifest,
+    opts.fns,
+    opts.store,
+    0,
+    opts.transports,
+  );
   const outcome = await runInto(compiled, opts.args ?? {}, "", ctx, 0);
   emit(ctx, { kind: "run.end", outcome });
   const receipt: Omit<RunReceipt, "digest"> = {
@@ -317,6 +333,10 @@ async function runInto(
         if (act.shadowOut !== undefined) rec.shadowOut = act.shadowOut;
         if (act.rounds !== undefined) rec.rounds = act.rounds;
         if (act.items !== undefined) rec.items = act.items;
+        const via =
+          compiled.resolvedVia.get(cell.id) ??
+          ctx.opts.replayVia?.[cellPath(cell.id)];
+        if (via) rec.via = via;
         ctx.cells[cellPath(cell.id)] = rec;
         emit(ctx, { kind: "cell.commit", path: cellPath(cell.id) });
       } catch (e) {

@@ -1,0 +1,21 @@
+{
+  "contract": "morphogen.organism.v1",
+  "key": "organism:remote",
+  "name": "Remote",
+  "cells": [
+    { "id": "q", "kind": "input", "outputs": { "text": "text" } },
+    {
+      "id": "svc",
+      "kind": "organism",
+      "manifest": "sha256:dc66459afd73fa9f266dea26f20ccf5c24ee1c648ff984eaef7f5c3dc5b4102f",
+      "via": "bundles"
+    },
+    { "id": "emit", "kind": "fn", "fn": "echo.v1" }
+  ],
+  "edges": [
+    { "from": { "cell": "q", "port": "text" },
+      "to": { "cell": "svc", "port": "q" } },
+    { "from": { "cell": "svc", "port": "a" },
+      "to": { "cell": "emit", "port": "value" } }
+  ]
+}

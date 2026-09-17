@@ -48,6 +48,18 @@ canonicalized, hashed, and embedded. It can never carry code.
 | `store` | writes a payload into the content-addressed store | input `data` (`json`), output `ref` (`ref`) |
 | `load` | resolves a `ref` token back to its payload | input `ref` (`ref`), output `data` (`json`) |
 
+`organism`, `repeat`, and `each` cells may declare `via`: a transport name
+(a safe id) the host maps to a bundle source. When the referenced manifest
+is absent from the local store, the transport supplies a
+`morphogen.bundle.v1` closure; `unpack` installs it with every claimed
+digest rehashed, then resolution retries locally. The cell's receipt record
+carries `via` — the transport name that served the closure. Local hits
+never consult transports, so `via` is a fallback, not a preference; a
+missing transport or missing bundle fails closed (`STORE_MISS`), and a
+wrong-rooted or tampered bundle fails `DIGEST_MISMATCH`. Trust is the
+digest itself: a transport can only deliver content the manifest already
+named — execution stays local, metered, and receipted either way.
+
 ### Port types
 
 Every port declares one of:
