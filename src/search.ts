@@ -62,6 +62,7 @@ function feedback(generation: number, selection?: FoundrySelection): JsonValue {
       train: candidate.train,
       validation: candidate.validation,
       work: candidate.work,
+      usage: candidate.usage,
     })),
   };
 }

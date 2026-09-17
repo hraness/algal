@@ -57,6 +57,15 @@ function parseWork(value: JsonValue | undefined, at: string) {
   };
 }
 
+function parseUsage(value: JsonValue | undefined, at: string) {
+  const usage = object(value, at);
+  keys(usage, ["tokensIn", "tokensOut"], at);
+  return {
+    tokensIn: count(usage.tokensIn, `${at}.tokensIn`),
+    tokensOut: count(usage.tokensOut, `${at}.tokensOut`),
+  };
+}
+
 function parseScore(value: JsonValue | undefined, at: string) {
   const score = object(value, at);
   keys(score, ["passed", "total"], at);
@@ -72,7 +81,7 @@ function parseScore(value: JsonValue | undefined, at: string) {
 
 function parseCase(value: JsonValue, at: string): FoundryCaseResult {
   const c = object(value, at);
-  keys(c, ["id", "split", "passed", "outcome", "outputs", "expect", "receiptDigest", "work"], at);
+  keys(c, ["id", "split", "passed", "outcome", "outputs", "expect", "receiptDigest", "work", "usage"], at);
   const split = text(c.split, `${at}.split`);
   const outcome = text(c.outcome, `${at}.outcome`);
   if (split !== "train" && split !== "validation" && split !== "holdout") {
@@ -93,13 +102,14 @@ function parseCase(value: JsonValue, at: string): FoundryCaseResult {
     expect: object(c.expect, `${at}.expect`),
     receiptDigest: digest(c.receiptDigest, `${at}.receiptDigest`),
     work: parseWork(c.work, `${at}.work`),
+    usage: parseUsage(c.usage, `${at}.usage`),
   };
 }
 
 function parseCandidate(value: JsonValue, i: number): FoundryCandidateResult {
   const at = `foundry.candidates[${i}]`;
   const c = object(value, at);
-  keys(c, ["manifestDigest", "manifestKey", "train", "validation", "work", "cases"], at);
+  keys(c, ["manifestDigest", "manifestKey", "train", "validation", "work", "usage", "cases"], at);
   if (!Array.isArray(c.cases) || c.cases.length === 0 || c.cases.length > FOUNDRY_BOUNDS.maxCases) {
     throw new MorphogenError("PARSE_FAILED", `${at}.cases must be a bounded non-empty list`);
   }
@@ -109,6 +119,7 @@ function parseCandidate(value: JsonValue, i: number): FoundryCandidateResult {
     train: parseScore(c.train, `${at}.train`),
     validation: parseScore(c.validation, `${at}.validation`),
     work: parseWork(c.work, `${at}.work`),
+    usage: parseUsage(c.usage, `${at}.usage`),
     cases: c.cases.map((entry, j) => parseCase(entry, `${at}.cases[${j}]`)),
   };
 }
@@ -207,6 +218,16 @@ export async function verifyFoundryReport(
     if (canonicalize(work as unknown as JsonValue) !== canonicalize(candidate.work as unknown as JsonValue)) {
       mismatches.push(`${candidate.manifestKey} work does not match its cases`);
     }
+    const usage = candidate.cases.reduce(
+      (total, c) => ({
+        tokensIn: total.tokensIn + c.usage.tokensIn,
+        tokensOut: total.tokensOut + c.usage.tokensOut,
+      }),
+      { tokensIn: 0, tokensOut: 0 },
+    );
+    if (canonicalize(usage as unknown as JsonValue) !== canonicalize(candidate.usage as unknown as JsonValue)) {
+      mismatches.push(`${candidate.manifestKey} usage does not match its cases`);
+    }
   }
   checkScore("holdout", report.holdout.cases, "holdout", report.holdout);
   if (report.holdout.cases.some((c) => c.split !== "holdout")) {
@@ -247,6 +268,16 @@ export async function verifyFoundryReport(
         if (canonicalize(receipt.work as unknown as JsonValue) !== canonicalize(c.work as unknown as JsonValue)) {
           mismatches.push(`case ${c.id}: work differs from receipt`);
         }
+        const usage = receipt.effects.reduce(
+          (total, effect) => ({
+            tokensIn: total.tokensIn + (effect.usage?.tokensIn ?? 0),
+            tokensOut: total.tokensOut + (effect.usage?.tokensOut ?? 0),
+          }),
+          { tokensIn: 0, tokensOut: 0 },
+        );
+        if (canonicalize(usage as unknown as JsonValue) !== canonicalize(c.usage as unknown as JsonValue)) {
+          mismatches.push(`case ${c.id}: usage differs from receipt`);
+        }
       }
       const verified = await verifyReceipt(receipt, manifestToJson(manifest), store, fns);
       checkedReceipts++;
@@ -266,6 +297,7 @@ export async function verifyFoundryReport(
     expect: {},
     receiptDigest: report.lineage.receiptDigest,
     work: { steps: 0, agentCalls: 0, units: 0 },
+    usage: { tokensIn: 0, tokensOut: 0 },
   }], false);
   return { ok: mismatches.length === 0, digest: claimed, checkedReceipts, mismatches };
 }

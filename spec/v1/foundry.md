@@ -28,10 +28,10 @@ A report contains:
 - `lineage` — optional generator manifest and run-receipt digests;
 - `digest` — the canonical digest of every preceding report field.
 
-Each case records its split, expected and actual interface outputs, outcome, pass claim, work, and stored run-receipt digest. Candidate manifests, generator manifests, and all referenced run receipts live in the host store.
+Each case records its split, expected and actual interface outputs, outcome, pass claim, work, aggregate input/output token usage, and stored run-receipt digest. Candidate records aggregate work and usage across selection cases. Candidate manifests, generator manifests, and all referenced run receipts live in the host store.
 
 ## Verification
 
-Verification rejects unknown fields and malformed bounds, recomputes the report digest, scores, pass claims, and deterministic promotion, resolves every referenced manifest and receipt, compares recorded outputs, outcome, and work with each receipt, and replays every run offline. Bundle export is permitted only after successful verification and packs the promoted organism's content-addressed closure.
+Verification rejects unknown fields and malformed bounds, recomputes the report digest, scores, pass claims, and deterministic promotion, resolves every referenced manifest and receipt, compares recorded outputs, outcome, work, and token usage with each receipt, and replays every run offline. Bundle export is permitted only after successful verification and packs the promoted organism's content-addressed closure.
 
 A verified report proves that the recorded evidence and selection are internally consistent. It does not prove that cases represent deployment, expectations are correct, the model was truthful, or the promoted organism will receive the same effects on a future live run.

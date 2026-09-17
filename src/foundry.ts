@@ -33,6 +33,7 @@ export type FoundryCaseResult = {
   expect: Record<string, JsonValue>;
   receiptDigest: Digest;
   work: { steps: number; agentCalls: number; units: number };
+  usage: { tokensIn: number; tokensOut: number };
 };
 
 export type FoundryCandidateResult = {
@@ -41,6 +42,7 @@ export type FoundryCandidateResult = {
   train: { passed: number; total: number };
   validation: { passed: number; total: number };
   work: { steps: number; agentCalls: number; units: number };
+  usage: { tokensIn: number; tokensOut: number };
   cases: FoundryCaseResult[];
 };
 
@@ -190,6 +192,13 @@ async function evaluateCase(
   });
   const receiptDigest = await opts.store.putReceipt(receipt as unknown as JsonValue);
   const outputs = caseOutputs(candidate, receipt.cells);
+  const usage = receipt.effects.reduce(
+    (total, effect) => ({
+      tokensIn: total.tokensIn + (effect.usage?.tokensIn ?? 0),
+      tokensOut: total.tokensOut + (effect.usage?.tokensOut ?? 0),
+    }),
+    { tokensIn: 0, tokensOut: 0 },
+  );
   return {
     id: c.id,
     split: c.split,
@@ -199,6 +208,7 @@ async function evaluateCase(
     expect: c.expect,
     receiptDigest,
     work: receipt.work,
+    usage,
   };
 }
 
@@ -285,6 +295,13 @@ export async function evaluateFoundryPopulation(
           units: total.units + c.work.units,
         }),
         { steps: 0, agentCalls: 0, units: 0 },
+      ),
+      usage: cases.reduce(
+        (total, c) => ({
+          tokensIn: total.tokensIn + c.usage.tokensIn,
+          tokensOut: total.tokensOut + c.usage.tokensOut,
+        }),
+        { tokensIn: 0, tokensOut: 0 },
       ),
       cases,
     });

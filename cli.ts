@@ -508,6 +508,7 @@ async function main(): Promise<number> {
             train: candidate.train,
             validation: candidate.validation,
             work: candidate.work,
+            usage: candidate.usage,
           })),
           holdout: { passed: report.holdout.passed, total: report.holdout.total },
         });

@@ -6,7 +6,7 @@ A search report records bounded, validation-guided evolution over organism manif
 
 A search runs 1–8 generations. At each generation:
 
-1. The generator organism receives fixed task arguments and, when configured, the prior generation's candidate digests, train and validation scores, work, and promoted digest.
+1. The generator organism receives fixed task arguments and, when configured, the prior generation's candidate digests, train and validation scores, work, token usage, and promoted digest.
 2. Its declared output is parsed as 1–32 ordinary organism manifests.
 3. The previous winner survives and competes with the new proposals. Duplicate manifest digests collapse.
 4. Every candidate runs against train and validation cases under the host registry, executors, transports, store, and root manifest budgets.

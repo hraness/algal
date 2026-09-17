@@ -205,8 +205,8 @@ additional candidate paths:
 Paths resolve relative to the config. Promotion prefers validation pass rate,
 then train pass rate, then fewer agent calls and work units, with manifest digest
 as the final tie-breaker. Non-promoted candidates never run against holdout
-cases. A `morphogen.foundry.v1` report records expectations, outputs, work,
-manifest and receipt digests, generator lineage, and the winner's holdout result.
+cases. A `morphogen.foundry.v1` report records expectations, outputs, work, token
+usage, manifest and receipt digests, generator lineage, and the winner's holdout result.
 `foundry verify` checks the report digest, scores, selection, claimed outputs,
 and every run receipt by offline replay. `foundry pack` verifies that evidence
 before exporting the promoted organism's content-addressed closure.
