@@ -46,12 +46,24 @@ export type EffectReceipt = {
   cached?: boolean;
 };
 
+export type ExecutorMetadata = {
+  executor?: string;
+  usage?: EffectReceipt["usage"];
+  cached?: boolean;
+};
+
+export type ExecutorResult = {
+  output: JsonValue;
+  metadata?: ExecutorMetadata;
+};
+
 export type Executor = {
   id: string;
   /** `signal` aborts when the cell's `budget.maxEffectMs` fires — an
    * executor should treat abort as cancellation (commandExecutor kills its
    * process). Advisory: the runner already raced the call to a timeout. */
   execute(request: EffectRequest, signal?: AbortSignal): Promise<JsonValue>;
+  executeEffect?(request: EffectRequest, signal?: AbortSignal): Promise<ExecutorResult>;
   /** Receipt metadata recorded for this request. Executors that replay a
    * prior run implement this so the rerun reproduces the original receipt's
    * executor id and usage — making verification bit-for-bit. Called before
@@ -189,18 +201,38 @@ export function cachedExecutor(inner: Executor, store: Store): Executor {
       return inner.receiptFor?.(request) ?? {};
     },
     async execute(request, signal) {
+      return (await this.executeEffect!(request, signal)).output;
+    },
+    async executeEffect(request, signal) {
       const hit = await lookup(request);
-      if (hit?.output !== undefined) return hit.output;
-      const out = await inner.execute(request, signal);
-      const meta = await inner.receiptFor?.(request);
+      if (hit?.output !== undefined) {
+        return {
+          output: hit.output,
+          metadata: {
+            executor: hit.executor,
+            ...(hit.usage ? { usage: hit.usage } : {}),
+            cached: true,
+          },
+        };
+      }
+      let result: ExecutorResult;
+      if (inner.executeEffect) {
+        result = await inner.executeEffect(request, signal);
+      } else {
+        const metadata = await inner.receiptFor?.(request);
+        result = {
+          output: await inner.execute(request, signal),
+          ...(metadata ? { metadata } : {}),
+        };
+      }
       const entry: EffectReceipt = {
         requestDigest: effectRequestDigest(request),
-        executor: meta?.executor ?? inner.id,
-        output: out,
+        executor: result.metadata?.executor ?? inner.id,
+        output: result.output,
       };
-      if (meta?.usage) entry.usage = meta.usage;
+      if (result.metadata?.usage) entry.usage = result.metadata.usage;
       await store.putEffect(entry);
-      return out;
+      return result;
     },
   };
 }

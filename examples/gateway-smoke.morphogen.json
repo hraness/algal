@@ -1,0 +1,25 @@
+{
+  "contract": "morphogen.organism.v1",
+  "key": "organism:gateway-smoke",
+  "name": "Gateway smoke",
+  "budgets": { "maxSteps": 4, "maxAgentCalls": 1, "maxWork": 100000 },
+  "interface": {
+    "inputs": { "ticket": { "cell": "src", "port": "ticket" } },
+    "outputs": { "route": { "cell": "route", "port": "out" } }
+  },
+  "cells": [
+    { "id": "src", "kind": "input", "outputs": { "ticket": "text" } },
+    {
+      "id": "route",
+      "kind": "classifier",
+      "inputs": { "ticket": "text" },
+      "prompt": "Classify the support ticket by its primary operational destination.",
+      "view": { "inputs": ["ticket"] },
+      "output": { "kind": "choice", "labels": ["billing", "technical", "other"] },
+      "budget": { "maxContextBytes": 4096, "maxOutputBytes": 256, "maxEffectMs": 120000 }
+    }
+  ],
+  "edges": [
+    { "from": { "cell": "src", "port": "ticket" }, "to": { "cell": "route", "port": "ticket" } }
+  ]
+}

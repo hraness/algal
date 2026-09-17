@@ -16,6 +16,7 @@ import {
   type Executor,
 } from "./src/effects";
 import { errorReport, MorphogenError } from "./src/errors";
+import { vercelGatewayExecutor } from "./src/gateway";
 import { builtinRegistry } from "./src/registry";
 import { parseRunReceipt, runOrganism, type RunReceipt } from "./src/run";
 import { packOrganism, parseBundle, unpackBundle } from "./src/bundle";
@@ -54,6 +55,7 @@ usage:
       --args <file>                           input-cell values (JSON)
       --responses <file>                      scripted agent outputs (JSON map)
       --executor-cmd <shell command>          live executor: request on stdin, output on stdout
+      --gateway-model <provider/model>        Vercel AI Gateway structured-output executor
       --executors <file>                      JSON map of executor name → shell command;
                                               route.provider/route.preset pick by name
       --modules <dir>                         load *.morphogen.json into the store for organism cells
@@ -75,6 +77,7 @@ usage:
   morphogen diff <receipt-a.json> <receipt-b.json>
                                               compare two receipts, report divergence
   morphogen foundry <config.json> [--responses <file>] [--executor-cmd <command>]
+      [--gateway-model <provider/model>]
       [--executors <file>] [--modules <dir>] [--transports <file>]
       [--cache-effects] [--dir <path>] [--out <report.json>]
                                               generate/evaluate candidates and promote a winner
@@ -439,6 +442,9 @@ async function main(): Promise<number> {
       if (flags["executor-cmd"] !== undefined) {
         executors.push(commandExecutor(String(flags["executor-cmd"])));
       }
+      if (flags["gateway-model"] !== undefined) {
+        executors.push(vercelGatewayExecutor({ model: String(flags["gateway-model"]) }));
+      }
       if (flags.executors !== undefined) {
         const map = asRecord(
           await readJson(resolve(String(flags.executors))),
@@ -673,6 +679,9 @@ async function main(): Promise<number> {
       }
       if (flags["executor-cmd"] !== undefined) {
         executors.push(commandExecutor(String(flags["executor-cmd"])));
+      }
+      if (flags["gateway-model"] !== undefined) {
+        executors.push(vercelGatewayExecutor({ model: String(flags["gateway-model"]) }));
       }
       if (flags.executors !== undefined) {
         const map = asRecord(await readJson(resolve(String(flags.executors))), "executors");

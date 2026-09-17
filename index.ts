@@ -42,7 +42,16 @@ export {
   replayExecutor,
   scriptedExecutor,
 } from "./src/effects";
-export type { EffectReceipt, EffectRequest, Executor } from "./src/effects";
+export type {
+  EffectReceipt,
+  EffectRequest,
+  Executor,
+  ExecutorMetadata,
+  ExecutorResult,
+} from "./src/effects";
+
+export { VERCEL_AI_GATEWAY_BASE_URL, vercelGatewayExecutor } from "./src/gateway";
+export type { GatewayExecutorOptions, GatewayFetch } from "./src/gateway";
 
 export { builtinRegistry } from "./src/registry";
 export type { Fn, FnRegistry, FnSignature } from "./src/registry";

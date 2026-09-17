@@ -29,6 +29,7 @@ import {
   type EffectReceipt,
   type EffectRequest,
   type Executor,
+  type ExecutorMetadata,
 } from "./effects";
 import type { FnRegistry } from "./registry";
 import type { Store } from "./store";
@@ -711,20 +712,29 @@ async function activate(
           ctx.work.units += WORK.effectBase + contextBytes * WORK.perContextByte;
           emit(ctx, { kind: "effect", path, digest: requestDigest });
 
-          const meta = await executor.receiptFor?.(request);
+          let meta: ExecutorMetadata | undefined;
+          const invoke = async (signal?: AbortSignal): Promise<JsonValue> => {
+            if (executor.executeEffect) {
+              const result = await executor.executeEffect(request, signal);
+              meta = result.metadata;
+              return result.output;
+            }
+            meta = await executor.receiptFor?.(request);
+            return executor.execute(request, signal);
+          };
           let raw: JsonValue;
           // budget.maxEffectMs bounds each call wall-clock; the timeout is
           // recorded as an effect error so retry and replay both see it
           const effectMs = cell.budget?.maxEffectMs;
           try {
             if (effectMs === undefined) {
-              raw = await executor.execute(request);
+              raw = await invoke();
             } else {
               const ac = new AbortController();
               const timer = setTimeout(() => ac.abort(), effectMs);
               try {
                 raw = await Promise.race([
-                  executor.execute(request, ac.signal),
+                  invoke(ac.signal),
                   new Promise<never>((_, reject) =>
                     ac.signal.addEventListener(
                       "abort",

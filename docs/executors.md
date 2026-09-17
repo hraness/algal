@@ -61,6 +61,26 @@ The loop ends when the response binds to `output` or `budget.maxTurns` is
 exhausted. A `{tool,inputs}` naming a ref outside `tools` is ordinary output,
 not a call.
 
+## Vercel AI Gateway
+
+`--gateway-model <provider/model>` runs cells through Vercel AI Gateway's
+structured Chat Completions API. Authentication comes only from
+`AI_GATEWAY_API_KEY` or the short-lived `VERCEL_OIDC_TOKEN` supplied by a linked
+Vercel project. The credential never enters a request, receipt, digest, or log.
+
+```sh
+bun run cli run examples/gateway-smoke.morphogen.json \
+  --args examples/gateway-smoke.args.json \
+  --gateway-model alibaba/qwen3.5-flash --write
+```
+
+The adapter fixes the Gateway origin, rejects redirects, bounds response bytes,
+requests a strict `{ "value": ... }` JSON object, includes the declared output
+contract in model-visible context, and returns the bound value to Morphogen.
+Provider model identity and input/output token usage are captured after the call
+on the ordinary effect receipt, so foundry reports can compare real usage and
+offline replay preserves it exactly.
+
 ## Multiple executors
 
 `--executors execs.json` maps names to commands:

@@ -3097,4 +3097,56 @@ describe("spawn cells", () => {
     expect(r.cells["recover"]?.outputs?.value).toBe("FN_UNKNOWN");
   });
 
+  test("executor results record usage produced by the completed call", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:post-call-usage",
+      name: "Post-call usage",
+      cells: [{
+        id: "answer",
+        kind: "agent",
+        inputs: {},
+        prompt: "Answer.",
+        view: { inputs: [] },
+        output: { kind: "text" },
+      }],
+      edges: [],
+    });
+    const receipt = await runOrganism({
+      manifest: m,
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [{
+        id: "metered",
+        async execute() {
+          throw new Error("legacy execute must not run");
+        },
+        async executeEffect() {
+          return {
+            output: "ok",
+            metadata: {
+              executor: "gateway:qwen-flash",
+              usage: { model: "alibaba/qwen3.5-flash", tokensIn: 12, tokensOut: 3 },
+            },
+          };
+        },
+      }],
+    });
+
+    expect(receipt.outcome).toBe("complete");
+    expect(receipt.effects[0]?.executor).toBe("gateway:qwen-flash");
+    expect(receipt.effects[0]?.usage).toEqual({
+      model: "alibaba/qwen3.5-flash",
+      tokensIn: 12,
+      tokensOut: 3,
+    });
+    const verified = await verifyReceipt(
+      receipt as unknown as JsonValue,
+      manifestToJson(m),
+      new MemoryStore(),
+      builtinRegistry(),
+    );
+    expect(verified.ok).toBe(true);
+  });
+
 });

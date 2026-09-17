@@ -2,7 +2,8 @@
 
 - `src/` — the contract (`contract.ts`, `graph.ts`), the scheduler (`run.ts`),
   the effect seam (`effects.ts`), the store (`store.ts`), verification
-  (`verify.ts`), foundry evaluation and search (`foundry.ts`, `search.ts`), bundles (`bundle.ts`),
+  (`verify.ts`), Vercel AI Gateway execution (`gateway.ts`), foundry evaluation
+  and search (`foundry.ts`, `search.ts`), bundles (`bundle.ts`),
   transports (`transport.ts`), canonical values and digests, and colocated tests.
 - `cli.ts` — the Bun CLI (`run`, `check`, `verify`, `inspect`, `explain`,
   `diff`, `foundry`, `runs`, `digest`, `store`, `manifests`, `manifest`,
