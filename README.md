@@ -211,6 +211,26 @@ manifest and receipt digests, generator lineage, and the winner's holdout result
 and every run receipt by offline replay. `foundry pack` verifies that evidence
 before exporting the promoted organism's content-addressed closure.
 
+A bounded search repeats generation and selection while keeping holdout sealed.
+The previous winner survives into the next population, and the generator sees
+only prior train/validation scores, work, and manifest digests:
+
+```sh
+bun run cli foundry search examples/search.config.json \
+  --responses examples/evolving-generator.responses.json \
+  --dir .morphogen --out search-report.json
+bun run cli foundry search-inspect search-report.json
+bun run cli foundry search-verify search-report.json --dir .morphogen
+bun run cli foundry search-pack search-report.json --dir .morphogen --out bundles
+```
+
+`morphogen.search.v1` bounds a search to eight generations. Every generation
+records its generator receipt, proposals, full population evidence, and winner.
+Verification replays the complete history, checks survivor continuity and that
+every proposal was evaluated, and rejects any holdout evidence in generation
+records. Baseline manifests may enter through the config's `candidates` list and
+compete with generated organisms from generation zero onward.
+
 `check` admits a manifest without running it: parse, graph validation, and
 interface resolution only. `explain` prints the compiled signature — every
 cell's resolved input/output ports (including ports inherited from embedded
@@ -292,6 +312,7 @@ detection.
 
 - `spec/v1/organism.md` — the manifest, run, and receipt contract.
 - `spec/v1/foundry.md` — candidate generation, evidence, promotion, and verification.
+- `spec/v1/search.md` — bounded generations, feedback, survivors, and lineage.
 - `docs/` — design notes as they land.
 
 ## Related work

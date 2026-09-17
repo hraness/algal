@@ -94,6 +94,8 @@ export type {
   SearchOptions,
   SearchReport,
 } from "./src/search";
+export { parseSearchReport, verifySearchReport } from "./src/search-verify";
+export type { SearchVerifyReport } from "./src/search-verify";
 
 export { digestCanonical, digestText } from "./src/digest";
 export type { Digest } from "./src/digest";

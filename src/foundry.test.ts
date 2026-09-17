@@ -5,6 +5,7 @@ import { generateFoundryCandidates, runFoundry } from "./foundry";
 import { verifyFoundryReport } from "./foundry-verify";
 import { builtinRegistry } from "./registry";
 import { runFoundrySearch } from "./search";
+import { verifySearchReport } from "./search-verify";
 import { MemoryStore } from "./store";
 
 const echo = parseOrganismManifest({
@@ -72,6 +73,7 @@ describe("foundry", () => {
       ],
     });
     let calls = 0;
+    const store = new MemoryStore();
     const result = await runFoundrySearch({
       generator,
       generatorArgs: {},
@@ -85,7 +87,7 @@ describe("foundry", () => {
       ],
       maxGenerations: 2,
       fns: builtinRegistry(),
-      store: new MemoryStore(),
+      store,
       executors: [{
         id: "evolver",
         async execute() {
@@ -102,6 +104,9 @@ describe("foundry", () => {
     )).toBe(true);
     expect(result.result.holdout.passed).toBe(1);
     expect(result.result.promoted).toBe(digestCanonical(manifestToJson(echo)));
+    const verified = await verifySearchReport(result, store, builtinRegistry());
+    expect(verified.ok).toBe(true);
+    expect(verified.checkedReceipts).toBeGreaterThan(0);
   });
 
   test("runs an organism that emits candidate manifests and records its lineage", async () => {

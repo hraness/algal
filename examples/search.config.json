@@ -1,0 +1,33 @@
+{
+  "contract": "morphogen.foundry.config.v1",
+  "generator": {
+    "manifest": "evolving-generator.morphogen.json",
+    "args": { "task": "Return the input value unchanged." },
+    "output": "candidates",
+    "field": "candidates"
+  },
+  "search": {
+    "maxGenerations": 2,
+    "feedbackInput": "feedback"
+  },
+  "cases": [
+    {
+      "id": "train-alpha",
+      "split": "train",
+      "args": { "q": "alpha" },
+      "expect": { "answer": "alpha" }
+    },
+    {
+      "id": "validation-beta",
+      "split": "validation",
+      "args": { "q": "beta" },
+      "expect": { "answer": "beta" }
+    },
+    {
+      "id": "holdout-gamma",
+      "split": "holdout",
+      "args": { "q": "gamma" },
+      "expect": { "answer": "gamma" }
+    }
+  ]
+}

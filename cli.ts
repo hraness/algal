@@ -33,6 +33,8 @@ import {
   type FoundryCase,
 } from "./src/foundry";
 import { parseFoundryReport, verifyFoundryReport } from "./src/foundry-verify";
+import { runFoundrySearch } from "./src/search";
+import { parseSearchReport, verifySearchReport } from "./src/search-verify";
 import {
   canonicalBytes,
   canonicalize,
@@ -81,6 +83,12 @@ usage:
   morphogen foundry inspect <report.json>     summarize scores, lineage, and promotion
   morphogen foundry pack <report.json> --out <dir> [--dir <path>]
                                               export the promoted organism's verified bundle
+  morphogen foundry search <config.json> [executor/store options] [--out <report.json>]
+                                              evolve candidates over bounded generations
+  morphogen foundry search-verify <report.json> [--dir <path>]
+  morphogen foundry search-inspect <report.json>
+  morphogen foundry search-pack <report.json> --out <dir> [--dir <path>]
+                                              inspect or export a verified search winner
   morphogen suite                             run and verify all bundled examples
   morphogen digest <manifest.json>            print the manifest's canonical digest
   morphogen store put <value.json> [--dir <path>]
@@ -505,6 +513,54 @@ async function main(): Promise<number> {
         });
         return 0;
       }
+      if (file === "search-verify") {
+        const reportFile = positional[1];
+        if (!reportFile) usageError("morphogen foundry search-verify <report.json> [--dir <path>]");
+        const verified = await verifySearchReport(await readJson(resolve(reportFile)), store, fns);
+        out(verified as unknown as JsonObject);
+        return verified.ok ? 0 : 1;
+      }
+      if (file === "search-inspect") {
+        const reportFile = positional[1];
+        if (!reportFile) usageError("morphogen foundry search-inspect <report.json>");
+        const report = parseSearchReport(await readJson(resolve(reportFile)));
+        out({
+          contract: report.contract,
+          digest: report.digest,
+          generatorDigest: report.generatorDigest,
+          generations: report.generations.map((generation) => ({
+            generation: generation.generation,
+            proposed: generation.proposed.length,
+            population: generation.candidates.length,
+            promoted: generation.promoted,
+          })),
+          promoted: report.result.promoted,
+          holdout: { passed: report.result.holdout.passed, total: report.result.holdout.total },
+        });
+        return 0;
+      }
+      if (file === "search-pack") {
+        const reportFile = positional[1];
+        if (!reportFile || flags.out === undefined) {
+          usageError("morphogen foundry search-pack <report.json> --out <dir> [--dir <path>]");
+        }
+        const raw = await readJson(resolve(reportFile));
+        const report = parseSearchReport(raw);
+        const verified = await verifySearchReport(raw, store, fns);
+        if (!verified.ok) {
+          throw new MorphogenError("RECEIPT_MISMATCH", `search report failed verification: ${verified.mismatches.join("; ")}`);
+        }
+        const promoted = await store.getManifest(report.result.promoted);
+        if (!promoted) throw new MorphogenError("STORE_MISS", `promoted manifest ${report.result.promoted} missing`);
+        const bundle = await packOrganism(promoted, store);
+        const outputDir = resolve(String(flags.out));
+        const { mkdir, writeFile } = await import("node:fs/promises");
+        await mkdir(outputDir, { recursive: true });
+        const outputFile = join(outputDir, `${report.result.promoted.slice(7)}.bundle.json`);
+        await writeFile(outputFile, canonicalize(bundle as unknown as JsonValue));
+        out({ bundle: outputFile, root: bundle.root, search: report.digest });
+        return 0;
+      }
       if (file === "pack") {
         const reportFile = positional[1];
         if (!reportFile || flags.out === undefined) {
@@ -527,18 +583,24 @@ async function main(): Promise<number> {
         out({ bundle: outputFile, root: bundle.root, foundry: report.digest });
         return 0;
       }
-      const configFile = resolve(file);
+      const searchMode = file === "search";
+      const configPath = searchMode ? positional[1] : file;
+      if (!configPath) usageError("morphogen foundry search <config.json>");
+      const configFile = resolve(configPath);
       if (flags.modules !== undefined) {
         const n = await loadModules(String(flags.modules), store);
         diag(`loaded ${n} module(s) from ${flags.modules}`);
       }
       const config = asRecord(await readJson(configFile), "foundry config");
-      const unknown = Object.keys(config).filter((k) => !["contract", "candidates", "generator", "cases"].includes(k));
+      const unknown = Object.keys(config).filter((k) => !["contract", "candidates", "generator", "cases", "search"].includes(k));
       if (unknown.length > 0) {
         throw new MorphogenError("PARSE_FAILED", `foundry config: unknown key "${unknown[0]}"`);
       }
       if (config.contract !== "morphogen.foundry.config.v1") {
         throw new MorphogenError("PARSE_FAILED", "foundry config.contract must be morphogen.foundry.config.v1");
+      }
+      if (!searchMode && config.search !== undefined) {
+        throw new MorphogenError("PARSE_FAILED", "search settings require the foundry search command");
       }
       const candidateEntries = config.candidates ?? [];
       if (!Array.isArray(candidateEntries)) {
@@ -627,6 +689,40 @@ async function main(): Promise<number> {
       const transports = flags.transports !== undefined
         ? await loadTransports(String(flags.transports))
         : undefined;
+      if (searchMode) {
+        if (!generator || config.search === undefined) {
+          throw new MorphogenError("PARSE_FAILED", "search config needs generator and search objects");
+        }
+        const search = asRecord(config.search, "foundry config.search");
+        const extra = Object.keys(search).filter((key) => !["maxGenerations", "feedbackInput"].includes(key));
+        if (
+          extra.length > 0 ||
+          !Number.isInteger(search.maxGenerations) ||
+          typeof search.feedbackInput !== "string"
+        ) {
+          throw new MorphogenError("PARSE_FAILED", "foundry config.search needs maxGenerations and feedbackInput");
+        }
+        const report = await runFoundrySearch({
+          generator: generator.manifest,
+          generatorArgs: generator.args,
+          feedbackInput: search.feedbackInput,
+          output: generator.output,
+          ...(generator.field ? { field: generator.field } : {}),
+          seeds: candidates,
+          cases,
+          maxGenerations: search.maxGenerations as number,
+          fns,
+          store,
+          executors: activeExecutors,
+          ...(transports ? { transports } : {}),
+        });
+        if (flags.out !== undefined) {
+          const { writeFile } = await import("node:fs/promises");
+          await writeFile(resolve(String(flags.out)), canonicalize(report as unknown as JsonValue));
+        }
+        out(report as unknown as JsonObject);
+        return 0;
+      }
       const generated = generator
         ? await generateFoundryCandidates({
             generator: generator.manifest,

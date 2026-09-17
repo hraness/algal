@@ -9,7 +9,7 @@
   `slots`, `slot`, `pack`, `unpack`, `example`, `suite`).
 - `index.ts` — the package's public surface.
 - `examples/` — bundled manifests and scripted responses used by `suite`.
-- `spec/v1/organism.md`, `spec/v1/foundry.md` — authoritative contract prose.
+- `spec/v1/organism.md`, `spec/v1/foundry.md`, `spec/v1/search.md` — authoritative contract prose.
 - `site/` — the static morphogen.dev source; `build.ts` writes `site/dist`.
 - `README.md`, `CONTRIBUTING.md`, `SECURITY.md` — the public contract.
 
