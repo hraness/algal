@@ -158,6 +158,40 @@ bun run cli pack examples/inbox.morphogen.json --modules examples > bundle.json
 bun run cli unpack bundle.json --dir /tmp/elsewhere   # installs, digests verified
 ```
 
+## Foundry: select organisms by evidence
+
+A foundry evaluates a bounded population of organism manifests against explicit
+train and validation cases, persists every child run receipt, and promotes one
+manifest digest. The baseline scorer is deliberately deterministic: a case
+passes only when the organism completes and its interface outputs canonically
+equal the expected record.
+
+```sh
+bun run cli foundry examples/foundry.config.json --dir .morphogen
+```
+
+A `morphogen.foundry.config.v1` file names candidate manifest paths and cases:
+
+```json
+{
+  "contract": "morphogen.foundry.config.v1",
+  "candidates": ["a.morphogen.json", "b.morphogen.json"],
+  "cases": [
+    { "id": "train-a", "split": "train", "args": { "q": "a" }, "expect": { "answer": "a" } },
+    { "id": "validation-b", "split": "validation", "args": { "q": "b" }, "expect": { "answer": "b" } }
+  ]
+}
+```
+
+Candidate paths resolve relative to the config file. Candidates must declare the
+same case-facing interface. The report records train and validation scores, work,
+outputs, and receipt digests for every case. Promotion prefers validation pass
+rate, then train pass rate, then fewer agent calls and work units, with manifest
+digest as the final deterministic tie-breaker. `--responses` supplies scripted
+effects for deterministic agent candidates. Model judges, candidate generation,
+and search strategies remain host concerns; the foundry report is the stable,
+replayable evidence layer beneath them.
+
 `check` admits a manifest without running it: parse, graph validation, and
 interface resolution only. `explain` prints the compiled signature — every
 cell's resolved input/output ports (including ports inherited from embedded

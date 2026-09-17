@@ -27,6 +27,7 @@ import {
   type Transport,
 } from "./src/transport";
 import { diffReceipts, verifyReceipt } from "./src/verify";
+import { runFoundry, type FoundryCase } from "./src/foundry";
 import {
   canonicalBytes,
   canonicalize,
@@ -66,6 +67,9 @@ usage:
   morphogen runs [--dir <path>]               list receipts stored under --dir
   morphogen diff <receipt-a.json> <receipt-b.json>
                                               compare two receipts, report divergence
+  morphogen foundry <config.json> [--responses <file>] [--dir <path>]
+                                              evaluate candidates on train/validation cases,
+                                              persist receipts, and promote the winner
   morphogen suite                             run and verify all bundled examples
   morphogen digest <manifest.json>            print the manifest's canonical digest
   morphogen store put <value.json> [--dir <path>]
@@ -458,6 +462,62 @@ async function main(): Promise<number> {
       }
       out(receipt);
       return receipt.outcome === "complete" ? 0 : 1;
+    }
+
+    case "foundry": {
+      const file = positional[0];
+      if (!file) usageError("morphogen foundry <config.json> [--responses <file>] [--dir <path>]");
+      const configFile = resolve(file);
+      const config = asRecord(await readJson(configFile), "foundry config");
+      const unknown = Object.keys(config).filter((k) => !["contract", "candidates", "cases"].includes(k));
+      if (unknown.length > 0) {
+        throw new MorphogenError("PARSE_FAILED", `foundry config: unknown key "${unknown[0]}"`);
+      }
+      if (config.contract !== "morphogen.foundry.config.v1") {
+        throw new MorphogenError("PARSE_FAILED", "foundry config.contract must be morphogen.foundry.config.v1");
+      }
+      if (!Array.isArray(config.candidates) || config.candidates.length === 0) {
+        throw new MorphogenError("PARSE_FAILED", "foundry config.candidates must be a non-empty list");
+      }
+      if (!Array.isArray(config.cases) || config.cases.length === 0) {
+        throw new MorphogenError("PARSE_FAILED", "foundry config.cases must be a non-empty list");
+      }
+      const base = dirname(configFile);
+      const candidates = await Promise.all(config.candidates.map(async (candidate, i) => {
+        if (typeof candidate !== "string") {
+          throw new MorphogenError("PARSE_FAILED", `foundry config.candidates[${i}] must be a path`);
+        }
+        return parseOrganismManifest(await readJson(resolve(base, candidate)));
+      }));
+      const cases: FoundryCase[] = config.cases.map((raw, i) => {
+        const c = asRecord(raw, `foundry config.cases[${i}]`);
+        const extra = Object.keys(c).filter((k) => !["id", "split", "args", "expect"].includes(k));
+        if (extra.length > 0) {
+          throw new MorphogenError("PARSE_FAILED", `foundry config.cases[${i}]: unknown key "${extra[0]}"`);
+        }
+        if (typeof c.id !== "string" || (c.split !== "train" && c.split !== "validation")) {
+          throw new MorphogenError("PARSE_FAILED", `foundry config.cases[${i}] needs string id and train|validation split`);
+        }
+        if (c.args === undefined || c.expect === undefined) {
+          throw new MorphogenError("PARSE_FAILED", `foundry config.cases[${i}] needs args and expect objects`);
+        }
+        return {
+          id: c.id,
+          split: c.split,
+          args: asRecord(c.args, `foundry config.cases[${i}].args`),
+          expect: asRecord(c.expect, `foundry config.cases[${i}].expect`),
+        };
+      });
+      const executors: Executor[] = [];
+      if (flags.responses !== undefined) {
+        executors.push(scriptedExecutor(asRecord(
+          await readJson(resolve(String(flags.responses))),
+          "responses",
+        ) as Record<string, JsonValue>));
+      }
+      const report = await runFoundry({ candidates, cases, fns, store, executors });
+      out(report as unknown as JsonObject);
+      return 0;
     }
 
     case "verify": {

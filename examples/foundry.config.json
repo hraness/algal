@@ -1,0 +1,27 @@
+{
+  "contract": "morphogen.foundry.config.v1",
+  "candidates": [
+    "foundry-constant.morphogen.json",
+    "foundry-echo.morphogen.json"
+  ],
+  "cases": [
+    {
+      "id": "train-alpha",
+      "split": "train",
+      "args": { "q": "alpha" },
+      "expect": { "answer": "alpha" }
+    },
+    {
+      "id": "train-beta",
+      "split": "train",
+      "args": { "q": "beta" },
+      "expect": { "answer": "beta" }
+    },
+    {
+      "id": "validation-gamma",
+      "split": "validation",
+      "args": { "q": "gamma" },
+      "expect": { "answer": "gamma" }
+    }
+  ]
+}

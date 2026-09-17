@@ -68,6 +68,15 @@ export type { Transport } from "./src/transport";
 export { verifyReceipt } from "./src/verify";
 export type { VerifyReport } from "./src/verify";
 
+export { FOUNDRY_BOUNDS, FOUNDRY_CONTRACT, runFoundry } from "./src/foundry";
+export type {
+  FoundryCandidateResult,
+  FoundryCase,
+  FoundryCaseResult,
+  FoundryOptions,
+  FoundryReport,
+} from "./src/foundry";
+
 export { digestCanonical, digestText } from "./src/digest";
 export type { Digest } from "./src/digest";
 
