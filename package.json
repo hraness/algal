@@ -32,12 +32,17 @@
     "test": "bun test",
     "check": "bun run typecheck && bun run lint && bun run test && bun run build:site",
     "build:site": "bun site/build.ts",
+    "generate:og": "bun site/generate-og.tsx",
     "cli": "bun cli.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
+    "@hraness/web-discovery": "github:hraness/web-discovery#v0.6.0",
+    "@resvg/resvg-js": "2.6.2",
     "@types/bun": "^1.2.0",
     "eslint": "^9.13.0",
+    "react": "19.2.3",
+    "satori": "0.33.4",
     "typescript": "^5.6.0",
     "typescript-eslint": "^8.8.0"
   },
