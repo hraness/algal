@@ -22,8 +22,9 @@ Cell kinds:
 - `fn` — a pure function from the host's registry (`echo.v1`, `tag.v1`,
   `coalesce.v1`, `pick.v1`, `format.v1` ship built in).
 - `agent` — a bounded model call: a declared context view, a prompt, a typed
-  output contract, an optional route, declared tool callbacks, and byte and
-  turn budgets.
+  output contract, an optional route, declared tool callbacks, and byte, turn,
+  and wall-clock (`budget.maxEffectMs`) budgets — a hung executor becomes a
+  recorded, routable failure instead of a hung run.
 - `classifier` — an agent cell restricted to a closed set of labels, with an
   optional `onMiss` fallback. Its output drives `guard`ed edges, which is how
   routing decisions live in the structure instead of in prose. A classifier
@@ -35,9 +36,10 @@ Cell kinds:
 - `organism` — a sealed sub-manifest referenced by digest. The outer graph sees
   only its declared interface ports. This is symbolization: a compound that is
   versioned, inspectable, and not a free primitive. `via` names a transport
-  the host configures (`--transports`): on a local miss, the closure arrives
-  as a verified bundle — remote resolution, local execution, and the receipt
-  records which transport served it.
+  the host configures (`--transports` maps names to bundle directories or
+  HTTP(S) base URLs): on a local miss, the closure arrives as a verified
+  bundle — remote resolution, local execution, and the receipt records which
+  transport served it.
 - `repeat` — bounded iteration over a digest-embedded sub-manifest: up to
   `maxRounds` rounds, with `carry` mapping interface outputs back into the
   next round's inputs and an optional `until` early-exit on an interface
@@ -101,7 +103,8 @@ cell through `on:"fail"`), `flaky` (a classifier scripted to emit a bad
 label, then a good one — `retry` re-issues the same signed request and the
 receipt records both attempts under one digest), and `remote` (an organism
 cell whose sub-manifest exists only in a bundle directory — `via` fetches,
-verifies, and runs it) — with
+verifies, and runs it), and `approve` (a `gate` cell's decision is a required,
+guard-fed input — the merge cell only activates on "approve") — with
 scripted responses, then verifies each receipt offline. To run one yourself:
 
 ```sh

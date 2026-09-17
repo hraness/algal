@@ -1,0 +1,58 @@
+{
+  "contract": "morphogen.organism.v1",
+  "key": "organism:approve",
+  "name": "Approve",
+  "cells": [
+    { "id": "pr", "kind": "input", "outputs": { "diff": "text" } },
+    {
+      "id": "review",
+      "kind": "agent",
+      "inputs": { "diff": "text" },
+      "prompt": "Summarize the change and its risk in one line.",
+      "view": { "inputs": "*" },
+      "output": { "kind": "text" }
+    },
+    {
+      "id": "gate",
+      "kind": "gate",
+      "inputs": { "diff": "text", "summary": "text" },
+      "prompt": "Approve this change for merge?",
+      "view": { "inputs": "*" },
+      "output": { "kind": "choice", "labels": ["approve", "reject"] }
+    },
+    {
+      "id": "merge",
+      "kind": "agent",
+      "inputs": { "diff": "text", "decision": "text" },
+      "prompt": "Write the merge commit subject line.",
+      "view": { "inputs": "*" },
+      "output": { "kind": "text" }
+    },
+    {
+      "id": "hold",
+      "kind": "agent",
+      "inputs": { "diff": "text", "decision": "text" },
+      "prompt": "Write a one-line rejection note to the author.",
+      "view": { "inputs": "*" },
+      "output": { "kind": "text" }
+    }
+  ],
+  "edges": [
+    { "from": { "cell": "pr", "port": "diff" },
+      "to": { "cell": "review", "port": "diff" } },
+    { "from": { "cell": "pr", "port": "diff" },
+      "to": { "cell": "gate", "port": "diff" } },
+    { "from": { "cell": "review", "port": "out" },
+      "to": { "cell": "gate", "port": "summary" } },
+    { "from": { "cell": "pr", "port": "diff" },
+      "to": { "cell": "merge", "port": "diff" } },
+    { "from": { "cell": "pr", "port": "diff" },
+      "to": { "cell": "hold", "port": "diff" } },
+    { "from": { "cell": "gate", "port": "out" },
+      "to": { "cell": "merge", "port": "decision" },
+      "guard": { "equals": "approve" } },
+    { "from": { "cell": "gate", "port": "out" },
+      "to": { "cell": "hold", "port": "decision" },
+      "guard": { "equals": "reject" } }
+  ]
+}

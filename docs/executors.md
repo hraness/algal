@@ -92,6 +92,10 @@ default when no route matches.
 - Expect re-issue under `retry`: a cell that declares `retry.attempts` sends
   the *same* request — same digest — again after a failure, up to the bound.
   Each attempt is a separate call, separately metered, separately recorded.
+- Expect cancellation: a cell's `budget.maxEffectMs` bounds each call. The
+  runner races the call to the bound and kills an over-long commandExecutor
+  process — a timeout is a recorded `BUDGET_EXHAUSTED` effect error, so
+  `retry` and `on:"fail"` handle it like any other failure.
 - For replay (`verify`), Morphogen serves recorded outputs — and recorded
   errors — by request digest itself, in record order; executors are not
   involved.

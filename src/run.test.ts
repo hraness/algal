@@ -2192,3 +2192,87 @@ describe("retry", () => {
     expect(r.effects[0]?.output).toBe("not-a-label");
   });
 });
+
+describe("effect timeouts", () => {
+  const m = manifest({
+    contract: "morphogen.organism.v1",
+    key: "organism:slow",
+    name: "Slow",
+    cells: [
+      { id: "src", kind: "input", outputs: { v: "text" } },
+      {
+        id: "worker",
+        kind: "agent",
+        inputs: { v: "text" },
+        prompt: "p",
+        output: { kind: "text" },
+        budget: { maxEffectMs: 25 },
+        retry: { attempts: 2 },
+      },
+      {
+        id: "fallback",
+        kind: "agent",
+        inputs: { err: "json" },
+        prompt: "p",
+        output: { kind: "text" },
+      },
+    ],
+    edges: [
+      { from: { cell: "src", port: "v" }, to: { cell: "worker", port: "v" } },
+      {
+        from: { cell: "worker", port: "out" },
+        to: { cell: "fallback", port: "err" },
+        on: "fail",
+      },
+    ],
+  });
+
+  test("a hung effect records a timeout error and retries the same request", async () => {
+    let calls = 0;
+    const r = await runOrganism({
+      manifest: m,
+      args: { src: { v: "job" } },
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [
+        {
+          id: "slow",
+          async execute(req) {
+            calls++;
+            if (req.cellId === "worker") {
+              // never settles — the maxEffectMs race must end it
+              return new Promise<JsonValue>(() => {});
+            }
+            return "handled";
+          },
+        },
+      ],
+    });
+    expect(r.outcome).toBe("complete");
+    expect(calls).toBe(3); // 2 timed-out attempts + 1 fallback
+    expect(r.cells["worker"]?.status).toBe("failed");
+    expect(r.cells["worker"]?.failure?.code).toBe("BUDGET_EXHAUSTED");
+    expect(
+      r.effects.filter((e) => e.error?.code === "BUDGET_EXHAUSTED").length,
+    ).toBe(2);
+    expect(r.cells["fallback"]?.outputs?.out).toBe("handled");
+  });
+
+  test("a fast executor is unaffected by the bound", async () => {
+    const r = await runOrganism({
+      manifest: m,
+      args: { src: { v: "job" } },
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [
+        {
+          id: "fast",
+          async execute() {
+            return "quick";
+          },
+        },
+      ],
+    });
+    expect(r.cells["worker"]?.outputs?.out).toBe("quick");
+  });
+});

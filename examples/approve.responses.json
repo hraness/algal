@@ -1,0 +1,6 @@
+{
+  "review": "Adds bounded retries to effect cells; low blast radius, well tested.",
+  "gate": "approve",
+  "merge": "retry: bounded effect re-issue",
+  "hold": "Needs another look — see the retry loop's error handling."
+}

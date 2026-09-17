@@ -8,7 +8,7 @@ import { digestCanonical, type Digest } from "./digest";
 import { builtinRegistry } from "./registry";
 import { runOrganism } from "./run";
 import { MemoryStore } from "./store";
-import { fileTransport, parseTransportsFile } from "./transport";
+import { fileTransport, httpTransport, parseTransportsFile } from "./transport";
 import { verifyReceipt } from "./verify";
 import { canonicalize, type JsonValue } from "./values";
 
@@ -204,5 +204,77 @@ describe("via transports", () => {
     const tooMany: Record<string, string> = {};
     for (let i = 0; i < 17; i++) tooMany[`t${i}`] = "/tmp";
     expect(() => parseTransportsFile(tooMany)).toThrow("exceeds");
+  });
+});
+
+describe("httpTransport", () => {
+  test("serves a bundle over HTTP and installs it verified", async () => {
+    const remoteStore = new MemoryStore();
+    await remoteStore.putManifest(inner);
+    const bundle = await packOrganism(inner, remoteStore);
+    const body = canonicalize(bundle as unknown as JsonValue);
+    const server = Bun.serve({
+      port: 0,
+      fetch(req) {
+        const path = new URL(req.url).pathname;
+        return path === `/${innerDigest.slice(7)}.bundle.json`
+          ? new Response(body, { headers: { "content-type": "application/json" } })
+          : new Response("nope", { status: 404 });
+      },
+    });
+    try {
+      const receipt = await runOrganism({
+        manifest: parseOrganismManifest(outerJson("net")),
+        args: { src: { v: "wire" } },
+        fns: builtinRegistry(),
+        store: new MemoryStore(),
+        executors: [],
+        transports: {
+          net: httpTransport(`http://127.0.0.1:${server.port}`),
+        },
+      });
+      expect(receipt.outcome).toBe("complete");
+      expect(receipt.cells["emit"]?.outputs?.value).toBe("wire");
+      expect(receipt.cells["sub"]?.via).toBe("net");
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  test("a 404 is a miss; a tampered body fails the digest check", async () => {
+    const remoteStore = new MemoryStore();
+    await remoteStore.putManifest(inner);
+    const bundle = await packOrganism(inner, remoteStore);
+    const tampered = JSON.parse(JSON.stringify(bundle));
+    tampered.manifests[innerDigest].name = "Forged";
+    const bad = canonicalize(tampered as JsonValue);
+    const server = Bun.serve({
+      port: 0,
+      fetch(req) {
+        return new URL(req.url).pathname === `/${innerDigest.slice(7)}.bundle.json`
+          ? new Response(bad)
+          : new Response("nope", { status: 404 });
+      },
+    });
+    try {
+      const t = httpTransport(`http://127.0.0.1:${server.port}`);
+      await expect(
+        t.getBundle(`sha256:${"f".repeat(64)}` as Digest),
+      ).resolves.toBeNull();
+      // the tampered entry passes getBundle's root check but fails the
+      // per-entry rehash when unpack installs it
+      await expect(
+        runOrganism({
+          manifest: parseOrganismManifest(outerJson("net")),
+          args: { src: { v: "x" } },
+          fns: builtinRegistry(),
+          store: new MemoryStore(),
+          executors: [],
+          transports: { net: t },
+        }),
+      ).rejects.toThrow("hashes to");
+    } finally {
+      server.stop(true);
+    }
   });
 });

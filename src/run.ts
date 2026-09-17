@@ -619,8 +619,36 @@ async function activate(
 
           const meta = executor.receiptFor?.(request);
           let raw: JsonValue;
+          // budget.maxEffectMs bounds each call wall-clock; the timeout is
+          // recorded as an effect error so retry and replay both see it
+          const effectMs = cell.budget?.maxEffectMs;
           try {
-            raw = await executor.execute(request);
+            if (effectMs === undefined) {
+              raw = await executor.execute(request);
+            } else {
+              const ac = new AbortController();
+              const timer = setTimeout(() => ac.abort(), effectMs);
+              try {
+                raw = await Promise.race([
+                  executor.execute(request, ac.signal),
+                  new Promise<never>((_, reject) =>
+                    ac.signal.addEventListener(
+                      "abort",
+                      () =>
+                        reject(
+                          new MorphogenError(
+                            "BUDGET_EXHAUSTED",
+                            `cell "${cell.id}" effect exceeded maxEffectMs ${effectMs}`,
+                          ),
+                        ),
+                      { once: true },
+                    ),
+                  ),
+                ]);
+              } finally {
+                clearTimeout(timer);
+              }
+            }
           } catch (e) {
             // a failed effect is recorded too — replay must reproduce the
             // same failure for the run to verify bit-for-bit

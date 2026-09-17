@@ -64,7 +64,72 @@ export function fileTransport(dir: string, id = dir): Transport {
   };
 }
 
-/** Parse a `--transports` file: `{"name": "<dir>"}`. */
+/** A remote bundle source over HTTP(S): `GET <base>/<hex>.bundle.json`.
+ * Same trust model as FileTransport — the bundle's digests verify on
+ * install, so the wire can only deliver what the manifest named. */
+export function httpTransport(
+  base: string,
+  opts: { timeoutMs?: number } = {},
+): Transport {
+  const url = base.endsWith("/") ? base : base + "/";
+  return {
+    id: base,
+    async getBundle(root) {
+      const target = `${url}${root.slice("sha256:".length)}.bundle.json`;
+      let res: Response;
+      try {
+        res = await fetch(target, {
+          signal: AbortSignal.timeout(opts.timeoutMs ?? 15_000),
+        });
+      } catch (e) {
+        throw new MorphogenError(
+          "IO_FAILED",
+          `transport "${base}": ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+      if (res.status === 404) return null;
+      if (!res.ok) {
+        throw new MorphogenError(
+          "IO_FAILED",
+          `transport "${base}": HTTP ${res.status} for ${target}`,
+        );
+      }
+      const declared = Number(res.headers.get("content-length") ?? 0);
+      if (declared > BOUNDS.maxBundleBytes) {
+        throw new MorphogenError(
+          "BUDGET_EXHAUSTED",
+          `transport "${base}": bundle exceeds ${BOUNDS.maxBundleBytes} bytes`,
+        );
+      }
+      const text = await res.text();
+      if (text.length > BOUNDS.maxBundleBytes) {
+        throw new MorphogenError(
+          "BUDGET_EXHAUSTED",
+          `transport "${base}": bundle exceeds ${BOUNDS.maxBundleBytes} bytes`,
+        );
+      }
+      let raw: unknown;
+      try {
+        raw = JSON.parse(text);
+      } catch {
+        throw new MorphogenError(
+          "PARSE_FAILED",
+          `transport "${base}": ${target} is not JSON`,
+        );
+      }
+      const bundle = parseBundle(raw);
+      if (bundle.root !== root) {
+        throw new MorphogenError(
+          "DIGEST_MISMATCH",
+          `transport "${base}": ${target} roots at ${bundle.root}, not ${root}`,
+        );
+      }
+      return bundle;
+    },
+  };
+}
+
+/** Parse a `--transports` file: `{"name": "<dir>" | "https://…"}`. */
 export function parseTransportsFile(u: unknown): Record<string, string> {
   const obj = u as Record<string, unknown>;
   if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {

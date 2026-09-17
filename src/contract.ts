@@ -55,6 +55,8 @@ export const BOUNDS = {
   /** One bundle file a transport reads — closure of manifests + values. */
   maxBundleBytes: 67_108_864,
   maxTransports: 16,
+  /** Per-effect-call wall-clock bound ceiling — 10 minutes. */
+  maxEffectMs: 600_000,
   /** A single port value — produced or collected — never exceeds this.
    * Larger payloads go through `store` cells and `ref` tokens. */
   maxValueBytes: 262_144,
@@ -103,6 +105,9 @@ export type CellBudget = {
   maxContextBytes?: number;
   maxOutputBytes?: number;
   maxTurns?: number;
+  /** Wall-clock bound per effect call, in milliseconds. Enforcement only —
+   * receipts record the timeout as an effect error, never the clock. */
+  maxEffectMs?: number;
 };
 
 export type CellView = { cell: string; ports?: PortName[] };
@@ -690,7 +695,7 @@ function parseCell(u: unknown, what: string): Cell {
         const b = asObject(obj.budget, `${what}.budget`);
         noUnknownKeys(
           b,
-          ["maxContextBytes", "maxOutputBytes", "maxTurns"],
+          ["maxContextBytes", "maxOutputBytes", "maxTurns", "maxEffectMs"],
           `${what}.budget`,
         );
         budget = {};
@@ -719,6 +724,15 @@ function parseCell(u: unknown, what: string): Cell {
             `${what}.budget.maxTurns`,
             1,
             BOUNDS.maxTurns,
+          );
+        }
+        const ems = optField(b, "maxEffectMs");
+        if (ems !== undefined) {
+          budget.maxEffectMs = asInt(
+            ems,
+            `${what}.budget.maxEffectMs`,
+            1,
+            BOUNDS.maxEffectMs,
           );
         }
       }
@@ -1085,6 +1099,8 @@ export function manifestToJson(m: OrganismManifest): JsonObject {
             b.maxOutputBytes = c.budget.maxOutputBytes;
           if (c.budget.maxTurns !== undefined)
             b.maxTurns = c.budget.maxTurns;
+          if (c.budget.maxEffectMs !== undefined)
+            b.maxEffectMs = c.budget.maxEffectMs;
           o.budget = b;
         }
         return o;

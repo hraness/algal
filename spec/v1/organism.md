@@ -49,9 +49,10 @@ canonicalized, hashed, and embedded. It can never carry code.
 | `load` | resolves a `ref` token back to its payload | input `ref` (`ref`), output `data` (`json`) |
 
 `organism`, `repeat`, and `each` cells may declare `via`: a transport name
-(a safe id) the host maps to a bundle source. When the referenced manifest
-is absent from the local store, the transport supplies a
-`morphogen.bundle.v1` closure; `unpack` installs it with every claimed
+(a safe id) the host maps to a bundle source — a directory of
+`<hex>.bundle.json` files or an HTTP(S) base URL serving the same. When the
+referenced manifest is absent from the local store, the transport supplies
+a `morphogen.bundle.v1` closure; `unpack` installs it with every claimed
 digest rehashed, then resolution retries locally. The cell's receipt record
 carries `via` — the transport name that served the closure. Local hits
 never consult transports, so `via` is a fallback, not a preference; a
@@ -96,7 +97,12 @@ dangling pointer.
   "tools": ["pick.v1"],
   "shadow": { "take": "bug" },
   "retry": { "attempts": 3 },
-  "budget": { "maxContextBytes": 65536, "maxOutputBytes": 4096, "maxTurns": 8 }
+  "budget": {
+    "maxContextBytes": 65536,
+    "maxOutputBytes": 4096,
+    "maxTurns": 8,
+    "maxEffectMs": 30000
+  }
 }
 ```
 
@@ -140,6 +146,10 @@ dangling pointer.
   turn is a separate effect request and counts against `maxAgentCalls`. A
   `{tool, inputs}` response naming a ref outside `tools` is ordinary output.
   Tool calls that omit a required fn input fail the cell.
+- `budget.maxEffectMs` (1–600 000) bounds each effect call wall-clock. On
+  expiry the call records `{code:"BUDGET_EXHAUSTED"}` like any other failed
+  effect — `retry` re-issues, `on:"fail"` routes, replay reproduces it.
+  Receipts never record the clock itself: the bound is enforcement, not data.
 - `retry` (optional, agent/classifier/gate) is `{"attempts": 2..8}`. A failed
   effect — executor error, over-bound output, or contract-violating
   response — is recorded with its request digest and the *same* request

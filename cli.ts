@@ -21,6 +21,7 @@ import { packOrganism, parseBundle, unpackBundle } from "./src/bundle";
 import { FileStore } from "./src/store";
 import {
   fileTransport,
+  httpTransport,
   parseTransportsFile,
   type Transport,
 } from "./src/transport";
@@ -151,8 +152,10 @@ async function loadTransports(
 ): Promise<Record<string, Transport>> {
   const map = parseTransportsFile(await readJson(resolve(file)));
   const out: Record<string, Transport> = {};
-  for (const [name, dir] of Object.entries(map)) {
-    out[name] = fileTransport(resolve(dir), name);
+  for (const [name, target] of Object.entries(map)) {
+    out[name] = /^https?:\/\//.test(target)
+      ? httpTransport(target)
+      : fileTransport(resolve(target), name);
   }
   return out;
 }

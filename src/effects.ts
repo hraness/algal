@@ -43,7 +43,10 @@ export type EffectReceipt = {
 
 export type Executor = {
   id: string;
-  execute(request: EffectRequest): Promise<JsonValue>;
+  /** `signal` aborts when the cell's `budget.maxEffectMs` fires — an
+   * executor should treat abort as cancellation (commandExecutor kills its
+   * process). Advisory: the runner already raced the call to a timeout. */
+  execute(request: EffectRequest, signal?: AbortSignal): Promise<JsonValue>;
   /** Receipt metadata recorded for this request. Executors that replay a
    * prior run implement this so the rerun reproduces the original receipt's
    * executor id and usage — making verification bit-for-bit. */
@@ -150,7 +153,7 @@ export function commandExecutor(
   const maxStdout = opts.maxStdoutBytes ?? 1_048_576;
   return {
     id: `cmd:${command}`,
-    async execute(request) {
+    async execute(request, signal) {
       const proc = Bun.spawn(["sh", "-c", command], {
         stdin: "pipe",
         stdout: "pipe",
@@ -160,11 +163,14 @@ export function commandExecutor(
       proc.stdin.write(payload);
       proc.stdin.end();
       const timer = setTimeout(() => proc.kill("SIGKILL"), timeoutMs);
+      const onAbort = () => proc.kill("SIGKILL");
+      signal?.addEventListener("abort", onAbort);
       let stdout: Buffer;
       try {
         stdout = Buffer.from(await new Response(proc.stdout).arrayBuffer());
       } finally {
         clearTimeout(timer);
+        signal?.removeEventListener("abort", onAbort);
       }
       const code = await proc.exited;
       if (stdout.byteLength > maxStdout) {
