@@ -5,6 +5,7 @@ import {
   type OrganismManifest,
 } from "./contract";
 import { cachedExecutor, scriptedExecutor } from "./effects";
+import { digestCanonical } from "./digest";
 import { MorphogenError } from "./errors";
 import { builtinRegistry } from "./registry";
 import { runOrganism } from "./run";
@@ -2610,4 +2611,260 @@ describe("slot cells", () => {
       }),
     ).toThrow("only valid on read-mode");
   });
+});
+
+describe("spawn cells", () => {
+  const inner = {
+    contract: "morphogen.organism.v1",
+    key: "organism:spawned",
+    name: "Spawned",
+    interface: {
+      inputs: { v: { cell: "src", port: "v" } },
+      outputs: { out: { cell: "echo", port: "value" } },
+    },
+    cells: [
+      { id: "src", kind: "input", outputs: { v: "text" } },
+      { id: "echo", kind: "fn", fn: "echo.v1" },
+    ],
+    edges: [
+      { from: { cell: "src", port: "v" }, to: { cell: "echo", port: "value" } },
+    ],
+  };
+
+  const outer = manifest({
+    contract: "morphogen.organism.v1",
+    key: "organism:breeder",
+    name: "Breeder",
+    cells: [
+      {
+        id: "prog",
+        kind: "const",
+        outputs: { m: { type: "json", value: inner } },
+      },
+      {
+        id: "in",
+        kind: "const",
+        outputs: { a: { type: "json", value: { v: "hello" } } },
+      },
+      { id: "run", kind: "spawn" },
+    ],
+    edges: [
+      {
+        from: { cell: "prog", port: "m" },
+        to: { cell: "run", port: "manifest" },
+      },
+      { from: { cell: "in", port: "a" }, to: { cell: "run", port: "args" } },
+    ],
+  });
+
+  test("a manifest delivered as data is admitted and run; digest is provenance", async () => {
+    const store = new MemoryStore();
+    const r = await runOrganism({
+      manifest: outer,
+      args: {},
+      fns: builtinRegistry(),
+      store,
+      executors: [],
+    });
+    expect(r.outcome).toBe("complete");
+    expect(r.cells["run"]?.outputs?.data).toEqual({ out: "hello" });
+    const d = r.cells["run"]?.outputs?.digest as string;
+    expect(d).toBe(digestCanonical(manifestToJson(parseOrganismManifest(inner))));
+    // admitted to CAS — resolvable
+    expect(await store.getManifest(d as `sha256:${string}`)).toBeDefined();
+    // inner cells recorded under the spawn path
+    expect(r.cells["run/src"]?.status).toBe("committed");
+    expect(r.cells["run/echo"]?.outputs?.value).toBe("hello");
+    // and it replays bit-for-bit — the manifest rides a const, deterministic
+    const rep = await verifyReceipt(
+      r as unknown as JsonValue,
+      manifestToJson(outer),
+      store,
+      builtinRegistry(),
+    );
+    expect(rep.ok).toBe(true);
+  });
+
+  test("a non-manifest input fails the cell, routable via on:fail", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:badspawn",
+      name: "BadSpawn",
+      cells: [
+        {
+          id: "prog",
+          kind: "const",
+          outputs: { m: { type: "json", value: { not: "a manifest" } } },
+        },
+        { id: "run", kind: "spawn" },
+        { id: "recover", kind: "fn", fn: "pick.v1" },
+        {
+          id: "fname",
+          kind: "const",
+          outputs: { f: { type: "text", value: "code" } },
+        },
+      ],
+      edges: [
+        {
+          from: { cell: "prog", port: "m" },
+          to: { cell: "run", port: "manifest" },
+        },
+        {
+          from: { cell: "run", port: "data" },
+          to: { cell: "recover", port: "record" },
+          on: "fail",
+        },
+        {
+          from: { cell: "fname", port: "f" },
+          to: { cell: "recover", port: "field" },
+        },
+      ],
+    });
+    const r = await runOrganism({
+      manifest: m,
+      args: {},
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [],
+    });
+    expect(r.outcome).toBe("complete");
+    expect(r.cells["run"]?.status).toBe("failed");
+    expect(r.cells["run"]?.failure?.code).toBe("PARSE_FAILED");
+    expect(r.cells["recover"]?.outputs?.value).toBe("PARSE_FAILED");
+  });
+
+  test("a spawned organism runs its own effects through the outer executor", async () => {
+    const innerAgent = {
+      ...inner,
+      key: "organism:spawned-agent",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "text" } },
+        {
+          id: "brain",
+          kind: "agent",
+          inputs: { v: "text" },
+          prompt: "p",
+          output: { kind: "text" },
+        },
+      ],
+      edges: [
+        {
+          from: { cell: "src", port: "v" },
+          to: { cell: "brain", port: "v" },
+        },
+      ],
+      interface: {
+        inputs: { v: { cell: "src", port: "v" } },
+        outputs: { out: { cell: "brain", port: "out" } },
+      },
+    };
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:breeder2",
+      name: "Breeder2",
+      cells: [
+        {
+          id: "prog",
+          kind: "const",
+          outputs: { m: { type: "json", value: innerAgent } },
+        },
+        {
+          id: "in",
+          kind: "const",
+          outputs: { a: { type: "json", value: { v: "q" } } },
+        },
+        { id: "run", kind: "spawn" },
+      ],
+      edges: [
+        {
+          from: { cell: "prog", port: "m" },
+          to: { cell: "run", port: "manifest" },
+        },
+        { from: { cell: "in", port: "a" }, to: { cell: "run", port: "args" } },
+      ],
+    });
+    const r = await runOrganism({
+      manifest: m,
+      args: {},
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [scriptedExecutor({ brain: "spawned-answer" })],
+    });
+    expect(r.outcome).toBe("complete");
+    expect(r.cells["run/brain"]?.outputs?.out).toBe("spawned-answer");
+    expect(r.cells["run"]?.outputs?.data).toEqual({ out: "spawned-answer" });
+    // the inner effect lands on the outer receipt under the spawn path
+    expect(r.effects.length).toBe(1);
+  });
+
+  test("a spawned manifest can itself spawn — recursion is depth-bounded", async () => {
+    const grandchild = {
+      ...inner,
+      key: "organism:grandchild",
+    };
+    const child = {
+      contract: "morphogen.organism.v1",
+      key: "organism:child",
+      name: "Child",
+      interface: {
+        inputs: { v: { cell: "src", port: "v" } },
+        outputs: { out: { cell: "run2", port: "data" } },
+      },
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "text" } },
+        {
+          id: "prog2",
+          kind: "const",
+          outputs: { m: { type: "json", value: grandchild } },
+        },
+        {
+          id: "in2",
+          kind: "const",
+          outputs: { a: { type: "json", value: { v: "deep" } } },
+        },
+        { id: "run2", kind: "spawn" },
+      ],
+      edges: [
+        {
+          from: { cell: "prog2", port: "m" },
+          to: { cell: "run2", port: "manifest" },
+        },
+        {
+          from: { cell: "in2", port: "a" },
+          to: { cell: "run2", port: "args" },
+        },
+      ],
+    };
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:rec",
+      name: "Rec",
+      cells: [
+        {
+          id: "prog",
+          kind: "const",
+          outputs: { m: { type: "json", value: child } },
+        },
+        { id: "run", kind: "spawn" },
+      ],
+      edges: [
+        {
+          from: { cell: "prog", port: "m" },
+          to: { cell: "run", port: "manifest" },
+        },
+      ],
+    });
+    const r = await runOrganism({
+      manifest: m,
+      args: {},
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [],
+    });
+    expect(r.outcome).toBe("complete");
+    // grandchild cells recorded three paths deep
+    expect(r.cells["run/run2/echo"]?.outputs?.value).toBe("deep");
+    expect(r.cells["run"]?.outputs?.data).toEqual({ out: { out: "deep" } });
+  });
+
 });

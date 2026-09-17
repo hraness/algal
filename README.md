@@ -61,6 +61,15 @@ Cell kinds:
   fails, routable via `on:"fail"`), `write` stores its `data` input and
   echoes it. Reads are recorded on the receipt and served verbatim on
   replay — a live slot may have moved on since the run being verified.
+- `spawn` — breeding, bounded to one idea. An upstream cell delivers an
+  organism *manifest as data* (typically an agent's `json` output); the
+  cell parses it through the ordinary contract, admits it to the store,
+  and runs it as a nested organism under the spawn path — inner cells land
+  on the receipt as `run/echo`, `run/src`, …. `args` maps interface
+  inputs; outputs are `data` (the interface outputs) and `digest` (the
+  admitted manifest's `sha256:` — provenance). The spawned organism
+  inherits the host registry, executors, store, transports, budgets, and
+  depth bound: generated manifests are data, never code.
 
 Edges connect a producer port to a consumer port. Ports are typed (`text`,
 `json`, `choice`, `ref`), and a `json` port may declare a bounded `schema`
@@ -113,7 +122,9 @@ guard-fed input — the merge cell only activates on "approve"), and `guard`
 (an `assert.v1` invariant fails on a mismatched value — the `on:"fail"` edge
 hands the record to a `hold` cell), and `counter` (a `slot` cell reads a
 durable count, `inc.v1` bumps it, a write-mode `slot` stores it back — state
-that survives between runs) — with
+that survives between runs), and `breed` (an agent emits a manifest as
+`json`; `spawn` admits it to CAS and runs it — the child's `echo` output
+surfaces through `data`, the admitted digest through `digest`) — with
 scripted responses, then verifies each receipt offline. To run one yourself:
 
 ```sh

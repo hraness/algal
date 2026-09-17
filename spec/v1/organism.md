@@ -48,6 +48,7 @@ canonicalized, hashed, and embedded. It can never carry code.
 | `store` | writes a payload into the content-addressed store | input `data` (`json`), output `ref` (`ref`) |
 | `load` | resolves a `ref` token back to its payload | input `ref` (`ref`), output `data` (`json`) |
 | `slot` | durable named state across runs | read: output `data` (`json`); write: input+output `data` |
+| `spawn` | admit and run a manifest delivered as data | inputs `manifest` (`json`), `args` (`json`, optional); outputs `data` (`json`), `digest` (`text`) |
 
 `organism`, `repeat`, and `each` cells may declare `via`: a transport name
 (a safe id) the host maps to a bundle source — a directory of
@@ -78,8 +79,8 @@ Every port declares one of:
 
 A `ref` is a pointer, not a value: the payload never rides the edge, so it
 never enters receipts, agent contexts, or request digests — only the token
-does. `store`, `load`, and `slot` cells are the only data IO points; they
-are the only cells whose ports are fixed by the contract. A `ref` token admitted
+does. `store`, `load`, `slot`, and `spawn` cells are the only cells whose
+ports are fixed by the contract. A `ref` token admitted
 through `input` args or a `const` port must already resolve in the store —
 the caller mints tokens by writing the payload first; no cell can invent a
 dangling pointer.
@@ -234,6 +235,41 @@ dangling pointer.
 - Within one run, a read sees whatever the store holds at its activation:
   wire a read behind a write with an edge to order them, or accept
   schedule order.
+
+### spawn cells
+
+```json
+{ "id": "run", "kind": "spawn" }
+```
+
+- `spawn` is breeding bounded to one idea: an upstream cell (typically an
+  agent emitting `json`) delivers an organism *manifest as data* on the
+  `manifest` port. The cell parses it through the ordinary organism
+  contract — the same parser, bounds, and rejection of unknown keys as a
+  manifest on disk — admits it to the store, compiles it, and runs it as a
+  nested organism under the spawning cell's path (`run/src`, `run/echo`, …).
+- `args` (optional `json`) is a record keyed by the spawned manifest's
+  `interface.inputs` names — the same mapping a caller supplies at run
+  time. Absent `args` means `{}`.
+- `data` emits the spawned organism's `interface.outputs` as a record;
+  `digest` emits the admitted manifest's `sha256:` — provenance for what
+  ran, resolvable in the store afterward.
+- The spawned organism inherits everything about its root run: the
+  function registry, the executor list, store, transports, and — since
+  inner cells run on the same context — the root budgets and `maxDepth`.
+  A spawned manifest can itself contain `spawn` cells; each nesting level
+  consumes one depth step, so recursion is bounded.
+- A manifest delivered on `manifest` is data, not code: it cannot name a
+  function outside the host registry, an executor the host did not
+  supply, or exceed any contract bound. An invalid manifest fails the cell
+  through the normal contract errors (`PARSE_FAILED` et al), routable via
+  `on:"fail"`.
+- Spawned work is deterministic on replay: the manifest input rides an
+  edge (a `const`, a recorded effect output, or a `load`ed payload), inner
+  effects and slot reads replay from the receipt, and `putManifest` is
+  idempotent — `verify` reproduces the run bit-for-bit.
+- Manifests larger than `maxValueBytes` cannot ride an edge — `store` the
+  manifest JSON first and deliver it through `load` → `data` → `manifest`.
 
 ### each cells
 

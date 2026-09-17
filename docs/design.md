@@ -132,7 +132,12 @@ the request signs.
 - Delegated execution — a remote host runs the organism and you trust its
   receipt (needs signed identity/attestation — a Valhalla concern). Remote
   *resolution* via `via`/transports is implemented.
-- Workflow breeding/mutation, organisms that emit organisms.
+- Workflow breeding/mutation beyond `spawn`: search strategies over
+  organism space, fitness evaluation loops, self-modification. `spawn`
+  admits a *delivered* manifest — it bounds breeding to "run this program
+  another cell produced," inheriting the root run's budgets, registry,
+  executors, and depth. Who proposes candidates, how a population is
+  scored, and what a lineage means are habitat questions, deferred.
 - Hosted habitats: persistent goal-seeking configurations of many organisms.
 - A real view language over the program graph (beyond `view.cells`).
 - Cycles as ordinary edges and streaming re-activation (`repeat` and `each`

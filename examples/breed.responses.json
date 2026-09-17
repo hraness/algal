@@ -1,0 +1,18 @@
+{
+  "writer": {
+    "contract": "morphogen.organism.v1",
+    "key": "organism:echo-child",
+    "name": "EchoChild",
+    "interface": {
+      "inputs": { "q": { "cell": "src", "port": "v" } },
+      "outputs": { "out": { "cell": "echo", "port": "value" } }
+    },
+    "cells": [
+      { "id": "src", "kind": "input", "outputs": { "v": "text" } },
+      { "id": "echo", "kind": "fn", "fn": "echo.v1" }
+    ],
+    "edges": [
+      { "from": { "cell": "src", "port": "v" }, "to": { "cell": "echo", "port": "value" } }
+    ]
+  }
+}

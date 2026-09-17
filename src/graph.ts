@@ -101,6 +101,22 @@ export function cellSignature(
             outputs: { data: { type: "json" } },
           }
         : { inputs: {}, outputs: { data: { type: "json" } } };
+    case "spawn":
+      return {
+        inputs: {
+          manifest: { type: "json" },
+          /** Interface-input map for the spawned organism:
+           * `{<interface input name>: value}`, same shape an organism cell's
+           * declared inputs take. */
+          args: { type: "json", optional: true },
+        },
+        outputs: {
+          /** The spawned organism's interface outputs as a record. */
+          data: { type: "json" },
+          /** The admitted manifest's digest — provenance of what ran. */
+          digest: { type: "text" },
+        },
+      };
     case "organism": {
       const sub = children.get(cell.id);
       if (!sub?.manifest.interface) {

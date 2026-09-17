@@ -204,7 +204,14 @@ export type Cell =
       mode: "read" | "write";
       /** Read mode only: emitted when the slot has never been written. */
       default?: JsonValue;
-    };
+    }
+  /** `spawn` runs a manifest delivered as *data*: a json producer (usually
+   * an agent) emits an organism manifest, and the cell parses it through the
+   * same contract, admits it to the store by digest, and runs it under the
+   * root manifest's budgets and depth bound. This is the honest first form
+   * of breeding — the emitted program is still data, still bounded, still
+   * fully on the receipt, and its digest is the spawned run's provenance. */
+  | { id: string; kind: "spawn" };
 
 export type Edge = {
   from: { cell: string; port: PortName };
@@ -564,7 +571,8 @@ function parseCell(u: unknown, what: string): Cell {
       };
     }
     case "store":
-    case "load": {
+    case "load":
+    case "spawn": {
       noUnknownKeys(obj, ["id", "kind"], what);
       return { id, kind };
     }
@@ -1084,6 +1092,7 @@ export function manifestToJson(m: OrganismManifest): JsonObject {
         return { id: c.id, kind: c.kind, fn: c.fn };
       case "store":
       case "load":
+      case "spawn":
         return { id: c.id, kind: c.kind };
       case "slot": {
         const o: JsonObject = {

@@ -582,4 +582,37 @@ describe("slot cells", () => {
       parseOrganismManifest(cell({ via: "x" })),
     ).toThrow(/unknown key/);
   });
+
+  test("spawn cells carry no config and round-trip", () => {
+    const m = parseOrganismManifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:t",
+      name: "T",
+      cells: [
+        {
+          id: "prog",
+          kind: "const",
+          outputs: { m: { type: "json", value: {} } },
+        },
+        { id: "run", kind: "spawn" },
+      ],
+      edges: [
+        {
+          from: { cell: "prog", port: "m" },
+          to: { cell: "run", port: "manifest" },
+        },
+      ],
+    });
+    const back = parseOrganismManifest(manifestToJson(m));
+    expect(manifestToJson(back)).toEqual(manifestToJson(m));
+    expect(() =>
+      parseOrganismManifest({
+        contract: "morphogen.organism.v1",
+        key: "organism:t",
+        name: "T",
+        cells: [{ id: "s", kind: "spawn", extra: 1 }],
+        edges: [],
+      }),
+    ).toThrow("unknown key");
+  });
 });

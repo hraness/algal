@@ -17,7 +17,11 @@ import type {
   OrganismManifest,
   PortType,
 } from "./contract";
-import { BOUNDS, manifestToJson } from "./contract";
+import {
+  BOUNDS,
+  manifestToJson,
+  parseOrganismManifest,
+} from "./contract";
 import {
   bindOutput,
   checkSchema,
@@ -526,6 +530,47 @@ async function activate(
         );
       }
       return { outputs: { data: v } };
+    }
+    case "spawn": {
+      // the manifest is runtime data — parse it through the same contract a
+      // static manifest faces, admit it to CAS, compile, and run it under
+      // the root manifest's budgets and depth bound
+      const subManifest = parseOrganismManifest(inputs.manifest);
+      const subDigest = await ctx.opts.store.putManifest(subManifest);
+      const subCompiled = await compileOrganism(
+        subManifest,
+        ctx.opts.fns,
+        ctx.opts.store,
+        depth + 1,
+        ctx.opts.transports,
+      );
+      const rawArgs = inputs.args ?? {};
+      if (
+        rawArgs === null ||
+        typeof rawArgs !== "object" ||
+        Array.isArray(rawArgs)
+      ) {
+        throw new MorphogenError(
+          "TYPE_MISMATCH",
+          `spawn cell "${cell.id}": args must be a record of interface inputs`,
+        );
+      }
+      const subArgs = argsForSubOrganism(
+        subManifest,
+        rawArgs as Record<string, JsonValue>,
+      );
+      await runInto(subCompiled, subArgs, path, ctx, depth + 1);
+      if (ctx.failure) {
+        throw new MorphogenError(ctx.failure.code, ctx.failure.message);
+      }
+      const data: Record<string, JsonValue> = {};
+      const iface = subManifest.interface ?? { inputs: {}, outputs: {} };
+      for (const [name, target] of Object.entries(iface.outputs)) {
+        const rec = ctx.cells[`${path}/${target.cell}`];
+        const v = rec?.outputs?.[target.port];
+        if (v !== undefined) data[name] = v;
+      }
+      return { outputs: { data, digest: subDigest } };
     }
     case "fn": {
       const entry = ctx.opts.fns.get(cell.fn)!;
