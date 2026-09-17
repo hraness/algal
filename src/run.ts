@@ -20,6 +20,7 @@ import type {
 import { BOUNDS, manifestToJson } from "./contract";
 import {
   bindOutput,
+  checkSchema,
   effectRequestDigest,
   type EffectReceipt,
   type EffectRequest,
@@ -295,6 +296,13 @@ async function runInto(
       ctx.work.units += WORK.activation;
 
       try {
+        // the consumer's declared ports are the last contract check: a
+        // delivered value that violates a declared schema fails this cell
+        // (routable via on:"fail"), never silently enters activation
+        for (const p of inputNames) {
+          const v = inputs[p];
+          if (v !== undefined) checkValue(v, sig.inputs[p]!, `${cell.id}.${p}`);
+        }
         const act = await activate(cell, inputs, args, compiled, ctx, cellPath(cell.id), depth);
         checkOutputs(cell, sig.outputs, act.outputs);
         produced.set(cell.id, new Map(Object.entries(act.outputs)));
@@ -788,6 +796,14 @@ function pickExecutor(executors: Executor[], cell: Cell): Executor {
 }
 
 function checkValue(v: JsonValue, decl: PortType, what: string): void {
+  // a port never carries a value over maxValueBytes — bulk goes through CAS
+  const bytes = canonicalBytes(v);
+  if (bytes > BOUNDS.maxValueBytes) {
+    throw new MorphogenError(
+      "BUDGET_EXHAUSTED",
+      `${what}: value ${bytes}B exceeds maxValueBytes ${BOUNDS.maxValueBytes}B — pin large payloads through a store cell`,
+    );
+  }
   if (decl.many) {
     if (!Array.isArray(v)) {
       throw new MorphogenError("TYPE_MISMATCH", `${what}: expected a list`);
@@ -827,6 +843,7 @@ function checkValue(v: JsonValue, decl: PortType, what: string): void {
       }
       return;
     case "json":
+      if (decl.schema) checkSchema(decl.schema, v, what, "TYPE_MISMATCH");
       return;
   }
 }

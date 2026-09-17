@@ -6,7 +6,7 @@
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { manifestToJson, parseOrganismManifest } from "./src/contract";
+import { BOUNDS, manifestToJson, parseOrganismManifest } from "./src/contract";
 import { compileOrganism } from "./src/graph";
 import { digestCanonical } from "./src/digest";
 import {
@@ -50,6 +50,12 @@ usage:
                                               compare two receipts, report divergence
   morphogen suite                             run and verify all bundled examples
   morphogen digest <manifest.json>            print the manifest's canonical digest
+  morphogen store put <value.json> [--dir <path>]
+                                              write a JSON value to CAS, print its ref token
+  morphogen store get <sha256:…> [--dir <path>]
+                                              print the payload a ref resolves to
+  morphogen store has <sha256:…> [--dir <path>]
+                                              report whether a ref resolves
   morphogen --version | --help
 `;
 
@@ -169,6 +175,53 @@ async function main(): Promise<number> {
       return 0;
     }
 
+    case "store": {
+      const sub = positional[0];
+      const asRefDigest = (s: string | undefined): `sha256:${string}` => {
+        if (!s || !/^sha256:[0-9a-f]{64}$/.test(s)) {
+          throw new MorphogenError(
+            "PARSE_FAILED",
+            "expected a sha256:<64 hex> ref token",
+          );
+        }
+        return s as `sha256:${string}`;
+      };
+      switch (sub) {
+        case "put": {
+          const file = positional[1];
+          if (!file) usageError("morphogen store put <value.json>");
+          const v = await readJson(resolve(file));
+          const bytes = canonicalize(v).length;
+          if (bytes > BOUNDS.maxBlobBytes) {
+            throw new MorphogenError(
+              "BUDGET_EXHAUSTED",
+              `value ${bytes}B exceeds maxBlobBytes ${BOUNDS.maxBlobBytes}B — a run could never load this ref`,
+            );
+          }
+          const d = await store.putValue(v);
+          out({ ref: d, bytes });
+          return 0;
+        }
+        case "get": {
+          const d = asRefDigest(positional[1]);
+          const v = await store.getValue(d);
+          if (v === undefined) {
+            throw new MorphogenError("INPUT_MISSING", `ref ${d} not in store`);
+          }
+          out(v);
+          return 0;
+        }
+        case "has": {
+          const d = asRefDigest(positional[1]);
+          out({ ref: d, ok: (await store.getValue(d)) !== undefined });
+          return 0;
+        }
+        default:
+          usageError("morphogen store put|get|has …");
+      }
+      return 0;
+    }
+
     case "check": {
       const file = positional[0];
       if (!file) usageError("morphogen check <manifest.json> [--modules <dir>]");
@@ -204,11 +257,13 @@ async function main(): Promise<number> {
         optional?: boolean;
         many?: boolean;
         labels?: string[];
+        schema?: JsonObject;
       }): JsonValue => {
         const o: JsonObject = { type: p.type };
         if (p.optional) o.optional = true;
         if (p.many) o.many = true;
         if (p.labels) o.labels = p.labels;
+        if (p.schema) o.schema = p.schema;
         return o as JsonValue;
       };
       const cells: JsonObject = {};

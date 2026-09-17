@@ -46,13 +46,17 @@ Cell kinds:
   fan-out → compute → collect without a loop construct in sight.
 - `store` / `load` — the only data IO cells. `store` writes a `json` payload
   into the content-addressed store and emits a `ref` port — a `sha256:` token.
-  `load` resolves the token back to the payload. Payloads live in CAS and are
-  bounded by `maxBlobBytes`; only digests ride edges, receipts, and contexts.
-  A caller-supplied `ref` must already resolve — no dangling pointers — and a
-  store that returns wrong content fails `DIGEST_MISMATCH`.
+  `load` resolves the token back to the payload. No port ever carries more
+  than `maxValueBytes` (256 KiB canonical), so bulk data *must* flow through
+  CAS — only digests ride edges, receipts, and contexts. A caller-supplied
+  `ref` must already resolve — `morphogen store put` mints one — and a store
+  that returns wrong content fails `DIGEST_MISMATCH`.
 
 Edges connect a producer port to a consumer port. Ports are typed (`text`,
-`json`, `choice`, `ref`); guarded edges fire only when the produced choice equals the
+`json`, `choice`, `ref`), and a `json` port may declare a bounded `schema`
+(`{"type","required","properties"}`, depth ≤ 4) — a delivered record that
+violates it fails the consumer's activation, routable through `on:"fail"`.
+Guarded edges fire only when the produced choice equals the
 guard label — or, on a `json` producer, when `guard.field` of the delivered
 record strictly equals `guard.equals`, so routing can depend on a structured
 field without a classifier in between. An edge declared `"on": "fail"`
@@ -88,7 +92,9 @@ classifier), `recover` (a classifier miss fails; an `on:"fail"` edge hands
 the record to a fallback cell), and
 `swarm` (an `each` cell mapping a question list through a sub-manifest), and
 `stash` (a document pinned to CAS by a `store` cell — only the `ref` token
-reaches the `load` cell that resolves it) — with
+reaches the `load` cell that resolves it), and `intake` (a schema'd input
+port rejecting a malformed ticket, the failure record routed to a `repair`
+cell through `on:"fail"`) — with
 scripted responses, then verifies each receipt offline. To run one yourself:
 
 ```sh
@@ -102,6 +108,9 @@ bun run cli verify .morphogen/runs/<receipt-digest>.json \
 bun run cli verify .morphogen/runs/<receipt-digest>.json
 # compare two runs: which cells diverged, what each one cost
 bun run cli diff .morphogen/runs/<a>.json .morphogen/runs/<b>.json
+# mint a ref for a payload — then pass the token as a "ref" arg
+bun run cli store put payload.json        # → {"ref":"sha256:…"}
+bun run cli store get sha256:…            # → the payload
 ```
 
 `check` admits a manifest without running it: parse, graph validation, and

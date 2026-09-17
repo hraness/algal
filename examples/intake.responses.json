@@ -1,0 +1,4 @@
+{
+  "handler": "Got it — 'Export broken' is flagged high severity.",
+  "repair": "Your ticket is missing required fields; please include severity and title."
+}

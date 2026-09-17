@@ -51,6 +51,9 @@ export const BOUNDS = {
   maxEvents: 4096,
   maxArgsBytes: 1_048_576,
   maxBlobBytes: 262_144,
+  /** A single port value — produced or collected — never exceeds this.
+   * Larger payloads go through `store` cells and `ref` tokens. */
+  maxValueBytes: 262_144,
   maxSchemaDepth: 4,
   maxInterfacePorts: 32,
 } as const;
@@ -68,7 +71,13 @@ export const DEFAULT_BUDGETS = {
 
 export type PortType =
   | { type: "text"; optional?: boolean; many?: boolean }
-  | { type: "json"; optional?: boolean; many?: boolean }
+  | {
+      type: "json";
+      optional?: boolean;
+      many?: boolean;
+      /** bounded schema subset — same shape as agent json output contracts */
+      schema?: JsonObject;
+    }
   | { type: "choice"; optional?: boolean; many?: boolean; labels?: string[] }
   | { type: "ref"; optional?: boolean; many?: boolean };
 
@@ -216,7 +225,7 @@ function parsePortType(u: unknown, what: string): PortType {
     throw new MorphogenError("PARSE_FAILED", `${what}: unknown port type "${u}"`);
   }
   const obj = asObject(u, what);
-  noUnknownKeys(obj, ["type", "optional", "many", "labels"], what);
+  noUnknownKeys(obj, ["type", "optional", "many", "labels", "schema"], what);
   const type = asString(reqField(obj, "type", what), `${what}.type`, 16);
   if (
     type !== "text" &&
@@ -252,6 +261,18 @@ function parsePortType(u: unknown, what: string): PortType {
       );
     }
   }
+  const schemaRaw = optField(obj, "schema");
+  let schema: JsonObject | undefined;
+  if (schemaRaw !== undefined) {
+    if (type !== "json") {
+      throw new MorphogenError(
+        "PARSE_FAILED",
+        `${what}.schema requires type "json"`,
+      );
+    }
+    schema = asObject(schemaRaw, `${what}.schema`);
+    checkSchemaDepth(schema, `${what}.schema`, 0);
+  }
   if (type === "choice") {
     const out: {
       type: "choice";
@@ -265,6 +286,7 @@ function parsePortType(u: unknown, what: string): PortType {
     return out;
   }
   const out: PortType = { type };
+  if (schema !== undefined && out.type === "json") out.schema = schema;
   if (optional !== undefined) out.optional = optional;
   if (many !== undefined) out.many = many;
   return out;
@@ -487,15 +509,18 @@ function parseCell(u: unknown, what: string): Cell {
       for (const [name, decl] of Object.entries(raw)) {
         asSafeId(name, `${what}.outputs port name`);
         const d = asObject(decl, `${what}.outputs.${name}`);
-        const pt = parsePortType(d, `${what}.outputs.${name}`);
+        // `value` is the const payload, not a port-type field — split it off
+        // before type parsing so parsePortType's unknown-key check still bites
+        const value = reqField(d, "value", `${what}.outputs.${name}`);
+        asJsonValue(value, `${what}.outputs.${name}.value`);
+        const { value: _v, ...typeDecl } = d;
+        const pt = parsePortType(typeDecl, `${what}.outputs.${name}`);
         if (pt.many) {
           throw new MorphogenError(
             "PARSE_FAILED",
             `${what}.outputs.${name}: many is only valid on input ports`,
           );
         }
-        const value = reqField(d, "value", `${what}.outputs.${name}`);
-        asJsonValue(value, `${what}.outputs.${name}.value`);
         outputs[name] = { ...pt, value: value as JsonValue };
       }
       return { id, kind, outputs };
@@ -1060,6 +1085,7 @@ function portTypeJson(p: PortType): JsonObject {
   if (p.optional) o.optional = true;
   if (p.many) o.many = true;
   if (p.type === "choice" && p.labels) o.labels = p.labels;
+  if (p.type === "json" && p.schema) o.schema = p.schema;
   return o;
 }
 

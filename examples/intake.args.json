@@ -1,0 +1,9 @@
+{
+  "src": {
+    "ticket": {
+      "severity": "high",
+      "title": "Export broken",
+      "body": "CSV export returns an empty file since yesterday."
+    }
+  }
+}

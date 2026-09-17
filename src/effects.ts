@@ -229,14 +229,18 @@ export function bindOutput(
   }
 }
 
-function checkSchema(schema: JsonObject, value: JsonValue, what: string): void {
+/** The bounded schema subset `{type, required, properties}` — used for
+ * agent json output contracts and `json` port `schema` declarations. */
+export function checkSchema(
+  schema: JsonObject,
+  value: JsonValue,
+  what: string,
+  code: "EFFECT_UNPARSEABLE" | "TYPE_MISMATCH" = "EFFECT_UNPARSEABLE",
+): void {
   const type = typeof schema.type === "string" ? schema.type : undefined;
   if (type === "object" || type === undefined) {
     if (value === null || typeof value !== "object" || Array.isArray(value)) {
-      throw new MorphogenError(
-        "EFFECT_UNPARSEABLE",
-        `${what}: expected object`,
-      );
+      throw new MorphogenError(code, `${what}: expected object`);
     }
     const required = Array.isArray(schema.required) ? schema.required : [];
     const props =
@@ -246,7 +250,7 @@ function checkSchema(schema: JsonObject, value: JsonValue, what: string): void {
     for (const r of required) {
       if (typeof r === "string" && !(r in (value as JsonObject))) {
         throw new MorphogenError(
-          "EFFECT_UNPARSEABLE",
+          code,
           `${what}: missing required key "${r}"`,
         );
       }
@@ -254,13 +258,18 @@ function checkSchema(schema: JsonObject, value: JsonValue, what: string): void {
     for (const [k, v] of Object.entries(value as JsonObject)) {
       const sub = props[k];
       if (sub !== null && typeof sub === "object" && !Array.isArray(sub)) {
-        checkSchemaValue(sub as JsonObject, v, `${what}.${k}`);
+        checkSchemaValue(sub as JsonObject, v, `${what}.${k}`, code);
       }
     }
   }
 }
 
-function checkSchemaValue(schema: JsonObject, value: JsonValue, what: string): void {
+function checkSchemaValue(
+  schema: JsonObject,
+  value: JsonValue,
+  what: string,
+  code: "EFFECT_UNPARSEABLE" | "TYPE_MISMATCH",
+): void {
   const t = typeof schema.type === "string" ? schema.type : undefined;
   const ok =
     t === undefined ||
@@ -271,10 +280,7 @@ function checkSchemaValue(schema: JsonObject, value: JsonValue, what: string): v
     (t === "object" && value !== null && typeof value === "object" && !Array.isArray(value)) ||
     (t === "null" && value === null);
   if (!ok) {
-    throw new MorphogenError(
-      "EFFECT_UNPARSEABLE",
-      `${what}: expected ${t}`,
-    );
+    throw new MorphogenError(code, `${what}: expected ${t}`);
   }
 }
 

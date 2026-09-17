@@ -435,3 +435,53 @@ describe("ref ports and store/load cells", () => {
     ).toThrow(/unknown key/);
   });
 });
+
+describe("json port schemas", () => {
+  test("schema parses on json ports and round-trips", () => {
+    const m = parseOrganismManifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:sch",
+      name: "Sch",
+      cells: [
+        {
+          id: "a",
+          kind: "agent",
+          inputs: {
+            rec: {
+              type: "json",
+              schema: { type: "object", required: ["severity"] },
+            },
+          },
+          prompt: "p",
+          output: { kind: "text" },
+        },
+      ],
+      edges: [],
+    });
+    expect(parseOrganismManifest(manifestToJson(m))).toEqual(m);
+  });
+
+  test("schema is rejected on non-json ports and beyond depth bound", () => {
+    const cell = (inputs: unknown) => ({
+      contract: "morphogen.organism.v1",
+      key: "organism:sch2",
+      name: "Sch2",
+      cells: [
+        { id: "a", kind: "agent", inputs, prompt: "p", output: { kind: "text" } },
+      ],
+      edges: [],
+    });
+    expect(() =>
+      parseOrganismManifest(
+        cell({ r: { type: "ref", schema: { type: "object" } } }),
+      ),
+    ).toThrow(/requires type "json"/);
+    let deep: Record<string, unknown> = {};
+    for (let i = 0; i < BOUNDS.maxSchemaDepth + 1; i++) {
+      deep = { properties: { ["k" + i]: deep } };
+    }
+    expect(() =>
+      parseOrganismManifest(cell({ r: { type: "json", schema: deep } })),
+    ).toThrow(/schema depth/);
+  });
+});

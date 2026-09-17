@@ -89,10 +89,12 @@ execution are different jobs.)
 
 **Payloads are content-addressed too.** A `ref` port carries a `sha256:`
 token, not a value; `store` and `load` cells are the only IO points, so the
-graph shows exactly where data enters and leaves CAS. A large document can
-pass through a hundred cells without ever appearing in a receipt or an
-effect request — only its digest does, and the digest is what the request
-signs.
+graph shows exactly where data enters and leaves CAS. `maxValueBytes` makes
+this the enforced path, not the optional one: no port may carry more than
+256 KiB canonical, so bulk data goes through CAS by construction. A large
+document can pass through a hundred cells without ever appearing in a
+receipt or an effect request — only its digest does, and the digest is what
+the request signs.
 
 ## Deferred on purpose
 

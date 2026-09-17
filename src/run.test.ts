@@ -1883,12 +1883,16 @@ describe("ref ports and store/load cells", () => {
     );
   });
 
-  test("payloads over maxBlobBytes fail bounded", async () => {
+  test("payloads over maxValueBytes fail bounded at the boundary", async () => {
     const r = await run(manifest(cas), {
       args: { src: { doc: { blob: "x".repeat(300_000) } } },
     });
     expect(r.outcome).toBe("failed");
-    expect(r.cells["put"]?.failure?.code).toBe("BUDGET_EXHAUSTED");
+    // the value never enters the graph — src cannot commit an over-bound
+    // port value, so the store cell is never even reached
+    expect(r.cells["src"]?.failure?.code).toBe("BUDGET_EXHAUSTED");
+    expect(r.cells["src"]?.failure?.message).toContain("store cell");
+    expect(r.cells["put"]).toBeUndefined();
   });
 
   test("store/load runs replay bit-for-bit", async () => {
@@ -1949,5 +1953,91 @@ describe("ref ports and store/load cells", () => {
     expect(r.outcome).toBe("complete");
     expect(r.cells["sub"]?.outputs?.doc).toEqual(doc);
     expect(r.cells["sub/get"]?.outputs?.data).toEqual(doc);
+  });
+});
+
+describe("json port schemas", () => {
+  const ticketer = (consumerSchema?: unknown, withFailEdge = false) => ({
+    contract: "morphogen.organism.v1",
+    key: "organism:schema",
+    name: "Schema",
+    cells: [
+      { id: "src", kind: "input", outputs: { doc: "json" } },
+      {
+        id: "sink",
+        kind: "agent",
+        inputs: {
+          rec: consumerSchema
+            ? { type: "json", schema: consumerSchema }
+            : "json",
+        },
+        prompt: "p",
+        output: { kind: "text" },
+      },
+      ...(withFailEdge
+        ? [{ id: "fallback", kind: "agent", inputs: { err: "json" }, prompt: "p", output: { kind: "text" } }]
+        : []),
+    ],
+    edges: [
+      { from: { cell: "src", port: "doc" }, to: { cell: "sink", port: "rec" } },
+      ...(withFailEdge
+        ? [{ from: { cell: "sink", port: "out" }, to: { cell: "fallback", port: "err" }, on: "fail" }]
+        : []),
+    ],
+  });
+
+  const schema = {
+    type: "object",
+    required: ["severity"],
+    properties: { severity: { type: "string" } },
+  };
+
+  test("a schema'd consumer accepts a conforming record", async () => {
+    const r = await run(manifest(ticketer(schema)), {
+      args: { src: { doc: { severity: "high", title: "t" } } },
+      responses: { sink: "ok" },
+    });
+    expect(r.outcome).toBe("complete");
+    expect(r.cells["sink"]?.outputs?.out).toBe("ok");
+  });
+
+  test("a schema'd consumer fails on a missing required key", async () => {
+    const r = await run(manifest(ticketer(schema)), {
+      args: { src: { doc: { title: "t" } } },
+      responses: { sink: "ok" },
+    });
+    expect(r.outcome).toBe("failed");
+    expect(r.cells["sink"]?.failure?.code).toBe("TYPE_MISMATCH");
+    expect(r.cells["sink"]?.failure?.message).toContain("severity");
+  });
+
+  test("a schema violation is routable via on:fail", async () => {
+    const r = await run(manifest(ticketer(schema, true)), {
+      args: { src: { doc: { title: "t" } } },
+      responses: { sink: "ok", fallback: "handled" },
+    });
+    expect(r.outcome).toBe("complete");
+    expect(r.cells["sink"]?.status).toBe("failed");
+    expect(r.cells["fallback"]?.outputs?.out).toBe("handled");
+  });
+
+  test("a schema on a producer output is enforced at commit", async () => {
+    const m = manifest({
+      contract: "morphogen.organism.v1",
+      key: "organism:schprod",
+      name: "SchProd",
+      cells: [
+        {
+          id: "c",
+          kind: "const",
+          outputs: {
+            rec: { type: "json", schema, value: { title: "no severity" } },
+          },
+        },
+      ],
+    });
+    const r = await run(m);
+    expect(r.outcome).toBe("failed");
+    expect(r.cells["c"]?.failure?.code).toBe("TYPE_MISMATCH");
   });
 });

@@ -35,6 +35,7 @@ export type { CellRecord, RunEvent, RunOptions, RunReceipt } from "./src/run";
 export {
   EFFECT_CONTRACT,
   bindOutput,
+  checkSchema,
   commandExecutor,
   effectRequestDigest,
   replayExecutor,

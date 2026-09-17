@@ -53,7 +53,12 @@ canonicalized, hashed, and embedded. It can never carry code.
 Every port declares one of:
 
 - `text` — a string
-- `json` — any JSON value
+- `json` — any JSON value; an optional `schema` field narrows it to a
+  bounded subset (`{"type","required","properties"}` — the same shape as
+  agent json output contracts, depth ≤ 4). The declaring cell owns the
+  check: a produced value violating an output schema fails at commit; a
+  delivered value violating an input schema fails the consumer's activation
+  — either way routable through `on:"fail"`.
 - `choice` — a string from declared `labels`
 - `ref` — a `sha256:` digest token naming a payload in the store
 
@@ -257,6 +262,11 @@ dangling pointer.
   work ledger and bound it by `maxBlobBytes`. `ref` tokens compose across
   `organism`/`repeat`/`each` boundaries — every nested run shares the root
   store, so a token minted at any depth resolves at any other.
+- No port ever carries a value over `maxValueBytes` (262 144 canonical
+  bytes) — produced outputs are bounded at commit and collected inputs
+  (including whole `many` lists) at delivery. Anything larger must go
+  through CAS: a `store` cell emits a ~71-byte `ref` token that rides the
+  edge instead.
 - A cell whose activation throws records `status: "failed"` with the
   failure detail. With no `on:"fail"` edge outbound, the run fails (first
   unhandled failure wins). With one, the run continues — the failure record
