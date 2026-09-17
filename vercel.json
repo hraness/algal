@@ -2,5 +2,13 @@
   "framework": null,
   "buildCommand": "bun run build:site",
   "installCommand": "bun install --frozen-lockfile --ignore-scripts",
-  "outputDirectory": "site/dist"
+  "outputDirectory": "site/dist",
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "morphogen-teal.vercel.app" }],
+      "destination": "https://morphogen.dev/$1",
+      "permanent": true
+    }
+  ]
 }

@@ -1,0 +1,13 @@
+# morphogen
+
+> Typed, replayable workflow organisms for AI agents: a finite, typed graph
+> where deterministic cells do most of the work and bounded agent cells handle
+> what needs judgment. Every run emits a content-addressed receipt a verifier
+> can replay offline.
+
+## Source
+
+- [GitHub: hraness/morphogen](https://github.com/hraness/morphogen)
+- [Organism contract (spec/v1/organism.md)](https://github.com/hraness/morphogen/blob/main/spec/v1/organism.md)
+- [Design notes](https://github.com/hraness/morphogen/tree/main/docs)
+- [Bundled example organisms](https://github.com/hraness/morphogen/tree/main/examples)

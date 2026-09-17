@@ -10,7 +10,7 @@ const DIST = join(SITE, "dist");
 await rm(DIST, { recursive: true, force: true });
 await mkdir(DIST, { recursive: true });
 
-for (const f of ["index.html", "styles.css", "robots.txt", "sitemap.xml", "og.png"]) {
+for (const f of ["index.html", "styles.css", "robots.txt", "sitemap.xml", "llms.txt", "og.png"]) {
   await cp(join(SITE, f), join(DIST, f));
 }
 
