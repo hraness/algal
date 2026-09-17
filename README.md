@@ -1,6 +1,6 @@
 # morphogen
 
-Typed, replayable workflow organisms. A workflow is a finite, typed graph where
+Typed, replayable workflow organisms for AI agents. A workflow is a finite, typed graph where
 the structure carries the decisions: deterministic cells do most of the work,
 and bounded agent cells handle the parts that need judgment. Every run emits a
 content-addressed receipt that a verifier can replay offline.
