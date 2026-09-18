@@ -162,10 +162,10 @@ function caseArgs(
   manifest: OrganismManifest,
   c: BenchCase,
 ): Record<string, Record<string, JsonValue>> {
-  const args: Record<string, Record<string, JsonValue>> = {};
+  const args: Record<string, Record<string, JsonValue>> = Object.create(null) as Record<string, Record<string, JsonValue>>;
   for (const [name, value] of Object.entries(c.args)) {
     const target = manifest.interface!.inputs[name]!;
-    (args[target.cell] ??= {})[target.port] = value;
+    (args[target.cell] ??= Object.create(null) as Record<string, JsonValue>)[target.port] = value;
   }
   return args;
 }
@@ -186,7 +186,7 @@ function attribute(
   usage: { tokensIn: number; tokensOut: number; cost: number };
   attribution: Record<string, BenchAttribution>;
 } {
-  const attribution: Record<string, BenchAttribution> = {};
+  const attribution: Record<string, BenchAttribution> = Object.create(null) as Record<string, BenchAttribution>;
   const usage = { tokensIn: 0, tokensOut: 0, cost: 0 };
   for (const effect of effects) {
     const key = effect.usage?.model ?? effect.executor;
@@ -238,7 +238,7 @@ async function evaluateCase(
     ...(opts.tools ? { tools: opts.tools } : {}),
   });
   const receiptDigest = await opts.store.putReceipt(receipt as unknown as JsonValue);
-  const outputs: Record<string, JsonValue> = {};
+  const outputs: Record<string, JsonValue> = Object.create(null) as Record<string, JsonValue>;
   for (const [name, source] of Object.entries(system.manifest.interface!.outputs)) {
     const value = receipt.cells[source.cell]?.outputs?.[source.port];
     if (value !== undefined) outputs[name] = value;
@@ -299,7 +299,7 @@ export async function runBenchmark(opts: BenchOptions): Promise<BenchReport> {
     const manifestDigest = await opts.store.putManifest(system.manifest);
     const cases: BenchCaseResult[] = [];
     for (const c of opts.cases) cases.push(await evaluateCase(system, c, opts));
-    const attribution: Record<string, BenchAttribution> = {};
+    const attribution: Record<string, BenchAttribution> = Object.create(null) as Record<string, BenchAttribution>;
     for (const c of cases) mergeAttribution(attribution, c.attribution);
     systems.push({
       id: system.id,

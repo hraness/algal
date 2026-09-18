@@ -141,16 +141,16 @@ function validate(opts: FoundryOptions): void {
 }
 
 function caseArgs(candidate: OrganismManifest, c: FoundryCase): Record<string, Record<string, JsonValue>> {
-  const args: Record<string, Record<string, JsonValue>> = {};
+  const args: Record<string, Record<string, JsonValue>> = Object.create(null) as Record<string, Record<string, JsonValue>>;
   for (const [name, value] of Object.entries(c.args)) {
     const target = candidate.interface!.inputs[name]!;
-    (args[target.cell] ??= {})[target.port] = value;
+    (args[target.cell] ??= Object.create(null) as Record<string, JsonValue>)[target.port] = value;
   }
   return args;
 }
 
 function caseOutputs(candidate: OrganismManifest, cells: Awaited<ReturnType<typeof runOrganism>>["cells"]): Record<string, JsonValue> {
-  const outputs: Record<string, JsonValue> = {};
+  const outputs: Record<string, JsonValue> = Object.create(null) as Record<string, JsonValue>;
   for (const [name, source] of Object.entries(candidate.interface!.outputs)) {
     const value = cells[source.cell]?.outputs?.[source.port];
     if (value !== undefined) outputs[name] = value;
@@ -223,11 +223,11 @@ export async function generateFoundryCandidates(
   if (!iface) fail(`generator ${opts.generator.key} must declare an interface`);
   const source = iface.outputs[opts.output];
   if (!source) fail(`generator ${opts.generator.key}: unknown interface output "${opts.output}"`);
-  const args: Record<string, Record<string, JsonValue>> = {};
+  const args: Record<string, Record<string, JsonValue>> = Object.create(null) as Record<string, Record<string, JsonValue>>;
   for (const [name, value] of Object.entries(opts.args)) {
     const target = iface.inputs[name];
     if (!target) fail(`generator ${opts.generator.key}: unknown interface input "${name}"`);
-    (args[target.cell] ??= {})[target.port] = value;
+    (args[target.cell] ??= Object.create(null) as Record<string, JsonValue>)[target.port] = value;
   }
   const generatorDigest = await opts.store.putManifest(opts.generator);
   const receipt = await runOrganism({
