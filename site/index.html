@@ -117,6 +117,31 @@ $ morphogen verify run.receipt.json triage.morphogen.json
     </ul>
   </section>
 
+  <section>
+    <h2>Case study: cheap + tool beats frontier alone</h2>
+    <p>
+      A billing-dispute organism first retrieves an account's charge ledger
+      through a typed <code>tool</code> cell, then decides whether to
+      <code>refund</code>, <code>escalate</code>, or <code>monitor</code>.
+    </p>
+    <p>
+      Live Vercel AI Gateway result on six cases:
+    </p>
+    <ul>
+      <li><strong>Qwen 3.5 Flash + ledger tool:</strong> 6/6 correct</li>
+      <li><strong>Claude Opus 5 without the ledger:</strong> 4/6 correct</li>
+    </ul>
+    <p>
+      Both models fail the same evidence-only cases when they cannot look up
+      the ledger. The structure — a typed tool call feeding a bounded
+      classifier — is what wins, not the model brand.
+    </p>
+    <p>
+      <a href="https://github.com/hraness/morphogen/tree/main/examples/invest">See the invest example</a>
+      · <a href="https://github.com/hraness/morphogen/blob/main/docs/when-morphogen-wins.md">Read the intuition doc</a>
+    </p>
+  </section>
+
   <section class="status">
     <img alt="" aria-hidden="true" class="morphogen-topic-icon" decoding="async" height="88" loading="lazy" src="/icons/status.svg" width="88">
     <h2>Status</h2>

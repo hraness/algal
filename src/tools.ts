@@ -4,7 +4,6 @@ import {
   asObject,
   asString,
   noUnknownKeys,
-  optField,
   reqField,
   type JsonValue,
 } from "./values";

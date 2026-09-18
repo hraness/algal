@@ -99,6 +99,48 @@ and leaves to the model only what is declared inside a cell boundary. A run is
 then something you can replay, diff, and audit rather than a transcript you
 have to trust.
 
+## Where it wins
+
+Morphogen wins where the work is **structured, verifiable, and cheaper to split
+into many small decisions** than to pack into one long prompt. The fastest wins
+are workloads where a single LLM call is missing information or has no way to
+check itself:
+
+- **Tool-grounded investigation** — a model call cannot look up a customer
+  record, run a calculation, or inspect a ledger; Morphogen routes a typed
+  `tool` cell before the judgment, then checks the result deterministically.
+- **Multi-decision classifiers over one shared context** — dozens of narrow
+  `classifier` cells see only the slices they need, each with a tiny prompt,
+  instead of one monolithic completion.
+- **Escalation by disagreement** — two cheap lanes plus an `assert.v1` guard
+  escalate only when the cheap models disagree; frontier inference is sparse,
+  not the default.
+- **Verification before promotion** — a generated organism must pass train,
+  validation, and holdout cases, and `morphogen verify` replays every receipt
+  bit-for-bit before the organism is promoted.
+
+### Case study: billing-dispute investigation
+
+`examples/invest/` runs six support tickets where the correct decision depends
+on a charge ledger. A lone model sees only the ticket; the Morphogen organism
+retrieves the ledger through a typed `tool` cell and then classifies.
+
+Live Vercel AI Gateway run:
+
+| system | passed | effect calls | input tokens | output tokens | Pareto |
+|---|---|---|---|---|---|
+| cheap-single (qwen3.5, no evidence) | 4/6 | 6 | 759 | 10,366 | — |
+| frontier-single (claude-opus-5, no evidence) | 4/6 | 6 | 4,214 | 207 | yes |
+| **organism-cheap (qwen3.5 + ledger tool)** | **6/6** | **12** | **1,210** | **5,364** | **yes** |
+| organism-ensemble (qwen3.5 + qwen3.7 + tool) | 6/6 | 18 | 2,840 | 7,584 | — |
+
+A Qwen Flash organism with a typed ledger lookup is **100% accurate on this
+workload**, while a Claude Opus call without the tool is **67% accurate**.
+Opus fails the same evidence-only cases as Qwen does when neither can look up
+the charges. The Pareto set keeps both the organism (quality winner) and the
+frontier single call (fewest round-trips), so the tradeoff is explicit and
+can be chosen per deployment.
+
 ## First value
 
 ```sh
@@ -256,9 +298,15 @@ whose `executors` map names to `gateway:<provider/model>` (Vercel AI Gateway),
 `scripted:<file>`, or `cmd:<command>` specs; the first entry is the default and
 named entries answer `route.preset`. The report records per-case results, work,
 token usage, per-model effect attribution, and the non-dominated pareto set on
-quality versus tokens. `examples/bench.config.json` runs it deterministically;
-`examples/bench-live.config.json` swaps the scripted lanes for
-`alibaba/qwen3.5-flash` and `anthropic/claude-opus-5` through the gateway.
+(quality ↑, tokens ↓, effect calls ↓). `examples/bench.config.json` runs it
+deterministically; `examples/bench-live.config.json` swaps the scripted lanes
+for `alibaba/qwen3.5-flash` and `anthropic/claude-opus-5` through the gateway.
+
+For tool-grounded baselines, pass `--tools <file>`: a registry of named tools
+with typed signatures and `scripted:<data>` or `cmd:<shell>` executors. The
+billing-dispute case in `examples/invest/bench-invest-live.config.json` uses it
+to compare a Qwen organism with a charge-ledger lookup against a Claude Opus
+call that can only read the ticket.
 
 `check` admits a manifest without running it: parse, graph validation, and
 interface resolution only. `explain` prints the compiled signature — every
@@ -329,6 +377,79 @@ name → command, so a cell's `route.provider`/`route.preset` picks its model.
   which the host owns.
 - This is not a hosted orchestrator, a durable job queue, or a multi-agent
   town. Those are later layers; the contract is designed not to need them yet.
+
+## Plug it into your agent or provider
+
+Morphogen is a library and a CLI; the seams are deliberately narrow so you can
+use it from a larger system without giving the system ambient authority.
+
+### From code
+
+```ts
+import { builtinRegistry, runOrganism, vercelGatewayExecutor } from "morphogen";
+import { FileStore } from "morphogen/store"; // or a custom Store
+
+const receipt = await runOrganism({
+  manifest: myManifest,
+  args: { src: { ticket: "I was charged twice…" } },
+  fns: builtinRegistry(),
+  store: new FileStore(".morphogen"),
+  executors: [vercelGatewayExecutor({ model: "alibaba/qwen3.5-flash" })],
+  tools: myToolRegistry, // typed external effects
+});
+```
+
+The `Executor` interface is one method: `execute(effect, signal?)` returns the
+raw effect output. Any provider, local model, or hard-coded fixture fits by
+wrapping that method. `runOrganism` does the scheduling, binding, budget
+enforcement, and receipt writing.
+
+### From the CLI with any provider
+
+```sh
+# scripted replay fixture
+bun run cli run ticket.morphogen.json --responses ticket.responses.json
+
+# Vercel AI Gateway
+bun run cli run ticket.morphogen.json \
+  --gateway-model alibaba/qwen3.5-flash --write
+
+# any command that reads JSON on stdin and writes JSON on stdout
+bun run cli run ticket.morphogen.json \
+  --executor-cmd "python -m my_provider_agent"
+```
+
+### External tools
+
+Agent cells can request functions from the host registry (`tools: ["pick.v1"]`),
+and explicit `tool` cells can call external services. For the CLI, declare the
+registry in a `--tools <file>`:
+
+```json
+{
+  "ledger.charges.v1": {
+    "signature": {
+      "inputs": { "account": "text" },
+      "outputs": { "charges": "json" },
+      "effect": "read",
+      "cost": 50,
+      "maxOutputBytes": 8192
+    },
+    "exec": "cmd:ledger-cli"
+  }
+}
+```
+
+The command receives `{ inputs, requestDigest, idempotencyKey }` on stdin and
+must print a JSON object of output ports. For deterministic testing, use
+`"exec": "scripted:<data.json>"`.
+
+### Verification and transport
+
+Receipts are content-addressed canonical JSON; `morphogen verify` replays them
+offline with the recorded effects fixed. `morphogen pack` exports a manifest
+closure — sub-manifests, `const` refs, and linked bundles — so one digest fully
+describes a deployable program.
 
 ## How claims are checked
 

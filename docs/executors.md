@@ -125,3 +125,58 @@ default when no route matches.
   Only successes are memoized — a recorded error may be transient — and
   the first record for a digest wins. A hit is recorded on the new run's
   receipt as `cached: true`, so reuse stays auditable.
+
+## Tool registries
+
+`tool` cells and agent-requested tools both resolve against the host's
+`ToolRegistry` — the same typed, receipted boundary, supplied by the host and
+never declared inside a manifest.
+
+For the CLI, `--tools <file>` loads a registry:
+
+```json
+{
+  "ledger.charges.v1": {
+    "signature": {
+      "inputs": { "account": "text" },
+      "outputs": { "charges": "json" },
+      "effect": "read",
+      "cost": 50,
+      "maxOutputBytes": 8192
+    },
+    "exec": "cmd:ledger-cli"
+  }
+}
+```
+
+`exec` is either `scripted:<data.json>` — a canonical-inputs → outputs map —
+or `cmd:<shell>` — a shell command that receives `{ inputs, requestDigest,
+idempotencyKey }` on stdin and must print a JSON object of output ports on
+stdout. The signature's `maxOutputBytes` is enforced on the command's stdout;
+timeouts are enforced by a 30-second hard bound; nonzero exit is a structured
+failure. This keeps external IO outside the manifest while still recording it
+per-activation.
+
+Programmatically, a `ToolRegistry` is a `Map<string, { signature, tool }>`:
+
+```ts
+import type { Tool, ToolRegistry } from "morphogen";
+
+const tools: ToolRegistry = new Map([[
+  "ledger.charges.v1",
+  {
+    signature: {
+      inputs: { account: { type: "text" } },
+      outputs: { charges: { type: "json" } },
+      effect: "read",
+      cost: 50,
+      maxOutputBytes: 8192,
+    },
+    tool: async (inputs) => ({ charges: await myLedger.lookup(inputs.account) }),
+  },
+]]);
+```
+
+The tool receives the canonical inputs and a `ToolContext` carrying the
+`requestDigest`, `idempotencyKey`, and an optional `AbortSignal`. Pass it to
+`runOrganism` or `runBenchmark` through the `tools` option.

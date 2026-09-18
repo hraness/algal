@@ -11,3 +11,29 @@
 - [Organism contract (spec/v1/organism.md)](https://github.com/hraness/morphogen/blob/main/spec/v1/organism.md)
 - [Design notes](https://github.com/hraness/morphogen/tree/main/docs)
 - [Bundled example organisms](https://github.com/hraness/morphogen/tree/main/examples)
+
+## Where it wins
+
+Morphogen wins when a workflow has structure that a single LLM call cannot
+capture: tool-grounded evidence, many narrow classifiers, guarded routing,
+budgets, and the need to prove what happened. Example: a billing-dispute
+organism that first looks up a charge ledger with a typed `tool` cell, then
+classifies. In a live Vercel AI Gateway run, a Qwen 3.5 Flash organism with the
+ledger lookup scored 6/6, while a Claude Opus 5 call without the tool scored
+4/6. The model was not the deciding factor; the structure was.
+
+## Quick start
+
+```sh
+bun install
+bun run cli suite
+bun run cli bench examples/bench.config.json --dir .morphogen --out bench-report.json
+```
+
+## Integration
+
+- `Executor` is one method: `execute(effect, signal?)` → raw output. Wrap any
+  provider, local model, or scripted fixture.
+- `ToolRegistry` is a host-supplied `Map` of typed signatures and async callables.
+- CLI: `--gateway-model <provider/model>` for Vercel AI Gateway;
+  `--tools <file>` for `scripted:<data>` or `cmd:<shell>` tool executors.
