@@ -40,6 +40,15 @@
         "cheap": "gateway:alibaba/qwen3.5-flash",
         "frontier": "gateway:anthropic/claude-opus-5"
       }
+    },
+    {
+      "id": "ensemble",
+      "manifest": "bench-triage-ensemble.morphogen.json",
+      "executors": {
+        "cheap": "gateway:alibaba/qwen3.5-flash",
+        "cheap2": "gateway:alibaba/qwen3.7-flash",
+        "frontier": "gateway:anthropic/claude-opus-5"
+      }
     }
   ]
 }

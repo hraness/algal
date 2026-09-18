@@ -1,4 +1,6 @@
 {
   "route": ["billing", "technical", "billing", "other"],
-  "cheap": ["billing", "technical", "billing", "unsure"]
+  "cheap": ["billing", "technical", "billing", "unsure"],
+  "cheap-a": ["billing", "technical", "billing", "billing"]
 }
+

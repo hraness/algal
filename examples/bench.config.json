@@ -40,6 +40,15 @@
         "cheap": "scripted:bench-cheap.responses.json",
         "frontier": "scripted:bench-frontier.responses.json"
       }
+    },
+    {
+      "id": "ensemble",
+      "manifest": "bench-triage-ensemble.morphogen.json",
+      "executors": {
+        "cheap": "scripted:bench-cheap.responses.json",
+        "cheap2": "scripted:bench-cheap2.responses.json",
+        "frontier": "scripted:bench-frontier.responses.json"
+      }
     }
   ]
 }
