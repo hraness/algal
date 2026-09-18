@@ -236,6 +236,30 @@ every proposal was evaluated, and rejects any holdout evidence in generation
 records. Baseline manifests may enter through the config's `candidates` list and
 compete with generated organisms from generation zero onward.
 
+## Bench: compare systems on one workload
+
+A bench measures several systems — each an organism plus a host-resolved
+executor list — against the same cases. "One cheap call", "one frontier call",
+and "a decomposed organism whose frontier call is a guarded escalation branch"
+are the same kind of contender. A case passes only when the run completes and
+its declared outputs canonically equal `expect`; every case's receipt is
+persisted and replayable.
+
+```sh
+bun run cli bench examples/bench.config.json --dir .morphogen --out bench-report.json
+bun run cli bench inspect bench-report.json
+bun run cli bench verify bench-report.json --dir .morphogen
+```
+
+A `morphogen.bench.config.v1` file names case `args`/`expect` pairs and systems
+whose `executors` map names to `gateway:<provider/model>` (Vercel AI Gateway),
+`scripted:<file>`, or `cmd:<command>` specs; the first entry is the default and
+named entries answer `route.preset`. The report records per-case results, work,
+token usage, per-model effect attribution, and the non-dominated pareto set on
+quality versus tokens. `examples/bench.config.json` runs it deterministically;
+`examples/bench-live.config.json` swaps the scripted lanes for
+`alibaba/qwen3.5-flash` and `anthropic/claude-opus-5` through the gateway.
+
 `check` admits a manifest without running it: parse, graph validation, and
 interface resolution only. `explain` prints the compiled signature — every
 cell's resolved input/output ports (including ports inherited from embedded
@@ -244,10 +268,12 @@ embed others resolve sub-manifests by digest from the store; `--modules <dir>`
 loads a directory of `*.morphogen.json` files first.
 
 To go live, point `--executor-cmd` at any program that reads an effect request
-(JSON) on stdin and prints the model's output on stdout. Morphogen does not
-broker provider access; the executor seam is where provider auth lives.
-`--executors <file>` takes a JSON map of name → command, so a cell's
-`route.provider`/`route.preset` picks its model.
+(JSON) on stdin and prints the model's output on stdout, or use
+`--gateway-model <provider/model>` for the built-in Vercel AI Gateway executor
+(short-lived OIDC or a scoped gateway key from the environment — never the
+manifest). Morphogen does not broker provider access; the executor seam is
+where provider auth lives. `--executors <file>` takes a JSON map of
+name → command, so a cell's `route.provider`/`route.preset` picks its model.
 
 ## How does it behave?
 
@@ -318,6 +344,7 @@ detection.
 - `spec/v1/organism.md` — the manifest, run, and receipt contract.
 - `spec/v1/foundry.md` — candidate generation, evidence, promotion, and verification.
 - `spec/v1/search.md` — bounded generations, feedback, survivors, and lineage.
+- `spec/v1/bench.md` — workload comparison, attribution, and the pareto claim.
 - `docs/` — design notes as they land.
 
 ## Related work

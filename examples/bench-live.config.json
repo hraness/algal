@@ -1,0 +1,45 @@
+{
+  "contract": "morphogen.bench.config.v1",
+  "cases": [
+    {
+      "id": "t1",
+      "args": { "ticket": "charged twice for my subscription" },
+      "expect": { "out": "billing" }
+    },
+    {
+      "id": "t2",
+      "args": { "ticket": "app crashes on export" },
+      "expect": { "out": "technical" }
+    },
+    {
+      "id": "t3",
+      "args": { "ticket": "refund for a cancelled plan" },
+      "expect": { "out": "billing" }
+    },
+    {
+      "id": "t4",
+      "args": { "ticket": "invoice totals look wrong after the update" },
+      "expect": { "out": "technical" }
+    }
+  ],
+  "systems": [
+    {
+      "id": "cheap-single",
+      "manifest": "bench-triage-single.morphogen.json",
+      "executors": { "cheap": "gateway:alibaba/qwen3.5-flash" }
+    },
+    {
+      "id": "frontier-single",
+      "manifest": "bench-triage-single.morphogen.json",
+      "executors": { "frontier": "gateway:anthropic/claude-opus-5" }
+    },
+    {
+      "id": "circuit",
+      "manifest": "bench-triage-circuit.morphogen.json",
+      "executors": {
+        "cheap": "gateway:alibaba/qwen3.5-flash",
+        "frontier": "gateway:anthropic/claude-opus-5"
+      }
+    }
+  ]
+}

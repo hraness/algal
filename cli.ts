@@ -36,6 +36,8 @@ import {
 import { parseFoundryReport, verifyFoundryReport } from "./src/foundry-verify";
 import { runFoundrySearch } from "./src/search";
 import { parseSearchReport, verifySearchReport } from "./src/search-verify";
+import { runBenchmark, type BenchCase, type BenchSystem } from "./src/bench";
+import { parseBenchReport, verifyBenchReport } from "./src/bench-verify";
 import {
   canonicalBytes,
   canonicalize,
@@ -92,6 +94,13 @@ usage:
   morphogen foundry search-inspect <report.json>
   morphogen foundry search-pack <report.json> --out <dir> [--dir <path>]
                                               inspect or export a verified search winner
+  morphogen bench <config.json> [--dir <path>] [--out <report.json>]
+                                              measure several systems on one workload:
+                                              quality, tokens, work, per-model attribution,
+                                              and the non-dominated pareto set
+  morphogen bench verify <report.json> [--dir <path>]
+                                              replay every case receipt in a bench report
+  morphogen bench inspect <report.json>       summarize a pareto comparison
   morphogen suite                             run and verify all bundled examples
   morphogen digest <manifest.json>            print the manifest's canonical digest
   morphogen store put <value.json> [--dir <path>]
@@ -759,6 +768,151 @@ async function main(): Promise<number> {
             receiptDigest: generated.receiptDigest,
           },
         } : {}),
+      });
+      if (flags.out !== undefined) {
+        const { writeFile } = await import("node:fs/promises");
+        await writeFile(resolve(String(flags.out)), canonicalize(report as unknown as JsonValue));
+      }
+      out(report as unknown as JsonObject);
+      return 0;
+    }
+
+    case "bench": {
+      const file = positional[0];
+      if (!file) {
+        usageError("morphogen bench <config.json> | bench verify|inspect <report.json>");
+      }
+      if (file === "verify") {
+        const reportFile = positional[1];
+        if (!reportFile) usageError("morphogen bench verify <report.json> [--dir <path>]");
+        const verified = await verifyBenchReport(await readJson(resolve(reportFile)), store, fns);
+        out(verified as unknown as JsonObject);
+        return verified.ok ? 0 : 1;
+      }
+      if (file === "inspect") {
+        const reportFile = positional[1];
+        if (!reportFile) usageError("morphogen bench inspect <report.json>");
+        const report = parseBenchReport(await readJson(resolve(reportFile)));
+        out({
+          contract: report.contract,
+          digest: report.digest,
+          workload: report.workload,
+          pareto: report.pareto,
+          systems: report.systems.map((system) => ({
+            id: system.id,
+            manifestKey: system.manifestKey,
+            manifestDigest: system.manifestDigest,
+            passed: system.passed,
+            total: system.total,
+            effectCalls: system.effectCalls,
+            work: system.work,
+            usage: system.usage,
+            attribution: system.attribution,
+            pareto: report.pareto.includes(system.id),
+          })),
+        });
+        return 0;
+      }
+      const configFile = resolve(file);
+      const config = asRecord(await readJson(configFile), "bench config");
+      const unknown = Object.keys(config).filter((k) => !["contract", "cases", "systems"].includes(k));
+      if (unknown.length > 0) {
+        throw new MorphogenError("PARSE_FAILED", `bench config: unknown key "${unknown[0]}"`);
+      }
+      if (config.contract !== "morphogen.bench.config.v1") {
+        throw new MorphogenError("PARSE_FAILED", "bench config.contract must be morphogen.bench.config.v1");
+      }
+      if (!Array.isArray(config.cases) || config.cases.length === 0) {
+        throw new MorphogenError("PARSE_FAILED", "bench config.cases must be a non-empty list");
+      }
+      if (!Array.isArray(config.systems) || config.systems.length === 0) {
+        throw new MorphogenError("PARSE_FAILED", "bench config.systems must be a non-empty list");
+      }
+      const base = dirname(configFile);
+      const cases: BenchCase[] = config.cases.map((raw, i) => {
+        const c = asRecord(raw, `bench config.cases[${i}]`);
+        const extra = Object.keys(c).filter((k) => !["id", "args", "expect"].includes(k));
+        if (extra.length > 0) {
+          throw new MorphogenError("PARSE_FAILED", `bench config.cases[${i}]: unknown key "${extra[0]}"`);
+        }
+        if (typeof c.id !== "string" || c.args === undefined || c.expect === undefined) {
+          throw new MorphogenError("PARSE_FAILED", `bench config.cases[${i}] needs id, args, and expect`);
+        }
+        return {
+          id: c.id,
+          args: asRecord(c.args, `bench config.cases[${i}].args`),
+          expect: asRecord(c.expect, `bench config.cases[${i}].expect`),
+        };
+      });
+      const named = (id: string, inner: Executor): Executor => ({
+        id,
+        execute: (request, signal) => inner.execute(request, signal),
+        ...(inner.executeEffect
+          ? { executeEffect: (request: Parameters<NonNullable<Executor["executeEffect"]>>[0], signal?: AbortSignal) => inner.executeEffect!(request, signal) }
+          : {}),
+        ...(inner.receiptFor
+          ? { receiptFor: (request: Parameters<NonNullable<Executor["receiptFor"]>>[0]) => inner.receiptFor!(request) }
+          : {}),
+      });
+      const resolveSpec = async (id: string, spec: string): Promise<Executor> => {
+        if (spec.startsWith("gateway:")) {
+          return named(id, vercelGatewayExecutor({ model: spec.slice("gateway:".length) }));
+        }
+        if (spec.startsWith("scripted:")) {
+          const responses = asRecord(
+            await readJson(resolve(base, spec.slice("scripted:".length))),
+            `bench executor ${id}`,
+          ) as Record<string, JsonValue>;
+          return named(id, scriptedExecutor(responses, id));
+        }
+        if (spec.startsWith("cmd:")) {
+          return named(id, commandExecutor(spec.slice("cmd:".length)));
+        }
+        throw new MorphogenError(
+          "PARSE_FAILED",
+          `bench executor "${id}": unknown spec (want gateway:<model>, scripted:<file>, or cmd:<command>)`,
+        );
+      };
+      const systems: BenchSystem[] = [];
+      for (const [i, raw] of config.systems.entries()) {
+        const s = asRecord(raw, `bench config.systems[${i}]`);
+        const extra = Object.keys(s).filter((k) => !["id", "manifest", "executors"].includes(k));
+        if (extra.length > 0) {
+          throw new MorphogenError("PARSE_FAILED", `bench config.systems[${i}]: unknown key "${extra[0]}"`);
+        }
+        if (typeof s.id !== "string" || typeof s.manifest !== "string" || s.executors === undefined) {
+          throw new MorphogenError("PARSE_FAILED", `bench config.systems[${i}] needs id, manifest, and executors`);
+        }
+        const specs = asRecord(s.executors, `bench config.systems[${i}].executors`);
+        const executors: Executor[] = [];
+        for (const [name, spec] of Object.entries(specs)) {
+          if (typeof spec !== "string" || spec.length === 0) {
+            throw new MorphogenError("PARSE_FAILED", `bench executor "${name}" must be a spec string`);
+          }
+          executors.push(await resolveSpec(name, spec));
+        }
+        systems.push({
+          id: s.id,
+          manifest: parseOrganismManifest(await readJson(resolve(base, s.manifest))),
+          executors,
+        });
+      }
+      const transports =
+        flags.transports !== undefined
+          ? await loadTransports(String(flags.transports))
+          : undefined;
+      const report = await runBenchmark({
+        systems: systems.map((system) => ({
+          ...system,
+          executors:
+            flags["cache-effects"] !== undefined
+              ? system.executors.map((e) => cachedExecutor(e, store))
+              : system.executors,
+        })),
+        cases,
+        fns,
+        store,
+        ...(transports ? { transports } : {}),
       });
       if (flags.out !== undefined) {
         const { writeFile } = await import("node:fs/promises");

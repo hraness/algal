@@ -115,6 +115,19 @@ export type {
 export { parseSearchReport, verifySearchReport } from "./src/search-verify";
 export type { SearchVerifyReport } from "./src/search-verify";
 
+export { BENCH_BOUNDS, BENCH_CONTRACT, benchPareto, runBenchmark } from "./src/bench";
+export type {
+  BenchAttribution,
+  BenchCase,
+  BenchCaseResult,
+  BenchOptions,
+  BenchReport,
+  BenchSystem,
+  BenchSystemResult,
+} from "./src/bench";
+export { parseBenchReport, verifyBenchReport } from "./src/bench-verify";
+export type { BenchVerifyReport } from "./src/bench-verify";
+
 export { digestCanonical, digestText } from "./src/digest";
 export type { Digest } from "./src/digest";
 

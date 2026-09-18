@@ -1,0 +1,49 @@
+{
+  "contract": "morphogen.organism.v1",
+  "key": "organism:bench-triage-circuit",
+  "name": "Bench triage — cheap-first cascade",
+  "note": "The organism: a cheap classifier may abstain with \"unsure\"; only then does the escalate cell (routed at the frontier preset) fire, and coalesce prefers its answer. Frontier inference is a guarded branch, not the default path.",
+  "budgets": { "maxSteps": 8, "maxAgentCalls": 4, "maxWork": 100000 },
+  "interface": {
+    "inputs": { "ticket": { "cell": "src", "port": "ticket" } },
+    "outputs": { "out": { "cell": "merge", "port": "value" } }
+  },
+  "cells": [
+    { "id": "src", "kind": "input", "outputs": { "ticket": "text" } },
+    {
+      "id": "cheap",
+      "kind": "classifier",
+      "inputs": { "ticket": "text" },
+      "prompt": "Classify the support ticket: billing, technical, or other. When the routing is genuinely ambiguous, abstain with unsure.",
+      "view": { "inputs": ["ticket"] },
+      "output": { "kind": "choice", "labels": ["billing", "technical", "other", "unsure"] },
+      "route": { "preset": "cheap" },
+      "budget": { "maxContextBytes": 4096, "maxOutputBytes": 256, "maxEffectMs": 120000 }
+    },
+    {
+      "id": "escalate",
+      "kind": "classifier",
+      "inputs": {
+        "ticket": "text",
+        "trigger": { "type": "choice", "labels": ["billing", "technical", "other", "unsure"] }
+      },
+      "prompt": "Classify the support ticket a cheaper pass declined to route: billing, technical, or other.",
+      "view": { "inputs": ["ticket"] },
+      "output": { "kind": "choice", "labels": ["billing", "technical", "other"] },
+      "route": { "preset": "frontier" },
+      "budget": { "maxContextBytes": 4096, "maxOutputBytes": 256, "maxEffectMs": 120000 }
+    },
+    { "id": "merge", "kind": "fn", "fn": "coalesce.v1" }
+  ],
+  "edges": [
+    { "from": { "cell": "src", "port": "ticket" }, "to": { "cell": "cheap", "port": "ticket" } },
+    { "from": { "cell": "src", "port": "ticket" }, "to": { "cell": "escalate", "port": "ticket" } },
+    {
+      "from": { "cell": "cheap", "port": "out" },
+      "to": { "cell": "escalate", "port": "trigger" },
+      "guard": { "equals": "unsure" }
+    },
+    { "from": { "cell": "escalate", "port": "out" }, "to": { "cell": "merge", "port": "a" } },
+    { "from": { "cell": "cheap", "port": "out" }, "to": { "cell": "merge", "port": "b" } }
+  ]
+}

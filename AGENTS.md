@@ -2,15 +2,18 @@
 
 - `src/` — the contract (`contract.ts`, `graph.ts`), the scheduler (`run.ts`),
   the effect seam (`effects.ts`), the store (`store.ts`), verification
-  (`verify.ts`), Vercel AI Gateway execution (`gateway.ts`), foundry evaluation
-  and search (`foundry.ts`, `search.ts`), bundles (`bundle.ts`),
-  transports (`transport.ts`), canonical values and digests, and colocated tests.
+  (`verify.ts`), Vercel AI Gateway execution (`gateway.ts`), typed external
+  tools (`tools.ts`), foundry evaluation and search (`foundry.ts`,
+  `search.ts`), benchmark comparison (`bench.ts`, `bench-verify.ts`),
+  bundles (`bundle.ts`), transports (`transport.ts`), canonical values and
+  digests, and colocated tests.
 - `cli.ts` — the Bun CLI (`run`, `check`, `verify`, `inspect`, `explain`,
-  `diff`, `foundry`, `runs`, `digest`, `store`, `manifests`, `manifest`,
-  `slots`, `slot`, `pack`, `unpack`, `example`, `suite`).
+  `diff`, `foundry`, `bench`, `runs`, `digest`, `store`, `manifests`,
+  `manifest`, `slots`, `slot`, `pack`, `unpack`, `example`, `suite`).
 - `index.ts` — the package's public surface.
 - `examples/` — bundled manifests and scripted responses used by `suite`.
-- `spec/v1/organism.md`, `spec/v1/foundry.md`, `spec/v1/search.md` — authoritative contract prose.
+- `spec/v1/organism.md`, `spec/v1/foundry.md`, `spec/v1/search.md`,
+  `spec/v1/bench.md` — authoritative contract prose.
 - `site/` — the static morphogen.dev source; `build.ts` writes `site/dist`.
 - `README.md`, `CONTRIBUTING.md`, `SECURITY.md` — the public contract.
 
