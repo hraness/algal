@@ -28,20 +28,22 @@ export const ERROR_CODES = [
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
 
-export class MorphogenError extends Error {
+export class AlgalError extends Error {
   readonly code: ErrorCode;
   readonly details?: unknown;
 
   constructor(code: ErrorCode, message: string, details?: unknown) {
     super(message);
-    this.name = "MorphogenError";
+    this.name = "AlgalError";
     this.code = code;
     if (details !== undefined) this.details = details;
   }
 }
 
-export function isMorphogenError(u: unknown): u is MorphogenError {
-  return u instanceof MorphogenError;
+export { AlgalError as MorphogenError };
+
+export function isMorphogenError(u: unknown): u is AlgalError {
+  return u instanceof AlgalError;
 }
 
 export function errorReport(u: unknown): { code: ErrorCode; message: string } {

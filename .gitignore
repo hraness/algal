@@ -2,6 +2,8 @@ node_modules/
 dist/
 site/dist/
 .morphogen/
+.algal/
+/target/
 promoted/
 /civ/
 .env

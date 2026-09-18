@@ -1,6 +1,6 @@
 # Organisms and agent loops
 
-Morphogen organisms are themselves bounded agent loops. The interesting
+ALGAL organisms are themselves bounded agent loops. The interesting
 question is how they relate to the larger agent loop that deploys them: when
 do you compile a piece of agentic behavior into an organism, and when do you
 let the outer loop stay improvisational?
@@ -17,7 +17,7 @@ content-addressed.
 
 The difference is not power; it is **inspectability and custody**:
 
-| aspect | improvised agent loop | Morphogen organism |
+| aspect | improvised agent loop | ALGAL organism |
 |---|---|---|
 | state | mutable, ambient | ports on a DAG, typed |
 | branching | if/else in code or prompt | `guard`ed edges, routable failures |
@@ -51,7 +51,7 @@ A coding agent's outer loop might look like:
 ```
 read user request
 → plan next step
-→ if step is well-formed, call `morphogen run` on the right organism
+→ if step is well-formed, call `algal run` on the right organism
 → receive the receipt and outputs
 → decide the next step or stop
 ```
@@ -74,7 +74,7 @@ complexity.
 ## Can the agent itself be an organism?
 
 Yes, at the cost of stronger assumptions. You can write the outer loop as a
-Morphogen organism if:
+ALGAL organism if:
 
 - the conversation has a bounded state model (a list of turns, a current goal);
 - the set of next actions is closed (a `choice` of intents);
@@ -87,7 +87,7 @@ the agent a library of verifiable sub-routines it can invoke with confidence.
 
 ## When this is premature
 
-Do not wrap a whole agent in Morphogen just to have the receipt. Use a
+Do not wrap a whole agent in ALGAL just to have the receipt. Use a
 single organism when the inputs, outputs, and budgets are clear, and the
 failure modes are worth replaying. Use the outer loop for exploration,
 ambiguity, and user interaction. The two layers compose: the agent loop

@@ -1,0 +1,15 @@
+{
+  "contract": "algal.memory.v1",
+  "facts": [
+    {
+      "relation": "depends",
+      "tuple": ["app", "parser"],
+      "sources": ["sha256:cfb76052b68bc6756a34aac35c150c1707576472bf612a0550aa3987a8bb075b"]
+    },
+    {
+      "relation": "depends",
+      "tuple": ["parser", "lexer"],
+      "sources": ["sha256:cfb76052b68bc6756a34aac35c150c1707576472bf612a0550aa3987a8bb075b"]
+    }
+  ]
+}

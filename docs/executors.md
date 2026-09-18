@@ -2,12 +2,12 @@
 
 Agent, classifier, and gate cells never reach a provider directly. Each
 activation emits a `morphogen.effect.v1` request; the host's executor answers
-it. Morphogen owns the schedule, the bounds, and the receipt — the executor
+it. ALGAL owns the schedule, the bounds, and the receipt — the executor
 owns provider access and anything the provider does.
 
 ## The wire shape
 
-With `--executor-cmd`, Morphogen runs the command per request: canonical
+With `--executor-cmd`, ALGAL runs the command per request: canonical
 request JSON on stdin, the output JSON on stdout, nonzero exit or unparseable
 stdout fails the cell.
 
@@ -55,7 +55,7 @@ When a cell declares `tools`, the executor may answer with the reserved shape:
 { "tool": "pick.v1", "inputs": { "record": {…}, "field": "author" } }
 ```
 
-Morphogen runs the named fn, appends the call and its result to
+ALGAL runs the named fn, appends the call and its result to
 `context.toolLog`, and re-issues the request with `context.turn` incremented.
 The loop ends when the response binds to `output` or `budget.maxTurns` is
 exhausted. A `{tool,inputs}` naming a ref outside `tools` is ordinary output,
@@ -76,7 +76,7 @@ bun run cli run examples/gateway-smoke.morphogen.json \
 
 The adapter fixes the Gateway origin, rejects redirects, bounds response bytes,
 requests a strict `{ "value": ... }` JSON object, includes the declared output
-contract in model-visible context, and returns the bound value to Morphogen.
+contract in model-visible context, and returns the bound value to ALGAL.
 Provider model identity and input/output token usage are captured after the call
 on the ordinary effect receipt, so foundry reports can compare real usage and
 offline replay preserves it exactly.
@@ -116,7 +116,7 @@ default when no route matches.
   runner races the call to the bound and kills an over-long commandExecutor
   process — a timeout is a recorded `BUDGET_EXHAUSTED` effect error, so
   `retry` and `on:"fail"` handle it like any other failure.
-- For replay (`verify`), Morphogen serves recorded outputs — and recorded
+- For replay (`verify`), ALGAL serves recorded outputs — and recorded
   errors — by request digest itself, in record order; executors are not
   involved.
 - For memoization (`run --cache-effects`), `cachedExecutor` consults the

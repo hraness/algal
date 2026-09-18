@@ -1,13 +1,13 @@
-# Why Morphogen is a new primitive
+# Why ALGAL is a new primitive
 
 Most existing abstractions fall into one of two buckets:
 
 1. **Deterministic programs** — code, configs, workflows, smart contracts.
 2. **Open-ended agents** — LLM agents, chatbots, copilots.
 
-Morphogen is a third thing: a **bounded, typed, content-addressed probabilistic program**.
+ALGAL is a third thing: a **bounded, typed, content-addressed probabilistic program**.
 
-## What a Morphogen organism is
+## What a ALGAL organism is
 
 An organism is not a script. It is a finite, strongly-typed graph where:
 
@@ -24,15 +24,15 @@ That combination is what makes it a new primitive, not just a nicer prompt chain
 
 ## How it differs from neighboring abstractions
 
-| Abstraction | What it does | Why Morphogen is different |
+| Abstraction | What it does | Why ALGAL is different |
 |---|---|---|
 | **Prompt engineering** | Hand-tunes a string for a model | A manifest is a graph, not a prompt. The model only sees a bounded view of the graph. |
 | **LLM agent loop (ReAct, etc.)** | Open-ended reasoning with tools | The organism loop is bounded, typed, and hashable. It can be *inside* an agent, not a replacement for it. |
 | **Workflow / DAG engine** | Orchestrates deterministic steps | Effects are first-class, receipted, and replayable. Model calls are cells, not opaque black boxes. |
 | **Probabilistic programming** | Samples and conditions | No sampler is in the language. Non-determinism is isolated to the executor. The graph itself is deterministic given receipts. |
-| **Smart contract / zkVM** | Verifies computation by proof | Morphogen does not prove correctness. It proves *what was run and what was returned*, with everything content-addressed and replayable. |
-| **Function as a Service** | Runs code on demand | A Morphogen organism is content-addressed, provider-agnostic, and emits a receipt. It is a verifiable function, not just a callable endpoint. |
-| **Cellular automata** | Repeated local rules on a grid | Morphogen is a typed, heterogeneous, DAG-executed graph, not a grid. But it keeps the CA spirit: local, bounded, explicit state transitions. |
+| **Smart contract / zkVM** | Verifies computation by proof | ALGAL does not prove correctness. It proves *what was run and what was returned*, with everything content-addressed and replayable. |
+| **Function as a Service** | Runs code on demand | A ALGAL organism is content-addressed, provider-agnostic, and emits a receipt. It is a verifiable function, not just a callable endpoint. |
+| **Cellular automata** | Repeated local rules on a grid | ALGAL is a typed, heterogeneous, DAG-executed graph, not a grid. But it keeps the CA spirit: local, bounded, explicit state transitions. |
 
 ## What the primitive enables
 
@@ -71,13 +71,13 @@ This makes it safe to execute organisms you did not write.
 
 Because an organism is a value, a program can generate, evaluate, and select organisms:
 
-- `morphogen foundry` breeds candidates on a train set and promotes the Pareto winner.
-- `morphogen search` evolves populations over generations with lineage tracking.
+- `algal foundry` breeds candidates on a train set and promotes the Pareto winner.
+- `algal search` evolves populations over generations with lineage tracking.
 - The promoted organism is itself a value that can be packed, shipped, and called.
 
 ## Where it is not the right tool
 
-Morphogen is not for open-ended conversation, exploratory research, or tasks where the structure itself is unknown. It is for subproblems where the shape of the work can be declared: classification, routing, extraction, verification, multi-step forms, code review gates, and tool-grounded investigations.
+ALGAL is not for open-ended conversation, exploratory research, or tasks where the structure itself is unknown. It is for subproblems where the shape of the work can be declared: classification, routing, extraction, verification, multi-step forms, code review gates, and tool-grounded investigations.
 
 ## Why the name "organism"
 

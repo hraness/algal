@@ -5,7 +5,7 @@
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { digestCanonical, type Digest } from "./digest";
+import { asDigest, digestCanonical, type Digest } from "./digest";
 import { MorphogenError } from "./errors";
 import {
   manifestToJson,
@@ -27,8 +27,8 @@ export interface Store {
    * Unlike the CAS methods this is keyed by *request*, not content — the
    * point is that two runs issuing the identical request share one answer.
    * `putEffect` is first-wins and idempotent. */
-  getEffect(requestDigest: Digest): Promise<EffectReceipt | undefined>;
-  putEffect(receipt: EffectReceipt): Promise<Digest>;
+  getEffect(requestDigest: Digest, executor?: string): Promise<EffectReceipt | undefined>;
+  putEffect(receipt: EffectReceipt, executor?: string): Promise<Digest>;
   /** Slots: named mutable cells that persist across runs — an organism's
    * memory. Not content-addressed: `setSlot` overwrites. `slot` cells are
    * the only access, so reads/writes land on the run receipt. */
@@ -41,63 +41,90 @@ export class MemoryStore implements Store {
   private receipts = new Map<Digest, JsonValue>();
 
   async getManifest(digest: Digest) {
-    return this.manifests.get(digest);
+    return structuredClone(this.manifests.get(digest));
   }
   async putManifest(manifest: OrganismManifest) {
     const d = digestCanonical(manifestToJson(manifest));
-    this.manifests.set(d, manifest);
+    this.manifests.set(d, structuredClone(manifest));
     return d;
   }
   async getReceipt(digest: Digest) {
-    return this.receipts.get(digest);
+    return structuredClone(this.receipts.get(digest));
   }
   async putReceipt(receipt: JsonValue) {
     const d = digestCanonical(receipt);
-    this.receipts.set(d, receipt);
+    this.receipts.set(d, structuredClone(receipt));
     return d;
   }
   private values = new Map<Digest, JsonValue>();
   async getValue(digest: Digest) {
-    return this.values.get(digest);
+    return structuredClone(this.values.get(digest));
   }
   async putValue(value: JsonValue) {
     const d = digestCanonical(value);
-    this.values.set(d, value);
+    this.values.set(d, structuredClone(value));
     return d;
   }
   private effects = new Map<Digest, EffectReceipt>();
-  async getEffect(requestDigest: Digest) {
-    return this.effects.get(requestDigest);
+  async getEffect(requestDigest: Digest, executor?: string) {
+    return structuredClone(this.effects.get(effectKey(requestDigest, executor)));
   }
-  async putEffect(receipt: EffectReceipt) {
-    if (!this.effects.has(receipt.requestDigest)) {
-      this.effects.set(receipt.requestDigest, receipt);
+  async putEffect(receipt: EffectReceipt, executor?: string) {
+    const key = effectKey(receipt.requestDigest, executor);
+    if (!this.effects.has(key)) {
+      this.effects.set(key, structuredClone(receipt));
     }
     return receipt.requestDigest;
   }
   private slots = new Map<string, JsonValue>();
   async getSlot(name: string) {
-    return this.slots.get(name);
+    return structuredClone(this.slots.get(name));
   }
   async setSlot(name: string, value: JsonValue) {
-    this.slots.set(name, value);
+    this.slots.set(name, structuredClone(value));
   }
+}
+
+function effectKey(requestDigest: Digest, executor?: string): Digest {
+  asDigest(requestDigest, "effect request digest");
+  return executor === undefined ? requestDigest : digestCanonical({
+    contract: "algal.effect-cache.v1", executor, requestDigest,
+  });
+}
+
+export function replayStore(source: Store): Store {
+  const overlay = new MemoryStore();
+  return {
+    getManifest: async (d) => await overlay.getManifest(d) ?? source.getManifest(d),
+    putManifest: (m) => overlay.putManifest(m),
+    getReceipt: async (d) => await overlay.getReceipt(d) ?? source.getReceipt(d),
+    putReceipt: (r) => overlay.putReceipt(r),
+    getValue: async (d) => {
+      const value = await overlay.getValue(d);
+      return value === undefined ? source.getValue(d) : value;
+    },
+    putValue: (v) => overlay.putValue(v),
+    getEffect: (d, e) => overlay.getEffect(d, e),
+    putEffect: (r, e) => overlay.putEffect(r, e),
+    getSlot: (n) => overlay.getSlot(n),
+    setSlot: (n, v) => overlay.setSlot(n, v),
+  };
 }
 
 export class FileStore implements Store {
   constructor(readonly dir: string) {}
 
   private manifestPath(d: Digest) {
-    return join(this.dir, "manifests", `${d.slice(7)}.json`);
+    return join(this.dir, "manifests", `${asDigest(d, "store digest").slice(7)}.json`);
   }
   private receiptPath(d: Digest) {
-    return join(this.dir, "runs", `${d.slice(7)}.json`);
+    return join(this.dir, "runs", `${asDigest(d, "store digest").slice(7)}.json`);
   }
   private valuePath(d: Digest) {
-    return join(this.dir, "values", `${d.slice(7)}.json`);
+    return join(this.dir, "values", `${asDigest(d, "store digest").slice(7)}.json`);
   }
   private effectPath(d: Digest) {
-    return join(this.dir, "effects", `${d.slice(7)}.json`);
+    return join(this.dir, "effects", `${asDigest(d, "store digest").slice(7)}.json`);
   }
 
   async getManifest(digest: Digest) {
@@ -178,9 +205,9 @@ export class FileStore implements Store {
     return d;
   }
 
-  async getEffect(requestDigest: Digest) {
+  async getEffect(requestDigest: Digest, executor?: string) {
     try {
-      const raw = await readFile(this.effectPath(requestDigest), "utf8");
+      const raw = await readFile(this.effectPath(effectKey(requestDigest, executor)), "utf8");
       const parsed = parseEffectReceipt(JSON.parse(raw));
       if (parsed.requestDigest !== requestDigest) {
         throw new MorphogenError(
@@ -196,14 +223,14 @@ export class FileStore implements Store {
     }
   }
 
-  async putEffect(receipt: EffectReceipt) {
+  async putEffect(receipt: EffectReceipt, executor?: string) {
     await mkdir(join(this.dir, "effects"), { recursive: true });
     try {
       // flag "wx" fails EEXIST when an entry already claims this request —
       // the first recorded response wins, so a later differing response for
       // the same request can never overwrite the memo
       await writeFile(
-        this.effectPath(receipt.requestDigest),
+        this.effectPath(effectKey(receipt.requestDigest, executor)),
         canonicalize(receipt as unknown as JsonValue),
         { flag: "wx" },
       );
@@ -214,6 +241,9 @@ export class FileStore implements Store {
   }
 
   private slotPath(name: string) {
+    if (!/^[a-z][a-z0-9._-]{0,63}$/.test(name)) {
+      throw new MorphogenError("PARSE_FAILED", "invalid slot name");
+    }
     return join(this.dir, "slots", `${name}.json`);
   }
 

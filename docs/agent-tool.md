@@ -1,17 +1,17 @@
-# Morphogen as an agent tool
+# ALGAL as an agent tool
 
-A Morphogen organism is a content-addressed, replayable subroutine. Pack it once and any agent—OpenAI, Anthropic, a coding agent, or a shell script—can call it as a typed tool and receive a compact, verifiable result.
+A ALGAL organism is a content-addressed, replayable subroutine. Pack it once and any agent—OpenAI, Anthropic, a coding agent, or a shell script—can call it as a typed tool and receive a compact, verifiable result.
 
 ## Why
 
 - **Manifests are the contract.** Inputs, outputs, budgets, and failure paths are declared before the run starts.
 - **Receipts are the evidence.** Every tool call produces a `receiptDigest` that can be replayed offline without the original provider.
-- **Bundles are the transport.** `morphogen pack` collects the organism and every embedded sub-manifest into one closure.
+- **Bundles are the transport.** `algal pack` collects the organism and every embedded sub-manifest into one closure.
 
 ## Pack
 
 ```sh
-morphogen pack examples/triage.morphogen.json --out ./tools
+algal pack examples/triage.morphogen.json --out ./tools
 ```
 
 This writes `./tools/<root-hex>.bundle.json`. The bundle is self-contained and digest-verified.
@@ -21,8 +21,8 @@ This writes `./tools/<root-hex>.bundle.json`. The bundle is self-contained and d
 Generate an OpenAI or Anthropic tool definition from the manifest's interface:
 
 ```sh
-morphogen tool-def examples/triage.morphogen.json
-morphogen tool-def examples/triage.morphogen.json --format anthropic
+algal tool-def examples/triage.morphogen.json
+algal tool-def examples/triage.morphogen.json --format anthropic
 ```
 
 OpenAI output:
@@ -50,11 +50,11 @@ Register that definition with the agent. When the agent decides to call the tool
 
 ## Call
 
-The agent invokes `morphogen call` with the bundled organism and the tool arguments. Pass `--args -` to read the arguments from stdin:
+The agent invokes `algal call` with the bundled organism and the tool arguments. Pass `--args -` to read the arguments from stdin:
 
 ```sh
 echo '{"ticket":{"text":"I cannot log in after the update"}}' | \
-  morphogen call ./tools/<bundle>.bundle.json \
+  algal call ./tools/<bundle>.bundle.json \
   --args - \
   --responses examples/triage.responses.json
 ```
@@ -63,7 +63,7 @@ Or write the args to a file:
 
 ```sh
 echo '{"ticket":{"text":"I cannot log in after the update"}}' > /tmp/triage.args.json
-morphogen call ./tools/<bundle>.bundle.json \
+algal call ./tools/<bundle>.bundle.json \
   --args /tmp/triage.args.json \
   --responses examples/triage.responses.json
 ```
@@ -84,7 +84,7 @@ The output is compact, so the agent does not need to parse the full receipt:
 
 ## Wiring into a coding agent
 
-A coding agent can use a Morphogen tool for any stable, repeatable, inspectable subproblem:
+A coding agent can use a ALGAL tool for any stable, repeatable, inspectable subproblem:
 
 - `summarize-diff` — read a git diff and classify intent (refactor, fix, feature).
 - `test-patch` — run the test command and return `pass`, `fail`, or `escalate`.

@@ -1,6 +1,6 @@
 # Contributing
 
-Morphogen is early and the contract is deliberately small. Contributions are
+ALGAL is early and the contract is deliberately small. Contributions are
 welcome; the bar is that the contract stays checkable.
 
 ## Setup

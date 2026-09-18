@@ -34,3 +34,26 @@
   deterministic example, not a mock-heavy harness.
 - Keep the public surfaces honest: README claims match what `bun run check`
   and the tests actually prove; mark proposals as proposals.
+
+# ALGAL native migration
+
+- The product is ALGAL; existing `morphogen.*.v1` wire identifiers and fixtures
+  are compatibility coordinates. Do not mass-rewrite content-addressed data.
+- `crates/algal/` is the Rust kernel, native CLI, memory/context primitives,
+  and ACP boundary. Keep the TypeScript runtime independently runnable as the
+  compatibility reference. No implicit native-to-Bun fallback.
+- Native checks: `cargo test --workspace --locked`,
+  `cargo clippy --workspace --all-targets --locked -- -D warnings`, and
+  `cargo fmt --all -- --check`. Use `cargo build --locked` followed by
+  `bun scripts/native-parity.ts` to compare all 39 existing examples and verify
+  TypeScript receipts with the Rust engine.
+- `sh scripts/build-apple.sh` builds the Foundation Models bridge with Xcode 26
+  on Apple Silicon. `target/debug/algal doctor --apple` checks availability;
+  compilation alone is not evidence that inference works.
+- xcb is the current repository for AgentMixer. It owns subscription custody
+  and settled failover. Never recreate credential copying in ALGAL or treat
+  ACP/cwd as OS isolation. Delegated coding tasks are non-cacheable and must
+  not be automatically retried after uncertain completion.
+- Canonical receipts are execution evidence, not truth or provider attestation.
+  Memory query proofs are positive derivations from explicitly selected facts.
+  Compaction preserves sources; byte reduction is not a token/billing claim.

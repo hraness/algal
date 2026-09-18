@@ -1,66 +1,64 @@
-# morphogen
+# ALGAL
 
-> Typed, replayable workflow organisms for AI agents: a finite, typed graph
-> where deterministic cells do most of the work and bounded agent cells handle
-> what needs judgment. Every run emits a content-addressed receipt a verifier
-> can replay offline.
+> Programs that grow. More from every model. ALGAL is a language for typed,
+> bounded agent programs, a foundation for a coding-agent harness, and a
+> host-controlled environment for generating and selecting program populations.
+
+Previously named Morphogen. The public package is @hraness/algal and the CLI is
+algal. The existing morphogen.*.v1 wire identifiers and legacy fixtures are
+preserved for digest and replay compatibility. New stores default to .algal;
+--dir .morphogen reads an existing store without moving it.
 
 ## Source
 
-- [GitHub: hraness/morphogen](https://github.com/hraness/morphogen)
-- [Organism contract (spec/v1/organism.md)](https://github.com/hraness/morphogen/blob/main/spec/v1/organism.md)
-- [Design notes](https://github.com/hraness/morphogen/tree/main/docs)
-- [Bundled example organisms](https://github.com/hraness/morphogen/tree/main/examples)
+- Repository: https://github.com/hraness/morphogen
+- Design and implementation audit: docs/algal-design.md
+- Language contract: spec/v1/organism.md
+- Agent integration: docs/agent-tool.md and docs/executors.md
+- Selection and populations: docs/civilization.md
+- Measured case studies and limitations: docs/when-morphogen-wins.md
 
-## Where it wins
+## Product boundaries
 
-Morphogen wins when a workflow has structure that a single LLM call cannot
-capture: tool-grounded evidence, many narrow classifiers, guarded routing,
-budgets, and the need to prove what happened. Example: a billing-dispute
-organism that first looks up a charge ledger with a typed `tool` cell, then
-classifies. In a live Vercel AI Gateway run, a Qwen 3.5 Flash organism with the
-ledger lookup scored 6/6 for $0.00131, while a Claude Opus 5 call without the
-tool scored 4/6 for $0.02625. Prices were taken from aicharts.io / AI//COST
-and OpenRouter/Alibaba rate cards.
+Manifests are data, not executable code. Host registries own functions, tools,
+providers, and admission. Every run is bounded and emits a content-addressed
+receipt. Replay checks deterministic orchestration with recorded external
+answers; it does not establish that an answer is true, an external operation
+really happened, or a provider was authenticated.
 
-## Why it is a new primitive
+The two value propositions are a growing, inspectable agent harness and better
+use of model capacity through evidence, structure, checks, and measurement.
+The design has three layers: language/kernel, agent harness, and habitat.
 
-Morphogen sits between deterministic programs and open-ended agents. A manifest
-is a finite, strongly-typed graph; a run is a content-addressed, replayable
-receipt; and model judgment is isolated behind bounded cells with declared
-contracts. This makes an organism a new kind of value: hashable, transportable,
-verifiable, and evolvable. See `docs/why-unique.md` in the repository for the
-full comparison.
+## Migration status
 
-## Habitats and self-evolution
+The TypeScript v1 runtime is implemented and retained as the compatibility
+reference. Native Rust execution, ACP integration, relational memory,
+compaction, provider generalization, and an Apple Foundation Models bridge are
+being developed against explicit tests. See docs/algal-design.md for current
+qualification rather than assuming every proposed integration is production-ready.
 
-Because a manifest is a value, an organism can generate and propose new
-organisms, functions, and tools. A shared `Store` and registries become a
-habitat: a population that evolves through foundry search and host admission.
-The organism cannot rewrite its own runtime; it can only propose. The host
-remains the admission gate. A live steel thread already works:
-`bun examples/habitat/promote.ts --live` lets a parent organism call a model to
-design a child, spawn it, and the host promotes the child to a bundle if it is
-valid and different from the safe fallback. The next layer is a runnable
-`bun scripts/civ.ts --live` civilization loop: goals, parent organisms,
-proposed children, and promotions into `civ/population.json`.
+AgentMixer is now xcb (https://github.com/hraness/xcb). Subscription credentials,
+provider qualification, account custody, and settled quota-aware switching
+belong to xcb, not to an ALGAL manifest. ACP is the client/agent protocol; it is
+not an authentication or sandbox protocol.
 
-## Quick start
+Oh (https://oh.computer), Wordcell (https://github.com/hraness/wordcell), and
+Gobstopper (https://github.com/hraness/gobstopper) inform native memory and
+compaction: immutable sources, derived context, bounded positive logic, exact
+recall, and no mutation of provider-owned transcripts by ALGAL.
+
+## Run the compatibility reference
 
 ```sh
-bun install
+bun install --frozen-lockfile
+bun run cli run examples/hello.algal.json
 bun run cli suite
-bun run cli bench examples/bench.config.json --dir .morphogen --out bench-report.json
 ```
 
-## Integration
-
-- `Executor` is one method: `execute(effect, signal?)` → raw output. Wrap any
-  provider, local model, or scripted fixture.
-- `ToolRegistry` is a host-supplied `Map` of typed signatures and async callables.
-- CLI: `--gateway-model <provider/model>` for Vercel AI Gateway;
-  `--tools <file>` for `scripted:<data>` or `cmd:<shell>` tool executors;
-  add `prices` to a bench config to get a dollar-denominated Pareto.
-- Agent tools: `morphogen pack` a manifest closure, `morphogen tool-def` to
-  emit an OpenAI/Anthropic function definition, and `morphogen call` to run it
-  and get `{ ok, outputs, receiptDigest, manifestDigest }`.
+The billing-dispute example demonstrates the value of evidence access. An earlier
+six-case run recorded Qwen plus a ledger lookup at 6/6 and an unassisted Opus
+call at 4/6. This is not a controlled model comparison: the systems had different
+tools. Historical prices are declared rate cards, not current billing promises.
+The batch/ensemble experiments also found cases where decomposition added cost
+without improving quality. Use the benchmark harness on your own workload.

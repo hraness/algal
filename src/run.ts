@@ -608,6 +608,9 @@ async function activate(
       } as unknown as JsonValue);
       emit(ctx, { kind: "effect", path, digest: requestDigest });
       const replay = ctx.toolReplay.get(requestDigest)?.shift();
+      if (!replay && ctx.opts.replayToolEffects !== undefined) {
+        throw new MorphogenError("EFFECT_UNBOUND", `replay has no tool receipt for ${requestDigest}`);
+      }
       if (replay) {
         ctx.effects.push(replay);
         if (replay.error) throw new MorphogenError(replay.error.code, replay.error.message);
@@ -845,8 +848,10 @@ async function activate(
             };
             if (meta?.usage) eff.usage = meta.usage;
             if (meta?.cached) eff.cached = true;
+            if (executor.retryable === false || meta?.retryable === false) eff.retryable = false;
             ctx.effects.push(eff);
             lastErr = e;
+            if (eff.retryable === false) break;
             continue;
           }
           // the response is a fact of the run: it is recorded before any
@@ -858,6 +863,7 @@ async function activate(
           };
           if (meta?.usage) eff.usage = meta.usage;
           if (meta?.cached) eff.cached = true;
+          if (executor.retryable === false || meta?.retryable === false) eff.retryable = false;
           ctx.effects.push(eff);
 
           const outBytes = canonicalBytes(raw);
@@ -866,6 +872,7 @@ async function activate(
               "BUDGET_EXHAUSTED",
               `effect output ${outBytes}B exceeds maxOutputBytes ${maxOut}B`,
             );
+            if (eff.retryable === false) break;
             continue;
           }
           ctx.work.units += outBytes * WORK.perOutputByte;
@@ -882,6 +889,7 @@ async function activate(
             };
           } catch (e) {
             lastErr = e;
+            if (eff.retryable === false) break;
             continue;
           }
         }
@@ -945,6 +953,9 @@ async function activate(
           } as unknown as JsonValue);
           emit(ctx, { kind: "effect", path, digest: toolDigest });
           const replay = ctx.toolReplay.get(toolDigest)?.shift();
+          if (!replay && ctx.opts.replayToolEffects !== undefined) {
+            throw new MorphogenError("EFFECT_UNBOUND", `replay has no tool receipt for ${toolDigest}`);
+          }
           if (replay) {
             ctx.effects.push(replay);
             if (replay.error) throw new MorphogenError(replay.error.code, replay.error.message);

@@ -2369,7 +2369,7 @@ describe("cachedExecutor", () => {
     });
     expect(r.outcome).toBe("complete");
     expect(calls).toBe(2); // error attempt did not poison the memo
-    expect(await store.getEffect(r.effects[0]!.requestDigest)).toBeDefined();
+    expect(await store.getEffect(r.effects[0]!.requestDigest, inner.id)).toBeDefined();
   });
 });
 

@@ -4,6 +4,7 @@
 // Executors are host-supplied — Morphogen never brokers provider access.
 
 import { MorphogenError, type ErrorCode } from "./errors";
+import { commandJson } from "./io";
 import { digestCanonical, type Digest } from "./digest";
 import type { AgentOutput, Route } from "./contract";
 import type { Store } from "./store";
@@ -11,7 +12,7 @@ import {
   asArray,
   asObject,
   asString,
-  canonicalize,
+  canonicalBytes,
   noUnknownKeys,
   optField,
   reqField,
@@ -44,12 +45,14 @@ export type EffectReceipt = {
    * `cachedExecutor` rather than executed — a fact of the run, so replay
    * reproduces the flag. Only ever present as `cached: true`. */
   cached?: boolean;
+  retryable?: false;
 };
 
 export type ExecutorMetadata = {
   executor?: string;
   usage?: EffectReceipt["usage"];
   cached?: boolean;
+  retryable?: false;
 };
 
 export type ExecutorResult = {
@@ -59,6 +62,9 @@ export type ExecutorResult = {
 
 export type Executor = {
   id: string;
+  cacheIdentity?: string;
+  cacheable?: boolean;
+  retryable?: boolean;
   /** `signal` aborts when the cell's `budget.maxEffectMs` fires — an
    * executor should treat abort as cancellation (commandExecutor kills its
    * process). Advisory: the runner already raced the call to a timeout. */
@@ -74,11 +80,13 @@ export type Executor = {
         usage?: EffectReceipt["usage"];
         /** The response will be served from a memoized record. */
         cached?: boolean;
+        retryable?: false;
       }
     | Promise<{
         executor?: string;
         usage?: EffectReceipt["usage"];
         cached?: boolean;
+        retryable?: false;
       }>;
 };
 
@@ -97,9 +105,11 @@ export function scriptedExecutor(
   responses: Record<string, JsonValue>,
   id = "scripted",
 ): Executor {
+  responses = structuredClone(responses);
   const queues = new Map<string, JsonValue[]>();
   return {
     id,
+    cacheIdentity: digestCanonical({ kind: "scripted", id, responses }),
     async execute(request) {
       const digest = effectRequestDigest(request);
       if (responses[digest] !== undefined) return responses[digest];
@@ -148,11 +158,13 @@ export function replayExecutor(
         executor?: string;
         usage?: EffectReceipt["usage"];
         cached?: boolean;
+        retryable?: false;
       } = {
         executor: rec.executor,
       };
       if (rec.usage) out.usage = rec.usage;
       if (rec.cached) out.cached = true;
+      if (rec.retryable === false) out.retryable = false;
       return out;
     },
     async execute(request) {
@@ -183,9 +195,12 @@ export function replayExecutor(
  * provider) and must never determinize into permanent failure. First record
  * wins — a later differing response for the same request cannot overwrite. */
 export function cachedExecutor(inner: Executor, store: Store): Executor {
+  if (inner.cacheable === false) return inner;
+  const identity = inner.cacheIdentity ?? inner.id;
   const lookup = (request: EffectRequest) =>
-    store.getEffect(effectRequestDigest(request));
+    store.getEffect(effectRequestDigest(request), identity);
   return {
+    ...inner,
     id: inner.id,
     async receiptFor(request) {
       const hit = await lookup(request);
@@ -225,13 +240,18 @@ export function cachedExecutor(inner: Executor, store: Store): Executor {
           ...(metadata ? { metadata } : {}),
         };
       }
+      if (result.output !== null && typeof result.output === "object" && !Array.isArray(result.output)
+        && Object.hasOwn(result.output, "tool") && Object.hasOwn(result.output, "inputs")) return result;
+      if (canonicalBytes(result.output) > request.budget.maxOutputBytes) return result;
+      try { bindOutput(request.output, result.output, request.cellId); }
+      catch { return result; }
       const entry: EffectReceipt = {
         requestDigest: effectRequestDigest(request),
         executor: result.metadata?.executor ?? inner.id,
         output: result.output,
       };
       if (result.metadata?.usage) entry.usage = result.metadata.usage;
-      await store.putEffect(entry);
+      await store.putEffect(entry, identity);
       return result;
     },
   };
@@ -244,58 +264,15 @@ export function commandExecutor(
   command: string,
   opts: { timeoutMs?: number; maxStdoutBytes?: number } = {},
 ): Executor {
-  const timeoutMs = opts.timeoutMs ?? 120_000;
-  const maxStdout = opts.maxStdoutBytes ?? 1_048_576;
+  const identity = digestCanonical({ command, options: opts });
   return {
-    id: `cmd:${command}`,
-    async execute(request, signal) {
-      const proc = Bun.spawn(["sh", "-c", command], {
-        stdin: "pipe",
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-      const payload = canonicalize(request as unknown as JsonValue);
-      proc.stdin.write(payload);
-      proc.stdin.end();
-      const timer = setTimeout(() => proc.kill("SIGKILL"), timeoutMs);
-      const onAbort = () => proc.kill("SIGKILL");
-      signal?.addEventListener("abort", onAbort);
-      let stdout: Buffer;
-      try {
-        stdout = Buffer.from(await new Response(proc.stdout).arrayBuffer());
-      } finally {
-        clearTimeout(timer);
-        signal?.removeEventListener("abort", onAbort);
-      }
-      const code = await proc.exited;
-      if (stdout.byteLength > maxStdout) {
-        throw new MorphogenError(
-          "EFFECT_FAILED",
-          `executor output exceeds ${maxStdout} bytes`,
-        );
-      }
-      if (code !== 0) {
-        const stderr = Buffer.from(
-          await new Response(proc.stderr).arrayBuffer(),
-        )
-          .toString("utf8")
-          .slice(0, 2000);
-        throw new MorphogenError(
-          "EFFECT_FAILED",
-          `executor exited ${code}: ${stderr}`,
-        );
-      }
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(stdout.toString("utf8"));
-      } catch {
-        throw new MorphogenError(
-          "EFFECT_UNPARSEABLE",
-          "executor stdout is not JSON",
-        );
-      }
-      return parsed as JsonValue;
-    },
+    id: `cmd:${identity}`,
+    cacheIdentity: identity,
+    cacheable: false,
+    retryable: false,
+    execute: (request, signal) => commandJson(
+      ["sh", "-c", command], request as unknown as JsonValue, { ...opts, ...(signal ? { signal } : {}) },
+    ),
   };
 }
 
@@ -399,7 +376,7 @@ export function parseEffectReceipt(u: unknown): EffectReceipt {
   const obj = asObject(u, "effect receipt");
   noUnknownKeys(
     obj,
-    ["requestDigest", "output", "error", "executor", "usage", "cached"],
+    ["requestDigest", "output", "error", "executor", "usage", "cached", "retryable"],
     "effect receipt",
   );
   const digest = asString(
@@ -448,6 +425,11 @@ export function parseEffectReceipt(u: unknown): EffectReceipt {
     if (uo.tokensOut !== undefined)
       u2.tokensOut = asIntField(uo.tokensOut, "usage.tokensOut");
     receipt.usage = u2;
+  }
+  const retryable = optField(obj, "retryable");
+  if (retryable !== undefined) {
+    if (retryable !== false) throw new MorphogenError("PARSE_FAILED", "effect receipt.retryable must be false when present");
+    receipt.retryable = false;
   }
   const cached = optField(obj, "cached");
   if (cached !== undefined) {

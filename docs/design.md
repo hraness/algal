@@ -5,7 +5,7 @@
 An agentic workflow has two kinds of decisions. The ones that can be decided
 statically — routing, what context a step may see, how much work is allowed —
 belong in structure. The ones that need judgment belong in bounded cells.
-Morphogen puts the first kind in a typed graph and gives the second kind a
+ALGAL puts the first kind in a typed graph and gives the second kind a
 declared boundary, so a run is a thing that can be replayed and audited rather
 than a transcript that has to be trusted.
 
@@ -106,7 +106,7 @@ receipts, the `getValue`/`putValue` CAS behind `ref` ports, the
 `getSlot`/`setSlot` mutable cells behind `slot` cells; an Oh-backed
 adapter lands when Oh's API settles (it is moving weekly). `Executor` is one
 async call; provider auth lives behind `--executor-cmd` or a host adapter.
-Morphogen never brokers model access. (From Oompa: custody and provider
+ALGAL never brokers model access. (From Oompa: custody and provider
 execution are different jobs.)
 
 **State is a cell.** A `slot` cell reads or writes a named, mutable,

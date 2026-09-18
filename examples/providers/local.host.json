@@ -1,0 +1,13 @@
+{
+  "contract": "algal.host.v1",
+  "executors": {
+    "default": {
+      "kind": "openai",
+      "baseUrl": "http://127.0.0.1:8080/v1",
+      "model": "your-local-model",
+      "responseFormat": "json_object",
+      "timeoutMs": 120000,
+      "maxResponseBytes": 2097152
+    }
+  }
+}

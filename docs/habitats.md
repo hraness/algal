@@ -1,6 +1,6 @@
 # Habitats, self-reproduction, and civilization
 
-There is a deeper shape hidden inside Morphogen: not just a workflow runner,
+There is a deeper shape hidden inside ALGAL: not just a workflow runner,
 but a substrate for organisms that live, reproduce, and evolve in a shared
 runtime. This is not yet fully built, but the v1 contract already contains the
 seeds of it. This document teases the idea apart and shows what is possible
@@ -94,7 +94,7 @@ invariant: **manifests are data, authority is host-owned**.
 
 ## Applications as civilizations
 
-In this view, a Morphogen application is a habitat:
+In this view, a ALGAL application is a habitat:
 
 - **Modules** are organisms in the store.
 - **Capabilities** are functions and tools in the registries.
@@ -150,7 +150,7 @@ There is a runnable steel thread in the bundled examples. The `habitat` organism
 Run it:
 
 ```sh
-morphogen run examples/habitat.morphogen.json \
+algal run examples/habitat.morphogen.json \
   --args examples/habitat.args.json \
   --responses examples/habitat.responses.json \
   --write
@@ -213,7 +213,7 @@ The most concrete near-term habitat would be:
 1. A long-lived `Store` shared by an agent loop.
 2. A `ToolRegistry` that can accept proposals from organisms.
 3. A `foundry` config that treats past receipts as a population and evolves it.
-4. A host rule: a proposed tool is installed only after `morphogen bench`
+4. A host rule: a proposed tool is installed only after `algal bench`
    shows it Pareto-dominates the incumbent.
 
 The agent loop becomes the habitat's weather: it decides which organisms to

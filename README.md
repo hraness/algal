@@ -1,17 +1,54 @@
-# morphogen
+# ALGAL
 
-Typed, replayable workflow organisms for AI agents. A workflow is a finite, typed graph where
-the structure carries the decisions: deterministic cells do most of the work,
-and bounded agent cells handle the parts that need judgment. Every run emits a
-content-addressed receipt that a verifier can replay offline.
+**Programs that grow. More from every model.**
 
-Status: early. The v1 contract, scheduler, effect seam, nested organisms, and
-offline verification are implemented and tested. Hosted habitats, multi-owner
-messaging, and workflow breeding are deliberately deferred.
+ALGAL is a language for agent programs: typed workflows that can be generated,
+composed, evaluated, and promoted. Its name nods to ALGOL and to living systems.
+The same program can be a tool inside a coding agent, the structure around a
+model, or a candidate in a host-controlled population.
+
+1. **A growing agent harness.** Keep successful behavior as inspectable programs,
+   not just longer prompts. Propose new versions, measure them, preserve their
+   lineage, and let the host decide which capabilities to admit.
+2. **More useful work per model call.** Give small or large models narrow context,
+   typed tools, deterministic checks, and explicit escalation. Measure quality,
+   cost, and effect calls instead of assuming decomposition always helps.
+
+Status: early. The TypeScript v1 runtime is the compatibility reference. Native
+Rust execution, coding-agent integration, relational memory, and on-device
+inference are being developed against explicit tests; see the implementation
+status in [the design audit](docs/algal-design.md).
+
+## Rename and compatibility
+
+ALGAL was previously Morphogen. The package is `@hraness/algal` and the command
+is `algal`; `morphogen` remains a compatibility command. Existing
+`morphogen.*.v1` wire identifiers and `.morphogen.json` fixtures are intentionally
+preserved: renaming a product must not silently change a manifest's digest or
+invalidate its receipts. New files may use `.algal.json`. New stores default to
+`.algal/`; use `--dir .morphogen` to access an existing store. No old state is
+moved, deleted, or implicitly merged. The existing site origin remains
+morphogen.dev until a new domain is configured.
+
+## Two clear value props
+
+### A living agent harness
+
+A successful agent workflow becomes a reusable organism. Organisms can propose
+children; the host tests and selects them. A population records programs and
+evidence, not consciousness or permission to rewrite its own runtime.
+
+### Squeeze more juice from LLMs
+
+Use structure where structure helps: fetch missing evidence, calculate rather
+than guess, validate outputs, and escalate on a measured failure condition.
+Vercel AI Gateway and host-supplied executors are implemented. There is no
+universal small-model-to-frontier-quality guarantee; compare systems with the
+same tools, inputs, and evaluation budget.
 
 ## Why this is a new primitive
 
-Morphogen is a third thing between deterministic programs and open-ended agents:
+ALGAL is a third thing between deterministic programs and open-ended agents:
 a bounded, typed, content-addressed probabilistic program. The manifest is a
 value; the receipt is evidence; and model judgment is isolated behind explicit
 cells with declared contracts and budgets. See [`docs/why-unique.md`](docs/why-unique.md)
@@ -81,7 +118,7 @@ Cell kinds:
   `load` resolves the token back to the payload. No port ever carries more
   than `maxValueBytes` (256 KiB canonical), so bulk data *must* flow through
   CAS — only digests ride edges, receipts, and contexts. A caller-supplied
-  `ref` must already resolve — `morphogen store put` mints one — and a store
+  `ref` must already resolve — `algal store put` mints one — and a store
   that returns wrong content fails `DIGEST_MISMATCH`.
 - `slot` — durable named state across runs: an organism's memory. `read`
   emits the stored value (or a declared `default`; empty-without-default
@@ -115,7 +152,7 @@ through guards. The graph must be acyclic.
 
 ## Why does it exist?
 
-Prompt conventions do not compose and cannot be checked. Morphogen moves what
+Prompt conventions do not compose and cannot be checked. ALGAL moves what
 can be checked into the structure — routing, context, budgets, capabilities —
 and leaves to the model only what is declared inside a cell boundary. A run is
 then something you can replay, diff, and audit rather than a transcript you
@@ -123,13 +160,13 @@ have to trust.
 
 ## Where it wins
 
-Morphogen wins where the work is **structured, verifiable, and cheaper to split
+ALGAL wins where the work is **structured, verifiable, and cheaper to split
 into many small decisions** than to pack into one long prompt. The fastest wins
 are workloads where a single LLM call is missing information or has no way to
 check itself:
 
 - **Tool-grounded investigation** — a model call cannot look up a customer
-  record, run a calculation, or inspect a ledger; Morphogen routes a typed
+  record, run a calculation, or inspect a ledger; ALGAL routes a typed
   `tool` cell before the judgment, then checks the result deterministically.
 - **Multi-decision classifiers over one shared context** — dozens of narrow
   `classifier` cells see only the slices they need, each with a tiny prompt,
@@ -138,13 +175,13 @@ check itself:
   escalate only when the cheap models disagree; frontier inference is sparse,
   not the default.
 - **Verification before promotion** — a generated organism must pass train,
-  validation, and holdout cases, and `morphogen verify` replays every receipt
+  validation, and holdout cases, and `algal verify` replays every receipt
   bit-for-bit before the organism is promoted.
 
 ### Case study: billing-dispute investigation
 
 `examples/invest/` runs six support tickets where the correct decision depends
-on a charge ledger. A lone model sees only the ticket; the Morphogen organism
+on a charge ledger. A lone model sees only the ticket; the ALGAL organism
 retrieves the ledger through a typed `tool` cell and then classifies.
 
 Live Vercel AI Gateway run:
@@ -245,10 +282,10 @@ composition rather than privileged foundry code.
 ```sh
 bun run cli foundry examples/generated-foundry.config.json \
   --responses examples/foundry-generator.responses.json \
-  --dir .morphogen --out foundry-report.json
+  --dir .algal --out foundry-report.json
 bun run cli foundry inspect foundry-report.json
 bun run cli foundry verify foundry-report.json --dir .morphogen
-bun run cli foundry pack foundry-report.json --dir .morphogen --out bundles
+bun run cli foundry pack foundry-report.json --dir .algal --out bundles
 ```
 
 A `morphogen.foundry.config.v1` file declares the generator, cases, and optionally
@@ -287,10 +324,10 @@ only prior train/validation scores, work, and manifest digests:
 ```sh
 bun run cli foundry search examples/search.config.json \
   --responses examples/evolving-generator.responses.json \
-  --dir .morphogen --out search-report.json
+  --dir .algal --out search-report.json
 bun run cli foundry search-inspect search-report.json
 bun run cli foundry search-verify search-report.json --dir .morphogen
-bun run cli foundry search-pack search-report.json --dir .morphogen --out bundles
+bun run cli foundry search-pack search-report.json --dir .algal --out bundles
 ```
 
 `morphogen.search.v1` bounds a search to eight generations. Every generation
@@ -310,7 +347,7 @@ its declared outputs canonically equal `expect`; every case's receipt is
 persisted and replayable.
 
 ```sh
-bun run cli bench examples/bench.config.json --dir .morphogen --out bench-report.json
+bun run cli bench examples/bench.config.json --dir .algal --out bench-report.json
 bun run cli bench inspect bench-report.json
 bun run cli bench verify bench-report.json --dir .morphogen
 ```
@@ -343,7 +380,7 @@ To go live, point `--executor-cmd` at any program that reads an effect request
 (JSON) on stdin and prints the model's output on stdout, or use
 `--gateway-model <provider/model>` for the built-in Vercel AI Gateway executor
 (short-lived OIDC or a scoped gateway key from the environment — never the
-manifest). Morphogen does not broker provider access; the executor seam is
+manifest). ALGAL does not broker provider access; the executor seam is
 where provider auth lives. `--executors <file>` takes a JSON map of
 name → command, so a cell's `route.provider`/`route.preset` picks its model.
 
@@ -386,8 +423,8 @@ name → command, so a cell's `route.provider`/`route.preset` picks its model.
 - `run --cache-effects` memoizes effects across runs through the store's
   effect index: an identical request digest serves the earlier recorded
   response (marked `cached` on the new receipt). Only successes memoize —
-  recorded errors may be transient. `morphogen runs` lists the receipts
-  stored under `--dir`, and `morphogen manifests` / `manifest <digest>`
+  recorded errors may be transient. `algal runs` lists the receipts
+  stored under `--dir`, and `algal manifests` / `manifest <digest>`
   list and print the manifest CAS — including children admitted by
   `spawn`, so a `bred` journal's digests resolve to inspectable programs.
 
@@ -404,7 +441,7 @@ name → command, so a cell's `route.provider`/`route.preset` picks its model.
 
 ## Plug it into your agent or provider
 
-Morphogen is a library and a CLI; the seams are deliberately narrow so you can
+ALGAL is a library and a CLI; the seams are deliberately narrow so you can
 use it from a larger system without giving the system ambient authority.
 
 ### From code
@@ -473,14 +510,14 @@ must print a JSON object of output ports. For deterministic testing, use
 Pack an organism and register it as an OpenAI or Anthropic function tool:
 
 ```sh
-morphogen pack ticket.morphogen.json --out ./tools
-morphogen tool-def ticket.morphogen.json > ticket-tool.json
+algal pack ticket.morphogen.json --out ./tools
+algal tool-def ticket.morphogen.json > ticket-tool.json
 ```
 
 Then call it from an agent:
 
 ```sh
-morphogen call ./tools/<bundle>.bundle.json \
+algal call ./tools/<bundle>.bundle.json \
   --args ticket.args.json \
   --gateway-model alibaba/qwen3.5-flash
 ```
@@ -501,8 +538,8 @@ The agent receives the output and a receipt digest it can verify later. See
 
 ### Verification and transport
 
-Receipts are content-addressed canonical JSON; `morphogen verify` replays them
-offline with the recorded effects fixed. `morphogen pack` exports a manifest
+Receipts are content-addressed canonical JSON; `algal verify` replays them
+offline with the recorded effects fixed. `algal pack` exports a manifest
 closure — sub-manifests, `const` refs, and linked bundles — so one digest fully
 describes a deployable program.
 
@@ -525,7 +562,7 @@ detection.
 
 ## Related work
 
-Morphogen is a Hraness project. It shares conventions with `oh`
+ALGAL is a Hraness project. It shares conventions with `oh`
 (content-addressed canonical records), `platonik` (bounded organisms and
 symbolization), `valhalla` (authority boundaries and witness execution), and
 `oompa` (execution custody and conservative model routing), but it is

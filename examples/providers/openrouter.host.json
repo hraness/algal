@@ -1,0 +1,14 @@
+{
+  "contract": "algal.host.v1",
+  "executors": {
+    "default": {
+      "kind": "openai",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "model": "openrouter/auto",
+      "credentialEnv": "OPENROUTER_API_KEY",
+      "responseFormat": "json_object",
+      "timeoutMs": 120000,
+      "maxResponseBytes": 2097152
+    }
+  }
+}

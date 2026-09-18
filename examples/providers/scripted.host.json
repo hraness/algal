@@ -1,0 +1,9 @@
+{
+  "contract": "algal.host.v1",
+  "executors": {
+    "default": {
+      "kind": "scripted",
+      "responses": { "work": "This is a deterministic ALGAL harness fixture, not a live coding agent." }
+    }
+  }
+}

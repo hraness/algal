@@ -1,0 +1,19 @@
+{
+  "contract": "algal.query.v1",
+  "rules": [
+    {
+      "id": "direct",
+      "head": { "relation": "affects", "terms": [{ "var": "x" }, { "var": "y" }] },
+      "body": [{ "relation": "depends", "terms": [{ "var": "x" }, { "var": "y" }] }]
+    },
+    {
+      "id": "transitive",
+      "head": { "relation": "affects", "terms": [{ "var": "x" }, { "var": "z" }] },
+      "body": [
+        { "relation": "affects", "terms": [{ "var": "x" }, { "var": "y" }] },
+        { "relation": "depends", "terms": [{ "var": "y" }, { "var": "z" }] }
+      ]
+    }
+  ],
+  "query": { "relation": "affects", "terms": ["app", { "var": "dependency" }] }
+}

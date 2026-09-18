@@ -1,12 +1,12 @@
-# When Morphogen wins
+# When ALGAL wins
 
-Morphogen is a programming model, not a model model. It wins when the work
+ALGAL is a programming model, not a model model. It wins when the work
 has structure that a prompt alone cannot capture — routing, typed inputs,
 external evidence, budget enforcement, and the need to prove what happened.
 
 ## The short version
 
-Use Morphogen when you want to:
+Use ALGAL when you want to:
 
 - compare several ways to solve the same workflow on the same workload,
 - keep the model from seeing data it should not see,
@@ -31,7 +31,7 @@ replayed without repeating the live call.
 ### 2. Many narrow judgments over one context
 
 A long prompt that asks for many things at once is expensive and fragile. A
-Morphogen organism can split the work into many `classifier` cells, each with a
+ALGAL organism can split the work into many `classifier` cells, each with a
 declared view, and route the outputs through `guard`ed edges. The graph decides
 what the next cell sees, not the model.
 
@@ -86,7 +86,7 @@ the frontier model is not on the efficient frontier at all.
 
 - **passed** is a strict canonical equality against the expected output. A
   classifier that emits the right label but with the wrong capitalization is a
-  miss — Morphogen does not silently normalize outputs.
+  miss — ALGAL does not silently normalize outputs.
 - **effect calls** counts every model call and tool call. The organism's extra
   calls are the tool lookups and the model decisions that use them.
 - **tokens in/out** are what the provider reported; scripted runs report zero,
@@ -94,17 +94,17 @@ the frontier model is not on the efficient frontier at all.
 - **cost** is `tokensIn * inputPrice + tokensOut * outputPrice` per attribution
   key, in USD. It is optional and comes from a `prices` map in the bench
   config. Because it is derived from reported tokens, it is also checked during
-  `morphogen bench verify` when the price card is in the report.
+  `algal bench verify` when the price card is in the report.
 - **Pareto** means no other system is at least as good on all three axes
   (quality ↑, cost signal ↓, effect calls ↓) and strictly better on one. It is
-  a claim that survives `morphogen bench verify`.
+  a claim that survives `algal bench verify`.
 
 ## What to do next
 
 1. Run `bun run cli suite` to see the bundled deterministic examples.
 2. Run `bun run cli bench examples/invest/bench-invest.config.json \
    --tools examples/invest/bench-invest.tools.json \
-   --dir .morphogen --out invest-report.json` to see the same workload
+   --dir .algal --out invest-report.json` to see the same workload
    replayed deterministically.
 3. Add the `prices` map to `examples/invest/bench-invest-priced.config.json`
    (or use `examples/invest/bench-invest-live.config.json` for the live

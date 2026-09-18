@@ -1,0 +1,13 @@
+{
+  "contract": "algal.context.v1",
+  "items": [
+    { "id": "goal", "role": "user", "content": "Keep the public parser API unchanged." },
+    {
+      "id": "old-test-output",
+      "role": "tool",
+      "content": "Parser test transcript: token-one passed; token-two passed; token-three passed; token-four passed; token-five passed; token-six passed; token-seven passed; token-eight passed; token-nine passed; token-ten passed. Lexer test transcript: offset-one passed; offset-two passed; offset-three passed; offset-four passed; offset-five passed; offset-six passed; offset-seven passed; offset-eight passed; offset-nine passed; offset-ten passed. This verbose output is synthetic evidence, retained exactly in the source archive even when it is replaced by a digest link in the active context."
+    },
+    { "id": "decision", "role": "assistant", "content": "Preserve token offsets.", "pinned": true },
+    { "id": "next", "role": "assistant", "content": "Check lexer dependencies next." }
+  ]
+}

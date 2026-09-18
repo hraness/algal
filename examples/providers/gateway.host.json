@@ -1,0 +1,6 @@
+{
+  "contract": "algal.host.v1",
+  "executors": {
+    "default": { "kind": "gateway", "model": "alibaba/qwen3.7-flash" }
+  }
+}

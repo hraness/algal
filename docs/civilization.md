@@ -1,23 +1,23 @@
-# Morphogen Civilization
+# ALGAL Civilization
 
-Morphogen is not just a workflow runtime. It is a substrate for a new kind of
+ALGAL is not just a workflow runtime. It is a substrate for a new kind of
 programming: **civilization software**. Programs are organisms, organisms are
 data, and a host can evolve a population of them by selecting, composing, and
 promoting the ones that work.
 
 This document is the convergence of the parallel spikes: agent tools, Pareto
 benchmarks, live-model execution, habitats, and self-reproduction. It describes
-what a Morphogen civilization is and gives a first runnable host loop.
+what a ALGAL civilization is and gives a first runnable host loop.
 
 ## The four spikes
 
 Each spike explored a different face of the same primitive:
 
-1. **Agent tool spike** — `morphogen tool-def` and `morphogen call` let a larger
+1. **Agent tool spike** — `algal tool-def` and `algal call` let a larger
    agent use an organism as a typed, receipted tool. The agent stays open-ended;
    the organism takes over once the sub-problem is well-formed.
 
-2. **Pareto benchmark spike** — `morphogen bench` and `morphogen bench verify`
+2. **Pareto benchmark spike** — `algal bench` and `algal bench verify`
    measure systems on cost, tokens, effects, and accuracy. The efficient
    frontier makes the tradeoff explicit instead of pretending one model is best.
 
@@ -31,7 +31,7 @@ Each spike explored a different face of the same primitive:
 
 ## What a civilization is
 
-A Morphogen civilization is a long-lived loop:
+A ALGAL civilization is a long-lived loop:
 
 ```
 goals  →  parent organism  →  proposed child  →  spawn  →  promote
@@ -68,8 +68,8 @@ bun scripts/civ.ts --live
 After a run, `civ/population.json` lists the digests and `civ/` contains the
 packs. The host can now:
 
-- run `morphogen bench` with the population as competing systems,
-- run `morphogen foundry search` to breed better children,
+- run `algal bench` with the population as competing systems,
+- run `algal foundry search` to breed better children,
 - register a promoted child as a tool in a larger agent,
 - keep the receipts as a fossil record.
 
@@ -92,7 +92,7 @@ The loop currently uses the host's promote policy. The next layers are:
 
 1. **Bench-driven selection** — run the candidates on a Pareto workload and
    promote only non-dominated ones.
-2. **Foundry-driven breeding** — use `morphogen foundry search` to mutate
+2. **Foundry-driven breeding** — use `algal foundry search` to mutate
    organism topologies and keep the winners.
 3. **Peer review** — an organism inspects another organism's receipt before
    voting for promotion.
@@ -101,7 +101,7 @@ The loop currently uses the host's promote policy. The next layers are:
 
 ## The deeper shape
 
-The trippy part: in a Morphogen civilization, **programming becomes ecology**.
+The trippy part: in a ALGAL civilization, **programming becomes ecology**.
 The source code is not a static artifact. It is a population of organisms under
 selection pressure. The receipts are fossils. The host is the environment. The
 model is mutation. The bench is natural selection.

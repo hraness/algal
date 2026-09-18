@@ -5,6 +5,8 @@ import type {
   ExecutorResult,
 } from "./effects";
 import { MorphogenError } from "./errors";
+import { boundedBytes } from "./io";
+import { digestCanonical } from "./digest";
 import { canonicalize, type JsonObject, type JsonValue } from "./values";
 
 export const VERCEL_AI_GATEWAY_BASE_URL = "https://ai-gateway.vercel.sh/v1" as const;
@@ -50,7 +52,7 @@ async function boundedJson(response: Response, maxBytes: number): Promise<unknow
   if (declared !== null && Number(declared) > maxBytes) {
     throw new MorphogenError("EFFECT_FAILED", `AI Gateway response exceeds ${maxBytes} bytes`);
   }
-  const bytes = new Uint8Array(await response.arrayBuffer());
+  const bytes = await boundedBytes(response.body, maxBytes, "AI Gateway response");
   if (bytes.byteLength > maxBytes) {
     throw new MorphogenError("EFFECT_FAILED", `AI Gateway response exceeds ${maxBytes} bytes`);
   }
@@ -58,7 +60,8 @@ async function boundedJson(response: Response, maxBytes: number): Promise<unknow
   if (!response.ok) {
     throw new MorphogenError(
       "EFFECT_FAILED",
-      `AI Gateway returned ${response.status}: ${text.slice(0, 500)}`,
+      `AI Gateway returned HTTP ${response.status}; response body withheld`,
+
     );
   }
   try {
@@ -168,6 +171,7 @@ export function vercelGatewayExecutor(options: GatewayExecutorOptions): Executor
   };
   return {
     id: `vercel:${options.model}`,
+    cacheIdentity: digestCanonical({ provider: "vercel", baseUrl: VERCEL_AI_GATEWAY_BASE_URL, model: options.model, responseFormat: "json_schema" }),
     execute: async (request, signal) => (await run(request, signal)).output,
     executeEffect: run,
   };

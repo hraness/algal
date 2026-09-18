@@ -12,7 +12,7 @@ import {
   type RunReceipt,
 } from "./run";
 import { manifestToJson, parseOrganismManifest } from "./contract";
-import type { Store } from "./store";
+import { replayStore, type Store } from "./store";
 import type { Transport } from "./transport";
 import type { ToolRegistry } from "./tools";
 import { MorphogenError } from "./errors";
@@ -63,7 +63,7 @@ export async function verifyReceipt(
     manifest,
     args: original.args,
     fns,
-    store,
+    store: replayStore(store),
     executors: [replayExecutor(original.effects)],
     replayVia,
     replaySlots,

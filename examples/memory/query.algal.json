@@ -1,0 +1,17 @@
+{
+  "contract": "morphogen.organism.v1",
+  "key": "organism:memory-query",
+  "name": "A proof-carrying context query",
+  "cells": [
+    { "id": "source", "kind": "input", "outputs": { "snapshot": "json", "program": "json" } },
+    { "id": "query", "kind": "fn", "fn": "memory.query.v1" }
+  ],
+  "edges": [
+    { "from": { "cell": "source", "port": "snapshot" }, "to": { "cell": "query", "port": "snapshot" } },
+    { "from": { "cell": "source", "port": "program" }, "to": { "cell": "query", "port": "program" } }
+  ],
+  "interface": {
+    "inputs": { "snapshot": { "cell": "source", "port": "snapshot" }, "program": { "cell": "source", "port": "program" } },
+    "outputs": { "context": { "cell": "query", "port": "result" } }
+  }
+}

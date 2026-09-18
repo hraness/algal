@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// morphogen — run, verify, and inspect typed workflow organisms.
+// algal — run, verify, and inspect typed workflow organisms.
 // Data on stdout (JSON), diagnostics on stderr. Exit 0 ok, 1 run/verify
 // failure, 2 usage or parse error.
 
@@ -17,6 +17,7 @@ import {
 } from "./src/effects";
 import { errorReport, MorphogenError } from "./src/errors";
 import { vercelGatewayExecutor } from "./src/gateway";
+import { commandJson } from "./src/io";
 import { builtinRegistry } from "./src/registry";
 import { parseRunReceipt, runOrganism, type RunReceipt } from "./src/run";
 import { packOrganism, parseBundle, unpackBundle } from "./src/bundle";
@@ -54,12 +55,12 @@ import {
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const EXAMPLES_DIR = join(ROOT, "examples");
 
-const USAGE = `morphogen — typed, replayable workflow organisms
+const USAGE = `algal — typed, replayable workflow organisms
 
 usage:
-  morphogen examples                          list bundled examples
-  morphogen example <id>                      print the example manifest
-  morphogen run <manifest.json> [options]     run an organism, print its receipt
+  algal examples                          list bundled examples
+  algal example <id>                      print the example manifest
+  algal run <manifest.json> [options]     run an organism, print its receipt
       --args <file>                           input-cell values (JSON)
       --responses <file>                      scripted agent outputs (JSON map)
       --executor-cmd <shell command>          live executor: request on stdin, output on stdout
@@ -71,76 +72,76 @@ usage:
                                               via cells resolve remote manifests through it
       --tools <file>                          tool registry: name → {signature, exec};
                                               exec is scripted:<file> or cmd:<shell>
-      --dir <path>                            store directory (default .morphogen)
+      --dir <path>                            store directory (default .algal)
       --write                                 persist manifest + receipt under --dir
       --cache-effects                         memoize effects: identical request digests
                                               serve the store's recorded response
-  morphogen check <manifest.json> [--modules <dir>] [--transports <file>] [--dir <path>]
+  algal check <manifest.json> [--modules <dir>] [--transports <file>] [--dir <path>]
                                               admit a manifest without running it
-  morphogen explain <manifest.json> [--modules <dir>] [--transports <file>] [--dir <path>]
+  algal explain <manifest.json> [--modules <dir>] [--transports <file>] [--dir <path>]
                                               print the compiled signature: resolved ports, guards
-  morphogen verify <receipt.json> [manifest.json] [--modules <dir>] [--transports <file>] [--dir <path>]
+  algal verify <receipt.json> [manifest.json] [--modules <dir>] [--transports <file>] [--dir <path>]
                                               re-run with recorded receipts and compare;
                                               manifest resolves from the store when omitted
-  morphogen inspect <receipt.json>            summarize a run receipt
-  morphogen runs [--dir <path>]               list receipts stored under --dir
-  morphogen diff <receipt-a.json> <receipt-b.json>
+  algal inspect <receipt.json>            summarize a run receipt
+  algal runs [--dir <path>]               list receipts stored under --dir
+  algal diff <receipt-a.json> <receipt-b.json>
                                               compare two receipts, report divergence
-  morphogen foundry <config.json> [--responses <file>] [--executor-cmd <command>]
+  algal foundry <config.json> [--responses <file>] [--executor-cmd <command>]
       [--gateway-model <provider/model>]
       [--executors <file>] [--modules <dir>] [--transports <file>] [--tools <file>]
       [--cache-effects] [--dir <path>] [--out <report.json>]
                                               generate/evaluate candidates and promote a winner
-  morphogen foundry verify <report.json> [--dir <path>]
+  algal foundry verify <report.json> [--dir <path>]
                                               replay every run in a foundry report offline
-  morphogen foundry inspect <report.json>     summarize scores, lineage, and promotion
-  morphogen foundry pack <report.json> --out <dir> [--dir <path>]
+  algal foundry inspect <report.json>     summarize scores, lineage, and promotion
+  algal foundry pack <report.json> --out <dir> [--dir <path>]
                                               export the promoted organism's verified bundle
-  morphogen foundry search <config.json> [executor/store options] [--out <report.json>]
+  algal foundry search <config.json> [executor/store options] [--out <report.json>]
                                               evolve candidates over bounded generations
-  morphogen foundry search-verify <report.json> [--dir <path>]
-  morphogen foundry search-inspect <report.json>
-  morphogen foundry search-pack <report.json> --out <dir> [--dir <path>]
+  algal foundry search-verify <report.json> [--dir <path>]
+  algal foundry search-inspect <report.json>
+  algal foundry search-pack <report.json> --out <dir> [--dir <path>]
                                               inspect or export a verified search winner
-  morphogen bench <config.json> [--modules <dir>] [--tools <file>] [--dir <path>] [--out <report.json>]
+  algal bench <config.json> [--modules <dir>] [--tools <file>] [--dir <path>] [--out <report.json>]
                                               measure several systems on one workload:
                                               quality, tokens, work, per-model attribution,
                                               and the non-dominated pareto set (with optional prices)
-  morphogen bench verify <report.json> [--dir <path>]
+  algal bench verify <report.json> [--dir <path>]
                                               replay every case receipt in a bench report
-  morphogen bench inspect <report.json>       summarize a pareto comparison
-  morphogen suite                             run and verify all bundled examples
-  morphogen digest <manifest.json>            print the manifest's canonical digest
-  morphogen store put <value.json> [--dir <path>]
+  algal bench inspect <report.json>       summarize a pareto comparison
+  algal suite                             run and verify all bundled examples
+  algal digest <manifest.json>            print the manifest's canonical digest
+  algal store put <value.json> [--dir <path>]
                                               write a JSON value to CAS, print its ref token
-  morphogen store get <sha256:…> [--dir <path>]
+  algal store get <sha256:…> [--dir <path>]
                                               print the payload a ref resolves to
-  morphogen store has <sha256:…> [--dir <path>]
+  algal store has <sha256:…> [--dir <path>]
                                               report whether a ref resolves
-  morphogen slots [--dir <path>]              list durable slot cells' state
-  morphogen manifests [--dir <path>]         list manifests stored under --dir
-  morphogen manifest <sha256:…> [--dir <path>]
+  algal slots [--dir <path>]              list durable slot cells' state
+  algal manifests [--dir <path>]         list manifests stored under --dir
+  algal manifest <sha256:…> [--dir <path>]
                                               print a stored manifest
-  morphogen slot get <name> [--dir <path>]    print a slot's current value
-  morphogen slot set <name> <value.json> [--dir <path>]
+  algal slot get <name> [--dir <path>]    print a slot's current value
+  algal slot set <name> <value.json> [--dir <path>]
                                               write a slot directly (seeding)
-  morphogen pack <manifest.json> [--modules <dir>] [--dir <path>] [--out <dir>]
+  algal pack <manifest.json> [--modules <dir>] [--dir <path>] [--out <dir>]
                                               print a closure bundle: the manifest plus every
                                               embedded sub-manifest and const-ref payload;
                                               --out also writes <root-hex>.bundle.json
-  morphogen unpack <bundle.json> [--dir <path>]
+  algal unpack <bundle.json> [--dir <path>]
                                               install a bundle into the store, digests verified
-  morphogen call <bundle.json> [options]
+  algal call <bundle.json> [options]
                                               run a packed organism and print a compact result:
                                               { ok, outputs, receiptDigest, manifestDigest }.
-                                              options mirror morphogen run: --args, --responses,
+                                              options mirror algal run: --args, --responses,
                                               --executor-cmd, --gateway-model, --executors,
                                               --modules, --tools, --cache-effects, --dir
-  morphogen tool-def <manifest.json> [--modules <dir>]
+  algal tool-def <manifest.json> [--modules <dir>]
                                               print an OpenAI/Anthropic tool definition for the
                                               organism's interface: a name, description, and a
                                               JSON Schema of the arguments it expects
-  morphogen --version | --help
+  algal --version | --help
 `;
 
 type ParsedArgs = {
@@ -221,7 +222,7 @@ async function loadModules(
   }
   let loaded = 0;
   for (const f of files.sort()) {
-    if (!f.endsWith(".morphogen.json")) continue;
+    if (!/\.(?:algal|morphogen)\.json$/.test(f)) continue;
     const m = parseOrganismManifest(await readJson(join(resolved, f)));
     await store.putManifest(m);
     loaded++;
@@ -296,53 +297,14 @@ async function loadTools(file: string): Promise<ToolRegistry> {
     } else if (spec.startsWith("cmd:")) {
       const command = spec.slice("cmd:".length);
       tool = async (inputs, context) => {
-        const proc = Bun.spawn(["sh", "-c", command], {
-          cwd: base,
-          stdin: "pipe",
-          stdout: "pipe",
-          stderr: "pipe",
+        const parsed = await commandJson(["sh", "-c", command], {
+          inputs,
+          requestDigest: context.requestDigest,
+          ...(context.idempotencyKey ? { idempotencyKey: context.idempotencyKey } : {}),
+        }, {
+          cwd: base, timeoutMs: 30_000,
+          maxStdoutBytes: signature.maxOutputBytes, ...(context.signal ? { signal: context.signal } : {}),
         });
-        void proc.stdin.write(
-          canonicalize({
-            inputs,
-            requestDigest: context.requestDigest,
-            idempotencyKey: context.idempotencyKey,
-          } as JsonValue),
-        );
-        void proc.stdin.end();
-        const onAbort = () => proc.kill("SIGKILL");
-        const timer = setTimeout(onAbort, 30_000);
-        context.signal?.addEventListener("abort", onAbort);
-        let stdout: Uint8Array;
-        let code: number;
-        try {
-          stdout = new Uint8Array(
-            await new Response(proc.stdout).arrayBuffer(),
-          );
-          code = await proc.exited;
-        } finally {
-          clearTimeout(timer);
-          context.signal?.removeEventListener("abort", onAbort);
-        }
-        if (stdout.byteLength > signature.maxOutputBytes) {
-          throw new MorphogenError(
-            "TOOL_FAILED",
-            `${name}: output exceeds ${signature.maxOutputBytes} bytes`,
-          );
-        }
-        if (code !== 0) {
-          const stderr = (await new Response(proc.stderr).text()).slice(0, 2000);
-          throw new MorphogenError(
-            "TOOL_FAILED",
-            `${name}: exited ${code}: ${stderr}`,
-          );
-        }
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(new TextDecoder().decode(stdout));
-        } catch {
-          throw new MorphogenError("TOOL_FAILED", `${name}: stdout is not JSON`);
-        }
         if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
           throw new MorphogenError(
             "TOOL_FAILED",
@@ -419,7 +381,7 @@ function deriveInputs(c: {
 
 async function main(): Promise<number> {
   const { cmd, positional, flags } = parseArgs(process.argv.slice(2));
-  const dir = String(flags.dir ?? ".morphogen");
+  const dir = String(flags.dir ?? ".algal");
   const store = new FileStore(dir);
   const fns = builtinRegistry();
 
@@ -432,31 +394,33 @@ async function main(): Promise<number> {
 
     case "--version":
     case "version":
-      out({ name: "morphogen", version: "0.1.0", contract: "morphogen.organism.v1" });
+      out({ name: "algal", version: "0.1.0", contract: "morphogen.organism.v1" });
       return 0;
 
     case "examples": {
       const { readdir } = await import("node:fs/promises");
       const files = (await readdir(EXAMPLES_DIR)).filter(
-        (f) => f.endsWith(".morphogen.json"),
+        (f) => /\.(?:algal|morphogen)\.json$/.test(f),
       );
-      out({ examples: files.map((f) => f.replace(/\.morphogen\.json$/, "")) });
+      out({ examples: files.map((f) => f.replace(/\.(?:algal|morphogen)\.json$/, "")) });
       return 0;
     }
 
     case "example": {
       const id = positional[0];
       if (!id || !/^[a-z][a-z0-9-]*$/.test(id)) {
-        throw new MorphogenError("PARSE_FAILED", "usage: morphogen example <id>");
+        throw new MorphogenError("PARSE_FAILED", "usage: algal example <id>");
       }
-      const m = await readJson(join(EXAMPLES_DIR, `${id}.morphogen.json`));
+      const name = await Bun.file(join(EXAMPLES_DIR, `${id}.algal.json`)).exists()
+        ? `${id}.algal.json` : `${id}.morphogen.json`;
+      const m = await readJson(join(EXAMPLES_DIR, name));
       out(m);
       return 0;
     }
 
     case "digest": {
       const file = positional[0];
-      if (!file) usageError("morphogen digest <manifest.json>");
+      if (!file) usageError("algal digest <manifest.json>");
       const manifest = parseOrganismManifest(await readJson(file));
       out({ digest: digestCanonical(manifestToJson(manifest)) });
       return 0;
@@ -476,7 +440,7 @@ async function main(): Promise<number> {
       switch (sub) {
         case "put": {
           const file = positional[1];
-          if (!file) usageError("morphogen store put <value.json>");
+          if (!file) usageError("algal store put <value.json>");
           const v = await readJson(resolve(file));
           const bytes = canonicalize(v).length;
           if (bytes > BOUNDS.maxBlobBytes) {
@@ -504,14 +468,14 @@ async function main(): Promise<number> {
           return 0;
         }
         default:
-          usageError("morphogen store put|get|has …");
+          usageError("algal store put|get|has …");
       }
       return 0;
     }
 
     case "pack": {
       const file = positional[0];
-      if (!file) usageError("morphogen pack <manifest.json> [--modules <dir>]");
+      if (!file) usageError("algal pack <manifest.json> [--modules <dir>]");
       if (flags.modules !== undefined) {
         const n = await loadModules(String(flags.modules), store);
         diag(`loaded ${n} module(s) from ${flags.modules}`);
@@ -535,7 +499,7 @@ async function main(): Promise<number> {
 
     case "unpack": {
       const file = positional[0];
-      if (!file) usageError("morphogen unpack <bundle.json>");
+      if (!file) usageError("algal unpack <bundle.json>");
       const bundle = parseBundle(await readJson(resolve(file)));
       const res = await unpackBundle(bundle, store);
       out({ ok: true, root: bundle.root, ...res });
@@ -544,7 +508,7 @@ async function main(): Promise<number> {
 
     case "call": {
       const file = positional[0];
-      if (!file) usageError("morphogen call <bundle.json> [options]");
+      if (!file) usageError("algal call <bundle.json> [options]");
       if (flags.modules !== undefined) {
         const n = await loadModules(String(flags.modules), store);
         diag(`loaded ${n} module(s) from ${flags.modules}`);
@@ -645,7 +609,7 @@ async function main(): Promise<number> {
 
     case "tool-def": {
       const file = positional[0];
-      if (!file) usageError("morphogen tool-def <manifest.json> [--format openai|anthropic]");
+      if (!file) usageError("algal tool-def <manifest.json> [--format openai|anthropic]");
       if (flags.modules !== undefined) {
         const n = await loadModules(String(flags.modules), store);
         diag(`loaded ${n} module(s) from ${flags.modules}`);
@@ -715,7 +679,7 @@ async function main(): Promise<number> {
 
     case "check": {
       const file = positional[0];
-      if (!file) usageError("morphogen check <manifest.json> [--modules <dir>]");
+      if (!file) usageError("algal check <manifest.json> [--modules <dir>]");
       if (flags.modules !== undefined) {
         const n = await loadModules(String(flags.modules), store);
         diag(`loaded ${n} module(s) from ${flags.modules}`);
@@ -743,7 +707,7 @@ async function main(): Promise<number> {
     case "explain": {
       const file = positional[0];
       if (!file) {
-        usageError("morphogen explain <manifest.json> [--modules <dir>]");
+        usageError("algal explain <manifest.json> [--modules <dir>]");
       }
       if (flags.modules !== undefined) {
         const n = await loadModules(String(flags.modules), store);
@@ -801,7 +765,7 @@ async function main(): Promise<number> {
 
     case "run": {
       const file = positional[0];
-      if (!file) usageError("morphogen run <manifest.json> [options]");
+      if (!file) usageError("algal run <manifest.json> [options]");
       if (flags.modules !== undefined) {
         const n = await loadModules(String(flags.modules), store);
         diag(`loaded ${n} module(s) from ${flags.modules}`);
@@ -882,10 +846,10 @@ async function main(): Promise<number> {
 
     case "foundry": {
       const file = positional[0];
-      if (!file) usageError("morphogen foundry <config.json> | foundry verify|inspect|pack <report.json>");
+      if (!file) usageError("algal foundry <config.json> | foundry verify|inspect|pack <report.json>");
       if (file === "verify") {
         const reportFile = positional[1];
-        if (!reportFile) usageError("morphogen foundry verify <report.json> [--dir <path>]");
+        if (!reportFile) usageError("algal foundry verify <report.json> [--dir <path>]");
         const verified = await verifyFoundryReport(
           await readJson(resolve(reportFile)),
           store,
@@ -897,7 +861,7 @@ async function main(): Promise<number> {
       }
       if (file === "inspect") {
         const reportFile = positional[1];
-        if (!reportFile) usageError("morphogen foundry inspect <report.json>");
+        if (!reportFile) usageError("algal foundry inspect <report.json>");
         const report = parseFoundryReport(await readJson(resolve(reportFile)));
         out({
           contract: report.contract,
@@ -918,7 +882,7 @@ async function main(): Promise<number> {
       }
       if (file === "search-verify") {
         const reportFile = positional[1];
-        if (!reportFile) usageError("morphogen foundry search-verify <report.json> [--dir <path>]");
+        if (!reportFile) usageError("algal foundry search-verify <report.json> [--dir <path>]");
         const verified = await verifySearchReport(
           await readJson(resolve(reportFile)),
           store,
@@ -930,7 +894,7 @@ async function main(): Promise<number> {
       }
       if (file === "search-inspect") {
         const reportFile = positional[1];
-        if (!reportFile) usageError("morphogen foundry search-inspect <report.json>");
+        if (!reportFile) usageError("algal foundry search-inspect <report.json>");
         const report = parseSearchReport(await readJson(resolve(reportFile)));
         out({
           contract: report.contract,
@@ -950,7 +914,7 @@ async function main(): Promise<number> {
       if (file === "search-pack") {
         const reportFile = positional[1];
         if (!reportFile || flags.out === undefined) {
-          usageError("morphogen foundry search-pack <report.json> --out <dir> [--dir <path>]");
+          usageError("algal foundry search-pack <report.json> --out <dir> [--dir <path>]");
         }
         const raw = await readJson(resolve(reportFile));
         const report = parseSearchReport(raw);
@@ -977,7 +941,7 @@ async function main(): Promise<number> {
       if (file === "pack") {
         const reportFile = positional[1];
         if (!reportFile || flags.out === undefined) {
-          usageError("morphogen foundry pack <report.json> --out <dir> [--dir <path>]");
+          usageError("algal foundry pack <report.json> --out <dir> [--dir <path>]");
         }
         const raw = await readJson(resolve(reportFile));
         const report = parseFoundryReport(raw);
@@ -1003,7 +967,7 @@ async function main(): Promise<number> {
       }
       const searchMode = file === "search";
       const configPath = searchMode ? positional[1] : file;
-      if (!configPath) usageError("morphogen foundry search <config.json>");
+      if (!configPath) usageError("algal foundry search <config.json>");
       const configFile = resolve(configPath);
       if (flags.modules !== undefined) {
         const n = await loadModules(String(flags.modules), store);
@@ -1188,11 +1152,11 @@ async function main(): Promise<number> {
     case "bench": {
       const file = positional[0];
       if (!file) {
-        usageError("morphogen bench <config.json> | bench verify|inspect <report.json>");
+        usageError("algal bench <config.json> | bench verify|inspect <report.json>");
       }
       if (file === "verify") {
         const reportFile = positional[1];
-        if (!reportFile) usageError("morphogen bench verify <report.json> [--dir <path>]");
+        if (!reportFile) usageError("algal bench verify <report.json> [--dir <path>]");
         const verified = await verifyBenchReport(
           await readJson(resolve(reportFile)),
           store,
@@ -1204,7 +1168,7 @@ async function main(): Promise<number> {
       }
       if (file === "inspect") {
         const reportFile = positional[1];
-        if (!reportFile) usageError("morphogen bench inspect <report.json>");
+        if (!reportFile) usageError("algal bench inspect <report.json>");
         const report = parseBenchReport(await readJson(resolve(reportFile)));
         out({
           contract: report.contract,
@@ -1349,7 +1313,7 @@ async function main(): Promise<number> {
     case "verify": {
       const [receiptFile, manifestFile] = positional;
       if (!receiptFile) {
-        usageError("morphogen verify <receipt.json> [manifest.json]");
+        usageError("algal verify <receipt.json> [manifest.json]");
       }
       if (flags.modules !== undefined) {
         const n = await loadModules(String(flags.modules), store);
@@ -1396,7 +1360,7 @@ async function main(): Promise<number> {
     case "diff": {
       const [aFile, bFile] = positional;
       if (!aFile || !bFile) {
-        usageError("morphogen diff <receipt-a.json> <receipt-b.json>");
+        usageError("algal diff <receipt-a.json> <receipt-b.json>");
       }
       const a = parseRunReceipt(await readJson(resolve(aFile)));
       const b = parseRunReceipt(await readJson(resolve(bFile)));
@@ -1417,7 +1381,7 @@ async function main(): Promise<number> {
 
     case "inspect": {
       const file = positional[0];
-      if (!file) usageError("morphogen inspect <receipt.json>");
+      if (!file) usageError("algal inspect <receipt.json>");
       const raw = (await readJson(resolve(file))) as JsonObject;
       const cells = (raw.cells ?? {}) as JsonObject;
       const summary: JsonObject = {
@@ -1539,7 +1503,7 @@ async function main(): Promise<number> {
     case "manifest": {
       const digest = positional[0];
       if (!digest) {
-        return usageError("morphogen manifest <sha256:…> [--dir <path>]");
+        return usageError("algal manifest <sha256:…> [--dir <path>]");
       }
       const m = await store.getManifest(digest as `sha256:${string}`);
       if (!m) {
@@ -1551,7 +1515,7 @@ async function main(): Promise<number> {
     case "slot": {
       const [sub, name, valueFile] = positional;
       if (sub === "get") {
-        if (!name) usageError("morphogen slot get <name>");
+        if (!name) usageError("algal slot get <name>");
         const v = await store.getSlot(name);
         if (v === undefined) {
           throw new MorphogenError("STORE_MISS", `slot "${name}" is empty`);
@@ -1561,7 +1525,7 @@ async function main(): Promise<number> {
       }
       if (sub === "set") {
         if (!name || !valueFile) {
-          usageError("morphogen slot set <name> <value.json>");
+          usageError("algal slot set <name> <value.json>");
         }
         const v = await readJson(resolve(valueFile));
         const bytes = canonicalBytes(v);
@@ -1576,7 +1540,7 @@ async function main(): Promise<number> {
         return 0;
       }
       return usageError(
-        "morphogen slot get <name> | slot set <name> <value.json>",
+        "algal slot get <name> | slot set <name> <value.json>",
       );
     }
 
@@ -1585,7 +1549,7 @@ async function main(): Promise<number> {
       // and default args, then verify each receipt offline.
       const { readdir } = await import("node:fs/promises");
       const files = (await readdir(EXAMPLES_DIR)).filter((f) =>
-        f.endsWith(".morphogen.json"),
+        /\.(?:algal|morphogen)\.json$/.test(f),
       );
       const results: JsonObject[] = [];
       let allOk = true;
@@ -1593,7 +1557,7 @@ async function main(): Promise<number> {
       // regardless of iteration order
       const parsed = new Map<string, { raw: JsonValue; manifest: ReturnType<typeof parseOrganismManifest> }>();
       for (const f of files.sort()) {
-        const id = f.replace(/\.morphogen\.json$/, "");
+        const id = f.replace(/\.(?:algal|morphogen)\.json$/, "");
         const raw = await readJson(join(EXAMPLES_DIR, f));
         const manifest = parseOrganismManifest(raw);
         await store.putManifest(manifest);
@@ -1653,7 +1617,7 @@ async function main(): Promise<number> {
         try {
           await readFile(join(EXAMPLES_DIR, `${id}.cache.json`), "utf8");
           for (const e of receipt.effects) {
-            if (e.output !== undefined) await store.putEffect(e);
+            if (e.output !== undefined) await store.putEffect(e, scriptedExecutor(responses).cacheIdentity);
           }
           const receipt2 = await runOrganism({
             manifest,

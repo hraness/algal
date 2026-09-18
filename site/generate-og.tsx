@@ -9,7 +9,7 @@ import satori from "satori";
 const siteDirectory = dirname(fileURLToPath(import.meta.url));
 
 const mark = (
-  <svg aria-label="morphogen" height="42" role="img" viewBox="0 0 42 42" width="42">
+  <svg aria-label="ALGAL" height="42" role="img" viewBox="0 0 42 42" width="42">
     <circle cx="16" cy="23" r="11" fill="currentColor" />
     <circle cx="30" cy="17" r="7" fill="currentColor" />
   </svg>
@@ -17,9 +17,9 @@ const mark = (
 
 const card = createSocialImageCard({
   description:
-    "Morphogen expresses an agentic workflow as a typed graph: deterministic cells, bounded agent cells, classifier routing, and receipts a verifier can replay.",
+    "A language for growing agent programs. Typed workflows, bounded model calls, inspectable memory, and evidence-driven evolution.",
   domain: "morphogen.dev",
-  eyebrow: "morphogen",
+  eyebrow: "ALGAL",
   mark,
   theme: {
     accent: "#355e3b",
@@ -27,7 +27,7 @@ const card = createSocialImageCard({
     foreground: "#1c1a18",
     muted: "#6b675f",
   },
-  title: "morphogen — typed, replayable workflow organisms",
+  title: "Programs that grow. More from every model.",
 });
 
 const svg = await satori(card.element, {

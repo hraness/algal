@@ -1,6 +1,6 @@
 # Security
 
-Morphogen's boundary is the executor seam: effect requests go out, bounded
+ALGAL's boundary is the executor seam: effect requests go out, bounded
 bytes come back, and outputs bind to declared contracts before they can feed
 the graph. If you find a way for model output, a manifest, or a receipt to
 cross a boundary it should not — authority, execution, unbounded resource use,

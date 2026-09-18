@@ -1,0 +1,17 @@
+{
+  "contract": "morphogen.organism.v1",
+  "key": "organism:hello-algal",
+  "name": "Hello ALGAL",
+  "interface": {
+    "inputs": {},
+    "outputs": { "greeting": { "cell": "hello", "port": "text" } }
+  },
+  "cells": [
+    {
+      "id": "hello",
+      "kind": "const",
+      "outputs": { "text": { "type": "text", "value": "Programs that grow." } }
+    }
+  ],
+  "edges": []
+}

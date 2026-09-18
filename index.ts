@@ -138,5 +138,5 @@ export type { Digest } from "./src/digest";
 export { canonicalize, canonicalBytes } from "./src/values";
 export type { JsonObject, JsonValue } from "./src/values";
 
-export { ERROR_CODES, MorphogenError, errorReport } from "./src/errors";
+export { ERROR_CODES, AlgalError, MorphogenError, errorReport } from "./src/errors";
 export type { ErrorCode } from "./src/errors";

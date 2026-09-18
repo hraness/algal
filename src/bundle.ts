@@ -140,9 +140,15 @@ export async function unpackBundle(
   bundle: Bundle,
   store: Store,
 ): Promise<{ manifests: number; values: number }> {
+  bundle = parseBundle(bundle);
+  if (bundle.manifests[bundle.root] === undefined) {
+    throw new MorphogenError("PARSE_FAILED", `bundle root ${bundle.root} is not among its manifests`);
+  }
+  const parsed = new Map<Digest, OrganismManifest>();
   for (const [claimed, json] of Object.entries(bundle.manifests)) {
     const m = parseOrganismManifest(json);
-    const actual = await store.putManifest(m);
+    parsed.set(claimed as Digest, m);
+    const actual = digestCanonical(manifestToJson(m));
     if (actual !== claimed) {
       throw new MorphogenError(
         "DIGEST_MISMATCH",
@@ -151,7 +157,7 @@ export async function unpackBundle(
     }
   }
   for (const [claimed, v] of Object.entries(bundle.values)) {
-    const actual = await store.putValue(v);
+    const actual = digestCanonical(v);
     if (actual !== claimed) {
       throw new MorphogenError(
         "DIGEST_MISMATCH",
@@ -165,6 +171,8 @@ export async function unpackBundle(
       `bundle root ${bundle.root} is not among its manifests`,
     );
   }
+  for (const m of parsed.values()) await store.putManifest(m);
+  for (const value of Object.values(bundle.values)) await store.putValue(value);
   return {
     manifests: Object.keys(bundle.manifests).length,
     values: Object.keys(bundle.values).length,

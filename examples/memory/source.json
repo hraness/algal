@@ -1,0 +1,5 @@
+{
+  "kind": "dependency-observation",
+  "statement": "The app imports the parser. The parser imports the lexer.",
+  "authority": "synthetic demonstration fixture"
+}
