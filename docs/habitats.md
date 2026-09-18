@@ -160,6 +160,52 @@ The receipt shows `child` (the spawned manifest digest) and `population` (the
 updated list). The child is data, the host still owns the store and registries,
  and the whole lineage is replayable.
 
+## Live self-reproduction: `examples/habitat/live.morphogen.json`
+
+There is also a non-deterministic version of the habitat steel thread. The
+`habitat-live` organism calls a live model to design the child, falls back to a
+safe default if the model fails to produce a JSON manifest, and then spawns
+whatever is selected. A host script, `examples/habitat/promote.ts`, decides
+whether to promote the result.
+
+Run the scripted version to see the fallback/rejection path:
+
+```sh
+bun examples/habitat/promote.ts
+```
+
+Run the live version to watch an organism design and spawn a real child:
+
+```sh
+bun examples/habitat/promote.ts --live
+# optionally: GATEWAY_MODEL=anthropic/claude-opus-5 bun examples/habitat/promote.ts --live
+```
+
+`promote.ts`:
+
+1. packs the known fallback manifest and records its digest,
+2. runs `habitat-live` with a live model as the `designer` agent,
+3. extracts the spawned child digest from the receipt,
+4. compares it to the fallback digest,
+5. if the live model produced a *different* valid manifest, packs and writes it
+to `promoted/<digest>.bundle.json` and prints `promoted bundle …`.
+
+When this was first run with `alibaba/qwen3.7-flash`, the model generated and
+the organism spawned:
+
+```
+fallback digest  sha256:0d888ed00f06bba02259b00a3f9f895ef90d705cdbb1a8cc9c70d3bd96ee7a0e
+proposed child    sha256:f73c4ef9f89a3c55595f773c5a86c89780cfaf202cf29284005e76a5ad7e751c
+promoted bundle   sha256:f73c4ef9f89a3c55595f773c5a86c89780cfaf202cf29284005e76a5ad7e751c
+wrote promoted/f73c4ef9f89a3c55595f773c5a86c89780cfaf202cf29284005e76a5ad7e751c.bundle.json
+```
+
+That is the first real live self-reproduction in the habitat: a parent organism
+proposed a child through a model call, the runtime admitted and ran it, and the
+host script promoted the child to a standalone bundle. The fallback digest gives
+a deterministic baseline; any non-fallback child is a live, model-proposed
+candidate.
+
 ## A sketch of the next step
 
 The most concrete near-term habitat would be:

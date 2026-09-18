@@ -2,6 +2,7 @@ node_modules/
 dist/
 site/dist/
 .morphogen/
+promoted/
 .env
 .env.*
 !.env.example

@@ -38,7 +38,10 @@ Because a manifest is a value, an organism can generate and propose new
 organisms, functions, and tools. A shared `Store` and registries become a
 habitat: a population that evolves through foundry search and host admission.
 The organism cannot rewrite its own runtime; it can only propose. The host
-remains the admission gate. See `docs/habitats.md` for the design sketch.
+remains the admission gate. A live steel thread already works:
+`bun examples/habitat/promote.ts --live` lets a parent organism call a model to
+design a child, spawn it, and the host promotes the child to a bundle if it is
+valid and different from the safe fallback.
 
 ## Quick start
 

@@ -179,6 +179,12 @@ $ morphogen call ./tools/&lt;bundle&gt;.bundle.json --args ticket.args.json
       admission. The organism cannot rewrite its own runtime; it can only
       propose. The host remains the admission gate.
     </p>
+    <p>
+      A live steel thread already works: <code>bun examples/habitat/promote.ts --live</code>
+      lets a parent organism call a model to design a child, spawn it, and the
+      host promotes the child to a standalone bundle if it is valid and different
+      from the safe fallback.
+    </p>
   </section>
 
   <section class="status">
