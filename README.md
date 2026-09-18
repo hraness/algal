@@ -446,6 +446,37 @@ The command receives `{ inputs, requestDigest, idempotencyKey }` on stdin and
 must print a JSON object of output ports. For deterministic testing, use
 `"exec": "scripted:<data.json>"`.
 
+### As an agent tool
+
+Pack an organism and register it as an OpenAI or Anthropic function tool:
+
+```sh
+morphogen pack ticket.morphogen.json --out ./tools
+morphogen tool-def ticket.morphogen.json > ticket-tool.json
+```
+
+Then call it from an agent:
+
+```sh
+morphogen call ./tools/<bundle>.bundle.json \
+  --args ticket.args.json \
+  --gateway-model alibaba/qwen3.5-flash
+```
+
+The result is compact enough for an agent to consume:
+
+```json
+{
+  "ok": true,
+  "outputs": { "out": "billing" },
+  "receiptDigest": "sha256:...",
+  "manifestDigest": "sha256:..."
+}
+```
+
+The agent receives the output and a receipt digest it can verify later. See
+`docs/agent-tool.md` for a complete example.
+
 ### Verification and transport
 
 Receipts are content-addressed canonical JSON; `morphogen verify` replays them

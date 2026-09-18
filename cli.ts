@@ -130,6 +130,16 @@ usage:
                                               --out also writes <root-hex>.bundle.json
   morphogen unpack <bundle.json> [--dir <path>]
                                               install a bundle into the store, digests verified
+  morphogen call <bundle.json> [options]
+                                              run a packed organism and print a compact result:
+                                              { ok, outputs, receiptDigest, manifestDigest }.
+                                              options mirror morphogen run: --args, --responses,
+                                              --executor-cmd, --gateway-model, --executors,
+                                              --modules, --tools, --cache-effects, --dir
+  morphogen tool-def <manifest.json> [--modules <dir>]
+                                              print an OpenAI/Anthropic tool definition for the
+                                              organism's interface: a name, description, and a
+                                              JSON Schema of the arguments it expects
   morphogen --version | --help
 `;
 
@@ -337,6 +347,61 @@ async function loadTools(file: string): Promise<ToolRegistry> {
   return registry;
 }
 
+/** Convert a Morphogen port type to a draft-07 JSON Schema fragment. */
+function portToJsonSchema(p: {
+  type: string;
+  optional?: boolean;
+  many?: boolean;
+  labels?: string[];
+  schema?: JsonObject;
+}): JsonValue {
+  let base: JsonObject;
+  switch (p.type) {
+    case "text":
+      base = { type: "string" };
+      break;
+    case "int":
+      base = { type: "integer" };
+      break;
+    case "number":
+      base = { type: "number" };
+      break;
+    case "bool":
+      base = { type: "boolean" };
+      break;
+    case "json":
+      base = p.schema ? { ...p.schema } : { type: "object" };
+      break;
+    case "choice":
+      base = { type: "string", enum: p.labels ?? [] };
+      break;
+    case "ref":
+      base = { type: "string", pattern: "^sha256:[a-f0-9]{64}$" };
+      break;
+    default:
+      base = {};
+  }
+  return p.many ? { type: "array", items: base } : (base as JsonValue);
+}
+
+/** Derive a public interface from the manifest's input cells when the
+ * manifest does not declare one. Input cells export their first output port. */
+function deriveInputs(c: {
+  manifest: { cells: { id: string; kind: string }[] };
+  ports: Map<string, { inputs: Record<string, unknown>; outputs: Record<string, unknown> }>;
+}): Record<string, { cell: string; port: string }> {
+  const inputs: Record<string, { cell: string; port: string }> = {};
+  for (const cell of c.manifest.cells) {
+    if (cell.kind !== "input") continue;
+    const sig = c.ports.get(cell.id);
+    if (!sig) continue;
+    const first = Object.keys(sig.outputs)[0];
+    if (!first) continue;
+    inputs[cell.id] = { cell: cell.id, port: first };
+  }
+  return inputs;
+}
+
 async function main(): Promise<number> {
   const { cmd, positional, flags } = parseArgs(process.argv.slice(2));
   const dir = String(flags.dir ?? ".morphogen");
@@ -459,6 +524,175 @@ async function main(): Promise<number> {
       const bundle = parseBundle(await readJson(resolve(file)));
       const res = await unpackBundle(bundle, store);
       out({ ok: true, root: bundle.root, ...res });
+      return 0;
+    }
+
+    case "call": {
+      const file = positional[0];
+      if (!file) usageError("morphogen call <bundle.json> [options]");
+      if (flags.modules !== undefined) {
+        const n = await loadModules(String(flags.modules), store);
+        diag(`loaded ${n} module(s) from ${flags.modules}`);
+      }
+
+      const bundle = parseBundle(await readJson(resolve(file)));
+      await unpackBundle(bundle, store);
+      const manifest = await store.getManifest(bundle.root);
+      if (!manifest) {
+        throw new MorphogenError("STORE_MISS", `bundle root ${bundle.root} not in store after unpack`);
+      }
+
+      const argsRaw =
+        flags.args !== undefined
+          ? asRecord(await readJson(resolve(String(flags.args))), "args")
+          : {};
+      const args: Record<string, Record<string, JsonValue>> = {};
+      for (const [cellId, ports] of Object.entries(argsRaw)) {
+        args[cellId] = asRecord(ports as JsonValue, `args.${cellId}`);
+      }
+
+      const executors: Executor[] = [];
+      if (flags.responses !== undefined) {
+        const map = asRecord(
+          await readJson(resolve(String(flags.responses))),
+          "responses",
+        );
+        executors.push(scriptedExecutor(map as Record<string, JsonValue>));
+      }
+      if (flags["executor-cmd"] !== undefined) {
+        executors.push(commandExecutor(String(flags["executor-cmd"])));
+      }
+      if (flags["gateway-model"] !== undefined) {
+        executors.push(vercelGatewayExecutor({ model: String(flags["gateway-model"]) }));
+      }
+      if (flags.executors !== undefined) {
+        const map = asRecord(
+          await readJson(resolve(String(flags.executors))),
+          "executors",
+        );
+        for (const [name, cmd] of Object.entries(map)) {
+          if (typeof cmd !== "string" || cmd.length === 0) {
+            throw new MorphogenError(
+              "PARSE_FAILED",
+              `executors.${name} must be a shell command string`,
+            );
+          }
+          const inner = commandExecutor(cmd);
+          executors.push({ id: name, execute: (r) => inner.execute(r) });
+        }
+        diag(`loaded ${Object.keys(map).length} named executor(s)`);
+      }
+      const transports =
+        flags.transports !== undefined
+          ? await loadTransports(String(flags.transports))
+          : undefined;
+      const tools =
+        flags.tools !== undefined
+          ? await loadTools(String(flags.tools))
+          : undefined;
+
+      const receipt = await runOrganism({
+        manifest,
+        args,
+        fns,
+        store,
+        executors:
+          flags["cache-effects"] !== undefined
+            ? executors.map((e) => cachedExecutor(e, store))
+            : executors,
+        ...(transports ? { transports } : {}),
+        ...(tools ? { tools } : {}),
+      });
+
+      const outputs: JsonObject = {};
+      for (const [id, cell] of Object.entries(receipt.cells)) {
+        if (cell.outputs) {
+          outputs[id] = cell.outputs as JsonValue;
+        }
+      }
+      const rd = await store.putReceipt(receipt as unknown as JsonValue);
+      const compact: JsonObject = {
+        ok: receipt.outcome === "complete",
+        outputs,
+        receiptDigest: rd,
+        manifestDigest: receipt.manifestDigest,
+      };
+      if (receipt.outcome !== "complete") {
+        compact.error = receipt.failure
+          ? { code: receipt.failure.code, message: receipt.failure.message }
+          : { code: "FAILED", message: receipt.outcome };
+      }
+      out(compact);
+      return receipt.outcome === "complete" ? 0 : 1;
+    }
+
+    case "tool-def": {
+      const file = positional[0];
+      if (!file) usageError("morphogen tool-def <manifest.json> [--format openai|anthropic]");
+      if (flags.modules !== undefined) {
+        const n = await loadModules(String(flags.modules), store);
+        diag(`loaded ${n} module(s) from ${flags.modules}`);
+      }
+      const manifest = parseOrganismManifest(await readJson(resolve(file)));
+      const compiled = await compileOrganism(
+        manifest,
+        fns,
+        store,
+        0,
+        flags.transports !== undefined
+          ? await loadTransports(String(flags.transports))
+          : undefined,
+      );
+
+      const raw = manifest.interface ?? { inputs: deriveInputs(compiled), outputs: {} };
+      const properties: JsonObject = {};
+      const required: string[] = [];
+      for (const [name, end] of Object.entries(raw.inputs)) {
+        const sig = compiled.ports.get(end.cell);
+        if (!sig) {
+          throw new MorphogenError("PARSE_FAILED", `interface input ${name}: cell ${end.cell} not found`);
+        }
+        const p = sig.outputs[end.port];
+        if (!p) {
+          throw new MorphogenError("PARSE_FAILED", `interface input ${name}: port ${end.port} not found on cell ${end.cell}`);
+        }
+        properties[name] = portToJsonSchema(p as never) as JsonObject;
+        if (!p.optional) required.push(name);
+      }
+      const parameters: JsonObject = {
+        $schema: "http://json-schema.org/draft-07/schema#",
+        type: "object",
+        additionalProperties: false,
+        properties,
+      };
+      if (required.length) parameters.required = required;
+
+      const baseName =
+        (manifest.key.split(":").pop() ?? manifest.name)
+          .toLowerCase()
+          .replace(/[^a-z0-9_-]/g, "_")
+          .replace(/_+/g, "_")
+          .replace(/^_|_$/g, "") || "organism";
+      const functionName = baseName.slice(0, 64) || "organism";
+      const description = manifest.note ?? manifest.name;
+
+      const fmt = String(flags.format ?? "openai");
+      if (fmt === "anthropic") {
+        out({
+          name: functionName,
+          description,
+          input_schema: parameters,
+        });
+      } else {
+        out({
+          type: "function",
+          function: {
+            name: functionName,
+            description,
+            parameters,
+          },
+        });
+      }
       return 0;
     }
 

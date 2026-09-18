@@ -142,6 +142,22 @@ $ morphogen verify run.receipt.json triage.morphogen.json
     </p>
   </section>
 
+  <section>
+    <h2>Use it as an agent tool</h2>
+    <p>
+      Pack an organism into a digest-verified bundle, generate an OpenAI or
+      Anthropic tool definition, and let a larger agent call it by running
+      <code>morphogen call</code>.
+    </p>
+    <pre class="code">$ morphogen pack ticket.morphogen.json --out ./tools
+$ morphogen tool-def ticket.morphogen.json
+$ morphogen call ./tools/&lt;bundle&gt;.bundle.json --args ticket.args.json
+{ "ok": true, "outputs": { "out": "billing" }, "receiptDigest": "sha256:..." }</pre>
+    <p>
+      The agent receives a compact result plus a receipt it can verify offline.
+    </p>
+  </section>
+
   <section class="status">
     <img alt="" aria-hidden="true" class="morphogen-topic-icon" decoding="async" height="88" loading="lazy" src="/icons/status.svg" width="88">
     <h2>Status</h2>

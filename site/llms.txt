@@ -39,3 +39,6 @@ bun run cli bench examples/bench.config.json --dir .morphogen --out bench-report
 - CLI: `--gateway-model <provider/model>` for Vercel AI Gateway;
   `--tools <file>` for `scripted:<data>` or `cmd:<shell>` tool executors;
   add `prices` to a bench config to get a dollar-denominated Pareto.
+- Agent tools: `morphogen pack` a manifest closure, `morphogen tool-def` to
+  emit an OpenAI/Anthropic function definition, and `morphogen call` to run it
+  and get `{ ok, outputs, receiptDigest, manifestDigest }`.
