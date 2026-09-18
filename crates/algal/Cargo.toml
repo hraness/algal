@@ -10,6 +10,7 @@ description = "Typed, bounded, replayable agent programs"
 workspace = true
 
 [dependencies]
+apple-foundation = { git = "https://github.com/hraness/apple-foundation", tag = "v0.1.2" }
 clap = { version = "=4.5.48", features = ["derive"] }
 reqwest = { version = "=0.12.24", default-features = false, features = ["json", "rustls-tls"] }
 ryu-js = "=1.0.2"

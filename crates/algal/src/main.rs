@@ -354,10 +354,16 @@ fn bridge_path(explicit: Option<&PathBuf>) -> Result<PathBuf> {
         return Ok(path.into());
     }
     let binary = std::env::current_exe()?;
-    Ok(binary
+    let path = binary
         .parent()
         .unwrap_or(Path::new("."))
-        .join("algal-apple"))
+        .join("algal-apple");
+    // The default sibling is managed: build (or rebuild) it from the pinned
+    // apple-foundation source when absent or stale. Explicit flag/env paths
+    // are user-managed and used as-is.
+    apple_foundation::ensure_bridge(&path)
+        .map_err(|e| Error::invalid(format!("apple bridge unavailable: {e}")))?;
+    Ok(path)
 }
 
 fn host(options: &Execution) -> Result<Host> {

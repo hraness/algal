@@ -120,7 +120,7 @@ bridge is appropriate even with a Rust kernel: check availability, use guided
 generation where supported, return JSON, and let the same output binder enforce
 the declared contract. Never silently fall back to a cloud provider.
 
-The implemented bridge (`native/apple/AlgalApple.swift`) translates a bounded
+The implemented bridge (`hraness/apple-foundation`, pinned by tag) translates a bounded
 JSON Schema into `DynamicGenerationSchema` — strings, numbers, integers,
 booleans, arrays, objects, enums, optional properties, bounded depth and
 property counts — so declared output contracts constrain decoding rather than
