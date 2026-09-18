@@ -1,0 +1,46 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:expr-rate",
+  "name": "Expr rate",
+  "interface": {
+    "inputs": {
+      "ticket": { "cell": "in", "port": "ticket" },
+      "base": { "cell": "in", "port": "base" }
+    },
+    "outputs": { "rating": { "cell": "rate", "port": "out" } }
+  },
+  "cells": [
+    {
+      "id": "in",
+      "kind": "input",
+      "outputs": { "ticket": "json", "base": "json" }
+    },
+    {
+      "id": "rate",
+      "kind": "expr",
+      "inputs": { "ticket": "json", "base": "json" },
+      "expr": {
+        "contract": "algal.expr.v1",
+        "program": [
+          "let", "amt", ["get", "ticket", "amount"],
+          ["let", "mult", ["get", "base"],
+            ["if",
+              ["gt", ["mul", ["get", "amt"], ["get", "mult"]], 1000],
+              "high",
+              "std"]]
+        ]
+      },
+      "output": { "kind": "choice", "labels": ["high", "std"] }
+    }
+  ],
+  "edges": [
+    {
+      "from": { "cell": "in", "port": "ticket" },
+      "to": { "cell": "rate", "port": "ticket" }
+    },
+    {
+      "from": { "cell": "in", "port": "base" },
+      "to": { "cell": "rate", "port": "base" }
+    }
+  ]
+}

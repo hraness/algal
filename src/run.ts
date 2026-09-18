@@ -6,6 +6,7 @@
 // a receipt is replayable bit-for-bit.
 
 import { AlgalError, errorReport, type ErrorCode } from "./errors";
+import { evalProgram } from "./expr";
 import {
   argsForSubOrganism,
   compileOrganism,
@@ -593,6 +594,21 @@ async function activate(
         if (v !== undefined) checkValue(v, decl, `${cell.id}.${p}`);
       }
       return { outputs: entry.fn(inputs) };
+    }
+    case "expr": {
+      const r = evalProgram(
+        cell.expr.program,
+        inputs as JsonObject,
+        BOUNDS.maxExprFuel,
+      );
+      ctx.work.units += r.fuel;
+      if (!r.ok) {
+        throw new AlgalError(
+          r.err.code === "EXPR_FUEL" ? "BUDGET_EXHAUSTED" : "EXPR_FAILED",
+          `expr ${canonicalize(r.err)}`,
+        );
+      }
+      return { outputs: { out: r.value } };
     }
     case "tool": {
       const entry = ctx.opts.tools?.get(cell.tool);

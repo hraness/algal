@@ -92,6 +92,11 @@ export function cellSignature(
         outputs: { ...entry.signature.outputs },
       };
     }
+    case "expr":
+      return {
+        inputs: cell.inputs,
+        outputs: { out: agentOutputPortType(cell.output) },
+      };
     case "agent":
     case "classifier":
     case "gate":

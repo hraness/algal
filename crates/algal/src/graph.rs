@@ -153,6 +153,17 @@ pub fn compile(
                 .get(cell["tool"].as_str().unwrap())
                 .cloned()
                 .ok_or_else(|| Error::new("TOOL_UNKNOWN", "tool is not host-admitted"))?,
+            "expr" => {
+                let mut output = json!({"type":cell["output"]["kind"]});
+                if let Some(labels) = cell["output"].get("labels") {
+                    output["labels"] = labels.clone();
+                }
+                Signature {
+                    inputs: ports(&cell["inputs"], false, false)?,
+                    outputs: port_map(json!({"out":output}))?,
+                    cost: 0,
+                }
+            }
             "agent" | "classifier" | "gate" => {
                 let mut output = json!({"type":cell["output"]["kind"]});
                 if let Some(labels) = cell["output"].get("labels") {

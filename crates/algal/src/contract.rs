@@ -212,6 +212,7 @@ fn normalize_cell(value: &Value) -> Result<Value> {
     let allowed: &[&str] = match kind {
         "input" | "const" => &["id", "kind", "outputs"],
         "fn" => &["id", "kind", "fn"],
+        "expr" => &["id", "kind", "inputs", "expr", "output"],
         "tool" => &["id", "kind", "tool", "budget"],
         "store" | "load" | "spawn" => &["id", "kind"],
         "slot" => &["id", "kind", "name", "mode", "default"],
@@ -240,6 +241,32 @@ fn normalize_cell(value: &Value) -> Result<Value> {
         }
         "fn" | "tool" => {
             text(&v[kind], 64)?;
+        }
+        "expr" => {
+            v["inputs"] =
+                serde_json::to_value(ports(v.get("inputs").unwrap_or(&json!({})), false, false)?)?;
+            keys(&v["expr"], &["contract", "program"])?;
+            if v["expr"]["contract"] != "algal.expr.v1" {
+                return Err(Error::invalid("expr.contract must be algal.expr.v1"));
+            }
+            if v["expr"].get("program").is_none() {
+                return Err(Error::invalid("expr.program is required"));
+            }
+            output_contract(&v["output"])?;
+            if v["output"]["kind"] == "json" && v["output"].get("schema").is_none() {
+                v["output"]["schema"] = json!({});
+            }
+            if v["output"].get("onMiss").is_some() {
+                return Err(Error::invalid(
+                    "expr output onMiss is meaningless — programs return exact values",
+                ));
+            }
+            let names: BTreeSet<String> = v["inputs"]
+                .as_object()
+                .map(|m| m.keys().cloned().collect())
+                .unwrap_or_default();
+            algal_expr::check_program(&v["expr"]["program"], &names)
+                .map_err(|e| Error::invalid(format!("expr program: {}", e.to_json())))?;
         }
         "slot" => {
             id(&v["name"])?;

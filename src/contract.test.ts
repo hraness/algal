@@ -641,3 +641,93 @@ describe("slot cells", () => {
     })).toThrow("unknown key");
   });
 });
+
+describe("expr cells", () => {
+  const base = {
+    contract: "algal.organism.v1",
+    key: "organism:expr-t",
+    name: "Expr",
+    cells: [
+      { id: "in", kind: "input", outputs: { ticket: "json" } },
+      {
+        id: "rate",
+        kind: "expr",
+        inputs: { ticket: "json" },
+        expr: {
+          contract: "algal.expr.v1",
+          program: [
+            "if",
+            ["gt", ["get", "ticket", "amount"], 1000],
+            "high",
+            "std",
+          ],
+        },
+        output: { kind: "choice", labels: ["high", "std"] },
+      },
+    ],
+    edges: [
+      {
+        from: { cell: "in", port: "ticket" },
+        to: { cell: "rate", port: "ticket" },
+      },
+    ],
+  };
+
+  const cell = (over: Record<string, unknown>) => ({
+    ...base,
+    cells: [base.cells[0], { ...(base.cells[1] as object), ...over }],
+  });
+
+  test("parses, round-trips, and checks literal get names at parse", () => {
+    const m = parseOrganismManifest(base);
+    expect(manifestToJson(parseOrganismManifest(manifestToJson(m)))).toEqual(
+      manifestToJson(m),
+    );
+    // a get naming an undeclared port fails admission, not the run
+    expect(() =>
+      parseOrganismManifest(
+        cell({
+          expr: { contract: "algal.expr.v1", program: ["get", "ghost"] },
+        }),
+      ),
+    ).toThrow("unbound name");
+  });
+
+  test("rejects bad envelopes, unknown ops, and onMiss", () => {
+    const exprCell = (base.cells[1] as { expr: object }).expr;
+    expect(() =>
+      parseOrganismManifest(
+        cell({ expr: { contract: "other.v1", program: 1 } }),
+      ),
+    ).toThrow("algal.expr.v1");
+    // unknown ops are caught statically — even in dead branches
+    expect(() =>
+      parseOrganismManifest(
+        cell({
+          expr: {
+            contract: "algal.expr.v1",
+            program: ["if", true, "high", ["bogus", "x"]],
+          },
+        }),
+      ),
+    ).toThrow("EXPR_OP");
+    // literal arrays must be quoted — [1,2] parses as an op call
+    expect(() =>
+      parseOrganismManifest(
+        cell({ expr: { contract: "algal.expr.v1", program: ["list", [1, 2]] } }),
+      ),
+    ).toThrow("EXPR_PARSE");
+    expect(() =>
+      parseOrganismManifest(
+        cell({
+          expr: exprCell,
+          output: { kind: "choice", labels: ["a"], onMiss: "a" },
+        }),
+      ),
+    ).toThrow("onMiss");
+    // strict keys
+    expect(() =>
+      parseOrganismManifest(cell({ fuel: 5 })),
+    ).toThrow("unknown key");
+  });
+});
