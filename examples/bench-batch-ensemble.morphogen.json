@@ -1,0 +1,24 @@
+{
+  "contract": "morphogen.organism.v1",
+  "key": "organism:bench-batch-ensemble",
+  "name": "Bench batch — ensemble each",
+  "note": "The full organism: each maps the ticket list through the disagreement ensemble — two cheap lanes per item, frontier only where they disagree.",
+  "budgets": { "maxSteps": 64, "maxAgentCalls": 48, "maxWork": 400000 },
+  "interface": {
+    "inputs": { "tickets": { "cell": "src", "port": "tickets" } },
+    "outputs": { "out": { "cell": "map", "port": "out" } }
+  },
+  "cells": [
+    { "id": "src", "kind": "input", "outputs": { "tickets": "json" } },
+    {
+      "id": "map",
+      "kind": "each",
+      "manifest": "sha256:b18e04fc01936054c820e129523132a080531d37b390ab25e532027f3106a945",
+      "over": "ticket",
+      "maxItems": 16
+    }
+  ],
+  "edges": [
+    { "from": { "cell": "src", "port": "tickets" }, "to": { "cell": "map", "port": "ticket" } }
+  ]
+}

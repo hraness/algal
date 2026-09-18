@@ -1,0 +1,67 @@
+{
+  "contract": "morphogen.bench.config.v1",
+  "cases": [
+    {
+      "id": "b1",
+      "args": {
+        "tickets": [
+          "charged twice for my subscription",
+          "app crashes on export",
+          "invoice totals look wrong after the update",
+          "where is my receipt for last month",
+          "SSO login loops back to the sign-in page",
+          "can I change my billing email",
+          "webhook deliveries stopped since Tuesday",
+          "do you offer nonprofit pricing"
+        ]
+      },
+      "expect": {
+        "out": ["billing", "technical", "technical", "billing", "technical", "billing", "technical", "other"]
+      }
+    },
+    {
+      "id": "b2",
+      "args": {
+        "tickets": [
+          "refund a duplicate annual charge",
+          "dark mode setting does not persist",
+          "upgrade seats mid-cycle proration question",
+          "API returns 500 on batch create",
+          "your ad said free migration",
+          "password reset email never arrives",
+          "sales tax missing from my quote",
+          "is there a student discount"
+        ]
+      },
+      "expect": {
+        "out": ["billing", "technical", "billing", "technical", "other", "technical", "billing", "other"]
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "cheap-single",
+      "manifest": "bench-batch-single.morphogen.json",
+      "executors": { "cheap": "gateway:alibaba/qwen3.5-flash" }
+    },
+    {
+      "id": "frontier-single",
+      "manifest": "bench-batch-single.morphogen.json",
+      "executors": { "frontier": "gateway:anthropic/claude-opus-5" }
+    },
+    {
+      "id": "each-cheap",
+      "manifest": "bench-batch-each.morphogen.json",
+      "executors": { "cheap": "gateway:alibaba/qwen3.5-flash" }
+    },
+    {
+      "id": "each-ensemble",
+      "manifest": "bench-batch-ensemble.morphogen.json",
+      "executors": {
+        "cheap": "gateway:alibaba/qwen3.5-flash",
+        "cheap2": "gateway:alibaba/qwen3.7-flash",
+        "frontier": "gateway:anthropic/claude-opus-5"
+      }
+    }
+  ]
+}

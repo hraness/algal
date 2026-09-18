@@ -94,7 +94,7 @@ usage:
   morphogen foundry search-inspect <report.json>
   morphogen foundry search-pack <report.json> --out <dir> [--dir <path>]
                                               inspect or export a verified search winner
-  morphogen bench <config.json> [--dir <path>] [--out <report.json>]
+  morphogen bench <config.json> [--modules <dir>] [--dir <path>] [--out <report.json>]
                                               measure several systems on one workload:
                                               quality, tokens, work, per-model attribution,
                                               and the non-dominated pareto set
@@ -814,6 +814,10 @@ async function main(): Promise<number> {
         return 0;
       }
       const configFile = resolve(file);
+      if (flags.modules !== undefined) {
+        const n = await loadModules(String(flags.modules), store);
+        diag(`loaded ${n} module(s) from ${flags.modules}`);
+      }
       const config = asRecord(await readJson(configFile), "bench config");
       const unknown = Object.keys(config).filter((k) => !["contract", "cases", "systems"].includes(k));
       if (unknown.length > 0) {

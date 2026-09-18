@@ -1,0 +1,7 @@
+{
+  "batch": [
+    ["billing", "technical", "technical", "billing", "technical", "billing", "technical", "other"],
+    ["billing", "technical", "billing", "technical", "other", "technical", "billing", "other"]
+  ],
+  "escalate": ["technical", "billing"]
+}
