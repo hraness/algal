@@ -81,6 +81,46 @@ Provider model identity and input/output token usage are captured after the call
 on the ordinary effect receipt, so foundry reports can compare real usage and
 offline replay preserves it exactly.
 
+## OpenAI-compatible endpoints
+
+The native CLI also speaks to any OpenAI-compatible Chat Completions endpoint
+through `--openai-model`, `--openai-base-url`, and a credential environment
+variable — OpenRouter and a self-hosted server are presets of the same
+adapter, not new auth. The endpoint is host-configured, never taken from a
+model response; HTTPS is required except for explicit loopback, redirects and
+URL credentials are rejected, and upstream error bodies are not echoed.
+
+## Apple Intelligence
+
+`algal run --apple` (and `algal civ --live --apple`) routes cells to Apple's
+on-device Foundation Models framework through the Swift bridge in
+`native/apple/`. `algal doctor --apple` checks availability; building the
+bridge is not proof the model is present.
+
+The bridge translates a declared `output.schema` into a
+`DynamicGenerationSchema` — strings, numbers, integers, booleans, arrays,
+objects, enums, optional properties, within bounded depth and property counts —
+so generation is schema-constrained rather than free-form. A schema it cannot
+translate falls back to bounded free-text generation and the same contract
+validation. It enforces context and output byte budgets, rejects `gate`
+requests (approval belongs to a human/policy executor, not a model), and never
+falls back to a cloud provider. Inference runs on-device and produces ordinary,
+offline-verifiable receipts.
+
+## Coding agents (ACP and xcb)
+
+For delegated coding work, ALGAL is an ACP client to a host-selected agent and
+an ACP agent to a host editor; see `crates/algal/src/acp.rs`. ACP carries
+sessions, prompts, permission requests, and updates — it is not authentication
+and not a sandbox. A coding-agent executor is *mutating*: it is not memoized
+and a timed-out or unsettled task is a recorded failure, never silently
+retried.
+
+Account custody, provider qualification, and subscription failover belong to
+xcb. `xcb algal` invokes a host-selected ALGAL bundle with bounded JSON input
+and returns receipt references; ALGAL never copies credentials or reimplements
+account switching.
+
 ## Multiple executors
 
 `--executors execs.json` maps names to commands:

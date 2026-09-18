@@ -120,6 +120,38 @@ bridge is appropriate even with a Rust kernel: check availability, use guided
 generation where supported, return JSON, and let the same output binder enforce
 the declared contract. Never silently fall back to a cloud provider.
 
+The implemented bridge (`native/apple/AlgalApple.swift`) translates a bounded
+JSON Schema into `DynamicGenerationSchema` — strings, numbers, integers,
+booleans, arrays, objects, enums, optional properties, bounded depth and
+property counts — so declared output contracts constrain decoding rather than
+merely validate after the fact. Schemas it cannot translate fall back to
+bounded free-text generation and ordinary contract validation. It enforces
+context and output byte budgets, rejects gate requests (approval is a host
+decision, not a model call), and never calls external tools.
+
+### Models decide; hosts compile
+
+The civilization work surfaced a general principle: **ask the model for the
+smallest sufficient decision, and let the host own everything else.** Emitting
+a whole manifest is too much surface for a small or on-device model — free-form
+generation produces syntax the contract must reject, and every rejection wastes
+the call. The native `algal civ` loop instead gives the designer two cells:
+
+1. an `agent` cell whose contract is a small *plan* — a JSON array of 1–4 step
+   strings like `["fn:format.v1;prefix=Hello, "]` or `["const:\"x\""]`, and
+2. an `fn` cell running `manifest.compile.v1`, which compiles the plan into a
+   manifest deterministically: resolves each step's chain port, emits const
+   cells for bindings, checks edge types, and assigns the content-derived key.
+
+The model picks verbs and literals; the host owns grammar, typing, graph shape,
+budgets, admission, measurement, and promotion. The compiler ignores
+annotations that cannot affect the compiled program (bindings to unknown or
+chain ports, bare non-step tokens) while still rejecting malformed intent —
+an unknown `fn:` name, a missing `=`, an invalid literal, an empty or
+over-length plan. With schema-constrained decoding on the Apple bridge, this
+surface is small enough that an on-device model proposed plans that compiled,
+passed their cases, and promoted for all four demo goals.
+
 ## Rust migration and compatibility
 
 Port incrementally behind tests. Keep the independently runnable TypeScript
@@ -138,10 +170,30 @@ The site keeps its configured origin until a new domain is actually provisioned.
 
 - Implemented baseline: the TypeScript v1 language, effects, replay,
   foundry/search, benchmarks, and bundles.
-- Rename: public package/CLI/docs moving to ALGAL; legacy wire data retained.
-- In progress: audit regressions, native Rust path, ACP/routing seam,
-  hosted-provider generalization, Apple bridge, memory/context primitives,
-  measured civilization selection, and end-to-end qualification.
+- Rename: public package/CLI/docs moved to ALGAL; legacy wire data retained.
+- Audit regressions fixed and covered: executor-bound effect caching,
+  prototype-safe canonicalization and maps, bounded stream/HTTP reads,
+  isolated replay, snapshot-on-write/read memory values, path-validated file
+  store, all-or-nothing bundle install, no blind retry of mutating executors,
+  and fail-closed replay of missing tool receipts.
+- Native Rust path: canonical identity, manifest parsing, the scheduler
+  (nested organisms, bounded loops, tool calls, spawn, replay), memory/context
+  primitives, the CLI, and `bun scripts/native-parity.ts` parity across all 39
+  bundled examples.
+- ACP: ALGAL is both an ACP agent (sessions, permissions, timeouts, buffered
+  pre-session updates) and an ACP client to a host-selected coding agent; a
+  live Devin ACP task completed with an offline-verifiable receipt.
+- Providers: scripted, hosted HTTP, OpenAI-compatible, and Vercel AI Gateway
+  executors; xcb delegates coding-agent custody (`xcb algal` runs a bundle and
+  returns receipt references).
+- Apple: the Swift bridge compiles with Xcode 26, `algal doctor --apple`
+  checks availability, and schema-constrained generation ran a full on-device
+  civilization epoch that promoted all four demo goals.
+- Civilization: `algal civ`/`civ-verify` run measured epochs — plan proposals,
+  host compilation, train/validation selection, sealed holdout, provenance and
+  evidence in a verifiable population snapshot.
 - Not claimed: unrestricted autonomous civilizations, self-rewriting runtime,
   multi-owner consensus, universal frontier-quality small models, cryptographic
   proof of external actions, or production qualification of every agent adapter.
+  The Vercel Gateway credential returned HTTP 401 at last check and needs a
+  routine refresh before that route re-qualifies live.

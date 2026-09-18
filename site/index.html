@@ -88,6 +88,9 @@
       deterministic checks, and explicit escalation. Measure the result on your
       workload: more calls are not automatically better. Hosted, coding-agent,
       and on-device adapters belong behind the same bounded effect boundary.
+      The sharpest trick is to ask the model for the smallest sufficient
+      decision — a plan — and let the host compile it into a program, so an
+      on-device model can do work that used to require a cloud call.
     </p>
   </section>
 
@@ -211,11 +214,15 @@ $ morphogen call ./tools/&lt;bundle&gt;.bundle.json --args ticket.args.json
   <section>
     <h2>Civilization</h2>
     <p>
-      Programming becomes ecology. <code>bun scripts/civ.ts --live</code> runs a
-      loop of goals, parent organisms, proposed children, and promotions. The
-      result is a population of bundled organisms in <code>civ/</code> and a
-      <code>civ/population.json</code> fossil record. Selection is whatever the
-      host wants: bench Pareto, foundry search, or another organism.
+      Programming becomes ecology. <code>algal civ --live</code> runs a measured
+      epoch: a designer organism proposes a small plan per goal,
+      <code>manifest.compile.v1</code> compiles it into a manifest, the host
+      measures it on train and validation cases, and only winners promote —
+      with provenance, evidence, holdout results, and a bundle digest recorded
+      in a verifiable population snapshot. On Apple Silicon,
+      <code>algal civ --live --apple</code> runs the whole epoch on-device:
+      Apple Intelligence proposed the plans, the host compiled and promoted
+      all four demo goals, and <code>algal civ-verify</code> replays it offline.
     </p>
   </section>
 

@@ -46,6 +46,16 @@ Vercel AI Gateway and host-supplied executors are implemented. There is no
 universal small-model-to-frontier-quality guarantee; compare systems with the
 same tools, inputs, and evaluation budget.
 
+The sharpest version of this trick: **ask the model for the smallest
+sufficient decision, then let the host own everything else.** In `algal civ`,
+the designer organism is `agent(plan) → fn(manifest.compile.v1)` — the model
+emits a flat plan like `["fn:format.v1;prefix=Hello, "]` and a deterministic
+host fn compiles it into a type-checked manifest. On a Mac with Apple
+Intelligence, `algal civ --live --apple` runs the whole civilization epoch
+on-device: the model proposed plans, the host compiled, measured, and promoted
+all four goals (greet, double, invert, shout), and the population verifies
+offline — no cloud, no subscription, fully receipted.
+
 ## Why this is a new primitive
 
 ALGAL is a third thing between deterministic programs and open-ended agents:

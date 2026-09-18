@@ -32,11 +32,20 @@ The design has three layers: language/kernel, agent harness, and habitat.
 
 ## Migration status
 
-The TypeScript v1 runtime is implemented and retained as the compatibility
-reference. Native Rust execution, ACP integration, relational memory,
-compaction, provider generalization, and an Apple Foundation Models bridge are
-being developed against explicit tests. See docs/algal-design.md for current
-qualification rather than assuming every proposed integration is production-ready.
+The TypeScript v1 runtime is retained as the compatibility reference. The
+native Rust kernel executes all 39 bundled examples with event-log and
+work-ledger parity and verifies TypeScript receipts offline
+(`bun scripts/native-parity.ts`). ACP integration, relational memory,
+compaction, OpenAI-compatible and Vercel AI Gateway providers, and an Apple
+Foundation Models bridge are implemented; `algal doctor --apple` checks
+on-device availability. See docs/algal-design.md for current qualification.
+
+The native `algal civ` loop runs a measured civilization epoch: a designer
+organism emits a small plan, `manifest.compile.v1` compiles it into a
+type-checked manifest, the host measures train/validation and only then checks
+holdout, and `algal civ-verify` replays the population snapshot offline. On
+Apple Silicon, `algal civ --live --apple` ran the whole epoch on-device and
+promoted all four demo goals.
 
 AgentMixer is now xcb (https://github.com/hraness/xcb). Subscription credentials,
 provider qualification, account custody, and settled quota-aware switching

@@ -50,23 +50,78 @@ goals  →  parent organism  →  proposed child  →  spawn  →  promote
 The key invariant: the organism cannot rewrite the runtime, install tools, or
 force its own promotion. It can only *propose*. The host owns admission.
 
-## The first loop: `scripts/civ.ts`
+## The native loop: `algal civ`
 
-`scripts/civ.ts` runs a tiny civilization. It reads a list of goals, runs the
-live habitat organism for each one, and promotes every valid child to a bundle
-in `civ/`. The fallback child acts as a safety net; with `--live` the model
-mutates the children.
+The native CLI runs a measured civilization epoch. It has four demo goals
+(`greet`, `double`, `invert`, `shout`), each with bounded train, validation,
+and sealed holdout cases. For every goal a *designer organism* proposes a
+candidate, the candidate is measured on train and validation, and only winners
+are promoted — with proposal provenance, per-case evidence, holdout results,
+and a bundle digest recorded in a content-addressed population snapshot.
 
 ```sh
-# scripted fallback civilization (deterministic, safe, fast)
-bun scripts/civ.ts
+# deterministic scripted civilization (no provider needed)
+algal civ --dir .algal/civ
 
-# live-model civilization (each goal becomes a real child organism)
-bun scripts/civ.ts --live
+# live civilization driven by a host executor
+algal civ --live --gateway-model alibaba/qwen3.7-flash --dir .algal/civ
+
+# fully on-device: Apple Intelligence proposes every candidate
+algal civ --live --apple --dir .algal/civ
+
+# replay a population snapshot and verify every claim offline
+algal civ-verify --dir .algal/civ
 ```
 
-After a run, `civ/population.json` lists the digests and `civ/` contains the
-packs. The host can now:
+### Models decide; hosts compile
+
+A whole manifest is too large a surface for a small or on-device model to emit
+reliably — free-form generation produces syntax the contract must reject. So
+the designer organism is two cells: an `agent` cell that returns a *plan*, and
+an `fn` cell running `manifest.compile.v1` that compiles the plan into a
+manifest deterministically.
+
+A plan is a JSON array of 1–4 step strings:
+
+```json
+["fn:format.v1;prefix=Hello, "]
+["fn:double.v1"]
+["const:\"fixed answer\""]
+```
+
+The grammar is `fn:NAME` optionally followed by `;PORT=VALUE` bindings, or
+`const:JSON_LITERAL`. The compiler resolves the chain port per step, emits
+const cells for bindings, checks edge types (`json` never narrows to `text`),
+and assigns the manifest its content-derived key. Annotations that cannot
+affect the compiled program — bindings to unknown or chain ports, bare noise
+tokens — are ignored, so a small model's filler does not sink a sound
+proposal; malformed intent (`fn:bogus.v9`, missing `=`, invalid literals)
+still rejects.
+
+This is the core ALGAL trick: **ask the model for the smallest sufficient
+decision, then let the host own everything else** — syntax, typing, budgets,
+admission, measurement, and promotion.
+
+### On-device verification
+
+On a Mac with Apple Intelligence enabled, `algal civ --live --apple` runs the
+entire epoch against the on-device Foundation Models bridge. The declared plan
+schema (`array` of `string`) is translated into a `DynamicGenerationSchema`,
+so generation is schema-constrained rather than free-form. In the recorded
+run the model proposed all four goals' plans; the compiler dropped harmless
+annotations (`"Ada"`, `;input=hello`) and promoted **greet, double, invert,
+and shout** — a fully local civilization epoch whose population snapshot
+verifies offline.
+
+## The TypeScript loop: `scripts/civ.ts`
+
+`bun scripts/civ.ts [--live]` runs the original TypeScript-side civilization
+over `examples/civ/goals.json`, promoting model-designed manifests into
+`civ/` bundles. The native `algal civ` is the measured successor: plans
+instead of raw manifests, selection instead of blanket promotion, and
+`civ-verify` for offline auditing.
+
+After a run, the host can:
 
 - run `algal bench` with the population as competing systems,
 - run `algal foundry search` to breed better children,

@@ -206,6 +206,24 @@ host script promoted the child to a standalone bundle. The fallback digest gives
 a deterministic baseline; any non-fallback child is a live, model-proposed
 candidate.
 
+## Smaller decision surfaces: plans, not manifests
+
+Emitting a whole manifest works for a hosted frontier-ish model, but it is too
+much surface for a small or on-device model — free-form generation produces
+syntax the contract must reject. The native `algal civ` loop shrinks the
+decision: the designer is `agent(plan) → fn(manifest.compile.v1)`. The model
+emits a plan — a JSON array of step strings like `["fn:format.v1;prefix=Hello, "]`
+— and a deterministic host fn compiles it into a type-checked manifest.
+
+The split is deliberate. The model only picks verbs and literals; the host owns
+grammar, typing, graph shape, budgets, and admission. Tolerable noise
+(bindings to ports a function does not have, trailing non-step tokens) is
+dropped rather than fatal; malformed intent (an unknown `fn:` name, a missing
+`=`, an invalid literal) still rejects. With Apple Intelligence as the
+designer this is enough for an on-device ~3B model to propose plans that
+compile, pass their cases, and promote — a civilization epoch that never left
+the machine. See [`docs/civilization.md`](civilization.md).
+
 ## A sketch of the next step
 
 The most concrete near-term habitat would be:
