@@ -120,12 +120,26 @@ struct AlgalApple {
                 try emit(availability())
                 return
             }
-            guard CommandLine.arguments.count == 1 else { throw BridgeError(code: "unknownArguments") }
             var bytes = Data()
             while let chunk = try FileHandle.standardInput.read(upToCount: 8192), !chunk.isEmpty {
                 guard bytes.count + chunk.count <= 1048576 else { throw BridgeError(code: "inputBudgetExceeded") }
                 bytes.append(chunk)
             }
+            if CommandLine.arguments.dropFirst().elementsEqual(["--schema-check"]) {
+                let parsed: Any
+                do {
+                    parsed = try JSONSerialization.jsonObject(with: bytes, options: [.fragmentsAllowed])
+                } catch {
+                    throw BridgeError(code: "invalidSchema")
+                }
+                guard let value = parsed as? [String: Any] else {
+                    throw BridgeError(code: "invalidSchema")
+                }
+                _ = try schema(value, name: "AlgalValue")
+                try emit(["ok": true])
+                return
+            }
+            guard CommandLine.arguments.count == 1 else { throw BridgeError(code: "unknownArguments") }
             try await execute(bytes)
         } catch {
             let code = (error as? BridgeError)?.code ?? "generationFailed"
