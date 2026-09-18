@@ -47,9 +47,12 @@
   `cargo fmt --all -- --check`. Use `cargo build --locked` followed by
   `bun scripts/native-parity.ts` to compare all 39 existing examples and verify
   TypeScript receipts with the Rust engine.
-- `sh scripts/build-apple.sh` builds the Foundation Models bridge with Xcode 26
-  on Apple Silicon. `target/debug/algal doctor --apple` checks availability;
-  compilation alone is not evidence that inference works.
+- The Foundation Models bridge comes from the pinned `apple-foundation`
+  crate (`hraness/apple-foundation`); `sh scripts/build-apple.sh` emits its
+  embedded source and builds it with Xcode 26 on Apple Silicon, and the
+  default `algal-apple` sibling auto-builds on first use.
+  `target/debug/algal doctor --apple` checks availability; compilation alone
+  is not evidence that inference works.
 - xcb is the current repository for AgentMixer. It owns subscription custody
   and settled failover. Never recreate credential copying in ALGAL or treat
   ACP/cwd as OS isolation. Delegated coding tasks are non-cacheable and must
