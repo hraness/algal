@@ -81,6 +81,12 @@ Provider model identity and input/output token usage are captured after the call
 on the ordinary effect receipt, so foundry reports can compare real usage and
 offline replay preserves it exactly.
 
+Two distinct failures to expect: `401` means the credential is stale — mint a
+fresh OIDC token with `vercel env pull` on the linked project, or create a key
+with `vercel ai-gateway api-keys create`. `402` means authentication succeeded
+but the team has a zero credit balance — the gateway requires positive credits
+even for BYOK, and topping up is a dashboard action.
+
 ## OpenAI-compatible endpoints
 
 The native CLI also speaks to any OpenAI-compatible Chat Completions endpoint
