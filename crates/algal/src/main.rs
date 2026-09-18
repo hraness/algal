@@ -119,6 +119,28 @@ enum Commands {
     Digest {
         manifest: PathBuf,
     },
+    Inspect {
+        receipt: PathBuf,
+    },
+    Diff {
+        a: PathBuf,
+        b: PathBuf,
+    },
+    Runs,
+    Manifests,
+    Manifest {
+        digest: String,
+    },
+    Slots,
+    Slot {
+        #[command(subcommand)]
+        command: SlotCommand,
+    },
+    Example {
+        id: String,
+        #[arg(long, default_value = "examples")]
+        examples: PathBuf,
+    },
     Verify {
         receipt: PathBuf,
         manifest: Option<PathBuf>,
@@ -190,6 +212,13 @@ enum BenchCommand {
 enum StoreCommand {
     Put { file: String },
     Get { digest: String },
+    Has { digest: String },
+}
+
+#[derive(Subcommand)]
+enum SlotCommand {
+    Get { name: String },
+    Set { name: String, value: PathBuf },
 }
 
 #[derive(Subcommand)]
@@ -418,6 +447,225 @@ fn tool_definition(manifest: Manifest, store: &mut Store, format: &str) -> Resul
 #[derive(Default)]
 struct MapBuilder(serde_json::Map<String, Value>);
 
+fn listing(dir: &Path, kind: &str) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    match std::fs::read_dir(dir.join(kind)) {
+        Ok(entries) => {
+            for entry in entries {
+                let path = entry?.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("json") {
+                    files.push(path);
+                }
+            }
+        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e.into()),
+    }
+    files.sort();
+    Ok(files)
+}
+
+fn canon_eq(a: Option<&Value>, b: Option<&Value>) -> bool {
+    let empty = Value::Null;
+    canonical(a.unwrap_or(&empty)).unwrap_or_default()
+        == canonical(b.unwrap_or(&empty)).unwrap_or_default()
+}
+
+fn disp(value: &Value) -> String {
+    value
+        .as_str()
+        .map(String::from)
+        .unwrap_or_else(|| canonical(value).unwrap_or_else(|_| "null".into()))
+}
+
+/// The receipt inspector: a bounded summary of cell statuses and effect
+/// counts, matching `algal inspect` on the TypeScript CLI.
+fn inspect_receipt(raw: &Value) -> Value {
+    let mut cells = serde_json::Map::new();
+    if let Some(map) = raw["cells"].as_object() {
+        for (name, cell) in map {
+            let mut entry = serde_json::Map::new();
+            entry.insert("status".into(), cell["status"].clone());
+            if cell["work"].as_u64().unwrap_or(0) > 0 {
+                entry.insert("work".into(), cell["work"].clone());
+            }
+            for field in [
+                "failure",
+                "shadowOut",
+                "rounds",
+                "items",
+                "via",
+                "slot",
+                "effectDigest",
+            ] {
+                if !cell[field].is_null() {
+                    entry.insert(field.into(), cell[field].clone());
+                }
+            }
+            if let Some(calls) = cell["toolCalls"].as_array().filter(|t| !t.is_empty()) {
+                entry.insert("toolCalls".into(), json!(calls.len()));
+            }
+            cells.insert(name.clone(), Value::Object(entry));
+        }
+    }
+    json!({
+        "contract":raw["contract"],
+        "manifestKey":raw["manifestKey"],
+        "outcome":raw["outcome"],
+        "work":raw["work"],
+        "cells":cells,
+        "effects":raw["effects"].as_array().map(|e| e.len()).unwrap_or(0),
+        "failure":raw["failure"],
+        "digest":raw["digest"],
+    })
+}
+
+/// Compare two run receipts field by field — the `algal diff` surface.
+fn receipt_diff(a: &Value, b: &Value) -> Vec<String> {
+    let mut out = Vec::new();
+    if a["outcome"] != b["outcome"] {
+        out.push(format!(
+            "outcome: {} vs {}",
+            disp(&a["outcome"]),
+            disp(&b["outcome"])
+        ));
+    }
+    let a_cells: Vec<String> = a["cells"]
+        .as_object()
+        .map(|m| m.keys().cloned().collect())
+        .unwrap_or_default();
+    let b_cells: Vec<String> = b["cells"]
+        .as_object()
+        .map(|m| m.keys().cloned().collect())
+        .unwrap_or_default();
+    if a_cells != b_cells {
+        out.push(format!(
+            "cells: {} vs {}",
+            a_cells.join(","),
+            b_cells.join(",")
+        ));
+    }
+    for name in &a_cells {
+        let (ac, bc) = (&a["cells"][name], &b["cells"][name]);
+        if bc.is_null() {
+            continue;
+        }
+        if ac["status"] != bc["status"] {
+            out.push(format!(
+                "cell {name}: status {} vs {}",
+                disp(&ac["status"]),
+                disp(&bc["status"])
+            ));
+        }
+        let empty = json!({});
+        if !canon_eq(
+            Some(if ac["outputs"].is_null() {
+                &empty
+            } else {
+                &ac["outputs"]
+            }),
+            Some(if bc["outputs"].is_null() {
+                &empty
+            } else {
+                &bc["outputs"]
+            }),
+        ) {
+            out.push(format!("cell {name}: outputs differ"));
+        }
+        if ac["work"] != bc["work"] {
+            out.push(format!(
+                "cell {name}: work {} vs {}",
+                disp(&ac["work"]),
+                disp(&bc["work"])
+            ));
+        }
+        if ac["rounds"] != bc["rounds"] {
+            out.push(format!(
+                "cell {name}: rounds {} vs {}",
+                disp(&ac["rounds"]),
+                disp(&bc["rounds"])
+            ));
+        }
+        if ac["items"] != bc["items"] {
+            out.push(format!(
+                "cell {name}: items {} vs {}",
+                disp(&ac["items"]),
+                disp(&bc["items"])
+            ));
+        }
+        if !canon_eq(ac.get("failure"), bc.get("failure")) {
+            out.push(format!("cell {name}: failure differs"));
+        }
+        if !canon_eq(ac.get("toolCalls"), bc.get("toolCalls")) {
+            out.push(format!("cell {name}: toolCalls differ"));
+        }
+        if !canon_eq(ac.get("shadowOut"), bc.get("shadowOut")) {
+            out.push(format!("cell {name}: shadowOut differs"));
+        }
+        if ac["via"] != bc["via"] {
+            out.push(format!(
+                "cell {name}: via {} vs {}",
+                ac["via"].as_str().unwrap_or("local"),
+                bc["via"].as_str().unwrap_or("local")
+            ));
+        }
+        if !canon_eq(ac.get("slot"), bc.get("slot")) {
+            out.push(format!("cell {name}: slot differs"));
+        }
+    }
+    let a_effects = a["effects"].as_array().map(|e| e.len()).unwrap_or(0);
+    let b_effects = b["effects"].as_array().map(|e| e.len()).unwrap_or(0);
+    if a_effects != b_effects {
+        out.push(format!("effects: {a_effects} vs {b_effects}"));
+    } else if let (Some(ae), Some(be)) = (a["effects"].as_array(), b["effects"].as_array()) {
+        for (i, (e, o)) in ae.iter().zip(be.iter()).enumerate() {
+            if e["requestDigest"] != o["requestDigest"] {
+                out.push(format!("effect {i}: requestDigest differs"));
+            }
+            if !canon_eq(e.get("output"), o.get("output")) {
+                out.push(format!("effect {i}: output differs"));
+            }
+            if !canon_eq(e.get("error"), o.get("error")) {
+                out.push(format!("effect {i}: error differs"));
+            }
+            if e["executor"] != o["executor"] {
+                out.push(format!(
+                    "effect {i}: executor {} vs {}",
+                    disp(&e["executor"]),
+                    disp(&o["executor"])
+                ));
+            }
+            if !canon_eq(e.get("usage"), o.get("usage")) {
+                out.push(format!("effect {i}: usage differs"));
+            }
+        }
+    }
+    if !canon_eq(a.get("events"), b.get("events")) {
+        out.push("events: event logs differ".into());
+    }
+    for field in ["steps", "agentCalls", "units"] {
+        if a["work"][field] != b["work"][field] {
+            out.push(format!(
+                "work.{field}: {} vs {}",
+                disp(&a["work"][field]),
+                disp(&b["work"][field])
+            ));
+        }
+    }
+    if a.get("failure").is_some() != b.get("failure").is_some() {
+        out.push("failure presence differs".into());
+    } else if let (Some(af), Some(bf)) = (a.get("failure"), b.get("failure")) {
+        if af["code"] != bf["code"] {
+            out.push(format!(
+                "failure.code: {} vs {}",
+                disp(&af["code"]),
+                disp(&bf["code"])
+            ));
+        }
+    }
+    out
+}
+
 async fn execute(cli: Cli) -> Result<bool> {
     match cli.command {
         Commands::Civ {
@@ -641,6 +889,138 @@ async fn execute(cli: Cli) -> Result<bool> {
             emit(&json!({"digest":manifest(&file)?.digest()?}))?;
             Ok(true)
         }
+        Commands::Inspect { receipt } => {
+            emit(&inspect_receipt(&load(&receipt, MAX_DOCUMENT_BYTES)?))?;
+            Ok(true)
+        }
+        Commands::Diff { a, b } => {
+            let a = load(&a, MAX_DOCUMENT_BYTES)?;
+            let b = load(&b, MAX_DOCUMENT_BYTES)?;
+            let mut mismatches = receipt_diff(&a, &b);
+            if a["manifestDigest"] != b["manifestDigest"] {
+                mismatches.insert(
+                    0,
+                    format!(
+                        "manifestDigest: {} vs {}",
+                        disp(&a["manifestDigest"]),
+                        disp(&b["manifestDigest"])
+                    ),
+                );
+            }
+            emit(&json!({
+                "same":mismatches.is_empty(),
+                "a":a["digest"],
+                "b":b["digest"],
+                "mismatches":mismatches,
+            }))?;
+            Ok(mismatches.is_empty())
+        }
+        Commands::Runs => {
+            let mut runs = Vec::new();
+            for path in listing(&cli.dir, "runs")? {
+                let digest = format!(
+                    "sha256:{}",
+                    path.file_stem().and_then(|s| s.to_str()).unwrap_or("")
+                );
+                match load(&path, MAX_DOCUMENT_BYTES) {
+                    Ok(raw) => runs.push(json!({
+                        "digest":digest,
+                        "manifestKey":raw["manifestKey"],
+                        "outcome":raw["outcome"],
+                        "effects":raw["effects"].as_array().map(|e| e.len()).unwrap_or(0),
+                    })),
+                    Err(error) => runs.push(json!({"digest":digest,"error":error.message})),
+                }
+            }
+            runs.sort_by(|a, b| {
+                format!("{}{}", a["manifestKey"].as_str().unwrap_or(""), a["digest"]).cmp(&format!(
+                    "{}{}",
+                    b["manifestKey"].as_str().unwrap_or(""),
+                    b["digest"]
+                ))
+            });
+            emit(&json!({"dir":cli.dir.join("runs"),"runs":runs}))?;
+            Ok(true)
+        }
+        Commands::Manifests => {
+            let mut manifests = Vec::new();
+            for path in listing(&cli.dir, "manifests")? {
+                let digest = format!(
+                    "sha256:{}",
+                    path.file_stem().and_then(|s| s.to_str()).unwrap_or("")
+                );
+                match load(&path, MAX_DOCUMENT_BYTES) {
+                    Ok(raw) => manifests.push(json!({
+                        "digest":digest,
+                        "key":raw["key"],
+                        "name":raw["name"],
+                        "cells":raw["cells"].as_array().map(|c| c.len()).unwrap_or(0),
+                    })),
+                    Err(error) => manifests.push(json!({"digest":digest,"error":error.message})),
+                }
+            }
+            manifests.sort_by(|a, b| {
+                format!("{}{}", a["key"].as_str().unwrap_or(""), a["digest"]).cmp(&format!(
+                    "{}{}",
+                    b["key"].as_str().unwrap_or(""),
+                    b["digest"]
+                ))
+            });
+            emit(&json!({"dir":cli.dir.join("manifests"),"manifests":manifests}))?;
+            Ok(true)
+        }
+        Commands::Manifest { digest } => {
+            let store = Store::open(&cli.dir, false)?;
+            emit(&store.get("manifests", &digest)?.ok_or_else(|| {
+                Error::new("STORE_MISS", format!("manifest {digest} not found"))
+            })?)?;
+            Ok(true)
+        }
+        Commands::Slots => {
+            let mut slots = Vec::new();
+            for path in listing(&cli.dir, "slots")? {
+                let name = path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_owned();
+                match load(&path, 262_144) {
+                    Ok(value) => slots.push(json!({"name":name,"value":value})),
+                    Err(error) => slots.push(json!({"name":name,"error":error.message})),
+                }
+            }
+            emit(&json!({"dir":cli.dir.join("slots"),"slots":slots}))?;
+            Ok(true)
+        }
+        Commands::Slot { command } => {
+            let mut store = Store::open(&cli.dir, true)?;
+            match command {
+                SlotCommand::Get { name } => emit(&store.get_slot(&name)?.ok_or_else(|| {
+                    Error::new("STORE_MISS", format!("slot \"{name}\" is empty"))
+                })?)?,
+                SlotCommand::Set { name, value } => {
+                    store.set_slot(&name, &load(&value, 1_048_576)?)?;
+                    emit(&json!({"name":name,"set":true}))?;
+                }
+            }
+            Ok(true)
+        }
+        Commands::Example { id, examples } => {
+            let valid = !id.is_empty()
+                && id.len() <= 64
+                && id.chars().next().is_some_and(|c| c.is_ascii_lowercase())
+                && id
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+            if !valid {
+                return Err(Error::invalid("usage: algal example <id>"));
+            }
+            let algal = examples.join(format!("{id}.algal.json"));
+            let legacy = examples.join(format!("{id}.morphogen.json"));
+            let path = if algal.exists() { algal } else { legacy };
+            emit(&load(&path, 1_048_576)?)?;
+            Ok(true)
+        }
         Commands::Verify {
             receipt: file,
             manifest: manifest_file,
@@ -732,6 +1112,9 @@ async fn execute(cli: Cli) -> Result<bool> {
                         .get("values", &digest)?
                         .ok_or_else(|| Error::new("STORE_MISS", "value not in store"))?,
                 )?,
+                StoreCommand::Has { digest } => {
+                    emit(&json!({"ref":digest,"ok":store.get("values", &digest)?.is_some()}))?
+                }
             }
             Ok(true)
         }
