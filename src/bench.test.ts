@@ -152,9 +152,10 @@ describe("bench", () => {
     expect(circuit.attribution["qwen-flash"]!.calls).toBe(4);
     expect(circuit.usage.tokensIn).toBe(4 * CHEAP.tokensIn + FRONTIER.tokensIn);
     expect(byId.get("frontier-single")!.usage.tokensIn).toBe(4 * FRONTIER.tokensIn);
-    // frontier-single is dominated by the circuit; cheap-single trades
-    // quality for cost and stays on the frontier
-    expect(report.pareto).toEqual(["circuit", "cheap-single"]);
+    // three-axis pareto: circuit dominates on tokens, frontier-single
+    // stays non-dominated on effect calls (4 vs the circuit's 5),
+    // cheap-single trades quality for cost
+    expect(report.pareto).toEqual(["circuit", "frontier-single", "cheap-single"]);
     expect(report.workload).toMatch(/^sha256:[0-9a-f]{64}$/);
     // the report embeds the workload so verification is self-contained
     const reparsed = parseBenchReport(JSON.parse(canonicalize(report as unknown as JsonValue)));

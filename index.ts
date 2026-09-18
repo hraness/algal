@@ -53,7 +53,11 @@ export type {
 export { VERCEL_AI_GATEWAY_BASE_URL, vercelGatewayExecutor } from "./src/gateway";
 export type { GatewayExecutorOptions, GatewayFetch } from "./src/gateway";
 
-export { emptyToolRegistry } from "./src/tools";
+export {
+  emptyToolRegistry,
+  parseToolSignature,
+  TOOL_SIGNATURE_BOUNDS,
+} from "./src/tools";
 export type {
   Tool,
   ToolContext,

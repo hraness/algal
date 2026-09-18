@@ -1,0 +1,5 @@
+{
+  "solo": ["refund", "escalate", "refund", "refund", "refund", "refund"],
+  "decide": ["refund", "escalate", "monitor", "escalate", "monitor", "refund"],
+  "decide-a": ["refund", "escalate", "monitor", "escalate", "monitor", "refund"]
+}

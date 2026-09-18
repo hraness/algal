@@ -1,0 +1,12 @@
+{
+  "ledger.charges.v1": {
+    "signature": {
+      "inputs": { "account": "text" },
+      "outputs": { "charges": "json" },
+      "effect": "read",
+      "cost": 50,
+      "maxOutputBytes": 8192
+    },
+    "exec": "scripted:bench-ledger.data.json"
+  }
+}

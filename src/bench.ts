@@ -90,8 +90,8 @@ export type BenchReport = {
   /** The full case list, so a verifier needs no config to check provenance. */
   cases: BenchCase[];
   systems: BenchSystemResult[];
-  /** Non-dominated system ids on (passed ↑, total tokens ↓), sorted by
-   * passed desc then cost asc then id. */
+  /** Non-dominated system ids on (passed ↑, total tokens ↓, effect
+   * calls ↓), sorted by passed desc then tokens asc then calls asc. */
   pareto: string[];
   digest: Digest;
 };
@@ -225,23 +225,33 @@ async function evaluateCase(
   };
 }
 
-/** Non-dominated systems on (passed ↑, total tokens ↓). A system is
- * dominated when another is at least as good on both and strictly better
- * on one — deterministic, ties broken by id. */
+/** Non-dominated systems on (passed ↑, total tokens ↓, effect calls ↓).
+ * A system is dominated when another is at least as good on all three
+ * axes and strictly better on one — deterministic, ties broken by id.
+ * Scripted runs report no tokens, so effect calls carry the cost signal
+ * that live runs would attribute to providers. */
 export function benchPareto(systems: BenchSystemResult[]): string[] {
-  const cost = (s: BenchSystemResult) => s.usage.tokensIn + s.usage.tokensOut;
+  const tokens = (s: BenchSystemResult) => s.usage.tokensIn + s.usage.tokensOut;
+  const calls = (s: BenchSystemResult) => s.effectCalls;
   const kept = systems.filter(
     (s) =>
       !systems.some(
         (o) =>
           o.id !== s.id &&
           o.passed >= s.passed &&
-          cost(o) <= cost(s) &&
-          (o.passed > s.passed || cost(o) < cost(s)),
+          tokens(o) <= tokens(s) &&
+          calls(o) <= calls(s) &&
+          (o.passed > s.passed || tokens(o) < tokens(s) || calls(o) < calls(s)),
       ),
   );
   return kept
-    .sort((a, b) => b.passed - a.passed || cost(a) - cost(b) || a.id.localeCompare(b.id))
+    .sort(
+      (a, b) =>
+        b.passed - a.passed ||
+        tokens(a) - tokens(b) ||
+        calls(a) - calls(b) ||
+        a.id.localeCompare(b.id),
+    )
     .map((s) => s.id);
 }
 

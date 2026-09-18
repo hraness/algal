@@ -1,0 +1,36 @@
+{
+  "{\"account\":\"acct-1\"}": {
+    "charges": [
+      { "id": "ch_101", "amount": 4900, "currency": "usd", "status": "posted", "memo": "SUBSCRIPTION RENEWAL" },
+      { "id": "ch_102", "amount": 4900, "currency": "usd", "status": "posted", "memo": "SUBSCRIPTION RENEWAL" }
+    ]
+  },
+  "{\"account\":\"acct-2\"}": {
+    "charges": [
+      { "id": "ch_201", "amount": 18400, "currency": "usd", "status": "posted", "memo": "ZZ*FORN VENDOR 8821" }
+    ]
+  },
+  "{\"account\":\"acct-3\"}": {
+    "charges": [
+      { "id": "ch_301", "amount": 4900, "currency": "usd", "status": "pending", "memo": "SUBSCRIPTION RENEWAL" }
+    ]
+  },
+  "{\"account\":\"acct-4\"}": {
+    "charges": [
+      { "id": "ch_401", "amount": 4900, "currency": "usd", "status": "posted", "memo": "SUBSCRIPTION RENEWAL" },
+      { "id": "ch_402", "amount": 12900, "currency": "usd", "status": "posted", "memo": "ADD-ON SEATS" }
+    ]
+  },
+  "{\"account\":\"acct-5\"}": {
+    "charges": [
+      { "id": "ch_501", "amount": 4900, "currency": "usd", "status": "reversed", "memo": "SUBSCRIPTION RENEWAL" }
+    ]
+  },
+  "{\"account\":\"acct-6\"}": {
+    "charges": [
+      { "id": "ch_601", "amount": 4900, "currency": "usd", "status": "posted", "memo": "SUBSCRIPTION RENEWAL" },
+      { "id": "ch_602", "amount": 4900, "currency": "usd", "status": "posted", "memo": "SUBSCRIPTION RENEWAL" },
+      { "id": "ch_603", "amount": 4900, "currency": "usd", "status": "posted", "memo": "SUBSCRIPTION RENEWAL" }
+    ]
+  }
+}

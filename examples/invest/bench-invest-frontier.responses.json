@@ -1,0 +1,4 @@
+{
+  "solo": ["refund", "escalate", "monitor", "escalate", "refund", "refund"],
+  "escalate": ["monitor"]
+}

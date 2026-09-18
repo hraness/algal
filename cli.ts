@@ -29,6 +29,12 @@ import {
 } from "./src/transport";
 import { diffReceipts, verifyReceipt } from "./src/verify";
 import {
+  parseToolSignature,
+  TOOL_SIGNATURE_BOUNDS,
+  type Tool,
+  type ToolRegistry,
+} from "./src/tools";
+import {
   generateFoundryCandidates,
   runFoundry,
   type FoundryCase,
@@ -63,6 +69,8 @@ usage:
       --modules <dir>                         load *.morphogen.json into the store for organism cells
       --transports <file>                     JSON map of transport name → bundle directory;
                                               via cells resolve remote manifests through it
+      --tools <file>                          tool registry: name → {signature, exec};
+                                              exec is scripted:<file> or cmd:<shell>
       --dir <path>                            store directory (default .morphogen)
       --write                                 persist manifest + receipt under --dir
       --cache-effects                         memoize effects: identical request digests
@@ -80,7 +88,7 @@ usage:
                                               compare two receipts, report divergence
   morphogen foundry <config.json> [--responses <file>] [--executor-cmd <command>]
       [--gateway-model <provider/model>]
-      [--executors <file>] [--modules <dir>] [--transports <file>]
+      [--executors <file>] [--modules <dir>] [--transports <file>] [--tools <file>]
       [--cache-effects] [--dir <path>] [--out <report.json>]
                                               generate/evaluate candidates and promote a winner
   morphogen foundry verify <report.json> [--dir <path>]
@@ -94,7 +102,7 @@ usage:
   morphogen foundry search-inspect <report.json>
   morphogen foundry search-pack <report.json> --out <dir> [--dir <path>]
                                               inspect or export a verified search winner
-  morphogen bench <config.json> [--modules <dir>] [--dir <path>] [--out <report.json>]
+  morphogen bench <config.json> [--modules <dir>] [--tools <file>] [--dir <path>] [--out <report.json>]
                                               measure several systems on one workload:
                                               quality, tokens, work, per-model attribution,
                                               and the non-dominated pareto set
@@ -209,6 +217,124 @@ async function loadTransports(
       : fileTransport(resolve(target), name);
   }
   return out;
+}
+
+/** Load a tool registry from a JSON file:
+ *   { "<tool.name>": { "signature": {...}, "exec": "scripted:<file>" | "cmd:<shell>" } }
+ * scripted maps canonical(inputs) -> output ports; cmd receives
+ * { inputs, requestDigest, idempotencyKey } on stdin and must print a JSON
+ * object of output ports. Both stay behind the signature's bounds. */
+async function loadTools(file: string): Promise<ToolRegistry> {
+  const resolved = resolve(file);
+  const raw = asRecord(await readJson(resolved), "tools");
+  const base = dirname(resolved);
+  const registry: ToolRegistry = new Map();
+  for (const [name, entry] of Object.entries(raw)) {
+    if (
+      !/^[a-z0-9][a-z0-9.-]*$/.test(name) ||
+      name.length > TOOL_SIGNATURE_BOUNDS.maxNameLen
+    ) {
+      throw new MorphogenError("PARSE_FAILED", `invalid tool name "${name}"`);
+    }
+    const e = asRecord(entry, `tools.${name}`);
+    const extra = Object.keys(e).filter(
+      (k) => k !== "signature" && k !== "exec",
+    );
+    if (e.signature === undefined || typeof e.exec !== "string" || extra.length > 0) {
+      throw new MorphogenError(
+        "PARSE_FAILED",
+        `tools.${name} requires "signature" and "exec"`,
+      );
+    }
+    const signature = parseToolSignature(
+      e.signature,
+      `tools.${name}.signature`,
+    );
+    const spec = e.exec;
+    let tool: Tool;
+    if (spec.startsWith("scripted:")) {
+      const data = asRecord(
+        await readJson(resolve(base, spec.slice("scripted:".length))),
+        `tools.${name} data`,
+      );
+      tool = async (inputs) => {
+        const key = canonicalize(inputs);
+        const hit = data[key];
+        if (hit === null || typeof hit !== "object" || Array.isArray(hit)) {
+          throw new MorphogenError(
+            "TOOL_FAILED",
+            `${name}: no scripted output for inputs ${key.slice(0, 200)}`,
+          );
+        }
+        return hit as Record<string, JsonValue>;
+      };
+    } else if (spec.startsWith("cmd:")) {
+      const command = spec.slice("cmd:".length);
+      tool = async (inputs, context) => {
+        const proc = Bun.spawn(["sh", "-c", command], {
+          cwd: base,
+          stdin: "pipe",
+          stdout: "pipe",
+          stderr: "pipe",
+        });
+        void proc.stdin.write(
+          canonicalize({
+            inputs,
+            requestDigest: context.requestDigest,
+            idempotencyKey: context.idempotencyKey,
+          } as JsonValue),
+        );
+        void proc.stdin.end();
+        const onAbort = () => proc.kill("SIGKILL");
+        const timer = setTimeout(onAbort, 30_000);
+        context.signal?.addEventListener("abort", onAbort);
+        let stdout: Uint8Array;
+        let code: number;
+        try {
+          stdout = new Uint8Array(
+            await new Response(proc.stdout).arrayBuffer(),
+          );
+          code = await proc.exited;
+        } finally {
+          clearTimeout(timer);
+          context.signal?.removeEventListener("abort", onAbort);
+        }
+        if (stdout.byteLength > signature.maxOutputBytes) {
+          throw new MorphogenError(
+            "TOOL_FAILED",
+            `${name}: output exceeds ${signature.maxOutputBytes} bytes`,
+          );
+        }
+        if (code !== 0) {
+          const stderr = (await new Response(proc.stderr).text()).slice(0, 2000);
+          throw new MorphogenError(
+            "TOOL_FAILED",
+            `${name}: exited ${code}: ${stderr}`,
+          );
+        }
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(new TextDecoder().decode(stdout));
+        } catch {
+          throw new MorphogenError("TOOL_FAILED", `${name}: stdout is not JSON`);
+        }
+        if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+          throw new MorphogenError(
+            "TOOL_FAILED",
+            `${name}: output must be a JSON object of ports`,
+          );
+        }
+        return parsed as Record<string, JsonValue>;
+      };
+    } else {
+      throw new MorphogenError(
+        "PARSE_FAILED",
+        `tools.${name}.exec must be scripted:<file> or cmd:<shell>`,
+      );
+    }
+    registry.set(name, { signature, tool });
+  }
+  return registry;
 }
 
 async function main(): Promise<number> {
@@ -475,6 +601,10 @@ async function main(): Promise<number> {
         flags.transports !== undefined
           ? await loadTransports(String(flags.transports))
           : undefined;
+      const tools =
+        flags.tools !== undefined
+          ? await loadTools(String(flags.tools))
+          : undefined;
 
       const receipt = await runOrganism({
         manifest,
@@ -486,6 +616,7 @@ async function main(): Promise<number> {
             ? executors.map((e) => cachedExecutor(e, store))
             : executors,
         ...(transports ? { transports } : {}),
+        ...(tools ? { tools } : {}),
       });
 
       if (flags.write) {
@@ -504,7 +635,12 @@ async function main(): Promise<number> {
       if (file === "verify") {
         const reportFile = positional[1];
         if (!reportFile) usageError("morphogen foundry verify <report.json> [--dir <path>]");
-        const verified = await verifyFoundryReport(await readJson(resolve(reportFile)), store, fns);
+        const verified = await verifyFoundryReport(
+          await readJson(resolve(reportFile)),
+          store,
+          fns,
+          flags.tools !== undefined ? await loadTools(String(flags.tools)) : undefined,
+        );
         out(verified as unknown as JsonObject);
         return verified.ok ? 0 : 1;
       }
@@ -532,7 +668,12 @@ async function main(): Promise<number> {
       if (file === "search-verify") {
         const reportFile = positional[1];
         if (!reportFile) usageError("morphogen foundry search-verify <report.json> [--dir <path>]");
-        const verified = await verifySearchReport(await readJson(resolve(reportFile)), store, fns);
+        const verified = await verifySearchReport(
+          await readJson(resolve(reportFile)),
+          store,
+          fns,
+          flags.tools !== undefined ? await loadTools(String(flags.tools)) : undefined,
+        );
         out(verified as unknown as JsonObject);
         return verified.ok ? 0 : 1;
       }
@@ -562,7 +703,12 @@ async function main(): Promise<number> {
         }
         const raw = await readJson(resolve(reportFile));
         const report = parseSearchReport(raw);
-        const verified = await verifySearchReport(raw, store, fns);
+        const verified = await verifySearchReport(
+          raw,
+          store,
+          fns,
+          flags.tools !== undefined ? await loadTools(String(flags.tools)) : undefined,
+        );
         if (!verified.ok) {
           throw new MorphogenError("RECEIPT_MISMATCH", `search report failed verification: ${verified.mismatches.join("; ")}`);
         }
@@ -584,7 +730,12 @@ async function main(): Promise<number> {
         }
         const raw = await readJson(resolve(reportFile));
         const report = parseFoundryReport(raw);
-        const verified = await verifyFoundryReport(raw, store, fns);
+        const verified = await verifyFoundryReport(
+          raw,
+          store,
+          fns,
+          flags.tools !== undefined ? await loadTools(String(flags.tools)) : undefined,
+        );
         if (!verified.ok) {
           throw new MorphogenError("RECEIPT_MISMATCH", `foundry report failed verification: ${verified.mismatches.join("; ")}`);
         }
@@ -708,6 +859,9 @@ async function main(): Promise<number> {
       const transports = flags.transports !== undefined
         ? await loadTransports(String(flags.transports))
         : undefined;
+      const tools = flags.tools !== undefined
+        ? await loadTools(String(flags.tools))
+        : undefined;
       if (searchMode) {
         if (!generator || config.search === undefined) {
           throw new MorphogenError("PARSE_FAILED", "search config needs generator and search objects");
@@ -734,6 +888,7 @@ async function main(): Promise<number> {
           store,
           executors: activeExecutors,
           ...(transports ? { transports } : {}),
+          ...(tools ? { tools } : {}),
         });
         if (flags.out !== undefined) {
           const { writeFile } = await import("node:fs/promises");
@@ -752,6 +907,7 @@ async function main(): Promise<number> {
             store,
             executors: activeExecutors,
             ...(transports ? { transports } : {}),
+            ...(tools ? { tools } : {}),
           })
         : undefined;
       if (generated) candidates.push(...generated.candidates);
@@ -762,6 +918,7 @@ async function main(): Promise<number> {
         store,
         executors: activeExecutors,
         ...(transports ? { transports } : {}),
+        ...(tools ? { tools } : {}),
         ...(generated ? {
           lineage: {
             generatorDigest: generated.generatorDigest,
@@ -785,7 +942,12 @@ async function main(): Promise<number> {
       if (file === "verify") {
         const reportFile = positional[1];
         if (!reportFile) usageError("morphogen bench verify <report.json> [--dir <path>]");
-        const verified = await verifyBenchReport(await readJson(resolve(reportFile)), store, fns);
+        const verified = await verifyBenchReport(
+          await readJson(resolve(reportFile)),
+          store,
+          fns,
+          flags.tools !== undefined ? await loadTools(String(flags.tools)) : undefined,
+        );
         out(verified as unknown as JsonObject);
         return verified.ok ? 0 : 1;
       }
@@ -905,6 +1067,10 @@ async function main(): Promise<number> {
         flags.transports !== undefined
           ? await loadTransports(String(flags.transports))
           : undefined;
+      const tools =
+        flags.tools !== undefined
+          ? await loadTools(String(flags.tools))
+          : undefined;
       const report = await runBenchmark({
         systems: systems.map((system) => ({
           ...system,
@@ -917,6 +1083,7 @@ async function main(): Promise<number> {
         fns,
         store,
         ...(transports ? { transports } : {}),
+        ...(tools ? { tools } : {}),
       });
       if (flags.out !== undefined) {
         const { writeFile } = await import("node:fs/promises");
@@ -964,6 +1131,9 @@ async function main(): Promise<number> {
         fns,
         flags.transports !== undefined
           ? await loadTransports(String(flags.transports))
+          : undefined,
+        flags.tools !== undefined
+          ? await loadTools(String(flags.tools))
           : undefined,
       );
       out(report as unknown as JsonObject);

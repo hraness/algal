@@ -1,0 +1,97 @@
+{
+  "contract": "morphogen.bench.config.v1",
+  "cases": [
+    {
+      "id": "i1",
+      "args": {
+        "ticket": "I was charged twice for my subscription this month.",
+        "account": "acct-1"
+      },
+      "expect": {
+        "out": "refund"
+      }
+    },
+    {
+      "id": "i2",
+      "args": {
+        "ticket": "There is a charge on my card I do not recognize.",
+        "account": "acct-2"
+      },
+      "expect": {
+        "out": "escalate"
+      }
+    },
+    {
+      "id": "i3",
+      "args": {
+        "ticket": "You charged me but the payment is still showing as pending.",
+        "account": "acct-3"
+      },
+      "expect": {
+        "out": "monitor"
+      }
+    },
+    {
+      "id": "i4",
+      "args": {
+        "ticket": "Double billed again — refund it.",
+        "account": "acct-4"
+      },
+      "expect": {
+        "out": "escalate"
+      }
+    },
+    {
+      "id": "i5",
+      "args": {
+        "ticket": "A charge appeared after I cancelled — I want my money back.",
+        "account": "acct-5"
+      },
+      "expect": {
+        "out": "monitor"
+      }
+    },
+    {
+      "id": "i6",
+      "args": {
+        "ticket": "My card was charged three times this cycle.",
+        "account": "acct-6"
+      },
+      "expect": {
+        "out": "refund"
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "cheap-single",
+      "manifest": "bench-invest-single.morphogen.json",
+      "executors": {
+        "cheap": "gateway:alibaba/qwen3.5-flash"
+      }
+    },
+    {
+      "id": "frontier-single",
+      "manifest": "bench-invest-single.morphogen.json",
+      "executors": {
+        "frontier": "gateway:anthropic/claude-opus-5"
+      }
+    },
+    {
+      "id": "organism-cheap",
+      "manifest": "bench-invest-org.morphogen.json",
+      "executors": {
+        "cheap": "gateway:alibaba/qwen3.5-flash"
+      }
+    },
+    {
+      "id": "organism-ensemble",
+      "manifest": "bench-invest-ensemble.morphogen.json",
+      "executors": {
+        "cheap": "gateway:alibaba/qwen3.5-flash",
+        "cheap2": "gateway:alibaba/qwen3.7-flash",
+        "frontier": "gateway:anthropic/claude-opus-5"
+      }
+    }
+  ]
+}

@@ -334,7 +334,7 @@ function fail(msg: string): never {
   throw new MorphogenError("PARSE_FAILED", msg);
 }
 
-function parsePortMap(
+export function parsePortMap(
   u: unknown,
   what: string,
   role: "consumer" | "producer" = "consumer",
