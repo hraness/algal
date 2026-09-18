@@ -17,6 +17,11 @@ pub fn read_json(reader: impl Read, max: usize) -> Result<Value> {
     Ok(serde_json::from_slice(&bytes)?)
 }
 
+// JS [[OwnPropertyKeys]] order — and therefore JSON.stringify emit order —
+// is array-index keys ascending, then all other keys in insertion order.
+// canonicalize() sorts the tail lexicographically, so the canonical key
+// order is: canonical u32 indices numerically first, then UTF-16 code-unit
+// lexicographic. This comparator reproduces exactly that.
 fn array_index(key: &str) -> Option<u32> {
     let n: u32 = key.parse().ok()?;
     (n != u32::MAX && n.to_string() == key).then_some(n)

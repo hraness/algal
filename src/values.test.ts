@@ -20,6 +20,17 @@ describe("canonicalize", () => {
       '{"e":[],"n":null,"u":"héllo"}',
     );
   });
+
+  // JSON.stringify emits array-index keys numerically first regardless of
+  // insertion order, so canonical order is: u32-index keys ascending, then
+  // the remaining keys in lexicographic (UTF-16) order. canonical.rs
+  // reproduces this exactly — do not "fix" either side toward pure
+  // lexicographic.
+  test("sorts array-index keys numerically, others lexicographically", () => {
+    expect(canonicalize({ "10": 1, "2": 2, "1": 3, b: 0, a: 0 })).toBe(
+      '{"1":3,"2":2,"10":1,"a":0,"b":0}',
+    );
+  });
 });
 
 describe("digest", () => {
