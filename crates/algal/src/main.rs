@@ -70,11 +70,15 @@ enum Commands {
     Civ {
         #[arg(long)]
         live: bool,
+        #[arg(long)]
+        goals: Option<PathBuf>,
         #[command(flatten)]
         options: Execution,
     },
     CivVerify {
         population: Option<PathBuf>,
+        #[arg(long)]
+        goals: Option<PathBuf>,
     },
     Run {
         manifest: PathBuf,
@@ -386,7 +390,11 @@ struct MapBuilder(serde_json::Map<String, Value>);
 
 async fn execute(cli: Cli) -> Result<bool> {
     match cli.command {
-        Commands::Civ { live, mut options } => {
+        Commands::Civ {
+            live,
+            goals,
+            mut options,
+        } => {
             let _lock = algal::civilization::lock(&cli.dir)?;
             let mut store = Store::open(&cli.dir, true)?;
             if live
@@ -399,15 +407,20 @@ async fn execute(cli: Cli) -> Result<bool> {
                 options.gateway_model = Some("alibaba/qwen3.7-flash".into());
             }
             let provider = if live { Some(host(&options)?) } else { None };
-            let result = algal::civilization::evolve(&mut store, provider).await?;
-            let verified =
-                algal::civilization::verify_population(&result["population"], &store).await?;
+            let result =
+                algal::civilization::evolve(&mut store, provider, goals.as_deref()).await?;
+            let verified = algal::civilization::verify_population(
+                &result["population"],
+                &store,
+                goals.as_deref(),
+            )
+            .await?;
             emit(
                 &json!({"head":result["head"],"population":result["population"],"verification":verified}),
             )?;
             Ok(!object(&result["population"]["members"])?.is_empty())
         }
-        Commands::CivVerify { population } => {
+        Commands::CivVerify { population, goals } => {
             let store = Store::open(&cli.dir, false)?;
             let population = match population {
                 Some(file) => {
@@ -428,7 +441,10 @@ async fn execute(cli: Cli) -> Result<bool> {
                         .ok_or_else(|| Error::new("STORE_MISS", "population snapshot missing"))?
                 }
             };
-            emit(&algal::civilization::verify_population(&population, &store).await?)?;
+            emit(
+                &algal::civilization::verify_population(&population, &store, goals.as_deref())
+                    .await?,
+            )?;
             Ok(true)
         }
         Commands::Run {

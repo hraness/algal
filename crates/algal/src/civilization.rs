@@ -134,8 +134,8 @@ fn load_goals(path: &Path) -> Result<Vec<Goal>> {
     if bytes.len() > 262_144 {
         return Err(Error::limit("goals file bytes"));
     }
-    let value: Value = serde_json::from_slice(&bytes)
-        .map_err(|_| Error::invalid("goals file is not JSON"))?;
+    let value: Value =
+        serde_json::from_slice(&bytes).map_err(|_| Error::invalid("goals file is not JSON"))?;
     keys(&value, &["contract", "goals"])?;
     if value["contract"] != "algal.goals.v1" {
         return Err(Error::invalid("goals file requires algal.goals.v1"));
@@ -163,7 +163,9 @@ fn load_goals(path: &Path) -> Result<Vec<Goal>> {
         let scripted = match raw.get("scripted") {
             Some(plan) if !plan.is_null() => {
                 crate::registry::compile_plan(plan).map_err(|error| {
-                    Error::invalid(format!("goal {goal_id} scripted plan does not compile: {error}"))
+                    Error::invalid(format!(
+                        "goal {goal_id} scripted plan does not compile: {error}"
+                    ))
                 })?;
                 Some(plan.clone())
             }
@@ -189,7 +191,7 @@ fn load_goals(path: &Path) -> Result<Vec<Goal>> {
                         _ => {
                             return Err(Error::invalid(
                                 "split must be train, validation, or holdout",
-                            ))
+                            ));
                         }
                     }
                 }
@@ -215,7 +217,7 @@ fn load_goals(path: &Path) -> Result<Vec<Goal>> {
         }
         result.push(Goal {
             id: goal_id,
-            description,
+            description: description.to_owned(),
             scripted,
             cases,
         });
@@ -224,9 +226,7 @@ fn load_goals(path: &Path) -> Result<Vec<Goal>> {
 }
 
 fn plan_fixture(goal: &Goal, constant: bool) -> Result<Value> {
-    if !constant
-        && let Some(plan) = &goal.scripted
-    {
+    if !constant && let Some(plan) = &goal.scripted {
         return Ok(plan.clone());
     }
     Ok(json!([format!(
@@ -380,7 +380,11 @@ fn candidate_json(candidate: &Candidate) -> Result<Value> {
     )
 }
 
-pub async fn evolve(store: &mut Store, live: Option<Host>, goals_path: Option<&Path>) -> Result<Value> {
+pub async fn evolve(
+    store: &mut Store,
+    live: Option<Host>,
+    goals_path: Option<&Path>,
+) -> Result<Value> {
     let (goals, policy, evidence_scope) = match goals_path {
         Some(path) => (
             load_goals(path)?,
@@ -467,7 +471,7 @@ pub async fn evolve(store: &mut Store, live: Option<Host>, goals_path: Option<&P
             let candidate = checked_candidate(
                 manifest,
                 member["proposal"].clone(),
-                &goal,
+                goal,
                 store,
                 &mut total_work,
             )
@@ -479,7 +483,7 @@ pub async fn evolve(store: &mut Store, live: Option<Host>, goals_path: Option<&P
         for attempt in 0..attempts {
             let mut host = match &live {
                 Some(host) => host.clone(),
-                None => Host::scripted(json!({"designer":[plan_fixture(&goal,attempt == 0)?]})),
+                None => Host::scripted(json!({"designer":[plan_fixture(goal,attempt == 0)?]})),
             };
             let train: Vec<_> = goal
                 .cases
@@ -487,7 +491,7 @@ pub async fn evolve(store: &mut Store, live: Option<Host>, goals_path: Option<&P
                 .filter(|case| case.split == "train")
                 .map(|case| json!({"input":case.input,"expect":case.expected}))
                 .collect();
-            let task = json!({"goal":goal.description,"train":train,"incumbent":incumbent.as_ref().map(|member| &member["manifest"])});
+            let task = json!({"goal":&goal.description,"train":train,"incumbent":incumbent.as_ref().map(|member| &member["manifest"])});
             let parent = runtime::run(
                 designer.clone(),
                 json!({"goal":{"task":task}}),
@@ -512,7 +516,7 @@ pub async fn evolve(store: &mut Store, live: Option<Host>, goals_path: Option<&P
                         rejected.push(json!({"proposal":proposal,"reason":"duplicate"}));
                         continue;
                     }
-                    checked_candidate(manifest, proposal.clone(), &goal, store, &mut total_work)
+                    checked_candidate(manifest, proposal.clone(), goal, store, &mut total_work)
                         .await
                 }
                 Err(error) => Err(error),
@@ -525,27 +529,33 @@ pub async fn evolve(store: &mut Store, live: Option<Host>, goals_path: Option<&P
         candidates.sort_by_key(ranking);
         let mut selected = Value::Null;
         let mut holdout = Vec::new();
+        let train_total = goal.cases.iter().filter(|c| c.split == "train").count();
+        let validation_total = goal
+            .cases
+            .iter()
+            .filter(|c| c.split == "validation")
+            .count();
         if let Some(winner) = candidates.first() {
-            if winner.train == 2 && winner.validation == 1 {
+            if winner.train == train_total && winner.validation == validation_total {
                 selected = json!(winner.manifest.digest()?);
                 for case in goal.cases.iter().filter(|case| case.split == "holdout") {
                     holdout.push(evaluate(&winner.manifest, case, store).await?);
                 }
                 if holdout.iter().all(|result| result["passed"] == true) {
                     let bundle = pack(&winner.manifest, store)?;
-                    let evidence = json!({"contract":"algal.promotion.v1","goal":goal.id,"policy":"algal.demo-selection.v1","candidate":candidate_json(winner)?,"holdout":holdout});
+                    let evidence = json!({"contract":"algal.promotion.v1","goal":&goal.id,"policy":policy,"candidate":candidate_json(winner)?,"holdout":holdout});
                     let evidence = store.put("values", &evidence)?;
                     let member = json!({"manifest":winner.manifest.digest()?,"bundle":store.put("values",&bundle)?,"evidence":evidence,"proposal":winner.proposal});
-                    members.insert(goal.id.to_owned(), member);
+                    members.insert(goal.id.clone(), member);
                 }
             }
         }
-        reports.push(json!({"goal":goal.id,"selected":selected,"holdout":holdout,"candidates":candidates.iter().map(candidate_json).collect::<Result<Vec<_>>>()?,"rejected":rejected}));
+        reports.push(json!({"goal":&goal.id,"selected":selected,"holdout":holdout,"candidates":candidates.iter().map(candidate_json).collect::<Result<Vec<_>>>()?,"rejected":rejected}));
     }
     let population = json!({
         "contract":"algal.population.v1","epoch":epoch,"previous":initial_head.as_ref().map(|v| &v["head"]),
-        "policy":"algal.demo-selection.v1","members":members,"reports":reports,
-        "evidenceScope":"Four toy contracts, not a learning or generalization benchmark; boolean cases cover a two-value domain.",
+        "policy":policy,"members":members,"reports":reports,
+        "evidenceScope":evidence_scope,
     });
     if canonical(&population)?.len() > 1_048_576 {
         return Err(Error::limit("population record bytes"));
@@ -556,7 +566,7 @@ pub async fn evolve(store: &mut Store, live: Option<Host>, goals_path: Option<&P
             "population head changed; refusing stale promotion",
         ));
     }
-    verify_population(&population, store).await?;
+    verify_population(&population, store, goals_path).await?;
     let head = store.put("values", &population)?;
     store.set_slot("civilization", &json!({"head":head}))?;
     Ok(json!({"head":head,"population":population}))
@@ -671,7 +681,7 @@ async fn verify_proposal(
     Ok(raw)
 }
 
-async fn verify_reports(population: &Value, store: &Store) -> Result<()> {
+async fn verify_reports(population: &Value, store: &Store, known: &[Goal]) -> Result<()> {
     let epoch = population["epoch"]
         .as_u64()
         .filter(|n| *n > 0 && *n <= 100_000)
@@ -698,9 +708,8 @@ async fn verify_reports(population: &Value, store: &Store) -> Result<()> {
     };
     let reports = population["reports"]
         .as_array()
-        .filter(|r| r.len() == 4)
-        .ok_or_else(|| Error::invalid("population requires four goal reports"))?;
-    let known = goals();
+        .filter(|r| r.len() == known.len())
+        .ok_or_else(|| Error::invalid("population report count does not match goals"))?;
     let mut seen_goals = BTreeSet::new();
     for report in reports {
         keys(
@@ -775,9 +784,18 @@ async fn verify_reports(population: &Value, store: &Store) -> Result<()> {
             ));
         }
         ranking.sort();
+        let train_total = goal.cases.iter().filter(|c| c.split == "train").count();
+        let validation_total = goal
+            .cases
+            .iter()
+            .filter(|c| c.split == "validation")
+            .count();
+        let holdout_total = goal.cases.iter().filter(|c| c.split == "holdout").count();
         let selected = ranking
             .first()
-            .filter(|(validation, train, _, _)| validation.0 == 1 && train.0 == 2)
+            .filter(|(validation, train, _, _)| {
+                validation.0 == validation_total && train.0 == train_total
+            })
             .map(|(_, _, _, id)| *id);
         if report["selected"] != json!(selected) {
             return Err(Error::new(
@@ -789,13 +807,15 @@ async fn verify_reports(population: &Value, store: &Store) -> Result<()> {
             .as_array()
             .ok_or_else(|| Error::invalid("holdout evidence"))?;
         let promoted = if let Some(selected) = selected {
-            if holdout.len() != 1 || holdout[0]["split"] != "holdout" {
+            if holdout.len() != holdout_total
+                || holdout.iter().any(|case| case["split"] != "holdout")
+            {
                 return Err(Error::invalid(
-                    "selected candidate requires exactly one holdout case",
+                    "selected candidate requires the sealed holdout cases",
                 ));
             }
             verify_cases(&store.manifest(selected)?, holdout, goal, store).await?;
-            holdout[0]["passed"] == true
+            holdout.iter().all(|case| case["passed"] == true)
         } else {
             if !holdout.is_empty() {
                 return Err(Error::invalid("unselected candidate saw holdout"));
@@ -871,7 +891,11 @@ async fn verify_reports(population: &Value, store: &Store) -> Result<()> {
     Ok(())
 }
 
-pub async fn verify_population(population: &Value, store: &Store) -> Result<Value> {
+pub async fn verify_population(
+    population: &Value,
+    store: &Store,
+    goals_path: Option<&Path>,
+) -> Result<Value> {
     keys(
         population,
         &[
@@ -884,20 +908,21 @@ pub async fn verify_population(population: &Value, store: &Store) -> Result<Valu
             "evidenceScope",
         ],
     )?;
-    if population["contract"] != "algal.population.v1"
-        || population["policy"] != "algal.demo-selection.v1"
-    {
+    let (known, expected_policy) = match goals_path {
+        Some(path) => (load_goals(path)?, "algal.goals-selection.v1"),
+        None => (demo_goals(), "algal.demo-selection.v1"),
+    };
+    if population["contract"] != "algal.population.v1" || population["policy"] != expected_policy {
         return Err(Error::invalid("population contract/policy"));
     }
     if canonical(population)?.len() > 1_048_576 || object(&population["members"])?.len() > 64 {
         return Err(Error::limit("population bytes/members"));
     }
-    verify_reports(population, store).await?;
-    let known = goals();
+    verify_reports(population, store, &known).await?;
     for (goal_id, member) in object(&population["members"])? {
         let goal = known
             .iter()
-            .find(|goal| goal.id == goal_id)
+            .find(|goal| goal.id == *goal_id)
             .ok_or_else(|| Error::invalid("unknown population goal"))?;
         let manifest = store.manifest(
             member["manifest"]
@@ -929,10 +954,10 @@ pub async fn verify_population(population: &Value, store: &Store) -> Result<Valu
                 .ok_or_else(|| Error::invalid("holdout cases"))?
                 .clone(),
         );
-        if cases.len() != 4 || cases.iter().any(|case| case["passed"] != true) {
+        if cases.len() != goal.cases.len() || cases.iter().any(|case| case["passed"] != true) {
             return Err(Error::new(
                 "RECEIPT_MISMATCH",
-                "promotion requires all four cases",
+                "promotion requires every goal case",
             ));
         }
         verify_cases(&manifest, &cases, goal, store).await?;
@@ -961,10 +986,10 @@ mod tests {
     #[tokio::test]
     async fn selection_rejects_memorized_constants_and_keeps_a_replayable_lineage() {
         let mut store = Store::default();
-        let first = evolve(&mut store, None).await.unwrap();
+        let first = evolve(&mut store, None, None).await.unwrap();
         assert_eq!(first["population"]["members"].as_object().unwrap().len(), 4);
         assert_eq!(
-            verify_population(&first["population"], &store)
+            verify_population(&first["population"], &store, None)
                 .await
                 .unwrap()["ok"],
             true
@@ -979,7 +1004,7 @@ mod tests {
                     .any(|c| c["validationPassed"] != 1 || c["trainPassed"] != 2)
             );
         }
-        let second = evolve(&mut store, None).await.unwrap();
+        let second = evolve(&mut store, None, None).await.unwrap();
         assert_eq!(second["population"]["previous"], first["head"]);
         assert_eq!(second["population"]["epoch"], 2);
         assert!(
@@ -989,7 +1014,7 @@ mod tests {
                 .is_some()
         );
         assert_eq!(
-            verify_population(&second["population"], &store)
+            verify_population(&second["population"], &store, None)
                 .await
                 .unwrap()["ok"],
             true
@@ -999,23 +1024,114 @@ mod tests {
     #[tokio::test]
     async fn forged_selection_and_population_changes_are_detected() {
         let mut store = Store::default();
-        let result = evolve(&mut store, None).await.unwrap();
+        let result = evolve(&mut store, None, None).await.unwrap();
         let mut forged = result["population"].clone();
         forged["reports"][0]["candidates"][0]["trainPassed"] = json!(0);
-        assert!(verify_population(&forged, &store).await.is_err());
+        assert!(verify_population(&forged, &store, None).await.is_err());
         let mut forged = result["population"].clone();
         forged["members"].as_object_mut().unwrap().remove("double");
-        assert!(verify_population(&forged, &store).await.is_err());
+        assert!(verify_population(&forged, &store, None).await.is_err());
     }
 
     #[tokio::test]
     async fn invalid_live_proposals_are_recorded_but_never_promoted() {
         let mut store = Store::default();
         let host = Host::scripted(json!({"designer":{"not":"a manifest"}}));
-        let result = evolve(&mut store, Some(host)).await.unwrap();
+        let result = evolve(&mut store, Some(host), None).await.unwrap();
         assert_eq!(result["population"]["members"], json!({}));
         for report in result["population"]["reports"].as_array().unwrap() {
             assert_eq!(report["rejected"].as_array().unwrap().len(), 1);
         }
+    }
+
+    fn goals_file(dir: &Path, body: &str) -> PathBuf {
+        let path = dir.join("goals.json");
+        fs::write(&path, body).unwrap();
+        path
+    }
+
+    #[tokio::test]
+    async fn custom_goals_epoch_promotes_scripted_answers_and_verifies() {
+        let dir = std::env::temp_dir().join(format!("algal-goals-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = goals_file(
+            &dir,
+            r#"{"contract":"algal.goals.v1","goals":[
+                {"id":"echo-back","description":"Return the input unchanged.","scripted":["fn:echo.v1"],"cases":[
+                    {"input":"a","expected":"a"},
+                    {"input":"b","expected":"b"},
+                    {"input":"c","expected":"c"},
+                    {"input":"d","expected":"d"}]},
+                {"id":"triple","description":"Return three times the input.","cases":[
+                    {"input":1,"expected":3},
+                    {"input":2,"expected":6},
+                    {"input":-1,"expected":-3},
+                    {"input":10,"expected":30}]}]}"#,
+        );
+        let mut store = Store::default();
+        let result = evolve(&mut store, None, Some(&path)).await.unwrap();
+        assert_eq!(result["population"]["policy"], "algal.goals-selection.v1");
+        let members = result["population"]["members"].as_object().unwrap();
+        assert_eq!(members.len(), 1);
+        assert!(members.contains_key("echo-back"));
+        assert_eq!(
+            verify_population(&result["population"], &store, Some(&path))
+                .await
+                .unwrap()["ok"],
+            true
+        );
+        // A different goals file must not verify this population.
+        let other = goals_file(
+            &dir,
+            r#"{"contract":"algal.goals.v1","goals":[
+                {"id":"other","description":"Different.","cases":[
+                    {"input":1,"expected":1},
+                    {"input":2,"expected":2},
+                    {"input":3,"expected":3},
+                    {"input":4,"expected":4}]}]}"#,
+        );
+        assert!(
+            verify_population(&result["population"], &store, Some(&other))
+                .await
+                .is_err()
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn goals_files_are_bounded_and_validated() {
+        let dir = std::env::temp_dir().join(format!("algal-goals-bad-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        // Missing holdout coverage rejects at load.
+        let missing_holdout = goals_file(
+            &dir,
+            r#"{"contract":"algal.goals.v1","goals":[{"id":"g","description":"x","cases":[
+                {"input":1,"expected":1},
+                {"input":2,"expected":2},
+                {"input":3,"expected":3}]}]}"#,
+        );
+        assert!(load_goals(&missing_holdout).is_err());
+        // Uncompilable scripted plans reject at load.
+        let bad_plan = goals_file(
+            &dir,
+            r#"{"contract":"algal.goals.v1","goals":[{"id":"g","description":"x","scripted":["fn:bogus.v9"],"cases":[
+                {"input":1,"expected":1},
+                {"input":2,"expected":2},
+                {"input":3,"expected":3},
+                {"input":4,"expected":4}]}]}"#,
+        );
+        assert!(load_goals(&bad_plan).is_err());
+        // Explicit splits are honored; scripted plans compile.
+        let ok = goals_file(
+            &dir,
+            r#"{"contract":"algal.goals.v1","goals":[{"id":"g","description":"x","scripted":["fn:echo.v1"],"cases":[
+                {"input":1,"expected":1,"split":"train"},
+                {"input":2,"expected":2,"split":"validation"},
+                {"input":3,"expected":3,"split":"holdout"}]}]}"#,
+        );
+        let loaded = load_goals(&ok).unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].cases.len(), 3);
+        let _ = fs::remove_dir_all(&dir);
     }
 }

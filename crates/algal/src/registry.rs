@@ -183,7 +183,7 @@ pub fn invoke(name: &str, inputs: &Value) -> Result<(Value, usize)> {
 /// compiled program are ignored (bindings to unknown or chain ports, bare
 /// non-fn tokens); malformed intent — unknown fn names, missing `=`, invalid
 /// literals — still rejects the proposal.
-fn compile_plan(plan: &Value) -> Result<Value> {
+pub(crate) fn compile_plan(plan: &Value) -> Result<Value> {
     let steps = list(plan, 4)?;
     if steps.is_empty() {
         return Err(Error::invalid("plan requires 1..4 steps"));

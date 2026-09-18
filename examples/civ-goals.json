@@ -1,0 +1,38 @@
+{
+  "contract": "algal.goals.v1",
+  "goals": [
+    {
+      "id": "echo-back",
+      "description": "Return the input unchanged.",
+      "scripted": ["fn:echo.v1"],
+      "cases": [
+        {"input": "abc", "expected": "abc"},
+        {"input": "DeF", "expected": "DeF"},
+        {"input": "ghi", "expected": "ghi"},
+        {"input": "jkl", "expected": "jkl"}
+      ]
+    },
+    {
+      "id": "shout-tags",
+      "description": "Return the input text in uppercase.",
+      "scripted": ["fn:uppercase.v1"],
+      "cases": [
+        {"input": "one", "expected": "ONE"},
+        {"input": "two", "expected": "TWO"},
+        {"input": "three", "expected": "THREE"},
+        {"input": "four", "expected": "FOUR"}
+      ]
+    },
+    {
+      "id": "double-odds",
+      "description": "Return twice the numeric input.",
+      "scripted": ["fn:double.v1"],
+      "cases": [
+        {"input": 1, "expected": 2},
+        {"input": 3, "expected": 6},
+        {"input": 5, "expected": 10},
+        {"input": 7, "expected": 14}
+      ]
+    }
+  ]
+}

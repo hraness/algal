@@ -73,6 +73,30 @@ algal civ --live --apple --dir .algal/civ
 algal civ-verify --dir .algal/civ
 ```
 
+### Custom goals: `algal civ --goals`
+
+The four built-in goals are a demo. A goals file turns the same loop into a
+general program-evolution engine over *your* contracts:
+
+```sh
+algal civ --goals examples/civ-goals.json --dir .algal/civ
+algal civ-verify --goals examples/civ-goals.json --dir .algal/civ
+```
+
+The file is `algal.goals.v1`: up to 16 goals, each with an id, a description
+(the model sees this plus the train cases), 3–8 cases, and an optional
+`scripted` plan used as the deterministic designer answer when no live
+executor is configured. Cases default to positional splits — first two train,
+third validation, the rest holdout — or declare `"split"` explicitly. Every
+goal needs at least one case in each split, and a `scripted` plan must compile
+at load time, so a bad fixture fails before the epoch starts.
+
+Selection is policy-identical to the demo: all train and validation cases must
+pass, holdout stays sealed until selection, and the winner is packed with
+provenance and evidence. Custom-goal populations record policy
+`algal.goals-selection.v1`, and `civ-verify --goals` re-derives every claim —
+a population only verifies against the goals that produced it.
+
 ### Models decide; hosts compile
 
 A whole manifest is too large a surface for a small or on-device model to emit
