@@ -23,6 +23,15 @@ ledger lookup scored 6/6 for $0.00131, while a Claude Opus 5 call without the
 tool scored 4/6 for $0.02625. Prices were taken from aicharts.io / AI//COST
 and OpenRouter/Alibaba rate cards.
 
+## Why it is a new primitive
+
+Morphogen sits between deterministic programs and open-ended agents. A manifest
+is a finite, strongly-typed graph; a run is a content-addressed, replayable
+receipt; and model judgment is isolated behind bounded cells with declared
+contracts. This makes an organism a new kind of value: hashable, transportable,
+verifiable, and evolvable. See `docs/why-unique.md` in the repository for the
+full comparison.
+
 ## Quick start
 
 ```sh

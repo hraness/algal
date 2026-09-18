@@ -50,15 +50,16 @@ Register that definition with the agent. When the agent decides to call the tool
 
 ## Call
 
-The agent invokes `morphogen call` with the bundled organism and the tool arguments:
+The agent invokes `morphogen call` with the bundled organism and the tool arguments. Pass `--args -` to read the arguments from stdin:
 
 ```sh
-morphogen call ./tools/<bundle>.bundle.json \
+echo '{"ticket":{"text":"I cannot log in after the update"}}' | \
+  morphogen call ./tools/<bundle>.bundle.json \
   --args - \
   --responses examples/triage.responses.json
 ```
 
-`--args -` could read from stdin in a future release; for now write the args to a file:
+Or write the args to a file:
 
 ```sh
 echo '{"ticket":{"text":"I cannot log in after the update"}}' > /tmp/triage.args.json

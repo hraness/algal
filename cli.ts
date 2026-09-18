@@ -182,6 +182,21 @@ async function readJson(path: string): Promise<JsonValue> {
   }
 }
 
+async function readJsonStdin(): Promise<JsonValue> {
+  const text = await Bun.stdin.text();
+  if (!text.trim()) {
+    throw new MorphogenError("INPUT_MISSING", "stdin was empty");
+  }
+  try {
+    return JSON.parse(text) as JsonValue;
+  } catch (e) {
+    throw new MorphogenError(
+      "PARSE_FAILED",
+      `stdin: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+}
+
 function out(v: JsonValue | JsonObject | RunReceipt): void {
   process.stdout.write(canonicalize(v as JsonValue) + "\n");
 }
@@ -543,9 +558,11 @@ async function main(): Promise<number> {
       }
 
       const argsRaw =
-        flags.args !== undefined
-          ? asRecord(await readJson(resolve(String(flags.args))), "args")
-          : {};
+        flags.args === "-"
+          ? asRecord(await readJsonStdin(), "args")
+          : flags.args !== undefined
+            ? asRecord(await readJson(resolve(String(flags.args))), "args")
+            : {};
       const args: Record<string, Record<string, JsonValue>> = {};
       for (const [cellId, ports] of Object.entries(argsRaw)) {
         args[cellId] = asRecord(ports as JsonValue, `args.${cellId}`);

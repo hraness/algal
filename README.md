@@ -9,6 +9,15 @@ Status: early. The v1 contract, scheduler, effect seam, nested organisms, and
 offline verification are implemented and tested. Hosted habitats, multi-owner
 messaging, and workflow breeding are deliberately deferred.
 
+## Why this is a new primitive
+
+Morphogen is a third thing between deterministic programs and open-ended agents:
+a bounded, typed, content-addressed probabilistic program. The manifest is a
+value; the receipt is evidence; and model judgment is isolated behind explicit
+cells with declared contracts and budgets. See [`docs/why-unique.md`](docs/why-unique.md)
+for the full comparison with prompts, agent loops, DAG engines, probabilistic
+programming, smart contracts, and FaaS.
+
 ## What is this?
 
 An **organism** is a manifest (`morphogen.organism.v1`): a set of cells with
