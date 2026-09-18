@@ -6,6 +6,7 @@ pub mod context;
 pub mod contract;
 pub mod effects;
 pub mod error;
+pub mod foundry;
 pub mod graph;
 pub mod memory;
 pub mod registry;
