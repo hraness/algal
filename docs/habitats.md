@@ -137,6 +137,29 @@ problem. With them, it becomes a search-and-selection problem.
 These are later layers. The current contract already supports the core loop:
 generate, admit, run, measure, select.
 
+## Working example: `examples/habitat.morphogen.json`
+
+There is a runnable steel thread in the bundled examples. The `habitat` organism:
+
+1. receives a `goal` input,
+2. a `designer` agent outputs a child organism manifest as JSON,
+3. a `spawn` cell admits and runs the child under the parent's budgets,
+4. a `push.v1` cell appends the child digest to the `population` slot,
+5. a `write` slot cell persists the new population.
+
+Run it:
+
+```sh
+morphogen run examples/habitat.morphogen.json \
+  --args examples/habitat.args.json \
+  --responses examples/habitat.responses.json \
+  --write
+```
+
+The receipt shows `child` (the spawned manifest digest) and `population` (the
+updated list). The child is data, the host still owns the store and registries,
+ and the whole lineage is replayable.
+
 ## A sketch of the next step
 
 The most concrete near-term habitat would be:

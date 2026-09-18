@@ -25,7 +25,9 @@ store, and propose new organisms. A shared `Store`, `ToolRegistry`, and
 `FnRegistry` becomes a habitat: a population of organisms that evolve through
 foundry search and host admission. The organism cannot rewrite its own runtime,
 but it can *propose* children, functions, and tools; the host decides what to
-admit. See [`docs/habitats.md`](docs/habitats.md) for the design sketch.
+admit. See [`docs/habitats.md`](docs/habitats.md) for the design sketch and
+[`examples/habitat.morphogen.json`](examples/habitat.morphogen.json) for a
+working steel thread.
 
 ## What is this?
 
