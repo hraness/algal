@@ -127,12 +127,12 @@ retrieves the ledger through a typed `tool` cell and then classifies.
 
 Live Vercel AI Gateway run:
 
-| system | passed | effect calls | input tokens | output tokens | Pareto |
-|---|---|---|---|---|---|
-| cheap-single (qwen3.5, no evidence) | 4/6 | 6 | 759 | 10,366 | — |
-| frontier-single (claude-opus-5, no evidence) | 4/6 | 6 | 4,214 | 207 | yes |
-| **organism-cheap (qwen3.5 + ledger tool)** | **6/6** | **12** | **1,210** | **5,364** | **yes** |
-| organism-ensemble (qwen3.5 + qwen3.7 + tool) | 6/6 | 18 | 2,840 | 7,584 | — |
+|| system | passed | effect calls | cost | input tokens | output tokens | Pareto |
+|---|---|---:|---:|---:|---:|---|
+|| cheap-single (qwen3.5, no evidence) | 4/6 | 6 | $0.00371 | 759 | 14,087 | yes |
+|| frontier-single (claude-opus-5, no evidence) | 4/6 | 6 | $0.02625 | 4,214 | 207 | — |
+|| **organism-cheap (qwen3.5 + ledger tool)** | **6/6** | **12** | **$0.00131** | **1,210** | **4,716** | **yes** |
+|| organism-ensemble (qwen3.5 + qwen3.7 + tool) | 6/6 | 19 | $0.00676 | 3,692 | 6,776 | — |
 
 A Qwen Flash organism with a typed ledger lookup is **100% accurate on this
 workload**, while a Claude Opus call without the tool is **67% accurate**.
@@ -306,7 +306,9 @@ For tool-grounded baselines, pass `--tools <file>`: a registry of named tools
 with typed signatures and `scripted:<data>` or `cmd:<shell>` executors. The
 billing-dispute case in `examples/invest/bench-invest-live.config.json` uses it
 to compare a Qwen organism with a charge-ledger lookup against a Claude Opus
-call that can only read the ticket.
+call that can only read the ticket. Add a `prices` map to the bench config
+(`examples/invest/bench-invest-priced.config.json`) to put the Pareto in
+aicharts.io-denominated dollars.
 
 `check` admits a manifest without running it: parse, graph validation, and
 interface resolution only. `explain` prints the compiled signature — every

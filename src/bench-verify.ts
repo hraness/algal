@@ -8,6 +8,7 @@ import {
   type BenchAttribution,
   type BenchCase,
   type BenchCaseResult,
+  type BenchPrice,
   type BenchReport,
   type BenchSystemResult,
 } from "./bench";
@@ -58,6 +59,13 @@ function count(value: JsonValue | undefined, at: string): number {
   return value as number;
 }
 
+function number_(value: JsonValue | undefined, at: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new MorphogenError("PARSE_FAILED", `${at} must be a non-negative number`);
+  }
+  return value;
+}
+
 function parseWork(value: JsonValue | undefined, at: string) {
   const work = object(value, at);
   keys(work, ["steps", "agentCalls", "units"], at);
@@ -70,10 +78,11 @@ function parseWork(value: JsonValue | undefined, at: string) {
 
 function parseUsage(value: JsonValue | undefined, at: string) {
   const usage = object(value, at);
-  keys(usage, ["tokensIn", "tokensOut"], at);
+  keys(usage, ["tokensIn", "tokensOut", "cost"], at);
   return {
     tokensIn: count(usage.tokensIn, `${at}.tokensIn`),
     tokensOut: count(usage.tokensOut, `${at}.tokensOut`),
+    cost: number_(usage.cost, `${at}.cost`),
   };
 }
 
@@ -85,11 +94,12 @@ function parseAttribution(value: JsonValue | undefined, at: string): Record<stri
       throw new MorphogenError("PARSE_FAILED", `${at} has an invalid attribution key`);
     }
     const entry = object(raw, `${at}.${key}`);
-    keys(entry, ["calls", "tokensIn", "tokensOut"], `${at}.${key}`);
+    keys(entry, ["calls", "tokensIn", "tokensOut", "cost"], `${at}.${key}`);
     out[key] = {
       calls: count(entry.calls, `${at}.${key}.calls`),
       tokensIn: count(entry.tokensIn, `${at}.${key}.tokensIn`),
       tokensOut: count(entry.tokensOut, `${at}.${key}.tokensOut`),
+      cost: number_(entry.cost, `${at}.${key}.cost`),
     };
   }
   return out;
@@ -155,9 +165,27 @@ function parseSystem(value: JsonValue, i: number): BenchSystemResult {
   };
 }
 
+function parseBenchPrice(value: JsonValue | undefined, at: string): Record<string, BenchPrice> | undefined {
+  if (value === undefined) return undefined;
+  const map = object(value, at);
+  const out: Record<string, BenchPrice> = {};
+  for (const [key, raw] of Object.entries(map)) {
+    if (key.length === 0 || key.length > 256) {
+      throw new MorphogenError("PARSE_FAILED", `${at} has an invalid price key`);
+    }
+    const p = object(raw, `${at}.${key}`);
+    keys(p, ["input", "output"], `${at}.${key}`);
+    out[key] = {
+      input: number_(p.input, `${at}.${key}.input`),
+      output: number_(p.output, `${at}.${key}.output`),
+    };
+  }
+  return out;
+}
+
 export function parseBenchReport(value: unknown): BenchReport {
   const report = object(value, "bench");
-  keys(report, ["contract", "workload", "cases", "systems", "pareto", "digest"], "bench");
+  keys(report, ["contract", "workload", "cases", "prices", "systems", "pareto", "digest"], "bench");
   if (report.contract !== BENCH_CONTRACT) {
     throw new MorphogenError("PARSE_FAILED", `bench.contract must be ${BENCH_CONTRACT}`);
   }
@@ -186,6 +214,7 @@ export function parseBenchReport(value: unknown): BenchReport {
     contract: BENCH_CONTRACT,
     workload: digest(report.workload, "bench.workload"),
     cases: report.cases.map((entry, i) => parseBenchCase(entry, `bench.cases[${i}]`)),
+    prices: parseBenchPrice(report.prices, "bench.prices"),
     systems,
     pareto,
     digest: digest(report.digest, "bench.digest"),
@@ -214,7 +243,7 @@ export async function verifyBenchReport(
   if (workload !== report.workload) {
     mismatches.push(`workload: claimed ${report.workload}, computed ${workload}`);
   }
-  if (canonicalize(report.pareto as unknown as JsonValue) !== canonicalize(benchPareto(report.systems) as unknown as JsonValue)) {
+  if (canonicalize(report.pareto as unknown as JsonValue) !== canonicalize(benchPareto(report.systems, report.prices !== undefined) as unknown as JsonValue)) {
     mismatches.push("pareto does not match the system totals");
   }
   const caseIds = new Set<string>();
@@ -242,7 +271,7 @@ export async function verifyBenchReport(
       mismatches.push(`${system.id}: case count differs from the workload`);
     }
     const work = { steps: 0, agentCalls: 0, units: 0 };
-    const usage = { tokensIn: 0, tokensOut: 0 };
+    const usage = { tokensIn: 0, tokensOut: 0, cost: 0 };
     const attribution: Record<string, BenchAttribution> = {};
     let effectCalls = 0;
     for (const c of system.cases) {
@@ -263,12 +292,14 @@ export async function verifyBenchReport(
       work.units += c.work.units;
       usage.tokensIn += c.usage.tokensIn;
       usage.tokensOut += c.usage.tokensOut;
+      usage.cost += c.usage.cost;
       effectCalls += c.effectCalls;
       for (const [key, value] of Object.entries(c.attribution)) {
-        const entry = (attribution[key] ??= { calls: 0, tokensIn: 0, tokensOut: 0 });
+        const entry = (attribution[key] ??= { calls: 0, tokensIn: 0, tokensOut: 0, cost: 0 });
         entry.calls += value.calls;
         entry.tokensIn += value.tokensIn;
         entry.tokensOut += value.tokensOut;
+        entry.cost += value.cost;
       }
       const stored = await store.getReceipt(c.receiptDigest);
       if (!stored) {
@@ -311,23 +342,33 @@ export async function verifyBenchReport(
       if (receipt.effects.length !== c.effectCalls) {
         mismatches.push(`${system.id} case ${c.id}: effectCalls differs from receipt`);
       }
-      const receiptUsage = { tokensIn: 0, tokensOut: 0 };
+      const receiptUsage = { tokensIn: 0, tokensOut: 0, cost: 0 };
       const receiptAttribution: Record<string, BenchAttribution> = {};
       for (const effect of receipt.effects) {
         const key = effect.usage?.model ?? effect.executor;
-        const entry = (receiptAttribution[key] ??= { calls: 0, tokensIn: 0, tokensOut: 0 });
+        const entry = (receiptAttribution[key] ??= { calls: 0, tokensIn: 0, tokensOut: 0, cost: 0 });
         entry.calls += 1;
         const tokensIn = effect.usage?.tokensIn ?? 0;
         const tokensOut = effect.usage?.tokensOut ?? 0;
         entry.tokensIn += tokensIn;
         entry.tokensOut += tokensOut;
+        const price = report.prices?.[key];
+        const extraCost = price
+          ? (tokensIn * price.input + tokensOut * price.output) / 1_000_000
+          : 0;
+        entry.cost += extraCost;
         receiptUsage.tokensIn += tokensIn;
         receiptUsage.tokensOut += tokensOut;
+        receiptUsage.cost += extraCost;
+      }
+      const reportAttribution: Record<string, BenchAttribution> = {};
+      for (const [key, value] of Object.entries(c.attribution)) {
+        reportAttribution[key] = { ...value };
       }
       if (canonicalize(receiptUsage as unknown as JsonValue) !== canonicalize(c.usage as unknown as JsonValue)) {
         mismatches.push(`${system.id} case ${c.id}: usage differs from receipt`);
       }
-      if (canonicalize(receiptAttribution as unknown as JsonValue) !== canonicalize(c.attribution as unknown as JsonValue)) {
+      if (canonicalize(receiptAttribution as unknown as JsonValue) !== canonicalize(reportAttribution as unknown as JsonValue)) {
         mismatches.push(`${system.id} case ${c.id}: attribution differs from receipt`);
       }
       const verified = await verifyReceipt(

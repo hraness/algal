@@ -40,6 +40,11 @@ export type BenchSystem = {
   executors: Executor[];
 };
 
+export type BenchPrice = {
+  input: number;
+  output: number;
+};
+
 export type BenchOptions = {
   systems: BenchSystem[];
   cases: BenchCase[];
@@ -47,14 +52,20 @@ export type BenchOptions = {
   store: Store;
   transports?: Record<string, Transport>;
   tools?: ToolRegistry;
+  /** Optional per-attribution price card, in USD per 1M tokens.
+   * Attribution keys are `usage.model` (e.g. "alibaba/qwen3.5-flash")
+   * or `effect.executor` for tool/scripted runs. */
+  prices?: Record<string, BenchPrice>;
 };
 
-/** Effect attribution: calls and tokens grouped by the recorded model, or
- * by executor id when the effect reports no model (tools, scripted runs). */
+/** Effect attribution: calls, tokens, and optional cost grouped by the
+ * recorded model, or by executor id when no model is reported (tools,
+ * scripted runs). */
 export type BenchAttribution = {
   calls: number;
   tokensIn: number;
   tokensOut: number;
+  cost: number;
 };
 
 export type BenchCaseResult = {
@@ -66,7 +77,7 @@ export type BenchCaseResult = {
   receiptDigest: Digest;
   effectCalls: number;
   work: { steps: number; agentCalls: number; units: number };
-  usage: { tokensIn: number; tokensOut: number };
+  usage: { tokensIn: number; tokensOut: number; cost: number };
   attribution: Record<string, BenchAttribution>;
 };
 
@@ -78,7 +89,7 @@ export type BenchSystemResult = {
   total: number;
   effectCalls: number;
   work: { steps: number; agentCalls: number; units: number };
-  usage: { tokensIn: number; tokensOut: number };
+  usage: { tokensIn: number; tokensOut: number; cost: number };
   attribution: Record<string, BenchAttribution>;
   cases: BenchCaseResult[];
 };
@@ -89,9 +100,10 @@ export type BenchReport = {
   workload: Digest;
   /** The full case list, so a verifier needs no config to check provenance. */
   cases: BenchCase[];
+  /** Optional USD-per-1M-token price card used to compute `cost`. */
+  prices?: Record<string, BenchPrice> | undefined;
   systems: BenchSystemResult[];
-  /** Non-dominated system ids on (passed ↑, total tokens ↓, effect
-   * calls ↓), sorted by passed desc then tokens asc then calls asc. */
+  /** Non-dominated system ids (passed ↑, cost signal ↓, calls ↓). */
   pareto: string[];
   digest: Digest;
 };
@@ -158,22 +170,42 @@ function caseArgs(
   return args;
 }
 
-function attribute(effects: EffectReceipt[]): {
-  usage: { tokensIn: number; tokensOut: number };
+function costFor(
+  price: BenchPrice | undefined,
+  tokensIn: number,
+  tokensOut: number,
+): number {
+  if (!price) return 0;
+  return (tokensIn * price.input + tokensOut * price.output) / 1_000_000;
+}
+
+function attribute(
+  effects: EffectReceipt[],
+  prices?: Record<string, BenchPrice>,
+): {
+  usage: { tokensIn: number; tokensOut: number; cost: number };
   attribution: Record<string, BenchAttribution>;
 } {
   const attribution: Record<string, BenchAttribution> = {};
-  const usage = { tokensIn: 0, tokensOut: 0 };
+  const usage = { tokensIn: 0, tokensOut: 0, cost: 0 };
   for (const effect of effects) {
     const key = effect.usage?.model ?? effect.executor;
-    const entry = (attribution[key] ??= { calls: 0, tokensIn: 0, tokensOut: 0 });
+    const entry = (attribution[key] ??= {
+      calls: 0,
+      tokensIn: 0,
+      tokensOut: 0,
+      cost: 0,
+    });
     entry.calls += 1;
     const tokensIn = effect.usage?.tokensIn ?? 0;
     const tokensOut = effect.usage?.tokensOut ?? 0;
     entry.tokensIn += tokensIn;
     entry.tokensOut += tokensOut;
+    const extraCost = costFor(prices?.[key], tokensIn, tokensOut);
+    entry.cost += extraCost;
     usage.tokensIn += tokensIn;
     usage.tokensOut += tokensOut;
+    usage.cost += extraCost;
   }
   return { usage, attribution };
 }
@@ -183,10 +215,11 @@ function mergeAttribution(
   from: Record<string, BenchAttribution>,
 ): void {
   for (const [key, value] of Object.entries(from)) {
-    const entry = (into[key] ??= { calls: 0, tokensIn: 0, tokensOut: 0 });
+    const entry = (into[key] ??= { calls: 0, tokensIn: 0, tokensOut: 0, cost: 0 });
     entry.calls += value.calls;
     entry.tokensIn += value.tokensIn;
     entry.tokensOut += value.tokensOut;
+    entry.cost += value.cost;
   }
 }
 
@@ -210,7 +243,7 @@ async function evaluateCase(
     const value = receipt.cells[source.cell]?.outputs?.[source.port];
     if (value !== undefined) outputs[name] = value;
   }
-  const { usage, attribution } = attribute(receipt.effects);
+  const { usage, attribution } = attribute(receipt.effects, opts.prices);
   return {
     id: c.id,
     passed: receipt.outcome === "complete" && canonicalize(outputs) === canonicalize(c.expect),
@@ -225,13 +258,17 @@ async function evaluateCase(
   };
 }
 
-/** Non-dominated systems on (passed ↑, total tokens ↓, effect calls ↓).
- * A system is dominated when another is at least as good on all three
- * axes and strictly better on one — deterministic, ties broken by id.
- * Scripted runs report no tokens, so effect calls carry the cost signal
- * that live runs would attribute to providers. */
-export function benchPareto(systems: BenchSystemResult[]): string[] {
+/** Non-dominated systems on (passed ↑, cost signal ↓, effect calls ↓).
+ * The cost signal is the dollar `cost` when prices were supplied,
+ * otherwise total token count. A system is dominated when another is at
+ * least as good on all three axes and strictly better on one —
+ * deterministic, ties broken by id. */
+export function benchPareto(
+  systems: BenchSystemResult[],
+  hasPrices = false,
+): string[] {
   const tokens = (s: BenchSystemResult) => s.usage.tokensIn + s.usage.tokensOut;
+  const cost = (s: BenchSystemResult) => (hasPrices ? s.usage.cost : tokens(s));
   const calls = (s: BenchSystemResult) => s.effectCalls;
   const kept = systems.filter(
     (s) =>
@@ -239,16 +276,16 @@ export function benchPareto(systems: BenchSystemResult[]): string[] {
         (o) =>
           o.id !== s.id &&
           o.passed >= s.passed &&
-          tokens(o) <= tokens(s) &&
+          cost(o) <= cost(s) &&
           calls(o) <= calls(s) &&
-          (o.passed > s.passed || tokens(o) < tokens(s) || calls(o) < calls(s)),
+          (o.passed > s.passed || cost(o) < cost(s) || calls(o) < calls(s)),
       ),
   );
   return kept
     .sort(
       (a, b) =>
         b.passed - a.passed ||
-        tokens(a) - tokens(b) ||
+        cost(a) - cost(b) ||
         calls(a) - calls(b) ||
         a.id.localeCompare(b.id),
     )
@@ -283,19 +320,21 @@ export async function runBenchmark(opts: BenchOptions): Promise<BenchReport> {
         (t, c) => ({
           tokensIn: t.tokensIn + c.usage.tokensIn,
           tokensOut: t.tokensOut + c.usage.tokensOut,
+          cost: t.cost + c.usage.cost,
         }),
-        { tokensIn: 0, tokensOut: 0 },
+        { tokensIn: 0, tokensOut: 0, cost: 0 },
       ),
       attribution,
       cases,
     });
   }
-  const base = {
+  const base: Omit<BenchReport, "digest"> = {
     contract: BENCH_CONTRACT,
     workload: digestCanonical(opts.cases as unknown as JsonValue),
     cases: opts.cases,
     systems,
-    pareto: benchPareto(systems),
+    pareto: benchPareto(systems, opts.prices !== undefined),
   };
+  if (opts.prices !== undefined) base.prices = opts.prices;
   return { ...base, digest: digestCanonical(base as unknown as JsonValue) };
 }

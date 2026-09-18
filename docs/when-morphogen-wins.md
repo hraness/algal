@@ -54,24 +54,33 @@ measured evidence and never saw the holdout during search.
 `refund`, `escalate`, or `monitor`. The correct decision depends on the
 account's charge ledger — which the model cannot see unless a tool retrieves it.
 
-The live Vercel AI Gateway run (Qwen 3.5 Flash and Claude Opus 5) shows where
-structure beats a single larger call:
+The live Vercel AI Gateway run is priced from aicharts.io / AI//COST and
+OpenRouter/Alibaba rate cards (USD per 1M tokens):
 
-| system | passed | effect calls | input tokens | output tokens | Pareto |
-|---|---|---|---|---|---|
-| cheap-single (qwen3.5, no evidence) | 4/6 | 6 | 759 | 10,366 | — |
-| frontier-single (claude-opus-5, no evidence) | 4/6 | 6 | 4,214 | 207 | yes |
-| **organism-cheap (qwen3.5 + ledger tool)** | **6/6** | **12** | **1,210** | **5,364** | **yes** |
-| organism-ensemble (qwen3.5 + qwen3.7 + tool) | 6/6 | 18 | 2,840 | 7,584 | — |
+|| system | passed | effect calls | cost | input tokens | output tokens | Pareto |
+|---|---|---:|---:|---:|---:|---|
+|| cheap-single (qwen3.5, no evidence) | 4/6 | 6 | $0.00371 | 759 | 14,087 | yes |
+|| frontier-single (claude-opus-5, no evidence) | 4/6 | 6 | $0.02625 | 4,214 | 207 | — |
+|| **organism-cheap (qwen3.5 + ledger tool)** | **6/6** | **12** | **$0.00131** | **1,210** | **4,716** | **yes** |
+|| organism-ensemble (qwen3.5 + qwen3.7 + tool) | 6/6 | 19 | $0.00676 | 3,692 | 6,776 | — |
 
-The Qwen Flash organism reaches **100% accuracy** because it retrieves the
-ledger. Claude Opus 5 without the ledger reaches only **67%** — and fails the
-same two evidence-only cases that Qwen fails when it also lacks the data. The
-model brand is not the deciding factor; the structure is.
+Price card:
 
-The Pareto frontier keeps both the organism (highest quality, still cheaper
-input tokens than Opus) and the frontier single call (fewest round-trips), so
-the choice between them is explicit.
+```json
+{
+  "alibaba/qwen3.5-flash": { "input": 0.065, "output": 0.26 },
+  "alibaba/qwen3.7-flash": { "input": 0.03, "output": 0.13 },
+  "anthropic/claude-opus-5": { "input": 5.00, "output": 25.00 }
+}
+```
+
+The Qwen Flash organism reaches **100% accuracy** for **$0.00131** because it
+retrieves the ledger. Claude Opus 5 without the ledger reaches only **67%** for
+**$0.02625** — 20× more expensive and still wrong on the same evidence-only
+cases. The single-Qwen baseline is also **67%**, but it costs **2.8× as much**
+as the organism and gets the same cases wrong. The Pareto set keeps the
+organism (best quality and best cost) and the single Qwen (fewest round-trips);
+the frontier model is not on the efficient frontier at all.
 
 ## What the numbers mean
 
@@ -82,9 +91,13 @@ the choice between them is explicit.
   calls are the tool lookups and the model decisions that use them.
 - **tokens in/out** are what the provider reported; scripted runs report zero,
   which is why the Pareto set also considers effect-call count.
+- **cost** is `tokensIn * inputPrice + tokensOut * outputPrice` per attribution
+  key, in USD. It is optional and comes from a `prices` map in the bench
+  config. Because it is derived from reported tokens, it is also checked during
+  `morphogen bench verify` when the price card is in the report.
 - **Pareto** means no other system is at least as good on all three axes
-  (quality ↑, tokens ↓, calls ↓) and strictly better on one. It is a claim that
-  survives `morphogen bench verify`.
+  (quality ↑, cost signal ↓, effect calls ↓) and strictly better on one. It is
+  a claim that survives `morphogen bench verify`.
 
 ## What to do next
 
@@ -93,6 +106,6 @@ the choice between them is explicit.
    --tools examples/invest/bench-invest.tools.json \
    --dir .morphogen --out invest-report.json` to see the same workload
    replayed deterministically.
-3. Replace the `gateway:` specs in `examples/invest/bench-invest-live.config.json`
-   and run it with `AI_GATEWAY_API_KEY` or a linked Vercel project to reproduce
-   the live result.
+3. Add the `prices` map to `examples/invest/bench-invest-priced.config.json`
+   (or use `examples/invest/bench-invest-live.config.json` for the live
+   gateway version) to reproduce the cost Pareto.

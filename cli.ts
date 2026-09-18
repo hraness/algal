@@ -42,7 +42,7 @@ import {
 import { parseFoundryReport, verifyFoundryReport } from "./src/foundry-verify";
 import { runFoundrySearch } from "./src/search";
 import { parseSearchReport, verifySearchReport } from "./src/search-verify";
-import { runBenchmark, type BenchCase, type BenchSystem } from "./src/bench";
+import { runBenchmark, type BenchCase, type BenchPrice, type BenchSystem } from "./src/bench";
 import { parseBenchReport, verifyBenchReport } from "./src/bench-verify";
 import {
   canonicalBytes,
@@ -105,7 +105,7 @@ usage:
   morphogen bench <config.json> [--modules <dir>] [--tools <file>] [--dir <path>] [--out <report.json>]
                                               measure several systems on one workload:
                                               quality, tokens, work, per-model attribution,
-                                              and the non-dominated pareto set
+                                              and the non-dominated pareto set (with optional prices)
   morphogen bench verify <report.json> [--dir <path>]
                                               replay every case receipt in a bench report
   morphogen bench inspect <report.json>       summarize a pareto comparison
@@ -981,7 +981,7 @@ async function main(): Promise<number> {
         diag(`loaded ${n} module(s) from ${flags.modules}`);
       }
       const config = asRecord(await readJson(configFile), "bench config");
-      const unknown = Object.keys(config).filter((k) => !["contract", "cases", "systems"].includes(k));
+      const unknown = Object.keys(config).filter((k) => !["contract", "cases", "systems", "prices"].includes(k));
       if (unknown.length > 0) {
         throw new MorphogenError("PARSE_FAILED", `bench config: unknown key "${unknown[0]}"`);
       }
@@ -1071,6 +1071,7 @@ async function main(): Promise<number> {
         flags.tools !== undefined
           ? await loadTools(String(flags.tools))
           : undefined;
+      const prices = parseBenchPrices(config.prices, "bench config.prices");
       const report = await runBenchmark({
         systems: systems.map((system) => ({
           ...system,
@@ -1084,6 +1085,7 @@ async function main(): Promise<number> {
         store,
         ...(transports ? { transports } : {}),
         ...(tools ? { tools } : {}),
+        ...(prices ? { prices } : {}),
       });
       if (flags.out !== undefined) {
         const { writeFile } = await import("node:fs/promises");
@@ -1441,6 +1443,33 @@ function asRecord(v: JsonValue, what: string): Record<string, JsonValue> {
     throw new MorphogenError("PARSE_FAILED", `${what} must be a JSON object`);
   }
   return v as Record<string, JsonValue>;
+}
+
+function parseBenchPrices(
+  raw: JsonValue | undefined,
+  at: string,
+): Record<string, BenchPrice> | undefined {
+  if (raw === undefined) return undefined;
+  const map = asRecord(raw, at);
+  const prices: Record<string, BenchPrice> = {};
+  for (const [key, value] of Object.entries(map)) {
+    if (key.length === 0 || key.length > 256) {
+      throw new MorphogenError("PARSE_FAILED", `${at} has an invalid price key`);
+    }
+    const p = asRecord(value, `${at}.${key}`);
+    const extra = Object.keys(p).filter((k) => !["input", "output"].includes(k));
+    if (extra.length > 0) {
+      throw new MorphogenError("PARSE_FAILED", `${at}.${key}: unknown key "${extra[0]}"`);
+    }
+    if (typeof p.input !== "number" || p.input < 0 || !Number.isFinite(p.input)) {
+      throw new MorphogenError("PARSE_FAILED", `${at}.${key}.input must be a non-negative number`);
+    }
+    if (typeof p.output !== "number" || p.output < 0 || !Number.isFinite(p.output)) {
+      throw new MorphogenError("PARSE_FAILED", `${at}.${key}.output must be a non-negative number`);
+    }
+    prices[key] = { input: p.input, output: p.output };
+  }
+  return prices;
 }
 
 function usageError(msg: string): never {
