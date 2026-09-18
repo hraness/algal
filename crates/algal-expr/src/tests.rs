@@ -333,9 +333,9 @@ fn map_filter_fold() {
 #[test]
 fn strings() {
     let e = Map::new();
-    // slen = UTF-8 bytes
-    assert_eq!(ok_eval(json!(["slen", "héllo"]), &e), json!(6));
-    assert_eq!(ok_eval(json!(["slen", "😀"]), &e), json!(4));
+    // slen = UTF-16 code units — matches JS .length and canonical key order
+    assert_eq!(ok_eval(json!(["slen", "héllo"]), &e), json!(5));
+    assert_eq!(ok_eval(json!(["slen", "😀"]), &e), json!(2));
     assert_eq!(ok_eval(json!(["sconcat", "a", "b", "c"]), &e), json!("abc"));
     assert_eq!(ok_eval(json!(["upper", "héllo"]), &e), json!("HéLLO"));
     assert_eq!(ok_eval(json!(["lower", "ABC"]), &e), json!("abc"));

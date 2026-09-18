@@ -3,8 +3,9 @@
 // A manifest is a finite typed graph: cells with declared ports, edges between
 // ports, budgets over the whole run, and an optional interface so the organism
 // can be embedded as a cell inside a larger organism. A manifest carries no
-// executable code: fn cells name registry refs and agent cells declare prompts,
-// context views, output contracts, and routes. The structure is the program.
+// host code: fn cells name registry refs, agent cells declare prompts and
+// contracts, and expr cells carry bounded contract-interpreted programs as
+// data (algal.expr.v1). The structure is the program.
 
 import { AlgalError } from "./errors";
 import { checkProgram } from "./expr";

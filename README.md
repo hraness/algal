@@ -14,8 +14,9 @@ programs are values — they can be stored, diffed, spawned as children, and
 passed between hosts. Every run emits a receipt that replays bit-for-bit
 offline, so results are auditable without provider access. Lineage is a fossil
 record in which every proposal, measurement, and promotion is addressed by its
-content. And a manifest carries no code — it can only name what the host
-admits, which makes an untrusted program safe to execute.
+content. And a manifest carries no host code — it can only name what the
+host or the contract admits, which makes an untrusted program safe to
+execute.
 
 It's early days, but ALGAL programs already squeeze real work out of small
 models: an organism built on Qwen Flash plus a ledger tool beat a single
@@ -98,7 +99,7 @@ with `bun scripts/civ.ts --live` for the first runnable civilization loop.
 
 An **organism** is a manifest (`algal.organism.v1`): a set of cells with
 declared ports, edges between ports, and budgets over the whole run. A manifest
-carries no executable code. It names things the host already admits.
+carries no host code. It names things the host or the contract already admits.
 
 Cell kinds:
 
@@ -106,6 +107,13 @@ Cell kinds:
 - `const` — a literal producer. Ports are declared values.
 - `fn` — a pure function from the host's registry (`echo.v1`, `tag.v1`,
   `coalesce.v1`, `pick.v1`, `format.v1` ship built in).
+- `expr` — a bounded pure `algal.expr.v1` program carried in the manifest
+  itself: contract-interpreted, fuel-metered, effect-free. Where `fn` names
+  host-registered functions, `expr` is the manifest's own data-transformation
+  language — arithmetic, conditionals, lexical `let`s, `get` paths,
+  `map`/`filter`/`fold`, strings — evaluated identically by both runtimes
+  (one Rust evaluator; native in the kernel, WASM in Bun). Output commits to
+  `out`; activation burns 100 + fuel work; verify replays by re-evaluation.
 - `tool` — a typed external effect resolved only from the host's tool registry.
   Read/write class, inputs, outputs, work cost, output bytes, timeout, and
   idempotency key are explicit; results and failures are receipted and replayed

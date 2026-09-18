@@ -24,8 +24,11 @@
   package dependency for something the contract can express.
 - Parse foreign values from `unknown` and reject unknown keys. Model invalid
   states out rather than checking them late.
-- The manifest is data and carries no code. `fn` cells resolve against the
-  host registry; agent cells resolve against an executor the host supplies.
+- The manifest is data and carries no host code. `fn` cells resolve against
+  the host registry; agent cells resolve against an executor the host
+  supplies; `expr` cells carry bounded `algal.expr.v1` programs that the
+  contract-owned evaluator (`crates/algal-expr`, one implementation for
+  both runtimes) interprets under fuel — data, not executables.
 - Receipts contain no wall-clock fields. `verify` must replay a run
   bit-for-bit; keep nondeterminism at the executor boundary only.
 - Bound every count, byte size, depth, and list. New contract fields need a

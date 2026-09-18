@@ -468,12 +468,17 @@ impl<'a> Eval<'a> {
                             _ => x >= y,
                         }
                     }
-                    (Value::String(x), Value::String(y)) => match op {
-                        "lt" => x < y,
-                        "lte" => x <= y,
-                        "gt" => x > y,
-                        _ => x >= y,
-                    },
+                    (Value::String(x), Value::String(y)) => {
+                        // UTF-16 code-unit order — the same order the
+                        // canonical layer uses for object keys.
+                        let ord = x.encode_utf16().cmp(y.encode_utf16());
+                        match op {
+                            "lt" => ord.is_lt(),
+                            "lte" => ord.is_le(),
+                            "gt" => ord.is_gt(),
+                            _ => ord.is_ge(),
+                        }
+                    }
                     _ => {
                         return Err(err_type(
                             op,
@@ -676,7 +681,10 @@ impl<'a> Eval<'a> {
             // ---------------------------------------------------- strings
             "slen" => {
                 let s = self.string(arr.get(1).unwrap_or(&Value::Null), op, 0)?;
-                Ok(Value::from(s.len() as u64))
+                // UTF-16 code units — the canonical layer orders keys in
+                // UTF-16 and JS string .length shares the unit; the spec
+                // pins code-unit length, not UTF-8 bytes.
+                Ok(Value::from(s.encode_utf16().count() as u64))
             }
             "sconcat" => {
                 let args = self.eval_args(arr)?;
