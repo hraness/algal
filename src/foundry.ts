@@ -7,6 +7,7 @@ import type { FnRegistry } from "./registry";
 import { runOrganism } from "./run";
 import type { Store } from "./store";
 import type { Transport } from "./transport";
+import type { ToolRegistry } from "./tools";
 import { canonicalize, type JsonValue } from "./values";
 
 export const FOUNDRY_CONTRACT = "morphogen.foundry.v1" as const;
@@ -67,6 +68,7 @@ export type FoundryOptions = {
   store: Store;
   executors: Executor[];
   transports?: Record<string, Transport>;
+  tools?: ToolRegistry;
   lineage?: FoundryLineage;
 };
 
@@ -79,6 +81,7 @@ export type GenerateCandidatesOptions = {
   store: Store;
   executors: Executor[];
   transports?: Record<string, Transport>;
+  tools?: ToolRegistry;
 };
 
 export type GeneratedCandidates = FoundryLineage & {
@@ -189,6 +192,7 @@ async function evaluateCase(
     store: opts.store,
     executors: opts.executors,
     ...(opts.transports ? { transports: opts.transports } : {}),
+    ...(opts.tools ? { tools: opts.tools } : {}),
   });
   const receiptDigest = await opts.store.putReceipt(receipt as unknown as JsonValue);
   const outputs = caseOutputs(candidate, receipt.cells);
@@ -233,6 +237,7 @@ export async function generateFoundryCandidates(
     store: opts.store,
     executors: opts.executors,
     ...(opts.transports ? { transports: opts.transports } : {}),
+    ...(opts.tools ? { tools: opts.tools } : {}),
   });
   const receiptDigest = await opts.store.putReceipt(receipt as unknown as JsonValue);
   if (receipt.outcome !== "complete") {

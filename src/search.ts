@@ -15,6 +15,7 @@ import {
 import type { FnRegistry } from "./registry";
 import type { Store } from "./store";
 import type { Transport } from "./transport";
+import type { ToolRegistry } from "./tools";
 import type { JsonValue } from "./values";
 
 export const SEARCH_CONTRACT = "morphogen.search.v1" as const;
@@ -49,6 +50,7 @@ export type SearchOptions = {
   store: Store;
   executors: Executor[];
   transports?: Record<string, Transport>;
+  tools?: ToolRegistry;
 };
 
 function feedback(generation: number, selection?: FoundrySelection): JsonValue {
@@ -98,6 +100,7 @@ export async function runFoundrySearch(opts: SearchOptions): Promise<SearchRepor
       store: opts.store,
       executors: opts.executors,
       ...(opts.transports ? { transports: opts.transports } : {}),
+      ...(opts.tools ? { tools: opts.tools } : {}),
     });
     const population = dedupe([...survivors, ...generated.candidates]);
     if (population.length > FOUNDRY_BOUNDS.maxCandidates) {
@@ -110,6 +113,7 @@ export async function runFoundrySearch(opts: SearchOptions): Promise<SearchRepor
       store: opts.store,
       executors: opts.executors,
       ...(opts.transports ? { transports: opts.transports } : {}),
+      ...(opts.tools ? { tools: opts.tools } : {}),
     });
     generations.push({
       generation,

@@ -131,6 +131,7 @@ export type Cell =
   | { id: string; kind: "input"; outputs: PortMap }
   | { id: string; kind: "const"; outputs: Record<PortName, PortType & { value: JsonValue }> }
   | { id: string; kind: "fn"; fn: string }
+  | { id: string; kind: "tool"; tool: string; budget?: { maxEffectMs?: number } }
   | {
       id: string;
       kind: "agent";
@@ -569,6 +570,30 @@ function parseCell(u: unknown, what: string): Cell {
         kind,
         fn: asString(reqField(obj, "fn", what), `${what}.fn`, BOUNDS.maxRefLen),
       };
+    }
+    case "tool": {
+      noUnknownKeys(obj, ["id", "kind", "tool", "budget"], what);
+      const cell: Cell = {
+        id,
+        kind,
+        tool: asString(reqField(obj, "tool", what), `${what}.tool`, BOUNDS.maxRefLen),
+      };
+      if (obj.budget !== undefined) {
+        const budget = asObject(obj.budget, `${what}.budget`);
+        noUnknownKeys(budget, ["maxEffectMs"], `${what}.budget`);
+        const maxEffectMs = optField(budget, "maxEffectMs");
+        cell.budget = maxEffectMs === undefined
+          ? {}
+          : {
+              maxEffectMs: asInt(
+                maxEffectMs,
+                `${what}.budget.maxEffectMs`,
+                1,
+                BOUNDS.maxEffectMs,
+              ),
+            };
+      }
+      return cell;
     }
     case "store":
     case "load":
@@ -1090,6 +1115,13 @@ export function manifestToJson(m: OrganismManifest): JsonObject {
       }
       case "fn":
         return { id: c.id, kind: c.kind, fn: c.fn };
+      case "tool":
+        return {
+          id: c.id,
+          kind: c.kind,
+          tool: c.tool,
+          ...(c.budget ? { budget: c.budget as unknown as JsonValue } : {}),
+        };
       case "store":
       case "load":
       case "spawn":

@@ -12,6 +12,7 @@ import {
 import type { FnRegistry } from "./registry";
 import { parseRunReceipt } from "./run";
 import type { Store } from "./store";
+import type { ToolRegistry } from "./tools";
 import { verifyReceipt } from "./verify";
 import { canonicalize, type JsonObject, type JsonValue } from "./values";
 
@@ -176,6 +177,7 @@ export async function verifyFoundryReport(
   value: unknown,
   store: Store,
   fns: FnRegistry,
+  tools?: ToolRegistry,
 ): Promise<FoundryVerifyReport> {
   const report = parseFoundryReport(value);
   const mismatches: string[] = [];
@@ -279,7 +281,14 @@ export async function verifyFoundryReport(
           mismatches.push(`case ${c.id}: usage differs from receipt`);
         }
       }
-      const verified = await verifyReceipt(receipt, manifestToJson(manifest), store, fns);
+      const verified = await verifyReceipt(
+        receipt,
+        manifestToJson(manifest),
+        store,
+        fns,
+        undefined,
+        tools,
+      );
       checkedReceipts++;
       if (!verified.ok) mismatches.push(`receipt ${c.receiptDigest}: ${verified.mismatches.join("; ")}`);
     }

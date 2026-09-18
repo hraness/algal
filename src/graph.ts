@@ -16,6 +16,7 @@ import { asDigest } from "./digest";
 import { parseOrganismManifest } from "./contract";
 import { unpackBundle } from "./bundle";
 import type { Transport } from "./transport";
+import type { ToolRegistry } from "./tools";
 import type { JsonValue } from "./values";
 
 export type CellPorts = { inputs: PortMap; outputs: PortMap };
@@ -52,6 +53,7 @@ export function cellSignature(
   cell: Cell,
   fns: FnRegistry,
   children: Map<string, CompiledOrganism>,
+  tools?: ToolRegistry,
 ): CellPorts {
   switch (cell.kind) {
     case "input":
@@ -75,6 +77,19 @@ export function cellSignature(
       return {
         inputs: { ...sig.signature.inputs },
         outputs: { ...sig.signature.outputs },
+      };
+    }
+    case "tool": {
+      const entry = tools?.get(cell.tool);
+      if (!entry) {
+        throw new MorphogenError(
+          "TOOL_UNKNOWN",
+          `cell "${cell.id}" references unknown tool "${cell.tool}"`,
+        );
+      }
+      return {
+        inputs: { ...entry.signature.inputs },
+        outputs: { ...entry.signature.outputs },
       };
     }
     case "agent":
@@ -310,6 +325,7 @@ export async function compileOrganism(
   store: Store,
   depth = 0,
   transports?: Record<string, Transport>,
+  tools?: ToolRegistry,
 ): Promise<CompiledOrganism> {
   if (depth > MAX_COMPILE_DEPTH) {
     throw new MorphogenError(
@@ -365,14 +381,14 @@ export async function compileOrganism(
     }
     children.set(
       cell.id,
-      await compileOrganism(sub, fns, store, depth + 1, transports),
+      await compileOrganism(sub, fns, store, depth + 1, transports, tools),
     );
   }
 
   // signatures
   const ports = new Map<string, CellPorts>();
   for (const cell of manifest.cells) {
-    ports.set(cell.id, cellSignature(cell, fns, children));
+    ports.set(cell.id, cellSignature(cell, fns, children, tools));
   }
 
   // interface integrity (top-level manifest interface)
@@ -561,10 +577,10 @@ export async function compileOrganism(
       }
     }
     for (const ref of (cell.kind === "gate" ? [] : cell.tools) ?? []) {
-      if (!fns.has(ref)) {
+      if (!fns.has(ref) && !tools?.has(ref)) {
         throw new MorphogenError(
-          "FN_UNKNOWN",
-          `cell "${cell.id}" declares unknown tool fn "${ref}"`,
+          "TOOL_UNKNOWN",
+          `cell "${cell.id}" declares unknown tool "${ref}"`,
         );
       }
     }

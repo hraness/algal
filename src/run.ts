@@ -34,6 +34,7 @@ import {
 import type { FnRegistry } from "./registry";
 import type { Store } from "./store";
 import type { Transport } from "./transport";
+import type { ToolRegistry } from "./tools";
 import { digestCanonical, type Digest } from "./digest";
 import {
   canonicalBytes,
@@ -105,6 +106,7 @@ export type RunOptions = {
   fns: FnRegistry;
   store: Store;
   executors: Executor[];
+  tools?: ToolRegistry;
   /** Named transports for `via` cells — remote manifest resolution. */
   transports?: Record<string, Transport>;
   /** Provenance replay: cell path → transport name recorded by the run
@@ -117,6 +119,7 @@ export type RunOptions = {
    * default — the failure replays too). A live slot may have been
    * overwritten since; the record is authoritative. */
   replaySlots?: Record<string, { value?: JsonValue; missing?: boolean }>;
+  replayToolEffects?: EffectReceipt[];
 };
 
 type EdgeState = "pending" | "delivered" | "dead";
@@ -131,6 +134,7 @@ type RunContext = {
   work: { steps: number; agentCalls: number; units: number };
   failure?: { code: ErrorCode; message: string; path?: string };
   seq: number;
+  toolReplay: Map<Digest, EffectReceipt[]>;
 };
 
 export async function runOrganism(opts: RunOptions): Promise<RunReceipt> {
@@ -143,7 +147,13 @@ export async function runOrganism(opts: RunOptions): Promise<RunReceipt> {
     events: [],
     work: { steps: 0, agentCalls: 0, units: 0 },
     seq: 0,
+    toolReplay: new Map(),
   };
+  for (const effect of opts.replayToolEffects ?? []) {
+    const queue = ctx.toolReplay.get(effect.requestDigest) ?? [];
+    queue.push(effect);
+    ctx.toolReplay.set(effect.requestDigest, queue);
+  }
   emit(ctx, { kind: "run.start", digest: manifestDigest });
   const compiled = await compileOrganism(
     opts.manifest,
@@ -151,6 +161,7 @@ export async function runOrganism(opts: RunOptions): Promise<RunReceipt> {
     opts.store,
     0,
     opts.transports,
+    opts.tools,
   );
   const outcome = await runInto(compiled, opts.args ?? {}, "", ctx, 0);
   emit(ctx, { kind: "run.end", outcome });
@@ -544,6 +555,7 @@ async function activate(
         ctx.opts.store,
         depth + 1,
         ctx.opts.transports,
+        ctx.opts.tools,
       );
       const rawArgs = inputs.args ?? {};
       if (
@@ -581,6 +593,75 @@ async function activate(
         if (v !== undefined) checkValue(v, decl, `${cell.id}.${p}`);
       }
       return { outputs: entry.fn(inputs) };
+    }
+    case "tool": {
+      const entry = ctx.opts.tools?.get(cell.tool);
+      if (!entry) {
+        throw new MorphogenError("TOOL_UNKNOWN", `tool "${cell.tool}" is not configured`);
+      }
+      const requestDigest = digestCanonical({
+        contract: "morphogen.tool-effect.v1",
+        path,
+        tool: cell.tool,
+        effect: entry.signature.effect,
+        inputs,
+      } as unknown as JsonValue);
+      emit(ctx, { kind: "effect", path, digest: requestDigest });
+      const replay = ctx.toolReplay.get(requestDigest)?.shift();
+      if (replay) {
+        ctx.effects.push(replay);
+        if (replay.error) throw new MorphogenError(replay.error.code, replay.error.message);
+        ctx.work.units += entry.signature.cost + canonicalBytes(replay.output!);
+        return { outputs: replay.output as Record<string, JsonValue>, effectDigest: requestDigest };
+      }
+      const controller = new AbortController();
+      const timeout = cell.budget?.maxEffectMs;
+      const timer = timeout === undefined ? undefined : setTimeout(() => controller.abort(), timeout);
+      try {
+        const execute = entry.tool(inputs, {
+          requestDigest,
+          idempotencyKey: requestDigest,
+          ...(timeout !== undefined ? { signal: controller.signal } : {}),
+        });
+        const outputs = timeout === undefined
+          ? await execute
+          : await Promise.race([
+              execute,
+              new Promise<never>((_, reject) => controller.signal.addEventListener(
+                "abort",
+                () => reject(new MorphogenError(
+                  "BUDGET_EXHAUSTED",
+                  `tool cell "${cell.id}" exceeded maxEffectMs ${timeout}`,
+                )),
+                { once: true },
+              )),
+            ]);
+        const bytes = canonicalBytes(outputs as unknown as JsonValue);
+        if (bytes > entry.signature.maxOutputBytes) {
+          throw new MorphogenError(
+            "BUDGET_EXHAUSTED",
+            `tool cell "${cell.id}" output ${bytes}B exceeds ${entry.signature.maxOutputBytes}B`,
+          );
+        }
+        ctx.work.units += entry.signature.cost + bytes;
+        ctx.effects.push({
+          requestDigest,
+          output: outputs as unknown as JsonValue,
+          executor: `tool:${cell.tool}`,
+        });
+        return { outputs, effectDigest: requestDigest };
+      } catch (error) {
+        const report = errorReport(error);
+        ctx.effects.push({
+          requestDigest,
+          error: { code: report.code === "INTERNAL" ? "TOOL_FAILED" : report.code, message: report.message },
+          executor: `tool:${cell.tool}`,
+        });
+        if (error instanceof MorphogenError) throw error;
+        throw new MorphogenError("TOOL_FAILED", report.message);
+      } finally {
+        if (timer !== undefined) clearTimeout(timer);
+      }
     }
     case "agent":
     case "classifier":
@@ -832,9 +913,11 @@ async function activate(
         // bounded callback into the automaton: run the declared fn, log the
         // result, re-request with the updated tool log
         const call = settled;
-        const entry = ctx.opts.fns.get(call.fn)!;
-        ctx.work.units += entry.signature.cost;
-        for (const [p, decl] of Object.entries(entry.signature.inputs)) {
+        const fn = ctx.opts.fns.get(call.fn);
+        const external = ctx.opts.tools?.get(call.fn);
+        const signature = fn?.signature ?? external?.signature;
+        if (!signature) throw new MorphogenError("TOOL_UNKNOWN", `tool "${call.fn}" is not configured`);
+        for (const [p, decl] of Object.entries(signature.inputs)) {
           const v = (call.inputs as Record<string, JsonValue>)[p];
           if (v === undefined) {
             if (!decl.optional) {
@@ -847,7 +930,73 @@ async function activate(
           }
           checkValue(v, decl, `${cell.id}.tool.${p}`);
         }
-        const toolOut = entry.fn(call.inputs as Record<string, JsonValue>);
+        let toolOut: Record<string, JsonValue>;
+        if (fn) {
+          ctx.work.units += fn.signature.cost;
+          toolOut = fn.fn(call.inputs as Record<string, JsonValue>);
+        } else {
+          const tool = external!;
+          const toolDigest = digestCanonical({
+            contract: "morphogen.tool-effect.v1",
+            path: `${path}/t${turn}`,
+            tool: call.fn,
+            effect: tool.signature.effect,
+            inputs: call.inputs,
+          } as unknown as JsonValue);
+          emit(ctx, { kind: "effect", path, digest: toolDigest });
+          const replay = ctx.toolReplay.get(toolDigest)?.shift();
+          if (replay) {
+            ctx.effects.push(replay);
+            if (replay.error) throw new MorphogenError(replay.error.code, replay.error.message);
+            toolOut = replay.output as Record<string, JsonValue>;
+          } else {
+            const controller = new AbortController();
+            const timeout = cell.budget?.maxEffectMs;
+            const timer = timeout === undefined ? undefined : setTimeout(() => controller.abort(), timeout);
+            try {
+              const execute = tool.tool(call.inputs as Record<string, JsonValue>, {
+                requestDigest: toolDigest,
+                idempotencyKey: toolDigest,
+                ...(timeout !== undefined ? { signal: controller.signal } : {}),
+              });
+              toolOut = timeout === undefined
+                ? await execute
+                : await Promise.race([
+                    execute,
+                    new Promise<never>((_, reject) => controller.signal.addEventListener(
+                      "abort",
+                      () => reject(new MorphogenError(
+                        "BUDGET_EXHAUSTED",
+                        `agent tool ${call.fn} exceeded maxEffectMs ${timeout}`,
+                      )),
+                      { once: true },
+                    )),
+                  ]);
+              ctx.effects.push({
+                requestDigest: toolDigest,
+                output: toolOut as unknown as JsonValue,
+                executor: `tool:${call.fn}`,
+              });
+            } catch (error) {
+              const report = errorReport(error);
+              const code = report.code === "INTERNAL" ? "TOOL_FAILED" : report.code;
+              ctx.effects.push({
+                requestDigest: toolDigest,
+                error: { code, message: report.message },
+                executor: `tool:${call.fn}`,
+              });
+              throw new MorphogenError(code, report.message);
+            } finally {
+              if (timer !== undefined) clearTimeout(timer);
+            }
+          }
+          const bytes = canonicalBytes(toolOut as unknown as JsonValue);
+          if (bytes > tool.signature.maxOutputBytes) {
+            throw new MorphogenError("BUDGET_EXHAUSTED", `tool ${call.fn} output exceeds its byte bound`);
+          }
+          ctx.work.units += tool.signature.cost + bytes;
+        }
+        checkOutputs(cell, signature.outputs, toolOut);
         toolLog.push({ fn: call.fn, inputs: call.inputs, output: toolOut as JsonValue });
       }
     }

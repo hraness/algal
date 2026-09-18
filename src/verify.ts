@@ -14,6 +14,7 @@ import {
 import { manifestToJson, parseOrganismManifest } from "./contract";
 import type { Store } from "./store";
 import type { Transport } from "./transport";
+import type { ToolRegistry } from "./tools";
 import { MorphogenError } from "./errors";
 import { canonicalize, type JsonValue } from "./values";
 
@@ -30,6 +31,7 @@ export async function verifyReceipt(
   store: Store,
   fns: FnRegistry = builtinRegistry(),
   transports?: Record<string, Transport>,
+  tools?: ToolRegistry,
 ): Promise<VerifyReport> {
   const original = parseRunReceipt(receiptJson);
   const manifest = parseOrganismManifest(manifestJson);
@@ -65,7 +67,9 @@ export async function verifyReceipt(
     executors: [replayExecutor(original.effects)],
     replayVia,
     replaySlots,
+    replayToolEffects: original.effects.filter((effect) => effect.executor.startsWith("tool:")),
     ...(transports ? { transports } : {}),
+    ...(tools ? { tools } : {}),
   });
 
   const mismatches = diffReceipts(original, rerun);

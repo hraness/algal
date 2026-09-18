@@ -16,6 +16,7 @@ import {
   type SearchReport,
 } from "./search";
 import type { Store } from "./store";
+import type { ToolRegistry } from "./tools";
 import { verifyReceipt } from "./verify";
 import type { JsonObject, JsonValue } from "./values";
 
@@ -97,13 +98,14 @@ export async function verifySearchReport(
   value: unknown,
   store: Store,
   fns: FnRegistry,
+  tools?: ToolRegistry,
 ): Promise<SearchVerifyReport> {
   const report = parseSearchReport(value);
   const mismatches: string[] = [];
   const { digest: claimed, ...base } = report;
   const computed = digestCanonical(base as unknown as JsonValue);
   if (claimed !== computed) mismatches.push(`digest: claimed ${claimed}, computed ${computed}`);
-  const final = await verifyFoundryReport(report.result, store, fns);
+  const final = await verifyFoundryReport(report.result, store, fns, tools);
   if (!final.ok) mismatches.push(...final.mismatches.map((mismatch) => `result: ${mismatch}`));
   let checkedReceipts = final.checkedReceipts;
   let previousWinner: Digest | undefined;
@@ -144,7 +146,7 @@ export async function verifySearchReport(
         ...synthetic,
         digest: digestCanonical(synthetic as unknown as JsonValue),
       };
-      const verified = await verifyFoundryReport(foundry, store, fns);
+      const verified = await verifyFoundryReport(foundry, store, fns, tools);
       checkedReceipts += verified.checkedReceipts;
       if (!verified.ok) {
         mismatches.push(...verified.mismatches.map((mismatch) => `generation ${generation.generation}: ${mismatch}`));
@@ -163,6 +165,8 @@ export async function verifySearchReport(
         manifestToJson(generatorManifest),
         store,
         fns,
+        undefined,
+        tools,
       );
       checkedReceipts++;
       if (!verified.ok) {

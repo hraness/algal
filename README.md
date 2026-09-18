@@ -21,6 +21,11 @@ Cell kinds:
 - `const` — a literal producer. Ports are declared values.
 - `fn` — a pure function from the host's registry (`echo.v1`, `tag.v1`,
   `coalesce.v1`, `pick.v1`, `format.v1` ship built in).
+- `tool` — a typed external effect resolved only from the host's tool registry.
+  Read/write class, inputs, outputs, work cost, output bytes, timeout, and
+  idempotency key are explicit; results and failures are receipted and replayed
+  without repeating live IO. Agent cells may request the same admitted tools
+  during bounded turns alongside pure function callbacks.
 - `agent` — a bounded model call: a declared context view, a prompt, a typed
   output contract, an optional route, declared tool callbacks, and byte, turn,
   and wall-clock (`budget.maxEffectMs`) budgets — a hung executor becomes a

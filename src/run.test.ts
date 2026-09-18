@@ -475,7 +475,7 @@ describe("scheduler", () => {
         store: new MemoryStore(),
         executors: [],
       }),
-    ).rejects.toThrowError(/unknown tool fn/);
+    ).rejects.toThrowError(/unknown tool/);
   });
 
   test("shadow classifier records the decision but takes the declared label", async () => {

@@ -615,4 +615,29 @@ describe("slot cells", () => {
       }),
     ).toThrow("unknown key");
   });
+
+  test("tool cells parse, bound time, and round-trip", () => {
+    const raw = {
+      contract: "morphogen.organism.v1",
+      key: "organism:tool",
+      name: "Tool",
+      cells: [{
+        id: "lookup",
+        kind: "tool",
+        tool: "records.lookup.v1",
+        budget: { maxEffectMs: 1000 },
+      }],
+      edges: [],
+    };
+    const parsed = parseOrganismManifest(raw);
+    expect(manifestToJson(parseOrganismManifest(manifestToJson(parsed)))).toEqual(manifestToJson(parsed));
+    expect(() => parseOrganismManifest({
+      ...raw,
+      cells: [{ id: "lookup", kind: "tool", tool: "records.lookup.v1", budget: { maxEffectMs: 0 } }],
+    })).toThrow("maxEffectMs");
+    expect(() => parseOrganismManifest({
+      ...raw,
+      cells: [{ id: "lookup", kind: "tool", tool: "records.lookup.v1", shell: "curl" }],
+    })).toThrow("unknown key");
+  });
 });
