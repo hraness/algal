@@ -80,6 +80,22 @@ enum Commands {
         #[arg(long)]
         goals: Option<PathBuf>,
     },
+    Bench {
+        #[command(subcommand)]
+        command: Option<BenchCommand>,
+        /// `morphogen.bench.config.v1` file
+        config: Option<PathBuf>,
+        #[arg(long)]
+        out: Option<PathBuf>,
+        #[arg(long)]
+        apple_bridge: Option<PathBuf>,
+        #[arg(long)]
+        tools: Option<PathBuf>,
+        #[arg(long)]
+        modules: Option<PathBuf>,
+        #[arg(long)]
+        transports: Option<PathBuf>,
+    },
     Run {
         manifest: PathBuf,
         #[command(flatten)]
@@ -153,6 +169,20 @@ enum Commands {
     Acp {
         #[command(flatten)]
         options: Execution,
+    },
+}
+
+#[derive(Subcommand)]
+enum BenchCommand {
+    Verify {
+        report: PathBuf,
+        #[arg(long)]
+        tools: Option<PathBuf>,
+        #[arg(long)]
+        modules: Option<PathBuf>,
+    },
+    Inspect {
+        report: PathBuf,
     },
 }
 
@@ -447,6 +477,83 @@ async fn execute(cli: Cli) -> Result<bool> {
             )?;
             Ok(true)
         }
+        Commands::Bench {
+            command,
+            config,
+            out,
+            apple_bridge,
+            tools,
+            modules,
+            transports,
+        } => match command {
+            Some(BenchCommand::Verify {
+                report,
+                tools,
+                modules,
+            }) => {
+                let mut store = Store::open(&cli.dir, false)?;
+                if let Some(path) = modules {
+                    store.load_modules(&path)?;
+                }
+                let mut host = Host::default();
+                if let Some(path) = tools {
+                    host.load_tools(&path)?;
+                }
+                let result =
+                    algal::bench::verify(&load(&report, MAX_DOCUMENT_BYTES)?, &store, &host)
+                        .await?;
+                emit(&result)?;
+                Ok(result["ok"] == true)
+            }
+            Some(BenchCommand::Inspect { report }) => {
+                emit(&algal::bench::inspect(&load(&report, MAX_DOCUMENT_BYTES)?)?)?;
+                Ok(true)
+            }
+            None => {
+                let config = config.ok_or_else(|| {
+                    Error::invalid(
+                        "usage: algal bench <config.json> | bench verify|inspect <report.json>",
+                    )
+                })?;
+                let mut store = Store::open(&cli.dir, true)?;
+                if let Some(path) = modules {
+                    store.load_modules(&path)?;
+                }
+                let mut host = Host::default();
+                if let Some(path) = tools {
+                    host.load_tools(&path)?;
+                }
+                let mut transports_map = Transports::new();
+                if let Some(file) = transports {
+                    let value = load(&file, 65_536)?;
+                    if object(&value)?.len() > 16 {
+                        return Err(Error::limit("transport count"));
+                    }
+                    for (name, target) in object(&value)? {
+                        let target = target
+                            .as_str()
+                            .ok_or_else(|| Error::invalid("transport directory"))?;
+                        if target.contains("://") {
+                            return Err(Error::new(
+                                "EFFECT_UNBOUND",
+                                "native transports currently require local bundle directories",
+                            ));
+                        }
+                        transports_map.insert(name.clone(), PathBuf::from(target));
+                    }
+                }
+                let (cases, systems, prices) =
+                    algal::bench::load_config(&config, apple_bridge.as_deref())?;
+                let report =
+                    algal::bench::run(&cases, &systems, prices, &mut store, &host, &transports_map)
+                        .await?;
+                if let Some(path) = out {
+                    std::fs::write(&path, canonical(&report)?)?;
+                }
+                emit(&report)?;
+                Ok(true)
+            }
+        },
         Commands::Run {
             manifest: file,
             options,

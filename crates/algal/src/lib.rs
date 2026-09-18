@@ -1,4 +1,5 @@
 pub mod acp;
+pub mod bench;
 pub mod canonical;
 pub mod civilization;
 pub mod context;

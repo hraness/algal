@@ -375,13 +375,20 @@ persisted and replayable.
 ```sh
 bun run cli bench examples/bench.config.json --dir .algal --out bench-report.json
 bun run cli bench inspect bench-report.json
-bun run cli bench verify bench-report.json --dir .morphogen
+bun run cli bench verify bench-report.json --dir .algal
+
+# or natively — same config, same report contract
+algal bench examples/bench.config.json --dir .algal --out bench-report.json
+algal bench inspect bench-report.json
+algal bench verify bench-report.json --dir .algal
 ```
 
 A `morphogen.bench.config.v1` file names case `args`/`expect` pairs and systems
 whose `executors` map names to `gateway:<provider/model>` (Vercel AI Gateway),
-`scripted:<file>`, or `cmd:<command>` specs; the first entry is the default and
-named entries answer `route.preset`. The report records per-case results, work,
+`scripted:<file>`, or `cmd:<command>` specs — the native CLI also accepts
+`apple` for the on-device bridge. Named entries answer `route.preset` /
+`route.provider`; the fallback is the first listed entry (in the native CLI,
+the first name alphabetically). The report records per-case results, work,
 token usage, per-model effect attribution, and the non-dominated pareto set on
 (quality ↑, tokens ↓, effect calls ↓). `examples/bench.config.json` runs it
 deterministically; `examples/bench-live.config.json` swaps the scripted lanes
