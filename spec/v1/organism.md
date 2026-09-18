@@ -1,7 +1,10 @@
 # algal.organism.v1
 
 The organism manifest contract. A manifest is data: it can be checked,
-canonicalized, hashed, and embedded. It can never carry code.
+canonicalized, hashed, and embedded. It never carries host code — the
+only programs it may carry are bounded, contract-owned ones
+(`algal.expr.v1`), interpreted under fuel by the contract's evaluator
+rather than the host language.
 
 ## Manifest
 
@@ -39,6 +42,7 @@ canonicalized, hashed, and embedded. It can never carry code.
 | `input` | entry point; run args supply values | declared `outputs` |
 | `const` | literal producer | `outputs` entries carry `type` + `value` |
 | `fn` | pure registered function | inherited from the host registry signature |
+| `expr` | bounded pure `algal.expr.v1` program carried in the manifest | declared `inputs`; one output port `out` |
 | `agent` | bounded model call | declared `inputs`; one output port `out` |
 | `classifier` | agent restricted to `choice` output | same as agent |
 | `gate` | approval point — a `choice` effect routed to a human/policy, not a model | same as agent; no `tools`/`shadow` |
@@ -160,6 +164,37 @@ dangling pointer.
   through `on:"fail"`). Since attempts share a request digest, the receipt's
   effects list is ordered: replay serves them in order and reproduces the
   run bit-for-bit.
+
+### expr cells
+
+```json
+{
+  "id": "rate",
+  "kind": "expr",
+  "inputs": { "ticket": "json", "base": "json" },
+  "expr": {
+    "contract": "algal.expr.v1",
+    "program": [
+      "let", "amt", ["get", "ticket", "amount"],
+      ["if", ["gt", ["mul", ["get", "amt"], ["get", "base"]], 1000],
+        "high", "std"]
+    ]
+  },
+  "output": { "kind": "choice", "labels": ["high", "std"] }
+}
+```
+
+Where `fn` cells compose functions the host registry owns, `expr` cells
+carry the program itself — a bounded pure `algal.expr.v1` program
+(spec/v1/expr.md) evaluated against the delivered `inputs`. The result
+commits to the single port `out` under the `output` contract (same shape
+as agent output; `onMiss` is rejected — a program returns exact values).
+Static checking at parse covers op names, arity, bounds, and literal
+`get` names against the declared input ports. Activation burns 100 + fuel
+work units (`budgets`-bounded; the per-activation fuel ceiling is
+`BOUNDS.maxExprFuel`) and produces an ordinary cell commit — no effect
+request, no executor — so verification replays the program by
+re-evaluation.
 
 ### repeat cells
 
@@ -443,8 +478,9 @@ A bundle is a portable closure: `{"contract","root","manifests","values"}`.
 cells) and every payload named by a `const` `ref` port, collecting each into
 a digest-keyed map. `unpack` installs the closure into a store — every entry
 re-hashes against its claimed key (`DIGEST_MISMATCH` on tamper) and the root
-must be among the manifests. A bundle is data with no code: the unpacked
-organism runs exactly as if its modules had been loaded individually.
+must be among the manifests. A bundle is data with no host code: the
+unpacked organism runs exactly as if its modules had been loaded
+individually.
 
 ## Reserved, not implemented
 

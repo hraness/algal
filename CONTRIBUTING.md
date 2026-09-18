@@ -19,8 +19,10 @@ editing: `bun test src/run.test.ts`.
 ## Rules of the house
 
 - Parse every foreign value from `unknown`; reject unknown keys.
-- Keep the manifest free of code. New behavior lands as registry fns, contract
-  fields, or executor adapters — never eval, never string-loaded code.
+- Keep the manifest free of host code. New behavior lands as registry fns,
+  contract fields, bounded contract-interpreted programs (`algal.expr.v1`
+  cells — data the shared evaluator runs under fuel), or executor adapters —
+  never eval, never string-loaded code.
 - No wall-clock values in receipts. Runs must replay bit-for-bit with fixed
   effect receipts.
 - Bound everything: counts, bytes, depth, labels, prompts.

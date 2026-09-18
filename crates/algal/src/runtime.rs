@@ -10,6 +10,11 @@ use crate::{
 use serde_json::{Map, Value, json};
 use std::{collections::BTreeSet, future::Future, pin::Pin};
 
+/// Fuel budget for a single `expr` cell activation — mirrors
+/// `BOUNDS.maxExprFuel` in src/contract.ts. The run-level `max_work` budget
+/// still bounds total burn; this caps the synchronous eval itself.
+const MAX_EXPR_FUEL: u64 = 100_000;
+
 pub fn receipt_digest(receipt: &Value) -> Result<String> {
     let mut body = receipt.clone();
     body.as_object_mut()
@@ -419,6 +424,25 @@ impl Runtime<'_> {
                 let (outputs, extra) = registry::invoke(function, inputs)?;
                 self.work += extra;
                 Ok(json!({"outputs":outputs}))
+            }
+            "expr" => {
+                let env = inputs.as_object().cloned().unwrap_or_default();
+                match algal_expr::run(&cell["expr"]["program"], &env, MAX_EXPR_FUEL) {
+                    Ok((value, fuel)) => {
+                        self.work += fuel as usize;
+                        Ok(json!({"outputs":{"out":value}}))
+                    }
+                    Err((e, fuel)) => {
+                        self.work += fuel as usize;
+                        Err(if e.code == "EXPR_FUEL" {
+                            Error::limit("expr fuel exhausted")
+                        } else {
+                            let detail =
+                                canonical(&e.to_json()).unwrap_or_else(|_| e.to_json().to_string());
+                            Error::new("EXPR_FAILED", format!("expr {detail}"))
+                        })
+                    }
+                }
             }
             "store" => {
                 self.work += canonical(&inputs["data"])?.len();

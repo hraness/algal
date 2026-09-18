@@ -5,15 +5,20 @@
   (`verify.ts`), Vercel AI Gateway execution (`gateway.ts`), typed external
   tools (`tools.ts`), foundry evaluation and search (`foundry.ts`,
   `search.ts`), benchmark comparison (`bench.ts`, `bench-verify.ts`),
-  bundles (`bundle.ts`), transports (`transport.ts`), canonical values and
-  digests, and colocated tests.
+  bundles (`bundle.ts`), transports (`transport.ts`), the `algal.expr.v1`
+  WASM loader (`expr.ts` + committed `algal_expr.wasm`), canonical values
+  and digests, and colocated tests.
+- `crates/algal-expr/` — the one expression evaluator (Rust): linked into
+  the kernel as an rlib and compiled to `wasm32-unknown-unknown` for Bun.
+  `scripts/build-expr-wasm.sh` rebuilds `src/algal_expr.wasm` (needs a
+  rustup toolchain with the wasm target; pins `RUSTC` past Homebrew).
 - `cli.ts` — the Bun CLI (`run`, `check`, `verify`, `inspect`, `explain`,
   `diff`, `foundry`, `bench`, `runs`, `digest`, `store`, `manifests`,
   `manifest`, `slots`, `slot`, `pack`, `unpack`, `example`, `suite`).
 - `index.ts` — the package's public surface.
 - `examples/` — bundled manifests and scripted responses used by `suite`.
-- `spec/v1/organism.md`, `spec/v1/foundry.md`, `spec/v1/search.md`,
-  `spec/v1/bench.md` — authoritative contract prose.
+- `spec/v1/organism.md`, `spec/v1/expr.md`, `spec/v1/foundry.md`,
+  `spec/v1/search.md`, `spec/v1/bench.md` — authoritative contract prose.
 - `site/` — the static algal.dev source; `build.ts` writes `site/dist`.
 - `README.md`, `CONTRIBUTING.md`, `SECURITY.md` — the public contract.
 
@@ -24,8 +29,11 @@
   package dependency for something the contract can express.
 - Parse foreign values from `unknown` and reject unknown keys. Model invalid
   states out rather than checking them late.
-- The manifest is data and carries no code. `fn` cells resolve against the
-  host registry; agent cells resolve against an executor the host supplies.
+- The manifest is data and carries no host code. `fn` cells resolve against
+  the host registry; agent cells resolve against an executor the host
+  supplies; `expr` cells carry bounded `algal.expr.v1` programs that the
+  contract-owned evaluator (`crates/algal-expr`, one implementation for
+  both runtimes) interprets under fuel — data, not executables.
 - Receipts contain no wall-clock fields. `verify` must replay a run
   bit-for-bit; keep nondeterminism at the executor boundary only.
 - Bound every count, byte size, depth, and list. New contract fields need a

@@ -1,0 +1,24 @@
+[package]
+name = "algal-expr"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Bounded pure JSON-expression evaluator for algal.expr.v1 programs"
+
+# Not workspace = true: the workspace forbids unsafe_code, which the wasm32
+# FFI shim legitimately requires. The evaluator itself contains no unsafe —
+# only the #[cfg(target_arch = "wasm32")] FFI module does.
+
+[lints.clippy]
+# A panic is a wasm trap — an opaque crash across the ABI instead of a typed
+# EXPR_* error. The evaluator is panic-free by construction; keep it that way.
+unwrap_used = "deny"
+expect_used = "deny"
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+ryu-js = "=1.0.2"
+serde_json = "=1.0.145"

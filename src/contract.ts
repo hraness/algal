@@ -3,10 +3,12 @@
 // A manifest is a finite typed graph: cells with declared ports, edges between
 // ports, budgets over the whole run, and an optional interface so the organism
 // can be embedded as a cell inside a larger organism. A manifest carries no
-// executable code: fn cells name registry refs and agent cells declare prompts,
-// context views, output contracts, and routes. The structure is the program.
+// host code: fn cells name registry refs, agent cells declare prompts and
+// contracts, and expr cells carry bounded contract-interpreted programs as
+// data (algal.expr.v1). The structure is the program.
 
 import { AlgalError } from "./errors";
+import { checkProgram } from "./expr";
 import type { Digest } from "./digest";
 import {
   asArray,
@@ -58,6 +60,8 @@ export const BOUNDS = {
   maxTransports: 16,
   /** Per-effect-call wall-clock bound ceiling — 10 minutes. */
   maxEffectMs: 600_000,
+  /** Fuel budget for a single `expr` cell activation. */
+  maxExprFuel: 100_000,
   /** A single port value — produced or collected — never exceeds this.
    * Larger payloads go through `store` cells and `ref` tokens. */
   maxValueBytes: 262_144,
@@ -131,6 +135,18 @@ export type Cell =
   | { id: string; kind: "input"; outputs: PortMap }
   | { id: string; kind: "const"; outputs: Record<PortName, PortType & { value: JsonValue }> }
   | { id: string; kind: "fn"; fn: string }
+  /** `expr` evaluates a bounded pure `algal.expr.v1` program over its input
+   * ports — where `fn` composes host-registered functions, `expr` carries the
+   * program itself as manifest data: contract-interpreted, fuel-metered, and
+   * effect-free, so replay is exact. The value binds to the single port
+   * `out`; `output` follows the agent output contract. */
+  | {
+      id: string;
+      kind: "expr";
+      inputs: PortMap;
+      expr: { contract: "algal.expr.v1"; program: JsonValue };
+      output: AgentOutput;
+    }
   | { id: string; kind: "tool"; tool: string; budget?: { maxEffectMs?: number } }
   | {
       id: string;
@@ -569,6 +585,50 @@ function parseCell(u: unknown, what: string): Cell {
         id,
         kind,
         fn: asString(reqField(obj, "fn", what), `${what}.fn`, BOUNDS.maxRefLen),
+      };
+    }
+    case "expr": {
+      noUnknownKeys(obj, ["id", "kind", "inputs", "expr", "output"], what);
+      const inputs =
+        obj.inputs === undefined
+          ? {}
+          : parsePortMap(obj.inputs, `${what}.inputs`);
+      const expr = asObject(reqField(obj, "expr", what), `${what}.expr`);
+      noUnknownKeys(expr, ["contract", "program"], `${what}.expr`);
+      if (expr.contract !== "algal.expr.v1") {
+        throw new AlgalError(
+          "PARSE_FAILED",
+          `${what}.expr.contract must be "algal.expr.v1"`,
+        );
+      }
+      const program = asJsonValue(
+        reqField(expr, "program", `${what}.expr`),
+        `${what}.expr.program`,
+      );
+      const output = parseAgentOutput(
+        reqField(obj, "output", what),
+        `${what}.output`,
+      );
+      if (output.kind === "choice" && output.onMiss !== undefined) {
+        throw new AlgalError(
+          "PARSE_FAILED",
+          `${what}.output.onMiss has no meaning on expr cells — a program returns exact values`,
+        );
+      }
+      const check = checkProgram(program, Object.keys(inputs));
+      if (!check.ok) {
+        const { code, ...details } = check.err;
+        throw new AlgalError(
+          "PARSE_FAILED",
+          `${what}.expr.program: ${code} ${JSON.stringify(details)}`,
+        );
+      }
+      return {
+        id,
+        kind,
+        inputs,
+        expr: { contract: "algal.expr.v1", program },
+        output,
       };
     }
     case "tool": {
@@ -1115,6 +1175,16 @@ export function manifestToJson(m: OrganismManifest): JsonObject {
       }
       case "fn":
         return { id: c.id, kind: c.kind, fn: c.fn };
+      case "expr": {
+        const o: JsonObject = {
+          id: c.id,
+          kind: c.kind,
+          expr: c.expr,
+          output: outputJson(c.output),
+        };
+        if (Object.keys(c.inputs).length) o.inputs = portMapJson(c.inputs);
+        return o;
+      }
       case "tool":
         return {
           id: c.id,

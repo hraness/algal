@@ -60,7 +60,7 @@ export function builtinRegistry(): FnRegistry {
     fn: (i) => {
       const v = i.value;
       const rendered =
-        typeof v === "string" ? v : JSON.stringify(v ?? null);
+        typeof v === "string" ? v : canonicalize(v ?? null);
       return { value: `${i.prefix}${rendered}` };
     },
   });
@@ -76,8 +76,10 @@ export function builtinRegistry(): FnRegistry {
     },
     fn: (i) => {
       const v = i.value;
-      const rendered = typeof v === "string" ? v : JSON.stringify(v ?? null);
-      return { value: `${String(i.tag).toUpperCase()}: ${rendered}` };
+      const rendered = typeof v === "string" ? v : canonicalize(v ?? null);
+      return {
+        value: `${String(i.tag).replace(/[a-z]/g, (c) => c.toUpperCase())}: ${rendered}`,
+      };
     },
   });
 
@@ -112,7 +114,11 @@ export function builtinRegistry(): FnRegistry {
     fn: (i) => {
       const items = Array.isArray(i.items) ? i.items : [];
       const sep = typeof i.sep === "string" ? i.sep : "\n";
-      return { value: items.join(sep) };
+      return {
+        value: items
+          .map((v) => (typeof v === "string" ? v : canonicalize(v)))
+          .join(sep),
+      };
     },
   });
 

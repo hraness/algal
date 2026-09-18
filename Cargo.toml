@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/algal"]
+members = ["crates/algal", "crates/algal-expr"]
 resolver = "3"
 
 [workspace.package]

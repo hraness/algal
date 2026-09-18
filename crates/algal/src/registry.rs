@@ -95,7 +95,19 @@ pub fn invoke(name: &str, inputs: &Value) -> Result<(Value, usize)> {
             json!({"value":format!("{}{}", inputs["prefix"].as_str().unwrap_or(""), rendered()?)})
         }
         "tag.v1" => {
-            json!({"value":format!("{}: {}", inputs["tag"].as_str().unwrap_or("").to_uppercase(), rendered()?)})
+            let tag: String = inputs["tag"]
+                .as_str()
+                .unwrap_or("")
+                .chars()
+                .map(|c| {
+                    if c.is_ascii_lowercase() {
+                        c.to_ascii_uppercase()
+                    } else {
+                        c
+                    }
+                })
+                .collect();
+            json!({"value":format!("{}: {}", tag, rendered()?)})
         }
         "pick.v1" => {
             let record = object(&inputs["record"])
@@ -109,7 +121,13 @@ pub fn invoke(name: &str, inputs: &Value) -> Result<(Value, usize)> {
             let items = inputs["items"]
                 .as_array()
                 .ok_or_else(|| Error::new("FN_FAILED", "join.v1 requires array"))?;
-            let parts: Vec<_> = items.iter().map(|v| v.as_str().unwrap_or("")).collect();
+            let parts: Vec<String> = items
+                .iter()
+                .map(|v| match v.as_str() {
+                    Some(s) => Ok(s.to_owned()),
+                    None => canonical(v),
+                })
+                .collect::<Result<_>>()?;
             json!({"value":parts.join(inputs["sep"].as_str().unwrap_or("\n"))})
         }
         "assert.v1" => {

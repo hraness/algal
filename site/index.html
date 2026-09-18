@@ -140,7 +140,7 @@ $ algal verify run.receipt.json triage.algal.json
     <img alt="" aria-hidden="true" class="algal-topic-icon" decoding="async" height="88" loading="lazy" src="/icons/boundaries.svg" width="88">
     <h2>Boundaries</h2>
     <ul>
-      <li>A manifest carries no executable code. <code>fn</code> cells name host-registered functions; agent cells declare prompts, views, and contracts.</li>
+      <li>A manifest carries no host code. <code>fn</code> cells name host-registered functions, agent cells declare prompts/views/contracts, and <code>expr</code> cells carry bounded <code>algal.expr.v1</code> programs as data — interpreted under fuel by one shared evaluator (Rust native + WASM), never eval'd by the host.</li>
       <li>An agent cell sees only its declared view of the graph — its inputs, plus ancestor cells named in <code>view.cells</code>. Byte-bounded, computed, never a stuffed prompt.</li>
       <li>Model output is data. It re-enters the graph only after binding to a declared output contract.</li>
       <li>Agents reach back into the automaton only through <code>tools</code>: declared registry functions, turn-bounded, every call on the receipt. Classifiers can run in shadow — the model's decision is recorded while a declared label stays authoritative.</li>
