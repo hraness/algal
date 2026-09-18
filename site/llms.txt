@@ -32,6 +32,14 @@ contracts. This makes an organism a new kind of value: hashable, transportable,
 verifiable, and evolvable. See `docs/why-unique.md` in the repository for the
 full comparison.
 
+## Habitats and self-evolution
+
+Because a manifest is a value, an organism can generate and propose new
+organisms, functions, and tools. A shared `Store` and registries become a
+habitat: a population that evolves through foundry search and host admission.
+The organism cannot rewrite its own runtime; it can only propose. The host
+remains the admission gate. See `docs/habitats.md` for the design sketch.
+
 ## Quick start
 
 ```sh

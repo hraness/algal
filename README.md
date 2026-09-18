@@ -18,6 +18,15 @@ cells with declared contracts and budgets. See [`docs/why-unique.md`](docs/why-u
 for the full comparison with prompts, agent loops, DAG engines, probabilistic
 programming, smart contracts, and FaaS.
 
+### Where this could go
+
+Because manifests are values and receipts are evidence, organisms can generate,
+store, and propose new organisms. A shared `Store`, `ToolRegistry`, and
+`FnRegistry` becomes a habitat: a population of organisms that evolve through
+foundry search and host admission. The organism cannot rewrite its own runtime,
+but it can *propose* children, functions, and tools; the host decides what to
+admit. See [`docs/habitats.md`](docs/habitats.md) for the design sketch.
+
 ## What is this?
 
 An **organism** is a manifest (`morphogen.organism.v1`): a set of cells with
