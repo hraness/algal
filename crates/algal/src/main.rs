@@ -62,6 +62,8 @@ struct Execution {
     #[arg(long)]
     tools: Option<PathBuf>,
     #[arg(long)]
+    cache_effects: bool,
+    #[arg(long)]
     write: bool,
 }
 
@@ -173,6 +175,12 @@ enum Commands {
         modules: Option<PathBuf>,
         #[arg(long, default_value = "openai")]
         format: String,
+    },
+    Suite {
+        #[arg(long, default_value = "examples")]
+        examples: PathBuf,
+        #[arg(long)]
+        modules: Option<PathBuf>,
     },
     Store {
         #[command(subcommand)]
@@ -439,7 +447,8 @@ fn prepare(options: &Execution, dir: &Path) -> Result<(Store, Host, Transports)>
     if let Some(path) = &options.modules {
         store.load_modules(path)?;
     }
-    let host = host(options)?;
+    let mut host = host(options)?;
+    host.cache = options.cache_effects;
     let mut transports = Transports::new();
     if let Some(file) = &options.transports {
         let value = load(file, 65_536)?;
@@ -1270,6 +1279,15 @@ async fn execute(cli: Cli) -> Result<bool> {
                 )?,
             };
             let result = runtime::verify(&receipt, manifest, &store, &host).await?;
+            emit(&result)?;
+            Ok(result["ok"] == true)
+        }
+        Commands::Suite { examples, modules } => {
+            let mut store = Store::open(&cli.dir, true)?;
+            if let Some(path) = modules {
+                store.load_modules(&path)?;
+            }
+            let result = algal::suite::run(&examples, &mut store).await?;
             emit(&result)?;
             Ok(result["ok"] == true)
         }

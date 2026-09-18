@@ -12,5 +12,6 @@ pub mod memory;
 pub mod registry;
 pub mod runtime;
 pub mod store;
+pub mod suite;
 
 pub use error::{Error, Result};

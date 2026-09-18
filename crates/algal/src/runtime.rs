@@ -672,7 +672,10 @@ impl Runtime<'_> {
                 self.calls += 1;
                 self.work += 500 + context_bytes;
                 self.event("effect", Some(cell_path), Some(&request_digest), None)?;
-                let receipt = self.host.effect(&request, timeout).await?;
+                let receipt = self
+                    .host
+                    .effect(&request, timeout, Some(&mut *self.store))
+                    .await?;
                 self.effects.push(receipt.clone());
                 let retryable = receipt["retryable"] != false;
                 if let Some(error) = receipt.get("error") {

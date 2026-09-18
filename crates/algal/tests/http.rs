@@ -70,7 +70,7 @@ async fn openai_compatible_provider_uses_bound_configuration_and_records_usage()
     };
     let mut host = Host::default();
     host.entries.push(("fixture".into(), backend));
-    let receipt = host.effect(&effect(), 5000).await.unwrap();
+    let receipt = host.effect(&effect(), 5000, None).await.unwrap();
     assert_eq!(receipt["output"], "yes");
     assert_eq!(receipt["usage"]["tokensIn"], 12);
     assert_eq!(receipt["usage"]["tokensOut"], 3);
@@ -104,7 +104,7 @@ async fn redirects_oversized_bodies_and_upstream_errors_fail_without_leaking_con
         };
         let mut host = Host::default();
         host.entries.push(("fixture".into(), backend));
-        let receipt = host.effect(&effect(), 5000).await.unwrap();
+        let receipt = host.effect(&effect(), 5000, None).await.unwrap();
         assert!(receipt.get("error").is_some());
         assert!(!canonical(&receipt).unwrap().contains("do-not-log"));
         server.join().unwrap();

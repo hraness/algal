@@ -172,6 +172,84 @@ impl Store {
         self.put("manifests", &manifest.value)
     }
 
+    fn effect_path(&self, key: &str) -> Result<Option<PathBuf>> {
+        check_digest(key)?;
+        self.root
+            .as_ref()
+            .map(|root| {
+                no_link(root)?;
+                no_link(&root.join("effects"))?;
+                let path = root.join("effects").join(format!("{}.json", &key[7..]));
+                no_link(&path)?;
+                Ok(path)
+            })
+            .transpose()
+    }
+
+    /// The memo key for an executor-scoped effect request — a digest of
+    /// the executor identity and request digest so the same request served
+    /// by different executors never collides.
+    pub fn effect_key(request_digest: &str, executor: &str) -> Result<String> {
+        check_digest(request_digest)?;
+        digest(&json!({
+            "contract":"algal.effect-cache.v1",
+            "executor":executor,
+            "requestDigest":request_digest,
+        }))
+    }
+
+    /// Read a memoized effect receipt recorded under `(request, executor)`.
+    /// A stored record must name the request it claims — a corrupt or
+    /// foreign file is a hard error, never a silent miss.
+    pub fn get_effect(&self, request_digest: &str, executor: &str) -> Result<Option<Value>> {
+        let key = Self::effect_key(request_digest, executor)?;
+        if let Some(value) = self.data.get(&("effects".to_owned(), key.clone())) {
+            return Ok(Some(value.clone()));
+        }
+        let Some(path) = self.effect_path(&key)? else {
+            return Ok(None);
+        };
+        let file = match File::open(&path) {
+            Ok(file) => file,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(e.into()),
+        };
+        let value = read_json(file, MAX_DOCUMENT_BYTES)?;
+        if value["requestDigest"].as_str() != Some(request_digest) {
+            return Err(Error::new(
+                "DIGEST_MISMATCH",
+                format!("effect file claims a different request than {request_digest}"),
+            ));
+        }
+        if value["executor"].as_str().is_none() {
+            return Err(Error::invalid("effect record needs an executor"));
+        }
+        if value.get("output").is_none() && value.get("error").is_none() {
+            return Err(Error::invalid("effect record needs an output or error"));
+        }
+        Ok(Some(value))
+    }
+
+    /// Record an effect response for later runs. First write wins — a
+    /// later differing response for the same request can never overwrite
+    /// the memo.
+    pub fn put_effect(&mut self, receipt: &Value, executor: &str) -> Result<String> {
+        let request_digest = receipt["requestDigest"]
+            .as_str()
+            .ok_or_else(|| Error::invalid("effect receipt needs requestDigest"))?
+            .to_owned();
+        let key = Self::effect_key(&request_digest, executor)?;
+        if self.writable {
+            if let Some(path) = self.effect_path(&key)? {
+                publish(&path, canonical(receipt)?.as_bytes(), false)?;
+            }
+        }
+        self.data
+            .entry(("effects".to_owned(), key))
+            .or_insert_with(|| receipt.clone());
+        Ok(request_digest)
+    }
+
     pub fn get_slot(&self, name: &str) -> Result<Option<Value>> {
         id(&json!(name))?;
         if !self.writable || self.root.is_none() {
