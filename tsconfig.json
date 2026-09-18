@@ -16,5 +16,5 @@
     "types": ["bun"]
   },
   "include": ["**/*.ts"],
-  "exclude": ["node_modules", "site/dist", "dist", ".morphogen"]
+  "exclude": ["node_modules", "site/dist", "dist", ".algal"]
 }

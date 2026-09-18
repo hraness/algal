@@ -5,20 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ALGAL — programs that grow</title>
 <meta name="description" content="ALGAL is a living agent harness — organisms are typed, replayable graphs that can spawn and evolve — and a way to squeeze more juice out of LLMs, small or large.">
-<link rel="canonical" href="https://morphogen.dev/">
+<link rel="canonical" href="https://algal.dev/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ALGAL">
 <meta property="og:title" content="ALGAL — programs that grow">
 <meta property="og:description" content="ALGAL is a living agent harness — organisms are typed, replayable graphs that can spawn and evolve — and a way to squeeze more juice out of LLMs, small or large.">
-<meta property="og:url" content="https://morphogen.dev/">
-<meta property="og:image" content="https://morphogen.dev/og.png">
+<meta property="og:url" content="https://algal.dev/">
+<meta property="og:image" content="https://algal.dev/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="ALGAL — programs that grow">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="ALGAL — programs that grow">
 <meta name="twitter:description" content="ALGAL is a living agent harness — organisms are typed, replayable graphs that can spawn and evolve — and a way to squeeze more juice out of LLMs, small or large.">
-<meta name="twitter:image" content="https://morphogen.dev/og.png">
+<meta name="twitter:image" content="https://algal.dev/og.png">
 <meta name="robots" content="index, follow">
 <script type="application/ld+json">
 {
@@ -27,12 +27,12 @@
     {
       "@type": "WebSite",
       "name": "ALGAL",
-      "url": "https://morphogen.dev/"
+      "url": "https://algal.dev/"
     },
     {
       "@type": "SoftwareApplication",
       "name": "ALGAL",
-      "url": "https://morphogen.dev/",
+      "url": "https://algal.dev/",
       "description": "ALGAL is a living agent harness — organisms are typed, replayable graphs that can spawn and evolve — and a way to squeeze more juice out of LLMs, small or large.",
       "applicationCategory": "DeveloperApplication",
       "codeRepository": "https://github.com/hraness/algal",
@@ -107,7 +107,7 @@
   </section>
 
   <section>
-    <img alt="" aria-hidden="true" class="morphogen-topic-icon" decoding="async" height="88" loading="lazy" src="/icons/shape.svg" width="88">
+    <img alt="" aria-hidden="true" class="algal-topic-icon" decoding="async" height="88" loading="lazy" src="/icons/shape.svg" width="88">
     <h2>The shape</h2>
     <pre class="code">cells:
   - id: route
@@ -122,7 +122,7 @@ edges:
   </section>
 
   <section>
-    <img alt="" aria-hidden="true" class="morphogen-topic-icon" decoding="async" height="88" loading="lazy" src="/icons/run-produces.svg" width="88">
+    <img alt="" aria-hidden="true" class="algal-topic-icon" decoding="async" height="88" loading="lazy" src="/icons/run-produces.svg" width="88">
     <h2>What a run produces</h2>
     <p>
       Every run emits a content-addressed receipt: which cells committed,
@@ -131,13 +131,13 @@ edges:
       recorded receipts fixed — the same manifest, the same outputs, the same
       digest — or reports exactly where it diverges.
     </p>
-    <pre class="code">$ algal run triage.morphogen.json --responses triage.responses.json
-$ algal verify run.receipt.json triage.morphogen.json
+    <pre class="code">$ algal run triage.algal.json --responses triage.responses.json
+$ algal verify run.receipt.json triage.algal.json
 {"ok":true,"outcome":"complete","digest":"sha256:…"}</pre>
   </section>
 
   <section>
-    <img alt="" aria-hidden="true" class="morphogen-topic-icon" decoding="async" height="88" loading="lazy" src="/icons/boundaries.svg" width="88">
+    <img alt="" aria-hidden="true" class="algal-topic-icon" decoding="async" height="88" loading="lazy" src="/icons/boundaries.svg" width="88">
     <h2>Boundaries</h2>
     <ul>
       <li>A manifest carries no executable code. <code>fn</code> cells name host-registered functions; agent cells declare prompts, views, and contracts.</li>
@@ -174,7 +174,7 @@ $ algal verify run.receipt.json triage.morphogen.json
     </p>
     <p>
       <a href="https://github.com/hraness/algal/tree/main/examples/invest">See the invest example</a>
-      · <a href="https://github.com/hraness/algal/blob/main/docs/when-morphogen-wins.md">Read the intuition doc</a>
+      · <a href="https://github.com/hraness/algal/blob/main/docs/when-algal-wins.md">Read the intuition doc</a>
     </p>
   </section>
 
@@ -185,8 +185,8 @@ $ algal verify run.receipt.json triage.morphogen.json
       Anthropic tool definition, and let a larger agent call it by running
       <code>algal call</code>.
     </p>
-    <pre class="code">$ algal pack ticket.morphogen.json --out ./tools
-$ algal tool-def ticket.morphogen.json
+    <pre class="code">$ algal pack ticket.algal.json --out ./tools
+$ algal tool-def ticket.algal.json
 $ algal call ./tools/&lt;bundle&gt;.bundle.json --args ticket.args.json
 { "ok": true, "outputs": { "out": "billing" }, "receiptDigest": "sha256:..." }</pre>
     <p>
@@ -227,10 +227,10 @@ $ algal call ./tools/&lt;bundle&gt;.bundle.json --args ticket.args.json
   </section>
 
   <section class="status">
-    <img alt="" aria-hidden="true" class="morphogen-topic-icon" decoding="async" height="88" loading="lazy" src="/icons/status.svg" width="88">
+    <img alt="" aria-hidden="true" class="algal-topic-icon" decoding="async" height="88" loading="lazy" src="/icons/status.svg" width="88">
     <h2>Status</h2>
     <p>
-      Early. <code>morphogen.organism.v1</code> covers the manifest contract,
+      Early. <code>algal.organism.v1</code> covers the manifest contract,
       the scheduler, the effect/receipt seam, nested organisms, bounded
       spawning, and offline verification. Hosted habitats, multi-owner
       messaging, and workflow search are deliberately deferred.

@@ -2,7 +2,7 @@ import type { OrganismManifest } from "./contract";
 import { manifestToJson, parseOrganismManifest } from "./contract";
 import { digestCanonical, type Digest } from "./digest";
 import type { Executor } from "./effects";
-import { MorphogenError } from "./errors";
+import { AlgalError } from "./errors";
 import type { FnRegistry } from "./registry";
 import { runOrganism } from "./run";
 import type { Store } from "./store";
@@ -10,7 +10,7 @@ import type { Transport } from "./transport";
 import type { ToolRegistry } from "./tools";
 import { canonicalize, type JsonValue } from "./values";
 
-export const FOUNDRY_CONTRACT = "morphogen.foundry.v1" as const;
+export const FOUNDRY_CONTRACT = "algal.foundry.v1" as const;
 
 export const FOUNDRY_BOUNDS = {
   maxCandidates: 32,
@@ -89,7 +89,7 @@ export type GeneratedCandidates = FoundryLineage & {
 };
 
 function fail(message: string): never {
-  throw new MorphogenError("PARSE_FAILED", message);
+  throw new AlgalError("PARSE_FAILED", message);
 }
 
 function validate(opts: FoundryOptions): void {

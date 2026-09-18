@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const CONTRACT: &str = "morphogen.organism.v1";
+pub const CONTRACT: &str = "algal.organism.v1";
 pub const MAX_VALUE_BYTES: usize = 262_144;
 pub type Ports = BTreeMap<String, Value>;
 

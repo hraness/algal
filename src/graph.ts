@@ -2,7 +2,7 @@
 // Everything structural is decided here — cycles, port existence, type
 // compatibility, guard validity, interface integrity — before any cell runs.
 
-import { MorphogenError } from "./errors";
+import { AlgalError } from "./errors";
 import type {
   Cell,
   OrganismInterface,
@@ -39,7 +39,7 @@ export function outputPortType(
 ): PortType {
   const t = sigs.outputs[port];
   if (!t) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "MANIFEST_INVALID",
       `cell "${cell.id}" has no output port "${port}"`,
     );
@@ -69,7 +69,7 @@ export function cellSignature(
     case "fn": {
       const sig = fns.get(cell.fn);
       if (!sig) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "FN_UNKNOWN",
           `cell "${cell.id}" references unknown fn "${cell.fn}"`,
         );
@@ -82,7 +82,7 @@ export function cellSignature(
     case "tool": {
       const entry = tools?.get(cell.tool);
       if (!entry) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "TOOL_UNKNOWN",
           `cell "${cell.id}" references unknown tool "${cell.tool}"`,
         );
@@ -135,7 +135,7 @@ export function cellSignature(
     case "organism": {
       const sub = children.get(cell.id);
       if (!sub?.manifest.interface) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "INTERFACE_MISMATCH",
           `organism cell "${cell.id}" requires a sub-manifest with an interface`,
         );
@@ -145,7 +145,7 @@ export function cellSignature(
     case "repeat": {
       const sub = children.get(cell.id);
       if (!sub?.manifest.interface) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "INTERFACE_MISMATCH",
           `repeat cell "${cell.id}" requires a sub-manifest with an interface`,
         );
@@ -156,13 +156,13 @@ export function cellSignature(
       // is optional on the repeat cell since round 0 may run without it
       for (const [outName, inName] of Object.entries(cell.carry ?? {})) {
         if (!iface.outputs[outName]) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "INTERFACE_MISMATCH",
             `repeat cell "${cell.id}" carry key "${outName}" is not an interface output of "${sub.manifest.key}"`,
           );
         }
         if (!iface.inputs[inName]) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "INTERFACE_MISMATCH",
             `repeat cell "${cell.id}" carry target "${inName}" is not an interface input of "${sub.manifest.key}"`,
           );
@@ -172,7 +172,7 @@ export function cellSignature(
       if (cell.until) {
         const target = iface.outputs[cell.until.output];
         if (!target) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "INTERFACE_MISMATCH",
             `repeat cell "${cell.id}" until.output "${cell.until.output}" is not an interface output of "${sub.manifest.key}"`,
           );
@@ -180,7 +180,7 @@ export function cellSignature(
         const pt = sig.outputs[cell.until.output]!;
         if (cell.until.field !== undefined) {
           if (pt.type !== "json") {
-            throw new MorphogenError(
+            throw new AlgalError(
               "GUARD_INVALID",
               `repeat cell "${cell.id}" until.field requires a json output, got ${describePort(pt)}`,
             );
@@ -190,7 +190,7 @@ export function cellSignature(
           pt.labels &&
           !pt.labels.includes(cell.until.equals)
         ) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "GUARD_INVALID",
             `repeat cell "${cell.id}" until.equals "${cell.until.equals}" not in labels of "${cell.until.output}"`,
           );
@@ -201,7 +201,7 @@ export function cellSignature(
     case "each": {
       const sub = children.get(cell.id);
       if (!sub?.manifest.interface) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "INTERFACE_MISMATCH",
           `each cell "${cell.id}" requires a sub-manifest with an interface`,
         );
@@ -209,7 +209,7 @@ export function cellSignature(
       const iface = sub.manifest.interface;
       const sig = interfaceSignature(cell.id, sub);
       if (!iface.inputs[cell.over]) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "INTERFACE_MISMATCH",
           `each cell "${cell.id}" over "${cell.over}" is not an interface input of "${sub.manifest.key}"`,
         );
@@ -237,14 +237,14 @@ function interfaceSignature(
   for (const [name, target] of Object.entries(iface.inputs)) {
     const inner = sub.manifest.cells.find((c) => c.id === target.cell);
     if (!inner || inner.kind !== "input") {
-      throw new MorphogenError(
+      throw new AlgalError(
         "INTERFACE_MISMATCH",
         `interface input "${name}" of "${sub.manifest.key}" must target an input cell`,
       );
     }
     const pt = inner.outputs[target.port];
     if (!pt) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "INTERFACE_MISMATCH",
         `interface input "${name}" of "${sub.manifest.key}" targets missing port "${target.cell}.${target.port}"`,
       );
@@ -255,7 +255,7 @@ function interfaceSignature(
   for (const [name, target] of Object.entries(iface.outputs)) {
     const pt = sub.ports.get(target.cell)?.outputs[target.port];
     if (!pt) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "INTERFACE_MISMATCH",
         `interface output "${name}" of "${sub.manifest.key}" targets missing port "${target.cell}.${target.port}"`,
       );
@@ -268,7 +268,7 @@ function interfaceSignature(
 function mustCell(m: OrganismManifest, id: string): Cell {
   const c = m.cells.find((x) => x.id === id);
   if (!c) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "INTERFACE_MISMATCH",
       `organism "${m.key}" interface references missing cell "${id}"`,
     );
@@ -328,7 +328,7 @@ export async function compileOrganism(
   tools?: ToolRegistry,
 ): Promise<CompiledOrganism> {
   if (depth > MAX_COMPILE_DEPTH) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "DEPTH_EXCEEDED",
       `embedding chain exceeds compile depth ${MAX_COMPILE_DEPTH}`,
     );
@@ -336,7 +336,7 @@ export async function compileOrganism(
   const seen = new Set<string>();
   for (const cell of manifest.cells) {
     if (seen.has(cell.id)) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "MANIFEST_INVALID",
         `duplicate cell id "${cell.id}"`,
       );
@@ -357,14 +357,14 @@ export async function compileOrganism(
     if (!sub && cell.via) {
       const t = transports?.[cell.via];
       if (!t) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "STORE_MISS",
           `cell "${cell.id}" manifest ${digest} not in store and transport "${cell.via}" is not configured`,
         );
       }
       const bundle = await t.getBundle(digest);
       if (!bundle) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "STORE_MISS",
           `cell "${cell.id}": transport "${cell.via}" has no bundle rooted at ${digest}`,
         );
@@ -374,7 +374,7 @@ export async function compileOrganism(
       if (sub) resolvedVia.set(cell.id, cell.via);
     }
     if (!sub) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "STORE_MISS",
         `organism cell "${cell.id}" manifest ${digest} not in store`,
       );
@@ -396,13 +396,13 @@ export async function compileOrganism(
     for (const [name, t] of Object.entries(manifest.interface.inputs)) {
       const c = mustCell(manifest, t.cell);
       if (c.kind !== "input") {
-        throw new MorphogenError(
+        throw new AlgalError(
           "INTERFACE_MISMATCH",
           `interface input "${name}" must target an input cell`,
         );
       }
       if (!c.outputs[t.port]) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "INTERFACE_MISMATCH",
           `interface input "${name}" targets missing port "${t.cell}.${t.port}"`,
         );
@@ -411,7 +411,7 @@ export async function compileOrganism(
     for (const [name, t] of Object.entries(manifest.interface.outputs)) {
       const sig = ports.get(t.cell)!;
       if (!sig.outputs[t.port]) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "INTERFACE_MISMATCH",
           `interface output "${name}" targets missing port "${t.cell}.${t.port}"`,
         );
@@ -425,13 +425,13 @@ export async function compileOrganism(
     const from = manifest.cells.find((c) => c.id === e.from.cell);
     const to = manifest.cells.find((c) => c.id === e.to.cell);
     if (!from) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "MANIFEST_INVALID",
         `edge ${i}: unknown from cell "${e.from.cell}"`,
       );
     }
     if (!to) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "MANIFEST_INVALID",
         `edge ${i}: unknown to cell "${e.to.cell}"`,
       );
@@ -439,26 +439,26 @@ export async function compileOrganism(
     const pt = outputPortType(from, e.from.port, ports.get(from.id)!);
     const ct = ports.get(to.id)!.inputs[e.to.port];
     if (!ct) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "MANIFEST_INVALID",
         `edge ${i}: cell "${e.to.cell}" has no input port "${e.to.port}"`,
       );
     }
     if (e.on === "fail") {
       if (e.guard) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "GUARD_INVALID",
           `edge ${i}: guard is not valid on an on:"fail" edge`,
         );
       }
       if (ct.type !== "json") {
-        throw new MorphogenError(
+        throw new AlgalError(
           "TYPE_MISMATCH",
           `edge ${i}: on:"fail" delivers a failure record — consumer port "${e.to.cell}.${e.to.port}" must be json, got ${describePort(ct)}`,
         );
       }
     } else if (!portCompatible(pt, ct)) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "TYPE_MISMATCH",
         `edge ${i}: ${e.from.cell}.${e.from.port} (${describePort(pt)}) cannot feed ${e.to.cell}.${e.to.port} (${describePort(ct)})`,
       );
@@ -466,20 +466,20 @@ export async function compileOrganism(
     if (e.guard) {
       if (e.guard.field !== undefined) {
         if (pt.type !== "json") {
-          throw new MorphogenError(
+          throw new AlgalError(
             "GUARD_INVALID",
             `edge ${i}: field guard requires a json producer, got ${describePort(pt)}`,
           );
         }
       } else {
         if (pt.type !== "choice") {
-          throw new MorphogenError(
+          throw new AlgalError(
             "GUARD_INVALID",
             `edge ${i}: guard requires a choice producer, got ${describePort(pt)}`,
           );
         }
         if (pt.labels && !pt.labels.includes(e.guard.equals)) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "GUARD_INVALID",
             `edge ${i}: guard label "${e.guard.equals}" not in producer labels`,
           );
@@ -494,13 +494,13 @@ export async function compileOrganism(
           (manifest.edges[x.edge]!.on === "fail") !== (e.on === "fail"),
       )
     ) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "MANIFEST_INVALID",
         `edge ${i}: input port "${e.to.cell}.${e.to.port}" mixes normal and on:"fail" edges`,
       );
     }
     if (!ct.many && list.some((x) => x.port === e.to.port)) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "MANIFEST_INVALID",
         `edge ${i}: input port "${e.to.cell}.${e.to.port}" already has an edge; inputs are single-assignment`,
       );
@@ -538,7 +538,7 @@ export async function compileOrganism(
     if (cell.view.inputs !== "*") {
       for (const name of cell.view.inputs) {
         if (!ports.get(cell.id)!.inputs[name]) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "MANIFEST_INVALID",
             `cell "${cell.id}" view.inputs references undeclared input "${name}"`,
           );
@@ -546,7 +546,7 @@ export async function compileOrganism(
       }
     }
     if (cell.view.graph && !cell.view.cells?.length) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "MANIFEST_INVALID",
         `cell "${cell.id}" view.graph requires view.cells — the graph fragment covers named ancestors`,
       );
@@ -555,20 +555,20 @@ export async function compileOrganism(
       const ancestors = ancestorsOf(cell.id);
       for (const cv of cell.view.cells) {
         if (!ports.has(cv.cell)) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "MANIFEST_INVALID",
             `cell "${cell.id}" view.cells references unknown cell "${cv.cell}"`,
           );
         }
         if (!ancestors.has(cv.cell)) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "MANIFEST_INVALID",
             `cell "${cell.id}" view.cells names "${cv.cell}", which is not an ancestor — its record would not exist at activation`,
           );
         }
         for (const p of cv.ports ?? []) {
           if (!ports.get(cv.cell)!.outputs[p]) {
-            throw new MorphogenError(
+            throw new AlgalError(
               "MANIFEST_INVALID",
               `cell "${cell.id}" view.cells names port "${cv.cell}.${p}", which is not an output port`,
             );
@@ -578,7 +578,7 @@ export async function compileOrganism(
     }
     for (const ref of (cell.kind === "gate" ? [] : cell.tools) ?? []) {
       if (!fns.has(ref) && !tools?.has(ref)) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "TOOL_UNKNOWN",
           `cell "${cell.id}" declares unknown tool "${ref}"`,
         );
@@ -611,7 +611,7 @@ export async function compileOrganism(
     }
   }
   if (visited !== manifest.cells.length) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "GRAPH_CYCLE",
       "manifest graph contains a cycle; organisms must be acyclic",
     );

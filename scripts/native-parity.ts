@@ -13,7 +13,7 @@ const root = resolve(import.meta.dir, "..");
 const examples = join(root, "examples");
 const binary = process.env.ALGAL_BIN ?? join(root, "target/debug/algal");
 const temporary = await mkdtemp(join(tmpdir(), "algal-parity-"));
-const files = (await readdir(examples)).filter((f) => /\.(algal|morphogen)\.json$/.test(f)).sort();
+const files = (await readdir(examples)).filter((f) => /\.algal\.json$/.test(f)).sort();
 const modules = await Promise.all(files.map(async (file) => parseOrganismManifest(JSON.parse(await readFile(join(examples, file), "utf8")))));
 let failed = 0;
 
@@ -26,7 +26,7 @@ async function native(args: string[]) {
 
 try {
   for (const [index, file] of files.entries()) {
-    const name = file.replace(/\.(algal|morphogen)\.json$/, "");
+    const name = file.replace(/\.algal\.json$/, "");
     const manifest = modules[index]!;
     const store = new MemoryStore();
     for (const module of modules) await store.putManifest(module);

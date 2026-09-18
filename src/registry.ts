@@ -2,7 +2,7 @@
 // the host registry owns the signature and implementation. A manifest can
 // never introduce code — it can only compose what the host admits.
 
-import { MorphogenError } from "./errors";
+import { AlgalError } from "./errors";
 import { canonicalize, type JsonObject, type JsonValue } from "./values";
 import type { PortMap } from "./contract";
 
@@ -44,7 +44,7 @@ export function builtinRegistry(): FnRegistry {
         const v = i[k];
         if (v !== undefined && v !== null) return { value: v };
       }
-      throw new MorphogenError("FN_FAILED", "coalesce.v1: all inputs empty");
+      throw new AlgalError("FN_FAILED", "coalesce.v1: all inputs empty");
     },
   });
 
@@ -91,10 +91,10 @@ export function builtinRegistry(): FnRegistry {
       const rec = i.record;
       const field = i.field;
       if (typeof field !== "string") {
-        throw new MorphogenError("FN_FAILED", "pick.v1: field must be text");
+        throw new AlgalError("FN_FAILED", "pick.v1: field must be text");
       }
       if (rec === null || typeof rec !== "object" || Array.isArray(rec)) {
-        throw new MorphogenError("FN_FAILED", "pick.v1: record must be an object");
+        throw new AlgalError("FN_FAILED", "pick.v1: record must be an object");
       }
       return { value: (rec as JsonObject)[field] ?? null };
     },
@@ -132,7 +132,7 @@ export function builtinRegistry(): FnRegistry {
       const v = i.value ?? null;
       const e = i.expect ?? null;
       if (canonicalize(v) !== canonicalize(e)) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "FN_FAILED",
           `assert.v1: value ${canonicalize(v).slice(0, 200)} != expect ${canonicalize(e).slice(0, 200)}`,
         );
@@ -150,7 +150,7 @@ export function builtinRegistry(): FnRegistry {
     fn: (i) => {
       const v = i.value;
       if (typeof v !== "number" || !Number.isFinite(v)) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "FN_FAILED",
           "inc.v1: value must be a finite number",
         );
@@ -182,7 +182,7 @@ export function builtinRegistry(): FnRegistry {
     fn: (i) => {
       const list = i.list;
       if (!Array.isArray(list)) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "FN_FAILED",
           "push.v1: list must be an array",
         );

@@ -18,7 +18,7 @@ fn fixture(mode: &str) -> Vec<String> {
     ]
 }
 fn effect() -> Value {
-    json!({"contract":"morphogen.effect.v1","cellId":"work","kind":"agent","prompt":"synthetic task","context":{},"output":{"kind":"text"},"budget":{"maxContextBytes":4096,"maxOutputBytes":4096}})
+    json!({"contract":"algal.effect.v1","cellId":"work","kind":"agent","prompt":"synthetic task","context":{},"output":{"kind":"text"},"budget":{"maxContextBytes":4096,"maxOutputBytes":4096}})
 }
 
 #[tokio::test]

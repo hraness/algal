@@ -1,8 +1,9 @@
 use crate::{
     Error, Result,
     canonical::{canonical, digest, read_json},
-    contract::{Signature, integer, keys, object, ports, text},
+    contract::{Signature, bind_output, integer, keys, object, ports, text},
     graph::ToolSignatures,
+    store::Store,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -90,6 +91,27 @@ impl Backend {
             self,
             Self::Command { .. } | Self::Xcb { .. } | Self::Acp { .. }
         )
+    }
+    /// Whether a completed response may be memoized for later identical
+    /// requests. Model-call backends are pure at the request boundary;
+    /// command and delegated-coding backends run effects a memo could
+    /// never determinize, so they stay uncacheable.
+    pub fn cacheable(&self) -> bool {
+        !matches!(
+            self,
+            Self::Command { .. } | Self::Xcb { .. } | Self::Acp { .. }
+        )
+    }
+    /// The executor-scoped memo identity: a scripted executor binds its
+    /// whole response table so a different script can never serve its
+    /// answers; other backends scope by their admitted entry name.
+    pub fn cache_identity(&self, id: &str) -> Result<String> {
+        match self {
+            Self::Scripted { responses } => {
+                digest(&json!({"kind":"scripted","id":id,"responses":responses}))
+            }
+            _ => Ok(id.to_owned()),
+        }
     }
     pub fn validate(&self) -> Result<()> {
         match self {
@@ -449,6 +471,11 @@ pub struct Host {
     pub permissions: Option<crate::acp::PermissionBroker>,
     pub updates: Option<tokio::sync::mpsc::Sender<crate::acp::AgentUpdate>>,
     pub permission_scope: String,
+    /// When set, successful effects are memoized in the store and identical
+    /// later requests are served the recorded response (`cached: true`).
+    /// Only contract-valid, in-budget, non-tool-call outputs are memoized,
+    /// and the first record wins.
+    pub cache: bool,
     strict_routes: bool,
 }
 
@@ -787,7 +814,12 @@ impl Host {
         }
     }
 
-    pub async fn effect(&mut self, request: &Value, timeout_ms: u64) -> Result<Value> {
+    pub async fn effect(
+        &mut self,
+        request: &Value,
+        timeout_ms: u64,
+        memos: Option<&mut Store>,
+    ) -> Result<Value> {
         let request_digest = digest(request)?;
         if let Some(replay) = &mut self.replay {
             return replay
@@ -815,6 +847,31 @@ impl Host {
             .or_else(|| self.entries.first())
             .cloned()
             .ok_or_else(|| Error::new("EFFECT_UNBOUND", "no executor configured"))?;
+        let cacheable = self.cache && backend.cacheable();
+        let identity = if cacheable {
+            backend.cache_identity(&id)?
+        } else {
+            String::new()
+        };
+        let mut memos = memos;
+        if cacheable {
+            if let Some(store) = memos.as_deref_mut() {
+                if let Some(hit) = store.get_effect(&request_digest, &identity)? {
+                    if hit.get("output").is_some() {
+                        let mut receipt = json!({
+                            "requestDigest":request_digest,
+                            "executor":hit["executor"].clone(),
+                            "output":hit["output"].clone(),
+                            "cached":true,
+                        });
+                        if let Some(usage) = hit.get("usage") {
+                            receipt["usage"] = usage.clone();
+                        }
+                        return Ok(receipt);
+                    }
+                }
+            }
+        }
         let max = request["budget"]["maxOutputBytes"]
             .as_u64()
             .unwrap_or(262_144) as usize;
@@ -830,6 +887,29 @@ impl Host {
             .await
         {
             Ok((output, metadata)) => {
+                if cacheable {
+                    // Only a complete, contract-valid, in-budget response is
+                    // worth determinizing — errors may be transient and a
+                    // tool-call envelope is a request, not an answer.
+                    let tool_call = output.is_object()
+                        && !output["tool"].is_null()
+                        && !output["inputs"].is_null();
+                    let fits = canonical(&output)
+                        .map(|bytes| bytes.len() <= max)
+                        .unwrap_or(false);
+                    let valid = bind_output(&request["output"], output.clone()).is_ok();
+                    if let (false, true, true, Some(store)) = (tool_call, fits, valid, memos) {
+                        let mut entry = json!({
+                            "requestDigest":request_digest,
+                            "executor":metadata.get("executor").cloned().unwrap_or(json!(id)),
+                            "output":output.clone(),
+                        });
+                        if let Some(usage) = metadata.get("usage") {
+                            entry["usage"] = usage.clone();
+                        }
+                        store.put_effect(&entry, &identity)?;
+                    }
+                }
                 receipt["output"] = output;
                 for field in ["usage", "executor"] {
                     if let Some(v) = metadata.get(field) {

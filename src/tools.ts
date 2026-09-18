@@ -1,5 +1,5 @@
 import { BOUNDS, parsePortMap, type PortMap } from "./contract";
-import { MorphogenError } from "./errors";
+import { AlgalError } from "./errors";
 import {
   asObject,
   asString,
@@ -48,11 +48,11 @@ export function parseToolSignature(u: unknown, what = "tool signature"): ToolSig
   noUnknownKeys(obj, ["inputs", "outputs", "effect", "cost", "maxOutputBytes"], what);
   const effect = asString(reqField(obj, "effect", what), `${what}.effect`, 8);
   if (effect !== "read" && effect !== "write") {
-    throw new MorphogenError("PARSE_FAILED", `${what}.effect must be read|write`);
+    throw new AlgalError("PARSE_FAILED", `${what}.effect must be read|write`);
   }
   const cost = reqField(obj, "cost", what);
   if (!Number.isInteger(cost) || (cost as number) < 0 || (cost as number) > TOOL_SIGNATURE_BOUNDS.maxCost) {
-    throw new MorphogenError("PARSE_FAILED", `${what}.cost must be an integer 0..${TOOL_SIGNATURE_BOUNDS.maxCost}`);
+    throw new AlgalError("PARSE_FAILED", `${what}.cost must be an integer 0..${TOOL_SIGNATURE_BOUNDS.maxCost}`);
   }
   const maxOutputBytes = reqField(obj, "maxOutputBytes", what);
   if (
@@ -60,7 +60,7 @@ export function parseToolSignature(u: unknown, what = "tool signature"): ToolSig
     (maxOutputBytes as number) <= 0 ||
     (maxOutputBytes as number) > BOUNDS.maxValueBytes
   ) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "PARSE_FAILED",
       `${what}.maxOutputBytes must be an integer 1..${BOUNDS.maxValueBytes}`,
     );

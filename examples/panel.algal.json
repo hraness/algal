@@ -1,0 +1,57 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:panel",
+  "name": "Review panel",
+  "note": "Three reviewer agents each see the brief; a synthesizer agent fans in all their reviews through a many port.",
+  "cells": [
+    {
+      "id": "brief",
+      "kind": "input",
+      "outputs": { "v": "text" }
+    },
+    {
+      "id": "rev-structure",
+      "kind": "agent",
+      "inputs": { "v": "text" },
+      "prompt": "Review the proposal for structural soundness. One sentence.",
+      "output": { "kind": "text" }
+    },
+    {
+      "id": "rev-risk",
+      "kind": "agent",
+      "inputs": { "v": "text" },
+      "prompt": "Review the proposal for risks. One sentence.",
+      "output": { "kind": "text" }
+    },
+    {
+      "id": "rev-cost",
+      "kind": "agent",
+      "inputs": { "v": "text" },
+      "prompt": "Review the proposal for cost. One sentence.",
+      "output": { "kind": "text" }
+    },
+    {
+      "id": "synth",
+      "kind": "agent",
+      "inputs": {
+        "brief": "text",
+        "reviews": { "type": "text", "many": true }
+      },
+      "prompt": "Synthesize the panel's reviews into a one-line verdict.",
+      "output": { "kind": "text" }
+    }
+  ],
+  "edges": [
+    { "from": { "cell": "brief", "port": "v" }, "to": { "cell": "rev-structure", "port": "v" } },
+    { "from": { "cell": "brief", "port": "v" }, "to": { "cell": "rev-risk", "port": "v" } },
+    { "from": { "cell": "brief", "port": "v" }, "to": { "cell": "rev-cost", "port": "v" } },
+    { "from": { "cell": "rev-structure", "port": "out" }, "to": { "cell": "synth", "port": "reviews" } },
+    { "from": { "cell": "rev-risk", "port": "out" }, "to": { "cell": "synth", "port": "reviews" } },
+    { "from": { "cell": "rev-cost", "port": "out" }, "to": { "cell": "synth", "port": "reviews" } },
+    { "from": { "cell": "brief", "port": "v" }, "to": { "cell": "synth", "port": "brief" } }
+  ],
+  "interface": {
+    "inputs": { "brief": { "cell": "brief", "port": "v" } },
+    "outputs": { "verdict": { "cell": "synth", "port": "out" } }
+  }
+}

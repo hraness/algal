@@ -15,7 +15,7 @@ import {
   scriptedExecutor,
   type Executor,
 } from "./src/effects";
-import { errorReport, MorphogenError } from "./src/errors";
+import { errorReport, AlgalError } from "./src/errors";
 import { vercelGatewayExecutor } from "./src/gateway";
 import { commandJson } from "./src/io";
 import { builtinRegistry } from "./src/registry";
@@ -67,7 +67,7 @@ usage:
       --gateway-model <provider/model>        Vercel AI Gateway structured-output executor
       --executors <file>                      JSON map of executor name → shell command;
                                               route.provider/route.preset pick by name
-      --modules <dir>                         load *.morphogen.json into the store for organism cells
+      --modules <dir>                         load *.algal.json into the store for organism cells
       --transports <file>                     JSON map of transport name → bundle directory;
                                               via cells resolve remote manifests through it
       --tools <file>                          tool registry: name → {signature, exec};
@@ -176,7 +176,7 @@ async function readJson(path: string): Promise<JsonValue> {
   try {
     return JSON.parse(await readFile(path, "utf8")) as JsonValue;
   } catch (e) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "PARSE_FAILED",
       `${path}: ${e instanceof Error ? e.message : String(e)}`,
     );
@@ -186,12 +186,12 @@ async function readJson(path: string): Promise<JsonValue> {
 async function readJsonStdin(): Promise<JsonValue> {
   const text = await Bun.stdin.text();
   if (!text.trim()) {
-    throw new MorphogenError("INPUT_MISSING", "stdin was empty");
+    throw new AlgalError("INPUT_MISSING", "stdin was empty");
   }
   try {
     return JSON.parse(text) as JsonValue;
   } catch (e) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "PARSE_FAILED",
       `stdin: ${e instanceof Error ? e.message : String(e)}`,
     );
@@ -206,7 +206,7 @@ function diag(msg: string): void {
   process.stderr.write(msg + "\n");
 }
 
-/** Load every *.morphogen.json under dir into the store so organism cells
+/** Load every *.algal.json under dir into the store so organism cells
  * resolve by digest. */
 async function loadModules(
   dir: string,
@@ -218,11 +218,11 @@ async function loadModules(
   try {
     files = await readdir(resolved);
   } catch {
-    throw new MorphogenError("IO_FAILED", `modules dir not readable: ${dir}`);
+    throw new AlgalError("IO_FAILED", `modules dir not readable: ${dir}`);
   }
   let loaded = 0;
   for (const f of files.sort()) {
-    if (!/\.(?:algal|morphogen)\.json$/.test(f)) continue;
+    if (!/\.algal\.json$/.test(f)) continue;
     const m = parseOrganismManifest(await readJson(join(resolved, f)));
     await store.putManifest(m);
     loaded++;
@@ -260,14 +260,14 @@ async function loadTools(file: string): Promise<ToolRegistry> {
       !/^[a-z0-9][a-z0-9.-]*$/.test(name) ||
       name.length > TOOL_SIGNATURE_BOUNDS.maxNameLen
     ) {
-      throw new MorphogenError("PARSE_FAILED", `invalid tool name "${name}"`);
+      throw new AlgalError("PARSE_FAILED", `invalid tool name "${name}"`);
     }
     const e = asRecord(entry, `tools.${name}`);
     const extra = Object.keys(e).filter(
       (k) => k !== "signature" && k !== "exec",
     );
     if (e.signature === undefined || typeof e.exec !== "string" || extra.length > 0) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "PARSE_FAILED",
         `tools.${name} requires "signature" and "exec"`,
       );
@@ -287,7 +287,7 @@ async function loadTools(file: string): Promise<ToolRegistry> {
         const key = canonicalize(inputs);
         const hit = data[key];
         if (hit === null || typeof hit !== "object" || Array.isArray(hit)) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "TOOL_FAILED",
             `${name}: no scripted output for inputs ${key.slice(0, 200)}`,
           );
@@ -306,7 +306,7 @@ async function loadTools(file: string): Promise<ToolRegistry> {
           maxStdoutBytes: signature.maxOutputBytes, ...(context.signal ? { signal: context.signal } : {}),
         });
         if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "TOOL_FAILED",
             `${name}: output must be a JSON object of ports`,
           );
@@ -314,7 +314,7 @@ async function loadTools(file: string): Promise<ToolRegistry> {
         return parsed as Record<string, JsonValue>;
       };
     } else {
-      throw new MorphogenError(
+      throw new AlgalError(
         "PARSE_FAILED",
         `tools.${name}.exec must be scripted:<file> or cmd:<shell>`,
       );
@@ -324,7 +324,7 @@ async function loadTools(file: string): Promise<ToolRegistry> {
   return registry;
 }
 
-/** Convert a Morphogen port type to a draft-07 JSON Schema fragment. */
+/** Convert a Algal port type to a draft-07 JSON Schema fragment. */
 function portToJsonSchema(p: {
   type: string;
   optional?: boolean;
@@ -394,26 +394,24 @@ async function main(): Promise<number> {
 
     case "--version":
     case "version":
-      out({ name: "algal", version: "0.1.0", contract: "morphogen.organism.v1" });
+      out({ name: "algal", version: "0.1.0", contract: "algal.organism.v1" });
       return 0;
 
     case "examples": {
       const { readdir } = await import("node:fs/promises");
       const files = (await readdir(EXAMPLES_DIR)).filter(
-        (f) => /\.(?:algal|morphogen)\.json$/.test(f),
+        (f) => /\.algal\.json$/.test(f),
       );
-      out({ examples: files.map((f) => f.replace(/\.(?:algal|morphogen)\.json$/, "")) });
+      out({ examples: files.map((f) => f.replace(/\.algal\.json$/, "")) });
       return 0;
     }
 
     case "example": {
       const id = positional[0];
       if (!id || !/^[a-z][a-z0-9-]*$/.test(id)) {
-        throw new MorphogenError("PARSE_FAILED", "usage: algal example <id>");
+        throw new AlgalError("PARSE_FAILED", "usage: algal example <id>");
       }
-      const name = await Bun.file(join(EXAMPLES_DIR, `${id}.algal.json`)).exists()
-        ? `${id}.algal.json` : `${id}.morphogen.json`;
-      const m = await readJson(join(EXAMPLES_DIR, name));
+      const m = await readJson(join(EXAMPLES_DIR, `${id}.algal.json`));
       out(m);
       return 0;
     }
@@ -430,7 +428,7 @@ async function main(): Promise<number> {
       const sub = positional[0];
       const asRefDigest = (s: string | undefined): `sha256:${string}` => {
         if (!s || !/^sha256:[0-9a-f]{64}$/.test(s)) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "PARSE_FAILED",
             "expected a sha256:<64 hex> ref token",
           );
@@ -444,7 +442,7 @@ async function main(): Promise<number> {
           const v = await readJson(resolve(file));
           const bytes = canonicalize(v).length;
           if (bytes > BOUNDS.maxBlobBytes) {
-            throw new MorphogenError(
+            throw new AlgalError(
               "BUDGET_EXHAUSTED",
               `value ${bytes}B exceeds maxBlobBytes ${BOUNDS.maxBlobBytes}B — a run could never load this ref`,
             );
@@ -457,7 +455,7 @@ async function main(): Promise<number> {
           const d = asRefDigest(positional[1]);
           const v = await store.getValue(d);
           if (v === undefined) {
-            throw new MorphogenError("INPUT_MISSING", `ref ${d} not in store`);
+            throw new AlgalError("INPUT_MISSING", `ref ${d} not in store`);
           }
           out(v);
           return 0;
@@ -518,7 +516,7 @@ async function main(): Promise<number> {
       await unpackBundle(bundle, store);
       const manifest = await store.getManifest(bundle.root);
       if (!manifest) {
-        throw new MorphogenError("STORE_MISS", `bundle root ${bundle.root} not in store after unpack`);
+        throw new AlgalError("STORE_MISS", `bundle root ${bundle.root} not in store after unpack`);
       }
 
       const argsRaw =
@@ -553,7 +551,7 @@ async function main(): Promise<number> {
         );
         for (const [name, cmd] of Object.entries(map)) {
           if (typeof cmd !== "string" || cmd.length === 0) {
-            throw new MorphogenError(
+            throw new AlgalError(
               "PARSE_FAILED",
               `executors.${name} must be a shell command string`,
             );
@@ -631,11 +629,11 @@ async function main(): Promise<number> {
       for (const [name, end] of Object.entries(raw.inputs)) {
         const sig = compiled.ports.get(end.cell);
         if (!sig) {
-          throw new MorphogenError("PARSE_FAILED", `interface input ${name}: cell ${end.cell} not found`);
+          throw new AlgalError("PARSE_FAILED", `interface input ${name}: cell ${end.cell} not found`);
         }
         const p = sig.outputs[end.port];
         if (!p) {
-          throw new MorphogenError("PARSE_FAILED", `interface input ${name}: port ${end.port} not found on cell ${end.cell}`);
+          throw new AlgalError("PARSE_FAILED", `interface input ${name}: port ${end.port} not found on cell ${end.cell}`);
         }
         properties[name] = portToJsonSchema(p as never) as JsonObject;
         if (!p.optional) required.push(name);
@@ -802,7 +800,7 @@ async function main(): Promise<number> {
         );
         for (const [name, cmd] of Object.entries(map)) {
           if (typeof cmd !== "string" || cmd.length === 0) {
-            throw new MorphogenError(
+            throw new AlgalError(
               "PARSE_FAILED",
               `executors.${name} must be a shell command string`,
             );
@@ -925,10 +923,10 @@ async function main(): Promise<number> {
           flags.tools !== undefined ? await loadTools(String(flags.tools)) : undefined,
         );
         if (!verified.ok) {
-          throw new MorphogenError("RECEIPT_MISMATCH", `search report failed verification: ${verified.mismatches.join("; ")}`);
+          throw new AlgalError("RECEIPT_MISMATCH", `search report failed verification: ${verified.mismatches.join("; ")}`);
         }
         const promoted = await store.getManifest(report.result.promoted);
-        if (!promoted) throw new MorphogenError("STORE_MISS", `promoted manifest ${report.result.promoted} missing`);
+        if (!promoted) throw new AlgalError("STORE_MISS", `promoted manifest ${report.result.promoted} missing`);
         const bundle = await packOrganism(promoted, store);
         const outputDir = resolve(String(flags.out));
         const { mkdir, writeFile } = await import("node:fs/promises");
@@ -952,10 +950,10 @@ async function main(): Promise<number> {
           flags.tools !== undefined ? await loadTools(String(flags.tools)) : undefined,
         );
         if (!verified.ok) {
-          throw new MorphogenError("RECEIPT_MISMATCH", `foundry report failed verification: ${verified.mismatches.join("; ")}`);
+          throw new AlgalError("RECEIPT_MISMATCH", `foundry report failed verification: ${verified.mismatches.join("; ")}`);
         }
         const promoted = await store.getManifest(report.promoted);
-        if (!promoted) throw new MorphogenError("STORE_MISS", `promoted manifest ${report.promoted} missing`);
+        if (!promoted) throw new AlgalError("STORE_MISS", `promoted manifest ${report.promoted} missing`);
         const bundle = await packOrganism(promoted, store);
         const outputDir = resolve(String(flags.out));
         const { mkdir, writeFile } = await import("node:fs/promises");
@@ -976,28 +974,28 @@ async function main(): Promise<number> {
       const config = asRecord(await readJson(configFile), "foundry config");
       const unknown = Object.keys(config).filter((k) => !["contract", "candidates", "generator", "cases", "search"].includes(k));
       if (unknown.length > 0) {
-        throw new MorphogenError("PARSE_FAILED", `foundry config: unknown key "${unknown[0]}"`);
+        throw new AlgalError("PARSE_FAILED", `foundry config: unknown key "${unknown[0]}"`);
       }
-      if (config.contract !== "morphogen.foundry.config.v1") {
-        throw new MorphogenError("PARSE_FAILED", "foundry config.contract must be morphogen.foundry.config.v1");
+      if (config.contract !== "algal.foundry.config.v1") {
+        throw new AlgalError("PARSE_FAILED", "foundry config.contract must be algal.foundry.config.v1");
       }
       if (!searchMode && config.search !== undefined) {
-        throw new MorphogenError("PARSE_FAILED", "search settings require the foundry search command");
+        throw new AlgalError("PARSE_FAILED", "search settings require the foundry search command");
       }
       const candidateEntries = config.candidates ?? [];
       if (!Array.isArray(candidateEntries)) {
-        throw new MorphogenError("PARSE_FAILED", "foundry config.candidates must be a list");
+        throw new AlgalError("PARSE_FAILED", "foundry config.candidates must be a list");
       }
       if (candidateEntries.length === 0 && config.generator === undefined) {
-        throw new MorphogenError("PARSE_FAILED", "foundry config needs candidates or a generator");
+        throw new AlgalError("PARSE_FAILED", "foundry config needs candidates or a generator");
       }
       if (!Array.isArray(config.cases) || config.cases.length === 0) {
-        throw new MorphogenError("PARSE_FAILED", "foundry config.cases must be a non-empty list");
+        throw new AlgalError("PARSE_FAILED", "foundry config.cases must be a non-empty list");
       }
       const base = dirname(configFile);
       const candidates = await Promise.all(candidateEntries.map(async (candidate, i) => {
         if (typeof candidate !== "string") {
-          throw new MorphogenError("PARSE_FAILED", `foundry config.candidates[${i}] must be a path`);
+          throw new AlgalError("PARSE_FAILED", `foundry config.candidates[${i}] must be a path`);
         }
         return parseOrganismManifest(await readJson(resolve(base, candidate)));
       }));
@@ -1011,10 +1009,10 @@ async function main(): Promise<number> {
           typeof raw.output !== "string" ||
           (raw.field !== undefined && typeof raw.field !== "string")
         ) {
-          throw new MorphogenError("PARSE_FAILED", "foundry config.generator needs manifest, args, and output");
+          throw new AlgalError("PARSE_FAILED", "foundry config.generator needs manifest, args, and output");
         }
         if (raw.args === undefined) {
-          throw new MorphogenError("PARSE_FAILED", "foundry config.generator.args must be an object");
+          throw new AlgalError("PARSE_FAILED", "foundry config.generator.args must be an object");
         }
         generator = {
           manifest: parseOrganismManifest(await readJson(resolve(base, raw.manifest))),
@@ -1027,16 +1025,16 @@ async function main(): Promise<number> {
         const c = asRecord(raw, `foundry config.cases[${i}]`);
         const extra = Object.keys(c).filter((k) => !["id", "split", "args", "expect"].includes(k));
         if (extra.length > 0) {
-          throw new MorphogenError("PARSE_FAILED", `foundry config.cases[${i}]: unknown key "${extra[0]}"`);
+          throw new AlgalError("PARSE_FAILED", `foundry config.cases[${i}]: unknown key "${extra[0]}"`);
         }
         if (
           typeof c.id !== "string" ||
           (c.split !== "train" && c.split !== "validation" && c.split !== "holdout")
         ) {
-          throw new MorphogenError("PARSE_FAILED", `foundry config.cases[${i}] needs string id and train|validation|holdout split`);
+          throw new AlgalError("PARSE_FAILED", `foundry config.cases[${i}] needs string id and train|validation|holdout split`);
         }
         if (c.args === undefined || c.expect === undefined) {
-          throw new MorphogenError("PARSE_FAILED", `foundry config.cases[${i}] needs args and expect objects`);
+          throw new AlgalError("PARSE_FAILED", `foundry config.cases[${i}] needs args and expect objects`);
         }
         return {
           id: c.id,
@@ -1062,7 +1060,7 @@ async function main(): Promise<number> {
         const map = asRecord(await readJson(resolve(String(flags.executors))), "executors");
         for (const [name, command] of Object.entries(map)) {
           if (typeof command !== "string" || command.length === 0) {
-            throw new MorphogenError("PARSE_FAILED", `executors.${name} must be a shell command string`);
+            throw new AlgalError("PARSE_FAILED", `executors.${name} must be a shell command string`);
           }
           const inner = commandExecutor(command);
           executors.push({ id: name, execute: (request) => inner.execute(request) });
@@ -1079,7 +1077,7 @@ async function main(): Promise<number> {
         : undefined;
       if (searchMode) {
         if (!generator || config.search === undefined) {
-          throw new MorphogenError("PARSE_FAILED", "search config needs generator and search objects");
+          throw new AlgalError("PARSE_FAILED", "search config needs generator and search objects");
         }
         const search = asRecord(config.search, "foundry config.search");
         const extra = Object.keys(search).filter((key) => !["maxGenerations", "feedbackInput"].includes(key));
@@ -1088,7 +1086,7 @@ async function main(): Promise<number> {
           !Number.isInteger(search.maxGenerations) ||
           typeof search.feedbackInput !== "string"
         ) {
-          throw new MorphogenError("PARSE_FAILED", "foundry config.search needs maxGenerations and feedbackInput");
+          throw new AlgalError("PARSE_FAILED", "foundry config.search needs maxGenerations and feedbackInput");
         }
         const report = await runFoundrySearch({
           generator: generator.manifest,
@@ -1198,26 +1196,26 @@ async function main(): Promise<number> {
       const config = asRecord(await readJson(configFile), "bench config");
       const unknown = Object.keys(config).filter((k) => !["contract", "cases", "systems", "prices"].includes(k));
       if (unknown.length > 0) {
-        throw new MorphogenError("PARSE_FAILED", `bench config: unknown key "${unknown[0]}"`);
+        throw new AlgalError("PARSE_FAILED", `bench config: unknown key "${unknown[0]}"`);
       }
-      if (config.contract !== "morphogen.bench.config.v1") {
-        throw new MorphogenError("PARSE_FAILED", "bench config.contract must be morphogen.bench.config.v1");
+      if (config.contract !== "algal.bench.config.v1") {
+        throw new AlgalError("PARSE_FAILED", "bench config.contract must be algal.bench.config.v1");
       }
       if (!Array.isArray(config.cases) || config.cases.length === 0) {
-        throw new MorphogenError("PARSE_FAILED", "bench config.cases must be a non-empty list");
+        throw new AlgalError("PARSE_FAILED", "bench config.cases must be a non-empty list");
       }
       if (!Array.isArray(config.systems) || config.systems.length === 0) {
-        throw new MorphogenError("PARSE_FAILED", "bench config.systems must be a non-empty list");
+        throw new AlgalError("PARSE_FAILED", "bench config.systems must be a non-empty list");
       }
       const base = dirname(configFile);
       const cases: BenchCase[] = config.cases.map((raw, i) => {
         const c = asRecord(raw, `bench config.cases[${i}]`);
         const extra = Object.keys(c).filter((k) => !["id", "args", "expect"].includes(k));
         if (extra.length > 0) {
-          throw new MorphogenError("PARSE_FAILED", `bench config.cases[${i}]: unknown key "${extra[0]}"`);
+          throw new AlgalError("PARSE_FAILED", `bench config.cases[${i}]: unknown key "${extra[0]}"`);
         }
         if (typeof c.id !== "string" || c.args === undefined || c.expect === undefined) {
-          throw new MorphogenError("PARSE_FAILED", `bench config.cases[${i}] needs id, args, and expect`);
+          throw new AlgalError("PARSE_FAILED", `bench config.cases[${i}] needs id, args, and expect`);
         }
         return {
           id: c.id,
@@ -1249,7 +1247,7 @@ async function main(): Promise<number> {
         if (spec.startsWith("cmd:")) {
           return named(id, commandExecutor(spec.slice("cmd:".length)));
         }
-        throw new MorphogenError(
+        throw new AlgalError(
           "PARSE_FAILED",
           `bench executor "${id}": unknown spec (want gateway:<model>, scripted:<file>, or cmd:<command>)`,
         );
@@ -1259,16 +1257,16 @@ async function main(): Promise<number> {
         const s = asRecord(raw, `bench config.systems[${i}]`);
         const extra = Object.keys(s).filter((k) => !["id", "manifest", "executors"].includes(k));
         if (extra.length > 0) {
-          throw new MorphogenError("PARSE_FAILED", `bench config.systems[${i}]: unknown key "${extra[0]}"`);
+          throw new AlgalError("PARSE_FAILED", `bench config.systems[${i}]: unknown key "${extra[0]}"`);
         }
         if (typeof s.id !== "string" || typeof s.manifest !== "string" || s.executors === undefined) {
-          throw new MorphogenError("PARSE_FAILED", `bench config.systems[${i}] needs id, manifest, and executors`);
+          throw new AlgalError("PARSE_FAILED", `bench config.systems[${i}] needs id, manifest, and executors`);
         }
         const specs = asRecord(s.executors, `bench config.systems[${i}].executors`);
         const executors: Executor[] = [];
         for (const [name, spec] of Object.entries(specs)) {
           if (typeof spec !== "string" || spec.length === 0) {
-            throw new MorphogenError("PARSE_FAILED", `bench executor "${name}" must be a spec string`);
+            throw new AlgalError("PARSE_FAILED", `bench executor "${name}" must be a spec string`);
           }
           executors.push(await resolveSpec(name, spec));
         }
@@ -1326,14 +1324,14 @@ async function main(): Promise<number> {
       } else {
         const digest = (receipt as JsonObject).manifestDigest;
         if (typeof digest !== "string" || !digest.startsWith("sha256:")) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "PARSE_FAILED",
             "receipt has no manifestDigest; pass the manifest explicitly",
           );
         }
         const stored = await store.getManifest(digest as `sha256:${string}`);
         if (!stored) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "STORE_MISS",
             `manifest ${digest} not in store; pass it explicitly or use --modules`,
           );
@@ -1518,7 +1516,7 @@ async function main(): Promise<number> {
         if (!name) usageError("algal slot get <name>");
         const v = await store.getSlot(name);
         if (v === undefined) {
-          throw new MorphogenError("STORE_MISS", `slot "${name}" is empty`);
+          throw new AlgalError("STORE_MISS", `slot "${name}" is empty`);
         }
         out(v as JsonObject);
         return 0;
@@ -1530,7 +1528,7 @@ async function main(): Promise<number> {
         const v = await readJson(resolve(valueFile));
         const bytes = canonicalBytes(v);
         if (bytes > BOUNDS.maxBlobBytes) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "BUDGET_EXHAUSTED",
             `slot value ${bytes}B exceeds maxBlobBytes ${BOUNDS.maxBlobBytes}B`,
           );
@@ -1549,7 +1547,7 @@ async function main(): Promise<number> {
       // and default args, then verify each receipt offline.
       const { readdir } = await import("node:fs/promises");
       const files = (await readdir(EXAMPLES_DIR)).filter((f) =>
-        /\.(?:algal|morphogen)\.json$/.test(f),
+        /\.algal\.json$/.test(f),
       );
       const results: JsonObject[] = [];
       let allOk = true;
@@ -1557,7 +1555,7 @@ async function main(): Promise<number> {
       // regardless of iteration order
       const parsed = new Map<string, { raw: JsonValue; manifest: ReturnType<typeof parseOrganismManifest> }>();
       for (const f of files.sort()) {
-        const id = f.replace(/\.(?:algal|morphogen)\.json$/, "");
+        const id = f.replace(/\.algal\.json$/, "");
         const raw = await readJson(join(EXAMPLES_DIR, f));
         const manifest = parseOrganismManifest(raw);
         await store.putManifest(manifest);
@@ -1655,7 +1653,7 @@ async function main(): Promise<number> {
 
 function asRecord(v: JsonValue, what: string): Record<string, JsonValue> {
   if (v === null || typeof v !== "object" || Array.isArray(v)) {
-    throw new MorphogenError("PARSE_FAILED", `${what} must be a JSON object`);
+    throw new AlgalError("PARSE_FAILED", `${what} must be a JSON object`);
   }
   return v as Record<string, JsonValue>;
 }
@@ -1669,18 +1667,18 @@ function parseBenchPrices(
   const prices: Record<string, BenchPrice> = {};
   for (const [key, value] of Object.entries(map)) {
     if (key.length === 0 || key.length > 256) {
-      throw new MorphogenError("PARSE_FAILED", `${at} has an invalid price key`);
+      throw new AlgalError("PARSE_FAILED", `${at} has an invalid price key`);
     }
     const p = asRecord(value, `${at}.${key}`);
     const extra = Object.keys(p).filter((k) => !["input", "output"].includes(k));
     if (extra.length > 0) {
-      throw new MorphogenError("PARSE_FAILED", `${at}.${key}: unknown key "${extra[0]}"`);
+      throw new AlgalError("PARSE_FAILED", `${at}.${key}: unknown key "${extra[0]}"`);
     }
     if (typeof p.input !== "number" || p.input < 0 || !Number.isFinite(p.input)) {
-      throw new MorphogenError("PARSE_FAILED", `${at}.${key}.input must be a non-negative number`);
+      throw new AlgalError("PARSE_FAILED", `${at}.${key}.input must be a non-negative number`);
     }
     if (typeof p.output !== "number" || p.output < 0 || !Number.isFinite(p.output)) {
-      throw new MorphogenError("PARSE_FAILED", `${at}.${key}.output must be a non-negative number`);
+      throw new AlgalError("PARSE_FAILED", `${at}.${key}.output must be a non-negative number`);
     }
     prices[key] = { input: p.input, output: p.output };
   }
@@ -1688,7 +1686,7 @@ function parseBenchPrices(
 }
 
 function usageError(msg: string): never {
-  throw new MorphogenError("PARSE_FAILED", `usage: ${msg}`);
+  throw new AlgalError("PARSE_FAILED", `usage: ${msg}`);
 }
 
 main()

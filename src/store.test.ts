@@ -7,7 +7,7 @@ import { digestCanonical } from "./digest";
 import { FileStore, MemoryStore } from "./store";
 
 const m = parseOrganismManifest({
-  contract: "morphogen.organism.v1",
+  contract: "algal.organism.v1",
   key: "organism:stored",
   name: "Stored",
   cells: [{ id: "x", kind: "input", outputs: { v: "json" } }],
@@ -37,7 +37,7 @@ describe("MemoryStore", () => {
 
 describe("FileStore", () => {
   test("round-trips and detects tampering", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "morphogen-test-"));
+    const dir = await mkdtemp(join(tmpdir(), "algal-test-"));
     try {
       const s = new FileStore(dir);
       const d = await s.putManifest(m);
@@ -60,7 +60,7 @@ describe("FileStore", () => {
   });
 
   test("values round-trip and corrupt files are detected", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "morphogen-test-"));
+    const dir = await mkdtemp(join(tmpdir(), "algal-test-"));
     try {
       const s = new FileStore(dir);
       const v = { doc: "payload", items: [1, 2, 3] };
@@ -96,7 +96,7 @@ describe("effect memo index", () => {
   });
 
   test("FileStore round-trips, is first-wins, and detects claim mismatch", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "morphogen-test-"));
+    const dir = await mkdtemp(join(tmpdir(), "algal-test-"));
     try {
       const s = new FileStore(dir);
       await s.putEffect({ ...rec });

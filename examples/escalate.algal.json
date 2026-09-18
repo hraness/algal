@@ -1,0 +1,48 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:escalate",
+  "name": "Escalate",
+  "note": "Field-guard routing: a ticket record's severity field picks the handler — no classifier needed.",
+  "cells": [
+    {
+      "id": "ticket",
+      "kind": "input",
+      "outputs": { "rec": "json" }
+    },
+    {
+      "id": "page",
+      "kind": "agent",
+      "inputs": { "rec": "json" },
+      "prompt": "Page the on-call: one line naming the system and impact.",
+      "output": { "kind": "text" }
+    },
+    {
+      "id": "log",
+      "kind": "agent",
+      "inputs": { "rec": "json" },
+      "prompt": "Write a one-line log entry for this routine ticket.",
+      "output": { "kind": "text" }
+    },
+    { "id": "emit", "kind": "fn", "fn": "join.v1" }
+  ],
+  "edges": [
+    {
+      "from": { "cell": "ticket", "port": "rec" },
+      "to": { "cell": "page", "port": "rec" },
+      "guard": { "field": "severity", "equals": "high" }
+    },
+    {
+      "from": { "cell": "ticket", "port": "rec" },
+      "to": { "cell": "log", "port": "rec" },
+      "guard": { "field": "severity", "equals": "low" }
+    },
+    {
+      "from": { "cell": "page", "port": "out" },
+      "to": { "cell": "emit", "port": "items" }
+    },
+    {
+      "from": { "cell": "log", "port": "out" },
+      "to": { "cell": "emit", "port": "items" }
+    }
+  ]
+}

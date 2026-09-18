@@ -137,7 +137,7 @@ problem. With them, it becomes a search-and-selection problem.
 These are later layers. The current contract already supports the core loop:
 generate, admit, run, measure, select.
 
-## Working example: `examples/habitat.morphogen.json`
+## Working example: `examples/habitat.algal.json`
 
 There is a runnable steel thread in the bundled examples. The `habitat` organism:
 
@@ -150,7 +150,7 @@ There is a runnable steel thread in the bundled examples. The `habitat` organism
 Run it:
 
 ```sh
-algal run examples/habitat.morphogen.json \
+algal run examples/habitat.algal.json \
   --args examples/habitat.args.json \
   --responses examples/habitat.responses.json \
   --write
@@ -160,7 +160,7 @@ The receipt shows `child` (the spawned manifest digest) and `population` (the
 updated list). The child is data, the host still owns the store and registries,
  and the whole lineage is replayable.
 
-## Live self-reproduction: `examples/habitat/live.morphogen.json`
+## Live self-reproduction: `examples/habitat/live.algal.json`
 
 There is also a non-deterministic version of the habitat steel thread. The
 `habitat-live` organism calls a live model to design the child, falls back to a
@@ -194,7 +194,7 @@ When this was first run with `alibaba/qwen3.7-flash`, the model generated and
 the organism spawned:
 
 ```
-fallback digest  sha256:0d888ed00f06bba02259b00a3f9f895ef90d705cdbb1a8cc9c70d3bd96ee7a0e
+fallback digest  sha256:89f457723808edf83efecf817c275a789f525b80dd06e72bb23ddd47f6d0cc32
 proposed child    sha256:f73c4ef9f89a3c55595f773c5a86c89780cfaf202cf29284005e76a5ad7e751c
 promoted bundle   sha256:f73c4ef9f89a3c55595f773c5a86c89780cfaf202cf29284005e76a5ad7e751c
 wrote promoted/f73c4ef9f89a3c55595f773c5a86c89780cfaf202cf29284005e76a5ad7e751c.bundle.json

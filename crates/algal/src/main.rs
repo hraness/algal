@@ -62,6 +62,8 @@ struct Execution {
     #[arg(long)]
     tools: Option<PathBuf>,
     #[arg(long)]
+    cache_effects: bool,
+    #[arg(long)]
     write: bool,
 }
 
@@ -83,7 +85,7 @@ enum Commands {
     Bench {
         #[command(subcommand)]
         command: Option<BenchCommand>,
-        /// `morphogen.bench.config.v1` file
+        /// `algal.bench.config.v1` file
         config: Option<PathBuf>,
         #[arg(long)]
         out: Option<PathBuf>,
@@ -95,6 +97,16 @@ enum Commands {
         modules: Option<PathBuf>,
         #[arg(long)]
         transports: Option<PathBuf>,
+    },
+    Foundry {
+        #[command(subcommand)]
+        command: Option<FoundryCommand>,
+        /// `algal.foundry.config.v1` file
+        config: Option<PathBuf>,
+        #[arg(long)]
+        out: Option<PathBuf>,
+        #[command(flatten)]
+        options: Execution,
     },
     Run {
         manifest: PathBuf,
@@ -164,6 +176,12 @@ enum Commands {
         #[arg(long, default_value = "openai")]
         format: String,
     },
+    Suite {
+        #[arg(long, default_value = "examples")]
+        examples: PathBuf,
+        #[arg(long)]
+        modules: Option<PathBuf>,
+    },
     Store {
         #[command(subcommand)]
         command: StoreCommand,
@@ -205,6 +223,56 @@ enum BenchCommand {
     },
     Inspect {
         report: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum FoundryCommand {
+    Verify {
+        report: PathBuf,
+        #[arg(long)]
+        tools: Option<PathBuf>,
+        #[arg(long)]
+        modules: Option<PathBuf>,
+    },
+    Inspect {
+        report: PathBuf,
+    },
+    Pack {
+        report: PathBuf,
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long)]
+        tools: Option<PathBuf>,
+        #[arg(long)]
+        modules: Option<PathBuf>,
+    },
+    Search {
+        /// `algal.foundry.config.v1` file with a `search` block
+        config: PathBuf,
+        #[arg(long)]
+        out: Option<PathBuf>,
+        #[command(flatten)]
+        options: Box<Execution>,
+    },
+    SearchVerify {
+        report: PathBuf,
+        #[arg(long)]
+        tools: Option<PathBuf>,
+        #[arg(long)]
+        modules: Option<PathBuf>,
+    },
+    SearchInspect {
+        report: PathBuf,
+    },
+    SearchPack {
+        report: PathBuf,
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long)]
+        tools: Option<PathBuf>,
+        #[arg(long)]
+        modules: Option<PathBuf>,
     },
 }
 
@@ -385,7 +453,8 @@ fn prepare(options: &Execution, dir: &Path) -> Result<(Store, Host, Transports)>
     if let Some(path) = &options.modules {
         store.load_modules(path)?;
     }
-    let host = host(options)?;
+    let mut host = host(options)?;
+    host.cache = options.cache_effects;
     let mut transports = Transports::new();
     if let Some(file) = &options.transports {
         let value = load(file, 65_536)?;
@@ -808,6 +877,179 @@ async fn execute(cli: Cli) -> Result<bool> {
                 Ok(true)
             }
         },
+        Commands::Foundry {
+            command,
+            config,
+            out,
+            options,
+        } => {
+            let verifier =
+                |tools: Option<PathBuf>, modules: Option<PathBuf>| -> Result<(Store, Host)> {
+                    let mut store = Store::open(&cli.dir, false)?;
+                    if let Some(path) = modules {
+                        store.load_modules(&path)?;
+                    }
+                    let mut host = Host::default();
+                    if let Some(path) = tools {
+                        host.load_tools(&path)?;
+                    }
+                    Ok((store, host))
+                };
+            match command {
+                Some(FoundryCommand::Verify {
+                    report,
+                    tools,
+                    modules,
+                }) => {
+                    let (store, host) = verifier(tools, modules)?;
+                    let result =
+                        algal::foundry::verify(&load(&report, MAX_DOCUMENT_BYTES)?, &store, &host)
+                            .await?;
+                    emit(&result)?;
+                    Ok(result["ok"] == true)
+                }
+                Some(FoundryCommand::Inspect { report }) => {
+                    emit(&algal::foundry::inspect(&load(
+                        &report,
+                        MAX_DOCUMENT_BYTES,
+                    )?)?)?;
+                    Ok(true)
+                }
+                Some(FoundryCommand::Pack {
+                    report,
+                    out,
+                    tools,
+                    modules,
+                }) => {
+                    let (store, host) = verifier(tools, modules)?;
+                    emit(
+                        &algal::foundry::pack_promoted(
+                            &load(&report, MAX_DOCUMENT_BYTES)?,
+                            false,
+                            &store,
+                            &host,
+                            &out,
+                        )
+                        .await?,
+                    )?;
+                    Ok(true)
+                }
+                Some(FoundryCommand::SearchVerify {
+                    report,
+                    tools,
+                    modules,
+                }) => {
+                    let (store, host) = verifier(tools, modules)?;
+                    let result = algal::foundry::verify_search(
+                        &load(&report, MAX_DOCUMENT_BYTES)?,
+                        &store,
+                        &host,
+                    )
+                    .await?;
+                    emit(&result)?;
+                    Ok(result["ok"] == true)
+                }
+                Some(FoundryCommand::SearchInspect { report }) => {
+                    emit(&algal::foundry::inspect_search(&load(
+                        &report,
+                        MAX_DOCUMENT_BYTES,
+                    )?)?)?;
+                    Ok(true)
+                }
+                Some(FoundryCommand::SearchPack {
+                    report,
+                    out,
+                    tools,
+                    modules,
+                }) => {
+                    let (store, host) = verifier(tools, modules)?;
+                    emit(
+                        &algal::foundry::pack_promoted(
+                            &load(&report, MAX_DOCUMENT_BYTES)?,
+                            true,
+                            &store,
+                            &host,
+                            &out,
+                        )
+                        .await?,
+                    )?;
+                    Ok(true)
+                }
+                Some(FoundryCommand::Search {
+                    config,
+                    out,
+                    mut options,
+                }) => {
+                    options.write = true;
+                    let (mut store, mut host, transports) = prepare(&options, &cli.dir)?;
+                    let config = algal::foundry::load_config(&config, true)?;
+                    let generator = config.generator.as_ref().ok_or_else(|| {
+                        Error::invalid("foundry search requires a generator in the config")
+                    })?;
+                    let search = config.search.as_ref().ok_or_else(|| {
+                        Error::invalid("foundry search requires a search block in the config")
+                    })?;
+                    let report = algal::foundry::search(
+                        generator,
+                        &config.candidates,
+                        &config.cases,
+                        search,
+                        &mut store,
+                        &mut host,
+                        &transports,
+                    )
+                    .await?;
+                    if let Some(path) = out {
+                        std::fs::write(&path, canonical(&report)?)?;
+                    }
+                    emit(&report)?;
+                    Ok(true)
+                }
+                None => {
+                    let config = config.ok_or_else(|| {
+                        Error::invalid(
+                            "usage: algal foundry <config.json> | foundry verify|inspect|pack <report.json>",
+                        )
+                    })?;
+                    let mut options = options;
+                    options.write = true;
+                    let (mut store, mut host, transports) = prepare(&options, &cli.dir)?;
+                    let mut config = algal::foundry::load_config(&config, false)?;
+                    let lineage = match &config.generator {
+                        Some(generator) => {
+                            let (generator_digest, receipt_digest, generated) =
+                                algal::foundry::generate(
+                                    &generator.manifest,
+                                    &generator.args,
+                                    &generator.output,
+                                    generator.field.as_deref(),
+                                    &mut store,
+                                    &mut host,
+                                    &transports,
+                                )
+                                .await?;
+                            config.candidates.extend(generated);
+                            Some((generator_digest, receipt_digest))
+                        }
+                        None => None,
+                    };
+                    let report = algal::foundry::run(
+                        &config.candidates,
+                        &config.cases,
+                        lineage,
+                        &mut store,
+                        &mut host,
+                        &transports,
+                    )
+                    .await?;
+                    if let Some(path) = out {
+                        std::fs::write(&path, canonical(&report)?)?;
+                    }
+                    emit(&report)?;
+                    Ok(true)
+                }
+            }
+        }
         Commands::Run {
             manifest: file,
             options,
@@ -1022,7 +1264,7 @@ async fn execute(cli: Cli) -> Result<bool> {
                 return Err(Error::invalid("usage: algal example <id>"));
             }
             let algal = examples.join(format!("{id}.algal.json"));
-            let legacy = examples.join(format!("{id}.morphogen.json"));
+            let legacy = examples.join(format!("{id}.algal.json"));
             let path = if algal.exists() { algal } else { legacy };
             emit(&load(&path, 1_048_576)?)?;
             Ok(true)
@@ -1043,6 +1285,15 @@ async fn execute(cli: Cli) -> Result<bool> {
                 )?,
             };
             let result = runtime::verify(&receipt, manifest, &store, &host).await?;
+            emit(&result)?;
+            Ok(result["ok"] == true)
+        }
+        Commands::Suite { examples, modules } => {
+            let mut store = Store::open(&cli.dir, true)?;
+            if let Some(path) = modules {
+                store.load_modules(&path)?;
+            }
+            let result = algal::suite::run(&examples, &mut store).await?;
             emit(&result)?;
             Ok(result["ok"] == true)
         }
@@ -1218,7 +1469,7 @@ async fn execute(cli: Cli) -> Result<bool> {
             options.write = true;
             let (mut store, mut host, transports) = prepare(&options, &cli.dir)?;
             let program = Manifest::parse(
-                &json!({"contract":"morphogen.organism.v1","key":"organism:algal-agent","name":"ALGAL coding-agent harness","cells":[
+                &json!({"contract":"algal.organism.v1","key":"organism:algal-agent","name":"ALGAL coding-agent harness","cells":[
                 {"id":"task","kind":"input","outputs":{"text":"text"}},
                 {"id":"work","kind":"agent","inputs":{"task":"text"},"prompt":"Complete the user's bounded task using only host-admitted capabilities. State what was verified and what remains uncertain.","output":{"kind":"text"},"budget":{"maxEffectMs":600000}}
             ],"edges":[{"from":{"cell":"task","port":"text"},"to":{"cell":"work","port":"task"}}],"interface":{"inputs":{"task":{"cell":"task","port":"text"}},"outputs":{"answer":{"cell":"work","port":"out"}}}}),
@@ -1273,7 +1524,7 @@ async fn execute(cli: Cli) -> Result<bool> {
                 Ok(result["available"] == true)
             } else {
                 emit(
-                    &json!({"runtime":"algal","version":env!("CARGO_PKG_VERSION"),"native":true,"platform":std::env::consts::OS,"legacyWireContract":"morphogen.organism.v1"}),
+                    &json!({"runtime":"algal","version":env!("CARGO_PKG_VERSION"),"native":true,"platform":std::env::consts::OS,"legacyWireContract":"algal.organism.v1"}),
                 )?;
                 Ok(true)
             }

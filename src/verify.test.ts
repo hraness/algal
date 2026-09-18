@@ -16,7 +16,7 @@ const EXAMPLES = join(__dirname, "..", "examples");
 
 function loadExample() {
   const manifestRaw = JSON.parse(
-    readFileSync(join(EXAMPLES, "triage.morphogen.json"), "utf8"),
+    readFileSync(join(EXAMPLES, "triage.algal.json"), "utf8"),
   ) as JsonValue;
   const responses = JSON.parse(
     readFileSync(join(EXAMPLES, "triage.responses.json"), "utf8"),
@@ -71,7 +71,7 @@ describe("verify", () => {
     const { receipt } = await runTriage();
     const other = manifestToJson(
       parseOrganismManifest({
-        contract: "morphogen.organism.v1",
+        contract: "algal.organism.v1",
         key: "organism:other",
         name: "Other",
         cells: [{ id: "x", kind: "input", outputs: { v: "json" } }],
@@ -114,7 +114,7 @@ describe("verify", () => {
 
   test("a tool-call loop replays bit-for-bit", async () => {
     const manifestRaw = {
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:vtools",
       name: "VTools",
       cells: [
@@ -160,7 +160,7 @@ describe("verify", () => {
   test("a repeat run replays bit-for-bit", async () => {
     const store = new MemoryStore();
     const innerRaw = {
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:polish",
       name: "Polish",
       interface: {
@@ -194,7 +194,7 @@ describe("verify", () => {
     } as JsonValue;
     const innerDigest = await store.putManifest(parseOrganismManifest(innerRaw));
     const outerRaw = {
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:refine",
       name: "Refine",
       cells: [

@@ -40,14 +40,12 @@ export class AlgalError extends Error {
   }
 }
 
-export { AlgalError as MorphogenError };
-
-export function isMorphogenError(u: unknown): u is AlgalError {
+export function isAlgalError(u: unknown): u is AlgalError {
   return u instanceof AlgalError;
 }
 
 export function errorReport(u: unknown): { code: ErrorCode; message: string } {
-  if (isMorphogenError(u)) return { code: u.code, message: u.message };
+  if (isAlgalError(u)) return { code: u.code, message: u.message };
   return {
     code: "INTERNAL",
     message: u instanceof Error ? u.message : String(u),

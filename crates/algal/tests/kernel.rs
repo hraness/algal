@@ -27,7 +27,7 @@ fn every_bundled_manifest_is_admitted_and_normalizes_stably() {
     for entry in fs::read_dir(examples).unwrap() {
         let path = entry.unwrap().path();
         let name = path.file_name().unwrap().to_string_lossy();
-        if !name.ends_with(".morphogen.json") && !name.ends_with(".algal.json") {
+        if !name.ends_with(".algal.json") {
             continue;
         }
         let manifest =
@@ -48,7 +48,7 @@ async fn every_scripted_example_runs_and_replays_without_a_provider() {
         let path = entry.unwrap().path();
         let name = path.file_name().unwrap().to_string_lossy();
         let Some(id) = name
-            .strip_suffix(".morphogen.json")
+            .strip_suffix(".algal.json")
             .or_else(|| name.strip_suffix(".algal.json"))
         else {
             continue;
@@ -89,7 +89,10 @@ async fn every_scripted_example_runs_and_replays_without_a_provider() {
 
 #[test]
 fn tampered_bundle_does_not_partially_install() {
-    let manifest = Manifest::parse(&json!({"contract":"morphogen.organism.v1","key":"organism:empty","name":"Empty","cells":[]})).unwrap();
+    let manifest = Manifest::parse(
+        &json!({"contract":"algal.organism.v1","key":"organism:empty","name":"Empty","cells":[]}),
+    )
+    .unwrap();
     let mut bundle = pack(&manifest, &Store::default()).unwrap();
     bundle["values"][format!("sha256:{}", "a".repeat(64))] = json!("forged");
     let mut destination = Store::default();
@@ -105,7 +108,7 @@ fn tampered_bundle_does_not_partially_install() {
 #[test]
 fn structural_errors_never_reach_effect_execution() {
     let manifest = Manifest::parse(
-        &json!({"contract":"morphogen.organism.v1","key":"organism:cycle","name":"Cycle","cells":[
+        &json!({"contract":"algal.organism.v1","key":"organism:cycle","name":"Cycle","cells":[
             {"id":"one","kind":"fn","fn":"echo.v1"},{"id":"two","kind":"fn","fn":"echo.v1"}
         ],"edges":[
             {"from":{"cell":"one","port":"value"},"to":{"cell":"two","port":"value"}},

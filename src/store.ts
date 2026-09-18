@@ -1,12 +1,12 @@
 // Content-addressed store: manifests and run receipts live under their
-// canonical digests. `FileStore` writes to a `.morphogen/` directory;
+// canonical digests. `FileStore` writes to a `.algal/` directory;
 // `MemoryStore` backs tests. The interface is the Oh-adoption seam — an
 // Oh-backed store implements these four methods over the op log.
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { asDigest, digestCanonical, type Digest } from "./digest";
-import { MorphogenError } from "./errors";
+import { AlgalError } from "./errors";
 import {
   manifestToJson,
   parseOrganismManifest,
@@ -133,16 +133,16 @@ export class FileStore implements Store {
       const parsed = parseOrganismManifest(JSON.parse(raw));
       const actual = digestCanonical(manifestToJson(parsed));
       if (actual !== digest) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "DIGEST_MISMATCH",
           `manifest file ${digest} hashes to ${actual}`,
         );
       }
       return parsed;
     } catch (e) {
-      if (e instanceof MorphogenError) throw e;
+      if (e instanceof AlgalError) throw e;
       if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-      throw new MorphogenError("PARSE_FAILED", `manifest ${digest}: ${e}`);
+      throw new AlgalError("PARSE_FAILED", `manifest ${digest}: ${e}`);
     }
   }
 
@@ -159,16 +159,16 @@ export class FileStore implements Store {
       const parsed = JSON.parse(raw) as JsonValue;
       const actual = digestCanonical(parsed);
       if (actual !== digest) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "DIGEST_MISMATCH",
           `receipt file ${digest} hashes to ${actual}`,
         );
       }
       return parsed;
     } catch (e) {
-      if (e instanceof MorphogenError) throw e;
+      if (e instanceof AlgalError) throw e;
       if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-      throw new MorphogenError("PARSE_FAILED", `receipt ${digest}: ${e}`);
+      throw new AlgalError("PARSE_FAILED", `receipt ${digest}: ${e}`);
     }
   }
 
@@ -185,16 +185,16 @@ export class FileStore implements Store {
       const parsed = JSON.parse(raw) as JsonValue;
       const actual = digestCanonical(parsed);
       if (actual !== digest) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "DIGEST_MISMATCH",
           `value file ${digest} hashes to ${actual}`,
         );
       }
       return parsed;
     } catch (e) {
-      if (e instanceof MorphogenError) throw e;
+      if (e instanceof AlgalError) throw e;
       if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-      throw new MorphogenError("PARSE_FAILED", `value ${digest}: ${e}`);
+      throw new AlgalError("PARSE_FAILED", `value ${digest}: ${e}`);
     }
   }
 
@@ -210,16 +210,16 @@ export class FileStore implements Store {
       const raw = await readFile(this.effectPath(effectKey(requestDigest, executor)), "utf8");
       const parsed = parseEffectReceipt(JSON.parse(raw));
       if (parsed.requestDigest !== requestDigest) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "DIGEST_MISMATCH",
           `effect file ${requestDigest} claims request ${parsed.requestDigest}`,
         );
       }
       return parsed;
     } catch (e) {
-      if (e instanceof MorphogenError) throw e;
+      if (e instanceof AlgalError) throw e;
       if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-      throw new MorphogenError("PARSE_FAILED", `effect ${requestDigest}: ${e}`);
+      throw new AlgalError("PARSE_FAILED", `effect ${requestDigest}: ${e}`);
     }
   }
 
@@ -242,7 +242,7 @@ export class FileStore implements Store {
 
   private slotPath(name: string) {
     if (!/^[a-z][a-z0-9._-]{0,63}$/.test(name)) {
-      throw new MorphogenError("PARSE_FAILED", "invalid slot name");
+      throw new AlgalError("PARSE_FAILED", "invalid slot name");
     }
     return join(this.dir, "slots", `${name}.json`);
   }
@@ -253,7 +253,7 @@ export class FileStore implements Store {
       return JSON.parse(raw) as JsonValue;
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-      throw new MorphogenError("PARSE_FAILED", `slot ${name}: ${e}`);
+      throw new AlgalError("PARSE_FAILED", `slot ${name}: ${e}`);
     }
   }
 

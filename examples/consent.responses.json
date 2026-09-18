@@ -1,6 +1,6 @@
 {
   "writer": {
-    "contract": "morphogen.organism.v1",
+    "contract": "algal.organism.v1",
     "key": "organism:consent-child",
     "name": "ConsentChild",
     "interface": {

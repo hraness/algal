@@ -14,7 +14,7 @@
 - `examples/` — bundled manifests and scripted responses used by `suite`.
 - `spec/v1/organism.md`, `spec/v1/foundry.md`, `spec/v1/search.md`,
   `spec/v1/bench.md` — authoritative contract prose.
-- `site/` — the static morphogen.dev source; `build.ts` writes `site/dist`.
+- `site/` — the static algal.dev source; `build.ts` writes `site/dist`.
 - `README.md`, `CONTRIBUTING.md`, `SECURITY.md` — the public contract.
 
 # Guidelines
@@ -37,11 +37,12 @@
 
 # ALGAL native migration
 
-- The product is ALGAL; existing `morphogen.*.v1` wire identifiers and fixtures
-  are compatibility coordinates. Do not mass-rewrite content-addressed data.
+- The product is ALGAL; all wire identifiers are `algal.*.v1` and manifest
+  fixtures use `*.algal.json`. There is no compatibility surface for older
+  naming.
 - `crates/algal/` is the Rust kernel, native CLI, memory/context primitives,
   and ACP boundary. Keep the TypeScript runtime independently runnable as the
-  compatibility reference. No implicit native-to-Bun fallback.
+  reference implementation. No implicit native-to-Bun fallback.
 - Native checks: `cargo test --workspace --locked`,
   `cargo clippy --workspace --all-targets --locked -- -D warnings`, and
   `cargo fmt --all -- --check`. Use `cargo build --locked` followed by

@@ -1,0 +1,16 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:foundry-echo",
+  "name": "Foundry echo candidate",
+  "interface": {
+    "inputs": { "q": { "cell": "src", "port": "value" } },
+    "outputs": { "answer": { "cell": "echo", "port": "value" } }
+  },
+  "cells": [
+    { "id": "src", "kind": "input", "outputs": { "value": "json" } },
+    { "id": "echo", "kind": "fn", "fn": "echo.v1" }
+  ],
+  "edges": [
+    { "from": { "cell": "src", "port": "value" }, "to": { "cell": "echo", "port": "value" } }
+  ]
+}

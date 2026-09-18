@@ -1,0 +1,32 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:inbox",
+  "name": "Inbox with embedded triage",
+  "note": "Embeds organism:triage by digest as a single cell. The outer graph sees only its declared interface ports.",
+  "budgets": {
+    "maxSteps": 128,
+    "maxAgentCalls": 8,
+    "maxWork": 200000
+  },
+  "cells": [
+    {
+      "id": "ticket",
+      "kind": "input",
+      "outputs": { "text": "text" }
+    },
+    {
+      "id": "triage",
+      "kind": "organism",
+      "manifest": "sha256:56f247870a72b3f1bfef6978c56ea9ce27906b91565bb68f19a60244295f7022"
+    },
+    {
+      "id": "sink",
+      "kind": "fn",
+      "fn": "echo.v1"
+    }
+  ],
+  "edges": [
+    { "from": { "cell": "ticket", "port": "text" }, "to": { "cell": "triage", "port": "ticket" } },
+    { "from": { "cell": "triage", "port": "summary" }, "to": { "cell": "sink", "port": "value" } }
+  ]
+}

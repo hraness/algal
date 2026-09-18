@@ -12,7 +12,7 @@ import { runOrganism } from "./run";
 import { MemoryStore } from "./store";
 
 const inner = parseOrganismManifest({
-  contract: "morphogen.organism.v1",
+  contract: "algal.organism.v1",
   key: "organism:b-inner",
   name: "Inner",
   cells: [
@@ -35,7 +35,7 @@ describe("pack/unpack", () => {
     const payload = { doc: "pinned" };
     const valueDigest = await src.putValue(payload);
     const outer = parseOrganismManifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:b-outer",
       name: "Outer",
       cells: [
@@ -78,7 +78,7 @@ describe("pack/unpack", () => {
 
   test("pack fails closed when a sub-manifest is missing", async () => {
     const m = parseOrganismManifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:b-miss",
       name: "Miss",
       cells: [
@@ -99,7 +99,7 @@ describe("pack/unpack", () => {
     const src = new MemoryStore();
     const d = await src.putManifest(inner);
     const outer = parseOrganismManifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:b-tamper",
       name: "Tamper",
       cells: [{ id: "sub", kind: "organism", manifest: d }],

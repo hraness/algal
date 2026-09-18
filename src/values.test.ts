@@ -35,7 +35,7 @@ describe("digest", () => {
   });
 
   test("text digests are stable", () => {
-    expect(digestText("morphogen")).toBe(digestText("morphogen"));
+    expect(digestText("algal")).toBe(digestText("algal"));
   });
 });
 

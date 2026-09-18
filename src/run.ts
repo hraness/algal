@@ -5,7 +5,7 @@
 // executor seam and return as receipts. No wall-clock values are recorded:
 // a receipt is replayable bit-for-bit.
 
-import { MorphogenError, errorReport, type ErrorCode } from "./errors";
+import { AlgalError, errorReport, type ErrorCode } from "./errors";
 import {
   argsForSubOrganism,
   compileOrganism,
@@ -43,7 +43,7 @@ import {
   type JsonValue,
 } from "./values";
 
-export const RUN_CONTRACT = "morphogen.run.v1" as const;
+export const RUN_CONTRACT = "algal.run.v1" as const;
 export const RUNTIME_VERSION = "0.1.0" as const;
 
 const WORK = {
@@ -87,7 +87,7 @@ export type CellRecord = {
 
 export type RunReceipt = {
   contract: typeof RUN_CONTRACT;
-  runtime: { name: "morphogen"; version: string };
+  runtime: { name: "algal"; version: string };
   manifestDigest: Digest;
   manifestKey: string;
   args: Record<string, Record<string, JsonValue>>;
@@ -167,7 +167,7 @@ export async function runOrganism(opts: RunOptions): Promise<RunReceipt> {
   emit(ctx, { kind: "run.end", outcome });
   const receipt: Omit<RunReceipt, "digest"> = {
     contract: RUN_CONTRACT,
-    runtime: { name: "morphogen", version: RUNTIME_VERSION },
+    runtime: { name: "algal", version: RUNTIME_VERSION },
     manifestDigest,
     manifestKey: opts.manifest.key,
     args: opts.args ?? {},
@@ -478,7 +478,7 @@ async function activate(
       const data = inputs.data!;
       const bytes = canonicalBytes(data);
       if (bytes > BOUNDS.maxBlobBytes) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "BUDGET_EXHAUSTED",
           `${cell.id}: payload ${bytes}B exceeds maxBlobBytes ${BOUNDS.maxBlobBytes}B`,
         );
@@ -492,14 +492,14 @@ async function activate(
       checkValue(ref, { type: "ref" }, `${cell.id}.ref`);
       const v = await ctx.opts.store.getValue(ref as Digest);
       if (v === undefined) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "INPUT_MISSING",
           `${cell.id}: ref ${ref} not in store`,
         );
       }
       const bytes = canonicalBytes(v);
       if (bytes > BOUNDS.maxBlobBytes) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "BUDGET_EXHAUSTED",
           `${cell.id}: payload ${bytes}B exceeds maxBlobBytes ${BOUNDS.maxBlobBytes}B`,
         );
@@ -512,7 +512,7 @@ async function activate(
         const data = inputs.data!;
         const bytes = canonicalBytes(data);
         if (bytes > BOUNDS.maxBlobBytes) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "BUDGET_EXHAUSTED",
             `${cell.id}: slot payload ${bytes}B exceeds maxBlobBytes ${BOUNDS.maxBlobBytes}B`,
           );
@@ -526,7 +526,7 @@ async function activate(
       const rep = ctx.opts.replaySlots?.[path];
       if (rep !== undefined) {
         if (rep.missing) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "INPUT_MISSING",
             `slot cell "${cell.id}": slot "${cell.name}" is empty and declares no default`,
           );
@@ -536,7 +536,7 @@ async function activate(
       const stored = await ctx.opts.store.getSlot(cell.name);
       const v = stored !== undefined ? stored : cell.default;
       if (v === undefined) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "INPUT_MISSING",
           `slot cell "${cell.id}": slot "${cell.name}" is empty and declares no default`,
         );
@@ -563,7 +563,7 @@ async function activate(
         typeof rawArgs !== "object" ||
         Array.isArray(rawArgs)
       ) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "TYPE_MISMATCH",
           `spawn cell "${cell.id}": args must be a record of interface inputs`,
         );
@@ -574,7 +574,7 @@ async function activate(
       );
       await runInto(subCompiled, subArgs, path, ctx, depth + 1);
       if (ctx.failure) {
-        throw new MorphogenError(ctx.failure.code, ctx.failure.message);
+        throw new AlgalError(ctx.failure.code, ctx.failure.message);
       }
       const data: Record<string, JsonValue> = {};
       const iface = subManifest.interface ?? { inputs: {}, outputs: {} };
@@ -597,10 +597,10 @@ async function activate(
     case "tool": {
       const entry = ctx.opts.tools?.get(cell.tool);
       if (!entry) {
-        throw new MorphogenError("TOOL_UNKNOWN", `tool "${cell.tool}" is not configured`);
+        throw new AlgalError("TOOL_UNKNOWN", `tool "${cell.tool}" is not configured`);
       }
       const requestDigest = digestCanonical({
-        contract: "morphogen.tool-effect.v1",
+        contract: "algal.tool-effect.v1",
         path,
         tool: cell.tool,
         effect: entry.signature.effect,
@@ -609,11 +609,11 @@ async function activate(
       emit(ctx, { kind: "effect", path, digest: requestDigest });
       const replay = ctx.toolReplay.get(requestDigest)?.shift();
       if (!replay && ctx.opts.replayToolEffects !== undefined) {
-        throw new MorphogenError("EFFECT_UNBOUND", `replay has no tool receipt for ${requestDigest}`);
+        throw new AlgalError("EFFECT_UNBOUND", `replay has no tool receipt for ${requestDigest}`);
       }
       if (replay) {
         ctx.effects.push(replay);
-        if (replay.error) throw new MorphogenError(replay.error.code, replay.error.message);
+        if (replay.error) throw new AlgalError(replay.error.code, replay.error.message);
         ctx.work.units += entry.signature.cost + canonicalBytes(replay.output!);
         return { outputs: replay.output as Record<string, JsonValue>, effectDigest: requestDigest };
       }
@@ -632,7 +632,7 @@ async function activate(
               execute,
               new Promise<never>((_, reject) => controller.signal.addEventListener(
                 "abort",
-                () => reject(new MorphogenError(
+                () => reject(new AlgalError(
                   "BUDGET_EXHAUSTED",
                   `tool cell "${cell.id}" exceeded maxEffectMs ${timeout}`,
                 )),
@@ -641,7 +641,7 @@ async function activate(
             ]);
         const bytes = canonicalBytes(outputs as unknown as JsonValue);
         if (bytes > entry.signature.maxOutputBytes) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "BUDGET_EXHAUSTED",
             `tool cell "${cell.id}" output ${bytes}B exceeds ${entry.signature.maxOutputBytes}B`,
           );
@@ -660,8 +660,8 @@ async function activate(
           error: { code: report.code === "INTERNAL" ? "TOOL_FAILED" : report.code, message: report.message },
           executor: `tool:${cell.tool}`,
         });
-        if (error instanceof MorphogenError) throw error;
-        throw new MorphogenError("TOOL_FAILED", report.message);
+        if (error instanceof AlgalError) throw error;
+        throw new AlgalError("TOOL_FAILED", report.message);
       } finally {
         if (timer !== undefined) clearTimeout(timer);
       }
@@ -713,7 +713,7 @@ async function activate(
 
       for (let turn = 0; ; turn++) {
         if (turn >= maxTurns) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "BUDGET_EXHAUSTED",
             `cell "${cell.id}" produced no final output within maxTurns ${maxTurns}`,
           );
@@ -751,14 +751,14 @@ async function activate(
         }
         const contextBytes = canonicalBytes(context);
         if (contextBytes > maxCtx) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "BUDGET_EXHAUSTED",
             `context view ${contextBytes}B exceeds maxContextBytes ${maxCtx}B`,
           );
         }
 
         const request: EffectRequest = {
-          contract: "morphogen.effect.v1",
+          contract: "algal.effect.v1",
           cellId: cell.id,
           kind: cell.kind,
           prompt: cell.prompt,
@@ -790,7 +790,7 @@ async function activate(
           attempt++
         ) {
           if (ctx.work.agentCalls + 1 > budgets.maxAgentCalls) {
-            throw new MorphogenError("BUDGET_EXHAUSTED", "maxAgentCalls exhausted");
+            throw new AlgalError("BUDGET_EXHAUSTED", "maxAgentCalls exhausted");
           }
           ctx.work.agentCalls += 1;
           ctx.work.units += WORK.effectBase + contextBytes * WORK.perContextByte;
@@ -824,7 +824,7 @@ async function activate(
                       "abort",
                       () =>
                         reject(
-                          new MorphogenError(
+                          new AlgalError(
                             "BUDGET_EXHAUSTED",
                             `cell "${cell.id}" effect exceeded maxEffectMs ${effectMs}`,
                           ),
@@ -868,7 +868,7 @@ async function activate(
 
           const outBytes = canonicalBytes(raw);
           if (outBytes > maxOut) {
-            lastErr = new MorphogenError(
+            lastErr = new AlgalError(
               "BUDGET_EXHAUSTED",
               `effect output ${outBytes}B exceeds maxOutputBytes ${maxOut}B`,
             );
@@ -896,7 +896,7 @@ async function activate(
         if (settled === undefined) {
           throw lastErr instanceof Error
             ? lastErr
-            : new MorphogenError(
+            : new AlgalError(
                 "EFFECT_FAILED",
                 `cell "${cell.id}" exhausted ${maxAttempts} attempt(s)`,
               );
@@ -924,12 +924,12 @@ async function activate(
         const fn = ctx.opts.fns.get(call.fn);
         const external = ctx.opts.tools?.get(call.fn);
         const signature = fn?.signature ?? external?.signature;
-        if (!signature) throw new MorphogenError("TOOL_UNKNOWN", `tool "${call.fn}" is not configured`);
+        if (!signature) throw new AlgalError("TOOL_UNKNOWN", `tool "${call.fn}" is not configured`);
         for (const [p, decl] of Object.entries(signature.inputs)) {
           const v = (call.inputs as Record<string, JsonValue>)[p];
           if (v === undefined) {
             if (!decl.optional) {
-              throw new MorphogenError(
+              throw new AlgalError(
                 "EFFECT_FAILED",
                 `cell "${cell.id}" tool call to ${call.fn} missing required input "${p}"`,
               );
@@ -945,7 +945,7 @@ async function activate(
         } else {
           const tool = external!;
           const toolDigest = digestCanonical({
-            contract: "morphogen.tool-effect.v1",
+            contract: "algal.tool-effect.v1",
             path: `${path}/t${turn}`,
             tool: call.fn,
             effect: tool.signature.effect,
@@ -954,11 +954,11 @@ async function activate(
           emit(ctx, { kind: "effect", path, digest: toolDigest });
           const replay = ctx.toolReplay.get(toolDigest)?.shift();
           if (!replay && ctx.opts.replayToolEffects !== undefined) {
-            throw new MorphogenError("EFFECT_UNBOUND", `replay has no tool receipt for ${toolDigest}`);
+            throw new AlgalError("EFFECT_UNBOUND", `replay has no tool receipt for ${toolDigest}`);
           }
           if (replay) {
             ctx.effects.push(replay);
-            if (replay.error) throw new MorphogenError(replay.error.code, replay.error.message);
+            if (replay.error) throw new AlgalError(replay.error.code, replay.error.message);
             toolOut = replay.output as Record<string, JsonValue>;
           } else {
             const controller = new AbortController();
@@ -976,7 +976,7 @@ async function activate(
                     execute,
                     new Promise<never>((_, reject) => controller.signal.addEventListener(
                       "abort",
-                      () => reject(new MorphogenError(
+                      () => reject(new AlgalError(
                         "BUDGET_EXHAUSTED",
                         `agent tool ${call.fn} exceeded maxEffectMs ${timeout}`,
                       )),
@@ -996,14 +996,14 @@ async function activate(
                 error: { code, message: report.message },
                 executor: `tool:${call.fn}`,
               });
-              throw new MorphogenError(code, report.message);
+              throw new AlgalError(code, report.message);
             } finally {
               if (timer !== undefined) clearTimeout(timer);
             }
           }
           const bytes = canonicalBytes(toolOut as unknown as JsonValue);
           if (bytes > tool.signature.maxOutputBytes) {
-            throw new MorphogenError("BUDGET_EXHAUSTED", `tool ${call.fn} output exceeds its byte bound`);
+            throw new AlgalError("BUDGET_EXHAUSTED", `tool ${call.fn} output exceeds its byte bound`);
           }
           ctx.work.units += tool.signature.cost + bytes;
         }
@@ -1016,7 +1016,7 @@ async function activate(
       const subArgs = argsForSubOrganism(subCompiled.manifest, inputs);
       await runInto(subCompiled, subArgs, path, ctx, depth + 1);
       if (ctx.failure) {
-        throw new MorphogenError(ctx.failure.code, ctx.failure.message);
+        throw new AlgalError(ctx.failure.code, ctx.failure.message);
       }
       const out: Record<string, JsonValue> = {};
       const iface = subCompiled.manifest.interface ?? { inputs: {}, outputs: {} };
@@ -1048,7 +1048,7 @@ async function activate(
         );
         if (outcome !== "complete") {
           const code = ctx.failure?.code ?? "STUCK";
-          throw new MorphogenError(
+          throw new AlgalError(
             code,
             ctx.failure?.message ??
               `repeat cell "${cell.id}" round ${r}: inner run ${outcome}`,
@@ -1086,13 +1086,13 @@ async function activate(
       const iface = subCompiled.manifest.interface ?? { inputs: {}, outputs: {} };
       const list = inputs[cell.over];
       if (!Array.isArray(list)) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "TYPE_MISMATCH",
           `each cell "${cell.id}" over "${cell.over}" expected a list`,
         );
       }
       if (list.length > cell.maxItems) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "BUDGET_EXHAUSTED",
           `each cell "${cell.id}" got ${list.length} items, maxItems ${cell.maxItems}`,
         );
@@ -1114,7 +1114,7 @@ async function activate(
         const outcome = await runInto(subCompiled, subArgs, itemPath, ctx, depth + 1);
         if (outcome !== "complete") {
           const code = ctx.failure?.code ?? "STUCK";
-          throw new MorphogenError(
+          throw new AlgalError(
             code,
             ctx.failure?.message ??
               `each cell "${cell.id}" item ${i}: inner run ${outcome}`,
@@ -1135,7 +1135,7 @@ async function activate(
 
 function pickExecutor(executors: Executor[], cell: Cell): Executor {
   if (executors.length === 0) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "EFFECT_UNBOUND",
       `no executor available for cell "${cell.id}"`,
     );
@@ -1161,14 +1161,14 @@ function checkValue(v: JsonValue, decl: PortType, what: string): void {
   // a port never carries a value over maxValueBytes — bulk goes through CAS
   const bytes = canonicalBytes(v);
   if (bytes > BOUNDS.maxValueBytes) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "BUDGET_EXHAUSTED",
       `${what}: value ${bytes}B exceeds maxValueBytes ${BOUNDS.maxValueBytes}B — pin large payloads through a store cell`,
     );
   }
   if (decl.many) {
     if (!Array.isArray(v)) {
-      throw new MorphogenError("TYPE_MISMATCH", `${what}: expected a list`);
+      throw new AlgalError("TYPE_MISMATCH", `${what}: expected a list`);
     }
     const { many: _many, ...el } = decl;
     for (let i = 0; i < v.length; i++) {
@@ -1179,15 +1179,15 @@ function checkValue(v: JsonValue, decl: PortType, what: string): void {
   switch (decl.type) {
     case "text":
       if (typeof v !== "string") {
-        throw new MorphogenError("TYPE_MISMATCH", `${what}: expected text`);
+        throw new AlgalError("TYPE_MISMATCH", `${what}: expected text`);
       }
       return;
     case "choice":
       if (typeof v !== "string") {
-        throw new MorphogenError("TYPE_MISMATCH", `${what}: expected choice label`);
+        throw new AlgalError("TYPE_MISMATCH", `${what}: expected choice label`);
       }
       if (decl.labels && !decl.labels.includes(v)) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "TYPE_MISMATCH",
           `${what}: "${v}" not in declared labels`,
         );
@@ -1198,7 +1198,7 @@ function checkValue(v: JsonValue, decl: PortType, what: string): void {
         typeof v !== "string" ||
         !/^sha256:[0-9a-f]{64}$/.test(v)
       ) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "TYPE_MISMATCH",
           `${what}: expected a sha256 ref token`,
         );
@@ -1222,7 +1222,7 @@ async function checkRefsResolve(
   const tokens = decl.many ? (v as JsonValue[]) : [v];
   for (const t of tokens) {
     if ((await ctx.opts.store.getValue(t as Digest)) === undefined) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "INPUT_MISSING",
         `${what}: ref ${t} not in store`,
       );
@@ -1242,7 +1242,7 @@ function checkOutputs(
   }
   for (const port of Object.keys(produced)) {
     if (!outputs[port]) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "TYPE_MISMATCH",
         `${cell.id}: produced undeclared output "${port}"`,
       );
@@ -1268,7 +1268,7 @@ function fail(
 export function parseRunReceipt(u: unknown): RunReceipt {
   const r = u as RunReceipt;
   if (r?.contract !== RUN_CONTRACT) {
-    throw new MorphogenError("PARSE_FAILED", `expected contract "${RUN_CONTRACT}"`);
+    throw new AlgalError("PARSE_FAILED", `expected contract "${RUN_CONTRACT}"`);
   }
   return r;
 }

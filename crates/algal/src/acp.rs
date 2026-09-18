@@ -511,7 +511,7 @@ fn load(store: &Store, id: &str) -> Result<Session> {
 
 fn task_manifest() -> Result<Manifest> {
     Manifest::parse(
-        &json!({"contract":"morphogen.organism.v1","key":"organism:algal-session","name":"ALGAL session turn","cells":[
+        &json!({"contract":"algal.organism.v1","key":"organism:algal-session","name":"ALGAL session turn","cells":[
         {"id":"context","kind":"input","outputs":{"view":"json"}},
         {"id":"work","kind":"agent","inputs":{"context":"json"},"prompt":"Continue the user's task from this source-linked context. Preserve user constraints. Use only host-admitted capabilities. Distinguish verified results, proposals, and unknowns. A ref identifies archived context; do not invent its content.","output":{"kind":"text"},"budget":{"maxEffectMs":600000}}
     ],"edges":[{"from":{"cell":"context","port":"view"},"to":{"cell":"work","port":"context"}}],"interface":{"inputs":{"context":{"cell":"context","port":"view"}},"outputs":{"answer":{"cell":"work","port":"out"}}}}),

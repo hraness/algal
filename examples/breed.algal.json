@@ -1,0 +1,34 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:breed",
+  "name": "Breed",
+  "cells": [
+    { "id": "src", "kind": "input", "outputs": { "task": "text" } },
+    {
+      "id": "writer",
+      "kind": "agent",
+      "inputs": { "task": "text" },
+      "prompt": "Write an organism manifest that echoes its input through echo.v1.",
+      "output": { "kind": "json", "schema": { "type": "object" } }
+    },
+    { "id": "run", "kind": "spawn" },
+    {
+      "id": "in",
+      "kind": "const",
+      "outputs": { "a": { "type": "json", "value": { "q": "ping" } } }
+    },
+    {
+      "id": "field",
+      "kind": "const",
+      "outputs": { "f": { "type": "text", "value": "out" } }
+    },
+    { "id": "show", "kind": "fn", "fn": "pick.v1" }
+  ],
+  "edges": [
+    { "from": { "cell": "src", "port": "task" }, "to": { "cell": "writer", "port": "task" } },
+    { "from": { "cell": "writer", "port": "out" }, "to": { "cell": "run", "port": "manifest" } },
+    { "from": { "cell": "in", "port": "a" }, "to": { "cell": "run", "port": "args" } },
+    { "from": { "cell": "run", "port": "data" }, "to": { "cell": "show", "port": "record" } },
+    { "from": { "cell": "field", "port": "f" }, "to": { "cell": "show", "port": "field" } }
+  ]
+}

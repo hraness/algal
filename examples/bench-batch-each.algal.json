@@ -1,0 +1,24 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:bench-batch-each",
+  "name": "Bench batch — each",
+  "note": "The organism: each maps the ticket list through a focused per-item classifier organism. Many narrow judgments instead of one diluted call.",
+  "budgets": { "maxSteps": 24, "maxAgentCalls": 16, "maxWork": 200000 },
+  "interface": {
+    "inputs": { "tickets": { "cell": "src", "port": "tickets" } },
+    "outputs": { "out": { "cell": "map", "port": "label" } }
+  },
+  "cells": [
+    { "id": "src", "kind": "input", "outputs": { "tickets": "json" } },
+    {
+      "id": "map",
+      "kind": "each",
+      "manifest": "sha256:da71aa1c534d264c730d8913e353b198a96a0ac5ad3275f8960c6f9c32f7c89a",
+      "over": "ticket",
+      "maxItems": 16
+    }
+  ],
+  "edges": [
+    { "from": { "cell": "src", "port": "tickets" }, "to": { "cell": "map", "port": "ticket" } }
+  ]
+}

@@ -9,7 +9,7 @@
 import type { OrganismManifest } from "./contract";
 import { digestCanonical, type Digest } from "./digest";
 import type { EffectReceipt, Executor } from "./effects";
-import { MorphogenError } from "./errors";
+import { AlgalError } from "./errors";
 import type { FnRegistry } from "./registry";
 import { runOrganism } from "./run";
 import type { Store } from "./store";
@@ -17,7 +17,7 @@ import type { Transport } from "./transport";
 import type { ToolRegistry } from "./tools";
 import { canonicalize, type JsonValue } from "./values";
 
-export const BENCH_CONTRACT = "morphogen.bench.v1" as const;
+export const BENCH_CONTRACT = "algal.bench.v1" as const;
 
 export const BENCH_BOUNDS = {
   maxSystems: 8,
@@ -109,7 +109,7 @@ export type BenchReport = {
 };
 
 function fail(message: string): never {
-  throw new MorphogenError("PARSE_FAILED", message);
+  throw new AlgalError("PARSE_FAILED", message);
 }
 
 function validate(opts: BenchOptions): void {

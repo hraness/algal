@@ -1,0 +1,54 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:habitat-propose",
+  "name": "HabitatPropose",
+  "note": "A parent organism proposes a child manifest, spawns it, and records the child digest in a durable population slot. The child is data, not code; the host still decides whether to admit or promote it.",
+  "budgets": {
+    "maxSteps": 32,
+    "maxAgentCalls": 4,
+    "maxWork": 10000
+  },
+  "interface": {
+    "inputs": { "goal": { "cell": "goal", "port": "text" } },
+    "outputs": {
+      "child": { "cell": "run", "port": "digest" },
+      "population": { "cell": "record", "port": "data" }
+    }
+  },
+  "cells": [
+    { "id": "goal", "kind": "input", "outputs": { "text": "text" } },
+    {
+      "id": "history",
+      "kind": "slot",
+      "name": "population",
+      "mode": "read",
+      "default": []
+    },
+    {
+      "id": "designer",
+      "kind": "agent",
+      "inputs": { "goal": "text" },
+      "prompt": "Design a tiny child organism that exposes an 'out' output containing the goal string.",
+      "output": { "kind": "json", "schema": { "type": "object" } }
+    },
+    { "id": "run", "kind": "spawn" },
+    {
+      "id": "append",
+      "kind": "fn",
+      "fn": "push.v1"
+    },
+    {
+      "id": "record",
+      "kind": "slot",
+      "name": "population",
+      "mode": "write"
+    }
+  ],
+  "edges": [
+    { "from": { "cell": "goal", "port": "text" }, "to": { "cell": "designer", "port": "goal" } },
+    { "from": { "cell": "designer", "port": "out" }, "to": { "cell": "run", "port": "manifest" } },
+    { "from": { "cell": "run", "port": "digest" }, "to": { "cell": "append", "port": "item" } },
+    { "from": { "cell": "history", "port": "data" }, "to": { "cell": "append", "port": "list" } },
+    { "from": { "cell": "append", "port": "value" }, "to": { "cell": "record", "port": "data" } }
+  ]
+}

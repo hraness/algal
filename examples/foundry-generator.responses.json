@@ -2,7 +2,7 @@
   "writer": {
     "candidates": [
     {
-      "contract": "morphogen.organism.v1",
+      "contract": "algal.organism.v1",
       "key": "organism:generated-constant",
       "name": "Generated constant candidate",
       "interface": {
@@ -16,7 +16,7 @@
       "edges": []
     },
     {
-      "contract": "morphogen.organism.v1",
+      "contract": "algal.organism.v1",
       "key": "organism:generated-echo",
       "name": "Generated echo candidate",
       "interface": {

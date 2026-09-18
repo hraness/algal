@@ -1,6 +1,6 @@
 import { manifestToJson } from "./contract";
 import { digestCanonical, type Digest } from "./digest";
-import { MorphogenError } from "./errors";
+import { AlgalError } from "./errors";
 import {
   FOUNDRY_CONTRACT,
   selectFoundryCandidate,
@@ -22,19 +22,19 @@ import type { JsonObject, JsonValue } from "./values";
 
 function object(value: unknown, at: string): JsonObject {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new MorphogenError("PARSE_FAILED", `${at} must be an object`);
+    throw new AlgalError("PARSE_FAILED", `${at} must be an object`);
   }
   return value as JsonObject;
 }
 
 function exactKeys(value: JsonObject, allowed: string[], at: string): void {
   const extra = Object.keys(value).find((key) => !allowed.includes(key));
-  if (extra) throw new MorphogenError("PARSE_FAILED", `${at}: unknown key "${extra}"`);
+  if (extra) throw new AlgalError("PARSE_FAILED", `${at}: unknown key "${extra}"`);
 }
 
 function digest(value: JsonValue | undefined, at: string): Digest {
   if (typeof value !== "string" || !/^sha256:[0-9a-f]{64}$/.test(value)) {
-    throw new MorphogenError("PARSE_FAILED", `${at} must be a sha256 digest`);
+    throw new AlgalError("PARSE_FAILED", `${at} must be a sha256 digest`);
   }
   return value as Digest;
 }
@@ -43,10 +43,10 @@ export function parseSearchReport(value: unknown): SearchReport {
   const raw = object(value, "search");
   exactKeys(raw, ["contract", "generatorDigest", "generations", "result", "digest"], "search");
   if (raw.contract !== SEARCH_CONTRACT) {
-    throw new MorphogenError("PARSE_FAILED", `search.contract must be ${SEARCH_CONTRACT}`);
+    throw new AlgalError("PARSE_FAILED", `search.contract must be ${SEARCH_CONTRACT}`);
   }
   if (!Array.isArray(raw.generations) || raw.generations.length === 0 || raw.generations.length > SEARCH_BOUNDS.maxGenerations) {
-    throw new MorphogenError("PARSE_FAILED", "search.generations must be a bounded non-empty list");
+    throw new AlgalError("PARSE_FAILED", "search.generations must be a bounded non-empty list");
   }
   const result = parseFoundryReport(raw.result);
   const generations: SearchGeneration[] = raw.generations.map((entry, index) => {
@@ -57,10 +57,10 @@ export function parseSearchReport(value: unknown): SearchReport {
       `search.generations[${index}]`,
     );
     if (generation.generation !== index) {
-      throw new MorphogenError("PARSE_FAILED", `search.generations[${index}].generation must be ${index}`);
+      throw new AlgalError("PARSE_FAILED", `search.generations[${index}].generation must be ${index}`);
     }
     if (!Array.isArray(generation.proposed) || generation.proposed.length === 0) {
-      throw new MorphogenError("PARSE_FAILED", `search.generations[${index}].proposed must be non-empty`);
+      throw new AlgalError("PARSE_FAILED", `search.generations[${index}].proposed must be non-empty`);
     }
     const parsed = parseFoundryReport({
       contract: FOUNDRY_CONTRACT,

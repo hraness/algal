@@ -13,7 +13,7 @@ import { verifyReceipt } from "./verify";
 import { canonicalize, type JsonValue } from "./values";
 
 const inner = parseOrganismManifest({
-  contract: "morphogen.organism.v1",
+  contract: "algal.organism.v1",
   key: "organism:t-inner",
   name: "TInner",
   cells: [
@@ -31,7 +31,7 @@ const inner = parseOrganismManifest({
 const innerDigest = digestCanonical(manifestToJson(inner));
 
 const outerJson = (via?: string) => ({
-  contract: "morphogen.organism.v1",
+  contract: "algal.organism.v1",
   key: "organism:t-outer",
   name: "TOuter",
   cells: [

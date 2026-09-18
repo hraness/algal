@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { canonicalize, type JsonValue } from "./values";
-import { MorphogenError } from "./errors";
+import { AlgalError } from "./errors";
 
 export type Digest = `sha256:${string}`;
 
@@ -15,7 +15,7 @@ export function digestText(text: string): Digest {
 
 export function asDigest(u: unknown, what: string): Digest {
   if (typeof u !== "string" || !/^sha256:[0-9a-f]{64}$/.test(u)) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "PARSE_FAILED",
       `${what} must be a sha256:<64 lowercase hex> digest`,
     );

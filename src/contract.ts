@@ -1,4 +1,4 @@
-// morphogen.organism.v1 — the organism manifest contract.
+// algal.organism.v1 — the organism manifest contract.
 //
 // A manifest is a finite typed graph: cells with declared ports, edges between
 // ports, budgets over the whole run, and an optional interface so the organism
@@ -6,7 +6,7 @@
 // executable code: fn cells name registry refs and agent cells declare prompts,
 // context views, output contracts, and routes. The structure is the program.
 
-import { MorphogenError } from "./errors";
+import { AlgalError } from "./errors";
 import type { Digest } from "./digest";
 import {
   asArray,
@@ -23,7 +23,7 @@ import {
   type JsonValue,
 } from "./values";
 
-export const CONTRACT = "morphogen.organism.v1" as const;
+export const CONTRACT = "algal.organism.v1" as const;
 
 // ---------------------------------------------------------------- bounds ---
 
@@ -260,7 +260,7 @@ function parsePortType(u: unknown, what: string): PortType {
     if (u === "text" || u === "json" || u === "choice" || u === "ref") {
       return { type: u };
     }
-    throw new MorphogenError("PARSE_FAILED", `${what}: unknown port type "${u}"`);
+    throw new AlgalError("PARSE_FAILED", `${what}: unknown port type "${u}"`);
   }
   const obj = asObject(u, what);
   noUnknownKeys(obj, ["type", "optional", "many", "labels", "schema"], what);
@@ -271,7 +271,7 @@ function parsePortType(u: unknown, what: string): PortType {
     type !== "choice" &&
     type !== "ref"
   ) {
-    throw new MorphogenError("PARSE_FAILED", `${what}.type: unknown "${type}"`);
+    throw new AlgalError("PARSE_FAILED", `${what}.type: unknown "${type}"`);
   }
   const asBool = (v: unknown, name: string) =>
     v === true || v === false ? v : fail(`${what}.${name} must be a boolean`);
@@ -287,13 +287,13 @@ function parsePortType(u: unknown, what: string): PortType {
       asString(l, `${what}.labels[${i}]`, BOUNDS.maxLabelLen),
     );
     if (labels.length > BOUNDS.maxLabels) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "PARSE_FAILED",
         `${what}.labels exceeds ${BOUNDS.maxLabels}`,
       );
     }
     if (type !== "choice") {
-      throw new MorphogenError(
+      throw new AlgalError(
         "PARSE_FAILED",
         `${what}.labels requires type "choice"`,
       );
@@ -303,7 +303,7 @@ function parsePortType(u: unknown, what: string): PortType {
   let schema: JsonObject | undefined;
   if (schemaRaw !== undefined) {
     if (type !== "json") {
-      throw new MorphogenError(
+      throw new AlgalError(
         "PARSE_FAILED",
         `${what}.schema requires type "json"`,
       );
@@ -331,7 +331,7 @@ function parsePortType(u: unknown, what: string): PortType {
 }
 
 function fail(msg: string): never {
-  throw new MorphogenError("PARSE_FAILED", msg);
+  throw new AlgalError("PARSE_FAILED", msg);
 }
 
 export function parsePortMap(
@@ -341,7 +341,7 @@ export function parsePortMap(
 ): PortMap {
   const obj = asObject(u, what);
   if (Object.keys(obj).length > BOUNDS.maxInterfacePorts) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "PARSE_FAILED",
       `${what} exceeds ${BOUNDS.maxInterfacePorts} ports`,
     );
@@ -351,7 +351,7 @@ export function parsePortMap(
     asSafeId(name, `${what} port name`);
     const pt = parsePortType(decl, `${what}.${name}`);
     if (role === "producer" && pt.many) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "PARSE_FAILED",
         `${what}.${name}: many is only valid on input ports`,
       );
@@ -383,13 +383,13 @@ function parseAgentOutput(u: unknown, what: string): AgentOutput {
         (l, i) => asString(l, `${what}.labels[${i}]`, BOUNDS.maxLabelLen),
       );
       if (labels.length === 0 || labels.length > BOUNDS.maxLabels) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "PARSE_FAILED",
           `${what}.labels must have 1..${BOUNDS.maxLabels} entries`,
         );
       }
       if (new Set(labels).size !== labels.length) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "PARSE_FAILED",
           `${what}.labels must be unique`,
         );
@@ -399,7 +399,7 @@ function parseAgentOutput(u: unknown, what: string): AgentOutput {
       if (onMiss !== undefined) {
         const miss = asString(onMiss, `${what}.onMiss`, BOUNDS.maxLabelLen);
         if (!labels.includes(miss)) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "PARSE_FAILED",
             `${what}.onMiss "${miss}" is not a declared label`,
           );
@@ -409,7 +409,7 @@ function parseAgentOutput(u: unknown, what: string): AgentOutput {
       return out;
     }
     default:
-      throw new MorphogenError(
+      throw new AlgalError(
         "PARSE_FAILED",
         `${what}.kind: unknown "${kind}"`,
       );
@@ -418,7 +418,7 @@ function parseAgentOutput(u: unknown, what: string): AgentOutput {
 
 function checkSchemaDepth(u: JsonValue, what: string, depth: number): void {
   if (depth > BOUNDS.maxSchemaDepth) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "PARSE_FAILED",
       `${what} exceeds schema depth ${BOUNDS.maxSchemaDepth}`,
     );
@@ -461,25 +461,25 @@ function parseView(u: unknown, what: string): AgentView {
           asSafeId(p, `${at}.ports[${j}]`),
         );
         if (cv.ports.length === 0 || cv.ports.length > BOUNDS.maxInterfacePorts) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "PARSE_FAILED",
             `${at}.ports must have 1..${BOUNDS.maxInterfacePorts} entries`,
           );
         }
         if (new Set(cv.ports).size !== cv.ports.length) {
-          throw new MorphogenError("PARSE_FAILED", `${at}.ports must be unique`);
+          throw new AlgalError("PARSE_FAILED", `${at}.ports must be unique`);
         }
       }
       return cv;
     });
     if (cells.length === 0 || cells.length > BOUNDS.maxViewCells) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "PARSE_FAILED",
         `${what}.cells must have 1..${BOUNDS.maxViewCells} entries`,
       );
     }
     if (new Set(cells.map((c) => c.cell)).size !== cells.length) {
-      throw new MorphogenError("PARSE_FAILED", `${what}.cells must be unique`);
+      throw new AlgalError("PARSE_FAILED", `${what}.cells must be unique`);
     }
   }
   const graphRaw = optField(obj, "graph");
@@ -488,7 +488,7 @@ function parseView(u: unknown, what: string): AgentView {
   if (cells) view.cells = cells;
   if (graphRaw !== undefined) {
     if (graphRaw !== true && graphRaw !== false) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "PARSE_FAILED",
         `${what}.graph must be a boolean`,
       );
@@ -538,7 +538,7 @@ function parseCell(u: unknown, what: string): Cell {
       noUnknownKeys(obj, ["id", "kind", "outputs"], what);
       const raw = asObject(reqField(obj, "outputs", what), `${what}.outputs`);
       if (Object.keys(raw).length > BOUNDS.maxInterfacePorts) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "PARSE_FAILED",
           `${what}.outputs exceeds ${BOUNDS.maxInterfacePorts} ports`,
         );
@@ -554,7 +554,7 @@ function parseCell(u: unknown, what: string): Cell {
         const { value: _v, ...typeDecl } = d;
         const pt = parsePortType(typeDecl, `${what}.outputs.${name}`);
         if (pt.many) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "PARSE_FAILED",
             `${what}.outputs.${name}: many is only valid on input ports`,
           );
@@ -606,7 +606,7 @@ function parseCell(u: unknown, what: string): Cell {
       const name = asSafeId(reqField(obj, "name", what), `${what}.name`);
       const modeRaw = asString(reqField(obj, "mode", what), `${what}.mode`, 8);
       if (modeRaw !== "read" && modeRaw !== "write") {
-        throw new MorphogenError(
+        throw new AlgalError(
           "PARSE_FAILED",
           `${what}.mode must be "read" or "write"`,
         );
@@ -616,14 +616,14 @@ function parseCell(u: unknown, what: string): Cell {
       const def = optField(obj, "default");
       if (def !== undefined) {
         if (mode !== "read") {
-          throw new MorphogenError(
+          throw new AlgalError(
             "PARSE_FAILED",
             `${what}.default is only valid on read-mode slot cells`,
           );
         }
         asJsonValue(def, `${what}.default`);
         if (canonicalBytes(def as JsonValue) > BOUNDS.maxValueBytes) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "PARSE_FAILED",
             `${what}.default exceeds maxValueBytes ${BOUNDS.maxValueBytes}B`,
           );
@@ -674,7 +674,7 @@ function parseCell(u: unknown, what: string): Cell {
       if (carry !== undefined) {
         const cm = asObject(carry, `${what}.carry`);
         if (Object.keys(cm).length > BOUNDS.maxInterfacePorts) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "PARSE_FAILED",
             `${what}.carry exceeds ${BOUNDS.maxInterfacePorts} entries`,
           );
@@ -822,13 +822,13 @@ function parseCell(u: unknown, what: string): Cell {
           asString(t, `${what}.tools[${i}]`, BOUNDS.maxRefLen),
         );
         if (tools.length === 0 || tools.length > BOUNDS.maxTools) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "PARSE_FAILED",
             `${what}.tools must have 1..${BOUNDS.maxTools} entries`,
           );
         }
         if (new Set(tools).size !== tools.length) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "PARSE_FAILED",
             `${what}.tools must be unique`,
           );
@@ -848,14 +848,14 @@ function parseCell(u: unknown, what: string): Cell {
         };
       }
       if (kind === "gate" && (obj.tools !== undefined || obj.shadow !== undefined)) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "PARSE_FAILED",
           `${what}: gate cells take no tools or shadow — a gate is an approval point, not a worker`,
         );
       }
       if (kind === "classifier" || kind === "gate") {
         if (output.kind !== "choice") {
-          throw new MorphogenError(
+          throw new AlgalError(
             "PARSE_FAILED",
             `${what}: ${kind} output must be {kind:"choice"}`,
           );
@@ -877,7 +877,7 @@ function parseCell(u: unknown, what: string): Cell {
             BOUNDS.maxLabelLen,
           );
           if (!output.labels.includes(take)) {
-            throw new MorphogenError(
+            throw new AlgalError(
               "PARSE_FAILED",
               `${what}.shadow.take must be a declared label`,
             );
@@ -907,7 +907,7 @@ function parseCell(u: unknown, what: string): Cell {
       return cell;
     }
     default:
-      throw new MorphogenError(
+      throw new AlgalError(
         "PARSE_FAILED",
         `${what}.kind: unknown "${kind}"`,
       );
@@ -950,7 +950,7 @@ function parseEdge(u: unknown, what: string): Edge {
   const on = optField(obj, "on");
   if (on !== undefined) {
     if (on !== "fail") {
-      throw new MorphogenError(
+      throw new AlgalError(
         "PARSE_FAILED",
         `${what}.on: unknown "${String(on)}" — the only value is "fail"`,
       );
@@ -1004,7 +1004,7 @@ function parseInterface(u: unknown): OrganismInterface | undefined {
   ): Record<string, { cell: string; port: PortName }> => {
     const m = asObject(v, what);
     if (Object.keys(m).length > BOUNDS.maxInterfacePorts) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "PARSE_FAILED",
         `${what} exceeds ${BOUNDS.maxInterfacePorts} ports`,
       );
@@ -1041,14 +1041,14 @@ export function parseOrganismManifest(u: unknown): OrganismManifest {
   );
   const contract = asString(reqField(obj, "contract", what), `${what}.contract`, 64);
   if (contract !== CONTRACT) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "PARSE_FAILED",
       `manifest.contract must be "${CONTRACT}" (got "${contract}")`,
     );
   }
   const key = asString(reqField(obj, "key", what), `${what}.key`, BOUNDS.maxIdLen);
   if (!/^organism:[a-z][a-z0-9-]*$/.test(key)) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "PARSE_FAILED",
       `manifest.key must match "organism:<kebab-key>"`,
     );
@@ -1077,13 +1077,13 @@ export function parseOrganismManifest(u: unknown): OrganismManifest {
   if (iface) manifest.interface = iface;
 
   if (manifest.cells.length > BOUNDS.maxCells) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "PARSE_FAILED",
       `manifest.cells exceeds ${BOUNDS.maxCells}`,
     );
   }
   if (manifest.edges.length > BOUNDS.maxEdges) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "PARSE_FAILED",
       `manifest.edges exceeds ${BOUNDS.maxEdges}`,
     );

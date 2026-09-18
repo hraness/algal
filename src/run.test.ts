@@ -6,7 +6,7 @@ import {
 } from "./contract";
 import { cachedExecutor, scriptedExecutor } from "./effects";
 import { digestCanonical } from "./digest";
-import { MorphogenError } from "./errors";
+import { AlgalError } from "./errors";
 import { builtinRegistry } from "./registry";
 import { runOrganism } from "./run";
 import { MemoryStore } from "./store";
@@ -37,7 +37,7 @@ async function run(
 }
 
 const chain = {
-  contract: "morphogen.organism.v1",
+  contract: "algal.organism.v1",
   key: "organism:chain",
   name: "Chain",
   cells: [
@@ -64,7 +64,7 @@ describe("scheduler", () => {
 
   test("guarded edges route choice outputs; dead branches skip", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:guard",
       name: "Guard",
       cells: [
@@ -98,7 +98,7 @@ describe("scheduler", () => {
 
   test("agent cells get bounded context and commit typed output", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:ag",
       name: "Agent",
       cells: [
@@ -133,7 +133,7 @@ describe("scheduler", () => {
 
   test("classifier onMiss absorbs undeclared output", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:miss",
       name: "Miss",
       cells: [
@@ -160,7 +160,7 @@ describe("scheduler", () => {
 
   test("classifier without onMiss fails closed on bad output", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:miss2",
       name: "Miss2",
       cells: [
@@ -199,7 +199,7 @@ describe("scheduler", () => {
   test("nested organism cells run and expose interface outputs", async () => {
     const store = new MemoryStore();
     const inner = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:inner",
       name: "Inner",
       interface: {
@@ -218,7 +218,7 @@ describe("scheduler", () => {
     const innerDigest = await store.putManifest(inner);
 
     const outer = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:outer",
       name: "Outer",
       cells: [
@@ -240,7 +240,7 @@ describe("scheduler", () => {
 
   test("agent context exceeding maxContextBytes fails the run", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:ctx",
       name: "Ctx",
       budgets: { maxContextBytes: 64 },
@@ -273,7 +273,7 @@ describe("scheduler", () => {
     const store = new MemoryStore();
     const mk = (key: string, innerDigest?: string) =>
       manifest({
-        contract: "morphogen.organism.v1",
+        contract: "algal.organism.v1",
         key,
         name: key,
         interface: {
@@ -298,7 +298,7 @@ describe("scheduler", () => {
     const d2 = await store.putManifest(mk("organism:l2", d1));
     const d3 = await store.putManifest(mk("organism:l3", d2));
     const outer = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:outer-chain",
       name: "Outer",
       budgets: { maxDepth: 2 },
@@ -318,7 +318,7 @@ describe("scheduler", () => {
 
   test("agent tool calls loop back into declared fns", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:tools",
       name: "Tools",
       cells: [
@@ -360,7 +360,7 @@ describe("scheduler", () => {
 
   test("tool loop that never settles exhausts maxTurns", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:tools-loop",
       name: "Loop",
       cells: [
@@ -396,7 +396,7 @@ describe("scheduler", () => {
 
   test("tool call to an undeclared ref is just output (fail closed)", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:tools-scope",
       name: "Scope",
       cells: [
@@ -425,7 +425,7 @@ describe("scheduler", () => {
 
   test("tool call with missing required input fails the cell", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:tools-req",
       name: "Req",
       cells: [
@@ -453,7 +453,7 @@ describe("scheduler", () => {
 
   test("tools entries must name known registry fns", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:bad-tool",
       name: "BadTool",
       cells: [
@@ -480,7 +480,7 @@ describe("scheduler", () => {
 
   test("shadow classifier records the decision but takes the declared label", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:shadow",
       name: "Shadow",
       cells: [
@@ -511,7 +511,7 @@ describe("scheduler", () => {
   test("shadow.take must be a declared label", () => {
     expect(() =>
       manifest({
-        contract: "morphogen.organism.v1",
+        contract: "algal.organism.v1",
         key: "organism:bad-shadow",
         name: "BadShadow",
         cells: [
@@ -530,7 +530,7 @@ describe("scheduler", () => {
 
   test("route.preset selects a named executor", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:routed",
       name: "Routed",
       cells: [
@@ -565,7 +565,7 @@ describe("scheduler", () => {
 
   test("gate cells emit kind:gate effect requests and drive guards", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:gate",
       name: "Gate",
       cells: [
@@ -610,7 +610,7 @@ describe("scheduler", () => {
 
   test("view.cells delivers ancestor records into the effect context", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:viewcells",
       name: "ViewCells",
       cells: [
@@ -653,7 +653,7 @@ describe("scheduler", () => {
 
   test("view.cells port slicing limits which ancestor outputs enter context", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:vcslice",
       name: "VcSlice",
       cells: [
@@ -694,7 +694,7 @@ describe("scheduler", () => {
     await expect(
       runOrganism({
         manifest: manifest({
-          contract: "morphogen.organism.v1",
+          contract: "algal.organism.v1",
           key: "organism:vcslice-bad",
           name: "Bad",
           cells: [
@@ -722,7 +722,7 @@ describe("scheduler", () => {
 
   test("field guard routes on a json record field", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:fguard",
       name: "FGuard",
       cells: [
@@ -781,7 +781,7 @@ describe("scheduler", () => {
     await expect(
       runOrganism({
         manifest: manifest({
-          contract: "morphogen.organism.v1",
+          contract: "algal.organism.v1",
           key: "organism:fguard-bad",
           name: "Bad",
           cells: [
@@ -807,7 +807,7 @@ describe("scheduler", () => {
   test("until.field exits a repeat when a json field matches", async () => {
     const store = new MemoryStore();
     const inner = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:statuser",
       name: "Statuser",
       interface: {
@@ -830,7 +830,7 @@ describe("scheduler", () => {
     });
     const d = await store.putManifest(inner);
     const outer = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:untilfield",
       name: "UntilField",
       cells: [
@@ -863,7 +863,7 @@ describe("scheduler", () => {
     expect(receipt.cells["loop/r3"]).toBeUndefined();
     // until.field on a non-json output fails admission
     const innerChoice = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:statuser-c",
       name: "StatuserC",
       interface: {
@@ -888,7 +888,7 @@ describe("scheduler", () => {
     await expect(
       runOrganism({
         manifest: manifest({
-          contract: "morphogen.organism.v1",
+          contract: "algal.organism.v1",
           key: "organism:untilfield-bad",
           name: "Bad",
           cells: [
@@ -915,7 +915,7 @@ describe("scheduler", () => {
 
   test("view.graph puts the ancestor wiring into context", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:vgraph",
       name: "VGraph",
       cells: [
@@ -975,7 +975,7 @@ describe("scheduler", () => {
 
   test("on:fail edge routes a failure record to a recovery cell", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:failroute",
       name: "FailRoute",
       cells: [
@@ -1009,7 +1009,7 @@ describe("scheduler", () => {
       id: "flaky",
       async execute(req: { cellId: string; context: JsonValue }) {
         if (req.cellId === "worker") {
-          throw new MorphogenError("EFFECT_FAILED", "boom");
+          throw new AlgalError("EFFECT_FAILED", "boom");
         }
         captured = req.context;
         return "recovered";
@@ -1042,7 +1042,7 @@ describe("scheduler", () => {
 
   test("a handled failure replays bit-for-bit through verify", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:failroute",
       name: "FailRoute",
       cells: [
@@ -1080,7 +1080,7 @@ describe("scheduler", () => {
         id: "flaky",
         async execute(req) {
           if (req.cellId === "worker") {
-            throw new MorphogenError("EFFECT_FAILED", "boom");
+            throw new AlgalError("EFFECT_FAILED", "boom");
           }
           return "recovered";
         },
@@ -1097,7 +1097,7 @@ describe("scheduler", () => {
 
   test("an unhandled failure still fails the run, with the effect recorded", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:failbare",
       name: "FailBare",
       cells: [
@@ -1122,7 +1122,7 @@ describe("scheduler", () => {
       executors: [{
         id: "flaky",
         async execute() {
-          throw new MorphogenError("EFFECT_FAILED", "boom");
+          throw new AlgalError("EFFECT_FAILED", "boom");
         },
       }],
     });
@@ -1141,7 +1141,7 @@ describe("scheduler", () => {
 
   test("on:fail admission: json consumer, no guard, no port mixing", async () => {
     const base = (toPort: string, extra: Record<string, unknown> = {}) => ({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:fadm",
       name: "FAdm",
       cells: [
@@ -1193,7 +1193,7 @@ describe("scheduler", () => {
     ).rejects.toThrowError(/not valid on an on:"fail" edge/);
     // normal + fail edges into the same port
     const mixed = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:fmix",
       name: "FMix",
       cells: [
@@ -1221,7 +1221,7 @@ describe("scheduler", () => {
   test("view.cells rejects non-ancestor and unknown cells", async () => {
     // sibling commits before "brain" in declared order but is not an ancestor
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:viewcells-bad",
       name: "Bad",
       cells: [
@@ -1251,7 +1251,7 @@ describe("scheduler", () => {
   test("repeat cell loops a sub-manifest with carry until the guard", async () => {
     const store = new MemoryStore();
     const inner = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:polish",
       name: "Polish",
       interface: {
@@ -1285,7 +1285,7 @@ describe("scheduler", () => {
     });
     const innerDigest = await store.putManifest(inner);
     const outer = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:refine",
       name: "Refine",
       cells: [
@@ -1327,7 +1327,7 @@ describe("scheduler", () => {
   test("repeat without until runs exactly maxRounds", async () => {
     const store = new MemoryStore();
     const inner = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:spin",
       name: "Spin",
       interface: {
@@ -1342,7 +1342,7 @@ describe("scheduler", () => {
     });
     const d = await store.putManifest(inner);
     const outer = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:spinner",
       name: "Spinner",
       cells: [
@@ -1367,7 +1367,7 @@ describe("scheduler", () => {
   test("repeat carry must name interface ports", async () => {
     const store = new MemoryStore();
     const inner = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:tiny",
       name: "Tiny",
       interface: {
@@ -1378,7 +1378,7 @@ describe("scheduler", () => {
     });
     const d = await store.putManifest(inner);
     const outer = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:badcarry",
       name: "BadCarry",
       cells: [
@@ -1400,7 +1400,7 @@ describe("scheduler", () => {
 
   test("many ports fan in every delivered edge in manifest order", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:fanin",
       name: "FanIn",
       cells: [
@@ -1424,7 +1424,7 @@ describe("scheduler", () => {
 
   test("guarded fan-in contributes only the edges that fired", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:condfan",
       name: "CondFan",
       cells: [
@@ -1469,7 +1469,7 @@ describe("scheduler", () => {
   test("many on a producer port is rejected", async () => {
     expect(() =>
       manifest({
-        contract: "morphogen.organism.v1",
+        contract: "algal.organism.v1",
         key: "organism:badmany",
         name: "Bad",
         cells: [
@@ -1481,7 +1481,7 @@ describe("scheduler", () => {
 
   test("an agent many input arrives as a list in context.inputs", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:manyagent",
       name: "ManyAgent",
       cells: [
@@ -1522,7 +1522,7 @@ describe("scheduler", () => {
   test("each maps a list through a sub-manifest and flattens into many", async () => {
     const store = new MemoryStore();
     const inner = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:rate-one",
       name: "RateOne",
       interface: {
@@ -1545,7 +1545,7 @@ describe("scheduler", () => {
     });
     const d = await store.putManifest(inner);
     const outer = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:batch",
       name: "Batch",
       cells: [
@@ -1577,7 +1577,7 @@ describe("scheduler", () => {
   test("each enforces maxItems and element types", async () => {
     const store = new MemoryStore();
     const inner = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:one",
       name: "One",
       interface: {
@@ -1588,7 +1588,7 @@ describe("scheduler", () => {
     });
     const d = await store.putManifest(inner);
     const outer = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:batcher",
       name: "Batcher",
       cells: [
@@ -1623,7 +1623,7 @@ describe("scheduler", () => {
     const store = new MemoryStore();
     // inner of each: classify one item as keep/drop
     const voteInner = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:vote",
       name: "Vote",
       interface: {
@@ -1647,7 +1647,7 @@ describe("scheduler", () => {
     const voteDigest = await store.putManifest(voteInner);
     // repeat body: run an each over the carried list, emit count + verdict
     const roundBody = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:round",
       name: "Round",
       interface: {
@@ -1682,7 +1682,7 @@ describe("scheduler", () => {
     });
     const roundDigest = await store.putManifest(roundBody);
     const outer = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:winnow",
       name: "Winnow",
       cells: [
@@ -1726,7 +1726,7 @@ describe("scheduler", () => {
   test("unresolvable cells produce a stuck outcome", async () => {
     // two pending cells blocked behind a skipped branch with a required input
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:stuck",
       name: "Stuck",
       cells: [
@@ -1764,7 +1764,7 @@ describe("scheduler", () => {
 
 describe("ref ports and store/load cells", () => {
   const cas = {
-    contract: "morphogen.organism.v1",
+    contract: "algal.organism.v1",
     key: "organism:cas",
     name: "Cas",
     cells: [
@@ -1798,7 +1798,7 @@ describe("ref ports and store/load cells", () => {
 
   test("a caller-supplied ref must already resolve in the store", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:refin",
       name: "RefIn",
       cells: [{ id: "src", kind: "input", outputs: { r: "ref" } }],
@@ -1821,7 +1821,7 @@ describe("ref ports and store/load cells", () => {
 
   test("a non-digest ref value fails the type check", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:badref",
       name: "BadRef",
       cells: [{ id: "src", kind: "input", outputs: { r: "ref" } }],
@@ -1833,7 +1833,7 @@ describe("ref ports and store/load cells", () => {
   test("a load cell fails closed when the blob is absent", async () => {
     // a ref minted in one store does not resolve in another
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:dangle",
       name: "Dangle",
       cells: [
@@ -1862,7 +1862,7 @@ describe("ref ports and store/load cells", () => {
   test("ref↔ref only: ref cannot feed json, json cannot feed ref", async () => {
     const bad = (toCell: string, toPort: string, fromCell = "put", fromPort = "ref") =>
       manifest({
-        contract: "morphogen.organism.v1",
+        contract: "algal.organism.v1",
         key: "organism:rtype",
         name: "RType",
         cells: [
@@ -1917,7 +1917,7 @@ describe("ref ports and store/load cells", () => {
 
   test("refs compose across organism boundaries (shared store)", async () => {
     const inner = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:refinner",
       name: "RefInner",
       cells: [
@@ -1935,7 +1935,7 @@ describe("ref ports and store/load cells", () => {
     const store = new MemoryStore();
     const innerDigest = await store.putManifest(inner);
     const outer = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:refouter",
       name: "RefOuter",
       cells: [
@@ -1959,7 +1959,7 @@ describe("ref ports and store/load cells", () => {
 
 describe("json port schemas", () => {
   const ticketer = (consumerSchema?: unknown, withFailEdge = false) => ({
-    contract: "morphogen.organism.v1",
+    contract: "algal.organism.v1",
     key: "organism:schema",
     name: "Schema",
     cells: [
@@ -2024,7 +2024,7 @@ describe("json port schemas", () => {
 
   test("a schema on a producer output is enforced at commit", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:schprod",
       name: "SchProd",
       cells: [
@@ -2045,7 +2045,7 @@ describe("json port schemas", () => {
 
 describe("retry", () => {
   const flaky = {
-    contract: "morphogen.organism.v1",
+    contract: "algal.organism.v1",
     key: "organism:retry",
     name: "Retry",
     cells: [
@@ -2075,7 +2075,7 @@ describe("retry", () => {
         id: "flaky",
         async execute() {
           calls++;
-          if (calls === 1) throw new MorphogenError("EFFECT_FAILED", "transient");
+          if (calls === 1) throw new AlgalError("EFFECT_FAILED", "transient");
           return "done";
         },
       }],
@@ -2114,7 +2114,7 @@ describe("retry", () => {
         id: "flaky",
         async execute(req) {
           calls++;
-          if (req.cellId === "worker") throw new MorphogenError("EFFECT_FAILED", "down");
+          if (req.cellId === "worker") throw new AlgalError("EFFECT_FAILED", "down");
           return "handled";
         },
       }],
@@ -2138,7 +2138,7 @@ describe("retry", () => {
         id: "flaky",
         async execute() {
           calls++;
-          if (calls < 3) throw new MorphogenError("EFFECT_FAILED", `f${calls}`);
+          if (calls < 3) throw new AlgalError("EFFECT_FAILED", `f${calls}`);
           return "done";
         },
       }],
@@ -2156,7 +2156,7 @@ describe("retry", () => {
   test("a contract-violating response is recorded and retried", async () => {
     let calls = 0;
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:retrybind",
       name: "RetryBind",
       cells: [
@@ -2196,7 +2196,7 @@ describe("retry", () => {
 
 describe("effect timeouts", () => {
   const m = manifest({
-    contract: "morphogen.organism.v1",
+    contract: "algal.organism.v1",
     key: "organism:slow",
     name: "Slow",
     cells: [
@@ -2280,7 +2280,7 @@ describe("effect timeouts", () => {
 
 describe("cachedExecutor", () => {
   const m = manifest({
-    contract: "morphogen.organism.v1",
+    contract: "algal.organism.v1",
     key: "organism:memo",
     name: "Memo",
     cells: [
@@ -2342,7 +2342,7 @@ describe("cachedExecutor", () => {
       id: "flaky",
       async execute() {
         calls++;
-        if (calls === 1) throw new MorphogenError("EFFECT_FAILED", "boom");
+        if (calls === 1) throw new AlgalError("EFFECT_FAILED", "boom");
         return "recovered";
       },
     };
@@ -2375,7 +2375,7 @@ describe("cachedExecutor", () => {
 
 describe("assert.v1", () => {
   const m = manifest({
-    contract: "morphogen.organism.v1",
+    contract: "algal.organism.v1",
     key: "organism:assert",
     name: "Assert",
     cells: [
@@ -2470,7 +2470,7 @@ describe("assert.v1", () => {
 
 describe("slot cells", () => {
   const counter = manifest({
-    contract: "morphogen.organism.v1",
+    contract: "algal.organism.v1",
     key: "organism:counter",
     name: "Counter",
     cells: [
@@ -2546,7 +2546,7 @@ describe("slot cells", () => {
 
   test("an empty slot with no default fails INPUT_MISSING, routable", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:slot-miss",
       name: "SlotMiss",
       cells: [
@@ -2596,7 +2596,7 @@ describe("slot cells", () => {
   test("a write-mode slot rejects default at parse time", () => {
     expect(() =>
       manifest({
-        contract: "morphogen.organism.v1",
+        contract: "algal.organism.v1",
         key: "organism:bad",
         name: "Bad",
         cells: [
@@ -2615,7 +2615,7 @@ describe("slot cells", () => {
 
 describe("spawn cells", () => {
   const inner = {
-    contract: "morphogen.organism.v1",
+    contract: "algal.organism.v1",
     key: "organism:spawned",
     name: "Spawned",
     interface: {
@@ -2632,7 +2632,7 @@ describe("spawn cells", () => {
   };
 
   const outer = manifest({
-    contract: "morphogen.organism.v1",
+    contract: "algal.organism.v1",
     key: "organism:breeder",
     name: "Breeder",
     cells: [
@@ -2687,7 +2687,7 @@ describe("spawn cells", () => {
 
   test("a non-manifest input fails the cell, routable via on:fail", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:badspawn",
       name: "BadSpawn",
       cells: [
@@ -2759,7 +2759,7 @@ describe("spawn cells", () => {
       },
     };
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:breeder2",
       name: "Breeder2",
       cells: [
@@ -2803,7 +2803,7 @@ describe("spawn cells", () => {
       key: "organism:grandchild",
     };
     const child = {
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:child",
       name: "Child",
       interface: {
@@ -2836,7 +2836,7 @@ describe("spawn cells", () => {
       ],
     };
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:rec",
       name: "Rec",
       cells: [
@@ -2871,7 +2871,7 @@ describe("spawn cells", () => {
   test("each over spawn runs a bounded population of generated manifests", async () => {
     const store = new MemoryStore();
     const wrapper = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:spawn-one",
       name: "SpawnOne",
       interface: {
@@ -2894,7 +2894,7 @@ describe("spawn cells", () => {
     });
     const wd = await store.putManifest(wrapper);
     const cand = (key: string, v: string) => ({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key,
       name: key,
       interface: { outputs: { out: { cell: "emit", port: "v" } } },
@@ -2908,7 +2908,7 @@ describe("spawn cells", () => {
       edges: [],
     });
     const outer = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:hive-t",
       name: "HiveT",
       cells: [
@@ -2959,7 +2959,7 @@ describe("spawn cells", () => {
 
   test("push.v1 appends and rejects non-arrays", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:push-t",
       name: "PushT",
       cells: [
@@ -3005,7 +3005,7 @@ describe("spawn cells", () => {
     expect(r2.cells["sink"]?.outputs?.data).toEqual(["new", "new"]);
     // non-array list fails FN_FAILED
     const bad = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:push-bad",
       name: "PushBad",
       cells: [
@@ -3051,7 +3051,7 @@ describe("spawn cells", () => {
       },
     };
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:breeder-sec",
       name: "BreederSec",
       cells: [
@@ -3099,7 +3099,7 @@ describe("spawn cells", () => {
 
   test("executor results record usage produced by the completed call", async () => {
     const m = manifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:post-call-usage",
       name: "Post-call usage",
       cells: [{

@@ -173,7 +173,7 @@ pub fn invoke(name: &str, inputs: &Value) -> Result<(Value, usize)> {
     Ok((output, 0))
 }
 
-/// Compiles a pipeline plan into a `morphogen.organism.v1` manifest. A plan is
+/// Compiles a pipeline plan into a `algal.organism.v1` manifest. A plan is
 /// a JSON array of 1..4 step strings; each step is `fn:NAME` optionally
 /// followed by `;PORT=VALUE` bindings (raw text for text ports, JSON-encoded
 /// for other ports) or `const:JSON_LITERAL`. The flat grammar is deliberately
@@ -325,7 +325,7 @@ pub(crate) fn compile_plan(plan: &Value) -> Result<Value> {
     let key = format!("organism:plan-{}", &digest(plan)?[7..23]);
     let name = format!("Compiled {}", names.join("->"));
     Ok(json!({
-        "contract":"morphogen.organism.v1",
+        "contract":"algal.organism.v1",
         "key":key,
         "name":name,
         "budgets":{"maxAgentCalls":0,"maxSteps":32,"maxWork":10000},

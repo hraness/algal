@@ -1,5 +1,5 @@
 {
-  "contract": "morphogen.bench.config.v1",
+  "contract": "algal.bench.config.v1",
   "cases": [
     {
       "id": "b1",
@@ -41,22 +41,22 @@
   "systems": [
     {
       "id": "cheap-single",
-      "manifest": "bench-batch-single.morphogen.json",
+      "manifest": "bench-batch-single.algal.json",
       "executors": { "cheap": "scripted:bench-batch-cheap.responses.json" }
     },
     {
       "id": "frontier-single",
-      "manifest": "bench-batch-single.morphogen.json",
+      "manifest": "bench-batch-single.algal.json",
       "executors": { "frontier": "scripted:bench-batch-frontier.responses.json" }
     },
     {
       "id": "each-cheap",
-      "manifest": "bench-batch-each.morphogen.json",
+      "manifest": "bench-batch-each.algal.json",
       "executors": { "cheap": "scripted:bench-batch-cheap.responses.json" }
     },
     {
       "id": "each-ensemble",
-      "manifest": "bench-batch-ensemble.morphogen.json",
+      "manifest": "bench-batch-ensemble.algal.json",
       "executors": {
         "cheap": "scripted:bench-batch-cheap.responses.json",
         "cheap2": "scripted:bench-batch-cheap2.responses.json",

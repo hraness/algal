@@ -1,7 +1,7 @@
 {
   "writer": [
     {
-      "contract": "morphogen.organism.v1",
+      "contract": "algal.organism.v1",
       "key": "organism:gen-0",
       "name": "Gen0",
       "interface": {
@@ -19,7 +19,7 @@
       "edges": []
     },
     {
-      "contract": "morphogen.organism.v1",
+      "contract": "algal.organism.v1",
       "key": "organism:gen-1",
       "name": "Gen1",
       "interface": {

@@ -1,4 +1,4 @@
-# morphogen.organism.v1
+# algal.organism.v1
 
 The organism manifest contract. A manifest is data: it can be checked,
 canonicalized, hashed, and embedded. It can never carry code.
@@ -7,7 +7,7 @@ canonicalized, hashed, and embedded. It can never carry code.
 
 ```json
 {
-  "contract": "morphogen.organism.v1",
+  "contract": "algal.organism.v1",
   "key": "organism:triage",
   "name": "Ticket triage",
   "note": "optional bounded text",
@@ -23,7 +23,7 @@ canonicalized, hashed, and embedded. It can never carry code.
 
 | field | rule |
 | --- | --- |
-| `contract` | literal `morphogen.organism.v1` |
+| `contract` | literal `algal.organism.v1` |
 | `key` | `organism:<kebab-key>`, ≤ 64 chars |
 | `name` | ≤ 120 chars |
 | `note` | optional, ≤ 2000 chars |
@@ -54,7 +54,7 @@ canonicalized, hashed, and embedded. It can never carry code.
 (a safe id) the host maps to a bundle source — a directory of
 `<hex>.bundle.json` files or an HTTP(S) base URL serving the same. When the
 referenced manifest is absent from the local store, the transport supplies
-a `morphogen.bundle.v1` closure; `unpack` installs it with every claimed
+a `algal.bundle.v1` closure; `unpack` installs it with every claimed
 digest rehashed, then resolution retries locally. The cell's receipt record
 carries `via` — the transport name that served the closure. Local hits
 never consult transports, so `via` is a fallback, not a preference; a
@@ -393,7 +393,7 @@ cells keep their own records.
 An agent/classifier/gate activation produces an effect request:
 
 ```json
-{ "contract": "morphogen.effect.v1", "cellId": "route", "kind": "classifier",
+{ "contract": "algal.effect.v1", "cellId": "route", "kind": "classifier",
   "prompt": "…", "context": {"inputs": {…}}, "output": {…},
   "budget": {…}, "route": {…} }
 ```
@@ -403,7 +403,7 @@ The executor sees exactly these bytes; nothing else crosses the boundary.
 Executor output is bound to the declared `output` contract before it can feed
 edges. A miss on a `choice` output resolves to `onMiss` or fails the run.
 
-## Receipts — morphogen.run.v1
+## Receipts — algal.run.v1
 
 A receipt records `manifestDigest`, `args`, `outcome`, per-cell records
 (`committed | skipped | failed`, outputs, `failure` detail, `effectDigest`,
@@ -436,7 +436,7 @@ effect still occupies its budgeted slot (agent calls, context and output
 bytes), still binds to the declared output contract, and still replays
 bit-for-bit: replay reproduces the `cached` flag from the record.
 
-## Bundles — morphogen.bundle.v1
+## Bundles — algal.bundle.v1
 
 A bundle is a portable closure: `{"contract","root","manifests","values"}`.
 `pack` walks the root manifest's embedding graph (`organism`/`repeat`/`each`

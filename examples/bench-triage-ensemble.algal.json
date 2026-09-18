@@ -1,0 +1,56 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:bench-triage-ensemble",
+  "name": "Bench triage — ensemble cascade",
+  "note": "Uncertainty as structure: two decorrelated cheap classifiers vote; a deterministic assert compares them; only disagreement fires the frontier cell through an on:fail edge. Escalation needs no self-reported confidence — disagreement is the signal.",
+  "budgets": { "maxSteps": 10, "maxAgentCalls": 6, "maxWork": 100000 },
+  "interface": {
+    "inputs": { "ticket": { "cell": "src", "port": "ticket" } },
+    "outputs": { "out": { "cell": "merge", "port": "value" } }
+  },
+  "cells": [
+    { "id": "src", "kind": "input", "outputs": { "ticket": "text" } },
+    {
+      "id": "cheap-a",
+      "kind": "classifier",
+      "inputs": { "ticket": "text" },
+      "prompt": "Classify the support ticket by its primary operational destination: billing, technical, or other.",
+      "view": { "inputs": ["ticket"] },
+      "output": { "kind": "choice", "labels": ["billing", "technical", "other"] },
+      "route": { "preset": "cheap" },
+      "budget": { "maxContextBytes": 4096, "maxOutputBytes": 256, "maxEffectMs": 120000 }
+    },
+    {
+      "id": "cheap-b",
+      "kind": "classifier",
+      "inputs": { "ticket": "text" },
+      "prompt": "Decide which team should own this support ticket: billing, technical, or other.",
+      "view": { "inputs": ["ticket"] },
+      "output": { "kind": "choice", "labels": ["billing", "technical", "other"] },
+      "route": { "preset": "cheap2" },
+      "budget": { "maxContextBytes": 4096, "maxOutputBytes": 256, "maxEffectMs": 120000 }
+    },
+    { "id": "agree", "kind": "fn", "fn": "assert.v1" },
+    {
+      "id": "escalate",
+      "kind": "classifier",
+      "inputs": { "ticket": "text", "trigger": "json" },
+      "prompt": "Two cheap classifiers disagreed on this ticket. Route it definitively: billing, technical, or other.",
+      "view": { "inputs": ["ticket"] },
+      "output": { "kind": "choice", "labels": ["billing", "technical", "other"] },
+      "route": { "preset": "frontier" },
+      "budget": { "maxContextBytes": 4096, "maxOutputBytes": 256, "maxEffectMs": 120000 }
+    },
+    { "id": "merge", "kind": "fn", "fn": "coalesce.v1" }
+  ],
+  "edges": [
+    { "from": { "cell": "src", "port": "ticket" }, "to": { "cell": "cheap-a", "port": "ticket" } },
+    { "from": { "cell": "src", "port": "ticket" }, "to": { "cell": "cheap-b", "port": "ticket" } },
+    { "from": { "cell": "src", "port": "ticket" }, "to": { "cell": "escalate", "port": "ticket" } },
+    { "from": { "cell": "cheap-a", "port": "out" }, "to": { "cell": "agree", "port": "value" } },
+    { "from": { "cell": "cheap-b", "port": "out" }, "to": { "cell": "agree", "port": "expect" } },
+    { "from": { "cell": "agree", "port": "value" }, "to": { "cell": "escalate", "port": "trigger" }, "on": "fail" },
+    { "from": { "cell": "escalate", "port": "out" }, "to": { "cell": "merge", "port": "a" } },
+    { "from": { "cell": "cheap-a", "port": "out" }, "to": { "cell": "merge", "port": "b" } }
+  ]
+}

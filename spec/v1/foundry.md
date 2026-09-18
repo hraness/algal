@@ -1,4 +1,4 @@
-# morphogen.foundry.v1
+# algal.foundry.v1
 
 A foundry report is content-addressed evidence for selecting one bounded organism population. It records no wall-clock values and contains no executable code.
 
@@ -14,7 +14,7 @@ A case passes only when its run completes and the candidate's canonical interfac
 
 ## Candidate generation
 
-A host may supply candidate files or run a generator organism. The generator must declare an interface output containing a non-empty list of `morphogen.organism.v1` values, directly or under a configured object field. Every value passes through the ordinary manifest parser. Invalid, duplicate, or over-bound populations fail before evaluation.
+A host may supply candidate files or run a generator organism. The generator must declare an interface output containing a non-empty list of `algal.organism.v1` values, directly or under a configured object field. Every value passes through the ordinary manifest parser. Invalid, duplicate, or over-bound populations fail before evaluation.
 
 The generator is an ordinary organism. It may compose `repeat`, `each`, `spawn`, slots, gates, and nested organisms to implement bounded generations, populations, lineage journals, or approval. The foundry grants it no additional functions, executors, capabilities, or budgets.
 

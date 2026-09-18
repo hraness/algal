@@ -15,7 +15,7 @@ import { manifestToJson, parseOrganismManifest } from "./contract";
 import { replayStore, type Store } from "./store";
 import type { Transport } from "./transport";
 import type { ToolRegistry } from "./tools";
-import { MorphogenError } from "./errors";
+import { AlgalError } from "./errors";
 import { canonicalize, type JsonValue } from "./values";
 
 export type VerifyReport = {
@@ -181,7 +181,7 @@ export function diffReceipts(a: RunReceipt, b: RunReceipt): string[] {
 
 export function requireReceiptManifest(receipt: RunReceipt): Digest {
   if (!receipt.manifestDigest) {
-    throw new MorphogenError("PARSE_FAILED", "receipt has no manifestDigest");
+    throw new AlgalError("PARSE_FAILED", "receipt has no manifestDigest");
   }
   return receipt.manifestDigest;
 }

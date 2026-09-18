@@ -2,7 +2,7 @@
   "writer": [
     {
       "candidates": [{
-        "contract": "morphogen.organism.v1",
+        "contract": "algal.organism.v1",
         "key": "organism:evolved-constant",
         "name": "Generation zero constant",
         "interface": {
@@ -18,7 +18,7 @@
     },
     {
       "candidates": [{
-        "contract": "morphogen.organism.v1",
+        "contract": "algal.organism.v1",
         "key": "organism:evolved-echo",
         "name": "Generation one echo",
         "interface": {

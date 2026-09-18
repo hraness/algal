@@ -1,0 +1,38 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:bench-invest-org",
+  "name": "Bench invest — tool-grounded organism",
+  "note": "A cheap classifier decides the dispute, but only after a tool cell retrieves the account's charge ledger. Every lookup is typed, bounded, and receipted. The deciding evidence is data, not a guess.",
+  "budgets": { "maxSteps": 8, "maxAgentCalls": 2, "maxWork": 100000 },
+  "interface": {
+    "inputs": {
+      "ticket": { "cell": "src", "port": "ticket" },
+      "account": { "cell": "src", "port": "account" }
+    },
+    "outputs": { "out": { "cell": "decide", "port": "out" } }
+  },
+  "cells": [
+    { "id": "src", "kind": "input", "outputs": { "ticket": "text", "account": "text" } },
+    {
+      "id": "lookup",
+      "kind": "tool",
+      "tool": "ledger.charges.v1",
+      "budget": { "maxEffectMs": 30000 }
+    },
+    {
+      "id": "decide",
+      "kind": "classifier",
+      "inputs": { "ticket": "text", "charges": "json" },
+      "prompt": "Decide the dispute outcome from the ticket and the account's charge ledger. Output refund when the ledger shows a genuine duplicate: two or more identical posted charges. Output monitor when the charge in question is pending or already reversed. Output escalate for anything else: unfamiliar vendors, mismatched amounts, or ambiguous evidence.",
+      "view": { "inputs": ["ticket", "charges"] },
+      "output": { "kind": "choice", "labels": ["refund", "escalate", "monitor"] },
+      "route": { "preset": "cheap" },
+      "budget": { "maxContextBytes": 8192, "maxOutputBytes": 256, "maxEffectMs": 120000 }
+    }
+  ],
+  "edges": [
+    { "from": { "cell": "src", "port": "account" }, "to": { "cell": "lookup", "port": "account" } },
+    { "from": { "cell": "src", "port": "ticket" }, "to": { "cell": "decide", "port": "ticket" } },
+    { "from": { "cell": "lookup", "port": "charges" }, "to": { "cell": "decide", "port": "charges" } }
+  ]
+}

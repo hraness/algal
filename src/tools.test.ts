@@ -29,7 +29,7 @@ function lookupRegistry(calls: { value: number }): ToolRegistry {
 }
 
 const lookup = parseOrganismManifest({
-  contract: "morphogen.organism.v1",
+  contract: "algal.organism.v1",
   key: "organism:tool-lookup",
   name: "Tool lookup",
   interface: {
@@ -80,7 +80,7 @@ test("explicit tool cells are typed, receipted, and replay without live I/O", as
 
 test("agents call declared external tools and replay the nested effect", async () => {
   const manifest = parseOrganismManifest({
-    contract: "morphogen.organism.v1",
+    contract: "algal.organism.v1",
     key: "organism:agent-tool",
     name: "Agent external tool",
     cells: [{
@@ -140,7 +140,7 @@ test("agents call declared external tools and replay the nested effect", async (
 
 test("tool failures route through ordinary fail edges", async () => {
   const manifest = parseOrganismManifest({
-    contract: "morphogen.organism.v1",
+    contract: "algal.organism.v1",
     key: "organism:tool-failure",
     name: "Tool failure",
     cells: [
