@@ -2,11 +2,11 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const repo = resolve(import.meta.dir, "../..");
-const manifestPath = "examples/habitat/live.morphogen.json";
+const manifestPath = "examples/habitat/live.algal.json";
 const argsPath = "examples/habitat/live.args.json";
 const responsesPath = "examples/habitat/live.responses.json";
-const fallbackPath = "examples/habitat/fallback.morphogen.json";
-const dir = ".morphogen/habitat-live";
+const fallbackPath = "examples/habitat/fallback.algal.json";
+const dir = ".algal/habitat-live";
 const promotedDir = "promoted";
 
 const live = process.argv.slice(2).includes("--live");

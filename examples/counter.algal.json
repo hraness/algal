@@ -1,0 +1,28 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:counter",
+  "name": "Counter",
+  "cells": [
+    {
+      "id": "mem",
+      "kind": "slot",
+      "name": "counter-seen",
+      "mode": "read",
+      "default": 0
+    },
+    { "id": "bump", "kind": "fn", "fn": "inc.v1" },
+    { "id": "sink", "kind": "slot", "name": "counter-seen", "mode": "write" },
+    {
+      "id": "label",
+      "kind": "const",
+      "outputs": { "t": { "type": "text", "value": "SEEN" } }
+    },
+    { "id": "note", "kind": "fn", "fn": "tag.v1" }
+  ],
+  "edges": [
+    { "from": { "cell": "mem", "port": "data" }, "to": { "cell": "bump", "port": "value" } },
+    { "from": { "cell": "bump", "port": "value" }, "to": { "cell": "sink", "port": "data" } },
+    { "from": { "cell": "bump", "port": "value" }, "to": { "cell": "note", "port": "value" } },
+    { "from": { "cell": "label", "port": "t" }, "to": { "cell": "note", "port": "tag" } }
+  ]
+}

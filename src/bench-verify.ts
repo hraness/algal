@@ -1,6 +1,6 @@
 import { manifestToJson } from "./contract";
 import { digestCanonical, type Digest } from "./digest";
-import { MorphogenError } from "./errors";
+import { AlgalError } from "./errors";
 import {
   BENCH_BOUNDS,
   BENCH_CONTRACT,
@@ -21,25 +21,25 @@ import { canonicalize, type JsonObject, type JsonValue } from "./values";
 
 function object(value: unknown, at: string): JsonObject {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new MorphogenError("PARSE_FAILED", `${at} must be an object`);
+    throw new AlgalError("PARSE_FAILED", `${at} must be an object`);
   }
   return value as JsonObject;
 }
 
 function keys(value: JsonObject, allowed: string[], at: string): void {
   const extra = Object.keys(value).find((key) => !allowed.includes(key));
-  if (extra) throw new MorphogenError("PARSE_FAILED", `${at}: unknown key "${extra}"`);
+  if (extra) throw new AlgalError("PARSE_FAILED", `${at}: unknown key "${extra}"`);
 }
 
 function text(value: JsonValue | undefined, at: string): string {
-  if (typeof value !== "string") throw new MorphogenError("PARSE_FAILED", `${at} must be text`);
+  if (typeof value !== "string") throw new AlgalError("PARSE_FAILED", `${at} must be text`);
   return value;
 }
 
 function id(value: JsonValue | undefined, at: string): string {
   const parsed = text(value, at);
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(parsed) || parsed.length > BENCH_BOUNDS.maxIdLen) {
-    throw new MorphogenError("PARSE_FAILED", `${at} is not a valid id`);
+    throw new AlgalError("PARSE_FAILED", `${at} is not a valid id`);
   }
   return parsed;
 }
@@ -47,21 +47,21 @@ function id(value: JsonValue | undefined, at: string): string {
 function digest(value: JsonValue | undefined, at: string): Digest {
   const parsed = text(value, at);
   if (!/^sha256:[0-9a-f]{64}$/.test(parsed)) {
-    throw new MorphogenError("PARSE_FAILED", `${at} must be a sha256 digest`);
+    throw new AlgalError("PARSE_FAILED", `${at} must be a sha256 digest`);
   }
   return parsed as Digest;
 }
 
 function count(value: JsonValue | undefined, at: string): number {
   if (!Number.isInteger(value) || (value as number) < 0) {
-    throw new MorphogenError("PARSE_FAILED", `${at} must be a non-negative integer`);
+    throw new AlgalError("PARSE_FAILED", `${at} must be a non-negative integer`);
   }
   return value as number;
 }
 
 function number_(value: JsonValue | undefined, at: string): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-    throw new MorphogenError("PARSE_FAILED", `${at} must be a non-negative number`);
+    throw new AlgalError("PARSE_FAILED", `${at} must be a non-negative number`);
   }
   return value;
 }
@@ -91,7 +91,7 @@ function parseAttribution(value: JsonValue | undefined, at: string): Record<stri
   const out: Record<string, BenchAttribution> = {};
   for (const [key, raw] of Object.entries(map)) {
     if (key.length === 0 || key.length > 256) {
-      throw new MorphogenError("PARSE_FAILED", `${at} has an invalid attribution key`);
+      throw new AlgalError("PARSE_FAILED", `${at} has an invalid attribution key`);
     }
     const entry = object(raw, `${at}.${key}`);
     keys(entry, ["calls", "tokensIn", "tokensOut", "cost"], `${at}.${key}`);
@@ -120,10 +120,10 @@ function parseCaseResult(value: JsonValue, at: string): BenchCaseResult {
   keys(c, ["id", "passed", "outcome", "outputs", "expect", "receiptDigest", "effectCalls", "work", "usage", "attribution"], at);
   const outcome = text(c.outcome, `${at}.outcome`);
   if (outcome !== "complete" && outcome !== "failed" && outcome !== "stuck") {
-    throw new MorphogenError("PARSE_FAILED", `${at}.outcome is invalid`);
+    throw new AlgalError("PARSE_FAILED", `${at}.outcome is invalid`);
   }
   if (typeof c.passed !== "boolean") {
-    throw new MorphogenError("PARSE_FAILED", `${at}.passed must be boolean`);
+    throw new AlgalError("PARSE_FAILED", `${at}.passed must be boolean`);
   }
   return {
     id: id(c.id, `${at}.id`),
@@ -146,10 +146,10 @@ function parseSystem(value: JsonValue, i: number): BenchSystemResult {
   const total = count(s.total, `${at}.total`);
   const passed = count(s.passed, `${at}.passed`);
   if (total === 0 || passed > total) {
-    throw new MorphogenError("PARSE_FAILED", `${at} is not a valid score`);
+    throw new AlgalError("PARSE_FAILED", `${at} is not a valid score`);
   }
   if (!Array.isArray(s.cases) || s.cases.length !== total || s.cases.length > BENCH_BOUNDS.maxCases) {
-    throw new MorphogenError("PARSE_FAILED", `${at}.cases must match its total`);
+    throw new AlgalError("PARSE_FAILED", `${at}.cases must match its total`);
   }
   return {
     id: id(s.id, `${at}.id`),
@@ -171,7 +171,7 @@ function parseBenchPrice(value: JsonValue | undefined, at: string): Record<strin
   const out: Record<string, BenchPrice> = {};
   for (const [key, raw] of Object.entries(map)) {
     if (key.length === 0 || key.length > 256) {
-      throw new MorphogenError("PARSE_FAILED", `${at} has an invalid price key`);
+      throw new AlgalError("PARSE_FAILED", `${at} has an invalid price key`);
     }
     const p = object(raw, `${at}.${key}`);
     keys(p, ["input", "output"], `${at}.${key}`);
@@ -187,28 +187,28 @@ export function parseBenchReport(value: unknown): BenchReport {
   const report = object(value, "bench");
   keys(report, ["contract", "workload", "cases", "prices", "systems", "pareto", "digest"], "bench");
   if (report.contract !== BENCH_CONTRACT) {
-    throw new MorphogenError("PARSE_FAILED", `bench.contract must be ${BENCH_CONTRACT}`);
+    throw new AlgalError("PARSE_FAILED", `bench.contract must be ${BENCH_CONTRACT}`);
   }
   if (!Array.isArray(report.cases) || report.cases.length === 0 || report.cases.length > BENCH_BOUNDS.maxCases) {
-    throw new MorphogenError("PARSE_FAILED", "bench.cases must be a bounded non-empty list");
+    throw new AlgalError("PARSE_FAILED", "bench.cases must be a bounded non-empty list");
   }
   if (!Array.isArray(report.systems) || report.systems.length === 0 || report.systems.length > BENCH_BOUNDS.maxSystems) {
-    throw new MorphogenError("PARSE_FAILED", "bench.systems must be a bounded non-empty list");
+    throw new AlgalError("PARSE_FAILED", "bench.systems must be a bounded non-empty list");
   }
   if (!Array.isArray(report.pareto) || report.pareto.length > BENCH_BOUNDS.maxSystems) {
-    throw new MorphogenError("PARSE_FAILED", "bench.pareto must be a bounded list");
+    throw new AlgalError("PARSE_FAILED", "bench.pareto must be a bounded list");
   }
   const systems = report.systems.map(parseSystem);
   const ids = new Set(systems.map((s) => s.id));
   const pareto = report.pareto.map((entry, i) => {
     const parsed = id(entry as JsonValue, `bench.pareto[${i}]`);
     if (!ids.has(parsed)) {
-      throw new MorphogenError("PARSE_FAILED", `bench.pareto[${i}] names an unknown system`);
+      throw new AlgalError("PARSE_FAILED", `bench.pareto[${i}] names an unknown system`);
     }
     return parsed;
   });
   if (new Set(pareto).size !== pareto.length) {
-    throw new MorphogenError("PARSE_FAILED", "bench.pareto contains duplicates");
+    throw new AlgalError("PARSE_FAILED", "bench.pareto contains duplicates");
   }
   return {
     contract: BENCH_CONTRACT,

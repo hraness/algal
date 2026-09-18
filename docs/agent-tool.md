@@ -11,7 +11,7 @@ A ALGAL organism is a content-addressed, replayable subroutine. Pack it once and
 ## Pack
 
 ```sh
-algal pack examples/triage.morphogen.json --out ./tools
+algal pack examples/triage.algal.json --out ./tools
 ```
 
 This writes `./tools/<root-hex>.bundle.json`. The bundle is self-contained and digest-verified.
@@ -21,8 +21,8 @@ This writes `./tools/<root-hex>.bundle.json`. The bundle is self-contained and d
 Generate an OpenAI or Anthropic tool definition from the manifest's interface:
 
 ```sh
-algal tool-def examples/triage.morphogen.json
-algal tool-def examples/triage.morphogen.json --format anthropic
+algal tool-def examples/triage.algal.json
+algal tool-def examples/triage.algal.json --format anthropic
 ```
 
 OpenAI output:
@@ -95,4 +95,4 @@ The outer agent keeps doing open-ended planning, user interaction, and retries. 
 
 ## Failure handling
 
-If the organism fails or gets stuck, `ok` is `false` and `error` contains the code and message. The agent can retry with different arguments, escalate to a frontier model, or ask the user. The full receipt is still written to the `--dir` store (default `.morphogen/`) so the failure can be inspected offline.
+If the organism fails or gets stuck, `ok` is `false` and `error` contains the code and message. The agent can retry with different arguments, escalate to a frontier model, or ask the user. The full receipt is still written to the `--dir` store (default `.algal/`) so the failure can be inspected offline.

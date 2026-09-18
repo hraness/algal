@@ -1,0 +1,19 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:lineage",
+  "name": "Lineage",
+  "cells": [
+    { "id": "src", "kind": "input", "outputs": { "task": "text" } },
+    {
+      "id": "gen",
+      "kind": "repeat",
+      "manifest": "sha256:a168f3f13c813d1f53d5388c0d86de2414d91985a7d313661cbc60616e37413d",
+      "maxRounds": 4,
+      "carry": { "score": "feedback" },
+      "until": { "output": "score", "equals": "good" }
+    }
+  ],
+  "edges": [
+    { "from": { "cell": "src", "port": "task" }, "to": { "cell": "gen", "port": "task" } }
+  ]
+}

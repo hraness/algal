@@ -9,7 +9,7 @@ import { verifySearchReport } from "./search-verify";
 import { MemoryStore } from "./store";
 
 const echo = parseOrganismManifest({
-  contract: "morphogen.organism.v1",
+  contract: "algal.organism.v1",
   key: "organism:echo-candidate",
   name: "Echo candidate",
   interface: {
@@ -26,7 +26,7 @@ const echo = parseOrganismManifest({
 });
 
 const constant = parseOrganismManifest({
-  contract: "morphogen.organism.v1",
+  contract: "algal.organism.v1",
   key: "organism:constant-candidate",
   name: "Constant candidate",
   interface: {
@@ -43,7 +43,7 @@ const constant = parseOrganismManifest({
 describe("foundry", () => {
   test("search carries validation evidence across bounded generations without exposing holdout", async () => {
     const generator = parseOrganismManifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:evolving-generator",
       name: "Evolving generator",
       interface: {
@@ -111,7 +111,7 @@ describe("foundry", () => {
 
   test("runs an organism that emits candidate manifests and records its lineage", async () => {
     const generator = parseOrganismManifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:test-generator",
       name: "Test generator",
       interface: { inputs: {}, outputs: { candidates: { cell: "batch", port: "value" } } },
@@ -183,7 +183,7 @@ describe("foundry", () => {
       executors: [],
     });
 
-    expect(result.contract).toBe("morphogen.foundry.v1");
+    expect(result.contract).toBe("algal.foundry.v1");
     expect(result.candidates).toHaveLength(2);
     expect(result.candidates[0]?.train.passed).toBe(1);
     expect(result.candidates[0]?.validation.passed).toBe(0);
@@ -197,7 +197,7 @@ describe("foundry", () => {
 
   test("rejects duplicate case ids and candidates without interfaces", async () => {
     const noInterface = parseOrganismManifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:no-interface",
       name: "No interface",
       cells: [{ id: "x", kind: "const", outputs: { value: { type: "text", value: "x" } } }],

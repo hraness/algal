@@ -5,7 +5,7 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    ignores: ["site/dist/**", "dist/**", "node_modules/**", ".morphogen/**"],
+    ignores: ["site/dist/**", "dist/**", "node_modules/**", ".algal/**"],
   },
   {
     rules: {

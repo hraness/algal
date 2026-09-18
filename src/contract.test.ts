@@ -7,10 +7,10 @@ import {
 import { compileOrganism } from "./graph";
 import { builtinRegistry } from "./registry";
 import { MemoryStore } from "./store";
-import { MorphogenError } from "./errors";
+import { AlgalError } from "./errors";
 
 const minimal = {
-  contract: "morphogen.organism.v1",
+  contract: "algal.organism.v1",
   key: "organism:min",
   name: "Minimal",
   cells: [
@@ -38,7 +38,7 @@ describe("manifest parsing", () => {
   test("rejects wrong contract", () => {
     expect(() =>
       parseOrganismManifest({ ...minimal, contract: "other.v9" }),
-    ).toThrow(MorphogenError);
+    ).toThrow(AlgalError);
   });
 
   test("rejects bad key shape", () => {
@@ -81,7 +81,7 @@ describe("manifest parsing", () => {
 
 describe("view.cells and repeat parsing", () => {
   const agent = (view: unknown) => ({
-    contract: "morphogen.organism.v1",
+    contract: "algal.organism.v1",
     key: "organism:v",
     name: "V",
     cells: [
@@ -131,7 +131,7 @@ describe("view.cells and repeat parsing", () => {
   test("repeat requires a digest manifest and bounded maxRounds", async () => {
     const store = new MemoryStore();
     const inner = parseOrganismManifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:inner",
       name: "Inner",
       interface: {
@@ -142,7 +142,7 @@ describe("view.cells and repeat parsing", () => {
     });
     const d = await store.putManifest(inner);
     const outer = (cell: Record<string, unknown>) => ({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:o",
       name: "O",
       cells: [
@@ -183,7 +183,7 @@ describe("view.cells and repeat parsing", () => {
     ).rejects.toThrowError(/not an interface output/);
     // admission: child without interface is rejected
     const noIface = parseOrganismManifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:noiface",
       name: "NI",
       cells: [{ id: "in", kind: "input", outputs: { v: "text" } }],
@@ -203,7 +203,7 @@ describe("view.cells and repeat parsing", () => {
   test("field guard and until.field round-trip through manifestToJson", async () => {
     const store = new MemoryStore();
     const inner = parseOrganismManifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:rep-json",
       name: "RepJson",
       interface: {
@@ -216,7 +216,7 @@ describe("view.cells and repeat parsing", () => {
     });
     const d = await store.putManifest(inner);
     const m = parseOrganismManifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:fg",
       name: "FG",
       cells: [
@@ -268,7 +268,7 @@ describe("view.cells and repeat parsing", () => {
 describe("graph admission", () => {
   test("rejects cycles", async () => {
     const m = parseOrganismManifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:cyc",
       name: "Cyclic",
       cells: [
@@ -382,7 +382,7 @@ describe("graph admission", () => {
 
 describe("ref ports and store/load cells", () => {
   const cas = {
-    contract: "morphogen.organism.v1",
+    contract: "algal.organism.v1",
     key: "organism:cas",
     name: "Cas",
     cells: [
@@ -439,7 +439,7 @@ describe("ref ports and store/load cells", () => {
 describe("json port schemas", () => {
   test("schema parses on json ports and round-trips", () => {
     const m = parseOrganismManifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:sch",
       name: "Sch",
       cells: [
@@ -463,7 +463,7 @@ describe("json port schemas", () => {
 
   test("schema is rejected on non-json ports and beyond depth bound", () => {
     const cell = (inputs: unknown) => ({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:sch2",
       name: "Sch2",
       cells: [
@@ -487,7 +487,7 @@ describe("json port schemas", () => {
 
   test("retry parses on effect cells, round-trips, and is bounded", () => {
     const cell = (kind: string, retry?: unknown) => ({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:rt",
       name: "RT",
       cells: [
@@ -536,7 +536,7 @@ describe("json port schemas", () => {
 describe("slot cells", () => {
   test("slot cells parse, bound, and round-trip", () => {
     const m = parseOrganismManifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:slots",
       name: "Slots",
       cells: [
@@ -565,7 +565,7 @@ describe("slot cells", () => {
 
   test("slot cells reject bad mode, bad name, and unknown keys", () => {
     const cell = (extra: Record<string, unknown>) => ({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:s",
       name: "S",
       cells: [{ id: "s", kind: "slot", name: "x", mode: "read", ...extra }],
@@ -585,7 +585,7 @@ describe("slot cells", () => {
 
   test("spawn cells carry no config and round-trip", () => {
     const m = parseOrganismManifest({
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:t",
       name: "T",
       cells: [
@@ -607,7 +607,7 @@ describe("slot cells", () => {
     expect(manifestToJson(back)).toEqual(manifestToJson(m));
     expect(() =>
       parseOrganismManifest({
-        contract: "morphogen.organism.v1",
+        contract: "algal.organism.v1",
         key: "organism:t",
         name: "T",
         cells: [{ id: "s", kind: "spawn", extra: 1 }],
@@ -618,7 +618,7 @@ describe("slot cells", () => {
 
   test("tool cells parse, bound time, and round-trip", () => {
     const raw = {
-      contract: "morphogen.organism.v1",
+      contract: "algal.organism.v1",
       key: "organism:tool",
       name: "Tool",
       cells: [{

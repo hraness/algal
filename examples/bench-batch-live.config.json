@@ -1,5 +1,5 @@
 {
-  "contract": "morphogen.bench.config.v1",
+  "contract": "algal.bench.config.v1",
   "cases": [
     {
       "id": "b1",
@@ -41,22 +41,22 @@
   "systems": [
     {
       "id": "cheap-single",
-      "manifest": "bench-batch-single.morphogen.json",
+      "manifest": "bench-batch-single.algal.json",
       "executors": { "cheap": "gateway:alibaba/qwen3.5-flash" }
     },
     {
       "id": "frontier-single",
-      "manifest": "bench-batch-single.morphogen.json",
+      "manifest": "bench-batch-single.algal.json",
       "executors": { "frontier": "gateway:anthropic/claude-opus-5" }
     },
     {
       "id": "each-cheap",
-      "manifest": "bench-batch-each.morphogen.json",
+      "manifest": "bench-batch-each.algal.json",
       "executors": { "cheap": "gateway:alibaba/qwen3.5-flash" }
     },
     {
       "id": "each-ensemble",
-      "manifest": "bench-batch-ensemble.morphogen.json",
+      "manifest": "bench-batch-ensemble.algal.json",
       "executors": {
         "cheap": "gateway:alibaba/qwen3.5-flash",
         "cheap2": "gateway:alibaba/qwen3.7-flash",

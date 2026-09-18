@@ -1,7 +1,7 @@
 {
-  "contract": "morphogen.foundry.config.v1",
+  "contract": "algal.foundry.config.v1",
   "generator": {
-    "manifest": "evolving-generator.morphogen.json",
+    "manifest": "evolving-generator.algal.json",
     "args": { "task": "Return the input value unchanged." },
     "output": "candidates",
     "field": "candidates"

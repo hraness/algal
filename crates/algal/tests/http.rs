@@ -10,7 +10,7 @@ use std::{
 };
 
 fn effect() -> Value {
-    json!({"contract":"morphogen.effect.v1","cellId":"route","kind":"classifier","prompt":"Choose yes","context":{},"output":{"kind":"choice","labels":["yes","no"]},"budget":{"maxContextBytes":4096,"maxOutputBytes":4096}})
+    json!({"contract":"algal.effect.v1","cellId":"route","kind":"classifier","prompt":"Choose yes","context":{},"output":{"kind":"choice","labels":["yes","no"]},"budget":{"maxContextBytes":4096,"maxOutputBytes":4096}})
 }
 
 fn server(status: &str, body: String, headers: &str) -> (String, thread::JoinHandle<String>) {

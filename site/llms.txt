@@ -4,10 +4,10 @@
 > bounded agent programs, a foundation for a coding-agent harness, and a
 > host-controlled environment for generating and selecting program populations.
 
-Previously named Morphogen. The public package is @hraness/algal and the CLI is
-algal. The existing morphogen.*.v1 wire identifiers and legacy fixtures are
+Previously named Algal. The public package is @hraness/algal and the CLI is
+algal. The existing algal.*.v1 wire identifiers and legacy fixtures are
 preserved for digest and replay compatibility. New stores default to .algal;
---dir .morphogen reads an existing store without moving it.
+--dir .algal reads an existing store without moving it.
 
 ## Source
 
@@ -16,7 +16,7 @@ preserved for digest and replay compatibility. New stores default to .algal;
 - Language contract: spec/v1/organism.md
 - Agent integration: docs/agent-tool.md and docs/executors.md
 - Selection and populations: docs/civilization.md
-- Measured case studies and limitations: docs/when-morphogen-wins.md
+- Measured case studies and limitations: docs/when-algal-wins.md
 
 ## Product boundaries
 

@@ -237,7 +237,7 @@ fn plan_fixture(goal: &Goal, constant: bool) -> Result<Value> {
 
 fn generator() -> Result<Manifest> {
     Manifest::parse(
-        &json!({"contract":"morphogen.organism.v1","key":"organism:civilization-designer","name":"Bounded civilization designer",
+        &json!({"contract":"algal.organism.v1","key":"organism:civilization-designer","name":"Bounded civilization designer",
         "budgets":{"maxSteps":8,"maxAgentCalls":1,"maxWork":1000000,"maxContextBytes":32768,"maxOutputBytes":32768},
         "cells":[
             {"id":"goal","kind":"input","outputs":{"task":"json"}},

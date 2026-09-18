@@ -1,7 +1,7 @@
-// Canonical JSON values: the only data type that crosses Morphogen boundaries.
+// Canonical JSON values: the only data type that crosses Algal boundaries.
 // Every foreign value enters as `unknown` and is parsed through these readers.
 
-import { MorphogenError } from "./errors";
+import { AlgalError } from "./errors";
 
 export type JsonValue =
   | null
@@ -52,21 +52,21 @@ export function isJsonValue(u: unknown): u is JsonValue {
 
 export function asJsonValue(u: unknown, what: string): JsonValue {
   if (!isJsonValue(u)) {
-    throw new MorphogenError("PARSE_FAILED", `${what} is not a JSON value`);
+    throw new AlgalError("PARSE_FAILED", `${what} is not a JSON value`);
   }
   return u;
 }
 
 export function asObject(u: unknown, what: string): JsonObject {
   if (u === null || typeof u !== "object" || Array.isArray(u)) {
-    throw new MorphogenError("PARSE_FAILED", `${what} must be an object`);
+    throw new AlgalError("PARSE_FAILED", `${what} must be an object`);
   }
   return u as JsonObject;
 }
 
 export function asArray(u: unknown, what: string): JsonValue[] {
   if (!Array.isArray(u)) {
-    throw new MorphogenError("PARSE_FAILED", `${what} must be an array`);
+    throw new AlgalError("PARSE_FAILED", `${what} must be an array`);
   }
   return u;
 }
@@ -78,14 +78,14 @@ export function optField(obj: JsonObject, key: string): unknown {
 export function reqField(obj: JsonObject, key: string, what: string): unknown {
   const v = optField(obj, key);
   if (v === undefined) {
-    throw new MorphogenError("PARSE_FAILED", `${what} requires "${key}"`);
+    throw new AlgalError("PARSE_FAILED", `${what} requires "${key}"`);
   }
   return v;
 }
 
 export function asString(u: unknown, what: string, maxLen: number): string {
   if (typeof u !== "string" || u.length > maxLen) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "PARSE_FAILED",
       `${what} must be a string of at most ${maxLen} characters`,
     );
@@ -100,7 +100,7 @@ export function asInt(
   max: number,
 ): number {
   if (typeof u !== "number" || !Number.isInteger(u) || u < min || u > max) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "PARSE_FAILED",
       `${what} must be an integer in [${min}, ${max}]`,
     );
@@ -111,7 +111,7 @@ export function asInt(
 export function asSafeId(u: unknown, what: string): string {
   const s = asString(u, what, 64);
   if (!/^[a-z][a-z0-9-]*$/.test(s)) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "PARSE_FAILED",
       `${what} must be a lowercase kebab-case id`,
     );
@@ -126,7 +126,7 @@ export function noUnknownKeys(
 ): void {
   for (const key of Object.keys(obj)) {
     if (!allowed.includes(key)) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "PARSE_FAILED",
         `${what} has unknown key "${key}"`,
       );

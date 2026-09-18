@@ -10,11 +10,11 @@ import {
   type OrganismManifest,
 } from "./contract";
 import { asDigest, digestCanonical, type Digest } from "./digest";
-import { MorphogenError } from "./errors";
+import { AlgalError } from "./errors";
 import type { Store } from "./store";
 import { asObject, reqField, type JsonValue } from "./values";
 
-export const BUNDLE_CONTRACT = "morphogen.bundle.v1" as const;
+export const BUNDLE_CONTRACT = "algal.bundle.v1" as const;
 
 export type Bundle = {
   contract: typeof BUNDLE_CONTRACT;
@@ -39,7 +39,7 @@ export async function packOrganism(
     const d = digestCanonical(json);
     if (manifests[d] !== undefined) return;
     if (Object.keys(manifests).length >= BOUNDS.maxCells * BOUNDS.maxDepth) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "BUDGET_EXHAUSTED",
         `bundle exceeds ${BOUNDS.maxCells * BOUNDS.maxDepth} manifests`,
       );
@@ -55,7 +55,7 @@ export async function packOrganism(
           asDigest(cell.manifest, `cell "${cell.id}".manifest`),
         );
         if (!sub) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "STORE_MISS",
             `cell "${cell.id}" manifest ${cell.manifest} not in store — pack needs the full closure`,
           );
@@ -71,7 +71,7 @@ export async function packOrganism(
           );
           const v = await store.getValue(ref);
           if (v === undefined) {
-            throw new MorphogenError(
+            throw new AlgalError(
               "STORE_MISS",
               `const "${cell.id}" ref ${ref} not in store — pack needs the payload`,
             );
@@ -95,11 +95,11 @@ export function parseBundle(u: unknown): Bundle {
   const allowed = ["contract", "root", "manifests", "values"];
   for (const k of Object.keys(obj)) {
     if (!allowed.includes(k)) {
-      throw new MorphogenError("PARSE_FAILED", `bundle: unknown key "${k}"`);
+      throw new AlgalError("PARSE_FAILED", `bundle: unknown key "${k}"`);
     }
   }
   if (obj.contract !== BUNDLE_CONTRACT) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "PARSE_FAILED",
       `expected contract "${BUNDLE_CONTRACT}"`,
     );
@@ -108,7 +108,7 @@ export function parseBundle(u: unknown): Bundle {
   const manifestsRaw = asObject(reqField(obj, "manifests", "bundle"), "bundle.manifests");
   const cap = BOUNDS.maxCells * BOUNDS.maxDepth;
   if (Object.keys(manifestsRaw).length > cap) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "BUDGET_EXHAUSTED",
       `bundle.manifests exceeds ${cap} entries`,
     );
@@ -121,7 +121,7 @@ export function parseBundle(u: unknown): Bundle {
   if (obj.values !== undefined) {
     const vraw = asObject(obj.values, "bundle.values");
     if (Object.keys(vraw).length > cap) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "BUDGET_EXHAUSTED",
         `bundle.values exceeds ${cap} entries`,
       );
@@ -142,7 +142,7 @@ export async function unpackBundle(
 ): Promise<{ manifests: number; values: number }> {
   bundle = parseBundle(bundle);
   if (bundle.manifests[bundle.root] === undefined) {
-    throw new MorphogenError("PARSE_FAILED", `bundle root ${bundle.root} is not among its manifests`);
+    throw new AlgalError("PARSE_FAILED", `bundle root ${bundle.root} is not among its manifests`);
   }
   const parsed = new Map<Digest, OrganismManifest>();
   for (const [claimed, json] of Object.entries(bundle.manifests)) {
@@ -150,7 +150,7 @@ export async function unpackBundle(
     parsed.set(claimed as Digest, m);
     const actual = digestCanonical(manifestToJson(m));
     if (actual !== claimed) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "DIGEST_MISMATCH",
         `bundle manifest claims ${claimed}, hashes to ${actual}`,
       );
@@ -159,14 +159,14 @@ export async function unpackBundle(
   for (const [claimed, v] of Object.entries(bundle.values)) {
     const actual = digestCanonical(v);
     if (actual !== claimed) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "DIGEST_MISMATCH",
         `bundle value claims ${claimed}, hashes to ${actual}`,
       );
     }
   }
   if (bundle.manifests[bundle.root] === undefined) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "PARSE_FAILED",
       `bundle root ${bundle.root} is not among its manifests`,
     );

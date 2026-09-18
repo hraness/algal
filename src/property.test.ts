@@ -87,7 +87,7 @@ describe("manifest corpus properties", () => {
 
   test("every bundled example parses to a stable canonical form", async () => {
     const files = (await readdir(EXAMPLES)).filter((f) =>
-      f.endsWith(".morphogen.json"),
+      f.endsWith(".algal.json"),
     );
     expect(files.length).toBeGreaterThan(10);
     for (const f of files) {
@@ -102,7 +102,7 @@ describe("manifest corpus properties", () => {
 
   test("key permutation at any depth preserves the parsed manifest", async () => {
     const raw = JSON.parse(
-      await Bun.file(join(EXAMPLES, "triage.morphogen.json")).text(),
+      await Bun.file(join(EXAMPLES, "triage.algal.json")).text(),
     ) as JsonValue;
     const permuted = shuffleKeys(raw, rng(0xdead));
     expect(manifestToJson(parseOrganismManifest(permuted))).toEqual(

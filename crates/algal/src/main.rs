@@ -85,7 +85,7 @@ enum Commands {
     Bench {
         #[command(subcommand)]
         command: Option<BenchCommand>,
-        /// `morphogen.bench.config.v1` file
+        /// `algal.bench.config.v1` file
         config: Option<PathBuf>,
         #[arg(long)]
         out: Option<PathBuf>,
@@ -101,7 +101,7 @@ enum Commands {
     Foundry {
         #[command(subcommand)]
         command: Option<FoundryCommand>,
-        /// `morphogen.foundry.config.v1` file
+        /// `algal.foundry.config.v1` file
         config: Option<PathBuf>,
         #[arg(long)]
         out: Option<PathBuf>,
@@ -248,7 +248,7 @@ enum FoundryCommand {
         modules: Option<PathBuf>,
     },
     Search {
-        /// `morphogen.foundry.config.v1` file with a `search` block
+        /// `algal.foundry.config.v1` file with a `search` block
         config: PathBuf,
         #[arg(long)]
         out: Option<PathBuf>,
@@ -1258,7 +1258,7 @@ async fn execute(cli: Cli) -> Result<bool> {
                 return Err(Error::invalid("usage: algal example <id>"));
             }
             let algal = examples.join(format!("{id}.algal.json"));
-            let legacy = examples.join(format!("{id}.morphogen.json"));
+            let legacy = examples.join(format!("{id}.algal.json"));
             let path = if algal.exists() { algal } else { legacy };
             emit(&load(&path, 1_048_576)?)?;
             Ok(true)
@@ -1463,7 +1463,7 @@ async fn execute(cli: Cli) -> Result<bool> {
             options.write = true;
             let (mut store, mut host, transports) = prepare(&options, &cli.dir)?;
             let program = Manifest::parse(
-                &json!({"contract":"morphogen.organism.v1","key":"organism:algal-agent","name":"ALGAL coding-agent harness","cells":[
+                &json!({"contract":"algal.organism.v1","key":"organism:algal-agent","name":"ALGAL coding-agent harness","cells":[
                 {"id":"task","kind":"input","outputs":{"text":"text"}},
                 {"id":"work","kind":"agent","inputs":{"task":"text"},"prompt":"Complete the user's bounded task using only host-admitted capabilities. State what was verified and what remains uncertain.","output":{"kind":"text"},"budget":{"maxEffectMs":600000}}
             ],"edges":[{"from":{"cell":"task","port":"text"},"to":{"cell":"work","port":"task"}}],"interface":{"inputs":{"task":{"cell":"task","port":"text"}},"outputs":{"answer":{"cell":"work","port":"out"}}}}),
@@ -1518,7 +1518,7 @@ async fn execute(cli: Cli) -> Result<bool> {
                 Ok(result["available"] == true)
             } else {
                 emit(
-                    &json!({"runtime":"algal","version":env!("CARGO_PKG_VERSION"),"native":true,"platform":std::env::consts::OS,"legacyWireContract":"morphogen.organism.v1"}),
+                    &json!({"runtime":"algal","version":env!("CARGO_PKG_VERSION"),"native":true,"platform":std::env::consts::OS,"legacyWireContract":"algal.organism.v1"}),
                 )?;
                 Ok(true)
             }

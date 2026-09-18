@@ -1,7 +1,7 @@
 import { manifestToJson, type OrganismManifest } from "./contract";
 import { digestCanonical, type Digest } from "./digest";
 import type { Executor } from "./effects";
-import { MorphogenError } from "./errors";
+import { AlgalError } from "./errors";
 import {
   FOUNDRY_BOUNDS,
   evaluateFoundryPopulation,
@@ -18,7 +18,7 @@ import type { Transport } from "./transport";
 import type { ToolRegistry } from "./tools";
 import type { JsonValue } from "./values";
 
-export const SEARCH_CONTRACT = "morphogen.search.v1" as const;
+export const SEARCH_CONTRACT = "algal.search.v1" as const;
 
 export const SEARCH_BOUNDS = {
   maxGenerations: 8,
@@ -81,7 +81,7 @@ function dedupe(candidates: OrganismManifest[]): OrganismManifest[] {
 
 export async function runFoundrySearch(opts: SearchOptions): Promise<SearchReport> {
   if (!Number.isInteger(opts.maxGenerations) || opts.maxGenerations < 1 || opts.maxGenerations > SEARCH_BOUNDS.maxGenerations) {
-    throw new MorphogenError("PARSE_FAILED", `search maxGenerations must be 1..${SEARCH_BOUNDS.maxGenerations}`);
+    throw new AlgalError("PARSE_FAILED", `search maxGenerations must be 1..${SEARCH_BOUNDS.maxGenerations}`);
   }
   let survivors = dedupe(opts.seeds ?? []);
   let prior: FoundrySelection | undefined;
@@ -104,7 +104,7 @@ export async function runFoundrySearch(opts: SearchOptions): Promise<SearchRepor
     });
     const population = dedupe([...survivors, ...generated.candidates]);
     if (population.length > FOUNDRY_BOUNDS.maxCandidates) {
-      throw new MorphogenError("BUDGET_EXHAUSTED", `search population exceeds ${FOUNDRY_BOUNDS.maxCandidates}`);
+      throw new AlgalError("BUDGET_EXHAUSTED", `search population exceeds ${FOUNDRY_BOUNDS.maxCandidates}`);
     }
     prior = await evaluateFoundryPopulation({
       candidates: population,

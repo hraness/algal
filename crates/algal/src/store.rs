@@ -303,7 +303,7 @@ impl Store {
         let mut count = 0;
         for path in entries {
             let name = path.file_name().and_then(|v| v.to_str()).unwrap_or("");
-            if name.ends_with(".morphogen.json") || name.ends_with(".algal.json") {
+            if name.ends_with(".algal.json") {
                 if count >= 512 {
                     return Err(Error::limit("module count"));
                 }
@@ -365,14 +365,14 @@ pub fn pack(root: &Manifest, store: &Store) -> Result<Value> {
     let mut manifests = BTreeMap::new();
     let mut values = BTreeMap::new();
     visit(root, store, &mut manifests, &mut values)?;
-    let bundle = json!({"contract":"morphogen.bundle.v1","root":root.digest()?,"manifests":manifests,"values":values});
+    let bundle = json!({"contract":"algal.bundle.v1","root":root.digest()?,"manifests":manifests,"values":values});
     canonical(&bundle)?;
     Ok(bundle)
 }
 
 pub fn unpack(bundle: &Value, store: &mut Store) -> Result<Manifest> {
     keys(bundle, &["contract", "root", "manifests", "values"])?;
-    if bundle["contract"] != "morphogen.bundle.v1" {
+    if bundle["contract"] != "algal.bundle.v1" {
         return Err(Error::invalid("bundle contract"));
     }
     canonical(bundle)?;

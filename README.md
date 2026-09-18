@@ -37,14 +37,14 @@ relational memory, and on-device inference are implemented. See
 
 ## Rename and compatibility
 
-ALGAL was previously Morphogen. The package is `@hraness/algal` and the command
-is `algal`; `morphogen` remains a compatibility command. Existing
-`morphogen.*.v1` wire identifiers and `.morphogen.json` fixtures are intentionally
+ALGAL was previously Algal. The package is `@hraness/algal` and the command
+is `algal`; `algal` remains a compatibility command. Existing
+`algal.*.v1` wire identifiers and `.algal.json` fixtures are intentionally
 preserved: renaming a product must not silently change a manifest's digest or
 invalidate its receipts. New files may use `.algal.json`. New stores default to
-`.algal/`; use `--dir .morphogen` to access an existing store. No old state is
+`.algal/`; use `--dir .algal` to access an existing store. No old state is
 moved, deleted, or implicitly merged. The existing site origin remains
-morphogen.dev until a new domain is configured.
+algal.dev until a new domain is configured.
 
 ## Two clear value props
 
@@ -89,14 +89,14 @@ store, and propose new organisms. A shared `Store`, `ToolRegistry`, and
 foundry search and host admission. The organism cannot rewrite its own runtime,
 but it can *propose* children, functions, and tools; the host decides what to
 admit. See [`docs/habitats.md`](docs/habitats.md) for the design sketch,
-[`examples/habitat.morphogen.json`](examples/habitat.morphogen.json) for a
+[`examples/habitat.algal.json`](examples/habitat.algal.json) for a
 deterministic working steel thread, `bun examples/habitat/promote.ts --live`
 for a live model-driven reproduction loop, and [`docs/civilization.md`](docs/civilization.md)
 with `bun scripts/civ.ts --live` for the first runnable civilization loop.
 
 ## What is this?
 
-An **organism** is a manifest (`morphogen.organism.v1`): a set of cells with
+An **organism** is a manifest (`algal.organism.v1`): a set of cells with
 declared ports, edges between ports, and budgets over the whole run. A manifest
 carries no executable code. It names things the host already admits.
 
@@ -231,6 +231,10 @@ can be chosen per deployment.
 ```sh
 bun install
 bun run cli suite
+
+# or the native runtime
+cargo build -p algal
+./target/debug/algal suite --dir .algal
 ```
 
 `suite` runs every bundled example — `triage` (classifier routing), `pipeline`
@@ -272,21 +276,21 @@ effect was spent) — with
 scripted responses, then verifies each receipt offline. To run one yourself:
 
 ```sh
-bun run cli check examples/triage.morphogen.json
-bun run cli run examples/triage.morphogen.json \
+bun run cli check examples/triage.algal.json
+bun run cli run examples/triage.algal.json \
   --args examples/triage.args.json \
   --responses examples/triage.responses.json --write
-bun run cli verify .morphogen/runs/<receipt-digest>.json \
-  examples/triage.morphogen.json
+bun run cli verify .algal/runs/<receipt-digest>.json \
+  examples/triage.algal.json
 # or omit the manifest — it resolves from the store by the receipt's digest
-bun run cli verify .morphogen/runs/<receipt-digest>.json
+bun run cli verify .algal/runs/<receipt-digest>.json
 # compare two runs: which cells diverged, what each one cost
-bun run cli diff .morphogen/runs/<a>.json .morphogen/runs/<b>.json
+bun run cli diff .algal/runs/<a>.json .algal/runs/<b>.json
 # mint a ref for a payload — then pass the token as a "ref" arg
 bun run cli store put payload.json        # → {"ref":"sha256:…"}
 bun run cli store get sha256:…            # → the payload
 # a portable closure: the manifest plus everything it embeds and references
-bun run cli pack examples/inbox.morphogen.json --modules examples > bundle.json
+bun run cli pack examples/inbox.algal.json --modules examples > bundle.json
 bun run cli unpack bundle.json --dir /tmp/elsewhere   # installs, digests verified
 ```
 
@@ -310,18 +314,18 @@ bun run cli foundry examples/generated-foundry.config.json \
   --responses examples/foundry-generator.responses.json \
   --dir .algal --out foundry-report.json
 bun run cli foundry inspect foundry-report.json
-bun run cli foundry verify foundry-report.json --dir .morphogen
+bun run cli foundry verify foundry-report.json --dir .algal
 bun run cli foundry pack foundry-report.json --dir .algal --out bundles
 ```
 
-A `morphogen.foundry.config.v1` file declares the generator, cases, and optionally
+A `algal.foundry.config.v1` file declares the generator, cases, and optionally
 additional candidate paths:
 
 ```json
 {
-  "contract": "morphogen.foundry.config.v1",
+  "contract": "algal.foundry.config.v1",
   "generator": {
-    "manifest": "generator.morphogen.json",
+    "manifest": "generator.algal.json",
     "args": { "task": "Return the input unchanged." },
     "output": "candidates",
     "field": "candidates"
@@ -337,7 +341,7 @@ additional candidate paths:
 Paths resolve relative to the config. Promotion prefers validation pass rate,
 then train pass rate, then fewer agent calls and work units, with manifest digest
 as the final tie-breaker. Non-promoted candidates never run against holdout
-cases. A `morphogen.foundry.v1` report records expectations, outputs, work, token
+cases. A `algal.foundry.v1` report records expectations, outputs, work, token
 usage, manifest and receipt digests, generator lineage, and the winner's holdout result.
 `foundry verify` checks the report digest, scores, selection, claimed outputs,
 and every run receipt by offline replay. `foundry pack` verifies that evidence
@@ -352,11 +356,11 @@ bun run cli foundry search examples/search.config.json \
   --responses examples/evolving-generator.responses.json \
   --dir .algal --out search-report.json
 bun run cli foundry search-inspect search-report.json
-bun run cli foundry search-verify search-report.json --dir .morphogen
+bun run cli foundry search-verify search-report.json --dir .algal
 bun run cli foundry search-pack search-report.json --dir .algal --out bundles
 ```
 
-`morphogen.search.v1` bounds a search to eight generations. Every generation
+`algal.search.v1` bounds a search to eight generations. Every generation
 records its generator receipt, proposals, full population evidence, and winner.
 Verification replays the complete history, checks survivor continuity and that
 every proposal was evaluated, and rejects any holdout evidence in generation
@@ -383,7 +387,7 @@ algal bench inspect bench-report.json
 algal bench verify bench-report.json --dir .algal
 ```
 
-A `morphogen.bench.config.v1` file names case `args`/`expect` pairs and systems
+A `algal.bench.config.v1` file names case `args`/`expect` pairs and systems
 whose `executors` map names to `gateway:<provider/model>` (Vercel AI Gateway),
 `scripted:<file>`, or `cmd:<command>` specs — the native CLI also accepts
 `apple` for the on-device bridge. Named entries answer `route.preset` /
@@ -407,7 +411,7 @@ interface resolution only. `explain` prints the compiled signature — every
 cell's resolved input/output ports (including ports inherited from embedded
 organisms, `repeat`, and `each`) and the guard on every edge. Organisms that
 embed others resolve sub-manifests by digest from the store; `--modules <dir>`
-loads a directory of `*.morphogen.json` files first.
+loads a directory of `*.algal.json` files first.
 
 To go live, point `--executor-cmd` at any program that reads an effect request
 (JSON) on stdin and prints the model's output on stdout, or use
@@ -449,14 +453,18 @@ name → command, so a cell's `route.provider`/`route.preset` picks its model.
   reports any divergence; `diff` compares two receipts canonically.
 - Manifests and receipts are content-addressed canonical JSON; payloads ride
   the same CAS through `ref` ports. The store is a seam: `MemoryStore` and
-  `FileStore` (`.morphogen/`) ship now; an Oh-backed store implements the
+  `FileStore` (`.algal/`) ship now; an Oh-backed store implements the
   same ten methods. `pack`/`unpack` move a manifest's whole embedding
   closure — sub-manifests and `const`-referenced payloads — between stores
   as one verified bundle.
 - `run --cache-effects` memoizes effects across runs through the store's
-  effect index: an identical request digest serves the earlier recorded
-  response (marked `cached` on the new receipt). Only successes memoize —
-  recorded errors may be transient. `algal runs` lists the receipts
+  effect index: an identical request digest under the same executor cache
+  identity serves the earlier recorded response (marked `cached` on the
+  new receipt). Scripted executors bind their whole response table into
+  that identity; `command` and delegated-coding executors are
+  side-effecting and never memoize; and only contract-valid, in-budget,
+  non-tool-call outputs are stored — errors may be transient. `algal runs`
+  lists the receipts
   stored under `--dir`, and `algal manifests` / `manifest <digest>`
   list and print the manifest CAS — including children admitted by
   `spawn`, so a `bred` journal's digests resolve to inspectable programs.
@@ -480,14 +488,14 @@ use it from a larger system without giving the system ambient authority.
 ### From code
 
 ```ts
-import { builtinRegistry, runOrganism, vercelGatewayExecutor } from "morphogen";
-import { FileStore } from "morphogen/store"; // or a custom Store
+import { builtinRegistry, runOrganism, vercelGatewayExecutor } from "algal";
+import { FileStore } from "algal/store"; // or a custom Store
 
 const receipt = await runOrganism({
   manifest: myManifest,
   args: { src: { ticket: "I was charged twice…" } },
   fns: builtinRegistry(),
-  store: new FileStore(".morphogen"),
+  store: new FileStore(".algal"),
   executors: [vercelGatewayExecutor({ model: "alibaba/qwen3.5-flash" })],
   tools: myToolRegistry, // typed external effects
 });
@@ -502,14 +510,14 @@ enforcement, and receipt writing.
 
 ```sh
 # scripted replay fixture
-bun run cli run ticket.morphogen.json --responses ticket.responses.json
+bun run cli run ticket.algal.json --responses ticket.responses.json
 
 # Vercel AI Gateway
-bun run cli run ticket.morphogen.json \
+bun run cli run ticket.algal.json \
   --gateway-model alibaba/qwen3.5-flash --write
 
 # any command that reads JSON on stdin and writes JSON on stdout
-bun run cli run ticket.morphogen.json \
+bun run cli run ticket.algal.json \
   --executor-cmd "python -m my_provider_agent"
 ```
 
@@ -543,8 +551,8 @@ must print a JSON object of output ports. For deterministic testing, use
 Pack an organism and register it as an OpenAI or Anthropic function tool:
 
 ```sh
-algal pack ticket.morphogen.json --out ./tools
-algal tool-def ticket.morphogen.json > ticket-tool.json
+algal pack ticket.algal.json --out ./tools
+algal tool-def ticket.algal.json > ticket-tool.json
 ```
 
 Then call it from an agent:

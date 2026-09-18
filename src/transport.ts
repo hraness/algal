@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { parseBundle, type Bundle } from "./bundle";
 import { BOUNDS } from "./contract";
 import type { Digest } from "./digest";
-import { MorphogenError } from "./errors";
+import { AlgalError } from "./errors";
 
 export interface Transport {
   id: string;
@@ -29,16 +29,16 @@ export function fileTransport(dir: string, id = dir): Transport {
       try {
         const st = await stat(file);
         if (st.size > BOUNDS.maxBundleBytes) {
-          throw new MorphogenError(
+          throw new AlgalError(
             "BUDGET_EXHAUSTED",
             `transport "${id}": bundle ${file} exceeds ${BOUNDS.maxBundleBytes} bytes`,
           );
         }
         text = await readFile(file, "utf8");
       } catch (e) {
-        if (e instanceof MorphogenError) throw e;
+        if (e instanceof AlgalError) throw e;
         if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
-        throw new MorphogenError(
+        throw new AlgalError(
           "IO_FAILED",
           `transport "${id}": ${e instanceof Error ? e.message : String(e)}`,
         );
@@ -47,14 +47,14 @@ export function fileTransport(dir: string, id = dir): Transport {
       try {
         raw = JSON.parse(text);
       } catch {
-        throw new MorphogenError(
+        throw new AlgalError(
           "PARSE_FAILED",
           `transport "${id}": ${file} is not JSON`,
         );
       }
       const bundle = parseBundle(raw);
       if (bundle.root !== root) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "DIGEST_MISMATCH",
           `transport "${id}": ${file} roots at ${bundle.root}, not ${root}`,
         );
@@ -82,28 +82,28 @@ export function httpTransport(
           signal: AbortSignal.timeout(opts.timeoutMs ?? 15_000),
         });
       } catch (e) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "IO_FAILED",
           `transport "${base}": ${e instanceof Error ? e.message : String(e)}`,
         );
       }
       if (res.status === 404) return null;
       if (!res.ok) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "IO_FAILED",
           `transport "${base}": HTTP ${res.status} for ${target}`,
         );
       }
       const declared = Number(res.headers.get("content-length") ?? 0);
       if (declared > BOUNDS.maxBundleBytes) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "BUDGET_EXHAUSTED",
           `transport "${base}": bundle exceeds ${BOUNDS.maxBundleBytes} bytes`,
         );
       }
       const text = await res.text();
       if (text.length > BOUNDS.maxBundleBytes) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "BUDGET_EXHAUSTED",
           `transport "${base}": bundle exceeds ${BOUNDS.maxBundleBytes} bytes`,
         );
@@ -112,14 +112,14 @@ export function httpTransport(
       try {
         raw = JSON.parse(text);
       } catch {
-        throw new MorphogenError(
+        throw new AlgalError(
           "PARSE_FAILED",
           `transport "${base}": ${target} is not JSON`,
         );
       }
       const bundle = parseBundle(raw);
       if (bundle.root !== root) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "DIGEST_MISMATCH",
           `transport "${base}": ${target} roots at ${bundle.root}, not ${root}`,
         );
@@ -133,11 +133,11 @@ export function httpTransport(
 export function parseTransportsFile(u: unknown): Record<string, string> {
   const obj = u as Record<string, unknown>;
   if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
-    throw new MorphogenError("PARSE_FAILED", "transports file must be an object");
+    throw new AlgalError("PARSE_FAILED", "transports file must be an object");
   }
   const keys = Object.keys(obj);
   if (keys.length > BOUNDS.maxTransports) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "PARSE_FAILED",
       `transports file exceeds ${BOUNDS.maxTransports} entries`,
     );
@@ -145,10 +145,10 @@ export function parseTransportsFile(u: unknown): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(obj)) {
     if (k.length > BOUNDS.maxIdLen) {
-      throw new MorphogenError("PARSE_FAILED", `transport name "${k}" too long`);
+      throw new AlgalError("PARSE_FAILED", `transport name "${k}" too long`);
     }
     if (typeof v !== "string" || v.length === 0 || v.length > 4096) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "PARSE_FAILED",
         `transport "${k}": directory must be a non-empty string`,
       );

@@ -1,0 +1,21 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:remote",
+  "name": "Remote",
+  "cells": [
+    { "id": "q", "kind": "input", "outputs": { "text": "text" } },
+    {
+      "id": "svc",
+      "kind": "organism",
+      "manifest": "sha256:94b94c4f1e559cf9c9d9218e9c2dab6deb0ad804d848c3f275f32d1b7a217e6a",
+      "via": "bundles"
+    },
+    { "id": "emit", "kind": "fn", "fn": "echo.v1" }
+  ],
+  "edges": [
+    { "from": { "cell": "q", "port": "text" },
+      "to": { "cell": "svc", "port": "q" } },
+    { "from": { "cell": "svc", "port": "a" },
+      "to": { "cell": "emit", "port": "value" } }
+  ]
+}

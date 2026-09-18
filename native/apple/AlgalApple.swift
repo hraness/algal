@@ -62,7 +62,7 @@ func schema(_ value: [String: Any], name: String, depth: Int = 0) throws -> Dyna
 @available(macOS 26.0, *)
 func execute(_ raw: Data) async throws {
     guard let request = try JSONSerialization.jsonObject(with: raw) as? [String: Any],
-          request["contract"] as? String == "morphogen.effect.v1",
+          request["contract"] as? String == "algal.effect.v1",
           let prompt = request["prompt"] as? String,
           let context = request["context"] as? [String: Any],
           let output = request["output"] as? [String: Any],

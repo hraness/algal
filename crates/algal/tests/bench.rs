@@ -22,7 +22,7 @@ async fn bundled_bench_runs_and_verifies_offline() {
     )
     .await
     .unwrap();
-    assert_eq!(report["contract"], "morphogen.bench.v1");
+    assert_eq!(report["contract"], "algal.bench.v1");
     assert_eq!(report["pareto"], json!(["frontier-single"]));
     let totals: Vec<(String, u64)> = report["systems"]
         .as_array()
@@ -89,7 +89,7 @@ async fn verify_rejects_a_tampered_report() {
 fn config_rejects_bad_specs_and_overreach() {
     let directory = tempfile::tempdir().unwrap();
     let config = json!({
-        "contract":"morphogen.bench.config.v1",
+        "contract":"algal.bench.config.v1",
         "cases":[{"id":"t1","args":{},"expect":{}}],
         "systems":[{
             "id":"s1",
@@ -102,7 +102,7 @@ fn config_rejects_bad_specs_and_overreach() {
     assert!(bench::load_config(&file, None).is_err());
 
     let contract = json!({
-        "contract":"morphogen.bench.v2",
+        "contract":"algal.bench.v2",
         "cases":[{"id":"t1","args":{},"expect":{}}],
         "systems":[]
     });

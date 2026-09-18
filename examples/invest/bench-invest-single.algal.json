@@ -1,0 +1,30 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:bench-invest-single",
+  "name": "Bench invest — single call",
+  "note": "Baseline: one classifier decides the dispute from the ticket and account id alone. It can see the account id but has no way to reach the charge ledger, so every decision is a guess. Compared against the tool-grounded organisms in bench-invest.config.json.",
+  "budgets": { "maxSteps": 4, "maxAgentCalls": 1, "maxWork": 100000 },
+  "interface": {
+    "inputs": {
+      "ticket": { "cell": "src", "port": "ticket" },
+      "account": { "cell": "src", "port": "account" }
+    },
+    "outputs": { "out": { "cell": "solo", "port": "out" } }
+  },
+  "cells": [
+    { "id": "src", "kind": "input", "outputs": { "ticket": "text", "account": "text" } },
+    {
+      "id": "solo",
+      "kind": "classifier",
+      "inputs": { "ticket": "text", "account": "text" },
+      "prompt": "Decide the dispute outcome for the support ticket. Output refund when the customer reports a genuine duplicate charge. Output monitor when the issue will likely resolve itself. Output escalate when the situation needs human review.",
+      "view": { "inputs": ["ticket", "account"] },
+      "output": { "kind": "choice", "labels": ["refund", "escalate", "monitor"] },
+      "budget": { "maxContextBytes": 4096, "maxOutputBytes": 256, "maxEffectMs": 120000 }
+    }
+  ],
+  "edges": [
+    { "from": { "cell": "src", "port": "ticket" }, "to": { "cell": "solo", "port": "ticket" } },
+    { "from": { "cell": "src", "port": "account" }, "to": { "cell": "solo", "port": "account" } }
+  ]
+}

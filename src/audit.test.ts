@@ -24,7 +24,7 @@ test("commands bound stderr and respect a pre-aborted launch", async () => {
 
 test("mutating executors are not blindly retried and their failure replays", async () => {
   const manifest = parseOrganismManifest({
-    contract: "morphogen.organism.v1", key: "organism:no-retry", name: "No retry",
+    contract: "algal.organism.v1", key: "organism:no-retry", name: "No retry",
     cells: [{ id: "code", kind: "agent", inputs: {}, prompt: "task", output: { kind: "text" }, retry: { attempts: 2 } }],
   });
   let calls = 0;
@@ -42,7 +42,7 @@ test("mutating executors are not blindly retried and their failure replays", asy
 });
 
 const request: EffectRequest = {
-  contract: "morphogen.effect.v1", cellId: "model", kind: "agent", prompt: "Answer",
+  contract: "algal.effect.v1", cellId: "model", kind: "agent", prompt: "Answer",
   context: {}, output: { kind: "text" },
   budget: { maxContextBytes: 4096, maxOutputBytes: 4096 },
 };
@@ -57,7 +57,7 @@ test("model cache identity survives a routing alias", async () => {
 
 test("invalid typed output is not memoized into a permanent retry failure", async () => {
   const manifest = parseOrganismManifest({
-    contract: "morphogen.organism.v1", key: "organism:cache-retry", name: "Cache retry",
+    contract: "algal.organism.v1", key: "organism:cache-retry", name: "Cache retry",
     cells: [{ id: "model", kind: "agent", inputs: {}, prompt: "answer", output: { kind: "text" }, retry: { attempts: 2 } }],
   });
   let calls = 0;
@@ -74,7 +74,7 @@ test("missing tool receipts never cause verification to repeat live effects", as
     signature: { inputs: {}, outputs: { value: { type: "json" } }, effect: "read", cost: 1, maxOutputBytes: 1024 },
     tool: async () => { calls++; return { value: "observed" }; },
   }]]);
-  const manifest = parseOrganismManifest({ contract: "morphogen.organism.v1", key: "organism:offline-tool", name: "Offline tool", cells: [{ id: "read", kind: "tool", tool: "read.v1" }] });
+  const manifest = parseOrganismManifest({ contract: "algal.organism.v1", key: "organism:offline-tool", name: "Offline tool", cells: [{ id: "read", kind: "tool", tool: "read.v1" }] });
   const store = new MemoryStore();
   const receipt = await runOrganism({ manifest, store, fns: builtinRegistry(), tools, executors: [] });
   expect(calls).toBe(1);
@@ -126,7 +126,7 @@ test("file store validates SDK slot and digest paths", async () => {
 
 test("rejected bundles write nothing to their destination store", async () => {
   const manifest = parseOrganismManifest({
-    contract: "morphogen.organism.v1", key: "organism:audit", name: "Audit",
+    contract: "algal.organism.v1", key: "organism:audit", name: "Audit",
     cells: [{ id: "source", kind: "const", outputs: { value: { type: "json", value: 1 } } }],
   });
   const bundle = await packOrganism(manifest, new MemoryStore());
@@ -138,7 +138,7 @@ test("rejected bundles write nothing to their destination store", async () => {
 
 test("offline verification cannot rewind live slots", async () => {
   const manifest = parseOrganismManifest({
-    contract: "morphogen.organism.v1", key: "organism:slot-audit", name: "Slot audit",
+    contract: "algal.organism.v1", key: "organism:slot-audit", name: "Slot audit",
     cells: [
       { id: "source", kind: "const", outputs: { value: { type: "json", value: "old" } } },
       { id: "save", kind: "slot", name: "memory", mode: "write" },

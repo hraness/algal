@@ -1,0 +1,69 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:bench-invest-ensemble",
+  "name": "Bench invest — ensemble with escalation",
+  "note": "Two decorrelated cheap lanes judge the same ticket and ledger. assert.v1 compares their answers; only disagreement spends a frontier call. One ledger lookup serves both lanes.",
+  "budgets": { "maxSteps": 12, "maxAgentCalls": 4, "maxWork": 150000 },
+  "interface": {
+    "inputs": {
+      "ticket": { "cell": "src", "port": "ticket" },
+      "account": { "cell": "src", "port": "account" }
+    },
+    "outputs": { "out": { "cell": "merge", "port": "value" } }
+  },
+  "cells": [
+    { "id": "src", "kind": "input", "outputs": { "ticket": "text", "account": "text" } },
+    {
+      "id": "lookup",
+      "kind": "tool",
+      "tool": "ledger.charges.v1",
+      "budget": { "maxEffectMs": 30000 }
+    },
+    {
+      "id": "decide-a",
+      "kind": "classifier",
+      "inputs": { "ticket": "text", "charges": "json" },
+      "prompt": "Decide the dispute outcome from the ticket and the account's charge ledger. Output refund when the ledger shows a genuine duplicate: two or more identical posted charges. Output monitor when the charge in question is pending or already reversed. Output escalate for anything else: unfamiliar vendors, mismatched amounts, or ambiguous evidence.",
+      "view": { "inputs": ["ticket", "charges"] },
+      "output": { "kind": "choice", "labels": ["refund", "escalate", "monitor"] },
+      "route": { "preset": "cheap" },
+      "budget": { "maxContextBytes": 8192, "maxOutputBytes": 256, "maxEffectMs": 120000 }
+    },
+    {
+      "id": "decide-b",
+      "kind": "classifier",
+      "inputs": { "ticket": "text", "charges": "json" },
+      "prompt": "Decide the dispute outcome from the ticket and the account's charge ledger. Output refund when the ledger shows a genuine duplicate: two or more identical posted charges. Output monitor when the charge in question is pending or already reversed. Output escalate for anything else: unfamiliar vendors, mismatched amounts, or ambiguous evidence.",
+      "view": { "inputs": ["ticket", "charges"] },
+      "output": { "kind": "choice", "labels": ["refund", "escalate", "monitor"] },
+      "route": { "preset": "cheap2" },
+      "budget": { "maxContextBytes": 8192, "maxOutputBytes": 256, "maxEffectMs": 120000 }
+    },
+    { "id": "agree", "kind": "fn", "fn": "assert.v1" },
+    {
+      "id": "escalate",
+      "kind": "classifier",
+      "inputs": { "ticket": "text", "charges": "json", "trigger": "json" },
+      "prompt": "Two cheaper judges disagreed on this dispute. Decide the outcome from the ticket and the account's charge ledger. Output refund when the ledger shows a genuine duplicate: two or more identical posted charges. Output monitor when the charge in question is pending or already reversed. Output escalate for anything else: unfamiliar vendors, mismatched amounts, or ambiguous evidence.",
+      "view": { "inputs": ["ticket", "charges"] },
+      "output": { "kind": "choice", "labels": ["refund", "escalate", "monitor"] },
+      "route": { "preset": "frontier" },
+      "budget": { "maxContextBytes": 8192, "maxOutputBytes": 256, "maxEffectMs": 120000 }
+    },
+    { "id": "merge", "kind": "fn", "fn": "coalesce.v1" }
+  ],
+  "edges": [
+    { "from": { "cell": "src", "port": "account" }, "to": { "cell": "lookup", "port": "account" } },
+    { "from": { "cell": "src", "port": "ticket" }, "to": { "cell": "decide-a", "port": "ticket" } },
+    { "from": { "cell": "lookup", "port": "charges" }, "to": { "cell": "decide-a", "port": "charges" } },
+    { "from": { "cell": "src", "port": "ticket" }, "to": { "cell": "decide-b", "port": "ticket" } },
+    { "from": { "cell": "lookup", "port": "charges" }, "to": { "cell": "decide-b", "port": "charges" } },
+    { "from": { "cell": "decide-a", "port": "out" }, "to": { "cell": "agree", "port": "value" } },
+    { "from": { "cell": "decide-b", "port": "out" }, "to": { "cell": "agree", "port": "expect" } },
+    { "from": { "cell": "src", "port": "ticket" }, "to": { "cell": "escalate", "port": "ticket" } },
+    { "from": { "cell": "lookup", "port": "charges" }, "to": { "cell": "escalate", "port": "charges" } },
+    { "from": { "cell": "agree", "port": "value" }, "to": { "cell": "escalate", "port": "trigger" }, "on": "fail" },
+    { "from": { "cell": "escalate", "port": "out" }, "to": { "cell": "merge", "port": "a" } },
+    { "from": { "cell": "decide-a", "port": "out" }, "to": { "cell": "merge", "port": "b" } }
+  ]
+}

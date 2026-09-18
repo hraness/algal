@@ -1,6 +1,6 @@
-# morphogen.search.v1
+# algal.search.v1
 
-A search report records bounded, validation-guided evolution over organism manifests. Search is a host layer over ordinary generator organisms and `morphogen.foundry.v1` evidence; it adds no executable manifest primitive or authority.
+A search report records bounded, validation-guided evolution over organism manifests. Search is a host layer over ordinary generator organisms and `algal.foundry.v1` evidence; it adds no executable manifest primitive or authority.
 
 ## Generations
 
@@ -12,7 +12,7 @@ A search runs 1–8 generations. At each generation:
 4. Every candidate runs against train and validation cases under the host registry, executors, transports, store, and root manifest budgets.
 5. Deterministic foundry ordering promotes one survivor.
 
-Holdout expectations, outputs, scores, and receipts never enter generation evidence or generator feedback. After the final generation, the last winner is evaluated once against holdout cases through `morphogen.foundry.v1`.
+Holdout expectations, outputs, scores, and receipts never enter generation evidence or generator feedback. After the final generation, the last winner is evaluated once against holdout cases through `algal.foundry.v1`.
 
 ## Evidence
 

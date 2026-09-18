@@ -2,7 +2,7 @@
   "writer": {
     "manifests": [
       {
-        "contract": "morphogen.organism.v1",
+        "contract": "algal.organism.v1",
         "key": "organism:cand-a",
         "name": "CandA",
         "interface": {
@@ -18,7 +18,7 @@
         "edges": []
       },
       {
-        "contract": "morphogen.organism.v1",
+        "contract": "algal.organism.v1",
         "key": "organism:cand-b",
         "name": "CandB",
         "interface": {

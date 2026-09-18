@@ -105,7 +105,7 @@ impl Attribution {
 
 type Prices = BTreeMap<String, [f64; 2]>;
 
-/// Parse a `morphogen.bench.config.v1` file: bounded cases, systems whose
+/// Parse a `algal.bench.config.v1` file: bounded cases, systems whose
 /// manifests load relative to the config directory, and an optional price
 /// card. Executor specs are `gateway:<model>`, `scripted:<file>`,
 /// `cmd:<command>`, or `apple` (the on-device bridge; a native extension).
@@ -115,9 +115,9 @@ pub fn load_config(
 ) -> Result<(Vec<BenchCase>, Vec<BenchSystem>, Option<Prices>)> {
     let config = read_json(File::open(path)?, 1_048_576)?;
     keys(&config, &["contract", "cases", "systems", "prices"])?;
-    if config["contract"] != "morphogen.bench.config.v1" {
+    if config["contract"] != "algal.bench.config.v1" {
         return Err(Error::invalid(
-            "bench config.contract must be morphogen.bench.config.v1",
+            "bench config.contract must be algal.bench.config.v1",
         ));
     }
     let base = path.parent().unwrap_or(Path::new("."));
@@ -403,7 +403,7 @@ pub fn pareto(systems: &[Value], has_prices: bool) -> Vec<String> {
 }
 
 /// Run every case of every system, persist the receipts, and emit a
-/// `morphogen.bench.v1` report whose digest covers the whole comparison.
+/// `algal.bench.v1` report whose digest covers the whole comparison.
 pub async fn run(
     cases: &[BenchCase],
     systems: &[BenchSystem],
@@ -481,7 +481,7 @@ pub async fn run(
         .collect();
     let pareto = pareto(&results, prices.is_some());
     let mut report = json!({
-        "contract":"morphogen.bench.v1",
+        "contract":"algal.bench.v1",
         "workload":digest(&Value::Array(case_values.clone()))?,
         "cases":Value::Array(case_values),
         "systems":Value::Array(results),
@@ -569,7 +569,7 @@ fn parse_usage(value: &Value, at: &str) -> Result<Attribution> {
     })
 }
 
-/// Parse a `morphogen.bench.v1` report within its bounds.
+/// Parse a `algal.bench.v1` report within its bounds.
 pub fn parse_report(report: &Value) -> Result<(Vec<BenchCase>, Option<Prices>)> {
     keys(
         report,
@@ -577,8 +577,8 @@ pub fn parse_report(report: &Value) -> Result<(Vec<BenchCase>, Option<Prices>)> 
             "contract", "workload", "cases", "prices", "systems", "pareto", "digest",
         ],
     )?;
-    if report["contract"] != "morphogen.bench.v1" {
-        return Err(Error::invalid("bench.contract must be morphogen.bench.v1"));
+    if report["contract"] != "algal.bench.v1" {
+        return Err(Error::invalid("bench.contract must be algal.bench.v1"));
     }
     sha(&report["workload"], "bench.workload")?;
     sha(&report["digest"], "bench.digest")?;

@@ -18,7 +18,7 @@ const mark = (
 const card = createSocialImageCard({
   description:
     "A language for growing agent programs. Typed workflows, bounded model calls, inspectable memory, and evidence-driven evolution.",
-  domain: "morphogen.dev",
+  domain: "algal.dev",
   eyebrow: "ALGAL",
   mark,
   theme: {

@@ -342,7 +342,7 @@ impl Runtime<'_> {
             .cloned()
             .ok_or_else(|| Error::new("TOOL_UNKNOWN", "tool not configured"))?;
         let request_digest = digest(
-            &json!({"contract":"morphogen.tool-effect.v1","path":request_path,"tool":name,"effect":tool.effect,"inputs":inputs}),
+            &json!({"contract":"algal.tool-effect.v1","path":request_path,"tool":name,"effect":tool.effect,"inputs":inputs}),
         )?;
         self.event("effect", Some(event_path), Some(&request_digest), None)?;
         let receipt = if let Some(replay) = &mut self.host.replay {
@@ -658,7 +658,7 @@ impl Runtime<'_> {
                     "context view {context_bytes}B exceeds maxContextBytes {max_context}B"
                 )));
             }
-            let mut request = json!({"contract":"morphogen.effect.v1","cellId":name,"kind":cell["kind"],"prompt":cell["prompt"],"context":context,"output":cell["output"],"budget":{"maxContextBytes":max_context,"maxOutputBytes":max_output}});
+            let mut request = json!({"contract":"algal.effect.v1","cellId":name,"kind":cell["kind"],"prompt":cell["prompt"],"context":context,"output":cell["output"],"budget":{"maxContextBytes":max_context,"maxOutputBytes":max_output}});
             if let Some(route) = cell.get("route") {
                 request["route"] = route.clone();
             }
@@ -836,7 +836,7 @@ pub async fn verify(
     store: &Store,
     tools: &Host,
 ) -> Result<Value> {
-    if receipt["contract"] != "algal.run.v1" && receipt["contract"] != "morphogen.run.v1" {
+    if receipt["contract"] != "algal.run.v1" {
         return Err(Error::invalid("run receipt contract"));
     }
     if receipt["digest"] != receipt_digest(receipt)?

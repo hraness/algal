@@ -1,8 +1,8 @@
 {
-  "contract": "morphogen.foundry.config.v1",
+  "contract": "algal.foundry.config.v1",
   "candidates": [
-    "foundry-constant.morphogen.json",
-    "foundry-echo.morphogen.json"
+    "foundry-constant.algal.json",
+    "foundry-echo.algal.json"
   ],
   "cases": [
     {

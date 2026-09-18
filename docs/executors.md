@@ -1,7 +1,7 @@
 # Executors
 
 Agent, classifier, and gate cells never reach a provider directly. Each
-activation emits a `morphogen.effect.v1` request; the host's executor answers
+activation emits a `algal.effect.v1` request; the host's executor answers
 it. ALGAL owns the schedule, the bounds, and the receipt — the executor
 owns provider access and anything the provider does.
 
@@ -13,7 +13,7 @@ stdout fails the cell.
 
 ```json
 {
-  "contract": "morphogen.effect.v1",
+  "contract": "algal.effect.v1",
   "cellId": "plan",
   "kind": "agent",
   "prompt": "Draft a short implementation plan…",
@@ -69,7 +69,7 @@ structured Chat Completions API. Authentication comes only from
 Vercel project. The credential never enters a request, receipt, digest, or log.
 
 ```sh
-bun run cli run examples/gateway-smoke.morphogen.json \
+bun run cli run examples/gateway-smoke.algal.json \
   --args examples/gateway-smoke.args.json \
   --gateway-model alibaba/qwen3.5-flash --write
 ```
@@ -206,7 +206,7 @@ per-activation.
 Programmatically, a `ToolRegistry` is a `Map<string, { signature, tool }>`:
 
 ```ts
-import type { Tool, ToolRegistry } from "morphogen";
+import type { Tool, ToolRegistry } from "algal";
 
 const tools: ToolRegistry = new Map([[
   "ledger.charges.v1",

@@ -1,0 +1,34 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:refine-inner",
+  "name": "Polish a draft once",
+  "note": "One round of the evaluator-optimizer loop: an editor agent rewrites the draft, a critic classifier decides ship-or-revise.",
+  "interface": {
+    "inputs": { "draft": { "cell": "in", "port": "draft" } },
+    "outputs": {
+      "draft": { "cell": "editor", "port": "out" },
+      "verdict": { "cell": "critic", "port": "out" }
+    }
+  },
+  "cells": [
+    { "id": "in", "kind": "input", "outputs": { "draft": "text" } },
+    {
+      "id": "editor",
+      "kind": "agent",
+      "inputs": { "draft": "text" },
+      "prompt": "Improve the draft: tighten, clarify, keep the voice.",
+      "output": { "kind": "text" }
+    },
+    {
+      "id": "critic",
+      "kind": "classifier",
+      "inputs": { "draft": "text" },
+      "prompt": "Is this draft ready to ship?",
+      "output": { "kind": "choice", "labels": ["revise", "ship"] }
+    }
+  ],
+  "edges": [
+    { "from": { "cell": "in", "port": "draft" }, "to": { "cell": "editor", "port": "draft" } },
+    { "from": { "cell": "editor", "port": "out" }, "to": { "cell": "critic", "port": "draft" } }
+  ]
+}

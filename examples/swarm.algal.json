@@ -1,0 +1,33 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:swarm",
+  "name": "Question swarm",
+  "note": "An each cell maps a list of questions through organism:swarm-inner; the answers flatten into join.v1. Fan-out and fan-in as structure.",
+  "cells": [
+    {
+      "id": "batch",
+      "kind": "input",
+      "outputs": { "qs": "json" }
+    },
+    {
+      "id": "map",
+      "kind": "each",
+      "manifest": "sha256:cf96abc0aa1f0a6272610c73f88ac0e294946deca9eb5c3e234c3484b2f1f244",
+      "over": "q",
+      "maxItems": 8
+    },
+    {
+      "id": "digest",
+      "kind": "fn",
+      "fn": "join.v1"
+    }
+  ],
+  "edges": [
+    { "from": { "cell": "batch", "port": "qs" }, "to": { "cell": "map", "port": "q" } },
+    { "from": { "cell": "map", "port": "answer" }, "to": { "cell": "digest", "port": "items" } }
+  ],
+  "interface": {
+    "inputs": { "qs": { "cell": "batch", "port": "qs" } },
+    "outputs": { "answers": { "cell": "digest", "port": "value" } }
+  }
+}

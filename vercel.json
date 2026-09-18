@@ -6,8 +6,8 @@
   "redirects": [
     {
       "source": "/(.*)",
-      "has": [{ "type": "host", "value": "morphogen-teal.vercel.app" }],
-      "destination": "https://morphogen.dev/$1",
+      "has": [{ "type": "host", "value": "algal-teal.vercel.app" }],
+      "destination": "https://algal.dev/$1",
       "permanent": true
     }
   ]

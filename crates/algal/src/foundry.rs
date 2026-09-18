@@ -79,7 +79,7 @@ pub struct Search {
     pub feedback_input: String,
 }
 
-/// A parsed `morphogen.foundry.config.v1`.
+/// A parsed `algal.foundry.config.v1`.
 pub struct Config {
     pub candidates: Vec<Manifest>,
     pub generator: Option<Generator>,
@@ -87,7 +87,7 @@ pub struct Config {
     pub search: Option<Search>,
 }
 
-/// Parse a `morphogen.foundry.config.v1` file: candidate manifest paths,
+/// Parse a `algal.foundry.config.v1` file: candidate manifest paths,
 /// an optional generator, and a split workload. `search` settings are only
 /// legal under the `foundry search` command.
 pub fn load_config(path: &Path, search_mode: bool) -> Result<Config> {
@@ -96,9 +96,9 @@ pub fn load_config(path: &Path, search_mode: bool) -> Result<Config> {
         &config,
         &["contract", "candidates", "generator", "cases", "search"],
     )?;
-    if config["contract"] != "morphogen.foundry.config.v1" {
+    if config["contract"] != "algal.foundry.config.v1" {
         return Err(Error::invalid(
-            "foundry config.contract must be morphogen.foundry.config.v1",
+            "foundry config.contract must be algal.foundry.config.v1",
         ));
     }
     if !search_mode && config.get("search").is_some() {
@@ -457,7 +457,7 @@ pub async fn run(
     let holdout_cases: Vec<&FoundryCase> = cases.iter().filter(|c| c.split == "holdout").collect();
     let evaluated = evaluate_cases(winner, &holdout_cases, store, host, transports).await?;
     let mut report = json!({
-        "contract":"morphogen.foundry.v1",
+        "contract":"algal.foundry.v1",
         "candidates":results,
         "promoted":promoted,
         "holdout":{
@@ -690,7 +690,7 @@ pub async fn search(
     )
     .await?;
     let mut report = json!({
-        "contract":"morphogen.search.v1",
+        "contract":"algal.search.v1",
         "generatorDigest":generator.manifest.digest()?,
         "generations":generations,
         "result":result,
@@ -750,7 +750,7 @@ fn parse_score(value: &Value, at: &str) -> Result<()> {
     Ok(())
 }
 
-/// Parse a `morphogen.foundry.v1` report within its bounds.
+/// Parse a `algal.foundry.v1` report within its bounds.
 pub fn parse_report(report: &Value) -> Result<()> {
     keys(
         report,
@@ -763,10 +763,8 @@ pub fn parse_report(report: &Value) -> Result<()> {
             "digest",
         ],
     )?;
-    if report["contract"] != "morphogen.foundry.v1" {
-        return Err(Error::invalid(
-            "foundry.contract must be morphogen.foundry.v1",
-        ));
+    if report["contract"] != "algal.foundry.v1" {
+        return Err(Error::invalid("foundry.contract must be algal.foundry.v1"));
     }
     sha(&report["promoted"], "foundry.promoted")?;
     sha(&report["digest"], "foundry.digest")?;
@@ -1084,7 +1082,7 @@ pub fn inspect(report: &Value) -> Result<Value> {
     }))
 }
 
-/// Parse a `morphogen.search.v1` report within its bounds.
+/// Parse a `algal.search.v1` report within its bounds.
 pub fn parse_search_report(report: &Value) -> Result<()> {
     keys(
         report,
@@ -1096,10 +1094,8 @@ pub fn parse_search_report(report: &Value) -> Result<()> {
             "digest",
         ],
     )?;
-    if report["contract"] != "morphogen.search.v1" {
-        return Err(Error::invalid(
-            "search.contract must be morphogen.search.v1",
-        ));
+    if report["contract"] != "algal.search.v1" {
+        return Err(Error::invalid("search.contract must be algal.search.v1"));
     }
     sha(&report["generatorDigest"], "search.generatorDigest")?;
     sha(&report["digest"], "search.digest")?;
@@ -1135,7 +1131,7 @@ pub fn parse_search_report(report: &Value) -> Result<()> {
             sha(item, &format!("{at}.proposed[{i}]"))?;
         }
         let synthetic = json!({
-            "contract":"morphogen.foundry.v1",
+            "contract":"algal.foundry.v1",
             "candidates":entry["candidates"],
             "promoted":entry["promoted"],
             "holdout":report["result"]["holdout"],
@@ -1238,7 +1234,7 @@ pub async fn verify_search(report: &Value, store: &Store, tools: &Host) -> Resul
                 let mut case = evidence.clone();
                 case["split"] = json!("holdout");
                 let mut synthetic = json!({
-                    "contract":"morphogen.foundry.v1",
+                    "contract":"algal.foundry.v1",
                     "candidates":candidates,
                     "promoted":promoted,
                     "holdout":{"passed":if evidence["passed"] == true {1} else {0},"total":1,"cases":[case]},

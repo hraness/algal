@@ -884,9 +884,7 @@ impl Host {
                         .map(|bytes| bytes.len() <= max)
                         .unwrap_or(false);
                     let valid = bind_output(&request["output"], output.clone()).is_ok();
-                    if let (false, true, true, Some(store)) =
-                        (tool_call, fits, valid, memos.as_deref_mut())
-                    {
+                    if let (false, true, true, Some(store)) = (tool_call, fits, valid, memos) {
                         let mut entry = json!({
                             "requestDigest":request_digest,
                             "executor":metadata.get("executor").cloned().unwrap_or(json!(id)),

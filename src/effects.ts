@@ -1,9 +1,9 @@
 // Effect requests and receipts: the only seam through which agent and
 // classifier cells reach the world. A request is fully determined by the
 // manifest plus delivered inputs; its digest binds request to receipt.
-// Executors are host-supplied — Morphogen never brokers provider access.
+// Executors are host-supplied — Algal never brokers provider access.
 
-import { MorphogenError, type ErrorCode } from "./errors";
+import { AlgalError, type ErrorCode } from "./errors";
 import { commandJson } from "./io";
 import { digestCanonical, type Digest } from "./digest";
 import type { AgentOutput, Route } from "./contract";
@@ -20,7 +20,7 @@ import {
   type JsonValue,
 } from "./values";
 
-export const EFFECT_CONTRACT = "morphogen.effect.v1" as const;
+export const EFFECT_CONTRACT = "algal.effect.v1" as const;
 
 export type EffectRequest = {
   contract: typeof EFFECT_CONTRACT;
@@ -123,7 +123,7 @@ export function scriptedExecutor(
         hit = q.shift();
       }
       if (hit === undefined) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "EFFECT_UNBOUND",
           `no scripted response for cell "${request.cellId}" (digest ${digest})`,
         );
@@ -172,13 +172,13 @@ export function replayExecutor(
       const q = queues.get(digest);
       const hit = q?.shift();
       if (hit === undefined) {
-        throw new MorphogenError(
+        throw new AlgalError(
           "EFFECT_UNBOUND",
           `replay has no receipt for request ${digest} (cell "${request.cellId}")`,
         );
       }
       if (hit.error !== undefined) {
-        throw new MorphogenError(hit.error.code, hit.error.message);
+        throw new AlgalError(hit.error.code, hit.error.message);
       }
       return hit.output!;
     },
@@ -259,7 +259,7 @@ export function cachedExecutor(inner: Executor, store: Store): Executor {
 
 /** Shells out: request JSON on stdin, output JSON on stdout. This is the live
  * seam — a wrapper script owns provider auth and prints the model's output.
- * Morphogen only ever sees the bounded response bytes. */
+ * Algal only ever sees the bounded response bytes. */
 export function commandExecutor(
   command: string,
   opts: { timeoutMs?: number; maxStdoutBytes?: number } = {},
@@ -288,7 +288,7 @@ export function bindOutput(
   switch (output.kind) {
     case "text": {
       if (typeof raw !== "string") {
-        throw new MorphogenError(
+        throw new AlgalError(
           "EFFECT_UNPARSEABLE",
           `cell "${cellId}": expected text output`,
         );
@@ -297,7 +297,7 @@ export function bindOutput(
     }
     case "json": {
       if (raw === null || typeof raw !== "object") {
-        throw new MorphogenError(
+        throw new AlgalError(
           "EFFECT_UNPARSEABLE",
           `cell "${cellId}": expected json object output`,
         );
@@ -309,7 +309,7 @@ export function bindOutput(
       const s = typeof raw === "string" ? raw : null;
       if (s !== null && output.labels.includes(s)) return s;
       if (output.onMiss !== undefined) return output.onMiss;
-      throw new MorphogenError(
+      throw new AlgalError(
         "EFFECT_UNPARSEABLE",
         `cell "${cellId}": output ${JSON.stringify(raw)} is not a declared label`,
       );
@@ -328,7 +328,7 @@ export function checkSchema(
   const type = typeof schema.type === "string" ? schema.type : undefined;
   if (type === "object" || type === undefined) {
     if (value === null || typeof value !== "object" || Array.isArray(value)) {
-      throw new MorphogenError(code, `${what}: expected object`);
+      throw new AlgalError(code, `${what}: expected object`);
     }
     const required = Array.isArray(schema.required) ? schema.required : [];
     const props =
@@ -337,7 +337,7 @@ export function checkSchema(
         : {};
     for (const r of required) {
       if (typeof r === "string" && !(r in (value as JsonObject))) {
-        throw new MorphogenError(
+        throw new AlgalError(
           code,
           `${what}: missing required key "${r}"`,
         );
@@ -368,7 +368,7 @@ function checkSchemaValue(
     (t === "object" && value !== null && typeof value === "object" && !Array.isArray(value)) ||
     (t === "null" && value === null);
   if (!ok) {
-    throw new MorphogenError(code, `${what}: expected ${t}`);
+    throw new AlgalError(code, `${what}: expected ${t}`);
   }
 }
 
@@ -392,7 +392,7 @@ export function parseEffectReceipt(u: unknown): EffectReceipt {
   const outputRaw = optField(obj, "output");
   const errorRaw = optField(obj, "error");
   if ((outputRaw === undefined) === (errorRaw === undefined)) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "PARSE_FAILED",
       "effect receipt: exactly one of output or error is required",
     );
@@ -428,13 +428,13 @@ export function parseEffectReceipt(u: unknown): EffectReceipt {
   }
   const retryable = optField(obj, "retryable");
   if (retryable !== undefined) {
-    if (retryable !== false) throw new MorphogenError("PARSE_FAILED", "effect receipt.retryable must be false when present");
+    if (retryable !== false) throw new AlgalError("PARSE_FAILED", "effect receipt.retryable must be false when present");
     receipt.retryable = false;
   }
   const cached = optField(obj, "cached");
   if (cached !== undefined) {
     if (cached !== true) {
-      throw new MorphogenError(
+      throw new AlgalError(
         "PARSE_FAILED",
         "effect receipt.cached must be true when present",
       );
@@ -446,7 +446,7 @@ export function parseEffectReceipt(u: unknown): EffectReceipt {
 
 function asIntField(u: unknown, what: string): number {
   if (typeof u !== "number" || !Number.isInteger(u) || u < 0) {
-    throw new MorphogenError("PARSE_FAILED", `${what} must be a non-negative int`);
+    throw new AlgalError("PARSE_FAILED", `${what} must be a non-negative int`);
   }
   return u;
 }

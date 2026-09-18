@@ -27,7 +27,7 @@ async fn bundled_foundry_selects_and_verifies_offline() {
     )
     .await
     .unwrap();
-    assert_eq!(report["contract"], "morphogen.foundry.v1");
+    assert_eq!(report["contract"], "algal.foundry.v1");
     assert!(report.get("lineage").is_none());
     // foundry-echo sweeps every split; foundry-constant only ties train.
     let winner = report["candidates"]
@@ -111,7 +111,7 @@ async fn search_preserves_survivors_and_verifies() {
     )
     .await
     .unwrap();
-    assert_eq!(report["contract"], "morphogen.search.v1");
+    assert_eq!(report["contract"], "algal.search.v1");
     let generations = report["generations"].as_array().unwrap();
     assert_eq!(generations.len(), 2);
     // Generation one must carry the generation zero winner forward.
@@ -206,7 +206,7 @@ fn config_requires_all_splits_and_rejects_search_outside_search_mode() {
 
     // Missing holdout split.
     let file = write(json!({
-        "contract":"morphogen.foundry.config.v1",
+        "contract":"algal.foundry.config.v1",
         "candidates":["x.json"],
         "cases":base_cases(&["train","validation"]),
     }));
@@ -214,7 +214,7 @@ fn config_requires_all_splits_and_rejects_search_outside_search_mode() {
 
     // A search block is only legal under the search command.
     let file = write(json!({
-        "contract":"morphogen.foundry.config.v1",
+        "contract":"algal.foundry.config.v1",
         "candidates":["x.json"],
         "cases":base_cases(&["train","validation","holdout"]),
         "search":{"maxGenerations":2,"feedbackInput":"feedback"},
@@ -223,7 +223,7 @@ fn config_requires_all_splits_and_rejects_search_outside_search_mode() {
 
     // Wrong contract.
     let file = write(json!({
-        "contract":"morphogen.foundry.config.v2",
+        "contract":"algal.foundry.config.v2",
         "candidates":["x.json"],
         "cases":base_cases(&["train","validation","holdout"]),
     }));
@@ -231,7 +231,7 @@ fn config_requires_all_splits_and_rejects_search_outside_search_mode() {
 
     // Duplicate case ids.
     let file = write(json!({
-        "contract":"morphogen.foundry.config.v1",
+        "contract":"algal.foundry.config.v1",
         "candidates":["x.json"],
         "cases":[
             {"id":"same","split":"train","args":{"q":"x"},"expect":{"answer":"x"}},

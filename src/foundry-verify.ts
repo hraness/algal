@@ -1,6 +1,6 @@
 import { manifestToJson } from "./contract";
 import { digestCanonical, type Digest } from "./digest";
-import { MorphogenError } from "./errors";
+import { AlgalError } from "./errors";
 import {
   FOUNDRY_BOUNDS,
   FOUNDRY_CONTRACT,
@@ -18,32 +18,32 @@ import { canonicalize, type JsonObject, type JsonValue } from "./values";
 
 function object(value: unknown, at: string): JsonObject {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new MorphogenError("PARSE_FAILED", `${at} must be an object`);
+    throw new AlgalError("PARSE_FAILED", `${at} must be an object`);
   }
   return value as JsonObject;
 }
 
 function keys(value: JsonObject, allowed: string[], at: string): void {
   const extra = Object.keys(value).find((key) => !allowed.includes(key));
-  if (extra) throw new MorphogenError("PARSE_FAILED", `${at}: unknown key "${extra}"`);
+  if (extra) throw new AlgalError("PARSE_FAILED", `${at}: unknown key "${extra}"`);
 }
 
 function text(value: JsonValue | undefined, at: string): string {
-  if (typeof value !== "string") throw new MorphogenError("PARSE_FAILED", `${at} must be text`);
+  if (typeof value !== "string") throw new AlgalError("PARSE_FAILED", `${at} must be text`);
   return value;
 }
 
 function digest(value: JsonValue | undefined, at: string): Digest {
   const parsed = text(value, at);
   if (!/^sha256:[0-9a-f]{64}$/.test(parsed)) {
-    throw new MorphogenError("PARSE_FAILED", `${at} must be a sha256 digest`);
+    throw new AlgalError("PARSE_FAILED", `${at} must be a sha256 digest`);
   }
   return parsed as Digest;
 }
 
 function count(value: JsonValue | undefined, at: string): number {
   if (!Number.isInteger(value) || (value as number) < 0) {
-    throw new MorphogenError("PARSE_FAILED", `${at} must be a non-negative integer`);
+    throw new AlgalError("PARSE_FAILED", `${at} must be a non-negative integer`);
   }
   return value as number;
 }
@@ -75,7 +75,7 @@ function parseScore(value: JsonValue | undefined, at: string) {
     total: count(score.total, `${at}.total`),
   };
   if (parsed.total === 0 || parsed.passed > parsed.total) {
-    throw new MorphogenError("PARSE_FAILED", `${at} is not a valid score`);
+    throw new AlgalError("PARSE_FAILED", `${at} is not a valid score`);
   }
   return parsed;
 }
@@ -86,13 +86,13 @@ function parseCase(value: JsonValue, at: string): FoundryCaseResult {
   const split = text(c.split, `${at}.split`);
   const outcome = text(c.outcome, `${at}.outcome`);
   if (split !== "train" && split !== "validation" && split !== "holdout") {
-    throw new MorphogenError("PARSE_FAILED", `${at}.split is invalid`);
+    throw new AlgalError("PARSE_FAILED", `${at}.split is invalid`);
   }
   if (outcome !== "complete" && outcome !== "failed" && outcome !== "stuck") {
-    throw new MorphogenError("PARSE_FAILED", `${at}.outcome is invalid`);
+    throw new AlgalError("PARSE_FAILED", `${at}.outcome is invalid`);
   }
   if (typeof c.passed !== "boolean") {
-    throw new MorphogenError("PARSE_FAILED", `${at}.passed must be boolean`);
+    throw new AlgalError("PARSE_FAILED", `${at}.passed must be boolean`);
   }
   return {
     id: text(c.id, `${at}.id`),
@@ -112,7 +112,7 @@ function parseCandidate(value: JsonValue, i: number): FoundryCandidateResult {
   const c = object(value, at);
   keys(c, ["manifestDigest", "manifestKey", "train", "validation", "work", "usage", "cases"], at);
   if (!Array.isArray(c.cases) || c.cases.length === 0 || c.cases.length > FOUNDRY_BOUNDS.maxCases) {
-    throw new MorphogenError("PARSE_FAILED", `${at}.cases must be a bounded non-empty list`);
+    throw new AlgalError("PARSE_FAILED", `${at}.cases must be a bounded non-empty list`);
   }
   return {
     manifestDigest: digest(c.manifestDigest, `${at}.manifestDigest`),
@@ -129,10 +129,10 @@ export function parseFoundryReport(value: unknown): FoundryReport {
   const report = object(value, "foundry");
   keys(report, ["contract", "candidates", "promoted", "holdout", "lineage", "digest"], "foundry");
   if (report.contract !== FOUNDRY_CONTRACT) {
-    throw new MorphogenError("PARSE_FAILED", `foundry.contract must be ${FOUNDRY_CONTRACT}`);
+    throw new AlgalError("PARSE_FAILED", `foundry.contract must be ${FOUNDRY_CONTRACT}`);
   }
   if (!Array.isArray(report.candidates) || report.candidates.length === 0 || report.candidates.length > FOUNDRY_BOUNDS.maxCandidates) {
-    throw new MorphogenError("PARSE_FAILED", "foundry.candidates must be a bounded non-empty list");
+    throw new AlgalError("PARSE_FAILED", "foundry.candidates must be a bounded non-empty list");
   }
   const holdout = object(report.holdout, "foundry.holdout");
   keys(holdout, ["passed", "total", "cases"], "foundry.holdout");
@@ -141,10 +141,10 @@ export function parseFoundryReport(value: unknown): FoundryReport {
     total: count(holdout.total, "foundry.holdout.total"),
   };
   if (holdoutScore.total === 0 || holdoutScore.passed > holdoutScore.total) {
-    throw new MorphogenError("PARSE_FAILED", "foundry.holdout is not a valid score");
+    throw new AlgalError("PARSE_FAILED", "foundry.holdout is not a valid score");
   }
   if (!Array.isArray(holdout.cases) || holdout.cases.length !== holdoutScore.total) {
-    throw new MorphogenError("PARSE_FAILED", "foundry.holdout.cases must match its total");
+    throw new AlgalError("PARSE_FAILED", "foundry.holdout.cases must match its total");
   }
   const lineage = report.lineage === undefined ? undefined : object(report.lineage, "foundry.lineage");
   if (lineage) keys(lineage, ["generatorDigest", "receiptDigest"], "foundry.lineage");

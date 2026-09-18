@@ -1,4 +1,4 @@
-# morphogen.bench.v1
+# algal.bench.v1
 
 A bench report records one workload measured by several systems. A system is an admitted organism manifest plus a host-resolved executor list — so "one cheap call", "one frontier call", and "a decomposed organism with a guarded escalation branch" are all the same kind of contender. Bench adds no manifest primitive and no authority; it is a measurement layer over ordinary runs.
 

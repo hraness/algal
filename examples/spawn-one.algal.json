@@ -1,0 +1,19 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:spawn-one",
+  "name": "SpawnOne",
+  "interface": {
+    "inputs": { "m": { "cell": "in", "port": "v" } },
+    "outputs": {
+      "result": { "cell": "run", "port": "data" },
+      "child": { "cell": "run", "port": "digest" }
+    }
+  },
+  "cells": [
+    { "id": "in", "kind": "input", "outputs": { "v": "json" } },
+    { "id": "run", "kind": "spawn" }
+  ],
+  "edges": [
+    { "from": { "cell": "in", "port": "v" }, "to": { "cell": "run", "port": "manifest" } }
+  ]
+}

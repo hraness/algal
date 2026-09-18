@@ -8,7 +8,7 @@ import { parseBenchReport, verifyBenchReport } from "./bench-verify";
 import { canonicalize, type JsonValue } from "./values";
 
 const single = parseOrganismManifest({
-  contract: "morphogen.organism.v1",
+  contract: "algal.organism.v1",
   key: "organism:bench-single",
   name: "Single call",
   cells: [
@@ -32,7 +32,7 @@ const single = parseOrganismManifest({
 });
 
 const circuit = parseOrganismManifest({
-  contract: "morphogen.organism.v1",
+  contract: "algal.organism.v1",
   key: "organism:bench-circuit",
   name: "Cheap-first cascade",
   budgets: { maxSteps: 8, maxAgentCalls: 4, maxWork: 100000 },

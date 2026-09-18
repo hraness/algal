@@ -4,7 +4,7 @@ import type {
   Executor,
   ExecutorResult,
 } from "./effects";
-import { MorphogenError } from "./errors";
+import { AlgalError } from "./errors";
 import { boundedBytes } from "./io";
 import { digestCanonical } from "./digest";
 import { canonicalize, type JsonObject, type JsonValue } from "./values";
@@ -25,7 +25,7 @@ export type GatewayExecutorOptions = {
 
 function record(value: unknown, at: string): Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new MorphogenError("EFFECT_UNPARSEABLE", `${at} must be an object`);
+    throw new AlgalError("EFFECT_UNPARSEABLE", `${at} must be an object`);
   }
   return value as Record<string, unknown>;
 }
@@ -46,19 +46,19 @@ function outputSchema(output: AgentOutput): JsonObject {
 
 async function boundedJson(response: Response, maxBytes: number): Promise<unknown> {
   if (response.status >= 300 && response.status < 400) {
-    throw new MorphogenError("EFFECT_FAILED", "AI Gateway redirects are forbidden");
+    throw new AlgalError("EFFECT_FAILED", "AI Gateway redirects are forbidden");
   }
   const declared = response.headers.get("content-length");
   if (declared !== null && Number(declared) > maxBytes) {
-    throw new MorphogenError("EFFECT_FAILED", `AI Gateway response exceeds ${maxBytes} bytes`);
+    throw new AlgalError("EFFECT_FAILED", `AI Gateway response exceeds ${maxBytes} bytes`);
   }
   const bytes = await boundedBytes(response.body, maxBytes, "AI Gateway response");
   if (bytes.byteLength > maxBytes) {
-    throw new MorphogenError("EFFECT_FAILED", `AI Gateway response exceeds ${maxBytes} bytes`);
+    throw new AlgalError("EFFECT_FAILED", `AI Gateway response exceeds ${maxBytes} bytes`);
   }
   const text = new TextDecoder().decode(bytes);
   if (!response.ok) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "EFFECT_FAILED",
       `AI Gateway returned HTTP ${response.status}; response body withheld`,
 
@@ -67,7 +67,7 @@ async function boundedJson(response: Response, maxBytes: number): Promise<unknow
   try {
     return JSON.parse(text);
   } catch {
-    throw new MorphogenError("EFFECT_UNPARSEABLE", "AI Gateway returned invalid JSON");
+    throw new AlgalError("EFFECT_UNPARSEABLE", "AI Gateway returned invalid JSON");
   }
 }
 
@@ -76,7 +76,7 @@ function credential(options: GatewayExecutorOptions): string {
     ?? process.env.AI_GATEWAY_API_KEY
     ?? process.env.VERCEL_OIDC_TOKEN;
   if (typeof value !== "string" || value.length < 16 || value.length > 8192) {
-    throw new MorphogenError(
+    throw new AlgalError(
       "EFFECT_FAILED",
       "AI Gateway credential is not configured",
     );
@@ -86,7 +86,7 @@ function credential(options: GatewayExecutorOptions): string {
 
 export function vercelGatewayExecutor(options: GatewayExecutorOptions): Executor {
   if (!/^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*$/i.test(options.model)) {
-    throw new MorphogenError("PARSE_FAILED", `invalid AI Gateway model "${options.model}"`);
+    throw new AlgalError("PARSE_FAILED", `invalid AI Gateway model "${options.model}"`);
   }
   const fetcher = options.fetch ?? globalThis.fetch;
   const maxResponseBytes = options.maxResponseBytes ?? 2_097_152;
@@ -117,7 +117,7 @@ export function vercelGatewayExecutor(options: GatewayExecutorOptions): Executor
       response_format: {
         type: "json_schema",
         json_schema: {
-          name: "morphogen_cell_output",
+          name: "algal_cell_output",
           strict: true,
           schema,
         },
@@ -137,22 +137,22 @@ export function vercelGatewayExecutor(options: GatewayExecutorOptions): Executor
     });
     const raw = record(await boundedJson(response, maxResponseBytes), "AI Gateway response");
     if (!Array.isArray(raw.choices) || raw.choices.length !== 1) {
-      throw new MorphogenError("EFFECT_UNPARSEABLE", "AI Gateway response must contain one choice");
+      throw new AlgalError("EFFECT_UNPARSEABLE", "AI Gateway response must contain one choice");
     }
     const choice = record(raw.choices[0], "AI Gateway choice");
     const message = record(choice.message, "AI Gateway message");
     if (typeof message.content !== "string") {
-      throw new MorphogenError("EFFECT_UNPARSEABLE", "AI Gateway message content must be text");
+      throw new AlgalError("EFFECT_UNPARSEABLE", "AI Gateway message content must be text");
     }
     let parsed: unknown;
     try {
       parsed = JSON.parse(message.content);
     } catch {
-      throw new MorphogenError("EFFECT_UNPARSEABLE", "AI Gateway structured output is invalid JSON");
+      throw new AlgalError("EFFECT_UNPARSEABLE", "AI Gateway structured output is invalid JSON");
     }
     const structured = record(parsed, "AI Gateway structured output");
     if (!("value" in structured)) {
-      throw new MorphogenError("EFFECT_UNPARSEABLE", "AI Gateway structured output has no value");
+      throw new AlgalError("EFFECT_UNPARSEABLE", "AI Gateway structured output has no value");
     }
     const usage = record(raw.usage ?? {}, "AI Gateway usage");
     const tokensIn = integer(usage.prompt_tokens ?? usage.input_tokens);

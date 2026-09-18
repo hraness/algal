@@ -21,7 +21,7 @@ Each spike explored a different face of the same primitive:
    measure systems on cost, tokens, effects, and accuracy. The efficient
    frontier makes the tradeoff explicit instead of pretending one model is best.
 
-3. **Habitat spike** — `examples/habitat/live.morphogen.json` and
+3. **Habitat spike** — `examples/habitat/live.algal.json` and
    `examples/habitat/promote.ts` show a parent organism designing and spawning a
    child. The child is data; the host is the admission gate.
 

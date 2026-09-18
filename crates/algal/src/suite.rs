@@ -1,5 +1,5 @@
-//! The bundled-example self-check: every `*.algal.json` /
-//! `*.morphogen.json` manifest in a directory is admitted up front (so
+//! The bundled-example self-check: every `*.algal.json`
+//! manifest in a directory is admitted up front (so
 //! `organism` cells resolve regardless of order), then run against its
 //! scripted responses with optional args and transports, and every
 //! receipt is verified offline. A `<id>.cache.json` marker asks for a
@@ -65,7 +65,7 @@ pub async fn run(examples: &Path, store: &mut Store) -> Result<Value> {
             .and_then(|n| n.to_str())
             .unwrap_or_default()
             .to_owned();
-        if name.ends_with(".algal.json") || name.ends_with(".morphogen.json") {
+        if name.ends_with(".algal.json") {
             files.push(path);
         }
     }
@@ -74,7 +74,9 @@ pub async fn run(examples: &Path, store: &mut Store) -> Result<Value> {
         return Err(Error::invalid("suite found no examples"));
     }
     if files.len() > MAX_EXAMPLES {
-        return Err(Error::limit(format!("suite exceeds {MAX_EXAMPLES} examples")));
+        return Err(Error::limit(format!(
+            "suite exceeds {MAX_EXAMPLES} examples"
+        )));
     }
     let mut parsed: Vec<(String, Manifest)> = Vec::with_capacity(files.len());
     for path in &files {
@@ -84,7 +86,7 @@ pub async fn run(examples: &Path, store: &mut Store) -> Result<Value> {
             .unwrap_or_default();
         let id = name
             .strip_suffix(".algal.json")
-            .or_else(|| name.strip_suffix(".morphogen.json"))
+            .or_else(|| name.strip_suffix(".algal.json"))
             .unwrap_or(name)
             .to_owned();
         let manifest = Manifest::parse(&read_json(File::open(path)?, 1_048_576)?)?;
@@ -94,18 +96,12 @@ pub async fn run(examples: &Path, store: &mut Store) -> Result<Value> {
     let mut results = Vec::new();
     let mut all_ok = true;
     for (id, manifest) in &parsed {
-        let base = |suffix: &str| -> PathBuf {
-            examples.join(format!("{id}.{suffix}"))
-        };
-        let responses = optional_json(&base("responses.json"))?
-            .unwrap_or_else(|| json!({}));
-        object(&responses).map_err(|_| {
-            Error::invalid(format!("suite {id}: responses must be an object"))
-        })?;
+        let base = |suffix: &str| -> PathBuf { examples.join(format!("{id}.{suffix}")) };
+        let responses = optional_json(&base("responses.json"))?.unwrap_or_else(|| json!({}));
+        object(&responses)
+            .map_err(|_| Error::invalid(format!("suite {id}: responses must be an object")))?;
         let args = optional_json(&base("args.json"))?.unwrap_or_else(|| json!({}));
-        object(&args).map_err(|_| {
-            Error::invalid(format!("suite {id}: args must be an object"))
-        })?;
+        object(&args).map_err(|_| Error::invalid(format!("suite {id}: args must be an object")))?;
         let mut transports = Transports::new();
         if let Some(value) = optional_json(&base("transports.json"))? {
             if object(&value)?.len() > 16 {
@@ -121,17 +117,12 @@ pub async fn run(examples: &Path, store: &mut Store) -> Result<Value> {
                         "native transports currently require local bundle directories",
                     ));
                 }
-                transports.insert(name.clone(), PathBuf::from(target));
+                let root = examples.parent().unwrap_or(Path::new("."));
+                transports.insert(name.clone(), root.join(target));
             }
         }
         let receipt = run_one(manifest, &args, &responses, false, store, &transports).await?;
-        let report = runtime::verify(
-            &receipt,
-            manifest.clone(),
-            store,
-            &Host::default(),
-        )
-        .await?;
+        let report = runtime::verify(&receipt, manifest.clone(), store, &Host::default()).await?;
         let outcome = receipt["outcome"].as_str().unwrap_or("");
         let verify_ok = report["ok"] == true;
         let ok = outcome == "complete" && verify_ok;
@@ -149,35 +140,19 @@ pub async fn run(examples: &Path, store: &mut Store) -> Result<Value> {
                 responses: responses.clone(),
             }
             .cache_identity("scripted")?;
-            for effect in receipt["effects"]
-                .as_array()
-                .cloned()
-                .unwrap_or_default()
-            {
+            for effect in receipt["effects"].as_array().cloned().unwrap_or_default() {
                 if effect.get("output").is_some() {
                     store.put_effect(&effect, &identity)?;
                 }
             }
-            let receipt2 =
-                run_one(manifest, &args, &responses, true, store, &transports).await?;
-            let report2 = runtime::verify(
-                &receipt2,
-                manifest.clone(),
-                store,
-                &Host::default(),
-            )
-            .await?;
+            let receipt2 = run_one(manifest, &args, &responses, true, store, &transports).await?;
+            let report2 =
+                runtime::verify(&receipt2, manifest.clone(), store, &Host::default()).await?;
             let hits = receipt2["effects"]
                 .as_array()
-                .map(|effects| {
-                    effects
-                        .iter()
-                        .filter(|e| e["cached"] == true)
-                        .count() as u64
-                })
+                .map(|effects| effects.iter().filter(|e| e["cached"] == true).count() as u64)
                 .unwrap_or(0);
-            let cache_ok =
-                receipt2["outcome"] == "complete" && report2["ok"] == true && hits > 0;
+            let cache_ok = receipt2["outcome"] == "complete" && report2["ok"] == true && hits > 0;
             result["cacheOk"] = json!(cache_ok);
             result["cacheHits"] = json!(hits);
             all_ok &= cache_ok;

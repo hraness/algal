@@ -1,6 +1,6 @@
 # ALGAL: language, harness, habitat
 
-ALGAL is the new product name for Morphogen, with a nod to ALGOL. The useful
+ALGAL is the new product name for Algal, with a nod to ALGOL. The useful
 unifying object is a **program with bounded authority and retained evidence**.
 An organism is the program; a coding-agent session is one host application;
 a habitat is a host that evaluates and admits a population of programs.
@@ -160,10 +160,10 @@ canonical identities, graph behavior, outputs, failures, and replay, not merely
 whether both commands exit zero. Unsupported native features must fail
 explicitly, never execute a weakened interpretation or silently invoke Bun.
 
-Existing `morphogen.*.v1` identifiers and legacy fixture filenames are durable
+Existing `algal.*.v1` identifiers and legacy fixture filenames are durable
 wire coordinates, not branding mistakes. Do not rewrite old CAS objects to
 rename them. The public command/package/site become ALGAL; `.algal` is the new
-store default, and `--dir .morphogen` remains explicit access to old state.
+store default, and `--dir .algal` remains explicit access to old state.
 The site keeps its configured origin until a new domain is actually provisioned.
 
 ## Implementation status during this migration

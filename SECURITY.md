@@ -9,7 +9,7 @@ store tampering — please report it.
 ## Reporting
 
 Open a private security advisory on the GitHub repository
-(`hraness/morphogen`, Security → Advisories) or email the maintainers through
+(`hraness/algal`, Security → Advisories) or email the maintainers through
 the contact listed on the organization profile. Please include a manifest or
 receipt that demonstrates the issue where possible.
 

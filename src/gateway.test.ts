@@ -3,7 +3,7 @@ import { vercelGatewayExecutor } from "./gateway";
 import type { EffectRequest } from "./effects";
 
 const request: EffectRequest = {
-  contract: "morphogen.effect.v1",
+  contract: "algal.effect.v1",
   cellId: "route",
   kind: "classifier",
   prompt: "Classify the ticket.",
