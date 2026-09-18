@@ -1,3 +1,7 @@
+// Tests panic on purpose — the deny-lints guard the shipped evaluator,
+// which compiles to wasm where a panic is an opaque trap.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use super::*;
 use serde_json::json;
 use std::collections::BTreeSet;
