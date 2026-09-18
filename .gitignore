@@ -13,3 +13,4 @@ promoted/
 .DS_Store
 .vercel
 coverage/
+.env*
