@@ -99,19 +99,24 @@ URL credentials are rejected, and upstream error bodies are not echoed.
 ## Apple Intelligence
 
 `algal run --apple` (and `algal civ --live --apple`) routes cells to Apple's
-on-device Foundation Models framework through the Swift bridge in
-`native/apple/`. `algal doctor --apple` checks availability; building the
-bridge is not proof the model is present.
+on-device Foundation Models framework through the shared `apple-foundation`
+bridge (`hraness/apple-foundation`, pinned by tag). `algal doctor --apple`
+checks availability; building the bridge is not proof the model is present.
+The default sibling binary auto-builds via `swiftc` when missing or stale;
+explicit `--apple-bridge`/`ALGAL_APPLE_BRIDGE` paths are used as-is.
 
 The bridge translates a declared `output.schema` into a
 `DynamicGenerationSchema` — strings, numbers, integers, booleans, arrays,
 objects, enums, optional properties, within bounded depth and property counts —
 so generation is schema-constrained rather than free-form. A schema it cannot
 translate falls back to bounded free-text generation and the same contract
-validation. It enforces context and output byte budgets, rejects `gate`
+validation (the foundation bridge reports schema errors; the ALGAL adapter
+retries unguided). It enforces context and output byte budgets, rejects `gate`
 requests (approval belongs to a human/policy executor, not a model), and never
-falls back to a cloud provider. Inference runs on-device and produces ordinary,
-offline-verifiable receipts.
+falls back to a cloud provider. One persistent bridge process serializes
+generation per configured path — requests queue in-process instead of
+respawning per effect — and inference produces ordinary, offline-verifiable
+receipts.
 
 ## Coding agents (ACP and xcb)
 

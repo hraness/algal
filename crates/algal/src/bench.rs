@@ -201,17 +201,21 @@ pub fn load_config(
                     timeout_ms: 120_000,
                 }
             } else if spec == "apple" {
-                Backend::Apple {
-                    bridge: apple_bridge
-                        .map(|p| p.to_path_buf())
-                        .or_else(|| std::env::var_os("ALGAL_APPLE_BRIDGE").map(PathBuf::from))
-                        .or_else(|| {
-                            std::env::current_exe().ok().map(|exe| {
-                                exe.parent().unwrap_or(Path::new(".")).join("algal-apple")
-                            })
-                        })
-                        .ok_or_else(|| Error::invalid("apple spec needs a bridge path"))?,
-                }
+                let explicit = apple_bridge
+                    .map(|p| p.to_path_buf())
+                    .or_else(|| std::env::var_os("ALGAL_APPLE_BRIDGE").map(PathBuf::from));
+                let bridge = match explicit {
+                    Some(path) => path,
+                    None => {
+                        let sibling = std::env::current_exe()
+                            .ok()
+                            .map(|exe| exe.parent().unwrap_or(Path::new(".")).join("algal-apple"))
+                            .ok_or_else(|| Error::invalid("apple spec needs a bridge path"))?;
+                        apple_foundation::ensure_bridge(&sibling)
+                            .map_err(|e| Error::invalid(format!("apple bridge unavailable: {e}")))?
+                    }
+                };
+                Backend::Apple { bridge }
             } else {
                 return Err(Error::invalid(format!(
                     "bench executor \"{name}\": unknown spec (want gateway:<model>, scripted:<file>, cmd:<command>, or apple)"
