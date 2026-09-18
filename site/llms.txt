@@ -41,7 +41,9 @@ The organism cannot rewrite its own runtime; it can only propose. The host
 remains the admission gate. A live steel thread already works:
 `bun examples/habitat/promote.ts --live` lets a parent organism call a model to
 design a child, spawn it, and the host promotes the child to a bundle if it is
-valid and different from the safe fallback.
+valid and different from the safe fallback. The next layer is a runnable
+`bun scripts/civ.ts --live` civilization loop: goals, parent organisms,
+proposed children, and promotions into `civ/population.json`.
 
 ## Quick start
 

@@ -27,8 +27,9 @@ foundry search and host admission. The organism cannot rewrite its own runtime,
 but it can *propose* children, functions, and tools; the host decides what to
 admit. See [`docs/habitats.md`](docs/habitats.md) for the design sketch,
 [`examples/habitat.morphogen.json`](examples/habitat.morphogen.json) for a
-deterministic working steel thread, and `bun examples/habitat/promote.ts --live`
-for a live model-driven reproduction loop.
+deterministic working steel thread, `bun examples/habitat/promote.ts --live`
+for a live model-driven reproduction loop, and [`docs/civilization.md`](docs/civilization.md)
+with `bun scripts/civ.ts --live` for the first runnable civilization loop.
 
 ## What is this?
 

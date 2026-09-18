@@ -3,6 +3,7 @@ dist/
 site/dist/
 .morphogen/
 promoted/
+/civ/
 .env
 .env.*
 !.env.example
