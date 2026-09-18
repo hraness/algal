@@ -2,10 +2,26 @@
 
 **Programs that grow. More from every model.**
 
-ALGAL is a language for agent programs: typed workflows that can be generated,
-composed, evaluated, and promoted. Its name nods to ALGOL and to living systems.
-The same program can be a tool inside a coding agent, the structure around a
-model, or a candidate in a host-controlled population.
+ALGAL — named as a nod to ALGOL, and to algae — is a new take on the agent
+graph. Instead of bolting a DSL onto an existing language, ALGAL is a language
+and runtime designed for agentic program evolution. A malleable agent harness
+is simply a seed ALGAL program in an ALGAL habitat, and a habitat can
+self-evolve into a swarm of agents with shared artifacts and tools: an agent
+civilization.
+
+Programs are content-addressable, which yields some interesting properties:
+programs are values — they can be stored, diffed, spawned as children, and
+passed between hosts. Every run emits a receipt that replays bit-for-bit
+offline, so results are auditable without provider access. Lineage is a fossil
+record in which every proposal, measurement, and promotion is addressed by its
+content. And a manifest carries no code — it can only name what the host
+admits, which makes an untrusted program safe to execute.
+
+It's early days, but ALGAL programs already squeeze real work out of small
+models: an organism built on Qwen Flash plus a ledger tool beat a single
+Claude Opus call on a billing-dispute workload (6/6 vs 4/6) at ~20× lower
+cost, and an on-device Apple Intelligence model proposed, compiled, and
+promoted all four goals of a toy civilization without a single cloud call.
 
 1. **A growing agent harness.** Keep successful behavior as inspectable programs,
    not just longer prompts. Propose new versions, measure them, preserve their
@@ -14,10 +30,10 @@ model, or a candidate in a host-controlled population.
    typed tools, deterministic checks, and explicit escalation. Measure quality,
    cost, and effect calls instead of assuming decomposition always helps.
 
-Status: early. The TypeScript v1 runtime is the compatibility reference. Native
-Rust execution, coding-agent integration, relational memory, and on-device
-inference are being developed against explicit tests; see the implementation
-status in [the design audit](docs/algal-design.md).
+Status: early. The TypeScript v1 runtime is the compatibility reference; the
+native Rust kernel executes all 39 bundled examples with parity, and ACP,
+relational memory, and on-device inference are implemented. See
+[the design audit](docs/algal-design.md) for current qualification.
 
 ## Rename and compatibility
 

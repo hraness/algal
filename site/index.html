@@ -35,7 +35,7 @@
       "url": "https://morphogen.dev/",
       "description": "ALGAL is a living agent harness — organisms are typed, replayable graphs that can spawn and evolve — and a way to squeeze more juice out of LLMs, small or large.",
       "applicationCategory": "DeveloperApplication",
-      "codeRepository": "https://github.com/hraness/morphogen",
+      "codeRepository": "https://github.com/hraness/algal",
       "license": "https://opensource.org/license/mit",
       "author": { "@id": "https://github.com/hraness#org" }
     },
@@ -54,8 +54,8 @@
 <header>
   <div class="wordmark">ALGAL</div>
   <nav>
-    <a href="https://github.com/hraness/morphogen">github</a>
-    <a href="https://github.com/hraness/morphogen/tree/main/docs">docs</a>
+    <a href="https://github.com/hraness/algal">github</a>
+    <a href="https://github.com/hraness/algal/tree/main/docs">docs</a>
   </nav>
 </header>
 
@@ -127,12 +127,12 @@ edges:
     <p>
       Every run emits a content-addressed receipt: which cells committed,
       which skipped, what each agent cell asked and returned, and the work
-      ledger. <code>morphogen verify</code> replays the run offline with the
+      ledger. <code>algal verify</code> replays the run offline with the
       recorded receipts fixed — the same manifest, the same outputs, the same
       digest — or reports exactly where it diverges.
     </p>
-    <pre class="code">$ morphogen run triage.morphogen.json --responses triage.responses.json
-$ morphogen verify run.receipt.json triage.morphogen.json
+    <pre class="code">$ algal run triage.morphogen.json --responses triage.responses.json
+$ algal verify run.receipt.json triage.morphogen.json
 {"ok":true,"outcome":"complete","digest":"sha256:…"}</pre>
   </section>
 
@@ -173,8 +173,8 @@ $ morphogen verify run.receipt.json triage.morphogen.json
       classifier — is what wins, not the model brand.
     </p>
     <p>
-      <a href="https://github.com/hraness/morphogen/tree/main/examples/invest">See the invest example</a>
-      · <a href="https://github.com/hraness/morphogen/blob/main/docs/when-morphogen-wins.md">Read the intuition doc</a>
+      <a href="https://github.com/hraness/algal/tree/main/examples/invest">See the invest example</a>
+      · <a href="https://github.com/hraness/algal/blob/main/docs/when-morphogen-wins.md">Read the intuition doc</a>
     </p>
   </section>
 
@@ -183,11 +183,11 @@ $ morphogen verify run.receipt.json triage.morphogen.json
     <p>
       Pack an organism into a digest-verified bundle, generate an OpenAI or
       Anthropic tool definition, and let a larger agent call it by running
-      <code>morphogen call</code>.
+      <code>algal call</code>.
     </p>
-    <pre class="code">$ morphogen pack ticket.morphogen.json --out ./tools
-$ morphogen tool-def ticket.morphogen.json
-$ morphogen call ./tools/&lt;bundle&gt;.bundle.json --args ticket.args.json
+    <pre class="code">$ algal pack ticket.morphogen.json --out ./tools
+$ algal tool-def ticket.morphogen.json
+$ algal call ./tools/&lt;bundle&gt;.bundle.json --args ticket.args.json
 { "ok": true, "outputs": { "out": "billing" }, "receiptDigest": "sha256:..." }</pre>
     <p>
       The agent receives a compact result plus a receipt it can verify offline.
@@ -236,13 +236,13 @@ $ morphogen call ./tools/&lt;bundle&gt;.bundle.json --args ticket.args.json
       messaging, and workflow search are deliberately deferred.
     </p>
     <p>
-      <a href="https://github.com/hraness/morphogen">hraness/morphogen</a> · MIT
+      <a href="https://github.com/hraness/algal">hraness/algal</a> · MIT
     </p>
   </section>
 </main>
 
 <footer>
-  <span>morphogen · a <a href="https://github.com/hraness">hraness</a> project</span>
+  <span>algal · a <a href="https://github.com/hraness">hraness</a> project</span>
 </footer>
 </body>
 </html>

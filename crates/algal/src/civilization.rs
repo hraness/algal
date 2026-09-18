@@ -1,7 +1,7 @@
 use crate::{
     Error, Result,
     canonical::{canonical, digest},
-    contract::{Manifest, keys, object},
+    contract::{Manifest, id, keys, list, object, text},
     effects::Host,
     graph::{Transports, compile, interface_args, interface_signature},
     runtime,
@@ -34,14 +34,15 @@ pub fn lock(root: &Path) -> Result<PopulationLock> {
 #[derive(Clone)]
 struct Case {
     id: String,
-    split: &'static str,
+    split: String,
     input: Value,
     expected: Value,
 }
 #[derive(Clone)]
 struct Goal {
-    id: &'static str,
-    description: &'static str,
+    id: String,
+    description: String,
+    scripted: Option<Value>,
     cases: Vec<Case>,
 }
 #[derive(Clone)]
@@ -54,12 +55,13 @@ struct Candidate {
     work: u64,
 }
 
-fn goals() -> Vec<Goal> {
+fn demo_goals() -> Vec<Goal> {
     let mut result = Vec::new();
-    for (id, description, examples) in [
+    for (id, description, scripted, examples) in [
         (
             "greet",
             "Return the exact prefix Hello, and a space, followed by the supplied name.",
+            json!(["fn:format.v1;prefix=Hello, "]),
             vec![
                 (json!("Ada"), json!("Hello, Ada")),
                 (json!("Lin"), json!("Hello, Lin")),
@@ -70,6 +72,7 @@ fn goals() -> Vec<Goal> {
         (
             "double",
             "Return twice the numeric input.",
+            json!(["fn:double.v1"]),
             vec![
                 (json!(2), json!(4)),
                 (json!(7), json!(14)),
@@ -80,6 +83,7 @@ fn goals() -> Vec<Goal> {
         (
             "invert",
             "Return the logical negation of the boolean input.",
+            json!(["fn:not.v1"]),
             vec![
                 (json!(true), json!(false)),
                 (json!(false), json!(true)),
@@ -90,6 +94,7 @@ fn goals() -> Vec<Goal> {
         (
             "shout",
             "Return the input text in uppercase.",
+            json!(["fn:uppercase.v1"]),
             vec![
                 (json!("hello"), json!("HELLO")),
                 (json!("world"), json!("WORLD")),
@@ -107,33 +112,127 @@ fn goals() -> Vec<Goal> {
                     0 | 1 => "train",
                     2 => "validation",
                     _ => "holdout",
-                },
+                }
+                .to_owned(),
                 input,
                 expected,
             })
             .collect();
         result.push(Goal {
-            id,
-            description,
+            id: id.to_owned(),
+            description: description.to_owned(),
+            scripted: Some(scripted),
             cases,
         });
     }
     result
 }
 
-fn plan_fixture(goal: &Goal, constant: bool) -> Result<Value> {
-    if constant {
-        return Ok(json!([format!(
-            "const:{}",
-            canonical(&goal.cases[0].expected)?
-        )]));
+fn load_goals(path: &Path) -> Result<Vec<Goal>> {
+    let bytes = std::fs::read(path)
+        .map_err(|error| Error::invalid(format!("cannot read goals file: {error}")))?;
+    if bytes.len() > 262_144 {
+        return Err(Error::limit("goals file bytes"));
     }
-    Ok(match goal.id {
-        "greet" => json!(["fn:format.v1;prefix=Hello, "]),
-        "double" => json!(["fn:double.v1"]),
-        "invert" => json!(["fn:not.v1"]),
-        _ => json!(["fn:uppercase.v1"]),
-    })
+    let value: Value = serde_json::from_slice(&bytes)
+        .map_err(|_| Error::invalid("goals file is not JSON"))?;
+    keys(&value, &["contract", "goals"])?;
+    if value["contract"] != "algal.goals.v1" {
+        return Err(Error::invalid("goals file requires algal.goals.v1"));
+    }
+    let goals = list(&value["goals"], 16)?;
+    if goals.is_empty() {
+        return Err(Error::invalid("goals requires at least one goal"));
+    }
+    let mut result = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    for raw in goals.iter() {
+        keys(raw, &["id", "description", "scripted", "cases"])?;
+        let goal_id = id(&raw["id"])?;
+        if goal_id.len() > 64 {
+            return Err(Error::limit("goal id bytes"));
+        }
+        let goal_id = goal_id.to_owned();
+        if !seen.insert(goal_id.clone()) {
+            return Err(Error::invalid("goal ids must be unique"));
+        }
+        let description = text(&raw["description"], 1024)?;
+        if description.is_empty() {
+            return Err(Error::invalid("goal description required"));
+        }
+        let scripted = match raw.get("scripted") {
+            Some(plan) if !plan.is_null() => {
+                crate::registry::compile_plan(plan).map_err(|error| {
+                    Error::invalid(format!("goal {goal_id} scripted plan does not compile: {error}"))
+                })?;
+                Some(plan.clone())
+            }
+            _ => None,
+        };
+        let raw_cases = list(&raw["cases"], 8)?;
+        if raw_cases.len() < 3 {
+            return Err(Error::invalid("goal requires at least three cases"));
+        }
+        let mut cases = Vec::new();
+        for (i, raw_case) in raw_cases.iter().enumerate() {
+            keys(raw_case, &["input", "expected", "split"])?;
+            if canonical(&raw_case["input"])?.len() > 4096
+                || canonical(&raw_case["expected"])?.len() > 4096
+            {
+                return Err(Error::limit("case bytes"));
+            }
+            let split = match raw_case.get("split") {
+                Some(split) => {
+                    let split = text(split, 16)?;
+                    match split {
+                        "train" | "validation" | "holdout" => split.to_owned(),
+                        _ => {
+                            return Err(Error::invalid(
+                                "split must be train, validation, or holdout",
+                            ))
+                        }
+                    }
+                }
+                None => match i {
+                    0 | 1 => "train".to_owned(),
+                    2 => "validation".to_owned(),
+                    _ => "holdout".to_owned(),
+                },
+            };
+            cases.push(Case {
+                id: format!("{goal_id}-{i}"),
+                split,
+                input: raw_case["input"].clone(),
+                expected: raw_case["expected"].clone(),
+            });
+        }
+        for split in ["train", "validation", "holdout"] {
+            if !cases.iter().any(|case| case.split == split) {
+                return Err(Error::invalid(format!(
+                    "goal {goal_id} requires a {split} case"
+                )));
+            }
+        }
+        result.push(Goal {
+            id: goal_id,
+            description,
+            scripted,
+            cases,
+        });
+    }
+    Ok(result)
+}
+
+fn plan_fixture(goal: &Goal, constant: bool) -> Result<Value> {
+    if !constant
+        && let Some(plan) = &goal.scripted
+    {
+        return Ok(plan.clone());
+    }
+    Ok(json!([format!(
+        "const:{}",
+        canonical(&goal.cases[0].expected)?
+    )]))
 }
 
 fn generator() -> Result<Manifest> {
@@ -281,7 +380,22 @@ fn candidate_json(candidate: &Candidate) -> Result<Value> {
     )
 }
 
-pub async fn evolve(store: &mut Store, live: Option<Host>) -> Result<Value> {
+pub async fn evolve(store: &mut Store, live: Option<Host>, goals_path: Option<&Path>) -> Result<Value> {
+    let (goals, policy, evidence_scope) = match goals_path {
+        Some(path) => (
+            load_goals(path)?,
+            "algal.goals-selection.v1",
+            format!(
+                "Host-defined goals from {}; not a learning or generalization benchmark.",
+                path.display()
+            ),
+        ),
+        None => (
+            demo_goals(),
+            "algal.demo-selection.v1",
+            "Four toy contracts, not a learning or generalization benchmark; boolean cases cover a two-value domain.".to_owned(),
+        ),
+    };
     if live
         .as_ref()
         .is_some_and(|host| host.entries.iter().any(|(_, backend)| !backend.retryable()))
@@ -339,8 +453,8 @@ pub async fn evolve(store: &mut Store, live: Option<Host>) -> Result<Value> {
     let designer_digest = store.admit(&designer)?;
     let mut reports = Vec::new();
     let mut total_work = 0;
-    for goal in goals() {
-        let incumbent = members.get(goal.id).cloned();
+    for goal in &goals {
+        let incumbent = members.get(&goal.id).cloned();
         let mut candidates = Vec::new();
         let mut seen = BTreeSet::new();
         let mut rejected = Vec::new();

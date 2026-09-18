@@ -11,7 +11,7 @@ preserved for digest and replay compatibility. New stores default to .algal;
 
 ## Source
 
-- Repository: https://github.com/hraness/morphogen
+- Repository: https://github.com/hraness/algal
 - Design and implementation audit: docs/algal-design.md
 - Language contract: spec/v1/organism.md
 - Agent integration: docs/agent-tool.md and docs/executors.md
