@@ -113,7 +113,7 @@ export function scriptedExecutor(
     async execute(request) {
       const digest = effectRequestDigest(request);
       if (responses[digest] !== undefined) return responses[digest];
-      let hit = responses[request.cellId];
+      let hit: JsonValue | undefined = responses[request.cellId];
       if (Array.isArray(hit)) {
         let q = queues.get(request.cellId);
         if (!q) {
