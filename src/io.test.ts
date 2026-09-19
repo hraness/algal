@@ -24,3 +24,8 @@ test("commands can consume the complete bounded request before answering", async
   const result = await commandJson([process.execPath, "-e", "const input = JSON.parse(await Bun.stdin.text()); console.log(JSON.stringify(input.length));"], largeInput);
   expect(result).toBe(largeInput.length);
 });
+
+test("a blocked stdin write remains bounded by the command timeout", async () => {
+  await expect(commandJson([process.execPath, "-e", "await Bun.sleep(10_000);"], largeInput, { timeoutMs: 20 }))
+    .rejects.toMatchObject({ code: "BUDGET_EXHAUSTED" });
+});

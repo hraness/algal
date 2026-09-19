@@ -75,6 +75,91 @@ describe("GitHub CLI transport custody", () => {
       expect((result.body as { args: string[] }).args).toContain("--input");
     }
   });
+  test("awaits large backpressured input delivery", async () => {
+    const body = { query: "x".repeat(250_000) };
+    const reader = fakeGh(
+      `await Bun.sleep(10); const input = JSON.parse(await Bun.stdin.text()); ${emit(200, "{length:input.query.length}")}`,
+    );
+    const result = await githubCliTransport({ executable: reader })(
+      request({ method: "POST", path: "/graphql", body }),
+    );
+    expect(result.body).toEqual({ length: 250_000 });
+  });
+  test("observes asynchronous closed-pipe failures from both write and end", async () => {
+    // Isolate the deterministic FileSink fault in another process. A real
+    // short-lived child may let the kernel accept the entire bounded body
+    // before closing, which does not demonstrate an incomplete pipe write.
+    const source = `
+      import {githubCliTransport} from ${JSON.stringify(new URL("./github-cli.ts", import.meta.url).href)};
+      const results = [];
+      for (const fail of ["write", "end"]) for (const status of [200, 403]) {
+        const output = new TextEncoder().encode("HTTP/2.0 " + status + " Response\\r\\n\\r\\n" + JSON.stringify({message: "response"}));
+        const pipeFailure = async () => { await Promise.resolve(); throw Object.assign(new Error("PRIVATE_PIPE_DIAGNOSTIC"), {code: "EPIPE"}); };
+        Bun.spawn = () => ({
+          stdin: {
+            write: fail === "write" ? pipeFailure : async value => value.length,
+            end: fail === "end" ? pipeFailure : async () => 0,
+          },
+          stdout: new ReadableStream({start(controller) {controller.enqueue(output); controller.close();}}),
+          stderr: new ReadableStream({start(controller) {controller.close();}}),
+          exited: Promise.resolve(status === 403 ? 1 : 0),
+          kill() {},
+        });
+        try {
+          const result = await githubCliTransport()({method: "POST", path: "/graphql", body: {query: "x".repeat(250000)}, signal: new AbortController().signal, maxBytes: 8192});
+          results.push({fail, status: result.status});
+        } catch (error) { results.push({fail, code: error.code, message: error.message}); }
+      }
+      console.log(JSON.stringify(results));
+    `;
+    const child = Bun.spawn([process.execPath, "-e", source], {
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [output, diagnostic, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    expect(code).toBe(0);
+    expect(diagnostic).toBe("");
+    expect(JSON.parse(output)).toEqual([
+      {
+        fail: "write",
+        code: "EFFECT_FAILED",
+        message: "GitHub CLI closed stdin before request delivery",
+      },
+      { fail: "write", status: 403 },
+      {
+        fail: "end",
+        code: "EFFECT_FAILED",
+        message: "GitHub CLI closed stdin before request delivery",
+      },
+      { fail: "end", status: 403 },
+    ]);
+    expect(output).not.toContain("PRIVATE_PIPE_DIAGNOSTIC");
+  });
+  test("retains HTTP refusal after early input closure and rejects nonzero success", async () => {
+    const refused = fakeGh(
+      `import {closeSync} from "node:fs"; closeSync(0); ${emit(403, '{message:"Forbidden"}')} process.exit(1);`,
+    );
+    const result = await githubCliTransport({ executable: refused })(
+      request({
+        method: "POST",
+        path: "/graphql",
+        body: { query: "x".repeat(250_000) },
+      }),
+    );
+    expect(result.status).toBe(403);
+    expect(result.body).toEqual({ message: "Forbidden" });
+    const failed = fakeGh(
+      `await Bun.stdin.text(); ${emit(200, "{accepted:true}")} process.exit(2);`,
+    );
+    await expect(
+      githubCliTransport({ executable: failed })(request()),
+    ).rejects.toThrow("exited 2");
+  });
   test("withholds private diagnostics and nonpagination headers", async () => {
     const executable = fakeGh(
       `console.error("PRIVATE_AUTH_DIAGNOSTIC"); ${emit(401, '{message:"Unauthorized"}', "set-cookie: PRIVATE_COOKIE\\r\\n")}`,
@@ -107,6 +192,16 @@ describe("GitHub CLI transport custody", () => {
     );
     await expect(
       githubCliTransport({ executable, timeoutMs: 20 })(request()),
+    ).rejects.toThrow("cancelled");
+    const neverReads = fakeGh("await Bun.sleep(10000);");
+    await expect(
+      githubCliTransport({ executable: neverReads, timeoutMs: 20 })(
+        request({
+          method: "POST",
+          path: "/graphql",
+          body: { query: "x".repeat(250_000) },
+        }),
+      ),
     ).rejects.toThrow("cancelled");
     const controller = new AbortController();
     controller.abort();

@@ -65,7 +65,9 @@ export async function commandJson(
     const diagnostic = boundedBytes(child.stderr, 65_536, "executor diagnostics", signal);
     const input = (async () => {
       try {
-        child.stdin.write(payload);
+        // Both operations may return independent promises when the pipe is
+        // backpressured; observing only end() can leak a write rejection.
+        await child.stdin.write(payload);
         await child.stdin.end();
         return true;
       } catch (error) {

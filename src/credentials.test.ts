@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -106,4 +106,63 @@ describe("resolution chain", () => {
     expect(removed.length).toBeGreaterThan(0);
     expect(await resolveCredential("jev", { run })).toBeUndefined();
   });
+});
+
+
+test.skipIf(process.platform !== "linux")("Linux vault stdin promises settle before credential storage can succeed", async () => {
+  const directory = await freshHome();
+  const script = join(directory, "vault-fixture.ts");
+  // Only Linux's secret-tool vault passes a secret over stdin. Isolate the
+  // FileSink fixture in its own process without contacting a real vault.
+  await writeFile(script, `
+    import {readFile} from "node:fs/promises";
+    import {join} from "node:path";
+    const root = ${JSON.stringify(directory)};
+    const {storeCredential} = await import(${JSON.stringify(join(import.meta.dir, "credentials.ts"))});
+    const key = "fixture-only-not-a-provider-key";
+    const results = [];
+    for (const failure of ["write", "end", "none"]) {
+      process.env.ALGAL_HOME = join(root, failure);
+      let writes = 0; let ends = 0; let command = "";
+      const closed = () => new ReadableStream({start(controller) {controller.close();}});
+      const pipeError = () => Object.assign(new Error("fixture pipe closed"), {code: "EPIPE"});
+      Bun.spawn = (argv) => {
+        command = argv[0];
+        if (argv[0] !== "secret-tool" || argv[1] !== "store") throw new Error("unexpected vault command");
+        return {
+          stdin: {
+            async write(input) {writes++; if (input !== key) throw new Error("unexpected input"); if (failure === "write") throw pipeError(); return input.length;},
+            async end() {ends++; if (failure === "end") throw pipeError(); return 0;},
+          },
+          stdout: closed(), stderr: closed(), exited: Promise.resolve(0),
+        };
+      };
+      const stored = await storeCredential("jev", key);
+      const expected = failure === "none" ? "keychain" : "file";
+      if (stored.source !== expected || writes !== 1 || ends !== 1) throw new Error(JSON.stringify({failure,source:stored.source,writes,ends,command}));
+      if (expected === "file" && (await readFile(stored.location, "utf8")).trim() !== key) throw new Error("fallback lost credential");
+      results.push({failure, source: stored.source, writes, ends});
+    }
+    console.log(JSON.stringify(results));
+  `);
+  const child = Bun.spawn([process.execPath, script], {
+    env: { PATH: process.env.PATH ?? "", ALGAL_HOME: directory },
+    stdin: "ignore", stdout: "pipe", stderr: "pipe",
+  });
+  const timer = setTimeout(() => child.kill("SIGKILL"), 5_000);
+  try {
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited,
+    ]);
+    expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
+    expect(JSON.parse(stdout)).toEqual([
+      { failure: "write", source: "file", writes: 1, ends: 1 },
+      { failure: "end", source: "file", writes: 1, ends: 1 },
+      { failure: "none", source: "keychain", writes: 1, ends: 1 },
+    ]);
+  } finally {
+    clearTimeout(timer);
+    child.kill("SIGKILL");
+    await child.exited;
+  }
 });
