@@ -1,73 +1,82 @@
 # ALGAL
 
-> Programs that grow. More from every model. ALGAL is a language for typed,
-> bounded agent programs, a foundation for a coding-agent harness, and a
-> host-controlled environment for generating and selecting program populations.
+> Small programs that decide, act, and show their work. ALGAL is a language for
+> typed, bounded agent programs with readable source, generated diagrams,
+> replayable execution, and host-controlled program evolution.
 
-Previously named Algal. The public package is @hraness/algal and the CLI is
-algal. The existing algal.*.v1 wire identifiers and legacy fixtures are
-preserved for digest and replay compatibility. New stores default to .algal;
---dir .algal reads an existing store without moving it.
+The public package is @hraness/algal. Executable manifests use the
+algal.organism.v1 contract. Source authoring uses .algal files; the deterministic
+Bun compiler emits the existing .algal.json format plus an optional source map.
+Both Bun and Rust runtimes execute the compiled manifest. Native source parsing
+is not part of this first source-language release.
 
-## Source
+## Readable source and diagrams
 
-- Repository: https://github.com/hraness/algal
-- Design and implementation audit: docs/algal-design.md
-- Language contract: spec/v1/organism.md
-- Agent integration: docs/agent-tool.md and docs/executors.md
-- Selection and populations: docs/civilization.md
-- Measured case studies and limitations: docs/when-algal-wins.md
+The first source-language subset includes typed program inputs, immutable let
+bindings, literal values, typed decide operations, generate with explicit
+context, deterministic if and exhaustive match, and return. Advanced repeat,
+each, tool, wait, and evolution operations remain available through manifests.
 
-## Product boundaries
+The site reads examples/source/reply.algal during its build and renders diagrams
+from the compiled reply manifest and existing executable examples. Graphs show
+data dependencies, not an implicit promise of parallel wall-clock execution.
+The SVG, Mermaid, and JSON diagram formats share one manifest-derived view.
+Receipt overlays describe one identified execution; they are not live traces.
 
-Manifests are data, not executable code. Host registries own functions, tools,
-providers, and admission. Every run is bounded and emits a content-addressed
-receipt. Replay checks deterministic orchestration with recorded external
-answers; it does not establish that an answer is true, an external operation
-really happened, or a provider was authenticated.
-
-The two value propositions are a growing, inspectable agent harness and better
-use of model capacity through evidence, structure, checks, and measurement.
-The design has three layers: language/kernel, agent harness, and habitat.
-
-## Migration status
-
-The TypeScript v1 runtime is retained as the compatibility reference. The
-native Rust kernel executes all 39 bundled examples with event-log and
-work-ledger parity and verifies TypeScript receipts offline
-(`bun scripts/native-parity.ts`). ACP integration, relational memory,
-compaction, OpenAI-compatible and Vercel AI Gateway providers, and an Apple
-Foundation Models bridge are implemented; `algal doctor --apple` checks
-on-device availability. See docs/algal-design.md for current qualification.
-
-The native `algal civ` loop runs a measured civilization epoch: a designer
-organism emits a small plan, `manifest.compile.v1` compiles it into a
-type-checked manifest, the host measures train/validation and only then checks
-holdout, and `algal civ-verify` replays the population snapshot offline. On
-Apple Silicon, `algal civ --live --apple` ran the whole epoch on-device and
-promoted all four demo goals.
-
-AgentMixer is now xcb (https://github.com/hraness/xcb). Subscription credentials,
-provider qualification, account custody, and settled quota-aware switching
-belong to xcb, not to an ALGAL manifest. ACP is the client/agent protocol; it is
-not an authentication or sandbox protocol.
-
-Oh (https://oh.computer), Wordcell (https://github.com/hraness/wordcell), and
-Gobstopper (https://github.com/hraness/gobstopper) inform native memory and
-compaction: immutable sources, derived context, bounded positive logic, exact
-recall, and no mutation of provider-owned transcripts by ALGAL.
-
-## Run the compatibility reference
+Run from the repository root with Bun 1.3 or newer:
 
 ```sh
 bun install --frozen-lockfile
-bun run cli run examples/hello.algal.json
-bun run cli suite
+bun cli.ts compile examples/source/reply.algal --out reply.algal.json --source-map reply.source-map.json
+bun cli.ts check examples/source/reply.algal
+bun cli.ts diagram examples/source/reply.algal --format svg --out reply.svg
 ```
 
-The billing-dispute example demonstrates the value of evidence access. An earlier
-six-case run recorded Qwen plus a ledger lookup at 6/6 and an unassisted Opus
-call at 4/6. This is not a controlled model comparison: the systems had different
-tools. Historical prices are declared rate cards, not current billing promises.
-The batch/ensemble experiments also found cases where decomposition added cost
-without improving quality. Use the benchmark harness on your own workload.
+## Source and examples
+
+- Repository: https://github.com/hraness/algal
+- Readable example: https://algal.dev/examples/reply.algal
+- Compiled example: https://algal.dev/examples/reply.algal.json
+- Generated diagram: https://algal.dev/diagrams/reply.svg
+- Manifest contract: https://github.com/hraness/algal/blob/main/spec/v1/organism.md
+- Durable process demonstration: https://github.com/hraness/algal/blob/main/docs/vm.md
+- Selection and populations: https://github.com/hraness/algal/blob/main/docs/civilization.md
+- Measured case studies: https://github.com/hraness/algal/blob/main/docs/when-algal-wins.md
+- Agent integration: https://github.com/hraness/algal/blob/main/docs/agent-tool.md
+
+## Product boundaries
+
+Manifests are data, not host code. Host registries own functions, tools,
+providers, and admission. A manifest grants no OS isolation. Model effects see
+explicit declared context. Source compiler defaults are versioned and visible
+in the emitted artifact; max_agent_calls uses the runtime's executor-attempt
+counter, which is broader than a model-only inference count.
+
+Receipts are content-addressed execution evidence. Offline replay fixes recorded
+external answers and checks deterministic orchestration. It does not establish
+that an answer is true, an external operation happened, or a provider was
+authenticated. Fresh live runs may legitimately differ.
+
+A bounded repeat returns its last outputs when its round limit is exhausted;
+exhaustion is not convergence. The refinement example explicitly routes a final
+revise verdict to hold. The approval example waits on a host-supplied message,
+checks its release identifier and decision, and publishes only to a local
+mailbox. The fan-out example bounds child applications to eight questions;
+independent graph branches are not a promise of parallel speed.
+
+Programs are values. A designer can propose a child manifest, a spawn operation
+can admit and run it, and a slot can retain its digest. Evaluation, selection,
+and host-controlled promotion are separate operations. The site's habitat
+program diagram is a proposal-and-recording example; the selection lifecycle
+is conceptual, not a recorded winning run or a guarantee of improvement.
+
+## Runtime and integration
+
+The TypeScript runtime and native Rust kernel implement the shared manifest
+contract. The native kernel also includes ACP integration, relational memory,
+compaction, provider adapters, and an Apple Foundation Models bridge. Consult
+the repository for current platform qualification and measured evidence.
+
+xcb (https://github.com/hraness/xcb) owns subscription custody and settled
+provider switching. ACP is a client/agent protocol, not authentication or OS
+isolation. ALGAL keeps provider-owned transcripts separate from derived memory.

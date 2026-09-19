@@ -1,0 +1,94 @@
+import { expect, test } from "bun:test";
+import { readFile, readdir } from "node:fs/promises";
+import { join } from "node:path";
+import { createProgramDiagram, renderMermaid, renderSvg } from "./diagram";
+import { parseOrganismManifest } from "./contract";
+import { compileSource } from "./source";
+import { MemoryStore } from "./store";
+import { builtinRegistry } from "./registry";
+import { runOrganism, receiptDigest } from "./run";
+
+const examples = join(import.meta.dir, "../examples");
+
+test("all bundled manifest kinds render deterministically without executing effects", async () => {
+  const files = (await readdir(examples)).filter(f => f.endsWith(".algal.json"));
+  files.push("vm/release-review.algal.json", "vm/approval-wait.algal.json");
+  const kinds = new Set<string>();
+  for (const file of files) {
+    const manifest = parseOrganismManifest(JSON.parse(await readFile(join(examples, file), "utf8")));
+    const diagram = createProgramDiagram(manifest);
+    expect(diagram.nodes).toHaveLength(manifest.cells.length);
+    expect(diagram.edges).toHaveLength(manifest.edges.length);
+    for (const node of diagram.nodes) {
+      kinds.add(node.kind);
+      expect(node.status).toBeUndefined();
+    }
+    const mermaid = renderMermaid(diagram);
+    const svg = renderSvg(diagram);
+    expect(mermaid).toBe(renderMermaid(createProgramDiagram(manifest)));
+    expect(svg).toBe(renderSvg(createProgramDiagram(manifest)));
+    expect(svg).toContain('role="img"');
+    expect(svg).not.toContain("undefined");
+    expect(svg).not.toContain("NaN");
+  }
+  expect(kinds.size).toBe(17);
+});
+
+test("repeat limits, guards, capabilities and unknown external signatures stay explicit", async () => {
+  const read = async (file: string) => createProgramDiagram(parseOrganismManifest(JSON.parse(await readFile(join(examples, file), "utf8"))));
+  const refine = await read("refine.algal.json");
+  expect(refine.nodes.find(n => n.kind === "repeat")?.details).toContain("At most 4 rounds");
+  expect(refine.nodes.find(n => n.kind === "repeat")?.details).toContain("Limit reached: return last outputs");
+  expect(refine.edges.filter(e => e.guard)).toHaveLength(2);
+  expect(renderMermaid(refine)).toContain("ship");
+  expect(renderMermaid(refine)).toContain("revise");
+  expect(refine.nodes.find(n => n.id === "loop")?.inputs.some(p => p.type === null)).toBe(true);
+  const wait = await read("vm/approval-wait.algal.json");
+  expect(wait.nodes.some(n => n.outputs.some(p => p.type?.type === "cap"))).toBe(true);
+  expect(renderSvg(wait)).not.toContain("next tick");
+  const recovery = await read("recover.algal.json");
+  expect(recovery.edges.some(e => e.kind === "failure")).toBe(true);
+  expect(renderMermaid(recovery)).toContain("-.->");
+});
+
+test("untrusted strings cannot introduce SVG elements or Mermaid directives", () => {
+  const malicious = '</text><script>alert(1)</script>" ]\nclick n0 "https://evil.test"\n%%{init:{}}%%';
+  const manifest = parseOrganismManifest({ contract: "algal.organism.v1", key: "organism:escape", name: "<unsafe>\uffff\ufffe\ud800", cells: [{ id: "answer", kind: "agent", prompt: malicious, output: { kind: "text" } }] });
+  const diagram = createProgramDiagram(manifest);
+  const svg = renderSvg(diagram);
+  const mermaid = renderMermaid(diagram);
+  expect(svg).not.toContain("<script>");
+  expect(svg).toContain("&lt;script&gt;");
+  expect(svg).not.toContain("\uffff");
+  expect(svg).not.toContain("\ufffe");
+  expect(svg).not.toContain("\ud800");
+  expect(mermaid).not.toContain("\nclick");
+  expect(mermaid).not.toContain("%%{init");
+  expect(mermaid).not.toContain("</text>");
+});
+
+test("receipt overlays are bound to exact artifacts and retain actual recorded states", async () => {
+  const { manifest } = compileSource('program demo() -> text { budget { max_agent_calls: 0 } return "hello" }');
+  const receipt = await runOrganism({ manifest, store: new MemoryStore(), fns: builtinRegistry(), executors: [] });
+  const view = createProgramDiagram(manifest, { receipt });
+  expect(view.nodes[0]?.status).toBe("committed");
+  expect(view.receipt?.verification).toBe("digest-bound");
+  expect(renderSvg(view)).toContain("not replay-verified");
+  const other = compileSource('program other() -> text { budget { max_agent_calls: 0 } return "hello" }').manifest;
+  expect(() => createProgramDiagram(other, { receipt })).toThrow(/does not belong/);
+  const tampered = structuredClone(receipt);
+  tampered.cells.result!.status = "failed";
+  expect(() => createProgramDiagram(manifest, { receipt: tampered })).toThrow(/digest mismatch/);
+  // A self-consistent recording is not falsely described as verified truth.
+  tampered.digest = receiptDigest(tampered);
+  expect(renderMermaid(createProgramDiagram(manifest, { receipt: tampered }))).toContain("not replay-verified");
+});
+
+test("diagrams reject ambiguous IDs, missing endpoints and cycles", () => {
+  const base = { contract: "algal.organism.v1", key: "organism:bad", name: "Bad", cells: [{ id: "a", kind: "fn", fn: "echo.v1" }, { id: "b", kind: "fn", fn: "echo.v1" }] };
+  for (const edges of [
+    [{ from: { cell: "a", port: "value" }, to: { cell: "missing", port: "value" } }],
+    [{ from: { cell: "a", port: "value" }, to: { cell: "b", port: "value" } }, { from: { cell: "b", port: "value" }, to: { cell: "a", port: "value" } }],
+  ]) expect(() => createProgramDiagram(parseOrganismManifest({ ...base, edges }))).toThrow();
+  expect(() => createProgramDiagram(parseOrganismManifest({ ...base, cells: [base.cells[0], base.cells[0]] }))).toThrow(/duplicate/);
+});

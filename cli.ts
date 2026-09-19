@@ -3,10 +3,12 @@
 // Data on stdout (JSON), diagnostics on stderr. Exit 0 ok, 1 run/verify
 // failure, 2 usage or parse error.
 
-import { readFile, realpath } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BOUNDS, manifestToJson, parseOrganismManifest } from "./src/contract";
+import { BOUNDS, manifestToJson, parseOrganismManifest, type OrganismManifest } from "./src/contract";
+import { compileSource, SOURCE_BOUNDS } from "./src/source";
+import { createProgramDiagram, renderMermaid, renderSvg } from "./src/diagram";
 import { compileOrganism } from "./src/graph";
 import { asDigest, digestCanonical } from "./src/digest";
 import {
@@ -133,6 +135,12 @@ function recallSpecExecutor(spec: string, dir: string): Executor | undefined {
 const USAGE = `algal — typed, replayable workflow organisms
 
 usage:
+  algal compile <program.algal> [--out <manifest.json>] [--source-map <map.json>]
+                                              compile readable source to the existing v1 manifest
+  algal diagram <program.algal|manifest.json> [--format mermaid|svg|json]
+      [--receipt <receipt.json>] [--out <file>] [--modules <dir>] [--tools <file>]
+                                              render dependencies, bounds, and recorded cell states
+                                              .algal source is also accepted by manifest commands
   algal examples                          list bundled examples
   algal example <id>                      print the example manifest
   algal run <manifest.json> [options]     run an organism, print its receipt
@@ -314,6 +322,66 @@ async function readJsonBounded(
       "PARSE_FAILED",
       `${path}: ${error instanceof Error ? error.message : String(error)}`,
     );
+  }
+}
+
+async function readSource(path: string): Promise<string> {
+  try {
+    const bytes = await boundedBytes(Bun.file(path).stream(), SOURCE_BOUNDS.maxSourceBytes, "Algal source");
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch (error) {
+    throw new AlgalError("PARSE_FAILED", `${path}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function readManifest(path: string): Promise<OrganismManifest> {
+  return path.endsWith(".algal")
+    ? compileSource(await readSource(path)).manifest
+    : parseOrganismManifest(await readJson(path));
+}
+
+function artifactFlag(flags: ParsedArgs["flags"], key: string): string | undefined {
+  const value = flags[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.length === 0) usageError(`--${key} requires a value`);
+  return value;
+}
+
+/** An output must not overwrite a source, receipt, or the other output. */
+async function distinctArtifactPaths(inputs: string[], outputs: Array<string | undefined>): Promise<void> {
+  const canonical = async (path: string): Promise<string> => {
+    const absolute = resolve(path);
+    try { return await realpath(absolute); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      const parent = dirname(absolute);
+      if (parent === absolute) throw error;
+      return join(await canonical(parent), basename(absolute));
+    }
+  };
+  const identities = async (path: string): Promise<string[]> => {
+    const name = await canonical(path);
+    const information = await stat(path).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+      return undefined;
+    });
+    return [`path:${name}`, ...(information ? [`inode:${information.dev}:${information.ino}`] : [])];
+  };
+  const seen = new Set((await Promise.all(inputs.map(identities))).flat());
+  for (const path of outputs) {
+    if (path === undefined) continue;
+    const names = await identities(path);
+    if (names.some(name => seen.has(name))) usageError(`output path aliases an input or another output: ${path}`);
+    for (const name of names) seen.add(name);
+  }
+}
+
+async function emitArtifact(contents: string, path: string | undefined): Promise<void> {
+  const text = contents.endsWith("\n") ? contents : `${contents}\n`;
+  if (path === undefined) process.stdout.write(text);
+  else {
+    await writeFile(resolve(path), text);
+    diag(`wrote ${path}`);
   }
 }
 
@@ -597,6 +665,55 @@ async function main(): Promise<number> {
   const fns = builtinRegistry();
 
   switch (cmd) {
+    case "compile": {
+      if (positional.length !== 1) usageError("algal compile <program.algal> [--out <manifest.json>] [--source-map <map.json>]");
+      for (const key of Object.keys(flags)) {
+        if (!["out", "source-map"].includes(key)) usageError(`unknown compile option --${key}`);
+      }
+      const file = positional[0]!;
+      const output = artifactFlag(flags, "out");
+      const mapPath = artifactFlag(flags, "source-map");
+      await distinctArtifactPaths([file], [output, mapPath]);
+      const result = compileSource(await readSource(resolve(file)));
+      await compileOrganism(result.manifest, fns, store);
+      if (mapPath !== undefined) await emitArtifact(canonicalize(result.sourceMap as unknown as JsonValue), mapPath);
+      await emitArtifact(canonicalize(manifestToJson(result.manifest)), output);
+      return 0;
+    }
+
+    case "diagram": {
+      if (positional.length !== 1) usageError("algal diagram <program.algal|manifest.json> [--format mermaid|svg|json] [--receipt <file>] [--out <file>]");
+      for (const key of Object.keys(flags)) {
+        if (!["out", "format", "receipt", "modules", "tools", "transports", "dir"].includes(key)) {
+          usageError(`unknown diagram option --${key}`);
+        }
+        artifactFlag(flags, key);
+      }
+      const file = positional[0]!;
+      const format = artifactFlag(flags, "format") ?? "mermaid";
+      if (!["mermaid", "svg", "json"].includes(format)) usageError("diagram format must be mermaid, svg, or json");
+      const output = artifactFlag(flags, "out");
+      const receiptPath = artifactFlag(flags, "receipt");
+      await distinctArtifactPaths([file, ...(receiptPath === undefined ? [] : [receiptPath])], [output]);
+      const manifest = await readManifest(resolve(file));
+      const receipt = receiptPath === undefined ? undefined : parseRunReceipt(await readJson(resolve(receiptPath)));
+      if (flags.modules !== undefined) await loadModules(String(flags.modules), store);
+      const compiled = flags.modules !== undefined || flags.tools !== undefined || flags.transports !== undefined
+        ? await compileOrganism(manifest, fns, store, 0,
+          flags.transports === undefined ? undefined : await loadTransports(String(flags.transports)),
+          await resolveTools(flags, dir))
+        : undefined;
+      const view = createProgramDiagram(manifest, {
+        ...(receipt === undefined ? {} : { receipt }),
+        ...(compiled === undefined ? {} : { ports: compiled.ports }),
+      });
+      const contents = format === "svg" ? renderSvg(view)
+        : format === "json" ? canonicalize(view as unknown as JsonValue)
+        : renderMermaid(view);
+      await emitArtifact(contents, output);
+      return 0;
+    }
+
     case "--help":
     case "-h":
     case "help":
@@ -630,7 +747,7 @@ async function main(): Promise<number> {
     case "digest": {
       const file = positional[0];
       if (!file) usageError("algal digest <manifest.json>");
-      const manifest = parseOrganismManifest(await readJson(file));
+      const manifest = await readManifest(file);
       out({ digest: digestCanonical(manifestToJson(manifest)) });
       return 0;
     }
@@ -689,7 +806,7 @@ async function main(): Promise<number> {
         const n = await loadModules(String(flags.modules), store);
         diag(`loaded ${n} module(s) from ${flags.modules}`);
       }
-      const manifest = parseOrganismManifest(await readJson(resolve(file)));
+      const manifest = await readManifest(resolve(file));
       const bundle = await packOrganism(manifest, store);
       if (flags.out !== undefined) {
         const { mkdir, writeFile } = await import("node:fs/promises");
@@ -790,7 +907,7 @@ async function main(): Promise<number> {
         const n = await loadModules(String(flags.modules), store);
         diag(`loaded ${n} module(s) from ${flags.modules}`);
       }
-      const manifest = parseOrganismManifest(await readJson(resolve(file)));
+      const manifest = await readManifest(resolve(file));
       const compiled = await compileOrganism(
         manifest,
         fns,
@@ -861,7 +978,7 @@ async function main(): Promise<number> {
         const n = await loadModules(String(flags.modules), store);
         diag(`loaded ${n} module(s) from ${flags.modules}`);
       }
-      const manifest = parseOrganismManifest(await readJson(resolve(file)));
+      const manifest = await readManifest(resolve(file));
       const compiled = await compileOrganism(
         manifest,
         fns,
@@ -891,7 +1008,7 @@ async function main(): Promise<number> {
         const n = await loadModules(String(flags.modules), store);
         diag(`loaded ${n} module(s) from ${flags.modules}`);
       }
-      const manifest = parseOrganismManifest(await readJson(resolve(file)));
+      const manifest = await readManifest(resolve(file));
       const compiled = await compileOrganism(
         manifest,
         fns,
@@ -958,7 +1075,7 @@ async function main(): Promise<number> {
         const n = await loadModules(String(flags.modules), store);
         diag(`loaded ${n} module(s) from ${flags.modules}`);
       }
-      const manifest = parseOrganismManifest(await readJson(resolve(file)));
+      const manifest = await readManifest(resolve(file));
 
       const argsRaw =
         flags.args !== undefined
@@ -1154,7 +1271,7 @@ async function main(): Promise<number> {
         if (typeof candidate !== "string") {
           throw new AlgalError("PARSE_FAILED", `foundry config.candidates[${i}] must be a path`);
         }
-        return parseOrganismManifest(await readJson(resolve(base, candidate)));
+        return await readManifest(resolve(base, candidate));
       }));
       let generator: { manifest: ReturnType<typeof parseOrganismManifest>; args: Record<string, JsonValue>; output: string; field?: string } | undefined;
       if (config.generator !== undefined) {
@@ -1172,7 +1289,7 @@ async function main(): Promise<number> {
           throw new AlgalError("PARSE_FAILED", "foundry config.generator.args must be an object");
         }
         generator = {
-          manifest: parseOrganismManifest(await readJson(resolve(base, raw.manifest))),
+          manifest: await readManifest(resolve(base, raw.manifest)),
           args: asRecord(raw.args, "foundry config.generator.args"),
           output: raw.output,
           ...(typeof raw.field === "string" ? { field: raw.field } : {}),
@@ -1405,7 +1522,7 @@ async function main(): Promise<number> {
         }
         systems.push({
           id: s.id,
-          manifest: parseOrganismManifest(await readJson(resolve(base, s.manifest))),
+          manifest: await readManifest(resolve(base, s.manifest)),
           executors,
         });
       }
@@ -1458,7 +1575,7 @@ async function main(): Promise<number> {
       const receipt = await readJson(resolve(receiptFile));
       let manifest: JsonValue;
       if (manifestFile !== undefined) {
-        manifest = await readJson(resolve(manifestFile));
+        manifest = manifestToJson(await readManifest(resolve(manifestFile)));
       } else {
         const digest = (receipt as JsonObject).manifestDigest;
         if (typeof digest !== "string" || !digest.startsWith("sha256:")) {
@@ -1503,7 +1620,7 @@ async function main(): Promise<number> {
       const receipt = await readJson(resolve(receiptFile));
       let manifest: JsonValue;
       if (manifestFile !== undefined) {
-        manifest = await readJson(resolve(manifestFile));
+        manifest = manifestToJson(await readManifest(resolve(manifestFile)));
       } else {
         const digest = (receipt as JsonObject).manifestDigest;
         if (typeof digest !== "string" || !digest.startsWith("sha256:")) {
@@ -1826,7 +1943,7 @@ async function main(): Promise<number> {
       if (!name) usageError("algal process create|inspect|tick|verify <name>");
       if (sub === "create") {
         const file = positional[2]; if (!file) usageError("algal process create <name> <manifest.json>");
-        const manifest = parseOrganismManifest(await readJson(resolve(file)));
+        const manifest = await readManifest(resolve(file));
         const args = flags.args === undefined ? {} : await readJsonBounded(resolve(String(flags.args)), PROCESS_BOUNDS.maxArgsBytes, "process args");
         out(await supervisor.create(name, manifest, args, flags["max-generations"] === undefined ? 16 : Number(flags["max-generations"])) as unknown as JsonValue);
       } else if (sub === "inspect") out(await supervisor.inspect(name) as unknown as JsonValue);

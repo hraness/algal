@@ -9,6 +9,7 @@ import { scriptedExecutor } from "../src/effects";
 import { builtinRegistry } from "../src/registry";
 import { runOrganism } from "../src/run";
 import { verifyReceipt } from "../src/verify";
+import { compileSource } from "../src/source";
 
 const root = resolve(import.meta.dir, "..");
 const examples = join(root, "examples");
@@ -16,6 +17,20 @@ const binary = process.env.ALGAL_BIN ?? join(root, "target/debug/algal");
 const temporary = await mkdtemp(join(tmpdir(), "algal-parity-"));
 const files = (await readdir(examples)).filter((f) => /\.algal\.json$/.test(f)).sort();
 const modules = await Promise.all(files.map(async (file) => parseOrganismManifest(JSON.parse(await readFile(join(examples, file), "utf8")))));
+// The readable front end stays outside the kernel: both runtimes receive the
+// exact same compiled artifact. Exercise all committed source examples too.
+const sourceEntries = (await readdir(join(examples, "source"))).filter(f => f.endsWith(".algal")).sort();
+const generated = new Map<string, { manifestPath: string; fixtureBase: string }>();
+for (const file of sourceEntries) {
+  const source = await readFile(join(examples, "source", file), "utf8");
+  const { manifest } = compileSource(source);
+  const name = `source-${file.slice(0, -6)}`;
+  const manifestPath = join(temporary, `${name}.algal.json`);
+  await writeFile(manifestPath, canonicalize(manifestToJson(manifest)));
+  files.push(`${name}.algal.json`);
+  modules.push(manifest);
+  generated.set(name, { manifestPath, fixtureBase: join(examples, "source", file.slice(0, -6)) });
+}
 let failed = 0;
 
 async function native(args: string[]) {
@@ -33,9 +48,11 @@ try {
     for (const module of modules) await store.putManifest(module);
     let args: Record<string, Record<string, JsonValue>> = {};
     let responses: Record<string, JsonValue> = {};
-    const runArgs = ["run", join(examples, file), "--modules", examples, "--dir", join(temporary, name), "--write"];
+    const manifestPath = generated.get(name)?.manifestPath ?? join(examples, file);
+    const fixtureBase = generated.get(name)?.fixtureBase ?? join(examples, name);
+    const runArgs = ["run", manifestPath, "--modules", examples, "--dir", join(temporary, name), "--write"];
     for (const suffix of ["args", "responses"] as const) {
-      const path = join(examples, `${name}.${suffix}.json`);
+      const path = `${fixtureBase}.${suffix}.json`;
       try {
         const value = JSON.parse(await readFile(path, "utf8"));
         if (suffix === "args") args = value;
@@ -74,9 +91,9 @@ try {
       if (!reverse.ok) throw new Error(`reference could not verify native receipt: ${JSON.stringify(reverse)}`);
       const receiptFile = join(temporary, `${name}.receipt.json`);
       await writeFile(receiptFile, canonicalize(expected));
-      const verification = await native(["verify", receiptFile, join(examples, file), "--modules", examples, "--dir", join(temporary, name)]);
+      const verification = await native(["verify", receiptFile, manifestPath, "--modules", examples, "--dir", join(temporary, name)]);
       if (verification.ok !== true) throw new Error(`native could not verify reference receipt: ${JSON.stringify(verification)}`);
-      const identity = await native(["digest", join(examples, file)]);
+      const identity = await native(["digest", manifestPath]);
       if (identity.digest !== reference.manifestDigest) throw new Error("manifest identity mismatch");
       console.log(`${name}: identical semantics + receipts cross-verified`);
     } catch (error) {

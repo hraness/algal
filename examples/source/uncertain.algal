@@ -1,0 +1,22 @@
+program uncertain(email: text) -> text {
+  budget { max_agent_calls: 2 }
+
+  let intent = decide "What does this email need?" using email
+    as choice {
+      help: "Help with a problem",
+      sales: "Information before buying",
+      other: "Anything else"
+    }
+
+  let task = if intent.probability(intent.value) < 0.80 {
+    "Draft a question that clarifies what the sender needs."
+  } else {
+    match intent.value {
+      help => "Draft a helpful support reply.",
+      sales => "Draft a concise sales reply.",
+      other => "Draft a clarifying question."
+    }
+  }
+
+  return generate task using email
+}
