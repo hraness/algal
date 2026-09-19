@@ -1,7 +1,12 @@
 {
   "src": {
-    "query": "sprig",
-    "doc": {
+    "query": "sprig tidepool",
+    "doc-a": {
+      "habitat": "cliff",
+      "name": "wisp",
+      "species": "sprig"
+    },
+    "doc-b": {
       "habitat": "tidepool",
       "name": "wisp",
       "species": "sprig"

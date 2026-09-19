@@ -18,6 +18,7 @@ export type {
   OrganismManifest,
   PortMap,
   PortType,
+  RecallRerankPolicy,
   Route,
 } from "./src/contract";
 

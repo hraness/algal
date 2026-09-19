@@ -245,7 +245,7 @@ fn normalize_cell(value: &Value) -> Result<Value> {
             "retry",
         ],
         "recall" => &[
-            "id", "kind", "inputs", "query", "k", "embedder", "route", "budget", "retry",
+            "id", "kind", "inputs", "query", "k", "embedder", "route", "rerank", "budget", "retry",
         ],
         _ => return Err(Error::invalid(format!("unknown cell kind {kind}"))),
     };
@@ -446,6 +446,24 @@ fn normalize_cell(value: &Value) -> Result<Value> {
                 keys(route, &["provider", "model", "preset"])?;
                 for route in object(route)?.values() {
                     text(route, 64)?;
+                }
+            }
+            if let Some(rerank) = v.get("rerank") {
+                keys(rerank, &["route", "take"])?;
+                let route = rerank
+                    .get("route")
+                    .ok_or_else(|| Error::invalid("recall rerank requires route"))?;
+                keys(route, &["provider", "model", "preset"])?;
+                for value in object(route)?.values() {
+                    text(value, 64)?;
+                }
+                if route.get("provider").is_none() && route.get("preset").is_none() {
+                    return Err(Error::invalid(
+                        "recall rerank route requires provider or preset",
+                    ));
+                }
+                if let Some(take) = rerank.get("take") {
+                    integer(take, 1, v["k"].as_u64().unwrap_or(8) as usize)?;
                 }
             }
             if let Some(retry) = v.get("retry") {

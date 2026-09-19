@@ -94,6 +94,7 @@ describe("recall parsing", () => {
         k: 3,
         embedder: "local",
         route: { provider: "recall" },
+        rerank: { route: { provider: "jev" }, take: 2 },
         budget: { maxContextBytes: 4096, maxOutputBytes: 8192, maxEffectMs: 1000 },
         retry: { attempts: 2 },
         ...overrides,
@@ -127,6 +128,16 @@ describe("recall parsing", () => {
     expect(() => parseOrganismManifest(recall({
       query: { contract: "algal.expr.v1", program: ["get", "missing"] },
     }))).toThrowError();
+    expect(() => parseOrganismManifest(recall({ rerank: {} }))).toThrowError();
+    expect(() => parseOrganismManifest(recall({
+      rerank: { route: { model: "jev" } },
+    }))).toThrowError(/provider or preset/);
+    expect(() => parseOrganismManifest(recall({
+      rerank: { route: { provider: "jev" }, take: 4 },
+    }))).toThrowError();
+    expect(() => parseOrganismManifest(recall({
+      rerank: { route: { provider: "jev" }, extra: true },
+    }))).toThrowError(/unknown key/);
     expect(() => parseOrganismManifest(recall({ extra: true }))).toThrowError(/unknown key/);
   });
 });

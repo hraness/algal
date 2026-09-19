@@ -4,6 +4,7 @@ import {
   parseOrganismManifest,
   type OrganismManifest,
 } from "./contract";
+import { decisionAnswerSchema, type DecisionQuestions } from "./decisions";
 import {
   cachedExecutor,
   effectRequestDigest,
@@ -323,6 +324,109 @@ describe("scheduler", () => {
       },
       recall: { query: "coral habitat", k: 2, embedder: "local" },
     }));
+    expect((await verifyReceipt(
+      r as unknown as JsonValue,
+      manifestToJson(m),
+      store,
+    )).ok).toBe(true);
+  });
+
+  test("recall reranks hits through a recorded decision effect without rewriting sources", async () => {
+    const store = new MemoryStore();
+    const firstPayload = { species: "sprig", habitat: "cliff" };
+    const secondPayload = { species: "sprig", habitat: "tidepool" };
+    const firstRef = await store.putValue(firstPayload);
+    const secondRef = await store.putValue(secondPayload);
+    const firstHit = {
+      id: digestCanonical("first-hit"),
+      source: `value:${firstRef.slice(7)}`,
+      seq: 0,
+      score: 0.95,
+      text: "A sprig observed on a dry cliff",
+      ref: firstRef,
+    };
+    const secondHit = {
+      id: digestCanonical("second-hit"),
+      source: `value:${secondRef.slice(7)}`,
+      seq: 0,
+      score: 0.7,
+      text: "A sprig living in a tidepool habitat",
+      ref: secondRef,
+    };
+    const m = manifest({
+      contract: "algal.organism.v1",
+      key: "organism:recall-rerank",
+      name: "RecallRerank",
+      cells: [
+        { id: "src", kind: "input", outputs: { q: "text" } },
+        {
+          id: "memory",
+          kind: "recall",
+          inputs: { q: "text" },
+          query: { contract: "algal.expr.v1", program: ["get", "q"] },
+          k: 2,
+          embedder: "local",
+          rerank: { route: { provider: "jev" }, take: 1 },
+        },
+        { id: "full", kind: "load" },
+      ],
+      edges: [
+        { from: { cell: "src", port: "q" }, to: { cell: "memory", port: "q" } },
+        { from: { cell: "memory", port: "ref" }, to: { cell: "full", port: "ref" } },
+      ],
+    });
+    const r = await run(m, {
+      args: { src: { q: "sprig tidepool habitat" } },
+      responses: {
+        memory: [
+          { hits: [firstHit, secondHit] },
+          { answers: { hit_0: { noul: 0.1 }, hit_1: { noul: 0.9 } } },
+        ],
+      },
+      store,
+    });
+    expect(r.outcome).toBe("complete");
+    expect(r.cells.memory?.outputs?.out).toEqual({ hits: [secondHit] });
+    expect(r.cells.memory?.outputs?.ref).toBe(secondRef);
+    expect(r.cells.full?.outputs?.data).toEqual(secondPayload);
+    expect(r.effects).toHaveLength(2);
+    expect(r.work.agentCalls).toBe(2);
+    const questions: DecisionQuestions = {
+      hit_0: {
+        type: "noul",
+        instructions: "Is context.hits[0] directly relevant to context.query?",
+        criteria: {
+          true: "The hit directly helps answer context.query.",
+          false: "The hit does not help answer context.query.",
+        },
+      },
+      hit_1: {
+        type: "noul",
+        instructions: "Is context.hits[1] directly relevant to context.query?",
+        criteria: {
+          true: "The hit directly helps answer context.query.",
+          false: "The hit does not help answer context.query.",
+        },
+      },
+    };
+    const rerankDigest = effectRequestDigest({
+      contract: "algal.effect.v1",
+      cellId: "memory",
+      kind: "decide",
+      prompt:
+        "Semantic rerank for recall cell \"memory\". Score every hit's direct relevance " +
+        "to the query; do not summarize or rewrite the source text.",
+      context: { query: "sprig tidepool habitat", hits: [firstHit, secondHit] },
+      output: { kind: "json", schema: decisionAnswerSchema(questions) },
+      budget: {
+        maxContextBytes: m.budgets.maxContextBytes,
+        maxOutputBytes: m.budgets.maxOutputBytes,
+      },
+      route: { provider: "jev" },
+      questions,
+    });
+    expect(r.effects[1]?.requestDigest).toBe(rerankDigest);
+    expect(r.cells.memory?.effectDigest).toBe(rerankDigest);
     expect((await verifyReceipt(
       r as unknown as JsonValue,
       manifestToJson(m),

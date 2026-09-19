@@ -208,6 +208,70 @@ async fn recall_records_ranked_hits_and_feeds_load_by_ref() {
     assert_eq!(empty["cells"]["full"]["status"], "skipped");
 }
 
+#[tokio::test]
+async fn recall_reranks_hits_through_a_recorded_decision_effect() {
+    let manifest = Manifest::parse(&json!({
+        "contract":"algal.organism.v1",
+        "key":"organism:recall-rerank",
+        "name":"RecallRerank",
+        "cells":[
+            {"id":"src","kind":"input","outputs":{"q":"text"}},
+            {"id":"memory","kind":"recall","inputs":{"q":"text"},
+             "query":{"contract":"algal.expr.v1","program":["get","q"]},
+             "k":2,"embedder":"local",
+             "rerank":{"route":{"provider":"scripted"},"take":1}},
+            {"id":"full","kind":"load"}
+        ],
+        "edges":[
+            {"from":{"cell":"src","port":"q"},"to":{"cell":"memory","port":"q"}},
+            {"from":{"cell":"memory","port":"ref"},"to":{"cell":"full","port":"ref"}}
+        ]
+    }))
+    .unwrap();
+    let mut store = Store::default();
+    let first_payload = json!({"species":"sprig","habitat":"cliff"});
+    let second_payload = json!({"species":"sprig","habitat":"tidepool"});
+    let first_ref = store.put("values", &first_payload).unwrap();
+    let second_ref = store.put("values", &second_payload).unwrap();
+    let first_hit = json!({
+        "id":digest(&json!("first-hit")).unwrap(),
+        "source":format!("value:{}",&first_ref[7..]),"seq":0,"score":0.95,
+        "text":"A sprig observed on a dry cliff","ref":first_ref
+    });
+    let second_hit = json!({
+        "id":digest(&json!("second-hit")).unwrap(),
+        "source":format!("value:{}",&second_ref[7..]),"seq":0,"score":0.7,
+        "text":"A sprig living in a tidepool habitat","ref":second_ref
+    });
+    let responses = json!({"memory":[
+        {"hits":[first_hit,second_hit.clone()]},
+        {"answers":{"hit_0":{"noul":0.1},"hit_1":{"noul":0.9}}}
+    ]});
+    let receipt = runtime::run(
+        manifest.clone(),
+        json!({"src":{"q":"sprig tidepool habitat"}}),
+        &mut store,
+        &mut Host::scripted(responses),
+        &transports(),
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(receipt["outcome"], "complete");
+    assert_eq!(
+        receipt["cells"]["memory"]["outputs"]["out"],
+        json!({"hits":[second_hit]})
+    );
+    assert_eq!(receipt["cells"]["memory"]["outputs"]["ref"], second_ref);
+    assert_eq!(receipt["cells"]["full"]["outputs"]["data"], second_payload);
+    assert_eq!(receipt["effects"].as_array().unwrap().len(), 2);
+    assert_eq!(receipt["work"]["agentCalls"], 2);
+    let verified = runtime::verify(&receipt, manifest, &store, &Host::default())
+        .await
+        .unwrap();
+    assert_eq!(verified["ok"], true, "{verified}");
+}
+
 #[test]
 fn recall_contract_rejects_invalid_configuration() {
     let cell = |query: Value, k: usize, embedder: &str| {
@@ -221,6 +285,18 @@ fn recall_contract_rejects_invalid_configuration() {
     assert!(Manifest::parse(&cell(json!(["get", "q"]), 33, "local")).is_err());
     assert!(Manifest::parse(&cell(json!(["get", "q"]), 1, "unknown")).is_err());
     assert!(Manifest::parse(&cell(json!(["get", "missing"]), 1, "local")).is_err());
+    let rerank = |policy: Value| {
+        json!({
+            "contract":"algal.organism.v1","key":"organism:recall-policy","name":"Policy",
+            "cells":[{"id":"memory","kind":"recall","inputs":{"q":"text"},
+                "query":{"contract":"algal.expr.v1","program":["get","q"]},
+                "k":2,"rerank":policy}],"edges":[]
+        })
+    };
+    assert!(Manifest::parse(&rerank(json!({}))).is_err());
+    assert!(Manifest::parse(&rerank(json!({"route":{"model":"jev"}}))).is_err());
+    assert!(Manifest::parse(&rerank(json!({"route":{"provider":"jev"},"take":3}))).is_err());
+    assert!(Manifest::parse(&rerank(json!({"route":{"provider":"jev"},"extra":true}))).is_err());
     let inputless = Manifest::parse(&json!({
         "contract":"algal.organism.v1","key":"organism:recall-fixed","name":"Fixed",
         "cells":[{"id":"memory","kind":"recall",

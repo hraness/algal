@@ -242,6 +242,7 @@ the declared labels.
   "k": 8,
   "embedder": "local",
   "route": { "provider": "recall" },
+  "rerank": { "route": { "provider": "jev" }, "take": 4 },
   "budget": { "maxContextBytes": 65536, "maxOutputBytes": 65536 },
   "retry": { "attempts": 2 }
 }
@@ -256,6 +257,17 @@ recall executor must query. `route`, `retry`, `maxContextBytes`,
 `maxOutputBytes`, and `maxEffectMs` have their ordinary effect meanings;
 `maxTurns` is not accepted.
 
+`rerank` is optional and must declare an independent route containing
+`provider` or `preset`; this keeps semantic-index access and model decisions
+under separate host authority. `take` optionally truncates the reranked result
+to 1–`k` hits and otherwise all hits remain. When the index returns at least
+two hits, the runtime issues a second, ordinary `kind:"decide"` effect with one
+`noul` relevance question per hit over `context:{query,hits}`. Hits sort by
+answer descending with original rank as the deterministic tie-break. The
+runtime never rewrites a hit: retained records are byte-for-byte source values,
+only reordered and optionally truncated. Zero- and one-hit results need no
+rerank effect.
+
 The resulting `kind:"recall"` request carries
 `recall:{query,k,embedder}`. A provider returns exactly one `hits` list with
 at most `k` records in ranked order. Each record is
@@ -267,8 +279,11 @@ records fail `EFFECT_UNPARSEABLE`.
 The full `{hits:[…]}` record commits on `out`. If the first ranked hit has a
 `ref`, the same token also commits on `ref`; otherwise that port is absent and
 its downstream edge dies. Thus `recall.ref → load.ref` resolves full CAS
-payloads, while `recall.out` can feed an agent or a `decide` cell for reranking.
-An empty hit list is a successful result whose `ref` consumers skip.
+payloads. With `rerank`, `out` and `ref` reflect the decision-ranked result;
+without it, they reflect index order. An empty hit list is a successful result
+whose `ref` consumers skip. A rerank call counts independently against
+`maxAgentCalls` and work, uses the cell's retry/effect bounds, and records every
+relevance score in the effect receipt so replay reconstructs the same order.
 
 The semantic index is host-owned, derived, and mutable—not manifest or receipt
 data. A live run records the returned hits as an ordinary effect, and replay
@@ -551,9 +566,9 @@ An agent/classifier/gate/decide/recall activation produces an effect request:
 ```
 
 `questions` is present on `decide` requests only — the declared question
-map the provider must answer. Agent/compaction `decide` requests (the
-`compact` triage) carry it too; `kind` stays `decide` while `cellId` names
-the compacting agent cell. `recall` is present on `kind:"recall"` requests
+map the provider must answer. Internal compaction and recall-rerank requests
+carry it too; `kind` stays `decide` while `cellId` names the owning agent or
+recall cell. `recall` is present on `kind:"recall"` requests
 only and binds the evaluated query, hit cap, and embedder spec.
 
 `sha256` over the canonical request is the binding between request and receipt.

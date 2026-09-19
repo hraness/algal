@@ -63,6 +63,15 @@ fn path(prefix: &str, name: &str) -> String {
     }
 }
 
+struct BoundedEffect<'a> {
+    request: &'a Value,
+    cell_path: &'a str,
+    timeout: u64,
+    attempts: u64,
+    context_bytes: usize,
+    max_output: usize,
+}
+
 struct Runtime<'a> {
     store: &'a mut Store,
     host: &'a mut Host,
@@ -638,6 +647,67 @@ impl Runtime<'_> {
         }
     }
 
+    async fn bounded_effect<F>(
+        &mut self,
+        effect: BoundedEffect<'_>,
+        bind: F,
+    ) -> Result<(Value, String)>
+    where
+        F: Fn(&Value) -> Result<Value>,
+    {
+        let request_digest = digest(effect.request)?;
+        let mut last_error = Error::new("EFFECT_FAILED", "effect did not settle");
+        for _ in 0..effect.attempts {
+            if self.calls + 1 > self.budgets.max_agent_calls {
+                return Err(Error::limit("maxAgentCalls exhausted"));
+            }
+            self.calls += 1;
+            self.work += 500 + effect.context_bytes;
+            self.event(
+                "effect",
+                Some(effect.cell_path),
+                Some(&request_digest),
+                None,
+            )?;
+            let receipt = self
+                .host
+                .effect(effect.request, effect.timeout, Some(&mut *self.store))
+                .await?;
+            self.effects.push(receipt.clone());
+            let retryable = receipt["retryable"] != false;
+            if let Some(error) = receipt.get("error") {
+                last_error = serde_json::from_value(error.clone())?;
+                if !retryable {
+                    break;
+                }
+                continue;
+            }
+            let raw = &receipt["output"];
+            let output_bytes = canonical(raw)?.len();
+            if output_bytes > effect.max_output {
+                last_error = Error::limit(format!(
+                    "effect output {output_bytes}B exceeds maxOutputBytes {}B",
+                    effect.max_output
+                ));
+                if !retryable {
+                    break;
+                }
+                continue;
+            }
+            self.work += output_bytes;
+            match bind(raw) {
+                Ok(bound) => return Ok((bound, request_digest)),
+                Err(error) => {
+                    last_error = error;
+                    if !retryable {
+                        break;
+                    }
+                }
+            }
+        }
+        Err(last_error)
+    }
+
     async fn recall(&mut self, cell: &Value, inputs: &Value, cell_path: &str) -> Result<Value> {
         let name = cell["id"].as_str().unwrap();
         let env = inputs.as_object().cloned().unwrap_or_default();
@@ -713,73 +783,122 @@ impl Runtime<'_> {
         if let Some(route) = cell.get("route") {
             request["route"] = route.clone();
         }
-        let request_digest = digest(&request)?;
         let attempts = cell["retry"]["attempts"].as_u64().unwrap_or(1);
         let timeout = cell["budget"]["maxEffectMs"].as_u64().unwrap_or(120_000);
-        let mut last_error = Error::new("EFFECT_FAILED", "effect did not settle");
-        for _ in 0..attempts {
-            if self.calls + 1 > self.budgets.max_agent_calls {
-                return Err(Error::limit("maxAgentCalls exhausted"));
+        let (mut recalled, mut effect_digest) = self
+            .bounded_effect(
+                BoundedEffect {
+                    request: &request,
+                    cell_path,
+                    timeout,
+                    attempts,
+                    context_bytes,
+                    max_output,
+                },
+                |raw| {
+                    bind_output(&output_contract, raw.clone())?;
+                    crate::semantic::bind_recall_output(raw, k)
+                },
+            )
+            .await?;
+        let hits = recalled["hits"].as_array().cloned().unwrap_or_default();
+        if let Some(rerank) = cell.get("rerank").filter(|_| hits.len() > 1) {
+            let mut questions = Map::new();
+            for index in 0..hits.len() {
+                questions.insert(
+                    format!("hit_{index}"),
+                    json!({
+                        "type":"noul",
+                        "instructions":format!(
+                            "Is context.hits[{index}] directly relevant to context.query?"
+                        ),
+                        "criteria":{
+                            "true":"The hit directly helps answer context.query.",
+                            "false":"The hit does not help answer context.query."
+                        }
+                    }),
+                );
             }
-            self.calls += 1;
-            self.work += 500 + context_bytes;
-            self.event("effect", Some(cell_path), Some(&request_digest), None)?;
-            let receipt = self
-                .host
-                .effect(&request, timeout, Some(&mut *self.store))
+            let questions = Value::Object(questions);
+            let rerank_context = json!({"query":query,"hits":hits});
+            let rerank_context_bytes = canonical(&rerank_context)?.len();
+            if rerank_context_bytes > max_context {
+                return Err(Error::limit(format!(
+                    "recall rerank context {rerank_context_bytes}B exceeds maxContextBytes {max_context}B"
+                )));
+            }
+            let rerank_output = crate::decisions::answer_schema(&questions);
+            let rerank_request = json!({
+                "contract":"algal.effect.v1",
+                "cellId":name,
+                "kind":"decide",
+                "prompt":format!(
+                    "Semantic rerank for recall cell \"{name}\". Score every hit's direct relevance to the query; do not summarize or rewrite the source text."
+                ),
+                "context":rerank_context,
+                "output":rerank_output,
+                "budget":{"maxContextBytes":max_context,"maxOutputBytes":max_output},
+                "route":rerank["route"],
+                "questions":questions
+            });
+            let (answers, rerank_digest) = self
+                .bounded_effect(
+                    BoundedEffect {
+                        request: &rerank_request,
+                        cell_path,
+                        timeout,
+                        attempts,
+                        context_bytes: rerank_context_bytes,
+                        max_output,
+                    },
+                    |raw| {
+                        let bound = bind_output(&rerank_output, raw.clone())?;
+                        let mut answers = Map::new();
+                        for (question_name, question) in object(&questions)? {
+                            let answer = bound["answers"].get(question_name).ok_or_else(|| {
+                                Error::new(
+                                    "EFFECT_UNPARSEABLE",
+                                    format!("decision response missing answer \"{question_name}\""),
+                                )
+                            })?;
+                            answers.insert(
+                                question_name.clone(),
+                                crate::decisions::check_answer(answer, question, question_name)?,
+                            );
+                        }
+                        Ok(Value::Object(answers))
+                    },
+                )
                 .await?;
-            self.effects.push(receipt.clone());
-            let retryable = receipt["retryable"] != false;
-            if let Some(error) = receipt.get("error") {
-                last_error = serde_json::from_value(error.clone())?;
-                if !retryable {
-                    break;
-                }
-                continue;
-            }
-            let raw = receipt["output"].clone();
-            let output_bytes = canonical(&raw)?.len();
-            if output_bytes > max_output {
-                last_error = Error::limit(format!(
-                    "effect output {output_bytes}B exceeds maxOutputBytes {max_output}B"
-                ));
-                if !retryable {
-                    break;
-                }
-                continue;
-            }
-            self.work += output_bytes;
-            if let Err(error) = bind_output(&output_contract, raw.clone()) {
-                last_error = error;
-                if !retryable {
-                    break;
-                }
-                continue;
-            }
-            match crate::semantic::bind_recall_output(&raw, k) {
-                Ok(recalled) => {
-                    let mut outputs = json!({"out":recalled.clone()});
-                    if let Some(reference) = recalled["hits"]
-                        .as_array()
-                        .and_then(|hits| hits.first())
-                        .and_then(|hit| hit["ref"].as_str())
-                    {
-                        outputs["ref"] = json!(reference);
-                    }
-                    return Ok(json!({
-                        "outputs":outputs,
-                        "effectDigest":request_digest
-                    }));
-                }
-                Err(error) => {
-                    last_error = error;
-                    if !retryable {
-                        break;
-                    }
-                }
-            }
+            let mut scored: Vec<(usize, f64, Value)> = hits
+                .into_iter()
+                .enumerate()
+                .map(|(index, hit)| {
+                    let score = answers[format!("hit_{index}")]["noul"]
+                        .as_f64()
+                        .unwrap_or_default();
+                    (index, score, hit)
+                })
+                .collect();
+            scored.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+            let take = rerank["take"].as_u64().unwrap_or(scored.len() as u64) as usize;
+            recalled = json!({
+                "hits":scored.into_iter().take(take).map(|(_,_,hit)| hit).collect::<Vec<_>>()
+            });
+            effect_digest = rerank_digest;
         }
-        Err(last_error)
+        let mut outputs = json!({"out":recalled.clone()});
+        if let Some(reference) = recalled["hits"]
+            .as_array()
+            .and_then(|hits| hits.first())
+            .and_then(|hit| hit["ref"].as_str())
+        {
+            outputs["ref"] = json!(reference);
+        }
+        Ok(json!({
+            "outputs":outputs,
+            "effectDigest":effect_digest
+        }))
     }
 
     async fn agent(
