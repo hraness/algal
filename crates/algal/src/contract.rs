@@ -8,6 +8,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const CONTRACT: &str = "algal.organism.v1";
 pub const MAX_VALUE_BYTES: usize = 262_144;
+pub const MAX_RECALL_K: usize = 32;
+pub const MAX_RECALL_QUERY_BYTES: usize = 4_096;
 pub type Ports = BTreeMap<String, Value>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -242,6 +244,9 @@ fn normalize_cell(value: &Value) -> Result<Value> {
             "budget",
             "retry",
         ],
+        "recall" => &[
+            "id", "kind", "inputs", "query", "k", "embedder", "route", "budget", "retry",
+        ],
         _ => return Err(Error::invalid(format!("unknown cell kind {kind}"))),
     };
     keys(value, allowed)?;
@@ -412,6 +417,42 @@ fn normalize_cell(value: &Value) -> Result<Value> {
                 integer(&retry["attempts"], 2, 8)?;
             }
         }
+        "recall" => {
+            v["inputs"] =
+                serde_json::to_value(ports(v.get("inputs").unwrap_or(&json!({})), false, false)?)?;
+            let query = v
+                .get("query")
+                .ok_or_else(|| Error::invalid("recall cell requires query"))?;
+            keys(query, &["contract", "program"])?;
+            if query["contract"] != "algal.expr.v1" || query.get("program").is_none() {
+                return Err(Error::invalid(
+                    "recall query must be an algal.expr.v1 program",
+                ));
+            }
+            let names: BTreeSet<String> = v["inputs"]
+                .as_object()
+                .map(|m| m.keys().cloned().collect())
+                .unwrap_or_default();
+            algal_expr::check_program(&query["program"], &names)
+                .map_err(|e| Error::invalid(format!("recall query program: {}", e.to_json())))?;
+            if let Some(k) = v.get("k") {
+                integer(k, 1, MAX_RECALL_K)?;
+            }
+            if let Some(spec) = v.get("embedder") {
+                let spec = text(spec, 64)?;
+                crate::embeddings::Embedder::resolve(Some(spec))?;
+            }
+            if let Some(route) = v.get("route") {
+                keys(route, &["provider", "model", "preset"])?;
+                for route in object(route)?.values() {
+                    text(route, 64)?;
+                }
+            }
+            if let Some(retry) = v.get("retry") {
+                keys(retry, &["attempts"])?;
+                integer(&retry["attempts"], 2, 8)?;
+            }
+        }
         _ => (),
     }
     if let Some(budget) = v.get("budget") {
@@ -419,7 +460,7 @@ fn normalize_cell(value: &Value) -> Result<Value> {
             budget,
             if kind == "tool" {
                 &["maxEffectMs"]
-            } else if kind == "decide" {
+            } else if kind == "decide" || kind == "recall" {
                 &["maxContextBytes", "maxOutputBytes", "maxEffectMs"]
             } else {
                 &[

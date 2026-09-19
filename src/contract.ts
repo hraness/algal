@@ -13,6 +13,7 @@ import {
   parseDecisionQuestions,
   type DecisionQuestions,
 } from "./decisions";
+import { checkEmbedderSpec } from "./embeddings";
 import type { Digest } from "./digest";
 import {
   asArray,
@@ -47,6 +48,10 @@ export const BOUNDS = {
   maxTurns: 16,
   /** Tool-log tail entries a compact policy may pin from keep/drop triage. */
   maxToolLogPinned: 8,
+  /** Recall cells return at most this many hits. */
+  maxRecallK: 32,
+  /** A recall query is bounded text — the expr program's output limit. */
+  maxRecallQueryBytes: 4096,
   maxViewCells: 16,
   maxRounds: 16,
   maxEachItems: 64,
@@ -234,6 +239,21 @@ export type Cell =
       prompt?: string;
       questions: DecisionQuestions;
       view: AgentView;
+      route?: Route;
+      budget?: CellBudget;
+      retry?: { attempts: number };
+    }
+  | {
+      /** Bounded semantic-recall probe: an `algal.expr.v1` program over the
+       * cell's inputs produces a text query; the host's derived semantic
+       * index answers with ranked hits as a recorded effect — replayable
+       * like any other, and composable downstream (`ref` hits feed `load`). */
+      id: string;
+      kind: "recall";
+      inputs: PortMap;
+      query: { contract: "algal.expr.v1"; program: JsonValue };
+      k?: number;
+      embedder?: string;
       route?: Route;
       budget?: CellBudget;
       retry?: { attempts: number };
@@ -1107,6 +1127,89 @@ function parseCell(u: unknown, what: string): Cell {
       if (retry) cell.retry = retry;
       return cell;
     }
+    case "recall": {
+      noUnknownKeys(
+        obj,
+        ["id", "kind", "inputs", "query", "k", "embedder", "route", "budget", "retry"],
+        what,
+      );
+      const inputs = obj.inputs === undefined
+        ? {}
+        : parsePortMap(obj.inputs, `${what}.inputs`);
+      const query = asObject(reqField(obj, "query", what), `${what}.query`);
+      noUnknownKeys(query, ["contract", "program"], `${what}.query`);
+      if (query.contract !== "algal.expr.v1") {
+        throw new AlgalError(
+          "PARSE_FAILED",
+          `${what}.query.contract must be "algal.expr.v1"`,
+        );
+      }
+      const program = asJsonValue(
+        reqField(query, "program", `${what}.query`),
+        `${what}.query.program`,
+      );
+      const check = checkProgram(program, Object.keys(inputs));
+      if (!check.ok) {
+        const { code, ...details } = check.err;
+        throw new AlgalError(
+          "PARSE_FAILED",
+          `${what}.query.program: ${code} ${JSON.stringify(details)}`,
+        );
+      }
+      const cell: Cell = {
+        id,
+        kind,
+        inputs,
+        query: { contract: "algal.expr.v1", program },
+      };
+      if (obj.k !== undefined) {
+        cell.k = asInt(obj.k, `${what}.k`, 1, BOUNDS.maxRecallK);
+      }
+      if (obj.embedder !== undefined) {
+        cell.embedder = checkEmbedderSpec(
+          asString(obj.embedder, `${what}.embedder`, BOUNDS.maxRefLen),
+          `${what}.embedder`,
+        );
+      }
+      if (obj.route !== undefined) {
+        cell.route = parseRoute(obj.route, `${what}.route`);
+      }
+      if (obj.budget !== undefined) {
+        const b = asObject(obj.budget, `${what}.budget`);
+        noUnknownKeys(
+          b,
+          ["maxContextBytes", "maxOutputBytes", "maxEffectMs"],
+          `${what}.budget`,
+        );
+        const budget: CellBudget = {};
+        const ctx = optField(b, "maxContextBytes");
+        const outB = optField(b, "maxOutputBytes");
+        const ems = optField(b, "maxEffectMs");
+        if (ctx !== undefined) {
+          budget.maxContextBytes = asInt(ctx, `${what}.budget.maxContextBytes`, 1, BOUNDS.maxContextBytes);
+        }
+        if (outB !== undefined) {
+          budget.maxOutputBytes = asInt(outB, `${what}.budget.maxOutputBytes`, 1, BOUNDS.maxOutputBytes);
+        }
+        if (ems !== undefined) {
+          budget.maxEffectMs = asInt(ems, `${what}.budget.maxEffectMs`, 1, BOUNDS.maxEffectMs);
+        }
+        cell.budget = budget;
+      }
+      if (obj.retry !== undefined) {
+        const r = asObject(obj.retry, `${what}.retry`);
+        noUnknownKeys(r, ["attempts"], `${what}.retry`);
+        cell.retry = {
+          attempts: asInt(
+            reqField(r, "attempts", `${what}.retry`),
+            `${what}.retry.attempts`,
+            2,
+            BOUNDS.maxRetryAttempts,
+          ),
+        };
+      }
+      return cell;
+    }
     default:
       throw new AlgalError(
         "PARSE_FAILED",
@@ -1459,6 +1562,29 @@ export function manifestToJson(m: OrganismManifest): JsonObject {
         };
         if (Object.keys(c.inputs).length > 0) o.inputs = portMapJson(c.inputs);
         if (c.prompt !== undefined) o.prompt = c.prompt;
+        if (c.route) o.route = routeJson(c.route);
+        if (c.retry) o.retry = { attempts: c.retry.attempts };
+        if (c.budget) {
+          const b: JsonObject = {};
+          if (c.budget.maxContextBytes !== undefined)
+            b.maxContextBytes = c.budget.maxContextBytes;
+          if (c.budget.maxOutputBytes !== undefined)
+            b.maxOutputBytes = c.budget.maxOutputBytes;
+          if (c.budget.maxEffectMs !== undefined)
+            b.maxEffectMs = c.budget.maxEffectMs;
+          o.budget = b;
+        }
+        return o;
+      }
+      case "recall": {
+        const o: JsonObject = {
+          id: c.id,
+          kind: c.kind,
+          query: { contract: c.query.contract, program: c.query.program as JsonValue },
+        };
+        o.inputs = portMapJson(c.inputs);
+        if (c.k !== undefined) o.k = c.k;
+        if (c.embedder !== undefined) o.embedder = c.embedder;
         if (c.route) o.route = routeJson(c.route);
         if (c.retry) o.retry = { attempts: c.retry.attempts };
         if (c.budget) {

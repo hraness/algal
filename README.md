@@ -32,7 +32,7 @@ promoted all four goals of a toy civilization without a single cloud call.
    cost, and effect calls instead of assuming decomposition always helps.
 
 Status: early. The TypeScript v1 runtime is the compatibility reference; the
-native Rust kernel executes all 39 bundled examples with parity, and ACP,
+native Rust kernel executes all 44 bundled examples with parity, and ACP,
 relational memory, and on-device inference are implemented. See
 [the design audit](docs/algal-design.md) for current qualification.
 
@@ -140,6 +140,12 @@ Cell kinds:
   generate agent output or approve a gate. Jev (TypeSafe `systemone`) is
   the first such provider, admitted with `--jev`; its key lives in
   `TYPESAFE_API_KEY` or the local vault via `algal auth jev`.
+- `recall` — an expression-derived semantic query over a host-owned index,
+  recorded as an ordinary effect. `out` carries bounded ranked hits; when the
+  first hit names a value-store object, `ref` carries its `sha256:` token
+  directly into `load`. Empty recall is successful and leaves ref consumers
+  skipped. The request binds query, `k`, and embedder; replay serves the
+  recorded hits without consulting a mutable index.
 - `compact` (an `agent` field, requires `tools`) — recorded tool-log
   compaction. When the canonical `toolLog` exceeds `maxLogBytes`, the
   runtime issues a `decide` effect triaging every unpinned entry (keep =
@@ -296,8 +302,10 @@ generated programs, each digest-pinned under `gen/r<n>/run`), and
 durable `bred` slot — a breeding journal that persists across runs), and
 `consent` (a generated manifest carries its own `gate` — deny skips the
 child's effectful cell entirely, so `run.data` reports the verdict and no
-effect was spent) — with
-scripted responses, then verifies each receipt offline. To run one yourself:
+effect was spent), `decide-cell` (typed provider questions), `compact`
+(recorded keep/drop triage over a tool log), and `recall` (an expression-derived
+query returns ranked hits whose top `ref` feeds `load`) — with scripted
+responses, then verifies each receipt offline in both runtimes. To run one yourself:
 
 ```sh
 bun run cli check examples/triage.algal.json
@@ -323,14 +331,30 @@ bun run cli unpack bundle.json --dir /tmp/elsewhere   # installs, digests verifi
 `index` builds a derived hybrid index (embeddings + lexical) over stored
 manifests, runs, values, and optional docs — disposable tooling, never
 contract data: it changes nothing about digests, receipts, or replay.
-`search` ranks chunks by cosine + token overlap and prints snippets.
+`search` ranks chunks by cosine + token overlap and prints snippets. A
+`recall` cell makes the same capability available inside an organism through
+a recorded effect. Its bounded expression produces the query, `out` exposes
+ranked text and provenance, and a top value hit also emits `ref` for direct
+`load` resolution. Index-backed recall is deliberately not effect-cached;
+replay comes from the run receipt, while a new live run can observe a rebuilt
+index.
 
 ```sh
-bun run cli index --dir .algal --docs docs          # rebuild the index
+bun run cli index --dir .algal --docs docs
 bun run cli search "gateway timeout retry" --dir .algal -k 5
-# embedder: deterministic local trigram by default; `--embedder gateway[:<model>]`
-# opts into Vercel AI Gateway embeddings when AI_GATEWAY_API_KEY is set
+bun run cli run organism-with-recall.json --dir .algal --recall local
+# native equivalents use `algal index`, `algal search`, and `algal run --recall`
+# `--embedder gateway[:<model>]` and `--recall gateway[:<model>]` opt into
+# Vercel AI Gateway embeddings when AI_GATEWAY_API_KEY is set
 ```
+
+When one organism combines recall with another effect provider, give the
+recall cell an explicit route such as `{"provider":"memory"}`. The Bun
+`--executors` map admits `"memory":"recall"`; a native `algal.host.v1`
+executor uses `"memory":{"kind":"recall","dir":".algal","embedder":"local"}`.
+The derived index implementations use different disposable storage (SQLite
+in TypeScript, JSONL natively) but produce the same local vectors and hybrid
+ranking.
 
 ## Provider credentials
 
@@ -440,8 +464,9 @@ algal bench verify bench-report.json --dir .algal
 
 A `algal.bench.config.v1` file names case `args`/`expect` pairs and systems
 whose `executors` map names to `gateway:<provider/model>` (Vercel AI Gateway),
-`scripted:<file>`, or `cmd:<command>` specs — the native CLI also accepts
-`apple` for the on-device bridge. Named entries answer `route.preset` /
+`scripted:<file>`, or `cmd:<command>` specs. The Bun CLI also accepts
+`jev[:<model>]` and `recall[:<embedder>]`; the native CLI accepts `apple` for
+the on-device bridge and admits Jev/recall through `algal.host.v1`. Named entries answer `route.preset` /
 `route.provider`; the fallback is the first listed entry (in the native CLI,
 the first name alphabetically). The report records per-case results, work,
 token usage, per-model effect attribution, and the non-dominated pareto set on
@@ -516,8 +541,8 @@ name → command, so a cell's `route.provider`/`route.preset` picks its model.
   effect index: an identical request digest under the same executor cache
   identity serves the earlier recorded response (marked `cached` on the
   new receipt). Scripted executors bind their whole response table into
-  that identity; `command` and delegated-coding executors are
-  side-effecting and never memoize; and only contract-valid, in-budget,
+  that identity; `command`, delegated-coding, and derived-index recall
+  executors never memoize; and only contract-valid, in-budget,
   non-tool-call outputs are stored — errors may be transient. `algal runs`
   lists the receipts
   stored under `--dir`, and `algal manifests` / `manifest <digest>`

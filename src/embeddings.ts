@@ -267,23 +267,31 @@ export function gatewayCredential(): string | undefined {
   return process.env.AI_GATEWAY_API_KEY ?? process.env.VERCEL_OIDC_TOKEN;
 }
 
-/** Resolve the embedder for a CLI invocation: the gateway model when one
- * is named, the deterministic local embedder otherwise. */
-export function resolveEmbedder(spec?: string): Embedder {
-  if (spec === undefined || spec === "local") return localEmbedder();
-  if (spec === "gateway") {
-    return gatewayEmbedder({ credential: credentialResolver });
-  }
-  if (spec.startsWith("gateway:")) {
-    return gatewayEmbedder({
-      credential: credentialResolver,
-      model: spec.slice("gateway:".length),
-    });
+/** Validate an embedder spec and return it normalized — `local`, `gateway`,
+ * or `gateway:<model>`. Used at contract boundaries where the spec is data. */
+export function checkEmbedderSpec(spec: string, at: string): string {
+  if (spec === "local" || spec === "gateway") return spec;
+  if (spec.startsWith("gateway:") && spec.length > "gateway:".length) {
+    return spec;
   }
   throw new AlgalError(
     "PARSE_FAILED",
-    `unknown embedder "${spec}" (want local, gateway, or gateway:<model>)`,
+    `${at}: unknown embedder "${spec}" (want local, gateway, or gateway:<model>)`,
   );
+}
+
+/** Resolve the embedder for a CLI invocation: the gateway model when one
+ * is named, the deterministic local embedder otherwise. */
+export function resolveEmbedder(spec?: string): Embedder {
+  const normalized = checkEmbedderSpec(spec ?? "local", "embedder");
+  if (normalized === "local") return localEmbedder();
+  if (normalized === "gateway") {
+    return gatewayEmbedder({ credential: credentialResolver });
+  }
+  return gatewayEmbedder({
+    credential: credentialResolver,
+    model: normalized.slice("gateway:".length),
+  });
 }
 
 async function credentialResolver(): Promise<string> {

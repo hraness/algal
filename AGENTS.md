@@ -6,8 +6,8 @@
   tools (`tools.ts`), the provider-neutral typed-decision layer
   (`decisions.ts`) with the TypeSafe Jev adapter (`jev.ts`), cross-platform
   credential custody (`credentials.ts`), embeddings (`embeddings.ts`) and
-  the derived semantic index (`semantic.ts`), foundry evaluation and
-  search (`foundry.ts`, `search.ts`), benchmark comparison (`bench.ts`,
+  the derived semantic index plus recall executor (`semantic.ts`), foundry
+  evaluation and search (`foundry.ts`, `search.ts`), benchmark comparison (`bench.ts`,
   `bench-verify.ts`), bundles (`bundle.ts`), transports (`transport.ts`),
   the `algal.expr.v1` WASM loader (`expr.ts` + committed `algal_expr.wasm`),
   canonical values and digests, and colocated tests.
@@ -58,8 +58,8 @@
 - Native checks: `cargo test --workspace --locked`,
   `cargo clippy --workspace --all-targets --locked -- -D warnings`, and
   `cargo fmt --all -- --check`. Use `cargo build --locked` followed by
-  `bun scripts/native-parity.ts` to compare all 39 existing examples and verify
-  TypeScript receipts with the Rust engine.
+  `bun scripts/native-parity.ts` to compare all 44 existing examples and verify
+  receipts in both directions between TypeScript and Rust.
 - The Foundation Models bridge comes from the pinned `apple-foundation`
   crate (`hraness/apple-foundation`); `sh scripts/build-apple.sh` emits its
   embedded source and builds it with Xcode 26 on Apple Silicon, and the

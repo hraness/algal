@@ -6,8 +6,8 @@
 // 0.35·token overlap, chunk-id tie-break) over bit-identical local
 // vectors, so top-K over the same corpus is cross-runtime stable.
 //
-// The index is host tooling, not contract data: it never feeds manifests,
-// request digests, or receipts.
+// The index is host tooling, not contract data: storage and vectors stay
+// outside manifests and digests; recall exposes only bounded recorded hits.
 
 use crate::{
     Error, Result,
@@ -26,6 +26,7 @@ pub const MAX_QUERY_BYTES: usize = 8_192;
 pub const MAX_DOCS: usize = 4_096;
 pub const MAX_K: usize = 64;
 pub const MAX_FILES: usize = 65_536;
+pub const RECALL_HIT_TEXT_BYTES: usize = 2_048;
 
 const VEC_WEIGHT: f64 = 0.65;
 const LEX_WEIGHT: f64 = 0.35;
@@ -300,6 +301,7 @@ pub async fn index_store(
 }
 
 pub struct Hit {
+    pub id: String,
     pub source: String,
     pub seq: u64,
     pub score: f64,
@@ -336,24 +338,116 @@ pub async fn search(
         .into_iter()
         .next()
         .ok_or_else(|| Error::new("EFFECT_UNPARSEABLE", "embedder returned no vector"))?;
-    let mut hits: Vec<(String, Hit)> = rows
+    let mut hits: Vec<Hit> = rows
         .into_iter()
         .map(|row| {
             let score =
                 VEC_WEIGHT * cosine(&qv, &row.vec) + LEX_WEIGHT * token_overlap(query, &row.text);
-            (
-                row.id.clone(),
-                Hit {
-                    source: row.source,
-                    seq: row.seq,
-                    score,
-                    text: row.text,
-                },
-            )
+            Hit {
+                id: row.id,
+                source: row.source,
+                seq: row.seq,
+                score,
+                text: row.text,
+            }
         })
         .collect();
-    hits.sort_by(|a, b| b.1.score.total_cmp(&a.1.score).then_with(|| a.0.cmp(&b.0)));
-    Ok(hits.into_iter().take(k).map(|(_, h)| h).collect())
+    hits.sort_by(|a, b| b.score.total_cmp(&a.score).then_with(|| a.id.cmp(&b.id)));
+    hits.truncate(k);
+    Ok(hits)
+}
+
+fn digest_token(value: &str) -> bool {
+    value.len() == 71
+        && value.starts_with("sha256:")
+        && value[7..]
+            .bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+}
+
+impl Hit {
+    pub fn to_recall_json(&self) -> Value {
+        let bytes = self.text.as_bytes();
+        let mut end = bytes.len().min(RECALL_HIT_TEXT_BYTES);
+        while !self.text.is_char_boundary(end) {
+            end -= 1;
+        }
+        let text = self.text[..end].to_owned();
+        let mut out = json!({
+            "id":self.id,"source":self.source,"seq":self.seq,
+            "score":self.score,"text":text
+        });
+        if let Some(id) = self.source.strip_prefix("value:") {
+            let reference = if id.starts_with("sha256:") {
+                id.to_owned()
+            } else {
+                format!("sha256:{id}")
+            };
+            if digest_token(&reference) {
+                out["ref"] = json!(reference);
+            }
+        }
+        out
+    }
+}
+
+pub fn bind_recall_output(raw: &Value, k: usize) -> Result<Value> {
+    let invalid = |message: String| Error::new("EFFECT_UNPARSEABLE", message);
+    let object = raw
+        .as_object()
+        .ok_or_else(|| invalid("recall output must be an object".into()))?;
+    if object.keys().any(|key| key != "hits") || !raw["hits"].is_array() {
+        return Err(invalid(
+            "recall output must contain only a hits array".into(),
+        ));
+    }
+    let hits = raw["hits"].as_array().unwrap();
+    if hits.len() > k {
+        return Err(invalid(format!(
+            "recall output returned {} hits over k {k}",
+            hits.len()
+        )));
+    }
+    for (index, raw_hit) in hits.iter().enumerate() {
+        let hit = raw_hit
+            .as_object()
+            .ok_or_else(|| invalid(format!("recall output hits[{index}] must be an object")))?;
+        let allowed = ["id", "source", "seq", "score", "text", "ref"];
+        if hit.keys().any(|key| !allowed.contains(&key.as_str())) {
+            return Err(invalid(format!(
+                "recall output hits[{index}] has an unknown key"
+            )));
+        }
+        let source_ref = raw_hit["source"]
+            .as_str()
+            .and_then(|source| source.strip_prefix("value:"))
+            .map(|id| {
+                if id.starts_with("sha256:") {
+                    id.to_owned()
+                } else {
+                    format!("sha256:{id}")
+                }
+            });
+        let valid = raw_hit["id"].as_str().is_some_and(digest_token)
+            && raw_hit["source"]
+                .as_str()
+                .is_some_and(|source| source.encode_utf16().count() <= 512)
+            && raw_hit["seq"]
+                .as_u64()
+                .is_some_and(|seq| seq < MAX_CHUNKS as u64)
+            && raw_hit["score"].as_f64().is_some_and(f64::is_finite)
+            && raw_hit["text"]
+                .as_str()
+                .is_some_and(|text| text.len() <= RECALL_HIT_TEXT_BYTES)
+            && raw_hit.get("ref").is_none_or(|reference| {
+                reference.as_str().is_some_and(digest_token)
+                    && reference.as_str() == source_ref.as_deref()
+            });
+        if !valid {
+            return Err(invalid(format!("recall output hits[{index}] is invalid")));
+        }
+    }
+    Ok(raw.clone())
 }
 
 /// First non-empty content flattened to one line — same rule as TS.

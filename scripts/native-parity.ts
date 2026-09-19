@@ -3,11 +3,12 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { canonicalize, type JsonValue } from "../src/values";
 import { manifestToJson, parseOrganismManifest } from "../src/contract";
-import { MemoryStore } from "../src/store";
+import { FileStore, MemoryStore } from "../src/store";
 import { fileTransport, type Transport } from "../src/transport";
 import { scriptedExecutor } from "../src/effects";
 import { builtinRegistry } from "../src/registry";
 import { runOrganism } from "../src/run";
+import { verifyReceipt } from "../src/verify";
 
 const root = resolve(import.meta.dir, "..");
 const examples = join(root, "examples");
@@ -63,13 +64,21 @@ try {
         for (const field of differences) console.error(JSON.stringify({ field, native: result[field], reference: expected[field] }));
         continue;
       }
+      const reverse = await verifyReceipt(
+        result as JsonValue,
+        manifestToJson(manifest),
+        new FileStore(join(temporary, name)),
+        builtinRegistry(),
+        transports,
+      );
+      if (!reverse.ok) throw new Error(`reference could not verify native receipt: ${JSON.stringify(reverse)}`);
       const receiptFile = join(temporary, `${name}.receipt.json`);
       await writeFile(receiptFile, canonicalize(expected));
       const verification = await native(["verify", receiptFile, join(examples, file), "--modules", examples, "--dir", join(temporary, name)]);
       if (verification.ok !== true) throw new Error(`native could not verify reference receipt: ${JSON.stringify(verification)}`);
       const identity = await native(["digest", join(examples, file)]);
       if (identity.digest !== reference.manifestDigest) throw new Error("manifest identity mismatch");
-      console.log(`${name}: identical semantics + reference receipt verified`);
+      console.log(`${name}: identical semantics + receipts cross-verified`);
     } catch (error) {
       failed++;
       console.error(`${name}: ${error instanceof Error ? error.message : String(error)}`);

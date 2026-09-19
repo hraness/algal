@@ -151,9 +151,12 @@ a bounded pure program is useful. Consumers share the versioned
 `{"contract","program"}` envelope and differ only in the environment the
 program sees and the result type the consumer requires — the envelope is
 parsed once and each consumer static-checks the program against its own
-visible names. Five consumers exist today:
+visible names. Six consumers exist today:
 
 - **`expr` cells** (below) — compute a port value from input ports.
+- **`recall` queries** — derive a non-empty, ≤ 4096-byte text query from the
+  recall cell's declared inputs before the host semantic-index effect runs.
+  See `organism.md` recall cells.
 - **edge `guard.expr`** — an `{"expr": {…}}` guard is evaluated over
   `{"value": delivered}` and must return a boolean; the edge fires iff
   true. Static names are `{"value"}` only. See `organism.md` edges.

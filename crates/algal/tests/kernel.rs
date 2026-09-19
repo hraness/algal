@@ -1,15 +1,17 @@
 use algal::{
-    canonical::{canonical, read_json},
+    canonical::{canonical, digest, read_json},
     contract::Manifest,
-    effects::Host,
+    effects::{Backend, Host},
+    embeddings::Embedder,
     graph::{Transports, compile},
-    runtime,
+    runtime, semantic,
     store::{Store, pack, unpack},
 };
 use serde_json::{Value, json};
 use std::{
     fs::{self, File},
     path::PathBuf,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 fn root() -> PathBuf {
@@ -140,6 +142,146 @@ async fn compact_triages_the_tool_log_through_a_recorded_decide_effect() {
         .await
         .unwrap();
     assert_eq!(verified["ok"], true, "{verified}");
+}
+
+#[tokio::test]
+async fn recall_records_ranked_hits_and_feeds_load_by_ref() {
+    let manifest = Manifest::parse(&json!({
+        "contract":"algal.organism.v1",
+        "key":"organism:recall",
+        "name":"Recall",
+        "cells":[
+            {"id":"src","kind":"input","outputs":{"q":"text"}},
+            {"id":"memory","kind":"recall","inputs":{"q":"text"},
+             "query":{"contract":"algal.expr.v1","program":["sconcat",["get","q"]," habitat"]},
+             "k":2,"embedder":"local"},
+            {"id":"full","kind":"load"}
+        ],
+        "edges":[
+            {"from":{"cell":"src","port":"q"},"to":{"cell":"memory","port":"q"}},
+            {"from":{"cell":"memory","port":"ref"},"to":{"cell":"full","port":"ref"}}
+        ]
+    }))
+    .unwrap();
+    let mut store = Store::default();
+    let payload = json!({"habitat":"coral reef","depth":12});
+    let reference = store.put("values", &payload).unwrap();
+    let hit = json!({
+        "id":digest(&json!("chunk")).unwrap(),
+        "source":format!("value:{}",&reference[7..]),
+        "seq":0,"score":0.8,"text":"A coral habitat record","ref":reference
+    });
+    let receipt = runtime::run(
+        manifest.clone(),
+        json!({"src":{"q":"coral"}}),
+        &mut store,
+        &mut Host::scripted(json!({"memory":{"hits":[hit]}})),
+        &transports(),
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        receipt["outcome"],
+        "complete",
+        "{}",
+        canonical(&receipt).unwrap()
+    );
+    assert_eq!(receipt["cells"]["memory"]["outputs"]["ref"], reference);
+    assert_eq!(receipt["cells"]["full"]["outputs"]["data"], payload);
+    assert_eq!(receipt["effects"].as_array().unwrap().len(), 1);
+    let verified = runtime::verify(&receipt, manifest.clone(), &store, &Host::default())
+        .await
+        .unwrap();
+    assert_eq!(verified["ok"], true, "{verified}");
+    let empty = runtime::run(
+        manifest,
+        json!({"src":{"q":"nothing"}}),
+        &mut store,
+        &mut Host::scripted(json!({"memory":{"hits":[]}})),
+        &transports(),
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(empty["outcome"], "complete");
+    assert_eq!(empty["cells"]["full"]["status"], "skipped");
+}
+
+#[test]
+fn recall_contract_rejects_invalid_configuration() {
+    let cell = |query: Value, k: usize, embedder: &str| {
+        json!({
+            "contract":"algal.organism.v1","key":"organism:recall-bad","name":"Bad",
+            "cells":[{"id":"memory","kind":"recall","inputs":{"q":"text"},
+                "query":{"contract":"algal.expr.v1","program":query},
+                "k":k,"embedder":embedder}],"edges":[]
+        })
+    };
+    assert!(Manifest::parse(&cell(json!(["get", "q"]), 33, "local")).is_err());
+    assert!(Manifest::parse(&cell(json!(["get", "q"]), 1, "unknown")).is_err());
+    assert!(Manifest::parse(&cell(json!(["get", "missing"]), 1, "local")).is_err());
+    let inputless = Manifest::parse(&json!({
+        "contract":"algal.organism.v1","key":"organism:recall-fixed","name":"Fixed",
+        "cells":[{"id":"memory","kind":"recall",
+            "query":{"contract":"algal.expr.v1","program":"fixed query"}}],"edges":[]
+    }))
+    .unwrap();
+    assert_eq!(inputless.cells[0]["inputs"], json!({}));
+    assert!(
+        semantic::bind_recall_output(
+            &json!({"hits":[{
+                "id":digest(&json!("mismatch")).unwrap(),
+                "source":format!("value:{}","a".repeat(64)),"seq":0,"score":1,
+                "text":"x","ref":format!("sha256:{}","b".repeat(64))
+            }]}),
+            2
+        )
+        .is_err()
+    );
+}
+
+#[tokio::test]
+async fn recall_backend_queries_the_derived_index() {
+    let suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!("algal-recall-{}-{suffix}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    let mut store = Store::open(&dir, true).unwrap();
+    let payload = json!({"species":"coral","habitat":"warm reef"});
+    let reference = store.put("values", &payload).unwrap();
+    let embedder = Embedder::resolve(Some("local")).unwrap();
+    semantic::index_store(&dir, None, &embedder, 120_000)
+        .await
+        .unwrap();
+    let mut host = Host::default();
+    host.entries.push((
+        "recall".into(),
+        Backend::Recall {
+            dir: dir.clone(),
+            embedder: "local".into(),
+        },
+    ));
+    let request = json!({
+        "contract":"algal.effect.v1","cellId":"memory","kind":"recall","prompt":"",
+        "context":{"inputs":{"q":"coral habitat"}},
+        "output":{"kind":"json","schema":{"type":"object","required":["hits"],
+            "properties":{"hits":{"type":"array"}}}},
+        "budget":{"maxContextBytes":4096,"maxOutputBytes":8192},
+        "route":{"provider":"recall"},
+        "recall":{"query":"coral habitat","k":2,"embedder":"local"}
+    });
+    let receipt = host
+        .effect(&request, 120_000, Some(&mut store))
+        .await
+        .unwrap();
+    let hits = receipt["output"]["hits"].as_array().unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0]["ref"], reference);
+    assert!(hits[0]["text"].as_str().unwrap().contains("coral"));
+    fs::remove_dir_all(dir).unwrap();
 }
 
 #[test]

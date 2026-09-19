@@ -79,6 +79,58 @@ describe("manifest parsing", () => {
   });
 });
 
+describe("recall parsing", () => {
+  const recall = (overrides: Record<string, unknown> = {}) => ({
+    contract: "algal.organism.v1",
+    key: "organism:recall",
+    name: "Recall",
+    cells: [
+      { id: "src", kind: "input", outputs: { q: "text" } },
+      {
+        id: "memory",
+        kind: "recall",
+        inputs: { q: "text" },
+        query: { contract: "algal.expr.v1", program: ["get", "q"] },
+        k: 3,
+        embedder: "local",
+        route: { provider: "recall" },
+        budget: { maxContextBytes: 4096, maxOutputBytes: 8192, maxEffectMs: 1000 },
+        retry: { attempts: 2 },
+        ...overrides,
+      },
+    ],
+    edges: [
+      { from: { cell: "src", port: "q" }, to: { cell: "memory", port: "q" } },
+    ],
+  });
+
+  test("round-trips bounded query and provider configuration", async () => {
+    const parsed = parseOrganismManifest(recall());
+    expect(parseOrganismManifest(manifestToJson(parsed))).toEqual(parsed);
+    const compiled = await compileOrganism(parsed, builtinRegistry(), new MemoryStore());
+    expect(compiled.ports.get("memory")?.outputs.out?.type).toBe("json");
+    expect(compiled.ports.get("memory")?.outputs.ref?.type).toBe("ref");
+    const inputless = parseOrganismManifest(recall({
+      inputs: undefined,
+      query: { contract: "algal.expr.v1", program: "fixed query" },
+    }));
+    const json = manifestToJson(inputless);
+    expect((json.cells as Record<string, unknown>[])[1]?.inputs).toEqual({});
+  });
+
+  test("rejects invalid queries, embedders, bounds, and unknown keys", () => {
+    expect(() => parseOrganismManifest(recall({ k: 0 }))).toThrowError();
+    expect(() => parseOrganismManifest(recall({ k: BOUNDS.maxRecallK + 1 }))).toThrowError();
+    expect(() => parseOrganismManifest(recall({ embedder: "unknown" }))).toThrowError();
+    expect(() => parseOrganismManifest(recall({ query: { contract: "other", program: "x" } })))
+      .toThrowError();
+    expect(() => parseOrganismManifest(recall({
+      query: { contract: "algal.expr.v1", program: ["get", "missing"] },
+    }))).toThrowError();
+    expect(() => parseOrganismManifest(recall({ extra: true }))).toThrowError(/unknown key/);
+  });
+});
+
 describe("view.cells and repeat parsing", () => {
   const agent = (view: unknown) => ({
     contract: "algal.organism.v1",

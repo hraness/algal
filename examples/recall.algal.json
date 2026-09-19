@@ -1,0 +1,26 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:recall",
+  "name": "Recorded semantic recall",
+  "cells": [
+    { "id": "src", "kind": "input", "outputs": { "query": "text", "doc": "json" } },
+    { "id": "pin", "kind": "store" },
+    {
+      "id": "memory",
+      "kind": "recall",
+      "inputs": { "query": "text" },
+      "query": {
+        "contract": "algal.expr.v1",
+        "program": ["sconcat", ["get", "query"], " habitat"]
+      },
+      "k": 2,
+      "embedder": "local"
+    },
+    { "id": "full", "kind": "load" }
+  ],
+  "edges": [
+    { "from": { "cell": "src", "port": "doc" }, "to": { "cell": "pin", "port": "data" } },
+    { "from": { "cell": "src", "port": "query" }, "to": { "cell": "memory", "port": "query" } },
+    { "from": { "cell": "memory", "port": "ref" }, "to": { "cell": "full", "port": "ref" } }
+  ]
+}

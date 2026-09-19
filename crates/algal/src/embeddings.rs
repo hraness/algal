@@ -255,9 +255,11 @@ impl Embedder {
             Some("gateway") => Ok(Self::Gateway {
                 model: GATEWAY_EMBED_MODEL.into(),
             }),
-            Some(spec) if spec.starts_with("gateway:") => Ok(Self::Gateway {
-                model: spec["gateway:".len()..].to_owned(),
-            }),
+            Some(spec) if spec.starts_with("gateway:") && spec.len() > "gateway:".len() => {
+                Ok(Self::Gateway {
+                    model: spec["gateway:".len()..].to_owned(),
+                })
+            }
             Some(spec) => Err(Error::invalid(format!(
                 "unknown embedder \"{spec}\" (want local, gateway, or gateway:<model>)"
             ))),

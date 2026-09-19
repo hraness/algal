@@ -46,6 +46,8 @@ struct Execution {
     /// TypeSafe Jev decision executor; bare `--jev` uses `jev-latest`.
     #[arg(long, num_args = 0..=1, default_missing_value = "jev-latest")]
     jev: Option<String>,
+    #[arg(long, num_args = 0..=1, default_missing_value = "local")]
+    recall: Option<String>,
     #[arg(long, requires = "model")]
     base_url: Option<String>,
     #[arg(long, requires = "base_url")]
@@ -404,11 +406,12 @@ fn bridge_path(explicit: Option<&PathBuf>) -> Result<PathBuf> {
     Ok(path)
 }
 
-fn host(options: &Execution) -> Result<Host> {
+fn host(options: &Execution, dir: &Path) -> Result<Host> {
     let count = usize::from(options.responses.is_some())
         + usize::from(options.host.is_some())
         + usize::from(options.gateway_model.is_some())
         + usize::from(options.jev.is_some())
+        + usize::from(options.recall.is_some())
         + usize::from(options.base_url.is_some())
         + usize::from(options.apple)
         + usize::from(options.agent.is_some());
@@ -458,6 +461,11 @@ fn host(options: &Execution) -> Result<Host> {
                 model: model.clone(),
                 credential_env: None,
             })
+        } else if let Some(embedder) = &options.recall {
+            Some(Backend::Recall {
+                dir: dir.to_path_buf(),
+                embedder: embedder.clone(),
+            })
         } else if let Some(base_url) = &options.base_url {
             let response_format: ResponseFormat =
                 serde_json::from_value(json!(options.response_format))?;
@@ -497,7 +505,7 @@ fn prepare(options: &Execution, dir: &Path) -> Result<(Store, Host, Transports)>
     if let Some(path) = &options.modules {
         store.load_modules(path)?;
     }
-    let mut host = host(options)?;
+    let mut host = host(options, dir)?;
     host.cache = options.cache_effects;
     let mut transports = Transports::new();
     if let Some(file) = &options.transports {
@@ -797,13 +805,19 @@ async fn execute(cli: Cli) -> Result<bool> {
             if live
                 && options.host.is_none()
                 && options.gateway_model.is_none()
+                && options.jev.is_none()
+                && options.recall.is_none()
                 && options.base_url.is_none()
                 && !options.apple
                 && options.agent.is_none()
             {
                 options.gateway_model = Some("alibaba/qwen3.7-flash".into());
             }
-            let provider = if live { Some(host(&options)?) } else { None };
+            let provider = if live {
+                Some(host(&options, &cli.dir)?)
+            } else {
+                None
+            };
             let result =
                 algal::civilization::evolve(&mut store, provider, goals.as_deref()).await?;
             let verified = algal::civilization::verify_population(
@@ -1534,7 +1548,7 @@ async fn execute(cli: Cli) -> Result<bool> {
             Ok(ok)
         }
         Commands::Acp { options } => {
-            let host = host(&options)?;
+            let host = host(&options, &cli.dir)?;
             if !host.has_executor() {
                 return Err(Error::invalid("ACP requires a host-admitted executor"));
             }

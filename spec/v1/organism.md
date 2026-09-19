@@ -47,6 +47,7 @@ rather than the host language.
 | `classifier` | agent restricted to `choice` output | same as agent |
 | `gate` | approval point — a `choice` effect routed to a human/policy, not a model | same as agent; no `tools`/`shadow` |
 | `decide` | declared typed questions answered by a decision provider | declared `inputs`; one output port `out` — the answers record |
+| `recall` | bounded semantic query answered by a host-derived index | declared `inputs`; `out` is the ranked-hit record; `ref` is the top hit's loadable value ref when present |
 | `organism` | embedded sub-manifest by `sha256:` digest | inherited from the sub-manifest `interface` |
 | `repeat` | bounded re-run of a digest-embedded sub-manifest | inherited from the sub-manifest `interface` |
 | `each` | map a delivered list through a digest-embedded sub-manifest | `over` accepts one `json` edge carrying the list; other interface inputs pass through; interface outputs become lists |
@@ -84,7 +85,7 @@ Every port declares one of:
 
 A `ref` is a pointer, not a value: the payload never rides the edge, so it
 never enters receipts, agent contexts, or request digests — only the token
-does. `store`, `load`, `slot`, and `spawn` cells are the only cells whose
+does. `recall`, `store`, `load`, `slot`, and `spawn` cells are the cells whose
 ports are fixed by the contract. A `ref` token admitted
 through `input` args or a `const` port must already resolve in the store —
 the caller mints tokens by writing the payload first; no cell can invent a
@@ -226,6 +227,55 @@ the declared labels.
 
 `budget.maxTurns` is fixed at 1 for `decide`; other budget fields, `view`,
 `route`, and `retry` behave as on agent cells.
+
+### recall cells
+
+```json
+{
+  "id": "memory",
+  "kind": "recall",
+  "inputs": { "topic": "text" },
+  "query": {
+    "contract": "algal.expr.v1",
+    "program": ["sconcat", ["get", "topic"], " failure recovery"]
+  },
+  "k": 8,
+  "embedder": "local",
+  "route": { "provider": "recall" },
+  "budget": { "maxContextBytes": 65536, "maxOutputBytes": 65536 },
+  "retry": { "attempts": 2 }
+}
+```
+
+A `recall` cell evaluates `query.program` against its delivered inputs under
+ordinary expression fuel. Static checking admits only declared input names.
+The result must be non-empty text of at most 4096 UTF-8 bytes. `k` defaults
+to 8 and is bounded to 1–32. `embedder` defaults to `local` and may be
+`local`, `gateway`, or `gateway:<model>`; it names the vector space the host
+recall executor must query. `route`, `retry`, `maxContextBytes`,
+`maxOutputBytes`, and `maxEffectMs` have their ordinary effect meanings;
+`maxTurns` is not accepted.
+
+The resulting `kind:"recall"` request carries
+`recall:{query,k,embedder}`. A provider returns exactly one `hits` list with
+at most `k` records in ranked order. Each record is
+`{id,source,seq,score,text,ref?}`: `id` is the chunk digest, `score` is finite,
+`text` is capped at 2048 UTF-8 bytes, and `ref`—when present—must be the exact
+`sha256:` token named by its `value:` source. Unknown fields and malformed
+records fail `EFFECT_UNPARSEABLE`.
+
+The full `{hits:[…]}` record commits on `out`. If the first ranked hit has a
+`ref`, the same token also commits on `ref`; otherwise that port is absent and
+its downstream edge dies. Thus `recall.ref → load.ref` resolves full CAS
+payloads, while `recall.out` can feed an agent or a `decide` cell for reranking.
+An empty hit list is a successful result whose `ref` consumers skip.
+
+The semantic index is host-owned, derived, and mutable—not manifest or receipt
+data. A live run records the returned hits as an ordinary effect, and replay
+serves that exact response without reopening the index. Index-backed recall
+executors are not cross-run memoized: an identical query may legitimately see
+a newer derived index. The receipt proves which request received which hits;
+it does not attest the index's current contents.
 
 ### expr cells
 
@@ -492,18 +542,19 @@ cells keep their own records.
 
 ## Effects
 
-An agent/classifier/gate/decide activation produces an effect request:
+An agent/classifier/gate/decide/recall activation produces an effect request:
 
 ```json
 { "contract": "algal.effect.v1", "cellId": "route", "kind": "classifier",
   "prompt": "…", "context": {"inputs": {…}}, "output": {…},
-  "budget": {…}, "route": {…}, "questions": {…} }
+  "budget": {…}, "route": {…}, "questions": {…}, "recall": {…} }
 ```
 
 `questions` is present on `decide` requests only — the declared question
 map the provider must answer. Agent/compaction `decide` requests (the
 `compact` triage) carry it too; `kind` stays `decide` while `cellId` names
-the compacting agent cell.
+the compacting agent cell. `recall` is present on `kind:"recall"` requests
+only and binds the evaluated query, hit cap, and embedder spec.
 
 `sha256` over the canonical request is the binding between request and receipt.
 The executor sees exactly these bytes; nothing else crosses the boundary.
@@ -541,7 +592,9 @@ run" stays a fact of the record. Errors are never memoized — a recorded
 failure may be transient and must not determinize into permanence. A memoized
 effect still occupies its budgeted slot (agent calls, context and output
 bytes), still binds to the declared output contract, and still replays
-bit-for-bit: replay reproduces the `cached` flag from the record.
+bit-for-bit: replay reproduces the `cached` flag from the record. Derived-index
+recall executors opt out of this memo table because the same query may observe
+newly indexed sources; their per-run effect receipt remains replayable.
 
 ## Bundles — algal.bundle.v1
 
