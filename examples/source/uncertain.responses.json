@@ -1,0 +1,12 @@
+{
+  "b1-intent-decide": {
+    "answers": {
+      "answer": {
+        "choice": "help",
+        "confidence": 0.15,
+        "probabilities": {"help": 0.40, "sales": 0.35, "other": 0.25}
+      }
+    }
+  },
+  "result": "Are you asking about changing your plan or getting help with it?"
+}

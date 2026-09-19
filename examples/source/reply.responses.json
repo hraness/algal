@@ -1,0 +1,12 @@
+{
+  "b1-intent-decide": {
+    "answers": {
+      "answer": {
+        "choice": "help",
+        "confidence": 0.92,
+        "probabilities": {"help": 0.94, "sales": 0.02, "other": 0.04}
+      }
+    }
+  },
+  "result": "I can help with that. What happens when you try to sign in?"
+}

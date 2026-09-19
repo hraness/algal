@@ -1,0 +1,12 @@
+program quote(order: json) -> json {
+  budget { max_agent_calls: 0 }
+
+  let subtotal = order.quantity * order.unit_price
+  let shipping = if subtotal >= 50 { 0 } else { 5 }
+
+  return {
+    subtotal: subtotal,
+    shipping: shipping,
+    total: subtotal + shipping
+  }
+}

@@ -32,7 +32,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "bun test",
-    "check": "bun run typecheck && bun run lint && bun run test && bun run build:site",
+    "check": "bun run typecheck && bun run lint && bun run test && bun run docs:check && bun run build:site",
+    "docs:diagrams": "bun scripts/docs-diagrams.ts",
+    "docs:check": "bun scripts/docs-diagrams.ts --check",
     "build:site": "bun site/build.ts",
     "generate:og": "bun site/generate-og.tsx",
     "cli": "bun cli.ts"
