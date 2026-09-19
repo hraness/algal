@@ -143,6 +143,11 @@ export type CompactPolicy = {
   route?: Route;
 };
 
+export type RecallRerankPolicy = {
+  route: Route;
+  take?: number;
+};
+
 export type AgentView = {
   inputs: "*" | PortName[];
   /** Ancestor cell ids whose records (status + committed outputs) enter the
@@ -255,6 +260,7 @@ export type Cell =
       k?: number;
       embedder?: string;
       route?: Route;
+      rerank?: RecallRerankPolicy;
       budget?: CellBudget;
       retry?: { attempts: number };
     }
@@ -1130,7 +1136,7 @@ function parseCell(u: unknown, what: string): Cell {
     case "recall": {
       noUnknownKeys(
         obj,
-        ["id", "kind", "inputs", "query", "k", "embedder", "route", "budget", "retry"],
+        ["id", "kind", "inputs", "query", "k", "embedder", "route", "rerank", "budget", "retry"],
         what,
       );
       const inputs = obj.inputs === undefined
@@ -1173,6 +1179,30 @@ function parseCell(u: unknown, what: string): Cell {
       }
       if (obj.route !== undefined) {
         cell.route = parseRoute(obj.route, `${what}.route`);
+      }
+      if (obj.rerank !== undefined) {
+        const rerank = asObject(obj.rerank, `${what}.rerank`);
+        noUnknownKeys(rerank, ["route", "take"], `${what}.rerank`);
+        const route = parseRoute(
+          reqField(rerank, "route", `${what}.rerank`),
+          `${what}.rerank.route`,
+        );
+        if (route.provider === undefined && route.preset === undefined) {
+          throw new AlgalError(
+            "PARSE_FAILED",
+            `${what}.rerank.route requires provider or preset`,
+          );
+        }
+        const policy: RecallRerankPolicy = { route };
+        if (rerank.take !== undefined) {
+          policy.take = asInt(
+            rerank.take,
+            `${what}.rerank.take`,
+            1,
+            cell.k ?? 8,
+          );
+        }
+        cell.rerank = policy;
       }
       if (obj.budget !== undefined) {
         const b = asObject(obj.budget, `${what}.budget`);
@@ -1586,6 +1616,12 @@ export function manifestToJson(m: OrganismManifest): JsonObject {
         if (c.k !== undefined) o.k = c.k;
         if (c.embedder !== undefined) o.embedder = c.embedder;
         if (c.route) o.route = routeJson(c.route);
+        if (c.rerank) {
+          o.rerank = {
+            route: routeJson(c.rerank.route),
+            ...(c.rerank.take !== undefined ? { take: c.rerank.take } : {}),
+          };
+        }
         if (c.retry) o.retry = { attempts: c.retry.attempts };
         if (c.budget) {
           const b: JsonObject = {};

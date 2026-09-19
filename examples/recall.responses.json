@@ -1,14 +1,30 @@
 {
-  "memory": {
-    "hits": [
-      {
-        "id": "sha256:3a3282dc79eb0c900cd911ac464808a8a13248b3566eea66e28865ed1618e78e",
-        "source": "value:3f12ca7129eb1d5445b187cc062eca4f1d7013989bf3bc57eac96ab509b07938",
-        "seq": 0,
-        "score": 0.91,
-        "text": "wisp is a sprig from the tidepool",
-        "ref": "sha256:3f12ca7129eb1d5445b187cc062eca4f1d7013989bf3bc57eac96ab509b07938"
+  "memory": [
+    {
+      "hits": [
+        {
+          "id": "sha256:c70a035668e8543f159f77bdf3e3a5852a99262fc4148608e828962c32a17922",
+          "source": "value:2d2370319918292f593b4ff3d5924f02ec0b2ef1d4bd9ac5e5dd1e482e6363fb",
+          "seq": 0,
+          "score": 0.95,
+          "text": "wisp is a sprig observed on a dry cliff",
+          "ref": "sha256:2d2370319918292f593b4ff3d5924f02ec0b2ef1d4bd9ac5e5dd1e482e6363fb"
+        },
+        {
+          "id": "sha256:1e7fed2060f4cd4409f17dc6a31c61114dbe1b2adcbd06ad095dc30fef8d7c49",
+          "source": "value:3f12ca7129eb1d5445b187cc062eca4f1d7013989bf3bc57eac96ab509b07938",
+          "seq": 0,
+          "score": 0.7,
+          "text": "wisp is a sprig from the tidepool habitat",
+          "ref": "sha256:3f12ca7129eb1d5445b187cc062eca4f1d7013989bf3bc57eac96ab509b07938"
+        }
+      ]
+    },
+    {
+      "answers": {
+        "hit_0": { "noul": 0.1 },
+        "hit_1": { "noul": 0.95 }
       }
-    ]
-  }
+    }
+  ]
 }

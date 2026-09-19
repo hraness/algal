@@ -144,8 +144,11 @@ Cell kinds:
   recorded as an ordinary effect. `out` carries bounded ranked hits; when the
   first hit names a value-store object, `ref` carries its `sha256:` token
   directly into `load`. Empty recall is successful and leaves ref consumers
-  skipped. The request binds query, `k`, and embedder; replay serves the
-  recorded hits without consulting a mutable index.
+  skipped. Optional `rerank:{route,take?}` sends one recorded `noul` relevance
+  question per hit to a decision provider such as Jev, then reorders the exact
+  source records without summarizing them. The request binds query, `k`, and
+  embedder; replay serves the recorded hits and decisions without consulting a
+  mutable index.
 - `compact` (an `agent` field, requires `tools`) — recorded tool-log
   compaction. When the canonical `toolLog` exceeds `maxLogBytes`, the
   runtime issues a `decide` effect triaging every unpinned entry (keep =
@@ -304,7 +307,8 @@ durable `bred` slot — a breeding journal that persists across runs), and
 child's effectful cell entirely, so `run.data` reports the verdict and no
 effect was spent), `decide-cell` (typed provider questions), `compact`
 (recorded keep/drop triage over a tool log), and `recall` (an expression-derived
-query returns ranked hits whose top `ref` feeds `load`) — with scripted
+query returns two hits, recorded noul decisions rerank them, and the winning
+`ref` feeds `load`) — with scripted
 responses, then verifies each receipt offline in both runtimes. To run one yourself:
 
 ```sh
@@ -335,9 +339,11 @@ contract data: it changes nothing about digests, receipts, or replay.
 `recall` cell makes the same capability available inside an organism through
 a recorded effect. Its bounded expression produces the query, `out` exposes
 ranked text and provenance, and a top value hit also emits `ref` for direct
-`load` resolution. Index-backed recall is deliberately not effect-cached;
-replay comes from the run receipt, while a new live run can observe a rebuilt
-index.
+`load` resolution. Add `rerank:{route:{provider:"jev"},take:…}` to score each
+dynamic hit through the typed decision seam before choosing that top ref; the
+original hit records remain intact and the `decide` answers ride the receipt.
+Index-backed recall is deliberately not effect-cached; replay comes from the
+run receipt, while a new live run can observe a rebuilt index.
 
 ```sh
 bun run cli index --dir .algal --docs docs
@@ -349,12 +355,14 @@ bun run cli run organism-with-recall.json --dir .algal --recall local
 ```
 
 When one organism combines recall with another effect provider, give the
-recall cell an explicit route such as `{"provider":"memory"}`. The Bun
-`--executors` map admits `"memory":"recall"`; a native `algal.host.v1`
-executor uses `"memory":{"kind":"recall","dir":".algal","embedder":"local"}`.
-The derived index implementations use different disposable storage (SQLite
-in TypeScript, JSONL natively) but produce the same local vectors and hybrid
-ranking.
+recall cell an explicit route such as `{"provider":"memory"}` and its rerank
+policy a decision route such as `{"provider":"judge"}`. The Bun `--executors`
+map can admit `"memory":"recall"` and `"judge":"jev"`; native
+`algal.host.v1` entries use
+`"memory":{"kind":"recall","dir":".algal","embedder":"local"}` and a
+separate Jev backend. The derived index implementations use different
+disposable storage (SQLite in TypeScript, JSONL natively) but produce the same
+local vectors and hybrid ranking.
 
 ## Provider credentials
 
