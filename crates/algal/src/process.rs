@@ -7,6 +7,8 @@ use crate::{
     contract::{Manifest, check_value, id, object},
     effects::Host,
     graph::{Transports, compile},
+    journal::Journal,
+    lease::OwnerLease,
     mailbox::{MAILBOX_RECEIVE, MailboxService},
     runtime,
     store::Store,
@@ -560,7 +562,7 @@ impl ProcessService {
         }
         fs::create_dir(&directory)?;
         File::open(&processes)?.sync_all()?;
-        let _lease = Lease::acquire(directory.join(".lock"))?;
+        let _lease = OwnerLease::acquire(&directory, name)?;
         let manifest_digest = self.store.admit(&manifest)?;
         File::open(self.root.join("manifests"))?.sync_all()?;
         let process = ProcessRecord {
@@ -588,7 +590,20 @@ impl ProcessService {
         host: &mut Host,
         transports: &Transports,
     ) -> Result<ProcessState> {
-        let _lease = Lease::acquire(self.directory(name)?.join(".lock"))?;
+        self.tick_journal(name, cause, host, transports, false, 2)
+            .await
+    }
+
+    pub async fn tick_journal(
+        &mut self,
+        name: &str,
+        cause: Option<&str>,
+        host: &mut Host,
+        transports: &Transports,
+        journal: bool,
+        max_recoveries: usize,
+    ) -> Result<ProcessState> {
+        let _lease = OwnerLease::acquire(&self.directory(name)?, name)?;
         let current = self.inspect(name)?;
         if !["ready", "suspended"].contains(&current.process.status.as_str()) {
             return Err(Error::invalid(
@@ -611,18 +626,10 @@ impl ProcessService {
             return Err(Error::invalid("process wake is not ready"));
         }
         let manifest = self.manifest(&current.process)?;
-        let checkpoint = if current.process.receipt.is_some() {
-            let receipt = self.load_receipt(&current.process)?;
-            if runtime::verify(&receipt, manifest.clone(), &self.store, host).await?["ok"] != true {
-                return Err(Error::new(
-                    "VERIFY_FAILED",
-                    "process checkpoint does not replay",
-                ));
-            }
-            Some(receipt)
-        } else {
-            None
-        };
+        if journal {
+            self.recovery_safe(&manifest, host, transports)?;
+        }
+        let checkpoint = self.checkpoint(&current.process, &manifest, host).await?;
         let mut intent = current.process.clone();
         intent.generation += 1;
         intent.status = "uncertain".into();
@@ -630,8 +637,123 @@ impl ProcessService {
         intent.cause = Some(cause);
         transition(&current.process, &intent)?;
         let intent = self.persist(&intent)?;
+        // The journal must exist before an uncertain head can become observable.
+        let journal = if journal {
+            Some(Journal::create(
+                &self.root,
+                name,
+                &intent.digest,
+                &intent.process.manifest_digest,
+                max_recoveries,
+            )?)
+        } else {
+            None
+        };
         self.publish(&intent)?;
-        let scope = host.process_scope.replace(name.to_owned());
+        self.dispatch(intent, manifest, checkpoint, host, transports, journal)
+            .await
+    }
+
+    fn recovery_safe(
+        &mut self,
+        manifest: &Manifest,
+        host: &Host,
+        transports: &Transports,
+    ) -> Result<()> {
+        let compiled = compile(
+            manifest.clone(),
+            &mut self.store,
+            &host.tool_signatures(),
+            transports,
+            0,
+        )?;
+        let mut stack = vec![&compiled];
+        while let Some(compiled) = stack.pop() {
+            for cell in &compiled.manifest.cells {
+                if ["slot", "spawn"].contains(&cell["kind"].as_str().unwrap_or("")) {
+                    return Err(Error::new(
+                        "RECOVERY_BLOCKED",
+                        "journal recovery does not admit slot or spawn cells",
+                    ));
+                }
+                if cell["kind"] == "fn" {
+                    crate::registry::signature(cell["fn"].as_str().unwrap_or(""))?;
+                }
+            }
+            stack.extend(compiled.children.values());
+        }
+        Ok(())
+    }
+
+    async fn checkpoint(
+        &self,
+        process: &ProcessRecord,
+        manifest: &Manifest,
+        host: &Host,
+    ) -> Result<Option<Value>> {
+        if process.receipt.is_none() {
+            return Ok(None);
+        }
+        let receipt = self.load_receipt(process)?;
+        if runtime::verify(&receipt, manifest.clone(), &self.store, host).await?["ok"] != true {
+            return Err(Error::new(
+                "VERIFY_FAILED",
+                "process checkpoint does not replay",
+            ));
+        }
+        Ok(Some(receipt))
+    }
+
+    pub async fn recover(
+        &mut self,
+        name: &str,
+        expected_intent: &str,
+        host: &mut Host,
+        transports: &Transports,
+    ) -> Result<ProcessState> {
+        check_digest(expected_intent)?;
+        let _lease = OwnerLease::acquire(&self.directory(name)?, name)?;
+        let intent = self.inspect(name)?;
+        if intent.process.status != "uncertain" || intent.digest != expected_intent {
+            return Err(Error::new(
+                "RECOVERY_BLOCKED",
+                "recovery requires the exact current uncertain intent",
+            ));
+        }
+        let manifest = self.manifest(&intent.process)?;
+        self.recovery_safe(&manifest, host, transports)?;
+        let checkpoint = self.checkpoint(&intent.process, &manifest, host).await?;
+        let mut journal = Journal::open(
+            &self.root,
+            name,
+            &intent.digest,
+            &intent.process.manifest_digest,
+        )?;
+        journal.begin_recovery()?;
+        self.dispatch(
+            intent,
+            manifest,
+            checkpoint,
+            host,
+            transports,
+            Some(journal),
+        )
+        .await
+    }
+
+    async fn dispatch(
+        &mut self,
+        intent: ProcessState,
+        manifest: Manifest,
+        checkpoint: Option<Value>,
+        host: &mut Host,
+        transports: &Transports,
+        journal: Option<Journal>,
+    ) -> Result<ProcessState> {
+        let scope = host.process_scope.replace(intent.process.name.clone());
+        let previous_journal = host.journal.take();
+        let journal = journal.map(|journal| std::sync::Arc::new(std::sync::Mutex::new(journal)));
+        host.journal = journal.clone();
         let result = match checkpoint {
             Some(receipt) => {
                 runtime::resume(&receipt, manifest, &mut self.store, host, transports).await
@@ -649,6 +771,13 @@ impl ProcessService {
             }
         };
         host.process_scope = scope;
+        host.journal = previous_journal;
+        if let Some(journal) = journal {
+            journal
+                .lock()
+                .map_err(|_| Error::new("RECOVERY_BLOCKED", "journal mutex poisoned"))?
+                .finish()?;
+        }
         let receipt = result?;
         bounded_nodes(&receipt)?;
         if canonical(&receipt)?.len() > MAX_RECEIPT_BYTES {
@@ -674,6 +803,18 @@ impl ProcessService {
         max_ticks: usize,
         host: &mut Host,
         transports: &Transports,
+    ) -> Result<Value> {
+        self.schedule_journal(max_ticks, host, transports, false, 2)
+            .await
+    }
+
+    pub async fn schedule_journal(
+        &mut self,
+        max_ticks: usize,
+        host: &mut Host,
+        transports: &Transports,
+        journal: bool,
+        max_recoveries: usize,
     ) -> Result<Value> {
         if !(1..=1024).contains(&max_ticks) {
             return Err(Error::limit("process scheduler maxTicks"));
@@ -705,12 +846,35 @@ impl ProcessService {
             };
             if let Some(cause) = cause {
                 advanced.push(
-                    self.tick(&candidate.process.name, Some(&cause), host, transports)
-                        .await?,
+                    self.tick_journal(
+                        &candidate.process.name,
+                        Some(&cause),
+                        host,
+                        transports,
+                        journal,
+                        max_recoveries,
+                    )
+                    .await?,
                 );
             }
         }
         Ok(json!({"ticks":advanced.len(),"processes":advanced}))
+    }
+
+    pub fn journal(&self, name: &str) -> Result<Value> {
+        let chain = self.chain(name)?;
+        let intent = chain
+            .iter()
+            .rev()
+            .find(|state| state.process.status == "uncertain")
+            .ok_or_else(|| Error::new("IO_FAILED", "process has no dispatch intent"))?;
+        Journal::open(
+            &self.root,
+            name,
+            &intent.digest,
+            &intent.process.manifest_digest,
+        )?
+        .describe()
     }
 
     pub async fn verify(&self, name: &str, host: &Host) -> Result<Value> {

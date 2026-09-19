@@ -286,6 +286,11 @@ paid cost savings.
 `process create`, `tick`, `schedule`, `inspect`, `list`, and `verify` expose the
 bounded local supervisor. An uncertain dispatch remains blocked for
 reconciliation instead of automatically repeating a possibly completed effect.
+The [PR and CI shepherd](docs/pr-shepherd.md) adds durable event/timer waits and
+read-only GitHub evidence packets. Opt-in [ordered journals](spec/v1/process-journal.md)
+allow exact-intent crash recovery across Bun and Rust, replaying completed effects
+and refusing uncertain writes.
+
 See [the process VM guide](docs/vm.md) for the lifecycle, JSON report, commands,
 and host trust boundary.
 

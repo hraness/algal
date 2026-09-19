@@ -1,0 +1,126 @@
+{
+  "contract": "algal.github-qualification-corpus.v1",
+  "note": "Public read-only qualification seeds observed 2026-09-19. Labels describe the seed observation, not an immutable expected outcome. Recapture live state; report head drift. This corpus contains no positive readiness oracle. Use the current ALGAL implementation PR for positive live qualification.",
+  "cases": [
+    {
+      "repository": "hraness/algal",
+      "number": 15,
+      "headSha": "cad8ebd79e00ac17a738c8c51538614cd48e0f5b",
+      "observedCase": "terminal-merged"
+    },
+    {
+      "repository": "hraness/algal",
+      "number": 14,
+      "headSha": "7a66032e4bd20eda2eaa07d79f6d1866238e1125",
+      "observedCase": "terminal-merged"
+    },
+    {
+      "repository": "hraness/algal",
+      "number": 13,
+      "headSha": "4dd6a8ef00d943f34e8557f6e040cd7c1f9a0fb1",
+      "observedCase": "terminal-merged"
+    },
+    {
+      "repository": "hraness/algal",
+      "number": 12,
+      "headSha": "3b782a78ab901c6c524252f3145b0159787104bd",
+      "observedCase": "terminal-merged"
+    },
+    {
+      "repository": "hraness/algal",
+      "number": 11,
+      "headSha": "013b96c0103183947cf55d142748e0e2a1e455de",
+      "observedCase": "terminal-merged"
+    },
+    {
+      "repository": "hraness/algal",
+      "number": 10,
+      "headSha": "f4ddf3649d4bdc6cdba4b7df6ab9902555cba604",
+      "observedCase": "terminal-merged"
+    },
+    {
+      "repository": "hraness/algal",
+      "number": 9,
+      "headSha": "592cc1df2d2085de67061865567884e80f2500d6",
+      "observedCase": "terminal-merged"
+    },
+    {
+      "repository": "hraness/algal",
+      "number": 8,
+      "headSha": "faeef8fc7cf01858b26730362547e286cbc4da6e",
+      "observedCase": "terminal-merged"
+    },
+    {
+      "repository": "cli/cli",
+      "number": 14475,
+      "headSha": "9b6f66363f51a8265f1bb07f8fc3746017859cf1",
+      "observedCase": "green-checks-review-required"
+    },
+    {
+      "repository": "cli/cli",
+      "number": 14474,
+      "headSha": "543ced087c7ef3a7069ebfb09f065df38240b137",
+      "observedCase": "duplicate-check-names-review-required"
+    },
+    {
+      "repository": "cli/cli",
+      "number": 14450,
+      "headSha": "2761962e6aefc7436f2cf947958bead70e60cb87",
+      "observedCase": "green-checks-conflict"
+    },
+    {
+      "repository": "cli/cli",
+      "number": 13665,
+      "headSha": "1f937060b1954355c563203902e0fdaa3d07356b",
+      "observedCase": "approved-but-blocked"
+    },
+    {
+      "repository": "cli/cli",
+      "number": 13250,
+      "headSha": "d725e0a934477fcb74c97df494db4ad6225d5410",
+      "observedCase": "approved-but-conflict"
+    },
+    {
+      "repository": "oven-sh/bun",
+      "number": 43445,
+      "headSha": "9bf5224319854934c9392c2b6aacdf7918bd1813",
+      "observedCase": "check-failure-with-external-success-and-neutral"
+    },
+    {
+      "repository": "oven-sh/bun",
+      "number": 43444,
+      "headSha": "7184fca8a88a8b173a8bb8095d01ce89042524b6",
+      "observedCase": "external-status-failure-and-pending"
+    },
+    {
+      "repository": "oven-sh/bun",
+      "number": 43443,
+      "headSha": "e8c02b799223cb3dcdfd57bffdf9803496e65a2d",
+      "observedCase": "external-status-failure"
+    },
+    {
+      "repository": "oven-sh/bun",
+      "number": 43441,
+      "headSha": "1799b18724aa4870e087feb2cd6d010b23784828",
+      "observedCase": "unstable-external-status-failure"
+    },
+    {
+      "repository": "oven-sh/bun",
+      "number": 43440,
+      "headSha": "4174f9d6350c2e879dd4457dead54d2ce10b15f6",
+      "observedCase": "in-progress-checks-and-external-pending"
+    },
+    {
+      "repository": "oven-sh/bun",
+      "number": 43439,
+      "headSha": "a6b218a4fc53fb1cd7a88a1af24690139476c6c1",
+      "observedCase": "green-external-statuses-review-required"
+    },
+    {
+      "repository": "oven-sh/bun",
+      "number": 43436,
+      "headSha": "8162eb8e2e0a2b89699ca3aad3fd94f3288ef620",
+      "observedCase": "draft"
+    }
+  ]
+}

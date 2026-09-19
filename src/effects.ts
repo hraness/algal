@@ -120,6 +120,9 @@ export type Executor = {
    * requests the checkpoint never reached. */
   serves?(request: EffectRequest): boolean;
   cacheIdentity?: string;
+  /** Stable host admission identity, independent of cache-hit receipt metadata.
+   * Hosts must version this digest whenever adapter configuration/semantics change. */
+  journalConfigurationFor?(request: EffectRequest): Digest | Promise<Digest>;
   cacheable?: boolean;
   retryable?: boolean;
   /** `signal` aborts when the cell's `budget.maxEffectMs` fires — an
@@ -257,6 +260,11 @@ export function cachedExecutor(inner: Executor, store: Store): Executor {
   return {
     ...inner,
     id: inner.id,
+    async journalConfigurationFor(request) {
+      if (inner.journalConfigurationFor) return inner.journalConfigurationFor(request);
+      const metadata = await inner.receiptFor?.(request);
+      return asDigest(metadata?.configurationDigest ?? inner.cacheIdentity, "journal executor configuration");
+    },
     async receiptFor(request) {
       const hit = await lookup(request);
       if (hit?.output !== undefined) {

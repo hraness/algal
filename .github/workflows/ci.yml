@@ -46,3 +46,4 @@ jobs:
       - run: cargo build --locked
       - run: bun scripts/native-parity.ts
       - run: bun scripts/vm-demo.ts --native ./target/debug/algal
+      - run: bun scripts/recovery-demo.ts --native ./target/debug/algal

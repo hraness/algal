@@ -86,7 +86,7 @@ quota or a retention policy.
 | State | Required invariants and permitted next action |
 | --- | --- |
 | `ready` | Generation zero; no `previous`, `receipt`, or `cause`; empty wake list. May dispatch. |
-| `uncertain` | Persisted dispatch intent. Generation increments by one from `ready` or `suspended`; carries the prior receipt and wake list. Cannot automatically or explicitly redispatch. |
+| `uncertain` | Persisted dispatch intent. Generation increments by one from `ready` or `suspended`; carries the prior receipt and wake list. Cannot redispatch through tick/schedule. An admitted journal allows explicit exact-intent recovery. |
 | `suspended` | Completed generation receipt has outcome `suspended`. May dispatch while budget remains. Wake list may be empty. |
 | `complete`, `failed`, `stuck` | Terminal receipt with the matching outcome; empty wake list. Cannot redispatch. |
 
@@ -139,12 +139,14 @@ responsible for implementing the key and reconciling uncertainty.
 
 ## Publication, locking, and failure
 
-`processes/.lock` serializes process creation. `processes/<name>/.lock`
-exclusively owns a dispatch. Locks are created exclusively; an existing lock
-fails closed. Normal exit removes the owned lock. A hard interruption can
-leave the lock and an `uncertain` intent, which require host reconciliation.
-The supervisor does not steal locks, infer external completion from elapsed
-time, or automatically reissue an uncertain effect.
+`processes/.lock` serializes process creation and remains a fail-closed legacy
+interlock. Per-process dispatch now holds an OS-released SQLite transaction on
+the retained `.owner.sqlite` file plus a versioned `.lock` interlock. A new
+owner archives a matching abandoned v2 marker only after acquiring the SQLite
+transaction. Unknown legacy markers remain blocked. The supervisor never infers
+external completion from elapsed time or automatically reissues an uncertain
+effect. See the [journal and custody ABI](process-journal.md) for exact records,
+bounds, publication ordering, and explicit recovery semantics.
 
 The supervisor validates digest-addressed records before use. Its durable
 publication path writes complete objects before publishing references and

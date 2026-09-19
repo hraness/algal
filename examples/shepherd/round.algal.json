@@ -1,0 +1,100 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:github-shepherd-round",
+  "name": "Wait for an event and collect exact-revision CI evidence",
+  "budgets": {
+    "maxAgentCalls": 16,
+    "maxContextBytes": 65536,
+    "maxDepth": 4,
+    "maxOutputBytes": 65536,
+    "maxSteps": 256,
+    "maxWork": 1000000
+  },
+  "cells": [
+    {
+      "id": "input",
+      "kind": "input",
+      "outputs": {
+        "inbox": {
+          "type": "cap",
+          "capability": "mailbox-receive"
+        },
+        "previous": {
+          "type": "json"
+        }
+      }
+    },
+    {
+      "id": "wait",
+      "kind": "tool",
+      "tool": "mailbox.receive.v1"
+    },
+    {
+      "id": "observe",
+      "kind": "tool",
+      "tool": "github.shepherd.observe.v1"
+    }
+  ],
+  "edges": [
+    {
+      "from": {
+        "cell": "input",
+        "port": "inbox"
+      },
+      "to": {
+        "cell": "wait",
+        "port": "mailbox"
+      }
+    },
+    {
+      "from": {
+        "cell": "wait",
+        "port": "message"
+      },
+      "to": {
+        "cell": "observe",
+        "port": "wake"
+      }
+    },
+    {
+      "from": {
+        "cell": "input",
+        "port": "previous"
+      },
+      "to": {
+        "cell": "observe",
+        "port": "previous"
+      }
+    }
+  ],
+  "interface": {
+    "inputs": {
+      "inbox": {
+        "cell": "input",
+        "port": "inbox"
+      },
+      "previous": {
+        "cell": "input",
+        "port": "previous"
+      }
+    },
+    "outputs": {
+      "inbox": {
+        "cell": "input",
+        "port": "inbox"
+      },
+      "previous": {
+        "cell": "observe",
+        "port": "previous"
+      },
+      "result": {
+        "cell": "observe",
+        "port": "result"
+      },
+      "done": {
+        "cell": "observe",
+        "port": "done"
+      }
+    }
+  }
+}

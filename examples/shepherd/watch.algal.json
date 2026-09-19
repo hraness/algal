@@ -1,0 +1,82 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:github-shepherd",
+  "name": "Bounded durable PR and CI shepherd",
+  "budgets": {
+    "maxAgentCalls": 1,
+    "maxContextBytes": 65536,
+    "maxDepth": 4,
+    "maxOutputBytes": 65536,
+    "maxSteps": 256,
+    "maxWork": 10000000
+  },
+  "cells": [
+    {
+      "id": "input",
+      "kind": "input",
+      "outputs": {
+        "inbox": {
+          "type": "cap",
+          "capability": "mailbox-receive"
+        },
+        "previous": {
+          "type": "json"
+        }
+      }
+    },
+    {
+      "id": "watch",
+      "kind": "repeat",
+      "manifest": "sha256:148b4cb10071c37e930ebab659f41c2122f9a36a86afe89a813b71e8e726982d",
+      "maxRounds": 16,
+      "carry": {
+        "inbox": "inbox",
+        "previous": "previous"
+      },
+      "until": {
+        "output": "done",
+        "equals": "done"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": {
+        "cell": "input",
+        "port": "inbox"
+      },
+      "to": {
+        "cell": "watch",
+        "port": "inbox"
+      }
+    },
+    {
+      "from": {
+        "cell": "input",
+        "port": "previous"
+      },
+      "to": {
+        "cell": "watch",
+        "port": "previous"
+      }
+    }
+  ],
+  "interface": {
+    "inputs": {
+      "inbox": {
+        "cell": "input",
+        "port": "inbox"
+      },
+      "previous": {
+        "cell": "input",
+        "port": "previous"
+      }
+    },
+    "outputs": {
+      "result": {
+        "cell": "watch",
+        "port": "result"
+      }
+    }
+  }
+}

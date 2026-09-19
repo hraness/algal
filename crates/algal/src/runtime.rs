@@ -437,6 +437,29 @@ impl Runtime<'_> {
             None
         };
         let idempotency_key = self.host.tool_idempotency_key(&request_digest)?;
+        let replayed = if replayed.is_some() || self.host.journal.is_none() {
+            replayed
+        } else {
+            let configuration_digest = tool.configuration_digest.clone().ok_or_else(|| {
+                self.host.journal_poison();
+                Error::new(
+                    "RECOVERY_BLOCKED",
+                    "tool has no stable journal configuration",
+                )
+            })?;
+            self.host.journal_before(crate::journal::Binding {
+                request_digest: request_digest.clone(),
+                executor: format!("tool:{name}"),
+                configuration_digest,
+                idempotency_key: idempotency_key.clone(),
+                recovery: if tool.effect == "read" {
+                    "read"
+                } else {
+                    "never"
+                }
+                .into(),
+            })?
+        };
         let receipt = match replayed {
             Some(receipt) => receipt,
             None => {
@@ -446,7 +469,7 @@ impl Runtime<'_> {
                     ToolBackend::MailboxSend => self.host.mailbox.as_ref().ok_or_else(|| Error::new("CAPABILITY_DENIED", "mailbox host is not admitted")).and_then(|mailbox| mailbox.send(inputs["mailbox"].as_str().unwrap_or(""), inputs["message"].clone(), &idempotency_key)),
                     ToolBackend::MailboxReceive => self.host.mailbox.as_ref().ok_or_else(|| Error::new("CAPABILITY_DENIED", "mailbox host is not admitted")).and_then(|mailbox| mailbox.receive(inputs["mailbox"].as_str().unwrap_or(""))),
                 };
-                match result {
+                let receipt = match result {
                     Ok(output) => {
                         json!({"requestDigest":request_digest,"executor":format!("tool:{name}"),"output":output})
                     }
@@ -464,7 +487,9 @@ impl Runtime<'_> {
                         }
                         receipt
                     }
-                }
+                };
+                self.host.journal_after(&receipt)?;
+                receipt
             }
         };
         self.effects.push(receipt.clone());

@@ -3,7 +3,7 @@
 // Data on stdout (JSON), diagnostics on stderr. Exit 0 ok, 1 run/verify
 // failure, 2 usage or parse error.
 
-import { readFile } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BOUNDS, manifestToJson, parseOrganismManifest } from "./src/contract";
@@ -46,6 +46,8 @@ import { parseRunReceipt, runOrganism, type RunReceipt } from "./src/run";
 import { packOrganism, parseBundle, unpackBundle } from "./src/bundle";
 import { FileStore } from "./src/store";
 import { ProcessSupervisor, PROCESS_BOUNDS } from "./src/process";
+import { PullRequestShepherd } from "./src/shepherd";
+import { githubCliTransport } from "./src/github-cli";
 import {
   fileTransport,
   httpTransport,
@@ -165,6 +167,11 @@ usage:
   algal process create <name> <manifest.json> [--args <file>] [--max-generations 16]
       [--modules <dir>] [--tools <file>] [--dir <path>]
                                               admit a durable, bounded process
+  algal process recover <name> --expected-intent SHA [same tool/executor options]
+  algal process journal <name>
+  algal shepherd start <name> --repo owner/repo --pr NUMBER [--max-polls 16]
+  algal shepherd tick|watch|inspect|verify <name> [--gh /path/to/gh]
+  algal shepherd wake <name> --delivery stable-event-id
   algal process tick <name> [executor options] execute one generation under a lease
   algal process schedule [--max-ticks 16] [executor options]
                                               run ready processes and recorded mailbox wakeups
@@ -398,12 +405,14 @@ async function loadTools(file: string): Promise<ToolRegistry> {
       `tools.${name}.signature`,
     );
     const spec = e.exec;
+    const configuration: JsonObject = {contract: "algal.cli-tool-binding.v1", signature: e.signature, exec: spec, cwd: await realpath(base)};
     let tool: Tool;
     if (spec.startsWith("scripted:")) {
       const data = asRecord(
         await readJson(resolve(base, spec.slice("scripted:".length))),
         `tools.${name} data`,
       );
+      configuration.responses = data as JsonObject;
       tool = async (inputs) => {
         const key = canonicalize(inputs);
         const hit = data[key];
@@ -440,7 +449,7 @@ async function loadTools(file: string): Promise<ToolRegistry> {
         `tools.${name}.exec must be scripted:<file> or cmd:<shell>`,
       );
     }
-    registry.set(name, { signature, tool });
+    registry.set(name, { signature, tool, configurationDigest: digestCanonical(configuration) });
   }
   return registry;
 }
@@ -1719,12 +1728,40 @@ async function main(): Promise<number> {
       );
     }
 
+    case "shepherd": {
+      const [sub, name] = positional;
+      if (!name) usageError("algal shepherd start|tick|watch|inspect|wake|verify|recover <name>");
+      const shepherd = new PullRequestShepherd(dir, githubCliTransport({executable: String(flags.gh ?? "gh")}));
+      if (sub === "start") {
+        if (typeof flags.repo !== "string" || flags.pr === undefined) usageError("algal shepherd start <name> --repo owner/repo --pr NUMBER");
+        out(await shepherd.start({name, repository: flags.repo, pullNumber: Number(flags.pr), intervalMs: Number(flags["interval-ms"] ?? 30_000), maxPolls: Number(flags["max-polls"] ?? 16),
+          requiredChecks: flags["required-checks"] === undefined ? [] : String(flags["required-checks"]).split(",").map(name => ({name}))}) as unknown as JsonValue);
+      } else if (sub === "tick") out(await shepherd.tick(name) as unknown as JsonValue);
+      else if (sub === "inspect") out(await shepherd.inspect(name) as unknown as JsonValue);
+      else if (sub === "watch") {
+        const controller = new AbortController();
+        const stop = () => controller.abort();
+        process.once("SIGINT", stop); process.once("SIGTERM", stop);
+        try {out(await shepherd.watch(name, {maxPasses: Number(flags["max-passes"] ?? 64), maxDurationMs: Number(flags["max-duration-ms"] ?? 60_000), signal: controller.signal}) as unknown as JsonValue);}
+        finally {process.removeListener("SIGINT", stop); process.removeListener("SIGTERM", stop);}
+      }
+      else if (sub === "verify") out(await shepherd.verify(name));
+      else if (sub === "wake") {
+        if (typeof flags.delivery !== "string") usageError("shepherd wake requires --delivery stable-event-id");
+        out(await shepherd.wake(name, flags.delivery));
+      } else if (sub === "recover") {
+        if (typeof flags["expected-intent"] !== "string") usageError("shepherd recover requires --expected-intent SHA");
+        out(await shepherd.recover(name, asDigest(flags["expected-intent"], "--expected-intent")) as unknown as JsonValue);
+      } else usageError("algal shepherd start|tick|watch|inspect|wake|verify|recover <name>");
+      return 0;
+    }
+
     case "process": {
       const sub = positional[0];
       const name = positional[1];
       if (flags.modules !== undefined) await loadModules(String(flags.modules), store);
       const tools = await resolveTools(flags, dir);
-      const executors = sub === "tick" || sub === "schedule" ? await resolveExecutors(flags, dir) : [];
+      const executors = sub === "tick" || sub === "schedule" || sub === "recover" ? await resolveExecutors(flags, dir) : [];
       const transports = flags.transports === undefined ? undefined : await loadTransports(String(flags.transports));
       const supervisor = new ProcessSupervisor(dir, {
         fns, tools,
@@ -1732,6 +1769,7 @@ async function main(): Promise<number> {
           ? executors.map((executor) => cachedExecutor(executor, store))
           : executors,
         ...(transports ? { transports } : {}),
+        ...(flags.journal === undefined ? {} : {journal: {maxRecoveries: asInt(Number(flags["max-recoveries"] ?? 2), "--max-recoveries", 1, 8)}}),
       });
       if (sub === "list") { out({ processes: await supervisor.list() } as unknown as JsonValue); return 0; }
       if (sub === "schedule") {
@@ -1749,8 +1787,14 @@ async function main(): Promise<number> {
         const next = await supervisor.tick(name);
         out(next as unknown as JsonValue);
         return next?.process.status === "failed" || next?.process.status === "stuck" ? 1 : 0;
-      } else if (sub === "verify") out(await supervisor.verify(name));
-      else usageError("algal process create|list|inspect|tick|schedule|verify");
+      } else if (sub === "recover") {
+        if (typeof flags["expected-intent"] !== "string") usageError("process recover requires --expected-intent SHA");
+        const next = await supervisor.recover(name, asDigest(flags["expected-intent"], "--expected-intent"));
+        out(next as unknown as JsonValue);
+        return next.process.status === "failed" || next.process.status === "stuck" ? 1 : 0;
+      } else if (sub === "journal") out(await supervisor.journal(name));
+      else if (sub === "verify") out(await supervisor.verify(name));
+      else usageError("algal process create|list|inspect|tick|schedule|recover|journal|verify");
       return 0;
     }
 

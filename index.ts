@@ -280,3 +280,14 @@ export { ERROR_CODES, AlgalError, errorReport } from "./src/errors";
 export type { ErrorCode } from "./src/errors";
 
 export { ProcessSupervisor, PROCESS_CONTRACT, PROCESS_BOUNDS, parseProcessRecord, type ProcessRecord, type ProcessSnapshot, type ProcessHost } from "./src/process";
+
+export { HostEventService, HOST_EVENT_BOUNDS, HOST_EVENT_CONTRACT, HOST_MESSAGE_CONTRACT, hostEventMessage } from "./src/host-events";
+export type { HostEventInput, HostEventRecord, HostEventSnapshot, HostEventPollOptions, HostEventPollResult } from "./src/host-events";
+export { ProcessJournal, JOURNAL_BOUNDS } from "./src/process-journal";
+export type { RuntimeJournal, JournalBinding, JournalTicket } from "./src/process-journal";
+export { GitHubClient, GITHUB_BOUNDS } from "./src/github";
+export type { GitHubClientOptions, GitHubEvidence, GitHubRevision, GitHubMergeResult, GitHubTransport, GitHubRequest, GitHubResponse, GitHubRequiredCheck } from "./src/github";
+export { githubCliTransport } from "./src/github-cli";
+
+export { PullRequestShepherd, shepherdProgram, shepherdPacket, SHEPHERD_TOOL } from "./src/shepherd";
+export type { ShepherdConfig, ShepherdOptions, ShepherdReport } from "./src/shepherd";

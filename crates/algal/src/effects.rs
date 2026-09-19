@@ -525,6 +525,7 @@ pub enum ToolBackend {
 
 #[derive(Clone)]
 pub struct Tool {
+    pub configuration_digest: Option<String>,
     pub signature: Signature,
     pub effect: String,
     pub max_bytes: usize,
@@ -546,6 +547,7 @@ pub struct Host {
     pub permission_scope: String,
     /// Host supervisor namespace; does not change canonical run requests.
     pub process_scope: Option<String>,
+    pub journal: Option<std::sync::Arc<std::sync::Mutex<crate::journal::Journal>>>,
     /// When set, successful effects are memoized in the store and identical
     /// later requests are served the recorded response (`cached: true`).
     /// Only contract-valid, in-budget, non-tool-call outputs are memoized,
@@ -621,6 +623,33 @@ impl Host {
         })
     }
 
+    pub fn journal_before(&self, binding: crate::journal::Binding) -> Result<Option<Value>> {
+        match &self.journal {
+            Some(journal) => journal
+                .lock()
+                .map_err(|_| Error::new("RECOVERY_BLOCKED", "journal mutex poisoned"))?
+                .before(binding),
+            None => Ok(None),
+        }
+    }
+    pub fn journal_poison(&self) {
+        if let Some(journal) = &self.journal {
+            if let Ok(mut journal) = journal.lock() {
+                journal.poison();
+            }
+        }
+    }
+
+    pub fn journal_after(&self, receipt: &Value) -> Result<()> {
+        match &self.journal {
+            Some(journal) => journal
+                .lock()
+                .map_err(|_| Error::new("RECOVERY_BLOCKED", "journal mutex poisoned"))?
+                .after(receipt),
+            None => Ok(()),
+        }
+    }
+
     pub fn tool_idempotency_key(&self, request_digest: &str) -> Result<String> {
         match &self.process_scope {
             Some(name) => digest(
@@ -665,6 +694,7 @@ impl Host {
                 effect: "write".to_owned(),
                 max_bytes: 256,
                 backend: ToolBackend::MailboxSend,
+                configuration_digest: Some(digest(&json!({"contract":"algal.process-tool-binding.v1","tool":MAILBOX_SEND_TOOL,"driver":"builtin"}))?),
             },
         );
         self.tools.insert(
@@ -684,6 +714,7 @@ impl Host {
                 effect: "write".to_owned(),
                 max_bytes: 262_144,
                 backend: ToolBackend::MailboxReceive,
+                configuration_digest: Some(digest(&json!({"contract":"algal.process-tool-binding.v1","tool":MAILBOX_RECEIVE_TOOL,"driver":"builtin"}))?),
             },
         );
         self.mailbox = Some(service);
@@ -692,7 +723,11 @@ impl Host {
 
     pub fn load_tools(&mut self, file: &Path) -> Result<()> {
         let map = read_json(File::open(file)?, 1_048_576)?;
-        let base = file.parent().unwrap_or(Path::new("."));
+        let base = file
+            .parent()
+            .filter(|path| !path.as_os_str().is_empty())
+            .unwrap_or(Path::new("."))
+            .canonicalize()?;
         if object(&map)?.len() > 64 {
             return Err(Error::limit("tool registry count"));
         }
@@ -721,12 +756,17 @@ impl Host {
             } else if let Some(command) = spec.strip_prefix("cmd:") {
                 Backend::Command {
                     argv: vec!["sh".into(), "-c".into(), command.into()],
-                    cwd: Some(base.canonicalize()?),
+                    cwd: Some(base.clone()),
                     timeout_ms: 30_000,
                 }
             } else {
                 return Err(Error::invalid("tool exec must be scripted: or cmd:"));
             };
+            let mut descriptor = json!({"contract":"algal.cli-tool-binding.v1","signature":sig,"exec":spec,"cwd":base});
+            if let Backend::Scripted { responses } = &backend {
+                descriptor["responses"] = responses.clone();
+            }
+            let configuration_digest = Some(digest(&descriptor)?);
             self.tools.insert(
                 name.clone(),
                 Tool {
@@ -734,6 +774,7 @@ impl Host {
                     effect,
                     max_bytes,
                     backend: ToolBackend::External(backend),
+                    configuration_digest,
                 },
             );
         }
@@ -1083,6 +1124,22 @@ impl Host {
                 "error":{"code":"EFFECT_UNBOUND","message":"no host-admitted executor for this request"}}),
             );
         };
+        if self.journal.is_some() {
+            let configuration_digest = if matches!(backend, Backend::Scripted { .. }) {
+                backend.cache_identity(&id)?
+            } else {
+                digest(&serde_json::to_value(&backend)?)?
+            };
+            if let Some(receipt) = self.journal_before(crate::journal::Binding {
+                request_digest: request_digest.clone(),
+                executor: id.clone(),
+                configuration_digest,
+                idempotency_key: self.tool_idempotency_key(&request_digest)?,
+                recovery: "never".into(),
+            })? {
+                return Ok(receipt);
+            }
+        }
         let cacheable = self.cache && backend.cacheable();
         let identity = if cacheable {
             backend.cache_identity(&id)?
@@ -1103,6 +1160,7 @@ impl Host {
                         if let Some(usage) = hit.get("usage") {
                             receipt["usage"] = usage.clone();
                         }
+                        self.journal_after(&receipt)?;
                         return Ok(receipt);
                     }
                 }
@@ -1167,6 +1225,7 @@ impl Host {
                 receipt["error"] = serde_json::to_value(error)?;
             }
         }
+        self.journal_after(&receipt)?;
         Ok(receipt)
     }
 }
@@ -1286,6 +1345,97 @@ fn apple_error(error: apple_foundation::Error) -> Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn assert_recovery_rejects_binding_change(root: &Path, original: String, changed: String) {
+        use crate::journal::{Binding, Journal};
+        assert_ne!(original, changed);
+        let intent = digest(&json!("intent")).unwrap();
+        let manifest = digest(&json!("manifest")).unwrap();
+        let request = digest(&json!("request")).unwrap();
+        let binding = Binding {
+            request_digest: request.clone(),
+            executor: "tool:fixture.v1".into(),
+            configuration_digest: original,
+            idempotency_key: request.clone(),
+            recovery: "read".into(),
+        };
+        let mut journal = Journal::create(root, "fixture", &intent, &manifest, 2).unwrap();
+        journal.before(binding.clone()).unwrap();
+        journal.after(&json!({"requestDigest":request,"executor":"tool:fixture.v1","output":{"value":"first"}})).unwrap();
+        drop(journal);
+        let mut journal = Journal::open(root, "fixture", &intent, &manifest).unwrap();
+        journal.begin_recovery().unwrap();
+        assert!(
+            journal
+                .before(Binding {
+                    configuration_digest: changed,
+                    ..binding
+                })
+                .is_err()
+        );
+        assert!(journal.finish().is_err());
+    }
+
+    #[test]
+    fn cli_tool_binding_tracks_scripted_contents() {
+        let directory = tempfile::tempdir().unwrap();
+        let file = directory.path().join("tools.json");
+        let responses = directory.path().join("responses.json");
+        let signature = json!({"inputs":{},"outputs":{"value":"text"},"effect":"read","cost":1,"maxOutputBytes":1024});
+        std::fs::write(
+            &file,
+            canonical(
+                &json!({"fixture.v1":{"signature":signature,"exec":"scripted:responses.json"}}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let first = json!({"{}":{"value":"first"}});
+        std::fs::write(&responses, canonical(&first).unwrap()).unwrap();
+        let mut host = Host::default();
+        host.load_tools(&file).unwrap();
+        let original = host.tools["fixture.v1"]
+            .configuration_digest
+            .clone()
+            .unwrap();
+        assert_eq!(original,digest(&json!({"contract":"algal.cli-tool-binding.v1","signature":signature,"exec":"scripted:responses.json","cwd":directory.path().canonicalize().unwrap(),"responses":first})).unwrap());
+        std::fs::write(
+            &responses,
+            canonical(&json!({"{}":{"value":"changed"}})).unwrap(),
+        )
+        .unwrap();
+        host.load_tools(&file).unwrap();
+        let changed = host.tools["fixture.v1"]
+            .configuration_digest
+            .clone()
+            .unwrap();
+        assert_recovery_rejects_binding_change(&directory.path().join("state"), original, changed);
+    }
+
+    #[test]
+    fn cli_tool_binding_tracks_resolved_command_directory() {
+        let directory = tempfile::tempdir().unwrap();
+        let left = directory.path().join("left");
+        let right = directory.path().join("right");
+        std::fs::create_dir(&left).unwrap();
+        std::fs::create_dir(&right).unwrap();
+        let definition = json!({"fixture.v1":{"signature":{"inputs":{},"outputs":{"value":"text"},"effect":"read","cost":1,"maxOutputBytes":1024},"exec":"cmd:fixture-command"}});
+        for parent in [&left, &right] {
+            std::fs::write(parent.join("tools.json"), canonical(&definition).unwrap()).unwrap();
+        }
+        let mut host = Host::default();
+        host.load_tools(&left.join("tools.json")).unwrap();
+        let original = host.tools["fixture.v1"]
+            .configuration_digest
+            .clone()
+            .unwrap();
+        host.load_tools(&right.join("tools.json")).unwrap();
+        let changed = host.tools["fixture.v1"]
+            .configuration_digest
+            .clone()
+            .unwrap();
+        assert_recovery_rejects_binding_change(&directory.path().join("state"), original, changed);
+    }
 
     #[test]
     fn endpoints_are_host_selected_and_do_not_leak_auth_through_redirects() {

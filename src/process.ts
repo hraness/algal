@@ -11,7 +11,7 @@ import {
   rename,
   unlink,
 } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import {
   parseCapabilityHandle,
   parseWakeCapabilities,
@@ -25,13 +25,15 @@ import {
 import { asDigest, digestCanonical, type Digest } from "./digest";
 import type { Executor } from "./effects";
 import { AlgalError } from "./errors";
-import { compileOrganism } from "./graph";
+import { compileOrganism, type CompiledOrganism } from "./graph";
+import { hostLease } from "./host-state";
+import { ProcessJournal } from "./process-journal";
 import {
   FileMailboxService,
   mailboxToolRegistry,
   type MailboxService,
 } from "./mailbox";
-import { builtinRegistry, type FnRegistry } from "./registry";
+import { builtinRegistry, isBuiltinRegistry, type FnRegistry } from "./registry";
 import {
   checkValue,
   parseRunReceipt,
@@ -82,6 +84,7 @@ export type ProcessHost = {
   tools?: ToolRegistry;
   mailboxes?: MailboxService;
   transports?: Record<string, Transport>;
+  journal?: boolean | { maxRecoveries?: number };
 };
 const json = (v: unknown): JsonValue => v as JsonValue;
 const same = (a: unknown, b: unknown): boolean =>
@@ -329,6 +332,11 @@ export class ProcessSupervisor {
     return path;
   }
   private async lease<T>(path: string, action: () => Promise<T>): Promise<T> {
+    // Process dispatches share a process-owned SQLite mutex across Bun/Rust.
+    // Creation keeps its existing non-recoverable global admission lock.
+    if (dirname(path) !== join(this.dir, "processes")) {
+      return hostLease(dirname(path), basename(dirname(path)), action);
+    }
     let file;
     try {
       file = await open(path, "wx", 0o600);
@@ -524,24 +532,57 @@ export class ProcessSupervisor {
       result.push(await this.inspect(name));
     return result;
   }
-  private scopedTools(name: string): ToolRegistry {
-    return new Map(
-      [...this.tools].map(([id, entry]) => [
-        id,
-        {
-          signature: entry.signature,
-          tool: (inputs, ctx) =>
-            entry.tool(inputs, {
-              ...ctx,
-              idempotencyKey: digestCanonical({
-                contract: "algal.process-effect.v1",
-                process: name,
-                requestDigest: ctx.idempotencyKey,
-              }),
-            }),
-        },
-      ]),
-    );
+  private requireJournalSafe(compiled: CompiledOrganism): void {
+    if (!isBuiltinRegistry(this.fns)) throw new AlgalError("CAPABILITY_DENIED", "journal recovery requires unchanged built-in pure functions");
+    const visit = (program: CompiledOrganism): void => {
+      for (const cell of program.manifest.cells) {
+        if (cell.kind === "slot" || cell.kind === "spawn") throw new AlgalError("CAPABILITY_DENIED", "journal recovery does not admit slots or dynamic spawn");
+      }
+      for (const child of program.children.values()) visit(child);
+    };
+    visit(compiled);
+  }
+
+  private async executeIntent(intent: ProcessSnapshot, manifest: OrganismManifest, checkpoint: JsonValue | undefined, journal?: ProcessJournal): Promise<ProcessSnapshot> {
+    const name = intent.process.name;
+    const executors = this.host.executors ?? [];
+    const runtime = { processName: name, ...(journal ? {journal} : {}) };
+    const receipt = checkpoint
+      ? await resumeRun(checkpoint, manifestToJson(manifest), this.store, executors, this.fns, this.host.transports, this.tools, runtime)
+      : await runOrganism({manifest, args: intent.process.args, store: this.store, fns: this.fns, executors, tools: this.tools, ...runtime,
+          ...(this.host.transports ? {transports: this.host.transports} : {})});
+    journal?.assertComplete();
+    boundedValue(receipt, PROCESS_BOUNDS.maxReceiptBytes);
+    const receiptRef = await this.publish("runs", json(receipt));
+    return this.save({...intent.process, previous: intent.digest, status: receipt.outcome, receipt: receiptRef, wake: wakeOf(receipt)});
+  }
+
+  async recover(name: string, expectedIntent: Digest): Promise<ProcessSnapshot> {
+    const path = await this.paths(name);
+    return this.lease(join(path, ".lock"), async () => {
+      const intent = await this.inspect(name);
+      if (intent.digest !== asDigest(expectedIntent, "expected intent") || intent.process.status !== "uncertain") invalid("recovery requires the exact current uncertain intent");
+      const manifest = await this.manifest(intent.process.manifestDigest);
+      if (!manifest) throw new AlgalError("STORE_MISS", "process manifest missing");
+      const compiled = await compileOrganism(manifest, this.fns, this.store, 0, undefined, this.tools);
+      this.requireJournalSafe(compiled);
+      const checkpoint = intent.process.receipt ? await this.cas("runs", intent.process.receipt, PROCESS_BOUNDS.maxReceiptBytes) : undefined;
+      if (checkpoint) {
+        const verified = await verifyReceipt(checkpoint, manifestToJson(manifest), this.store, this.fns, undefined, this.tools);
+        if (!verified.ok) invalid("recovery checkpoint does not replay");
+      }
+      const journal = await ProcessJournal.open(this.dir, name, intent.digest, intent.process.manifestDigest);
+      await journal.beginRecovery();
+      return this.executeIntent(intent, manifest, checkpoint, journal);
+    });
+  }
+
+  async journal(name: string): Promise<JsonValue> {
+    const snapshot = await this.inspect(name);
+    const chain = await this.history(snapshot);
+    const intent = [...chain].reverse().find(item => item.process.status === "uncertain");
+    if (!intent) throw new AlgalError("IO_FAILED", "process has no dispatch intent");
+    return (await ProcessJournal.open(this.dir, name, intent.digest, intent.process.manifestDigest)).describe();
   }
   private async history(snapshot: ProcessSnapshot): Promise<ProcessSnapshot[]> {
     const chain = [snapshot];
@@ -720,7 +761,7 @@ export class ProcessSupervisor {
       const manifest = await this.manifest(record.manifestDigest);
       if (!manifest)
         throw new AlgalError("STORE_MISS", "process manifest missing");
-      await compileOrganism(
+      const compiled = await compileOrganism(
         manifest,
         this.fns,
         this.store,
@@ -743,45 +784,19 @@ export class ProcessSupervisor {
         );
         if (!report.ok) invalid("process checkpoint does not replay");
       }
-      const intent = await this.save({
+      if (this.host.journal) this.requireJournalSafe(compiled);
+      const intentRecord: ProcessRecord = {
         ...record,
         generation: record.generation + 1,
         status: "uncertain",
         previous: snapshot.digest,
         cause,
-      });
-      const executors = this.host.executors ?? [];
-      const tools = this.scopedTools(name);
-      const receipt = checkpoint
-        ? await resumeRun(
-            checkpoint,
-            manifestToJson(manifest),
-            this.store,
-            executors,
-            this.fns,
-            this.host.transports,
-            tools,
-          )
-        : await runOrganism({
-            manifest,
-            args: record.args,
-            store: this.store,
-            fns: this.fns,
-            executors,
-            tools,
-            ...(this.host.transports
-              ? { transports: this.host.transports }
-              : {}),
-          });
-      boundedValue(receipt, PROCESS_BOUNDS.maxReceiptBytes);
-      const receiptRef = await this.publish("runs", json(receipt));
-      return this.save({
-        ...intent.process,
-        previous: intent.digest,
-        status: receipt.outcome,
-        receipt: receiptRef,
-        wake: wakeOf(receipt),
-      });
+      };
+      const intentDigest = digestCanonical(json(intentRecord));
+      const journal = this.host.journal ? await ProcessJournal.create(this.dir, name, intentDigest, record.manifestDigest,
+        typeof this.host.journal === "object" ? this.host.journal.maxRecoveries ?? 2 : 2) : undefined;
+      const intent = await this.save(intentRecord);
+      return this.executeIntent(intent, manifest, checkpoint, journal);
     });
   }
   async schedule(

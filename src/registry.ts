@@ -17,6 +17,18 @@ export type Fn = (inputs: Record<string, JsonValue>) => Record<string, JsonValue
 
 export type FnRegistry = Map<string, { signature: FnSignature; fn: Fn }>;
 
+const builtinRegistries = new WeakMap<FnRegistry, Map<string, { fn: Fn; signature: string }>>();
+
+/** Journal recovery admits the built-in pure function set without allowing
+ * callers to replace an implementation under a trusted built-in name. */
+export function isBuiltinRegistry(registry: FnRegistry): boolean {
+  const original = builtinRegistries.get(registry);
+  return original !== undefined && original.size === registry.size && [...registry].every(([name, entry]) => {
+    const saved = original.get(name);
+    return saved?.fn === entry.fn && saved.signature === canonicalize(entry.signature as unknown as JsonValue);
+  });
+}
+
 export function builtinRegistry(): FnRegistry {
   const reg: FnRegistry = new Map();
 
@@ -197,5 +209,8 @@ export function builtinRegistry(): FnRegistry {
     },
   });
 
+  builtinRegistries.set(reg, new Map([...reg].map(([name, entry]) => [name, {
+    fn: entry.fn, signature: canonicalize(entry.signature as unknown as JsonValue),
+  }])));
   return reg;
 }

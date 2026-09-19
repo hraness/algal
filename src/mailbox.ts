@@ -853,6 +853,7 @@ export function mailboxToolRegistry(service: MailboxService): ToolRegistry {
     [
       MAILBOX_SEND_TOOL,
       {
+        configurationDigest: digestCanonical({contract: "algal.process-tool-binding.v1", tool: MAILBOX_SEND_TOOL, driver: "builtin"}),
         signature: {
           inputs: {
             mailbox: { type: "cap", capability: MAILBOX_SEND },
@@ -873,6 +874,7 @@ export function mailboxToolRegistry(service: MailboxService): ToolRegistry {
     [
       MAILBOX_RECEIVE_TOOL,
       {
+        configurationDigest: digestCanonical({contract: "algal.process-tool-binding.v1", tool: MAILBOX_RECEIVE_TOOL, driver: "builtin"}),
         signature: {
           inputs: {
             mailbox: { type: "cap", capability: MAILBOX_RECEIVE },
