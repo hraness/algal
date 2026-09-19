@@ -1,0 +1,23 @@
+{
+  "agent": [
+    {
+      "tool": "pick.v1",
+      "inputs": { "record": { "name": "wisp", "age": 3, "species": "sprig", "habitat": "tidepool" }, "field": "name" }
+    },
+    {
+      "tool": "pick.v1",
+      "inputs": { "record": { "name": "wisp", "age": 3, "species": "sprig", "habitat": "tidepool" }, "field": "species" }
+    },
+    {
+      "tool": "pick.v1",
+      "inputs": { "record": { "name": "wisp", "age": 3, "species": "sprig", "habitat": "tidepool" }, "field": "habitat" }
+    },
+    {
+      "answers": {
+        "keep_0": { "noul": 0.05 },
+        "keep_1": { "noul": 0.9 }
+      }
+    },
+    "wisp is a sprig from the tidepool"
+  ]
+}

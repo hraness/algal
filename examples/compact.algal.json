@@ -1,0 +1,24 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:compact",
+  "name": "Recorded tool-log compaction",
+  "cells": [
+    { "id": "task", "kind": "input", "outputs": { "query": "json" } },
+    {
+      "id": "agent",
+      "kind": "agent",
+      "inputs": { "query": "json" },
+      "prompt": "Gather the fields asked for and summarize them.",
+      "output": { "kind": "text" },
+      "tools": ["pick.v1"],
+      "compact": { "maxLogBytes": 400, "keepRecent": 1 },
+      "budget": { "maxTurns": 6 }
+    }
+  ],
+  "edges": [
+    {
+      "from": { "cell": "task", "port": "query" },
+      "to": { "cell": "agent", "port": "query" }
+    }
+  ]
+}

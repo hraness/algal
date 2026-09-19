@@ -43,6 +43,9 @@ struct Execution {
     workspace: PathBuf,
     #[arg(long)]
     gateway_model: Option<String>,
+    /// TypeSafe Jev decision executor; bare `--jev` uses `jev-latest`.
+    #[arg(long, num_args = 0..=1, default_missing_value = "jev-latest")]
+    jev: Option<String>,
     #[arg(long, requires = "model")]
     base_url: Option<String>,
     #[arg(long, requires = "base_url")]
@@ -200,11 +203,46 @@ enum Commands {
         #[command(flatten)]
         options: Execution,
     },
+    /// Rebuild the derived semantic index over the store + optional docs.
+    Index {
+        /// Host document directory (*.md/*.txt/*.json).
+        #[arg(long)]
+        docs: Option<PathBuf>,
+        /// Embedder: local (default), gateway, or gateway:<model>.
+        #[arg(long)]
+        embedder: Option<String>,
+    },
+    /// Hybrid-rank the semantic index: embedding cosine ⊕ token overlap.
+    Search {
+        query: String,
+        /// Result count (1..=64).
+        #[arg(short, long, default_value = "8")]
+        k: usize,
+        /// Embedder: local (default), gateway, or gateway:<model>.
+        #[arg(long)]
+        embedder: Option<String>,
+    },
+    Auth {
+        /// Credential provider (`jev`).
+        provider: String,
+        /// Report the credential's redacted status and exit.
+        #[arg(long)]
+        status: bool,
+        /// Remove the credential from every local store.
+        #[arg(long)]
+        forget: bool,
+        /// Read the key from the OS clipboard instead of a prompt.
+        #[arg(long)]
+        clipboard: bool,
+    },
     Doctor {
         #[arg(long)]
         apple: bool,
         #[arg(long)]
         apple_bridge: Option<PathBuf>,
+        /// TypeSafe Jev availability: credential status plus a live probe.
+        #[arg(long)]
+        jev: bool,
     },
     Acp {
         #[command(flatten)]
@@ -370,6 +408,7 @@ fn host(options: &Execution) -> Result<Host> {
     let count = usize::from(options.responses.is_some())
         + usize::from(options.host.is_some())
         + usize::from(options.gateway_model.is_some())
+        + usize::from(options.jev.is_some())
         + usize::from(options.base_url.is_some())
         + usize::from(options.apple)
         + usize::from(options.agent.is_some());
@@ -413,6 +452,11 @@ fn host(options: &Execution) -> Result<Host> {
         } else if let Some(model) = &options.gateway_model {
             Some(Backend::Gateway {
                 model: model.clone(),
+            })
+        } else if let Some(model) = &options.jev {
+            Some(Backend::Jev {
+                model: model.clone(),
+                credential_env: None,
             })
         } else if let Some(base_url) = &options.base_url {
             let response_format: ResponseFormat =
@@ -1504,11 +1548,108 @@ async fn execute(cli: Cli) -> Result<bool> {
             .await?;
             Ok(true)
         }
+        Commands::Index { docs, embedder } => {
+            let backend = algal::embeddings::Embedder::resolve(embedder.as_deref())?;
+            let report =
+                algal::semantic::index_store(&cli.dir, docs.as_deref(), &backend, 120_000).await?;
+            emit(&report.to_json())?;
+            Ok(true)
+        }
+        Commands::Search { query, k, embedder } => {
+            let backend = algal::embeddings::Embedder::resolve(embedder.as_deref())?;
+            let hits = algal::semantic::search(&cli.dir, &backend, &query, k, 120_000).await?;
+            emit(&json!({
+                "query":query,
+                "hits":hits.iter().map(|h| h.to_json()).collect::<Vec<_>>()
+            }))?;
+            Ok(!hits.is_empty())
+        }
+        Commands::Auth {
+            provider,
+            status,
+            forget,
+            clipboard,
+        } => {
+            algal::credentials::spec(&provider)?;
+            if status {
+                emit(&algal::credentials::status(&provider)?)?;
+                return Ok(true);
+            }
+            if forget {
+                let removed = algal::credentials::forget(&provider)?;
+                emit(&json!({"provider":provider,"removed":removed}))?;
+                return Ok(!removed.is_empty());
+            }
+            let key = if clipboard {
+                read_clipboard()?
+            } else {
+                read_secret_line(&format!(
+                    "paste your {provider} key (env {} also works): ",
+                    algal::credentials::spec(&provider)?.env
+                ))?
+            };
+            let (source, location) = tokio::task::spawn_blocking({
+                let provider = provider.clone();
+                let key = key.clone();
+                move || algal::credentials::store(&provider, &key)
+            })
+            .await
+            .map_err(|e| Error::new("IO_FAILED", format!("credential store join: {e}")))??;
+            emit(&json!({
+                "ok":true,"provider":provider,"stored":source,
+                "location":location,"hint":algal::credentials::redact(&key)
+            }))?;
+            Ok(true)
+        }
         Commands::Doctor {
             apple,
             apple_bridge,
+            jev,
         } => {
-            if apple {
+            if jev {
+                let status = tokio::task::spawn_blocking(|| algal::credentials::status("jev"))
+                    .await
+                    .map_err(|e| Error::new("IO_FAILED", format!("credential join: {e}")))??;
+                let mut report = json!({"provider":"jev","credential":status});
+                if status["configured"] != true {
+                    report["available"] = json!(false);
+                    report["error"] = json!(
+                        "credential not configured — run `algal auth jev` or set TYPESAFE_API_KEY"
+                    );
+                    emit(&report)?;
+                    return Ok(false);
+                }
+                let credential = algal::credentials::resolve("jev", None)?
+                    .map(|(key, _)| key)
+                    .unwrap();
+                match algal::decisions::ask(
+                    algal::decisions::DEFAULT_MODEL,
+                    &credential,
+                    &json!({"check":"algal doctor connectivity probe"}),
+                    &json!({"probe":{"type":"noul","instructions":"Is this a connectivity check?"}}),
+                    15_000,
+                )
+                .await
+                {
+                    Ok((out, meta)) => {
+                        report["available"] = json!(true);
+                        if let Some(noul) = out["answers"]["probe"]["noul"].as_f64() {
+                            report["noul"] = json!(noul);
+                        }
+                        if let Some(usage) = meta.get("usage") {
+                            report["usage"] = usage.clone();
+                        }
+                        emit(&report)?;
+                        Ok(true)
+                    }
+                    Err(error) => {
+                        report["available"] = json!(false);
+                        report["error"] = json!(format!("{}: {}", error.code, error.message));
+                        emit(&report)?;
+                        Ok(false)
+                    }
+                }
+            } else if apple {
                 let bridge = bridge_path(apple_bridge.as_ref())?;
                 let output = algal::effects::command_output(
                     &[bridge.to_string_lossy().into_owned(), "--check".into()],
@@ -1529,6 +1670,68 @@ async fn execute(cli: Cli) -> Result<bool> {
             }
         }
     }
+}
+
+/// Best-effort clipboard read across platforms; errors when nothing yields
+/// text. Never echoes what it read.
+fn read_clipboard() -> Result<String> {
+    let candidates: Vec<Vec<&str>> = if cfg!(target_os = "macos") {
+        vec![vec!["pbpaste"]]
+    } else if cfg!(target_os = "windows") {
+        vec![vec![
+            "powershell",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "Get-Clipboard",
+        ]]
+    } else {
+        vec![
+            vec!["wl-paste", "-n"],
+            vec!["xclip", "-o", "-selection", "clipboard"],
+            vec!["xsel", "-b", "-o"],
+        ]
+    };
+    for argv in candidates {
+        if let Ok(out) = std::process::Command::new(argv[0])
+            .args(&argv[1..])
+            .stderr(std::process::Stdio::null())
+            .output()
+            && out.status.success()
+        {
+            let text = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+            if !text.is_empty() {
+                return Ok(text);
+            }
+        }
+    }
+    Err(Error::new("IO_FAILED", "clipboard is empty or unavailable"))
+}
+
+/// Read one line of secret input: the prompt goes to stderr, echo is
+/// suppressed through `stty` where available. Never prints what it read.
+fn read_secret_line(prompt: &str) -> Result<String> {
+    use std::io::{BufRead, Write};
+    eprint!("{prompt}");
+    let _ = std::io::stderr().flush();
+    #[cfg(unix)]
+    let unecho = std::process::Command::new("stty")
+        .arg("-echo")
+        .status()
+        .is_ok_and(|s| s.success());
+    let mut line = String::new();
+    let read = std::io::stdin().lock().read_line(&mut line);
+    #[cfg(unix)]
+    if unecho {
+        let _ = std::process::Command::new("stty").arg("echo").status();
+        eprintln!();
+    }
+    read.map_err(|_| Error::new("IO_FAILED", "credential input failed"))?;
+    let key = line.trim().to_owned();
+    if key.is_empty() {
+        return Err(Error::new("IO_FAILED", "empty credential input"));
+    }
+    Ok(key)
 }
 
 #[tokio::main]

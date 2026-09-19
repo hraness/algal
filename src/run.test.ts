@@ -429,6 +429,146 @@ describe("scheduler", () => {
     expect(calls[0]!.output.value).toBe("wisp");
   });
 
+  test("compact triages the tool log through a recorded decide effect", async () => {
+    const m = manifest({
+      contract: "algal.organism.v1",
+      key: "organism:compact",
+      name: "Compact",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "json" } },
+        {
+          id: "a",
+          kind: "agent",
+          inputs: { v: "json" },
+          prompt: "gather and summarize",
+          output: { kind: "text" },
+          tools: ["pick.v1"],
+          compact: { maxLogBytes: 150, keepRecent: 1 },
+          budget: { maxTurns: 4 },
+        },
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "a", port: "v" } },
+      ],
+    });
+    const r = await run(m, {
+      args: { src: { v: { name: "wisp", age: 3 } } },
+      responses: {
+        a: [
+          {
+            tool: "pick.v1",
+            inputs: { record: { name: "wisp", age: 3 }, field: "name" },
+          },
+          {
+            tool: "pick.v1",
+            inputs: { record: { name: "wisp", age: 3 }, field: "age" },
+          },
+          // the recorded decide effect: drop the first (unpinned) entry
+          { answers: { keep_0: { noul: 0.1 } } },
+          "the name is wisp, age 3",
+        ],
+      },
+    });
+    expect(r.outcome).toBe("complete");
+    expect(r.cells["a"]?.outputs?.out).toBe("the name is wisp, age 3");
+    // three agent effects + one recorded decide effect
+    expect(r.effects).toHaveLength(4);
+    expect(r.work.agentCalls).toBe(4);
+    // the dropped entry left the log — the pinned tail remains verbatim
+    const calls = r.cells["a"]?.toolCalls as {
+      fn: string;
+      inputs: { field: string };
+    }[];
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.inputs.field).toBe("age");
+    // replay reproduces the compacted run bit-for-bit
+    const v = await verifyReceipt(
+      r as unknown as JsonValue,
+      manifestToJson(m),
+      new MemoryStore(),
+    );
+    expect(v.ok).toBe(true);
+  });
+
+  test("compact keeps an entry the provider scores keepable", async () => {
+    const m = manifest({
+      contract: "algal.organism.v1",
+      key: "organism:compact-keep",
+      name: "CompactKeep",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "json" } },
+        {
+          id: "a",
+          kind: "agent",
+          inputs: { v: "json" },
+          prompt: "gather and summarize",
+          output: { kind: "text" },
+          tools: ["pick.v1"],
+          compact: { maxLogBytes: 150, keepRecent: 1 },
+          budget: { maxTurns: 4 },
+        },
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "a", port: "v" } },
+      ],
+    });
+    const r = await run(m, {
+      args: { src: { v: { name: "wisp", age: 3 } } },
+      responses: {
+        a: [
+          {
+            tool: "pick.v1",
+            inputs: { record: { name: "wisp", age: 3 }, field: "name" },
+          },
+          {
+            tool: "pick.v1",
+            inputs: { record: { name: "wisp", age: 3 }, field: "age" },
+          },
+          { answers: { keep_0: { noul: 0.9 } } },
+          "the name is wisp, age 3",
+        ],
+      },
+    });
+    expect(r.outcome).toBe("complete");
+    // keep_0 scored 0.9 — both entries survive verbatim
+    const calls = r.cells["a"]?.toolCalls as unknown[];
+    expect(calls).toHaveLength(2);
+  });
+
+  test("compact is agent-only and requires tools", async () => {
+    for (const cell of [
+      {
+        id: "a",
+        kind: "agent",
+        prompt: "p",
+        output: { kind: "text" },
+        compact: { maxLogBytes: 100 },
+      },
+      {
+        id: "a",
+        kind: "classifier",
+        prompt: "p",
+        output: { kind: "choice", labels: ["x"] },
+        tools: ["pick.v1"],
+        compact: { maxLogBytes: 100 },
+      },
+    ]) {
+      let e: AlgalError | null = null;
+      try {
+        manifest({
+          contract: "algal.organism.v1",
+          key: "organism:bad-compact",
+          name: "Bad",
+          cells: [cell],
+          edges: [],
+        });
+      } catch (err) {
+        e = err as AlgalError;
+      }
+      expect(e?.code).toBe("PARSE_FAILED");
+    }
+  });
+
   test("tool loop that never settles exhausts maxTurns", async () => {
     const m = manifest({
       contract: "algal.organism.v1",

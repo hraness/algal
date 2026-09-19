@@ -9,6 +9,10 @@
 
 import { AlgalError } from "./errors";
 import { checkProgram } from "./expr";
+import {
+  parseDecisionQuestions,
+  type DecisionQuestions,
+} from "./decisions";
 import type { Digest } from "./digest";
 import {
   asArray,
@@ -41,6 +45,8 @@ export const BOUNDS = {
   maxRefLen: 64,
   maxTools: 16,
   maxTurns: 16,
+  /** Tool-log tail entries a compact policy may pin from keep/drop triage. */
+  maxToolLogPinned: 8,
   maxViewCells: 16,
   maxRounds: 16,
   maxEachItems: 64,
@@ -117,6 +123,21 @@ export type CellBudget = {
 
 export type CellView = { cell: string; ports?: PortName[] };
 
+/** Recorded tool-log compaction policy for `agent` cells. When the
+ * canonical tool log exceeds `maxLogBytes`, the runtime issues a `decide`
+ * effect asking a noul keep-question per unpinned entry; dropped entries
+ * leave the log verbatim and the decision is an ordinary replayable effect.
+ * Compaction preserves sources — kept entries are byte-identical. */
+export type CompactPolicy = {
+  /** Trigger threshold on canonical toolLog bytes (1..maxContextBytes). */
+  maxLogBytes: number;
+  /** Pinned tail entries never considered for dropping (0..8). */
+  keepRecent?: number;
+  /** Independent executor route for the keep/drop decisions — a cheap
+   * decision provider can compact while a frontier model runs the cell. */
+  route?: Route;
+};
+
 export type AgentView = {
   inputs: "*" | PortName[];
   /** Ancestor cell ids whose records (status + committed outputs) enter the
@@ -157,6 +178,7 @@ export type Cell =
       output: AgentOutput;
       route?: Route;
       tools?: string[];
+      compact?: CompactPolicy;
       budget?: CellBudget;
       retry?: { attempts: number };
     }
@@ -197,6 +219,21 @@ export type Cell =
       prompt: string;
       view: AgentView;
       output: { kind: "choice"; labels: string[]; onMiss?: string };
+      route?: Route;
+      budget?: CellBudget;
+      retry?: { attempts: number };
+    }
+  | {
+      /** A declared typed-decision probe: `noul`/`choice`/`score` questions
+       * over the cell's input state, answered by whichever decision provider
+       * the host routes (Jev today). The provider decides — it never
+       * generates — so the output contract is derived, not declared. */
+      id: string;
+      kind: "decide";
+      inputs: PortMap;
+      prompt?: string;
+      questions: DecisionQuestions;
+      view: AgentView;
       route?: Route;
       budget?: CellBudget;
       retry?: { attempts: number };
@@ -813,7 +850,7 @@ function parseCell(u: unknown, what: string): Cell {
         obj,
         [
           "id", "kind", "inputs", "prompt", "view", "output",
-          "route", "tools", "budget", "shadow", "retry",
+          "route", "tools", "compact", "budget", "shadow", "retry",
         ],
         what,
       );
@@ -898,6 +935,31 @@ function parseCell(u: unknown, what: string): Cell {
           );
         }
       }
+      let compact: CompactPolicy | undefined;
+      if (obj.compact !== undefined) {
+        const c = asObject(obj.compact, `${what}.compact`);
+        noUnknownKeys(c, ["maxLogBytes", "keepRecent", "route"], `${what}.compact`);
+        compact = {
+          maxLogBytes: asInt(
+            reqField(c, "maxLogBytes", `${what}.compact`),
+            `${what}.compact.maxLogBytes`,
+            1,
+            BOUNDS.maxContextBytes,
+          ),
+        };
+        const recent = optField(c, "keepRecent");
+        if (recent !== undefined) {
+          compact.keepRecent = asInt(
+            recent,
+            `${what}.compact.keepRecent`,
+            0,
+            BOUNDS.maxToolLogPinned,
+          );
+        }
+        if (c.route !== undefined) {
+          compact.route = parseRoute(c.route, `${what}.compact.route`);
+        }
+      }
       let retry: { attempts: number } | undefined;
       if (obj.retry !== undefined) {
         const r = asObject(obj.retry, `${what}.retry`);
@@ -910,6 +972,18 @@ function parseCell(u: unknown, what: string): Cell {
             BOUNDS.maxRetryAttempts,
           ),
         };
+      }
+      if (kind !== "agent" && obj.compact !== undefined) {
+        throw new AlgalError(
+          "PARSE_FAILED",
+          `${what}: compact is agent-only — only tool-bearing cells accumulate a log`,
+        );
+      }
+      if (kind === "agent" && compact !== undefined && obj.tools === undefined) {
+        throw new AlgalError(
+          "PARSE_FAILED",
+          `${what}: compact needs tools — no tool log ever accumulates`,
+        );
       }
       if (kind === "gate" && (obj.tools !== undefined || obj.shadow !== undefined)) {
         throw new AlgalError(
@@ -966,6 +1040,69 @@ function parseCell(u: unknown, what: string): Cell {
       const cell: Cell = { id, kind: "agent", inputs, prompt, view, output };
       if (route) cell.route = route;
       if (tools) cell.tools = tools;
+      if (compact) cell.compact = compact;
+      if (budget) cell.budget = budget;
+      if (retry) cell.retry = retry;
+      return cell;
+    }
+    case "decide": {
+      noUnknownKeys(
+        obj,
+        ["id", "kind", "inputs", "prompt", "questions", "view", "route", "budget", "retry"],
+        what,
+      );
+      const inputs = obj.inputs === undefined
+        ? {}
+        : parsePortMap(obj.inputs, `${what}.inputs`);
+      const prompt = obj.prompt === undefined
+        ? undefined
+        : asString(obj.prompt, `${what}.prompt`, BOUNDS.maxPromptLen);
+      const questions = parseDecisionQuestions(
+        reqField(obj, "questions", what),
+        `${what}.questions`,
+      );
+      const view = parseView(obj.view, `${what}.view`);
+      const route = obj.route === undefined
+        ? undefined
+        : parseRoute(obj.route, `${what}.route`);
+      let budget: CellBudget | undefined;
+      if (obj.budget !== undefined) {
+        const b = asObject(obj.budget, `${what}.budget`);
+        noUnknownKeys(
+          b,
+          ["maxContextBytes", "maxOutputBytes", "maxEffectMs"],
+          `${what}.budget`,
+        );
+        budget = {};
+        const ctx = optField(b, "maxContextBytes");
+        const outB = optField(b, "maxOutputBytes");
+        const ems = optField(b, "maxEffectMs");
+        if (ctx !== undefined) {
+          budget.maxContextBytes = asInt(ctx, `${what}.budget.maxContextBytes`, 1, BOUNDS.maxContextBytes);
+        }
+        if (outB !== undefined) {
+          budget.maxOutputBytes = asInt(outB, `${what}.budget.maxOutputBytes`, 1, BOUNDS.maxOutputBytes);
+        }
+        if (ems !== undefined) {
+          budget.maxEffectMs = asInt(ems, `${what}.budget.maxEffectMs`, 1, BOUNDS.maxEffectMs);
+        }
+      }
+      let retry: { attempts: number } | undefined;
+      if (obj.retry !== undefined) {
+        const r = asObject(obj.retry, `${what}.retry`);
+        noUnknownKeys(r, ["attempts"], `${what}.retry`);
+        retry = {
+          attempts: asInt(
+            reqField(r, "attempts", `${what}.retry`),
+            `${what}.retry.attempts`,
+            2,
+            BOUNDS.maxRetryAttempts,
+          ),
+        };
+      }
+      const cell: Cell = { id, kind: "decide", inputs, questions, view };
+      if (prompt !== undefined) cell.prompt = prompt;
+      if (route) cell.route = route;
       if (budget) cell.budget = budget;
       if (retry) cell.retry = retry;
       return cell;
@@ -1291,6 +1428,12 @@ export function manifestToJson(m: OrganismManifest): JsonObject {
         if (Object.keys(c.inputs).length > 0) o.inputs = portMapJson(c.inputs);
         if (c.route) o.route = routeJson(c.route);
         if (c.kind !== "gate" && c.tools) o.tools = c.tools;
+        if (c.kind === "agent" && c.compact) {
+          const cp: JsonObject = { maxLogBytes: c.compact.maxLogBytes };
+          if (c.compact.keepRecent !== undefined) cp.keepRecent = c.compact.keepRecent;
+          if (c.compact.route) cp.route = routeJson(c.compact.route);
+          o.compact = cp;
+        }
         if (c.kind === "classifier" && c.shadow) o.shadow = { take: c.shadow.take };
         if (c.retry) o.retry = { attempts: c.retry.attempts };
         if (c.budget) {
@@ -1301,6 +1444,29 @@ export function manifestToJson(m: OrganismManifest): JsonObject {
             b.maxOutputBytes = c.budget.maxOutputBytes;
           if (c.budget.maxTurns !== undefined)
             b.maxTurns = c.budget.maxTurns;
+          if (c.budget.maxEffectMs !== undefined)
+            b.maxEffectMs = c.budget.maxEffectMs;
+          o.budget = b;
+        }
+        return o;
+      }
+      case "decide": {
+        const o: JsonObject = {
+          id: c.id,
+          kind: "decide",
+          questions: c.questions as unknown as JsonValue,
+          view: viewJson(c.view),
+        };
+        if (Object.keys(c.inputs).length > 0) o.inputs = portMapJson(c.inputs);
+        if (c.prompt !== undefined) o.prompt = c.prompt;
+        if (c.route) o.route = routeJson(c.route);
+        if (c.retry) o.retry = { attempts: c.retry.attempts };
+        if (c.budget) {
+          const b: JsonObject = {};
+          if (c.budget.maxContextBytes !== undefined)
+            b.maxContextBytes = c.budget.maxContextBytes;
+          if (c.budget.maxOutputBytes !== undefined)
+            b.maxOutputBytes = c.budget.maxOutputBytes;
           if (c.budget.maxEffectMs !== undefined)
             b.maxEffectMs = c.budget.maxEffectMs;
           o.budget = b;

@@ -26,6 +26,10 @@ fn response_default() -> usize {
     2_097_152
 }
 
+fn jev_model_default() -> String {
+    crate::decisions::DEFAULT_MODEL.to_owned()
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ResponseFormat {
@@ -48,6 +52,12 @@ pub enum Backend {
     },
     Gateway {
         model: String,
+    },
+    Jev {
+        #[serde(default = "jev_model_default")]
+        model: String,
+        #[serde(default)]
+        credential_env: Option<String>,
     },
     Openai {
         base_url: String,
@@ -123,6 +133,15 @@ impl Backend {
             }
             Self::Gateway { model } => {
                 check_model(model)?;
+            }
+            Self::Jev {
+                model,
+                credential_env,
+            } => {
+                check_model(model)?;
+                if let Some(env) = credential_env {
+                    check_env(env)?;
+                }
             }
             Self::Openai {
                 base_url,
@@ -660,6 +679,46 @@ impl Host {
                 )
                 .await?;
                 meta["executor"] = json!(format!("vercel:{model}"));
+                Ok((out, meta))
+            }
+            Backend::Jev {
+                model,
+                credential_env,
+            } => {
+                let model = model.clone();
+                // an explicit credential_env reads that variable alone — a
+                // declared source that is missing fails loud, never silently
+                // falls back to the default vault chain
+                let credential = match credential_env {
+                    Some(env) => std::env::var(env)
+                        .map_err(|_| Error::new("EFFECT_UNBOUND", format!("configure {env}")))?,
+                    None => {
+                        // the vault probe touches OS tooling — keep it off the
+                        // async scheduler's worker thread
+                        let resolved = tokio::task::spawn_blocking(|| {
+                            crate::credentials::resolve("jev", None)
+                        })
+                        .await
+                        .map_err(|e| {
+                            Error::new("EFFECT_FAILED", format!("credential join: {e}"))
+                        })??;
+                        match resolved {
+                            Some((key, _)) => key,
+                            None => {
+                                return Err(Error::new(
+                                    "EFFECT_UNBOUND",
+                                    "Jev credential is not configured — run `algal auth jev` or set TYPESAFE_API_KEY",
+                                ));
+                            }
+                        }
+                    }
+                };
+                let (out, mut meta) =
+                    crate::decisions::serve(&model, &credential, request, deadline).await?;
+                if !meta.is_object() {
+                    meta = json!({});
+                }
+                meta["executor"] = json!(crate::decisions::executor_id(&model));
                 Ok((out, meta))
             }
             Backend::Openai {

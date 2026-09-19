@@ -131,6 +131,22 @@ Cell kinds:
 - `gate` — an approval point: a `choice` cell whose effect request carries
   `kind:"gate"` so executors route it to a human or a policy check instead of
   a model. Approval stays visible in the structure and on the receipt.
+- `decide` — a declared map of typed questions (`noul` keep-probabilities,
+  `choice` picks, `score` ratings) answered by a *decision provider* — typed
+  decisions, never generated text. The output contract is derived from the
+  question map (`{"answers":{…}}`), the effect request carries `questions`,
+  and the provider must return exactly the declared answers. Decision
+  executors serve `decide` and `classifier` cells only — they can never
+  generate agent output or approve a gate. Jev (TypeSafe `systemone`) is
+  the first such provider, admitted with `--jev`; its key lives in
+  `TYPESAFE_API_KEY` or the local vault via `algal auth jev`.
+- `compact` (an `agent` field, requires `tools`) — recorded tool-log
+  compaction. When the canonical `toolLog` exceeds `maxLogBytes`, the
+  runtime issues a `decide` effect triaging every unpinned entry (keep =
+  `noul ≥ 0.5`); the request covers the pre-compaction log and the answers
+  record the keep/drop, so replay reproduces the rebuilt log bit-for-bit.
+  `compact.route` may send triage to a cheap decision provider while a
+  frontier model runs the cell.
 - `organism` — a sealed sub-manifest referenced by digest. The outer graph sees
   only its declared interface ports. This is symbolization: a compound that is
   versioned, inspectable, and not a free primitive. `via` names a transport
@@ -300,6 +316,33 @@ bun run cli store get sha256:…            # → the payload
 # a portable closure: the manifest plus everything it embeds and references
 bun run cli pack examples/inbox.algal.json --modules examples > bundle.json
 bun run cli unpack bundle.json --dir /tmp/elsewhere   # installs, digests verified
+```
+
+## Semantic recall over the store
+
+`index` builds a derived hybrid index (embeddings + lexical) over stored
+manifests, runs, values, and optional docs — disposable tooling, never
+contract data: it changes nothing about digests, receipts, or replay.
+`search` ranks chunks by cosine + token overlap and prints snippets.
+
+```sh
+bun run cli index --dir .algal --docs docs          # rebuild the index
+bun run cli search "gateway timeout retry" --dir .algal -k 5
+# embedder: deterministic local trigram by default; `--embedder gateway[:<model>]`
+# opts into Vercel AI Gateway embeddings when AI_GATEWAY_API_KEY is set
+```
+
+## Provider credentials
+
+Provider keys never enter manifests, receipts, digests, or logs — they resolve
+at the executor boundary only. `auth` vaults them locally cross-platform
+(macOS Keychain, libsecret, Windows DPAPI, or a permission-checked file
+fallback); the provider env var always works as a CI escape hatch.
+
+```sh
+bun run cli auth jev            # vault a TypeSafe Jev key (TYPESAFE_API_KEY)
+bun run cli auth jev --status   # where the key resolves from (hint only)
+bun run cli doctor --jev        # live one-question check against systemone
 ```
 
 ## Foundry: select organisms by evidence

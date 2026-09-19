@@ -1,0 +1,10 @@
+{
+  "task": {
+    "query": {
+      "name": "wisp",
+      "age": 3,
+      "species": "sprig",
+      "habitat": "tidepool"
+    }
+  }
+}

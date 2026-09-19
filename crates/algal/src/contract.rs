@@ -228,8 +228,19 @@ fn normalize_cell(value: &Value) -> Result<Value> {
         ],
         "each" => &["id", "kind", "manifest", "via", "maxItems", "over"],
         "agent" | "classifier" | "gate" => &[
-            "id", "kind", "inputs", "prompt", "view", "output", "route", "tools", "budget",
-            "shadow", "retry",
+            "id", "kind", "inputs", "prompt", "view", "output", "route", "tools", "compact",
+            "budget", "shadow", "retry",
+        ],
+        "decide" => &[
+            "id",
+            "kind",
+            "inputs",
+            "prompt",
+            "questions",
+            "view",
+            "route",
+            "budget",
+            "retry",
         ],
         _ => return Err(Error::invalid(format!("unknown cell kind {kind}"))),
     };
@@ -319,55 +330,7 @@ fn normalize_cell(value: &Value) -> Result<Value> {
             if kind != "agent" && v["output"]["kind"] != "choice" {
                 return Err(Error::invalid("classifier/gate requires choice"));
             }
-            let mut view = v.get("view").cloned().unwrap_or(json!({}));
-            keys(&view, &["inputs", "cells", "graph", "note"])?;
-            if view.get("inputs").is_none() {
-                view["inputs"] = json!("*");
-            }
-            if view["inputs"] != "*" {
-                for input in list(&view["inputs"], 32)? {
-                    id(input)?;
-                }
-            }
-            if let Some(raw) = view.get("cells") {
-                let mut cells = Vec::new();
-                let mut unique = BTreeSet::new();
-                for raw in list(raw, 16)? {
-                    let item = if raw.is_string() {
-                        json!({"cell":raw})
-                    } else {
-                        raw.clone()
-                    };
-                    keys(&item, &["cell", "ports"])?;
-                    let name = id(&item["cell"])?;
-                    if !unique.insert(name.to_owned()) {
-                        return Err(Error::invalid("duplicate view cell"));
-                    }
-                    if let Some(ps) = item.get("ports") {
-                        let mut names = BTreeSet::new();
-                        for p in list(ps, 32)? {
-                            if !names.insert(id(p)?) {
-                                return Err(Error::invalid("duplicate view port"));
-                            }
-                        }
-                        if names.is_empty() {
-                            return Err(Error::invalid("empty view ports"));
-                        }
-                    }
-                    cells.push(item);
-                }
-                if cells.is_empty() {
-                    return Err(Error::invalid("empty view cells"));
-                }
-                view["cells"] = json!(cells);
-            }
-            if view.get("graph").is_some_and(|v| !v.is_boolean()) {
-                return Err(Error::invalid("view.graph must be boolean"));
-            }
-            if let Some(note) = view.get("note") {
-                text(note, 2000)?;
-            }
-            v["view"] = view;
+            v["view"] = agent_view(v.get("view"))?;
             if let Some(route) = v.get("route") {
                 keys(route, &["provider", "model", "preset"])?;
                 for route in object(route)?.values() {
@@ -388,6 +351,29 @@ fn normalize_cell(value: &Value) -> Result<Value> {
                     return Err(Error::invalid("empty tools"));
                 }
             }
+            if let Some(compact) = v.get("compact") {
+                if kind != "agent" {
+                    return Err(Error::invalid(
+                        "compact is agent-only — only tool-bearing cells accumulate a log",
+                    ));
+                }
+                keys(compact, &["maxLogBytes", "keepRecent", "route"])?;
+                integer(&compact["maxLogBytes"], 1, 262_144)?;
+                if let Some(recent) = compact.get("keepRecent") {
+                    integer(recent, 0, 8)?;
+                }
+                if let Some(route) = compact.get("route") {
+                    keys(route, &["provider", "model", "preset"])?;
+                    for r in object(route)?.values() {
+                        text(r, 64)?;
+                    }
+                }
+                if v.get("tools").is_none() {
+                    return Err(Error::invalid(
+                        "compact needs tools — no tool log ever accumulates",
+                    ));
+                }
+            }
             if let Some(shadow) = v.get("shadow") {
                 keys(shadow, &["take"])?;
                 if kind != "classifier"
@@ -403,6 +389,29 @@ fn normalize_cell(value: &Value) -> Result<Value> {
                 integer(&retry["attempts"], 2, 8)?;
             }
         }
+        "decide" => {
+            v["inputs"] =
+                serde_json::to_value(ports(v.get("inputs").unwrap_or(&json!({})), false, false)?)?;
+            if let Some(prompt) = v.get("prompt") {
+                text(prompt, 8192)?;
+            }
+            crate::decisions::check_questions(
+                v.get("questions")
+                    .ok_or_else(|| Error::invalid("decide cell requires questions"))?,
+                "decide.questions",
+            )?;
+            v["view"] = agent_view(v.get("view"))?;
+            if let Some(route) = v.get("route") {
+                keys(route, &["provider", "model", "preset"])?;
+                for route in object(route)?.values() {
+                    text(route, 64)?;
+                }
+            }
+            if let Some(retry) = v.get("retry") {
+                keys(retry, &["attempts"])?;
+                integer(&retry["attempts"], 2, 8)?;
+            }
+        }
         _ => (),
     }
     if let Some(budget) = v.get("budget") {
@@ -410,6 +419,8 @@ fn normalize_cell(value: &Value) -> Result<Value> {
             budget,
             if kind == "tool" {
                 &["maxEffectMs"]
+            } else if kind == "decide" {
+                &["maxContextBytes", "maxOutputBytes", "maxEffectMs"]
             } else {
                 &[
                     "maxContextBytes",
@@ -429,6 +440,61 @@ fn normalize_cell(value: &Value) -> Result<Value> {
         }
     }
     Ok(v)
+}
+
+/// Normalize an agent-style `view` block (agent/classifier/gate/decide):
+/// `inputs` defaults to `"*"`, `cells` entries normalize to `{cell, ports?}`
+/// objects with uniqueness enforced, `graph`/`note` are type-checked.
+fn agent_view(raw: Option<&Value>) -> Result<Value> {
+    let mut view = raw.cloned().unwrap_or(json!({}));
+    keys(&view, &["inputs", "cells", "graph", "note"])?;
+    if view.get("inputs").is_none() {
+        view["inputs"] = json!("*");
+    }
+    if view["inputs"] != "*" {
+        for input in list(&view["inputs"], 32)? {
+            id(input)?;
+        }
+    }
+    if let Some(raw) = view.get("cells") {
+        let mut cells = Vec::new();
+        let mut unique = BTreeSet::new();
+        for raw in list(raw, 16)? {
+            let item = if raw.is_string() {
+                json!({"cell":raw})
+            } else {
+                raw.clone()
+            };
+            keys(&item, &["cell", "ports"])?;
+            let name = id(&item["cell"])?;
+            if !unique.insert(name.to_owned()) {
+                return Err(Error::invalid("duplicate view cell"));
+            }
+            if let Some(ps) = item.get("ports") {
+                let mut names = BTreeSet::new();
+                for p in list(ps, 32)? {
+                    if !names.insert(id(p)?) {
+                        return Err(Error::invalid("duplicate view port"));
+                    }
+                }
+                if names.is_empty() {
+                    return Err(Error::invalid("empty view ports"));
+                }
+            }
+            cells.push(item);
+        }
+        if cells.is_empty() {
+            return Err(Error::invalid("empty view cells"));
+        }
+        view["cells"] = json!(cells);
+    }
+    if view.get("graph").is_some_and(|v| !v.is_boolean()) {
+        return Err(Error::invalid("view.graph must be boolean"));
+    }
+    if let Some(note) = view.get("note") {
+        text(note, 2000)?;
+    }
+    Ok(view)
 }
 
 impl Manifest {

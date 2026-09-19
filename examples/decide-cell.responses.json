@@ -1,0 +1,17 @@
+{
+  "probe": {
+    "answers": {
+      "risk": {
+        "choice": "low",
+        "confidence": 0.82,
+        "probabilities": { "low": 0.82, "medium": 0.15, "high": 0.03 }
+      },
+      "merge_ready": { "noul": 0.91 },
+      "quality": {
+        "score": 4,
+        "confidence": 0.77,
+        "probabilities": { "3": 0.2, "4": 0.77, "5": 0.03 }
+      }
+    }
+  }
+}

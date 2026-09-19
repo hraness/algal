@@ -3,18 +3,22 @@
 - `src/` — the contract (`contract.ts`, `graph.ts`), the scheduler (`run.ts`),
   the effect seam (`effects.ts`), the store (`store.ts`), verification
   (`verify.ts`), Vercel AI Gateway execution (`gateway.ts`), typed external
-  tools (`tools.ts`), foundry evaluation and search (`foundry.ts`,
-  `search.ts`), benchmark comparison (`bench.ts`, `bench-verify.ts`),
-  bundles (`bundle.ts`), transports (`transport.ts`), the `algal.expr.v1`
-  WASM loader (`expr.ts` + committed `algal_expr.wasm`), canonical values
-  and digests, and colocated tests.
+  tools (`tools.ts`), the provider-neutral typed-decision layer
+  (`decisions.ts`) with the TypeSafe Jev adapter (`jev.ts`), cross-platform
+  credential custody (`credentials.ts`), embeddings (`embeddings.ts`) and
+  the derived semantic index (`semantic.ts`), foundry evaluation and
+  search (`foundry.ts`, `search.ts`), benchmark comparison (`bench.ts`,
+  `bench-verify.ts`), bundles (`bundle.ts`), transports (`transport.ts`),
+  the `algal.expr.v1` WASM loader (`expr.ts` + committed `algal_expr.wasm`),
+  canonical values and digests, and colocated tests.
 - `crates/algal-expr/` — the one expression evaluator (Rust): linked into
   the kernel as an rlib and compiled to `wasm32-unknown-unknown` for Bun.
   `scripts/build-expr-wasm.sh` rebuilds `src/algal_expr.wasm` (needs a
   rustup toolchain with the wasm target; pins `RUSTC` past Homebrew).
 - `cli.ts` — the Bun CLI (`run`, `check`, `verify`, `inspect`, `explain`,
   `diff`, `foundry`, `bench`, `runs`, `digest`, `store`, `manifests`,
-  `manifest`, `slots`, `slot`, `pack`, `unpack`, `example`, `suite`).
+  `manifest`, `slots`, `slot`, `pack`, `unpack`, `example`, `suite`,
+  `index`, `search`, `auth`, `doctor`).
 - `index.ts` — the package's public surface.
 - `examples/` — bundled manifests and scripted responses used by `suite`.
 - `spec/v1/organism.md`, `spec/v1/expr.md`, `spec/v1/foundry.md`,

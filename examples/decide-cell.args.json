@@ -1,0 +1,3 @@
+{
+  "pr": { "diff": "retry: bound effect re-issue attempts at 8" }
+}
