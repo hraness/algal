@@ -67,6 +67,9 @@ export async function commandJson(
     child.stdin.end();
     const [stdout, , code] = await Promise.all([output, diagnostic, child.exited]);
     if (signal.aborted) throw new AlgalError("BUDGET_EXHAUSTED", "command cancelled or timed out");
+    // exit 75 (EX_TEMPFAIL): the answer is not ready — suspend the run; it
+    // may be resumed later. Any other nonzero exit is an ordinary failure.
+    if (code === 75) throw new AlgalError("EFFECT_SUSPENDED", "executor asked the host to suspend the run");
     if (code !== 0) throw new AlgalError("EFFECT_FAILED", `executor exited ${code}; diagnostics withheld`);
     let parsed: unknown;
     try { parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(stdout)); }

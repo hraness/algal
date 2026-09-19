@@ -179,6 +179,11 @@ export function vercelGatewayExecutor(options: GatewayExecutorOptions): Executor
     id: `vercel:${options.model}`,
     capabilities: { effects: ["agent", "classifier"] },
     cacheIdentity: digestCanonical({ provider: "vercel", baseUrl: VERCEL_AI_GATEWAY_BASE_URL, model: options.model, responseFormat: "json_schema" }),
+    // the backend configuration digest mirrors the native gateway backend —
+    // `{kind:"gateway", model}` — so receipts agree across runtimes
+    receiptFor: () => ({
+      configurationDigest: digestCanonical({ kind: "gateway", model: options.model }),
+    }),
     execute: async (request, signal) => (await run(request, signal)).output,
     executeEffect: run,
   };

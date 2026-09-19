@@ -417,6 +417,122 @@ async fn host_routes_only_to_admitted_effect_capabilities() {
     assert_eq!(denied["error"]["code"], "EFFECT_UNBOUND");
 }
 
+#[tokio::test]
+async fn a_suspended_run_resumes_against_live_executors() {
+    let manifest = Manifest::parse(&json!({
+        "contract":"algal.organism.v1","key":"organism:suspendable","name":"Suspendable",
+        "cells":[
+            {"id":"src","kind":"input","outputs":{"v":{"type":"text"}}},
+            {"id":"worker","kind":"agent","inputs":{"v":{"type":"text"}},"prompt":"work",
+             "output":{"kind":"text"},"retry":{"attempts":4}},
+            {"id":"sink","kind":"fn","fn":"echo.v1"}
+        ],
+        "edges":[
+            {"from":{"cell":"src","port":"v"},"to":{"cell":"worker","port":"v"}},
+            {"from":{"cell":"worker","port":"out"},"to":{"cell":"sink","port":"value"}}
+        ]
+    }))
+    .unwrap();
+    let mut store = Store::default();
+    // exit 75 (EX_TEMPFAIL) asks the host to suspend the run
+    let mut pending = Host::default();
+    pending.entries.push((
+        "gatekeeper".into(),
+        Backend::Command {
+            argv: vec!["sh".into(), "-c".into(), "exit 75".into()],
+            cwd: None,
+            timeout_ms: 5_000,
+        },
+    ));
+    let suspended = runtime::run(
+        manifest.clone(),
+        json!({"src":{"v":"ticket"}}),
+        &mut store,
+        &mut pending,
+        &transports(),
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(suspended["outcome"], "suspended");
+    assert_eq!(suspended["cells"]["worker"]["status"], "suspended");
+    // suspension bypasses retry: one recorded attempt, non-retryable
+    let effects = suspended["effects"].as_array().unwrap();
+    assert_eq!(effects.len(), 1);
+    assert_eq!(effects[0]["error"]["code"], "EFFECT_SUSPENDED");
+    assert_eq!(effects[0]["retryable"], false);
+    assert!(suspended["cells"].get("sink").is_none());
+    assert!(
+        suspended["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["kind"] == "cell.suspend")
+    );
+
+    // the suspended checkpoint verifies bit-for-bit: replay reproduces the
+    // suspension, not a fabricated answer
+    let verified = runtime::verify(&suspended, manifest.clone(), &store, &Host::default())
+        .await
+        .unwrap();
+    assert_eq!(verified["ok"], true);
+    assert_eq!(verified["outcome"], "suspended");
+
+    // resume: the recorded prefix replays, the suspended request re-issues
+    // against the live host
+    let mut live = Host::scripted(json!({"worker":"the deferred answer"}));
+    let resumed = runtime::resume(
+        &suspended,
+        manifest.clone(),
+        &mut store,
+        &mut live,
+        &transports(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(resumed["outcome"], "complete");
+    assert_eq!(
+        resumed["cells"]["worker"]["outputs"]["out"],
+        "the deferred answer"
+    );
+    assert_eq!(resumed["cells"]["sink"]["status"], "committed");
+    let effects = resumed["effects"].as_array().unwrap();
+    assert_eq!(effects.len(), 1);
+    assert_eq!(effects[0]["requestDigest"], effects_digest(&suspended));
+    assert_eq!(effects[0]["output"], "the deferred answer");
+
+    // resuming with a still-suspending executor suspends identically
+    let mut still_pending = Host::default();
+    still_pending.entries.push((
+        "gatekeeper".into(),
+        Backend::Command {
+            argv: vec!["sh".into(), "-c".into(), "exit 75".into()],
+            cwd: None,
+            timeout_ms: 5_000,
+        },
+    ));
+    let again = runtime::resume(
+        &suspended,
+        manifest.clone(),
+        &mut store,
+        &mut still_pending,
+        &transports(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(again["outcome"], "suspended");
+    assert_eq!(again["cells"]["worker"]["status"], "suspended");
+    assert_eq!(
+        again["effects"][0]["requestDigest"],
+        effects_digest(&suspended)
+    );
+    assert_eq!(again["effects"][0]["error"]["code"], "EFFECT_SUSPENDED");
+}
+
+fn effects_digest(receipt: &Value) -> Value {
+    receipt["effects"][0]["requestDigest"].clone()
+}
+
 #[test]
 fn tampered_bundle_does_not_partially_install() {
     let manifest = Manifest::parse(

@@ -174,13 +174,25 @@ export function jevExecutor(options: JevExecutorOptions): Executor {
         ? { maxResponseBytes: options.maxResponseBytes }
         : {}),
     });
-  return decisionExecutor({
-    asker,
-    id: model === JEV_DEFAULT_MODEL ? "jev" : `jev:${model}`,
-    cacheIdentity: digestCanonical({
-      provider: "typesafe",
-      baseUrl: options.baseUrl ?? TYPESAFE_SYSTEMONE_URL,
-      model,
+  return {
+    ...decisionExecutor({
+      asker,
+      id: model === JEV_DEFAULT_MODEL ? "jev" : `jev:${model}`,
+      cacheIdentity: digestCanonical({
+        provider: "typesafe",
+        baseUrl: options.baseUrl ?? TYPESAFE_SYSTEMONE_URL,
+        model,
+      }),
     }),
-  });
+    // the backend configuration digest mirrors the native jev backend —
+    // `{kind:"jev", model, credentialEnv}` — so receipts agree across
+    // runtimes; the CLI's vault chain is not env-named, hence null
+    receiptFor: () => ({
+      configurationDigest: digestCanonical({
+        credentialEnv: null,
+        kind: "jev",
+        model,
+      }),
+    }),
+  };
 }

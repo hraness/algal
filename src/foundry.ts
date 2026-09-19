@@ -4,7 +4,7 @@ import { digestCanonical, type Digest } from "./digest";
 import type { Executor } from "./effects";
 import { AlgalError } from "./errors";
 import type { FnRegistry } from "./registry";
-import { runOrganism } from "./run";
+import { runOrganism, type RunOutcome } from "./run";
 import type { Store } from "./store";
 import type { Transport } from "./transport";
 import type { ToolRegistry } from "./tools";
@@ -30,7 +30,7 @@ export type FoundryCaseResult = {
   id: string;
   split: "train" | "validation" | "holdout";
   passed: boolean;
-  outcome: "complete" | "failed" | "stuck";
+  outcome: RunOutcome;
   args: Record<string, JsonValue>;
   outputs: Record<string, JsonValue>;
   expect: Record<string, JsonValue>;

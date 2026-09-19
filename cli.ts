@@ -44,7 +44,7 @@ import {
   parseTransportsFile,
   type Transport,
 } from "./src/transport";
-import { diffReceipts, verifyReceipt } from "./src/verify";
+import { diffReceipts, resumeRun, verifyReceipt } from "./src/verify";
 import {
   parseToolSignature,
   TOOL_SIGNATURE_BOUNDS,
@@ -102,7 +102,18 @@ function recallSpecExecutor(spec: string, dir: string): Executor | undefined {
     throw new AlgalError("PARSE_FAILED", "recall embedder spec must not be empty");
   }
   const embedder = resolveEmbedder(embedderSpec);
-  return recallExecutor(indexSearcher(dir, embedder, embedderSpec));
+  return {
+    ...recallExecutor(indexSearcher(dir, embedder, embedderSpec)),
+    // the backend configuration digest mirrors the native recall backend —
+    // `{dir, embedder, kind:"recall"}` — so receipts agree across runtimes
+    receiptFor: () => ({
+      configurationDigest: digestCanonical({
+        dir,
+        embedder: embedderSpec,
+        kind: "recall",
+      }),
+    }),
+  };
 }
 
 const USAGE = `algal — typed, replayable workflow organisms
@@ -138,6 +149,9 @@ usage:
   algal verify <receipt.json> [manifest.json] [--modules <dir>] [--transports <file>] [--dir <path>]
                                               re-run with recorded receipts and compare;
                                               manifest resolves from the store when omitted
+  algal resume <receipt.json> [manifest.json] [executor options]
+                                              continue a suspended run: recorded effects
+                                              replay, the rest routes to live executors
   algal inspect <receipt.json>            summarize a run receipt
   algal runs [--dir <path>]               list receipts stored under --dir
   algal diff <receipt-a.json> <receipt-b.json>
@@ -389,6 +403,64 @@ async function loadTools(file: string): Promise<ToolRegistry> {
   return registry;
 }
 
+/** Live executors from the shared run/call/resume flag set: `--responses`
+ * fixtures are wildcard scripted executors, `--executors` names host
+ * adapters (cmd / jev / recall specs keep their capability declarations). */
+async function resolveExecutors(
+  flags: Record<string, string | boolean>,
+  dir: string,
+): Promise<Executor[]> {
+  const executors: Executor[] = [];
+  if (flags.responses !== undefined) {
+    const map = asRecord(
+      await readJson(resolve(String(flags.responses))),
+      "responses",
+    );
+    executors.push(scriptedExecutor(map as Record<string, JsonValue>));
+  }
+  if (flags["executor-cmd"] !== undefined) {
+    executors.push(commandExecutor(String(flags["executor-cmd"])));
+  }
+  if (flags["gateway-model"] !== undefined) {
+    executors.push(vercelGatewayExecutor({ model: String(flags["gateway-model"]) }));
+  }
+  if (flags.jev !== undefined) {
+    executors.push(jevSpecExecutor(typeof flags.jev === "string" ? `jev:${flags.jev}` : "jev")!);
+  }
+  if (flags.recall !== undefined) {
+    const spec = typeof flags.recall === "string" ? `recall:${flags.recall}` : "recall";
+    executors.push(named("recall", recallSpecExecutor(spec, dir)!));
+  }
+  if (flags.executors !== undefined) {
+    const map = asRecord(
+      await readJson(resolve(String(flags.executors))),
+      "executors",
+    );
+    for (const [name, cmd] of Object.entries(map)) {
+      if (typeof cmd !== "string" || cmd.length === 0) {
+        throw new AlgalError(
+          "PARSE_FAILED",
+          `executors.${name} must be a shell command string`,
+        );
+      }
+      const jev = jevSpecExecutor(cmd);
+      if (jev !== undefined) {
+        executors.push(named(name, jev));
+        continue;
+      }
+      const recall = recallSpecExecutor(cmd, dir);
+      if (recall !== undefined) {
+        executors.push(named(name, recall));
+        continue;
+      }
+      const inner = commandExecutor(cmd);
+      executors.push(named(name, inner));
+    }
+    diag(`loaded ${Object.keys(map).length} named executor(s)`);
+  }
+  return executors;
+}
+
 /** Convert a Algal port type to a draft-07 JSON Schema fragment. */
 function portToJsonSchema(p: {
   type: string;
@@ -595,54 +667,7 @@ async function main(): Promise<number> {
         args[cellId] = asRecord(ports as JsonValue, `args.${cellId}`);
       }
 
-      const executors: Executor[] = [];
-      if (flags.responses !== undefined) {
-        const map = asRecord(
-          await readJson(resolve(String(flags.responses))),
-          "responses",
-        );
-        executors.push(scriptedExecutor(map as Record<string, JsonValue>));
-      }
-      if (flags["executor-cmd"] !== undefined) {
-        executors.push(commandExecutor(String(flags["executor-cmd"])));
-      }
-      if (flags["gateway-model"] !== undefined) {
-        executors.push(vercelGatewayExecutor({ model: String(flags["gateway-model"]) }));
-      }
-      if (flags.jev !== undefined) {
-        executors.push(jevSpecExecutor(typeof flags.jev === "string" ? `jev:${flags.jev}` : "jev")!);
-      }
-      if (flags.recall !== undefined) {
-        const spec = typeof flags.recall === "string" ? `recall:${flags.recall}` : "recall";
-        executors.push(named("recall", recallSpecExecutor(spec, dir)!));
-      }
-      if (flags.executors !== undefined) {
-        const map = asRecord(
-          await readJson(resolve(String(flags.executors))),
-          "executors",
-        );
-        for (const [name, cmd] of Object.entries(map)) {
-          if (typeof cmd !== "string" || cmd.length === 0) {
-            throw new AlgalError(
-              "PARSE_FAILED",
-              `executors.${name} must be a shell command string`,
-            );
-          }
-          const jev = jevSpecExecutor(cmd);
-          if (jev !== undefined) {
-            executors.push(named(name, jev));
-            continue;
-          }
-          const recall = recallSpecExecutor(cmd, dir);
-          if (recall !== undefined) {
-            executors.push(named(name, recall));
-            continue;
-          }
-          const inner = commandExecutor(cmd);
-          executors.push({ id: name, execute: (r) => inner.execute(r) });
-        }
-        diag(`loaded ${Object.keys(map).length} named executor(s)`);
-      }
+      const executors = await resolveExecutors(flags, dir);
       const transports =
         flags.transports !== undefined
           ? await loadTransports(String(flags.transports))
@@ -868,54 +893,7 @@ async function main(): Promise<number> {
         args[cellId] = asRecord(ports as JsonValue, `args.${cellId}`);
       }
 
-      const executors: Executor[] = [];
-      if (flags.responses !== undefined) {
-        const map = asRecord(
-          await readJson(resolve(String(flags.responses))),
-          "responses",
-        );
-        executors.push(scriptedExecutor(map as Record<string, JsonValue>));
-      }
-      if (flags["executor-cmd"] !== undefined) {
-        executors.push(commandExecutor(String(flags["executor-cmd"])));
-      }
-      if (flags["gateway-model"] !== undefined) {
-        executors.push(vercelGatewayExecutor({ model: String(flags["gateway-model"]) }));
-      }
-      if (flags.jev !== undefined) {
-        executors.push(jevSpecExecutor(typeof flags.jev === "string" ? `jev:${flags.jev}` : "jev")!);
-      }
-      if (flags.recall !== undefined) {
-        const spec = typeof flags.recall === "string" ? `recall:${flags.recall}` : "recall";
-        executors.push(named("recall", recallSpecExecutor(spec, dir)!));
-      }
-      if (flags.executors !== undefined) {
-        const map = asRecord(
-          await readJson(resolve(String(flags.executors))),
-          "executors",
-        );
-        for (const [name, cmd] of Object.entries(map)) {
-          if (typeof cmd !== "string" || cmd.length === 0) {
-            throw new AlgalError(
-              "PARSE_FAILED",
-              `executors.${name} must be a shell command string`,
-            );
-          }
-          const jev = jevSpecExecutor(cmd);
-          if (jev !== undefined) {
-            executors.push(named(name, jev));
-            continue;
-          }
-          const recall = recallSpecExecutor(cmd, dir);
-          if (recall !== undefined) {
-            executors.push(named(name, recall));
-            continue;
-          }
-          const inner = commandExecutor(cmd);
-          executors.push({ id: name, execute: (r) => inner.execute(r) });
-        }
-        diag(`loaded ${Object.keys(map).length} named executor(s)`);
-      }
+      const executors = await resolveExecutors(flags, dir);
       const transports =
         flags.transports !== undefined
           ? await loadTransports(String(flags.transports))
@@ -1153,46 +1131,7 @@ async function main(): Promise<number> {
       if (config.scorer !== undefined) {
         scorer = parseExprScorer(config.scorer, "foundry config.scorer");
       }
-      const executors: Executor[] = [];
-      if (flags.responses !== undefined) {
-        executors.push(scriptedExecutor(asRecord(
-          await readJson(resolve(String(flags.responses))),
-          "responses",
-        ) as Record<string, JsonValue>));
-      }
-      if (flags["executor-cmd"] !== undefined) {
-        executors.push(commandExecutor(String(flags["executor-cmd"])));
-      }
-      if (flags["gateway-model"] !== undefined) {
-        executors.push(vercelGatewayExecutor({ model: String(flags["gateway-model"]) }));
-      }
-      if (flags.jev !== undefined) {
-        executors.push(jevSpecExecutor(typeof flags.jev === "string" ? `jev:${flags.jev}` : "jev")!);
-      }
-      if (flags.recall !== undefined) {
-        const spec = typeof flags.recall === "string" ? `recall:${flags.recall}` : "recall";
-        executors.push(named("recall", recallSpecExecutor(spec, dir)!));
-      }
-      if (flags.executors !== undefined) {
-        const map = asRecord(await readJson(resolve(String(flags.executors))), "executors");
-        for (const [name, command] of Object.entries(map)) {
-          if (typeof command !== "string" || command.length === 0) {
-            throw new AlgalError("PARSE_FAILED", `executors.${name} must be a shell command string`);
-          }
-          const jev = jevSpecExecutor(command);
-          if (jev !== undefined) {
-            executors.push(named(name, jev));
-            continue;
-          }
-          const recall = recallSpecExecutor(command, dir);
-          if (recall !== undefined) {
-            executors.push(named(name, recall));
-            continue;
-          }
-          const inner = commandExecutor(command);
-          executors.push({ id: name, execute: (request) => inner.execute(request) });
-        }
-      }
+      const executors = await resolveExecutors(flags, dir);
       const activeExecutors = flags["cache-effects"] !== undefined
         ? executors.map((executor) => cachedExecutor(executor, store))
         : executors;
@@ -1484,6 +1423,65 @@ async function main(): Promise<number> {
       );
       out(report as unknown as JsonObject);
       return report.ok ? 0 : 1;
+    }
+
+    case "resume": {
+      const [receiptFile, manifestFile] = positional;
+      if (!receiptFile) {
+        usageError("algal resume <receipt.json> [manifest.json] [executor options]");
+      }
+      if (flags.modules !== undefined) {
+        const n = await loadModules(String(flags.modules), store);
+        diag(`loaded ${n} module(s) from ${flags.modules}`);
+      }
+      const receipt = await readJson(resolve(receiptFile));
+      let manifest: JsonValue;
+      if (manifestFile !== undefined) {
+        manifest = await readJson(resolve(manifestFile));
+      } else {
+        const digest = (receipt as JsonObject).manifestDigest;
+        if (typeof digest !== "string" || !digest.startsWith("sha256:")) {
+          throw new AlgalError(
+            "PARSE_FAILED",
+            "receipt has no manifestDigest; pass the manifest explicitly",
+          );
+        }
+        const stored = await store.getManifest(digest as `sha256:${string}`);
+        if (!stored) {
+          throw new AlgalError(
+            "STORE_MISS",
+            `manifest ${digest} not in store; pass it explicitly or use --modules`,
+          );
+        }
+        manifest = manifestToJson(stored);
+        diag(`resolved manifest ${digest} from store`);
+      }
+      const executors = await resolveExecutors(flags, dir);
+      const transports =
+        flags.transports !== undefined
+          ? await loadTransports(String(flags.transports))
+          : undefined;
+      const tools =
+        flags.tools !== undefined
+          ? await loadTools(String(flags.tools))
+          : undefined;
+      const resumed = await resumeRun(
+        receipt,
+        manifest,
+        store,
+        flags["cache-effects"] !== undefined
+          ? executors.map((e) => cachedExecutor(e, store))
+          : executors,
+        fns,
+        transports,
+        tools,
+      );
+      if (flags.write) {
+        const rd = await store.putReceipt(resumed as unknown as JsonValue);
+        diag(`receipt  ${rd}`);
+      }
+      out(resumed);
+      return resumed.outcome === "complete" ? 0 : 1;
     }
 
     case "diff": {

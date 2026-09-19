@@ -543,7 +543,9 @@ re-evaluation.
   and `each`: an inner unhandled failure fails the enclosing cell, which
   may itself be caught at the outer level.
 - A run ends `complete`, `failed` (first unhandled failure wins, recorded),
-  or `stuck` (pending cells remain but none can resolve).
+  `stuck` (pending cells remain but none can resolve), or `suspended` (an
+  effect asked the host to pause the process; see
+  [Suspension and resume](#suspension-and-resume)).
 
 ## Work ledger
 
@@ -605,12 +607,18 @@ scripted fixtures serve every kind and wildcard routes.
 
 A replay executor is not a route: verification resolves recorded effects by
 request digest before capability selection, so offline replay never depends
-on which executors the host currently admits.
+on which executors the host currently admits. An executor may also declare
+`serves(request)` — a request-aware admission checked before capability
+routing. The replay executor uses it to serve exactly the request digests
+its receipt list holds; on a miss the request falls through to ordinary
+live routing, which is what makes `resume` able to replay a recorded prefix
+and execute the tail live in one pass.
 
 ## Receipts — algal.run.v1
 
 A receipt records `manifestDigest`, `args`, `outcome`, per-cell records
-(`committed | skipped | failed`, outputs, `failure` detail, `effectDigest`,
+(`committed | skipped | failed | suspended`, outputs, `failure` detail,
+`effectDigest`,
 `toolCalls`, `shadowOut`, `rounds`, `items`, per-cell `work`), the
 `effects` list (`requestDigest`, then `output` *or* `error` — a failed
 effect records `{code, message}` so replay reproduces it — `executor` id,
@@ -626,6 +634,31 @@ recorded effect outputs by request digest — in record order when a digest
 repeats under `retry` — then compares cells, effects, work, and outcome. Any
 divergence is reported by name. The check is offline and deterministic:
 receipts fix what the world returned.
+
+### Suspension and resume
+
+An executor may decline a request with `EFFECT_SUSPENDED` — the answer is not
+ready (a gate awaiting a decision, a delegated task still pending). Suspension
+is not failure and not an answer:
+
+- The attempt is recorded like any effect — `error.code:"EFFECT_SUSPENDED"`,
+  `retryable:false` — then the run stops cleanly: the cell records
+  `status:"suspended"`, a `cell.suspend` event is emitted, and the run ends
+  `suspended`. Suspension bypasses `retry` (the request is never re-issued
+  within the run) and does not fire `on:"fail"` edges (nothing failed).
+- The suspended receipt is a valid checkpoint: `verify` replays it
+  bit-for-bit because replay reproduces the suspension rather than an answer.
+- `resumeRun(checkpoint, manifest, store, executors, …)` — `algal resume` —
+  continues the run. Completed effects replay by request digest exactly as
+  verify does; suspended-effect records are dropped from the replay set so
+  the same request re-issues live; everything else — the suspended request,
+  its cell, and the unexecuted tail — routes to the currently admitted live
+  executors. Replay resolves by digest, so an agent cell suspended mid-loop
+  replays its recorded turns and goes live only at the pending one. Resuming
+  with an executor that still suspends produces another suspended checkpoint,
+  so resume is safely repeatable.
+- Command executors signal suspension with exit code 75 (`EX_TEMPFAIL`);
+  any other nonzero exit is an ordinary `EFFECT_FAILED`.
 
 ### Effect memoization
 

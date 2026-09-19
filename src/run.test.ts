@@ -9,6 +9,7 @@ import {
   cachedExecutor,
   effectRequestDigest,
   scriptedExecutor,
+  type Executor,
 } from "./effects";
 import { digestCanonical } from "./digest";
 import { AlgalError } from "./errors";
@@ -16,7 +17,7 @@ import { builtinRegistry } from "./registry";
 import { runOrganism } from "./run";
 import { recallOutputSchema } from "./semantic";
 import { MemoryStore } from "./store";
-import { verifyReceipt } from "./verify";
+import { resumeRun, verifyReceipt } from "./verify";
 import type { JsonValue } from "./values";
 
 function manifest(u: unknown): OrganismManifest {
@@ -1139,6 +1140,205 @@ describe("scheduler", () => {
     expect(missed.outcome).toBe("failed");
     expect(missed.failure?.code).toBe("EFFECT_UNBOUND");
     expect(missed.effects[0]?.executor).toBe("unbound");
+  });
+
+  test("an executor can suspend a run and resume continues it live", async () => {
+    const m = manifest({
+      contract: "algal.organism.v1",
+      key: "organism:suspendable",
+      name: "Suspendable",
+      cells: [
+        { id: "src", kind: "input", outputs: { v: "text" } },
+        {
+          id: "worker",
+          kind: "agent",
+          inputs: { v: "text" },
+          prompt: "work",
+          output: { kind: "text" },
+          retry: { attempts: 4 },
+        },
+        { id: "sink", kind: "fn", fn: "echo.v1" },
+      ],
+      edges: [
+        { from: { cell: "src", port: "v" }, to: { cell: "worker", port: "v" } },
+        { from: { cell: "worker", port: "out" }, to: { cell: "sink", port: "value" } },
+      ],
+    });
+    let calls = 0;
+    const gatekeeper: Executor = {
+      id: "gatekeeper",
+      capabilities: { effects: ["agent"] },
+      async execute() {
+        calls++;
+        if (calls === 1) {
+          throw new AlgalError("EFFECT_SUSPENDED", "approval not ready");
+        }
+        return "approved work";
+      },
+    };
+    const suspended = await runOrganism({
+      manifest: m,
+      args: { src: { v: "ticket" } },
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [gatekeeper],
+    });
+    expect(suspended.outcome).toBe("suspended");
+    expect(suspended.cells.worker?.status).toBe("suspended");
+    // suspension bypasses retry: exactly one recorded effect, non-retryable
+    expect(suspended.effects).toHaveLength(1);
+    expect(suspended.effects[0]).toMatchObject({
+      error: { code: "EFFECT_SUSPENDED" },
+      executor: "gatekeeper",
+      retryable: false,
+    });
+    expect(suspended.cells.sink).toBeUndefined();
+    expect(calls).toBe(1);
+    expect(suspended.events.some((e) => e.kind === "cell.suspend")).toBe(true);
+
+    // the suspended checkpoint verifies bit-for-bit: replay reproduces the
+    // suspension, not a fabricated answer
+    const verified = await verifyReceipt(
+      suspended as unknown as JsonValue,
+      manifestToJson(m) as unknown as JsonValue,
+      new MemoryStore(),
+    );
+    expect(verified.ok).toBe(true);
+
+    // resume: the recorded prefix replays, the suspended effect goes live
+    const resumed = await resumeRun(
+      suspended as unknown as JsonValue,
+      manifestToJson(m) as unknown as JsonValue,
+      new MemoryStore(),
+      [gatekeeper],
+    );
+    expect(resumed.outcome).toBe("complete");
+    expect(resumed.cells.worker?.outputs?.out).toBe("approved work");
+    expect(resumed.cells.sink?.status).toBe("committed");
+    expect(calls).toBe(2);
+    // the re-issued effect keeps the same request digest — the checkpoint
+    // recorded the request, the resume records the answer
+    expect(resumed.effects).toHaveLength(1);
+    expect(resumed.effects[0]?.requestDigest).toBe(
+      suspended.effects[0]?.requestDigest,
+    );
+    expect(resumed.effects[0]?.output).toBe("approved work");
+    expect(resumed.effects[0]?.executor).toBe("gatekeeper");
+  });
+
+  test("resuming with a still-suspending executor suspends identically", async () => {
+    const m = manifest({
+      contract: "algal.organism.v1",
+      key: "organism:suspend-twice",
+      name: "SuspendTwice",
+      cells: [{
+        id: "worker",
+        kind: "agent",
+        prompt: "work",
+        output: { kind: "text" },
+      }],
+      edges: [],
+    });
+    const sleepy: Executor = {
+      id: "sleepy",
+      capabilities: { effects: ["agent"] },
+      async execute() {
+        throw new AlgalError("EFFECT_SUSPENDED", "still pending");
+      },
+    };
+    const first = await runOrganism({
+      manifest: m,
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [sleepy],
+    });
+    const second = await resumeRun(
+      first as unknown as JsonValue,
+      manifestToJson(m) as unknown as JsonValue,
+      new MemoryStore(),
+      [sleepy],
+    );
+    expect(second.outcome).toBe("suspended");
+    expect(second.cells.worker?.status).toBe("suspended");
+    // each suspension is its own receipt — resume re-issues the same request
+    expect(second.effects).toHaveLength(1);
+    expect(second.effects[0]?.requestDigest).toBe(
+      first.effects[0]?.requestDigest,
+    );
+    expect(second.effects[0]?.error?.code).toBe("EFFECT_SUSPENDED");
+  });
+
+  test("suspension bypasses fail edges and mid-cell suspension resumes per turn", async () => {
+    const m = manifest({
+      contract: "algal.organism.v1",
+      key: "organism:suspend-midcell",
+      name: "SuspendMidcell",
+      cells: [
+        {
+          id: "worker",
+          kind: "agent",
+          prompt: "work",
+          output: { kind: "text" },
+          tools: ["echo.v1"],
+        },
+        {
+          id: "recover",
+          kind: "agent",
+          inputs: { err: "json" },
+          prompt: "recover",
+          output: { kind: "text" },
+        },
+      ],
+      edges: [{
+        from: { cell: "worker", port: "out" },
+        to: { cell: "recover", port: "err" },
+        on: "fail",
+      }],
+    });
+    let calls = 0;
+    const suspending: Executor = {
+      id: "suspender",
+      capabilities: { effects: ["agent", "classifier", "gate", "decide", "recall"] },
+      async execute() {
+        calls++;
+        // turn 1 requests a tool call; the answer turn suspends
+        if (calls === 1) {
+          return { tool: "echo.v1", inputs: { value: "probe" } };
+        }
+        if (calls === 2) {
+          throw new AlgalError("EFFECT_SUSPENDED", "hold");
+        }
+        return "final answer";
+      },
+    };
+    const suspended = await runOrganism({
+      manifest: m,
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [suspending],
+    });
+    expect(suspended.outcome).toBe("suspended");
+    // the fail edge did not fire — suspension is not failure
+    expect(suspended.cells.recover).toBeUndefined();
+    expect(suspended.cells.worker?.status).toBe("suspended");
+    // two effects: the tool-call turn and the suspended turn
+    expect(suspended.effects).toHaveLength(2);
+
+    const resumed = await resumeRun(
+      suspended as unknown as JsonValue,
+      manifestToJson(m) as unknown as JsonValue,
+      new MemoryStore(),
+      [suspending],
+    );
+    expect(resumed.outcome).toBe("complete");
+    expect(resumed.cells.worker?.outputs?.out).toBe("final answer");
+    expect(resumed.cells.recover?.status).toBe("skipped");
+    // three effects: replayed tool-call turn, replayed suspension?? —
+    // no: the suspension record is filtered, the tool-call turn replays,
+    // and the answer turn goes live once more
+    expect(resumed.effects).toHaveLength(2);
+    expect(resumed.effects[1]?.output).toBe("final answer");
+    expect(calls).toBe(3);
   });
 
   test("gate cells emit kind:gate effect requests and drive guards", async () => {

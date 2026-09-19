@@ -22,6 +22,15 @@ test("commands bound stderr and respect a pre-aborted launch", async () => {
   await expect(commandJson(["missing-executable"], null, { signal: controller.signal })).rejects.toThrow("before launch");
 });
 
+test("command exit 75 asks the host to suspend; other nonzero exits fail", async () => {
+  await expect(
+    commandJson([process.execPath, "-e", "process.exit(75)"], null),
+  ).rejects.toMatchObject({ code: "EFFECT_SUSPENDED" });
+  await expect(
+    commandJson([process.execPath, "-e", "process.exit(2)"], null),
+  ).rejects.toMatchObject({ code: "EFFECT_FAILED" });
+});
+
 test("mutating executors are not blindly retried and their failure replays", async () => {
   const manifest = parseOrganismManifest({
     contract: "algal.organism.v1", key: "organism:no-retry", name: "No retry",

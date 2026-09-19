@@ -3,7 +3,7 @@
 // manifest, the receipts, or the runtime changed — the receipt catches it.
 
 import { digestCanonical, type Digest } from "./digest";
-import { replayExecutor } from "./effects";
+import { replayExecutor, type Executor } from "./effects";
 import { builtinRegistry, type FnRegistry } from "./registry";
 import {
   canonicalizeReceipt,
@@ -47,18 +47,7 @@ export async function verifyReceipt(
     };
   }
 
-  const replayVia: Record<string, string> = {};
-  const replaySlots: Record<string, { value?: JsonValue; missing?: boolean }> =
-    {};
-  for (const [path, rec] of Object.entries(original.cells)) {
-    if (rec.via) replayVia[path] = rec.via;
-    // a recorded slot read is authoritative: the live slot may have been
-    // overwritten since — serve what the original run saw, or its failure
-    if (rec.slot?.mode === "read") {
-      const v = rec.status === "committed" ? rec.outputs?.data : undefined;
-      replaySlots[path] = v !== undefined ? { value: v } : { missing: true };
-    }
-  }
+  const { replayVia, replaySlots } = replayInputs(original);
   const rerun = await runOrganism({
     manifest,
     args: original.args,
@@ -89,6 +78,72 @@ export async function verifyReceipt(
     digest: rerun.digest,
     mismatches,
   };
+}
+
+/** The recorded context a rerun needs to reproduce the run's prefix:
+ * transport provenance and slot-read values. Shared by verify (bit-for-bit
+ * replay) and resume (prefix replay, live tail). */
+function replayInputs(receipt: RunReceipt): {
+  replayVia: Record<string, string>;
+  replaySlots: Record<string, { value?: JsonValue; missing?: boolean }>;
+} {
+  const replayVia: Record<string, string> = {};
+  const replaySlots: Record<string, { value?: JsonValue; missing?: boolean }> =
+    {};
+  for (const [path, rec] of Object.entries(receipt.cells)) {
+    if (rec.via) replayVia[path] = rec.via;
+    // a recorded slot read is authoritative: the live slot may have been
+    // overwritten since — serve what the original run saw, or its failure
+    if (rec.slot?.mode === "read") {
+      const v = rec.status === "committed" ? rec.outputs?.data : undefined;
+      replaySlots[path] = v !== undefined ? { value: v } : { missing: true };
+    }
+  }
+  return { replayVia, replaySlots };
+}
+
+/** resume(checkpoint, manifest): continue a suspended run — or extend a
+ * completed one — by replaying its recorded effects in order and routing
+ * everything the checkpoint never reached to the host's live executors.
+ * The result is a new receipt stamped by the resuming runtime; the
+ * checkpoint stays its own evidence. */
+export async function resumeRun(
+  receiptJson: JsonValue,
+  manifestJson: JsonValue,
+  store: Store,
+  executors: Executor[],
+  fns: FnRegistry = builtinRegistry(),
+  transports?: Record<string, Transport>,
+  tools?: ToolRegistry,
+): Promise<RunReceipt> {
+  const checkpoint = parseRunReceipt(receiptJson);
+  const manifest = parseOrganismManifest(manifestJson);
+  const manifestDigest = digestCanonical(manifestToJson(manifest));
+  if (manifestDigest !== checkpoint.manifestDigest) {
+    throw new AlgalError(
+      "DIGEST_MISMATCH",
+      `receipt records ${checkpoint.manifestDigest}, supplied manifest hashes to ${manifestDigest}`,
+    );
+  }
+  // suspension records are not answers: the suspended effect is re-issued
+  // live while every completed prefix effect replays in order
+  const continuable = checkpoint.effects.filter(
+    (effect) => effect.error?.code !== "EFFECT_SUSPENDED",
+  );
+  const { replayVia, replaySlots } = replayInputs(checkpoint);
+  return runOrganism({
+    manifest,
+    args: checkpoint.args,
+    fns,
+    store,
+    executors: [replayExecutor(continuable), ...executors],
+    replayVia,
+    replaySlots,
+    replayToolEffects: checkpoint.effects.filter((effect) =>
+      effect.executor.startsWith("tool:")),
+    ...(transports ? { transports } : {}),
+    ...(tools ? { tools } : {}),
+  });
 }
 
 /** Compare canonically — a stored receipt has sorted keys, a fresh run has

@@ -22,7 +22,6 @@ import type {
   Cell,
   OrganismManifest,
   PortType,
-  Route,
 } from "./contract";
 import {
   BOUNDS,
@@ -70,6 +69,7 @@ export type RunEvent = {
     | "cell.commit"
     | "cell.skip"
     | "cell.fail"
+    | "cell.suspend"
     | "effect"
     | "run.end";
   path?: string;
@@ -78,7 +78,7 @@ export type RunEvent = {
 };
 
 export type CellRecord = {
-  status: "committed" | "skipped" | "failed";
+  status: "committed" | "skipped" | "failed" | "suspended";
   outputs?: Record<string, JsonValue>;
   /** Present when status is "failed" — what the activation reported. */
   failure?: { code: ErrorCode; message: string };
@@ -95,13 +95,15 @@ export type CellRecord = {
   slot?: { name: string; mode: "read" | "write" };
 };
 
+export type RunOutcome = "complete" | "failed" | "stuck" | "suspended";
+
 export type RunReceipt = {
   contract: typeof RUN_CONTRACT;
   runtime: { name: "algal"; version: string };
   manifestDigest: Digest;
   manifestKey: string;
   args: Record<string, Record<string, JsonValue>>;
-  outcome: "complete" | "failed" | "stuck";
+  outcome: RunOutcome;
   cells: Record<string, CellRecord>;
   effects: EffectReceipt[];
   events: RunEvent[];
@@ -147,6 +149,7 @@ type RunContext = {
   events: RunEvent[];
   work: { steps: number; agentCalls: number; units: number };
   failure?: { code: ErrorCode; message: string; path?: string };
+  suspended?: boolean;
   seq: number;
   toolReplay: Map<Digest, EffectReceipt[]>;
 };
@@ -211,7 +214,7 @@ async function runInto(
   pathPrefix: string,
   ctx: RunContext,
   depth: number,
-): Promise<"complete" | "failed" | "stuck"> {
+): Promise<"complete" | "failed" | "stuck" | "suspended"> {
   const { manifest, ports, inbound } = compiled;
   const budgets = ctx.budgets;
   if (depth > budgets.maxDepth) {
@@ -220,7 +223,10 @@ async function runInto(
 
   // produced outputs per cell: cellId -> port -> value
   const produced = new Map<string, Map<string, JsonValue>>();
-  const state = new Map<string, "pending" | "done" | "skipped" | "failed">();
+  const state = new Map<
+    string,
+    "pending" | "done" | "skipped" | "failed" | "suspended"
+  >();
   const failedInfo = new Map<string, { code: ErrorCode; message: string }>();
   for (const c of manifest.cells) state.set(c.id, "pending");
 
@@ -307,9 +313,9 @@ async function runInto(
 
   const cellPath = (id: string) => (pathPrefix ? `${pathPrefix}/${id}` : id);
 
-  let outcome: "complete" | "failed" | "stuck" = "complete";
+  let outcome: "complete" | "failed" | "stuck" | "suspended" = "complete";
   let progress = true;
-  while (progress && !ctx.failure) {
+  while (progress && !ctx.failure && !ctx.suspended) {
     progress = false;
     for (const cell of manifest.cells) {
       if (state.get(cell.id) !== "pending") continue;
@@ -408,6 +414,24 @@ async function runInto(
         emit(ctx, { kind: "cell.commit", path: cellPath(cell.id) });
       } catch (e) {
         const rep = errorReport(e);
+        // suspension is not failure: the cell's effect asked the host to
+        // pause the process (a gate awaiting a decision, a delegated task
+        // still pending). The attempt is already on the receipt — record
+        // the suspension, halt the sweep, and leave fail edges dead.
+        if (rep.code === "EFFECT_SUSPENDED") {
+          state.set(cell.id, "suspended");
+          const susRec: CellRecord = {
+            status: "suspended",
+            work: ctx.work.units - workBefore,
+          };
+          if (cell.kind === "slot") {
+            susRec.slot = { name: cell.name, mode: cell.mode };
+          }
+          ctx.cells[cellPath(cell.id)] = susRec;
+          emit(ctx, { kind: "cell.suspend", path: cellPath(cell.id) });
+          ctx.suspended = true;
+          break;
+        }
         state.set(cell.id, "failed");
         failedInfo.set(cell.id, { code: rep.code, message: rep.message });
         const failRec: CellRecord = {
@@ -442,7 +466,9 @@ async function runInto(
     }
   }
 
-  if (ctx.failure) {
+  if (ctx.suspended) {
+    outcome = "suspended";
+  } else if (ctx.failure) {
     outcome = "failed";
   } else {
     const pending = manifest.cells.filter((c) => state.get(c.id) === "pending");
@@ -507,12 +533,16 @@ async function executeBoundedEffect<T>(
     emit(ctx, { kind: "effect", path, digest: requestDigest });
     let meta: ExecutorMetadata | undefined;
     const invoke = async (signal?: AbortSignal): Promise<JsonValue> => {
+      // the executor's declared receipt metadata is the baseline — it is
+      // recorded even when the call itself fails (a suspension or error is
+      // still bound to the backend that declined it); executeEffect's
+      // result metadata refines it on success
+      meta = await executor.receiptFor?.(request);
       if (executor.executeEffect) {
         const result = await executor.executeEffect(request, signal);
-        meta = result.metadata;
+        meta = { ...meta, ...result.metadata };
         return result.output;
       }
-      meta = await executor.receiptFor?.(request);
       return executor.execute(request, signal);
     };
     let raw: JsonValue;
@@ -549,7 +579,12 @@ async function executeBoundedEffect<T>(
       };
       if (meta?.usage) effect.usage = meta.usage;
       if (meta?.cached) effect.cached = true;
-      if (executor.retryable === false || meta?.retryable === false) effect.retryable = false;
+      if (meta?.configurationDigest) effect.configurationDigest = meta.configurationDigest;
+      // suspension is not a retryable failure — it asks the host to pause
+      // the process, so the request is never re-issued within this run
+      if (report.code === "EFFECT_SUSPENDED" || executor.retryable === false || meta?.retryable === false) {
+        effect.retryable = false;
+      }
       ctx.effects.push(effect);
       lastErr = error;
       if (effect.retryable === false) break;
@@ -562,6 +597,7 @@ async function executeBoundedEffect<T>(
     };
     if (meta?.usage) effect.usage = meta.usage;
     if (meta?.cached) effect.cached = true;
+    if (meta?.configurationDigest) effect.configurationDigest = meta.configurationDigest;
     if (executor.retryable === false || meta?.retryable === false) effect.retryable = false;
     ctx.effects.push(effect);
     const bytes = canonicalBytes(raw);
@@ -805,7 +841,7 @@ async function activate(
         ...(cell.route ? { route: cell.route } : {}),
         recall: { query, k, embedder },
       };
-      const executor = pickExecutor(ctx.opts.executors, cell.route, "recall");
+      const executor = pickExecutor(request, ctx.opts.executors);
       const maxAttempts = cell.retry?.attempts ?? 1;
       const effectMs = cell.budget?.maxEffectMs;
       const recallEffect = await executeBoundedEffect(
@@ -863,9 +899,8 @@ async function activate(
           questions,
         };
         const rerankExecutor = pickExecutor(
+          rerankRequest,
           ctx.opts.executors,
-          cell.rerank.route,
-          "decide",
         );
         const rerankEffect = await executeBoundedEffect(
           ctx,
@@ -997,11 +1032,6 @@ async function activate(
       for (const [k, v] of Object.entries(inputs)) {
         if (wanted === "*" || wanted.includes(k)) viewInputs[k] = v;
       }
-      const executor = pickExecutor(
-        ctx.opts.executors,
-        cellRoute(cell),
-        cell.kind,
-      );
       const toolLog: { fn: string; inputs: JsonValue; output: JsonValue }[] = [];
 
       // declared cross-cell context: records of ancestor cells in this scope.
@@ -1088,11 +1118,7 @@ async function activate(
             questions,
           };
           const compactDigest = effectRequestDigest(compactReq);
-          const compactExec = pickExecutor(
-            ctx.opts.executors,
-            compactRoute,
-            "decide",
-          );
+          const compactExec = pickExecutor(compactReq, ctx.opts.executors);
           if (ctx.work.agentCalls + 1 > budgets.maxAgentCalls) {
             throw new AlgalError("BUDGET_EXHAUSTED", "maxAgentCalls exhausted");
           }
@@ -1103,12 +1129,12 @@ async function activate(
           let raw: JsonValue;
           let meta: ExecutorMetadata | undefined;
           try {
+            meta = await compactExec.receiptFor?.(compactReq);
             if (compactExec.executeEffect) {
               const r = await compactExec.executeEffect(compactReq);
-              meta = r.metadata;
+              meta = { ...meta, ...r.metadata };
               raw = r.output;
             } else {
-              meta = await compactExec.receiptFor?.(compactReq);
               raw = await compactExec.execute(compactReq);
             }
           } catch (e) {
@@ -1120,6 +1146,7 @@ async function activate(
             };
             if (meta?.usage) eff.usage = meta.usage;
             if (meta?.cached) eff.cached = true;
+            if (meta?.configurationDigest) eff.configurationDigest = meta.configurationDigest;
             ctx.effects.push(eff);
             throw e;
           }
@@ -1130,6 +1157,7 @@ async function activate(
           };
           if (meta?.usage) eff.usage = meta.usage;
           if (meta?.cached) eff.cached = true;
+          if (meta?.configurationDigest) eff.configurationDigest = meta.configurationDigest;
           ctx.effects.push(eff);
           ctx.work.units += canonicalBytes(raw) * WORK.perOutputByte;
           const bound = bindOutput(
@@ -1199,6 +1227,9 @@ async function activate(
           ...(cell.kind === "decide" ? { questions: cell.questions } : {}),
         };
         const requestDigest = effectRequestDigest(request);
+        // pick per request: the digest turns with the tool log, so replay and
+        // resume resolve each turn independently
+        const executor = pickExecutor(request, ctx.opts.executors);
 
         // retry: each attempt is a separate effect — request, receipt, work
         // charge, agent-call count. A failed or contract-violating attempt
@@ -1230,12 +1261,12 @@ async function activate(
 
           let meta: ExecutorMetadata | undefined;
           const invoke = async (signal?: AbortSignal): Promise<JsonValue> => {
+            meta = await executor.receiptFor?.(request);
             if (executor.executeEffect) {
               const result = await executor.executeEffect(request, signal);
-              meta = result.metadata;
+              meta = { ...meta, ...result.metadata };
               return result.output;
             }
-            meta = await executor.receiptFor?.(request);
             return executor.execute(request, signal);
           };
           let raw: JsonValue;
@@ -1280,7 +1311,12 @@ async function activate(
             };
             if (meta?.usage) eff.usage = meta.usage;
             if (meta?.cached) eff.cached = true;
-            if (executor.retryable === false || meta?.retryable === false) eff.retryable = false;
+            if (meta?.configurationDigest) eff.configurationDigest = meta.configurationDigest;
+            // suspension is not a retryable failure — it asks the host to
+            // pause the process, so the request is never re-issued
+            if (rep.code === "EFFECT_SUSPENDED" || executor.retryable === false || meta?.retryable === false) {
+              eff.retryable = false;
+            }
             ctx.effects.push(eff);
             lastErr = e;
             if (eff.retryable === false) break;
@@ -1295,6 +1331,7 @@ async function activate(
           };
           if (meta?.usage) eff.usage = meta.usage;
           if (meta?.cached) eff.cached = true;
+          if (meta?.configurationDigest) eff.configurationDigest = meta.configurationDigest;
           if (executor.retryable === false || meta?.retryable === false) eff.retryable = false;
           ctx.effects.push(eff);
 
@@ -1479,6 +1516,12 @@ async function activate(
           depth + 1,
         );
         if (outcome !== "complete") {
+          if (ctx.suspended) {
+            throw new AlgalError(
+              "EFFECT_SUSPENDED",
+              `repeat cell "${cell.id}" round ${r}: inner run suspended`,
+            );
+          }
           const code = ctx.failure?.code ?? "STUCK";
           throw new AlgalError(
             code,
@@ -1545,6 +1588,12 @@ async function activate(
         const itemPath = `${path}/i${i}`;
         const outcome = await runInto(subCompiled, subArgs, itemPath, ctx, depth + 1);
         if (outcome !== "complete") {
+          if (ctx.suspended) {
+            throw new AlgalError(
+              "EFFECT_SUSPENDED",
+              `each cell "${cell.id}" item ${i}: inner run suspended`,
+            );
+          }
           const code = ctx.failure?.code ?? "STUCK";
           throw new AlgalError(
             code,
@@ -1565,16 +1614,6 @@ async function activate(
   }
 }
 
-function cellRoute(cell: Cell): Route | undefined {
-  return cell.kind === "agent" ||
-    cell.kind === "classifier" ||
-    cell.kind === "gate" ||
-    cell.kind === "decide" ||
-    cell.kind === "recall"
-    ? cell.route
-    : undefined;
-}
-
 function unboundExecutor(kind: EffectKind): Executor {
   return {
     id: "unbound",
@@ -1591,24 +1630,31 @@ function unboundExecutor(kind: EffectKind): Executor {
 }
 
 function pickExecutor(
+  request: EffectRequest,
   executors: Executor[],
-  route: Route | undefined,
-  kind: EffectKind,
 ): Executor {
-  const replay = executors.find((executor) => executor.replay === true);
+  // replay resolves by request digest before live routing — but only when it
+  // actually holds a receipt: a resume run replays the recorded prefix and
+  // falls through to live selection for everything the checkpoint lacks
+  const replay = executors.find(
+    (executor) => executor.replay === true && executor.serves?.(request) !== false,
+  );
   if (replay) return replay;
+  const live = executors.filter((executor) => executor.replay !== true);
+  const kind = request.kind;
+  const route = request.route;
   const wanted = [
     ...(route?.provider ? [route.provider, `provider:${route.provider}`] : []),
     ...(route?.preset ? [route.preset, `preset:${route.preset}`] : []),
   ];
   if (wanted.length > 0) {
-    const routed = executors.find((executor) => wanted.includes(executor.id));
+    const routed = live.find((executor) => wanted.includes(executor.id));
     if (routed) return executorSupports(routed, kind) ? routed : unboundExecutor(kind);
-    return executors.find((executor) =>
+    return live.find((executor) =>
       executor.routeWildcard === true && executorSupports(executor, kind)
     ) ?? unboundExecutor(kind);
   }
-  return executors.find((executor) => executorSupports(executor, kind)) ?? unboundExecutor(kind);
+  return live.find((executor) => executorSupports(executor, kind)) ?? unboundExecutor(kind);
 }
 
 function checkValue(v: JsonValue, decl: PortType, what: string): void {

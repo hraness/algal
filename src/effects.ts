@@ -80,6 +80,9 @@ export type EffectReceipt = {
    * reproduces the flag. Only ever present as `cached: true`. */
   cached?: boolean;
   retryable?: false;
+  /** Digest of the backend configuration that served the request — binds
+   * the admitted executor's identity into the receipt. */
+  configurationDigest?: Digest;
 };
 
 export type ExecutorMetadata = {
@@ -87,6 +90,7 @@ export type ExecutorMetadata = {
   usage?: EffectReceipt["usage"];
   cached?: boolean;
   retryable?: false;
+  configurationDigest?: Digest;
 };
 
 export type ExecutorResult = {
@@ -103,6 +107,11 @@ export type Executor = {
   capabilities?: ExecutorCapabilities;
   routeWildcard?: true;
   replay?: true;
+  /** Present on replay executors: whether a recorded receipt exists for this
+   * request's digest. The scheduler checks it before routing — a resume run
+   * replays its recorded prefix and falls through to live executors for
+   * requests the checkpoint never reached. */
+  serves?(request: EffectRequest): boolean;
   cacheIdentity?: string;
   cacheable?: boolean;
   retryable?: boolean;
@@ -116,19 +125,8 @@ export type Executor = {
    * executor id and usage — making verification bit-for-bit. Called before
    * `execute` on each attempt. */
   receiptFor?(request: EffectRequest):
-    | {
-        executor?: string;
-        usage?: EffectReceipt["usage"];
-        /** The response will be served from a memoized record. */
-        cached?: boolean;
-        retryable?: false;
-      }
-    | Promise<{
-        executor?: string;
-        usage?: EffectReceipt["usage"];
-        cached?: boolean;
-        retryable?: false;
-      }>;
+    | ExecutorMetadata
+    | Promise<ExecutorMetadata>;
 };
 
 export function executorSupports(executor: Executor, kind: EffectKind): boolean {
@@ -201,20 +199,19 @@ export function replayExecutor(
     id,
     capabilities: { effects: EFFECT_KINDS },
     replay: true,
+    serves(request) {
+      return next(effectRequestDigest(request)) !== undefined;
+    },
     receiptFor(request) {
       const rec = next(effectRequestDigest(request));
       if (!rec) return {};
-      const out: {
-        executor?: string;
-        usage?: EffectReceipt["usage"];
-        cached?: boolean;
-        retryable?: false;
-      } = {
+      const out: ExecutorMetadata = {
         executor: rec.executor,
       };
       if (rec.usage) out.usage = rec.usage;
       if (rec.cached) out.cached = true;
       if (rec.retryable === false) out.retryable = false;
+      if (rec.configurationDigest) out.configurationDigest = rec.configurationDigest;
       return out;
     },
     async execute(request) {
@@ -315,12 +312,22 @@ export function commandExecutor(
   opts: { timeoutMs?: number; maxStdoutBytes?: number } = {},
 ): Executor {
   const identity = digestCanonical({ command, options: opts });
+  // The backend configuration digest mirrors the native executor's
+  // `algal.host.v1` command backend — argv, cwd, and the effective timeout —
+  // so receipts agree across runtimes.
+  const configurationDigest = digestCanonical({
+    argv: ["sh", "-c", command],
+    cwd: null,
+    kind: "command",
+    timeoutMs: opts.timeoutMs ?? 120_000,
+  });
   return {
     id: `cmd:${identity}`,
     capabilities: { effects: EFFECT_KINDS },
     cacheIdentity: identity,
     cacheable: false,
     retryable: false,
+    receiptFor: () => ({ configurationDigest }),
     execute: (request, signal) => commandJson(
       ["sh", "-c", command], request as unknown as JsonValue, { ...opts, ...(signal ? { signal } : {}) },
     ),
