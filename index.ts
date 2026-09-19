@@ -32,7 +32,7 @@ export {
   receiptDigest,
   runOrganism,
 } from "./src/run";
-export type { CellRecord, RunEvent, RunOptions, RunReceipt } from "./src/run";
+export type { CellRecord, RunEvent, RunOptions, RunOutcome, RunReceipt } from "./src/run";
 
 export {
   EFFECT_CONTRACT,
@@ -179,7 +179,7 @@ export {
 } from "./src/transport";
 export type { Transport } from "./src/transport";
 
-export { verifyReceipt } from "./src/verify";
+export { resumeRun, verifyReceipt } from "./src/verify";
 export type { VerifyReport } from "./src/verify";
 
 export {

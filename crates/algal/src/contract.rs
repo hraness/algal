@@ -259,8 +259,7 @@ fn normalize_cell(value: &Value) -> Result<Value> {
             text(&v[kind], 64)?;
         }
         "expr" => {
-            v["inputs"] =
-                serde_json::to_value(ports(v.get("inputs").unwrap_or(&json!({})), false, false)?)?;
+            normalize_inputs(&mut v)?;
             keys(&v["expr"], &["contract", "program"])?;
             if v["expr"]["contract"] != "algal.expr.v1" {
                 return Err(Error::invalid("expr.contract must be algal.expr.v1"));
@@ -325,8 +324,7 @@ fn normalize_cell(value: &Value) -> Result<Value> {
             }
         }
         "agent" | "classifier" | "gate" => {
-            v["inputs"] =
-                serde_json::to_value(ports(v.get("inputs").unwrap_or(&json!({})), false, false)?)?;
+            normalize_inputs(&mut v)?;
             text(&v["prompt"], 8192)?;
             output_contract(&v["output"])?;
             if v["output"]["kind"] == "json" && v["output"].get("schema").is_none() {
@@ -395,8 +393,7 @@ fn normalize_cell(value: &Value) -> Result<Value> {
             }
         }
         "decide" => {
-            v["inputs"] =
-                serde_json::to_value(ports(v.get("inputs").unwrap_or(&json!({})), false, false)?)?;
+            normalize_inputs(&mut v)?;
             if let Some(prompt) = v.get("prompt") {
                 text(prompt, 8192)?;
             }
@@ -499,6 +496,18 @@ fn normalize_cell(value: &Value) -> Result<Value> {
         }
     }
     Ok(v)
+}
+
+/// Normalize a cell's `inputs` port map; the canonical form omits an empty
+/// map, matching the reference serializer.
+fn normalize_inputs(v: &mut Value) -> Result<()> {
+    let inputs = serde_json::to_value(ports(v.get("inputs").unwrap_or(&json!({})), false, false)?)?;
+    if inputs.as_object().is_none_or(|o| o.is_empty()) {
+        v.as_object_mut().unwrap().remove("inputs");
+    } else {
+        v["inputs"] = inputs;
+    }
+    Ok(())
 }
 
 /// Normalize an agent-style `view` block (agent/classifier/gate/decide):

@@ -533,6 +533,14 @@ name → command, so a cell's `route.provider`/`route.preset` picks its model.
   decision, or recall authority. Scripted fixtures wildcard any named route
   for deterministic tests; replay resolves by request digest before
   routing, so verification never depends on live admissions.
+- An executor may suspend a run: declining a request with `EFFECT_SUSPENDED`
+  (or exiting 75 from a command executor) records the attempt, marks the
+  cell `suspended`, and ends the run `suspended` — no retry, no fail edge.
+  The suspended receipt still verifies bit-for-bit, and `algal resume`
+  continues it: recorded effects replay by request digest, the suspended
+  request re-issues against the currently admitted executors, and the tail
+  executes live — idempotently, so a still-pending executor just suspends
+  the process again.
 - An agent cell's context is declared, not ambient: `view.inputs` selects its
   edge-fed inputs, and `view.cells` names ancestor cells whose committed
   records join the request under `context.cells` — optionally sliced to named
@@ -544,10 +552,10 @@ name → command, so a cell's `route.provider`/`route.preset` picks its model.
   the fn, appends to the request's `toolLog`, and re-issues the request —
   bounded by `budget.maxTurns` and counted against `maxAgentCalls`. This is
   how agents call functions inside the automaton without ambient authority.
-- The receipt records every committed/skipped/failed cell (with per-cell
-  work attribution), every effect request and response, the event log, and
-  the work ledger. `verify` replays the run with recorded receipts fixed and
-  reports any divergence; `diff` compares two receipts canonically.
+- The receipt records every committed/skipped/failed/suspended cell (with
+  per-cell work attribution), every effect request and response, the event
+  log, and the work ledger. `verify` replays the run with recorded receipts
+  fixed and reports any divergence; `diff` compares two receipts canonically.
 - Manifests and receipts are content-addressed canonical JSON; payloads ride
   the same CAS through `ref` ports. The store is a seam: `MemoryStore` and
   `FileStore` (`.algal/`) ship now; an Oh-backed store implements the
@@ -605,7 +613,11 @@ enforcement, and receipt writing. An executor declares the effect kinds it
 serves with `capabilities: { effects: [...] }`; undeclared executors default
 to `agent`/`classifier`, and `executorSupports` is the predicate the
 scheduler routes by — see the spec's executor matrix for the fail-closed
-rules.
+rules. Two optional refinements: `serves(request)` is a request-aware
+admission checked before routing (the replay executor uses it to serve
+exactly the request digests it holds, letting `resume` replay a prefix and
+run the tail live), and throwing `EFFECT_SUSPENDED` — or exiting 75 from a
+command executor — suspends the run into a resumable checkpoint.
 
 ### From the CLI with any provider
 

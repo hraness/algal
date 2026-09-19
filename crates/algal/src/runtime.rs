@@ -84,6 +84,7 @@ struct Runtime<'a> {
     calls: usize,
     work: usize,
     failure: Option<Value>,
+    suspended: bool,
     replay: Option<&'a Value>,
 }
 
@@ -138,7 +139,7 @@ impl Runtime<'_> {
             }
             let mut resolved = BTreeSet::new();
             let mut progress = true;
-            while progress && self.failure.is_none() {
+            while progress && self.failure.is_none() && !self.suspended {
                 progress = false;
                 for cell in &compiled.manifest.cells {
                     let name = cell["id"].as_str().unwrap();
@@ -305,6 +306,23 @@ impl Runtime<'_> {
                             self.event("cell.commit", Some(&cell_path), None, None)?;
                         }
                         Err(error) => {
+                            // suspension is not failure: the cell's effect
+                            // asked the host to pause the process. The attempt
+                            // is already on the receipt — record the
+                            // suspension, halt the sweep, and leave fail
+                            // edges dead.
+                            if error.code == "EFFECT_SUSPENDED" {
+                                let mut record =
+                                    json!({"status":"suspended","work":self.work-before});
+                                if cell["kind"] == "slot" {
+                                    record["slot"] =
+                                        json!({"name":cell["name"],"mode":cell["mode"]});
+                                }
+                                self.cells.insert(cell_path.clone(), record);
+                                self.event("cell.suspend", Some(&cell_path), None, None)?;
+                                self.suspended = true;
+                                break;
+                            }
                             let mut record =
                                 json!({"status":"failed","work":self.work-before,"failure":error});
                             if cell["kind"] == "slot" {
@@ -331,7 +349,9 @@ impl Runtime<'_> {
                     }
                 }
             }
-            Ok(if self.failure.is_some() {
+            Ok(if self.suspended {
+                "suspended"
+            } else if self.failure.is_some() {
                 "failed"
             } else if resolved.len() != compiled.manifest.cells.len() {
                 "stuck"
@@ -371,6 +391,12 @@ impl Runtime<'_> {
             .run_into(compiled, args, path.to_owned(), depth + 1)
             .await?;
         if outcome != "complete" {
+            if self.suspended {
+                return Err(Error::new(
+                    "EFFECT_SUSPENDED",
+                    format!("inner run at \"{path}\" suspended"),
+                ));
+            }
             return Err(self
                 .failure
                 .as_ref()
@@ -398,22 +424,32 @@ impl Runtime<'_> {
             &json!({"contract":"algal.tool-effect.v1","path":request_path,"tool":name,"effect":tool.effect,"inputs":inputs}),
         )?;
         self.event("effect", Some(event_path), Some(&request_digest), None)?;
-        let receipt = if let Some(replay) = &mut self.host.replay {
-            replay
-                .get_mut(&request_digest)
-                .and_then(|q| q.pop_front())
-                .ok_or_else(|| Error::new("EFFECT_UNBOUND", "tool replay missing"))?
+        // Resume keeps the checkpoint's recorded tool effects but lets a
+        // digest miss fall through to the live tool — strict replay (verify)
+        // treats a miss as unbound.
+        let replayed = if let Some(replay) = self.host.replay.as_mut() {
+            let hit = replay.get_mut(&request_digest).and_then(|q| q.pop_front());
+            if hit.is_none() && !self.host.replay_fallthrough {
+                return Err(Error::new("EFFECT_UNBOUND", "tool replay missing"));
+            }
+            hit
         } else {
-            let result = match &tool.backend {
-                Backend::Scripted { responses } => responses.get(&canonical(inputs)?).cloned().ok_or_else(|| Error::new("TOOL_FAILED", "scripted tool result missing")),
-                backend => self.host.execute_backend(name, backend, &json!({"inputs":inputs,"requestDigest":request_digest,"idempotencyKey":request_digest}), tool.max_bytes, timeout).await.map(|(v, _)| v),
-            };
-            match result {
-                Ok(output) => {
-                    json!({"requestDigest":request_digest,"executor":format!("tool:{name}"),"output":output})
-                }
-                Err(error) => {
-                    json!({"requestDigest":request_digest,"executor":format!("tool:{name}"),"error":error})
+            None
+        };
+        let receipt = match replayed {
+            Some(receipt) => receipt,
+            None => {
+                let result = match &tool.backend {
+                    Backend::Scripted { responses } => responses.get(&canonical(inputs)?).cloned().ok_or_else(|| Error::new("TOOL_FAILED", "scripted tool result missing")),
+                    backend => self.host.execute_backend(name, backend, &json!({"inputs":inputs,"requestDigest":request_digest,"idempotencyKey":request_digest}), tool.max_bytes, timeout).await.map(|(v, _)| v),
+                };
+                match result {
+                    Ok(output) => {
+                        json!({"requestDigest":request_digest,"executor":format!("tool:{name}"),"output":output})
+                    }
+                    Err(error) => {
+                        json!({"requestDigest":request_digest,"executor":format!("tool:{name}"),"error":error})
+                    }
                 }
             }
         };
@@ -1227,6 +1263,7 @@ pub async fn run(
         calls: 0,
         work: 0,
         failure: None,
+        suspended: false,
         replay,
     };
     runtime.event("run.start", None, Some(&manifest_digest), None)?;
@@ -1277,4 +1314,54 @@ pub async fn verify(
     Ok(
         json!({"ok":ok,"digest":replayed["digest"],"outcome":replayed["outcome"],"mismatches":if ok {json!([])} else {json!(["deterministic replay differs"])} }),
     )
+}
+
+/// Continue a suspended (or completed) run. The checkpoint's completed
+/// effects replay by request digest; suspended attempts are dropped so the
+/// same requests re-issue against the live host's executors, and the tail
+/// executes live. The checkpoint supplies slot reads and transport
+/// provenance exactly as verify does.
+pub async fn resume(
+    checkpoint: &Value,
+    manifest: Manifest,
+    store: &mut Store,
+    host: &mut Host,
+    transports: &Transports,
+) -> Result<Value> {
+    if checkpoint["contract"] != "algal.run.v1" {
+        return Err(Error::invalid("run receipt contract"));
+    }
+    if checkpoint["manifestDigest"] != manifest.digest()? {
+        return Err(Error::invalid("manifest digest does not match checkpoint"));
+    }
+    let mut continuable = Vec::new();
+    for effect in checkpoint["effects"]
+        .as_array()
+        .ok_or_else(|| Error::invalid("effects must be an array"))?
+    {
+        if effect["error"]["code"].as_str() != Some("EFFECT_SUSPENDED") {
+            continuable.push(effect.clone());
+        }
+    }
+    host.replay = Host::replay(&json!(continuable))?.replay;
+    host.replay_fallthrough = true;
+    // the checkpoint supplies slot reads and via provenance — but the
+    // resumed receipt is a new run stamped by this runtime, so the
+    // checkpoint's own contract/runtime stamps are stripped from the
+    // provenance record (verify keeps them for bit-for-bit replay)
+    let mut provenance = checkpoint.clone();
+    let obj = provenance
+        .as_object_mut()
+        .ok_or_else(|| Error::invalid("run receipt must be an object"))?;
+    obj.remove("contract");
+    obj.remove("runtime");
+    run(
+        manifest,
+        checkpoint["args"].clone(),
+        store,
+        host,
+        transports,
+        Some(&provenance),
+    )
+    .await
 }

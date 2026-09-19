@@ -159,7 +159,7 @@ pub fn compile(
                     output["labels"] = labels.clone();
                 }
                 Signature {
-                    inputs: ports(&cell["inputs"], false, false)?,
+                    inputs: ports(cell.get("inputs").unwrap_or(&json!({})), false, false)?,
                     outputs: port_map(json!({"out":output}))?,
                     cost: 0,
                 }
@@ -170,18 +170,18 @@ pub fn compile(
                     output["labels"] = labels.clone();
                 }
                 Signature {
-                    inputs: ports(&cell["inputs"], false, false)?,
+                    inputs: ports(cell.get("inputs").unwrap_or(&json!({})), false, false)?,
                     outputs: port_map(json!({"out":output}))?,
                     cost: 0,
                 }
             }
             "decide" => Signature {
-                inputs: ports(&cell["inputs"], false, false)?,
+                inputs: ports(cell.get("inputs").unwrap_or(&json!({})), false, false)?,
                 outputs: port_map(json!({"out":"json"}))?,
                 cost: 0,
             },
             "recall" => Signature {
-                inputs: ports(&cell["inputs"], false, false)?,
+                inputs: ports(cell.get("inputs").unwrap_or(&json!({})), false, false)?,
                 outputs: port_map(json!({"out":"json","ref":"ref"}))?,
                 cost: 0,
             },

@@ -18,7 +18,7 @@ import {
   type ExprScorer,
 } from "./expr";
 import type { FnRegistry } from "./registry";
-import { runOrganism } from "./run";
+import { runOrganism, type RunOutcome } from "./run";
 import type { Store } from "./store";
 import type { Transport } from "./transport";
 import type { ToolRegistry } from "./tools";
@@ -109,7 +109,7 @@ export type BenchAttribution = {
 export type BenchCaseResult = {
   id: string;
   passed: boolean;
-  outcome: "complete" | "failed" | "stuck";
+  outcome: RunOutcome;
   outputs: Record<string, JsonValue>;
   expect: Record<string, JsonValue>;
   receiptDigest: Digest;

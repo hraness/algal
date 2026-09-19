@@ -164,6 +164,14 @@ enum Commands {
         #[command(flatten)]
         options: Execution,
     },
+    /// Continue a suspended run: recorded effects replay, the rest routes
+    /// to the live executors.
+    Resume {
+        receipt: PathBuf,
+        manifest: Option<PathBuf>,
+        #[command(flatten)]
+        options: Execution,
+    },
     Pack {
         manifest: PathBuf,
         #[arg(long)]
@@ -1344,6 +1352,35 @@ async fn execute(cli: Cli) -> Result<bool> {
             let result = runtime::verify(&receipt, manifest, &store, &host).await?;
             emit(&result)?;
             Ok(result["ok"] == true)
+        }
+        Commands::Resume {
+            receipt: file,
+            manifest: manifest_file,
+            options,
+        } => {
+            let receipt = load(&file, MAX_DOCUMENT_BYTES)?;
+            let (mut store, mut host, transports) = prepare(&options, &cli.dir)?;
+            let manifest = match manifest_file {
+                Some(file) => manifest(&file)?,
+                None => store.manifest(
+                    receipt["manifestDigest"]
+                        .as_str()
+                        .ok_or_else(|| Error::invalid("receipt manifestDigest"))?,
+                )?,
+            };
+            let resumed = runtime::resume(
+                &receipt,
+                manifest.clone(),
+                &mut store,
+                &mut host,
+                &transports,
+            )
+            .await?;
+            if options.write {
+                eprintln!("receipt {}", persist(&mut store, &manifest, &resumed)?);
+            }
+            emit(&resumed)?;
+            Ok(resumed["outcome"] == "complete")
         }
         Commands::Suite { examples, modules } => {
             let mut store = Store::open(&cli.dir, true)?;

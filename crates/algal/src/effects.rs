@@ -364,6 +364,15 @@ pub async fn command_output(
             async { Ok::<_, Error>(child.wait().await?) }
         )?;
         if !status.success() {
+            // exit 75 (EX_TEMPFAIL): the answer is not ready — suspend the
+            // run; it may be resumed later. Any other nonzero exit is an
+            // ordinary failure.
+            if status.code() == Some(75) {
+                return Err(Error::new(
+                    "EFFECT_SUSPENDED",
+                    "executor asked the host to suspend the run",
+                ));
+            }
             return Err(Error::new(
                 "EFFECT_FAILED",
                 "host executable failed; diagnostics withheld",
@@ -518,6 +527,9 @@ pub struct Host {
     pub tools: BTreeMap<String, Tool>,
     queues: BTreeMap<String, VecDeque<Value>>,
     pub replay: Option<BTreeMap<String, VecDeque<Value>>>,
+    /// Resume mode: a replay digest miss falls through to live executor
+    /// routing instead of failing unbound. Strict verify leaves this off.
+    pub replay_fallthrough: bool,
     pub permissions: Option<crate::acp::PermissionBroker>,
     pub updates: Option<tokio::sync::mpsc::Sender<crate::acp::AgentUpdate>>,
     pub permission_scope: String,
@@ -944,11 +956,21 @@ impl Host {
         memos: Option<&mut Store>,
     ) -> Result<Value> {
         let request_digest = digest(request)?;
-        if let Some(replay) = &mut self.replay {
-            return replay
+        if let Some(replay) = self.replay.as_mut() {
+            let hit = replay
                 .get_mut(&request_digest)
-                .and_then(VecDeque::pop_front)
-                .ok_or_else(|| Error::new("EFFECT_UNBOUND", "replay has no matching effect"));
+                .and_then(VecDeque::pop_front);
+            if let Some(receipt) = hit {
+                return Ok(receipt);
+            }
+            // Resume keeps recorded prefix effects but routes a digest miss
+            // live; strict replay (verify) treats a miss as unbound.
+            if !self.replay_fallthrough {
+                return Err(Error::new(
+                    "EFFECT_UNBOUND",
+                    "replay has no matching effect",
+                ));
+            }
         }
         let wanted: Vec<_> = ["provider", "preset"]
             .iter()
@@ -1054,7 +1076,14 @@ impl Host {
                     }
                 }
             }
-            Err(error) => receipt["error"] = serde_json::to_value(error)?,
+            Err(error) => {
+                // suspension is not a retryable failure — it asks the host
+                // to pause the process, so the request is never re-issued
+                if error.code == "EFFECT_SUSPENDED" {
+                    receipt["retryable"] = json!(false);
+                }
+                receipt["error"] = serde_json::to_value(error)?;
+            }
         }
         Ok(receipt)
     }
