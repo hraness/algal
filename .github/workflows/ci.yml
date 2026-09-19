@@ -24,3 +24,25 @@ jobs:
           bun-version: "1.3.14"
       - run: bun install --frozen-lockfile
       - run: bun run check
+
+  native:
+    name: Native VM (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      - run: rustup toolchain install stable --profile minimal --component clippy,rustfmt
+      - run: rustup default stable
+      - run: bun install --frozen-lockfile
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+      - run: cargo build --locked
+      - run: bun scripts/native-parity.ts
+      - run: bun scripts/vm-demo.ts --native ./target/debug/algal

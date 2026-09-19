@@ -1,0 +1,10 @@
+{
+  "release": "release-42",
+  "change": "Publish the signed-off release report",
+  "checks": {
+    "unit": "pass",
+    "integration": "pass",
+    "security": "pass"
+  },
+  "openIncidents": 0
+}

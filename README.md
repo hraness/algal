@@ -15,14 +15,14 @@ passed between hosts. Every run emits a receipt that replays bit-for-bit
 offline, so results are auditable without provider access. Lineage is a fossil
 record in which every proposal, measurement, and promotion is addressed by its
 content. And a manifest carries no host code — it can only name what the
-host or the contract admits, which makes an untrusted program safe to
-execute.
+host or the contract admits. Safety still depends on those admitted tools,
+executors, and capability custody; a manifest is not an OS sandbox.
 
-It's early days, but ALGAL programs already squeeze real work out of small
-models: an organism built on Qwen Flash plus a ledger tool beat a single
-Claude Opus call on a billing-dispute workload (6/6 vs 4/6) at ~20× lower
-cost, and an on-device Apple Intelligence model proposed, compiled, and
-promoted all four goals of a toy civilization without a single cloud call.
+It's early days. The process VM demonstration retains a reviewed proposal
+across a wait and avoids redoing its decision after approval. The billing
+fixture explores evidence access, and the civilization example explores
+on-device program generation and selection. Each experiment has a different
+claim to validate; fixture outcomes are not live provider rankings.
 
 1. **A growing agent harness.** Keep successful behavior as inspectable programs,
    not just longer prompts. Propose new versions, measure them, preserve their
@@ -33,7 +33,9 @@ promoted all four goals of a toy civilization without a single cloud call.
 
 Status: early. The TypeScript v1 runtime is the compatibility reference; the
 native Rust kernel executes all 44 bundled examples with parity, and ACP,
-relational memory, and on-device inference are implemented. See
+relational memory, and on-device inference are implemented. A bounded local
+process supervisor now adds durable checkpoints, mailbox wake scheduling, and
+per-generation offline verification; see [the VM demonstration](docs/vm.md). See
 [the design audit](docs/algal-design.md) for current qualification.
 
 ## Rename and compatibility
@@ -75,12 +77,12 @@ offline — no cloud, no subscription, fully receipted.
 
 ## Why this is a new primitive
 
-ALGAL is a third thing between deterministic programs and open-ended agents:
-a bounded, typed, content-addressed probabilistic program. The manifest is a
-value; the receipt is evidence; and model judgment is isolated behind explicit
-cells with declared contracts and budgets. See [`docs/why-unique.md`](docs/why-unique.md)
-for the full comparison with prompts, agent loops, DAG engines, probabilistic
-programming, smart contracts, and FaaS.
+ALGAL combines bounded, typed, content-addressed programs with explicit model
+effects and replayable execution evidence. Durable workflows and checkpointed
+agent graphs have substantial prior art. The distinctive focus here is a
+shared data-only program and evidence contract for program evolution, execution,
+and offline checking across two runtimes. See
+[`docs/why-unique.md`](docs/why-unique.md) for the concrete comparison and limits.
 
 ### Where this could go
 
@@ -252,21 +254,40 @@ check itself:
 on a charge ledger. A lone model sees only the ticket; the ALGAL organism
 retrieves the ledger through a typed `tool` cell and then classifies.
 
-Live Vercel AI Gateway run:
+The committed configuration uses scripted responses. Run it to inspect evidence
+routing and verify benchmark receipts; it does not establish a live provider
+quality or price ranking. Comparing a tool-equipped graph to a model without
+the ledger primarily measures evidence access. See
+[when ALGAL is useful](docs/when-algal-wins.md) for reproduction and the limits
+of this comparison.
 
-|| system | passed | effect calls | cost | input tokens | output tokens | Pareto |
-|---|---|---:|---:|---:|---:|---|
-|| cheap-single (qwen3.5, no evidence) | 4/6 | 6 | $0.00371 | 759 | 14,087 | yes |
-|| frontier-single (claude-opus-5, no evidence) | 4/6 | 6 | $0.02625 | 4,214 | 207 | — |
-|| **organism-cheap (qwen3.5 + ledger tool)** | **6/6** | **12** | **$0.00131** | **1,210** | **4,716** | **yes** |
-|| organism-ensemble (qwen3.5 + qwen3.7 + tool) | 6/6 | 19 | $0.00676 | 3,692 | 6,776 | — |
+## A process that survives approval
 
-A Qwen Flash organism with a typed ledger lookup is **100% accurate on this
-workload**, while a Claude Opus call without the tool is **67% accurate**.
-Opus fails the same evidence-only cases as Qwen does when neither can look up
-the charges. The Pareto set keeps both the organism (quality winner) and the
-frontier single call (fewest round-trips), so the tradeoff is explicit and
-can be chosen per deployment.
+```sh
+bun scripts/vm-demo.ts
+# With a built native executable, also test both runtime handoff directions:
+bun scripts/vm-demo.ts --native ./target/debug/algal --keep --out vm-report.json
+```
+
+The example records a release report proposal, exits its CLI process, waits
+for an external approval, and continues from its recorded effects. Approval
+publishes a local mailbox message; denial prevents publication. Every command
+runs in a fresh OS process. The optional native mode creates in one runtime
+and resumes in the other using the same store.
+
+The measured fixture uses **2 decision-adapter invocations instead of 4** for
+an actual fresh-run restart baseline over two actors. It checks zero decision
+calls during idle scheduling, resume, and offline verification; four completed
+actor receipt generations verify. A separate identical-arguments scenario
+checks process identity and single-consumer mailbox delivery. The adapter is
+scripted: this demonstrates avoided execution work, not live model quality or
+paid cost savings.
+
+`process create`, `tick`, `schedule`, `inspect`, `list`, and `verify` expose the
+bounded local supervisor. An uncertain dispatch remains blocked for
+reconciliation instead of automatically repeating a possibly completed effect.
+See [the process VM guide](docs/vm.md) for the lifecycle, JSON report, commands,
+and host trust boundary.
 
 ## First value
 
@@ -595,17 +616,17 @@ name → command, so a cell's `route.provider`/`route.preset` picks its model.
 
 ## What not to infer
 
-- A receipt proves the recorded run is self-consistent and replayable. It does
-  not prove the world will cooperate next time, that the model was right, or
-  that a label was anything but a label.
+- A successful receipt replay checks the recorded run for internal consistency.
+  It does not attest to a provider call, authenticate external facts, establish
+  that the model was right, or predict the next live execution.
 - `agent` cells carry no ambient authority. Model output is data until it
   binds to a declared contract; an agent can use only capability handles
   delivered through typed inputs and tools declared on that cell. Provider
   access remains behind executors the host owns.
-- This is not yet a hosted orchestrator, distributed queue, or multi-agent
-  town. Capability mailboxes are bounded local durable messaging; supervision,
-  leases, migration, distributed consensus, and automatic wake scheduling are
-  later host/runtime layers.
+- The process supervisor and mailbox scheduler are bounded local commands.
+  They provide durable records and exclusive dispatch; they do not provide a
+  hosted service, distributed consensus, OS isolation, automatic crash
+  reconciliation, or exactly-once arbitrary external effects.
 
 ## Plug it into your agent or provider
 

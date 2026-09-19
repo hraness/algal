@@ -1,0 +1,53 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:vm-approval-wait",
+  "name": "Wait after the proposal is recorded",
+  "interface": {
+    "inputs": {
+      "inbox": {
+        "cell": "input",
+        "port": "inbox"
+      },
+      "proposal": {
+        "cell": "input",
+        "port": "proposal"
+      }
+    },
+    "outputs": {
+      "approval": {
+        "cell": "receive",
+        "port": "message"
+      }
+    }
+  },
+  "cells": [
+    {
+      "id": "input",
+      "kind": "input",
+      "outputs": {
+        "inbox": {
+          "type": "cap",
+          "capability": "mailbox-receive"
+        },
+        "proposal": "text"
+      }
+    },
+    {
+      "id": "receive",
+      "kind": "tool",
+      "tool": "mailbox.receive.v1"
+    }
+  ],
+  "edges": [
+    {
+      "from": {
+        "cell": "input",
+        "port": "inbox"
+      },
+      "to": {
+        "cell": "receive",
+        "port": "mailbox"
+      }
+    }
+  ]
+}

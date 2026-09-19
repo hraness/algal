@@ -11,7 +11,6 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 pub const CAPABILITY_CONTRACT: &str = "algal.capability.v1";
@@ -102,16 +101,16 @@ fn envelope(mailbox: &str, idempotency_key: &str, value: &Value) -> Value {
 }
 
 fn nonce() -> Result<String> {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|_| Error::new("IO_FAILED", "system clock precedes unix epoch"))?
-        .as_nanos();
-    let seed = digest(&json!({
-        "counter":NONCE.fetch_add(1, Ordering::Relaxed),
-        "nanos":nanos.to_string(),
-        "pid":std::process::id(),
-    }))?;
-    Ok(seed[7..].to_owned())
+    let mut entropy = [0_u8; 32];
+    getrandom::fill(&mut entropy)
+        .map_err(|_| Error::new("IO_FAILED", "operating-system entropy unavailable"))?;
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut nonce = String::with_capacity(64);
+    for byte in entropy {
+        nonce.push(HEX[usize::from(byte >> 4)] as char);
+        nonce.push(HEX[usize::from(byte & 15)] as char);
+    }
+    Ok(nonce)
 }
 
 fn no_link(path: &Path) -> Result<()> {
@@ -126,6 +125,15 @@ fn no_link(path: &Path) -> Result<()> {
 }
 
 fn write_new(path: &Path, value: &Value) -> Result<bool> {
+    no_link(path)?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| Error::invalid("mailbox parent"))?;
+    let temporary = parent.join(format!(
+        ".algal-publish-{}-{}",
+        std::process::id(),
+        NONCE.fetch_add(1, Ordering::Relaxed)
+    ));
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
     #[cfg(unix)]
@@ -133,14 +141,34 @@ fn write_new(path: &Path, value: &Value) -> Result<bool> {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    let mut file = match options.open(path) {
-        Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => return Ok(false),
-        Err(error) => return Err(error.into()),
-    };
-    file.write_all(canonical(value)?.as_bytes())?;
-    file.sync_all()?;
-    Ok(true)
+    let mut file = options.open(&temporary)?;
+    let result = (|| -> Result<bool> {
+        file.write_all(canonical(value)?.as_bytes())?;
+        file.sync_all()?;
+        match fs::hard_link(&temporary, path) {
+            Ok(()) => {
+                File::open(parent)?.sync_all()?;
+                Ok(true)
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
+            Err(error) => Err(error.into()),
+        }
+    })();
+    let cleanup = fs::remove_file(&temporary);
+    result.and_then(|published| {
+        cleanup?;
+        Ok(published)
+    })
+}
+
+struct MailboxLock {
+    path: PathBuf,
+    _file: File,
+}
+impl Drop for MailboxLock {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
 }
 
 fn write_replace(path: &Path, value: &Value) -> Result<()> {
@@ -155,10 +183,12 @@ fn write_replace(path: &Path, value: &Value) -> Result<()> {
     ));
     write_new(&temporary, value)?;
     fs::rename(&temporary, path)?;
+    File::open(parent)?.sync_all()?;
     Ok(())
 }
 
 fn read_optional(path: &Path) -> Result<Option<Value>> {
+    no_link(path)?;
     match File::open(path) {
         Ok(file) => Ok(Some(read_json(file, MAX_DOCUMENT_BYTES)?)),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -435,6 +465,38 @@ impl MailboxService {
         Ok((config, record))
     }
 
+    fn lock(&self, name: &str) -> Result<MailboxLock> {
+        let config = self.config_path(name)?;
+        let path = config
+            .parent()
+            .ok_or_else(|| Error::invalid("mailbox parent"))?
+            .join(".lock");
+        no_link(&path)?;
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let file = options.open(&path).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                Error::new("IO_FAILED", format!("mailbox \"{name}\" is locked; reconcile the owning operation before retrying"))
+            } else { error.into() }
+        })?;
+        Ok(MailboxLock { path, _file: file })
+    }
+
+    /// Host readiness observation; it never dequeues a delivery.
+    pub fn has_pending(&self, handle: &str) -> Result<bool> {
+        let (config, _) = self.resolve(handle, MAILBOX_RECEIVE)?;
+        let _lock = self.lock(&config.name)?;
+        let (config, _) = self.resolve(handle, MAILBOX_RECEIVE)?;
+        Ok(!self
+            .message_files(&config.name, config.max_messages)?
+            .is_empty())
+    }
+
     pub fn revoke(&self, handle: &str) -> Result<()> {
         let parsed = parse_capability_handle(handle, None)?;
         if ![MAILBOX_SEND, MAILBOX_RECEIVE].contains(&parsed.capability.as_str()) {
@@ -443,6 +505,8 @@ impl MailboxService {
                 "capability is not a mailbox right",
             ));
         }
+        let (config, _) = self.resolve(handle, &parsed.capability)?;
+        let _lock = self.lock(&config.name)?;
         let (_, mut record) = self.resolve(handle, &parsed.capability)?;
         record.revoked = true;
         write_replace(&self.record_path(handle)?, &serde_json::to_value(record)?)
@@ -477,6 +541,8 @@ impl MailboxService {
 
     pub fn send(&self, handle: &str, value: Value, idempotency_key: &str) -> Result<Value> {
         check_digest(idempotency_key)?;
+        let (config, _) = self.resolve(handle, MAILBOX_SEND)?;
+        let _lock = self.lock(&config.name)?;
         let (config, _) = self.resolve(handle, MAILBOX_SEND)?;
         let bytes = canonical(&value)?.len();
         if bytes > config.max_message_bytes {
@@ -571,12 +637,14 @@ impl MailboxService {
 
     pub fn receive(&self, handle: &str) -> Result<Value> {
         let (config, _) = self.resolve(handle, MAILBOX_RECEIVE)?;
+        let _lock = self.lock(&config.name)?;
+        let (config, _) = self.resolve(handle, MAILBOX_RECEIVE)?;
         for _ in 0..16 {
             let files = self.message_files(&config.name, config.max_messages)?;
             if files.is_empty() {
-                return Err(Error::new(
-                    "EFFECT_SUSPENDED",
+                return Err(Error::suspended(
                     format!("mailbox \"{}\" is empty", config.name),
+                    handle,
                 ));
             }
             for source in files {
@@ -600,15 +668,19 @@ impl MailboxService {
                     return Err(Error::new("DIGEST_MISMATCH", "mailbox delivery is corrupt"));
                 }
                 match fs::rename(&source, self.consumed_dir(&config.name)?.join(file)) {
-                    Ok(()) => return Ok(json!({"id":message.id,"message":message.value})),
+                    Ok(()) => {
+                        File::open(self.pending_dir(&config.name)?)?.sync_all()?;
+                        File::open(self.consumed_dir(&config.name)?)?.sync_all()?;
+                        return Ok(json!({"id":message.id,"message":message.value}));
+                    }
                     Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
                     Err(error) => return Err(error.into()),
                 }
             }
         }
-        Err(Error::new(
-            "EFFECT_SUSPENDED",
+        Err(Error::suspended(
             format!("mailbox \"{}\" is busy", config.name),
+            handle,
         ))
     }
 }

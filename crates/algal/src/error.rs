@@ -6,6 +6,9 @@ use std::fmt;
 pub struct Error {
     pub code: String,
     pub message: String,
+    /// Host-only suspension evidence; serialized on the effect receipt.
+    #[serde(skip)]
+    pub wake: Vec<String>,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -15,7 +18,13 @@ impl Error {
         Self {
             code: code.into(),
             message: message.into(),
+            wake: Vec::new(),
         }
+    }
+    pub fn suspended(message: impl Into<String>, handle: &str) -> Self {
+        let mut error = Self::new("EFFECT_SUSPENDED", message);
+        error.wake.push(handle.to_owned());
+        error
     }
     pub fn invalid(message: impl Into<String>) -> Self {
         Self::new("PARSE_FAILED", message)

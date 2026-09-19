@@ -723,6 +723,11 @@ pending, or an empty mailbox). Suspension is not failure and not an answer:
 - Command executors signal suspension with exit code 75 (`EX_TEMPFAIL`);
   any other nonzero exit is an ordinary `EFFECT_FAILED`.
 
+The bounded named supervisor, dispatch intents, mailbox wake scheduling, and
+cross-runtime filesystem ABI are specified in [algal.process.v1](process.md).
+A recorded suspension is resumable; an interrupted dispatch with uncertain
+external completion must be reconciled before any retry.
+
 ### Effect memoization
 
 The store keeps an effect index keyed by request digest — a memo table, not
@@ -752,5 +757,4 @@ individually.
 ## Reserved, not implemented
 
 - Cycles and streaming re-activation (organisms are DAGs in v1).
-- Inter-organism messaging during a run.
-- Durable multi-run state beyond the content-addressed store.
+- Distributed process supervision and network mailbox transport.

@@ -3,17 +3,20 @@
 // `MemoryStore` backs tests. The interface is the Oh-adoption seam — an
 // Oh-backed store implements these four methods over the op log.
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { randomBytes } from "node:crypto";
+import { constants } from "node:fs";
+import { link, lstat, mkdir, open, rename, unlink } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { asDigest, digestCanonical, type Digest } from "./digest";
 import { AlgalError } from "./errors";
 import {
+  BOUNDS,
   manifestToJson,
   parseOrganismManifest,
   type OrganismManifest,
 } from "./contract";
 import { parseEffectReceipt, type EffectReceipt } from "./effects";
-import { canonicalize, type JsonValue } from "./values";
+import { asJsonValue, canonicalize, type JsonValue } from "./values";
 
 export interface Store {
   getManifest(digest: Digest): Promise<OrganismManifest | undefined>;
@@ -111,6 +114,44 @@ export function replayStore(source: Store): Store {
   };
 }
 
+export const STORE_BOUNDS = { maxDocumentBytes: 67_108_864, maxDepth: 64, maxNodes: 1_000_000 } as const;
+
+function storeJson(value: unknown): JsonValue {
+  const pending: { value: unknown; depth: number }[] = [{ value, depth: 0 }];
+  let nodes = 0;
+  while (pending.length > 0) {
+    const item = pending.pop()!;
+    if (++nodes > STORE_BOUNDS.maxNodes || item.depth > STORE_BOUNDS.maxDepth) {
+      throw new AlgalError("BUDGET_EXHAUSTED", "store JSON depth/count exceeded");
+    }
+    if (item.value !== null && typeof item.value === "object") {
+      for (const child of Object.values(item.value)) {
+        pending.push({ value: child, depth: item.depth + 1 });
+        if (pending.length > STORE_BOUNDS.maxNodes) {
+          throw new AlgalError("BUDGET_EXHAUSTED", "store JSON count exceeded");
+        }
+      }
+    }
+  }
+  return asJsonValue(value, "store value");
+}
+
+async function guardPath(path: string, directory: boolean): Promise<void> {
+  try {
+    const metadata = await lstat(path);
+    if (metadata.isSymbolicLink() || (directory ? !metadata.isDirectory() : !metadata.isFile())) {
+      throw new AlgalError("IO_FAILED", "store symlinks and unexpected file types are not admitted");
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+}
+
+async function syncDirectory(path: string): Promise<void> {
+  const directory = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try { await directory.sync(); } finally { await directory.close(); }
+}
+
 export class FileStore implements Store {
   constructor(readonly dir: string) {}
 
@@ -126,120 +167,6 @@ export class FileStore implements Store {
   private effectPath(d: Digest) {
     return join(this.dir, "effects", `${asDigest(d, "store digest").slice(7)}.json`);
   }
-
-  async getManifest(digest: Digest) {
-    try {
-      const raw = await readFile(this.manifestPath(digest), "utf8");
-      const parsed = parseOrganismManifest(JSON.parse(raw));
-      const actual = digestCanonical(manifestToJson(parsed));
-      if (actual !== digest) {
-        throw new AlgalError(
-          "DIGEST_MISMATCH",
-          `manifest file ${digest} hashes to ${actual}`,
-        );
-      }
-      return parsed;
-    } catch (e) {
-      if (e instanceof AlgalError) throw e;
-      if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-      throw new AlgalError("PARSE_FAILED", `manifest ${digest}: ${e}`);
-    }
-  }
-
-  async putManifest(manifest: OrganismManifest) {
-    const d = digestCanonical(manifestToJson(manifest));
-    await mkdir(join(this.dir, "manifests"), { recursive: true });
-    await writeFile(this.manifestPath(d), canonicalize(manifestToJson(manifest)));
-    return d;
-  }
-
-  async getReceipt(digest: Digest) {
-    try {
-      const raw = await readFile(this.receiptPath(digest), "utf8");
-      const parsed = JSON.parse(raw) as JsonValue;
-      const actual = digestCanonical(parsed);
-      if (actual !== digest) {
-        throw new AlgalError(
-          "DIGEST_MISMATCH",
-          `receipt file ${digest} hashes to ${actual}`,
-        );
-      }
-      return parsed;
-    } catch (e) {
-      if (e instanceof AlgalError) throw e;
-      if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-      throw new AlgalError("PARSE_FAILED", `receipt ${digest}: ${e}`);
-    }
-  }
-
-  async putReceipt(receipt: JsonValue) {
-    const d = digestCanonical(receipt);
-    await mkdir(join(this.dir, "runs"), { recursive: true });
-    await writeFile(this.receiptPath(d), canonicalize(receipt));
-    return d;
-  }
-
-  async getValue(digest: Digest) {
-    try {
-      const raw = await readFile(this.valuePath(digest), "utf8");
-      const parsed = JSON.parse(raw) as JsonValue;
-      const actual = digestCanonical(parsed);
-      if (actual !== digest) {
-        throw new AlgalError(
-          "DIGEST_MISMATCH",
-          `value file ${digest} hashes to ${actual}`,
-        );
-      }
-      return parsed;
-    } catch (e) {
-      if (e instanceof AlgalError) throw e;
-      if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-      throw new AlgalError("PARSE_FAILED", `value ${digest}: ${e}`);
-    }
-  }
-
-  async putValue(value: JsonValue) {
-    const d = digestCanonical(value);
-    await mkdir(join(this.dir, "values"), { recursive: true });
-    await writeFile(this.valuePath(d), canonicalize(value));
-    return d;
-  }
-
-  async getEffect(requestDigest: Digest, executor?: string) {
-    try {
-      const raw = await readFile(this.effectPath(effectKey(requestDigest, executor)), "utf8");
-      const parsed = parseEffectReceipt(JSON.parse(raw));
-      if (parsed.requestDigest !== requestDigest) {
-        throw new AlgalError(
-          "DIGEST_MISMATCH",
-          `effect file ${requestDigest} claims request ${parsed.requestDigest}`,
-        );
-      }
-      return parsed;
-    } catch (e) {
-      if (e instanceof AlgalError) throw e;
-      if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-      throw new AlgalError("PARSE_FAILED", `effect ${requestDigest}: ${e}`);
-    }
-  }
-
-  async putEffect(receipt: EffectReceipt, executor?: string) {
-    await mkdir(join(this.dir, "effects"), { recursive: true });
-    try {
-      // flag "wx" fails EEXIST when an entry already claims this request —
-      // the first recorded response wins, so a later differing response for
-      // the same request can never overwrite the memo
-      await writeFile(
-        this.effectPath(effectKey(receipt.requestDigest, executor)),
-        canonicalize(receipt as unknown as JsonValue),
-        { flag: "wx" },
-      );
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-    }
-    return receipt.requestDigest;
-  }
-
   private slotPath(name: string) {
     if (!/^[a-z][a-z0-9._-]{0,63}$/.test(name)) {
       throw new AlgalError("PARSE_FAILED", "invalid slot name");
@@ -247,18 +174,157 @@ export class FileStore implements Store {
     return join(this.dir, "slots", `${name}.json`);
   }
 
-  async getSlot(name: string) {
+  private async guard(path: string, create = false): Promise<void> {
+    await guardPath(this.dir, true);
+    await guardPath(dirname(path), true);
+    if (create) {
+      await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+      await guardPath(this.dir, true);
+      await guardPath(dirname(path), true);
+    }
+    await guardPath(path, false);
+  }
+
+  private async read(path: string, max: number = STORE_BOUNDS.maxDocumentBytes): Promise<JsonValue | undefined> {
+    await this.guard(path);
+    let file;
     try {
-      const raw = await readFile(this.slotPath(name), "utf8");
-      return JSON.parse(raw) as JsonValue;
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-      throw new AlgalError("PARSE_FAILED", `slot ${name}: ${e}`);
+      file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      throw new AlgalError("IO_FAILED", `store file cannot be opened: ${(error as NodeJS.ErrnoException).code ?? "unknown"}`);
+    }
+    try {
+      const metadata = await file.stat();
+      if (!metadata.isFile() || metadata.size > max) {
+        throw new AlgalError("BUDGET_EXHAUSTED", "store file type/byte bound exceeded");
+      }
+      const chunks: Buffer[] = [];
+      let size = 0;
+      for (;;) {
+        const chunk = Buffer.alloc(Math.min(65_536, max + 1 - size));
+        const { bytesRead } = await file.read(chunk, 0, chunk.length, null);
+        if (bytesRead === 0) break;
+        size += bytesRead;
+        if (size > max) {
+          throw new AlgalError("BUDGET_EXHAUSTED", "store file byte bound exceeded");
+        }
+        chunks.push(chunk.subarray(0, bytesRead));
+      }
+      const value: unknown = JSON.parse(Buffer.concat(chunks, size).toString("utf8"));
+      return storeJson(value);
+    } catch (error) {
+      if (error instanceof AlgalError) throw error;
+      if (error instanceof SyntaxError) throw new AlgalError("PARSE_FAILED", "store file contains invalid JSON");
+      throw error;
+    } finally { await file.close(); }
+  }
+
+  private async publish(path: string, value: JsonValue, mutable = false, max: number = STORE_BOUNDS.maxDocumentBytes): Promise<void> {
+    const bytes = canonicalize(storeJson(value));
+    if (Buffer.byteLength(bytes, "utf8") > max) {
+      throw new AlgalError("BUDGET_EXHAUSTED", "store document byte bound exceeded");
+    }
+    await this.guard(path, true);
+    const temporary = join(dirname(path), `.algal-${process.pid}-${randomBytes(16).toString("hex")}`);
+    const file = await open(temporary, "wx", 0o600);
+    try {
+      await file.writeFile(bytes);
+      await file.sync();
+    } catch (error) {
+      await file.close();
+      await unlink(temporary).catch(() => undefined);
+      throw error;
+    }
+    await file.close();
+    try {
+      await this.guard(path);
+      if (mutable) await rename(temporary, path);
+      else {
+        try { await link(temporary, path); }
+        catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+      }
+      await syncDirectory(dirname(path));
+      await syncDirectory(this.dir);
+    } finally {
+      await unlink(temporary).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+      });
     }
   }
 
+  private async readCas(path: string, digest: Digest, kind: string): Promise<JsonValue | undefined> {
+    const value = await this.read(path);
+    if (value === undefined) return undefined;
+    const actual = digestCanonical(value);
+    if (actual !== digest) {
+      throw new AlgalError("DIGEST_MISMATCH", `${kind} file ${digest} hashes to ${actual}`);
+    }
+    return value;
+  }
+
+  private async writeCas(path: string, value: JsonValue, digest: Digest, kind: string): Promise<Digest> {
+    await this.publish(path, value);
+    // Existing immutable entries are never overwritten, including corruption.
+    if (await this.readCas(path, digest, kind) === undefined) {
+      throw new AlgalError("IO_FAILED", "published store object is missing");
+    }
+    return digest;
+  }
+
+  async getManifest(digest: Digest) {
+    const value = await this.read(this.manifestPath(digest));
+    if (value === undefined) return undefined;
+    const manifest = parseOrganismManifest(value);
+    const actual = digestCanonical(manifestToJson(manifest));
+    if (actual !== digest) {
+      throw new AlgalError("DIGEST_MISMATCH", `manifest file ${digest} hashes to ${actual}`);
+    }
+    return manifest;
+  }
+  async putManifest(manifest: OrganismManifest) {
+    const value = storeJson(manifestToJson(manifest));
+    const digest = digestCanonical(value);
+    return this.writeCas(this.manifestPath(digest), value, digest, "manifest");
+  }
+  async getReceipt(digest: Digest) {
+    return this.readCas(this.receiptPath(digest), digest, "receipt");
+  }
+  async putReceipt(receipt: JsonValue) {
+    storeJson(receipt);
+    const digest = digestCanonical(receipt);
+    return this.writeCas(this.receiptPath(digest), receipt, digest, "receipt");
+  }
+  async getValue(digest: Digest) {
+    return this.readCas(this.valuePath(digest), digest, "value");
+  }
+  async putValue(value: JsonValue) {
+    storeJson(value);
+    const digest = digestCanonical(value);
+    return this.writeCas(this.valuePath(digest), value, digest, "value");
+  }
+  async getEffect(requestDigest: Digest, executor?: string) {
+    const value = await this.read(this.effectPath(effectKey(requestDigest, executor)));
+    if (value === undefined) return undefined;
+    const receipt = parseEffectReceipt(value);
+    if (receipt.requestDigest !== requestDigest) {
+      throw new AlgalError("DIGEST_MISMATCH", `effect file ${requestDigest} claims request ${receipt.requestDigest}`);
+    }
+    return receipt;
+  }
+  async putEffect(receipt: EffectReceipt, executor?: string) {
+    const path = this.effectPath(effectKey(receipt.requestDigest, executor));
+    await this.publish(path, parseEffectReceipt(storeJson(receipt)) as unknown as JsonValue);
+    // The memo index remains first-wins, but malformed existing claims fail closed.
+    if (await this.getEffect(receipt.requestDigest, executor) === undefined) {
+      throw new AlgalError("IO_FAILED", "published effect memo is missing");
+    }
+    return receipt.requestDigest;
+  }
+  async getSlot(name: string) {
+    return this.read(this.slotPath(name), BOUNDS.maxBlobBytes);
+  }
   async setSlot(name: string, value: JsonValue) {
-    await mkdir(join(this.dir, "slots"), { recursive: true });
-    await writeFile(this.slotPath(name), canonicalize(value));
+    await this.publish(this.slotPath(name), value, true, BOUNDS.maxBlobBytes);
   }
 }

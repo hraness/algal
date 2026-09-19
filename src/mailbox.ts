@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import {
+  link,
   lstat,
   mkdir,
   open,
@@ -12,6 +13,7 @@ import { join } from "node:path";
 import {
   capabilityHandle,
   parseCapabilityHandle,
+  suspensionDetails,
   type CapabilityHandle,
 } from "./capabilities";
 import { BOUNDS } from "./contract";
@@ -92,6 +94,7 @@ export interface MailboxService {
   receive(
     handle: CapabilityHandle,
   ): Promise<{ id: Digest; message: JsonValue }>;
+  hasPending(handle: CapabilityHandle): Promise<boolean>;
 }
 
 function descriptor(record: Pick<CapabilityRecord, "capability" | "mailbox" | "nonce">): JsonValue {
@@ -394,6 +397,11 @@ export class MemoryMailboxService implements MailboxService {
     return { id };
   }
 
+  async hasPending(handle: CapabilityHandle): Promise<boolean> {
+    const { config } = this.resolve(handle, MAILBOX_RECEIVE);
+    return this.pending.get(config.name)!.size > 0;
+  }
+
   async receive(
     handle: CapabilityHandle,
   ): Promise<{ id: Digest; message: JsonValue }> {
@@ -401,7 +409,11 @@ export class MemoryMailboxService implements MailboxService {
     const queue = this.pending.get(config.name)!;
     const delivery = [...queue.keys()].sort()[0];
     if (!delivery) {
-      throw new AlgalError("EFFECT_SUSPENDED", `mailbox "${config.name}" is empty`);
+      throw new AlgalError(
+        "EFFECT_SUSPENDED",
+        `mailbox "${config.name}" is empty`,
+        suspensionDetails(handle),
+      );
     }
     const message = queue.get(delivery)!;
     queue.delete(delivery);
@@ -432,18 +444,26 @@ async function readJson(path: string): Promise<unknown | undefined> {
 }
 
 async function writeNew(path: string, value: JsonValue): Promise<boolean> {
+  // Publish complete immutable bytes without exposing a partially written file.
+  const temporary = `${path}.algal-${process.pid}-${randomBytes(8).toString("hex")}`;
+  const file = await open(temporary, "wx", 0o600);
   try {
-    const file = await open(path, "wx", 0o600);
-    try {
-      await file.writeFile(canonicalize(value));
-      await file.sync();
-    } finally {
-      await file.close();
-    }
+    await file.writeFile(canonicalize(value));
+    await file.sync();
+  } catch (error) {
+    await file.close();
+    await unlink(temporary).catch(() => undefined);
+    throw error;
+  }
+  await file.close();
+  try {
+    await link(temporary, path);
     return true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
     throw error;
+  } finally {
+    await unlink(temporary);
   }
 }
 
@@ -632,7 +652,41 @@ export class FileMailboxService implements MailboxService {
     return { config, record };
   }
 
+  private async withMailboxLock<T>(name: string, operation: () => Promise<T>): Promise<T> {
+    await this.guard(name);
+    const path = join(this.dir, "mailboxes", asSafeId(name, "mailbox name"), ".lock");
+    let lock;
+    try {
+      lock = await open(path, "wx", 0o600);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+        throw new AlgalError("IO_FAILED", `mailbox "${name}" is locked; reconcile the owning operation before retrying`);
+      }
+      throw error;
+    }
+    try {
+      return await operation();
+    } finally {
+      await lock.close();
+      await unlink(path);
+    }
+  }
+
+  async hasPending(handle: CapabilityHandle): Promise<boolean> {
+    const { config } = await this.resolve(handle, MAILBOX_RECEIVE);
+    return this.withMailboxLock(config.name, async () => {
+      await this.resolve(handle, MAILBOX_RECEIVE);
+      return (await jsonFiles(this.pendingDir(config.name), config.maxMessages)).length > 0;
+    });
+  }
+
   async revoke(handle: CapabilityHandle): Promise<void> {
+    const { config } = await this.resolve(handle,
+      parseCapabilityHandle(handle).capability === MAILBOX_SEND ? MAILBOX_SEND : MAILBOX_RECEIVE);
+    await this.withMailboxLock(config.name, () => this.revokeLocked(handle));
+  }
+
+  private async revokeLocked(handle: CapabilityHandle): Promise<void> {
     const { record } = await this.resolve(
       handle,
       parseCapabilityHandle(handle).capability === MAILBOX_SEND
@@ -644,6 +698,15 @@ export class FileMailboxService implements MailboxService {
   }
 
   async send(
+    handle: CapabilityHandle,
+    value: JsonValue,
+    idempotencyKey: Digest,
+  ): Promise<{ id: Digest }> {
+    const { config } = await this.resolve(handle, MAILBOX_SEND);
+    return this.withMailboxLock(config.name, () => this.sendLocked(handle, value, idempotencyKey));
+  }
+
+  private async sendLocked(
     handle: CapabilityHandle,
     value: JsonValue,
     idempotencyKey: Digest,
@@ -736,11 +799,22 @@ export class FileMailboxService implements MailboxService {
     handle: CapabilityHandle,
   ): Promise<{ id: Digest; message: JsonValue }> {
     const { config } = await this.resolve(handle, MAILBOX_RECEIVE);
+    return this.withMailboxLock(config.name, () => this.receiveLocked(handle));
+  }
+
+  private async receiveLocked(
+    handle: CapabilityHandle,
+  ): Promise<{ id: Digest; message: JsonValue }> {
+    const { config } = await this.resolve(handle, MAILBOX_RECEIVE);
     await this.guard(config.name);
     for (let attempt = 0; attempt < 16; attempt++) {
       const pending = await jsonFiles(this.pendingDir(config.name), config.maxMessages);
       if (pending.length === 0) {
-        throw new AlgalError("EFFECT_SUSPENDED", `mailbox "${config.name}" is empty`);
+        throw new AlgalError(
+          "EFFECT_SUSPENDED",
+          `mailbox "${config.name}" is empty`,
+          suspensionDetails(handle),
+        );
       }
       for (const file of pending) {
         const source = join(this.pendingDir(config.name), file);
@@ -766,7 +840,11 @@ export class FileMailboxService implements MailboxService {
         }
       }
     }
-    throw new AlgalError("EFFECT_SUSPENDED", `mailbox "${config.name}" is busy`);
+    throw new AlgalError(
+      "EFFECT_SUSPENDED",
+      `mailbox "${config.name}" is busy`,
+      suspensionDetails(handle),
+    );
   }
 }
 

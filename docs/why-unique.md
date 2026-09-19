@@ -1,84 +1,81 @@
-# Why ALGAL is a new primitive
+# What distinguishes ALGAL
 
-Most existing abstractions fall into one of two buckets:
+ALGAL's useful combination is a typed program format, bounded execution,
+content-addressed evidence, and portable process checkpoints. A manifest is
+JSON data: the host can inspect, hash, compose, generate, and admit it before
+execution. Model judgments are bounded cells inside that program. A process
+can wait for an external message and continue from recorded effects under a
+new CLI invocation.
 
-1. **Deterministic programs** — code, configs, workflows, smart contracts.
-2. **Open-ended agents** — LLM agents, chatbots, copilots.
+None of these individual ideas establishes uniqueness. Durable execution,
+effect replay, checkpointing, and approval workflows have substantial prior
+art. ALGAL's claim is narrower: the same small program and evidence contracts
+join program evolution, execution, and offline verification across its
+TypeScript and Rust runtimes.
 
-ALGAL is a third thing: a **bounded, typed, content-addressed probabilistic program**.
+## A concrete use
 
-## What a ALGAL organism is
+The [process VM demonstration](vm.md) runs an evidence review, records a
+proposal, exits, waits for an approval, and resumes without invoking the
+recorded decision again. Approval authority stays in a host-admitted mailbox;
+the model can recommend but cannot approve. A denied actor completes without
+publishing. The report measures actual subprocess invocations, verifies all
+completed actor receipt generations, and can demonstrate both directions of
+TypeScript/Rust handoff.
 
-An organism is not a script. It is a finite, strongly-typed graph where:
+The fixture makes two decision invocations across two actors, versus four
+when the same program restarts without a checkpoint. It demonstrates avoided
+work under that restart policy, not better intelligence or superiority over
+another durable runtime. Its local command adapter returns scripted data and
+incurs no provider charges.
 
-- Every cell has declared input and output ports.
-- Every edge is a typed wire with optional guards.
-- Most cells are deterministic host functions.
-- Some cells are bounded agent calls with a prompt, a context view, an output contract, and a budget.
-- Model output is data. It is bound to a port before it re-enters the graph.
-- The whole graph is a value. It hashes, transports, and verifies.
-- A run emits a content-addressed receipt that can be replayed offline without the original provider.
-- Failure is explicit and routable, not an exception the caller discovers.
+## How the pieces reinforce each other
 
-That combination is what makes it a new primitive, not just a nicer prompt chain.
+- **Programs are values.** A manifest digest identifies the typed graph and
+  its declared bounds. Generated candidates use the same admission path as
+  hand-written programs, so evaluation and promotion can retain exact source
+  identities instead of informal prompt versions.
+- **Effects are explicit.** Model calls and tools have recorded requests and
+  outcomes. Replay reconstructs orchestration using those outcomes, and a
+  resumed process only invokes effects beyond the recorded prefix.
+- **Authority is admitted by the host.** Capability ports retain their exact
+  classes. A manifest cannot mint a mailbox handle from a constant. The host
+  decides which tools and executors are available and which capabilities enter
+  the process.
+- **Execution evidence is portable.** Process records, manifests, and receipts
+  have canonical representations. The local store can be handed between the
+  two runtime implementations, and recorded generations can be checked without
+  the original provider.
+- **The outer process is bounded too.** A named process has a generation
+  budget. Waiting does not require a model polling loop. Dispatch uncertainty
+  remains visible rather than triggering an automatic external-action retry.
 
-## How it differs from neighboring abstractions
+These properties are useful together when a model-generated workflow needs
+admission, durable execution, and later inspection. They are unnecessary
+machinery for many single-call applications.
 
-| Abstraction | What it does | Why ALGAL is different |
-|---|---|---|
-| **Prompt engineering** | Hand-tunes a string for a model | A manifest is a graph, not a prompt. The model only sees a bounded view of the graph. |
-| **LLM agent loop (ReAct, etc.)** | Open-ended reasoning with tools | The organism loop is bounded, typed, and hashable. It can be *inside* an agent, not a replacement for it. |
-| **Workflow / DAG engine** | Orchestrates deterministic steps | Effects are first-class, receipted, and replayable. Model calls are cells, not opaque black boxes. |
-| **Probabilistic programming** | Samples and conditions | No sampler is in the language. Non-determinism is isolated to the executor. The graph itself is deterministic given receipts. |
-| **Smart contract / zkVM** | Verifies computation by proof | ALGAL does not prove correctness. It proves *what was run and what was returned*, with everything content-addressed and replayable. |
-| **Function as a Service** | Runs code on demand | A ALGAL organism is content-addressed, provider-agnostic, and emits a receipt. It is a verifiable function, not just a callable endpoint. |
-| **Cellular automata** | Repeated local rules on a grid | ALGAL is a typed, heterogeneous, DAG-executed graph, not a grid. But it keeps the CA spirit: local, bounded, explicit state transitions. |
+## Neighboring systems
 
-## What the primitive enables
+| System or abstraction | Established capability | ALGAL's design choice |
+| --- | --- | --- |
+| [Temporal workflows](https://docs.temporal.io/workflows) | Workflow histories reconstruct state and reuse recorded activity results during replay. | Typed JSON manifests and canonical execution receipts are the shared program/evidence format. ALGAL's local supervisor is much smaller in operational scope. |
+| [LangGraph persistence](https://docs.langchain.com/oss/python/langgraph/persistence) | Checkpointers preserve graph state for continuity, interruptions, human review, and fault tolerance. | A data-only graph contract and independent TypeScript/Rust runtimes support the demonstrated local handoff and offline replay. |
+| [WebAssembly isolation](https://bytecodealliance.org/articles/security-and-correctness-in-wasmtime) | Runtime-enforced memory and control-flow isolation restrict untrusted machine code. | ALGAL interprets bounded graph/expression data but does not isolate its host tools or command executors. An OS or Wasm sandbox is a separate host concern. |
 
-### 1. Programs as values
+The comparisons identify design choices, not missing capabilities in other
+products. They do not establish that an equivalent design could not be built
+on another workflow system. Sources were consulted on 2026-09-19.
 
-A manifest is a pure JSON document. Its canonical digest is its identity. You can:
+## Evidence and trust
 
-- Hash it.
-- Ship it.
-- Cache it.
-- Compose it into another organism.
-- Generate candidates in a foundry and select by Pareto.
-- Register it as an agent tool.
+A matching receipt replay establishes internal consistency under the admitted
+runtime, graph, and tool signatures. Content addressing detects changes
+relative to an expected digest. Neither property is a cryptographic proof of
+external execution, a provider attestation, an approval signature, or evidence
+that the model's answer is true.
 
-### 2. Receipts as evidence
-
-Every run produces a receipt that records every cell, every edge, every effect request, and every effect response. The receipt is also content-addressed. You can:
-
-- Replay it offline and get the same digest.
-- Diff two receipts to find the exact cell where they diverge.
-- Transport it to a third party who can verify it without trusting you or the original provider.
-
-### 3. Boundaries by construction
-
-Budgets and types are in the manifest, not the runtime's head. The runtime enforces:
-
-- maxSteps, maxAgentCalls, maxWork, maxDepth
-- maxContextBytes, maxOutputBytes
-- declared tool lists and turn budgets
-- exact output contracts
-- no ambient authority for agent cells
-
-This makes it safe to execute organisms you did not write.
-
-### 4. Generation and selection
-
-Because an organism is a value, a program can generate, evaluate, and select organisms:
-
-- `algal foundry` breeds candidates on a train set and promotes the Pareto winner.
-- `algal search` evolves populations over generations with lineage tracking.
-- The promoted organism is itself a value that can be packed, shipped, and called.
-
-## Where it is not the right tool
-
-ALGAL is not for open-ended conversation, exploratory research, or tasks where the structure itself is unknown. It is for subproblems where the shape of the work can be declared: classification, routing, extraction, verification, multi-step forms, code review gates, and tool-grounded investigations.
-
-## Why the name "organism"
-
-An organism is alive in a very bounded sense: it ingests inputs, performs work through typed cells, emits a waste-free receipt, and can reproduce (generate and evolve variants). But it has no open-ended autonomy, no persistent self-interest, and no ambient access to the world. It is a value that behaves, not an agent that wants.
+Typed graphs and bounded expressions reduce the executable surface, but
+admitted functions, executors, storage, and capability custody are part of the
+trusted host. Do not infer that an arbitrary manifest is safe to execute with
+arbitrary tools. Distributed durability, general crash reconciliation, and OS
+isolation remain outside the current process VM.

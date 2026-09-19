@@ -6,7 +6,9 @@ use algal::{
     effects::{Backend, Host, ResponseFormat},
     graph::{Transports, compile, interface_args, interface_signature},
     mailbox::{self, MailboxService},
-    memory, runtime,
+    memory,
+    process::ProcessService,
+    runtime,
     store::{Store, pack, unpack},
 };
 use clap::{Args, Parser, Subcommand};
@@ -38,6 +40,9 @@ struct Execution {
     responses: Option<PathBuf>,
     #[arg(long)]
     host: Option<PathBuf>,
+    /// Shell executor: bounded request JSON on stdin, response JSON on stdout.
+    #[arg(long)]
+    executor_cmd: Option<String>,
     #[arg(long)]
     agent: Option<String>,
     #[arg(long, default_value = ".")]
@@ -157,6 +162,10 @@ enum Commands {
     Mailbox {
         #[command(subcommand)]
         command: MailboxCommand,
+    },
+    Process {
+        #[command(subcommand)]
+        command: ProcessCommand,
     },
     Example {
         id: String,
@@ -343,6 +352,38 @@ enum SlotCommand {
 }
 
 #[derive(Subcommand)]
+enum ProcessCommand {
+    Create {
+        name: String,
+        manifest: PathBuf,
+        #[arg(long, default_value_t = 16)]
+        max_generations: usize,
+        #[command(flatten)]
+        options: Execution,
+    },
+    List,
+    Inspect {
+        name: String,
+    },
+    Tick {
+        name: String,
+        #[command(flatten)]
+        options: Execution,
+    },
+    Schedule {
+        #[arg(long, default_value_t = 16)]
+        max_ticks: usize,
+        #[command(flatten)]
+        options: Execution,
+    },
+    Verify {
+        name: String,
+        #[command(flatten)]
+        options: Execution,
+    },
+}
+
+#[derive(Subcommand)]
 enum MailboxCommand {
     Create {
         name: String,
@@ -446,6 +487,7 @@ fn bridge_path(explicit: Option<&PathBuf>) -> Result<PathBuf> {
 fn host(options: &Execution, dir: &Path) -> Result<Host> {
     let count = usize::from(options.responses.is_some())
         + usize::from(options.host.is_some())
+        + usize::from(options.executor_cmd.is_some())
         + usize::from(options.gateway_model.is_some())
         + usize::from(options.jev.is_some())
         + usize::from(options.recall.is_some())
@@ -461,6 +503,17 @@ fn host(options: &Execution, dir: &Path) -> Result<Host> {
         Host::scripted(load(path, 1_048_576)?)
     } else if let Some(path) = &options.host {
         Host::from_config(&load(path, 1_048_576)?)?
+    } else if let Some(command) = &options.executor_cmd {
+        let backend = Backend::Command {
+            argv: vec!["sh".into(), "-c".into(), command.clone()],
+            cwd: None,
+            timeout_ms: 120_000,
+        };
+        backend.validate()?;
+        let identity = algal::canonical::digest(&json!({"command":command,"options":{}}))?;
+        let mut host = Host::default();
+        host.entries.push((format!("cmd:{identity}"), backend));
+        host
     } else {
         let backend = if let Some(agent) = &options.agent {
             let cwd = options.workspace.canonicalize()?;
@@ -1365,6 +1418,57 @@ async fn execute(cli: Cli) -> Result<bool> {
                 SlotCommand::Set { name, value } => {
                     store.set_slot(&name, &load(&value, 1_048_576)?)?;
                     emit(&json!({"name":name,"set":true}))?;
+                }
+            }
+            Ok(true)
+        }
+        Commands::Process { command } => {
+            let mut service = ProcessService::open(&cli.dir)?;
+            match command {
+                ProcessCommand::Create {
+                    name,
+                    manifest: file,
+                    max_generations,
+                    mut options,
+                } => {
+                    options.write = true;
+                    let (store, host, transports) = prepare(&options, &cli.dir)?;
+                    service.store = store;
+                    emit(&serde_json::to_value(service.create(
+                        &name,
+                        manifest(&file)?,
+                        args(&options)?,
+                        max_generations,
+                        &host,
+                        &transports,
+                    )?)?)?;
+                }
+                ProcessCommand::List => emit(&json!({"processes":service.list()?}))?,
+                ProcessCommand::Inspect { name } => {
+                    emit(&serde_json::to_value(service.inspect(&name)?)?)?
+                }
+                ProcessCommand::Tick { name, mut options } => {
+                    options.write = true;
+                    let (store, mut host, transports) = prepare(&options, &cli.dir)?;
+                    service.store = store;
+                    let state = service.tick(&name, None, &mut host, &transports).await?;
+                    let successful = !["failed", "stuck"].contains(&state.process.status.as_str());
+                    emit(&serde_json::to_value(state)?)?;
+                    return Ok(successful);
+                }
+                ProcessCommand::Schedule {
+                    max_ticks,
+                    mut options,
+                } => {
+                    options.write = true;
+                    let (store, mut host, transports) = prepare(&options, &cli.dir)?;
+                    service.store = store;
+                    emit(&service.schedule(max_ticks, &mut host, &transports).await?)?;
+                }
+                ProcessCommand::Verify { name, options } => {
+                    let (store, host, _) = prepare(&options, &cli.dir)?;
+                    service.store = store;
+                    emit(&service.verify(&name, &host).await?)?;
                 }
             }
             Ok(true)
