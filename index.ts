@@ -36,18 +36,23 @@ export type { CellRecord, RunEvent, RunOptions, RunReceipt } from "./src/run";
 
 export {
   EFFECT_CONTRACT,
+  EFFECT_KINDS,
+  MODEL_EFFECT_KINDS,
   bindOutput,
   cachedExecutor,
   checkSchema,
   commandExecutor,
   effectRequestDigest,
+  executorSupports,
   replayExecutor,
   scriptedExecutor,
 } from "./src/effects";
 export type {
+  EffectKind,
   EffectReceipt,
   EffectRequest,
   Executor,
+  ExecutorCapabilities,
   ExecutorMetadata,
   ExecutorResult,
 } from "./src/effects";

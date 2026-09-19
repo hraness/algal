@@ -33,6 +33,8 @@ import {
   bindOutput,
   checkSchema,
   effectRequestDigest,
+  executorSupports,
+  type EffectKind,
   type EffectReceipt,
   type EffectRequest,
   type Executor,
@@ -803,7 +805,7 @@ async function activate(
         ...(cell.route ? { route: cell.route } : {}),
         recall: { query, k, embedder },
       };
-      const executor = pickExecutor(ctx.opts.executors, cell.route, `cell "${cell.id}"`);
+      const executor = pickExecutor(ctx.opts.executors, cell.route, "recall");
       const maxAttempts = cell.retry?.attempts ?? 1;
       const effectMs = cell.budget?.maxEffectMs;
       const recallEffect = await executeBoundedEffect(
@@ -863,7 +865,7 @@ async function activate(
         const rerankExecutor = pickExecutor(
           ctx.opts.executors,
           cell.rerank.route,
-          `cell "${cell.id}" rerank`,
+          "decide",
         );
         const rerankEffect = await executeBoundedEffect(
           ctx,
@@ -998,7 +1000,7 @@ async function activate(
       const executor = pickExecutor(
         ctx.opts.executors,
         cellRoute(cell),
-        `cell "${cell.id}"`,
+        cell.kind,
       );
       const toolLog: { fn: string; inputs: JsonValue; output: JsonValue }[] = [];
 
@@ -1089,7 +1091,7 @@ async function activate(
           const compactExec = pickExecutor(
             ctx.opts.executors,
             compactRoute,
-            `cell "${cell.id}" compaction`,
+            "decide",
           );
           if (ctx.work.agentCalls + 1 > budgets.maxAgentCalls) {
             throw new AlgalError("BUDGET_EXHAUSTED", "maxAgentCalls exhausted");
@@ -1573,25 +1575,40 @@ function cellRoute(cell: Cell): Route | undefined {
     : undefined;
 }
 
+function unboundExecutor(kind: EffectKind): Executor {
+  return {
+    id: "unbound",
+    capabilities: { effects: [kind] },
+    cacheable: false,
+    retryable: false,
+    async execute() {
+      throw new AlgalError(
+        "EFFECT_UNBOUND",
+        "no host-admitted executor for this request",
+      );
+    },
+  };
+}
+
 function pickExecutor(
   executors: Executor[],
   route: Route | undefined,
-  at: string,
+  kind: EffectKind,
 ): Executor {
-  if (executors.length === 0) {
-    throw new AlgalError("EFFECT_UNBOUND", `no executor available for ${at}`);
+  const replay = executors.find((executor) => executor.replay === true);
+  if (replay) return replay;
+  const wanted = [
+    ...(route?.provider ? [route.provider, `provider:${route.provider}`] : []),
+    ...(route?.preset ? [route.preset, `preset:${route.preset}`] : []),
+  ];
+  if (wanted.length > 0) {
+    const routed = executors.find((executor) => wanted.includes(executor.id));
+    if (routed) return executorSupports(routed, kind) ? routed : unboundExecutor(kind);
+    return executors.find((executor) =>
+      executor.routeWildcard === true && executorSupports(executor, kind)
+    ) ?? unboundExecutor(kind);
   }
-  // route.provider / route.preset select an executor by id; a bare id or a
-  // "provider:<name>"/"preset:<name>" prefixed id both match
-  if (route) {
-    const wanted = [
-      ...(route.provider ? [route.provider, `provider:${route.provider}`] : []),
-      ...(route.preset ? [route.preset, `preset:${route.preset}`] : []),
-    ];
-    const hit = executors.find((e) => wanted.includes(e.id));
-    if (hit) return hit;
-  }
-  return executors[0]!;
+  return executors.find((executor) => executorSupports(executor, kind)) ?? unboundExecutor(kind);
 }
 
 function checkValue(v: JsonValue, decl: PortType, what: string): void {

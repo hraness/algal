@@ -524,6 +524,15 @@ name → command, so a cell's `route.provider`/`route.preset` picks its model.
   executor error or contract violation — is recorded with its request digest
   and the same request re-issued. Every attempt is metered and replayed in
   order; exhaustion fails the cell, routable through `on:"fail"`.
+- Effect routing is capability-aware and fails closed: every executor
+  declares the effect kinds it serves (`agent`, `classifier`, `gate`,
+  `decide`, `recall`), an unrouted request binds the first admitting
+  executor, and a named route that cannot serve the kind records an
+  `EFFECT_UNBOUND` effect. Executors without declarations default to the
+  model-generation kinds only — a model adapter never inherits gate,
+  decision, or recall authority. Scripted fixtures wildcard any named route
+  for deterministic tests; replay resolves by request digest before
+  routing, so verification never depends on live admissions.
 - An agent cell's context is declared, not ambient: `view.inputs` selects its
   edge-fed inputs, and `view.cells` names ancestor cells whose committed
   records join the request under `context.cells` — optionally sliced to named
@@ -592,7 +601,11 @@ const receipt = await runOrganism({
 The `Executor` interface is one method: `execute(effect, signal?)` returns the
 raw effect output. Any provider, local model, or hard-coded fixture fits by
 wrapping that method. `runOrganism` does the scheduling, binding, budget
-enforcement, and receipt writing.
+enforcement, and receipt writing. An executor declares the effect kinds it
+serves with `capabilities: { effects: [...] }`; undeclared executors default
+to `agent`/`classifier`, and `executorSupports` is the predicate the
+scheduler routes by — see the spec's executor matrix for the fail-closed
+rules.
 
 ### From the CLI with any provider
 

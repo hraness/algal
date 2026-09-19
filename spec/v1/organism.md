@@ -137,8 +137,8 @@ dangling pointer.
   `{"kind":"choice","labels":[…],"onMiss"?}`.
 - `route` is a hint the executor may honor. It grants nothing by itself.
   `route.provider` and `route.preset` select among host-supplied executors by
-  id (`<name>` or `provider:<name>` / `preset:<name>`); the first executor is
-  the default when no route matches.
+  id (`<name>` or `provider:<name>` / `preset:<name>`). Selection is
+  capability-aware and fails closed — see **Executors** under Effects.
 - `shadow` (classifier only) declares an audition: `{"take":"<label>"}` runs
   the effect and binds the output normally, but commits `take` instead. The
   model's bound output is recorded on the cell receipt as `shadowOut`. This
@@ -575,6 +575,37 @@ only and binds the evaluated query, hit cap, and embedder spec.
 The executor sees exactly these bytes; nothing else crosses the boundary.
 Executor output is bound to the declared `output` contract before it can feed
 edges. A miss on a `choice` output resolves to `onMiss` or fails the run.
+
+### Executors
+
+Executors are host-supplied; the manifest is data and cannot name host code.
+Every executor declares `capabilities.effects` — the effect kinds it is
+admitted to serve. Undeclared executors default to `agent`/`classifier`
+only: a legacy adapter never silently gains approval, decision, or index
+authority.
+
+Selection is capability-aware in both directions:
+
+- An unrouted request binds the first executor admitting its kind.
+- `route.provider`/`route.preset` names an executor by id; a named executor
+  that does not admit the kind fails closed — it is never substituted.
+- A route miss — no admitted executor carries that id — may be served by a
+  `routeWildcard` executor. That is the scripted-fixture seam: it simulates
+  any named route so manifests stay exercisable under deterministic tests.
+  Live executors are never wildcards.
+- With no candidate, the run records an ordinary failed effect:
+  `executor:"unbound"`, `error.code:"EFFECT_UNBOUND"`, `retryable:false`.
+  It is receipt data and replays like any other recorded failure.
+
+The built-in matrix: model executors serve `agent`/`classifier`; decision
+executors serve `classifier`/`decide`; index executors serve `recall`;
+gate approval requires an executor the host explicitly admitted for `gate`;
+command executors are host-written adapters admitted for every kind;
+scripted fixtures serve every kind and wildcard routes.
+
+A replay executor is not a route: verification resolves recorded effects by
+request digest before capability selection, so offline replay never depends
+on which executors the host currently admits.
 
 ## Receipts — algal.run.v1
 

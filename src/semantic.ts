@@ -417,6 +417,7 @@ export type RecallSearcher = {
 export function recallExecutor(searcher: RecallSearcher): Executor {
   return {
     id: searcher.id,
+    capabilities: { effects: ["recall"] },
     cacheable: false,
     async execute(request: EffectRequest) {
       if (request.kind !== "recall" || request.recall === undefined) {

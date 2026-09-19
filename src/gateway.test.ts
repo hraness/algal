@@ -28,6 +28,7 @@ test("Vercel Gateway executor binds structured output and post-call usage", asyn
   });
 
   const result = await executor.executeEffect!(request);
+  expect(executor.capabilities?.effects).toEqual(["agent", "classifier"]);
   expect(result.output).toBe("billing");
   expect(result.metadata?.usage).toEqual({
     model: "alibaba/qwen3.5-flash",
@@ -45,6 +46,23 @@ test("Vercel Gateway executor binds structured output and post-call usage", asyn
     "billing",
     "other",
   ]);
+});
+
+test("Vercel Gateway executor refuses authority outside model generation", async () => {
+  let fetched = false;
+  const executor = vercelGatewayExecutor({
+    model: "alibaba/qwen3.5-flash",
+    credential: "test-credential-value",
+    async fetch() {
+      fetched = true;
+      return Response.json({});
+    },
+  });
+  await expect(executor.execute({ ...request, kind: "gate" }))
+    .rejects.toThrow(/cannot serve effect kind/);
+  await expect(executor.execute({ ...request, kind: "decide" }))
+    .rejects.toThrow(/cannot serve effect kind/);
+  expect(fetched).toBe(false);
 });
 
 test("Vercel Gateway executor rejects redirects and malformed output", async () => {
