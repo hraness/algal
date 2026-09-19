@@ -469,7 +469,10 @@ export async function compileOrganism(
       );
     }
     if (e.guard) {
-      if (e.guard.field !== undefined) {
+      if ("expr" in e.guard) {
+        // expr guards accept any producer type — the program predicates on
+        // the delivered value itself
+      } else if (e.guard.field !== undefined) {
         if (pt.type !== "json") {
           throw new AlgalError(
             "GUARD_INVALID",

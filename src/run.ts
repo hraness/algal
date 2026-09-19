@@ -248,13 +248,41 @@ async function runInto(
       return;
     }
     if (e.guard) {
-      const hit =
-        e.guard.field === undefined
-          ? v === e.guard.equals
-          : typeof v === "object" &&
-            v !== null &&
-            !Array.isArray(v) &&
-            v[e.guard.field] === e.guard.equals;
+      let hit: boolean;
+      if ("expr" in e.guard) {
+        const r = evalProgram(
+          e.guard.expr.program,
+          { value: v },
+          BOUNDS.maxExprFuel,
+        );
+        ctx.work.units += r.fuel;
+        if (!r.ok) {
+          throw new AlgalError(
+            "GUARD_INVALID",
+            `guard expr ${canonicalize(r.err)}`,
+          );
+        }
+        if (typeof r.value !== "boolean") {
+          const got = Array.isArray(r.value)
+            ? "list"
+            : r.value === null
+              ? "null"
+              : typeof r.value;
+          throw new AlgalError(
+            "GUARD_INVALID",
+            `guard expr must produce boolean, got ${got}`,
+          );
+        }
+        hit = r.value;
+      } else {
+        hit =
+          e.guard.field === undefined
+            ? v === e.guard.equals
+            : typeof v === "object" &&
+              v !== null &&
+              !Array.isArray(v) &&
+              v[e.guard.field] === e.guard.equals;
+      }
       if (!hit) {
         edgeState[i] = "dead";
         return;
@@ -751,12 +779,15 @@ async function activate(
                 to: `${e.to.cell}.${e.to.port}`,
                 ...(e.guard
                   ? {
-                      guard: {
-                        equals: e.guard.equals,
-                        ...(e.guard.field !== undefined
-                          ? { field: e.guard.field }
-                          : {}),
-                      },
+                      guard:
+                        "expr" in e.guard
+                          ? { expr: e.guard.expr }
+                          : {
+                              equals: e.guard.equals,
+                              ...(e.guard.field !== undefined
+                                ? { field: e.guard.field }
+                                : {}),
+                            },
                     }
                   : {}),
               })),

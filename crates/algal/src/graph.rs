@@ -290,15 +290,19 @@ pub fn compile(
             return Err(Error::new("TYPE_MISMATCH", "incompatible edge ports"));
         }
         if let Some(guard) = edge.get("guard") {
-            if (guard.get("field").is_some() && producer["type"] != "json")
-                || (guard.get("field").is_none() && producer["type"] != "choice")
+            // expr guards predicate on the delivered value itself — any
+            // producer type is admissible
+            if guard.get("expr").is_none()
+                && ((guard.get("field").is_some() && producer["type"] != "json")
+                    || (guard.get("field").is_none() && producer["type"] != "choice"))
             {
                 return Err(Error::new(
                     "GUARD_INVALID",
                     "guard does not match producer type",
                 ));
             }
-            if guard.get("field").is_none()
+            if guard.get("expr").is_none()
+                && guard.get("field").is_none()
                 && producer["labels"]
                     .as_array()
                     .is_some_and(|ls| !ls.contains(&guard["equals"]))

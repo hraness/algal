@@ -348,12 +348,17 @@ re-evaluation.
   "guard": { "equals": "bug" } }
 ```
 
-- A guard is valid only on a `choice` or `json` producer. Bare
-  `{"equals": "bug"}` guards a `choice` producer and the label must be in
-  the producer's declared labels. `{"field": "severity", "equals": "high"}`
-  guards a `json` producer: the edge delivers only when the value is an
-  object whose named field strictly equals `equals`. A non-object value or a
-  missing field never matches — the edge is dead, not an error.
+- A guard is one of three shapes. Bare `{"equals": "bug"}` guards a
+  `choice` producer and the label must be in the producer's declared
+  labels. `{"field": "severity", "equals": "high"}` guards a `json`
+  producer: the edge delivers only when the value is an object whose named
+  field strictly equals `equals`. A non-object value or a missing field
+  never matches — the edge is dead, not an error. `{"expr": {…}}` carries
+  an `algal.expr.v1` program evaluated over `{"value": delivered}` on any
+  producer type — routing logic as data. It must return a boolean; a
+  thrown or non-boolean guard is a manifest bug and the run hard-fails
+  `GUARD_INVALID` (a dead edge is the only way a guard says "no"). Guard
+  fuel is metered into run work like any other burn.
 - An input port accepts at most one edge (single assignment) unless it
   declares `"many": true`. A `many` port collects every delivered edge in
   manifest edge order into a list. A guarded edge into a `many` port

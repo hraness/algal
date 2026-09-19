@@ -234,8 +234,12 @@ export type Edge = {
   from: { cell: string; port: PortName };
   to: { cell: string; port: PortName };
   /** Bare `{equals}` guards a choice producer by label; `{field, equals}`
-   * guards a json producer by a string field of the delivered record. */
-  guard?: { equals: string; field?: string };
+   * guards a json producer by a string field of the delivered record.
+   * `{expr}` evaluates an `algal.expr.v1` program over `{"value": produced}`
+   * and must return a boolean — routing logic as data on any producer type. */
+  guard?:
+    | { equals: string; field?: string }
+    | { expr: { contract: "algal.expr.v1"; program: JsonValue } };
   /** "fail": the edge fires when the producer's activation fails and
    * delivers the failure record {code, message} — the producer port is
    * still named (uniform grammar) but the delivered value is the record.
@@ -994,17 +998,47 @@ function parseEdge(u: unknown, what: string): Edge {
   const guard = optField(obj, "guard");
   if (guard !== undefined) {
     const g = asObject(guard, `${what}.guard`);
-    noUnknownKeys(g, ["equals", "field"], `${what}.guard`);
-    edge.guard = {
-      equals: asString(
-        reqField(g, "equals", `${what}.guard`),
-        `${what}.guard.equals`,
-        BOUNDS.maxLabelLen,
-      ),
-    };
-    const f = optField(g, "field");
-    if (f !== undefined) {
-      edge.guard.field = asSafeId(f, `${what}.guard.field`);
+    noUnknownKeys(g, ["equals", "field", "expr"], `${what}.guard`);
+    if (g.expr !== undefined) {
+      if (g.equals !== undefined || g.field !== undefined) {
+        throw new AlgalError(
+          "PARSE_FAILED",
+          `${what}.guard: expr cannot mix with equals/field`,
+        );
+      }
+      const e = asObject(g.expr, `${what}.guard.expr`);
+      noUnknownKeys(e, ["contract", "program"], `${what}.guard.expr`);
+      if (e.contract !== "algal.expr.v1") {
+        throw new AlgalError(
+          "PARSE_FAILED",
+          `${what}.guard.expr.contract must be "algal.expr.v1"`,
+        );
+      }
+      const program = asJsonValue(
+        reqField(e, "program", `${what}.guard.expr`),
+        `${what}.guard.expr.program`,
+      );
+      const check = checkProgram(program, ["value"]);
+      if (!check.ok) {
+        const { code, ...details } = check.err;
+        throw new AlgalError(
+          "PARSE_FAILED",
+          `${what}.guard.expr.program: ${code} ${JSON.stringify(details)}`,
+        );
+      }
+      edge.guard = { expr: { contract: "algal.expr.v1", program } };
+    } else {
+      edge.guard = {
+        equals: asString(
+          reqField(g, "equals", `${what}.guard`),
+          `${what}.guard.equals`,
+          BOUNDS.maxLabelLen,
+        ),
+      };
+      const f = optField(g, "field");
+      if (f !== undefined) {
+        edge.guard.field = asSafeId(f, `${what}.guard.field`);
+      }
     }
   }
   const on = optField(obj, "on");
@@ -1288,10 +1322,15 @@ export function manifestToJson(m: OrganismManifest): JsonObject {
       };
       if (e.on) o.on = e.on;
       if (e.guard) {
-        o.guard = {
-          equals: e.guard.equals,
-          ...(e.guard.field !== undefined ? { field: e.guard.field } : {}),
-        };
+        o.guard =
+          "expr" in e.guard
+            ? { expr: e.guard.expr }
+            : {
+                equals: e.guard.equals,
+                ...(e.guard.field !== undefined
+                  ? { field: e.guard.field }
+                  : {}),
+              };
       }
       return o;
     }),

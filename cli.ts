@@ -755,7 +755,14 @@ async function main(): Promise<number> {
         edges: manifest.edges.map((e) => ({
           from: `${e.from.cell}.${e.from.port}`,
           to: `${e.to.cell}.${e.to.port}`,
-          ...(e.guard ? { guard: { equals: e.guard.equals } } : {}),
+          ...(e.guard
+            ? {
+                guard:
+                  "expr" in e.guard
+                    ? { expr: e.guard.expr }
+                    : { equals: e.guard.equals },
+              }
+            : {}),
         })),
       });
       return 0;

@@ -731,3 +731,53 @@ describe("expr cells", () => {
     ).toThrow("unknown key");
   });
 });
+
+describe("expr guards", () => {
+  const base = {
+    contract: "algal.organism.v1",
+    key: "organism:g",
+    name: "G",
+    cells: [
+      { id: "in", kind: "input", outputs: { n: "json" } },
+      { id: "sink", kind: "fn", fn: "echo.v1" },
+    ],
+    edges: [
+      {
+        from: { cell: "in", port: "n" },
+        to: { cell: "sink", port: "value" },
+        guard: {
+          expr: {
+            contract: "algal.expr.v1",
+            program: ["gt", ["get", "value"], 10],
+          },
+        },
+      },
+    ],
+  };
+
+  test("parses on a non-choice producer and round-trips", () => {
+    const m = parseOrganismManifest(base);
+    expect(manifestToJson(parseOrganismManifest(manifestToJson(m)))).toEqual(
+      manifestToJson(m),
+    );
+  });
+
+  test("rejects mixing expr with equals/field and unbound names", () => {
+    const edge = (guard: unknown) => ({
+      ...base,
+      edges: [{ ...base.edges[0], guard }],
+    });
+    expect(() =>
+      parseOrganismManifest(edge({ expr: { contract: "algal.expr.v1", program: true }, equals: "x" })),
+    ).toThrow("cannot mix");
+    // literal get names must resolve to the guard env — "value" only
+    expect(() =>
+      parseOrganismManifest(
+        edge({ expr: { contract: "algal.expr.v1", program: ["get", "ghost"] } }),
+      ),
+    ).toThrow("unbound name");
+    expect(() =>
+      parseOrganismManifest(edge({ expr: { contract: "other.v1", program: true } })),
+    ).toThrow("algal.expr.v1");
+  });
+});

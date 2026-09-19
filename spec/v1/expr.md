@@ -129,6 +129,19 @@ All failures are `{code, ...details}` where code is one of:
 `EXPR_FUEL`. Check-time failures carry the same codes; nothing about an
 error depends on the host.
 
+## Consumers
+
+The evaluator is contract machinery, and the contract can put it anywhere
+a bounded pure program is useful. Two consumers exist today:
+
+- **`expr` cells** (below) — compute a port value from input ports.
+- **edge `guard.expr`** — an `{"expr": {…}}` guard is evaluated over
+  `{"value": delivered}` and must return a boolean; the edge fires iff
+  true. Static names are `{"value"}` only. See `organism.md` edges.
+
+More consumers are expected — route conditions, foundry scorers, search
+predicates — anywhere the contract currently hardcodes a predicate.
+
 ## The `expr` cell
 
 ```json

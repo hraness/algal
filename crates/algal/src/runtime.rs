@@ -170,11 +170,50 @@ impl Runtime<'_> {
                                 continue;
                             };
                             if let Some(guard) = edge.get("guard") {
-                                let actual = match guard["field"].as_str() {
-                                    Some(field) => value.get(field),
-                                    None => Some(value),
+                                let hit = if let Some(expr) = guard.get("expr") {
+                                    let mut env = Map::new();
+                                    env.insert("value".to_string(), value.clone());
+                                    match algal_expr::run(&expr["program"], &env, MAX_EXPR_FUEL) {
+                                        Ok((v, fuel)) => {
+                                            self.work += fuel as usize;
+                                            match v {
+                                                Value::Bool(b) => b,
+                                                other => {
+                                                    let got = match &other {
+                                                        Value::Null => "null",
+                                                        Value::Number(_) => "number",
+                                                        Value::String(_) => "string",
+                                                        Value::Array(_) => "list",
+                                                        Value::Object(_) => "map",
+                                                        Value::Bool(_) => "bool",
+                                                    };
+                                                    return Err(Error::new(
+                                                        "GUARD_INVALID",
+                                                        format!(
+                                                            "guard expr must produce boolean, got {got}"
+                                                        ),
+                                                    ));
+                                                }
+                                            }
+                                        }
+                                        Err((e, fuel)) => {
+                                            self.work += fuel as usize;
+                                            let detail = canonical(&e.to_json())
+                                                .unwrap_or_else(|_| e.to_json().to_string());
+                                            return Err(Error::new(
+                                                "GUARD_INVALID",
+                                                format!("guard expr {detail}"),
+                                            ));
+                                        }
+                                    }
+                                } else {
+                                    let actual = match guard["field"].as_str() {
+                                        Some(field) => value.get(field),
+                                        None => Some(value),
+                                    };
+                                    actual == Some(&guard["equals"])
                                 };
-                                if actual != Some(&guard["equals"]) {
+                                if !hit {
                                     continue;
                                 }
                             }
