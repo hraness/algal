@@ -239,14 +239,14 @@ function interfaceSignature(
     if (!inner || inner.kind !== "input") {
       throw new MorphogenError(
         "INTERFACE_MISMATCH",
-        `interface input "${name}" of "${sub.manifest.key}" must target an input cell`,
+        `interface input "${name}" on "${cellId}" of "${sub.manifest.key}" must target an input cell`,
       );
     }
     const pt = inner.outputs[target.port];
     if (!pt) {
       throw new MorphogenError(
         "INTERFACE_MISMATCH",
-        `interface input "${name}" of "${sub.manifest.key}" targets missing port "${target.cell}.${target.port}"`,
+        `interface input "${name}" on "${cellId}" of "${sub.manifest.key}" targets missing port "${target.cell}.${target.port}"`,
       );
     }
     inputs[name] = pt;
@@ -257,7 +257,7 @@ function interfaceSignature(
     if (!pt) {
       throw new MorphogenError(
         "INTERFACE_MISMATCH",
-        `interface output "${name}" of "${sub.manifest.key}" targets missing port "${target.cell}.${target.port}"`,
+        `interface output "${name}" on "${cellId}" of "${sub.manifest.key}" targets missing port "${target.cell}.${target.port}"`,
       );
     }
     outputs[name] = pt;
