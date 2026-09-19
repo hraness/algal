@@ -85,12 +85,15 @@ from an underlying backend's receipt executor label.
 ## Explicit recovery
 
 `recover` validates the process chain, previous completed receipt, journal CAS
-chain, static closure, configuration, and exact intent. It records a bounded
-attempt at `recoveries/000001.json`:
+chain, static closure, and exact intent. It records a bounded attempt at
+`recoveries/000001.json`:
 `{contract:"algal.process-recovery-attempt.v1",intent:INTENT,attempt:1}`.
 
-It then reconstructs the interrupted dispatch. Completed journal entries replay
-their full receipts without contacting their adapters. An unsettled host-declared
+It then reconstructs the interrupted dispatch, validating each recorded
+request and configuration binding before that ordinal can execute. A binding
+mismatch fails reconstruction and consumes the admitted recovery attempt.
+Completed journal entries replay their full receipts without contacting their
+adapters. An unsettled host-declared
 read may publish a new started record with `attempt + 1` and `previous` pointing
 to the earlier started record. The recovery budget is consumed before execution.
 Providers and write tools use `recovery:"never"`; any unsettled such entry blocks
