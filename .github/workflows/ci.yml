@@ -51,4 +51,5 @@ jobs:
       - run: bun scripts/vm-demo.ts --native ./target/debug/algal
       - run: bun scripts/recovery-demo.ts --native ./target/debug/algal
       - run: bun scripts/repair-demo.ts --native ./target/debug/algal
-      - run: python3 scripts/test-native-release.py --binary target/debug/algal --commit "$GITHUB_SHA" --rustc-version "$(rustc --version)"
+      - run: cargo build --release --locked -p algal --bin algal
+      - run: python3 scripts/test-native-release.py --binary target/release/algal --commit "$GITHUB_SHA" --rustc-version "$(rustc --version)"
