@@ -31,7 +31,9 @@ sh scripts/install-native.sh "$HOME/.local" \
 ```
 
 The archive installer requires Python 3 and verifies both the archive checksum
-and the binary digest before executing or installing it. It extracts only the
+and the binary digest before executing or installing it. Compressed input,
+expanded tar bytes and individual members are bounded before extraction; PAX
+headers cannot bypass the expansion limit. It extracts only the
 executable, rejects a mismatched platform, and refuses an existing installation
 unless `--force` is supplied. Replacements use an atomic rename on the target
 filesystem; failed verification preserves the existing executable. Source

@@ -457,10 +457,17 @@ pub async fn request(
         }
     };
     let result = tokio::time::timeout(Duration::from_millis(timeout_ms), bounded).await;
-    if result.is_err() || result.as_ref().is_ok_and(|r| r.is_err()) {
-        if let Some(session) = &client.session {
-            let _ = tokio::time::timeout(Duration::from_millis(250),send(&mut client.input,&json!({"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":session}}))).await;
-        }
+    if (result.is_err() || result.as_ref().is_ok_and(|r| r.is_err()))
+        && let Some(session) = &client.session
+    {
+        let _ = tokio::time::timeout(
+            Duration::from_millis(250),
+            send(
+                &mut client.input,
+                &json!({"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":session}}),
+            ),
+        )
+        .await;
     }
     drop(client);
     let _ = child.kill().await;
@@ -646,10 +653,10 @@ pub async fn serve(
                 }
             }
             Event::Update(update) => {
-                if let Some(active) = &active {
-                    if update.scope == active.scope {
-                        send(&mut writer,&json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":active.session,"update":update.body}})).await?;
-                    }
+                if let Some(active) = &active
+                    && update.scope == active.scope
+                {
+                    send(&mut writer,&json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":active.session,"update":update.body}})).await?;
                 }
             }
             Event::Finished(result) => {
@@ -700,12 +707,11 @@ pub async fn serve(
                     }
                 };
                 if message.get("method").is_none() {
-                    if let Some(key) = message["id"].as_str() {
-                        if let Some(request) = pending.remove(key) {
-                            let result =
-                                permission_result(&request.params, message["result"].clone());
-                            let _ = request.response.send(result);
-                        }
+                    if let Some(key) = message["id"].as_str()
+                        && let Some(request) = pending.remove(key)
+                    {
+                        let result = permission_result(&request.params, message["result"].clone());
+                        let _ = request.response.send(result);
                     }
                     continue;
                 }

@@ -89,13 +89,13 @@ pub(crate) fn write(path: &Path, value: &Value, replace: bool) -> Result<()> {
         .ok_or_else(|| Error::invalid("host file parent"))?;
     directory(parent)?;
     let bytes = canonical(value)?;
-    if let Ok(meta) = fs::symlink_metadata(path) {
-        if !meta.is_file() || meta.file_type().is_symlink() {
-            return Err(Error::new(
-                "IO_FAILED",
-                "host publication target must be regular",
-            ));
-        }
+    if let Ok(meta) = fs::symlink_metadata(path)
+        && (!meta.is_file() || meta.file_type().is_symlink())
+    {
+        return Err(Error::new(
+            "IO_FAILED",
+            "host publication target must be regular",
+        ));
     }
     let mut random = [0u8; 24];
     getrandom::fill(&mut random)

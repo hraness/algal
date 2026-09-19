@@ -2,12 +2,19 @@
 """Focused release/install qualification; requires an already-built native binary."""
 import argparse
 import hashlib
+import gzip
+import importlib.util
 import json
 import os
 from pathlib import Path
 import platform
 import subprocess
 import tempfile
+import tarfile
+from unittest.mock import patch
+import sys
+
+sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -43,6 +50,40 @@ def check(binary, commit, rustc_version):
         corrupted.write_bytes(archive.read_bytes() + b"tampered")
         call(["sh", str(ROOT / "scripts/install-native.sh"), str(prefix), "--archive", str(corrupted), "--checksum", str(checksum), "--force"], success=False)
         assert hashlib.sha256(installed.read_bytes()).hexdigest() == expected
+        # A valid checksum does not make adversarial archive headers safe. A
+        # PAX extension is interpreted internally before yielded member checks.
+        spec = importlib.util.spec_from_file_location("native_unpack", ROOT / "scripts/unpack-native.py")
+        unpacker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(unpacker)
+        extension = tarfile.TarInfo("extended")
+        extension.type = tarfile.XHDTYPE
+        extension.size = 100_000_001
+        malicious = directory / "pax.tar.gz"
+        malicious.write_bytes(gzip.compress(extension.tobuf()))
+        malicious_checksum = directory / "pax.tar.gz.sha256"
+        malicious_checksum.write_text(hashlib.sha256(malicious.read_bytes()).hexdigest() + "  pax.tar.gz\n")
+        call(["sh", str(ROOT / "scripts/install-native.sh"), str(prefix), "--archive", str(malicious), "--checksum", str(malicious_checksum), "--force"], success=False)
+        assert hashlib.sha256(installed.read_bytes()).hexdigest() == expected
+        # Exercise the actual streaming bound cheaply instead of allocating a
+        # hundred-megabyte bomb in every qualification run.
+        with patch.object(unpacker, "MAX_TAR_BYTES", 1024):
+            try:
+                unpacker.bounded_tar(gzip.compress(b"x" * 1025))
+                raise AssertionError("expanded archive bound was not enforced")
+            except ValueError as error:
+                assert "expanded archive byte limit" in str(error)
+        # Every gzip read remains bounded even for a huge declared PAX body.
+        original_read = gzip.GzipFile.read
+        def guarded_read(self, size=-1):
+            assert 0 <= size <= 65_536
+            return original_read(self, size)
+        with patch.object(gzip.GzipFile, "read", guarded_read):
+            try:
+                unpacker.unpack(malicious, malicious_checksum, directory / "must-not-exist")
+                raise AssertionError("malformed PAX archive accepted")
+            except (ValueError, tarfile.ReadError):
+                pass
+        assert not (directory / "must-not-exist").exists()
         # A fake build command copies the qualified binary, verifying that source
         # install honors a relative CARGO_TARGET_DIR without another compilation.
         fakebin = directory / "fakebin"
@@ -55,7 +96,7 @@ def check(binary, commit, rustc_version):
         assert (directory / "custom-target/release/algal").is_file()
         assert (directory / "source-installed/bin/algal").is_file()
         assert not list((prefix / "bin").glob(".algal-install.*"))
-    print(json.dumps({"ok": True, "checks": ["package-extracted-smoke", "verified-install", "overwrite-refusal", "explicit-force", "tampered-checksum-refusal", "existing-binary-preserved", "relative-CARGO_TARGET_DIR", "staging-cleanup"]}))
+    print(json.dumps({"ok": True, "checks": ["package-extracted-smoke", "verified-install", "overwrite-refusal", "explicit-force", "tampered-checksum-refusal", "existing-binary-preserved", "relative-CARGO_TARGET_DIR", "staging-cleanup", "oversized-PAX-refusal", "bounded-gzip-expansion"]}))
 
 
 if __name__ == "__main__":

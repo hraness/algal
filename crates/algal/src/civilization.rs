@@ -535,19 +535,20 @@ pub async fn evolve(
             .iter()
             .filter(|c| c.split == "validation")
             .count();
-        if let Some(winner) = candidates.first() {
-            if winner.train == train_total && winner.validation == validation_total {
-                selected = json!(winner.manifest.digest()?);
-                for case in goal.cases.iter().filter(|case| case.split == "holdout") {
-                    holdout.push(evaluate(&winner.manifest, case, store).await?);
-                }
-                if holdout.iter().all(|result| result["passed"] == true) {
-                    let bundle = pack(&winner.manifest, store)?;
-                    let evidence = json!({"contract":"algal.promotion.v1","goal":&goal.id,"policy":policy,"candidate":candidate_json(winner)?,"holdout":holdout});
-                    let evidence = store.put("values", &evidence)?;
-                    let member = json!({"manifest":winner.manifest.digest()?,"bundle":store.put("values",&bundle)?,"evidence":evidence,"proposal":winner.proposal});
-                    members.insert(goal.id.clone(), member);
-                }
+        if let Some(winner) = candidates.first()
+            && winner.train == train_total
+            && winner.validation == validation_total
+        {
+            selected = json!(winner.manifest.digest()?);
+            for case in goal.cases.iter().filter(|case| case.split == "holdout") {
+                holdout.push(evaluate(&winner.manifest, case, store).await?);
+            }
+            if holdout.iter().all(|result| result["passed"] == true) {
+                let bundle = pack(&winner.manifest, store)?;
+                let evidence = json!({"contract":"algal.promotion.v1","goal":&goal.id,"policy":policy,"candidate":candidate_json(winner)?,"holdout":holdout});
+                let evidence = store.put("values", &evidence)?;
+                let member = json!({"manifest":winner.manifest.digest()?,"bundle":store.put("values",&bundle)?,"evidence":evidence,"proposal":winner.proposal});
+                members.insert(goal.id.clone(), member);
             }
         }
         reports.push(json!({"goal":&goal.id,"selected":selected,"holdout":holdout,"candidates":candidates.iter().map(candidate_json).collect::<Result<Vec<_>>>()?,"rejected":rejected}));
@@ -670,13 +671,13 @@ async fn verify_proposal(
         )?;
     }
     let raw = runtime::outputs(&parent, &receipt)?["proposal"].clone();
-    if let Some(manifest) = manifest {
-        if Manifest::parse(&raw)?.digest()? != manifest.digest()? {
-            return Err(Error::new(
-                "RECEIPT_MISMATCH",
-                "proposal does not identify candidate",
-            ));
-        }
+    if let Some(manifest) = manifest
+        && Manifest::parse(&raw)?.digest()? != manifest.digest()?
+    {
+        return Err(Error::new(
+            "RECEIPT_MISMATCH",
+            "proposal does not identify candidate",
+        ));
     }
     Ok(raw)
 }

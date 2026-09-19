@@ -121,21 +121,21 @@ pub fn compile(
             .any(|kind| cell["kind"] == *kind)
         {
             let digest = cell["manifest"].as_str().unwrap();
-            if store.get("manifests", digest)?.is_none() {
-                if let Some(via) = cell["via"].as_str() {
-                    let directory = transports
-                        .get(via)
-                        .ok_or_else(|| Error::new("STORE_MISS", "transport is not configured"))?;
-                    let bundle = read_json(
-                        File::open(directory.join(format!("{}.bundle.json", &digest[7..])))?,
-                        MAX_DOCUMENT_BYTES,
-                    )?;
-                    if bundle["root"] != digest {
-                        return Err(Error::new("DIGEST_MISMATCH", "transport bundle root"));
-                    }
-                    unpack(&bundle, store)?;
-                    result.via.insert(name.to_owned(), via.to_owned());
+            if store.get("manifests", digest)?.is_none()
+                && let Some(via) = cell["via"].as_str()
+            {
+                let directory = transports
+                    .get(via)
+                    .ok_or_else(|| Error::new("STORE_MISS", "transport is not configured"))?;
+                let bundle = read_json(
+                    File::open(directory.join(format!("{}.bundle.json", &digest[7..])))?,
+                    MAX_DOCUMENT_BYTES,
+                )?;
+                if bundle["root"] != digest {
+                    return Err(Error::new("DIGEST_MISMATCH", "transport bundle root"));
                 }
+                unpack(&bundle, store)?;
+                result.via.insert(name.to_owned(), via.to_owned());
             }
             result.children.insert(
                 name.to_owned(),

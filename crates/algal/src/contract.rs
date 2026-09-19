@@ -215,10 +215,10 @@ pub fn output_contract(value: &Value) -> Result<()> {
         "choice" => {
             keys(value, &["kind", "labels", "onMiss"])?;
             labels(&value["labels"])?;
-            if let Some(miss) = value.get("onMiss") {
-                if !value["labels"].as_array().unwrap().contains(miss) {
-                    return Err(Error::invalid("onMiss must be a label"));
-                }
+            if let Some(miss) = value.get("onMiss")
+                && !value["labels"].as_array().unwrap().contains(miss)
+            {
+                return Err(Error::invalid("onMiss must be a label"));
             }
             Ok(())
         }

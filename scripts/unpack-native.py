@@ -2,6 +2,7 @@
 """Verify a local release archive and extract only its admitted executable."""
 import argparse
 import hashlib
+import gzip
 import io
 import json
 from pathlib import Path
@@ -9,6 +10,23 @@ import platform
 import re
 import tarfile
 
+
+MAX_TAR_BYTES = 101_000_000
+
+def bounded_tar(archive_data):
+    # Bound expansion before tarfile interprets PAX/GNU extension lengths.
+    # Member iteration alone is too late: tarfile consumes those internally.
+    data = io.BytesIO()
+    with gzip.GzipFile(fileobj=io.BytesIO(archive_data), mode="rb") as compressed:
+        while True:
+            block = compressed.read(min(65_536, MAX_TAR_BYTES + 1 - data.tell()))
+            if not block:
+                break
+            data.write(block)
+            if data.tell() > MAX_TAR_BYTES:
+                raise ValueError("release expanded archive byte limit")
+    data.seek(0)
+    return data
 
 def unpack(archive, checksum, out):
     with archive.open("rb") as source:
@@ -25,7 +43,7 @@ def unpack(archive, checksum, out):
     target = {("Linux", "x86_64"): "x86_64-unknown-linux-gnu", ("Darwin", "arm64"): "aarch64-apple-darwin"}.get((platform.system(), platform.machine()))
     if target is None:
         raise ValueError("unsupported native platform")
-    with tarfile.open(fileobj=io.BytesIO(archive_data), mode="r:gz") as tar:
+    with bounded_tar(archive_data) as expanded, tarfile.open(fileobj=expanded, mode="r:") as tar:
         members = []
         for member in tar:
             if len(members) >= 4 or not member.isfile() or not 0 <= member.size <= 100_000_000:

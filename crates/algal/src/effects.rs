@@ -666,10 +666,10 @@ impl Host {
         }
     }
     pub fn journal_poison(&self) {
-        if let Some(journal) = &self.journal {
-            if let Ok(mut journal) = journal.lock() {
-                journal.poison();
-            }
+        if let Some(journal) = &self.journal
+            && let Ok(mut journal) = journal.lock()
+        {
+            journal.poison();
         }
     }
 
@@ -1184,24 +1184,22 @@ impl Host {
             String::new()
         };
         let mut memos = memos;
-        if cacheable {
-            if let Some(store) = memos.as_deref_mut() {
-                if let Some(hit) = store.get_effect(&request_digest, &identity)? {
-                    if hit.get("output").is_some() {
-                        let mut receipt = json!({
-                            "requestDigest":request_digest,
-                            "executor":hit["executor"].clone(),
-                            "output":hit["output"].clone(),
-                            "cached":true,
-                        });
-                        if let Some(usage) = hit.get("usage") {
-                            receipt["usage"] = usage.clone();
-                        }
-                        self.journal_after(&receipt)?;
-                        return Ok(receipt);
-                    }
-                }
+        if cacheable
+            && let Some(store) = memos.as_deref_mut()
+            && let Some(hit) = store.get_effect(&request_digest, &identity)?
+            && hit.get("output").is_some()
+        {
+            let mut receipt = json!({
+                "requestDigest":request_digest,
+                "executor":hit["executor"].clone(),
+                "output":hit["output"].clone(),
+                "cached":true,
+            });
+            if let Some(usage) = hit.get("usage") {
+                receipt["usage"] = usage.clone();
             }
+            self.journal_after(&receipt)?;
+            return Ok(receipt);
         }
         let max = request["budget"]["maxOutputBytes"]
             .as_u64()

@@ -346,7 +346,7 @@ describe("runtime durable journal boundaries", () => {
   test("an unresolved provider deadline leaves its journal uncertain despite a late result", async () => {
     const manifest = parseOrganismManifest({
       contract: "algal.organism.v1", key: "organism:journal-timeout", name: "Journal timeout",
-      cells: [{ id: "agent", kind: "agent", prompt: "wait", output: { kind: "text" }, budget: { maxEffectMs: 50 } }],
+      cells: [{ id: "agent", kind: "agent", prompt: "wait", output: { kind: "text" }, budget: { maxEffectMs: 1000 } }],
     });
     const { options, journal, recover } = await setup(manifest);
     let release!: () => void;
@@ -372,13 +372,30 @@ describe("runtime durable journal boundaries", () => {
   test("a provider abort handler cannot settle a deadline as an ordinary adapter error", async () => {
     const manifest = parseOrganismManifest({
       contract: "algal.organism.v1", key: "organism:journal-abort", name: "Journal abort",
-      cells: [{ id: "agent", kind: "agent", prompt: "wait", output: { kind: "text" }, budget: { maxEffectMs: 50 } }],
+      cells: [{ id: "agent", kind: "agent", prompt: "wait", output: { kind: "text" }, budget: { maxEffectMs: 1000 } }],
     });
     const { options, journal, recover } = await setup(manifest);
+    // The deadline includes durable journal admission. Give filesystem syncs
+    // headroom so this fixture exercises the post-dispatch abort race.
+    const events: string[] = [];
     const executor: Executor = {id: "provider", cacheIdentity: config, execute: async (_request, signal) => new Promise((_, reject) => {
-      signal!.addEventListener("abort", () => reject(new AlgalError("BUDGET_EXHAUSTED", "adapter noticed abort")), {once: true});
+      events.push("dispatch");
+      signal!.addEventListener("abort", () => {
+        events.push("abort");
+        reject(new AlgalError("BUDGET_EXHAUSTED", "adapter noticed abort"));
+      }, {once: true});
     })};
-    await expect(runOrganism({...options, executors: [executor]})).rejects.toThrow("exceeded maxEffectMs");
+    const outcome = await runOrganism({...options, executors: [executor]}).then(
+      (result) => ({ result }),
+      (error: unknown) => ({ error }),
+    );
+    expect(events).toEqual(["dispatch", "abort"]);
+    const failure = "error" in outcome ? outcome.error : undefined;
+    expect(failure).toBeInstanceOf(AlgalError);
+    if (!(failure instanceof AlgalError)) throw new Error("expected an uncertain provider deadline");
+    expect(failure.code).toBe("BUDGET_EXHAUSTED");
+    expect(failure.uncertain).toBe(true);
+    expect(failure.message).toContain("exceeded maxEffectMs");
     expect(() => journal.assertComplete()).toThrow("exceeded maxEffectMs");
     await expect(recover()).rejects.toThrow("unknown completion");
   });
