@@ -121,6 +121,10 @@ export type RunOptions = {
    * overwritten since; the record is authoritative. */
   replaySlots?: Record<string, { value?: JsonValue; missing?: boolean }>;
   replayToolEffects?: EffectReceipt[];
+  /** The runtime stamp to put on the replayed receipt — `verify` passes
+   * the recorded run's stamp so a receipt produced under another runtime
+   * version replays bit-for-bit instead of being re-stamped. */
+  replayRuntime?: { name: "algal"; version: string };
 };
 
 type EdgeState = "pending" | "delivered" | "dead";
@@ -168,7 +172,7 @@ export async function runOrganism(opts: RunOptions): Promise<RunReceipt> {
   emit(ctx, { kind: "run.end", outcome });
   const receipt: Omit<RunReceipt, "digest"> = {
     contract: RUN_CONTRACT,
-    runtime: { name: "algal", version: RUNTIME_VERSION },
+    runtime: opts.replayRuntime ?? { name: "algal", version: RUNTIME_VERSION },
     manifestDigest,
     manifestKey: opts.manifest.key,
     args: opts.args ?? {},

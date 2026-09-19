@@ -68,6 +68,7 @@ export async function verifyReceipt(
     replayVia,
     replaySlots,
     replayToolEffects: original.effects.filter((effect) => effect.executor.startsWith("tool:")),
+    replayRuntime: original.runtime,
     ...(transports ? { transports } : {}),
     ...(tools ? { tools } : {}),
   });
