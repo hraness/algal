@@ -15,8 +15,8 @@ apple-foundation = { git = "https://github.com/hraness/apple-foundation", tag = 
 clap = { version = "=4.5.48", features = ["derive"] }
 reqwest = { version = "=0.12.24", default-features = false, features = ["json", "rustls-tls"] }
 ryu-js = "=1.0.2"
-serde = { version = "=1.0.228", features = ["derive"] }
-serde_json = "=1.0.145"
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
 sha2 = "=0.10.9"
 tokio = { version = "=1.47.1", features = ["rt-multi-thread", "macros", "process", "io-util", "io-std", "sync", "time", "signal"] }
 

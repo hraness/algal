@@ -58,7 +58,7 @@
 - Native checks: `cargo test --workspace --locked`,
   `cargo clippy --workspace --all-targets --locked -- -D warnings`, and
   `cargo fmt --all -- --check`. Use `cargo build --locked` followed by
-  `bun scripts/native-parity.ts` to compare all 39 existing examples and verify
+  `bun scripts/native-parity.ts` to compare all 43 existing examples and verify
   TypeScript receipts with the Rust engine.
 - The Foundation Models bridge comes from the pinned `apple-foundation`
   crate (`hraness/apple-foundation`); `sh scripts/build-apple.sh` emits its
