@@ -10,6 +10,7 @@ import {
   type FoundryCase,
   type FoundryLineage,
   type FoundryReport,
+  type FoundryScorer,
   type FoundrySelection,
 } from "./foundry";
 import type { FnRegistry } from "./registry";
@@ -51,6 +52,7 @@ export type SearchOptions = {
   executors: Executor[];
   transports?: Record<string, Transport>;
   tools?: ToolRegistry;
+  scorer?: FoundryScorer;
 };
 
 function feedback(generation: number, selection?: FoundrySelection): JsonValue {
@@ -114,6 +116,7 @@ export async function runFoundrySearch(opts: SearchOptions): Promise<SearchRepor
       executors: opts.executors,
       ...(opts.transports ? { transports: opts.transports } : {}),
       ...(opts.tools ? { tools: opts.tools } : {}),
+      ...(opts.scorer ? { scorer: opts.scorer } : {}),
     });
     generations.push({
       generation,
@@ -139,6 +142,7 @@ export async function runFoundrySearch(opts: SearchOptions): Promise<SearchRepor
     store: opts.store,
     executors: opts.executors,
     ...(opts.transports ? { transports: opts.transports } : {}),
+    ...(opts.scorer ? { scorer: opts.scorer } : {}),
     lineage: {
       generatorDigest: last.generatorDigest,
       receiptDigest: last.receiptDigest,

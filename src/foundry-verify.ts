@@ -2,13 +2,16 @@ import { manifestToJson } from "./contract";
 import { digestCanonical, type Digest } from "./digest";
 import { AlgalError } from "./errors";
 import {
+  evalScorer,
   FOUNDRY_BOUNDS,
   FOUNDRY_CONTRACT,
   selectFoundryCandidate,
   type FoundryCandidateResult,
   type FoundryCaseResult,
   type FoundryReport,
+  type FoundryScorer,
 } from "./foundry";
+import { checkProgram } from "./expr";
 import type { FnRegistry } from "./registry";
 import { parseRunReceipt } from "./run";
 import type { Store } from "./store";
@@ -82,7 +85,7 @@ function parseScore(value: JsonValue | undefined, at: string) {
 
 function parseCase(value: JsonValue, at: string): FoundryCaseResult {
   const c = object(value, at);
-  keys(c, ["id", "split", "passed", "outcome", "outputs", "expect", "receiptDigest", "work", "usage"], at);
+  keys(c, ["id", "split", "passed", "outcome", "args", "outputs", "expect", "receiptDigest", "work", "usage"], at);
   const split = text(c.split, `${at}.split`);
   const outcome = text(c.outcome, `${at}.outcome`);
   if (split !== "train" && split !== "validation" && split !== "holdout") {
@@ -99,6 +102,7 @@ function parseCase(value: JsonValue, at: string): FoundryCaseResult {
     split,
     passed: c.passed,
     outcome,
+    args: object(c.args, `${at}.args`),
     outputs: object(c.outputs, `${at}.outputs`),
     expect: object(c.expect, `${at}.expect`),
     receiptDigest: digest(c.receiptDigest, `${at}.receiptDigest`),
@@ -125,9 +129,25 @@ function parseCandidate(value: JsonValue, i: number): FoundryCandidateResult {
   };
 }
 
+function parseScorer(value: JsonValue | undefined, at: string): FoundryScorer {
+  const s = object(value, at);
+  keys(s, ["contract", "program"], at);
+  if (s.contract !== "algal.expr.v1") {
+    throw new AlgalError("PARSE_FAILED", `${at}.contract must be algal.expr.v1`);
+  }
+  if (s.program === undefined) {
+    throw new AlgalError("PARSE_FAILED", `${at}.program is required`);
+  }
+  const c = checkProgram(s.program, ["args", "expect", "outputs"]);
+  if (!c.ok) {
+    throw new AlgalError("SCORER_INVALID", `${at} ${canonicalize(c.err)}`);
+  }
+  return { contract: "algal.expr.v1", program: s.program };
+}
+
 export function parseFoundryReport(value: unknown): FoundryReport {
   const report = object(value, "foundry");
-  keys(report, ["contract", "candidates", "promoted", "holdout", "lineage", "digest"], "foundry");
+  keys(report, ["contract", "candidates", "promoted", "holdout", "scorer", "lineage", "digest"], "foundry");
   if (report.contract !== FOUNDRY_CONTRACT) {
     throw new AlgalError("PARSE_FAILED", `foundry.contract must be ${FOUNDRY_CONTRACT}`);
   }
@@ -148,6 +168,9 @@ export function parseFoundryReport(value: unknown): FoundryReport {
   }
   const lineage = report.lineage === undefined ? undefined : object(report.lineage, "foundry.lineage");
   if (lineage) keys(lineage, ["generatorDigest", "receiptDigest"], "foundry.lineage");
+  const scorer = report.scorer === undefined
+    ? undefined
+    : parseScorer(report.scorer, "foundry.scorer");
   return {
     contract: FOUNDRY_CONTRACT,
     candidates: report.candidates.map(parseCandidate),
@@ -156,6 +179,7 @@ export function parseFoundryReport(value: unknown): FoundryReport {
       ...holdoutScore,
       cases: holdout.cases.map((entry, i) => parseCase(entry, `foundry.holdout.cases[${i}]`)),
     },
+    ...(scorer ? { scorer } : {}),
     ...(lineage ? {
       lineage: {
         generatorDigest: digest(lineage.generatorDigest, "foundry.lineage.generatorDigest"),
@@ -199,7 +223,21 @@ export async function verifyFoundryReport(
       mismatches.push(`${label} score does not match its cases`);
     }
     for (const c of selected) {
-      const expectedPass = c.outcome === "complete" && canonicalize(c.outputs) === canonicalize(c.expect);
+      let expectedPass = false;
+      if (c.outcome === "complete") {
+        if (report.scorer !== undefined) {
+          try {
+            expectedPass = evalScorer(report.scorer, c, c.outputs);
+          } catch (e) {
+            mismatches.push(
+              `${label} case ${c.id} scorer error: ${e instanceof AlgalError ? e.message : String(e)}`,
+            );
+            continue;
+          }
+        } else {
+          expectedPass = canonicalize(c.outputs) === canonicalize(c.expect);
+        }
+      }
       if (c.passed !== expectedPass) mismatches.push(`${label} case ${c.id} has an invalid pass claim`);
     }
   };
@@ -302,6 +340,7 @@ export async function verifyFoundryReport(
     split: "train",
     passed: true,
     outcome: "complete",
+    args: {},
     outputs: {},
     expect: {},
     receiptDigest: report.lineage.receiptDigest,

@@ -21,6 +21,7 @@ async fn bundled_foundry_selects_and_verifies_offline() {
         &config.candidates,
         &config.cases,
         None,
+        None,
         &mut store,
         &mut Host::default(),
         &Transports::new(),
@@ -72,6 +73,7 @@ async fn generated_candidates_carry_lineage_and_verify() {
     let report = foundry::run(
         &config.candidates,
         &config.cases,
+        None,
         Some((generator_digest.clone(), receipt_digest.clone())),
         &mut store,
         &mut Host::default(),
@@ -105,6 +107,7 @@ async fn search_preserves_survivors_and_verifies() {
         &config.candidates,
         &config.cases,
         search,
+        None,
         &mut store,
         &mut host,
         &Transports::new(),
@@ -139,6 +142,7 @@ async fn verify_rejects_tampering_and_missing_evidence() {
     let report = foundry::run(
         &config.candidates,
         &config.cases,
+        None,
         None,
         &mut store,
         &mut Host::default(),
@@ -179,6 +183,95 @@ async fn verify_rejects_tampering_and_missing_evidence() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(mismatches.contains("missing"), "{mismatches}");
+}
+
+#[tokio::test]
+async fn expr_scorer_replaces_exact_match_and_verifies() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut store = Store::open(directory.path(), true).unwrap();
+    let config = foundry::load_config(&repo().join("examples/foundry.config.json"), false).unwrap();
+    // "the answer must be alpha" — constant emits alpha unconditionally and
+    // sweeps every split; exact-match would promote echo instead.
+    let scorer = json!({
+        "contract":"algal.expr.v1",
+        "program":["eq",["get","outputs","answer"],"alpha"],
+    });
+    let report = foundry::run(
+        &config.candidates,
+        &config.cases,
+        Some(&scorer),
+        None,
+        &mut store,
+        &mut Host::default(),
+        &Transports::new(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(report["scorer"], scorer);
+    let winner = report["candidates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["manifestKey"] == "organism:foundry-constant")
+        .unwrap();
+    assert_eq!(report["promoted"], winner["manifestDigest"]);
+    assert_eq!(winner["validation"]["passed"], 1);
+    assert_eq!(report["holdout"]["passed"], 1);
+    // args landed on the case records — the report is self-contained
+    assert_eq!(report["holdout"]["cases"][0]["args"]["q"], "delta");
+
+    let verified = foundry::verify(&report, &store, &Host::default())
+        .await
+        .unwrap();
+    assert_eq!(verified["ok"], true, "{verified}");
+
+    // A tampered scorer rewrites the recomputed pass claims.
+    let mut tampered = report.clone();
+    tampered["scorer"]["program"] =
+        json!(["eq", ["get", "outputs", "answer"], ["get", "args", "q"]]);
+    let verified = foundry::verify(&tampered, &store, &Host::default())
+        .await
+        .unwrap();
+    assert_eq!(verified["ok"], false);
+    let mismatches = verified["mismatches"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|m| m.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(mismatches.contains("invalid pass claim"), "{mismatches}");
+
+    // A non-boolean scorer is a config bug, not a failed case.
+    let bad = json!({"contract":"algal.expr.v1","program":["get","outputs","answer"]});
+    let err = foundry::run(
+        &config.candidates,
+        &config.cases,
+        Some(&bad),
+        None,
+        &mut store,
+        &mut Host::default(),
+        &Transports::new(),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(err.code, "SCORER_INVALID");
+
+    // An unbound name fails the static check.
+    let bad = json!({"contract":"algal.expr.v1","program":["get","nope"]});
+    let err = foundry::run(
+        &config.candidates,
+        &config.cases,
+        Some(&bad),
+        None,
+        &mut store,
+        &mut Host::default(),
+        &Transports::new(),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(err.code, "SCORER_INVALID");
 }
 
 #[test]
@@ -240,6 +333,27 @@ fn config_requires_all_splits_and_rejects_search_outside_search_mode() {
         ],
     }));
     assert!(foundry::load_config(&file, false).is_err());
+
+    // Scorer programs are checked at config load: unbound names reject.
+    let file = write(json!({
+        "contract":"algal.foundry.config.v1",
+        "candidates":["x.json"],
+        "cases":base_cases(&["train","validation","holdout"]),
+        "scorer":{"contract":"algal.expr.v1","program":["get","nope"]},
+    }));
+    let err = foundry::load_config(&file, false).err().unwrap();
+    assert_eq!(err.code, "SCORER_INVALID");
+
+    // A well-formed scorer parses through.
+    let file = write(json!({
+        "contract":"algal.foundry.config.v1",
+        "candidates":["x.json"],
+        "cases":base_cases(&["train","validation","holdout"]),
+        "scorer":{"contract":"algal.expr.v1","program":["eq",["get","outputs","answer"],["get","expect","answer"]]},
+    }));
+    let err = foundry::load_config(&file, false).err().unwrap();
+    // fails only because the candidate path doesn't exist — scorer parsed fine
+    assert_ne!(err.code, "SCORER_INVALID");
 }
 
 #[test]

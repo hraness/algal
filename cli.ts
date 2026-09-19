@@ -39,6 +39,7 @@ import {
   generateFoundryCandidates,
   runFoundry,
   type FoundryCase,
+  type FoundryScorer,
 } from "./src/foundry";
 import { parseFoundryReport, verifyFoundryReport } from "./src/foundry-verify";
 import { runFoundrySearch } from "./src/search";
@@ -979,7 +980,7 @@ async function main(): Promise<number> {
         diag(`loaded ${n} module(s) from ${flags.modules}`);
       }
       const config = asRecord(await readJson(configFile), "foundry config");
-      const unknown = Object.keys(config).filter((k) => !["contract", "candidates", "generator", "cases", "search"].includes(k));
+      const unknown = Object.keys(config).filter((k) => !["contract", "candidates", "generator", "cases", "search", "scorer"].includes(k));
       if (unknown.length > 0) {
         throw new AlgalError("PARSE_FAILED", `foundry config: unknown key "${unknown[0]}"`);
       }
@@ -1050,6 +1051,18 @@ async function main(): Promise<number> {
           expect: asRecord(c.expect, `foundry config.cases[${i}].expect`),
         };
       });
+      let scorer: FoundryScorer | undefined;
+      if (config.scorer !== undefined) {
+        const raw = asRecord(config.scorer, "foundry config.scorer");
+        const extra = Object.keys(raw).filter((k) => !["contract", "program"].includes(k));
+        if (extra.length > 0 || raw.contract !== "algal.expr.v1" || raw.program === undefined) {
+          throw new AlgalError(
+            "PARSE_FAILED",
+            "foundry config.scorer needs contract algal.expr.v1 and a program",
+          );
+        }
+        scorer = { contract: "algal.expr.v1", program: raw.program };
+      }
       const executors: Executor[] = [];
       if (flags.responses !== undefined) {
         executors.push(scriptedExecutor(asRecord(
@@ -1109,6 +1122,7 @@ async function main(): Promise<number> {
           executors: activeExecutors,
           ...(transports ? { transports } : {}),
           ...(tools ? { tools } : {}),
+          ...(scorer ? { scorer } : {}),
         });
         if (flags.out !== undefined) {
           const { writeFile } = await import("node:fs/promises");
@@ -1139,6 +1153,7 @@ async function main(): Promise<number> {
         executors: activeExecutors,
         ...(transports ? { transports } : {}),
         ...(tools ? { tools } : {}),
+        ...(scorer ? { scorer } : {}),
         ...(generated ? {
           lineage: {
             generatorDigest: generated.generatorDigest,
