@@ -12,6 +12,7 @@ import {
   type BenchReport,
   type BenchSystemResult,
 } from "./bench";
+import { evalScorer, parseExprScorer } from "./expr";
 import type { FnRegistry } from "./registry";
 import { parseRunReceipt } from "./run";
 import type { Store } from "./store";
@@ -185,7 +186,7 @@ function parseBenchPrice(value: JsonValue | undefined, at: string): Record<strin
 
 export function parseBenchReport(value: unknown): BenchReport {
   const report = object(value, "bench");
-  keys(report, ["contract", "workload", "cases", "prices", "systems", "pareto", "digest"], "bench");
+  keys(report, ["contract", "workload", "cases", "prices", "scorer", "systems", "pareto", "digest"], "bench");
   if (report.contract !== BENCH_CONTRACT) {
     throw new AlgalError("PARSE_FAILED", `bench.contract must be ${BENCH_CONTRACT}`);
   }
@@ -215,6 +216,9 @@ export function parseBenchReport(value: unknown): BenchReport {
     workload: digest(report.workload, "bench.workload"),
     cases: report.cases.map((entry, i) => parseBenchCase(entry, `bench.cases[${i}]`)),
     prices: parseBenchPrice(report.prices, "bench.prices"),
+    ...(report.scorer !== undefined
+      ? { scorer: parseExprScorer(report.scorer, "bench.scorer") }
+      : {}),
     systems,
     pareto,
     digest: digest(report.digest, "bench.digest"),
@@ -283,7 +287,25 @@ export async function verifyBenchReport(
       if (canonicalize(c.expect) !== canonicalize(benchCase.expect)) {
         mismatches.push(`${system.id} case ${c.id}: expect differs from the workload`);
       }
-      const expectedPass = c.outcome === "complete" && canonicalize(c.outputs) === canonicalize(c.expect);
+      let expectedPass = false;
+      if (c.outcome === "complete") {
+        if (report.scorer !== undefined) {
+          try {
+            expectedPass = evalScorer(
+              report.scorer,
+              { args: benchCase.args, expect: c.expect },
+              c.outputs,
+            );
+          } catch (e) {
+            mismatches.push(
+              `${system.id} case ${c.id} scorer error: ${e instanceof AlgalError ? e.message : String(e)}`,
+            );
+            continue;
+          }
+        } else {
+          expectedPass = canonicalize(c.outputs) === canonicalize(c.expect);
+        }
+      }
       if (c.passed !== expectedPass) {
         mismatches.push(`${system.id} case ${c.id}: invalid pass claim`);
       }

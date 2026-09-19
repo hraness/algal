@@ -9,7 +9,7 @@
 
 import { readFileSync } from "node:fs";
 import { AlgalError } from "./errors";
-import type { JsonObject, JsonValue } from "./values";
+import { canonicalize, type JsonObject, type JsonValue } from "./values";
 
 export type ExprErr = { code: string } & { [k: string]: JsonValue };
 export type ExprResult =
@@ -102,4 +102,62 @@ export function checkProgram(
 ): ExprCheck {
   const raw = call("algal_check", { program, names: [...names] });
   return JSON.parse(raw) as ExprCheck;
+}
+
+/** An `algal.expr.v1` program scored per case over the fixed environment
+ * {"args","expect","outputs"} — the pass predicate as data, shared by
+ * foundry fitness and bench claims. */
+export type ExprScorer = { contract: "algal.expr.v1"; program: JsonValue };
+
+const SCORER_NAMES = ["args", "expect", "outputs"] as const;
+
+/** Scorer fuel budget — must match crates/algal scorer::MAX_EXPR_FUEL. */
+const SCORER_FUEL = 100_000;
+
+/** Parse and statically check a scorer from a foreign value. A malformed
+ * shape is PARSE_FAILED; a well-formed object with a bad program is
+ * SCORER_INVALID — the distinction a config author needs. */
+export function parseExprScorer(value: unknown, at: string): ExprScorer {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new AlgalError("PARSE_FAILED", `${at} must be an object`);
+  }
+  const s = value as JsonObject;
+  const extra = Object.keys(s).find((key) => !["contract", "program"].includes(key));
+  if (extra) throw new AlgalError("PARSE_FAILED", `${at}: unknown key "${extra}"`);
+  if (s.contract !== "algal.expr.v1") {
+    throw new AlgalError("PARSE_FAILED", `${at}.contract must be algal.expr.v1`);
+  }
+  if (s.program === undefined) {
+    throw new AlgalError("PARSE_FAILED", `${at}.program is required`);
+  }
+  const c = checkProgram(s.program, SCORER_NAMES);
+  if (!c.ok) {
+    throw new AlgalError("SCORER_INVALID", `${at} ${canonicalize(c.err)}`);
+  }
+  return { contract: "algal.expr.v1", program: s.program };
+}
+
+/** Run a scorer against one case: env is {"args","expect","outputs"}, the
+ * result must be a strict boolean. A thrown or non-boolean scorer is a
+ * config bug — SCORER_INVALID, never a silent case failure. */
+export function evalScorer(
+  scorer: ExprScorer,
+  c: { args: Record<string, JsonValue>; expect: Record<string, JsonValue> },
+  outputs: Record<string, JsonValue>,
+): boolean {
+  const r = evalProgram(
+    scorer.program,
+    { args: c.args, expect: c.expect, outputs },
+    SCORER_FUEL,
+  );
+  if (!r.ok) {
+    throw new AlgalError("SCORER_INVALID", `scorer ${canonicalize(r.err)}`);
+  }
+  if (typeof r.value !== "boolean") {
+    throw new AlgalError(
+      "SCORER_INVALID",
+      `scorer must produce boolean, got ${canonicalize(r.value)}`,
+    );
+  }
+  return r.value;
 }

@@ -13,6 +13,7 @@ use crate::{
     effects::{Backend, Host},
     graph::Transports,
     runtime,
+    scorer::{check_scorer, eval_scorer},
     store::Store,
 };
 use serde_json::{Map, Value, json};
@@ -109,17 +110,33 @@ type Prices = BTreeMap<String, [f64; 2]>;
 /// manifests load relative to the config directory, and an optional price
 /// card. Executor specs are `gateway:<model>`, `scripted:<file>`,
 /// `cmd:<command>`, or `apple` (the on-device bridge; a native extension).
-pub fn load_config(
-    path: &Path,
-    apple_bridge: Option<&Path>,
-) -> Result<(Vec<BenchCase>, Vec<BenchSystem>, Option<Prices>)> {
+/// An optional `algal.expr.v1` scorer replaces exact-match as the pass
+/// claim — the same bounded predicate the foundry selects under.
+pub struct BenchConfig {
+    pub cases: Vec<BenchCase>,
+    pub systems: Vec<BenchSystem>,
+    pub prices: Option<Prices>,
+    pub scorer: Option<Value>,
+}
+
+pub fn load_config(path: &Path, apple_bridge: Option<&Path>) -> Result<BenchConfig> {
     let config = read_json(File::open(path)?, 1_048_576)?;
-    keys(&config, &["contract", "cases", "systems", "prices"])?;
+    keys(
+        &config,
+        &["contract", "cases", "systems", "prices", "scorer"],
+    )?;
     if config["contract"] != "algal.bench.config.v1" {
         return Err(Error::invalid(
             "bench config.contract must be algal.bench.config.v1",
         ));
     }
+    let scorer = match config.get("scorer") {
+        None | Some(Value::Null) => None,
+        Some(raw) => {
+            check_scorer(raw)?;
+            Some(raw.clone())
+        }
+    };
     let base = path.parent().unwrap_or(Path::new("."));
     let raw_cases = config["cases"]
         .as_array()
@@ -281,7 +298,12 @@ pub fn load_config(
             }
         }
     }
-    Ok((cases, systems, prices))
+    Ok(BenchConfig {
+        cases,
+        systems,
+        prices,
+        scorer,
+    })
 }
 
 fn case_args(manifest: &Manifest, case: &BenchCase) -> Result<Value> {
@@ -412,6 +434,7 @@ pub async fn run(
     cases: &[BenchCase],
     systems: &[BenchSystem],
     prices: Option<Prices>,
+    scorer: Option<&Value>,
     store: &mut Store,
     tools: &Host,
     transports: &Transports,
@@ -441,7 +464,13 @@ pub async fn run(
             let reference = store.put("runs", &receipt)?;
             let outputs = runtime::outputs(&system.manifest, &receipt)?;
             let outcome = receipt["outcome"].as_str().unwrap_or("");
-            let ok = outcome == "complete" && canonical(&outputs)? == canonical(&case.expect)?;
+            let ok = outcome == "complete"
+                && match scorer {
+                    Some(scorer) => {
+                        eval_scorer(&scorer["program"], &case.args, &case.expect, &outputs)?
+                    }
+                    None => canonical(&outputs)? == canonical(&case.expect)?,
+                };
             if ok {
                 passed += 1;
             }
@@ -497,6 +526,9 @@ pub async fn run(
             .map(|(key, [input, output])| (key.clone(), json!({"input":input,"output":output})))
             .collect::<Map<_, _>>()
             .into();
+    }
+    if let Some(scorer) = scorer {
+        report["scorer"] = scorer.clone();
     }
     report["digest"] = json!(digest(&report)?);
     Ok(report)
@@ -574,11 +606,11 @@ fn parse_usage(value: &Value, at: &str) -> Result<Attribution> {
 }
 
 /// Parse a `algal.bench.v1` report within its bounds.
-pub fn parse_report(report: &Value) -> Result<(Vec<BenchCase>, Option<Prices>)> {
+pub fn parse_report(report: &Value) -> Result<(Vec<BenchCase>, Option<Prices>, Option<Value>)> {
     keys(
         report,
         &[
-            "contract", "workload", "cases", "prices", "systems", "pareto", "digest",
+            "contract", "workload", "cases", "prices", "scorer", "systems", "pareto", "digest",
         ],
     )?;
     if report["contract"] != "algal.bench.v1" {
@@ -623,14 +655,21 @@ pub fn parse_report(report: &Value) -> Result<(Vec<BenchCase>, Option<Prices>)> 
         None | Some(Value::Null) => None,
         Some(raw) => Some(parse_prices(raw, "bench.prices")?),
     };
-    Ok((cases, prices))
+    let scorer = match report.get("scorer") {
+        None | Some(Value::Null) => None,
+        Some(raw) => {
+            check_scorer(raw)?;
+            Some(raw.clone())
+        }
+    };
+    Ok((cases, prices, scorer))
 }
 
 /// Recompute a bench report against the store: the report digest, workload
 /// digest, and Pareto order must hold, and every case must match a stored,
 /// offline-replayable run receipt.
 pub async fn verify(report: &Value, store: &Store, tools: &Host) -> Result<Value> {
-    let (workload_cases, prices) = parse_report(report)?;
+    let (workload_cases, prices, scorer) = parse_report(report)?;
     let claimed = report["digest"].as_str().unwrap_or("").to_owned();
     let mut mismatches: Vec<String> = Vec::new();
     let mut base = report.clone();
@@ -756,8 +795,26 @@ pub async fn verify(report: &Value, store: &Store, tools: &Host) -> Result<Value
                     "{id} case {case_id}: expect differs from the workload"
                 ));
             }
-            let expected_pass = outcome == "complete"
-                && canonical(&case["outputs"])? == canonical(&case["expect"])?;
+            let expected_pass = if outcome == "complete" {
+                match &scorer {
+                    Some(scorer) => match eval_scorer(
+                        &scorer["program"],
+                        &bench_case.args,
+                        &case["expect"],
+                        &case["outputs"],
+                    ) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            mismatches
+                                .push(format!("{id} case {case_id} scorer error: {}", e.message));
+                            continue;
+                        }
+                    },
+                    None => canonical(&case["outputs"])? == canonical(&case["expect"])?,
+                }
+            } else {
+                false
+            };
             if case["passed"].as_bool() != Some(expected_pass) {
                 mismatches.push(format!("{id} case {case_id}: invalid pass claim"));
             }

@@ -147,7 +147,7 @@ error depends on the host.
 ## Consumers
 
 The evaluator is contract machinery, and the contract can put it anywhere
-a bounded pure program is useful. Three consumers exist today:
+a bounded pure program is useful. Four consumers exist today:
 
 - **`expr` cells** (below) — compute a port value from input ports.
 - **edge `guard.expr`** — an `{"expr": {…}}` guard is evaluated over
@@ -156,6 +156,10 @@ a bounded pure program is useful. Three consumers exist today:
 - **foundry `scorer`** — an optional program in `algal.foundry.config.v1`
   evaluated per case over `{"args", "expect", "outputs"}`; it must return
   a boolean and replaces exact-match as the pass claim. See `foundry.md`.
+- **bench `scorer`** — the same optional program in
+  `algal.bench.config.v1`, over the same `{"args", "expect", "outputs"}`
+  environment; the pass claim a pareto comparison is built on. See
+  `bench.md`.
 
 More consumers are expected — route conditions, search predicates —
 anywhere the contract currently hardcodes a predicate.

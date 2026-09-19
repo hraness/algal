@@ -13,6 +13,7 @@ use crate::{
     effects::Host,
     graph::Transports,
     runtime,
+    scorer::{check_scorer, eval_scorer},
     store::Store,
 };
 use serde_json::{Map, Value, json};
@@ -310,57 +311,9 @@ fn usage_of(effects: &[Value]) -> Value {
     json!({"tokensIn":tokens_in,"tokensOut":tokens_out})
 }
 
-/// `BOUNDS.maxExprFuel` in src/contract.ts — same budget the runtime gives
-/// expr cells and edge guards.
-const MAX_EXPR_FUEL: u64 = 100_000;
-
-/// An `algal.expr.v1` scorer program replaces exact-match with a bounded
-/// predicate over {"args","expect","outputs"} — fitness as data. A thrown
-/// or non-boolean scorer is a config bug and fails SCORER_INVALID.
-fn eval_scorer(program: &Value, case: &FoundryCase, outputs: &Value) -> Result<bool> {
-    let mut env = Map::new();
-    env.insert("args".to_owned(), case.args.clone());
-    env.insert("expect".to_owned(), case.expect.clone());
-    env.insert("outputs".to_owned(), outputs.clone());
-    match algal_expr::run(program, &env, MAX_EXPR_FUEL) {
-        Ok((Value::Bool(b), _)) => Ok(b),
-        Ok((value, _)) => Err(Error::new(
-            "SCORER_INVALID",
-            format!("scorer must produce boolean, got {}", canonical(&value)?),
-        )),
-        Err((e, _)) => Err(Error::new(
-            "SCORER_INVALID",
-            format!("scorer {}", canonical(&e.to_json())?),
-        )),
-    }
-}
-
-/// Same predicate on a recorded report case (id/split/passed extra).
+/// Same scorer predicate on a recorded report case (id/split/passed extra).
 fn eval_scorer_record(program: &Value, case: &Value) -> Result<bool> {
-    let mapped = FoundryCase {
-        id: case["id"].as_str().unwrap_or("").to_owned(),
-        split: case["split"].as_str().unwrap_or("").to_owned(),
-        args: case["args"].clone(),
-        expect: case["expect"].clone(),
-    };
-    eval_scorer(program, &mapped, &case["outputs"])
-}
-
-fn check_scorer(scorer: &Value) -> Result<()> {
-    keys(scorer, &["contract", "program"])?;
-    if scorer["contract"] != "algal.expr.v1" {
-        return Err(Error::invalid("scorer.contract must be algal.expr.v1"));
-    }
-    let names: BTreeSet<String> = ["args", "expect", "outputs"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-    algal_expr::check_program(&scorer["program"], &names).map_err(|e| {
-        Error::new(
-            "SCORER_INVALID",
-            format!("scorer {}", canonical(&e.to_json()).unwrap_or_default()),
-        )
-    })
+    eval_scorer(program, &case["args"], &case["expect"], &case["outputs"])
 }
 
 async fn evaluate_case(
@@ -385,7 +338,7 @@ async fn evaluate_case(
     let outcome = receipt["outcome"].as_str().unwrap_or("");
     let passed = outcome == "complete"
         && match scorer {
-            Some(scorer) => eval_scorer(&scorer["program"], case, &outputs)?,
+            Some(scorer) => eval_scorer(&scorer["program"], &case.args, &case.expect, &outputs)?,
             None => canonical(&outputs)? == canonical(&case.expect)?,
         };
     let effects = receipt["effects"].as_array().cloned().unwrap_or_default();

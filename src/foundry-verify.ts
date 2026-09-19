@@ -9,9 +9,8 @@ import {
   type FoundryCandidateResult,
   type FoundryCaseResult,
   type FoundryReport,
-  type FoundryScorer,
 } from "./foundry";
-import { checkProgram } from "./expr";
+import { parseExprScorer } from "./expr";
 import type { FnRegistry } from "./registry";
 import { parseRunReceipt } from "./run";
 import type { Store } from "./store";
@@ -129,22 +128,6 @@ function parseCandidate(value: JsonValue, i: number): FoundryCandidateResult {
   };
 }
 
-function parseScorer(value: JsonValue | undefined, at: string): FoundryScorer {
-  const s = object(value, at);
-  keys(s, ["contract", "program"], at);
-  if (s.contract !== "algal.expr.v1") {
-    throw new AlgalError("PARSE_FAILED", `${at}.contract must be algal.expr.v1`);
-  }
-  if (s.program === undefined) {
-    throw new AlgalError("PARSE_FAILED", `${at}.program is required`);
-  }
-  const c = checkProgram(s.program, ["args", "expect", "outputs"]);
-  if (!c.ok) {
-    throw new AlgalError("SCORER_INVALID", `${at} ${canonicalize(c.err)}`);
-  }
-  return { contract: "algal.expr.v1", program: s.program };
-}
-
 export function parseFoundryReport(value: unknown): FoundryReport {
   const report = object(value, "foundry");
   keys(report, ["contract", "candidates", "promoted", "holdout", "scorer", "lineage", "digest"], "foundry");
@@ -170,7 +153,7 @@ export function parseFoundryReport(value: unknown): FoundryReport {
   if (lineage) keys(lineage, ["generatorDigest", "receiptDigest"], "foundry.lineage");
   const scorer = report.scorer === undefined
     ? undefined
-    : parseScorer(report.scorer, "foundry.scorer");
+    : parseExprScorer(report.scorer, "foundry.scorer");
   return {
     contract: FOUNDRY_CONTRACT,
     candidates: report.candidates.map(parseCandidate),

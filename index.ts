@@ -135,10 +135,12 @@ export type { BenchVerifyReport } from "./src/bench-verify";
 export {
   evalProgram,
   checkProgram,
+  evalScorer,
+  parseExprScorer,
   EXPR_BOUNDS,
   EXPR_DEFAULT_FUEL,
 } from "./src/expr";
-export type { ExprCheck, ExprErr, ExprResult } from "./src/expr";
+export type { ExprCheck, ExprErr, ExprResult, ExprScorer } from "./src/expr";
 
 export { digestCanonical, digestText } from "./src/digest";
 export type { Digest } from "./src/digest";
