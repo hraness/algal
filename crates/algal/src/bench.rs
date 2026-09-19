@@ -13,7 +13,7 @@ use crate::{
     effects::{Backend, Host},
     graph::Transports,
     runtime,
-    scorer::{check_scorer, eval_scorer},
+    scorer::{check_axis_program, check_envelope, check_scorer, eval_axis, eval_scorer},
     store::Store,
 };
 use serde_json::{Map, Value, json};
@@ -26,6 +26,85 @@ use std::{
 const MAX_SYSTEMS: usize = 8;
 const MAX_CASES: usize = 256;
 const MAX_ID: usize = 64;
+const MAX_AXES: usize = 8;
+
+/// The names an axis program may see — the system's aggregate record
+/// minus its case list. Static-checked against every axis program.
+const AXIS_NAMES: [&str; 9] = [
+    "id",
+    "manifestKey",
+    "manifestDigest",
+    "passed",
+    "total",
+    "effectCalls",
+    "work",
+    "usage",
+    "attribution",
+];
+
+/// A configured Pareto axis: a bounded `algal.expr.v1` program over the
+/// system aggregate whose `dir` says which direction is better.
+#[derive(Clone)]
+pub struct Axis {
+    pub name: String,
+    pub dir: String,
+    pub expr: Value,
+}
+
+fn axis_name_set() -> BTreeSet<String> {
+    AXIS_NAMES.iter().map(|s| s.to_string()).collect()
+}
+
+fn parse_axis(value: &Value, at: &str) -> Result<Axis> {
+    keys(value, &["name", "dir", "expr"])?;
+    let name = bench_id(&value["name"], &format!("{at}.name"))?;
+    let dir = text(&value["dir"], 4)?;
+    if dir != "up" && dir != "down" {
+        return Err(Error::invalid(format!(
+            "{at}.dir must be \"up\" or \"down\""
+        )));
+    }
+    check_envelope(&value["expr"], &format!("{at}.expr"))?;
+    check_axis_program(&value["expr"]["program"], &axis_name_set(), at)?;
+    Ok(Axis {
+        name,
+        dir: dir.to_owned(),
+        expr: value["expr"].clone(),
+    })
+}
+
+fn parse_axes(value: &Value, at: &str) -> Result<Vec<Axis>> {
+    let list = value
+        .as_array()
+        .filter(|list| !list.is_empty() && list.len() <= MAX_AXES)
+        .ok_or_else(|| {
+            Error::invalid(format!(
+                "{at} must be a bounded non-empty list of at most {MAX_AXES}"
+            ))
+        })?;
+    let mut axes = Vec::with_capacity(list.len());
+    let mut names = BTreeSet::new();
+    for (i, entry) in list.iter().enumerate() {
+        let axis = parse_axis(entry, &format!("{at}[{i}]"))?;
+        if !names.insert(axis.name.clone()) {
+            return Err(Error::invalid(format!(
+                "{at} has duplicate axis \"{}\"",
+                axis.name
+            )));
+        }
+        axes.push(axis);
+    }
+    Ok(axes)
+}
+
+/// The aggregate record an axis program sees: the system result minus
+/// its case list, matching AXIS_NAMES.
+fn axis_env(system: &Value) -> Map<String, Value> {
+    AXIS_NAMES
+        .iter()
+        .map(|name| (name.to_string(), system[name].clone()))
+        .collect()
+}
 
 fn bench_id(value: &Value, at: &str) -> Result<String> {
     let id = text(value, MAX_ID)?.to_owned();
@@ -117,13 +196,14 @@ pub struct BenchConfig {
     pub systems: Vec<BenchSystem>,
     pub prices: Option<Prices>,
     pub scorer: Option<Value>,
+    pub axes: Option<Vec<Axis>>,
 }
 
 pub fn load_config(path: &Path, apple_bridge: Option<&Path>) -> Result<BenchConfig> {
     let config = read_json(File::open(path)?, 1_048_576)?;
     keys(
         &config,
-        &["contract", "cases", "systems", "prices", "scorer"],
+        &["contract", "cases", "systems", "prices", "scorer", "axes"],
     )?;
     if config["contract"] != "algal.bench.config.v1" {
         return Err(Error::invalid(
@@ -136,6 +216,10 @@ pub fn load_config(path: &Path, apple_bridge: Option<&Path>) -> Result<BenchConf
             check_scorer(raw)?;
             Some(raw.clone())
         }
+    };
+    let axes = match config.get("axes") {
+        None | Some(Value::Null) => None,
+        Some(raw) => Some(parse_axes(raw, "bench config.axes")?),
     };
     let base = path.parent().unwrap_or(Path::new("."));
     let raw_cases = config["cases"]
@@ -303,6 +387,7 @@ pub fn load_config(path: &Path, apple_bridge: Option<&Path>) -> Result<BenchConf
         systems,
         prices,
         scorer,
+        axes,
     })
 }
 
@@ -386,59 +471,116 @@ fn usage_value(usage: &Attribution) -> Value {
     json!({"tokensIn":usage.tokens_in,"tokensOut":usage.tokens_out,"cost":usage.cost})
 }
 
+/// Non-dominated ids over an axis matrix: `dirs[k]` says which direction
+/// is better on axis k (true = higher), `rows[i]` is system `ids[i]`'s
+/// axis values. A row is dominated when another is at least as good on
+/// every axis (per dir) and strictly better on one. Survivors sort by the
+/// axes in order, then id — deterministic.
+fn dominance(ids: &[String], dirs: &[bool], rows: &[Vec<f64>]) -> Vec<String> {
+    let mut kept: Vec<usize> = (0..ids.len())
+        .filter(|&i| {
+            !(0..ids.len()).any(|j| {
+                j != i
+                    && rows[j].iter().enumerate().all(|(k, v)| {
+                        if dirs[k] {
+                            *v >= rows[i][k]
+                        } else {
+                            *v <= rows[i][k]
+                        }
+                    })
+                    && rows[j].iter().enumerate().any(|(k, v)| {
+                        if dirs[k] {
+                            *v > rows[i][k]
+                        } else {
+                            *v < rows[i][k]
+                        }
+                    })
+            })
+        })
+        .collect();
+    kept.sort_by(|&a, &b| {
+        for (k, up) in dirs.iter().enumerate() {
+            let ord = if *up {
+                rows[b][k].total_cmp(&rows[a][k])
+            } else {
+                rows[a][k].total_cmp(&rows[b][k])
+            };
+            if ord != std::cmp::Ordering::Equal {
+                return ord;
+            }
+        }
+        ids[a].cmp(&ids[b])
+    });
+    kept.into_iter().map(|i| ids[i].clone()).collect()
+}
+
 /// Non-dominated systems on (passed ↑, cost signal ↓, effect calls ↓). The
 /// cost signal is the dollar `cost` when prices were supplied, otherwise
-/// total token count. A system is dominated when another is at least as
-/// good on all three axes and strictly better on one — deterministic, ties
-/// broken by id.
+/// total token count — the default axis triple, computed through the same
+/// dominance machinery configured axes use.
 pub fn pareto(systems: &[Value], has_prices: bool) -> Vec<String> {
     let tokens = |s: &Value| -> f64 {
         s["usage"]["tokensIn"].as_f64().unwrap_or(0.0)
             + s["usage"]["tokensOut"].as_f64().unwrap_or(0.0)
     };
-    let cost = |s: &Value| -> f64 {
-        if has_prices {
-            s["usage"]["cost"].as_f64().unwrap_or(0.0)
-        } else {
-            tokens(s)
-        }
-    };
-    let calls = |s: &Value| s["effectCalls"].as_u64().unwrap_or(0);
-    let passed = |s: &Value| s["passed"].as_u64().unwrap_or(0);
-    let id = |s: &Value| s["id"].as_str().unwrap_or("").to_owned();
-    let mut kept: Vec<&Value> = systems
+    let ids: Vec<String> = systems
         .iter()
-        .filter(|s| {
-            !systems.iter().any(|o| {
-                id(o) != id(s)
-                    && passed(o) >= passed(s)
-                    && cost(o) <= cost(s)
-                    && calls(o) <= calls(s)
-                    && (passed(o) > passed(s) || cost(o) < cost(s) || calls(o) < calls(s))
-            })
+        .map(|s| s["id"].as_str().unwrap_or("").to_owned())
+        .collect();
+    let rows: Vec<Vec<f64>> = systems
+        .iter()
+        .map(|s| {
+            vec![
+                s["passed"].as_f64().unwrap_or(0.0),
+                if has_prices {
+                    s["usage"]["cost"].as_f64().unwrap_or(0.0)
+                } else {
+                    tokens(s)
+                },
+                s["effectCalls"].as_f64().unwrap_or(0.0),
+            ]
         })
         .collect();
-    kept.sort_by(|a, b| {
-        passed(b)
-            .cmp(&passed(a))
-            .then(cost(a).total_cmp(&cost(b)))
-            .then(calls(a).cmp(&calls(b)))
-            .then(id(a).cmp(&id(b)))
-    });
-    kept.into_iter().map(id).collect()
+    dominance(&ids, &[true, false, false], &rows)
+}
+
+/// Pareto under configured axes: every axis evaluated once per system —
+/// the recorded axisValues are what dominance ran on.
+fn axes_pareto(systems: &[Value], axes: &[Axis]) -> Vec<String> {
+    let ids: Vec<String> = systems
+        .iter()
+        .map(|s| s["id"].as_str().unwrap_or("").to_owned())
+        .collect();
+    let dirs: Vec<bool> = axes.iter().map(|a| a.dir == "up").collect();
+    let rows: Vec<Vec<f64>> = systems
+        .iter()
+        .map(|s| {
+            axes.iter()
+                .map(|a| s["axisValues"][&a.name].as_f64().unwrap_or(0.0))
+                .collect()
+        })
+        .collect();
+    dominance(&ids, &dirs, &rows)
 }
 
 /// Run every case of every system, persist the receipts, and emit a
 /// `algal.bench.v1` report whose digest covers the whole comparison.
 pub async fn run(
-    cases: &[BenchCase],
-    systems: &[BenchSystem],
-    prices: Option<Prices>,
-    scorer: Option<&Value>,
+    config: &BenchConfig,
     store: &mut Store,
     tools: &Host,
     transports: &Transports,
 ) -> Result<Value> {
+    let BenchConfig {
+        cases,
+        systems,
+        prices,
+        scorer,
+        axes,
+    } = config;
+    let scorer = scorer.as_ref();
+    let axes = axes.as_deref();
+    let prices = prices.clone();
     let mut results = Vec::with_capacity(systems.len());
     for system in systems {
         let manifest_digest = store.admit(&system.manifest)?;
@@ -495,7 +637,7 @@ pub async fn run(
                 "attribution":attribution_value(&case_attribution),
             }));
         }
-        results.push(json!({
+        let mut result = json!({
             "id":system.id,
             "manifestDigest":manifest_digest,
             "manifestKey":system.manifest.value["key"],
@@ -506,13 +648,28 @@ pub async fn run(
             "usage":usage_value(&usage),
             "attribution":attribution_value(&attribution),
             "cases":case_results,
-        }));
+        });
+        if let Some(axes) = axes {
+            let env = axis_env(&result);
+            let mut values = Map::new();
+            for axis in axes {
+                values.insert(
+                    axis.name.clone(),
+                    json!(eval_axis(&axis.expr["program"], &env)?),
+                );
+            }
+            result["axisValues"] = Value::Object(values);
+        }
+        results.push(result);
     }
     let case_values: Vec<Value> = cases
         .iter()
         .map(|c| json!({"id":c.id,"args":c.args,"expect":c.expect}))
         .collect();
-    let pareto = pareto(&results, prices.is_some());
+    let pareto = match axes {
+        Some(axes) => axes_pareto(&results, axes),
+        None => pareto(&results, prices.is_some()),
+    };
     let mut report = json!({
         "contract":"algal.bench.v1",
         "workload":digest(&Value::Array(case_values.clone()))?,
@@ -529,6 +686,12 @@ pub async fn run(
     }
     if let Some(scorer) = scorer {
         report["scorer"] = scorer.clone();
+    }
+    if let Some(axes) = axes {
+        report["axes"] = axes
+            .iter()
+            .map(|a| json!({"name":a.name,"dir":a.dir,"expr":a.expr}))
+            .collect();
     }
     report["digest"] = json!(digest(&report)?);
     Ok(report)
@@ -605,12 +768,22 @@ fn parse_usage(value: &Value, at: &str) -> Result<Attribution> {
     })
 }
 
+/// The parsed front matter of a `algal.bench.v1` report: the workload,
+/// price card, scorer, and axis definitions verification replays against.
+pub struct ParsedReport {
+    pub cases: Vec<BenchCase>,
+    pub prices: Option<Prices>,
+    pub scorer: Option<Value>,
+    pub axes: Option<Vec<Axis>>,
+}
+
 /// Parse a `algal.bench.v1` report within its bounds.
-pub fn parse_report(report: &Value) -> Result<(Vec<BenchCase>, Option<Prices>, Option<Value>)> {
+pub fn parse_report(report: &Value) -> Result<ParsedReport> {
     keys(
         report,
         &[
-            "contract", "workload", "cases", "prices", "scorer", "systems", "pareto", "digest",
+            "contract", "workload", "cases", "prices", "scorer", "axes", "systems", "pareto",
+            "digest",
         ],
     )?;
     if report["contract"] != "algal.bench.v1" {
@@ -662,14 +835,55 @@ pub fn parse_report(report: &Value) -> Result<(Vec<BenchCase>, Option<Prices>, O
             Some(raw.clone())
         }
     };
-    Ok((cases, prices, scorer))
+    let axes = match report.get("axes") {
+        None | Some(Value::Null) => None,
+        Some(raw) => Some(parse_axes(raw, "bench.axes")?),
+    };
+    for (i, system) in systems.iter().enumerate() {
+        let at = format!("bench.systems[{i}].axisValues");
+        match (&axes, system.get("axisValues")) {
+            (None, Some(_)) => {
+                return Err(Error::invalid(format!("{at} requires bench.axes")));
+            }
+            (Some(_), None) => {
+                return Err(Error::invalid(format!("{at} is required by bench.axes")));
+            }
+            (Some(axes), Some(values)) => {
+                let map = object(values)
+                    .map_err(|_| Error::invalid(format!("{at} must be an object")))?;
+                let names: BTreeSet<&str> = axes.iter().map(|a| a.name.as_str()).collect();
+                if map.len() != names.len() || !map.keys().all(|k| names.contains(k.as_str())) {
+                    return Err(Error::invalid(format!("{at} must name every axis")));
+                }
+                for (key, value) in map {
+                    if value.as_f64().filter(|n| n.is_finite()).is_none() {
+                        return Err(Error::invalid(format!(
+                            "{at}.{key} must be a finite number"
+                        )));
+                    }
+                }
+            }
+            (None, None) => {}
+        }
+    }
+    Ok(ParsedReport {
+        cases,
+        prices,
+        scorer,
+        axes,
+    })
 }
 
 /// Recompute a bench report against the store: the report digest, workload
 /// digest, and Pareto order must hold, and every case must match a stored,
 /// offline-replayable run receipt.
 pub async fn verify(report: &Value, store: &Store, tools: &Host) -> Result<Value> {
-    let (workload_cases, prices, scorer) = parse_report(report)?;
+    let ParsedReport {
+        cases: workload_cases,
+        prices,
+        scorer,
+        axes,
+    } = parse_report(report)?;
     let claimed = report["digest"].as_str().unwrap_or("").to_owned();
     let mut mismatches: Vec<String> = Vec::new();
     let mut base = report.clone();
@@ -688,7 +902,30 @@ pub async fn verify(report: &Value, store: &Store, tools: &Host) -> Result<Value
         ));
     }
     let systems = report["systems"].as_array().cloned().unwrap_or_default();
-    let recomputed = pareto(&systems, prices.is_some());
+    if let Some(axes) = &axes {
+        for system in &systems {
+            let id = system["id"].as_str().unwrap_or("");
+            let env = axis_env(system);
+            for axis in axes {
+                match eval_axis(&axis.expr["program"], &env) {
+                    Ok(value) => {
+                        if system["axisValues"][axis.name.as_str()].as_f64() != Some(value) {
+                            mismatches.push(format!(
+                                "{id} axis \"{}\" does not match the system totals",
+                                axis.name
+                            ));
+                        }
+                    }
+                    Err(e) => mismatches
+                        .push(format!("{id} axis \"{}\" failed: {}", axis.name, e.message)),
+                }
+            }
+        }
+    }
+    let recomputed = match &axes {
+        Some(axes) => axes_pareto(&systems, axes),
+        None => pareto(&systems, prices.is_some()),
+    };
     if canonical(&json!(recomputed))? != canonical(&report["pareto"])? {
         mismatches.push("pareto does not match the system totals".into());
     }
@@ -717,6 +954,7 @@ pub async fn verify(report: &Value, store: &Store, tools: &Host) -> Result<Value
                 "usage",
                 "attribution",
                 "cases",
+                "axisValues",
             ],
         )?;
         let id = bench_id(&system["id"], &format!("{at}.id"))?;

@@ -12,7 +12,13 @@ Each case result records outcome, declared outputs, expectations, run receipt di
 
 ## Evidence and pareto
 
-The report embeds the complete case list (so verification needs no external config), a workload digest over it, every system's aggregate passed/total, effect calls, work, usage, and attribution, and the non-dominated system set on (passed ↑, total tokens ↓): a system is dominated when another is at least as good on both axes and strictly better on one. Ties break deterministically.
+The report embeds the complete case list (so verification needs no external config), a workload digest over it, every system's aggregate passed/total, effect calls, work, usage, and attribution, and the non-dominated system set on the default triple (passed ↑, cost signal ↓, effect calls ↓ — the cost signal is the dollar `cost` when a price card was supplied, otherwise total token count): a system is dominated when another is at least as good on every axis and strictly better on one. Ties break deterministically by the axes in order, then system id.
+
+## Axes
+
+The config may instead carry `axes` — a bounded non-empty list of at most 8 Pareto criteria, each `{"name","dir","expr"}`: a bounded id-style name, a direction (`"up"` means greater is better, `"down"` means lower is better), and an `algal.expr.v1` program. An axis program evaluates once per system over that system's aggregate record `{"id","manifestKey","manifestDigest","passed","total","effectCalls","work","usage","attribution"}` — the system result minus its case list — and must return a finite number. Literal `get` names are statically checked against exactly those fields at admission; an unbound name, a throwing program, or a nonnumeric result fails `AXIS_INVALID`.
+
+When axes are present they replace the default triple entirely. Each computed value is recorded on the system as `axisValues`, the axis definitions are recorded on the report, and the pareto claim is computed over the recorded values — all covered by the report digest. Verification re-evaluates every axis program against every recorded aggregate, compares each recomputed value against its recorded `axisValues` entry, and recomputes dominance under the recorded directions; a report that records `axisValues` without declaring `axes`, or omits them when `axes` is present, fails to parse.
 
 Verification parses strictly, recomputes the report and workload digests, rechecks every pass claim — under the recorded scorer when one is present — and aggregate, recomputes the pareto set, confirms each case's recorded receipt ran the claimed manifest with the claimed args, and replays every receipt offline. Tampering fails even when the report digest is recomputed, because claims must match receipted runs.
 

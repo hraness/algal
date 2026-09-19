@@ -147,7 +147,11 @@ error depends on the host.
 ## Consumers
 
 The evaluator is contract machinery, and the contract can put it anywhere
-a bounded pure program is useful. Four consumers exist today:
+a bounded pure program is useful. Consumers share the versioned
+`{"contract","program"}` envelope and differ only in the environment the
+program sees and the result type the consumer requires — the envelope is
+parsed once and each consumer static-checks the program against its own
+visible names. Five consumers exist today:
 
 - **`expr` cells** (below) — compute a port value from input ports.
 - **edge `guard.expr`** — an `{"expr": {…}}` guard is evaluated over
@@ -159,6 +163,12 @@ a bounded pure program is useful. Four consumers exist today:
 - **bench `scorer`** — the same optional program in
   `algal.bench.config.v1`, over the same `{"args", "expect", "outputs"}`
   environment; the pass claim a pareto comparison is built on. See
+  `bench.md`.
+- **bench `axes`** — optional `{"name","dir","expr"}` entries in
+  `algal.bench.config.v1`, each evaluated once per system over its
+  aggregate record `{"id","manifestKey","manifestDigest","passed","total",
+  "effectCalls","work","usage","attribution"}`; each must return a finite
+  number and the recorded values replace the default pareto criteria. See
   `bench.md`.
 
 More consumers are expected — route conditions, search predicates —

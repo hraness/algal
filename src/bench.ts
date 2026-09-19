@@ -10,13 +10,19 @@ import type { OrganismManifest } from "./contract";
 import { digestCanonical, type Digest } from "./digest";
 import type { EffectReceipt, Executor } from "./effects";
 import { AlgalError } from "./errors";
-import { checkProgram, evalScorer, type ExprScorer } from "./expr";
+import {
+  checkProgram,
+  evalAxis,
+  evalScorer,
+  type ExprEnvelope,
+  type ExprScorer,
+} from "./expr";
 import type { FnRegistry } from "./registry";
 import { runOrganism } from "./run";
 import type { Store } from "./store";
 import type { Transport } from "./transport";
 import type { ToolRegistry } from "./tools";
-import { canonicalize, type JsonValue } from "./values";
+import { canonicalize, type JsonObject, type JsonValue } from "./values";
 
 export const BENCH_CONTRACT = "algal.bench.v1" as const;
 
@@ -24,7 +30,31 @@ export const BENCH_BOUNDS = {
   maxSystems: 8,
   maxCases: 256,
   maxIdLen: 64,
+  maxAxes: 8,
 } as const;
+
+/** A pareto axis: an `algal.expr.v1` program evaluated once per system
+ * over the system's aggregate record — the comparison criteria as data.
+ * `dir` is which direction wins ("up" = bigger is better). */
+export type BenchAxis = {
+  name: string;
+  dir: "up" | "down";
+  expr: ExprEnvelope;
+};
+
+/** The aggregate fields an axis program may read — the same record a
+ * system result carries, minus the case list. */
+export const BENCH_AXIS_NAMES = [
+  "id",
+  "manifestKey",
+  "manifestDigest",
+  "passed",
+  "total",
+  "effectCalls",
+  "work",
+  "usage",
+  "attribution",
+] as const;
 
 export type BenchCase = {
   id: string;
@@ -60,6 +90,10 @@ export type BenchOptions = {
   /** Optional `algal.expr.v1` scorer: replaces exact-match as the pass
    * claim — the same bounded predicate foundry selects under. */
   scorer?: ExprScorer;
+  /** Optional pareto axes: replaces the default (passed ↑, cost ↓,
+   * effectCalls ↓) dominance criteria with expr programs over each
+   * system's aggregates. */
+  axes?: BenchAxis[];
 };
 
 /** Effect attribution: calls, tokens, and optional cost grouped by the
@@ -95,6 +129,9 @@ export type BenchSystemResult = {
   work: { steps: number; agentCalls: number; units: number };
   usage: { tokensIn: number; tokensOut: number; cost: number };
   attribution: Record<string, BenchAttribution>;
+  /** The value each configured axis produced for this system — recorded
+   * so the pareto claim is checkable without re-deriving aggregates. */
+  axisValues?: Record<string, number>;
   cases: BenchCaseResult[];
 };
 
@@ -108,6 +145,8 @@ export type BenchReport = {
   prices?: Record<string, BenchPrice> | undefined;
   /** The scorer program pass claims were made under, when not exact-match. */
   scorer?: ExprScorer;
+  /** The pareto axes dominance was computed under, when not the default. */
+  axes?: BenchAxis[];
   systems: BenchSystemResult[];
   /** Non-dominated system ids (passed ↑, cost signal ↓, calls ↓). */
   pareto: string[];
@@ -123,6 +162,26 @@ function validate(opts: BenchOptions): void {
     const c = checkProgram(opts.scorer.program, ["args", "expect", "outputs"]);
     if (!c.ok) {
       throw new AlgalError("SCORER_INVALID", `scorer ${canonicalize(c.err)}`);
+    }
+  }
+  if (opts.axes !== undefined) {
+    if (opts.axes.length === 0 || opts.axes.length > BENCH_BOUNDS.maxAxes) {
+      fail(`bench axes must be a bounded non-empty list of at most ${BENCH_BOUNDS.maxAxes}`);
+    }
+    const names = new Set<string>();
+    for (const axis of opts.axes) {
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(axis.name) || axis.name.length > BENCH_BOUNDS.maxIdLen) {
+        fail(`invalid bench axis name "${axis.name}"`);
+      }
+      if (names.has(axis.name)) fail(`duplicate bench axis name "${axis.name}"`);
+      names.add(axis.name);
+      if (axis.dir !== "up" && axis.dir !== "down") {
+        fail(`bench axis "${axis.name}" dir must be "up" or "down"`);
+      }
+      const c = checkProgram(axis.expr.program, BENCH_AXIS_NAMES);
+      if (!c.ok) {
+        throw new AlgalError("AXIS_INVALID", `axis "${axis.name}" ${canonicalize(c.err)}`);
+      }
     }
   }
   if (opts.systems.length === 0) fail("bench requires at least one system");
@@ -272,38 +331,88 @@ async function evaluateCase(
   };
 }
 
+/** Non-dominated ids over an axis matrix: `dirs[k]` says which direction
+ * is better on axis k, `rows[i]` is system `ids[i]`'s axis values. A row
+ * is dominated when another is at least as good on every axis (per dir)
+ * and strictly better on one. Survivors sort by the axes in order, then
+ * id — deterministic. */
+function dominancePareto(
+  ids: string[],
+  dirs: readonly ("up" | "down")[],
+  rows: number[][],
+): string[] {
+  const atLeast = (a: number, b: number, dir: "up" | "down") =>
+    dir === "up" ? a >= b : a <= b;
+  const better = (a: number, b: number, dir: "up" | "down") =>
+    dir === "up" ? a > b : a < b;
+  const kept = ids
+    .map((id, i) => ({ id, row: rows[i]! }))
+    .filter(
+      ({ row }) =>
+        !rows.some(
+          (other) =>
+            other !== row &&
+            other.every((v, k) => atLeast(v, row[k]!, dirs[k]!)) &&
+            other.some((v, k) => better(v, row[k]!, dirs[k]!)),
+        ),
+    );
+  kept.sort((a, b) => {
+    for (let k = 0; k < dirs.length; k++) {
+      const d =
+        dirs[k] === "up" ? b.row[k]! - a.row[k]! : a.row[k]! - b.row[k]!;
+      if (d !== 0) return d;
+    }
+    return a.id.localeCompare(b.id);
+  });
+  return kept.map((e) => e.id);
+}
+
 /** Non-dominated systems on (passed ↑, cost signal ↓, effect calls ↓).
  * The cost signal is the dollar `cost` when prices were supplied,
- * otherwise total token count. A system is dominated when another is at
- * least as good on all three axes and strictly better on one —
- * deterministic, ties broken by id. */
+ * otherwise total token count. The default axis triple, computed through
+ * the same dominance machinery configured axes use. */
 export function benchPareto(
   systems: BenchSystemResult[],
   hasPrices = false,
 ): string[] {
   const tokens = (s: BenchSystemResult) => s.usage.tokensIn + s.usage.tokensOut;
   const cost = (s: BenchSystemResult) => (hasPrices ? s.usage.cost : tokens(s));
-  const calls = (s: BenchSystemResult) => s.effectCalls;
-  const kept = systems.filter(
-    (s) =>
-      !systems.some(
-        (o) =>
-          o.id !== s.id &&
-          o.passed >= s.passed &&
-          cost(o) <= cost(s) &&
-          calls(o) <= calls(s) &&
-          (o.passed > s.passed || cost(o) < cost(s) || calls(o) < calls(s)),
-      ),
+  return dominancePareto(
+    systems.map((s) => s.id),
+    ["up", "down", "down"],
+    systems.map((s) => [s.passed, cost(s), s.effectCalls]),
   );
-  return kept
-    .sort(
-      (a, b) =>
-        b.passed - a.passed ||
-        cost(a) - cost(b) ||
-        calls(a) - calls(b) ||
-        a.id.localeCompare(b.id),
-    )
-    .map((s) => s.id);
+}
+
+/** The aggregate record an axis program sees — the system result minus
+ * its case list, matching BENCH_AXIS_NAMES. Exported so verification
+ * rebuilds the identical environment from a parsed report. */
+export function benchAxisEnv(s: BenchSystemResult): JsonObject {
+  return {
+    id: s.id,
+    manifestKey: s.manifestKey,
+    manifestDigest: s.manifestDigest,
+    passed: s.passed,
+    total: s.total,
+    effectCalls: s.effectCalls,
+    work: s.work as unknown as JsonObject,
+    usage: s.usage as unknown as JsonObject,
+    attribution: s.attribution as unknown as JsonObject,
+  };
+}
+
+/** Pareto under configured axes: every axis evaluates once per system and
+ * the recorded axisValues are what dominance ran on. Exported so
+ * verification recomputes the same claim. */
+export function axesPareto(
+  systems: BenchSystemResult[],
+  axes: BenchAxis[],
+): string[] {
+  return dominancePareto(
+    systems.map((s) => s.id),
+    axes.map((a) => a.dir),
+    systems.map((s) => axes.map((a) => s.axisValues![a.name]!)),
+  );
 }
 
 export async function runBenchmark(opts: BenchOptions): Promise<BenchReport> {
@@ -342,14 +451,27 @@ export async function runBenchmark(opts: BenchOptions): Promise<BenchReport> {
       cases,
     });
   }
+  if (opts.axes !== undefined) {
+    for (const s of systems) {
+      const values: Record<string, number> = {};
+      const env = benchAxisEnv(s);
+      for (const axis of opts.axes) {
+        values[axis.name] = evalAxis(axis.expr.program, env);
+      }
+      s.axisValues = values;
+    }
+  }
   const base: Omit<BenchReport, "digest"> = {
     contract: BENCH_CONTRACT,
     workload: digestCanonical(opts.cases as unknown as JsonValue),
     cases: opts.cases,
     systems,
-    pareto: benchPareto(systems, opts.prices !== undefined),
+    pareto: opts.axes !== undefined
+      ? axesPareto(systems, opts.axes)
+      : benchPareto(systems, opts.prices !== undefined),
   };
   if (opts.prices !== undefined) base.prices = opts.prices;
   if (opts.scorer !== undefined) base.scorer = opts.scorer;
+  if (opts.axes !== undefined) base.axes = opts.axes;
   return { ...base, digest: digestCanonical(base as unknown as JsonValue) };
 }
