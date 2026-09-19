@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing version tag at a commit with successful main CI
+        description: Existing version tag matching the selected workflow ref, with successful main CI
         required: true
         type: string
       publish:
@@ -26,25 +26,26 @@ jobs:
     permissions:
       contents: read
       actions: read
-    outputs:
-      sha: ${{ steps.identity.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: refs/tags/${{ inputs.tag }}
           persist-credentials: false
       - name: Require exact tag and successful main CI
-        id: identity
         env:
           RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_SHA: ${{ github.sha }}
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         shell: bash
         run: |
           set -euo pipefail
+          (( ${#RELEASE_TAG} <= 256 ))
           [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]
           sha=$(git rev-parse HEAD)
-          test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$sha"
+          test "$sha" = "$RELEASE_SHA"
+          # Fetch the requested identity, but never check out input-selected code.
+          git fetch --no-tags --depth=1 origin "refs/tags/$RELEASE_TAG"
+          test "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$sha"
           gh run list --workflow ci.yml --commit "$sha" --branch main --event push --limit 1 --json headSha,headBranch,status,conclusion > ci.json
           python3 - "$sha" <<'PY'
           import json, sys
@@ -52,7 +53,6 @@ jobs:
           if len(runs)!=1 or runs[0]!={"headSha":sys.argv[1],"headBranch":"main","status":"completed","conclusion":"success"}:
               raise SystemExit("Exact tagged commit needs successful main push CI before packaging")
           PY
-          printf 'sha=%s\n' "$sha" >> "$GITHUB_OUTPUT"
 
   build:
     needs: qualify
@@ -68,7 +68,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.qualify.outputs.sha }}
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
@@ -82,7 +81,7 @@ jobs:
       - name: Qualify archive and installer
         env:
           TARGET: ${{ matrix.target }}
-          RELEASE_SHA: ${{ needs.qualify.outputs.sha }}
+          RELEASE_SHA: ${{ github.sha }}
         shell: bash
         run: |
           set -euo pipefail
@@ -91,7 +90,7 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
           RELEASE_TAG: ${{ inputs.tag }}
-          RELEASE_SHA: ${{ needs.qualify.outputs.sha }}
+          RELEASE_SHA: ${{ github.sha }}
         shell: bash
         run: |
           set -euo pipefail
@@ -120,7 +119,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.tag }}
-          RELEASE_SHA: ${{ needs.qualify.outputs.sha }}
+          RELEASE_SHA: ${{ github.sha }}
         shell: bash
         run: |
           set -euo pipefail

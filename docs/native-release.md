@@ -55,10 +55,14 @@ binaries. Production signing/notarization remains separate work.
 
 ## Build and publish an exact source release
 
-`.github/workflows/release.yml` is manually dispatched with an existing version
-tag. The tagged commit must have a completed successful main push CI run.
-The workflow checks out that exact commit on each qualified platform, builds
-with pinned Rust 1.97.1 and `Cargo.lock`, and qualifies the actual release binary.
+`.github/workflows/release.yml` is manually dispatched at the desired release
+ref with an existing version tag as input. Select that tag as the workflow ref
+for an older release commit; selecting `main` works only when its current commit
+matches the tag. The tag must resolve to the workflow event commit, which must
+have a completed successful main push CI run. The tag input never selects code
+to execute: every checkout uses the workflow event commit. The workflow builds
+that exact source on each qualified platform with pinned Rust 1.97.1 and
+`Cargo.lock`, and qualifies the actual release binary.
 Production packaging refuses a dirty checkout. The test helper allows temporary
 dirty fixtures but labels their metadata `dirty-test-fixture`; publication rejects them.
 

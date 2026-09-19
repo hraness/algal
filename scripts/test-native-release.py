@@ -27,6 +27,7 @@ def call(argv, success=True, **kwargs):
 
 
 def check(binary, commit, rustc_version):
+    call([sys.executable, str(ROOT / "scripts/test-release-workflow.py")])
     binary = binary.resolve(strict=True)
     target = {"Darwin": "aarch64-apple-darwin", "Linux": "x86_64-unknown-linux-gnu"}[platform.system()]
     with tempfile.TemporaryDirectory(prefix="algal-release-test-") as temporary:
@@ -96,7 +97,7 @@ def check(binary, commit, rustc_version):
         assert (directory / "custom-target/release/algal").is_file()
         assert (directory / "source-installed/bin/algal").is_file()
         assert not list((prefix / "bin").glob(".algal-install.*"))
-    print(json.dumps({"ok": True, "checks": ["package-extracted-smoke", "verified-install", "overwrite-refusal", "explicit-force", "tampered-checksum-refusal", "existing-binary-preserved", "relative-CARGO_TARGET_DIR", "staging-cleanup", "oversized-PAX-refusal", "bounded-gzip-expansion"]}))
+    print(json.dumps({"ok": True, "checks": ["release-source-admission", "package-extracted-smoke", "verified-install", "overwrite-refusal", "explicit-force", "tampered-checksum-refusal", "existing-binary-preserved", "relative-CARGO_TARGET_DIR", "staging-cleanup", "oversized-PAX-refusal", "bounded-gzip-expansion"]}))
 
 
 if __name__ == "__main__":
