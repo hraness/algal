@@ -908,14 +908,14 @@ fn receipt_diff(a: &Value, b: &Value) -> Vec<String> {
     }
     if a.get("failure").is_some() != b.get("failure").is_some() {
         out.push("failure presence differs".into());
-    } else if let (Some(af), Some(bf)) = (a.get("failure"), b.get("failure")) {
-        if af["code"] != bf["code"] {
-            out.push(format!(
-                "failure.code: {} vs {}",
-                disp(&af["code"]),
-                disp(&bf["code"])
-            ));
-        }
+    } else if let (Some(af), Some(bf)) = (a.get("failure"), b.get("failure"))
+        && af["code"] != bf["code"]
+    {
+        out.push(format!(
+            "failure.code: {} vs {}",
+            disp(&af["code"]),
+            disp(&bf["code"])
+        ));
     }
     out
 }

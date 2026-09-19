@@ -1264,15 +1264,14 @@ pub async fn verify_search(report: &Value, store: &Store, tools: &Host) -> Resul
                 "generation {index}: holdout evidence leaked into selection"
             ));
         }
-        if let Some(previous) = &previous_winner {
-            if !candidates
+        if let Some(previous) = &previous_winner
+            && !candidates
                 .iter()
                 .any(|candidate| candidate["manifestDigest"].as_str() == Some(previous.as_str()))
-            {
-                mismatches.push(format!(
-                    "generation {index}: previous winner did not survive"
-                ));
-            }
+        {
+            mismatches.push(format!(
+                "generation {index}: previous winner did not survive"
+            ));
         }
         for proposed in generation["proposed"]
             .as_array()

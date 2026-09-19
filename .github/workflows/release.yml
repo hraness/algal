@@ -1,0 +1,182 @@
+name: Native release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag matching the selected workflow ref, with successful main CI
+        required: true
+        type: string
+      publish:
+        description: Attach verified assets to a draft or prerelease (create a prerelease if absent)
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require exact tag and successful main CI
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          (( ${#RELEASE_TAG} <= 256 ))
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]
+          sha=$(git rev-parse HEAD)
+          test "$sha" = "$RELEASE_SHA"
+          # Fetch the requested identity, but never check out input-selected code.
+          git fetch --no-tags --depth=1 origin "refs/tags/$RELEASE_TAG"
+          test "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$sha"
+          gh run list --workflow ci.yml --commit "$sha" --branch main --event push --limit 1 --json headSha,headBranch,status,conclusion > ci.json
+          python3 - "$sha" <<'PY'
+          import json, sys
+          runs=json.load(open("ci.json"))
+          if len(runs)!=1 or runs[0]!={"headSha":sys.argv[1],"headBranch":"main","status":"completed","conclusion":"success"}:
+              raise SystemExit("Exact tagged commit needs successful main push CI before packaging")
+          PY
+
+  build:
+    needs: qualify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - os: macos-14
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.97.1 --profile minimal
+      - name: Build locked release executable
+        env:
+          CARGO_BUILD_TARGET: ${{ matrix.target }}
+        run: cargo +1.97.1 build --release --locked -p algal --bin algal
+      - name: Qualify archive and installer
+        env:
+          TARGET: ${{ matrix.target }}
+          RELEASE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/test-native-release.py --binary "target/$TARGET/release/algal" --commit "$RELEASE_SHA" --rustc-version "$(rustc +1.97.1 --version)"
+      - name: Package exact source artifact
+        env:
+          TARGET: ${{ matrix.target }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/package-native.py --binary "target/$TARGET/release/algal" --target "$TARGET" --tag "$RELEASE_TAG" --commit "$RELEASE_SHA" --rustc-version "$(rustc +1.97.1 --version)" --out artifacts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.target }}
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    if: inputs.publish
+    needs: [qualify, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: artifacts
+          merge-multiple: true
+      - name: Publish only verified prerelease assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$RELEASE_TAG" "$RELEASE_SHA" <<'PY'
+          import glob,hashlib,json,pathlib,sys
+          metadata=glob.glob("artifacts/*.release.json")
+          if len(metadata)!=2: raise SystemExit("Expected two qualified native packages")
+          targets=set()
+          checksums=glob.glob("artifacts/*.sha256")
+          if len(checksums)!=2 or len(glob.glob("artifacts/*.tar.gz"))!=2: raise SystemExit("Expected two archive/checksum pairs")
+          for path in metadata:
+              value=json.load(open(path))
+              if value["tag"]!=sys.argv[1] or value["commit"]!=sys.argv[2] or value["sourceState"]!="clean": raise SystemExit("Artifact source identity mismatch")
+              if pathlib.Path(value["archive"]).name!=value["archive"] or hashlib.sha256(pathlib.Path("artifacts",value["archive"]).read_bytes()).hexdigest()!=value["archiveSha256"]: raise SystemExit("Manifest archive digest mismatch")
+              targets.add(value["target"])
+          if targets!={"x86_64-unknown-linux-gnu","aarch64-apple-darwin"}: raise SystemExit("Artifact target mismatch")
+          for path in checksums:
+              expected,name=pathlib.Path(path).read_text().split()
+              if pathlib.Path(name).name!=name or hashlib.sha256(pathlib.Path("artifacts",name).read_bytes()).hexdigest()!=expected: raise SystemExit("Artifact checksum mismatch")
+          PY
+          verify_release_tag() {
+            python3 - "$RELEASE_TAG" "$RELEASE_SHA" "$GH_REPO" <<'PYTAG'
+          import json, re, subprocess, sys
+          tag, expected, repo = sys.argv[1:]
+          if len(tag) > 256 or not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.-]+)?", tag):
+              raise SystemExit("Invalid release tag")
+          if not re.fullmatch(r"[0-9a-f]{40}", expected) or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
+              raise SystemExit("Invalid qualified source identity")
+          def lookup(endpoint):
+              try:
+                  result = subprocess.run(["gh", "api", "--hostname", "github.com", endpoint, "--jq", ".object"],
+                                          check=True, capture_output=True, text=True, timeout=30)
+                  if len(result.stdout) > 4096:
+                      raise ValueError("Oversized tag response")
+                  value = json.loads(result.stdout)
+                  if not isinstance(value, dict) or not isinstance(value.get("sha"), str) or not re.fullmatch(r"[0-9a-f]{40}", value["sha"]):
+                      raise ValueError("Invalid tag response")
+                  return value
+              except (subprocess.SubprocessError, OSError, ValueError):
+                  raise SystemExit("Cannot establish the current remote release tag identity") from None
+          current = lookup(f"repos/{repo}/git/ref/tags/{tag}")
+          seen = set()
+          while current.get("type") != "commit":
+              if current.get("type") != "tag" or current["sha"] in seen or len(seen) >= 8:
+                  raise SystemExit("Remote release tag has an unsupported or excessive annotation chain")
+              seen.add(current["sha"])
+              current = lookup(f"repos/{repo}/git/tags/{current['sha']}")
+          if current["sha"] != expected:
+              raise SystemExit("Remote release tag moved from the qualified source; refusing publication")
+          PYTAG
+          }
+          if gh release view "$RELEASE_TAG" --json isDraft,isPrerelease > release.json; then
+            python3 -c 'import json; r=json.load(open("release.json")); assert r["isDraft"] or r["isPrerelease"], "Refusing to mutate a stable release"'
+          else
+            printf '%s\n' "Qualified native process VM prerelease for source $RELEASE_SHA." 'Linux x86_64: Ubuntu 24.04/glibc 2.39+. macOS arm64: macOS 14+, unsigned and not notarized. No Bun or Cargo required to run. Python 3 is used only by the verification/installation helpers.' > notes.txt
+            verify_release_tag
+            gh release create "$RELEASE_TAG" --verify-tag --prerelease --title "ALGAL $RELEASE_TAG" --notes-file notes.txt
+          fi
+          verify_release_tag
+          gh release upload "$RELEASE_TAG" artifacts/*

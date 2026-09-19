@@ -9,6 +9,9 @@ pub struct Error {
     /// Host-only suspension evidence; serialized on the effect receipt.
     #[serde(skip)]
     pub wake: Vec<String>,
+    /// Host-only: dispatch may have happened without confirmed settlement.
+    #[serde(skip)]
+    pub uncertain: bool,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -19,7 +22,12 @@ impl Error {
             code: code.into(),
             message: message.into(),
             wake: Vec::new(),
+            uncertain: false,
         }
+    }
+    pub fn uncertain(mut self) -> Self {
+        self.uncertain = true;
+        self
     }
     pub fn suspended(message: impl Into<String>, handle: &str) -> Self {
         let mut error = Self::new("EFFECT_SUSPENDED", message);

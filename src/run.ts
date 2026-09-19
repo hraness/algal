@@ -564,22 +564,27 @@ async function journalBefore(ctx: RunContext, binding: JournalBinding): Promise<
     return { token: asDigest(ticket.token, "journal token") };
   });
 }
+// Internal only: the host deadline expired while invocation was unresolved.
+// An adapter-returned BUDGET_EXHAUSTED is a settled result and is distinct.
+class UnsettledEffectDeadline extends AlgalError {
+  constructor(message: string) { super("BUDGET_EXHAUSTED", message, undefined, {uncertain: true}); }
+}
 async function boundedCall<T>(invoke: (signal?: AbortSignal) => Promise<T>, timeout: number | undefined, message: string): Promise<T> {
   if (timeout === undefined) return invoke();
   if (timeout <= 0) throw new AlgalError("BUDGET_EXHAUSTED", message);
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
-  try {
-    return await Promise.race([
-      invoke(controller.signal),
-      new Promise<never>((_, reject) => controller.signal.addEventListener("abort", () => {
-        reject(new AlgalError("BUDGET_EXHAUSTED", message));
-      }, { once: true })),
-    ]);
-  } finally { clearTimeout(timer); }
+  let rejectDeadline!: (error: Error) => void;
+  const expired = new Promise<never>((_, reject) => { rejectDeadline = reject; });
+  const timer = setTimeout(() => {
+    // Select uncertainty before abort listeners can return a misleading error.
+    rejectDeadline(new UnsettledEffectDeadline(message));
+    controller.abort();
+  }, timeout);
+  try { return await Promise.race([invoke(controller.signal), expired]); }
+  finally { clearTimeout(timer); }
 }
-/** One attempt owns one terminal receipt. The losing timeout promise never
- * writes the journal or refines the receipt after that terminal is selected. */
+/** A journal cannot turn local cancellation into proof of external settlement.
+ * Losing adapter promises may finish, but never publish a journal completion. */
 async function providerAttempt(
   ctx: RunContext, request: EffectRequest, executor: Executor,
   timeout: number | undefined, retryPolicy = true,
@@ -614,6 +619,8 @@ async function providerAttempt(
   try {
     const result = await boundedCall(async (signal) => {
       if (!journal) meta = await executor.receiptFor?.(request);
+      if (signal?.aborted || (deadline !== undefined && performance.now() >= deadline))
+        throw new AlgalError("BUDGET_EXHAUSTED", timeoutMessage);
       if (executor.executeEffect) {
         const result = await executor.executeEffect(request, signal);
         return { output: result.output, metadata: { ...meta, ...result.metadata } };
@@ -623,16 +630,20 @@ async function providerAttempt(
     meta = result.metadata;
     effect = { requestDigest, output: result.output, executor: meta?.executor ?? executor.id };
   } catch (error) {
+    if (journal && error instanceof AlgalError && error.uncertain)
+      return journalStep(ctx, async () => { throw error; });
     const report = errorReport(error);
     effect = { requestDigest, error: { code: report.code, message: report.message }, executor: meta?.executor ?? executor.id };
     const wake = suspensionWake(error, meta?.wake);
     if (wake.length > 0) effect.wake = wake;
-    if (report.code === "EFFECT_SUSPENDED") effect.retryable = false;
+    if (report.code === "EFFECT_SUSPENDED" || (error instanceof AlgalError && error.uncertain)) effect.retryable = false;
   }
   if (meta?.usage) effect.usage = structuredClone(meta.usage);
   if (meta?.cached) effect.cached = true;
   if (meta?.configurationDigest) effect.configurationDigest = meta.configurationDigest;
   if (retryPolicy && (executor.retryable === false || meta?.retryable === false)) effect.retryable = false;
+  // Compaction has no retry loop, but replay must retain its recorded policy.
+  if (executor.replay === true && meta?.retryable === false) effect.retryable = false;
   // Adapter-owned output objects must not change while persistence awaits I/O.
   const terminal = journal ? await journalStep(ctx, async () => structuredClone(effect)) : effect;
   if (journal && ticket?.token !== undefined)
@@ -663,12 +674,14 @@ async function toolAttempt(
     }), timeout, timeoutMessage);
     effect = { requestDigest, output: outputs as JsonValue, executor: `tool:${name}` };
   } catch (error) {
+    if (journal && error instanceof AlgalError && error.uncertain)
+      return journalStep(ctx, async () => { throw error; });
     const report = errorReport(error);
     const code = report.code === "INTERNAL" ? "TOOL_FAILED" : report.code;
     const wake = suspensionWake(error);
     effect = {
       requestDigest, error: { code, message: report.message }, executor: `tool:${name}`,
-      ...(code === "EFFECT_SUSPENDED" ? { retryable: false as const } : {}),
+      ...(code === "EFFECT_SUSPENDED" || (error instanceof AlgalError && error.uncertain) ? { retryable: false as const } : {}),
       ...(wake.length > 0 ? { wake } : {}),
     };
   }
@@ -1192,7 +1205,7 @@ async function activate(
           ctx.work.units +=
             WORK.effectBase + compactCtxBytes * WORK.perContextByte;
           emit(ctx, { kind: "effect", path, digest: compactDigest });
-          const eff = await providerAttempt(ctx, compactReq, compactExec, undefined, false);
+          const eff = await providerAttempt(ctx, compactReq, compactExec, cell.budget?.maxEffectMs, false);
           ctx.effects.push(eff);
           if (eff.error) throw new AlgalError(eff.error.code, eff.error.message);
           const raw = eff.output!;

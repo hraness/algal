@@ -71,10 +71,10 @@ fn publish(path: &Path, bytes: &[u8], replace: bool) -> Result<()> {
         Err(e) if !replace && e.kind() == std::io::ErrorKind::AlreadyExists => (),
         Err(e) => return Err(e.into()),
     }
-    if let Err(e) = cleanup {
-        if e.kind() != std::io::ErrorKind::NotFound {
-            return Err(e.into());
-        }
+    if let Err(e) = cleanup
+        && e.kind() != std::io::ErrorKind::NotFound
+    {
+        return Err(e.into());
     }
     Ok(())
 }
@@ -144,16 +144,16 @@ impl Store {
     pub fn put(&mut self, kind: &str, value: &Value) -> Result<String> {
         let key = digest(value)?;
         let path = self.path(kind, &key)?;
-        if self.writable {
-            if let Some(path) = path {
-                publish(&path, canonical(value)?.as_bytes(), false)?;
-                let installed = read_json(File::open(&path)?, MAX_DOCUMENT_BYTES)?;
-                if digest(&installed)? != key {
-                    return Err(Error::new(
-                        "DIGEST_MISMATCH",
-                        "existing store content is corrupt",
-                    ));
-                }
+        if self.writable
+            && let Some(path) = path
+        {
+            publish(&path, canonical(value)?.as_bytes(), false)?;
+            let installed = read_json(File::open(&path)?, MAX_DOCUMENT_BYTES)?;
+            if digest(&installed)? != key {
+                return Err(Error::new(
+                    "DIGEST_MISMATCH",
+                    "existing store content is corrupt",
+                ));
             }
         }
         self.data
@@ -239,10 +239,10 @@ impl Store {
             .ok_or_else(|| Error::invalid("effect receipt needs requestDigest"))?
             .to_owned();
         let key = Self::effect_key(&request_digest, executor)?;
-        if self.writable {
-            if let Some(path) = self.effect_path(&key)? {
-                publish(&path, canonical(receipt)?.as_bytes(), false)?;
-            }
+        if self.writable
+            && let Some(path) = self.effect_path(&key)?
+        {
+            publish(&path, canonical(receipt)?.as_bytes(), false)?;
         }
         self.data
             .entry(("effects".to_owned(), key))
@@ -252,10 +252,10 @@ impl Store {
 
     pub fn get_slot(&self, name: &str) -> Result<Option<Value>> {
         id(&json!(name))?;
-        if !self.writable || self.root.is_none() {
-            if let Some(value) = self.slots.get(name) {
-                return Ok(Some(value.clone()));
-            }
+        if (!self.writable || self.root.is_none())
+            && let Some(value) = self.slots.get(name)
+        {
+            return Ok(Some(value.clone()));
         }
         let Some(root) = &self.root else {
             return Ok(None);
@@ -277,15 +277,15 @@ impl Store {
         if bytes.len() > 262_144 {
             return Err(Error::limit("slot bytes"));
         }
-        if self.writable {
-            if let Some(root) = &self.root {
-                no_link(root)?;
-                publish(
-                    &root.join("slots").join(format!("{name}.json")),
-                    bytes.as_bytes(),
-                    true,
-                )?;
-            }
+        if self.writable
+            && let Some(root) = &self.root
+        {
+            no_link(root)?;
+            publish(
+                &root.join("slots").join(format!("{name}.json")),
+                bytes.as_bytes(),
+                true,
+            )?;
         }
         self.slots.insert(name.to_owned(), value.clone());
         Ok(())

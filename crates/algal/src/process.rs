@@ -179,10 +179,11 @@ fn record(value: Value) -> Result<ProcessRecord> {
     for key in [&record.previous, &record.receipt].into_iter().flatten() {
         check_digest(key)?;
     }
-    if let Some(cause) = &record.cause {
-        if cause != "start" && cause != "manual" {
-            parse_capability_handle(cause, None)?;
-        }
+    if let Some(cause) = &record.cause
+        && cause != "start"
+        && cause != "manual"
+    {
+        parse_capability_handle(cause, None)?;
     }
     if record.status == "ready" {
         if record.generation != 0
@@ -435,10 +436,10 @@ impl ProcessService {
         for (index, state) in chain.iter().enumerate() {
             if !["ready", "uncertain"].contains(&state.process.status.as_str()) {
                 let receipt = self.load_receipt(&state.process)?;
-                if let Some(previous) = index.checked_sub(1).and_then(|index| chain.get(index)) {
-                    if previous.process.receipt.is_some() {
-                        continuation(&self.load_receipt(&previous.process)?, &receipt)?;
-                    }
+                if let Some(previous) = index.checked_sub(1).and_then(|index| chain.get(index))
+                    && previous.process.receipt.is_some()
+                {
+                    continuation(&self.load_receipt(&previous.process)?, &receipt)?;
                 }
                 if receipt["outcome"] != state.process.status
                     || wake(&receipt)? != state.process.wake
@@ -881,16 +882,16 @@ impl ProcessService {
         let chain = self.chain(name)?;
         let mut receipts = BTreeSet::new();
         for state in &chain {
-            if let Some(key) = &state.process.receipt {
-                if receipts.insert(key.clone()) {
-                    let receipt = self.load_receipt(&state.process)?;
-                    let manifest = self.manifest(&state.process)?;
-                    if runtime::verify(&receipt, manifest, &self.store, host).await?["ok"] != true {
-                        return Err(Error::new(
-                            "VERIFY_FAILED",
-                            "process generation does not replay",
-                        ));
-                    }
+            if let Some(key) = &state.process.receipt
+                && receipts.insert(key.clone())
+            {
+                let receipt = self.load_receipt(&state.process)?;
+                let manifest = self.manifest(&state.process)?;
+                if runtime::verify(&receipt, manifest, &self.store, host).await?["ok"] != true {
+                    return Err(Error::new(
+                        "VERIFY_FAILED",
+                        "process generation does not replay",
+                    ));
                 }
             }
         }

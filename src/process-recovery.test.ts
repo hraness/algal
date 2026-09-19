@@ -117,3 +117,41 @@ test("journal inspection selects the latest dispatch after a suspended generatio
   expect(asObject(report.header, "header").intent).toBe(completed?.process.previous);
   expect(report.effects).toHaveLength(1);
 });
+
+
+test("a timed-out journaled write keeps the exact uncertain intent and never admits its fail handler", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "algal-process-timeout-")); directories.push(dir);
+  let release!: () => void;
+  const pending = new Promise<void>(done => { release = done; });
+  let attempts = 0;
+  const writes: string[] = [];
+  const tools: ToolRegistry = new Map([
+    ["pending.v1", {signature: {...signature, effect: "write"}, configurationDigest, tool: async () => {
+      attempts++; await pending; writes.push("late-commit"); return {value: "late"};
+    }}],
+    ["fallback.v1", {signature: {...signature, inputs: {error: {type: "json"}}, effect: "write"}, configurationDigest,
+      tool: async () => { writes.push("fallback-commit"); return {value: "fallback"}; }}],
+  ]);
+  const vm = new ProcessSupervisor(dir, {tools, journal: true});
+  await vm.create("actor", parseOrganismManifest({contract: "algal.organism.v1", key: "organism:unknown-timeout", name: "Unknown timeout",
+    cells: [{id: "pending", kind: "tool", tool: "pending.v1", budget: {maxEffectMs: 10}}, {id: "fallback", kind: "tool", tool: "fallback.v1"}],
+    edges: [{from: {cell: "pending", port: "value"}, to: {cell: "fallback", port: "error"}, on: "fail"}]}));
+  await expect(vm.tick("actor")).rejects.toThrow("exceeded maxEffectMs");
+  const uncertain = await vm.inspect("actor");
+  expect(uncertain.process.status).toBe("uncertain");
+  expect(uncertain.process.receipt).toBeUndefined();
+  const beforeLate = await vm.journal("actor");
+  const entries = asObject(beforeLate, "journal").effects as {record: {state: string; receipt?: unknown}}[];
+  expect(entries).toHaveLength(1);
+  expect(entries[0]?.record.state).toBe("started");
+  expect(entries[0]?.record.receipt).toBeUndefined();
+  expect(writes).toEqual([]);
+  release(); await Bun.sleep(1);
+  expect(writes).toEqual(["late-commit"]);
+  expect(await vm.journal("actor")).toEqual(beforeLate);
+  const reopened = new ProcessSupervisor(dir, {tools, journal: true});
+  await expect(reopened.recover("actor", uncertain.digest)).rejects.toThrow("unknown completion");
+  expect((await reopened.inspect("actor")).digest).toBe(uncertain.digest);
+  expect(attempts).toBe(1);
+  expect(writes).toEqual(["late-commit"]);
+});

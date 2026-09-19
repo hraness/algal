@@ -85,10 +85,10 @@ fn literal(literal: &Literal, arities: &mut BTreeMap<String, usize>) -> Result<B
     if literal.terms.len() > 8 {
         return Err(Error::limit("relation arity"));
     }
-    if let Some(arity) = arities.insert(literal.relation.clone(), literal.terms.len()) {
-        if arity != literal.terms.len() {
-            return Err(Error::invalid("inconsistent relation arity"));
-        }
+    if let Some(arity) = arities.insert(literal.relation.clone(), literal.terms.len())
+        && arity != literal.terms.len()
+    {
+        return Err(Error::invalid("inconsistent relation arity"));
     }
     let mut vars = BTreeSet::new();
     for term in &literal.terms {

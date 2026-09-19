@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { manifestToJson, parseOrganismManifest, type OrganismManifest } from "./contract";
 import { digestCanonical, type Digest } from "./digest";
 import { cachedExecutor, replayExecutor, type EffectReceipt, type Executor } from "./effects";
-import { AlgalError } from "./errors";
+import { AlgalError, errorReport } from "./errors";
+import { commandJson } from "./io";
 import { ProcessJournal, type JournalBinding, type RuntimeJournal } from "./process-journal";
 import { runOrganism, type RunOptions } from "./run";
 import { MemoryStore } from "./store";
@@ -342,33 +343,115 @@ describe("runtime durable journal boundaries", () => {
     expect(calls).toBe(0);
   });
 
-  test("timeout selects one terminal receipt; a late executor result cannot rewrite its journal metadata", async () => {
+  test("an unresolved provider deadline leaves its journal uncertain despite a late result", async () => {
     const manifest = parseOrganismManifest({
       contract: "algal.organism.v1", key: "organism:journal-timeout", name: "Journal timeout",
-      cells: [{ id: "agent", kind: "agent", prompt: "wait", output: { kind: "text" }, budget: { maxEffectMs: 50 } }],
+      cells: [{ id: "agent", kind: "agent", prompt: "wait", output: { kind: "text" }, budget: { maxEffectMs: 1000 } }],
     });
     const { options, journal, recover } = await setup(manifest);
     let release!: () => void;
     const late = new Promise<void>((done) => { release = done; });
+    let entered = false;
     const persisted: EffectReceipt[] = [];
     const executor: Executor = {
       id: "provider", cacheIdentity: config,
       receiptFor: () => ({ configurationDigest: config, usage: { tokensIn: 1 } }),
       execute: async () => "unused",
-      executeEffect: async () => { await late; return { output: "late", metadata: { executor: "late-provider", usage: { tokensIn: 999 } } }; },
+      executeEffect: async () => { entered = true; await late; return { output: "late", metadata: { executor: "late-provider", usage: { tokensIn: 999 } } }; },
     };
     const wrapped = observed(journal, [], { after: async (token, receipt) => { persisted.push(structuredClone(receipt)); await journal.after(token, receipt); } });
-    const result = await runOrganism({ ...options, executors: [executor], journal: wrapped });
-    journal.assertComplete();
-    expect(result.outcome).toBe("failed");
-    expect(persisted).toHaveLength(1);
-    expect(persisted[0]).toMatchObject({ executor: "provider", usage: { tokensIn: 1 }, error: { code: "BUDGET_EXHAUSTED" } });
+    await expect(runOrganism({ ...options, executors: [executor], journal: wrapped })).rejects.toThrow("exceeded maxEffectMs");
+    expect(entered).toBe(true);
+    expect(() => journal.assertComplete()).toThrow("exceeded maxEffectMs");
     release();
     await new Promise((done) => setTimeout(done, 1));
-    expect(persisted).toEqual(result.effects);
-    const restored = await recover();
-    expect(await runOrganism({ ...options, executors: [executor], journal: restored })).toEqual(result);
-    restored.assertComplete();
-    expect(persisted).toHaveLength(1);
+    expect(persisted).toEqual([]);
+    await expect(recover()).rejects.toThrow("unknown completion");
   });
+
+  test("a provider abort handler cannot settle a deadline as an ordinary adapter error", async () => {
+    const manifest = parseOrganismManifest({
+      contract: "algal.organism.v1", key: "organism:journal-abort", name: "Journal abort",
+      cells: [{ id: "agent", kind: "agent", prompt: "wait", output: { kind: "text" }, budget: { maxEffectMs: 1000 } }],
+    });
+    const { options, journal, recover } = await setup(manifest);
+    // The deadline includes durable journal admission. Give filesystem syncs
+    // headroom so this fixture exercises the post-dispatch abort race.
+    const events: string[] = [];
+    const executor: Executor = {id: "provider", cacheIdentity: config, execute: async (_request, signal) => new Promise((_, reject) => {
+      events.push("dispatch");
+      signal!.addEventListener("abort", () => {
+        events.push("abort");
+        reject(new AlgalError("BUDGET_EXHAUSTED", "adapter noticed abort"));
+      }, {once: true});
+    })};
+    const outcome = await runOrganism({...options, executors: [executor]}).then(
+      (result) => ({ result }),
+      (error: unknown) => ({ error }),
+    );
+    expect(events).toEqual(["dispatch", "abort"]);
+    const failure = "error" in outcome ? outcome.error : undefined;
+    expect(failure).toBeInstanceOf(AlgalError);
+    if (!(failure instanceof AlgalError)) throw new Error("expected an uncertain provider deadline");
+    expect(failure.code).toBe("BUDGET_EXHAUSTED");
+    expect(failure.uncertain).toBe(true);
+    expect(failure.message).toContain("exceeded maxEffectMs");
+    expect(() => journal.assertComplete()).toThrow("exceeded maxEffectMs");
+    await expect(recover()).rejects.toThrow("unknown completion");
+  });
+
+  test("an adapter-returned budget error remains a settled and replayable result", async () => {
+    const { options, journal, recover } = await setup(toolManifest("write", 50));
+    let calls = 0;
+    const tools = toolsFor("write", async () => { calls++; throw new AlgalError("BUDGET_EXHAUSTED", "adapter quota exhausted before write"); });
+    const result = await runOrganism({...options, tools});
+    journal.assertComplete();
+    expect(result.effects[0]?.error).toEqual({code: "BUDGET_EXHAUSTED", message: "adapter quota exhausted before write"});
+    const restored = await recover();
+    expect(await runOrganism({...options, journal: restored, tools})).toEqual(result);
+    restored.assertComplete();
+    expect(calls).toBe(1);
+  });
+
+  test("a command adapter's own timeout remains an unsettled journaled write", async () => {
+    const { options, journal, recover } = await setup(toolManifest("write"));
+    const tools = toolsFor("write", async () => {
+      await commandJson([process.execPath, "-e", "await Bun.stdin.text(); await Bun.sleep(10000);"], null, {timeoutMs: 20});
+      return {value: "never"};
+    });
+    await expect(runOrganism({...options, tools})).rejects.toMatchObject({code: "BUDGET_EXHAUSTED", uncertain: true});
+    expect(() => journal.assertComplete()).toThrow("command cancelled or timed out");
+    await expect(recover()).rejects.toThrow("unknown completion");
+  });
+
+  for (const failure of ["overflow", "signal"] as const) {
+    test(`a command ${failure} cannot complete or retry a journaled write`, async () => {
+      const {options, journal, recover} = await setup(toolManifest());
+      let calls = 0;
+      const tools = toolsFor("write", async () => {
+        calls++;
+        if (failure === "signal") await commandJson(["/bin/sh", "-c", "kill -KILL $$"], null);
+        else await commandJson([process.execPath, "-e", "await Bun.stdin.text(); console.log('x'.repeat(4096)); await Bun.sleep(10000);"], null, {maxStdoutBytes: 64});
+        return {value: "unreachable"};
+      });
+      await expect(runOrganism({...options, tools})).rejects.toMatchObject({uncertain: true});
+      expect(() => journal.assertComplete()).toThrow();
+      await expect(recover()).rejects.toThrow("unknown completion");
+      expect(calls).toBe(1);
+    });
+  }
+
+  test("adapter uncertainty prevents nonjournal retries without entering error wire data", async () => {
+    const error = new AlgalError("EFFECT_FAILED", "completion unknown", {detail: "host-only"}, {uncertain: true});
+    expect(errorReport(error)).toEqual({code: "EFFECT_FAILED", message: "completion unknown"});
+    expect(error.details).toEqual({detail: "host-only"});
+    const manifest = parseOrganismManifest({contract: "algal.organism.v1", key: "organism:uncertain-retry", name: "Uncertain retry",
+      cells: [{id: "agent", kind: "agent", prompt: "Write", output: {kind: "text"}, retry: {attempts: 2}}]});
+    let calls = 0;
+    const result = await runOrganism({manifest, store: new MemoryStore(), fns: new Map(), executors: [{id: "provider", execute: async () => {calls++; throw error;}}]});
+    expect(calls).toBe(1);
+    expect(result.effects[0]).toMatchObject({error: {code: "EFFECT_FAILED", message: "completion unknown"}, retryable: false});
+    expect(JSON.stringify(result)).not.toContain('"uncertain":');
+  });
+
 });

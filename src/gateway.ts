@@ -44,17 +44,23 @@ function outputSchema(output: AgentOutput): JsonObject {
   return output.schema;
 }
 
-async function boundedJson(response: Response, maxBytes: number): Promise<unknown> {
+async function boundedJson(response: Response, maxBytes: number, signal?: AbortSignal): Promise<unknown> {
   if (response.status >= 300 && response.status < 400) {
     throw new AlgalError("EFFECT_FAILED", "AI Gateway redirects are forbidden");
   }
   const declared = response.headers.get("content-length");
   if (declared !== null && Number(declared) > maxBytes) {
-    throw new AlgalError("EFFECT_FAILED", `AI Gateway response exceeds ${maxBytes} bytes`);
+    void response.body?.cancel().catch(() => {});
+    throw new AlgalError("EFFECT_FAILED", `AI Gateway response exceeds ${maxBytes} bytes`, undefined, {uncertain: true});
   }
-  const bytes = await boundedBytes(response.body, maxBytes, "AI Gateway response");
-  if (bytes.byteLength > maxBytes) {
-    throw new AlgalError("EFFECT_FAILED", `AI Gateway response exceeds ${maxBytes} bytes`);
+  let bytes: Uint8Array;
+  try { bytes = await boundedBytes(response.body, maxBytes, "AI Gateway response", signal); }
+  catch (error) {
+    const limited = error instanceof AlgalError && error.code === "BUDGET_EXHAUSTED";
+    throw new AlgalError(limited ? "BUDGET_EXHAUSTED" : "EFFECT_FAILED",
+      limited ? "AI Gateway response cancelled or exceeded byte limit; external completion uncertain"
+        : "AI Gateway response transport failed; external completion uncertain",
+      undefined, {uncertain: true});
   }
   const text = new TextDecoder().decode(bytes);
   if (!response.ok) {
@@ -75,7 +81,7 @@ function credential(options: GatewayExecutorOptions): string {
   const value = options.credential
     ?? process.env.AI_GATEWAY_API_KEY
     ?? process.env.VERCEL_OIDC_TOKEN;
-  if (typeof value !== "string" || value.length < 16 || value.length > 8192) {
+  if (typeof value !== "string" || value.length < 16 || value.length > 8192 || /[\r\n]/.test(value)) {
     throw new AlgalError(
       "EFFECT_FAILED",
       "AI Gateway credential is not configured",
@@ -90,6 +96,8 @@ export function vercelGatewayExecutor(options: GatewayExecutorOptions): Executor
   }
   const fetcher = options.fetch ?? globalThis.fetch;
   const maxResponseBytes = options.maxResponseBytes ?? 2_097_152;
+  if (!Number.isSafeInteger(maxResponseBytes) || maxResponseBytes < 1 || maxResponseBytes > 67_108_864)
+    throw new AlgalError("PARSE_FAILED", "invalid AI Gateway response byte limit");
   const run = async (request: EffectRequest, signal?: AbortSignal): Promise<ExecutorResult> => {
     if (request.kind !== "agent" && request.kind !== "classifier") {
       throw new AlgalError(
@@ -97,6 +105,7 @@ export function vercelGatewayExecutor(options: GatewayExecutorOptions): Executor
         `AI Gateway cannot serve effect kind "${request.kind}"`,
       );
     }
+    if (signal?.aborted) throw new AlgalError("BUDGET_EXHAUSTED", "AI Gateway request cancelled before dispatch");
     const token = credential(options);
     const schema = {
       type: "object",
@@ -131,17 +140,19 @@ export function vercelGatewayExecutor(options: GatewayExecutorOptions): Executor
       max_tokens: Math.max(1, Math.min(16_384, Math.ceil(request.budget.maxOutputBytes / 4))),
       temperature: 0,
     };
-    const response = await fetcher(`${VERCEL_AI_GATEWAY_BASE_URL}/chat/completions`, {
-      method: "POST",
-      redirect: "error",
-      ...(signal ? { signal } : {}),
-      headers: {
-        authorization: `Bearer ${token}`,
-        "content-type": "application/json",
-      },
+    const init: RequestInit = {
+      method: "POST", redirect: "error", ...(signal ? {signal} : {}),
+      headers: {authorization: `Bearer ${token}`, "content-type": "application/json"},
       body: canonicalize(body as unknown as JsonValue),
-    });
-    const raw = record(await boundedJson(response, maxResponseBytes), "AI Gateway response");
+    };
+    if (signal?.aborted) throw new AlgalError("BUDGET_EXHAUSTED", "AI Gateway request cancelled before dispatch");
+    let response: Response;
+    try { response = await fetcher(`${VERCEL_AI_GATEWAY_BASE_URL}/chat/completions`, init); }
+    catch {
+      throw new AlgalError(signal?.aborted ? "BUDGET_EXHAUSTED" : "EFFECT_FAILED",
+        "AI Gateway request transport failed; external completion uncertain", undefined, {uncertain: true});
+    }
+    const raw = record(await boundedJson(response, maxResponseBytes, signal), "AI Gateway response");
     if (!Array.isArray(raw.choices) || raw.choices.length !== 1) {
       throw new AlgalError("EFFECT_UNPARSEABLE", "AI Gateway response must contain one choice");
     }
