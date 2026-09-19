@@ -37,8 +37,11 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3.14"
-      - run: rustup toolchain install stable --profile minimal --component clippy,rustfmt
-      - run: rustup default stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: rustup toolchain install 1.97.1 --profile minimal --component clippy,rustfmt
+      - run: rustup default 1.97.1
       - run: bun install --frozen-lockfile
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
@@ -47,3 +50,5 @@ jobs:
       - run: bun scripts/native-parity.ts
       - run: bun scripts/vm-demo.ts --native ./target/debug/algal
       - run: bun scripts/recovery-demo.ts --native ./target/debug/algal
+      - run: bun scripts/repair-demo.ts --native ./target/debug/algal
+      - run: python3 scripts/test-native-release.py --binary target/debug/algal --commit "$GITHUB_SHA" --rustc-version "$(rustc --version)"

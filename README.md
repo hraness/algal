@@ -38,6 +38,14 @@ process supervisor now adds durable checkpoints, mailbox wake scheduling, and
 per-generation offline verification; see [the VM demonstration](docs/vm.md). See
 [the design audit](docs/algal-design.md) for current qualification.
 
+The [durable repair workflow](docs/repair.md) now admits one coding attempt,
+retains its exact patch, and resumes independent host validation after a wait.
+Failed or interrupted work cannot silently become a successful review packet.
+[Native release packages](docs/native-release.md) distribute the process kernel
+for Ubuntu 24.04 x86_64 and macOS 14+ Apple silicon without Bun or Cargo. The
+repair and GitHub integration hosts still require Bun. These are qualified
+prerelease surfaces, not a claim that every provider or deployment is production-ready.
+
 ## Rename and compatibility
 
 ALGAL was previously Algal. The package is `@hraness/algal` and the command

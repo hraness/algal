@@ -59,7 +59,8 @@ facing failed-check list and reasons are byte bounded with explicit truncation.
 | `budget-exhausted` | The finite episode ended while still waiting. |
 
 The shipped shepherd performs read-only GitHub work. A repair packet is an input
-for a coding agent or person; it does not launch an unbounded repair job. A review
+for a coding agent or person. A host can admit a separate bounded [coding repair
+episode](repair.md) against the exact source revision. A review
 packet is evidence to review, not permission to merge. The separate SDK merge
 adapter is disabled by default; when explicitly admitted it requires unchanged
 fresh evidence, the expected head, and non-bypassable server-side strict required
@@ -100,5 +101,7 @@ restart baseline, not against another durable workflow engine.
 The portable assets are the typed manifests, effects, process history, and receipts.
 The GitHub and timer host in this release runs on Bun. Both Bun and the independent
 Rust kernel implement the process journal and local custody ABI. Remaining work
-includes durable external coding-job handles with adapter-specific reconciliation,
-an approved repair-to-PR loop, and measurement of successful real repairs.
+includes adapter-specific reconciliation for lost coding-job acknowledgements,
+an approved repair-to-PR publication loop, and a broader corpus of real repairs.
+The separate repair host now retains a foreground coding attempt and validates
+its exact patch without automatic publication.

@@ -3007,7 +3007,7 @@ describe("effect timeouts", () => {
     ],
   });
 
-  test("a hung effect records a timeout error and retries the same request", async () => {
+  test("a hung effect records a non-retryable timeout while nonjournal failure routing remains available", async () => {
     let calls = 0;
     const r = await runOrganism({
       manifest: m,
@@ -3029,12 +3029,13 @@ describe("effect timeouts", () => {
       ],
     });
     expect(r.outcome).toBe("complete");
-    expect(calls).toBe(3); // 2 timed-out attempts + 1 fallback
+    expect(calls).toBe(2); // An uncertain timed-out attempt is never automatically repeated.
     expect(r.cells["worker"]?.status).toBe("failed");
     expect(r.cells["worker"]?.failure?.code).toBe("BUDGET_EXHAUSTED");
     expect(
       r.effects.filter((e) => e.error?.code === "BUDGET_EXHAUSTED").length,
-    ).toBe(2);
+    ).toBe(1);
+    expect(r.effects[0]?.retryable).toBe(false);
     expect(r.cells["fallback"]?.outputs?.out).toBe("handled");
   });
 
@@ -3928,4 +3929,43 @@ describe("spawn cells", () => {
     expect(verified.ok).toBe(true);
   });
 
+});
+
+
+describe("effect deadline dispatch boundaries", () => {
+  test("delayed metadata cannot dispatch a provider after the run times out", async () => {
+    let release!: () => void;
+    const metadata = new Promise<void>(done => { release = done; });
+    let calls = 0;
+    const m = manifest({contract: "algal.organism.v1", key: "organism:late-metadata", name: "Late metadata",
+      cells: [{id: "agent", kind: "agent", prompt: "Wait", output: {kind: "text"}, budget: {maxEffectMs: 10}}]});
+    const result = await runOrganism({manifest: m, fns: builtinRegistry(), store: new MemoryStore(), executors: [{
+      id: "provider", receiptFor: async () => { await metadata; return {}; }, execute: async () => { calls++; return "late"; },
+    }]});
+    expect(result.outcome).toBe("failed");
+    expect(result.effects[0]?.error?.code).toBe("BUDGET_EXHAUSTED");
+    release();
+    await Bun.sleep(1);
+    expect(calls).toBe(0);
+  });
+
+  test("tool-log compaction respects the cell effect deadline and replays offline", async () => {
+    let calls = 0;
+    let compactSignal: AbortSignal | undefined;
+    const m = manifest({contract: "algal.organism.v1", key: "organism:bounded-compaction", name: "Bounded compaction",
+      cells: [{id: "agent", kind: "agent", prompt: "Pick then summarize", output: {kind: "text"}, tools: ["pick.v1"],
+        compact: {maxLogBytes: 1, keepRecent: 0}, budget: {maxTurns: 2, maxEffectMs: 10}}]});
+    const result = await runOrganism({manifest: m, fns: builtinRegistry(), store: new MemoryStore(), executors: [{
+      id: "provider", capabilities: {effects: ["agent", "decide"]}, execute: async (request, signal) => {
+        calls++;
+        if (request.kind === "decide") { compactSignal = signal; return new Promise<JsonValue>(() => {}); }
+        return {tool: "pick.v1", inputs: {record: {name: "wisp"}, field: "name"}};
+      },
+    }]});
+    expect(result.outcome).toBe("failed");
+    expect(result.effects[1]?.error?.code).toBe("BUDGET_EXHAUSTED");
+    expect(calls).toBe(2);
+    expect(compactSignal?.aborted).toBe(true);
+    expect((await verifyReceipt(result as unknown as JsonValue, manifestToJson(m), new MemoryStore())).ok).toBe(true);
+  });
 });

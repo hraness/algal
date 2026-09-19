@@ -377,6 +377,13 @@ pub async fn command_output(
             async { Ok::<_, Error>(child.wait().await?) }
         )?;
         if !status.success() {
+            if status.code().is_none() {
+                return Err(Error::new(
+                    "EFFECT_FAILED",
+                    "host executable was terminated by a signal; external completion may be uncertain",
+                )
+                .uncertain());
+            }
             // exit 75 (EX_TEMPFAIL): the answer is not ready — suspend the
             // run; it may be resumed later. Any other nonzero exit is an
             // ordinary failure.
@@ -402,9 +409,20 @@ pub async fn command_output(
     let result = tokio::time::timeout(Duration::from_millis(timeout_ms), task).await;
     let _ = child.kill().await;
     let _ = child.wait().await;
-    result.map_err(|_| {
-        Error::limit("host executable timed out; external completion may be uncertain")
-    })?
+    result
+        .map_err(|_| {
+            Error::limit("host executable timed out; external completion may be uncertain")
+                .uncertain()
+        })?
+        .map_err(|error| {
+            // Read/output failures can stop local observation before the child has
+            // settled its external work. Killing it is not a remote rollback.
+            if matches!(error.code.as_str(), "IO_FAILED" | "BUDGET_EXHAUSTED") {
+                error.uncertain()
+            } else {
+                error
+            }
+        })
 }
 
 async fn hosted(
@@ -456,10 +474,9 @@ async fn hosted(
         }
         call = call.bearer_auth(credential);
     }
-    let mut response = call
-        .send()
-        .await
-        .map_err(|_| Error::new("EFFECT_FAILED", "provider request failed or timed out"))?;
+    let mut response = call.send().await.map_err(|_| {
+        Error::new("EFFECT_FAILED", "provider request failed or timed out").uncertain()
+    })?;
     if !response.status().is_success() {
         return Err(Error::new(
             "EFFECT_FAILED",
@@ -473,16 +490,16 @@ async fn hosted(
         .content_length()
         .is_some_and(|n| n > max_bytes as u64)
     {
-        return Err(Error::limit("provider response bytes"));
+        return Err(Error::limit("provider response bytes").uncertain());
     }
     let mut bytes = Vec::new();
     while let Some(chunk) = response
         .chunk()
         .await
-        .map_err(|_| Error::new("EFFECT_FAILED", "provider body read failed"))?
+        .map_err(|_| Error::new("EFFECT_FAILED", "provider body read failed").uncertain())?
     {
         if bytes.len().saturating_add(chunk.len()) > max_bytes {
-            return Err(Error::limit("provider response bytes"));
+            return Err(Error::limit("provider response bytes").uncertain());
         }
         bytes.extend_from_slice(&chunk);
     }
@@ -1057,7 +1074,10 @@ impl Host {
                     deadline,
                 )
                 .await?;
-                let result: Value = serde_json::from_slice(&bytes)?;
+                let result: Value = serde_json::from_slice(&bytes).map_err(|_| {
+                    Error::new("EFFECT_UNPARSEABLE", "xcb terminal envelope is not JSON")
+                        .uncertain()
+                })?;
                 if result["version"] != 1
                     || result["state"] != "idle"
                     || result["outcome"]["terminal"] != "completed"
@@ -1070,7 +1090,8 @@ impl Host {
                     return Err(Error::new(
                         "EFFECT_FAILED",
                         "xcb did not report a completed, joined, settled task; no automatic replay",
-                    ));
+                    )
+                    .uncertain());
                 }
                 let result = result["text"]
                     .as_str()
@@ -1228,6 +1249,13 @@ impl Host {
                 }
             }
             Err(error) => {
+                if error.uncertain {
+                    if self.journal.is_some() {
+                        self.journal_poison();
+                        return Err(error);
+                    }
+                    receipt["retryable"] = json!(false);
+                }
                 // suspension is not a retryable failure — it asks the host
                 // to pause the process, so the request is never re-issued
                 if error.code == "EFFECT_SUSPENDED" {
@@ -1348,12 +1376,17 @@ fn apple_bridge(path: &Path) -> Result<std::sync::Arc<apple_foundation::Bridge>>
 fn apple_error(error: apple_foundation::Error) -> Error {
     use apple_foundation::Error as E;
     match error {
-        E::Timeout => Error::limit("apple bridge timed out; generation may be uncertain"),
+        E::Timeout => {
+            Error::limit("apple bridge timed out; generation may be uncertain").uncertain()
+        }
         E::QueueFull => Error::new("EFFECT_FAILED", "apple bridge queue full"),
         E::Unsupported(m) | E::Unavailable(m) => {
             Error::new("EFFECT_UNBOUND", format!("apple bridge: {m}"))
         }
         E::Bridge(code) => Error::new("EFFECT_FAILED", format!("apple bridge: {code}")),
+        error @ (E::Io(_) | E::Protocol(_)) => {
+            Error::new("EFFECT_FAILED", format!("apple bridge: {error}")).uncertain()
+        }
         other => Error::new("EFFECT_FAILED", format!("apple bridge: {other}")),
     }
 }
@@ -1516,6 +1549,45 @@ mod tests {
         assert!(!gateway.route_wildcard());
         assert!(!jev.route_wildcard());
         assert!(!recall.route_wildcard());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn signal_termination_without_settlement_is_uncertain() {
+        let error = command_output(
+            &["sh".into(), "-c".into(), "kill -KILL $$".into()],
+            None,
+            b"",
+            1024,
+            1000,
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.code, "EFFECT_FAILED");
+        assert!(
+            error.uncertain,
+            "signal termination is not remote settlement"
+        );
+    }
+
+    #[test]
+    fn apple_post_dispatch_errors_are_uncertain() {
+        use apple_foundation::Error as E;
+        for error in [
+            E::Io(std::io::Error::other("lost response")),
+            E::Protocol("truncated envelope".into()),
+            E::Timeout,
+        ] {
+            assert!(apple_error(error).uncertain);
+        }
+        for error in [
+            E::Spawn(std::io::Error::other("could not start")),
+            E::QueueFull,
+            E::Unavailable("unavailable".into()),
+            E::Bridge("known_failure".into()),
+        ] {
+            assert!(!apple_error(error).uncertain);
+        }
     }
 
     #[tokio::test]

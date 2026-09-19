@@ -47,6 +47,8 @@ import { packOrganism, parseBundle, unpackBundle } from "./src/bundle";
 import { FileStore } from "./src/store";
 import { ProcessSupervisor, PROCESS_BOUNDS } from "./src/process";
 import { PullRequestShepherd } from "./src/shepherd";
+import { CodingJobService, type CodingJobOptions } from "./src/coding-jobs";
+import { RepairWorkflow, type RepairCheck } from "./src/repair";
 import { githubCliTransport } from "./src/github-cli";
 import {
   fileTransport,
@@ -169,6 +171,10 @@ usage:
                                               admit a durable, bounded process
   algal process recover <name> --expected-intent SHA [same tool/executor options]
   algal process journal <name>
+  algal job prepare <config.json>           admit a bounded coding job in a clean checkout
+  algal job run|inspect <job-digest>         run once in foreground or inspect retained state
+  algal repair start <name> --job <digest> --checks <checks.json>
+  algal repair tick|inspect|verify <name>    wait for the job, validate its exact patch, or replay
   algal shepherd start <name> --repo owner/repo --pr NUMBER [--max-polls 16]
   algal shepherd tick|watch|inspect|verify <name> [--gh /path/to/gh]
   algal shepherd wake <name> --delivery stable-event-id
@@ -1726,6 +1732,47 @@ async function main(): Promise<number> {
       return usageError(
         "algal slot get <name> | slot set <name> <value.json>",
       );
+    }
+
+    case "job": {
+      const [sub, target] = positional;
+      if (!target) usageError("algal job prepare <config.json> | run|inspect <job-digest>");
+      const jobs = new CodingJobService(dir);
+      if (sub === "prepare") {
+        const config = await readJsonBounded(resolve(target), 131_072, "coding job config");
+        out(await jobs.prepare(config as unknown as CodingJobOptions) as unknown as JsonValue);
+      } else if (sub === "inspect") out(await jobs.inspect(asDigest(target, "job digest")) as unknown as JsonValue);
+      else if (sub === "run") {
+        const controller = new AbortController();
+        const stop = () => controller.abort();
+        process.once("SIGINT", stop); process.once("SIGTERM", stop);
+        try {
+          const result = await jobs.run(asDigest(target, "job digest"), {signal: controller.signal});
+          out(result as unknown as JsonValue);
+          return result.status === "completed" ? 0 : 1;
+        } finally { process.removeListener("SIGINT", stop); process.removeListener("SIGTERM", stop); }
+      } else usageError("algal job prepare|run|inspect");
+      return 0;
+    }
+
+    case "repair": {
+      const [sub, name] = positional;
+      if (!name) usageError("algal repair start|tick|inspect|verify <name>");
+      const repair = new RepairWorkflow(dir);
+      if (sub === "start") {
+        if (typeof flags.job !== "string" || typeof flags.checks !== "string") usageError("repair start requires --job <digest> --checks <checks.json>");
+        const checks = await readJsonBounded(resolve(flags.checks), 65_536, "repair checks");
+        out(await repair.start(name, asDigest(flags.job, "job digest"), checks as unknown as RepairCheck[]) as unknown as JsonValue);
+      } else if (sub === "tick") {
+        const report = await repair.tick(name);
+        const uncertainJob = report.process.process.status === "suspended" &&
+          (await new CodingJobService(dir).inspect(report.config.jobId)).status === "uncertain";
+        out(report as unknown as JsonValue);
+        return uncertainJob || report.result?.action === "rejected" || ["failed", "uncertain", "stuck"].includes(report.process.process.status) ? 1 : 0;
+      } else if (sub === "inspect") out(await repair.inspect(name) as unknown as JsonValue);
+      else if (sub === "verify") out(await repair.verify(name) as unknown as JsonValue);
+      else usageError("algal repair start|tick|inspect|verify <name>");
+      return 0;
     }
 
     case "shepherd": {

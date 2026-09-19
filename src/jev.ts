@@ -49,23 +49,24 @@ export type JevAskerOptions = {
 async function boundedJson(
   response: Response,
   maxBytes: number,
+  signal?: AbortSignal,
 ): Promise<unknown> {
   if (response.status >= 300 && response.status < 400) {
     throw new AlgalError("EFFECT_FAILED", "Jev redirects are forbidden");
   }
   const declared = response.headers.get("content-length");
   if (declared !== null && Number(declared) > maxBytes) {
-    throw new AlgalError(
-      "EFFECT_FAILED",
-      `Jev response exceeds ${maxBytes} bytes`,
-    );
+    void response.body?.cancel().catch(() => {});
+    throw new AlgalError("EFFECT_FAILED", `Jev response exceeds ${maxBytes} bytes`, undefined, {uncertain: true});
   }
-  const bytes = await boundedBytes(response.body, maxBytes, "Jev response");
-  if (bytes.byteLength > maxBytes) {
-    throw new AlgalError(
-      "EFFECT_FAILED",
-      `Jev response exceeds ${maxBytes} bytes`,
-    );
+  let bytes: Uint8Array;
+  try { bytes = await boundedBytes(response.body, maxBytes, "Jev response", signal); }
+  catch (error) {
+    const limited = error instanceof AlgalError && error.code === "BUDGET_EXHAUSTED";
+    throw new AlgalError(limited ? "BUDGET_EXHAUSTED" : "EFFECT_FAILED",
+      limited ? "Jev response cancelled or exceeded byte limit; external completion uncertain"
+        : "Jev response transport failed; external completion uncertain",
+      undefined, {uncertain: true});
   }
   const text = new TextDecoder().decode(bytes);
   if (!response.ok) {
@@ -89,6 +90,8 @@ export function jevAsker(options: JevAskerOptions): DecisionAsker {
   const baseUrl = options.baseUrl ?? TYPESAFE_SYSTEMONE_URL;
   const fetcher = options.fetch ?? globalThis.fetch;
   const maxResponseBytes = options.maxResponseBytes ?? MAX_RESPONSE_BYTES;
+  if (!Number.isSafeInteger(maxResponseBytes) || maxResponseBytes < 1 || maxResponseBytes > 67_108_864)
+    throw new AlgalError("PARSE_FAILED", "invalid Jev response byte limit");
   const key = async (): Promise<string> => {
     const value =
       typeof options.credential === "function"
@@ -113,17 +116,22 @@ export function jevAsker(options: JevAskerOptions): DecisionAsker {
       questions: DecisionQuestions,
       signal?: AbortSignal,
     ): Promise<DecisionResponse> {
-      const response = await fetcher(baseUrl, {
-        method: "POST",
-        redirect: "error",
-        ...(signal ? { signal } : {}),
-        headers: {
-          authorization: `Bearer ${await key()}`,
-          "content-type": "application/json",
-        },
-        body: canonicalize({ model, state, questions } as JsonValue),
-      });
-      const raw = asObject(await boundedJson(response, maxResponseBytes), "Jev response");
+      if (signal?.aborted) throw new AlgalError("BUDGET_EXHAUSTED", "Jev request cancelled before dispatch");
+      const token = await key();
+      if (signal?.aborted) throw new AlgalError("BUDGET_EXHAUSTED", "Jev request cancelled before dispatch");
+      const init: RequestInit = {
+        method: "POST", redirect: "error", ...(signal ? {signal} : {}),
+        headers: {authorization: `Bearer ${token}`, "content-type": "application/json"},
+        body: canonicalize({model, state, questions} as JsonValue),
+      };
+      if (signal?.aborted) throw new AlgalError("BUDGET_EXHAUSTED", "Jev request cancelled before dispatch");
+      let response: Response;
+      try { response = await fetcher(baseUrl, init); }
+      catch {
+        throw new AlgalError(signal?.aborted ? "BUDGET_EXHAUSTED" : "EFFECT_FAILED",
+          "Jev request transport failed; external completion uncertain", undefined, {uncertain: true});
+      }
+      const raw = asObject(await boundedJson(response, maxResponseBytes, signal), "Jev response");
       const answers = parseDecisionAnswers(
         reqField(raw, "answers", "Jev response"),
         questions,

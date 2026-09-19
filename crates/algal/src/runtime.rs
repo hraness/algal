@@ -474,9 +474,17 @@ impl Runtime<'_> {
                         json!({"requestDigest":request_digest,"executor":format!("tool:{name}"),"output":output})
                     }
                     Err(error) => {
+                        if error.uncertain && self.host.journal.is_some() {
+                            self.host.journal_poison();
+                            return Err(error);
+                        }
+                        let uncertain = error.uncertain;
                         let suspended = error.code == "EFFECT_SUSPENDED";
                         let wake = error.wake.clone();
                         let mut receipt = json!({"requestDigest":request_digest,"executor":format!("tool:{name}"),"error":error});
+                        if uncertain {
+                            receipt["retryable"] = json!(false);
+                        }
                         if suspended {
                             receipt["retryable"] = json!(false);
                             if !wake.is_empty() {

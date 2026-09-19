@@ -124,13 +124,15 @@ For delegated coding work, ALGAL is an ACP client to a host-selected agent and
 an ACP agent to a host editor; see `crates/algal/src/acp.rs`. ACP carries
 sessions, prompts, permission requests, and updates — it is not authentication
 and not a sandbox. A coding-agent executor is *mutating*: it is not memoized
-and a timed-out or unsettled task is a recorded failure, never silently
+and a timed-out or unsettled task remains uncertain, never silently
 retried.
 
 Account custody, provider qualification, and subscription failover belong to
-xcb. `xcb algal` invokes a host-selected ALGAL bundle with bounded JSON input
-and returns receipt references; ALGAL never copies credentials or reimplements
-account switching.
+xcb. The foreground adapter invokes `xcb --json --cwd ABS run`, passes a
+bounded prompt on stdin, and requires a joined, settled terminal envelope. ALGAL
+never copies credentials or reimplements account switching. The [durable repair
+host](repair.md) binds that attempt to a clean source revision, retains its patch,
+and validates it through independently admitted commands.
 
 ## Multiple executors
 

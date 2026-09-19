@@ -192,3 +192,59 @@ describe("jevExecutor", () => {
     expect(wire).not.toContain(KEY);
   });
 });
+
+
+for (const failure of ["send", "body", "limit"] as const) {
+  test(`Jev ${failure} failure marks completion uncertain without leaking transport details`, async () => {
+    const asker = jevAsker({credential: KEY, maxResponseBytes: 32, fetch: async () => {
+      if (failure === "send") throw new Error(`PRIVATE transport with ${KEY}`);
+      if (failure === "limit") return new Response("x".repeat(33));
+      return new Response(new ReadableStream({start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"answers":'));
+        controller.error(new Error(`PRIVATE body with ${KEY}`));
+      }}));
+    }});
+    let caught: unknown;
+    try {await asker.ask({}, {q: {type: "noul", instructions: "relevant?"}});} catch (error) {caught = error;}
+    expect(caught).toMatchObject({uncertain: true});
+    expect(String(caught)).not.toContain("PRIVATE");
+    expect(String(caught)).not.toContain(KEY);
+  });
+}
+
+test("Jev credential cancellation stops dispatch after the resolver completes", async () => {
+  let resolveKey!: (key: string) => void;
+  let entered!: () => void;
+  const resolving = new Promise<void>(done => {entered = done;});
+  const key = new Promise<string>(done => {resolveKey = done;});
+  let calls = 0;
+  const asker = jevAsker({credential: async () => {entered(); return key;}, fetch: async () => {calls++; return Response.json({});}});
+  const controller = new AbortController();
+  const pending = asker.ask({}, {q: {type: "noul", instructions: "relevant?"}}, controller.signal);
+  await resolving; controller.abort(); resolveKey(KEY);
+  await expect(pending).rejects.toMatchObject({code: "BUDGET_EXHAUSTED", uncertain: false});
+  expect(calls).toBe(0);
+});
+
+test("Jev preflight cancellation avoids credential resolution and malformed complete responses remain definite", async () => {
+  let resolutions = 0;
+  const controller = new AbortController(); controller.abort();
+  const asker = jevAsker({credential: async () => {resolutions++; return KEY;}});
+  await expect(asker.ask({}, {q: {type: "noul", instructions: "relevant?"}}, controller.signal))
+    .rejects.toMatchObject({code: "BUDGET_EXHAUSTED", uncertain: false});
+  expect(resolutions).toBe(0);
+  const malformed = jevAsker({credential: KEY, fetch: async () => new Response("not JSON")});
+  await expect(malformed.ask({}, {q: {type: "noul", instructions: "relevant?"}}))
+    .rejects.toMatchObject({code: "EFFECT_UNPARSEABLE", uncertain: false});
+  expect(() => jevAsker({credential: KEY, maxResponseBytes: 0})).toThrow("byte limit");
+});
+
+test("Jev cancellation while reading the response is uncertain", async () => {
+  let bodyEntered!: () => void;
+  const reading = new Promise<void>(done => {bodyEntered = done;});
+  const asker = jevAsker({credential: KEY, fetch: async () => new Response(new ReadableStream({pull() {bodyEntered();}}))});
+  const controller = new AbortController();
+  const pending = asker.ask({}, {q: {type: "noul", instructions: "relevant?"}}, controller.signal);
+  await reading; controller.abort();
+  await expect(pending).rejects.toMatchObject({code: "BUDGET_EXHAUSTED", uncertain: true});
+});
