@@ -2,17 +2,27 @@ import { manifestToJson } from "./contract";
 import { digestCanonical, type Digest } from "./digest";
 import { AlgalError } from "./errors";
 import {
+  axesPareto,
+  BENCH_AXIS_NAMES,
   BENCH_BOUNDS,
   BENCH_CONTRACT,
+  benchAxisEnv,
   benchPareto,
   type BenchAttribution,
+  type BenchAxis,
   type BenchCase,
   type BenchCaseResult,
   type BenchPrice,
   type BenchReport,
   type BenchSystemResult,
 } from "./bench";
-import { evalScorer, parseExprScorer } from "./expr";
+import {
+  checkProgram,
+  evalAxis,
+  evalScorer,
+  parseExprEnvelope,
+  parseExprScorer,
+} from "./expr";
 import type { FnRegistry } from "./registry";
 import { parseRunReceipt } from "./run";
 import type { Store } from "./store";
@@ -106,6 +116,39 @@ function parseAttribution(value: JsonValue | undefined, at: string): Record<stri
   return out;
 }
 
+function parseBenchAxis(value: JsonValue, at: string): BenchAxis {
+  const a = object(value, at);
+  keys(a, ["name", "dir", "expr"], at);
+  const name = id(a.name, `${at}.name`);
+  if (a.dir !== "up" && a.dir !== "down") {
+    throw new AlgalError("PARSE_FAILED", `${at}.dir must be "up" or "down"`);
+  }
+  const expr = parseExprEnvelope(a.expr, `${at}.expr`);
+  const c = checkProgram(expr.program, BENCH_AXIS_NAMES);
+  if (!c.ok) {
+    throw new AlgalError("AXIS_INVALID", `${at} ${canonicalize(c.err)}`);
+  }
+  return { name, dir: a.dir, expr };
+}
+
+export function parseBenchAxes(value: unknown, at: string): BenchAxis[] {
+  if (!Array.isArray(value)) {
+    throw new AlgalError("PARSE_FAILED", `${at} must be a bounded non-empty list`);
+  }
+  if (value.length === 0 || value.length > BENCH_BOUNDS.maxAxes) {
+    throw new AlgalError("PARSE_FAILED", `${at} exceeds ${BENCH_BOUNDS.maxAxes}`);
+  }
+  const axes = value.map((e, i) => parseBenchAxis(e as JsonValue, `${at}[${i}]`));
+  const names = new Set<string>();
+  for (const a of axes) {
+    if (names.has(a.name)) {
+      throw new AlgalError("PARSE_FAILED", `${at} has duplicate axis "${a.name}"`);
+    }
+    names.add(a.name);
+  }
+  return axes;
+}
+
 function parseBenchCase(value: JsonValue, at: string): BenchCase {
   const c = object(value, at);
   keys(c, ["id", "args", "expect"], at);
@@ -143,7 +186,7 @@ function parseCaseResult(value: JsonValue, at: string): BenchCaseResult {
 function parseSystem(value: JsonValue, i: number): BenchSystemResult {
   const at = `bench.systems[${i}]`;
   const s = object(value, at);
-  keys(s, ["id", "manifestDigest", "manifestKey", "passed", "total", "effectCalls", "work", "usage", "attribution", "cases"], at);
+  keys(s, ["id", "manifestDigest", "manifestKey", "passed", "total", "effectCalls", "work", "usage", "attribution", "cases", "axisValues"], at);
   const total = count(s.total, `${at}.total`);
   const passed = count(s.passed, `${at}.passed`);
   if (total === 0 || passed > total) {
@@ -152,7 +195,7 @@ function parseSystem(value: JsonValue, i: number): BenchSystemResult {
   if (!Array.isArray(s.cases) || s.cases.length !== total || s.cases.length > BENCH_BOUNDS.maxCases) {
     throw new AlgalError("PARSE_FAILED", `${at}.cases must match its total`);
   }
-  return {
+  const result: BenchSystemResult = {
     id: id(s.id, `${at}.id`),
     manifestDigest: digest(s.manifestDigest, `${at}.manifestDigest`),
     manifestKey: text(s.manifestKey, `${at}.manifestKey`),
@@ -164,6 +207,15 @@ function parseSystem(value: JsonValue, i: number): BenchSystemResult {
     attribution: parseAttribution(s.attribution, `${at}.attribution`),
     cases: s.cases.map((entry, j) => parseCaseResult(entry, `${at}.cases[${j}]`)),
   };
+  if (s.axisValues !== undefined) {
+    const map = object(s.axisValues, `${at}.axisValues`);
+    const out: Record<string, number> = {};
+    for (const [key, raw] of Object.entries(map)) {
+      out[key] = number_(raw, `${at}.axisValues.${key}`);
+    }
+    result.axisValues = out;
+  }
+  return result;
 }
 
 function parseBenchPrice(value: JsonValue | undefined, at: string): Record<string, BenchPrice> | undefined {
@@ -186,7 +238,7 @@ function parseBenchPrice(value: JsonValue | undefined, at: string): Record<strin
 
 export function parseBenchReport(value: unknown): BenchReport {
   const report = object(value, "bench");
-  keys(report, ["contract", "workload", "cases", "prices", "scorer", "systems", "pareto", "digest"], "bench");
+  keys(report, ["contract", "workload", "cases", "prices", "scorer", "axes", "systems", "pareto", "digest"], "bench");
   if (report.contract !== BENCH_CONTRACT) {
     throw new AlgalError("PARSE_FAILED", `bench.contract must be ${BENCH_CONTRACT}`);
   }
@@ -200,6 +252,26 @@ export function parseBenchReport(value: unknown): BenchReport {
     throw new AlgalError("PARSE_FAILED", "bench.pareto must be a bounded list");
   }
   const systems = report.systems.map(parseSystem);
+  const axes = report.axes !== undefined
+    ? parseBenchAxes(report.axes, "bench.axes")
+    : undefined;
+  for (const [i, s] of systems.entries()) {
+    const at = `bench.systems[${i}].axisValues`;
+    if (axes === undefined) {
+      if (s.axisValues !== undefined) {
+        throw new AlgalError("PARSE_FAILED", `${at} requires bench.axes`);
+      }
+      continue;
+    }
+    if (s.axisValues === undefined) {
+      throw new AlgalError("PARSE_FAILED", `${at} is required by bench.axes`);
+    }
+    const expected = axes.map((a) => a.name).sort();
+    const actual = Object.keys(s.axisValues).sort();
+    if (expected.length !== actual.length || !expected.every((n, k) => n === actual[k])) {
+      throw new AlgalError("PARSE_FAILED", `${at} must name every axis`);
+    }
+  }
   const ids = new Set(systems.map((s) => s.id));
   const pareto = report.pareto.map((entry, i) => {
     const parsed = id(entry as JsonValue, `bench.pareto[${i}]`);
@@ -219,6 +291,7 @@ export function parseBenchReport(value: unknown): BenchReport {
     ...(report.scorer !== undefined
       ? { scorer: parseExprScorer(report.scorer, "bench.scorer") }
       : {}),
+    ...(axes !== undefined ? { axes } : {}),
     systems,
     pareto,
     digest: digest(report.digest, "bench.digest"),
@@ -247,7 +320,26 @@ export async function verifyBenchReport(
   if (workload !== report.workload) {
     mismatches.push(`workload: claimed ${report.workload}, computed ${workload}`);
   }
-  if (canonicalize(report.pareto as unknown as JsonValue) !== canonicalize(benchPareto(report.systems, report.prices !== undefined) as unknown as JsonValue)) {
+  for (const s of report.systems) {
+    if (report.axes === undefined || s.axisValues === undefined) continue;
+    const env = benchAxisEnv(s);
+    for (const axis of report.axes) {
+      let value: number;
+      try {
+        value = evalAxis(axis.expr.program, env);
+      } catch (e) {
+        mismatches.push(`${s.id} axis "${axis.name}" failed: ${e instanceof AlgalError ? e.message : "evaluation failed"}`);
+        continue;
+      }
+      if (s.axisValues[axis.name] !== value) {
+        mismatches.push(`${s.id} axis "${axis.name}" does not match the system totals`);
+      }
+    }
+  }
+  const expectedPareto = report.axes !== undefined
+    ? axesPareto(report.systems, report.axes)
+    : benchPareto(report.systems, report.prices !== undefined);
+  if (canonicalize(report.pareto as unknown as JsonValue) !== canonicalize(expectedPareto as unknown as JsonValue)) {
     mismatches.push("pareto does not match the system totals");
   }
   const caseIds = new Set<string>();

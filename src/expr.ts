@@ -114,10 +114,13 @@ const SCORER_NAMES = ["args", "expect", "outputs"] as const;
 /** Scorer fuel budget — must match crates/algal scorer::MAX_EXPR_FUEL. */
 const SCORER_FUEL = 100_000;
 
-/** Parse and statically check a scorer from a foreign value. A malformed
- * shape is PARSE_FAILED; a well-formed object with a bad program is
- * SCORER_INVALID — the distinction a config author needs. */
-export function parseExprScorer(value: unknown, at: string): ExprScorer {
+/** The versioned envelope every expr consumer shares. */
+export type ExprEnvelope = { contract: "algal.expr.v1"; program: JsonValue };
+
+/** Parse the `{"contract":"algal.expr.v1","program":…}` envelope from a
+ * foreign value — shape only; each consumer then statically checks the
+ * program against its own environment names. */
+export function parseExprEnvelope(value: unknown, at: string): ExprEnvelope {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new AlgalError("PARSE_FAILED", `${at} must be an object`);
   }
@@ -130,11 +133,19 @@ export function parseExprScorer(value: unknown, at: string): ExprScorer {
   if (s.program === undefined) {
     throw new AlgalError("PARSE_FAILED", `${at}.program is required`);
   }
+  return { contract: "algal.expr.v1", program: s.program };
+}
+
+/** Parse and statically check a scorer from a foreign value. A malformed
+ * shape is PARSE_FAILED; a well-formed envelope with a bad program is
+ * SCORER_INVALID — the distinction a config author needs. */
+export function parseExprScorer(value: unknown, at: string): ExprScorer {
+  const s = parseExprEnvelope(value, at);
   const c = checkProgram(s.program, SCORER_NAMES);
   if (!c.ok) {
     throw new AlgalError("SCORER_INVALID", `${at} ${canonicalize(c.err)}`);
   }
-  return { contract: "algal.expr.v1", program: s.program };
+  return s;
 }
 
 /** Run a scorer against one case: env is {"args","expect","outputs"}, the
@@ -157,6 +168,23 @@ export function evalScorer(
     throw new AlgalError(
       "SCORER_INVALID",
       `scorer must produce boolean, got ${canonicalize(r.value)}`,
+    );
+  }
+  return r.value;
+}
+
+/** Run a pareto-axis program over a system aggregate record; the result
+ * must be a finite number — a dominance coordinate, not a verdict. Same
+ * budget class as scorers; AXIS_INVALID on any failure. */
+export function evalAxis(program: JsonValue, env: JsonObject): number {
+  const r = evalProgram(program, env, SCORER_FUEL);
+  if (!r.ok) {
+    throw new AlgalError("AXIS_INVALID", `axis ${canonicalize(r.err)}`);
+  }
+  if (typeof r.value !== "number" || !Number.isFinite(r.value)) {
+    throw new AlgalError(
+      "AXIS_INVALID",
+      `axis must produce a finite number, got ${canonicalize(r.value)}`,
     );
   }
   return r.value;

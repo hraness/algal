@@ -866,16 +866,7 @@ async fn execute(cli: Cli) -> Result<bool> {
                     }
                 }
                 let config = algal::bench::load_config(&config, apple_bridge.as_deref())?;
-                let report = algal::bench::run(
-                    &config.cases,
-                    &config.systems,
-                    config.prices,
-                    config.scorer.as_ref(),
-                    &mut store,
-                    &host,
-                    &transports_map,
-                )
-                .await?;
+                let report = algal::bench::run(&config, &mut store, &host, &transports_map).await?;
                 if let Some(path) = out {
                     std::fs::write(&path, canonical(&report)?)?;
                 }

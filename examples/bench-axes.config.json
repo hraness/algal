@@ -1,0 +1,57 @@
+{
+  "contract": "algal.bench.config.v1",
+  "axes": [
+    {
+      "name": "calls",
+      "dir": "down",
+      "expr": { "contract": "algal.expr.v1", "program": ["get", "effectCalls"] }
+    },
+    {
+      "name": "work",
+      "dir": "down",
+      "expr": { "contract": "algal.expr.v1", "program": ["get", "work", "units"] }
+    }
+  ],
+  "cases": [
+    {
+      "id": "t1",
+      "args": { "ticket": "charged twice for my subscription" },
+      "expect": { "out": "billing" }
+    },
+    {
+      "id": "t2",
+      "args": { "ticket": "app crashes on export" },
+      "expect": { "out": "technical" }
+    },
+    {
+      "id": "t3",
+      "args": { "ticket": "refund for a cancelled plan" },
+      "expect": { "out": "billing" }
+    },
+    {
+      "id": "t4",
+      "args": { "ticket": "invoice totals look wrong after the update" },
+      "expect": { "out": "technical" }
+    }
+  ],
+  "systems": [
+    {
+      "id": "cheap-single",
+      "manifest": "bench-triage-single.algal.json",
+      "executors": { "cheap": "scripted:bench-cheap.responses.json" }
+    },
+    {
+      "id": "frontier-single",
+      "manifest": "bench-triage-single.algal.json",
+      "executors": { "frontier": "scripted:bench-frontier.responses.json" }
+    },
+    {
+      "id": "circuit",
+      "manifest": "bench-triage-circuit.algal.json",
+      "executors": {
+        "cheap": "scripted:bench-cheap.responses.json",
+        "frontier": "scripted:bench-frontier.responses.json"
+      }
+    }
+  ]
+}

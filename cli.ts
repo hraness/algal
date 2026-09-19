@@ -46,7 +46,7 @@ import { parseExprScorer } from "./src/expr";
 import { runFoundrySearch } from "./src/search";
 import { parseSearchReport, verifySearchReport } from "./src/search-verify";
 import { runBenchmark, type BenchCase, type BenchPrice, type BenchSystem } from "./src/bench";
-import { parseBenchReport, verifyBenchReport } from "./src/bench-verify";
+import { parseBenchAxes, parseBenchReport, verifyBenchReport } from "./src/bench-verify";
 import {
   canonicalBytes,
   canonicalize,
@@ -1209,7 +1209,7 @@ async function main(): Promise<number> {
         diag(`loaded ${n} module(s) from ${flags.modules}`);
       }
       const config = asRecord(await readJson(configFile), "bench config");
-      const unknown = Object.keys(config).filter((k) => !["contract", "cases", "systems", "prices", "scorer"].includes(k));
+      const unknown = Object.keys(config).filter((k) => !["contract", "cases", "systems", "prices", "scorer", "axes"].includes(k));
       if (unknown.length > 0) {
         throw new AlgalError("PARSE_FAILED", `bench config: unknown key "${unknown[0]}"`);
       }
@@ -1303,6 +1303,9 @@ async function main(): Promise<number> {
       const scorer = config.scorer === undefined
         ? undefined
         : parseExprScorer(config.scorer, "bench config.scorer");
+      const axes = config.axes === undefined
+        ? undefined
+        : parseBenchAxes(config.axes, "bench config.axes");
       const report = await runBenchmark({
         systems: systems.map((system) => ({
           ...system,
@@ -1318,6 +1321,7 @@ async function main(): Promise<number> {
         ...(tools ? { tools } : {}),
         ...(prices ? { prices } : {}),
         ...(scorer ? { scorer } : {}),
+        ...(axes ? { axes } : {}),
       });
       if (flags.out !== undefined) {
         const { writeFile } = await import("node:fs/promises");

@@ -402,7 +402,11 @@ whose `executors` map names to `gateway:<provider/model>` (Vercel AI Gateway),
 `route.provider`; the fallback is the first listed entry (in the native CLI,
 the first name alphabetically). The report records per-case results, work,
 token usage, per-model effect attribution, and the non-dominated pareto set on
-(quality ↑, tokens ↓, effect calls ↓). `examples/bench.config.json` runs it
+(quality ↑, tokens ↓, effect calls ↓). A `scorer` program replaces exact-match
+as the pass claim, and an `axes` list replaces the default pareto criteria —
+each axis a bounded `algal.expr.v1` program over the system's aggregate that
+must return a finite number (`examples/bench-axes.config.json`).
+`examples/bench.config.json` runs it
 deterministically; `examples/bench-live.config.json` swaps the scripted lanes
 for `alibaba/qwen3.5-flash` and `anthropic/claude-opus-5` through the gateway.
 

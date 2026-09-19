@@ -119,9 +119,18 @@ export type {
 export { parseSearchReport, verifySearchReport } from "./src/search-verify";
 export type { SearchVerifyReport } from "./src/search-verify";
 
-export { BENCH_BOUNDS, BENCH_CONTRACT, benchPareto, runBenchmark } from "./src/bench";
+export {
+  axesPareto,
+  BENCH_AXIS_NAMES,
+  BENCH_BOUNDS,
+  BENCH_CONTRACT,
+  benchAxisEnv,
+  benchPareto,
+  runBenchmark,
+} from "./src/bench";
 export type {
   BenchAttribution,
+  BenchAxis,
   BenchCase,
   BenchCaseResult,
   BenchOptions,
@@ -129,18 +138,20 @@ export type {
   BenchSystem,
   BenchSystemResult,
 } from "./src/bench";
-export { parseBenchReport, verifyBenchReport } from "./src/bench-verify";
+export { parseBenchAxes, parseBenchReport, verifyBenchReport } from "./src/bench-verify";
 export type { BenchVerifyReport } from "./src/bench-verify";
 
 export {
+  evalAxis,
   evalProgram,
   checkProgram,
   evalScorer,
+  parseExprEnvelope,
   parseExprScorer,
   EXPR_BOUNDS,
   EXPR_DEFAULT_FUEL,
 } from "./src/expr";
-export type { ExprCheck, ExprErr, ExprResult, ExprScorer } from "./src/expr";
+export type { ExprCheck, ExprEnvelope, ExprErr, ExprResult, ExprScorer } from "./src/expr";
 
 export { digestCanonical, digestText } from "./src/digest";
 export type { Digest } from "./src/digest";

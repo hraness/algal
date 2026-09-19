@@ -242,6 +242,175 @@ describe("bench", () => {
     expect(again.mismatches.some((m) => m.includes("invalid pass claim"))).toBe(true);
   });
 
+  test("configured axes replace the default pareto and verify offline", async () => {
+    const store = new MemoryStore();
+    const axes = [
+      {
+        name: "quality",
+        dir: "up" as const,
+        expr: { contract: "algal.expr.v1" as const, program: ["get", "passed"] },
+      },
+      {
+        name: "frontier",
+        dir: "down" as const,
+        expr: {
+          contract: "algal.expr.v1" as const,
+          program: [
+            "if",
+            ["has", ["get", "attribution"], "claude-opus"],
+            ["get", "attribution", "claude-opus", "calls"],
+            0,
+          ],
+        },
+      },
+    ];
+    const report = await runBenchmark({
+      fns: builtinRegistry(),
+      store,
+      cases,
+      axes,
+      systems: [
+        {
+          id: "cheap-single",
+          manifest: single,
+          executors: [
+            metered("cheap", "qwen-flash", { route: ["billing", "technical", "billing", "other"] }, CHEAP),
+          ],
+        },
+        {
+          id: "frontier-single",
+          manifest: single,
+          executors: [
+            metered("frontier", "claude-opus", { route: ["billing", "technical", "billing", "technical"] }, FRONTIER),
+          ],
+        },
+        {
+          id: "circuit",
+          manifest: circuit,
+          executors: [
+            metered("cheap", "qwen-flash", { cheap: ["billing", "technical", "billing", "unsure"] }, CHEAP),
+            metered("frontier", "claude-opus", { escalate: ["technical"] }, FRONTIER),
+          ],
+        },
+      ],
+    });
+    expect(report.axes).toEqual(axes);
+    const byId = new Map(report.systems.map((s) => [s.id, s]));
+    expect(byId.get("cheap-single")!.axisValues).toEqual({ quality: 3, frontier: 0 });
+    expect(byId.get("frontier-single")!.axisValues).toEqual({ quality: 4, frontier: 4 });
+    expect(byId.get("circuit")!.axisValues).toEqual({ quality: 4, frontier: 1 });
+    // under (quality ↑, frontier-calls ↓) the circuit dominates
+    // frontier-single outright — the default three-survivor pareto drops it
+    expect(report.pareto).toEqual(["circuit", "cheap-single"]);
+    const verified = await verifyBenchReport(report, store, builtinRegistry());
+    expect(verified.ok).toBe(true);
+    expect(verified.mismatches).toEqual([]);
+
+    // a tampered axis value fails recomputation even with a recomputed digest
+    const tampered = JSON.parse(canonicalize(report as unknown as JsonValue)) as {
+      systems: { axisValues: Record<string, number> }[];
+      pareto: string[];
+      digest?: string;
+    };
+    tampered.systems[2]!.axisValues.frontier = 9;
+    const { digestCanonical } = await import("./digest");
+    const { digest: _d, ...base } = tampered as Record<string, JsonValue> & { digest: string };
+    tampered.digest = digestCanonical(base as JsonValue);
+    const again = await verifyBenchReport(tampered, store, builtinRegistry());
+    expect(again.ok).toBe(false);
+    expect(again.mismatches.some((m) => m.includes('axis "frontier"'))).toBe(true);
+
+    // a forged pareto fails even when the axis values are honest
+    const forged = JSON.parse(canonicalize(report as unknown as JsonValue)) as {
+      pareto: string[];
+      digest?: string;
+    };
+    forged.pareto = ["cheap-single"];
+    const { digest: _d2, ...base2 } = forged as Record<string, JsonValue> & { digest: string };
+    forged.digest = digestCanonical(base2 as JsonValue);
+    const forgedCheck = await verifyBenchReport(forged, store, builtinRegistry());
+    expect(forgedCheck.ok).toBe(false);
+    expect(forgedCheck.mismatches.some((m) => m.includes("pareto"))).toBe(true);
+  });
+
+  test("invalid axes fail at admission and at eval", async () => {
+    const store = new MemoryStore();
+    const cheap = metered("cheap", "qwen-flash", { route: ["billing"] }, CHEAP);
+    const oneCase = [cases[0]!];
+    const oneSystem = [{ id: "a", manifest: single, executors: [cheap] }];
+    const expr = (program: JsonValue) => ({ contract: "algal.expr.v1" as const, program });
+    // unbound name: static check fails before any run
+    await expect(
+      runBenchmark({
+        fns: builtinRegistry(),
+        store,
+        cases: oneCase,
+        axes: [{ name: "x", dir: "up", expr: expr(["get", "bogus"]) }],
+        systems: oneSystem,
+      }),
+    ).rejects.toMatchObject({ code: "AXIS_INVALID" });
+    // nonnumeric result: fails at eval, after the runs complete
+    await expect(
+      runBenchmark({
+        fns: builtinRegistry(),
+        store,
+        cases: oneCase,
+        axes: [{ name: "x", dir: "up", expr: expr(["get", "manifestKey"]) }],
+        systems: oneSystem,
+      }),
+    ).rejects.toMatchObject({ code: "AXIS_INVALID" });
+    // duplicate names
+    await expect(
+      runBenchmark({
+        fns: builtinRegistry(),
+        store,
+        cases: oneCase,
+        axes: [
+          { name: "x", dir: "up", expr: expr(["get", "passed"]) },
+          { name: "x", dir: "down", expr: expr(["get", "effectCalls"]) },
+        ],
+        systems: oneSystem,
+      }),
+    ).rejects.toThrow(/duplicate bench axis/);
+    // empty and oversized lists
+    await expect(
+      runBenchmark({ fns: builtinRegistry(), store, cases: oneCase, axes: [], systems: oneSystem }),
+    ).rejects.toThrow(/non-empty/);
+    await expect(
+      runBenchmark({
+        fns: builtinRegistry(),
+        store,
+        cases: oneCase,
+        axes: Array.from({ length: 9 }, (_, i) => ({
+          name: `a${i}`,
+          dir: "up" as const,
+          expr: expr(["get", "passed"]),
+        })),
+        systems: oneSystem,
+      }),
+    ).rejects.toThrow(/at most 8/);
+  });
+
+  test("axisValues and axes must agree in a parsed report", async () => {
+    const { report } = await bench();
+    // a report that records axisValues without declaring axes fails parse
+    const stray = JSON.parse(canonicalize(report as unknown as JsonValue)) as {
+      systems: Record<string, JsonValue>[];
+    };
+    stray.systems[0]!.axisValues = { quality: 3 };
+    expect(() => parseBenchReport(stray)).toThrow(/requires bench\.axes/);
+    // and axes without the recorded values fail too
+    const missing = JSON.parse(canonicalize(report as unknown as JsonValue)) as Record<string, JsonValue>;
+    missing.axes = [
+      {
+        name: "quality",
+        dir: "up",
+        expr: { contract: "algal.expr.v1", program: ["get", "passed"] },
+      },
+    ];
+    expect(() => parseBenchReport(missing)).toThrow(/required by bench\.axes/);
+  });
+
   test("invalid scorers fail at admission and at eval", async () => {
     const store = new MemoryStore();
     const cheap = metered("cheap", "qwen-flash", { route: ["billing"] }, CHEAP);
