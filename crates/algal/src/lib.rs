@@ -12,6 +12,8 @@ pub mod embeddings;
 pub mod error;
 pub mod foundry;
 pub mod graph;
+pub mod journal;
+mod lease;
 pub mod mailbox;
 pub mod memory;
 pub mod process;

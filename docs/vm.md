@@ -131,11 +131,18 @@ needed for verification.
 ## Failure boundary and current limits
 
 A process that stops after dispatch intent and before recording its result
-remains `uncertain`. Automatic scheduling does not retry it. A lock may also
-remain after a hard crash; these are reconciliation evidence, not permission
-to repeat a possibly completed external action. This version has no automatic
-stale-lock recovery or general reconciliation command. An operator must inspect
-external state and preserve evidence before deciding how to proceed.
+remains `uncertain`. Automatic scheduling does not retry it. Opt-in ordered
+journals now support explicit same-intent recovery: completed effects replay,
+unknown reads may be repeated within a budget, and unknown writes stop for
+reconciliation. Both runtimes use an OS-released SQLite lease while retaining
+legacy lock evidence. See the [recovery contract](../spec/v1/process-journal.md)
+and run `bun scripts/recovery-demo.ts --native ./target/debug/algal`.
+
+The [PR shepherd](pr-shepherd.md) is a practical host application: it collects
+live exact-revision GitHub evidence, suspends on pending CI, and wakes from a
+durable timer or deduplicated event. It produces review or repair packets with
+no model calls in the waiting/readiness path. It currently performs read-only
+GitHub work; durable external coding-job reconciliation remains future work.
 
 Mailbox duplicate suppression applies to the supported durable mailbox
 operations and their idempotency keys. Host tools must implement their own

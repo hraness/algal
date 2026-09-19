@@ -365,12 +365,30 @@ enum ProcessCommand {
     Inspect {
         name: String,
     },
+    Journal {
+        name: String,
+    },
     Tick {
         name: String,
+        #[arg(long)]
+        journal: bool,
+        #[arg(long, default_value_t = 2)]
+        max_recoveries: usize,
+        #[command(flatten)]
+        options: Execution,
+    },
+    Recover {
+        name: String,
+        #[arg(long)]
+        expected_intent: String,
         #[command(flatten)]
         options: Execution,
     },
     Schedule {
+        #[arg(long)]
+        journal: bool,
+        #[arg(long, default_value_t = 2)]
+        max_recoveries: usize,
         #[arg(long, default_value_t = 16)]
         max_ticks: usize,
         #[command(flatten)]
@@ -1447,23 +1465,58 @@ async fn execute(cli: Cli) -> Result<bool> {
                 ProcessCommand::Inspect { name } => {
                     emit(&serde_json::to_value(service.inspect(&name)?)?)?
                 }
-                ProcessCommand::Tick { name, mut options } => {
+                ProcessCommand::Journal { name } => emit(&service.journal(&name)?)?,
+                ProcessCommand::Tick {
+                    name,
+                    journal,
+                    max_recoveries,
+                    mut options,
+                } => {
                     options.write = true;
                     let (store, mut host, transports) = prepare(&options, &cli.dir)?;
                     service.store = store;
-                    let state = service.tick(&name, None, &mut host, &transports).await?;
+                    let state = service
+                        .tick_journal(&name, None, &mut host, &transports, journal, max_recoveries)
+                        .await?;
+                    let successful = !["failed", "stuck"].contains(&state.process.status.as_str());
+                    emit(&serde_json::to_value(state)?)?;
+                    return Ok(successful);
+                }
+                ProcessCommand::Recover {
+                    name,
+                    expected_intent,
+                    mut options,
+                } => {
+                    options.write = true;
+                    let (store, mut host, transports) = prepare(&options, &cli.dir)?;
+                    service.store = store;
+                    let state = service
+                        .recover(&name, &expected_intent, &mut host, &transports)
+                        .await?;
                     let successful = !["failed", "stuck"].contains(&state.process.status.as_str());
                     emit(&serde_json::to_value(state)?)?;
                     return Ok(successful);
                 }
                 ProcessCommand::Schedule {
                     max_ticks,
+                    journal,
+                    max_recoveries,
                     mut options,
                 } => {
                     options.write = true;
                     let (store, mut host, transports) = prepare(&options, &cli.dir)?;
                     service.store = store;
-                    emit(&service.schedule(max_ticks, &mut host, &transports).await?)?;
+                    emit(
+                        &service
+                            .schedule_journal(
+                                max_ticks,
+                                &mut host,
+                                &transports,
+                                journal,
+                                max_recoveries,
+                            )
+                            .await?,
+                    )?;
                 }
                 ProcessCommand::Verify { name, options } => {
                     let (store, host, _) = prepare(&options, &cli.dir)?;

@@ -29,7 +29,12 @@ export type Tool = (
   context: ToolContext,
 ) => Promise<Record<string, JsonValue>>;
 
-export type ToolRegistry = Map<string, { signature: ToolSignature; tool: Tool }>;
+export type ToolRegistry = Map<string, {
+  signature: ToolSignature;
+  tool: Tool;
+  /** Host-admitted adapter/configuration identity, required by durable journals. */
+  configurationDigest?: `sha256:${string}`;
+}>;
 
 export function emptyToolRegistry(): ToolRegistry {
   return new Map();

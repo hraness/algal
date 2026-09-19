@@ -116,6 +116,7 @@ export async function resumeRun(
   fns: FnRegistry = builtinRegistry(),
   transports?: Record<string, Transport>,
   tools?: ToolRegistry,
+  runtime: { journal?: import("./process-journal").RuntimeJournal; processName?: string } = {},
 ): Promise<RunReceipt> {
   const checkpoint = parseRunReceipt(receiptJson);
   const manifest = parseOrganismManifest(manifestJson);
@@ -142,6 +143,7 @@ export async function resumeRun(
   );
   const { replayVia, replaySlots } = replayInputs(checkpoint);
   return runOrganism({
+    ...runtime,
     manifest,
     args: checkpoint.args,
     fns,

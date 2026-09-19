@@ -581,3 +581,128 @@ fn native_process_command_failure_emits_snapshot_and_exits_unsuccessfully() {
     assert_eq!(result["process"]["status"], "failed");
     assert!(result["process"]["receipt"].as_str().is_some());
 }
+
+#[tokio::test]
+async fn journal_recovers_completed_effects_without_repeating_mailbox_send() {
+    let directory = tempfile::tempdir().unwrap();
+    let mailboxes = MailboxService::open(directory.path());
+    let inbox = mailboxes.create("journal-in", 4, 1024).unwrap();
+    let outbox = mailboxes.create("journal-out", 4, 1024).unwrap();
+    let mut host = host(&mailboxes);
+    let mut service = ProcessService::open(directory.path()).unwrap();
+    service
+        .create(
+            "recover",
+            receiver(),
+            json!({"a-source":{"inbox":inbox.receive,"outbox":outbox.send,"payload":"once"}}),
+            3,
+            &host,
+            &Transports::new(),
+        )
+        .unwrap();
+    let result = service
+        .tick_journal("recover", None, &mut host, &Transports::new(), true, 2)
+        .await
+        .unwrap();
+    assert_eq!(result.process.status, "suspended");
+    mailboxes.receive(&outbox.receive).unwrap();
+    // Recreate the precise crash window after effect completion and before outcome publication.
+    let intent = result.process.previous.as_ref().unwrap();
+    fs::write(
+        directory.path().join("processes/recover/head.json"),
+        canonical(&json!({"contract":"algal.process-head.v1","name":"recover","record":intent}))
+            .unwrap(),
+    )
+    .unwrap();
+    let nonce = "a".repeat(64);
+    fs::write(
+        directory.path().join("processes/recover/.lock"),
+        canonical(&json!({"contract":"algal.process-owner.v2","process":"recover","nonce":nonce}))
+            .unwrap(),
+    )
+    .unwrap();
+    let recovered = service
+        .recover("recover", intent, &mut host, &Transports::new())
+        .await
+        .unwrap();
+    assert_eq!(recovered.process.receipt, result.process.receipt);
+    assert_eq!(recovered.process.generation, 1);
+    assert!(!mailboxes.has_pending(&outbox.receive).unwrap());
+    assert!(
+        directory
+            .path()
+            .join(format!("processes/recover/owners/{nonce}.json"))
+            .exists()
+    );
+    assert_eq!(service.verify("recover", &host).await.unwrap()["ok"], true);
+}
+
+#[tokio::test]
+async fn journal_rejects_slots_before_publishing_an_uncertain_intent() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut host = Host::default();
+    let mut service = ProcessService::open(directory.path()).unwrap();
+    let manifest=Manifest::parse(&json!({"contract":"algal.organism.v1","key":"organism:no-recovery-slot","name":"Mutable slot","cells":[{"id":"slot","kind":"slot","name":"mutable","mode":"read"}],"edges":[]})).unwrap();
+    let initial = service
+        .create("slot", manifest, json!({}), 2, &host, &Transports::new())
+        .unwrap();
+    assert!(
+        service
+            .tick_journal("slot", None, &mut host, &Transports::new(), true, 2)
+            .await
+            .is_err()
+    );
+    assert_eq!(service.inspect("slot").unwrap().digest, initial.digest);
+}
+
+#[tokio::test]
+async fn journal_cli_inspects_latest_dispatch_after_resume() {
+    let directory = tempfile::tempdir().unwrap();
+    let mailboxes = MailboxService::open(directory.path());
+    let inbox = mailboxes.create("journal-latest-in", 4, 1024).unwrap();
+    let outbox = mailboxes.create("journal-latest-out", 4, 1024).unwrap();
+    let mut host = host(&mailboxes);
+    let mut service = ProcessService::open(directory.path()).unwrap();
+    service
+        .create(
+            "inspect",
+            receiver(),
+            json!({"a-source":{"inbox":inbox.receive,"outbox":outbox.send,"payload":true}}),
+            3,
+            &host,
+            &Transports::new(),
+        )
+        .unwrap();
+    service
+        .tick_journal("inspect", None, &mut host, &Transports::new(), true, 2)
+        .await
+        .unwrap();
+    mailboxes
+        .send(&inbox.send, json!("awake"), &external_wake_key().unwrap())
+        .unwrap();
+    let completed = service
+        .tick_journal("inspect", None, &mut host, &Transports::new(), true, 2)
+        .await
+        .unwrap();
+    assert_eq!(completed.process.status, "complete");
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_algal"))
+        .arg("--dir")
+        .arg(directory.path())
+        .args(["process", "journal", "inspect"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        report["header"]["intent"],
+        json!(completed.process.previous)
+    );
+    assert_eq!(report["effects"].as_array().unwrap().len(), 1);
+    assert_eq!(report["effects"][0]["record"]["state"], "completed");
+    assert!(report["bytes"].as_u64().unwrap() > 0);
+    assert_eq!(service.inspect("inspect").unwrap().digest, completed.digest);
+}

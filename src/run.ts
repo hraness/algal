@@ -48,6 +48,7 @@ import type { FnRegistry } from "./registry";
 import type { Store } from "./store";
 import type { Transport } from "./transport";
 import type { ToolRegistry } from "./tools";
+import type { JournalBinding, JournalTicket, RuntimeJournal } from "./process-journal";
 import { bindRecallOutput, recallOutputSchema } from "./semantic";
 import { asDigest, digestCanonical, type Digest } from "./digest";
 import {
@@ -55,6 +56,7 @@ import {
   asInt,
   asObject,
   asString,
+  asSafeId,
   canonicalBytes,
   canonicalize,
   noUnknownKeys,
@@ -130,6 +132,10 @@ export type RunOptions = {
   store: Store;
   executors: Executor[];
   tools?: ToolRegistry;
+  /** A journal covers only this dispatch's live suffix, never checkpoint replay. */
+  journal?: RuntimeJournal;
+  /** Namespaces host tool idempotency and provider journal audit keys. */
+  processName?: string;
   /** Named transports for `via` cells — remote manifest resolution. */
   transports?: Record<string, Transport>;
   /** Provenance replay: cell path → transport name recorded by the run
@@ -166,9 +172,12 @@ type RunContext = {
   suspended?: boolean;
   seq: number;
   toolReplay: Map<Digest, EffectReceipt[]>;
+  journalFailure?: { error: unknown };
 };
 
 export async function runOrganism(opts: RunOptions): Promise<RunReceipt> {
+  if (opts.processName !== undefined) asSafeId(opts.processName, "process name");
+  opts.journal?.assertHealthy();
   const manifestDigest = digestCanonical(manifestToJson(opts.manifest));
   const ctx: RunContext = {
     opts,
@@ -195,6 +204,7 @@ export async function runOrganism(opts: RunOptions): Promise<RunReceipt> {
     opts.tools,
   );
   const outcome = await runInto(compiled, opts.args ?? {}, "", ctx, 0);
+  assertJournal(ctx);
   emit(ctx, { kind: "run.end", outcome });
   const receipt: Omit<RunReceipt, "digest"> = {
     contract: RUN_CONTRACT,
@@ -427,6 +437,8 @@ async function runInto(
         ctx.cells[cellPath(cell.id)] = rec;
         emit(ctx, { kind: "cell.commit", path: cellPath(cell.id) });
       } catch (e) {
+        // Journal integrity failures cannot be routed through guest fail edges.
+        assertJournal(ctx);
         const rep = errorReport(e);
         // suspension is not failure: the cell's effect asked the host to
         // pause the process (a gate awaiting a decision, a delegated task
@@ -525,6 +537,148 @@ function asToolCall(
   return undefined;
 }
 
+function assertJournal(ctx: RunContext): void {
+  if (ctx.journalFailure !== undefined) throw ctx.journalFailure.error;
+  ctx.opts.journal?.assertHealthy();
+}
+async function journalStep<T>(ctx: RunContext, operation: () => Promise<T>): Promise<T> {
+  try { assertJournal(ctx); return await operation(); }
+  catch (error) { ctx.journalFailure = { error }; ctx.opts.journal?.poison(error); throw error; }
+}
+function processEffectKey(ctx: RunContext, requestDigest: Digest): Digest {
+  return ctx.opts.processName === undefined ? requestDigest : digestCanonical({
+    contract: "algal.process-effect.v1", process: ctx.opts.processName, requestDigest,
+  });
+}
+async function journalBefore(ctx: RunContext, binding: JournalBinding): Promise<JournalTicket> {
+  return journalStep(ctx, async () => {
+    const ticket = await ctx.opts.journal!.before(binding);
+    if ((ticket.token === undefined) === (ticket.receipt === undefined))
+      throw new AlgalError("RECEIPT_MISMATCH", "journal must return exactly one intent or receipt");
+    if (ticket.receipt !== undefined) {
+      const receipt = parseEffectReceipt(ticket.receipt);
+      if (receipt.requestDigest !== binding.requestDigest)
+        throw new AlgalError("RECEIPT_MISMATCH", "journal returned another request's receipt");
+      return { receipt: structuredClone(receipt) };
+    }
+    return { token: asDigest(ticket.token, "journal token") };
+  });
+}
+async function boundedCall<T>(invoke: (signal?: AbortSignal) => Promise<T>, timeout: number | undefined, message: string): Promise<T> {
+  if (timeout === undefined) return invoke();
+  if (timeout <= 0) throw new AlgalError("BUDGET_EXHAUSTED", message);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  try {
+    return await Promise.race([
+      invoke(controller.signal),
+      new Promise<never>((_, reject) => controller.signal.addEventListener("abort", () => {
+        reject(new AlgalError("BUDGET_EXHAUSTED", message));
+      }, { once: true })),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+/** One attempt owns one terminal receipt. The losing timeout promise never
+ * writes the journal or refines the receipt after that terminal is selected. */
+async function providerAttempt(
+  ctx: RunContext, request: EffectRequest, executor: Executor,
+  timeout: number | undefined, retryPolicy = true,
+): Promise<EffectReceipt> {
+  assertJournal(ctx);
+  const requestDigest = effectRequestDigest(request);
+  const journal = executor.replay === true ? undefined : ctx.opts.journal;
+  const deadline = timeout === undefined ? undefined : performance.now() + timeout;
+  const remaining = () => deadline === undefined ? undefined : Math.max(0, deadline - performance.now());
+  const timeoutMessage = `cell "${request.cellId}" effect exceeded maxEffectMs ${timeout}`;
+  let meta: ExecutorMetadata | undefined;
+  let ticket: JournalTicket | undefined;
+  if (journal) {
+    ticket = await journalStep(ctx, async () => {
+      const prepared = await boundedCall(async (signal) => {
+        const metadata = await executor.receiptFor?.(request);
+        if (signal?.aborted) throw new AlgalError("BUDGET_EXHAUSTED", timeoutMessage);
+        const configurationDigest = asDigest(executor.journalConfigurationFor
+          ? await executor.journalConfigurationFor(request)
+          : metadata?.configurationDigest ?? executor.cacheIdentity, "journal executor configuration");
+        return { metadata, configurationDigest };
+      }, remaining(), timeoutMessage);
+      meta = prepared.metadata;
+      return journalBefore(ctx, {
+        requestDigest, executor: executor.id, configurationDigest: prepared.configurationDigest,
+        idempotencyKey: processEffectKey(ctx, requestDigest), recovery: "never",
+      });
+    });
+    if (ticket.receipt !== undefined) return ticket.receipt;
+  }
+  let effect: EffectReceipt;
+  try {
+    const result = await boundedCall(async (signal) => {
+      if (!journal) meta = await executor.receiptFor?.(request);
+      if (executor.executeEffect) {
+        const result = await executor.executeEffect(request, signal);
+        return { output: result.output, metadata: { ...meta, ...result.metadata } };
+      }
+      return { output: await executor.execute(request, signal), metadata: meta };
+    }, remaining(), timeoutMessage);
+    meta = result.metadata;
+    effect = { requestDigest, output: result.output, executor: meta?.executor ?? executor.id };
+  } catch (error) {
+    const report = errorReport(error);
+    effect = { requestDigest, error: { code: report.code, message: report.message }, executor: meta?.executor ?? executor.id };
+    const wake = suspensionWake(error, meta?.wake);
+    if (wake.length > 0) effect.wake = wake;
+    if (report.code === "EFFECT_SUSPENDED") effect.retryable = false;
+  }
+  if (meta?.usage) effect.usage = structuredClone(meta.usage);
+  if (meta?.cached) effect.cached = true;
+  if (meta?.configurationDigest) effect.configurationDigest = meta.configurationDigest;
+  if (retryPolicy && (executor.retryable === false || meta?.retryable === false)) effect.retryable = false;
+  // Adapter-owned output objects must not change while persistence awaits I/O.
+  const terminal = journal ? await journalStep(ctx, async () => structuredClone(effect)) : effect;
+  if (journal && ticket?.token !== undefined)
+    await journalStep(ctx, () => journal.after(ticket.token!, structuredClone(terminal)));
+  return terminal;
+}
+async function toolAttempt(
+  ctx: RunContext, name: string, entry: NonNullable<ReturnType<ToolRegistry["get"]>>,
+  inputs: Record<string, JsonValue>, requestDigest: Digest,
+  timeout: number | undefined, timeoutMessage: string,
+): Promise<EffectReceipt> {
+  assertJournal(ctx);
+  const journal = ctx.opts.journal;
+  let ticket: JournalTicket | undefined;
+  if (journal) {
+    ticket = await journalStep(ctx, async () => journalBefore(ctx, {
+      requestDigest, executor: `tool:${name}`,
+      configurationDigest: asDigest(entry.configurationDigest, "journal tool configuration"),
+      idempotencyKey: processEffectKey(ctx, requestDigest),
+      recovery: entry.signature.effect === "read" ? "read" : "never",
+    }));
+    if (ticket.receipt !== undefined) return ticket.receipt;
+  }
+  let effect: EffectReceipt;
+  try {
+    const outputs = await boundedCall((signal) => entry.tool(inputs, {
+      requestDigest, idempotencyKey: processEffectKey(ctx, requestDigest), ...(signal ? { signal } : {}),
+    }), timeout, timeoutMessage);
+    effect = { requestDigest, output: outputs as JsonValue, executor: `tool:${name}` };
+  } catch (error) {
+    const report = errorReport(error);
+    const code = report.code === "INTERNAL" ? "TOOL_FAILED" : report.code;
+    const wake = suspensionWake(error);
+    effect = {
+      requestDigest, error: { code, message: report.message }, executor: `tool:${name}`,
+      ...(code === "EFFECT_SUSPENDED" ? { retryable: false as const } : {}),
+      ...(wake.length > 0 ? { wake } : {}),
+    };
+  }
+  // Adapter-owned output objects must not change while persistence awaits I/O.
+  const terminal = journal ? await journalStep(ctx, async () => structuredClone(effect)) : effect;
+  if (journal && ticket?.token !== undefined)
+    await journalStep(ctx, () => journal.after(ticket.token!, structuredClone(terminal)));
+  return terminal;
+}
+
 async function executeBoundedEffect<T>(
   ctx: RunContext,
   path: string,
@@ -545,77 +699,14 @@ async function executeBoundedEffect<T>(
     ctx.work.agentCalls += 1;
     ctx.work.units += WORK.effectBase + contextBytes * WORK.perContextByte;
     emit(ctx, { kind: "effect", path, digest: requestDigest });
-    let meta: ExecutorMetadata | undefined;
-    const invoke = async (signal?: AbortSignal): Promise<JsonValue> => {
-      // the executor's declared receipt metadata is the baseline — it is
-      // recorded even when the call itself fails (a suspension or error is
-      // still bound to the backend that declined it); executeEffect's
-      // result metadata refines it on success
-      meta = await executor.receiptFor?.(request);
-      if (executor.executeEffect) {
-        const result = await executor.executeEffect(request, signal);
-        meta = { ...meta, ...result.metadata };
-        return result.output;
-      }
-      return executor.execute(request, signal);
-    };
-    let raw: JsonValue;
-    try {
-      if (effectMs === undefined) {
-        raw = await invoke();
-      } else {
-        const ac = new AbortController();
-        const timer = setTimeout(() => ac.abort(), effectMs);
-        try {
-          raw = await Promise.race([
-            invoke(ac.signal),
-            new Promise<never>((_, reject) =>
-              ac.signal.addEventListener(
-                "abort",
-                () => reject(new AlgalError(
-                  "BUDGET_EXHAUSTED",
-                  `cell "${request.cellId}" effect exceeded maxEffectMs ${effectMs}`,
-                )),
-                { once: true },
-              ),
-            ),
-          ]);
-        } finally {
-          clearTimeout(timer);
-        }
-      }
-    } catch (error) {
-      const report = errorReport(error);
-      const effect: EffectReceipt = {
-        requestDigest,
-        error: { code: report.code, message: report.message },
-        executor: meta?.executor ?? executor.id,
-      };
-      if (meta?.usage) effect.usage = meta.usage;
-      if (meta?.cached) effect.cached = true;
-      const wake = suspensionWake(error, meta?.wake);
-      if (wake.length > 0) effect.wake = wake;
-      if (meta?.configurationDigest) effect.configurationDigest = meta.configurationDigest;
-      // suspension is not a retryable failure — it asks the host to pause
-      // the process, so the request is never re-issued within this run
-      if (report.code === "EFFECT_SUSPENDED" || executor.retryable === false || meta?.retryable === false) {
-        effect.retryable = false;
-      }
-      ctx.effects.push(effect);
-      lastErr = error;
+    const effect = await providerAttempt(ctx, request, executor, effectMs);
+    ctx.effects.push(effect);
+    if (effect.error) {
+      lastErr = new AlgalError(effect.error.code, effect.error.message);
       if (effect.retryable === false) break;
       continue;
     }
-    const effect: EffectReceipt = {
-      requestDigest,
-      output: raw,
-      executor: meta?.executor ?? executor.id,
-    };
-    if (meta?.usage) effect.usage = meta.usage;
-    if (meta?.cached) effect.cached = true;
-    if (meta?.configurationDigest) effect.configurationDigest = meta.configurationDigest;
-    if (executor.retryable === false || meta?.retryable === false) effect.retryable = false;
-    ctx.effects.push(effect);
+    const raw = effect.output!;
     const bytes = canonicalBytes(raw);
     if (bytes > maxOut) {
       lastErr = new AlgalError(
@@ -650,6 +741,7 @@ async function activate(
   path: string,
   depth: number,
 ): Promise<Activation> {
+  assertJournal(ctx);
   switch (cell.kind) {
     case "input": {
       const supplied = args[cell.id] ?? {};
@@ -973,63 +1065,16 @@ async function activate(
       ) {
         throw new AlgalError("EFFECT_UNBOUND", `replay has no tool receipt for ${requestDigest}`);
       }
-      if (replay) {
-        ctx.effects.push(replay);
-        if (replay.error) throw new AlgalError(replay.error.code, replay.error.message);
-        ctx.work.units += entry.signature.cost + canonicalBytes(replay.output!);
-        return { outputs: replay.output as Record<string, JsonValue>, effectDigest: requestDigest };
-      }
-      const controller = new AbortController();
-      const timeout = cell.budget?.maxEffectMs;
-      const timer = timeout === undefined ? undefined : setTimeout(() => controller.abort(), timeout);
-      try {
-        const execute = entry.tool(inputs, {
-          requestDigest,
-          idempotencyKey: requestDigest,
-          ...(timeout !== undefined ? { signal: controller.signal } : {}),
-        });
-        const outputs = timeout === undefined
-          ? await execute
-          : await Promise.race([
-              execute,
-              new Promise<never>((_, reject) => controller.signal.addEventListener(
-                "abort",
-                () => reject(new AlgalError(
-                  "BUDGET_EXHAUSTED",
-                  `tool cell "${cell.id}" exceeded maxEffectMs ${timeout}`,
-                )),
-                { once: true },
-              )),
-            ]);
-        const bytes = canonicalBytes(outputs as unknown as JsonValue);
-        if (bytes > entry.signature.maxOutputBytes) {
-          throw new AlgalError(
-            "BUDGET_EXHAUSTED",
-            `tool cell "${cell.id}" output ${bytes}B exceeds ${entry.signature.maxOutputBytes}B`,
-          );
-        }
-        ctx.work.units += entry.signature.cost + bytes;
-        ctx.effects.push({
-          requestDigest,
-          output: outputs as unknown as JsonValue,
-          executor: `tool:${cell.tool}`,
-        });
-        return { outputs, effectDigest: requestDigest };
-      } catch (error) {
-        const report = errorReport(error);
-        const wake = suspensionWake(error);
-        ctx.effects.push({
-          requestDigest,
-          error: { code: report.code === "INTERNAL" ? "TOOL_FAILED" : report.code, message: report.message },
-          executor: `tool:${cell.tool}`,
-          ...(report.code === "EFFECT_SUSPENDED" ? { retryable: false as const } : {}),
-          ...(wake.length > 0 ? { wake } : {}),
-        });
-        if (error instanceof AlgalError) throw error;
-        throw new AlgalError("TOOL_FAILED", report.message);
-      } finally {
-        if (timer !== undefined) clearTimeout(timer);
-      }
+      const effect = replay ?? await toolAttempt(ctx, cell.tool, entry, inputs, requestDigest,
+        cell.budget?.maxEffectMs, `tool cell "${cell.id}" exceeded maxEffectMs ${cell.budget?.maxEffectMs}`);
+      ctx.effects.push(effect);
+      if (effect.error) throw new AlgalError(effect.error.code, effect.error.message);
+      const outputs = effect.output as Record<string, JsonValue>;
+      const bytes = canonicalBytes(effect.output!);
+      if (bytes > entry.signature.maxOutputBytes)
+        throw new AlgalError("BUDGET_EXHAUSTED", `tool cell "${cell.id}" output ${bytes}B exceeds ${entry.signature.maxOutputBytes}B`);
+      ctx.work.units += entry.signature.cost + bytes;
+      return { outputs, effectDigest: requestDigest };
     }
     case "agent":
     case "classifier":
@@ -1147,42 +1192,10 @@ async function activate(
           ctx.work.units +=
             WORK.effectBase + compactCtxBytes * WORK.perContextByte;
           emit(ctx, { kind: "effect", path, digest: compactDigest });
-          let raw: JsonValue;
-          let meta: ExecutorMetadata | undefined;
-          try {
-            meta = await compactExec.receiptFor?.(compactReq);
-            if (compactExec.executeEffect) {
-              const r = await compactExec.executeEffect(compactReq);
-              meta = { ...meta, ...r.metadata };
-              raw = r.output;
-            } else {
-              raw = await compactExec.execute(compactReq);
-            }
-          } catch (e) {
-            const rep = errorReport(e);
-            const eff: EffectReceipt = {
-              requestDigest: compactDigest,
-              error: { code: rep.code, message: rep.message },
-              executor: meta?.executor ?? compactExec.id,
-            };
-            if (meta?.usage) eff.usage = meta.usage;
-            if (meta?.cached) eff.cached = true;
-            const wake = suspensionWake(e, meta?.wake);
-            if (wake.length > 0) eff.wake = wake;
-            if (meta?.configurationDigest) eff.configurationDigest = meta.configurationDigest;
-            if (rep.code === "EFFECT_SUSPENDED") eff.retryable = false;
-            ctx.effects.push(eff);
-            throw e;
-          }
-          const eff: EffectReceipt = {
-            requestDigest: compactDigest,
-            output: raw,
-            executor: meta?.executor ?? compactExec.id,
-          };
-          if (meta?.usage) eff.usage = meta.usage;
-          if (meta?.cached) eff.cached = true;
-          if (meta?.configurationDigest) eff.configurationDigest = meta.configurationDigest;
+          const eff = await providerAttempt(ctx, compactReq, compactExec, undefined, false);
           ctx.effects.push(eff);
+          if (eff.error) throw new AlgalError(eff.error.code, eff.error.message);
+          const raw = eff.output!;
           ctx.work.units += canonicalBytes(raw) * WORK.perOutputByte;
           const bound = bindOutput(
             compactReq.output,
@@ -1281,83 +1294,14 @@ async function activate(
           ctx.work.units += WORK.effectBase + contextBytes * WORK.perContextByte;
           emit(ctx, { kind: "effect", path, digest: requestDigest });
 
-          let meta: ExecutorMetadata | undefined;
-          const invoke = async (signal?: AbortSignal): Promise<JsonValue> => {
-            meta = await executor.receiptFor?.(request);
-            if (executor.executeEffect) {
-              const result = await executor.executeEffect(request, signal);
-              meta = { ...meta, ...result.metadata };
-              return result.output;
-            }
-            return executor.execute(request, signal);
-          };
-          let raw: JsonValue;
-          // budget.maxEffectMs bounds each call wall-clock; the timeout is
-          // recorded as an effect error so retry and replay both see it
-          const effectMs = cell.budget?.maxEffectMs;
-          try {
-            if (effectMs === undefined) {
-              raw = await invoke();
-            } else {
-              const ac = new AbortController();
-              const timer = setTimeout(() => ac.abort(), effectMs);
-              try {
-                raw = await Promise.race([
-                  invoke(ac.signal),
-                  new Promise<never>((_, reject) =>
-                    ac.signal.addEventListener(
-                      "abort",
-                      () =>
-                        reject(
-                          new AlgalError(
-                            "BUDGET_EXHAUSTED",
-                            `cell "${cell.id}" effect exceeded maxEffectMs ${effectMs}`,
-                          ),
-                        ),
-                      { once: true },
-                    ),
-                  ),
-                ]);
-              } finally {
-                clearTimeout(timer);
-              }
-            }
-          } catch (e) {
-            // a failed effect is recorded too — replay must reproduce the
-            // same failure for the run to verify bit-for-bit
-            const rep = errorReport(e);
-            const eff: EffectReceipt = {
-              requestDigest,
-              error: { code: rep.code, message: rep.message },
-              executor: meta?.executor ?? executor.id,
-            };
-            if (meta?.usage) eff.usage = meta.usage;
-            if (meta?.cached) eff.cached = true;
-            const wake = suspensionWake(e, meta?.wake);
-            if (wake.length > 0) eff.wake = wake;
-            if (meta?.configurationDigest) eff.configurationDigest = meta.configurationDigest;
-            // suspension is not a retryable failure — it asks the host to
-            // pause the process, so the request is never re-issued
-            if (rep.code === "EFFECT_SUSPENDED" || executor.retryable === false || meta?.retryable === false) {
-              eff.retryable = false;
-            }
-            ctx.effects.push(eff);
-            lastErr = e;
+          const eff = await providerAttempt(ctx, request, executor, cell.budget?.maxEffectMs);
+          ctx.effects.push(eff);
+          if (eff.error) {
+            lastErr = new AlgalError(eff.error.code, eff.error.message);
             if (eff.retryable === false) break;
             continue;
           }
-          // the response is a fact of the run: it is recorded before any
-          // contract check so replay reproduces bad output verbatim
-          const eff: EffectReceipt = {
-            requestDigest,
-            output: raw,
-            executor: meta?.executor ?? executor.id,
-          };
-          if (meta?.usage) eff.usage = meta.usage;
-          if (meta?.cached) eff.cached = true;
-          if (meta?.configurationDigest) eff.configurationDigest = meta.configurationDigest;
-          if (executor.retryable === false || meta?.retryable === false) eff.retryable = false;
-          ctx.effects.push(eff);
+          const raw = eff.output!;
 
           const outBytes = canonicalBytes(raw);
           if (outBytes > maxOut) {
@@ -1458,48 +1402,12 @@ async function activate(
             if (replay.error) throw new AlgalError(replay.error.code, replay.error.message);
             toolOut = replay.output as Record<string, JsonValue>;
           } else {
-            const controller = new AbortController();
-            const timeout = cell.budget?.maxEffectMs;
-            const timer = timeout === undefined ? undefined : setTimeout(() => controller.abort(), timeout);
-            try {
-              const execute = tool.tool(call.inputs as Record<string, JsonValue>, {
-                requestDigest: toolDigest,
-                idempotencyKey: toolDigest,
-                ...(timeout !== undefined ? { signal: controller.signal } : {}),
-              });
-              toolOut = timeout === undefined
-                ? await execute
-                : await Promise.race([
-                    execute,
-                    new Promise<never>((_, reject) => controller.signal.addEventListener(
-                      "abort",
-                      () => reject(new AlgalError(
-                        "BUDGET_EXHAUSTED",
-                        `agent tool ${call.fn} exceeded maxEffectMs ${timeout}`,
-                      )),
-                      { once: true },
-                    )),
-                  ]);
-              ctx.effects.push({
-                requestDigest: toolDigest,
-                output: toolOut as unknown as JsonValue,
-                executor: `tool:${call.fn}`,
-              });
-            } catch (error) {
-              const report = errorReport(error);
-              const code = report.code === "INTERNAL" ? "TOOL_FAILED" : report.code;
-              const wake = suspensionWake(error);
-              ctx.effects.push({
-                requestDigest: toolDigest,
-                error: { code, message: report.message },
-                executor: `tool:${call.fn}`,
-                ...(code === "EFFECT_SUSPENDED" ? { retryable: false as const } : {}),
-                ...(wake.length > 0 ? { wake } : {}),
-              });
-              throw new AlgalError(code, report.message);
-            } finally {
-              if (timer !== undefined) clearTimeout(timer);
-            }
+            const effect = await toolAttempt(ctx, call.fn, tool,
+              call.inputs as Record<string, JsonValue>, toolDigest, cell.budget?.maxEffectMs,
+              `agent tool ${call.fn} exceeded maxEffectMs ${cell.budget?.maxEffectMs}`);
+            ctx.effects.push(effect);
+            if (effect.error) throw new AlgalError(effect.error.code, effect.error.message);
+            toolOut = effect.output as Record<string, JsonValue>;
           }
           const bytes = canonicalBytes(toolOut as unknown as JsonValue);
           if (bytes > tool.signature.maxOutputBytes) {
