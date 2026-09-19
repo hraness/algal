@@ -2,7 +2,7 @@ use algal::{
     canonical::{canonical, digest, read_json},
     capabilities::parse_capability_handle,
     contract::Manifest,
-    effects::{Backend, Host},
+    effects::{Backend, Host, command_output},
     embeddings::Embedder,
     graph::{Transports, compile},
     mailbox::{self, MailboxService},
@@ -456,7 +456,12 @@ async fn a_suspended_run_resumes_against_live_executors() {
     )
     .await
     .unwrap();
-    assert_eq!(suspended["outcome"], "suspended");
+    assert_eq!(
+        suspended["outcome"],
+        "suspended",
+        "initial suspension receipt: {}",
+        canonical(&suspended).unwrap()
+    );
     assert_eq!(suspended["cells"]["worker"]["status"], "suspended");
     // suspension bypasses retry: one recorded attempt, non-retryable
     let effects = suspended["effects"].as_array().unwrap();
@@ -522,13 +527,41 @@ async fn a_suspended_run_resumes_against_live_executors() {
     )
     .await
     .unwrap();
-    assert_eq!(again["outcome"], "suspended");
+    assert_eq!(
+        again["outcome"],
+        "suspended",
+        "repeated suspension receipt: {}",
+        canonical(&again).unwrap()
+    );
     assert_eq!(again["cells"]["worker"]["status"], "suspended");
     assert_eq!(
         again["effects"][0]["requestDigest"],
         effects_digest(&suspended)
     );
     assert_eq!(again["effects"][0]["error"]["code"], "EFFECT_SUSPENDED");
+}
+
+#[tokio::test]
+async fn command_exit_status_survives_an_early_closed_stdin() {
+    // A payload larger than an OS pipe can hold forces the writer to observe
+    // the closed reader; this reproduces the immediate-exit race without sleeps.
+    let payload = vec![b'x'; 1_048_576];
+    for (script, expected) in [
+        ("exec 0<&-; exit 75", "EFFECT_SUSPENDED"),
+        ("exec 0<&-; exit 1", "EFFECT_FAILED"),
+        ("exec 0<&-; printf 'ignored request'", "EFFECT_FAILED"),
+    ] {
+        let error = command_output(
+            &["sh".into(), "-c".into(), script.into()],
+            None,
+            &payload,
+            1024,
+            5000,
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.code, expected, "{script}: {error}");
+    }
 }
 
 fn effects_digest(receipt: &Value) -> Value {

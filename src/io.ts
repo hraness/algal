@@ -63,14 +63,25 @@ export async function commandJson(
   try {
     const output = boundedBytes(child.stdout, options.maxStdoutBytes ?? 1_048_576, "executor output", signal);
     const diagnostic = boundedBytes(child.stderr, 65_536, "executor diagnostics", signal);
-    child.stdin.write(payload);
-    child.stdin.end();
-    const [stdout, , code] = await Promise.all([output, diagnostic, child.exited]);
+    const input = (async () => {
+      try {
+        child.stdin.write(payload);
+        await child.stdin.end();
+        return true;
+      } catch (error) {
+        // A command may close stdin before asking to suspend. Settle the pipe
+        // and let its authoritative exit status decide that outcome.
+        if (typeof error === "object" && error !== null && "code" in error && error.code === "EPIPE") return false;
+        throw error;
+      }
+    })();
+    const [stdout, , code, inputComplete] = await Promise.all([output, diagnostic, child.exited, input]);
     if (signal.aborted) throw new AlgalError("BUDGET_EXHAUSTED", "command cancelled or timed out");
     // exit 75 (EX_TEMPFAIL): the answer is not ready — suspend the run; it
     // may be resumed later. Any other nonzero exit is an ordinary failure.
     if (code === 75) throw new AlgalError("EFFECT_SUSPENDED", "executor asked the host to suspend the run");
     if (code !== 0) throw new AlgalError("EFFECT_FAILED", `executor exited ${code}; diagnostics withheld`);
+    if (!inputComplete) throw new AlgalError("EFFECT_FAILED", "executor closed stdin before request delivery");
     let parsed: unknown;
     try { parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(stdout)); }
     catch { throw new AlgalError("EFFECT_UNPARSEABLE", "executor stdout is not JSON"); }

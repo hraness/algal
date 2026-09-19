@@ -355,12 +355,22 @@ pub async fn command_output(
         .ok_or_else(|| Error::new("IO_FAILED", "process stderr"))?;
     let task = async {
         let write = async {
-            input.write_all(payload).await?;
-            input.shutdown().await?;
+            let result = async {
+                input.write_all(payload).await?;
+                input.shutdown().await
+            }
+            .await;
             drop(input);
-            Ok::<_, Error>(())
+            match result {
+                Ok(()) => Ok(false),
+                // An immediate executor exit can close its reader before the
+                // request fits in the pipe. Join its exit status before deciding
+                // whether this was the explicit suspension protocol or failure.
+                Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => Ok(true),
+                Err(error) => Err(Error::from(error)),
+            }
         };
-        let (stdout, _, _, status) = tokio::try_join!(
+        let (stdout, _, incomplete_input, status) = tokio::try_join!(
             read_bounded(output, max),
             read_bounded(diagnostic, 65_536),
             write,
@@ -379,6 +389,12 @@ pub async fn command_output(
             return Err(Error::new(
                 "EFFECT_FAILED",
                 "host executable failed; diagnostics withheld",
+            ));
+        }
+        if incomplete_input {
+            return Err(Error::new(
+                "EFFECT_FAILED",
+                "executor closed stdin before request delivery",
             ));
         }
         Ok(stdout)
