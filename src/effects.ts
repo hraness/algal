@@ -22,15 +22,40 @@ import {
 
 export const EFFECT_CONTRACT = "algal.effect.v1" as const;
 
+/** The typed-decision question contract (`kind:"decide"` requests): the wire
+ * shape any decision provider answers — provider-neutral by design (Jev is
+ * the first backend). `noul` → a keep/relevance probability; `choice` → a
+ * label from `criteria` keys; `score` → a rating. The parsers live in
+ * decisions.ts; the type lives here because it is request-contract data. */
+export type DecisionQuestion =
+  | {
+      type: "noul";
+      instructions: string;
+      criteria?: { true?: string; false?: string };
+    }
+  | {
+      type: "choice";
+      instructions: string;
+      criteria: Record<string, string | null>;
+    }
+  | { type: "score"; instructions: string; criteria: string[] };
+
+export type DecisionQuestions = Record<string, DecisionQuestion>;
+
 export type EffectRequest = {
   contract: typeof EFFECT_CONTRACT;
   cellId: string;
-  kind: "agent" | "classifier" | "gate";
+  kind: "agent" | "classifier" | "gate" | "decide";
   prompt: string;
   context: JsonObject;
   output: AgentOutput;
   budget: { maxContextBytes: number; maxOutputBytes: number };
   route?: Route;
+  /** Declared typed-decision questions — present only on `kind:"decide"`
+   * requests (the `decide` cell kind's question map and internal compaction
+   * probes). Digested with the request, so a replayed run serves the same
+   * questions to the same answers. */
+  questions?: DecisionQuestions;
 };
 
 export type EffectReceipt = {

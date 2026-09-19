@@ -630,7 +630,9 @@ impl Runtime<'_> {
                     .await?;
                 Ok(json!({"outputs":output,"effectDigest":effect}))
             }
-            "agent" | "classifier" | "gate" => self.agent(cell, inputs, compiled, cell_path).await,
+            "agent" | "classifier" | "gate" | "decide" => {
+                self.agent(cell, inputs, compiled, cell_path).await
+            }
             _ => Err(Error::new("MANIFEST_INVALID", "unsupported native cell")),
         }
     }
@@ -657,6 +659,13 @@ impl Runtime<'_> {
             .flatten()
             .filter_map(Value::as_str)
             .collect();
+        // decide cells carry no declared output — the contract is derived
+        // from the question map (an answers record shaped per question type)
+        let output_contract = if cell["kind"] == "decide" {
+            crate::decisions::answer_schema(&cell["questions"])
+        } else {
+            cell["output"].clone()
+        };
         let max_turns = cell["budget"]["maxTurns"]
             .as_u64()
             .unwrap_or(if tools.is_empty() { 1 } else { 8 });
@@ -692,8 +701,87 @@ impl Runtime<'_> {
             }
             cell_view.insert(target.to_owned(), value);
         }
-        let mut log = Vec::new();
+        let mut log: Vec<Value> = Vec::new();
         for turn in 0..max_turns {
+            // recorded tool-log compaction: over-threshold logs are triaged
+            // by a decide effect (keep = noul >= 0.5). The effect rides the
+            // receipt — replay reproduces the rebuilt log bit-for-bit.
+            if cell["kind"] == "agent" {
+                if let Some(compact) = cell.get("compact") {
+                    let pinned = compact["keepRecent"].as_u64().unwrap_or(0) as usize;
+                    let max_log = compact["maxLogBytes"].as_u64().unwrap() as usize;
+                    if log.len() > pinned && canonical(&json!(log))?.len() > max_log {
+                        let droppable = log.len() - pinned;
+                        let mut questions = Map::new();
+                        for (i, entry) in log.iter().take(droppable).enumerate() {
+                            questions.insert(
+                                format!("keep_{i}"),
+                                json!({"type":"noul","instructions":format!(
+                                    "Retain context.toolLog[{i}] verbatim — the \"{}\" call and its result. Is it still needed for the remaining task?",
+                                    entry["fn"].as_str().unwrap_or("")
+                                )}),
+                            );
+                        }
+                        let questions = Value::Object(questions);
+                        let compact_ctx = json!({"inputs":view_inputs,"turn":turn,"toolLog":log});
+                        let compact_ctx_bytes = canonical(&compact_ctx)?.len();
+                        if compact_ctx_bytes > max_context {
+                            return Err(Error::limit(format!(
+                                "compaction context {compact_ctx_bytes}B exceeds maxContextBytes {max_context}B"
+                            )));
+                        }
+                        let mut req = json!({
+                            "contract":"algal.effect.v1",
+                            "cellId":name,
+                            "kind":"decide",
+                            "prompt":format!(
+                                "Tool-log triage for cell \"{name}\". The log exceeds {max_log}B; for each indexed entry decide whether the call and its result must be preserved verbatim for the remaining work. Task: {}",
+                                cell["prompt"].as_str().unwrap_or("")
+                            ),
+                            "context":compact_ctx,
+                            "output":crate::decisions::answer_schema(&questions),
+                            "budget":{"maxContextBytes":max_context,"maxOutputBytes":max_output},
+                            "questions":questions,
+                        });
+                        if let Some(route) = compact.get("route").or_else(|| cell.get("route")) {
+                            req["route"] = route.clone();
+                        }
+                        let req_digest = digest(&req)?;
+                        if self.calls + 1 > self.budgets.max_agent_calls {
+                            return Err(Error::limit("maxAgentCalls exhausted"));
+                        }
+                        self.calls += 1;
+                        self.work += 500 + compact_ctx_bytes;
+                        self.event("effect", Some(cell_path), Some(&req_digest), None)?;
+                        let receipt = self
+                            .host
+                            .effect(&req, timeout, Some(&mut *self.store))
+                            .await?;
+                        self.effects.push(receipt.clone());
+                        if let Some(error) = receipt.get("error") {
+                            return Err(serde_json::from_value(error.clone())?);
+                        }
+                        let raw = receipt["output"].clone();
+                        self.work += canonical(&raw)?.len();
+                        let bound = bind_output(&req["output"].clone(), raw).map_err(|e| {
+                            Error::new(
+                                "EFFECT_UNPARSEABLE",
+                                format!("cell \"{name}\" compaction: {}", e.message),
+                            )
+                        })?;
+                        let mut kept: Vec<Value> = Vec::new();
+                        for (i, entry) in log.iter().take(droppable).enumerate() {
+                            if bound["answers"][format!("keep_{i}")]["noul"]
+                                .as_f64()
+                                .is_some_and(|p| p >= 0.5)
+                            {
+                                kept.push(entry.clone());
+                            }
+                        }
+                        log.splice(0..droppable, kept);
+                    }
+                }
+            }
             let mut context = json!({"inputs":view_inputs,"turn":turn});
             if let Some(note) = cell["view"].get("note") {
                 context["note"] = note.clone();
@@ -721,9 +809,12 @@ impl Runtime<'_> {
                     "context view {context_bytes}B exceeds maxContextBytes {max_context}B"
                 )));
             }
-            let mut request = json!({"contract":"algal.effect.v1","cellId":name,"kind":cell["kind"],"prompt":cell["prompt"],"context":context,"output":cell["output"],"budget":{"maxContextBytes":max_context,"maxOutputBytes":max_output}});
+            let mut request = json!({"contract":"algal.effect.v1","cellId":name,"kind":cell["kind"],"prompt":cell.get("prompt").cloned().unwrap_or(json!("")),"context":context,"output":output_contract,"budget":{"maxContextBytes":max_context,"maxOutputBytes":max_output}});
             if let Some(route) = cell.get("route") {
                 request["route"] = route.clone();
+            }
+            if cell["kind"] == "decide" {
+                request["questions"] = cell["questions"].clone();
             }
             let request_digest = digest(&request)?;
             let mut last_error = Error::new("EFFECT_FAILED", "effect did not settle");
@@ -770,8 +861,8 @@ impl Runtime<'_> {
                     tool_call = Some(raw);
                     break;
                 }
-                match bind_output(&cell["output"], raw.clone()).map_err(|error| {
-                    if cell["output"]["kind"] == "choice" {
+                match bind_output(&output_contract, raw.clone()).map_err(|error| {
+                    if output_contract["kind"] == "choice" {
                         Error::new(
                             "EFFECT_UNPARSEABLE",
                             format!(

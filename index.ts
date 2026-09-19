@@ -12,6 +12,7 @@ export type {
   AgentView,
   Budgets,
   Cell,
+  CompactPolicy,
   Edge,
   OrganismInterface,
   OrganismManifest,
@@ -52,6 +53,83 @@ export type {
 
 export { VERCEL_AI_GATEWAY_BASE_URL, vercelGatewayExecutor } from "./src/gateway";
 export type { GatewayExecutorOptions, GatewayFetch } from "./src/gateway";
+
+export {
+  DECISION_BOUNDS,
+  decisionAnswerSchema,
+  decisionExecutor,
+  parseDecisionAnswer,
+  parseDecisionAnswers,
+  parseDecisionQuestion,
+  parseDecisionQuestions,
+} from "./src/decisions";
+export type {
+  DecisionAnswer,
+  DecisionAsker,
+  DecisionExecutorOptions,
+  DecisionQuestion,
+  DecisionQuestions,
+  DecisionResponse,
+  DecisionState,
+  DecisionUsage,
+} from "./src/decisions";
+
+export {
+  JEV_CREDENTIAL_ENV,
+  JEV_DEFAULT_MODEL,
+  TYPESAFE_SYSTEMONE_URL,
+  jevAsker,
+  jevExecutor,
+} from "./src/jev";
+export type { JevAskerOptions, JevExecutorOptions } from "./src/jev";
+
+export {
+  algalHome,
+  checkCredentialShape,
+  credentialResolver,
+  credentialStatus,
+  forgetCredential,
+  osBackend,
+  providerSpec,
+  redact,
+  resolveCredential,
+  storeCredential,
+} from "./src/credentials";
+export type {
+  CredentialProvider,
+  CredentialResolverOptions,
+  CredentialSource,
+  CredentialStatus,
+  VaultBackend,
+} from "./src/credentials";
+
+export {
+  EMBED_BOUNDS,
+  GATEWAY_EMBED_MODEL,
+  LOCAL_DIM,
+  LOCAL_MODEL,
+  VERCEL_GATEWAY_BASE,
+  cosine,
+  embedTokens,
+  gatewayEmbedder,
+  localEmbedder,
+  localVector,
+  resolveEmbedder,
+  tokenOverlap,
+} from "./src/embeddings";
+export type { Embedder, GatewayEmbedderOptions } from "./src/embeddings";
+
+export {
+  SEMANTIC_BOUNDS,
+  SEMANTIC_INDEX_FILE,
+  indexStore,
+  searchIndex,
+} from "./src/semantic";
+export type {
+  ChunkSource,
+  IndexReport,
+  SearchHit,
+} from "./src/semantic";
 
 export {
   emptyToolRegistry,

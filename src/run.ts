@@ -8,6 +8,10 @@
 import { AlgalError, errorReport, type ErrorCode } from "./errors";
 import { evalProgram } from "./expr";
 import {
+  decisionAnswerSchema,
+  type DecisionQuestions,
+} from "./decisions";
+import {
   argsForSubOrganism,
   compileOrganism,
   type CompiledOrganism,
@@ -17,6 +21,7 @@ import type {
   Cell,
   OrganismManifest,
   PortType,
+  Route,
 } from "./contract";
 import {
   BOUNDS,
@@ -716,19 +721,31 @@ async function activate(
     }
     case "agent":
     case "classifier":
-    case "gate": {
+    case "gate":
+    case "decide": {
       const budgets = ctx.budgets;
       const maxCtx = cell.budget?.maxContextBytes ?? budgets.maxContextBytes;
       const maxOut = cell.budget?.maxOutputBytes ?? budgets.maxOutputBytes;
-      const tools = cell.kind === "gate" ? undefined : cell.tools;
-      const maxTurns = cell.budget?.maxTurns ?? (tools?.length ? 8 : 1);
+      const tools =
+        cell.kind === "gate" || cell.kind === "decide" ? undefined : cell.tools;
+      const maxTurns = cell.kind === "decide" ? 1
+        : cell.budget?.maxTurns ?? (tools?.length ? 8 : 1);
+      // decide cells carry no declared output — the contract is derived from
+      // the question map (an answers record shaped per question type)
+      const output = cell.kind === "decide"
+        ? { kind: "json" as const, schema: decisionAnswerSchema(cell.questions) }
+        : cell.output;
 
       const viewInputs: Record<string, JsonValue> = {};
       const wanted = cell.view.inputs;
       for (const [k, v] of Object.entries(inputs)) {
         if (wanted === "*" || wanted.includes(k)) viewInputs[k] = v;
       }
-      const executor = pickExecutor(ctx.opts.executors, cell);
+      const executor = pickExecutor(
+        ctx.opts.executors,
+        cellRoute(cell),
+        `cell "${cell.id}"`,
+      );
       const toolLog: { fn: string; inputs: JsonValue; output: JsonValue }[] = [];
 
       // declared cross-cell context: records of ancestor cells in this scope.
@@ -766,6 +783,112 @@ async function activate(
             `cell "${cell.id}" produced no final output within maxTurns ${maxTurns}`,
           );
         }
+
+        // recorded tool-log compaction: when the canonical log exceeds the
+        // declared threshold, a `decide` effect triages every unpinned entry
+        // (keep = noul >= 0.5). The effect rides the receipt like any other —
+        // the request covers the pre-compaction log, the answers record the
+        // keep/drop, and replay reproduces the rebuilt log bit-for-bit.
+        if (
+          cell.kind === "agent" &&
+          cell.compact &&
+          toolLog.length > (cell.compact.keepRecent ?? 0) &&
+          canonicalBytes(toolLog) > cell.compact.maxLogBytes
+        ) {
+          const pinned = cell.compact.keepRecent ?? 0;
+          const droppable = toolLog.length - pinned;
+          const questions: DecisionQuestions = {};
+          for (let i = 0; i < droppable; i++) {
+            questions[`keep_${i}`] = {
+              type: "noul",
+              instructions:
+                `Retain context.toolLog[${i}] verbatim — the ` +
+                `"${toolLog[i]!.fn}" call and its result. Is it still needed ` +
+                `for the remaining task?`,
+            };
+          }
+          const compactCtx: JsonObject = { inputs: viewInputs, turn, toolLog };
+          const compactCtxBytes = canonicalBytes(compactCtx);
+          if (compactCtxBytes > maxCtx) {
+            throw new AlgalError(
+              "BUDGET_EXHAUSTED",
+              `compaction context ${compactCtxBytes}B exceeds maxContextBytes ${maxCtx}B`,
+            );
+          }
+          const compactRoute = cell.compact.route ?? cell.route;
+          const compactReq: EffectRequest = {
+            contract: "algal.effect.v1",
+            cellId: cell.id,
+            kind: "decide",
+            prompt:
+              `Tool-log triage for cell "${cell.id}". The log exceeds ` +
+              `${cell.compact.maxLogBytes}B; for each indexed entry decide ` +
+              `whether the call and its result must be preserved verbatim ` +
+              `for the remaining work. Task: ${cell.prompt}`,
+            context: compactCtx,
+            output: { kind: "json", schema: decisionAnswerSchema(questions) },
+            budget: { maxContextBytes: maxCtx, maxOutputBytes: maxOut },
+            ...(compactRoute ? { route: compactRoute } : {}),
+            questions,
+          };
+          const compactDigest = effectRequestDigest(compactReq);
+          const compactExec = pickExecutor(
+            ctx.opts.executors,
+            compactRoute,
+            `cell "${cell.id}" compaction`,
+          );
+          if (ctx.work.agentCalls + 1 > budgets.maxAgentCalls) {
+            throw new AlgalError("BUDGET_EXHAUSTED", "maxAgentCalls exhausted");
+          }
+          ctx.work.agentCalls += 1;
+          ctx.work.units +=
+            WORK.effectBase + compactCtxBytes * WORK.perContextByte;
+          emit(ctx, { kind: "effect", path, digest: compactDigest });
+          let raw: JsonValue;
+          let meta: ExecutorMetadata | undefined;
+          try {
+            if (compactExec.executeEffect) {
+              const r = await compactExec.executeEffect(compactReq);
+              meta = r.metadata;
+              raw = r.output;
+            } else {
+              meta = await compactExec.receiptFor?.(compactReq);
+              raw = await compactExec.execute(compactReq);
+            }
+          } catch (e) {
+            const rep = errorReport(e);
+            const eff: EffectReceipt = {
+              requestDigest: compactDigest,
+              error: { code: rep.code, message: rep.message },
+              executor: meta?.executor ?? compactExec.id,
+            };
+            if (meta?.usage) eff.usage = meta.usage;
+            if (meta?.cached) eff.cached = true;
+            ctx.effects.push(eff);
+            throw e;
+          }
+          const eff: EffectReceipt = {
+            requestDigest: compactDigest,
+            output: raw,
+            executor: meta?.executor ?? compactExec.id,
+          };
+          if (meta?.usage) eff.usage = meta.usage;
+          if (meta?.cached) eff.cached = true;
+          ctx.effects.push(eff);
+          ctx.work.units += canonicalBytes(raw) * WORK.perOutputByte;
+          const bound = bindOutput(
+            compactReq.output,
+            raw,
+            `cell "${cell.id}" compaction`,
+          );
+          const answers = (bound as JsonObject).answers as JsonObject;
+          const kept = toolLog.slice(0, droppable).filter((_, i) => {
+            const a = answers[`keep_${i}`] as JsonObject;
+            return typeof a.noul === "number" && a.noul >= 0.5;
+          });
+          toolLog.splice(0, droppable, ...kept);
+        }
+
         const context: JsonObject = { inputs: viewInputs, turn };
         if (cell.view.note !== undefined) context.note = cell.view.note;
         if (cellView) context.cells = cellView;
@@ -812,11 +935,12 @@ async function activate(
           contract: "algal.effect.v1",
           cellId: cell.id,
           kind: cell.kind,
-          prompt: cell.prompt,
+          prompt: cell.prompt ?? "",
           context,
-          output: cell.output,
+          output,
           budget: { maxContextBytes: maxCtx, maxOutputBytes: maxOut },
           ...(cell.route ? { route: cell.route } : {}),
+          ...(cell.kind === "decide" ? { questions: cell.questions } : {}),
         };
         const requestDigest = effectRequestDigest(request);
 
@@ -827,7 +951,8 @@ async function activate(
         const maxAttempts =
           (cell.kind === "agent" ||
             cell.kind === "classifier" ||
-            cell.kind === "gate"
+            cell.kind === "gate" ||
+            cell.kind === "decide"
             ? cell.retry?.attempts
             : undefined) ?? 1;
         let settled:
@@ -936,7 +1061,7 @@ async function activate(
           try {
             settled = {
               kind: "final",
-              bound: bindOutput(cell.output, raw, cell.id),
+              bound: bindOutput(output, raw, cell.id),
             };
           } catch (e) {
             lastErr = e;
@@ -1184,19 +1309,25 @@ async function activate(
   }
 }
 
-function pickExecutor(executors: Executor[], cell: Cell): Executor {
+function cellRoute(cell: Cell): Route | undefined {
+  return cell.kind === "agent" ||
+    cell.kind === "classifier" ||
+    cell.kind === "gate" ||
+    cell.kind === "decide"
+    ? cell.route
+    : undefined;
+}
+
+function pickExecutor(
+  executors: Executor[],
+  route: Route | undefined,
+  at: string,
+): Executor {
   if (executors.length === 0) {
-    throw new AlgalError(
-      "EFFECT_UNBOUND",
-      `no executor available for cell "${cell.id}"`,
-    );
+    throw new AlgalError("EFFECT_UNBOUND", `no executor available for ${at}`);
   }
   // route.provider / route.preset select an executor by id; a bare id or a
   // "provider:<name>"/"preset:<name>" prefixed id both match
-  const route =
-    cell.kind === "agent" || cell.kind === "classifier" || cell.kind === "gate"
-      ? cell.route
-      : undefined;
   if (route) {
     const wanted = [
       ...(route.provider ? [route.provider, `provider:${route.provider}`] : []),

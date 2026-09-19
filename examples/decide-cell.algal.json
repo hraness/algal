@@ -1,0 +1,60 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:decide-cell",
+  "name": "Decide cell",
+  "cells": [
+    { "id": "pr", "kind": "input", "outputs": { "diff": "text" } },
+    {
+      "id": "probe",
+      "kind": "decide",
+      "inputs": { "diff": "text" },
+      "prompt": "Triage this diff for review.",
+      "questions": {
+        "risk": {
+          "type": "choice",
+          "instructions": "How risky is this change to merge?",
+          "criteria": { "low": null, "medium": null, "high": null }
+        },
+        "merge_ready": {
+          "type": "noul",
+          "instructions": "Does this diff look ready to merge as-is?"
+        },
+        "quality": {
+          "type": "score",
+          "instructions": "Rate the change quality.",
+          "criteria": ["1", "2", "3", "4", "5"]
+        }
+      },
+      "view": { "inputs": "*" }
+    },
+    {
+      "id": "risk",
+      "kind": "expr",
+      "inputs": { "answers": "json" },
+      "expr": {
+        "contract": "algal.expr.v1",
+        "program": ["get", "answers", "answers", "risk", "choice"]
+      },
+      "output": { "kind": "text" }
+    },
+    {
+      "id": "flag",
+      "kind": "fn",
+      "fn": "echo.v1"
+    }
+  ],
+  "edges": [
+    {
+      "from": { "cell": "pr", "port": "diff" },
+      "to": { "cell": "probe", "port": "diff" }
+    },
+    {
+      "from": { "cell": "probe", "port": "out" },
+      "to": { "cell": "risk", "port": "answers" }
+    },
+    {
+      "from": { "cell": "risk", "port": "out" },
+      "to": { "cell": "flag", "port": "value" }
+    }
+  ]
+}

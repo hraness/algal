@@ -4,7 +4,10 @@ pub mod canonical;
 pub mod civilization;
 pub mod context;
 pub mod contract;
+pub mod credentials;
+pub mod decisions;
 pub mod effects;
+pub mod embeddings;
 pub mod error;
 pub mod foundry;
 pub mod graph;
@@ -12,6 +15,7 @@ pub mod memory;
 pub mod registry;
 pub mod runtime;
 pub mod scorer;
+pub mod semantic;
 pub mod store;
 pub mod suite;
 

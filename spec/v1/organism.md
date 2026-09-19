@@ -46,6 +46,7 @@ rather than the host language.
 | `agent` | bounded model call | declared `inputs`; one output port `out` |
 | `classifier` | agent restricted to `choice` output | same as agent |
 | `gate` | approval point — a `choice` effect routed to a human/policy, not a model | same as agent; no `tools`/`shadow` |
+| `decide` | declared typed questions answered by a decision provider | declared `inputs`; one output port `out` — the answers record |
 | `organism` | embedded sub-manifest by `sha256:` digest | inherited from the sub-manifest `interface` |
 | `repeat` | bounded re-run of a digest-embedded sub-manifest | inherited from the sub-manifest `interface` |
 | `each` | map a delivered list through a digest-embedded sub-manifest | `over` accepts one `json` edge carrying the list; other interface inputs pass through; interface outputs become lists |
@@ -152,6 +153,19 @@ dangling pointer.
   turn is a separate effect request and counts against `maxAgentCalls`. A
   `{tool, inputs}` response naming a ref outside `tools` is ordinary output.
   Tool calls that omit a required fn input fail the cell.
+- `compact` (optional, agent only, requires `tools`) is
+  `{"maxLogBytes": 1..262144, "keepRecent"?: 0..8, "route"?: Route}` — a
+  recorded tool-log compaction policy. When the canonical `toolLog` exceeds
+  `maxLogBytes` at the start of a turn, the runtime issues a `decide` effect
+  asking one `noul` keep-question per unpinned entry (`keepRecent` pins the
+  log's tail). Entries whose `noul` scores below 0.5 leave the log verbatim;
+  kept entries and the pinned tail are byte-identical. The triage is an
+  ordinary effect: its request covers the pre-compaction log, its answers
+  record every keep/drop, it counts against `maxAgentCalls`, and replay
+  reproduces the rebuilt log bit-for-bit. `compact.route` may route the
+  triage to a different provider than the cell — a cheap decision backend
+  can compact while a frontier model runs the agent. A compaction effect
+  failure is recorded like any other and fails the cell.
 - `budget.maxEffectMs` (1–600 000) bounds each effect call wall-clock. On
   expiry the call records `{code:"BUDGET_EXHAUSTED"}` like any other failed
   effect — `retry` re-issues, `on:"fail"` routes, replay reproduces it.
@@ -164,6 +178,54 @@ dangling pointer.
   through `on:"fail"`). Since attempts share a request digest, the receipt's
   effects list is ordered: replay serves them in order and reproduces the
   run bit-for-bit.
+
+### decide cells
+
+```json
+{
+  "id": "probe",
+  "kind": "decide",
+  "inputs": { "proposal": "json" },
+  "prompt": "optional framing for the provider",
+  "questions": {
+    "keep": { "type": "noul", "instructions": "Is this proposal still relevant?" },
+    "lane": {
+      "type": "choice",
+      "instructions": "Pick the closest lane.",
+      "criteria": { "bug": null, "feature": null, "chore": null }
+    },
+    "risk": { "type": "score", "instructions": "Rate breakage risk." }
+  },
+  "view": { "inputs": "*" },
+  "route": { "provider": "jev" },
+  "budget": { "maxContextBytes": 65536 },
+  "retry": { "attempts": 2 }
+}
+```
+
+A `decide` cell declares a bounded question map (≤ 64 names, each
+`noul`/`choice`/`score` with `instructions` ≤ 4096 bytes and optional
+`criteria`). It declares **no** output contract — the contract is derived
+from the question map, an `{"answers": {<name>: <answer-by-type>}}` record:
+
+- `noul` answers `{noul: number}` — a keep/relevance probability.
+- `choice` answers `{choice: "<criterion>", confidence, probabilities}`.
+- `score` answers `{score: number, confidence, probabilities}`.
+
+The cell activates like an agent with one turn and no tools: the effect
+request carries `questions` alongside `context`, and a *decision provider*
+answers them — typed decisions, never generated text. The provider must
+return exactly the declared answers: a missing, extra, or malformed answer
+fails the output contract like any other violation. A `decide` request
+routes to decision executors (`route.provider`/`preset`); a model executor
+that only generates text must reject it, and a decision executor must
+reject `agent` and `gate` requests — approval stays human/policy-routed.
+`classifier` cells are the model-served single-choice equivalent: a
+decision provider serves them by synthesizing one `choice` question from
+the declared labels.
+
+`budget.maxTurns` is fixed at 1 for `decide`; other budget fields, `view`,
+`route`, and `retry` behave as on agent cells.
 
 ### expr cells
 
@@ -430,13 +492,18 @@ cells keep their own records.
 
 ## Effects
 
-An agent/classifier/gate activation produces an effect request:
+An agent/classifier/gate/decide activation produces an effect request:
 
 ```json
 { "contract": "algal.effect.v1", "cellId": "route", "kind": "classifier",
   "prompt": "…", "context": {"inputs": {…}}, "output": {…},
-  "budget": {…}, "route": {…} }
+  "budget": {…}, "route": {…}, "questions": {…} }
 ```
+
+`questions` is present on `decide` requests only — the declared question
+map the provider must answer. Agent/compaction `decide` requests (the
+`compact` triage) carry it too; `kind` stays `decide` while `cellId` names
+the compacting agent cell.
 
 `sha256` over the canonical request is the binding between request and receipt.
 The executor sees exactly these bytes; nothing else crosses the boundary.

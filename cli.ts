@@ -17,6 +17,16 @@ import {
 } from "./src/effects";
 import { errorReport, AlgalError } from "./src/errors";
 import { vercelGatewayExecutor } from "./src/gateway";
+import { jevAsker, jevExecutor } from "./src/jev";
+import { resolveEmbedder } from "./src/embeddings";
+import { indexStore, searchIndex, snippet } from "./src/semantic";
+import {
+  credentialResolver,
+  credentialStatus,
+  forgetCredential,
+  storeCredential,
+  providerSpec,
+} from "./src/credentials";
 import { commandJson } from "./src/io";
 import { builtinRegistry } from "./src/registry";
 import { parseRunReceipt, runOrganism, type RunReceipt } from "./src/run";
@@ -57,6 +67,28 @@ import {
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const EXAMPLES_DIR = join(ROOT, "examples");
 
+/** Wrap an executor under a route-selectable id (bench/foundry systems and
+ * `--executors` maps name executors; receipts record the named id). */
+const named = (id: string, inner: Executor): Executor => ({
+  ...inner,
+  id,
+  ...(inner.receiptFor !== undefined
+    ? { receiptFor: inner.receiptFor.bind(inner) }
+    : {}),
+});
+
+/** `jev` / `jev:<model>` executor spec → a Jev decision executor whose
+ * credential resolves through the vault chain at call time. Undefined when
+ * the spec isn't a Jev spec. */
+function jevSpecExecutor(spec: string): Executor | undefined {
+  if (spec !== "jev" && !spec.startsWith("jev:")) return undefined;
+  const model = spec === "jev" ? undefined : spec.slice(4);
+  return jevExecutor({
+    credential: credentialResolver("jev"),
+    ...(model !== undefined && model.length > 0 ? { model } : {}),
+  });
+}
+
 const USAGE = `algal — typed, replayable workflow organisms
 
 usage:
@@ -67,6 +99,9 @@ usage:
       --responses <file>                      scripted agent outputs (JSON map)
       --executor-cmd <shell command>          live executor: request on stdin, output on stdout
       --gateway-model <provider/model>        Vercel AI Gateway structured-output executor
+      --jev [model]                           TypeSafe Jev decision executor — serves
+                                                decide and classifier cells (never gates:
+                                                approvals stay host/policy-routed)
       --executors <file>                      JSON map of executor name → shell command;
                                               route.provider/route.preset pick by name
       --modules <dir>                         load *.algal.json into the store for organism cells
@@ -143,6 +178,16 @@ usage:
                                               print an OpenAI/Anthropic tool definition for the
                                               organism's interface: a name, description, and a
                                               JSON Schema of the arguments it expects
+  algal index [--dir <path>] [--docs <dir>] [--embedder local|gateway[:<model>]]
+                                              rebuild the derived semantic index over the
+                                              store's manifests/runs/values (plus docs)
+  algal search <query> [--dir <path>] [-k <n>] [--embedder local|gateway[:<model>]]
+                                              hybrid rank: embedding cosine ⊕ token overlap
+  algal auth <provider> [--status | --forget | --clipboard]
+                                              vault a provider credential locally — keychain
+                                              when available, permission-checked file otherwise;
+                                              never echoes the key
+  algal doctor [--jev]                        runtime and provider availability check
   algal --version | --help
 `;
 
@@ -546,6 +591,9 @@ async function main(): Promise<number> {
       if (flags["gateway-model"] !== undefined) {
         executors.push(vercelGatewayExecutor({ model: String(flags["gateway-model"]) }));
       }
+      if (flags.jev !== undefined) {
+        executors.push(jevSpecExecutor(typeof flags.jev === "string" ? `jev:${flags.jev}` : "jev")!);
+      }
       if (flags.executors !== undefined) {
         const map = asRecord(
           await readJson(resolve(String(flags.executors))),
@@ -557,6 +605,11 @@ async function main(): Promise<number> {
               "PARSE_FAILED",
               `executors.${name} must be a shell command string`,
             );
+          }
+          const jev = jevSpecExecutor(cmd);
+          if (jev !== undefined) {
+            executors.push(named(name, jev));
+            continue;
           }
           const inner = commandExecutor(cmd);
           executors.push({ id: name, execute: (r) => inner.execute(r) });
@@ -802,6 +855,9 @@ async function main(): Promise<number> {
       if (flags["gateway-model"] !== undefined) {
         executors.push(vercelGatewayExecutor({ model: String(flags["gateway-model"]) }));
       }
+      if (flags.jev !== undefined) {
+        executors.push(jevSpecExecutor(typeof flags.jev === "string" ? `jev:${flags.jev}` : "jev")!);
+      }
       if (flags.executors !== undefined) {
         const map = asRecord(
           await readJson(resolve(String(flags.executors))),
@@ -813,6 +869,11 @@ async function main(): Promise<number> {
               "PARSE_FAILED",
               `executors.${name} must be a shell command string`,
             );
+          }
+          const jev = jevSpecExecutor(cmd);
+          if (jev !== undefined) {
+            executors.push(named(name, jev));
+            continue;
           }
           const inner = commandExecutor(cmd);
           executors.push({ id: name, execute: (r) => inner.execute(r) });
@@ -1069,11 +1130,19 @@ async function main(): Promise<number> {
       if (flags["gateway-model"] !== undefined) {
         executors.push(vercelGatewayExecutor({ model: String(flags["gateway-model"]) }));
       }
+      if (flags.jev !== undefined) {
+        executors.push(jevSpecExecutor(typeof flags.jev === "string" ? `jev:${flags.jev}` : "jev")!);
+      }
       if (flags.executors !== undefined) {
         const map = asRecord(await readJson(resolve(String(flags.executors))), "executors");
         for (const [name, command] of Object.entries(map)) {
           if (typeof command !== "string" || command.length === 0) {
             throw new AlgalError("PARSE_FAILED", `executors.${name} must be a shell command string`);
+          }
+          const jev = jevSpecExecutor(command);
+          if (jev !== undefined) {
+            executors.push(named(name, jev));
+            continue;
           }
           const inner = commandExecutor(command);
           executors.push({ id: name, execute: (request) => inner.execute(request) });
@@ -1238,20 +1307,12 @@ async function main(): Promise<number> {
           expect: asRecord(c.expect, `bench config.cases[${i}].expect`),
         };
       });
-      const named = (id: string, inner: Executor): Executor => ({
-        id,
-        execute: (request, signal) => inner.execute(request, signal),
-        ...(inner.executeEffect
-          ? { executeEffect: (request: Parameters<NonNullable<Executor["executeEffect"]>>[0], signal?: AbortSignal) => inner.executeEffect!(request, signal) }
-          : {}),
-        ...(inner.receiptFor
-          ? { receiptFor: (request: Parameters<NonNullable<Executor["receiptFor"]>>[0]) => inner.receiptFor!(request) }
-          : {}),
-      });
       const resolveSpec = async (id: string, spec: string): Promise<Executor> => {
         if (spec.startsWith("gateway:")) {
           return named(id, vercelGatewayExecutor({ model: spec.slice("gateway:".length) }));
         }
+        const jev = jevSpecExecutor(spec);
+        if (jev !== undefined) return named(id, jev);
         if (spec.startsWith("scripted:")) {
           const responses = asRecord(
             await readJson(resolve(base, spec.slice("scripted:".length))),
@@ -1264,7 +1325,7 @@ async function main(): Promise<number> {
         }
         throw new AlgalError(
           "PARSE_FAILED",
-          `bench executor "${id}": unknown spec (want gateway:<model>, scripted:<file>, or cmd:<command>)`,
+          `bench executor "${id}": unknown spec (want gateway:<model>, jev[:<model>], scripted:<file>, or cmd:<command>)`,
         );
       };
       const systems: BenchSystem[] = [];
@@ -1668,10 +1729,182 @@ async function main(): Promise<number> {
       return allOk ? 0 : 1;
     }
 
+    case "index": {
+      // rebuild the derived semantic index over the store + optional docs
+      const dir = typeof flags.dir === "string" ? flags.dir : ".algal";
+      const embedder = resolveEmbedder(
+        typeof flags.embedder === "string" ? flags.embedder : undefined,
+      );
+      const report = await indexStore(dir, embedder, {
+        ...(typeof flags.docs === "string" ? { docs: flags.docs } : {}),
+      });
+      out({ ok: true, ...report } as unknown as JsonObject);
+      return 0;
+    }
+
+    case "search": {
+      const query = positional.join(" ");
+      if (query.length === 0) usageError("algal search <query>");
+      const dir = typeof flags.dir === "string" ? flags.dir : ".algal";
+      const embedder = resolveEmbedder(
+        typeof flags.embedder === "string" ? flags.embedder : undefined,
+      );
+      const k =
+        flags.k === undefined
+          ? 8
+          : Number.parseInt(String(flags.k), 10);
+      const hits = await searchIndex(dir, embedder, query, k);
+      out({
+        query,
+        hits: hits.map((h) => ({
+          score: h.score,
+          source: h.source,
+          seq: h.seq,
+          snippet: snippet(h.text),
+        })),
+      } as unknown as JsonObject);
+      return hits.length > 0 ? 0 : 1;
+    }
+
+    case "auth": {
+      const provider = positional[0];
+      if (provider !== "jev") usageError("algal auth <jev> [--status|--forget|--stdin|--clipboard]");
+      if (flags.status !== undefined) {
+        out((await credentialStatus(provider)) as unknown as JsonObject);
+        return 0;
+      }
+      if (flags.forget !== undefined) {
+        const { removed } = await forgetCredential(provider);
+        out({ provider, removed } as unknown as JsonObject);
+        return removed.length > 0 ? 0 : 1;
+      }
+      const spec = providerSpec(provider);
+      let key: string;
+      if (flags.clipboard !== undefined) {
+        key = await readClipboard();
+        if (key.length === 0) {
+          throw new AlgalError("IO_FAILED", "clipboard is empty or unavailable");
+        }
+      } else {
+        key = await readSecretLine(
+          `paste your TypeSafe Jev key (env ${spec.env} also works): `,
+        );
+      }
+      const stored = await storeCredential(provider, key);
+      out({
+        ok: true,
+        provider,
+        stored: stored.source,
+        location: stored.location,
+        hint: `…${key.slice(-4)}`,
+      } as unknown as JsonObject);
+      return 0;
+    }
+
+    case "doctor": {
+      if (flags.jev !== undefined) {
+        const status = await credentialStatus("jev");
+        const report: JsonObject = {
+          provider: "jev",
+          credential: status as unknown as JsonValue,
+        };
+        if (!status.configured) {
+          report.available = false;
+          report.error = `credential not configured — run \`algal auth jev\` or set ${providerSpec("jev").env}`;
+          out(report);
+          return 1;
+        }
+        try {
+          const asker = jevAsker({ credential: credentialResolver("jev") });
+          const res = await asker.ask(
+            { check: "algal doctor connectivity probe" },
+            { probe: { type: "noul", instructions: "Is this a connectivity check?" } },
+          );
+          report.available = true;
+          const probe = res.answers.probe;
+          if (probe !== undefined && "noul" in probe) report.noul = probe.noul;
+          if (res.usage !== undefined) report.usage = res.usage as unknown as JsonValue;
+          out(report);
+          return 0;
+        } catch (e) {
+          const rep = errorReport(e);
+          report.available = false;
+          report.error = `${rep.code}: ${rep.message}`;
+          out(report);
+          return 1;
+        }
+      }
+      out({
+        runtime: "algal",
+        version: "0.1.0",
+        native: false,
+        platform: process.platform,
+        legacyWireContract: "algal.organism.v1",
+      });
+      return 0;
+    }
+
     default:
       process.stderr.write(USAGE);
       return 2;
   }
+}
+
+/** Read one line of secret input without echoing it: raw-mode TTY when
+ * interactive, piped stdin when not. Never prints what it read. */
+async function readSecretLine(prompt: string): Promise<string> {
+  if (!process.stdin.isTTY) {
+    const text = await Bun.stdin.text();
+    return text.trim();
+  }
+  process.stderr.write(prompt);
+  const stdin = process.stdin as NodeJS.ReadStream & {
+    setRawMode?: (mode: boolean) => void;
+  };
+  const canHide = typeof stdin.setRawMode === "function";
+  if (canHide) stdin.setRawMode!(true);
+  stdin.resume();
+  try {
+    return await new Promise<string>((resolveP) => {
+      let buf = "";
+      stdin.on("data", (chunk: Buffer) => {
+        for (const b of chunk) {
+          if (b === 3) process.exit(130);
+          if (b === 10 || b === 13) {
+            resolveP(buf.trim());
+            return;
+          }
+          if (b === 127 || b === 8) {
+            buf = buf.slice(0, -1);
+            continue;
+          }
+          buf += String.fromCharCode(b);
+        }
+      });
+    });
+  } finally {
+    if (canHide) stdin.setRawMode!(false);
+    process.stderr.write("\n");
+  }
+}
+
+/** Best-effort clipboard read across platforms; "" when unavailable. */
+async function readClipboard(): Promise<string> {
+  const candidates: string[][] =
+    process.platform === "darwin"
+      ? [["pbpaste"]]
+      : process.platform === "win32"
+        ? [["powershell", "-NoProfile", "-NonInteractive", "-Command", "Get-Clipboard"]]
+        : [["wl-paste", "-n"], ["xclip", "-o", "-selection", "clipboard"], ["xsel", "-b", "-o"]];
+  for (const argv of candidates) {
+    try {
+      const proc = Bun.spawn(argv, { stdout: "pipe", stderr: "ignore" });
+      const text = await new Response(proc.stdout).text();
+      const code = await proc.exited;
+      if (code === 0 && text.trim().length > 0) return text.trim();
+    } catch { /* tool absent */ }
+  }
+  return "";
 }
 
 function asRecord(v: JsonValue, what: string): Record<string, JsonValue> {

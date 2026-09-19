@@ -104,6 +104,11 @@ export function cellSignature(
         inputs: cell.inputs,
         outputs: { out: agentOutputPortType(cell.output) },
       };
+    case "decide":
+      return {
+        inputs: cell.inputs,
+        outputs: { out: { type: "json" } },
+      };
     case "store":
       return {
         inputs: { data: { type: "json" } },
@@ -541,7 +546,7 @@ export async function compileOrganism(
     return out;
   };
   for (const cell of manifest.cells) {
-    if (cell.kind !== "agent" && cell.kind !== "classifier" && cell.kind !== "gate")
+    if (cell.kind !== "agent" && cell.kind !== "classifier" && cell.kind !== "gate" && cell.kind !== "decide")
       continue;
     if (cell.view.inputs !== "*") {
       for (const name of cell.view.inputs) {
@@ -584,7 +589,7 @@ export async function compileOrganism(
         }
       }
     }
-    for (const ref of (cell.kind === "gate" ? [] : cell.tools) ?? []) {
+    for (const ref of (cell.kind === "gate" || cell.kind === "decide" ? [] : cell.tools) ?? []) {
       if (!fns.has(ref) && !tools?.has(ref)) {
         throw new AlgalError(
           "TOOL_UNKNOWN",

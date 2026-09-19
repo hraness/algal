@@ -87,6 +87,61 @@ async fn every_scripted_example_runs_and_replays_without_a_provider() {
     }
 }
 
+#[tokio::test]
+async fn compact_triages_the_tool_log_through_a_recorded_decide_effect() {
+    let manifest = Manifest::parse(&json!({
+        "contract":"algal.organism.v1",
+        "key":"organism:compact",
+        "name":"Compact",
+        "cells":[
+            {"id":"src","kind":"input","outputs":{"v":"json"}},
+            {"id":"a","kind":"agent","inputs":{"v":"json"},
+             "prompt":"gather and summarize","output":{"kind":"text"},
+             "tools":["pick.v1"],"compact":{"maxLogBytes":150,"keepRecent":1},
+             "budget":{"maxTurns":4}}
+        ],
+        "edges":[{"from":{"cell":"src","port":"v"},"to":{"cell":"a","port":"v"}}]
+    }))
+    .unwrap();
+    let mut store = Store::default();
+    let responses = json!({"a":[
+        {"tool":"pick.v1","inputs":{"record":{"name":"wisp","age":3},"field":"name"}},
+        {"tool":"pick.v1","inputs":{"record":{"name":"wisp","age":3},"field":"age"}},
+        {"answers":{"keep_0":{"noul":0.1}}},
+        "the name is wisp, age 3"
+    ]});
+    let receipt = runtime::run(
+        manifest.clone(),
+        json!({"src":{"v":{"name":"wisp","age":3}}}),
+        &mut store,
+        &mut Host::scripted(responses),
+        &transports(),
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        receipt["outcome"],
+        "complete",
+        "{}",
+        canonical(&receipt).unwrap()
+    );
+    assert_eq!(
+        receipt["cells"]["a"]["outputs"]["out"],
+        "the name is wisp, age 3"
+    );
+    // three agent effects + one recorded decide effect
+    assert_eq!(receipt["effects"].as_array().unwrap().len(), 4);
+    // the dropped entry left the log — the pinned tail remains verbatim
+    let calls = receipt["cells"]["a"]["toolCalls"].as_array().unwrap();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0]["inputs"]["field"], "age");
+    let verified = runtime::verify(&receipt, manifest, &store, &Host::default())
+        .await
+        .unwrap();
+    assert_eq!(verified["ok"], true, "{verified}");
+}
+
 #[test]
 fn tampered_bundle_does_not_partially_install() {
     let manifest = Manifest::parse(

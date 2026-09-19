@@ -175,6 +175,11 @@ pub fn compile(
                     cost: 0,
                 }
             }
+            "decide" => Signature {
+                inputs: ports(&cell["inputs"], false, false)?,
+                outputs: port_map(json!({"out":"json"}))?,
+                cost: 0,
+            },
             "store" => Signature {
                 inputs: port_map(json!({"data":"json"}))?,
                 outputs: port_map(json!({"ref":"ref"}))?,
@@ -356,7 +361,7 @@ pub fn compile(
         ));
     }
     for cell in &result.manifest.cells {
-        if !["agent", "classifier", "gate"]
+        if !["agent", "classifier", "gate", "decide"]
             .iter()
             .any(|kind| cell["kind"] == *kind)
         {
