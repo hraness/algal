@@ -603,12 +603,12 @@ impl ProcessService {
         } else {
             cause.unwrap_or("manual").to_owned()
         };
-        if cause != "start" && cause != "manual" {
-            if !current.process.wake.contains(&cause)
-                || !MailboxService::open(&self.root).has_pending(&cause)?
-            {
-                return Err(Error::invalid("process wake is not ready"));
-            }
+        if cause != "start"
+            && cause != "manual"
+            && (!current.process.wake.contains(&cause)
+                || !MailboxService::open(&self.root).has_pending(&cause)?)
+        {
+            return Err(Error::invalid("process wake is not ready"));
         }
         let manifest = self.manifest(&current.process)?;
         let checkpoint = if current.process.receipt.is_some() {

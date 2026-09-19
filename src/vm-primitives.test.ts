@@ -12,6 +12,7 @@ import { parseRunReceipt, receiptDigest, runOrganism } from "./run";
 import { MemoryStore } from "./store";
 import { resumeRun, verifyReceipt } from "./verify";
 import type { JsonValue } from "./values";
+import type { ToolRegistry } from "./tools";
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -83,6 +84,74 @@ describe("VM resume boundaries", () => {
     expect(resumed.cells.read?.outputs?.data).toBe("newer");
     expect((await verifyReceipt(resumed as unknown as JsonValue, manifestToJson(manifest), store, new Map())).ok).toBe(true);
   });
+
+  for (const kind of ["organism", "spawn"] as const) {
+    test(`${kind} propagates child suspension, replays the write prefix, and resumes its tail`, async () => {
+      const store = new MemoryStore();
+      let prefixWrites = 0;
+      let tailWrites = 0;
+      const tools: ToolRegistry = new Map([
+        ["test.prefix.v1", {
+          signature: { inputs: {}, outputs: { value: { type: "text" } }, effect: "write", cost: 1, maxOutputBytes: 256 },
+          tool: async () => { prefixWrites++; return { value: "retained prefix" }; },
+        }],
+        ["test.tail.v1", {
+          signature: { inputs: { value: { type: "json" } }, outputs: {}, effect: "write", cost: 1, maxOutputBytes: 256 },
+          tool: async () => { tailWrites++; return {}; },
+        }],
+      ]);
+      const child = parseOrganismManifest({
+        contract: "algal.organism.v1", key: "organism:nested-wait", name: "Nested wait",
+        interface: { inputs: {}, outputs: { result: { cell: "wait", port: "out" } } },
+        cells: [
+          { id: "prefix", kind: "tool", tool: "test.prefix.v1" },
+          { id: "wait", kind: "agent", inputs: { value: "text" }, prompt: "Wait for approval", output: { kind: "text" } },
+        ],
+        edges: [{ from: { cell: "prefix", port: "value" }, to: { cell: "wait", port: "value" } }],
+      });
+      const childDigest = await store.putManifest(child);
+      const manifest = parseOrganismManifest({
+        contract: "algal.organism.v1", key: `organism:nested-${kind}`, name: "Nested continuation",
+        cells: kind === "organism" ? [
+          { id: "nested", kind, manifest: childDigest },
+          { id: "tail", kind: "tool", tool: "test.tail.v1" },
+        ] : [
+          { id: "definition", kind: "const", outputs: { value: { type: "json", value: manifestToJson(child) } } },
+          { id: "nested", kind },
+          { id: "tail", kind: "tool", tool: "test.tail.v1" },
+        ],
+        edges: [
+          ...(kind === "spawn" ? [{ from: { cell: "definition", port: "value" }, to: { cell: "nested", port: "manifest" } }] : []),
+          { from: { cell: "nested", port: kind === "organism" ? "result" : "data" }, to: { cell: "tail", port: "value" } },
+        ],
+      });
+      const checkpoint = await runOrganism({ manifest, store, fns: new Map(), tools, executors: [{
+        id: "approval", execute: async () => { throw new AlgalError("EFFECT_SUSPENDED", "approval pending"); },
+      }] });
+      expect(checkpoint.outcome).toBe("suspended");
+      expect(checkpoint.cells["nested/prefix"]?.status).toBe("committed");
+      expect(checkpoint.cells["nested/wait"]?.status).toBe("suspended");
+      expect(checkpoint.cells.nested?.status).toBe("suspended");
+      expect(checkpoint.cells.tail).toBeUndefined();
+      expect(checkpoint.events.filter(event => event.kind === "cell.suspend").map(event => event.path))
+        .toEqual(["nested/wait", "nested"]);
+      expect(prefixWrites).toBe(1);
+      expect(tailWrites).toBe(0);
+      expect((await verifyReceipt(checkpoint as unknown as JsonValue, manifestToJson(manifest), store, new Map(), undefined, tools)).ok).toBe(true);
+      const resumed = await resumeRun(checkpoint as unknown as JsonValue, manifestToJson(manifest), store, [{
+        id: "approval", execute: async () => "approved",
+      }], new Map(), undefined, tools);
+      expect(resumed.outcome).toBe("complete");
+      expect(resumed.cells.nested?.status).toBe("committed");
+      expect(resumed.cells.tail?.status).toBe("committed");
+      expect(resumed.cells["nested/wait"]?.outputs?.out).toBe("approved");
+      expect(prefixWrites).toBe(1);
+      expect(tailWrites).toBe(1);
+      expect((await verifyReceipt(resumed as unknown as JsonValue, manifestToJson(manifest), store, new Map(), undefined, tools)).ok).toBe(true);
+      expect(prefixWrites).toBe(1);
+      expect(tailWrites).toBe(1);
+    });
+  }
 
   test("resume routes live when its replay prefix ends between retry attempts", async () => {
     const manifest = parseOrganismManifest({

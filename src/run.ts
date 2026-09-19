@@ -772,9 +772,12 @@ async function activate(
         subManifest,
         rawArgs as Record<string, JsonValue>,
       );
-      await runInto(subCompiled, subArgs, path, ctx, depth + 1);
-      if (ctx.failure) {
-        throw new AlgalError(ctx.failure.code, ctx.failure.message);
+      const outcome = await runInto(subCompiled, subArgs, path, ctx, depth + 1);
+      if (outcome !== "complete") {
+        if (ctx.suspended) {
+          throw new AlgalError("EFFECT_SUSPENDED", `inner run at "${path}" suspended`);
+        }
+        throw new AlgalError(ctx.failure?.code ?? "STUCK", ctx.failure?.message ?? "inner run stuck");
       }
       const data: Record<string, JsonValue> = {};
       const iface = subManifest.interface ?? { inputs: {}, outputs: {} };
@@ -1511,9 +1514,12 @@ async function activate(
     case "organism": {
       const subCompiled = compiled.children.get(cell.id)!;
       const subArgs = argsForSubOrganism(subCompiled.manifest, inputs);
-      await runInto(subCompiled, subArgs, path, ctx, depth + 1);
-      if (ctx.failure) {
-        throw new AlgalError(ctx.failure.code, ctx.failure.message);
+      const outcome = await runInto(subCompiled, subArgs, path, ctx, depth + 1);
+      if (outcome !== "complete") {
+        if (ctx.suspended) {
+          throw new AlgalError("EFFECT_SUSPENDED", `inner run at "${path}" suspended`);
+        }
+        throw new AlgalError(ctx.failure?.code ?? "STUCK", ctx.failure?.message ?? "inner run stuck");
       }
       const out: Record<string, JsonValue> = {};
       const iface = subCompiled.manifest.interface ?? { inputs: {}, outputs: {} };
