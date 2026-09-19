@@ -22,6 +22,10 @@ import {
 
 export const EFFECT_CONTRACT = "algal.effect.v1" as const;
 
+export const EFFECT_KINDS = ["agent", "classifier", "gate", "decide", "recall"] as const;
+export type EffectKind = (typeof EFFECT_KINDS)[number];
+export const MODEL_EFFECT_KINDS = ["agent", "classifier"] as const satisfies readonly EffectKind[];
+
 /** The typed-decision question contract (`kind:"decide"` requests): the wire
  * shape any decision provider answers — provider-neutral by design (Jev is
  * the first backend). `noul` → a keep/relevance probability; `choice` → a
@@ -45,7 +49,7 @@ export type DecisionQuestions = Record<string, DecisionQuestion>;
 export type EffectRequest = {
   contract: typeof EFFECT_CONTRACT;
   cellId: string;
-  kind: "agent" | "classifier" | "gate" | "decide" | "recall";
+  kind: EffectKind;
   prompt: string;
   context: JsonObject;
   output: AgentOutput;
@@ -90,8 +94,15 @@ export type ExecutorResult = {
   metadata?: ExecutorMetadata;
 };
 
+export type ExecutorCapabilities = {
+  effects: readonly EffectKind[];
+};
+
 export type Executor = {
   id: string;
+  capabilities?: ExecutorCapabilities;
+  routeWildcard?: true;
+  replay?: true;
   cacheIdentity?: string;
   cacheable?: boolean;
   retryable?: boolean;
@@ -120,6 +131,11 @@ export type Executor = {
       }>;
 };
 
+export function executorSupports(executor: Executor, kind: EffectKind): boolean {
+  const effects: readonly EffectKind[] = executor.capabilities?.effects ?? MODEL_EFFECT_KINDS;
+  return effects.includes(kind);
+}
+
 export function effectRequestDigest(req: EffectRequest): Digest {
   const { contract: _c, ...rest } = req;
   return digestCanonical({ contract: EFFECT_CONTRACT, ...rest } as JsonValue);
@@ -139,6 +155,8 @@ export function scriptedExecutor(
   const queues = new Map<string, JsonValue[]>();
   return {
     id,
+    capabilities: { effects: EFFECT_KINDS },
+    routeWildcard: true,
     cacheIdentity: digestCanonical({ kind: "scripted", id, responses }),
     async execute(request) {
       const digest = effectRequestDigest(request);
@@ -181,6 +199,8 @@ export function replayExecutor(
     queues.get(digest)?.[0];
   return {
     id,
+    capabilities: { effects: EFFECT_KINDS },
+    replay: true,
     receiptFor(request) {
       const rec = next(effectRequestDigest(request));
       if (!rec) return {};
@@ -297,6 +317,7 @@ export function commandExecutor(
   const identity = digestCanonical({ command, options: opts });
   return {
     id: `cmd:${identity}`,
+    capabilities: { effects: EFFECT_KINDS },
     cacheIdentity: identity,
     cacheable: false,
     retryable: false,

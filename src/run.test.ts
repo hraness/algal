@@ -366,7 +366,7 @@ describe("scheduler", () => {
           query: { contract: "algal.expr.v1", program: ["get", "q"] },
           k: 2,
           embedder: "local",
-          rerank: { route: { provider: "jev" }, take: 1 },
+          rerank: { route: { provider: "scripted" }, take: 1 },
         },
         { id: "full", kind: "load" },
       ],
@@ -422,7 +422,7 @@ describe("scheduler", () => {
         maxContextBytes: m.budgets.maxContextBytes,
         maxOutputBytes: m.budgets.maxOutputBytes,
       },
-      route: { provider: "jev" },
+      route: { provider: "scripted" },
       questions,
     });
     expect(r.effects[1]?.requestDigest).toBe(rerankDigest);
@@ -1030,6 +1030,117 @@ describe("scheduler", () => {
     expect(receipt.effects[0]!.executor).toBe("preset:small");
   });
 
+  test("capability routing skips incompatible defaults and explicit routes fail closed", async () => {
+    const base = {
+      contract: "algal.organism.v1",
+      key: "organism:capability-route",
+      name: "CapabilityRoute",
+      cells: [{
+        id: "worker",
+        kind: "agent",
+        prompt: "work",
+        output: { kind: "text" },
+      }],
+      edges: [],
+    };
+    let memoryCalls = 0;
+    let modelCalls = 0;
+    const executors = [
+      {
+        id: "memory",
+        capabilities: { effects: ["recall" as const] },
+        async execute() {
+          memoryCalls++;
+          return { hits: [] };
+        },
+      },
+      {
+        id: "model",
+        capabilities: { effects: ["agent" as const] },
+        async execute() {
+          modelCalls++;
+          return "done";
+        },
+      },
+    ];
+    const selected = await runOrganism({
+      manifest: manifest(base),
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors,
+    });
+    expect(selected.outcome).toBe("complete");
+    expect(selected.cells.worker?.outputs?.out).toBe("done");
+    expect(memoryCalls).toBe(0);
+    expect(modelCalls).toBe(1);
+
+    const unbound = await runOrganism({
+      manifest: manifest({
+        ...base,
+        key: "organism:capability-route-miss",
+        cells: [{ ...base.cells[0], route: { provider: "memory" } }],
+      }),
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors,
+    });
+    expect(unbound.outcome).toBe("failed");
+    expect(unbound.failure?.code).toBe("EFFECT_UNBOUND");
+    expect(unbound.effects).toHaveLength(1);
+    expect(unbound.effects[0]?.requestDigest).toMatch(/^sha256:/);
+    expect(unbound.effects[0]).toMatchObject({
+      error: {
+        code: "EFFECT_UNBOUND",
+        message: "no host-admitted executor for this request",
+      },
+      executor: "unbound",
+      retryable: false,
+    });
+    expect(memoryCalls).toBe(0);
+    expect(modelCalls).toBe(1);
+  });
+
+  test("scripted wildcards serve route misses while live-only hosts fail closed", async () => {
+    const base = {
+      contract: "algal.organism.v1",
+      key: "organism:route-wildcard",
+      name: "RouteWildcard",
+      cells: [{
+        id: "worker",
+        kind: "agent",
+        prompt: "work",
+        output: { kind: "text" },
+        route: { provider: "absent" },
+      }],
+      edges: [],
+    };
+    const simulated = await runOrganism({
+      manifest: manifest(base),
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [scriptedExecutor({ worker: "done" })],
+    });
+    expect(simulated.outcome).toBe("complete");
+    expect(simulated.cells.worker?.outputs?.out).toBe("done");
+    expect(simulated.effects[0]?.executor).toBe("scripted");
+
+    const missed = await runOrganism({
+      manifest: manifest(base),
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [{
+        id: "model",
+        capabilities: { effects: ["agent" as const] },
+        async execute() {
+          return "unreachable";
+        },
+      }],
+    });
+    expect(missed.outcome).toBe("failed");
+    expect(missed.failure?.code).toBe("EFFECT_UNBOUND");
+    expect(missed.effects[0]?.executor).toBe("unbound");
+  });
+
   test("gate cells emit kind:gate effect requests and drive guards", async () => {
     const m = manifest({
       contract: "algal.organism.v1",
@@ -1064,6 +1175,7 @@ describe("scheduler", () => {
       store: new MemoryStore(),
       executors: [{
         id: "approver",
+        capabilities: { effects: ["gate"] },
         async execute(req) {
           seen.push(req.kind);
           return "allow";

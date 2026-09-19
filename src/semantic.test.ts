@@ -50,6 +50,7 @@ describe("recall effects", () => {
       },
     });
     const output = await ex.execute(request()) as JsonObject;
+    expect(ex.capabilities?.effects).toEqual(["recall"]);
     expect(probe).toEqual(["coral habitat", 2, "local"]);
     const hits = output.hits as JsonObject[];
     expect(hits[0]!.ref).toBe(`sha256:${"a".repeat(64)}`);

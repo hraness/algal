@@ -132,6 +132,7 @@ describe("decisionExecutor", () => {
       },
     };
     const ex = decisionExecutor({ asker, id: "test", cacheIdentity: "t" });
+    expect(ex.capabilities?.effects).toEqual(["classifier", "decide"]);
     const out = await ex.execute(req());
     expect(out).toBe("yes");
     const q = seen!.questions.answer as { type: string; instructions: string; criteria: Record<string, string | null> };

@@ -396,6 +396,7 @@ export function decisionExecutor(options: DecisionExecutorOptions): Executor {
   };
   return {
     id: options.id,
+    capabilities: { effects: ["classifier", "decide"] },
     cacheIdentity: options.cacheIdentity,
     execute: async (request, signal) => (await run(request, signal)).output,
     executeEffect: run,

@@ -91,6 +91,12 @@ export function vercelGatewayExecutor(options: GatewayExecutorOptions): Executor
   const fetcher = options.fetch ?? globalThis.fetch;
   const maxResponseBytes = options.maxResponseBytes ?? 2_097_152;
   const run = async (request: EffectRequest, signal?: AbortSignal): Promise<ExecutorResult> => {
+    if (request.kind !== "agent" && request.kind !== "classifier") {
+      throw new AlgalError(
+        "EFFECT_UNBOUND",
+        `AI Gateway cannot serve effect kind "${request.kind}"`,
+      );
+    }
     const token = credential(options);
     const schema = {
       type: "object",
@@ -171,6 +177,7 @@ export function vercelGatewayExecutor(options: GatewayExecutorOptions): Executor
   };
   return {
     id: `vercel:${options.model}`,
+    capabilities: { effects: ["agent", "classifier"] },
     cacheIdentity: digestCanonical({ provider: "vercel", baseUrl: VERCEL_AI_GATEWAY_BASE_URL, model: options.model, responseFormat: "json_schema" }),
     execute: async (request, signal) => (await run(request, signal)).output,
     executeEffect: run,

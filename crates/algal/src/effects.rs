@@ -105,6 +105,22 @@ pub enum Backend {
 }
 
 impl Backend {
+    pub fn route_wildcard(&self) -> bool {
+        matches!(self, Self::Scripted { .. })
+    }
+
+    pub fn supports(&self, kind: &str) -> bool {
+        match self {
+            Self::Scripted { .. } | Self::Command { .. } => true,
+            Self::Gateway { .. } | Self::Openai { .. } | Self::Apple { .. } => {
+                matches!(kind, "agent" | "classifier")
+            }
+            Self::Jev { .. } => matches!(kind, "classifier" | "decide"),
+            Self::Recall { .. } => kind == "recall",
+            Self::Acp { .. } | Self::Xcb { .. } => kind == "agent",
+        }
+    }
+
     pub fn retryable(&self) -> bool {
         !matches!(
             self,
@@ -510,7 +526,6 @@ pub struct Host {
     /// Only contract-valid, in-budget, non-tool-call outputs are memoized,
     /// and the first record wins.
     pub cache: bool,
-    strict_routes: bool,
 }
 
 impl Host {
@@ -552,7 +567,6 @@ impl Host {
                 "multi-executor hosts require defaultExecutor",
             ));
         }
-        host.strict_routes = true;
         Ok(host)
     }
 
@@ -940,22 +954,36 @@ impl Host {
             .iter()
             .filter_map(|key| request["route"][key].as_str())
             .collect();
-        let selected = self.entries.iter().find(|(id, _)| {
-            wanted
+        let kind = request["kind"].as_str().unwrap_or("");
+        let selected = if wanted.is_empty() {
+            self.entries
                 .iter()
-                .any(|w| id == w || id == &format!("provider:{w}") || id == &format!("preset:{w}"))
-        });
-        if self.entries.is_empty() || self.strict_routes && !wanted.is_empty() && selected.is_none()
-        {
+                .find(|(_, backend)| backend.supports(kind))
+        } else {
+            let routed = self.entries.iter().find(|(id, _)| {
+                wanted.iter().any(|w| {
+                    id == w || id == &format!("provider:{w}") || id == &format!("preset:{w}")
+                })
+            });
+            match routed {
+                // A named route must serve the kind itself — an incompatible
+                // admission fails closed rather than falling back.
+                Some(entry) if entry.1.supports(kind) => Some(entry),
+                Some(_) => None,
+                // Route miss: scripted fixtures are wildcards that simulate
+                // any admitted route; live executors are not.
+                None => self
+                    .entries
+                    .iter()
+                    .find(|(_, backend)| backend.route_wildcard() && backend.supports(kind)),
+            }
+        };
+        let Some((id, backend)) = selected.cloned() else {
             return Ok(
                 json!({"requestDigest":request_digest,"executor":"unbound","retryable":false,
                 "error":{"code":"EFFECT_UNBOUND","message":"no host-admitted executor for this request"}}),
             );
-        }
-        let (id, backend) = selected
-            .or_else(|| self.entries.first())
-            .cloned()
-            .ok_or_else(|| Error::new("EFFECT_UNBOUND", "no executor configured"))?;
+        };
         let cacheable = self.cache && backend.cacheable();
         let identity = if cacheable {
             backend.cache_identity(&id)?
@@ -1165,6 +1193,52 @@ mod tests {
         ] {
             assert!(endpoint(url).is_err());
         }
+    }
+
+    #[test]
+    fn backends_admit_only_their_effect_capabilities() {
+        let gateway = Backend::Gateway {
+            model: "p/m".into(),
+        };
+        assert!(gateway.supports("agent"));
+        assert!(gateway.supports("classifier"));
+        assert!(!gateway.supports("gate"));
+        assert!(!gateway.supports("decide"));
+
+        let jev = Backend::Jev {
+            model: "jev-latest".into(),
+            credential_env: None,
+        };
+        assert!(jev.supports("classifier"));
+        assert!(jev.supports("decide"));
+        assert!(!jev.supports("agent"));
+        assert!(!jev.supports("gate"));
+
+        let recall = Backend::Recall {
+            dir: ".".into(),
+            embedder: "local".into(),
+        };
+        assert!(recall.supports("recall"));
+        assert!(!recall.supports("agent"));
+
+        let command = Backend::Command {
+            argv: vec!["true".into()],
+            cwd: None,
+            timeout_ms: 1,
+        };
+        assert!(command.supports("gate"));
+        assert!(command.supports("recall"));
+
+        // Only scripted fixtures wildcard a named route miss — a live
+        // backend never simulates an executor the host did not admit.
+        let scripted = Backend::Scripted {
+            responses: json!({}),
+        };
+        assert!(scripted.route_wildcard());
+        assert!(!command.route_wildcard());
+        assert!(!gateway.route_wildcard());
+        assert!(!jev.route_wildcard());
+        assert!(!recall.route_wildcard());
     }
 
     #[tokio::test]

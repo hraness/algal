@@ -360,6 +360,63 @@ async fn recall_backend_queries_the_derived_index() {
     fs::remove_dir_all(dir).unwrap();
 }
 
+#[tokio::test]
+async fn host_routes_only_to_admitted_effect_capabilities() {
+    let request = json!({
+        "contract":"algal.effect.v1","cellId":"worker","kind":"agent","prompt":"work",
+        "context":{},"output":{"kind":"text"},
+        "budget":{"maxContextBytes":4096,"maxOutputBytes":4096}
+    });
+    let mut host = Host::default();
+    host.entries.push((
+        "memory".into(),
+        Backend::Recall {
+            dir: ".".into(),
+            embedder: "local".into(),
+        },
+    ));
+    host.entries.push((
+        "scripted".into(),
+        Backend::Scripted {
+            responses: json!({"worker":"done"}),
+        },
+    ));
+    let selected = host.effect(&request, 1_000, None).await.unwrap();
+    assert_eq!(selected["output"], "done");
+    assert_eq!(selected["executor"], "scripted");
+
+    let mut routed = request.clone();
+    routed["route"] = json!({"provider":"memory"});
+    let unbound = host.effect(&routed, 1_000, None).await.unwrap();
+    assert_eq!(unbound["error"]["code"], "EFFECT_UNBOUND");
+    assert_eq!(unbound["executor"], "unbound");
+    assert_eq!(unbound["retryable"], false);
+
+    // A route miss is served by a scripted wildcard — fixtures simulate any
+    // admitted route — while a live-only host fails the same miss closed.
+    let mut missed = request.clone();
+    missed["route"] = json!({"provider":"absent"});
+    let simulated = host.effect(&missed, 1_000, None).await.unwrap();
+    assert_eq!(simulated["output"], "done");
+    assert_eq!(simulated["executor"], "scripted");
+
+    let mut model_host = Host::default();
+    model_host.entries.push((
+        "model".into(),
+        Backend::Gateway {
+            model: "provider/model".into(),
+        },
+    ));
+    let live_miss = model_host.effect(&missed, 1_000, None).await.unwrap();
+    assert_eq!(live_miss["error"]["code"], "EFFECT_UNBOUND");
+    assert_eq!(live_miss["executor"], "unbound");
+
+    let mut gate = request;
+    gate["kind"] = json!("gate");
+    let denied = model_host.effect(&gate, 1_000, None).await.unwrap();
+    assert_eq!(denied["error"]["code"], "EFFECT_UNBOUND");
+}
+
 #[test]
 fn tampered_bundle_does_not_partially_install() {
     let manifest = Manifest::parse(
