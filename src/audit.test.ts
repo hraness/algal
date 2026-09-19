@@ -6,6 +6,7 @@ import { canonicalize, type JsonObject, type JsonValue } from "./values";
 import { digestCanonical, type Digest } from "./digest";
 import { cachedExecutor, type EffectRequest } from "./effects";
 import { commandJson } from "./io";
+import { AlgalError } from "./errors";
 import { FileStore, MemoryStore } from "./store";
 import { manifestToJson, parseOrganismManifest } from "./contract";
 import { packOrganism, unpackBundle } from "./bundle";
@@ -16,10 +17,14 @@ import { vercelGatewayExecutor } from "./gateway";
 import type { ToolRegistry } from "./tools";
 
 test("commands bound stderr and respect a pre-aborted launch", async () => {
-  await expect(commandJson([process.execPath, "-e", "process.stderr.write('x'.repeat(70000)); console.log('null')"], null)).rejects.toThrow("exceeds");
+  const overflow = commandJson([process.execPath, "-e", "process.stderr.write('x'.repeat(70000)); console.log('null')"], null);
+  await expect(overflow).rejects.toBeInstanceOf(AlgalError);
+  await expect(overflow).rejects.toMatchObject({ code: "BUDGET_EXHAUSTED", uncertain: true });
   const controller = new AbortController();
   controller.abort();
-  await expect(commandJson(["missing-executable"], null, { signal: controller.signal })).rejects.toThrow("before launch");
+  const preAborted = commandJson(["missing-executable"], null, { signal: controller.signal });
+  await expect(preAborted).rejects.toThrow("before launch");
+  await expect(preAborted).rejects.toMatchObject({ code: "BUDGET_EXHAUSTED", uncertain: false });
 });
 
 test("command exit 75 asks the host to suspend; other nonzero exits fail", async () => {
@@ -176,7 +181,9 @@ test("HTTP response limits stop reading rather than buffer the whole body", asyn
       cancel() { cancelled = true; },
     })),
   });
-  await expect(executor.execute(request)).rejects.toThrow("exceeds");
+  const overflow = executor.execute(request);
+  await expect(overflow).rejects.toBeInstanceOf(AlgalError);
+  await expect(overflow).rejects.toMatchObject({ code: "BUDGET_EXHAUSTED", uncertain: true });
   expect(chunks).toBeLessThan(10);
   expect(cancelled).toBe(true);
 });

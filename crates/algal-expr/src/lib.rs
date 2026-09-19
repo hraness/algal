@@ -253,12 +253,11 @@ fn check(node: &Value, depth: usize, scope: &mut Vec<String>) -> Result<(), E> {
             }
             // get: a literal-string first path element must name a value in
             // scope (a port or an enclosing binder).
-            if op == "get" {
-                if let Some(name) = arr.get(1).and_then(Value::as_str) {
-                    if !scope.iter().any(|n| n == name) {
-                        return Err(err_path(op, format!("unbound name \"{name}\"")));
-                    }
-                }
+            if op == "get"
+                && let Some(name) = arr.get(1).and_then(Value::as_str)
+                && !scope.iter().any(|n| n == name)
+            {
+                return Err(err_path(op, format!("unbound name \"{name}\"")));
             }
             // Binder-introducing ops widen the scope only for the body,
             // which is always the last argument. All earlier args —
