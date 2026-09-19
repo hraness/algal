@@ -60,5 +60,36 @@ test("commands can consume the complete bounded request before answering", async
 
 test("a blocked stdin write remains bounded by the command timeout", async () => {
   await expect(commandJson([process.execPath, "-e", "await Bun.sleep(10_000);"], largeInput, { timeoutMs: 20 }))
-    .rejects.toMatchObject({ code: "BUDGET_EXHAUSTED" });
+    .rejects.toMatchObject({ code: "BUDGET_EXHAUSTED", uncertain: true });
+});
+
+
+test("prelaunch cancellation is definite but cancellation of a running command is uncertain", async () => {
+  const before = new AbortController(); before.abort();
+  await expect(commandJson(["unused"], null, {signal: before.signal}))
+    .rejects.toMatchObject({code: "BUDGET_EXHAUSTED", uncertain: false});
+  const during = new AbortController();
+  const pending = commandJson([process.execPath, "-e", "await Bun.stdin.text(); await Bun.sleep(10000);"], null, {signal: during.signal});
+  during.abort();
+  await expect(pending).rejects.toMatchObject({code: "BUDGET_EXHAUSTED", uncertain: true});
+});
+
+
+test("postlaunch output overflow leaves completion uncertain", async () => {
+  await expect(commandJson([process.execPath, "-e", "await Bun.stdin.text(); console.log('x'.repeat(4096)); await Bun.sleep(10000);"], null, {maxStdoutBytes: 64}))
+    .rejects.toMatchObject({code: "BUDGET_EXHAUSTED", uncertain: true, message: "executor response unavailable; external completion uncertain"});
+});
+
+test("signal termination remains uncertain while ordinary failure and malformed responses are settled", async () => {
+  await expect(commandJson(["/bin/sh", "-c", "kill -KILL $$"], null))
+    .rejects.toMatchObject({code: "EFFECT_FAILED", uncertain: true});
+  await expect(commandJson(["/bin/sh", "-c", "exit 2"], null))
+    .rejects.toMatchObject({code: "EFFECT_FAILED", uncertain: false});
+  await expect(commandJson(["/bin/sh", "-c", "cat >/dev/null; printf 'bad-json'"], null))
+    .rejects.toMatchObject({code: "EFFECT_UNPARSEABLE", uncertain: false});
+});
+
+test("invalid output bounds fail before a command can launch", async () => {
+  await expect(commandJson(["/not/a/real/executable"], null, {maxStdoutBytes: 0}))
+    .rejects.toMatchObject({code: "PARSE_FAILED", uncertain: false});
 });

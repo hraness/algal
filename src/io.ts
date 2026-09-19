@@ -51,6 +51,10 @@ export async function commandJson(
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 600_000) {
     throw new AlgalError("PARSE_FAILED", "invalid command timeout");
   }
+  const maxStdoutBytes = options.maxStdoutBytes ?? 1_048_576;
+  if (!Number.isSafeInteger(maxStdoutBytes) || maxStdoutBytes < 1 || maxStdoutBytes > 67_108_864) {
+    throw new AlgalError("PARSE_FAILED", "invalid command output byte limit");
+  }
   if (options.signal?.aborted) throw new AlgalError("BUDGET_EXHAUSTED", "command cancelled before launch");
   const payload = canonicalize(value);
   if (Buffer.byteLength(payload) > 1_048_576) throw new AlgalError("BUDGET_EXHAUSTED", "command input exceeds 1048576 bytes");
@@ -60,8 +64,9 @@ export async function commandJson(
   const stop = () => { child.kill("SIGKILL"); };
   signal.addEventListener("abort", stop, { once: true });
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let responseComplete = false;
   try {
-    const output = boundedBytes(child.stdout, options.maxStdoutBytes ?? 1_048_576, "executor output", signal);
+    const output = boundedBytes(child.stdout, maxStdoutBytes, "executor output", signal);
     const diagnostic = boundedBytes(child.stderr, 65_536, "executor diagnostics", signal);
     const input = (async () => {
       try {
@@ -78,7 +83,9 @@ export async function commandJson(
       }
     })();
     const [stdout, , code, inputComplete] = await Promise.all([output, diagnostic, child.exited, input]);
-    if (signal.aborted) throw new AlgalError("BUDGET_EXHAUSTED", "command cancelled or timed out");
+    responseComplete = true;
+    if (signal.aborted) throw new AlgalError("BUDGET_EXHAUSTED", "command cancelled or timed out", undefined, {uncertain: true});
+    if (child.signalCode) throw new AlgalError("EFFECT_FAILED", "executor terminated by signal; external completion uncertain", undefined, {uncertain: true});
     // exit 75 (EX_TEMPFAIL): the answer is not ready — suspend the run; it
     // may be resumed later. Any other nonzero exit is an ordinary failure.
     if (code === 75) throw new AlgalError("EFFECT_SUSPENDED", "executor asked the host to suspend the run");
@@ -88,6 +95,15 @@ export async function commandJson(
     try { parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(stdout)); }
     catch { throw new AlgalError("EFFECT_UNPARSEABLE", "executor stdout is not JSON"); }
     return asJsonValue(parsed, "executor output");
+  } catch (error) {
+    // Killing a launched command cannot prove that its external work stopped.
+    if (signal.aborted) throw new AlgalError("BUDGET_EXHAUSTED", "command cancelled or timed out", undefined, {uncertain: true});
+    if (!responseComplete) throw new AlgalError(
+      error instanceof AlgalError ? error.code : "EFFECT_FAILED",
+      "executor response unavailable; external completion uncertain",
+      undefined, {uncertain: true},
+    );
+    throw error;
   } finally {
     clearTimeout(timer);
     controller.abort();

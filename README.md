@@ -91,6 +91,16 @@ local mailbox. The model cannot approve itself. [Run the VM demo](docs/vm.md).
 
 ![Generated approval workflow with explicit capabilities, retained proposal, waiting child, and guarded publication.](docs/diagrams/approval.svg)
 
+### Validate a coding repair after a wait
+
+The [durable repair workflow](docs/repair.md) now admits one coding attempt,
+retains its exact patch, and resumes independent host validation after a wait.
+Failed or interrupted work cannot silently become a successful review packet.
+[Native release packages](docs/native-release.md) distribute the process kernel
+for Ubuntu 24.04 x86_64 and macOS 14+ Apple silicon without Bun or Cargo. The
+repair and GitHub integration hosts still require Bun. These are qualified
+prerelease surfaces, not a claim that every provider or deployment is production-ready.
+
 ### Grow a population of programs
 
 A designer can propose a child manifest as data. `spawn` admits and runs it

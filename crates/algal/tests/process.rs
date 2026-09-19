@@ -706,3 +706,49 @@ async fn journal_cli_inspects_latest_dispatch_after_resume() {
     assert!(report["bytes"].as_u64().unwrap() > 0);
     assert_eq!(service.inspect("inspect").unwrap().digest, completed.digest);
 }
+
+#[tokio::test]
+async fn timed_out_external_write_keeps_intent_uncertain_and_blocks_failure_dispatch() {
+    let directory = tempfile::tempdir().unwrap();
+    let tools = directory.path().join("tools.json");
+    fs::write(&tools, serde_json::to_vec(&json!({
+        "slow.v1": {"signature":{"inputs":{},"outputs":{"value":"text"},"effect":"write","cost":1,"maxOutputBytes":100},
+            "exec":"cmd:printf started > started; sleep 1; printf '{\"value\":\"late\"}'"},
+        "fallback.v1": {"signature":{"inputs":{"error":"json"},"outputs":{"value":"text"},"effect":"write","cost":1,"maxOutputBytes":100},
+            "exec":"cmd:printf fallback > fallback; printf '{\"value\":\"fallback\"}'"}
+    })).unwrap()).unwrap();
+    let mut host = Host::default();
+    host.load_tools(&tools).unwrap();
+    let mut service = ProcessService::open(&directory.path().join("store")).unwrap();
+    let manifest = Manifest::parse(&json!({
+        "contract":"algal.organism.v1","key":"organism:uncertain-timeout","name":"Uncertain timeout",
+        "cells":[
+            {"id":"slow","kind":"tool","tool":"slow.v1","budget":{"maxEffectMs":100}},
+            {"id":"fallback","kind":"tool","tool":"fallback.v1"}
+        ],
+        "edges":[{"from":{"cell":"slow","port":"value"},"to":{"cell":"fallback","port":"error"},"on":"fail"}]
+    })).unwrap();
+    service
+        .create("timeout", manifest, json!({}), 3, &host, &Transports::new())
+        .unwrap();
+    assert!(
+        service
+            .tick_journal("timeout", None, &mut host, &Transports::new(), true, 2)
+            .await
+            .is_err()
+    );
+    assert!(directory.path().join("started").exists());
+    assert!(!directory.path().join("fallback").exists());
+    let snapshot = service.inspect("timeout").unwrap();
+    assert_eq!(snapshot.process.status, "uncertain");
+    let journal = service.journal("timeout").unwrap();
+    assert_eq!(journal["effects"].as_array().unwrap().len(), 1);
+    assert_eq!(journal["effects"][0]["record"]["state"], "started");
+    assert!(
+        service
+            .recover("timeout", &snapshot.digest, &mut host, &Transports::new())
+            .await
+            .is_err()
+    );
+    assert!(!directory.path().join("fallback").exists());
+}

@@ -37,11 +37,14 @@ export type ErrorCode = (typeof ERROR_CODES)[number];
 export class AlgalError extends Error {
   readonly code: ErrorCode;
   readonly details?: unknown;
+  /** Host-only: cancellation or transport failure did not establish external settlement. */
+  readonly uncertain: boolean;
 
-  constructor(code: ErrorCode, message: string, details?: unknown) {
+  constructor(code: ErrorCode, message: string, details?: unknown, options: { uncertain?: boolean } = {}) {
     super(message);
     this.name = "AlgalError";
     this.code = code;
+    this.uncertain = options.uncertain === true;
     if (details !== undefined) this.details = details;
   }
 }

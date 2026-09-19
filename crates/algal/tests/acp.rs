@@ -187,3 +187,43 @@ async fn delegated_permissions_reach_the_client_instead_of_being_auto_approved()
         .unwrap()
         .unwrap();
 }
+
+#[tokio::test]
+async fn lost_acp_prompt_acknowledgement_leaves_journal_unsettled() {
+    use algal::{canonical::digest, effects::Backend, journal::Journal};
+    use std::sync::{Arc, Mutex};
+    let directory = tempfile::tempdir().unwrap();
+    let cwd = directory.path().canonicalize().unwrap();
+    let journal = Arc::new(Mutex::new(
+        Journal::create(
+            &cwd,
+            "actor",
+            &digest(&json!("intent")).unwrap(),
+            &digest(&json!("manifest")).unwrap(),
+            2,
+        )
+        .unwrap(),
+    ));
+    let mut host = Host::default();
+    host.journal = Some(journal.clone());
+    host.entries.push((
+        "acp".into(),
+        Backend::Acp {
+            argv: fixture("eof"),
+            cwd,
+        },
+    ));
+    let error = host.effect(&effect(), 3000, None).await.unwrap_err();
+    assert!(error.uncertain);
+    let journal = journal.lock().unwrap();
+    assert!(journal.finish().is_err());
+    assert_eq!(
+        journal.describe().unwrap()["effects"][0]["record"]["state"],
+        "started"
+    );
+    let serialized = serde_json::to_value(&error).unwrap();
+    assert!(
+        serialized.get("uncertain").is_none(),
+        "uncertainty is host state, not a receipt field"
+    );
+}

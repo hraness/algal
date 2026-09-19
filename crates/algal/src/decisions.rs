@@ -286,7 +286,7 @@ pub async fn ask(
         .bearer_auth(credential)
         .send()
         .await
-        .map_err(|_| Error::new("EFFECT_FAILED", "Jev request failed or timed out"))?;
+        .map_err(|_| Error::new("EFFECT_FAILED", "Jev request failed or timed out").uncertain())?;
     if !response.status().is_success() {
         return Err(Error::new(
             "EFFECT_FAILED",
@@ -300,16 +300,16 @@ pub async fn ask(
         .content_length()
         .is_some_and(|n| n > MAX_RESPONSE as u64)
     {
-        return Err(Error::limit("Jev response bytes"));
+        return Err(Error::limit("Jev response bytes").uncertain());
     }
     let mut bytes = Vec::new();
     while let Some(chunk) = response
         .chunk()
         .await
-        .map_err(|_| Error::new("EFFECT_FAILED", "Jev body read failed"))?
+        .map_err(|_| Error::new("EFFECT_FAILED", "Jev body read failed").uncertain())?
     {
         if bytes.len().saturating_add(chunk.len()) > MAX_RESPONSE {
-            return Err(Error::limit("Jev response bytes"));
+            return Err(Error::limit("Jev response bytes").uncertain());
         }
         bytes.extend_from_slice(&chunk);
     }

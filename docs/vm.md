@@ -163,3 +163,12 @@ Receipts establish consistency between recorded inputs, effects, and graph
 execution under the admitted runtime. They do not attest that a provider was
 contacted, establish the truth of model output, or authenticate an approver
 beyond the host's control of the mailbox capability and storage.
+
+## Coding work with independent validation
+
+The [repair workflow](repair.md) is a second practical VM application: suspend
+until a host-owned coding job settles, then validate its retained patch with
+fixed commands. The foreground job never automatically relaunches after an
+uncertain result. The VM records check outcomes and both runtimes verify the
+history offline. Native installation and supported targets are documented in
+[the distribution guide](native-release.md).

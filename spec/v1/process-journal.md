@@ -97,8 +97,15 @@ adapters. An unsettled host-declared
 read may publish a new started record with `attempt + 1` and `previous` pointing
 to the earlier started record. The recovery budget is consumed before execution.
 Providers and write tools use `recovery:"never"`; any unsettled such entry blocks
-recovery before a new attempt is admitted. A persisted error or suspension is a
-completed receipt, not unknown completion.
+recovery before a new attempt is admitted. A known settled error or suspension is a
+completed receipt. A dispatched adapter deadline, lost transport response, or
+other explicitly uncertain completion leaves the started entry unresolved,
+poisons the dispatch, and prevents fallback effects or process outcome
+publication. Aborting a promise or killing the immediate subprocess does not
+prove that external writes stopped. Host-only uncertainty markers are not wire
+fields; nonjournal receipts record these failures as nonretryable. Deadlines
+also cover compaction calls, and cancellation is rechecked after asynchronous
+metadata admission immediately before dispatch.
 
 The reconstructed execution must consume the entire recorded prefix with the
 same bindings and settle every new effect. Only then may it publish the normal

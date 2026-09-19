@@ -188,8 +188,9 @@ The site keeps its configured origin until a new domain is actually provisioned.
   pre-session updates) and an ACP client to a host-selected coding agent; a
   live Devin ACP task completed with an offline-verifiable receipt.
 - Providers: scripted, hosted HTTP, OpenAI-compatible, and Vercel AI Gateway
-  executors; xcb delegates coding-agent custody (`xcb algal` runs a bundle and
-  returns receipt references).
+  executors; xcb owns coding-agent custody (`xcb --json --cwd ABS run` returns
+  a settled terminal envelope). The durable repair host retains patches and
+  validates them with fixed host commands; see [repair](repair.md).
 - Apple: the Swift bridge compiles with Xcode 26, `algal doctor --apple`
   checks availability, and schema-constrained generation ran a full on-device
   civilization epoch that promoted all four demo goals.
