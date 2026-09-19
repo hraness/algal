@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -69,4 +69,34 @@ test("mailbox commands create capabilities and deliver a durable wakeup", async 
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+
+test("process tick and schedule honor executor-bound effect caching", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "algal-cli-process-cache-"));
+  try {
+    const manifest = join(dir, "workflow.algal.json");
+    const responses = join(dir, "responses.json");
+    await writeFile(manifest, JSON.stringify({
+      contract: "algal.organism.v1", key: "organism:cli-cache", name: "CLI cache",
+      cells: [{ id: "answer", kind: "agent", prompt: "Give the fixed answer", output: { kind: "text" } }],
+    }));
+    await writeFile(responses, JSON.stringify({ answer: "retained answer" }));
+    expect((await cli("process", "create", "first", manifest, "--dir", dir)).code).toBe(0);
+    const firstRun = await cli("process", "tick", "first", "--responses", responses, "--cache-effects", "--dir", dir);
+    expect(firstRun.code).toBe(0);
+    const first = JSON.parse(firstRun.stdout);
+    const firstReceipt = JSON.parse(await readFile(join(dir, "runs", `${first.process.receipt.slice(7)}.json`), "utf8"));
+    expect(firstReceipt.effects[0].cached).toBeUndefined();
+    expect((await cli("process", "create", "second", manifest, "--dir", dir)).code).toBe(0);
+    const scheduled = await cli("process", "schedule", "--max-ticks", "1", "--responses", responses, "--cache-effects", "--dir", dir);
+    expect(scheduled.code).toBe(0);
+    const result = JSON.parse(scheduled.stdout);
+    expect(result.ticks).toBe(1);
+    expect(result.processes[0].process.name).toBe("second");
+    const secondReceipt = JSON.parse(await readFile(join(dir, "runs", `${result.processes[0].process.receipt.slice(7)}.json`), "utf8"));
+    expect(secondReceipt.effects[0].cached).toBe(true);
+    expect(secondReceipt.cells.answer.outputs.out).toBe("retained answer");
+    expect((await cli("process", "verify", "second", "--dir", dir)).code).toBe(0);
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });

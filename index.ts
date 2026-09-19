@@ -278,3 +278,5 @@ export type { JsonObject, JsonValue } from "./src/values";
 
 export { ERROR_CODES, AlgalError, errorReport } from "./src/errors";
 export type { ErrorCode } from "./src/errors";
+
+export { ProcessSupervisor, PROCESS_CONTRACT, PROCESS_BOUNDS, parseProcessRecord, type ProcessRecord, type ProcessSnapshot, type ProcessHost } from "./src/process";

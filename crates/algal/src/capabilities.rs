@@ -41,3 +41,27 @@ pub fn parse_capability_handle(handle: &str, expected: Option<&str>) -> Result<C
         digest,
     })
 }
+
+/// Suspension evidence is bounded, unique, and contains only opaque handles.
+pub fn parse_wake_capabilities(value: &Value) -> Result<Vec<String>> {
+    let values = value
+        .as_array()
+        .ok_or_else(|| Error::invalid("wake capabilities must be an array"))?;
+    if values.is_empty() || values.len() > 16 {
+        return Err(Error::invalid(
+            "wake capabilities must contain 1..16 handles",
+        ));
+    }
+    let mut handles = Vec::new();
+    for value in values {
+        let handle = value
+            .as_str()
+            .ok_or_else(|| Error::invalid("wake capability must be a string"))?;
+        parse_capability_handle(handle, None)?;
+        if handles.iter().any(|previous| previous == handle) {
+            return Err(Error::invalid("wake capabilities must be unique"));
+        }
+        handles.push(handle.to_owned());
+    }
+    Ok(handles)
+}

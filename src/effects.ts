@@ -3,13 +3,18 @@
 // determined by the manifest plus delivered inputs; its digest binds request to receipt.
 // Executors are host-supplied — Algal never brokers provider access.
 
-import { AlgalError, type ErrorCode } from "./errors";
+import {
+  parseWakeCapabilities,
+  type CapabilityHandle,
+} from "./capabilities";
+import { AlgalError, ERROR_CODES, type ErrorCode } from "./errors";
 import { commandJson } from "./io";
-import { digestCanonical, type Digest } from "./digest";
+import { asDigest, digestCanonical, type Digest } from "./digest";
 import type { AgentOutput, Route } from "./contract";
 import type { Store } from "./store";
 import {
   asArray,
+  asJsonValue,
   asObject,
   asString,
   canonicalBytes,
@@ -80,6 +85,7 @@ export type EffectReceipt = {
    * reproduces the flag. Only ever present as `cached: true`. */
   cached?: boolean;
   retryable?: false;
+  wake?: CapabilityHandle[];
   /** Digest of the backend configuration that served the request — binds
    * the admitted executor's identity into the receipt. */
   configurationDigest?: Digest;
@@ -90,6 +96,7 @@ export type ExecutorMetadata = {
   usage?: EffectReceipt["usage"];
   cached?: boolean;
   retryable?: false;
+  wake?: CapabilityHandle[];
   configurationDigest?: Digest;
 };
 
@@ -211,6 +218,7 @@ export function replayExecutor(
       if (rec.usage) out.usage = rec.usage;
       if (rec.cached) out.cached = true;
       if (rec.retryable === false) out.retryable = false;
+      if (rec.wake) out.wake = rec.wake;
       if (rec.configurationDigest) out.configurationDigest = rec.configurationDigest;
       return out;
     },
@@ -434,14 +442,23 @@ export function parseEffectReceipt(u: unknown): EffectReceipt {
   const obj = asObject(u, "effect receipt");
   noUnknownKeys(
     obj,
-    ["requestDigest", "output", "error", "executor", "usage", "cached", "retryable"],
+    [
+      "requestDigest",
+      "output",
+      "error",
+      "executor",
+      "usage",
+      "cached",
+      "retryable",
+      "wake",
+      "configurationDigest",
+    ],
     "effect receipt",
   );
-  const digest = asString(
+  const digest = asDigest(
     reqField(obj, "requestDigest", "effect receipt"),
     "effect receipt.requestDigest",
-    72,
-  ) as Digest;
+  );
   const executor = asString(
     reqField(obj, "executor", "effect receipt"),
     "effect receipt.executor",
@@ -456,7 +473,7 @@ export function parseEffectReceipt(u: unknown): EffectReceipt {
     );
   }
   const receipt: EffectReceipt = { requestDigest: digest, executor };
-  if (outputRaw !== undefined) receipt.output = asJson(outputRaw);
+  if (outputRaw !== undefined) receipt.output = asJsonValue(outputRaw, "effect receipt.output");
   if (errorRaw !== undefined) {
     const eo = asObject(errorRaw, "effect receipt.error");
     noUnknownKeys(eo, ["code", "message"], "effect receipt.error");
@@ -473,9 +490,13 @@ export function parseEffectReceipt(u: unknown): EffectReceipt {
       ),
     };
   }
+  if (receipt.error && !ERROR_CODES.includes(receipt.error.code)) {
+    throw new AlgalError("PARSE_FAILED", "effect receipt.error.code is unknown");
+  }
   const usage = optField(obj, "usage");
   if (usage !== undefined) {
     const uo = asObject(usage, "effect receipt.usage");
+    noUnknownKeys(uo, ["model", "tokensIn", "tokensOut"], "effect receipt.usage");
     const u2: EffectReceipt["usage"] = {};
     if (uo.model !== undefined) u2.model = asString(uo.model, "usage.model", 128);
     if (uo.tokensIn !== undefined)
@@ -499,19 +520,28 @@ export function parseEffectReceipt(u: unknown): EffectReceipt {
     }
     receipt.cached = true;
   }
+  const wake = optField(obj, "wake");
+  if (wake !== undefined) {
+    if (receipt.error?.code !== "EFFECT_SUSPENDED") {
+      throw new AlgalError("PARSE_FAILED", "effect receipt.wake requires EFFECT_SUSPENDED");
+    }
+    receipt.wake = parseWakeCapabilities(wake, "effect receipt.wake");
+  }
+  const configurationDigest = optField(obj, "configurationDigest");
+  if (configurationDigest !== undefined) {
+    receipt.configurationDigest = asDigest(
+      configurationDigest,
+      "effect receipt.configurationDigest",
+    );
+  }
   return receipt;
 }
 
 function asIntField(u: unknown, what: string): number {
-  if (typeof u !== "number" || !Number.isInteger(u) || u < 0) {
+  if (typeof u !== "number" || !Number.isSafeInteger(u) || u < 0) {
     throw new AlgalError("PARSE_FAILED", `${what} must be a non-negative int`);
   }
   return u;
-}
-
-function asJson(u: unknown): JsonValue {
-  const v = u as JsonValue;
-  return v;
 }
 
 export function parseEffectReceipts(u: unknown): EffectReceipt[] {

@@ -5,8 +5,11 @@
 // executor seam and return as receipts. No wall-clock values are recorded:
 // a receipt is replayable bit-for-bit.
 
-import { parseCapabilityHandle } from "./capabilities";
-import { AlgalError, errorReport, type ErrorCode } from "./errors";
+import {
+  parseCapabilityHandle,
+  suspensionWake,
+} from "./capabilities";
+import { AlgalError, ERROR_CODES, errorReport, type ErrorCode } from "./errors";
 import { evalProgram } from "./expr";
 import {
   decisionAnswerSchema,
@@ -34,6 +37,7 @@ import {
   checkSchema,
   effectRequestDigest,
   executorSupports,
+  parseEffectReceipt,
   type EffectKind,
   type EffectReceipt,
   type EffectRequest,
@@ -45,10 +49,16 @@ import type { Store } from "./store";
 import type { Transport } from "./transport";
 import type { ToolRegistry } from "./tools";
 import { bindRecallOutput, recallOutputSchema } from "./semantic";
-import { digestCanonical, type Digest } from "./digest";
+import { asDigest, digestCanonical, type Digest } from "./digest";
 import {
+  asArray,
+  asInt,
+  asObject,
+  asString,
   canonicalBytes,
   canonicalize,
+  noUnknownKeys,
+  reqField,
   type JsonObject,
   type JsonValue,
 } from "./values";
@@ -132,6 +142,8 @@ export type RunOptions = {
    * default — the failure replays too). A live slot may have been
    * overwritten since; the record is authoritative. */
   replaySlots?: Record<string, { value?: JsonValue; missing?: boolean }>;
+  /** Completed prefix writes produce their recorded output without mutating live slots. */
+  replaySlotWrites?: ReadonlySet<string>;
   replayToolEffects?: EffectReceipt[];
   replayToolFallthrough?: boolean;
   /** The runtime stamp to put on the replayed receipt — `verify` passes
@@ -517,7 +529,6 @@ async function executeBoundedEffect<T>(
   ctx: RunContext,
   path: string,
   request: EffectRequest,
-  executor: Executor,
   maxAttempts: number,
   effectMs: number | undefined,
   contextBytes: number,
@@ -527,6 +538,7 @@ async function executeBoundedEffect<T>(
   const requestDigest = effectRequestDigest(request);
   let lastErr: unknown;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const executor = pickExecutor(request, ctx.opts.executors);
     if (ctx.work.agentCalls + 1 > ctx.budgets.maxAgentCalls) {
       throw new AlgalError("BUDGET_EXHAUSTED", "maxAgentCalls exhausted");
     }
@@ -581,6 +593,8 @@ async function executeBoundedEffect<T>(
       };
       if (meta?.usage) effect.usage = meta.usage;
       if (meta?.cached) effect.cached = true;
+      const wake = suspensionWake(error, meta?.wake);
+      if (wake.length > 0) effect.wake = wake;
       if (meta?.configurationDigest) effect.configurationDigest = meta.configurationDigest;
       // suspension is not a retryable failure — it asks the host to pause
       // the process, so the request is never re-issued within this run
@@ -702,7 +716,9 @@ async function activate(
           );
         }
         ctx.work.units += bytes * WORK.perOutputByte;
-        await ctx.opts.store.setSlot(cell.name, data);
+        if (!ctx.opts.replaySlotWrites?.has(path)) {
+          await ctx.opts.store.setSlot(cell.name, data);
+        }
         return { outputs: { data } };
       }
       // read: replay serves the recorded outcome — a live slot may have
@@ -843,14 +859,12 @@ async function activate(
         ...(cell.route ? { route: cell.route } : {}),
         recall: { query, k, embedder },
       };
-      const executor = pickExecutor(request, ctx.opts.executors);
       const maxAttempts = cell.retry?.attempts ?? 1;
       const effectMs = cell.budget?.maxEffectMs;
       const recallEffect = await executeBoundedEffect(
         ctx,
         path,
         request,
-        executor,
         maxAttempts,
         effectMs,
         contextBytes,
@@ -900,15 +914,10 @@ async function activate(
           route: cell.rerank.route,
           questions,
         };
-        const rerankExecutor = pickExecutor(
-          rerankRequest,
-          ctx.opts.executors,
-        );
         const rerankEffect = await executeBoundedEffect(
           ctx,
           path,
           rerankRequest,
-          rerankExecutor,
           maxAttempts,
           effectMs,
           rerankContextBytes,
@@ -1005,11 +1014,13 @@ async function activate(
         return { outputs, effectDigest: requestDigest };
       } catch (error) {
         const report = errorReport(error);
+        const wake = suspensionWake(error);
         ctx.effects.push({
           requestDigest,
           error: { code: report.code === "INTERNAL" ? "TOOL_FAILED" : report.code, message: report.message },
           executor: `tool:${cell.tool}`,
           ...(report.code === "EFFECT_SUSPENDED" ? { retryable: false as const } : {}),
+          ...(wake.length > 0 ? { wake } : {}),
         });
         if (error instanceof AlgalError) throw error;
         throw new AlgalError("TOOL_FAILED", report.message);
@@ -1153,7 +1164,10 @@ async function activate(
             };
             if (meta?.usage) eff.usage = meta.usage;
             if (meta?.cached) eff.cached = true;
+            const wake = suspensionWake(e, meta?.wake);
+            if (wake.length > 0) eff.wake = wake;
             if (meta?.configurationDigest) eff.configurationDigest = meta.configurationDigest;
+            if (rep.code === "EFFECT_SUSPENDED") eff.retryable = false;
             ctx.effects.push(eff);
             throw e;
           }
@@ -1234,10 +1248,6 @@ async function activate(
           ...(cell.kind === "decide" ? { questions: cell.questions } : {}),
         };
         const requestDigest = effectRequestDigest(request);
-        // pick per request: the digest turns with the tool log, so replay and
-        // resume resolve each turn independently
-        const executor = pickExecutor(request, ctx.opts.executors);
-
         // retry: each attempt is a separate effect — request, receipt, work
         // charge, agent-call count. A failed or contract-violating attempt
         // is recorded and the same request re-issued until `attempts` is
@@ -1259,6 +1269,8 @@ async function activate(
           attempt < maxAttempts && settled === undefined;
           attempt++
         ) {
+          // A replay prefix may end between attempts of the same request.
+          const executor = pickExecutor(request, ctx.opts.executors);
           if (ctx.work.agentCalls + 1 > budgets.maxAgentCalls) {
             throw new AlgalError("BUDGET_EXHAUSTED", "maxAgentCalls exhausted");
           }
@@ -1318,6 +1330,8 @@ async function activate(
             };
             if (meta?.usage) eff.usage = meta.usage;
             if (meta?.cached) eff.cached = true;
+            const wake = suspensionWake(e, meta?.wake);
+            if (wake.length > 0) eff.wake = wake;
             if (meta?.configurationDigest) eff.configurationDigest = meta.configurationDigest;
             // suspension is not a retryable failure — it asks the host to
             // pause the process, so the request is never re-issued
@@ -1471,11 +1485,13 @@ async function activate(
             } catch (error) {
               const report = errorReport(error);
               const code = report.code === "INTERNAL" ? "TOOL_FAILED" : report.code;
+              const wake = suspensionWake(error);
               ctx.effects.push({
                 requestDigest: toolDigest,
                 error: { code, message: report.message },
                 executor: `tool:${call.fn}`,
                 ...(code === "EFFECT_SUSPENDED" ? { retryable: false as const } : {}),
+                ...(wake.length > 0 ? { wake } : {}),
               });
               throw new AlgalError(code, report.message);
             } finally {
@@ -1669,7 +1685,7 @@ function pickExecutor(
   return live.find((executor) => executorSupports(executor, kind)) ?? unboundExecutor(kind);
 }
 
-function checkValue(v: JsonValue, decl: PortType, what: string): void {
+export function checkValue(v: JsonValue, decl: PortType, what: string): void {
   // a port never carries a value over maxValueBytes — bulk goes through CAS
   const bytes = canonicalBytes(v);
   if (bytes > BOUNDS.maxValueBytes) {
@@ -1780,12 +1796,121 @@ function fail(
 
 // ------------------------------------------------------------ parse/verify ---
 
+export const RECEIPT_BOUNDS = {
+  maxBytes: 67_108_864,
+  maxDepth: 64,
+  maxNodes: 1_000_000,
+  maxCells: BOUNDS.maxSteps * BOUNDS.maxCells,
+  maxEffects: BOUNDS.maxSteps * BOUNDS.maxTurns + BOUNDS.maxAgentCalls,
+} as const;
+
+/** Validate foreign checkpoints before inspecting or replaying them. Digest
+ * consistency is checked by resume; verify still reports tampering as a diff. */
 export function parseRunReceipt(u: unknown): RunReceipt {
-  const r = u as RunReceipt;
-  if (r?.contract !== RUN_CONTRACT) {
+  const pending: { value: unknown; depth: number }[] = [{ value: u, depth: 0 }];
+  let nodes = 0;
+  let stringBytes = 0;
+  while (pending.length > 0) {
+    const { value, depth } = pending.pop()!;
+    if (++nodes > RECEIPT_BOUNDS.maxNodes || depth > RECEIPT_BOUNDS.maxDepth) {
+      throw new AlgalError("PARSE_FAILED", "receipt structural bounds exceeded");
+    }
+    if (typeof value === "string") {
+      stringBytes += Buffer.byteLength(value, "utf8");
+      if (stringBytes > RECEIPT_BOUNDS.maxBytes) {
+        throw new AlgalError("PARSE_FAILED", "receipt byte bound exceeded");
+      }
+    } else if (value !== null && typeof value === "object") {
+      for (const [key, child] of Object.entries(value)) {
+        stringBytes += Buffer.byteLength(key, "utf8");
+        pending.push({ value: child, depth: depth + 1 });
+        if (pending.length > RECEIPT_BOUNDS.maxNodes) {
+          throw new AlgalError("PARSE_FAILED", "receipt node bound exceeded");
+        }
+      }
+    } else if (value !== null && typeof value !== "boolean" &&
+      (typeof value !== "number" || !Number.isFinite(value))) {
+      throw new AlgalError("PARSE_FAILED", "receipt must contain only JSON values");
+    }
+  }
+  if (canonicalBytes(u as JsonValue) > RECEIPT_BOUNDS.maxBytes) {
+    throw new AlgalError("PARSE_FAILED", "receipt byte bound exceeded");
+  }
+  const r = asObject(u, "receipt");
+  noUnknownKeys(r, ["contract", "runtime", "manifestDigest", "manifestKey", "args",
+    "outcome", "cells", "effects", "events", "work", "failure", "digest"], "receipt");
+  if (r.contract !== RUN_CONTRACT) {
     throw new AlgalError("PARSE_FAILED", `expected contract "${RUN_CONTRACT}"`);
   }
-  return r;
+  const runtime = asObject(reqField(r, "runtime", "receipt"), "receipt.runtime");
+  noUnknownKeys(runtime, ["name", "version"], "receipt.runtime");
+  if (runtime.name !== "algal") throw new AlgalError("PARSE_FAILED", "unknown receipt runtime");
+  asString(reqField(runtime, "version", "receipt.runtime"), "runtime.version", 128);
+  asDigest(reqField(r, "digest", "receipt"), "receipt.digest");
+  asDigest(reqField(r, "manifestDigest", "receipt"), "receipt.manifestDigest");
+  asString(reqField(r, "manifestKey", "receipt"), "receipt.manifestKey", 256);
+  const args = asObject(reqField(r, "args", "receipt"), "receipt.args");
+  if (canonicalBytes(args) > BOUNDS.maxArgsBytes) throw new AlgalError("PARSE_FAILED", "receipt args too large");
+  for (const value of Object.values(args)) asObject(value, "receipt input args");
+  if (typeof r.outcome !== "string" || !["complete", "failed", "stuck", "suspended"].includes(r.outcome)) {
+    throw new AlgalError("PARSE_FAILED", "unknown receipt outcome");
+  }
+  const work = asObject(reqField(r, "work", "receipt"), "receipt.work");
+  noUnknownKeys(work, ["steps", "agentCalls", "units"], "receipt.work");
+  for (const key of ["steps", "agentCalls", "units"]) {
+    asInt(reqField(work, key, "receipt.work"), `receipt.work.${key}`, 0, Number.MAX_SAFE_INTEGER);
+  }
+  const failure = (value: unknown, what: string, path: boolean): void => {
+    const f = asObject(value, what);
+    noUnknownKeys(f, path ? ["code", "message", "path"] : ["code", "message"], what);
+    if (!ERROR_CODES.includes(f.code as ErrorCode)) throw new AlgalError("PARSE_FAILED", `${what}.code is unknown`);
+    asString(reqField(f, "message", what), `${what}.message`, RECEIPT_BOUNDS.maxBytes);
+    if (f.path !== undefined) asString(f.path, `${what}.path`, 4096);
+  };
+  if (r.failure !== undefined) failure(r.failure, "receipt.failure", true);
+  const cells = asObject(reqField(r, "cells", "receipt"), "receipt.cells");
+  if (Object.keys(cells).length > RECEIPT_BOUNDS.maxCells) throw new AlgalError("PARSE_FAILED", "too many receipt cells");
+  for (const [path, value] of Object.entries(cells)) {
+    asString(path, "cell path", 4096);
+    const cell = asObject(value, "receipt cell");
+    noUnknownKeys(cell, ["status", "outputs", "failure", "work", "effectDigest", "toolCalls",
+      "shadowOut", "rounds", "items", "via", "slot"], "receipt cell");
+    if (typeof cell.status !== "string" || !["committed", "skipped", "failed", "suspended"].includes(cell.status)) {
+      throw new AlgalError("PARSE_FAILED", "unknown receipt cell status");
+    }
+    asInt(reqField(cell, "work", "receipt cell"), "cell.work", 0, Number.MAX_SAFE_INTEGER);
+    if (cell.outputs !== undefined) asObject(cell.outputs, "cell.outputs");
+    if (cell.failure !== undefined) failure(cell.failure, "cell.failure", false);
+    if (cell.effectDigest !== undefined) asDigest(cell.effectDigest, "cell.effectDigest");
+    if (cell.toolCalls !== undefined) asArray(cell.toolCalls, "cell.toolCalls");
+    for (const key of ["rounds", "items"]) {
+      if (cell[key] !== undefined) asInt(cell[key], `cell.${key}`, 0, Number.MAX_SAFE_INTEGER);
+    }
+    if (cell.via !== undefined) asString(cell.via, "cell.via", 128);
+    if (cell.slot !== undefined) {
+      const slot = asObject(cell.slot, "cell.slot");
+      noUnknownKeys(slot, ["name", "mode"], "cell.slot");
+      asString(reqField(slot, "name", "cell.slot"), "slot.name", 128);
+      if (slot.mode !== "read" && slot.mode !== "write") throw new AlgalError("PARSE_FAILED", "unknown slot mode");
+    }
+  }
+  const effects = asArray(reqField(r, "effects", "receipt"), "receipt.effects");
+  if (effects.length > RECEIPT_BOUNDS.maxEffects) throw new AlgalError("PARSE_FAILED", "too many receipt effects");
+  for (const effect of effects) parseEffectReceipt(effect);
+  const events = asArray(reqField(r, "events", "receipt"), "receipt.events");
+  if (events.length > BOUNDS.maxEvents) throw new AlgalError("PARSE_FAILED", "too many receipt events");
+  for (const value of events) {
+    const event = asObject(value, "receipt event");
+    noUnknownKeys(event, ["seq", "kind", "path", "digest", "outcome"], "receipt event");
+    asInt(reqField(event, "seq", "receipt event"), "event.seq", 0, Number.MAX_SAFE_INTEGER);
+    if (typeof event.kind !== "string" || !["run.start", "cell.commit", "cell.skip", "cell.fail", "cell.suspend", "effect", "run.end"].includes(event.kind)) {
+      throw new AlgalError("PARSE_FAILED", "unknown receipt event kind");
+    }
+    if (event.path !== undefined) asString(event.path, "event.path", 4096);
+    if (event.digest !== undefined) asDigest(event.digest, "event.digest");
+    if (event.outcome !== undefined) asString(event.outcome, "event.outcome", 32);
+  }
+  return r as unknown as RunReceipt;
 }
 
 export function canonicalizeReceipt(r: RunReceipt): string {

@@ -14,6 +14,7 @@ pub mod foundry;
 pub mod graph;
 pub mod mailbox;
 pub mod memory;
+pub mod process;
 pub mod registry;
 pub mod runtime;
 pub mod scorer;

@@ -45,6 +45,7 @@ import { builtinRegistry } from "./src/registry";
 import { parseRunReceipt, runOrganism, type RunReceipt } from "./src/run";
 import { packOrganism, parseBundle, unpackBundle } from "./src/bundle";
 import { FileStore } from "./src/store";
+import { ProcessSupervisor, PROCESS_BOUNDS } from "./src/process";
 import {
   fileTransport,
   httpTransport,
@@ -161,6 +162,14 @@ usage:
   algal resume <receipt.json> [manifest.json] [executor options]
                                               continue a suspended run: recorded effects
                                               replay, the rest routes to live executors
+  algal process create <name> <manifest.json> [--args <file>] [--max-generations 16]
+      [--modules <dir>] [--tools <file>] [--dir <path>]
+                                              admit a durable, bounded process
+  algal process tick <name> [executor options] execute one generation under a lease
+  algal process schedule [--max-ticks 16] [executor options]
+                                              run ready processes and recorded mailbox wakeups
+  algal process list|inspect <name>|verify <name> [--dir <path>] [--tools <file>]
+                                              inspect retained state or verify history offline
   algal inspect <receipt.json>            summarize a run receipt
   algal runs [--dir <path>]               list receipts stored under --dir
   algal diff <receipt-a.json> <receipt-b.json>
@@ -1708,6 +1717,41 @@ async function main(): Promise<number> {
       return usageError(
         "algal slot get <name> | slot set <name> <value.json>",
       );
+    }
+
+    case "process": {
+      const sub = positional[0];
+      const name = positional[1];
+      if (flags.modules !== undefined) await loadModules(String(flags.modules), store);
+      const tools = await resolveTools(flags, dir);
+      const executors = sub === "tick" || sub === "schedule" ? await resolveExecutors(flags, dir) : [];
+      const transports = flags.transports === undefined ? undefined : await loadTransports(String(flags.transports));
+      const supervisor = new ProcessSupervisor(dir, {
+        fns, tools,
+        executors: flags["cache-effects"] !== undefined
+          ? executors.map((executor) => cachedExecutor(executor, store))
+          : executors,
+        ...(transports ? { transports } : {}),
+      });
+      if (sub === "list") { out({ processes: await supervisor.list() } as unknown as JsonValue); return 0; }
+      if (sub === "schedule") {
+        out(await supervisor.schedule(flags["max-ticks"] === undefined ? 16 : Number(flags["max-ticks"])) as unknown as JsonValue);
+        return 0;
+      }
+      if (!name) usageError("algal process create|inspect|tick|verify <name>");
+      if (sub === "create") {
+        const file = positional[2]; if (!file) usageError("algal process create <name> <manifest.json>");
+        const manifest = parseOrganismManifest(await readJson(resolve(file)));
+        const args = flags.args === undefined ? {} : await readJsonBounded(resolve(String(flags.args)), PROCESS_BOUNDS.maxArgsBytes, "process args");
+        out(await supervisor.create(name, manifest, args, flags["max-generations"] === undefined ? 16 : Number(flags["max-generations"])) as unknown as JsonValue);
+      } else if (sub === "inspect") out(await supervisor.inspect(name) as unknown as JsonValue);
+      else if (sub === "tick") {
+        const next = await supervisor.tick(name);
+        out(next as unknown as JsonValue);
+        return next?.process.status === "failed" || next?.process.status === "stuck" ? 1 : 0;
+      } else if (sub === "verify") out(await supervisor.verify(name));
+      else usageError("algal process create|list|inspect|tick|schedule|verify");
+      return 0;
     }
 
     case "mailbox": {

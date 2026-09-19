@@ -8,6 +8,7 @@ import { builtinRegistry, type FnRegistry } from "./registry";
 import {
   canonicalizeReceipt,
   parseRunReceipt,
+  receiptDigest,
   runOrganism,
   type RunReceipt,
 } from "./run";
@@ -125,6 +126,15 @@ export async function resumeRun(
       `receipt records ${checkpoint.manifestDigest}, supplied manifest hashes to ${manifestDigest}`,
     );
   }
+  if (receiptDigest(checkpoint) !== checkpoint.digest) {
+    throw new AlgalError("DIGEST_MISMATCH", "checkpoint receipt digest does not match its contents");
+  }
+  // Verify against an isolated store and recorded effects before any live tail.
+  // No transport is admitted here: a checkpoint must retain its manifest closure.
+  const verified = await verifyReceipt(receiptJson, manifestJson, store, fns, undefined, tools);
+  if (!verified.ok) {
+    throw new AlgalError("RECEIPT_MISMATCH", `checkpoint did not verify: ${verified.mismatches.join("; ")}`);
+  }
   // suspension records are not answers: the suspended effect is re-issued
   // live while every completed prefix effect replays in order
   const continuable = checkpoint.effects.filter(
@@ -142,6 +152,9 @@ export async function resumeRun(
     replayToolEffects: continuable.filter((effect) =>
       effect.executor.startsWith("tool:")),
     replayToolFallthrough: true,
+    replaySlotWrites: new Set(Object.entries(checkpoint.cells)
+      .filter(([, cell]) => cell.status === "committed" && cell.slot?.mode === "write")
+      .map(([path]) => path)),
     ...(transports ? { transports } : {}),
     ...(tools ? { tools } : {}),
   });

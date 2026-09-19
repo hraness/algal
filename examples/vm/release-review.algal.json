@@ -1,0 +1,240 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:vm-release-review",
+  "name": "Durable evidence review and approved report publication",
+  "budgets": {
+    "maxSteps": 64,
+    "maxAgentCalls": 1,
+    "maxWork": 100000,
+    "maxDepth": 4
+  },
+  "cells": [
+    {
+      "id": "input",
+      "kind": "input",
+      "outputs": {
+        "evidence": "json",
+        "proposals": {
+          "type": "cap",
+          "capability": "mailbox-send"
+        },
+        "approvals": {
+          "type": "cap",
+          "capability": "mailbox-receive"
+        },
+        "publications": {
+          "type": "cap",
+          "capability": "mailbox-send"
+        }
+      }
+    },
+    {
+      "id": "recommend",
+      "kind": "agent",
+      "inputs": {
+        "evidence": "json"
+      },
+      "prompt": "Review the release evidence. Return the release identifier, a recommendation to review, and a concise summary of the checks. You cannot approve or publish anything.",
+      "view": {
+        "inputs": [
+          "evidence"
+        ]
+      },
+      "output": {
+        "kind": "json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "release": {
+              "type": "string"
+            },
+            "recommendation": {
+              "type": "string",
+              "enum": [
+                "review"
+              ]
+            },
+            "summary": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "release",
+            "recommendation",
+            "summary"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "budget": {
+        "maxContextBytes": 4096,
+        "maxOutputBytes": 1024,
+        "maxEffectMs": 10000
+      }
+    },
+    {
+      "id": "propose",
+      "kind": "tool",
+      "tool": "mailbox.send.v1"
+    },
+    {
+      "id": "wait",
+      "kind": "organism",
+      "manifest": "sha256:5f75c7fda5ac6030530b3311717d968bc49853023e96c1601c80ce1691e09e2c"
+    },
+    {
+      "id": "authorize",
+      "kind": "expr",
+      "inputs": {
+        "approval": "json",
+        "evidence": "json"
+      },
+      "expr": {
+        "contract": "algal.expr.v1",
+        "program": [
+          "if",
+          [
+            "and",
+            [
+              "eq",
+              [
+                "get",
+                "approval",
+                "decision"
+              ],
+              "approve"
+            ],
+            [
+              "eq",
+              [
+                "get",
+                "approval",
+                "release"
+              ],
+              [
+                "get",
+                "evidence",
+                "release"
+              ]
+            ]
+          ],
+          [
+            "get",
+            "approval"
+          ],
+          {
+            "decision": "reject",
+            "reason": "Missing, denied, or mismatched release approval"
+          }
+        ]
+      },
+      "output": {
+        "kind": "json",
+        "schema": {
+          "type": "object"
+        }
+      }
+    },
+    {
+      "id": "publish",
+      "kind": "tool",
+      "tool": "mailbox.send.v1"
+    }
+  ],
+  "edges": [
+    {
+      "from": {
+        "cell": "input",
+        "port": "evidence"
+      },
+      "to": {
+        "cell": "recommend",
+        "port": "evidence"
+      }
+    },
+    {
+      "from": {
+        "cell": "input",
+        "port": "proposals"
+      },
+      "to": {
+        "cell": "propose",
+        "port": "mailbox"
+      }
+    },
+    {
+      "from": {
+        "cell": "recommend",
+        "port": "out"
+      },
+      "to": {
+        "cell": "propose",
+        "port": "message"
+      }
+    },
+    {
+      "from": {
+        "cell": "input",
+        "port": "approvals"
+      },
+      "to": {
+        "cell": "wait",
+        "port": "inbox"
+      }
+    },
+    {
+      "from": {
+        "cell": "propose",
+        "port": "id"
+      },
+      "to": {
+        "cell": "wait",
+        "port": "proposal"
+      }
+    },
+    {
+      "from": {
+        "cell": "wait",
+        "port": "approval"
+      },
+      "to": {
+        "cell": "authorize",
+        "port": "approval"
+      }
+    },
+    {
+      "from": {
+        "cell": "input",
+        "port": "evidence"
+      },
+      "to": {
+        "cell": "authorize",
+        "port": "evidence"
+      }
+    },
+    {
+      "from": {
+        "cell": "input",
+        "port": "publications"
+      },
+      "to": {
+        "cell": "publish",
+        "port": "mailbox"
+      }
+    },
+    {
+      "from": {
+        "cell": "authorize",
+        "port": "out"
+      },
+      "to": {
+        "cell": "publish",
+        "port": "message"
+      },
+      "guard": {
+        "field": "decision",
+        "equals": "approve"
+      }
+    }
+  ]
+}

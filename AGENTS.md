@@ -4,7 +4,8 @@
   the effect seam (`effects.ts`), the store (`store.ts`), verification
   (`verify.ts`), Vercel AI Gateway execution (`gateway.ts`), typed external
   tools (`tools.ts`), opaque capability handles (`capabilities.ts`) and the
-  bounded durable mailbox driver (`mailbox.ts`), the provider-neutral
+  bounded durable mailbox driver (`mailbox.ts`), the named durable process
+  supervisor (`process.ts`), the provider-neutral
   typed-decision layer (`decisions.ts`) with the TypeSafe Jev adapter
   (`jev.ts`), cross-platform
   credential custody (`credentials.ts`), embeddings (`embeddings.ts`) and
@@ -19,12 +20,13 @@
   rustup toolchain with the wasm target; pins `RUSTC` past Homebrew).
 - `cli.ts` — the Bun CLI (`run`, `check`, `verify`, `resume`, `inspect`,
   `explain`, `diff`, `foundry`, `bench`, `runs`, `digest`, `store`,
-  `manifests`, `manifest`, `slots`, `slot`, `mailbox`, `pack`, `unpack`,
+  `manifests`, `manifest`, `slots`, `slot`, `mailbox`, `process`, `pack`, `unpack`,
   `example`, `suite`, `index`, `search`, `auth`, `doctor`).
 - `index.ts` — the package's public surface.
 - `examples/` — bundled manifests and scripted responses used by `suite`.
 - `spec/v1/organism.md`, `spec/v1/expr.md`, `spec/v1/foundry.md`,
-  `spec/v1/search.md`, `spec/v1/bench.md` — authoritative contract prose.
+  `spec/v1/search.md`, `spec/v1/bench.md`, `spec/v1/process.md` — authoritative
+  contract prose, including the bounded durable process filesystem ABI.
 - `site/` — the static algal.dev source; `build.ts` writes `site/dist`.
 - `README.md`, `CONTRIBUTING.md`, `SECURITY.md` — the public contract.
 

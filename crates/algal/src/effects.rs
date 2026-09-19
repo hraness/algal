@@ -544,6 +544,8 @@ pub struct Host {
     pub permissions: Option<crate::acp::PermissionBroker>,
     pub updates: Option<tokio::sync::mpsc::Sender<crate::acp::AgentUpdate>>,
     pub permission_scope: String,
+    /// Host supervisor namespace; does not change canonical run requests.
+    pub process_scope: Option<String>,
     /// When set, successful effects are memoized in the store and identical
     /// later requests are served the recorded response (`cached: true`).
     /// Only contract-valid, in-budget, non-tool-call outputs are memoized,
@@ -599,6 +601,12 @@ impl Host {
             .as_array()
             .ok_or_else(|| Error::invalid("effects must be an array"))?
         {
+            if let Some(wake) = receipt.get("wake") {
+                if receipt["error"]["code"] != "EFFECT_SUSPENDED" {
+                    return Err(Error::invalid("wake evidence requires a suspended effect"));
+                }
+                crate::capabilities::parse_wake_capabilities(wake)?;
+            }
             let key = receipt["requestDigest"]
                 .as_str()
                 .ok_or_else(|| Error::invalid("effect request digest"))?;
@@ -611,6 +619,15 @@ impl Host {
             replay: Some(replay),
             ..Self::default()
         })
+    }
+
+    pub fn tool_idempotency_key(&self, request_digest: &str) -> Result<String> {
+        match &self.process_scope {
+            Some(name) => digest(
+                &json!({"contract":"algal.process-effect.v1","process":name,"requestDigest":request_digest}),
+            ),
+            None => Ok(request_digest.to_owned()),
+        }
     }
 
     pub fn tool_signatures(&self) -> ToolSignatures {
@@ -1141,6 +1158,11 @@ impl Host {
                 // to pause the process, so the request is never re-issued
                 if error.code == "EFFECT_SUSPENDED" {
                     receipt["retryable"] = json!(false);
+                    if !error.wake.is_empty() {
+                        receipt["wake"] = json!(crate::capabilities::parse_wake_capabilities(
+                            &json!(error.wake)
+                        )?);
+                    }
                 }
                 receipt["error"] = serde_json::to_value(error)?;
             }

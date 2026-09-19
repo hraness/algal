@@ -436,13 +436,14 @@ impl Runtime<'_> {
         } else {
             None
         };
+        let idempotency_key = self.host.tool_idempotency_key(&request_digest)?;
         let receipt = match replayed {
             Some(receipt) => receipt,
             None => {
                 let result = match &tool.backend {
                     ToolBackend::External(Backend::Scripted { responses }) => responses.get(&canonical(inputs)?).cloned().ok_or_else(|| Error::new("TOOL_FAILED", "scripted tool result missing")),
-                    ToolBackend::External(backend) => self.host.execute_backend(name, backend, &json!({"inputs":inputs,"requestDigest":request_digest,"idempotencyKey":request_digest}), tool.max_bytes, timeout).await.map(|(v, _)| v),
-                    ToolBackend::MailboxSend => self.host.mailbox.as_ref().ok_or_else(|| Error::new("CAPABILITY_DENIED", "mailbox host is not admitted")).and_then(|mailbox| mailbox.send(inputs["mailbox"].as_str().unwrap_or(""), inputs["message"].clone(), &request_digest)),
+                    ToolBackend::External(backend) => self.host.execute_backend(name, backend, &json!({"inputs":inputs,"requestDigest":request_digest,"idempotencyKey":idempotency_key}), tool.max_bytes, timeout).await.map(|(v, _)| v),
+                    ToolBackend::MailboxSend => self.host.mailbox.as_ref().ok_or_else(|| Error::new("CAPABILITY_DENIED", "mailbox host is not admitted")).and_then(|mailbox| mailbox.send(inputs["mailbox"].as_str().unwrap_or(""), inputs["message"].clone(), &idempotency_key)),
                     ToolBackend::MailboxReceive => self.host.mailbox.as_ref().ok_or_else(|| Error::new("CAPABILITY_DENIED", "mailbox host is not admitted")).and_then(|mailbox| mailbox.receive(inputs["mailbox"].as_str().unwrap_or(""))),
                 };
                 match result {
@@ -451,9 +452,15 @@ impl Runtime<'_> {
                     }
                     Err(error) => {
                         let suspended = error.code == "EFFECT_SUSPENDED";
+                        let wake = error.wake.clone();
                         let mut receipt = json!({"requestDigest":request_digest,"executor":format!("tool:{name}"),"error":error});
                         if suspended {
                             receipt["retryable"] = json!(false);
+                            if !wake.is_empty() {
+                                receipt["wake"] = json!(
+                                    crate::capabilities::parse_wake_capabilities(&json!(wake))?
+                                );
+                            }
                         }
                         receipt
                     }
@@ -552,10 +559,18 @@ impl Runtime<'_> {
                 let slot = cell["name"].as_str().unwrap();
                 let value = if cell["mode"] == "write" {
                     self.work += canonical(&inputs["data"])?.len();
-                    self.store.set_slot(slot, &inputs["data"])?;
+                    if self
+                        .replay
+                        .is_none_or(|replay| replay["cells"][cell_path]["status"] != "committed")
+                    {
+                        self.store.set_slot(slot, &inputs["data"])?;
+                    }
                     Some(inputs["data"].clone())
-                } else if let Some(replay) = self.replay {
-                    replay["cells"][cell_path]["outputs"].get("data").cloned()
+                } else if let Some(record) = self
+                    .replay
+                    .and_then(|replay| replay["cells"].get(cell_path))
+                {
+                    record["outputs"].get("data").cloned()
                 } else {
                     self.store
                         .get_slot(slot)?
@@ -1341,6 +1356,12 @@ pub async fn resume(
     }
     if checkpoint["manifestDigest"] != manifest.digest()? {
         return Err(Error::invalid("manifest digest does not match checkpoint"));
+    }
+    if checkpoint["digest"] != receipt_digest(checkpoint)? {
+        return Err(Error::new("DIGEST_MISMATCH", "checkpoint digest mismatch"));
+    }
+    if verify(checkpoint, manifest.clone(), store, host).await?["ok"] != true {
+        return Err(Error::new("VERIFY_FAILED", "checkpoint does not replay"));
     }
     let mut continuable = Vec::new();
     for effect in checkpoint["effects"]
