@@ -95,15 +95,22 @@ async function defaultRun(
       stdout: "pipe",
       stderr: "pipe",
     });
-    if (stdin !== undefined && proc.stdin) {
-      proc.stdin.write(stdin);
-      proc.stdin.end();
-    }
-    const [stdout, stderr, code] = await Promise.all([
+    const input = (async () => {
+      if (stdin === undefined || !proc.stdin) return true;
+      let complete = true;
+      // Both operations can return independently rejecting promises. Always
+      // settle the close, and never treat an incomplete secret as stored.
+      try { await proc.stdin.write(stdin); } catch { complete = false; }
+      try { await proc.stdin.end(); } catch { complete = false; }
+      return complete;
+    })();
+    const [stdout, stderr, code, inputComplete] = await Promise.all([
       new Response(proc.stdout).text(),
       new Response(proc.stderr).text(),
       proc.exited,
+      input,
     ]);
+    if (!inputComplete) return { code: code === 0 ? 127 : code, stdout: "", stderr: "stdin delivery failed" };
     return { code, stdout, stderr };
   } catch {
     return { code: 127, stdout: "", stderr: "spawn failed" };

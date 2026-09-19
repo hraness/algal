@@ -579,8 +579,9 @@ name → command, so a cell's `route.provider`/`route.preset` picks its model.
   The suspended receipt still verifies bit-for-bit, and `algal resume`
   continues it: recorded effects replay by request digest, the suspended
   request re-issues against the currently admitted executors, and the tail
-  executes live — idempotently, so a still-pending executor just suspends
-  the process again.
+  executes live. Adapters must honor supplied idempotency keys or avoid
+  committing work before suspension; the runtime does not make arbitrary
+  external effects idempotent. A still-pending executor suspends again.
 - Mailbox receive uses that same process boundary: an empty admitted mailbox
   suspends, a sender holding the separate `mailbox-send` cap queues a bounded
   wakeup, and resume reissues the exact receive. Message files are immutable,

@@ -162,16 +162,55 @@ export function githubCliTransport(
         "GitHub CLI diagnostics",
         signal,
       );
-      if (request.body !== undefined)
-        child.stdin.write(JSON.stringify(request.body));
-      child.stdin.end();
-      const [bytes] = await Promise.all([stdout, stderr, child.exited]);
+      const input = (async () => {
+        try {
+          // A backpressured write and end can each reject independently. Keep
+          // both observed while stdout, diagnostics and process exit drain.
+          if (request.body !== undefined)
+            await child.stdin.write(JSON.stringify(request.body));
+          await child.stdin.end();
+          return true;
+        } catch (error) {
+          // gh may refuse a request and close stdin early. Preserve its HTTP
+          // error, but never accept a successful response to a partial input.
+          if (
+            typeof error === "object" &&
+            error !== null &&
+            "code" in error &&
+            error.code === "EPIPE"
+          )
+            return false;
+          throw new AlgalError(
+            "EFFECT_FAILED",
+            "GitHub CLI input delivery failed; diagnostics withheld",
+          );
+        }
+      })();
+      const [bytes, , code, inputComplete] = await Promise.all([
+        stdout,
+        stderr,
+        child.exited,
+        input,
+      ]);
       if (signal.aborted)
         throw new AlgalError(
           "BUDGET_EXHAUSTED",
           "GitHub CLI request cancelled or timed out",
         );
-      return decodeResponse(bytes, request.maxBytes);
+      const response = decodeResponse(bytes, request.maxBytes);
+      if (response.status < 400) {
+        if (code !== 0)
+          throw new AlgalError(
+            "EFFECT_FAILED",
+            `GitHub CLI exited ${code}; diagnostics withheld`,
+          );
+        if (!inputComplete)
+          throw new AlgalError(
+            "EFFECT_FAILED",
+            "GitHub CLI closed stdin before request delivery",
+          );
+      }
+      return response;
     } finally {
       clearTimeout(timer);
       controller.abort();
