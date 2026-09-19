@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="864" height="932" viewBox="0 0 864 932" role="img" aria-labelledby="algal-7f890428e915-title algal-7f890428e915-desc">
+<title id="algal-7f890428e915-title">HabitatPropose — Algal program</title>
+<desc id="algal-7f890428e915-desc">Exact data dependencies of organism:habitat-propose. 6 cells and 5 edges. Arrows carry named values; layout does not imply time or parallel execution. Dashed arrows carry failure records. No execution status is implied.</desc>
+<defs><marker id="algal-7f890428e915-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/></marker></defs>
+<rect width="864" height="932" rx="16" fill="#ffffff"/>
+<g font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" fill="#0f172a">
+<text x="32" y="34" font-size="20" font-weight="700"><title>HabitatPropose</title>HabitatPropose</text>
+<text x="32" y="56" font-size="11" fill="#475569">Exact manifest · sha256:7f890428e915f1b2f46ba7fd721bff2ac6b51ed8a2f72e7dbbe67fc414da9a0f</text>
+<text x="32" y="78" font-size="12" fill="#475569">Limits: 4 executor calls · 32 steps · depth 4</text>
+<text x="32" y="98" font-size="11" fill="#475569">Arrows are data dependencies; dashed = failure.</text>
+<path d="M 200 214 V 239 H 404 V 299" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-7f890428e915-arrow)"><title>text → goal · text</title></path>
+<rect x="243.8" y="230" width="116.39999999999999" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="302" y="241" font-size="10" text-anchor="middle" fill="#475569"><title>text → goal · text</title>text → goal · text</text>
+<path d="M 404 381 V 415 H 404 V 449" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-7f890428e915-arrow)"><title>out → manifest · json</title></path>
+<rect x="337.1" y="406" width="133.8" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="404" y="417" font-size="10" text-anchor="middle" fill="#475569"><title>out → manifest · json</title>out → manifest · json</text>
+<path d="M 404 565 V 608 H 348 V 633" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-7f890428e915-arrow)"><title>digest → item · text</title></path>
+<rect x="312" y="599" width="128" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="376" y="610" font-size="10" text-anchor="middle" fill="#475569"><title>digest → item · text</title>digest → item · text</text>
+<path d="M 608 231 V 256 H 802 V 610.3333333333334 H 460 V 633" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-7f890428e915-arrow)"><title>data → list · json</title></path>
+<rect x="549.8" y="247" width="116.39999999999999" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="608" y="258" font-size="10" text-anchor="middle" fill="#475569"><title>data → list · json</title>data → list · json</text>
+<path d="M 404 715 V 749 H 404 V 783" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-7f890428e915-arrow)"><title>value → data · json</title></path>
+<rect x="342.9" y="740" width="122.2" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="404" y="751" font-size="10" text-anchor="middle" fill="#475569"><title>value → data · json</title>value → data · json</text>
+<g><title>INPUT; goal; out text: text; INPUT goal → text</title>
+<rect x="32" y="132" width="336" height="82" rx="10" fill="#eff6ff" stroke="#2563eb" stroke-width="1.4"/>
+<rect x="32" y="144" width="4" height="58" rx="2" fill="#2563eb"/>
+<text x="49" y="155" font-size="10" letter-spacing="0.5" font-weight="700" fill="#2563eb">INPUT</text>
+<text x="49" y="178" font-size="16" font-weight="650">goal</text>
+<text x="49" y="198" font-size="11" fill="#475569"><title>INPUT goal → text</title>INPUT goal → text</text>
+</g>
+<g><title>SLOT · READ; history; population; Default when empty; out data: json; population; Default when empty</title>
+<rect x="440" y="132" width="336" height="99" rx="10" fill="#fdf4ff" stroke="#a21caf" stroke-width="1.4"/>
+<rect x="440" y="144" width="4" height="75" rx="2" fill="#a21caf"/>
+<text x="457" y="155" font-size="10" letter-spacing="0.5" font-weight="700" fill="#a21caf">SLOT · READ</text>
+<text x="457" y="178" font-size="16" font-weight="650">history</text>
+<text x="457" y="198" font-size="11" fill="#475569"><title>population</title>population</text>
+<text x="457" y="215" font-size="11" fill="#475569"><title>Default when empty</title>Default when empty</text>
+</g>
+<g><title>MODEL · generate; designer; Design a tiny child organism that exposes an &apos;out&apos; output containing the goal string.; in goal: text; out out: json; Design a tiny child organism that exposes an &apos;out&apos; output containing the goal string.</title>
+<rect x="236" y="299" width="336" height="82" rx="10" fill="#eef2ff" stroke="#6366f1" stroke-width="1.4"/>
+<rect x="236" y="311" width="4" height="58" rx="2" fill="#6366f1"/>
+<text x="253" y="322" font-size="10" letter-spacing="0.5" font-weight="700" fill="#6366f1">MODEL · generate</text>
+<text x="253" y="345" font-size="16" font-weight="650">designer</text>
+<text x="253" y="365" font-size="11" fill="#475569"><title>Design a tiny child organism that exposes an &apos;out&apos; output containing the goal string.</title>Design a tiny child organism that exposes an &apos;…</text>
+</g>
+<g><title>SPAWN · proposed program; run; Parse, admit, run manifest as data; Parent budgets and depth apply; in args: json?; in manifest: json; out data: json; out digest: text; Parse, admit, run manifest as data; Parent budgets and depth apply; OUTPUT digest → child</title>
+<rect x="236" y="449" width="336" height="116" rx="10" fill="#f0fdfa" stroke="#0f766e" stroke-width="1.4"/>
+<rect x="236" y="461" width="4" height="92" rx="2" fill="#0f766e"/>
+<text x="253" y="472" font-size="10" letter-spacing="0.5" font-weight="700" fill="#0f766e">SPAWN · proposed program</text>
+<text x="253" y="495" font-size="16" font-weight="650">run</text>
+<text x="253" y="515" font-size="11" fill="#475569"><title>Parse, admit, run manifest as data</title>Parse, admit, run manifest as data</text>
+<text x="253" y="532" font-size="11" fill="#475569"><title>Parent budgets and depth apply</title>Parent budgets and depth apply</text>
+<text x="253" y="549" font-size="11" fill="#475569"><title>OUTPUT digest → child</title>OUTPUT digest → child</text>
+</g>
+<g><title>PURE · function; append; push.v1; in item: json; in list: json; out value: json; push.v1</title>
+<rect x="236" y="633" width="336" height="82" rx="10" fill="#f1f5f9" stroke="#64748b" stroke-width="1.4"/>
+<rect x="236" y="645" width="4" height="58" rx="2" fill="#64748b"/>
+<text x="253" y="656" font-size="10" letter-spacing="0.5" font-weight="700" fill="#64748b">PURE · function</text>
+<text x="253" y="679" font-size="16" font-weight="650">append</text>
+<text x="253" y="699" font-size="11" fill="#475569"><title>push.v1</title>push.v1</text>
+</g>
+<g><title>SLOT · WRITE; record; population; in data: json; out data: json; population; OUTPUT data → population</title>
+<rect x="236" y="783" width="336" height="99" rx="10" fill="#fdf4ff" stroke="#a21caf" stroke-width="1.4"/>
+<rect x="236" y="795" width="4" height="75" rx="2" fill="#a21caf"/>
+<text x="253" y="806" font-size="10" letter-spacing="0.5" font-weight="700" fill="#a21caf">SLOT · WRITE</text>
+<text x="253" y="829" font-size="16" font-weight="650">record</text>
+<text x="253" y="849" font-size="11" fill="#475569"><title>population</title>population</text>
+<text x="253" y="866" font-size="11" fill="#475569"><title>OUTPUT data → population</title>OUTPUT data → population</text>
+</g>
+</g></svg>

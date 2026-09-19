@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ALGAL — programs that grow</title>
-<meta name="description" content="ALGAL is a living agent harness — organisms are typed, replayable graphs that can spawn and evolve — and a way to squeeze more juice out of LLMs, small or large.">
+<title>ALGAL — small programs that decide, act, and grow</title>
+<meta name="description" content="Write readable, bounded agent programs. See their decisions and effects, replay their execution, and grow new programs through measured, host-controlled selection.">
 <link rel="canonical" href="https://algal.dev/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ALGAL">
 <meta property="og:title" content="ALGAL — programs that grow">
-<meta property="og:description" content="ALGAL is a living agent harness — organisms are typed, replayable graphs that can spawn and evolve — and a way to squeeze more juice out of LLMs, small or large.">
+<meta property="og:description" content="Small programs that decide, act, and show their work. Readable source, generated diagrams, replayable execution, and measured program evolution.">
 <meta property="og:url" content="https://algal.dev/">
 <meta property="og:image" content="https://algal.dev/og.png">
 <meta property="og:image:width" content="1200">
@@ -17,229 +17,165 @@
 <meta property="og:image:alt" content="ALGAL — programs that grow">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="ALGAL — programs that grow">
-<meta name="twitter:description" content="ALGAL is a living agent harness — organisms are typed, replayable graphs that can spawn and evolve — and a way to squeeze more juice out of LLMs, small or large.">
+<meta name="twitter:description" content="Small programs that decide, act, and show their work. Readable source, generated diagrams, replayable execution, and measured program evolution.">
 <meta name="twitter:image" content="https://algal.dev/og.png">
 <meta name="robots" content="index, follow">
 <script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@graph": [
-    {
-      "@type": "WebSite",
-      "name": "ALGAL",
-      "url": "https://algal.dev/"
-    },
-    {
-      "@type": "SoftwareApplication",
-      "name": "ALGAL",
-      "url": "https://algal.dev/",
-      "description": "ALGAL is a living agent harness — organisms are typed, replayable graphs that can spawn and evolve — and a way to squeeze more juice out of LLMs, small or large.",
-      "applicationCategory": "DeveloperApplication",
-      "codeRepository": "https://github.com/hraness/algal",
-      "license": "https://opensource.org/license/mit",
-      "author": { "@id": "https://github.com/hraness#org" }
-    },
-    {
-      "@type": "Organization",
-      "@id": "https://github.com/hraness#org",
-      "name": "hraness",
-      "url": "https://github.com/hraness"
-    }
-  ]
-}
+{"@context":"https://schema.org","@graph":[{"@type":"WebSite","name":"ALGAL","url":"https://algal.dev/"},{"@type":"SoftwareApplication","name":"ALGAL","url":"https://algal.dev/","description":"A language for readable, bounded agent programs with generated diagrams, replayable execution, and host-controlled program evolution.","applicationCategory":"DeveloperApplication","codeRepository":"https://github.com/hraness/algal","license":"https://opensource.org/license/mit","author":{"@id":"https://github.com/hraness#org"}},{"@type":"Organization","@id":"https://github.com/hraness#org","name":"hraness","url":"https://github.com/hraness"}]}
 </script>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<header>
-  <div class="wordmark">ALGAL</div>
-  <nav>
-    <a href="https://github.com/hraness/algal">github</a>
-    <a href="https://github.com/hraness/algal/tree/main/docs">docs</a>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header">
+  <a class="wordmark" href="/" aria-label="ALGAL home"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>ALGAL</a>
+  <nav aria-label="Main navigation">
+    <a href="#examples">Examples</a>
+    <a href="https://github.com/hraness/algal/tree/main/docs">Docs <span aria-hidden="true">↗</span></a>
+    <a href="https://github.com/hraness/algal">GitHub <span aria-hidden="true">↗</span></a>
   </nav>
 </header>
 
-<main>
-  <section class="hero">
-    <h1>Programs that grow.<br>More from every model.</h1>
-    <p class="lede">
-      ALGAL is two things. It is an agent harness where organisms are
-      typed, replayable workflow graphs that can spawn and evolve into a
-      civilization. And it is a way to squeeze more juice out of LLMs — cheap
-      or frontier — by putting deterministic cells in charge of structure and
-      using models only where judgment is needed.
-    </p>
+<main id="main">
+  <section class="hero" aria-labelledby="hero-title">
+    <p class="eyebrow"><span class="live-dot" aria-hidden="true"></span>A language for growing agent programs</p>
+    <h1 id="hero-title">Small programs.<br>Visible decisions.<br><em>Room to grow.</em></h1>
+    <div class="hero-intro">
+      <p class="lede">Give models the judgment. Give programs the structure.<br class="desktop-break"> ALGAL makes both readable, bounded, and inspectable.</p>
+      <a class="button" href="#try">Try a program <span aria-hidden="true">↗</span></a>
+    </div>
+
+    <div class="program-window">
+      <div class="window-bar"><span class="file-label"><span class="file-dot" aria-hidden="true"></span>reply.algal</span><span class="window-note">One program. Two views.</span></div>
+      <div class="program-comparison">
+        <div class="source-pane">
+          <div class="pane-heading"><span class="eyebrow">01 / Read the intent</span><a href="examples/reply.algal" download>Source ↓</a></div>
+          <pre class="source-code"><code>{{REPLY_SOURCE}}</code></pre>
+          <div class="source-annotation">
+            <span class="annotation-line" aria-hidden="true"></span>
+            <p><strong>A decision. A pure match. A draft.</strong><br>The model sees the context you declare. The program makes the limits visible.</p>
+          </div>
+          <div class="source-facts"><span><b>{{REPLY_MAX_AGENT_CALLS}}</b> executor attempts, at most</span><span><b>0</b> model calls in <code>match</code></span></div>
+        </div>
+        <figure class="graph-pane">
+          <div class="pane-heading"><span class="eyebrow">02 / See the structure</span><a href="diagrams/reply.svg" target="_blank" rel="noopener">Expand ↗</a></div>
+          <img class="reply-diagram" src="diagrams/reply.svg" alt="Generated reply program graph: email flows into a typed decision, a pure decision adapter and match, then generation. Email also flows directly into generation as explicit context." width="480" height="730" fetchpriority="high">
+          <figcaption>Generated from the compiled manifest, including the pure decision adapter. Arrows are data dependencies.</figcaption>
+        </figure>
+      </div>
+      <div class="window-footer"><span><span class="legend-dot model" aria-hidden="true"></span>Model judgment</span><span><span class="legend-dot pure" aria-hidden="true"></span>Deterministic logic</span><a href="examples/reply.algal.json">Inspect the executable manifest ↗</a></div>
+    </div>
+    <p class="under-note">Executable source, not pseudocode. The Bun compiler lowers <code>.algal</code> into the existing <code>algal.organism.v1</code> format. Both runtimes execute the compiled manifest.</p>
   </section>
 
-  <section>
-    <h2>A living agent harness</h2>
-    <p>
-      Organisms are data: hashable, transportable, evolvable. They can propose
-      and spawn children, and a host can promote them into a civilization. It
-      is not just a workflow — it is a self-reproducing ecosystem with a
-      content-addressed fossil record.
-    </p>
+  <section class="artifact-section" aria-labelledby="artifact-title">
+    <div class="section-intro"><p class="eyebrow">One executable meaning</p><h2 id="artifact-title">Read it. Run it.<br>Ask what happened.</h2><p>A diagram comes from the program. An execution overlay comes from its receipt. The views stay connected to the artifact they explain.</p></div>
+    <ol class="artifact-flow">
+      <li><span class="step-number">01</span><h3>Write a program</h3><p>Immutable values, explicit model effects, exhaustive choices, and declared budgets.</p><code>.algal source</code></li>
+      <li><span class="step-number">02</span><h3>Compile its structure</h3><p>A deterministic compiler produces a typed manifest and a source-map sidecar. Diagrams come from that manifest.</p><code>.algal.json + diagram</code></li>
+      <li><span class="step-number">03</span><h3>Keep the evidence</h3><p>Receipts record execution. Replay checks the orchestration against recorded external answers.</p><code>receipt + verification</code></li>
+    </ol>
+    <p class="boundary-note">Replay checks execution consistency. It does not establish that a model answer is true or attest that a provider performed an operation.</p>
   </section>
 
-  <section>
-    <h2>Squeeze more juice from LLMs</h2>
-    <p>
-      Give small or large models narrower problems, the evidence they need,
-      deterministic checks, and explicit escalation. Measure the result on your
-      workload: more calls are not automatically better. Hosted, coding-agent,
-      and on-device adapters belong behind the same bounded effect boundary.
-      The sharpest trick is to ask the model for the smallest sufficient
-      decision — a plan — and let the host compile it into a program, so an
-      on-device model can do work that used to require a cloud call.
-    </p>
+  <section class="examples-section" id="examples" aria-labelledby="examples-title">
+    <div class="section-heading"><div><p class="eyebrow">The same core, more ambitious programs</p><h2 id="examples-title">Start small.<br><em>Grow deliberately.</em></h2></div><p>Refine a draft. Suspend for approval. Apply a child program to a collection. Propose a new program. Every effect and boundary has a place in the graph.</p></div>
+    <div class="example-tabs" role="tablist" aria-label="Program examples" hidden>
+      <button type="button" role="tab" id="tab-refine" aria-controls="example-refine" aria-selected="true" tabindex="0"><span>01</span> Refine</button>
+      <button type="button" role="tab" id="tab-wait" aria-controls="example-wait" aria-selected="false" tabindex="-1"><span>02</span> Wait</button>
+      <button type="button" role="tab" id="tab-fanout" aria-controls="example-fanout" aria-selected="false" tabindex="-1"><span>03</span> Fan out</button>
+      <button type="button" role="tab" id="tab-evolve" aria-controls="example-evolve" aria-selected="false" tabindex="-1"><span>04</span> Evolve</button>
+    </div>
+
+    <article class="example-panel" id="example-refine" aria-labelledby="refine-title">
+      <div class="example-copy"><span class="capability-label">Bounded refinement</span><h3 id="refine-title">Improve it.<br>Check it.<br>Know when to stop.</h3><p>An editor rewrites a draft. A critic returns <code>ship</code> or <code>revise</code>. A <code>repeat</code> cell carries the draft into the next round, up to {{REFINE_ROUNDS}} rounds.</p><p>The final verdict still matters. Reaching the round limit returns the last outputs; it does not turn <code>revise</code> into success. The graph sends that result to <code>hold</code>.</p><div class="bound-card"><span class="eyebrow">The boundary is part of the program</span><strong>{{REFINE_ROUNDS}} rounds maximum</strong><p>Each round contains an editor and a critic. The parent's attempt budget also bounds nested execution.</p></div><a class="text-link" href="examples/refine.algal.json">Inspect the manifest ↗</a><details class="detail-link"><summary>See inside one round</summary><img src="diagrams/refine-inner.svg" alt="Generated child graph: draft input, editor agent, then critic classifier with revise and ship labels." width="430" height="600" loading="lazy"><a href="examples/refine-inner.algal.json">Child manifest ↗</a></details></div>
+      <figure class="example-graph"><div class="graph-caption"><span class="eyebrow">Actual program / repeat + guarded branches</span><a href="diagrams/refine.svg" target="_blank" rel="noopener">Expand ↗</a></div><img src="diagrams/refine.svg" alt="Generated refinement graph. Draft enters a repeat cell bounded to {{REFINE_ROUNDS}} rounds. Its final verdict selects ship or hold through explicit guards." width="790" height="700" loading="lazy"><figcaption>The loop is a bounded child operation. The outer dataflow graph stays acyclic.</figcaption></figure>
+    </article>
+
+    <article class="example-panel" id="example-wait" aria-labelledby="wait-title">
+      <div class="example-copy"><span class="capability-label">Durable approval</span><h3 id="wait-title">Pause the work.<br>Keep the progress.</h3><p>A model reviews evidence and proposes a recommendation. The process can suspend while a child program waits for a host-supplied approval message.</p><p>On resume, a pure check requires both an <code>approve</code> decision and a matching release identifier before the publication effect becomes eligible.</p><div class="bound-card"><span class="eyebrow">Authority remains with the host</span><strong>Recommend → wait → authorize</strong><p>This example publishes a report to a local mailbox. The model does not approve or deploy a release.</p></div><a class="text-link" href="https://github.com/hraness/algal/blob/main/docs/vm.md">Run the durable process demonstration ↗</a><details class="detail-link"><summary>See inside the waiting child</summary><img src="diagrams/approval-wait.svg" alt="Generated approval child graph: an input supplies the admitted mailbox-receive capability to a mailbox.receive.v1 tool." width="430" height="460" loading="lazy"><a href="examples/approval-wait.algal.json">Child manifest ↗</a></details></div>
+      <figure class="example-graph"><div class="graph-caption"><span class="eyebrow">Actual program / tools + durable child</span><a href="diagrams/release-review.svg" target="_blank" rel="noopener">Expand ↗</a></div><img src="diagrams/release-review.svg" alt="Generated release review graph: evidence feeds recommendation, a proposal is recorded, the child waits for approval, and an authorization expression guards publication to a local mailbox." width="790" height="960" loading="lazy"><figcaption>Data dependencies retain the order. Mailbox capabilities are admitted by the host.</figcaption></figure>
+    </article>
+
+    <article class="example-panel" id="example-fanout" aria-labelledby="fanout-title">
+      <div class="example-copy"><span class="capability-label">Bounded composition</span><h3 id="fanout-title">One useful program.<br>A collection of questions.</h3><p>The <code>each</code> cell applies a pinned child program to each question, up to {{SWARM_ITEMS}} items. A pure function joins the answers.</p><p>The child's interface makes it reusable. Its content digest fixes which program is being called. The parent bounds how much work the collection can create.</p><div class="bound-card"><span class="eyebrow">Fan-out is explicit structure</span><strong>{{SWARM_ITEMS}} items maximum</strong><p>Independent work is visible in the graph. This does not promise concurrent execution or a wall-clock speedup.</p></div><a class="text-link" href="examples/swarm.algal.json">Inspect the manifest ↗</a></div>
+      <figure class="example-graph"><div class="graph-caption"><span class="eyebrow">Actual program / each + collection</span><a href="diagrams/swarm.svg" target="_blank" rel="noopener">Expand ↗</a></div><img src="diagrams/swarm.svg" alt="Generated question swarm graph: a list of questions enters an each cell with maxItems {{SWARM_ITEMS}}, then answers flow to the pure join.v1 function." width="640" height="650" loading="lazy"><figcaption>A reusable child is an artifact with a declared interface, not an invisible prompt template.</figcaption></figure>
+    </article>
+
+    <article class="example-panel" id="example-evolve" aria-labelledby="evolve-title">
+      <div class="example-copy"><span class="capability-label">Programs as values</span><h3 id="evolve-title">A program can<br>propose its successor.</h3><p>A designer produces a child manifest as data. A bounded <code>spawn</code> operation admits and runs it, and its digest is appended to a persistent population slot.</p><p>That is the starting point for a habitat. Foundry and civilization workflows evaluate candidates on declared cases; host selection decides what to retain or promote.</p><div class="bound-card"><span class="eyebrow">Proposal is not promotion</span><strong>Inspect → evaluate → select</strong><p>The graph shown records a proposed child's digest. It does not itself prove improvement or promote a winner.</p></div><a class="text-link" href="https://github.com/hraness/algal/blob/main/docs/civilization.md">Explore measured populations and lineage ↗</a></div>
+      <figure class="example-graph"><div class="graph-caption"><span class="eyebrow">Actual program / spawn + persistent slot</span><a href="diagrams/habitat.svg" target="_blank" rel="noopener">Expand ↗</a></div><img src="diagrams/habitat.svg" alt="Generated habitat graph: a goal reaches a designer agent that proposes a child manifest; spawn runs the admitted child, then its digest joins population history and is written to a slot." width="790" height="840" loading="lazy"><figcaption>Execution explains what a program did. Evaluation and lineage explain why a version was retained.</figcaption></figure>
+    </article>
+    <p class="under-note">These are generated views of existing executable manifests. The first source-language release covers values, decisions, generation, and pure selection; composition, waits, and evolution remain available through the manifest API.</p>
   </section>
 
-  <section>
-    <h2>A new primitive</h2>
-    <p>
-      ALGAL combines <em>bounded, typed, content-addressed programs</em>
-      with explicit model effects and replayable execution evidence. A
-      manifest is a reusable value: hashable, transportable, and evolvable.
-      Safety depends on the functions, tools, executors, and capabilities
-      admitted by the host. A manifest does not provide OS isolation.
-    </p>
+  <section class="evolution-section" aria-labelledby="evolution-title">
+    <p class="eyebrow">From one program to a measured population</p>
+    <div class="section-heading"><h2 id="evolution-title">Growth needs<br><em>a selection rule.</em></h2><p>Better programs come from evidence. Keep the candidate, its evaluation, and the host's decision connected—so growth has a history you can inspect.</p></div>
+    <ol class="lineage-flow" aria-label="Conceptual program selection lifecycle, not an execution trace">
+      <li><span>01 / propose</span><strong>Candidate artifacts</strong><p>Model-produced plans or manifests</p></li>
+      <li><span>02 / admit</span><strong>Typed, bounded programs</strong><p>Host compilation and checks</p></li>
+      <li><span>03 / measure</span><strong>Evaluation evidence</strong><p>Declared cases and work limits</p></li>
+      <li><span>04 / select</span><strong>Retain or promote</strong><p>Host policy and recorded lineage</p></li>
+    </ol>
+    <p class="boundary-note">Conceptual lifecycle of the existing foundry and civilization workflows. This is not a recorded run or a promise that a candidate improves.</p>
   </section>
 
-  <section>
-    <img alt="" aria-hidden="true" class="algal-topic-icon" decoding="async" height="88" loading="lazy" src="/icons/shape.svg" width="88">
-    <h2>The shape</h2>
-    <pre class="code">cells:
-  - id: route
-    kind: classifier            # bounded LLM call, closed label set
-    output: { kind: choice, labels: [bug, feature, question] }
-  - id: as-bug
-    kind: fn                    # deterministic code
-edges:
-  - from: route.out
-    to: as-bug.tag
-    guard: { equals: bug }      # the structure carries the routing</pre>
+  <section class="try-section" id="try" aria-labelledby="try-title">
+    <div class="section-intro"><p class="eyebrow">Start with a real artifact</p><h2 id="try-title">Twenty lines.<br>A graph you can inspect.</h2><p>Clone the repository and use Bun 1.3 or newer. Compile the source, check its graph, and export the diagram. No model credentials are needed for these steps.</p><a class="text-link" href="https://github.com/hraness/algal">Get ALGAL on GitHub ↗</a></div>
+    <div class="terminal"><div class="terminal-bar"><span>Terminal</span><span>source → manifest → diagram</span></div><pre><code><span class="code-comment"># Install from the repository root</span>
+bun install --frozen-lockfile
+
+<span class="code-comment"># Compile readable source</span>
+bun cli.ts compile examples/source/reply.algal \
+  --out reply.algal.json \
+  --source-map reply.source-map.json
+
+<span class="code-comment"># Check it and export its structure</span>
+bun cli.ts check examples/source/reply.algal
+bun cli.ts diagram examples/source/reply.algal \
+  --format svg --out reply.svg</code></pre><p>The compiler emits the existing manifest contract. Model execution uses an explicitly configured executor or scripted responses.</p></div>
   </section>
 
-  <section>
-    <img alt="" aria-hidden="true" class="algal-topic-icon" decoding="async" height="88" loading="lazy" src="/icons/run-produces.svg" width="88">
-    <h2>What a run produces</h2>
-    <p>
-      Every run emits a content-addressed receipt: which cells committed,
-      which skipped, what each agent cell asked and returned, and the work
-      ledger. <code>algal verify</code> replays the run offline with the
-      recorded receipts fixed — the same manifest, the same outputs, the same
-      digest — or reports exactly where it diverges. Replay checks internal
-      consistency; it does not attest to a provider call or establish that
-      the model output is true.
-    </p>
-    <pre class="code">$ algal run triage.algal.json --responses triage.responses.json
-$ algal verify run.receipt.json triage.algal.json
-{"ok":true,"outcome":"complete","digest":"sha256:…"}</pre>
-  </section>
-
-  <section>
-    <img alt="" aria-hidden="true" class="algal-topic-icon" decoding="async" height="88" loading="lazy" src="/icons/boundaries.svg" width="88">
-    <h2>Boundaries</h2>
-    <ul>
-      <li>A manifest carries no host code. <code>fn</code> cells name host-registered functions, agent cells declare prompts/views/contracts, and <code>expr</code> cells carry bounded <code>algal.expr.v1</code> programs as data — interpreted under fuel by one shared evaluator (Rust native + WASM), never eval'd by the host.</li>
-      <li>An agent cell sees only its declared view of the graph — its inputs, plus ancestor cells named in <code>view.cells</code>. Byte-bounded, computed, never a stuffed prompt.</li>
-      <li>Model output is data. It re-enters the graph only after binding to a declared output contract.</li>
-      <li>Agents reach back into the automaton only through <code>tools</code>: declared registry functions, turn-bounded, every call on the receipt. Classifiers can run in shadow — the model's decision is recorded while a declared label stays authoritative.</li>
-      <li>Organisms embed: a sealed, content-addressed manifest becomes one cell inside a larger organism, exposing only its declared ports. A <code>repeat</code> cell re-runs one for bounded rounds with carried values; an <code>each</code> cell maps it over a delivered list — iteration and fan-out as structure, with <code>many</code> ports collecting the results.</li>
-      <li>Failure is routable: an <code>on:"fail"</code> edge delivers the failure record to a recovery cell, so whether a failure is survivable is declared in the graph — not discovered mid-run. Without one, the run fails closed.</li>
-      <li>Payloads are content-addressed: <code>store</code> cells pin data under a <code>sha256:</code> digest and <code>ref</code> ports carry only the token — a payload can flow through the whole graph without entering a receipt or an agent's context until a <code>load</code> cell resolves it.</li>
-      <li>Organisms are portable: <code>pack</code> emits a manifest's whole embedding closure as one digest-verified bundle, and a <code>via</code> cell resolves a missing sub-manifest through a named transport — remote resolution, local execution, with digest checks establishing content identity rather than trustworthiness.</li>
-      <li>Eligible model effects can be memoized: <code>run --cache-effects</code> reuses a valid recorded response for an identical request under the same executor cache identity. Command, delegated-coding, and recall executors opt out; errors and tool-call responses are not memoized. Receipts mark reuse <code>cached</code>.</li>
-      <li>Receipts make runs replayable, not reproducible — the same organism on fresh inputs can legitimately diverge.</li>
-    </ul>
-  </section>
-
-  <section>
-    <h2>Example: evidence before judgment</h2>
-    <p>
-      A billing-dispute organism first retrieves an account's charge ledger
-      through a typed <code>tool</code> cell, then decides whether to
-      <code>refund</code>, <code>escalate</code>, or <code>monitor</code>.
-    </p>
-    <p>
-      The committed six-case configuration uses scripted responses to test
-      evidence routing, output comparison, and receipt verification. Giving
-      one graph the ledger and withholding it from another measures evidence
-      access; it does not establish a live provider quality or cost ranking.
-      A live comparison needs equal tool access, retained receipts, and
-      current provider prices.
-    </p>
-    <p>
-      <a href="https://github.com/hraness/algal/tree/main/examples/invest">See the invest example</a>
-      · <a href="https://github.com/hraness/algal/blob/main/docs/when-algal-wins.md">Read the intuition doc</a>
-    </p>
-  </section>
-
-  <section>
-    <h2>Use it as an agent tool</h2>
-    <p>
-      Pack an organism into a digest-verified bundle, generate an OpenAI or
-      Anthropic tool definition, and let a larger agent call it by running
-      <code>algal call</code>.
-    </p>
-    <pre class="code">$ algal pack ticket.algal.json --out ./tools
-$ algal tool-def ticket.algal.json
-$ algal call ./tools/&lt;bundle&gt;.bundle.json --args ticket.args.json
-{ "ok": true, "outputs": { "out": "billing" }, "receiptDigest": "sha256:..." }</pre>
-    <p>
-      The agent receives a compact result plus a receipt it can verify offline.
-    </p>
-  </section>
-
-  <section>
-    <h2>Habitats and self-evolution</h2>
-    <p>
-      Because a manifest is a value, an organism can generate and propose new
-      organisms, functions, and tools. A shared store and registries become a
-      habitat: a population that evolves through foundry search and host
-      admission. The organism cannot rewrite its own runtime; it can only
-      propose. The host remains the admission gate.
-    </p>
-    <p>
-      A live steel thread already works: <code>bun examples/habitat/promote.ts --live</code>
-      lets a parent organism call a model to design a child, spawn it, and the
-      host promotes the child to a standalone bundle if it is valid and different
-      from the safe fallback.
-    </p>
-  </section>
-
-  <section>
-    <h2>Civilization</h2>
-    <p>
-      Programming becomes ecology. <code>algal civ --live</code> runs a measured
-      epoch: a designer organism proposes a small plan per goal,
-      <code>manifest.compile.v1</code> compiles it into a manifest, the host
-      measures it on train and validation cases, and only winners promote —
-      with provenance, evidence, holdout results, and a bundle digest recorded
-      in a verifiable population snapshot. On Apple Silicon,
-      <code>algal civ --live --apple</code> runs the whole epoch on-device:
-      Apple Intelligence proposed the plans, the host compiled and promoted
-      all four demo goals, and <code>algal civ-verify</code> replays it offline.
-    </p>
-  </section>
-
-  <section class="status">
-    <img alt="" aria-hidden="true" class="algal-topic-icon" decoding="async" height="88" loading="lazy" src="/icons/status.svg" width="88">
-    <h2>Status</h2>
-    <p>
-      Early. <code>algal.organism.v1</code> covers the manifest contract,
-      the scheduler, the effect/receipt seam, nested organisms, bounded
-      spawning, and offline verification. Hosted habitats, multi-owner
-      messaging, and workflow search are deliberately deferred.
-    </p>
-    <p>
-      <a href="https://github.com/hraness/algal">hraness/algal</a> · MIT
-    </p>
+  <section class="principles" aria-label="Language principles">
+    <article><span class="principle-number">01</span><h3>Pure core, explicit effects</h3><p>Immutable values and deterministic expressions carry the structure. Models, tools, and durable state have visible boundaries.</p></article>
+    <article><span class="principle-number">02</span><h3>Bounds before execution</h3><p>Programs declare limits. The host owns admitted functions, providers, tools, and capabilities. A manifest grants no OS isolation.</p></article>
+    <article><span class="principle-number">03</span><h3>Evidence you can inspect</h3><p>Content-addressed programs and receipts connect source, structure, and execution. Measure quality on the workload that matters.</p></article>
   </section>
 </main>
-
-<footer>
-  <span>algal · a <a href="https://github.com/hraness">hraness</a> project</span>
-</footer>
+<footer><a class="wordmark" href="/">ALGAL</a><p>Programs that grow.</p><div><a href="https://github.com/hraness/algal">Source</a><a href="https://github.com/hraness/algal/tree/main/docs">Documentation</a><a href="llms.txt">llms.txt</a><span>MIT · Early, working software</span></div></footer>
+<script>
+(() => {
+  const tablist = document.querySelector('.example-tabs');
+  if (!tablist) return;
+  const tabs = Array.from(tablist.querySelectorAll('[role="tab"]'));
+  const panels = tabs.map(tab => document.getElementById(tab.getAttribute('aria-controls')));
+  if (panels.some(panel => !panel)) return;
+  function select(index, focus) {
+    tabs.forEach((tab, i) => {
+      tab.setAttribute('aria-selected', String(i === index));
+      tab.tabIndex = i === index ? 0 : -1;
+      panels[i].hidden = i !== index;
+    });
+    if (focus) tabs[index].focus();
+  }
+  tabs.forEach((tab, index) => {
+    panels[index].setAttribute('role', 'tabpanel');
+    panels[index].setAttribute('aria-labelledby', tab.id);
+    panels[index].tabIndex = 0;
+    tab.addEventListener('click', () => select(index, false));
+    tab.addEventListener('keydown', event => {
+      let next;
+      if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+      if (event.key === 'ArrowLeft') next = (index + tabs.length - 1) % tabs.length;
+      if (event.key === 'Home') next = 0;
+      if (event.key === 'End') next = tabs.length - 1;
+      if (next !== undefined) { event.preventDefault(); select(next, true); }
+    });
+  });
+  select(0, false);
+  tablist.hidden = false;
+})();
+</script>
 </body>
 </html>

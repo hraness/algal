@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="456" height="881" viewBox="0 0 456 881" role="img" aria-labelledby="algal-fa60e616cc9c-title algal-fa60e616cc9c-desc">
+<title id="algal-fa60e616cc9c-title">reply — Algal program</title>
+<desc id="algal-fa60e616cc9c-desc">Exact data dependencies of organism:reply. 5 cells and 5 edges. Arrows carry named values; layout does not imply time or parallel execution. Dashed arrows carry failure records. No execution status is implied.</desc>
+<defs><marker id="algal-fa60e616cc9c-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/></marker></defs>
+<rect width="456" height="881" rx="16" fill="#ffffff"/>
+<g font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" fill="#0f172a">
+<text x="32" y="34" font-size="20" font-weight="700"><title>reply</title>reply</text>
+<text x="32" y="56" font-size="11" fill="#475569">Exact manifest · sha256:fa60e616cc9c4474cc3f31962932cc3ff33ac121…</text>
+<text x="32" y="78" font-size="12" fill="#475569">Limits: 2 executor calls · 256 steps · depth 4</text>
+<text x="32" y="98" font-size="11" fill="#475569">Arrows are data dependencies; dashed = failure.</text>
+<path d="M 144 214 V 239 H 200 V 282" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-fa60e616cc9c-arrow)"><title>email → context · text</title></path>
+<rect x="102.2" y="230" width="139.6" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="172" y="241" font-size="10" text-anchor="middle" fill="#475569"><title>email → context · text</title>email → context · text</text>
+<path d="M 200 364 V 398 H 200 V 432" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-fa60e616cc9c-arrow)"><title>out → raw · json</title></path>
+<rect x="147.6" y="389" width="104.8" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="200" y="400" font-size="10" text-anchor="middle" fill="#475569"><title>out → raw · json</title>out → raw · json</text>
+<path d="M 200 514 V 557 H 200 V 582" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-fa60e616cc9c-arrow)"><title>out → value-1 · json</title></path>
+<rect x="136" y="548" width="128" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="200" y="559" font-size="10" text-anchor="middle" fill="#475569"><title>out → value-1 · json</title>out → value-1 · json</text>
+<path d="M 200 664 V 689 H 144 V 732" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-fa60e616cc9c-arrow)"><title>out → instruction · text</title></path>
+<rect x="96.4" y="680" width="151.2" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="172" y="691" font-size="10" text-anchor="middle" fill="#475569"><title>out → instruction · text</title>out → instruction · text</text>
+<path d="M 256 214 V 248 H 394 V 709.3333333333334 H 256 V 732" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-fa60e616cc9c-arrow)"><title>email → context · text</title></path>
+<rect x="186.2" y="239" width="139.6" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="256" y="250" font-size="10" text-anchor="middle" fill="#475569"><title>email → context · text</title>email → context · text</text>
+<g><title>INPUT; input; out email: text; INPUT email → email</title>
+<rect x="32" y="132" width="336" height="82" rx="10" fill="#eff6ff" stroke="#2563eb" stroke-width="1.4"/>
+<rect x="32" y="144" width="4" height="58" rx="2" fill="#2563eb"/>
+<text x="49" y="155" font-size="10" letter-spacing="0.5" font-weight="700" fill="#2563eb">INPUT</text>
+<text x="49" y="178" font-size="16" font-weight="650">input</text>
+<text x="49" y="198" font-size="11" fill="#475569"><title>INPUT email → email</title>INPUT email → email</text>
+</g>
+<g><title>MODEL · decide; b1-intent-decide; answer: choice (help | other | sales); in context: text; out out: json; answer: choice (help | other | sales)</title>
+<rect x="32" y="282" width="336" height="82" rx="10" fill="#eef2ff" stroke="#6366f1" stroke-width="1.4"/>
+<rect x="32" y="294" width="4" height="58" rx="2" fill="#6366f1"/>
+<text x="49" y="305" font-size="10" letter-spacing="0.5" font-weight="700" fill="#6366f1">MODEL · decide</text>
+<text x="49" y="328" font-size="16" font-weight="650">b1-intent-decide</text>
+<text x="49" y="348" font-size="11" fill="#475569"><title>answer: choice (help | other | sales)</title>answer: choice (help | other | sales)</text>
+</g>
+<g><title>PURE · expression; b1-intent; Bounded algal.expr.v1; in raw: json; out out: json; Bounded algal.expr.v1</title>
+<rect x="32" y="432" width="336" height="82" rx="10" fill="#f1f5f9" stroke="#64748b" stroke-width="1.4"/>
+<rect x="32" y="444" width="4" height="58" rx="2" fill="#64748b"/>
+<text x="49" y="455" font-size="10" letter-spacing="0.5" font-weight="700" fill="#64748b">PURE · expression</text>
+<text x="49" y="478" font-size="16" font-weight="650">b1-intent</text>
+<text x="49" y="498" font-size="11" fill="#475569"><title>Bounded algal.expr.v1</title>Bounded algal.expr.v1</text>
+</g>
+<g><title>PURE · expression; b2-task; Bounded algal.expr.v1; in value-1: json; out out: text; Bounded algal.expr.v1</title>
+<rect x="32" y="582" width="336" height="82" rx="10" fill="#f1f5f9" stroke="#64748b" stroke-width="1.4"/>
+<rect x="32" y="594" width="4" height="58" rx="2" fill="#64748b"/>
+<text x="49" y="605" font-size="10" letter-spacing="0.5" font-weight="700" fill="#64748b">PURE · expression</text>
+<text x="49" y="628" font-size="16" font-weight="650">b2-task</text>
+<text x="49" y="648" font-size="11" fill="#475569"><title>Bounded algal.expr.v1</title>Bounded algal.expr.v1</text>
+</g>
+<g><title>MODEL · generate; result; Algal source generation envelope v1. Follow the instruction in inputs.instruction. Use only inputs.context as task context. Return the requested text.; in context: text; in instruction: text; out out: text; Algal source generation envelope v1. Follow the instruction in inputs.instruction. Use only inputs.context as task context. Return the requested text.; OUTPUT out → result</title>
+<rect x="32" y="732" width="336" height="99" rx="10" fill="#eef2ff" stroke="#6366f1" stroke-width="1.4"/>
+<rect x="32" y="744" width="4" height="75" rx="2" fill="#6366f1"/>
+<text x="49" y="755" font-size="10" letter-spacing="0.5" font-weight="700" fill="#6366f1">MODEL · generate</text>
+<text x="49" y="778" font-size="16" font-weight="650">result</text>
+<text x="49" y="798" font-size="11" fill="#475569"><title>Algal source generation envelope v1. Follow the instruction in inputs.instruction. Use only inputs.context as task context. Return the requested text.</title>Algal source generation envelope v1. Follow th…</text>
+<text x="49" y="815" font-size="11" fill="#475569"><title>OUTPUT out → result</title>OUTPUT out → result</text>
+</g>
+</g></svg>

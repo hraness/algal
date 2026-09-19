@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="615" viewBox="0 0 400 615" role="img" aria-labelledby="algal-ab0da349152c-title algal-ab0da349152c-desc">
+<title id="algal-ab0da349152c-title">Question swarm — Algal program</title>
+<desc id="algal-ab0da349152c-desc">Exact data dependencies of organism:swarm. 3 cells and 2 edges. Arrows carry named values; layout does not imply time or parallel execution. Dashed arrows carry failure records. No execution status is implied.</desc>
+<defs><marker id="algal-ab0da349152c-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/></marker></defs>
+<rect width="400" height="615" rx="16" fill="#ffffff"/>
+<g font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" fill="#0f172a">
+<text x="32" y="34" font-size="20" font-weight="700"><title>Question swarm</title>Question swarm</text>
+<text x="32" y="56" font-size="11" fill="#475569">Exact manifest · sha256:ab0da349152c43dd4926e4eb3bfdd1c…</text>
+<text x="32" y="78" font-size="12" fill="#475569">Limits: 16 executor calls · 256 steps · depth 4</text>
+<text x="32" y="98" font-size="11" fill="#475569">Arrows are data dependencies; dashed = failure.</text>
+<path d="M 200 214 V 239 H 200 V 282" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-ab0da349152c-arrow)"><title>qs → q · json</title></path>
+<rect x="156.3" y="230" width="87.39999999999999" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="200" y="241" font-size="10" text-anchor="middle" fill="#475569"><title>qs → q · json</title>qs → q · json</text>
+<path d="M 200 398 V 432 H 200 V 466" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-ab0da349152c-arrow)"><title>answer → items · unknown</title></path>
+<rect x="124.4" y="423" width="151.2" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="200" y="434" font-size="10" text-anchor="middle" fill="#475569"><title>answer → items · unknown</title>answer → items · unknown</text>
+<g><title>INPUT; batch; out qs: json; INPUT qs → qs</title>
+<rect x="32" y="132" width="336" height="82" rx="10" fill="#eff6ff" stroke="#2563eb" stroke-width="1.4"/>
+<rect x="32" y="144" width="4" height="58" rx="2" fill="#2563eb"/>
+<text x="49" y="155" font-size="10" letter-spacing="0.5" font-weight="700" fill="#2563eb">INPUT</text>
+<text x="49" y="178" font-size="16" font-weight="650">batch</text>
+<text x="49" y="198" font-size="11" fill="#475569"><title>INPUT qs → qs</title>INPUT qs → qs</text>
+</g>
+<g><title>EACH · bounded children; map; Up to 8 items over q; Outputs are per-item lists; sha256:cf96abc0aa1f0a6272610c73f88ac0e294946deca9eb5c3e234c3484b2f1f244; in q: unknown; out answer: unknown; Up to 8 items over q; Outputs are per-item lists; + 1 details in diagram JSON</title>
+<rect x="32" y="282" width="336" height="116" rx="10" fill="#f0fdfa" stroke="#0f766e" stroke-width="1.4"/>
+<rect x="32" y="294" width="4" height="92" rx="2" fill="#0f766e"/>
+<text x="49" y="305" font-size="10" letter-spacing="0.5" font-weight="700" fill="#0f766e">EACH · bounded children</text>
+<text x="49" y="328" font-size="16" font-weight="650">map</text>
+<text x="49" y="348" font-size="11" fill="#475569"><title>Up to 8 items over q</title>Up to 8 items over q</text>
+<text x="49" y="365" font-size="11" fill="#475569"><title>Outputs are per-item lists</title>Outputs are per-item lists</text>
+<text x="49" y="382" font-size="11" fill="#475569"><title>+ 1 details in diagram JSON</title>+ 1 details in diagram JSON</text>
+</g>
+<g><title>PURE · function; digest; join.v1; in items: text[]; in sep: text?; out value: text; join.v1; OUTPUT value → answers</title>
+<rect x="32" y="466" width="336" height="99" rx="10" fill="#f1f5f9" stroke="#64748b" stroke-width="1.4"/>
+<rect x="32" y="478" width="4" height="75" rx="2" fill="#64748b"/>
+<text x="49" y="489" font-size="10" letter-spacing="0.5" font-weight="700" fill="#64748b">PURE · function</text>
+<text x="49" y="512" font-size="16" font-weight="650">digest</text>
+<text x="49" y="532" font-size="11" fill="#475569"><title>join.v1</title>join.v1</text>
+<text x="49" y="549" font-size="11" fill="#475569"><title>OUTPUT value → answers</title>OUTPUT value → answers</text>
+</g>
+</g></svg>

@@ -1,53 +1,122 @@
 # ALGAL
 
-**Programs that grow. More from every model.**
+**Small programs that decide, act, and show their work.**
 
-ALGAL — named as a nod to ALGOL, and to algae — is a new take on the agent
-graph. Instead of bolting a DSL onto an existing language, ALGAL is a language
-and runtime designed for agentic program evolution. A malleable agent harness
-is simply a seed ALGAL program in an ALGAL habitat, and a habitat can
-self-evolve into a swarm of agents with shared artifacts and tools: an agent
-civilization.
+ALGAL is a language and runtime for growing agent programs. Write down the
+judgment a model should make, the values it can see, and the limits on its work.
+Compile that source into a typed program, inspect its diagram, and keep a
+receipt of what happened. Programs are values: compose them, propose variants,
+evaluate them, and let the host select what to retain.
 
-Programs are content-addressable, which yields some interesting properties:
-programs are values — they can be stored, diffed, spawned as children, and
-passed between hosts. Every run emits a receipt that replays bit-for-bit
-offline, so results are auditable without provider access. Lineage is a fossil
-record in which every proposal, measurement, and promotion is addressed by its
-content. And a manifest carries no host code — it can only name what the
-host or the contract admits. Safety still depends on those admitted tools,
-executors, and capability custody; a manifest is not an OS sandbox.
+## Read the program. See its structure.
 
-It's early days. The process VM demonstration retains a reviewed proposal
-across a wait and avoids redoing its decision after approval. The billing
-fixture explores evidence access, and the civilization example explores
-on-device program generation and selection. Each experiment has a different
-claim to validate; fixture outcomes are not live provider rankings.
+This is executable `.algal` source. It makes one typed decision, selects an
+instruction with ordinary logic, and generates a draft reply.
 
-1. **A growing agent harness.** Keep successful behavior as inspectable programs,
-   not just longer prompts. Propose new versions, measure them, preserve their
-   lineage, and let the host decide which capabilities to admit.
-2. **More useful work per model call.** Give small or large models narrow context,
-   typed tools, deterministic checks, and explicit escalation. Measure quality,
-   cost, and effect calls instead of assuming decomposition always helps.
+<!-- source-example:start -->
 
-Status: early. The TypeScript v1 runtime is the compatibility reference; the
-native Rust kernel executes all 44 bundled examples with parity, and ACP,
-relational memory, and on-device inference are implemented. A bounded local
-process supervisor now adds durable checkpoints, mailbox wake scheduling, and
-per-generation offline verification; see [the VM demonstration](docs/vm.md). See
-[the design audit](docs/algal-design.md) for current qualification.
+```algal
+program reply(email: text) -> text {
+  budget { max_agent_calls: 2 }
 
-## Rename and compatibility
+  let intent = decide "What does this email need?" using email
+    as choice {
+      help: "Help with a problem",
+      sales: "Information before buying",
+      other: "Anything else"
+    }
 
-ALGAL was previously Algal. The package is `@hraness/algal` and the command
-is `algal`; `algal` remains a compatibility command. Existing
-`algal.*.v1` wire identifiers and `.algal.json` fixtures are intentionally
-preserved: renaming a product must not silently change a manifest's digest or
-invalidate its receipts. New files may use `.algal.json`. New stores default to
-`.algal/`; use `--dir .algal` to access an existing store. No old state is
-moved, deleted, or implicitly merged. The existing site origin remains
-algal.dev until a new domain is configured.
+  let task = match intent.value {
+    help => "Draft a helpful support reply.",
+    sales => "Draft a concise sales reply.",
+    other => "Draft a clarifying question."
+  }
+
+  return generate task using email
+}
+```
+
+<!-- source-example:end -->
+
+![Generated graph of the reply program: input, typed decision, pure decision check and match, then generation.](docs/diagrams/reply.svg)
+
+The diagram is generated from the compiled manifest, including the pure check
+that validates the decision before a branch uses it. `decide` and `generate`
+are effects; `match` is pure. `using` declares the context each effect receives.
+The budget counts executor attempts, including retries; in this program they
+are exactly the decision and generation calls. The wider runtime counter also
+covers gates and recall operations, while tool calls are separate.
+
+### Try it without credentials
+
+From a checkout, with Bun 1.3 or newer:
+
+```sh
+bun install --frozen-lockfile
+bun cli.ts compile examples/source/reply.algal --out reply.algal.json --source-map reply.map.json
+bun cli.ts check examples/source/reply.algal
+bun cli.ts diagram examples/source/reply.algal --format svg --out reply.svg
+
+# Scripted answers demonstrate orchestration, not live model quality.
+bun cli.ts run examples/source/reply.algal \
+  --args examples/source/reply.args.json \
+  --responses examples/source/reply.responses.json > reply.receipt.json
+bun cli.ts verify reply.receipt.json examples/source/reply.algal
+bun cli.ts diagram examples/source/reply.algal \
+  --receipt reply.receipt.json --format svg --out reply-run.svg
+```
+
+The source compiler is available through the Bun CLI and SDK. Its output is the
+existing `algal.organism.v1` manifest, executed by both the TypeScript runtime
+and native Rust kernel. The native CLI takes the compiled JSON; it does not
+silently invoke Bun. See the [source language guide](docs/source-language.md)
+for the grammar, uncertainty routing, bounds, and current subset.
+
+## More than a chain of prompts
+
+### Refine within a limit
+
+An editor and critic run in a bounded child program. Each round carries the
+new draft forward. The final verdict selects `ship` or `hold`; exhausting four
+rounds never turns `revise` into success.
+
+![Generated refinement graph with a four-round repeat and guarded ship/hold branches.](docs/diagrams/refine.svg)
+
+### Wait without losing completed work
+
+A release-review process records its recommendation, suspends for a host
+approval, and resumes from retained execution. A deterministic check requires
+a matching release identifier and an approval before publishing a report to a
+local mailbox. The model cannot approve itself. [Run the VM demo](docs/vm.md).
+
+![Generated approval workflow with explicit capabilities, retained proposal, waiting child, and guarded publication.](docs/diagrams/approval.svg)
+
+### Grow a population of programs
+
+A designer can propose a child manifest as data. `spawn` admits and runs it
+under the parent's bounds; a durable slot records the child's digest. The
+[habitat example](examples/habitat.algal.json) demonstrates that mechanism.
+[Foundry](spec/v1/foundry.md) and [civilization](docs/civilization.md) workflows
+add measured evaluation, selection policy, and lineage. Proposal alone does
+not establish improvement or promotion.
+
+![Generated habitat graph with designer, bounded spawn, and population slot.](docs/diagrams/habitat.svg)
+
+For bounded collection processing, see the [swarm graph](docs/diagrams/swarm.svg)
+and [manifest](examples/swarm.algal.json). A graph exposes independent
+work; it does not promise concurrent execution or a speedup.
+
+These are generated dataflow diagrams of executable programs. Diagram overlays
+show recorded cell states and are bound to the exact manifest and receipt.
+`verify` separately recomputes pure work with recorded effects. Replay checks
+execution consistency; it does not establish that a model answer is true or
+attest to a provider. [Diagram format and lifecycle views](docs/diagrams.md).
+
+The first source front end supports immutable values, pure expressions,
+exhaustive choices, decisions, generation, and budgets. Composition, tools,
+waits, and evolution remain available through the full manifest API. No
+executable statechart syntax is claimed. Existing wire identifiers, manifest
+digests, and receipts remain unchanged.
 
 ## Two clear value props
 
