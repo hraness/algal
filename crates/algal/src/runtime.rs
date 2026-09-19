@@ -2,7 +2,7 @@ use crate::{
     Error, Result,
     canonical::{canonical, digest},
     contract::{Budgets, Manifest, Ports, bind_output, check_value, object},
-    effects::{Backend, Host},
+    effects::{Backend, Host, ToolBackend},
     graph::{Compiled, Transports, compile, interface_args},
     registry,
     store::Store,
@@ -440,15 +440,22 @@ impl Runtime<'_> {
             Some(receipt) => receipt,
             None => {
                 let result = match &tool.backend {
-                    Backend::Scripted { responses } => responses.get(&canonical(inputs)?).cloned().ok_or_else(|| Error::new("TOOL_FAILED", "scripted tool result missing")),
-                    backend => self.host.execute_backend(name, backend, &json!({"inputs":inputs,"requestDigest":request_digest,"idempotencyKey":request_digest}), tool.max_bytes, timeout).await.map(|(v, _)| v),
+                    ToolBackend::External(Backend::Scripted { responses }) => responses.get(&canonical(inputs)?).cloned().ok_or_else(|| Error::new("TOOL_FAILED", "scripted tool result missing")),
+                    ToolBackend::External(backend) => self.host.execute_backend(name, backend, &json!({"inputs":inputs,"requestDigest":request_digest,"idempotencyKey":request_digest}), tool.max_bytes, timeout).await.map(|(v, _)| v),
+                    ToolBackend::MailboxSend => self.host.mailbox.as_ref().ok_or_else(|| Error::new("CAPABILITY_DENIED", "mailbox host is not admitted")).and_then(|mailbox| mailbox.send(inputs["mailbox"].as_str().unwrap_or(""), inputs["message"].clone(), &request_digest)),
+                    ToolBackend::MailboxReceive => self.host.mailbox.as_ref().ok_or_else(|| Error::new("CAPABILITY_DENIED", "mailbox host is not admitted")).and_then(|mailbox| mailbox.receive(inputs["mailbox"].as_str().unwrap_or(""))),
                 };
                 match result {
                     Ok(output) => {
                         json!({"requestDigest":request_digest,"executor":format!("tool:{name}"),"output":output})
                     }
                     Err(error) => {
-                        json!({"requestDigest":request_digest,"executor":format!("tool:{name}"),"error":error})
+                        let suspended = error.code == "EFFECT_SUSPENDED";
+                        let mut receipt = json!({"requestDigest":request_digest,"executor":format!("tool:{name}"),"error":error});
+                        if suspended {
+                            receipt["retryable"] = json!(false);
+                        }
+                        receipt
                     }
                 }
             }
@@ -1301,6 +1308,7 @@ pub async fn verify(
     }
     let mut host = Host::replay(&receipt["effects"])?;
     host.tools = tools.tools.clone();
+    host.mailbox = tools.mailbox.clone();
     let replayed = run(
         manifest,
         receipt["args"].clone(),

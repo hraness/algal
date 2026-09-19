@@ -443,6 +443,59 @@ describe("graph admission", () => {
   });
 });
 
+describe("capability ports", () => {
+  test("round-trips an exact capability class", () => {
+    const manifest = parseOrganismManifest({
+      ...minimal,
+      cells: [{
+        id: "source",
+        kind: "input",
+        outputs: {
+          mailbox: { type: "cap", capability: "mailbox-receive" },
+        },
+      }],
+      edges: [],
+    });
+    expect(manifestToJson(manifest).cells).toEqual([{
+      id: "source",
+      kind: "input",
+      outputs: {
+        mailbox: { type: "cap", capability: "mailbox-receive" },
+      },
+    }]);
+  });
+
+  test("requires a bounded safe class and rejects const minting", () => {
+    for (const output of [
+      "cap",
+      { type: "cap" },
+      { type: "cap", capability: "Mailbox" },
+      { type: "cap", capability: `a${"b".repeat(64)}` },
+    ]) {
+      expect(() => parseOrganismManifest({
+        ...minimal,
+        cells: [{ id: "source", kind: "input", outputs: { cap: output } }],
+        edges: [],
+      })).toThrow();
+    }
+    expect(() => parseOrganismManifest({
+      ...minimal,
+      cells: [{
+        id: "source",
+        kind: "const",
+        outputs: {
+          cap: {
+            type: "cap",
+            capability: "mailbox-send",
+            value: `cap:mailbox-send:sha256:${"a".repeat(64)}`,
+          },
+        },
+      }],
+      edges: [],
+    })).toThrow("cannot mint capability handles");
+  });
+});
+
 describe("ref ports and store/load cells", () => {
   const cas = {
     contract: "algal.organism.v1",

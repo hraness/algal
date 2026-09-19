@@ -312,6 +312,11 @@ export function agentOutputPortType(o: {
  * it feeds a `many` consumer element-wise (the edge flattens) or a `json`
  * consumer as a whole list value; scalar non-json consumers reject it. */
 export function portCompatible(producer: PortType, consumer: PortType): boolean {
+  if (producer.type === "cap" || consumer.type === "cap") {
+    return producer.type === "cap" &&
+      consumer.type === "cap" &&
+      producer.capability === consumer.capability;
+  }
   // a ref token is not the payload — only ref ports can carry it
   if (producer.type === "ref" || consumer.type === "ref") {
     return producer.type === "ref" && consumer.type === "ref";

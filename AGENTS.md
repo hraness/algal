@@ -3,8 +3,10 @@
 - `src/` — the contract (`contract.ts`, `graph.ts`), the scheduler (`run.ts`),
   the effect seam (`effects.ts`), the store (`store.ts`), verification
   (`verify.ts`), Vercel AI Gateway execution (`gateway.ts`), typed external
-  tools (`tools.ts`), the provider-neutral typed-decision layer
-  (`decisions.ts`) with the TypeSafe Jev adapter (`jev.ts`), cross-platform
+  tools (`tools.ts`), opaque capability handles (`capabilities.ts`) and the
+  bounded durable mailbox driver (`mailbox.ts`), the provider-neutral
+  typed-decision layer (`decisions.ts`) with the TypeSafe Jev adapter
+  (`jev.ts`), cross-platform
   credential custody (`credentials.ts`), embeddings (`embeddings.ts`) and
   the derived semantic index plus recall executor (`semantic.ts`), foundry
   evaluation and search (`foundry.ts`, `search.ts`), benchmark comparison (`bench.ts`,
@@ -17,8 +19,8 @@
   rustup toolchain with the wasm target; pins `RUSTC` past Homebrew).
 - `cli.ts` — the Bun CLI (`run`, `check`, `verify`, `resume`, `inspect`,
   `explain`, `diff`, `foundry`, `bench`, `runs`, `digest`, `store`,
-  `manifests`, `manifest`, `slots`, `slot`, `pack`, `unpack`, `example`,
-  `suite`, `index`, `search`, `auth`, `doctor`).
+  `manifests`, `manifest`, `slots`, `slot`, `mailbox`, `pack`, `unpack`,
+  `example`, `suite`, `index`, `search`, `auth`, `doctor`).
 - `index.ts` — the package's public surface.
 - `examples/` — bundled manifests and scripted responses used by `suite`.
 - `spec/v1/organism.md`, `spec/v1/expr.md`, `spec/v1/foundry.md`,
@@ -40,6 +42,9 @@
   both runtimes) interprets under fuel — data, not executables.
 - Receipts contain no wall-clock fields. `verify` must replay a run
   bit-for-bit; keep nondeterminism at the executor boundary only.
+- `cap` ports carry host-admitted authority. Keep capability classes exact,
+  reject widening to `json`, never let manifests mint handles with `const`,
+  and make every mutable driver idempotent and replay-safe.
 - Bound every count, byte size, depth, and list. New contract fields need a
   bound and a test.
 - Colocate tests with source (`src/*.test.ts`); cover failure modes with a

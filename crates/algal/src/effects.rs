@@ -3,6 +3,9 @@ use crate::{
     canonical::{canonical, digest, read_json},
     contract::{Signature, bind_output, integer, keys, object, ports, text},
     graph::ToolSignatures,
+    mailbox::{
+        MAILBOX_RECEIVE, MAILBOX_RECEIVE_TOOL, MAILBOX_SEND, MAILBOX_SEND_TOOL, MailboxService,
+    },
     store::Store,
 };
 use serde::{Deserialize, Serialize};
@@ -514,17 +517,25 @@ async fn hosted(
 }
 
 #[derive(Clone)]
+pub enum ToolBackend {
+    External(Backend),
+    MailboxSend,
+    MailboxReceive,
+}
+
+#[derive(Clone)]
 pub struct Tool {
     pub signature: Signature,
     pub effect: String,
     pub max_bytes: usize,
-    pub backend: Backend,
+    pub backend: ToolBackend,
 }
 
 #[derive(Clone, Default)]
 pub struct Host {
     pub entries: Vec<(String, Backend)>,
     pub tools: BTreeMap<String, Tool>,
+    pub mailbox: Option<MailboxService>,
     queues: BTreeMap<String, VecDeque<Value>>,
     pub replay: Option<BTreeMap<String, VecDeque<Value>>>,
     /// Resume mode: a replay digest miss falls through to live executor
@@ -613,6 +624,55 @@ impl Host {
         self.replay.is_some() || !self.entries.is_empty()
     }
 
+    pub fn install_mailboxes(&mut self, service: MailboxService) -> Result<()> {
+        if self.tools.contains_key(MAILBOX_SEND_TOOL)
+            || self.tools.contains_key(MAILBOX_RECEIVE_TOOL)
+        {
+            return Err(Error::invalid("duplicate mailbox tool"));
+        }
+        self.tools.insert(
+            MAILBOX_SEND_TOOL.to_owned(),
+            Tool {
+                signature: Signature {
+                    inputs: ports(
+                        &json!({
+                            "mailbox":{"type":"cap","capability":MAILBOX_SEND},
+                            "message":"json"
+                        }),
+                        false,
+                        false,
+                    )?,
+                    outputs: ports(&json!({"id":"text"}), true, false)?,
+                    cost: 100,
+                },
+                effect: "write".to_owned(),
+                max_bytes: 256,
+                backend: ToolBackend::MailboxSend,
+            },
+        );
+        self.tools.insert(
+            MAILBOX_RECEIVE_TOOL.to_owned(),
+            Tool {
+                signature: Signature {
+                    inputs: ports(
+                        &json!({
+                            "mailbox":{"type":"cap","capability":MAILBOX_RECEIVE}
+                        }),
+                        false,
+                        false,
+                    )?,
+                    outputs: ports(&json!({"id":"text","message":"json"}), true, false)?,
+                    cost: 100,
+                },
+                effect: "write".to_owned(),
+                max_bytes: 262_144,
+                backend: ToolBackend::MailboxReceive,
+            },
+        );
+        self.mailbox = Some(service);
+        Ok(())
+    }
+
     pub fn load_tools(&mut self, file: &Path) -> Result<()> {
         let map = read_json(File::open(file)?, 1_048_576)?;
         let base = file.parent().unwrap_or(Path::new("."));
@@ -656,7 +716,7 @@ impl Host {
                     signature,
                     effect,
                     max_bytes,
-                    backend,
+                    backend: ToolBackend::External(backend),
                 },
             );
         }

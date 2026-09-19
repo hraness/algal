@@ -587,6 +587,7 @@ pub async fn run(
         let mut host = Host::default();
         host.entries = system.executors.clone();
         host.tools = tools.tools.clone();
+        host.mailbox = tools.mailbox.clone();
         let mut case_results = Vec::with_capacity(cases.len());
         let mut work = [0u64; 3];
         let mut usage = Attribution::default();

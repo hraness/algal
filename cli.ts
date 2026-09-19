@@ -8,7 +8,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BOUNDS, manifestToJson, parseOrganismManifest } from "./src/contract";
 import { compileOrganism } from "./src/graph";
-import { digestCanonical } from "./src/digest";
+import { asDigest, digestCanonical } from "./src/digest";
 import {
   cachedExecutor,
   commandExecutor,
@@ -33,7 +33,14 @@ import {
   storeCredential,
   providerSpec,
 } from "./src/credentials";
-import { commandJson } from "./src/io";
+import { boundedBytes, commandJson } from "./src/io";
+import {
+  externalWakeKey,
+  FileMailboxService,
+  mailboxToolRegistry,
+  MAILBOX_BOUNDS,
+} from "./src/mailbox";
+import { parseCapabilityHandle } from "./src/capabilities";
 import { builtinRegistry } from "./src/registry";
 import { parseRunReceipt, runOrganism, type RunReceipt } from "./src/run";
 import { packOrganism, parseBundle, unpackBundle } from "./src/bundle";
@@ -46,6 +53,7 @@ import {
 } from "./src/transport";
 import { diffReceipts, resumeRun, verifyReceipt } from "./src/verify";
 import {
+  mergeToolRegistries,
   parseToolSignature,
   TOOL_SIGNATURE_BOUNDS,
   type Tool,
@@ -64,6 +72,7 @@ import { parseSearchReport, verifySearchReport } from "./src/search-verify";
 import { runBenchmark, type BenchCase, type BenchPrice, type BenchSystem } from "./src/bench";
 import { parseBenchAxes, parseBenchReport, verifyBenchReport } from "./src/bench-verify";
 import {
+  asInt,
   canonicalBytes,
   canonicalize,
   type JsonObject,
@@ -194,6 +203,13 @@ usage:
   algal slot get <name> [--dir <path>]    print a slot's current value
   algal slot set <name> <value.json> [--dir <path>]
                                               write a slot directly (seeding)
+  algal mailbox create <name> [--max-messages <n>] [--max-message-bytes <n>]
+                                              create bounded send/receive capabilities
+  algal mailbox list [--dir <path>]          list admitted mailboxes and handles
+  algal mailbox send <send-cap> <value.json> [--idempotency-key <sha256:…>]
+                                              enqueue an external wakeup
+  algal mailbox receive <receive-cap>        consume one message or suspend
+  algal mailbox revoke <cap>                 revoke one mailbox capability
   algal pack <manifest.json> [--modules <dir>] [--dir <path>] [--out <dir>]
                                               print a closure bundle: the manifest plus every
                                               embedded sub-manifest and const-ref payload;
@@ -258,6 +274,23 @@ async function readJson(path: string): Promise<JsonValue> {
     throw new AlgalError(
       "PARSE_FAILED",
       `${path}: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+}
+
+async function readJsonBounded(
+  path: string,
+  maxBytes: number,
+  label: string,
+): Promise<JsonValue> {
+  try {
+    const bytes = await boundedBytes(Bun.file(path).stream(), maxBytes, label);
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as JsonValue;
+  } catch (error) {
+    if (error instanceof AlgalError) throw error;
+    throw new AlgalError(
+      "PARSE_FAILED",
+      `${path}: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }
@@ -403,6 +436,16 @@ async function loadTools(file: string): Promise<ToolRegistry> {
   return registry;
 }
 
+async function resolveTools(
+  flags: Record<string, string | boolean>,
+  dir: string,
+): Promise<ToolRegistry> {
+  const standard = mailboxToolRegistry(new FileMailboxService(dir));
+  return flags.tools === undefined
+    ? standard
+    : mergeToolRegistries(standard, await loadTools(String(flags.tools)));
+}
+
 /** Live executors from the shared run/call/resume flag set: `--responses`
  * fixtures are wildcard scripted executors, `--executors` names host
  * adapters (cmd / jev / recall specs keep their capability declarations). */
@@ -468,6 +511,7 @@ function portToJsonSchema(p: {
   many?: boolean;
   labels?: string[];
   schema?: JsonObject;
+  capability?: string;
 }): JsonValue {
   let base: JsonObject;
   switch (p.type) {
@@ -491,6 +535,12 @@ function portToJsonSchema(p: {
       break;
     case "ref":
       base = { type: "string", pattern: "^sha256:[a-f0-9]{64}$" };
+      break;
+    case "cap":
+      base = {
+        type: "string",
+        pattern: `^cap:${p.capability ?? "[a-z][a-z0-9-]*"}:sha256:[a-f0-9]{64}$`,
+      };
       break;
     default:
       base = {};
@@ -672,10 +722,7 @@ async function main(): Promise<number> {
         flags.transports !== undefined
           ? await loadTransports(String(flags.transports))
           : undefined;
-      const tools =
-        flags.tools !== undefined
-          ? await loadTools(String(flags.tools))
-          : undefined;
+      const tools = await resolveTools(flags, dir);
 
       const receipt = await runOrganism({
         manifest,
@@ -728,6 +775,7 @@ async function main(): Promise<number> {
         flags.transports !== undefined
           ? await loadTransports(String(flags.transports))
           : undefined,
+        await resolveTools(flags, dir),
       );
 
       const raw = manifest.interface ?? { inputs: deriveInputs(compiled), outputs: {} };
@@ -798,6 +846,7 @@ async function main(): Promise<number> {
         flags.transports !== undefined
           ? await loadTransports(String(flags.transports))
           : undefined,
+        await resolveTools(flags, dir),
       );
       out({
         ok: true,
@@ -827,6 +876,7 @@ async function main(): Promise<number> {
         flags.transports !== undefined
           ? await loadTransports(String(flags.transports))
           : undefined,
+        await resolveTools(flags, dir),
       );
       const ptJson = (p: {
         type: string;
@@ -834,12 +884,14 @@ async function main(): Promise<number> {
         many?: boolean;
         labels?: string[];
         schema?: JsonObject;
+        capability?: string;
       }): JsonValue => {
         const o: JsonObject = { type: p.type };
         if (p.optional) o.optional = true;
         if (p.many) o.many = true;
         if (p.labels) o.labels = p.labels;
         if (p.schema) o.schema = p.schema;
+        if (p.capability) o.capability = p.capability;
         return o as JsonValue;
       };
       const cells: JsonObject = {};
@@ -898,10 +950,7 @@ async function main(): Promise<number> {
         flags.transports !== undefined
           ? await loadTransports(String(flags.transports))
           : undefined;
-      const tools =
-        flags.tools !== undefined
-          ? await loadTools(String(flags.tools))
-          : undefined;
+      const tools = await resolveTools(flags, dir);
 
       const receipt = await runOrganism({
         manifest,
@@ -936,7 +985,7 @@ async function main(): Promise<number> {
           await readJson(resolve(reportFile)),
           store,
           fns,
-          flags.tools !== undefined ? await loadTools(String(flags.tools)) : undefined,
+          await resolveTools(flags, dir),
         );
         out(verified as unknown as JsonObject);
         return verified.ok ? 0 : 1;
@@ -969,7 +1018,7 @@ async function main(): Promise<number> {
           await readJson(resolve(reportFile)),
           store,
           fns,
-          flags.tools !== undefined ? await loadTools(String(flags.tools)) : undefined,
+          await resolveTools(flags, dir),
         );
         out(verified as unknown as JsonObject);
         return verified.ok ? 0 : 1;
@@ -1004,7 +1053,7 @@ async function main(): Promise<number> {
           raw,
           store,
           fns,
-          flags.tools !== undefined ? await loadTools(String(flags.tools)) : undefined,
+          await resolveTools(flags, dir),
         );
         if (!verified.ok) {
           throw new AlgalError("RECEIPT_MISMATCH", `search report failed verification: ${verified.mismatches.join("; ")}`);
@@ -1031,7 +1080,7 @@ async function main(): Promise<number> {
           raw,
           store,
           fns,
-          flags.tools !== undefined ? await loadTools(String(flags.tools)) : undefined,
+          await resolveTools(flags, dir),
         );
         if (!verified.ok) {
           throw new AlgalError("RECEIPT_MISMATCH", `foundry report failed verification: ${verified.mismatches.join("; ")}`);
@@ -1138,9 +1187,7 @@ async function main(): Promise<number> {
       const transports = flags.transports !== undefined
         ? await loadTransports(String(flags.transports))
         : undefined;
-      const tools = flags.tools !== undefined
-        ? await loadTools(String(flags.tools))
-        : undefined;
+      const tools = await resolveTools(flags, dir);
       if (searchMode) {
         if (!generator || config.search === undefined) {
           throw new AlgalError("PARSE_FAILED", "search config needs generator and search objects");
@@ -1227,7 +1274,7 @@ async function main(): Promise<number> {
           await readJson(resolve(reportFile)),
           store,
           fns,
-          flags.tools !== undefined ? await loadTools(String(flags.tools)) : undefined,
+          await resolveTools(flags, dir),
         );
         out(verified as unknown as JsonObject);
         return verified.ok ? 0 : 1;
@@ -1342,10 +1389,7 @@ async function main(): Promise<number> {
         flags.transports !== undefined
           ? await loadTransports(String(flags.transports))
           : undefined;
-      const tools =
-        flags.tools !== undefined
-          ? await loadTools(String(flags.tools))
-          : undefined;
+      const tools = await resolveTools(flags, dir);
       const prices = parseBenchPrices(config.prices, "bench config.prices");
       const scorer = config.scorer === undefined
         ? undefined
@@ -1417,9 +1461,7 @@ async function main(): Promise<number> {
         flags.transports !== undefined
           ? await loadTransports(String(flags.transports))
           : undefined,
-        flags.tools !== undefined
-          ? await loadTools(String(flags.tools))
-          : undefined,
+        await resolveTools(flags, dir),
       );
       out(report as unknown as JsonObject);
       return report.ok ? 0 : 1;
@@ -1461,10 +1503,7 @@ async function main(): Promise<number> {
         flags.transports !== undefined
           ? await loadTransports(String(flags.transports))
           : undefined;
-      const tools =
-        flags.tools !== undefined
-          ? await loadTools(String(flags.tools))
-          : undefined;
+      const tools = await resolveTools(flags, dir);
       const resumed = await resumeRun(
         receipt,
         manifest,
@@ -1668,6 +1707,61 @@ async function main(): Promise<number> {
       }
       return usageError(
         "algal slot get <name> | slot set <name> <value.json>",
+      );
+    }
+
+    case "mailbox": {
+      const service = new FileMailboxService(dir);
+      const [sub, target, valueFile] = positional;
+      if (sub === "create") {
+        if (!target) usageError("algal mailbox create <name>");
+        const maxMessages = asInt(
+          Number(flags["max-messages"] ?? 64),
+          "--max-messages",
+          1,
+          MAILBOX_BOUNDS.maxMessages,
+        );
+        const maxMessageBytes = asInt(
+          Number(flags["max-message-bytes"] ?? 65_536),
+          "--max-message-bytes",
+          1,
+          MAILBOX_BOUNDS.maxMessageBytes,
+        );
+        out(await service.create(target, { maxMessages, maxMessageBytes }));
+        return 0;
+      }
+      if (sub === "list") {
+        out({ dir: join(dir, "mailboxes"), mailboxes: await service.list() });
+        return 0;
+      }
+      if (sub === "send") {
+        if (!target || !valueFile) {
+          usageError("algal mailbox send <send-cap> <value.json>");
+        }
+        const handle = parseCapabilityHandle(target, "mailbox-send").handle;
+        out(await service.send(
+          handle,
+          await readJsonBounded(resolve(valueFile), 1_048_576, "mailbox message file"),
+          flags["idempotency-key"] === undefined
+            ? externalWakeKey()
+            : asDigest(String(flags["idempotency-key"]), "--idempotency-key"),
+        ));
+        return 0;
+      }
+      if (sub === "receive") {
+        if (!target) usageError("algal mailbox receive <receive-cap>");
+        const handle = parseCapabilityHandle(target, "mailbox-receive").handle;
+        out(await service.receive(handle));
+        return 0;
+      }
+      if (sub === "revoke") {
+        if (!target) usageError("algal mailbox revoke <cap>");
+        await service.revoke(parseCapabilityHandle(target).handle);
+        out({ handle: target, revoked: true });
+        return 0;
+      }
+      return usageError(
+        "algal mailbox create|list|send|receive|revoke",
       );
     }
 

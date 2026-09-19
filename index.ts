@@ -26,6 +26,30 @@ export { compileOrganism } from "./src/graph";
 export type { CompiledOrganism } from "./src/graph";
 
 export {
+  asCapabilityClass,
+  capabilityHandle,
+  parseCapabilityHandle,
+} from "./src/capabilities";
+export type { CapabilityHandle } from "./src/capabilities";
+
+export {
+  CAPABILITY_CONTRACT,
+  FileMailboxService,
+  MAILBOX_BOUNDS,
+  MAILBOX_CONTRACT,
+  MAILBOX_DELIVERY_CONTRACT,
+  MAILBOX_MESSAGE_CONTRACT,
+  MAILBOX_RECEIVE,
+  MAILBOX_RECEIVE_TOOL,
+  MAILBOX_SEND,
+  MAILBOX_SEND_TOOL,
+  MemoryMailboxService,
+  externalWakeKey,
+  mailboxToolRegistry,
+} from "./src/mailbox";
+export type { MailboxConfig, MailboxService } from "./src/mailbox";
+
+export {
   RUN_CONTRACT,
   RUNTIME_VERSION,
   parseRunReceipt,
@@ -147,6 +171,7 @@ export type {
 
 export {
   emptyToolRegistry,
+  mergeToolRegistries,
   parseToolSignature,
   TOOL_SIGNATURE_BOUNDS,
 } from "./src/tools";

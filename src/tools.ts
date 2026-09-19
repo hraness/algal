@@ -35,6 +35,19 @@ export function emptyToolRegistry(): ToolRegistry {
   return new Map();
 }
 
+export function mergeToolRegistries(...registries: ToolRegistry[]): ToolRegistry {
+  const merged: ToolRegistry = new Map();
+  for (const registry of registries) {
+    for (const [name, entry] of registry) {
+      if (merged.has(name)) {
+        throw new AlgalError("PARSE_FAILED", `duplicate host tool "${name}"`);
+      }
+      merged.set(name, entry);
+    }
+  }
+  return merged;
+}
+
 export const TOOL_SIGNATURE_BOUNDS = {
   maxNameLen: 128,
   maxCost: 1_000_000,

@@ -5,6 +5,7 @@ use algal::{
     contract::{Manifest, object},
     effects::{Backend, Host, ResponseFormat},
     graph::{Transports, compile, interface_args, interface_signature},
+    mailbox::{self, MailboxService},
     memory, runtime,
     store::{Store, pack, unpack},
 };
@@ -152,6 +153,10 @@ enum Commands {
     Slot {
         #[command(subcommand)]
         command: SlotCommand,
+    },
+    Mailbox {
+        #[command(subcommand)]
+        command: MailboxCommand,
     },
     Example {
         id: String,
@@ -338,6 +343,30 @@ enum SlotCommand {
 }
 
 #[derive(Subcommand)]
+enum MailboxCommand {
+    Create {
+        name: String,
+        #[arg(long, default_value_t = 64)]
+        max_messages: usize,
+        #[arg(long, default_value_t = 65_536)]
+        max_message_bytes: usize,
+    },
+    List,
+    Send {
+        capability: String,
+        value: PathBuf,
+        #[arg(long)]
+        idempotency_key: Option<String>,
+    },
+    Receive {
+        capability: String,
+    },
+    Revoke {
+        capability: String,
+    },
+}
+
+#[derive(Subcommand)]
 enum MemoryCommand {
     Query {
         snapshot: PathBuf,
@@ -514,6 +543,7 @@ fn prepare(options: &Execution, dir: &Path) -> Result<(Store, Host, Transports)>
         store.load_modules(path)?;
     }
     let mut host = host(options, dir)?;
+    host.install_mailboxes(MailboxService::open(dir))?;
     host.cache = options.cache_effects;
     let mut transports = Transports::new();
     if let Some(file) = &options.transports {
@@ -542,14 +572,32 @@ fn persist(store: &mut Store, manifest: &Manifest, receipt: &Value) -> Result<St
     store.put("runs", receipt)
 }
 
-fn tool_definition(manifest: Manifest, store: &mut Store, format: &str) -> Result<Value> {
-    let compiled = compile(manifest, store, &Default::default(), &Default::default(), 0)?;
+fn tool_definition(
+    manifest: Manifest,
+    store: &mut Store,
+    format: &str,
+    tools: &Host,
+) -> Result<Value> {
+    let compiled = compile(
+        manifest,
+        store,
+        &tools.tool_signatures(),
+        &Default::default(),
+        0,
+    )?;
     let signature = interface_signature(&compiled)?;
     let mut properties = MapBuilder::default();
     let mut required = Vec::new();
     for (name, port) in signature.inputs {
         let mut schema = match port["type"].as_str() {
             Some("text") | Some("ref") => json!({"type":"string"}),
+            Some("cap") => json!({
+                "type":"string",
+                "pattern":format!(
+                    "^cap:{}:sha256:[a-f0-9]{{64}}$",
+                    port["capability"].as_str().unwrap_or("[a-z][a-z0-9-]*")
+                )
+            }),
             Some("choice") => json!({"type":"string","enum":port["labels"]}),
             _ => port.get("schema").cloned().unwrap_or(json!({})),
         };
@@ -888,6 +936,7 @@ async fn execute(cli: Cli) -> Result<bool> {
                 if let Some(path) = tools {
                     host.load_tools(&path)?;
                 }
+                host.install_mailboxes(MailboxService::open(&cli.dir))?;
                 let result =
                     algal::bench::verify(&load(&report, MAX_DOCUMENT_BYTES)?, &store, &host)
                         .await?;
@@ -912,6 +961,7 @@ async fn execute(cli: Cli) -> Result<bool> {
                 if let Some(path) = tools {
                     host.load_tools(&path)?;
                 }
+                host.install_mailboxes(MailboxService::open(&cli.dir))?;
                 let mut transports_map = Transports::new();
                 if let Some(file) = transports {
                     let value = load(&file, 65_536)?;
@@ -956,6 +1006,7 @@ async fn execute(cli: Cli) -> Result<bool> {
                     if let Some(path) = tools {
                         host.load_tools(&path)?;
                     }
+                    host.install_mailboxes(MailboxService::open(&cli.dir))?;
                     Ok((store, host))
                 };
             match command {
@@ -1318,6 +1369,41 @@ async fn execute(cli: Cli) -> Result<bool> {
             }
             Ok(true)
         }
+        Commands::Mailbox { command } => {
+            let service = MailboxService::open(&cli.dir);
+            match command {
+                MailboxCommand::Create {
+                    name,
+                    max_messages,
+                    max_message_bytes,
+                } => emit(&serde_json::to_value(service.create(
+                    &name,
+                    max_messages,
+                    max_message_bytes,
+                )?)?)?,
+                MailboxCommand::List => emit(&json!({
+                    "dir":cli.dir.join("mailboxes"),
+                    "mailboxes":service.list()?,
+                }))?,
+                MailboxCommand::Send {
+                    capability,
+                    value,
+                    idempotency_key,
+                } => {
+                    let key = match idempotency_key {
+                        Some(key) => key,
+                        None => mailbox::external_wake_key()?,
+                    };
+                    emit(&service.send(&capability, load(&value, MAX_DOCUMENT_BYTES)?, &key)?)?;
+                }
+                MailboxCommand::Receive { capability } => emit(&service.receive(&capability)?)?,
+                MailboxCommand::Revoke { capability } => {
+                    service.revoke(&capability)?;
+                    emit(&json!({"handle":capability,"revoked":true}))?;
+                }
+            }
+            Ok(true)
+        }
         Commands::Example { id, examples } => {
             let valid = !id.is_empty()
                 && id.len() <= 64
@@ -1444,7 +1530,14 @@ async fn execute(cli: Cli) -> Result<bool> {
             if let Some(modules) = modules {
                 store.load_modules(&modules)?;
             }
-            emit(&tool_definition(manifest(&file)?, &mut store, &format)?)?;
+            let mut tools = Host::default();
+            tools.install_mailboxes(MailboxService::open(&cli.dir))?;
+            emit(&tool_definition(
+                manifest(&file)?,
+                &mut store,
+                &format,
+                &tools,
+            )?)?;
             Ok(true)
         }
         Commands::Store { command } => {

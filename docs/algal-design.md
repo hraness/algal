@@ -178,8 +178,12 @@ The site keeps its configured origin until a new domain is actually provisioned.
   and fail-closed replay of missing tool receipts.
 - Native Rust path: canonical identity, manifest parsing, the scheduler
   (nested organisms, bounded loops, tool calls, spawn, replay), memory/context
-  primitives, the CLI, and `bun scripts/native-parity.ts` parity across all 39
+  primitives, the CLI, and `bun scripts/native-parity.ts` parity across the
   bundled examples.
+- VM kernel layers: fail-closed effect capabilities, suspended/resumable runs,
+  exact-class `cap` ports, and bounded durable mailbox drivers with independent
+  send/receive rights, revocation, and replay-safe wakeups are implemented in
+  both runtimes.
 - ACP: ALGAL is both an ACP agent (sessions, permissions, timeouts, buffered
   pre-session updates) and an ACP client to a host-selected coding agent; a
   live Devin ACP task completed with an offline-verifiable receipt.

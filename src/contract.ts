@@ -101,7 +101,8 @@ export type PortType =
       schema?: JsonObject;
     }
   | { type: "choice"; optional?: boolean; many?: boolean; labels?: string[] }
-  | { type: "ref"; optional?: boolean; many?: boolean };
+  | { type: "ref"; optional?: boolean; many?: boolean }
+  | { type: "cap"; capability: string; optional?: boolean; many?: boolean };
 
 export type PortName = string;
 export type PortMap = Record<PortName, PortType>;
@@ -343,16 +344,24 @@ function parsePortType(u: unknown, what: string): PortType {
     if (u === "text" || u === "json" || u === "choice" || u === "ref") {
       return { type: u };
     }
+    if (u === "cap") {
+      throw new AlgalError("PARSE_FAILED", `${what}: cap ports require a capability class`);
+    }
     throw new AlgalError("PARSE_FAILED", `${what}: unknown port type "${u}"`);
   }
   const obj = asObject(u, what);
-  noUnknownKeys(obj, ["type", "optional", "many", "labels", "schema"], what);
+  noUnknownKeys(
+    obj,
+    ["type", "optional", "many", "labels", "schema", "capability"],
+    what,
+  );
   const type = asString(reqField(obj, "type", what), `${what}.type`, 16);
   if (
     type !== "text" &&
     type !== "json" &&
     type !== "choice" &&
-    type !== "ref"
+    type !== "ref" &&
+    type !== "cap"
   ) {
     throw new AlgalError("PARSE_FAILED", `${what}.type: unknown "${type}"`);
   }
@@ -394,6 +403,22 @@ function parsePortType(u: unknown, what: string): PortType {
     schema = asObject(schemaRaw, `${what}.schema`);
     checkSchemaDepth(schema, `${what}.schema`, 0);
   }
+  const capabilityRaw = optField(obj, "capability");
+  let capability: string | undefined;
+  if (capabilityRaw !== undefined) {
+    if (type !== "cap") {
+      throw new AlgalError(
+        "PARSE_FAILED",
+        `${what}.capability requires type "cap"`,
+      );
+    }
+    capability = asSafeId(capabilityRaw, `${what}.capability`);
+  } else if (type === "cap") {
+    throw new AlgalError(
+      "PARSE_FAILED",
+      `${what}.capability is required for type "cap"`,
+    );
+  }
   if (type === "choice") {
     const out: {
       type: "choice";
@@ -402,6 +427,12 @@ function parsePortType(u: unknown, what: string): PortType {
       labels?: string[];
     } = { type };
     if (labels !== undefined) out.labels = labels;
+    if (optional !== undefined) out.optional = optional;
+    if (many !== undefined) out.many = many;
+    return out;
+  }
+  if (type === "cap") {
+    const out: PortType = { type, capability: capability! };
     if (optional !== undefined) out.optional = optional;
     if (many !== undefined) out.many = many;
     return out;
@@ -636,6 +667,12 @@ function parseCell(u: unknown, what: string): Cell {
         asJsonValue(value, `${what}.outputs.${name}.value`);
         const { value: _v, ...typeDecl } = d;
         const pt = parsePortType(typeDecl, `${what}.outputs.${name}`);
+        if (pt.type === "cap") {
+          throw new AlgalError(
+            "PARSE_FAILED",
+            `${what}.outputs.${name}: const cells cannot mint capability handles`,
+          );
+        }
         if (pt.many) {
           throw new AlgalError(
             "PARSE_FAILED",
@@ -1692,6 +1729,7 @@ function portTypeJson(p: PortType): JsonObject {
   if (p.many) o.many = true;
   if (p.type === "choice" && p.labels) o.labels = p.labels;
   if (p.type === "json" && p.schema) o.schema = p.schema;
+  if (p.type === "cap") o.capability = p.capability;
   return o;
 }
 
