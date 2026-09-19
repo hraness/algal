@@ -541,3 +541,168 @@ fn check_json_boundary() {
     let out = check_json(br#"{"program":["add",1,["get","x"]],"names":["x"]}"#);
     assert_eq!(out, r#"{"ok":true}"#);
 }
+
+// ------------------------------------------------------------ v2 ops -----
+
+#[test]
+fn min_max_clamp() {
+    let e = Map::new();
+    assert_eq!(ok_eval(json!(["min", 3, 1, 2]), &e), json!(1));
+    assert_eq!(ok_eval(json!(["max", 3, 1, 2]), &e), json!(3));
+    assert_eq!(ok_eval(json!(["min", -2.5, -3]), &e), json!(-3));
+    assert_eq!(ok_eval(json!(["clamp", 12, 0, 10]), &e), json!(10));
+    assert_eq!(ok_eval(json!(["clamp", -4, 0, 10]), &e), json!(0));
+    assert_eq!(ok_eval(json!(["clamp", 5, 0, 10]), &e), json!(5));
+    let err = err_eval(json!(["clamp", 1, 10, 0]), &e);
+    assert_eq!(err.code, "EXPR_ARG");
+    let err = err_eval(json!(["min", "a", 1]), &e);
+    assert_eq!(err.code, "EXPR_TYPE");
+}
+
+#[test]
+fn round_floor_ceil_abs() {
+    let e = Map::new();
+    // half toward +∞ — JS Math.round ties, not Rust's half-away
+    assert_eq!(ok_eval(json!(["round", 2.5]), &e), json!(3));
+    assert_eq!(ok_eval(json!(["round", -2.5]), &e), json!(-2));
+    assert_eq!(ok_eval(json!(["round", 2.4]), &e), json!(2));
+    assert_eq!(ok_eval(json!(["floor", 2.9]), &e), json!(2));
+    assert_eq!(ok_eval(json!(["floor", -2.1]), &e), json!(-3));
+    assert_eq!(ok_eval(json!(["ceil", 2.1]), &e), json!(3));
+    assert_eq!(ok_eval(json!(["ceil", -2.9]), &e), json!(-2));
+    assert_eq!(ok_eval(json!(["abs", -3.5]), &e), json!(3.5));
+    assert_eq!(ok_eval(json!(["abs", 0]), &e), json!(0));
+}
+
+#[test]
+fn starts_ends() {
+    let e = Map::new();
+    assert_eq!(ok_eval(json!(["starts", "algal", "alg"]), &e), json!(true));
+    assert_eq!(ok_eval(json!(["starts", "algal", "gal"]), &e), json!(false));
+    assert_eq!(ok_eval(json!(["ends", "algal", "gal"]), &e), json!(true));
+    assert_eq!(ok_eval(json!(["ends", "algal", "alg"]), &e), json!(false));
+    assert_eq!(ok_eval(json!(["starts", "algal", ""]), &e), json!(true));
+    let err = err_eval(json!(["starts", "algal", 3]), &e);
+    assert_eq!(err.code, "EXPR_TYPE");
+}
+
+#[test]
+fn reverse_take_drop() {
+    let e = Map::new();
+    assert_eq!(
+        ok_eval(json!(["reverse", ["quote", [1, 2, 3]]]), &e),
+        json!([3, 2, 1])
+    );
+    assert_eq!(
+        ok_eval(json!(["take", ["quote", [1, 2, 3]], 2]), &e),
+        json!([1, 2])
+    );
+    assert_eq!(
+        ok_eval(json!(["take", ["quote", [1, 2, 3]], 9]), &e),
+        json!([1, 2, 3])
+    );
+    assert_eq!(
+        ok_eval(json!(["drop", ["quote", [1, 2, 3]], 1]), &e),
+        json!([2, 3])
+    );
+    assert_eq!(
+        ok_eval(json!(["drop", ["quote", [1, 2, 3]], 9]), &e),
+        json!([])
+    );
+    let err = err_eval(json!(["take", ["quote", [1]], -1]), &e);
+    assert_eq!(err.code, "EXPR_TYPE");
+    let err = err_eval(json!(["take", ["quote", [1]], 1.5]), &e);
+    assert_eq!(err.code, "EXPR_TYPE");
+}
+
+#[test]
+fn flat_unique() {
+    let e = Map::new();
+    assert_eq!(
+        ok_eval(json!(["flat", ["quote", [[1, 2], [3], []]]]), &e),
+        json!([1, 2, 3])
+    );
+    assert_eq!(
+        ok_eval(json!(["unique", ["quote", [1, 2, 1, 3, 2]]]), &e),
+        json!([1, 2, 3])
+    );
+    // canonical equality inside unique — 1 and 1.0 are the same value
+    assert_eq!(
+        ok_eval(
+            json!(["unique", ["quote", [1, 1.0, {"a":1,"b":2},{"b":2,"a":1}]]]),
+            &e
+        ),
+        json!([1, {"a":1,"b":2}])
+    );
+    let err = err_eval(json!(["flat", ["quote", [[1], 2]]]), &e);
+    assert_eq!(err.code, "EXPR_TYPE");
+}
+
+#[test]
+fn sort_total_order() {
+    let e = Map::new();
+    assert_eq!(
+        ok_eval(json!(["sort", ["quote", [3, 1, 2]]]), &e),
+        json!([1, 2, 3])
+    );
+    // rank: null < bool < number < string < list < map
+    assert_eq!(
+        ok_eval(
+            json!(["sort", ["quote", [{"a":1}, "x", 2, true, null, [1], false]]]),
+            &e
+        ),
+        json!([null, false, true, 2, "x", [1], {"a":1}])
+    );
+    // strings order by UTF-16 code units
+    assert_eq!(
+        ok_eval(json!(["sort", ["quote", ["b", "a", "ab"]]]), &e),
+        json!(["a", "ab", "b"])
+    );
+    // stable on equal values, -0 ≡ 0
+    assert_eq!(
+        ok_eval(json!(["sort", ["quote", [0, -0.0, -1]]]), &e),
+        json!([-1, 0, 0])
+    );
+}
+
+#[test]
+fn has_keys_values_merge() {
+    let e = env(&[("o", json!({"b":2,"a":1}))]);
+    assert_eq!(ok_eval(json!(["has", ["get", "o"], "a"]), &e), json!(true));
+    assert_eq!(ok_eval(json!(["has", ["get", "o"], "z"]), &e), json!(false));
+    // canonical key order (UTF-16, array-index keys numerically first)
+    assert_eq!(
+        ok_eval(json!(["keys", ["get", "o"]]), &e),
+        json!(["a", "b"])
+    );
+    assert_eq!(ok_eval(json!(["values", ["get", "o"]]), &e), json!([1, 2]));
+    let e2 = env(&[("o2", json!({"10":1,"2":2,"a":3}))]);
+    assert_eq!(
+        ok_eval(json!(["keys", ["get", "o2"]]), &e2),
+        json!(["2", "10", "a"])
+    );
+    assert_eq!(
+        ok_eval(json!(["merge", {"a":1}, {"b":2,"a":9}]), &e),
+        json!({"a":9,"b":2})
+    );
+    let err = err_eval(json!(["merge", {"a":1}, ["quote", [1]]]), &e);
+    assert_eq!(err.code, "EXPR_TYPE");
+    let err = err_eval(json!(["has", "x", "a"]), &e);
+    assert_eq!(err.code, "EXPR_TYPE");
+}
+
+#[test]
+fn to_text_canonical() {
+    let e = Map::new();
+    // canonical render: key order normalized, f64 via ryu
+    // (object fields are programs too — the array literal needs quote)
+    assert_eq!(
+        ok_eval(json!(["toText", {"b":1,"a":["quote",[2,"x"]]}]), &e),
+        json!(r#"{"a":[2,"x"],"b":1}"#)
+    );
+    assert_eq!(
+        ok_eval(json!(["toText", 0.30000000000000004]), &e),
+        json!("0.30000000000000004")
+    );
+    assert_eq!(ok_eval(json!(["toText", null]), &e), json!("null"));
+}
