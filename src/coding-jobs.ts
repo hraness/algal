@@ -433,7 +433,12 @@ async function rawTrackedDigest(
           "BUDGET_EXHAUSTED",
           "raw workspace byte bound exceeded",
         );
-      entries.push({ path, kind: "symlink", mode, digest: digestText(target) });
+      entries.push({
+        path,
+        kind: "symlink",
+        mode,
+        digest: `sha256:${createHash("sha256").update(target).digest("hex")}`,
+      });
       continue;
     }
     if (!stat.isFile())

@@ -105,7 +105,7 @@ console.log(JSON.stringify({version:1,session:"fixture-session",state:"idle",out
   invariant(JSON.stringify(repeated) === JSON.stringify(settled), "repeated run changed the durable outcome");
   const reviewed = await cli<RepairReport>(["repair", "tick", "scheduler-repair"]);
   invariant(reviewed.process.process.status === "complete" && reviewed.result?.action === "review", "repair VM did not validate its patch");
-  invariant(reviewed.result.checks.length === 1 && reviewed.result.checks[0].exitCode === 0, "independent validation did not pass");
+  invariant(reviewed.result.checks.length === 1 && reviewed.result.checks[0]?.exitCode === 0, "independent validation did not pass");
   const verified = await cli<{ok: boolean; generations: number}>(["repair", "verify", "scheduler-repair"]);
   invariant(verified.ok === true && verified.generations === 2, "offline VM verification failed");
   const offlineTools = join(evidence, "offline-tools.json");
