@@ -630,11 +630,156 @@ impl Runtime<'_> {
                     .await?;
                 Ok(json!({"outputs":output,"effectDigest":effect}))
             }
+            "recall" => self.recall(cell, inputs, cell_path).await,
             "agent" | "classifier" | "gate" | "decide" => {
                 self.agent(cell, inputs, compiled, cell_path).await
             }
             _ => Err(Error::new("MANIFEST_INVALID", "unsupported native cell")),
         }
+    }
+
+    async fn recall(&mut self, cell: &Value, inputs: &Value, cell_path: &str) -> Result<Value> {
+        let name = cell["id"].as_str().unwrap();
+        let env = inputs.as_object().cloned().unwrap_or_default();
+        let (query, fuel) = match algal_expr::run(&cell["query"]["program"], &env, MAX_EXPR_FUEL) {
+            Ok(result) => result,
+            Err((error, fuel)) => {
+                self.work += fuel as usize;
+                return Err(if error.code == "EXPR_FUEL" {
+                    Error::limit("recall query fuel exhausted")
+                } else {
+                    Error::new(
+                        "EXPR_FAILED",
+                        format!(
+                            "recall query {}",
+                            canonical(&error.to_json()).unwrap_or_default()
+                        ),
+                    )
+                });
+            }
+        };
+        self.work += fuel as usize;
+        let query = query.as_str().ok_or_else(|| {
+            Error::new(
+                "EXPR_FAILED",
+                format!("recall cell \"{name}\" query must evaluate to text"),
+            )
+        })?;
+        if query.is_empty() {
+            return Err(Error::new(
+                "EXPR_FAILED",
+                format!("recall cell \"{name}\" query must not be empty"),
+            ));
+        }
+        if query.len() > crate::contract::MAX_RECALL_QUERY_BYTES {
+            return Err(Error::limit(format!(
+                "recall cell \"{name}\" query exceeds maxRecallQueryBytes {}",
+                crate::contract::MAX_RECALL_QUERY_BYTES
+            )));
+        }
+        let max_context = cell["budget"]["maxContextBytes"]
+            .as_u64()
+            .unwrap_or(self.budgets.max_context_bytes as u64) as usize;
+        let max_output = cell["budget"]["maxOutputBytes"]
+            .as_u64()
+            .unwrap_or(self.budgets.max_output_bytes as u64) as usize;
+        let context = json!({"inputs":inputs});
+        let context_bytes = canonical(&context)?.len();
+        if context_bytes > max_context {
+            return Err(Error::limit(format!(
+                "recall context {context_bytes}B exceeds maxContextBytes {max_context}B"
+            )));
+        }
+        let k = cell["k"].as_u64().unwrap_or(8) as usize;
+        let embedder = cell["embedder"].as_str().unwrap_or("local");
+        let output_contract = json!({
+            "kind":"json",
+            "schema":{
+                "type":"object",
+                "required":["hits"],
+                "properties":{"hits":{"type":"array"}}
+            }
+        });
+        let mut request = json!({
+            "contract":"algal.effect.v1",
+            "cellId":name,
+            "kind":"recall",
+            "prompt":"",
+            "context":context,
+            "output":output_contract,
+            "budget":{"maxContextBytes":max_context,"maxOutputBytes":max_output},
+            "recall":{"query":query,"k":k,"embedder":embedder}
+        });
+        if let Some(route) = cell.get("route") {
+            request["route"] = route.clone();
+        }
+        let request_digest = digest(&request)?;
+        let attempts = cell["retry"]["attempts"].as_u64().unwrap_or(1);
+        let timeout = cell["budget"]["maxEffectMs"].as_u64().unwrap_or(120_000);
+        let mut last_error = Error::new("EFFECT_FAILED", "effect did not settle");
+        for _ in 0..attempts {
+            if self.calls + 1 > self.budgets.max_agent_calls {
+                return Err(Error::limit("maxAgentCalls exhausted"));
+            }
+            self.calls += 1;
+            self.work += 500 + context_bytes;
+            self.event("effect", Some(cell_path), Some(&request_digest), None)?;
+            let receipt = self
+                .host
+                .effect(&request, timeout, Some(&mut *self.store))
+                .await?;
+            self.effects.push(receipt.clone());
+            let retryable = receipt["retryable"] != false;
+            if let Some(error) = receipt.get("error") {
+                last_error = serde_json::from_value(error.clone())?;
+                if !retryable {
+                    break;
+                }
+                continue;
+            }
+            let raw = receipt["output"].clone();
+            let output_bytes = canonical(&raw)?.len();
+            if output_bytes > max_output {
+                last_error = Error::limit(format!(
+                    "effect output {output_bytes}B exceeds maxOutputBytes {max_output}B"
+                ));
+                if !retryable {
+                    break;
+                }
+                continue;
+            }
+            self.work += output_bytes;
+            if let Err(error) = bind_output(&output_contract, raw.clone()) {
+                last_error = error;
+                if !retryable {
+                    break;
+                }
+                continue;
+            }
+            match crate::semantic::bind_recall_output(&raw, k) {
+                Ok(recalled) => {
+                    let mut outputs = json!({"out":recalled.clone()});
+                    if let Some(reference) = recalled["hits"]
+                        .as_array()
+                        .and_then(|hits| hits.first())
+                        .and_then(|hit| hit["ref"].as_str())
+                    {
+                        outputs["ref"] = json!(reference);
+                    }
+                    return Ok(json!({
+                        "outputs":outputs,
+                        "effectDigest":request_digest
+                    }));
+                }
+                Err(error) => {
+                    last_error = error;
+                    if !retryable {
+                        break;
+                    }
+                }
+            }
+        }
+        Err(last_error)
     }
 
     async fn agent(

@@ -1,6 +1,6 @@
-// Effect requests and receipts: the only seam through which agent and
-// classifier cells reach the world. A request is fully determined by the
-// manifest plus delivered inputs; its digest binds request to receipt.
+// Effect requests and receipts: the only seam through which agent,
+// decision, approval, and recall cells reach the world. A request is fully
+// determined by the manifest plus delivered inputs; its digest binds request to receipt.
 // Executors are host-supplied — Algal never brokers provider access.
 
 import { AlgalError, type ErrorCode } from "./errors";
@@ -45,7 +45,7 @@ export type DecisionQuestions = Record<string, DecisionQuestion>;
 export type EffectRequest = {
   contract: typeof EFFECT_CONTRACT;
   cellId: string;
-  kind: "agent" | "classifier" | "gate" | "decide";
+  kind: "agent" | "classifier" | "gate" | "decide" | "recall";
   prompt: string;
   context: JsonObject;
   output: AgentOutput;
@@ -56,6 +56,11 @@ export type EffectRequest = {
    * probes). Digested with the request, so a replayed run serves the same
    * questions to the same answers. */
   questions?: DecisionQuestions;
+  /** The derived semantic probe — present only on `kind:"recall"` requests:
+   * the expr-evaluated query text, the hit cap, and the embedder spec whose
+   * vectors the index must answer over. Digested with the request, so replay
+   * reproduces the same ranking inputs against the recorded response. */
+  recall?: { query: string; k: number; embedder: string };
 };
 
 export type EffectReceipt = {

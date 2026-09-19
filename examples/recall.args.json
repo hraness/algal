@@ -1,0 +1,10 @@
+{
+  "src": {
+    "query": "sprig",
+    "doc": {
+      "habitat": "tidepool",
+      "name": "wisp",
+      "species": "sprig"
+    }
+  }
+}

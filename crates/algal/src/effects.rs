@@ -30,6 +30,10 @@ fn jev_model_default() -> String {
     crate::decisions::DEFAULT_MODEL.to_owned()
 }
 
+fn recall_embedder_default() -> String {
+    "local".to_owned()
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ResponseFormat {
@@ -58,6 +62,11 @@ pub enum Backend {
         model: String,
         #[serde(default)]
         credential_env: Option<String>,
+    },
+    Recall {
+        dir: PathBuf,
+        #[serde(default = "recall_embedder_default")]
+        embedder: String,
     },
     Openai {
         base_url: String,
@@ -104,12 +113,12 @@ impl Backend {
     }
     /// Whether a completed response may be memoized for later identical
     /// requests. Model-call backends are pure at the request boundary;
-    /// command and delegated-coding backends run effects a memo could
-    /// never determinize, so they stay uncacheable.
+    /// command/delegated backends have side effects, while recall observes
+    /// a mutable derived index, so those backends stay uncacheable.
     pub fn cacheable(&self) -> bool {
         !matches!(
             self,
-            Self::Command { .. } | Self::Xcb { .. } | Self::Acp { .. }
+            Self::Command { .. } | Self::Xcb { .. } | Self::Acp { .. } | Self::Recall { .. }
         )
     }
     /// The executor-scoped memo identity: a scripted executor binds its
@@ -142,6 +151,12 @@ impl Backend {
                 if let Some(env) = credential_env {
                     check_env(env)?;
                 }
+            }
+            Self::Recall { dir, embedder } => {
+                if dir.as_os_str().is_empty() || dir.to_string_lossy().len() > 8_192 {
+                    return Err(Error::invalid("recall index directory"));
+                }
+                crate::embeddings::Embedder::resolve(Some(embedder))?;
             }
             Self::Openai {
                 base_url,
@@ -720,6 +735,41 @@ impl Host {
                 }
                 meta["executor"] = json!(crate::decisions::executor_id(&model));
                 Ok((out, meta))
+            }
+            Backend::Recall { dir, embedder } => {
+                if request["kind"] != "recall" || !request["recall"].is_object() {
+                    return Err(Error::new(
+                        "EFFECT_UNBOUND",
+                        format!(
+                            "recall executor cannot serve \"{}\" requests",
+                            request["kind"].as_str().unwrap_or("")
+                        ),
+                    ));
+                }
+                let requested = request["recall"]["embedder"]
+                    .as_str()
+                    .ok_or_else(|| Error::new("EFFECT_UNBOUND", "recall embedder missing"))?;
+                if requested != embedder {
+                    return Err(Error::new(
+                        "EFFECT_UNBOUND",
+                        format!(
+                            "recall executor for \"{embedder}\" cannot serve embedder \"{requested}\""
+                        ),
+                    ));
+                }
+                let query = request["recall"]["query"]
+                    .as_str()
+                    .ok_or_else(|| Error::new("EFFECT_UNBOUND", "recall query missing"))?;
+                let k = request["recall"]["k"]
+                    .as_u64()
+                    .and_then(|k| usize::try_from(k).ok())
+                    .ok_or_else(|| Error::new("EFFECT_UNBOUND", "recall k missing"))?;
+                let backend = crate::embeddings::Embedder::resolve(Some(embedder))?;
+                let hits = crate::semantic::search(dir, &backend, query, k, deadline).await?;
+                let output = json!({
+                    "hits": hits.iter().map(crate::semantic::Hit::to_recall_json).collect::<Vec<_>>()
+                });
+                Ok((output, json!({"executor":format!("recall:{embedder}")})))
             }
             Backend::Openai {
                 base_url,

@@ -4,11 +4,16 @@ import {
   parseOrganismManifest,
   type OrganismManifest,
 } from "./contract";
-import { cachedExecutor, scriptedExecutor } from "./effects";
+import {
+  cachedExecutor,
+  effectRequestDigest,
+  scriptedExecutor,
+} from "./effects";
 import { digestCanonical } from "./digest";
 import { AlgalError } from "./errors";
 import { builtinRegistry } from "./registry";
 import { runOrganism } from "./run";
+import { recallOutputSchema } from "./semantic";
 import { MemoryStore } from "./store";
 import { verifyReceipt } from "./verify";
 import type { JsonValue } from "./values";
@@ -254,6 +259,153 @@ describe("scheduler", () => {
     });
     expect(r.outcome).toBe("failed");
     expect(r.failure?.code).toBe("EFFECT_UNPARSEABLE");
+  });
+
+  test("recall evaluates its query and records ranked hits as a replayable effect", async () => {
+    const store = new MemoryStore();
+    const payload = { habitat: "coral reef", depth: 12 };
+    const ref = await store.putValue(payload);
+    const hitId = digestCanonical("chunk");
+    const m = manifest({
+      contract: "algal.organism.v1",
+      key: "organism:recall-run",
+      name: "RecallRun",
+      cells: [
+        { id: "src", kind: "input", outputs: { q: "text" } },
+        {
+          id: "memory",
+          kind: "recall",
+          inputs: { q: "text" },
+          query: {
+            contract: "algal.expr.v1",
+            program: ["sconcat", ["get", "q"], " habitat"],
+          },
+          k: 2,
+          embedder: "local",
+        },
+        { id: "full", kind: "load" },
+      ],
+      edges: [
+        { from: { cell: "src", port: "q" }, to: { cell: "memory", port: "q" } },
+        { from: { cell: "memory", port: "ref" }, to: { cell: "full", port: "ref" } },
+      ],
+    });
+    const output = {
+      hits: [{
+        id: hitId,
+        source: `value:${ref.slice(7)}`,
+        seq: 0,
+        score: 0.8,
+        text: "A coral habitat record",
+        ref,
+      }],
+    };
+    const r = await run(m, {
+      args: { src: { q: "coral" } },
+      responses: { memory: output },
+      store,
+    });
+    expect(r.outcome).toBe("complete");
+    expect(r.cells.memory?.outputs?.out).toEqual(output);
+    expect(r.cells.memory?.outputs?.ref).toBe(ref);
+    expect(r.cells.full?.outputs?.data).toEqual(payload);
+    expect(r.effects).toHaveLength(1);
+    expect(r.effects[0]?.requestDigest).toBe(effectRequestDigest({
+      contract: "algal.effect.v1",
+      cellId: "memory",
+      kind: "recall",
+      prompt: "",
+      context: { inputs: { q: "coral" } },
+      output: { kind: "json", schema: recallOutputSchema() },
+      budget: {
+        maxContextBytes: m.budgets.maxContextBytes,
+        maxOutputBytes: m.budgets.maxOutputBytes,
+      },
+      recall: { query: "coral habitat", k: 2, embedder: "local" },
+    }));
+    expect((await verifyReceipt(
+      r as unknown as JsonValue,
+      manifestToJson(m),
+      store,
+    )).ok).toBe(true);
+  });
+
+  test("recall records an empty hit list and leaves ref consumers skipped", async () => {
+    const m = manifest({
+      contract: "algal.organism.v1",
+      key: "organism:recall-empty",
+      name: "RecallEmpty",
+      cells: [
+        { id: "src", kind: "input", outputs: { q: "text" } },
+        {
+          id: "memory",
+          kind: "recall",
+          inputs: { q: "text" },
+          query: { contract: "algal.expr.v1", program: ["get", "q"] },
+        },
+        { id: "full", kind: "load" },
+      ],
+      edges: [
+        { from: { cell: "src", port: "q" }, to: { cell: "memory", port: "q" } },
+        { from: { cell: "memory", port: "ref" }, to: { cell: "full", port: "ref" } },
+      ],
+    });
+    const r = await run(m, {
+      args: { src: { q: "nothing" } },
+      responses: { memory: { hits: [] } },
+    });
+    expect(r.outcome).toBe("complete");
+    expect(r.cells.memory?.outputs).toEqual({ out: { hits: [] } });
+    expect(r.cells.full?.status).toBe("skipped");
+    expect(r.effects).toHaveLength(1);
+  });
+
+  test("recall fails before dispatch on non-text queries and rejects invalid hits", async () => {
+    const base = {
+      contract: "algal.organism.v1",
+      key: "organism:recall-invalid",
+      name: "RecallInvalid",
+      cells: [
+        { id: "src", kind: "input", outputs: { q: "json" } },
+        {
+          id: "memory",
+          kind: "recall",
+          inputs: { q: "json" },
+          query: { contract: "algal.expr.v1", program: ["get", "q"] },
+          k: 1,
+        },
+      ],
+      edges: [
+        { from: { cell: "src", port: "q" }, to: { cell: "memory", port: "q" } },
+      ],
+    };
+    const nonText = await run(manifest(base), {
+      args: { src: { q: 42 } },
+      responses: { memory: { hits: [] } },
+    });
+    expect(nonText.outcome).toBe("failed");
+    expect(nonText.failure?.code).toBe("EXPR_FAILED");
+    expect(nonText.effects).toHaveLength(0);
+
+    const invalid = await run(manifest({
+      ...base,
+      cells: [
+        { id: "src", kind: "input", outputs: { q: "text" } },
+        {
+          id: "memory",
+          kind: "recall",
+          inputs: { q: "text" },
+          query: { contract: "algal.expr.v1", program: ["get", "q"] },
+          k: 1,
+        },
+      ],
+    }), {
+      args: { src: { q: "coral" } },
+      responses: { memory: { hits: [{}, {}] } },
+    });
+    expect(invalid.outcome).toBe("failed");
+    expect(invalid.failure?.code).toBe("EFFECT_UNPARSEABLE");
+    expect(invalid.effects).toHaveLength(1);
   });
 
   test("budget exhaustion fails the run", async () => {

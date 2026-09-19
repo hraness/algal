@@ -180,6 +180,11 @@ pub fn compile(
                 outputs: port_map(json!({"out":"json"}))?,
                 cost: 0,
             },
+            "recall" => Signature {
+                inputs: ports(&cell["inputs"], false, false)?,
+                outputs: port_map(json!({"out":"json","ref":"ref"}))?,
+                cost: 0,
+            },
             "store" => Signature {
                 inputs: port_map(json!({"data":"json"}))?,
                 outputs: port_map(json!({"ref":"ref"}))?,

@@ -41,6 +41,7 @@ import type { FnRegistry } from "./registry";
 import type { Store } from "./store";
 import type { Transport } from "./transport";
 import type { ToolRegistry } from "./tools";
+import { bindRecallOutput, recallOutputSchema } from "./semantic";
 import { digestCanonical, type Digest } from "./digest";
 import {
   canonicalBytes,
@@ -646,6 +647,160 @@ async function activate(
         );
       }
       return { outputs: { out: r.value } };
+    }
+    case "recall": {
+      const evaluated = evalProgram(
+        cell.query.program,
+        inputs as JsonObject,
+        BOUNDS.maxExprFuel,
+      );
+      ctx.work.units += evaluated.fuel;
+      if (!evaluated.ok) {
+        throw new AlgalError(
+          evaluated.err.code === "EXPR_FUEL" ? "BUDGET_EXHAUSTED" : "EXPR_FAILED",
+          `recall query ${canonicalize(evaluated.err)}`,
+        );
+      }
+      if (typeof evaluated.value !== "string") {
+        throw new AlgalError("EXPR_FAILED", `recall cell "${cell.id}" query must evaluate to text`);
+      }
+      const query = evaluated.value;
+      if (query.length === 0) {
+        throw new AlgalError("EXPR_FAILED", `recall cell "${cell.id}" query must not be empty`);
+      }
+      if (Buffer.byteLength(query, "utf8") > BOUNDS.maxRecallQueryBytes) {
+        throw new AlgalError(
+          "BUDGET_EXHAUSTED",
+          `recall cell "${cell.id}" query exceeds maxRecallQueryBytes ${BOUNDS.maxRecallQueryBytes}`,
+        );
+      }
+      const maxCtx = cell.budget?.maxContextBytes ?? ctx.budgets.maxContextBytes;
+      const maxOut = cell.budget?.maxOutputBytes ?? ctx.budgets.maxOutputBytes;
+      const context: JsonObject = { inputs };
+      const contextBytes = canonicalBytes(context);
+      if (contextBytes > maxCtx) {
+        throw new AlgalError(
+          "BUDGET_EXHAUSTED",
+          `recall context ${contextBytes}B exceeds maxContextBytes ${maxCtx}B`,
+        );
+      }
+      const k = cell.k ?? 8;
+      const embedder = cell.embedder ?? "local";
+      const output = { kind: "json" as const, schema: recallOutputSchema() };
+      const request: EffectRequest = {
+        contract: "algal.effect.v1",
+        cellId: cell.id,
+        kind: "recall",
+        prompt: "",
+        context,
+        output,
+        budget: { maxContextBytes: maxCtx, maxOutputBytes: maxOut },
+        ...(cell.route ? { route: cell.route } : {}),
+        recall: { query, k, embedder },
+      };
+      const requestDigest = effectRequestDigest(request);
+      const executor = pickExecutor(ctx.opts.executors, cell.route, `cell "${cell.id}"`);
+      const maxAttempts = cell.retry?.attempts ?? 1;
+      let lastErr: unknown;
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        if (ctx.work.agentCalls + 1 > ctx.budgets.maxAgentCalls) {
+          throw new AlgalError("BUDGET_EXHAUSTED", "maxAgentCalls exhausted");
+        }
+        ctx.work.agentCalls += 1;
+        ctx.work.units += WORK.effectBase + contextBytes * WORK.perContextByte;
+        emit(ctx, { kind: "effect", path, digest: requestDigest });
+        let meta: ExecutorMetadata | undefined;
+        const invoke = async (signal?: AbortSignal): Promise<JsonValue> => {
+          if (executor.executeEffect) {
+            const result = await executor.executeEffect(request, signal);
+            meta = result.metadata;
+            return result.output;
+          }
+          meta = await executor.receiptFor?.(request);
+          return executor.execute(request, signal);
+        };
+        let raw: JsonValue;
+        try {
+          const effectMs = cell.budget?.maxEffectMs;
+          if (effectMs === undefined) {
+            raw = await invoke();
+          } else {
+            const ac = new AbortController();
+            const timer = setTimeout(() => ac.abort(), effectMs);
+            try {
+              raw = await Promise.race([
+                invoke(ac.signal),
+                new Promise<never>((_, reject) =>
+                  ac.signal.addEventListener(
+                    "abort",
+                    () => reject(new AlgalError(
+                      "BUDGET_EXHAUSTED",
+                      `cell "${cell.id}" effect exceeded maxEffectMs ${effectMs}`,
+                    )),
+                    { once: true },
+                  ),
+                ),
+              ]);
+            } finally {
+              clearTimeout(timer);
+            }
+          }
+        } catch (error) {
+          const report = errorReport(error);
+          const effect: EffectReceipt = {
+            requestDigest,
+            error: { code: report.code, message: report.message },
+            executor: meta?.executor ?? executor.id,
+          };
+          if (meta?.usage) effect.usage = meta.usage;
+          if (meta?.cached) effect.cached = true;
+          if (executor.retryable === false || meta?.retryable === false) effect.retryable = false;
+          ctx.effects.push(effect);
+          lastErr = error;
+          if (effect.retryable === false) break;
+          continue;
+        }
+        const effect: EffectReceipt = {
+          requestDigest,
+          output: raw,
+          executor: meta?.executor ?? executor.id,
+        };
+        if (meta?.usage) effect.usage = meta.usage;
+        if (meta?.cached) effect.cached = true;
+        if (executor.retryable === false || meta?.retryable === false) effect.retryable = false;
+        ctx.effects.push(effect);
+        const bytes = canonicalBytes(raw);
+        if (bytes > maxOut) {
+          lastErr = new AlgalError(
+            "BUDGET_EXHAUSTED",
+            `effect output ${bytes}B exceeds maxOutputBytes ${maxOut}B`,
+          );
+          if (effect.retryable === false) break;
+          continue;
+        }
+        ctx.work.units += bytes * WORK.perOutputByte;
+        try {
+          bindOutput(output, raw, cell.id);
+          const recalled = bindRecallOutput(raw, k);
+          const first = (recalled.hits as JsonObject[])[0];
+          return {
+            outputs: {
+              out: recalled,
+              ...(typeof first?.ref === "string" ? { ref: first.ref } : {}),
+            },
+            effectDigest: requestDigest,
+          };
+        } catch (error) {
+          lastErr = error;
+          if (effect.retryable === false) break;
+        }
+      }
+      throw lastErr instanceof Error
+        ? lastErr
+        : new AlgalError(
+            "EFFECT_FAILED",
+            `cell "${cell.id}" exhausted ${maxAttempts} attempt(s)`,
+          );
     }
     case "tool": {
       const entry = ctx.opts.tools?.get(cell.tool);
@@ -1313,7 +1468,8 @@ function cellRoute(cell: Cell): Route | undefined {
   return cell.kind === "agent" ||
     cell.kind === "classifier" ||
     cell.kind === "gate" ||
-    cell.kind === "decide"
+    cell.kind === "decide" ||
+    cell.kind === "recall"
     ? cell.route
     : undefined;
 }

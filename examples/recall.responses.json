@@ -1,0 +1,14 @@
+{
+  "memory": {
+    "hits": [
+      {
+        "id": "sha256:3a3282dc79eb0c900cd911ac464808a8a13248b3566eea66e28865ed1618e78e",
+        "source": "value:3f12ca7129eb1d5445b187cc062eca4f1d7013989bf3bc57eac96ab509b07938",
+        "seq": 0,
+        "score": 0.91,
+        "text": "wisp is a sprig from the tidepool",
+        "ref": "sha256:3f12ca7129eb1d5445b187cc062eca4f1d7013989bf3bc57eac96ab509b07938"
+      }
+    ]
+  }
+}

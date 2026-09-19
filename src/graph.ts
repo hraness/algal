@@ -109,6 +109,11 @@ export function cellSignature(
         inputs: cell.inputs,
         outputs: { out: { type: "json" } },
       };
+    case "recall":
+      return {
+        inputs: cell.inputs,
+        outputs: { out: { type: "json" }, ref: { type: "ref" } },
+      };
     case "store":
       return {
         inputs: { data: { type: "json" } },

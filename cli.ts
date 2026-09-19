@@ -19,7 +19,13 @@ import { errorReport, AlgalError } from "./src/errors";
 import { vercelGatewayExecutor } from "./src/gateway";
 import { jevAsker, jevExecutor } from "./src/jev";
 import { resolveEmbedder } from "./src/embeddings";
-import { indexStore, searchIndex, snippet } from "./src/semantic";
+import {
+  indexSearcher,
+  indexStore,
+  recallExecutor,
+  searchIndex,
+  snippet,
+} from "./src/semantic";
 import {
   credentialResolver,
   credentialStatus,
@@ -89,6 +95,16 @@ function jevSpecExecutor(spec: string): Executor | undefined {
   });
 }
 
+function recallSpecExecutor(spec: string, dir: string): Executor | undefined {
+  if (spec !== "recall" && !spec.startsWith("recall:")) return undefined;
+  const embedderSpec = spec === "recall" ? "local" : spec.slice(7);
+  if (embedderSpec.length === 0) {
+    throw new AlgalError("PARSE_FAILED", "recall embedder spec must not be empty");
+  }
+  const embedder = resolveEmbedder(embedderSpec);
+  return recallExecutor(indexSearcher(dir, embedder, embedderSpec));
+}
+
 const USAGE = `algal — typed, replayable workflow organisms
 
 usage:
@@ -102,6 +118,8 @@ usage:
       --jev [model]                           TypeSafe Jev decision executor — serves
                                                 decide and classifier cells (never gates:
                                                 approvals stay host/policy-routed)
+      --recall [embedder]                     derived-index recall executor; embedder is
+                                                local or gateway[:<model>] (default local)
       --executors <file>                      JSON map of executor name → shell command;
                                               route.provider/route.preset pick by name
       --modules <dir>                         load *.algal.json into the store for organism cells
@@ -172,8 +190,8 @@ usage:
                                               run a packed organism and print a compact result:
                                               { ok, outputs, receiptDigest, manifestDigest }.
                                               options mirror algal run: --args, --responses,
-                                              --executor-cmd, --gateway-model, --executors,
-                                              --modules, --tools, --cache-effects, --dir
+                                              --executor-cmd, --gateway-model, --jev, --recall,
+                                              --executors, --modules, --tools, --cache-effects, --dir
   algal tool-def <manifest.json> [--modules <dir>]
                                               print an OpenAI/Anthropic tool definition for the
                                               organism's interface: a name, description, and a
@@ -594,6 +612,10 @@ async function main(): Promise<number> {
       if (flags.jev !== undefined) {
         executors.push(jevSpecExecutor(typeof flags.jev === "string" ? `jev:${flags.jev}` : "jev")!);
       }
+      if (flags.recall !== undefined) {
+        const spec = typeof flags.recall === "string" ? `recall:${flags.recall}` : "recall";
+        executors.push(named("recall", recallSpecExecutor(spec, dir)!));
+      }
       if (flags.executors !== undefined) {
         const map = asRecord(
           await readJson(resolve(String(flags.executors))),
@@ -609,6 +631,11 @@ async function main(): Promise<number> {
           const jev = jevSpecExecutor(cmd);
           if (jev !== undefined) {
             executors.push(named(name, jev));
+            continue;
+          }
+          const recall = recallSpecExecutor(cmd, dir);
+          if (recall !== undefined) {
+            executors.push(named(name, recall));
             continue;
           }
           const inner = commandExecutor(cmd);
@@ -858,6 +885,10 @@ async function main(): Promise<number> {
       if (flags.jev !== undefined) {
         executors.push(jevSpecExecutor(typeof flags.jev === "string" ? `jev:${flags.jev}` : "jev")!);
       }
+      if (flags.recall !== undefined) {
+        const spec = typeof flags.recall === "string" ? `recall:${flags.recall}` : "recall";
+        executors.push(named("recall", recallSpecExecutor(spec, dir)!));
+      }
       if (flags.executors !== undefined) {
         const map = asRecord(
           await readJson(resolve(String(flags.executors))),
@@ -873,6 +904,11 @@ async function main(): Promise<number> {
           const jev = jevSpecExecutor(cmd);
           if (jev !== undefined) {
             executors.push(named(name, jev));
+            continue;
+          }
+          const recall = recallSpecExecutor(cmd, dir);
+          if (recall !== undefined) {
+            executors.push(named(name, recall));
             continue;
           }
           const inner = commandExecutor(cmd);
@@ -1133,6 +1169,10 @@ async function main(): Promise<number> {
       if (flags.jev !== undefined) {
         executors.push(jevSpecExecutor(typeof flags.jev === "string" ? `jev:${flags.jev}` : "jev")!);
       }
+      if (flags.recall !== undefined) {
+        const spec = typeof flags.recall === "string" ? `recall:${flags.recall}` : "recall";
+        executors.push(named("recall", recallSpecExecutor(spec, dir)!));
+      }
       if (flags.executors !== undefined) {
         const map = asRecord(await readJson(resolve(String(flags.executors))), "executors");
         for (const [name, command] of Object.entries(map)) {
@@ -1142,6 +1182,11 @@ async function main(): Promise<number> {
           const jev = jevSpecExecutor(command);
           if (jev !== undefined) {
             executors.push(named(name, jev));
+            continue;
+          }
+          const recall = recallSpecExecutor(command, dir);
+          if (recall !== undefined) {
+            executors.push(named(name, recall));
             continue;
           }
           const inner = commandExecutor(command);
@@ -1313,6 +1358,8 @@ async function main(): Promise<number> {
         }
         const jev = jevSpecExecutor(spec);
         if (jev !== undefined) return named(id, jev);
+        const recall = recallSpecExecutor(spec, dir);
+        if (recall !== undefined) return named(id, recall);
         if (spec.startsWith("scripted:")) {
           const responses = asRecord(
             await readJson(resolve(base, spec.slice("scripted:".length))),
@@ -1325,7 +1372,7 @@ async function main(): Promise<number> {
         }
         throw new AlgalError(
           "PARSE_FAILED",
-          `bench executor "${id}": unknown spec (want gateway:<model>, jev[:<model>], scripted:<file>, or cmd:<command>)`,
+          `bench executor "${id}": unknown spec (want gateway:<model>, jev[:<model>], recall[:<embedder>], scripted:<file>, or cmd:<command>)`,
         );
       };
       const systems: BenchSystem[] = [];

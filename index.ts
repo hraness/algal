@@ -109,6 +109,7 @@ export {
   LOCAL_DIM,
   LOCAL_MODEL,
   VERCEL_GATEWAY_BASE,
+  checkEmbedderSpec,
   cosine,
   embedTokens,
   gatewayEmbedder,
@@ -120,14 +121,21 @@ export {
 export type { Embedder, GatewayEmbedderOptions } from "./src/embeddings";
 
 export {
+  RECALL_HIT_TEXT_BYTES,
   SEMANTIC_BOUNDS,
   SEMANTIC_INDEX_FILE,
+  bindRecallOutput,
+  indexSearcher,
   indexStore,
+  recallExecutor,
+  recallOutputSchema,
   searchIndex,
+  snippet,
 } from "./src/semantic";
 export type {
   ChunkSource,
   IndexReport,
+  RecallSearcher,
   SearchHit,
 } from "./src/semantic";
 
