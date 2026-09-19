@@ -74,6 +74,11 @@ pub fn interface_signature(compiled: &Compiled) -> Result<Signature> {
 }
 
 fn compatible(from: &Value, to: &Value) -> bool {
+    if from["type"] == "cap" || to["type"] == "cap" {
+        return from["type"] == "cap"
+            && to["type"] == "cap"
+            && from["capability"] == to["capability"];
+    }
     if from["type"] == "ref" || to["type"] == "ref" {
         return from["type"] == to["type"];
     }

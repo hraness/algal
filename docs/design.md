@@ -17,7 +17,9 @@ therefore safe to store, diff, embed, and verify. (From Platonik: a name is an
 inspectable definition, never a free computation.)
 
 **Ports are typed and single-assignment — unless declared `many`.** `text`,
-`json`, `choice`. A guard is either `{equals}` on a choice producer or
+`json`, `choice`, `ref`, and exact-class `cap`. A capability handle cannot
+widen into JSON or another class, and a manifest cannot mint one with `const`.
+A guard is either `{equals}` on a choice producer or
 `{field, equals}` on a json producer — routing on a record's field is
 structure too, not a reason to add a classifier. A `many` input collects
 every delivered edge in manifest order, so fan-in — including conditional
@@ -37,10 +39,20 @@ exactly those bytes, bounded. A composable view language over the whole
 program graph remains deferred; v1 views are per-cell and ancestor-only.
 
 **Agents call back through declared tools.** `cell.tools` names registry fns
-the executor may invoke mid-activation; a `{"tool","inputs"}` response runs
-the fn, appends to `context.toolLog`, and re-issues the request, bounded by
-`budget.maxTurns`. The agent gains reach only into fns the manifest declares
-— the structure carries the capability, not the prompt.
+or typed host tools the executor may invoke mid-activation; a
+`{"tool","inputs"}` response runs the admitted target, appends to
+`context.toolLog`, and re-issues the request, bounded by `budget.maxTurns`.
+The agent gains reach only into tools the manifest declares — the structure
+carries the capability, not the prompt.
+
+**Capabilities are typed values, not ambient names.** A `cap` handle enters
+through host args or a trusted driver, flows only through ports of the same
+class, and remains subject to an active host admission record. The first
+driver is a mailbox standard library over ordinary `tool` cells: separate
+send/receive rights, bounded idempotent delivery, revocation, and an empty
+receive that suspends the process. An external send plus resume is a recorded
+wakeup; verification replays the receive receipt and never consumes live state.
+Mailbox is a driver, not a new kernel cell kind.
 
 **Effects are receipts.** Request digest binds request to response. Replay
 fixes recorded receipts and re-runs the orchestration deterministically, which
@@ -107,7 +119,9 @@ receipts, the `getValue`/`putValue` CAS behind `ref` ports, the
 adapter lands when Oh's API settles (it is moving weekly). `Executor` is one
 async call; provider auth lives behind `--executor-cmd` or a host adapter.
 ALGAL never brokers model access. (From Oompa: custody and provider
-execution are different jobs.)
+execution are different jobs.) `MailboxService` is a separate host-driver seam:
+capability admissions and message state are not organism store values or bundle
+content, even when the file implementation shares the `.algal` root.
 
 **State is a cell.** A `slot` cell reads or writes a named, mutable,
 durable key in the store — memory across runs. This is the one place the

@@ -8,7 +8,9 @@
   "exports": {
     ".": "./index.ts",
     "./manifest": "./src/contract.ts",
-    "./contract": "./src/contract.ts"
+    "./contract": "./src/contract.ts",
+    "./capabilities": "./src/capabilities.ts",
+    "./mailbox": "./src/mailbox.ts"
   },
   "bin": {
     "algal": "./cli.ts"

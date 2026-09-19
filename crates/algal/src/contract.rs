@@ -1,6 +1,7 @@
 use crate::{
     Error, Result,
     canonical::{canonical, check_digest, digest},
+    capabilities::parse_capability_handle,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -147,13 +148,21 @@ pub fn ports(value: &Value, producer: bool, constant: bool) -> Result<Ports> {
         keys(
             &p,
             if constant {
-                &["type", "optional", "many", "labels", "schema", "value"]
+                &[
+                    "type",
+                    "optional",
+                    "many",
+                    "labels",
+                    "schema",
+                    "capability",
+                    "value",
+                ]
             } else {
-                &["type", "optional", "many", "labels", "schema"]
+                &["type", "optional", "many", "labels", "schema", "capability"]
             },
         )?;
         let kind = text(&p["type"], 16)?;
-        if !["text", "json", "choice", "ref"].contains(&kind) {
+        if !["text", "json", "choice", "ref", "cap"].contains(&kind) {
             return Err(Error::invalid("unknown port type"));
         }
         for flag in ["optional", "many"] {
@@ -176,6 +185,15 @@ pub fn ports(value: &Value, producer: bool, constant: bool) -> Result<Ports> {
             }
             object(schema)?;
             schema_depth(schema, 0)?;
+        }
+        if kind == "cap" {
+            id(p.get("capability")
+                .ok_or_else(|| Error::invalid("cap ports require a capability class"))?)?;
+            if constant {
+                return Err(Error::invalid("const cells cannot mint capability handles"));
+            }
+        } else if p.get("capability").is_some() {
+            return Err(Error::invalid("capability requires cap type"));
         }
         if constant && p.get("value").is_none() {
             return Err(Error::invalid("const requires value"));
@@ -765,6 +783,10 @@ pub fn check_value(port: &Value, value: &Value) -> Result<()> {
         },
         Some("ref") => {
             check_digest(text(value, 71)?)?;
+            Ok(())
+        }
+        Some("cap") => {
+            parse_capability_handle(text(value, 160)?, Some(text(&port["capability"], 64)?))?;
             Ok(())
         }
         _ => Err(Error::new("TYPE_MISMATCH", "value does not match port")),

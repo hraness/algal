@@ -5,6 +5,7 @@
 // executor seam and return as receipts. No wall-clock values are recorded:
 // a receipt is replayable bit-for-bit.
 
+import { parseCapabilityHandle } from "./capabilities";
 import { AlgalError, errorReport, type ErrorCode } from "./errors";
 import { evalProgram } from "./expr";
 import {
@@ -132,6 +133,7 @@ export type RunOptions = {
    * overwritten since; the record is authoritative. */
   replaySlots?: Record<string, { value?: JsonValue; missing?: boolean }>;
   replayToolEffects?: EffectReceipt[];
+  replayToolFallthrough?: boolean;
   /** The runtime stamp to put on the replayed receipt — `verify` passes
    * the recorded run's stamp so a receipt produced under another runtime
    * version replays bit-for-bit instead of being re-stamped. */
@@ -952,7 +954,11 @@ async function activate(
       } as unknown as JsonValue);
       emit(ctx, { kind: "effect", path, digest: requestDigest });
       const replay = ctx.toolReplay.get(requestDigest)?.shift();
-      if (!replay && ctx.opts.replayToolEffects !== undefined) {
+      if (
+        !replay &&
+        ctx.opts.replayToolEffects !== undefined &&
+        ctx.opts.replayToolFallthrough !== true
+      ) {
         throw new AlgalError("EFFECT_UNBOUND", `replay has no tool receipt for ${requestDigest}`);
       }
       if (replay) {
@@ -1003,6 +1009,7 @@ async function activate(
           requestDigest,
           error: { code: report.code === "INTERNAL" ? "TOOL_FAILED" : report.code, message: report.message },
           executor: `tool:${cell.tool}`,
+          ...(report.code === "EFFECT_SUSPENDED" ? { retryable: false as const } : {}),
         });
         if (error instanceof AlgalError) throw error;
         throw new AlgalError("TOOL_FAILED", report.message);
@@ -1422,7 +1429,11 @@ async function activate(
           } as unknown as JsonValue);
           emit(ctx, { kind: "effect", path, digest: toolDigest });
           const replay = ctx.toolReplay.get(toolDigest)?.shift();
-          if (!replay && ctx.opts.replayToolEffects !== undefined) {
+          if (
+            !replay &&
+            ctx.opts.replayToolEffects !== undefined &&
+            ctx.opts.replayToolFallthrough !== true
+          ) {
             throw new AlgalError("EFFECT_UNBOUND", `replay has no tool receipt for ${toolDigest}`);
           }
           if (replay) {
@@ -1464,6 +1475,7 @@ async function activate(
                 requestDigest: toolDigest,
                 error: { code, message: report.message },
                 executor: `tool:${call.fn}`,
+                ...(code === "EFFECT_SUSPENDED" ? { retryable: false as const } : {}),
               });
               throw new AlgalError(code, report.message);
             } finally {
@@ -1703,6 +1715,9 @@ function checkValue(v: JsonValue, decl: PortType, what: string): void {
           `${what}: expected a sha256 ref token`,
         );
       }
+      return;
+    case "cap":
+      parseCapabilityHandle(v, decl.capability, what);
       return;
     case "json":
       if (decl.schema) checkSchema(decl.schema, v, what, "TYPE_MISMATCH");

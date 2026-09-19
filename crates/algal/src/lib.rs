@@ -1,6 +1,7 @@
 pub mod acp;
 pub mod bench;
 pub mod canonical;
+pub mod capabilities;
 pub mod civilization;
 pub mod context;
 pub mod contract;
@@ -11,6 +12,7 @@ pub mod embeddings;
 pub mod error;
 pub mod foundry;
 pub mod graph;
+pub mod mailbox;
 pub mod memory;
 pub mod registry;
 pub mod runtime;

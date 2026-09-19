@@ -1,9 +1,11 @@
 use algal::{
     canonical::{canonical, digest, read_json},
+    capabilities::parse_capability_handle,
     contract::Manifest,
     effects::{Backend, Host},
     embeddings::Embedder,
     graph::{Transports, compile},
+    mailbox::{self, MailboxService},
     runtime, semantic,
     store::{Store, pack, unpack},
 };
@@ -531,6 +533,172 @@ async fn a_suspended_run_resumes_against_live_executors() {
 
 fn effects_digest(receipt: &Value) -> Value {
     receipt["effects"][0]["requestDigest"].clone()
+}
+
+#[tokio::test]
+async fn mailbox_capabilities_suspend_and_wake_a_process() {
+    let directory = tempfile::tempdir().unwrap();
+    let service = MailboxService::open(directory.path());
+    let config = service.create("worker", 1, 32).unwrap();
+    let first_key = mailbox::external_wake_key().unwrap();
+    let first = service
+        .send(&config.send, json!({"task":"one"}), &first_key)
+        .unwrap();
+    assert_eq!(
+        service
+            .send(&config.send, json!({"task":"one"}), &first_key)
+            .unwrap(),
+        first
+    );
+    assert_eq!(
+        service
+            .send(
+                &config.send,
+                json!({"task":"two"}),
+                &mailbox::external_wake_key().unwrap()
+            )
+            .unwrap_err()
+            .code,
+        "MAILBOX_FULL"
+    );
+    assert_eq!(
+        service.receive(&config.receive).unwrap(),
+        json!({"id":first["id"],"message":{"task":"one"}})
+    );
+    assert_eq!(
+        service
+            .send(&config.send, json!({"task":"one"}), &first_key)
+            .unwrap(),
+        first
+    );
+    assert_eq!(
+        service
+            .send(&config.send, json!({"task":"changed"}), &first_key)
+            .unwrap_err()
+            .code,
+        "DIGEST_MISMATCH"
+    );
+    assert_eq!(
+        service.receive(&config.receive).unwrap_err().code,
+        "EFFECT_SUSPENDED"
+    );
+
+    let manifest = Manifest::parse(&json!({
+        "contract":"algal.organism.v1",
+        "key":"organism:mailbox-receiver",
+        "name":"Mailbox receiver",
+        "cells":[
+            {"id":"source","kind":"input","outputs":{"inbox":{"type":"cap","capability":"mailbox-receive"}}},
+            {"id":"wait","kind":"tool","tool":"mailbox.receive.v1"}
+        ],
+        "edges":[
+            {"from":{"cell":"source","port":"inbox"},"to":{"cell":"wait","port":"mailbox"}}
+        ]
+    }))
+    .unwrap();
+    let mut host = Host::default();
+    host.install_mailboxes(service.clone()).unwrap();
+    let mut store = Store::default();
+    let suspended = runtime::run(
+        manifest.clone(),
+        json!({"source":{"inbox":config.receive}}),
+        &mut store,
+        &mut host,
+        &transports(),
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(suspended["outcome"], "suspended");
+    assert_eq!(suspended["cells"]["wait"]["status"], "suspended");
+    assert_eq!(suspended["effects"][0]["retryable"], false);
+    assert_eq!(
+        runtime::verify(&suspended, manifest.clone(), &store, &host)
+            .await
+            .unwrap()["ok"],
+        true
+    );
+    let wake = service
+        .send(
+            &config.send,
+            json!({"command":"continue"}),
+            &mailbox::external_wake_key().unwrap(),
+        )
+        .unwrap();
+    let resumed = runtime::resume(
+        &suspended,
+        manifest.clone(),
+        &mut store,
+        &mut host,
+        &transports(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(resumed["outcome"], "complete");
+    assert_eq!(resumed["cells"]["wait"]["outputs"]["id"], wake["id"]);
+    assert_eq!(
+        resumed["effects"][0]["requestDigest"],
+        suspended["effects"][0]["requestDigest"]
+    );
+    assert_eq!(
+        runtime::verify(&resumed, manifest, &store, &host)
+            .await
+            .unwrap()["ok"],
+        true
+    );
+    service.revoke(&config.send).unwrap();
+    assert_eq!(
+        service
+            .send(
+                &config.send,
+                Value::Null,
+                &mailbox::external_wake_key().unwrap()
+            )
+            .unwrap_err()
+            .code,
+        "CAPABILITY_DENIED"
+    );
+}
+
+#[test]
+fn mailbox_authority_files_reject_tampering_and_symlinks() {
+    let directory = tempfile::tempdir().unwrap();
+    let service = MailboxService::open(directory.path());
+    let config = service.create("audited", 8, 1_024).unwrap();
+    let parsed = parse_capability_handle(&config.send, None).unwrap();
+    let record_path = directory
+        .path()
+        .join("capabilities")
+        .join(format!("{}.json", &parsed.digest[7..]));
+    let mut record = read_json(File::open(&record_path).unwrap(), 65_536).unwrap();
+    record["mailbox"] = json!("other");
+    fs::write(&record_path, canonical(&record).unwrap()).unwrap();
+    assert_eq!(
+        service
+            .send(
+                &config.send,
+                Value::Null,
+                &mailbox::external_wake_key().unwrap()
+            )
+            .unwrap_err()
+            .code,
+        "DIGEST_MISMATCH"
+    );
+
+    #[cfg(unix)]
+    {
+        let linked = tempfile::tempdir().unwrap();
+        let outside = linked.path().join("outside");
+        fs::create_dir(&outside).unwrap();
+        std::os::unix::fs::symlink(&outside, linked.path().join("mailboxes")).unwrap();
+        assert_eq!(
+            MailboxService::open(linked.path())
+                .create("escaped", 8, 1_024)
+                .unwrap_err()
+                .code,
+            "IO_FAILED"
+        );
+    }
 }
 
 #[test]

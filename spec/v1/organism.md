@@ -42,6 +42,7 @@ rather than the host language.
 | `input` | entry point; run args supply values | declared `outputs` |
 | `const` | literal producer | `outputs` entries carry `type` + `value` |
 | `fn` | pure registered function | inherited from the host registry signature |
+| `tool` | host-admitted typed external effect | inherited from the host tool signature |
 | `expr` | bounded pure `algal.expr.v1` program carried in the manifest | declared `inputs`; one output port `out` |
 | `agent` | bounded model call | declared `inputs`; one output port `out` |
 | `classifier` | agent restricted to `choice` output | same as agent |
@@ -82,6 +83,9 @@ Every port declares one of:
   — either way routable through `on:"fail"`.
 - `choice` — a string from declared `labels`
 - `ref` — a `sha256:` digest token naming a payload in the store
+- `cap` — an opaque `cap:<class>:sha256:<digest>` handle. It must use the
+  object form `{ "type":"cap", "capability":"<safe-class>" }`; producer
+  and consumer classes must match exactly.
 
 A `ref` is a pointer, not a value: the payload never rides the edge, so it
 never enters receipts, agent contexts, or request digests — only the token
@@ -90,6 +94,14 @@ ports are fixed by the contract. A `ref` token admitted
 through `input` args or a `const` port must already resolve in the store —
 the caller mints tokens by writing the payload first; no cell can invent a
 dangling pointer.
+
+A `cap` is authority, not payload. It feeds only a `cap` port declaring the
+same class — never `json`, even though handles serialize as strings. `const`
+cells cannot produce capabilities; roots receive them through host-supplied
+input args, trusted host functions/tools may return them, and organism
+interfaces may delegate them without widening their class. The handle is an
+opaque local identifier, not a provider credential: the host must still hold
+an active admission record and may revoke it independently.
 
 ### agent / classifier / gate fields
 
@@ -398,6 +410,47 @@ re-evaluation.
   wire a read behind a write with an edge to order them, or accept
   schedule order.
 
+### Capability mailboxes and wakeups
+
+Mailboxes are host standard-library tools over the generic `tool` cell — not a
+new cell kind:
+
+```json
+{ "id":"in", "kind":"input",
+  "outputs":{"inbox":{"type":"cap","capability":"mailbox-receive"}} }
+{ "id":"wait", "kind":"tool", "tool":"mailbox.receive.v1" }
+```
+
+The host admits two typed drivers:
+
+- `mailbox.send.v1`: inputs `mailbox` (`mailbox-send` cap), `message` (`json`);
+  output `id` (`text`). The id is the digest of mailbox, idempotency key, and
+  message. A repeated tool request is one delivery, never a duplicate.
+- `mailbox.receive.v1`: input `mailbox` (`mailbox-receive` cap); outputs `id`
+  and `message`. Pending messages are selected in deterministic delivery-key
+  digest order. Receive mutates the mailbox, so both drivers declare effect
+  `write`.
+
+`algal mailbox create <name>` admits a mailbox and prints independent send and
+receive handles plus its bounds. Pending count is 1–1024 (default 64); canonical
+message bytes are 1–250,000 (default 65,536). `mailbox revoke` disables one
+handle without changing the other. Capability records, immutable message
+claims, and pending/consumed delivery markers live under the host's `--dir`;
+bundles and manifests never contain those admissions.
+
+An empty receive throws `EFFECT_SUSPENDED`. The tool attempt records
+`retryable:false`, the cell/run suspend normally, and the `algal mailbox send`
+command supplies an external wakeup from a send cap and JSON value. A caller
+may pass `--idempotency-key sha256:…` to make retries the same delivery;
+without it each invocation mints a fresh delivery key. The `algal resume`
+command filters the suspended dequeue attempt, replays any
+completed prefix tool effects, and reissues that exact receive request live.
+Its successful effect receipt records the delivered message id and value.
+`verify` serves that receipt and never opens or consumes the live mailbox.
+Immutable message claims and consumed markers are retained as host recovery
+evidence; mailbox storage accounting and garbage collection remain host
+lifecycle responsibilities.
+
 ### spawn cells
 
 ```json
@@ -494,10 +547,11 @@ re-evaluation.
   signature inputs); a required `many` port needs at least one delivery or the
   cell skips, and an optional one arrives as `[]`.
 - Type compatibility: same type; `choice` may feed `text`; `choice` feeds
-  `choice` when the consumer's labels cover the producer's; anything feeds
-  `json`; `json` feeds only `json`. `ref` feeds only `ref` — a token is not
-  the payload, so it cannot widen into `json`. For `many` ports the rules
-  apply per element.
+  `choice` when the consumer's labels cover the producer's; anything except
+  `ref`/`cap` feeds `json`; `json` feeds only `json`. `ref` feeds only `ref` —
+  a token is not the payload, so it cannot widen into `json`. `cap` feeds only
+  `cap` with the exact same capability class — authority cannot widen into
+  `json` or another class. For `many` ports the rules apply per element.
 - `"on": "fail"` marks a failure edge: it fires when the producer's
   activation *fails* and delivers the failure record `{"code","message"}`
   to the consumer, which must be a `json` port. `guard` is not valid on a
@@ -567,6 +621,13 @@ An agent/classifier/gate/decide/recall activation produces an effect request:
   "budget": {…}, "route": {…}, "questions": {…}, "recall": {…} }
 ```
 
+A host `tool` call uses `algal.tool-effect.v1` instead:
+`{contract,path,tool,effect,inputs}`. Its canonical digest is the idempotency
+key passed to the driver, and its output/error is stored in the same ordered
+run `effects` list under `executor:"tool:<name>"`. Strict verification serves
+that record; resume may replay a completed tool prefix and route only a missing
+or suspended tool request live.
+
 `questions` is present on `decide` requests only — the declared question
 map the provider must answer. Internal compaction and recall-rerank requests
 carry it too; `kind` stays `decide` while `cellId` names the owning agent or
@@ -623,7 +684,9 @@ A receipt records `manifestDigest`, `args`, `outcome`, per-cell records
 `effects` list (`requestDigest`, then `output` *or* `error` — a failed
 effect records `{code, message}` so replay reproduces it — `executor` id,
 optional usage, `cached` when the response was served from a prior run's
-record rather than executed), the bounded `events` log, the work ledger,
+record rather than executed, `retryable:false` when re-issue is forbidden,
+and `configurationDigest` for the admitted backend configuration), the bounded
+`events` log, the work ledger,
 and run-level `failure` detail. `digest` is over the canonical receipt
 minus itself.
 
@@ -637,9 +700,9 @@ receipts fix what the world returned.
 
 ### Suspension and resume
 
-An executor may decline a request with `EFFECT_SUSPENDED` — the answer is not
-ready (a gate awaiting a decision, a delegated task still pending). Suspension
-is not failure and not an answer:
+An executor or host tool may decline a request with `EFFECT_SUSPENDED` — the
+answer is not ready (a gate awaiting a decision, a delegated task still
+pending, or an empty mailbox). Suspension is not failure and not an answer:
 
 - The attempt is recorded like any effect — `error.code:"EFFECT_SUSPENDED"`,
   `retryable:false` — then the run stops cleanly: the cell records

@@ -139,8 +139,9 @@ export async function resumeRun(
     executors: [replayExecutor(continuable), ...executors],
     replayVia,
     replaySlots,
-    replayToolEffects: checkpoint.effects.filter((effect) =>
+    replayToolEffects: continuable.filter((effect) =>
       effect.executor.startsWith("tool:")),
+    replayToolFallthrough: true,
     ...(transports ? { transports } : {}),
     ...(tools ? { tools } : {}),
   });

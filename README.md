@@ -184,6 +184,12 @@ Cell kinds:
   fails, routable via `on:"fail"`), `write` stores its `data` input and
   echoes it. Reads are recorded on the receipt and served verbatim on
   replay — a live slot may have moved on since the run being verified.
+- Capability mailboxes are standard-library `tool` drivers, not a cell kind.
+  `mailbox.send.v1` takes a typed `mailbox-send` cap and message;
+  `mailbox.receive.v1` takes the independently revocable `mailbox-receive`
+  cap. An empty receive suspends the run; an external send plus `resume`
+  wakes it. Sends are idempotent by request digest, successful delivery is
+  receipted, and verification never consumes the live mailbox.
 - `spawn` — breeding, bounded to one idea. An upstream cell delivers an
   organism *manifest as data* (typically an agent's `json` output); the
   cell parses it through the ordinary contract, admits it to the store,
@@ -195,7 +201,10 @@ Cell kinds:
   depth bound: generated manifests are data, never code.
 
 Edges connect a producer port to a consumer port. Ports are typed (`text`,
-`json`, `choice`, `ref`), and a `json` port may declare a bounded `schema`
+`json`, `choice`, `ref`, `cap`). A `cap` declares its exact capability class,
+feeds only the same class, and cannot be produced by `const` or widened into
+`json`; authority enters through host args or trusted host drivers and stays
+structural. A `json` port may declare a bounded `schema`
 (`{"type","required","properties"}`, depth ≤ 4) — a delivered record that
 violates it fails the consumer's activation, routable through `on:"fail"`.
 Guarded edges fire only when the produced choice equals the
@@ -325,6 +334,11 @@ bun run cli diff .algal/runs/<a>.json .algal/runs/<b>.json
 # mint a ref for a payload — then pass the token as a "ref" arg
 bun run cli store put payload.json        # → {"ref":"sha256:…"}
 bun run cli store get sha256:…            # → the payload
+# admit separate send/receive mailbox capabilities
+bun run cli mailbox create worker         # → {send:"cap:…", receive:"cap:…"}
+bun run cli mailbox send cap:mailbox-send:sha256:… wake.json \
+  --idempotency-key sha256:…             # optional: safe command retry
+bun run cli resume .algal/runs/<suspended-receipt>.json --write
 # a portable closure: the manifest plus everything it embeds and references
 bun run cli pack examples/inbox.algal.json --modules examples > bundle.json
 bun run cli unpack bundle.json --dir /tmp/elsewhere   # installs, digests verified
@@ -541,6 +555,11 @@ name → command, so a cell's `route.provider`/`route.preset` picks its model.
   request re-issues against the currently admitted executors, and the tail
   executes live — idempotently, so a still-pending executor just suspends
   the process again.
+- Mailbox receive uses that same process boundary: an empty admitted mailbox
+  suspends, a sender holding the separate `mailbox-send` cap queues a bounded
+  wakeup, and resume reissues the exact receive. Message files are immutable,
+  send requests are idempotent, receive evidence is retained, and replay never
+  mutates the live queue. Revoking either cap fails future uses closed.
 - An agent cell's context is declared, not ambient: `view.inputs` selects its
   edge-fed inputs, and `view.cells` names ancestor cells whose committed
   records join the request under `context.cells` — optionally sliced to named
@@ -579,11 +598,14 @@ name → command, so a cell's `route.provider`/`route.preset` picks its model.
 - A receipt proves the recorded run is self-consistent and replayable. It does
   not prove the world will cooperate next time, that the model was right, or
   that a label was anything but a label.
-- `agent` cells carry no authority. Model output is data until it binds to a
-  declared contract; capabilities and provider access live at the executor,
-  which the host owns.
-- This is not a hosted orchestrator, a durable job queue, or a multi-agent
-  town. Those are later layers; the contract is designed not to need them yet.
+- `agent` cells carry no ambient authority. Model output is data until it
+  binds to a declared contract; an agent can use only capability handles
+  delivered through typed inputs and tools declared on that cell. Provider
+  access remains behind executors the host owns.
+- This is not yet a hosted orchestrator, distributed queue, or multi-agent
+  town. Capability mailboxes are bounded local durable messaging; supervision,
+  leases, migration, distributed consensus, and automatic wake scheduling are
+  later host/runtime layers.
 
 ## Plug it into your agent or provider
 
@@ -659,6 +681,12 @@ The command receives `{ inputs, requestDigest, idempotencyKey }` on stdin and
 must print a JSON object of output ports. For deterministic testing, use
 `"exec": "scripted:<data.json>"`.
 
+The CLI admits `mailbox.send.v1` and `mailbox.receive.v1` as standard tools
+without a `--tools` file. Library hosts opt in explicitly with
+`mailboxToolRegistry(service)` and may merge registries with
+`mergeToolRegistries`; possession of a correctly typed handle is still checked
+against the host's active capability records on every call.
+
 ### As an agent tool
 
 Pack an organism and register it as an OpenAI or Anthropic function tool:
@@ -703,8 +731,9 @@ describes a deployable program.
 build. Tests cover manifest parsing and bounds, graph admission (cycles, type
 mismatches, guard validity, single-assignment), scheduler semantics (ordering,
 skips, budgets, nesting), the effect seam (digest binding, output binding,
-misses), store tamper detection, and verify round trips including forged-output
-detection.
+misses), capability-class isolation, mailbox quotas/revocation/idempotency,
+suspend/wake/resume, store tamper detection, and verify round trips including
+forged-output detection.
 
 ## Deeper documentation
 
