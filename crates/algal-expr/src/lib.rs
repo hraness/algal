@@ -136,6 +136,9 @@ fn op_spec(op: &str) -> Option<OpSpec> {
         "div" => s(2, 2),
         "mod" => s(2, 2),
         "neg" => s(1, 1),
+        "min" | "max" => s(1, V),
+        "abs" | "floor" | "ceil" | "round" => s(1, 1),
+        "clamp" => s(3, 3),
         "lt" | "lte" | "gt" | "gte" | "eq" | "neq" => s(2, 2),
         "and" | "or" => s(1, V),
         "not" => s(1, 1),
@@ -149,12 +152,22 @@ fn op_spec(op: &str) -> Option<OpSpec> {
         "map" | "filter" => b(3, 3, &[1]),
         "fold" => b(5, 5, &[2, 3]),
         "contains" => s(2, 2),
+        "reverse" => s(1, 1),
+        "take" | "drop" => s(2, 2),
+        "flat" => s(1, 1),
+        "unique" => s(1, 1),
+        "sort" => s(1, 1),
         "slen" => s(1, 1),
         "sconcat" => s(1, V),
         "upper" | "lower" | "trim" => s(1, 1),
         "split" => s(2, 2),
         "join" => s(2, 2),
         "scontains" => s(2, 2),
+        "starts" | "ends" => s(2, 2),
+        "has" => s(2, 2),
+        "keys" | "values" => s(1, 1),
+        "merge" => s(1, V),
+        "toText" => s(1, 1),
         "isText" | "isNum" | "isBool" | "isList" | "isMap" | "isNull" => s(1, 1),
         "quote" => s(1, 1),
         _ => return None,
@@ -400,6 +413,14 @@ impl<'a> Eval<'a> {
         }
     }
 
+    fn object(&mut self, node: &Value, op: &str, arg: usize) -> Result<Map<String, Value>, E> {
+        let v = self.eval(node)?;
+        match v {
+            Value::Object(o) => Ok(o),
+            _ => Err(err_type(op, arg, "map", kind_of(&v))),
+        }
+    }
+
     fn boolean(&self, v: &Value, op: &str, arg: usize) -> Result<bool, E> {
         match v {
             Value::Bool(b) => Ok(*b),
@@ -452,6 +473,48 @@ impl<'a> Eval<'a> {
                     return Err(err_num(op));
                 }
                 Ok(Value::from(v))
+            }
+            "min" | "max" => {
+                let args = self.eval_args(arr)?;
+                let mut best = args[0]
+                    .as_f64()
+                    .ok_or_else(|| err_type(op, 0, "number", kind_of(&args[0])))?;
+                for (i, v) in args.iter().enumerate().skip(1) {
+                    let n = v
+                        .as_f64()
+                        .ok_or_else(|| err_type(op, i, "number", kind_of(v)))?;
+                    best = if op == "min" {
+                        best.min(n)
+                    } else {
+                        best.max(n)
+                    };
+                }
+                Ok(Value::from(best))
+            }
+            "abs" | "floor" | "ceil" | "round" => {
+                let n = self.num(arr.get(1).unwrap_or(&Value::Null), op, 0)?;
+                let r = match op {
+                    "abs" => n.abs(),
+                    "floor" => n.floor(),
+                    "ceil" => n.ceil(),
+                    // half toward +∞ — JS Math.round semantics; the
+                    // (x + 0.5).floor() form pins the spec's tie rule.
+                    _ => (n + 0.5).floor(),
+                };
+                if !r.is_finite() {
+                    return Err(err_num(op));
+                }
+                Ok(Value::from(r))
+            }
+            "clamp" => {
+                let x = self.num(arr.get(1).unwrap_or(&Value::Null), op, 0)?;
+                let lo = self.num(arr.get(2).unwrap_or(&Value::Null), op, 1)?;
+                let hi = self.num(arr.get(3).unwrap_or(&Value::Null), op, 2)?;
+                if lo > hi {
+                    return Err(ExprErr::with("EXPR_ARG", "op", op)
+                        .detail("what", "clamp lo must be <= hi"));
+                }
+                Ok(Value::from(x.max(lo).min(hi)))
             }
             // ----------------------------------------------- comparisons
             "lt" | "lte" | "gt" | "gte" => {
@@ -678,6 +741,70 @@ impl<'a> Eval<'a> {
                 }
                 Ok(Value::Bool(false))
             }
+            "reverse" => {
+                let mut items = self.list(arr.get(1).unwrap_or(&Value::Null), op, 0)?;
+                items.reverse();
+                Ok(Value::Array(items))
+            }
+            "take" | "drop" => {
+                let items = self.list(arr.get(1).unwrap_or(&Value::Null), op, 0)?;
+                let i = self.eval(arr.get(2).unwrap_or(&Value::Null))?;
+                let n = match i.as_f64() {
+                    Some(n) if n >= 0.0 && n.fract() == 0.0 => n as usize,
+                    _ => return Err(err_type(op, 1, "nonneg integer", kind_of(&i))),
+                };
+                let out: Vec<Value> = if op == "take" {
+                    items.into_iter().take(n).collect()
+                } else {
+                    items.into_iter().skip(n).collect()
+                };
+                Ok(Value::Array(out))
+            }
+            "flat" => {
+                let items = self.list(arr.get(1).unwrap_or(&Value::Null), op, 0)?;
+                let mut total = 0usize;
+                for (i, v) in items.iter().enumerate() {
+                    match v {
+                        Value::Array(a) => total += a.len(),
+                        _ => return Err(err_type(op, i, "list", kind_of(v))),
+                    }
+                }
+                self.fuel.spend(total as u64)?;
+                if total > MAX_LIST_LEN {
+                    return Err(err_bounds("list-len", MAX_LIST_LEN));
+                }
+                let mut out = Vec::with_capacity(total);
+                for v in items {
+                    if let Value::Array(a) = v {
+                        out.extend(a);
+                    }
+                }
+                Ok(Value::Array(out))
+            }
+            "unique" => {
+                let items = self.list(arr.get(1).unwrap_or(&Value::Null), op, 0)?;
+                let mut out: Vec<Value> = Vec::new();
+                for item in items {
+                    let mut dup = false;
+                    for seen in &out {
+                        self.fuel.spend(1)?;
+                        if eq_values(seen, &item) {
+                            dup = true;
+                            break;
+                        }
+                    }
+                    if !dup {
+                        out.push(item);
+                    }
+                }
+                Ok(Value::Array(out))
+            }
+            "sort" => {
+                let mut items = self.list(arr.get(1).unwrap_or(&Value::Null), op, 0)?;
+                self.fuel.spend(items.len() as u64)?;
+                items.sort_by(cmp_values);
+                Ok(Value::Array(items))
+            }
             // ---------------------------------------------------- strings
             "slen" => {
                 let s = self.string(arr.get(1).unwrap_or(&Value::Null), op, 0)?;
@@ -761,6 +888,61 @@ impl<'a> Eval<'a> {
                 self.fuel.spend(s.len() as u64)?;
                 Ok(Value::Bool(s.contains(&sub)))
             }
+            "starts" | "ends" => {
+                let s = self.string(arr.get(1).unwrap_or(&Value::Null), op, 0)?;
+                let p = self.string(arr.get(2).unwrap_or(&Value::Null), op, 1)?;
+                self.fuel.spend(s.len() as u64)?;
+                Ok(Value::Bool(if op == "starts" {
+                    s.starts_with(&p)
+                } else {
+                    s.ends_with(&p)
+                }))
+            }
+            // ---------------------------------------------------- objects
+            "has" => {
+                let o = self.object(arr.get(1).unwrap_or(&Value::Null), op, 0)?;
+                let k = self.string(arr.get(2).unwrap_or(&Value::Null), op, 1)?;
+                Ok(Value::Bool(o.contains_key(&k)))
+            }
+            "keys" | "values" => {
+                let o = self.object(arr.get(1).unwrap_or(&Value::Null), op, 0)?;
+                let mut ks: Vec<&String> = o.keys().collect();
+                // canonical key order — UTF-16 code units, array-index
+                // keys numerically first, matching the canonical layer
+                ks.sort_by(|a, b| key_order(a.as_str(), b.as_str()));
+                let out: Vec<Value> = if op == "keys" {
+                    ks.into_iter().map(|k| Value::String(k.clone())).collect()
+                } else {
+                    ks.into_iter().map(|k| o[k].clone()).collect()
+                };
+                Ok(Value::Array(out))
+            }
+            "merge" => {
+                let args = self.eval_args(arr)?;
+                let mut out = Map::new();
+                for (i, v) in args.into_iter().enumerate() {
+                    match v {
+                        Value::Object(o) => {
+                            self.fuel.spend(o.len() as u64)?;
+                            out.extend(o);
+                            if out.len() > MAX_OBJECT_KEYS {
+                                return Err(err_bounds("object-keys", MAX_OBJECT_KEYS));
+                            }
+                        }
+                        _ => return Err(err_type(op, i, "map", kind_of(&v))),
+                    }
+                }
+                Ok(Value::Object(out))
+            }
+            "toText" => {
+                let v = self.eval(arr.get(1).unwrap_or(&Value::Null))?;
+                let s = canonical(&v);
+                self.fuel.spend(s.len() as u64)?;
+                if s.len() > MAX_STRING_BYTES {
+                    return Err(err_bounds("string-bytes", MAX_STRING_BYTES));
+                }
+                Ok(Value::String(s))
+            }
             // -------------------------------------------------- predicates
             "isText" | "isNum" | "isBool" | "isList" | "isMap" | "isNull" => {
                 let v = self.eval(arr.get(1).unwrap_or(&Value::Null))?;
@@ -798,6 +980,47 @@ fn eq_values(a: &Value, b: &Value) -> bool {
                     .all(|(k, v)| y.get(k).is_some_and(|w| eq_values(v, w)))
         }
         _ => false,
+    }
+}
+
+/// Total order over JSON values for `sort` — deterministic across runtimes.
+/// Rank: null < bool < number < string < list < map. Within a rank: bools by
+/// truth, numbers by value, strings by UTF-16 code units (canonical order),
+/// lists elementwise, maps by canonical-byte order.
+fn cmp_values(a: &Value, b: &Value) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    fn rank(v: &Value) -> u8 {
+        match v {
+            Value::Null => 0,
+            Value::Bool(_) => 1,
+            Value::Number(_) => 2,
+            Value::String(_) => 3,
+            Value::Array(_) => 4,
+            Value::Object(_) => 5,
+        }
+    }
+    let r = rank(a).cmp(&rank(b));
+    if r != Ordering::Equal {
+        return r;
+    }
+    match (a, b) {
+        (Value::Bool(x), Value::Bool(y)) => x.cmp(y),
+        (Value::Number(_), Value::Number(_)) => a
+            .as_f64()
+            .partial_cmp(&b.as_f64())
+            .unwrap_or(Ordering::Equal),
+        (Value::String(x), Value::String(y)) => x.encode_utf16().cmp(y.encode_utf16()),
+        (Value::Array(x), Value::Array(y)) => {
+            for (x, y) in x.iter().zip(y.iter()) {
+                let r = cmp_values(x, y);
+                if r != Ordering::Equal {
+                    return r;
+                }
+            }
+            x.len().cmp(&y.len())
+        }
+        (Value::Object(_), Value::Object(_)) => canonical(a).cmp(&canonical(b)),
+        _ => Ordering::Equal,
     }
 }
 

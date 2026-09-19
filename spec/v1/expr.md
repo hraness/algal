@@ -65,6 +65,10 @@ coercion anywhere: a number is not a string is not a boolean.
 | `add` `mul` | 1..* | numeric sum / product; non-finite result fails |
 | `sub` `div` `mod` | 2 | numeric; `div` is float division (`7/2 → 3.5`); `mod` is truncated remainder (dividend's sign); zero divisor fails |
 | `neg` | 1 | numeric negation |
+| `min` `max` | 1..* | numeric extremes |
+| `abs` `floor` `ceil` | 1 | numeric transforms; non-finite result fails |
+| `round` | 1 | round half toward +∞ (JS `Math.round` tie rule: `-2.5 → -2`) |
+| `clamp` | 3 | `[clamp, x, lo, hi]` — `min(max(x,lo),hi)`; `lo > hi` fails |
 | `lt` `lte` `gt` `gte` | 2 | two numbers (numeric order) or two strings (UTF-16 code-unit order — the canonical key order) |
 | `eq` `neq` | 2 | structural equality: key-order-insensitive, `1 ≡ 1.0`, `-0 ≡ 0`; cross-type false |
 | `and` `or` | 1..* | strict-boolean, short-circuit |
@@ -80,12 +84,22 @@ coercion anywhere: a number is not a string is not a boolean.
 | `filter` | 3 | same shape; keeps elements whose body is `true` (strict bool) |
 | `fold` | 5 | `[fold, list, init, "acc", "item", body]` — left fold |
 | `contains` | 2 | `[contains, list, value]` — `eq` membership |
+| `reverse` | 1 | reverse an array |
+| `take` `drop` | 2 | `[take, list, n]` / `[drop, list, n]` — `n` a nonneg integer; past the end clamps |
+| `flat` | 1 | one-level flatten; every element must be a list (strict) |
+| `unique` | 1 | dedupe by `eq`, first-seen order; O(n²) in fuel |
+| `sort` | 1 | total order: null < bool < number < string < list < map — numbers by value, strings by UTF-16 code units, lists elementwise, maps by canonical bytes; stable on `eq` |
 | `slen` | 1 | string length in UTF-16 code units (JS `.length`) |
 | `sconcat` | 1..* | concatenate strings |
 | `upper` `lower` `trim` | 1 | ASCII-only case and whitespace (` \t\n\r\v\f`) transforms — deliberately not Unicode-aware |
 | `split` | 2 | `[split, string, sep]` — nonempty separator; literal split |
 | `join` | 2 | `[join, list, sep]` — elements must be strings |
 | `scontains` | 2 | substring test |
+| `starts` `ends` | 2 | prefix / suffix test |
+| `has` | 2 | `[has, map, key]` — key presence (distinguishes `null` from absent) |
+| `keys` `values` | 1 | entries in canonical key order (array-index keys numerically first, then UTF-16) |
+| `merge` | 1..* | shallow object merge, rightmost wins; result ≤ object-keys bound |
+| `toText` | 1 | canonical JSON render of any value as a string |
 | `isText` `isNum` `isBool` `isList` `isMap` `isNull` | 1 | type predicates |
 | `quote` | 1 | return the argument verbatim — data, not a call |
 
@@ -111,9 +125,10 @@ result (overflow, `0/0`) is `EXPR_NUM`.
 Fuel is a deterministic work meter: each evaluated node spends its op's
 base cost (1 for control and predicates, 2 for most, 2 + argc for `get`)
 plus the canonical byte length of values it materially produces
-(`sconcat`/`join`/`split`/`upper`/`trim`/`concat` spend their output
-size; `map`/`filter`/`fold`/`contains` spend 1 per element; `eq` spends
-operand node counts). Same program + env ⇒ same value or
+(`sconcat`/`join`/`split`/`upper`/`trim`/`concat`/`toText` spend their
+output size; `map`/`filter`/`fold`/`contains`/`sort`/`merge`/`scontains`/
+`starts`/`ends`/`flat` spend 1 per element or input byte; `unique` spends
+1 per pairwise comparison; `eq` spends operand node counts). Same program + env ⇒ same value or
 error *and* the same burn. `run` takes a caller fuel budget ≤ the
 ceiling; exhaustion is `EXPR_FUEL`. In an organism, an `expr` cell
 activation burns 100 + fuel work units and the activation budget is
@@ -128,6 +143,22 @@ All failures are `{code, ...details}` where code is one of:
 `EXPR_NUM`, `EXPR_DIV_ZERO`, `EXPR_BOUNDS` (a bound was exceeded),
 `EXPR_FUEL`. Check-time failures carry the same codes; nothing about an
 error depends on the host.
+
+## Consumers
+
+The evaluator is contract machinery, and the contract can put it anywhere
+a bounded pure program is useful. Three consumers exist today:
+
+- **`expr` cells** (below) — compute a port value from input ports.
+- **edge `guard.expr`** — an `{"expr": {…}}` guard is evaluated over
+  `{"value": delivered}` and must return a boolean; the edge fires iff
+  true. Static names are `{"value"}` only. See `organism.md` edges.
+- **foundry `scorer`** — an optional program in `algal.foundry.config.v1`
+  evaluated per case over `{"args", "expect", "outputs"}`; it must return
+  a boolean and replaces exact-match as the pass claim. See `foundry.md`.
+
+More consumers are expected — route conditions, search predicates —
+anywhere the contract currently hardcodes a predicate.
 
 ## The `expr` cell
 

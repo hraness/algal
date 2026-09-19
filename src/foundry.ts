@@ -8,6 +8,8 @@ import { runOrganism } from "./run";
 import type { Store } from "./store";
 import type { Transport } from "./transport";
 import type { ToolRegistry } from "./tools";
+import { checkProgram, evalProgram } from "./expr";
+import { BOUNDS } from "./contract";
 import { canonicalize, type JsonValue } from "./values";
 
 export const FOUNDRY_CONTRACT = "algal.foundry.v1" as const;
@@ -30,6 +32,7 @@ export type FoundryCaseResult = {
   split: "train" | "validation" | "holdout";
   passed: boolean;
   outcome: "complete" | "failed" | "stuck";
+  args: Record<string, JsonValue>;
   outputs: Record<string, JsonValue>;
   expect: Record<string, JsonValue>;
   receiptDigest: Digest;
@@ -52,9 +55,12 @@ export type FoundryReport = {
   candidates: FoundryCandidateResult[];
   promoted: Digest;
   holdout: { passed: number; total: number; cases: FoundryCaseResult[] };
+  scorer?: FoundryScorer;
   lineage?: FoundryLineage;
   digest: Digest;
 };
+
+export type FoundryScorer = { contract: "algal.expr.v1"; program: JsonValue };
 
 export type FoundryLineage = {
   generatorDigest: Digest;
@@ -69,6 +75,7 @@ export type FoundryOptions = {
   executors: Executor[];
   transports?: Record<string, Transport>;
   tools?: ToolRegistry;
+  scorer?: FoundryScorer;
   lineage?: FoundryLineage;
 };
 
@@ -93,6 +100,12 @@ function fail(message: string): never {
 }
 
 function validate(opts: FoundryOptions): void {
+  if (opts.scorer !== undefined) {
+    const c = checkProgram(opts.scorer.program, ["args", "expect", "outputs"]);
+    if (!c.ok) {
+      throw new AlgalError("SCORER_INVALID", `scorer ${canonicalize(c.err)}`);
+    }
+  }
   if (opts.candidates.length === 0) fail("foundry requires at least one candidate");
   if (opts.candidates.length > FOUNDRY_BOUNDS.maxCandidates) {
     fail(`foundry candidates exceed ${FOUNDRY_BOUNDS.maxCandidates}`);
@@ -180,6 +193,32 @@ export function selectFoundryCandidate(candidates: FoundryCandidateResult[]): Di
   return [...candidates].sort(better)[0]!.manifestDigest;
 }
 
+// An expr scorer replaces exact-match with a bounded program over
+// {args, expect, outputs} — fitness as data. A thrown or non-boolean
+// scorer is a config bug: the eval hard-fails SCORER_INVALID rather than
+// silently flunking the case.
+export function evalScorer(
+  scorer: FoundryScorer,
+  c: Pick<FoundryCase, "args" | "expect">,
+  outputs: Record<string, JsonValue>,
+): boolean {
+  const r = evalProgram(
+    scorer.program,
+    { args: c.args, expect: c.expect, outputs },
+    BOUNDS.maxExprFuel,
+  );
+  if (!r.ok) {
+    throw new AlgalError("SCORER_INVALID", `scorer ${canonicalize(r.err)}`);
+  }
+  if (typeof r.value !== "boolean") {
+    throw new AlgalError(
+      "SCORER_INVALID",
+      `scorer must produce boolean, got ${canonicalize(r.value)}`,
+    );
+  }
+  return r.value;
+}
+
 async function evaluateCase(
   candidate: OrganismManifest,
   c: FoundryCase,
@@ -206,8 +245,11 @@ async function evaluateCase(
   return {
     id: c.id,
     split: c.split,
-    passed: receipt.outcome === "complete" && canonicalize(outputs) === canonicalize(c.expect),
+    passed: receipt.outcome === "complete" && (opts.scorer !== undefined
+      ? evalScorer(opts.scorer, c, outputs)
+      : canonicalize(outputs) === canonicalize(c.expect)),
     outcome: receipt.outcome,
+    args: c.args,
     outputs,
     expect: c.expect,
     receiptDigest,
@@ -331,6 +373,7 @@ export async function runFoundry(opts: FoundryOptions): Promise<FoundryReport> {
     candidates,
     promoted,
     holdout: { ...holdoutScore, cases: holdoutCases },
+    ...(opts.scorer ? { scorer: opts.scorer } : {}),
     ...(opts.lineage ? { lineage: opts.lineage } : {}),
   };
   return { ...base, digest: digestCanonical(base as unknown as JsonValue) };

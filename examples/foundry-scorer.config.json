@@ -1,0 +1,37 @@
+{
+  "contract": "algal.foundry.config.v1",
+  "candidates": [
+    "foundry-constant.algal.json",
+    "foundry-echo.algal.json"
+  ],
+  "cases": [
+    {
+      "id": "train-alpha",
+      "split": "train",
+      "args": { "q": "alpha" },
+      "expect": { "answer": "alpha" }
+    },
+    {
+      "id": "train-beta",
+      "split": "train",
+      "args": { "q": "beta" },
+      "expect": { "answer": "beta" }
+    },
+    {
+      "id": "validation-gamma",
+      "split": "validation",
+      "args": { "q": "gamma" },
+      "expect": { "answer": "gamma" }
+    },
+    {
+      "id": "holdout-delta",
+      "split": "holdout",
+      "args": { "q": "delta" },
+      "expect": { "answer": "delta" }
+    }
+  ],
+  "scorer": {
+    "contract": "algal.expr.v1",
+    "program": ["eq", ["get", "outputs", "answer"], ["get", "args", "q"]]
+  }
+}

@@ -85,6 +85,7 @@ pub struct Config {
     pub generator: Option<Generator>,
     pub cases: Vec<FoundryCase>,
     pub search: Option<Search>,
+    pub scorer: Option<Value>,
 }
 
 /// Parse a `algal.foundry.config.v1` file: candidate manifest paths,
@@ -94,7 +95,14 @@ pub fn load_config(path: &Path, search_mode: bool) -> Result<Config> {
     let config = read_json(File::open(path)?, 1_048_576)?;
     keys(
         &config,
-        &["contract", "candidates", "generator", "cases", "search"],
+        &[
+            "contract",
+            "candidates",
+            "generator",
+            "cases",
+            "search",
+            "scorer",
+        ],
     )?;
     if config["contract"] != "algal.foundry.config.v1" {
         return Err(Error::invalid(
@@ -106,6 +114,14 @@ pub fn load_config(path: &Path, search_mode: bool) -> Result<Config> {
             "search settings require the foundry search command",
         ));
     }
+    // Contract-level validation before any file IO.
+    let scorer = if config["scorer"].is_null() {
+        None
+    } else {
+        let scorer = config["scorer"].clone();
+        check_scorer(&scorer)?;
+        Some(scorer)
+    };
     let base = path.parent().unwrap_or(Path::new("."));
     let mut candidates = Vec::new();
     if let Some(entries) = config["candidates"].as_array() {
@@ -217,6 +233,7 @@ pub fn load_config(path: &Path, search_mode: bool) -> Result<Config> {
         generator,
         cases,
         search,
+        scorer,
     })
 }
 
@@ -293,9 +310,63 @@ fn usage_of(effects: &[Value]) -> Value {
     json!({"tokensIn":tokens_in,"tokensOut":tokens_out})
 }
 
+/// `BOUNDS.maxExprFuel` in src/contract.ts — same budget the runtime gives
+/// expr cells and edge guards.
+const MAX_EXPR_FUEL: u64 = 100_000;
+
+/// An `algal.expr.v1` scorer program replaces exact-match with a bounded
+/// predicate over {"args","expect","outputs"} — fitness as data. A thrown
+/// or non-boolean scorer is a config bug and fails SCORER_INVALID.
+fn eval_scorer(program: &Value, case: &FoundryCase, outputs: &Value) -> Result<bool> {
+    let mut env = Map::new();
+    env.insert("args".to_owned(), case.args.clone());
+    env.insert("expect".to_owned(), case.expect.clone());
+    env.insert("outputs".to_owned(), outputs.clone());
+    match algal_expr::run(program, &env, MAX_EXPR_FUEL) {
+        Ok((Value::Bool(b), _)) => Ok(b),
+        Ok((value, _)) => Err(Error::new(
+            "SCORER_INVALID",
+            format!("scorer must produce boolean, got {}", canonical(&value)?),
+        )),
+        Err((e, _)) => Err(Error::new(
+            "SCORER_INVALID",
+            format!("scorer {}", canonical(&e.to_json())?),
+        )),
+    }
+}
+
+/// Same predicate on a recorded report case (id/split/passed extra).
+fn eval_scorer_record(program: &Value, case: &Value) -> Result<bool> {
+    let mapped = FoundryCase {
+        id: case["id"].as_str().unwrap_or("").to_owned(),
+        split: case["split"].as_str().unwrap_or("").to_owned(),
+        args: case["args"].clone(),
+        expect: case["expect"].clone(),
+    };
+    eval_scorer(program, &mapped, &case["outputs"])
+}
+
+fn check_scorer(scorer: &Value) -> Result<()> {
+    keys(scorer, &["contract", "program"])?;
+    if scorer["contract"] != "algal.expr.v1" {
+        return Err(Error::invalid("scorer.contract must be algal.expr.v1"));
+    }
+    let names: BTreeSet<String> = ["args", "expect", "outputs"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    algal_expr::check_program(&scorer["program"], &names).map_err(|e| {
+        Error::new(
+            "SCORER_INVALID",
+            format!("scorer {}", canonical(&e.to_json()).unwrap_or_default()),
+        )
+    })
+}
+
 async fn evaluate_case(
     manifest: &Manifest,
     case: &FoundryCase,
+    scorer: Option<&Value>,
     store: &mut Store,
     host: &mut Host,
     transports: &Transports,
@@ -312,13 +383,18 @@ async fn evaluate_case(
     let reference = store.put("runs", &receipt)?;
     let outputs = runtime::outputs(manifest, &receipt)?;
     let outcome = receipt["outcome"].as_str().unwrap_or("");
-    let passed = outcome == "complete" && canonical(&outputs)? == canonical(&case.expect)?;
+    let passed = outcome == "complete"
+        && match scorer {
+            Some(scorer) => eval_scorer(&scorer["program"], case, &outputs)?,
+            None => canonical(&outputs)? == canonical(&case.expect)?,
+        };
     let effects = receipt["effects"].as_array().cloned().unwrap_or_default();
     Ok(json!({
         "id":case.id,
         "split":case.split,
         "passed":passed,
         "outcome":outcome,
+        "args":case.args,
         "outputs":outputs,
         "expect":case.expect,
         "receiptDigest":reference,
@@ -382,13 +458,14 @@ pub fn select(candidates: &[Value]) -> Result<String> {
 async fn evaluate_cases(
     manifest: &Manifest,
     cases: &[&FoundryCase],
+    scorer: Option<&Value>,
     store: &mut Store,
     host: &mut Host,
     transports: &Transports,
 ) -> Result<Vec<Value>> {
     let mut results = Vec::with_capacity(cases.len());
     for case in cases {
-        results.push(evaluate_case(manifest, case, store, host, transports).await?);
+        results.push(evaluate_case(manifest, case, scorer, store, host, transports).await?);
     }
     Ok(results)
 }
@@ -398,6 +475,7 @@ async fn evaluate_cases(
 pub async fn evaluate_population(
     candidates: &[Manifest],
     cases: &[FoundryCase],
+    scorer: Option<&Value>,
     store: &mut Store,
     host: &mut Host,
     transports: &Transports,
@@ -408,7 +486,7 @@ pub async fn evaluate_population(
     for candidate in candidates {
         let manifest_digest = store.admit(candidate)?;
         let evaluated =
-            evaluate_cases(candidate, &selection_cases, store, host, transports).await?;
+            evaluate_cases(candidate, &selection_cases, scorer, store, host, transports).await?;
         let mut work = json!({"steps":0,"agentCalls":0,"units":0});
         let mut usage = json!({"tokensIn":0,"tokensOut":0});
         for case in &evaluated {
@@ -442,20 +520,24 @@ pub async fn evaluate_population(
 pub async fn run(
     candidates: &[Manifest],
     cases: &[FoundryCase],
+    scorer: Option<&Value>,
     lineage: Option<(String, String)>,
     store: &mut Store,
     host: &mut Host,
     transports: &Transports,
 ) -> Result<Value> {
     check_interfaces(candidates, cases)?;
+    if let Some(scorer) = scorer {
+        check_scorer(scorer)?;
+    }
     let (results, promoted) =
-        evaluate_population(candidates, cases, store, host, transports).await?;
+        evaluate_population(candidates, cases, scorer, store, host, transports).await?;
     let winner = candidates
         .iter()
         .find(|candidate| candidate.digest().ok().as_deref() == Some(promoted.as_str()))
         .ok_or_else(|| Error::invalid("promoted candidate missing"))?;
     let holdout_cases: Vec<&FoundryCase> = cases.iter().filter(|c| c.split == "holdout").collect();
-    let evaluated = evaluate_cases(winner, &holdout_cases, store, host, transports).await?;
+    let evaluated = evaluate_cases(winner, &holdout_cases, scorer, store, host, transports).await?;
     let mut report = json!({
         "contract":"algal.foundry.v1",
         "candidates":results,
@@ -466,6 +548,9 @@ pub async fn run(
             "cases":evaluated,
         },
     });
+    if let Some(scorer) = scorer {
+        report["scorer"] = scorer.clone();
+    }
     if let Some((generator_digest, receipt_digest)) = lineage {
         report["lineage"] =
             json!({"generatorDigest":generator_digest,"receiptDigest":receipt_digest});
@@ -596,11 +681,13 @@ fn shrunk(selection: &[Value]) -> Vec<Value> {
 /// seeded with the previous winner and the prior selection fed back
 /// through `search.feedback_input`; the final epoch replays the surviving
 /// population for a sealed-holdout report.
+#[allow(clippy::too_many_arguments)]
 pub async fn search(
     generator: &Generator,
     seeds: &[Manifest],
     cases: &[FoundryCase],
     spec: &Search,
+    scorer: Option<&Value>,
     store: &mut Store,
     host: &mut Host,
     transports: &Transports,
@@ -647,7 +734,7 @@ pub async fn search(
         }
         check_interfaces(&population, cases)?;
         let (selection, promoted) =
-            evaluate_population(&population, cases, store, host, transports).await?;
+            evaluate_population(&population, cases, scorer, store, host, transports).await?;
         generations.push(json!({
             "generation":generation,
             "generatorDigest":generator_digest,
@@ -683,6 +770,7 @@ pub async fn search(
     let result = run(
         &final_population,
         cases,
+        scorer,
         Some((generator_digest, receipt_digest)),
         store,
         host,
@@ -707,6 +795,7 @@ fn parse_case_result(value: &Value, at: &str) -> Result<()> {
             "split",
             "passed",
             "outcome",
+            "args",
             "outputs",
             "expect",
             "receiptDigest",
@@ -726,6 +815,7 @@ fn parse_case_result(value: &Value, at: &str) -> Result<()> {
         return Err(Error::invalid(format!("{at}.passed must be boolean")));
     }
     text(&value["id"], MAX_ID)?;
+    object(&value["args"])?;
     object(&value["outputs"])?;
     object(&value["expect"])?;
     sha(&value["receiptDigest"], &format!("{at}.receiptDigest"))?;
@@ -759,12 +849,16 @@ pub fn parse_report(report: &Value) -> Result<()> {
             "candidates",
             "promoted",
             "holdout",
+            "scorer",
             "lineage",
             "digest",
         ],
     )?;
     if report["contract"] != "algal.foundry.v1" {
         return Err(Error::invalid("foundry.contract must be algal.foundry.v1"));
+    }
+    if let Some(scorer) = report.get("scorer") {
+        check_scorer(scorer)?;
     }
     sha(&report["promoted"], "foundry.promoted")?;
     sha(&report["digest"], "foundry.digest")?;
@@ -836,11 +930,14 @@ pub fn parse_report(report: &Value) -> Result<()> {
     Ok(())
 }
 
-fn expected_pass(case: &Value) -> Result<bool> {
-    Ok(
-        case["outcome"] == "complete"
-            && canonical(&case["outputs"])? == canonical(&case["expect"])?,
-    )
+fn expected_pass(case: &Value, scorer: Option<&Value>) -> Result<bool> {
+    if case["outcome"] != "complete" {
+        return Ok(false);
+    }
+    match scorer {
+        Some(scorer) => eval_scorer_record(&scorer["program"], case),
+        None => Ok(canonical(&case["outputs"])? == canonical(&case["expect"])?),
+    }
 }
 
 fn check_score(
@@ -848,6 +945,7 @@ fn check_score(
     cases: &[Value],
     split: &str,
     claimed: &Value,
+    scorer: Option<&Value>,
     mismatches: &mut Vec<String>,
 ) -> Result<()> {
     let selected: Vec<&Value> = cases
@@ -862,8 +960,13 @@ fn check_score(
     }
     for case in selected {
         let id = case["id"].as_str().unwrap_or("");
-        if case["passed"].as_bool() != Some(expected_pass(case)?) {
-            mismatches.push(format!("{label} case {id} has an invalid pass claim"));
+        match expected_pass(case, scorer) {
+            Ok(expected) => {
+                if case["passed"].as_bool() != Some(expected) {
+                    mismatches.push(format!("{label} case {id} has an invalid pass claim"));
+                }
+            }
+            Err(e) => mismatches.push(format!("{label} case {id} scorer error: {e}")),
         }
     }
     Ok(())
@@ -952,15 +1055,24 @@ pub async fn verify(report: &Value, store: &Store, tools: &Host) -> Result<Value
     if select(&candidates)? != report["promoted"].as_str().unwrap_or("") {
         mismatches.push("promoted digest is not the deterministic winner".into());
     }
+    let scorer = report.get("scorer");
     for candidate in &candidates {
         let key = candidate["manifestKey"].as_str().unwrap_or("");
         let cases = candidate["cases"].as_array().cloned().unwrap_or_default();
-        check_score(key, &cases, "train", &candidate["train"], &mut mismatches)?;
+        check_score(
+            key,
+            &cases,
+            "train",
+            &candidate["train"],
+            scorer,
+            &mut mismatches,
+        )?;
         check_score(
             key,
             &cases,
             "validation",
             &candidate["validation"],
+            scorer,
             &mut mismatches,
         )?;
         if cases.iter().any(|c| c["split"].as_str() == Some("holdout")) {
@@ -996,6 +1108,7 @@ pub async fn verify(report: &Value, store: &Store, tools: &Host) -> Result<Value
         &holdout_cases,
         "holdout",
         &report["holdout"],
+        scorer,
         &mut mismatches,
     )?;
     if holdout_cases

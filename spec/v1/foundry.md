@@ -10,7 +10,7 @@ A foundry run admits 1–32 distinct candidate manifests and 1–256 uniquely na
 - `validation` — evidence used to select a candidate.
 - `holdout` — run exactly once against the promoted candidate; never run against the rest of the population.
 
-A case passes only when its run completes and the candidate's canonical interface output record equals `expect`. Promotion orders candidates by validation pass rate, train pass rate, ascending agent calls, ascending work units, then manifest digest.
+A case passes only when its run completes and the scorer accepts. The default scorer is exact match: the candidate's canonical interface output record must equal `expect`. A `algal.foundry.config.v1` may instead carry `"scorer"` — an `algal.expr.v1` program evaluated over `{"args", "expect", "outputs"}` that must return a boolean. A thrown or non-boolean scorer is a config bug and fails `SCORER_INVALID`; a dead edge is the only way a guard says no, and likewise a scorer that crashes says nothing — the run fails. Promotion orders candidates by validation pass rate, train pass rate, ascending agent calls, ascending work units, then manifest digest.
 
 ## Candidate generation
 
@@ -25,10 +25,11 @@ A report contains:
 - `candidates` — manifest identity, train and validation scores, aggregate work, and case evidence;
 - `promoted` — the deterministic winner's manifest digest;
 - `holdout` — case evidence for the promoted manifest only;
+- `scorer` — optional `algal.expr.v1` scorer the pass claims were made under;
 - `lineage` — optional generator manifest and run-receipt digests;
 - `digest` — the canonical digest of every preceding report field.
 
-Each case records its split, expected and actual interface outputs, outcome, pass claim, work, aggregate input/output token usage, and stored run-receipt digest. Candidate records aggregate work and usage across selection cases. Candidate manifests, generator manifests, and all referenced run receipts live in the host store.
+Each case records its split, interface args, expected and actual interface outputs, outcome, pass claim, work, aggregate input/output token usage, and stored run-receipt digest. Candidate records aggregate work and usage across selection cases. Candidate manifests, generator manifests, and all referenced run receipts live in the host store.
 
 ## Verification
 

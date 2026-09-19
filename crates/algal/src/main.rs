@@ -994,6 +994,7 @@ async fn execute(cli: Cli) -> Result<bool> {
                         &config.candidates,
                         &config.cases,
                         search,
+                        config.scorer.as_ref(),
                         &mut store,
                         &mut host,
                         &transports,
@@ -1036,6 +1037,7 @@ async fn execute(cli: Cli) -> Result<bool> {
                     let report = algal::foundry::run(
                         &config.candidates,
                         &config.cases,
+                        config.scorer.as_ref(),
                         lineage,
                         &mut store,
                         &mut host,

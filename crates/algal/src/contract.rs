@@ -504,10 +504,27 @@ impl Manifest {
                 id(&edge[end]["port"])?;
             }
             if let Some(guard) = edge.get("guard") {
-                keys(guard, &["equals", "field"])?;
-                text(&guard["equals"], 64)?;
-                if let Some(field) = guard.get("field") {
-                    id(field)?;
+                keys(guard, &["equals", "field", "expr"])?;
+                if let Some(expr) = guard.get("expr") {
+                    if guard.get("equals").is_some() || guard.get("field").is_some() {
+                        return Err(Error::invalid("guard expr cannot mix with equals/field"));
+                    }
+                    keys(expr, &["contract", "program"])?;
+                    if expr["contract"] != "algal.expr.v1" {
+                        return Err(Error::invalid("guard expr.contract must be algal.expr.v1"));
+                    }
+                    if expr.get("program").is_none() {
+                        return Err(Error::invalid("guard expr.program is required"));
+                    }
+                    let names = BTreeSet::from(["value".to_string()]);
+                    algal_expr::check_program(&expr["program"], &names).map_err(|e| {
+                        Error::invalid(format!("guard expr program: {}", e.to_json()))
+                    })?;
+                } else {
+                    text(&guard["equals"], 64)?;
+                    if let Some(field) = guard.get("field") {
+                        id(field)?;
+                    }
                 }
             }
             if edge.get("on").is_some_and(|v| v != "fail") {

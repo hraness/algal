@@ -96,6 +96,56 @@ describe("scheduler", () => {
     expect(r.cells["only-a"]?.outputs?.value).toBe("A: a");
   });
 
+  test("expr guards predicate on any producer type and replay exactly", async () => {
+    const shape = (program: unknown) => ({
+      contract: "algal.organism.v1",
+      key: "organism:expr-guard",
+      name: "ExprGuard",
+      cells: [
+        { id: "src", kind: "input", outputs: { n: "json" } },
+        { id: "sink", kind: "fn", fn: "echo.v1" },
+      ],
+      edges: [
+        {
+          from: { cell: "src", port: "n" },
+          to: { cell: "sink", port: "value" },
+          guard: { expr: { contract: "algal.expr.v1", program } },
+        },
+      ],
+    });
+    // fires on the delivered number — a producer type equals/field
+    // guards cannot predicate on at all
+    const fires = manifest(
+      shape(["and", ["gte", ["get", "value"], 10], ["isNum", ["get", "value"]]]),
+    );
+    const big = await run(fires, { args: { src: { n: 60 } } });
+    expect(big.cells.sink?.status).toBe("committed");
+    expect(big.cells.sink?.outputs?.value).toBe(60);
+    const small = await run(fires, { args: { src: { n: 3 } } });
+    expect(small.cells.sink?.status).toBe("skipped");
+    // a thrown guard is a manifest bug — the run hard-fails GUARD_INVALID
+    const boom = manifest(shape(["div", 1, ["get", "value", "missing"]]));
+    const e1 = await run(boom, { args: { src: { n: 1 } } }).then(
+      () => null,
+      (e: unknown) => e as AlgalError,
+    );
+    expect(e1?.code).toBe("GUARD_INVALID");
+    // non-boolean guard result fails the same way
+    const notBool = manifest(shape(["add", ["get", "value"], 1]));
+    const e2 = await run(notBool, { args: { src: { n: 1 } } }).then(
+      () => null,
+      (e: unknown) => e as AlgalError,
+    );
+    expect(e2?.code).toBe("GUARD_INVALID");
+    // guard burns replay identically under verify
+    const v = await verifyReceipt(
+      big as unknown as JsonValue,
+      manifestToJson(fires),
+      new MemoryStore(),
+    );
+    expect(v.ok).toBe(true);
+  });
+
   test("agent cells get bounded context and commit typed output", async () => {
     const m = manifest({
       contract: "algal.organism.v1",

@@ -195,6 +195,102 @@ describe("foundry", () => {
     expect(await store.getReceipt(result.candidates[1]!.cases[1]!.receiptDigest!)).toBeDefined();
   });
 
+  test("expr scorer replaces exact-match and flows through verify", async () => {
+    const store = new MemoryStore();
+    // scorer: "the answer must be 'a'" — constant passes every case,
+    // echo only the train case; exact-match would promote echo instead.
+    const scorer = {
+      contract: "algal.expr.v1" as const,
+      program: ["eq", ["get", "outputs", "answer"], "a"],
+    };
+    const cases = [
+      { id: "train-a", split: "train" as const, args: { q: "a" }, expect: { answer: "a" } },
+      { id: "validation-b", split: "validation" as const, args: { q: "b" }, expect: { answer: "b" } },
+      { id: "holdout-c", split: "holdout" as const, args: { q: "c" }, expect: { answer: "c" } },
+    ];
+    const result = await runFoundry({
+      candidates: [constant, echo],
+      cases,
+      fns: builtinRegistry(),
+      store,
+      executors: [],
+      scorer,
+    });
+
+    expect(result.scorer).toEqual(scorer);
+    expect(result.promoted).toBe(result.candidates[0]!.manifestDigest);
+    expect(result.candidates[0]!.validation.passed).toBe(1);
+    expect(result.candidates[1]!.validation.passed).toBe(0);
+    expect(result.holdout.passed).toBe(1);
+    // args landed on the case records — the report is self-contained
+    expect(result.holdout.cases[0]?.args).toEqual({ q: "c" });
+
+    const verified = await verifyFoundryReport(result, store, builtinRegistry());
+    expect(verified.ok).toBe(true);
+
+    // a tampered scorer changes the recomputed pass claims
+    const tampered = structuredClone(result);
+    tampered.scorer!.program = ["eq", ["get", "outputs", "answer"], ["get", "args", "q"]];
+    const { digest: _d, ...tBase } = tampered;
+    tampered.digest = digestCanonical(tBase as never);
+    const rejected = await verifyFoundryReport(tampered, store, builtinRegistry());
+    expect(rejected.ok).toBe(false);
+    expect(rejected.mismatches.some((m) => m.includes("invalid pass claim"))).toBe(true);
+  });
+
+  test("scorer sees args, expect, and outputs; errors are SCORER_INVALID", async () => {
+    const store = new MemoryStore();
+    // relational scorer: answer must echo the input arg
+    const result = await runFoundry({
+      candidates: [echo],
+      cases: [
+        { id: "train-a", split: "train", args: { q: "a" }, expect: { answer: "zzz" } },
+        { id: "validation-b", split: "validation", args: { q: "b" }, expect: { answer: "zzz" } },
+        { id: "holdout-c", split: "holdout", args: { q: "c" }, expect: { answer: "zzz" } },
+      ],
+      fns: builtinRegistry(),
+      store,
+      executors: [],
+      scorer: {
+        contract: "algal.expr.v1",
+        program: ["eq", ["get", "outputs", "answer"], ["get", "args", "q"]],
+      },
+    });
+    // expect mismatches don't matter — the scorer defined success
+    expect(result.candidates[0]!.train.passed).toBe(1);
+    expect(result.holdout.passed).toBe(1);
+
+    const base = {
+      candidates: [echo],
+      cases: [
+        { id: "train", split: "train" as const, args: { q: "a" }, expect: { answer: "a" } },
+        { id: "validation", split: "validation" as const, args: { q: "b" }, expect: { answer: "b" } },
+        { id: "holdout", split: "holdout" as const, args: { q: "c" }, expect: { answer: "c" } },
+      ],
+      fns: builtinRegistry(),
+      store,
+      executors: [],
+    };
+    // unbound name fails static check at validate()
+    const err1 = await runFoundry({
+      ...base,
+      scorer: { contract: "algal.expr.v1", program: ["get", "nope"] },
+    }).catch((e) => e);
+    expect(err1.code).toBe("SCORER_INVALID");
+    // non-boolean result fails at eval
+    const err2 = await runFoundry({
+      ...base,
+      scorer: { contract: "algal.expr.v1", program: ["get", "outputs", "answer"] },
+    }).catch((e) => e);
+    expect(err2.code).toBe("SCORER_INVALID");
+    // thrown expr (div by zero on case data) also fails SCORER_INVALID
+    const err3 = await runFoundry({
+      ...base,
+      scorer: { contract: "algal.expr.v1", program: ["div", 1, 0] },
+    }).catch((e) => e);
+    expect(err3.code).toBe("SCORER_INVALID");
+  });
+
   test("rejects duplicate case ids and candidates without interfaces", async () => {
     const noInterface = parseOrganismManifest({
       contract: "algal.organism.v1",
