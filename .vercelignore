@@ -1,0 +1,13 @@
+.git
+.vercel
+.env
+.env.*
+node_modules
+target
+site/dist
+.algal
+coverage
+promoted
+civ
+*.log
+.DS_Store
