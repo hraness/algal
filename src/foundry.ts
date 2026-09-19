@@ -8,8 +8,7 @@ import { runOrganism } from "./run";
 import type { Store } from "./store";
 import type { Transport } from "./transport";
 import type { ToolRegistry } from "./tools";
-import { checkProgram, evalProgram } from "./expr";
-import { BOUNDS } from "./contract";
+import { checkProgram, evalScorer, type ExprScorer } from "./expr";
 import { canonicalize, type JsonValue } from "./values";
 
 export const FOUNDRY_CONTRACT = "algal.foundry.v1" as const;
@@ -60,7 +59,8 @@ export type FoundryReport = {
   digest: Digest;
 };
 
-export type FoundryScorer = { contract: "algal.expr.v1"; program: JsonValue };
+export type FoundryScorer = ExprScorer;
+export { evalScorer };
 
 export type FoundryLineage = {
   generatorDigest: Digest;
@@ -191,32 +191,6 @@ function better(a: FoundryCandidateResult, b: FoundryCandidateResult): number {
 export function selectFoundryCandidate(candidates: FoundryCandidateResult[]): Digest {
   if (candidates.length === 0) fail("foundry requires at least one candidate result");
   return [...candidates].sort(better)[0]!.manifestDigest;
-}
-
-// An expr scorer replaces exact-match with a bounded program over
-// {args, expect, outputs} — fitness as data. A thrown or non-boolean
-// scorer is a config bug: the eval hard-fails SCORER_INVALID rather than
-// silently flunking the case.
-export function evalScorer(
-  scorer: FoundryScorer,
-  c: Pick<FoundryCase, "args" | "expect">,
-  outputs: Record<string, JsonValue>,
-): boolean {
-  const r = evalProgram(
-    scorer.program,
-    { args: c.args, expect: c.expect, outputs },
-    BOUNDS.maxExprFuel,
-  );
-  if (!r.ok) {
-    throw new AlgalError("SCORER_INVALID", `scorer ${canonicalize(r.err)}`);
-  }
-  if (typeof r.value !== "boolean") {
-    throw new AlgalError(
-      "SCORER_INVALID",
-      `scorer must produce boolean, got ${canonicalize(r.value)}`,
-    );
-  }
-  return r.value;
 }
 
 async function evaluateCase(

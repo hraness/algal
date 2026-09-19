@@ -10,6 +10,7 @@ import type { OrganismManifest } from "./contract";
 import { digestCanonical, type Digest } from "./digest";
 import type { EffectReceipt, Executor } from "./effects";
 import { AlgalError } from "./errors";
+import { checkProgram, evalScorer, type ExprScorer } from "./expr";
 import type { FnRegistry } from "./registry";
 import { runOrganism } from "./run";
 import type { Store } from "./store";
@@ -56,6 +57,9 @@ export type BenchOptions = {
    * Attribution keys are `usage.model` (e.g. "alibaba/qwen3.5-flash")
    * or `effect.executor` for tool/scripted runs. */
   prices?: Record<string, BenchPrice>;
+  /** Optional `algal.expr.v1` scorer: replaces exact-match as the pass
+   * claim — the same bounded predicate foundry selects under. */
+  scorer?: ExprScorer;
 };
 
 /** Effect attribution: calls, tokens, and optional cost grouped by the
@@ -102,6 +106,8 @@ export type BenchReport = {
   cases: BenchCase[];
   /** Optional USD-per-1M-token price card used to compute `cost`. */
   prices?: Record<string, BenchPrice> | undefined;
+  /** The scorer program pass claims were made under, when not exact-match. */
+  scorer?: ExprScorer;
   systems: BenchSystemResult[];
   /** Non-dominated system ids (passed ↑, cost signal ↓, calls ↓). */
   pareto: string[];
@@ -113,6 +119,12 @@ function fail(message: string): never {
 }
 
 function validate(opts: BenchOptions): void {
+  if (opts.scorer !== undefined) {
+    const c = checkProgram(opts.scorer.program, ["args", "expect", "outputs"]);
+    if (!c.ok) {
+      throw new AlgalError("SCORER_INVALID", `scorer ${canonicalize(c.err)}`);
+    }
+  }
   if (opts.systems.length === 0) fail("bench requires at least one system");
   if (opts.systems.length > BENCH_BOUNDS.maxSystems) {
     fail(`bench systems exceed ${BENCH_BOUNDS.maxSystems}`);
@@ -246,7 +258,9 @@ async function evaluateCase(
   const { usage, attribution } = attribute(receipt.effects, opts.prices);
   return {
     id: c.id,
-    passed: receipt.outcome === "complete" && canonicalize(outputs) === canonicalize(c.expect),
+    passed: receipt.outcome === "complete" && (opts.scorer !== undefined
+      ? evalScorer(opts.scorer, c, outputs)
+      : canonicalize(outputs) === canonicalize(c.expect)),
     outcome: receipt.outcome,
     outputs,
     expect: c.expect,
@@ -336,5 +350,6 @@ export async function runBenchmark(opts: BenchOptions): Promise<BenchReport> {
     pareto: benchPareto(systems, opts.prices !== undefined),
   };
   if (opts.prices !== undefined) base.prices = opts.prices;
+  if (opts.scorer !== undefined) base.scorer = opts.scorer;
   return { ...base, digest: digestCanonical(base as unknown as JsonValue) };
 }

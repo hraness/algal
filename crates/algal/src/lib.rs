@@ -11,6 +11,7 @@ pub mod graph;
 pub mod memory;
 pub mod registry;
 pub mod runtime;
+pub mod scorer;
 pub mod store;
 pub mod suite;
 

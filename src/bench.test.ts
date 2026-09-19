@@ -185,6 +185,89 @@ describe("bench", () => {
     expect(again.mismatches.some((m) => m.includes("invalid pass claim") || m.includes("passed does not match"))).toBe(true);
   });
 
+  test("an expr scorer replaces exact-match and verifies offline", async () => {
+    const store = new MemoryStore();
+    const scorer = {
+      contract: "algal.expr.v1" as const,
+      program: [
+        "or",
+        ["eq", ["get", "outputs", "out"], ["get", "expect", "out"]],
+        ["eq", ["get", "outputs", "out"], "other"],
+      ],
+    };
+    const report = await runBenchmark({
+      fns: builtinRegistry(),
+      store,
+      cases,
+      scorer,
+      systems: [
+        {
+          id: "cheap-single",
+          manifest: single,
+          executors: [
+            metered("cheap", "qwen-flash", { route: ["billing", "technical", "billing", "other"] }, CHEAP),
+          ],
+        },
+        {
+          id: "frontier-single",
+          manifest: single,
+          executors: [
+            metered("frontier", "claude-opus", { route: ["billing", "technical", "billing", "technical"] }, FRONTIER),
+          ],
+        },
+      ],
+    });
+    // 'other' counts as acceptable under the scorer: the cheap system's t4
+    // miss against exact-match passes here — 4/4, not 3/4.
+    expect(report.scorer).toEqual(scorer);
+    const byId = new Map(report.systems.map((s) => [s.id, s]));
+    expect(byId.get("cheap-single")!.passed).toBe(4);
+    expect(byId.get("frontier-single")!.passed).toBe(4);
+    const verified = await verifyBenchReport(report, store, builtinRegistry());
+    expect(verified.ok).toBe(true);
+    expect(verified.mismatches).toEqual([]);
+
+    // a tampered scorer program flips recomputed claims even when the
+    // report digest is recomputed over the forgery
+    const tampered = JSON.parse(canonicalize(report as unknown as JsonValue)) as {
+      scorer: { program: JsonValue };
+      digest?: string;
+    };
+    tampered.scorer.program = ["eq", ["get", "outputs", "out"], "other"];
+    const { digestCanonical } = await import("./digest");
+    const { digest: _d, ...base } = tampered as Record<string, JsonValue> & { digest: string };
+    tampered.digest = digestCanonical(base as JsonValue);
+    const again = await verifyBenchReport(tampered, store, builtinRegistry());
+    expect(again.ok).toBe(false);
+    expect(again.mismatches.some((m) => m.includes("invalid pass claim"))).toBe(true);
+  });
+
+  test("invalid scorers fail at admission and at eval", async () => {
+    const store = new MemoryStore();
+    const cheap = metered("cheap", "qwen-flash", { route: ["billing"] }, CHEAP);
+    const oneCase = [cases[0]!];
+    // unbound name: static check fails before any run
+    await expect(
+      runBenchmark({
+        fns: builtinRegistry(),
+        store,
+        cases: oneCase,
+        scorer: { contract: "algal.expr.v1", program: ["eq", ["get", "bogus"], true] },
+        systems: [{ id: "a", manifest: single, executors: [cheap] }],
+      }),
+    ).rejects.toMatchObject({ code: "SCORER_INVALID" });
+    // non-boolean result: fails at eval, mid-run
+    await expect(
+      runBenchmark({
+        fns: builtinRegistry(),
+        store,
+        cases: oneCase,
+        scorer: { contract: "algal.expr.v1", program: ["get", "outputs", "out"] },
+        systems: [{ id: "a", manifest: single, executors: [cheap] }],
+      }),
+    ).rejects.toMatchObject({ code: "SCORER_INVALID" });
+  });
+
   test("validation: bounds, unique ids, and interface coverage", async () => {
     const store = new MemoryStore();
     const fns = builtinRegistry();

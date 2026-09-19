@@ -146,6 +146,27 @@ describe("scheduler", () => {
     expect(v.ok).toBe(true);
   });
 
+  test("verify preserves the recorded runtime stamp across versions", async () => {
+    const m = manifest(chain);
+    const receipt = await run(m, { args: { src: { v: "hi" } } });
+    // a receipt stamped by a different runtime version must still replay
+    // bit-for-bit — the stamp is part of the record, not re-derived
+    const foreign = JSON.parse(JSON.stringify(receipt)) as {
+      runtime: { name: string; version: string };
+      digest: `sha256:${string}`;
+    } & Record<string, JsonValue>;
+    foreign.runtime = { name: "algal", version: "9.9.9" };
+    const { digest: _d, ...rest } = foreign;
+    foreign.digest = digestCanonical(rest as unknown as JsonValue);
+    const v = await verifyReceipt(
+      foreign as unknown as JsonValue,
+      manifestToJson(m),
+      new MemoryStore(),
+    );
+    expect(v.ok).toBe(true);
+    expect(v.digest).toBe(foreign.digest);
+  });
+
   test("agent cells get bounded context and commit typed output", async () => {
     const m = manifest({
       contract: "algal.organism.v1",

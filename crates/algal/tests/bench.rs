@@ -10,12 +10,13 @@ fn repo() -> PathBuf {
 async fn bundled_bench_runs_and_verifies_offline() {
     let directory = tempfile::tempdir().unwrap();
     let mut store = Store::open(directory.path(), true).unwrap();
-    let (cases, systems, prices) =
-        bench::load_config(&repo().join("examples/bench.config.json"), None).unwrap();
+    let config = bench::load_config(&repo().join("examples/bench.config.json"), None).unwrap();
+    assert!(config.scorer.is_none());
     let report = bench::run(
-        &cases,
-        &systems,
-        prices,
+        &config.cases,
+        &config.systems,
+        config.prices,
+        config.scorer.as_ref(),
         &mut store,
         &Host::default(),
         &Transports::new(),
@@ -55,12 +56,12 @@ async fn bundled_bench_runs_and_verifies_offline() {
 async fn verify_rejects_a_tampered_report() {
     let directory = tempfile::tempdir().unwrap();
     let mut store = Store::open(directory.path(), true).unwrap();
-    let (cases, systems, prices) =
-        bench::load_config(&repo().join("examples/bench.config.json"), None).unwrap();
+    let config = bench::load_config(&repo().join("examples/bench.config.json"), None).unwrap();
     let report = bench::run(
-        &cases,
-        &systems,
-        prices,
+        &config.cases,
+        &config.systems,
+        config.prices,
+        config.scorer.as_ref(),
         &mut store,
         &Host::default(),
         &Transports::new(),
@@ -83,6 +84,73 @@ async fn verify_rejects_a_tampered_report() {
     assert!(mismatches.contains("digest"), "{mismatches}");
     assert!(mismatches.contains("pareto"), "{mismatches}");
     assert!(mismatches.contains("passed"), "{mismatches}");
+}
+
+#[tokio::test]
+async fn expr_scorer_replaces_exact_match_and_verifies() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut store = Store::open(directory.path(), true).unwrap();
+    let config =
+        bench::load_config(&repo().join("examples/bench-scorer.config.json"), None).unwrap();
+    assert!(config.scorer.is_some());
+    let report = bench::run(
+        &config.cases,
+        &config.systems,
+        config.prices.clone(),
+        config.scorer.as_ref(),
+        &mut store,
+        &Host::default(),
+        &Transports::new(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(report["scorer"], config.scorer.clone().unwrap());
+    // the scorer counts "other" as acceptable: cheap's t4 miss under
+    // exact-match passes here, so both systems go 4/4 — and scripted
+    // backends report no usage, so nothing separates them on cost.
+    let totals: Vec<(String, u64)> = report["systems"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| {
+            (
+                s["id"].as_str().unwrap().to_owned(),
+                s["passed"].as_u64().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        totals,
+        vec![
+            ("cheap-single".to_owned(), 4),
+            ("frontier-single".to_owned(), 4),
+        ]
+    );
+    assert_eq!(report["pareto"], json!(["cheap-single", "frontier-single"]));
+    let verified = bench::verify(&report, &store, &Host::default())
+        .await
+        .unwrap();
+    assert_eq!(verified["ok"], true, "{verified}");
+    assert_eq!(verified["checkedReceipts"], 8);
+
+    // a tampered scorer program flips recomputed claims even when the
+    // report digest is recomputed over the forgery
+    let mut tampered = report.clone();
+    tampered["scorer"]["program"] = json!(["eq", ["get", "outputs", "out"], "other"]);
+    tampered.as_object_mut().unwrap().remove("digest");
+    tampered["digest"] = json!(algal::canonical::digest(&tampered).unwrap());
+    let again = bench::verify(&tampered, &store, &Host::default())
+        .await
+        .unwrap();
+    assert_eq!(again["ok"], false);
+    let mismatches = again["mismatches"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|m| m.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(mismatches.contains("invalid pass claim"), "{mismatches}");
 }
 
 #[test]
