@@ -2788,7 +2788,7 @@ describe("json port schemas", () => {
     });
     expect(r.outcome).toBe("failed");
     expect(r.cells["sink"]?.failure?.code).toBe("TYPE_MISMATCH");
-    expect(r.cells["sink"]?.failure?.message).toContain("severity");
+    expect(r.cells["sink"]?.failure?.message).toBe("missing required field");
   });
 
   test("a schema violation is routable via on:fail", async () => {

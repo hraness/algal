@@ -147,6 +147,14 @@ an active admission record and may revoke it independently.
 - `output` is `{"kind":"text"}`, `{"kind":"json","schema":{…}}` (a bounded
   schema subset: `type`, `required`, `properties`, depth ≤ 4), or
   `{"kind":"choice","labels":[…],"onMiss"?}`.
+  JSON output may be an object, array, string, number, integer, boolean, or
+  null when the schema declares that type. An omitted `type` defaults to
+  `object`. The VM checks `required` and declared `properties` recursively
+  within the existing schema-depth bound. Declared properties are checked in
+  UTF-8 lexicographic key order so failure evidence is independent of source
+  key order. Other keywords, including
+  `additionalProperties`, `maxLength`, `items`, and `enum`, are retained
+  provider hints; they are not VM-enforced constraints or replay guarantees.
 - `route` is a hint the executor may honor. It grants nothing by itself.
   `route.provider` and `route.preset` select among host-supplied executors by
   id (`<name>` or `provider:<name>` / `preset:<name>`). Selection is
@@ -179,14 +187,23 @@ an active admission record and may revoke it independently.
   triage to a different provider than the cell — a cheap decision backend
   can compact while a frontier model runs the agent. A compaction effect
   failure is recorded like any other and fails the cell.
-- `budget.maxEffectMs` (1–600 000) bounds each effect call wall-clock. On
-  expiry the call records `{code:"BUDGET_EXHAUSTED"}` like any other failed
-  effect — `retry` re-issues, `on:"fail"` routes, replay reproduces it.
-  Receipts never record the clock itself: the bound is enforcement, not data.
-- `retry` (optional, agent/classifier/gate) is `{"attempts": 2..8}`. A failed
-  effect — executor error, over-bound output, or contract-violating
-  response — is recorded with its request digest and the *same* request
-  re-issued, up to `attempts` per turn. Every attempt counts against
+- `budget.maxEffectMs` (1–600 000) supplies a per-effect timeout enforced
+  at the host executor boundary. Receipts never record the clock itself.
+  A settled timeout records `{code:"BUDGET_EXHAUSTED"}`; retry requires an
+  executor that permits it. A timeout does not prove an operation never ran.
+  Unknown completion in a journaled process leaves an uncertain intent and
+  blocks settlement; it does not manufacture a failed receipt or authorize
+  another dispatch. For the native Apple adapter, one I/O deadline covers
+  stdin delivery and response waiting after bridge startup. Process startup
+  is outside that bound, and concurrent calls using the same configured
+  bridge path fail before submission instead of queueing.
+- `retry` (optional, agent/classifier/gate) is `{"attempts": 2..8}`. A settled
+  failed effect — executor error, over-bound output, or contract-violating
+  response — is recorded with its request digest. When the executor permits
+  retry, the *same* request is re-issued up to `attempts` per turn. A
+  `retryable:false` effect ends that retry loop. The native Apple adapter
+  never automatically retries an effect or downgrades its schema by issuing
+  another generation. Every attempt counts against
   `maxAgentCalls` and the work ledger; exhaustion fails the cell (routable
   through `on:"fail"`). Since attempts share a request digest, the receipt's
   effects list is ordered: replay serves them in order and reproduces the
@@ -758,3 +775,23 @@ individually.
 
 - Cycles and streaming re-activation (organisms are DAGs in v1).
 - Distributed process supervision and network mailbox transport.
+
+## Schema-validation compatibility
+
+Bun now enforces the same recursive `type`, `required`, and `properties`
+subset as the native runtime. Previously, Bun accepted some outputs with a
+wrong root type or missing/incorrect nested fields. It also rejected valid
+primitive or integer JSON outputs that native accepted. The correction does
+not turn unsupported provider hints into runtime constraints.
+
+This changes replay for receipts affected by those bugs: an invalid output
+formerly accepted may now fail verification, and a formerly rejected valid
+output may replay as success. Preserve the original receipt and its matching
+runtime when analyzing historical execution; do not rewrite retained evidence
+to make it pass. Schema failure messages and property-validation order now
+match native too, so newly created successful and failed receipts can replay
+across both runtimes. Older Bun schema-failure receipts may therefore require
+the original runtime even when their rejection was valid. Native failures with
+multiple invalid properties may also need their original runtime and source
+key order; native now checks properties in a deterministic order. This
+correction does not relax exact replay or ignore diagnostic differences.

@@ -1,0 +1,9 @@
+{
+  "change": "Add a portable evidence export command for a local agent process.",
+  "reportedChecks": {
+    "unit": "passed",
+    "integration": "passed",
+    "securityReview": "pending"
+  },
+  "operatorNote": "No deployment is requested. The draft will be published only to a local outbox after review."
+}

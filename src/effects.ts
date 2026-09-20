@@ -370,12 +370,6 @@ export function bindOutput(
       return raw;
     }
     case "json": {
-      if (raw === null || typeof raw !== "object") {
-        throw new AlgalError(
-          "EFFECT_UNPARSEABLE",
-          `cell "${cellId}": expected json object output`,
-        );
-      }
       checkSchema(output.schema, raw, `cell "${cellId}" output`);
       return raw;
     }
@@ -392,57 +386,50 @@ export function bindOutput(
 }
 
 /** The bounded schema subset `{type, required, properties}` — used for
- * agent json output contracts and `json` port `schema` declarations. */
+ * agent json output contracts and `json` port `schema` declarations.
+ * Manifest admission bounds schema depth. Other schema keywords are retained
+ * provider hints, not constraints enforced by the VM. */
 export function checkSchema(
   schema: JsonObject,
   value: JsonValue,
-  what: string,
+  _what: string,
   code: "EFFECT_UNPARSEABLE" | "TYPE_MISMATCH" = "EFFECT_UNPARSEABLE",
 ): void {
-  const type = typeof schema.type === "string" ? schema.type : undefined;
-  if (type === "object" || type === undefined) {
-    if (value === null || typeof value !== "object" || Array.isArray(value)) {
-      throw new AlgalError(code, `${what}: expected object`);
-    }
-    const required = Array.isArray(schema.required) ? schema.required : [];
-    const props =
-      schema.properties !== null && typeof schema.properties === "object"
-        ? (schema.properties as JsonObject)
-        : {};
-    for (const r of required) {
-      if (typeof r === "string" && !(r in (value as JsonObject))) {
-        throw new AlgalError(
-          code,
-          `${what}: missing required key "${r}"`,
-        );
-      }
-    }
-    for (const [k, v] of Object.entries(value as JsonObject)) {
-      const sub = props[k];
-      if (sub !== null && typeof sub === "object" && !Array.isArray(sub)) {
-        checkSchemaValue(sub as JsonObject, v, `${what}.${k}`, code);
-      }
+  const type = typeof schema.type === "string" ? schema.type : "object";
+  const matches =
+    (type === "string" && typeof value === "string") ||
+    (type === "number" && typeof value === "number") ||
+    (type === "integer" && typeof value === "number" && Number.isInteger(value)) ||
+    (type === "boolean" && typeof value === "boolean") ||
+    (type === "array" && Array.isArray(value)) ||
+    (type === "object" && value !== null && typeof value === "object" && !Array.isArray(value)) ||
+    (type === "null" && value === null);
+  if (!matches) throw new AlgalError(code, `expected ${type}`);
+  const values = value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as JsonObject : undefined;
+  const required = Array.isArray(schema.required) ? schema.required : [];
+  for (const key of required) {
+    // Match native's bounded text parser, including the input-side parse code.
+    const parseCode = code === "TYPE_MISMATCH" ? "PARSE_FAILED" : code;
+    if (typeof key !== "string") throw new AlgalError(parseCode, "expected text");
+    if (key.length > 64) throw new AlgalError(parseCode, "text exceeds bound");
+    if (values === undefined || !Object.prototype.hasOwnProperty.call(values, key)) {
+      throw new AlgalError(code, "missing required field");
     }
   }
-}
-
-function checkSchemaValue(
-  schema: JsonObject,
-  value: JsonValue,
-  what: string,
-  code: "EFFECT_UNPARSEABLE" | "TYPE_MISMATCH",
-): void {
-  const t = typeof schema.type === "string" ? schema.type : undefined;
-  const ok =
-    t === undefined ||
-    (t === "string" && typeof value === "string") ||
-    (t === "number" && typeof value === "number") ||
-    (t === "boolean" && typeof value === "boolean") ||
-    (t === "array" && Array.isArray(value)) ||
-    (t === "object" && value !== null && typeof value === "object" && !Array.isArray(value)) ||
-    (t === "null" && value === null);
-  if (!ok) {
-    throw new AlgalError(code, `${what}: expected ${t}`);
+  const props = schema.properties !== null && typeof schema.properties === "object" && !Array.isArray(schema.properties)
+    ? schema.properties as JsonObject : undefined;
+  if (values === undefined || props === undefined) return;
+  // Native schema validation visits properties in UTF-8 order. Diagnostic choice
+  // is receipt data, so use that same order, including non-BMP property names.
+  const keys = Object.keys(props).sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(values, key)) {
+      const sub = props[key];
+      const nested = sub !== null && typeof sub === "object" && !Array.isArray(sub)
+        ? sub as JsonObject : {};
+      checkSchema(nested, values[key]!, _what, code);
+    }
   }
 }
 

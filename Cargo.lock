@@ -96,9 +96,10 @@ dependencies = [
 
 [[package]]
 name = "apple-foundation"
-version = "0.1.2"
-source = "git+https://github.com/hraness/apple-foundation?tag=v0.1.2#6886cf5cf712c2d8a1fda73176c5fe98e4ec4272"
+version = "0.1.3"
+source = "git+https://github.com/hraness/apple-foundation?tag=v0.1.3#18f82c61338623a95310a829d589cdf0a067ccd4"
 dependencies = [
+ "serde",
  "serde_json",
 ]
 

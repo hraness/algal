@@ -1,0 +1,6 @@
+{
+  "recommend": {
+    "summary": "The change adds portable process evidence export; unit and integration checks are reported as passed.",
+    "reviewFocus": "Security review is still pending and a human must review the report before local publication."
+  }
+}

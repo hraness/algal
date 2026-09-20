@@ -16,7 +16,8 @@ compatible macOS/Xcode; it is not part of the portable CLI package.
 ## Verify and install
 
 Download the target's `.tar.gz` and matching `.tar.gz.sha256` from the same
-GitHub release. Each archive contains `bin/algal`, `LICENSE`, `release.json`,
+[GitHub release](https://github.com/hraness/algal/releases). The native workbench
+requires `v0.2.0-vm.6` or newer. Each archive contains `bin/algal`, `LICENSE`, `release.json`,
 and `smoke.py`. The metadata records the source commit, release tag, native
 version, clean source state, Rust toolchain, target, binary digest, and smoke result.
 The adjacent `.release.json` manifest also binds the archive filename and SHA-256.
@@ -29,8 +30,8 @@ For example, with a reviewed checkout at the release tag:
 
 ```sh
 sh scripts/install-native.sh "$HOME/.local" \
-  --archive ./algal-v0.2.0-vm.3-aarch64-apple-darwin.tar.gz \
-  --checksum ./algal-v0.2.0-vm.3-aarch64-apple-darwin.tar.gz.sha256
+  --archive ./algal-v0.2.0-vm.7-aarch64-apple-darwin.tar.gz \
+  --checksum ./algal-v0.2.0-vm.7-aarch64-apple-darwin.tar.gz.sha256
 "$HOME/.local/bin/algal" doctor
 ```
 
