@@ -62,7 +62,7 @@ test("loaded compiler options reproduce the digest-bound executable module closu
     expect(loaded.modules).toHaveLength(1);
     expect(loaded.modules[0]?.name).toBe("echo");
     expect(loaded.analysis).toEqual({ maxAgentCalls: 0, requiredDepth: 1 });
-    expect(compileSource(loaded.source, loaded.compilerOptions)).toEqual({ manifest: loaded.manifest, sourceMap: loaded.sourceMap, modules: loaded.modules, analysis: loaded.analysis });
+    expect(compileSource(loaded.source, loaded.compilerOptions)).toEqual({ manifest: loaded.manifest, sourceMap: loaded.sourceMap, modules: loaded.modules, analysis: loaded.analysis, project: loaded.project });
     await writeFile(join(directory, "child.algal"), 'program echo(message: text) -> text { budget { max_agent_calls: 0 } return "changed" }');
     expect((await loadSourceProject(join(directory, "entry.algal"))).sourceMap.manifestDigest).not.toBe(loaded.sourceMap.manifestDigest);
   });

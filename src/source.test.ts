@@ -487,3 +487,26 @@ test("composition rejects invalid argument records, alias shadowing and effects 
   expect(() => compileSource(source('"ok"').replace("email: text", "draft: text"), { modules: { "draft.algal": childText } })).toThrow(/shadows/);
   expect(() => compileSource(source('"ok"').replace('return "ok"', 'let draft = "bad" return "ok"'), { modules: { "draft.algal": childText } })).toThrow(/immutable/);
 });
+
+test("project source origins retain per-call file identity outside executable digests", () => {
+  const same = 'program same() -> text { budget { max_agent_calls: 0 } return "value" }';
+  const source = `import a from "./a.algal" import b from "./b.algal" program root(flag: json) -> text {
+    budget { max_agent_calls: 0 } let first = call a using {}
+    return if flag { call b using {} } else { first }
+  }`;
+  const modules = { "a.algal": same, "b.algal": `// alternate origin\n${same}` };
+  const compilation = compileSource(source, { entry: "main.algal", modules });
+  expect(Object.keys(compilation.project.units)).toEqual(["a.algal", "b.algal", "main.algal"]);
+  expect(compilation.project.entry).toBe("main.algal");
+  expect(compilation.project.units["a.algal"]?.manifestDigest).toBe(compilation.project.units["b.algal"]?.manifestDigest);
+  expect(compilation.project.calls.map(call => [call.source, call.cellId, call.childSource])).toEqual([
+    ["main.algal", "b1-first", "a.algal"], ["main.algal", "branch-1-arm-1", "b.algal"],
+  ]);
+  const guarded = compilation.project.calls[1]!;
+  expect(guarded.wrapper?.innerCellId).toBe("call");
+  expect(compilation.modules.some(module => module.cells.some(cell => cell.kind === "organism" && cell.id === "call" && cell.manifest === guarded.childManifestDigest))).toBe(true);
+  const reformatted = compileSource(`// root comment\n${source}`, { modules });
+  expect(reformatted.sourceMap.manifestDigest).toBe(compilation.sourceMap.manifestDigest);
+  expect(reformatted.sourceMap.sourceDigest).not.toBe(compilation.sourceMap.sourceDigest);
+  expect(reformatted.project.units["main.algal"]?.cells[0]?.span.start.line).not.toBe(compilation.project.units["main.algal"]?.cells[0]?.span.start.line);
+});

@@ -373,6 +373,55 @@ executable digest to match before using source annotations. For compiled JSON,
 the equivalent CLI option is `diagram manifest.json --source program.algal`.
 Persisted source-map labels alone are not trusted as evidence of source meaning.
 
+## Locate a recorded failure
+
+`diagnose` reads a receipt and the original source project without running a
+model, replaying effects, or changing the receipt:
+
+```sh
+bun cli.ts diagnose ratios.receipt.json \
+  --source examples/source/projects/ratios/ratios.algal --format text
+# Default output is JSON; --out writes an independent diagnostic artifact.
+```
+
+The `algal.source-diagnostics.v1` report identifies the root manifest,
+supplied entry source, and original receipt, plus one terminal issue when present.
+Each resolved location also includes its own file's source digest.
+A failure points to its exact execution path and source expression, with up
+to eight caller frames. A suspension is reported as a suspension. A complete
+run has no terminal issue, even if it handled earlier cell failures. The
+recorded failure message is clipped to 512 characters; each source excerpt
+is at most three lines and 320 characters. The report does not expand inputs,
+model contexts, or effect payloads. Failure messages and source text retain
+their recorded contents and may themselves contain sensitive text.
+
+```ts
+const project = await loadSourceProject(entryPath);
+const report = diagnoseSource(receipt, project.source, project.compilerOptions);
+console.log(renderSourceDiagnostics(report));
+```
+
+The original sources are recompiled. A mismatched root executable or receipt
+self-digest is rejected; persisted source-map labels are never trusted.
+The report says `digest-bound`: this establishes association and integrity,
+not successful replay or provider attestation. Use `verify` for replay.
+Formatting-only source changes can keep the same executable digest while
+moving line numbers; source digests identify the supplied text revision.
+Unresolvable or absent failure paths remain explicitly unavailable, rather
+than being assigned a guessed source location. Displayed paths are capped at
+1,024 characters with `pathTruncated` set when clipping occurs. Successful diagnosis exits 0
+even when the inspected run failed; invalid arguments or artifacts exit
+nonzero.
+
+Compilation also returns `project`, a deterministic source index containing
+the entry key, per-file source maps, and structured call origins. Calls record
+the actual imported file even when two files compile to the same manifest
+digest. Generated wrappers are represented explicitly. For lower-level
+inspection, `createSourceTrace(source, options)` constructs an immutable
+compiler-derived context; `resolveSourcePath(context, path, "cell")` or
+`"invocation"` follows manifest call boundaries and bounded item indices.
+Serialized or modified tracing contexts are not accepted as source evidence.
+
 ## Scope
 
 Local subprogram calls and bounded `each` are available in source. Bounded

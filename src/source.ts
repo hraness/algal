@@ -18,7 +18,7 @@ export const SOURCE_PROJECT_BOUNDS = Object.freeze({
 });
 /** Changing these defaults or the model-visible envelope changes compilation. */
 export const SOURCE_PROFILE = Object.freeze({
-  id: "algal.source.profile.v1", compilerVersion: "1.2.0",
+  id: "algal.source.profile.v1", compilerVersion: "1.3.0",
   budgets: Object.freeze({ maxSteps: 256, maxAgentCalls: 0, maxWork: 1_000_000,
     maxContextBytes: 65_536, maxOutputBytes: 65_536, maxDepth: 4 }),
   exprFuel: BOUNDS.maxExprFuel,
@@ -38,12 +38,26 @@ export type SourceMap = {
   cells: { cellId: string; role: string; span: SourceSpan; annotation?: SourceAnnotation }[];
 };
 export type SourceCompilerOptions = { entry?: string; modules?: Readonly<Record<string, string>> };
+export type SourceCallOrigin = {
+  source: string;
+  cellId: string;
+  childSource: string;
+  childManifestDigest: Digest;
+  wrapper?: { manifestDigest: Digest; innerCellId: string };
+};
+export type SourceProjectIndex = {
+  entry: string;
+  units: Record<string, SourceMap>;
+  calls: SourceCallOrigin[];
+};
 export type SourceCompilation = {
   manifest: OrganismManifest;
   sourceMap: SourceMap;
   /** Reachable dependency closure, child before parent, excluding the root. */
   modules: OrganismManifest[];
   analysis: { maxAgentCalls: number; requiredDepth: number };
+  /** Compiler-derived origins, outside executable manifest identity. */
+  project: SourceProjectIndex;
 };
 export type SourceImport = { path: string; alias: string; span: SourceSpan };
 export class SourceError extends AlgalError {
@@ -264,7 +278,8 @@ class Parser {
 type Type = { kind: "text"; literal?: string } | { kind: "json" | "number" | "boolean" | "null" | "list" } | { kind: "choice" | "decision"; labels: string[] } | { kind: "record"; fields: Map<string, Type> };
 type Reference = { cell: string; port: string; type: Type };
 type Pure = { program: JsonValue; type: Type; refs: Map<string, Reference> };
-type CompiledModule = SourceCompilation & { program: SourceProgram; importDepth: number };
+type CompiledUnit = Omit<SourceCompilation, "project"> & { calls: SourceCallOrigin[] };
+type CompiledModule = CompiledUnit & { program: SourceProgram; importDepth: number; sourceKey: string };
 const isText = (t: Type): boolean => t.kind === "text" || t.kind === "choice";
 function port(type: Type): PortType { return type.kind === "choice" ? { type: "choice", labels: type.labels } : { type: isText(type) ? "text" : "json" }; }
 function output(type: Type): AgentOutput {
@@ -337,9 +352,10 @@ class Compiler {
   private calls = 0;
   private requiredDepth = 0;
   private readonly modules = new Map<Digest, OrganismManifest>();
+  private readonly callOrigins: SourceCallOrigin[] = [];
   private branches = 0;
   private readonly controls: { selector: Reference; label: string }[] = [];
-  constructor(private readonly parser: Parser, private readonly imports: ReadonlyMap<string, CompiledModule>) {}
+  constructor(private readonly parser: Parser, private readonly imports: ReadonlyMap<string, CompiledModule>, private readonly sourceKey: string) {}
   private add(cell: Cell, span: Span, role: string, sourceAnnotation: SourceAnnotation, guarded = true): void {
     if (this.cells.length >= BOUNDS.maxCells) this.parser.fail("lowered cell limit exceeded", span);
     // Each newly created arm cell is gated, even a constant or an effect's pure
@@ -570,6 +586,8 @@ class Compiler {
     this.calls += child.analysis.maxAgentCalls * (expr.kind === "each" ? expr.maxItems : 1);
     this.requiredDepth = Math.max(this.requiredDepth, depth);
     const compositionId = expr.kind === "each" ? `${id}-each` : id;
+    this.callOrigins.push({ source: this.sourceKey, cellId: compositionId, childSource: child.sourceKey, childManifestDigest: child.sourceMap.manifestDigest,
+      ...(manifestDigest !== child.sourceMap.manifestDigest ? { wrapper: { manifestDigest, innerCellId: "call" } } : {}) });
     this.wire(compositionId, refs);
     const cell: Cell = expr.kind === "call" ? { id, kind: "organism", manifest: manifestDigest }
       : { id: compositionId, kind: "each", manifest: manifestDigest, over: expr.over.toLowerCase().replaceAll("_", "-"), maxItems: expr.maxItems };
@@ -588,7 +606,7 @@ class Compiler {
     }
     return { cell: id, port: "result", type: { kind: child.program.output } };
   }
-  compile(program: SourceProgram): SourceCompilation {
+  compile(program: SourceProgram): CompiledUnit {
     const inputs: PortMap = {}; const interfaceInputs: Record<string, { cell: string; port: string }> = {};
     this.parser.unique(program.parameters.map(p => p.name), "parameter", program);
     for (const param of program.parameters) {
@@ -614,7 +632,7 @@ class Compiler {
     let manifest: OrganismManifest;
     try { manifest = parseOrganismManifest({ contract: "algal.organism.v1", key: `organism:${program.name.replaceAll("_", "-")}`, name: program.name, budgets: program.budgets, interface: { inputs: interfaceInputs, outputs: { result: { cell: result.cell, port: result.port } } }, cells: this.cells, edges: this.edges }); }
     catch (error) { if (error instanceof AlgalError) this.parser.fail(`lowered manifest: ${error.message}`, program); throw error; }
-    return { manifest, sourceMap: { contract: "algal.source-map.v1", sourceDigest: digestText(this.parser.source), manifestDigest: digestCanonical(manifestToJson(manifest)), compilerVersion: SOURCE_PROFILE.compilerVersion, profile: SOURCE_PROFILE.id, cells: this.mappings }, modules: [...this.modules.values()], analysis: { maxAgentCalls: this.calls, requiredDepth: this.requiredDepth } };
+    return { manifest, sourceMap: { contract: "algal.source-map.v1", sourceDigest: digestText(this.parser.source), manifestDigest: digestCanonical(manifestToJson(manifest)), compilerVersion: SOURCE_PROFILE.compilerVersion, profile: SOURCE_PROFILE.id, cells: this.mappings }, modules: [...this.modules.values()], analysis: { maxAgentCalls: this.calls, requiredDepth: this.requiredDepth }, calls: this.callOrigins };
   }
 }
 
@@ -694,7 +712,7 @@ export function compileSource(source: string, options: SourceCompilerOptions = {
       const imports = new Map<string, CompiledModule>();
       for (const declaration of declarations) imports.set(declaration.alias, visit(resolveSourceImport(key, declaration.path, declaration.span), depth + 1, declaration.span));
       const importDepth = imports.size ? 1 + Math.max(...[...imports.values()].map(child => child.importDepth)) : 0;
-      const result = { ...new Compiler(parser, imports).compile(program), program, importDepth };
+      const result = { ...new Compiler(parser, imports, key).compile(program), program, importDepth, sourceKey: key };
       memo.set(key, result);
       return result;
     } catch (error) {
@@ -702,6 +720,13 @@ export function compileSource(source: string, options: SourceCompilerOptions = {
       throw error;
     } finally { active.delete(key); }
   };
-  const { program: _program, importDepth: _importDepth, ...result } = visit(entry, 0);
-  return result;
+  const { program: _program, importDepth: _importDepth, sourceKey: _sourceKey, calls: _calls, ...result } = visit(entry, 0);
+  const units: Record<string, SourceMap> = Object.create(null);
+  const calls: SourceCallOrigin[] = [];
+  for (const key of [...memo.keys()].sort()) {
+    const unit = memo.get(key)!;
+    units[key] = unit.sourceMap;
+    calls.push(...unit.calls);
+  }
+  return { ...result, project: { entry, units, calls } };
 }

@@ -1,0 +1,9 @@
+{
+  "input": {
+    "samples": [
+      { "numerator": 1, "denominator": 2 },
+      { "numerator": 3, "denominator": 0 },
+      { "numerator": 2, "denominator": 5 }
+    ]
+  }
+}

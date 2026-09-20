@@ -172,6 +172,35 @@ The bundle contains the complete manifest closure and runs without the source
 files. The [language guide](docs/source-language.md) covers the SDK, project
 roots, and native bundle calls.
 
+### Follow a result into the code that produced it
+
+Focus a diagram on one recorded child invocation. For the second inbox email:
+
+```sh
+bun cli.ts diagram examples/source/projects/inbox/inbox.algal \
+  --receipt inbox.receipt.json --focus b2-replies-each/i1 \
+  --format svg --out second-email.svg
+```
+
+The child keeps its original source labels and local cell IDs. Its status
+overlay remains bound to the root receipt and the exact invocation path;
+it is not a newly manufactured child receipt. Without `--receipt`, the same
+command shows the static child definition.
+
+When a run fails, map its recorded failure back to the source:
+
+```sh
+bun cli.ts diagnose ratios.receipt.json \
+  --source examples/source/projects/ratios/ratios.algal --format text
+```
+
+The [pure ratios example](examples/source/projects/ratios) deliberately fails
+on its second item. The report locates the division in `ratio.algal:4` and
+shows the caller in `ratios.algal`. Original source is recompiled and checked
+against the receipt before any location is displayed. Diagnosis inspects
+recorded evidence; `verify` separately replays it.
+[Explore child calls and a failed execution on the site](https://algal.dev/#inspect-children).
+
 ## More than a chain of prompts
 
 ### Refine within a limit
