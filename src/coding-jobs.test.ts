@@ -21,6 +21,13 @@ import { FileStore } from "./store";
 import { asObject } from "./values";
 import { digestText } from "./digest";
 
+// State assertions include real Git startup and two complete patch captures.
+// Keep their fixture allowance separate from the explicit expiry test below.
+const FIXTURE_JOB_TIMEOUT_MS = 10_000;
+function fixtureTest(name: string, body: () => Promise<void>): void {
+  test(name, body, 20_000);
+}
+
 const dirs: string[] = [];
 afterEach(async () => {
   for (const dir of dirs.splice(0))
@@ -60,7 +67,7 @@ async function git(workspace: string, ...args: string[]): Promise<string> {
   if (code !== 0) throw new Error(`fixture Git failed: ${error}`);
   return output.trim();
 }
-async function fixture(): Promise<{
+async function fixture(maxRuntimeMs = FIXTURE_JOB_TIMEOUT_MS): Promise<{
   root: string;
   workspace: string;
   options: CodingJobOptions;
@@ -83,7 +90,7 @@ async function fixture(): Promise<{
       expectedHead,
       prompt: "Bounded synthetic repair",
       adapter: { executable: process.execPath },
-      limits: { maxRuntimeMs: 1000 },
+      limits: { maxRuntimeMs },
     },
   };
 }
@@ -105,7 +112,7 @@ const completed = (text = "Fixture task completed") => ({
 });
 
 describe("durable foreground coding jobs", () => {
-  test("binds clean source, launches once, retains complete patch, and verifies drift", async () => {
+  fixtureTest("binds clean source, launches once, retains complete patch, and verifies drift", async () => {
     const f = await fixture();
     let calls = 0;
     const transport: CodingJobTransport = async () => {
@@ -123,7 +130,7 @@ describe("durable foreground coding jobs", () => {
     expect(prepared.status).toBe("prepared");
     expect((await host.prepare(f.options)).jobId).toBe(prepared.jobId);
     const result = await host.run(prepared.jobId);
-    expect(result.status).toBe("completed");
+    expect(result.status, result.reason).toBe("completed");
     expect(result.result?.changedFiles).toBe(2);
     const artifact = asObject(
       await new FileStore(f.root).getValue(result.result!.patchRef!),
@@ -160,7 +167,7 @@ describe("durable foreground coding jobs", () => {
       "no longer matches",
     );
   });
-  test("concurrent runs cannot duplicate a launch", async () => {
+  fixtureTest("concurrent runs cannot duplicate a launch", async () => {
     const f = await fixture();
     let release!: () => void,
       entered!: () => void,
@@ -181,21 +188,26 @@ describe("durable foreground coding jobs", () => {
       }),
       job = await host.prepare(f.options);
     const first = host.run(job.jobId);
-    await enteredPromise;
-    expect((await host.inspect(job.jobId)).status).toBe("uncertain");
-    await expect(
-      new CodingJobService(f.root, {
-        transport: async () => {
-          calls++;
-          return completed();
-        },
-      }).run(job.jobId),
-    ).rejects.toThrow("held");
-    release();
-    expect((await first).status).toBe("completed");
+    try {
+      await enteredPromise;
+      expect((await host.inspect(job.jobId)).status).toBe("uncertain");
+      await expect(
+        new CodingJobService(f.root, {
+          transport: async () => {
+            calls++;
+            return completed();
+          },
+        }).run(job.jobId),
+      ).rejects.toThrow("held");
+    } finally {
+      release();
+      await first;
+    }
+    const result = await first;
+    expect(result.status, result.reason).toBe("completed");
     expect(calls).toBe(1);
   });
-  test("a killed launch owner remains uncertain in a fresh process without resubmission", async () => {
+  fixtureTest("a killed launch owner remains uncertain in a fresh process without resubmission", async () => {
     const f = await fixture(),
       host = new CodingJobService(f.root),
       job = await host.prepare(f.options);
@@ -223,7 +235,7 @@ describe("durable foreground coding jobs", () => {
     expect((await recovered.run(job.jobId)).status).toBe("uncertain");
     expect(launches).toBe(0);
   });
-  test("transport acknowledgement loss is retained and never retried", async () => {
+  fixtureTest("transport acknowledgement loss is retained and never retried", async () => {
     const f = await fixture();
     let calls = 0;
     const host = new CodingJobService(f.root, {
@@ -246,9 +258,10 @@ describe("durable foreground coding jobs", () => {
       "unknown",
     );
   });
-  test("abort and expiry retain unknown completion even when an adapter ignores cancellation", async () => {
+  fixtureTest("abort and expiry retain unknown completion even when an adapter ignores cancellation", async () => {
     for (const cancel of [true, false]) {
-      const f = await fixture();
+      // This test exercises the actual deadline, unlike the other fixtures.
+      const f = await fixture(1_000);
       let entered!: () => void;
       const admitted = new Promise<void>((done) => {
         entered = done;
@@ -268,7 +281,7 @@ describe("durable foreground coding jobs", () => {
       expect((await host.run(job.jobId)).status).toBe("uncertain");
     }
   });
-  test("changed HEAD, dirty files, or replaced workspace block admission without a launch", async () => {
+  fixtureTest("changed HEAD, dirty files, or replaced workspace block admission without a launch", async () => {
     const f = await fixture();
     let calls = 0;
     const host = new CodingJobService(f.root, {
@@ -292,7 +305,7 @@ describe("durable foreground coding jobs", () => {
     expect(calls).toBe(0);
     expect((await host.inspect(job.jobId)).status).toBe("prepared");
   });
-  test("changed HEAD and unsettled or nonzero responses never become completed", async () => {
+  fixtureTest("changed HEAD and unsettled or nonzero responses never become completed", async () => {
     for (const mode of ["head", "unsettled", "nonzero", "malformed"] as const) {
       const f = await fixture(),
         host = new CodingJobService(f.root, {
@@ -326,7 +339,7 @@ describe("durable foreground coding jobs", () => {
       );
     }
   });
-  test("oversized and symlink changes are retained as uncertain without deleting user files", async () => {
+  fixtureTest("oversized and symlink changes are retained as uncertain without deleting user files", async () => {
     for (const mode of ["large", "many", "symlink"] as const) {
       const f = await fixture(),
         host = new CodingJobService(f.root, {
@@ -355,7 +368,7 @@ describe("durable foreground coding jobs", () => {
       ).toBeGreaterThan(0);
     }
   });
-  test("rejects foreign source head, symlink input, oversized prompt and state inside workspace", async () => {
+  fixtureTest("rejects foreign source head, symlink input, oversized prompt and state inside workspace", async () => {
     const f = await fixture(),
       host = new CodingJobService(f.root);
     await expect(
@@ -384,7 +397,7 @@ describe("durable foreground coding jobs", () => {
       new CodingJobService(join(f.workspace, ".algal")).prepare(f.options),
     ).rejects.toThrow("separate");
   });
-  test("hidden index flags and a pre-aborted run cannot admit work", async () => {
+  fixtureTest("hidden index flags and a pre-aborted run cannot admit work", async () => {
     const f = await fixture();
     let calls = 0;
     const host = new CodingJobService(f.root, {
@@ -406,7 +419,7 @@ describe("durable foreground coding jobs", () => {
     await expect(host.prepare(f.options)).rejects.toThrow("hidden");
     expect(calls).toBe(0);
   });
-  test("persisted unknown fields, nonstring states and replaced job directories fail closed", async () => {
+  fixtureTest("persisted unknown fields, nonstring states and replaced job directories fail closed", async () => {
     const f = await fixture(),
       host = new CodingJobService(f.root, {
         transport: async () => completed(),
@@ -428,7 +441,7 @@ describe("durable foreground coding jobs", () => {
     await symlink(`${path}-elsewhere`, path);
     await expect(host.inspect(job.jobId)).rejects.toThrow("symlinks");
   });
-  test("unresolved durable workspace claims block different prepared and new jobs", async () => {
+  fixtureTest("unresolved durable workspace claims block different prepared and new jobs", async () => {
     const f = await fixture();
     let launches = 0;
     const jobs = new CodingJobService(f.root, {
@@ -458,7 +471,7 @@ describe("durable foreground coding jobs", () => {
     expect((await restarted.run(first.jobId)).status).toBe("uncertain");
     expect(launches).toBe(1);
   });
-  test("a settled claim permits a next job, but its uncertainty blocks validation of older work", async () => {
+  fixtureTest("a settled claim permits a next job, but its uncertainty blocks validation of older work", async () => {
     const f = await fixture();
     let launches = 0;
     const jobs = new CodingJobService(f.root, {
@@ -481,7 +494,7 @@ describe("durable foreground coding jobs", () => {
     );
     expect(launches).toBe(2);
   });
-  test("offline observations do not launch or inspect live Git", async () => {
+  fixtureTest("offline observations do not launch or inspect live Git", async () => {
     const f = await fixture(),
       host = new CodingJobService(f.root, {
         transport: async () => completed(),
@@ -490,7 +503,7 @@ describe("durable foreground coding jobs", () => {
     await host.run(job.jobId);
     await rename(f.workspace, `${f.workspace}-gone`);
     const result = await host.inspect(job.jobId);
-    expect(result.status).toBe("completed");
+    expect(result.status, result.reason).toBe("completed");
     const entry = host.tools(job.jobId).get(CODING_JOB_TOOL)!;
     expect(entry.signature.effect).toBe("read");
     expect(

@@ -48,6 +48,7 @@ import type { FnRegistry } from "./registry";
 import type { Store } from "./store";
 import type { Transport } from "./transport";
 import type { ToolRegistry } from "./tools";
+import { elideToolContext } from "./tool-context";
 import type { JournalBinding, JournalTicket, RuntimeJournal } from "./process-journal";
 import { bindRecallOutput, recallOutputSchema } from "./semantic";
 import { asDigest, digestCanonical, type Digest } from "./digest";
@@ -1157,6 +1158,7 @@ async function activate(
         if (
           cell.kind === "agent" &&
           cell.compact &&
+          cell.compact.mode !== "elide" &&
           toolLog.length > (cell.compact.keepRecent ?? 0) &&
           canonicalBytes(toolLog) > cell.compact.maxLogBytes
         ) {
@@ -1223,7 +1225,7 @@ async function activate(
           toolLog.splice(0, droppable, ...kept);
         }
 
-        const context: JsonObject = { inputs: viewInputs, turn };
+        let context: JsonObject = { inputs: viewInputs, turn };
         if (cell.view.note !== undefined) context.note = cell.view.note;
         if (cellView) context.cells = cellView;
         if (cell.view.graph && cell.view.cells?.length) {
@@ -1256,6 +1258,9 @@ async function activate(
         }
         if (toolLog.length) {
           context.toolLog = toolLog as unknown as JsonValue;
+        }
+        if (cell.kind === "agent" && cell.compact?.mode === "elide") {
+          context = elideToolContext(context, cell.compact, maxCtx);
         }
         const contextBytes = canonicalBytes(context);
         if (contextBytes > maxCtx) {

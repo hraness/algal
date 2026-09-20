@@ -9,6 +9,12 @@ import {RepairWorkflow, type RepairCheck} from "./repair";
 import {FileStore} from "./store";
 import {codingCommand} from "./xcb";
 
+// These workflows run real Git inspections before and after validation.
+// Only the test allowance changes; each validation command keeps its own bound.
+function fixtureTest(name: string, body: () => Promise<void>): void {
+  test(name, body, 20_000);
+}
+
 const directories: string[] = [];
 afterEach(async () => {for (const dir of directories.splice(0)) await rm(dir, {recursive: true, force: true});});
 async function git(workspace: string, ...args: string[]): Promise<string> {
@@ -40,7 +46,7 @@ class OfflineJobs extends CodingJobService {
   override async verifyWorkspace(_jobId: Digest): Promise<void> {throw new Error("offline verification touched the workspace");}
 }
 
-test("repair waits across restart, validates the exact completed patch, and verifies without live work", async () => {
+fixtureTest("repair waits across restart, validates the exact completed patch, and verifies without live work", async () => {
   const {dir, jobs, job, check, launches} = await scenario();
   const workflow = new RepairWorkflow(dir, {jobs});
   const started = await workflow.start("episode", job.jobId, [check]);
@@ -52,7 +58,7 @@ test("repair waits across restart, validates the exact completed patch, and veri
   expect(await workflow.tick("episode")).toEqual(waiting);
   expect(launches()).toBe(0);
   const done = await jobs.run(job.jobId);
-  expect(done.status).toBe("completed");
+  expect(done.status, done.reason).toBe("completed");
   const resumed = await new RepairWorkflow(dir).tick("episode");
   expect(resumed.process.process.status).toBe("complete");
   expect(resumed.process.process.generation).toBe(2);
@@ -71,7 +77,7 @@ test("repair waits across restart, validates the exact completed patch, and veri
   expect(launches()).toBe(1);
 });
 
-test("a changed completed patch is rejected before any validation command", async () => {
+fixtureTest("a changed completed patch is rejected before any validation command", async () => {
   const {dir, workspace, jobs, job, check} = await scenario();
   await jobs.run(job.jobId);
   await writeFile(join(workspace, "value.txt"), "changed-after-job\n");
@@ -82,7 +88,7 @@ test("a changed completed patch is rejected before any validation command", asyn
   expect(await Bun.file(join(dir,"checks.log")).exists()).toBe(false);
 });
 
-test("validation cannot claim review after changing the admitted patch", async () => {
+fixtureTest("validation cannot claim review after changing the admitted patch", async () => {
   const {dir, jobs, job} = await scenario();
   await jobs.run(job.jobId);
   const check: RepairCheck = {name: "mutating-check", argv: [process.execPath, "-e", 'await Bun.write("value.txt", "changed-by-check");'], timeoutMs: 5000, maxOutputBytes: 1024};
@@ -91,7 +97,7 @@ test("validation cannot claim review after changing the admitted patch", async (
   expect((await workflow.tick("mutating")).result).toMatchObject({action: "rejected", reason: "workspace-changed-after:mutating-check"});
 });
 
-test("failed checks stop later validation and failed jobs run no checks", async () => {
+fixtureTest("failed checks stop later validation and failed jobs run no checks", async () => {
   const {dir, jobs, job, check} = await scenario();
   await jobs.run(job.jobId);
   const workflow = new RepairWorkflow(dir, {jobs});
@@ -109,7 +115,7 @@ test("failed checks stop later validation and failed jobs run no checks", async 
   expect(await Bun.file(join(failed.dir,"checks.log")).exists()).toBe(false);
 });
 
-test("an interrupted validation command leaves an uncertain process and cannot rerun", async () => {
+fixtureTest("an interrupted validation command leaves an uncertain process and cannot rerun", async () => {
   const {dir, jobs, job} = await scenario();
   await jobs.run(job.jobId);
   const workflow = new RepairWorkflow(dir, {jobs});
@@ -124,7 +130,7 @@ test("an interrupted validation command leaves an uncertain process and cannot r
   expect((await workflow.inspect("interrupted")).process.digest).toBe(uncertain.process.digest);
 });
 
-test("repair configuration is immutable, host-selected, and bounded", async () => {
+fixtureTest("repair configuration is immutable, host-selected, and bounded", async () => {
   const {dir, jobs, job, check} = await scenario();
   const workflow = new RepairWorkflow(dir, {jobs});
   await workflow.start("configured", job.jobId, [check]);
