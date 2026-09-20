@@ -148,12 +148,31 @@ external completion from elapsed time or automatically reissues an uncertain
 effect. See the [journal and custody ABI](process-journal.md) for exact records,
 bounds, publication ordering, and explicit recovery semantics.
 
+SQLite custody uses a zero busy timeout. An initialized database is inspected
+read-only before `BEGIN IMMEDIATE`, and its contract is revalidated under
+custody before marker recovery or dispatch. An interrupted empty table is
+initialized only when its schema is compatible with the owner contract.
+Contention fails immediately without retrying an operation. On a fresh lease
+database, simultaneous schema
+initializers can all return `IO_FAILED` before any owner is admitted; the
+protocol guarantees exclusion, not that one cold starter makes progress.
+This rejection publishes no process dispatch intent or mailbox authority.
+After contention ends, an explicit new invocation can finish initialization
+using the same retained database inode. It does not reconcile or retry an
+already admitted uncertain external effect.
+
 The supervisor validates digest-addressed records before use. Its durable
 publication path writes complete objects before publishing references and
 syncs the affected files/directories. A head is replaced atomically only after
 its referenced record exists. Symlinked supervisor paths and digest leaves
 are rejected. These checks assume a trusted host filesystem; they do not
 isolate concurrent malicious writers or authenticate a store owner.
+
+Process heads and record objects are read only after the opened descriptor
+passes regular-file and byte admission. On Unix, FIFOs and devices cannot
+block these reads while waiting for a writer. Invalid UTF-8 and leading BOM
+bytes are rejected before process interpretation; failed admission leaves
+the retained path untouched.
 
 ## CLI output and offline verification
 

@@ -17,6 +17,8 @@ import { canonicalizeReceipt, runOrganism } from "../src/run";
 import { MemoryStore } from "../src/store";
 import { asJsonValue, asObject, canonicalize, type JsonObject } from "../src/values";
 import { verifyReceipt } from "../src/verify";
+import { renderIconSprite, siteIcon } from "./icons";
+import { buildSiteStyles } from "./assets";
 
 const SITE = dirname(fileURLToPath(import.meta.url));
 const ROOT = dirname(SITE);
@@ -120,10 +122,10 @@ const routePanels = routeRuns.map(run => `
           <dl class="route-work"><dt>Executor attempts</dt><dd>${run.receipt.work.agentCalls}<span>of ${route.manifest.budgets.maxAgentCalls} allowed</span></dd><dt>Inactive draft branches skipped</dt><dd class="route-skipped-count">${run.skipped}</dd></dl>
         </div>
         <figure class="route-figure">
-          <figcaption><span class="run-state">Committed</span><span class="run-state skipped">Skipped</span><a href="diagrams/route-${run.choice}.svg" target="_blank" rel="noopener">Expand all cells ↗</a></figcaption>
+          <figcaption><span class="run-state">Committed</span><span class="run-state skipped">Skipped</span><a href="diagrams/route-${run.choice}.svg" target="_blank" rel="noopener">Expand all cells ${siteIcon("arrow-up-right")}</a></figcaption>
           <div class="route-diagram-scroll" tabindex="0" role="region" aria-label="${run.title} execution graph, scroll horizontally on small screens"><img src="diagrams/route-${run.choice}.svg" alt="Source-derived routing graph for the recorded ${run.choice} decision. ${run.receipt.work.agentCalls} executor attempts completed; ${run.skipped} inactive draft ${run.skipped === 1 ? "branch was" : "branches were"} skipped. All exact cells remain visible." width="1200" height="1050" loading="lazy"></div>
         </figure>
-        <div class="route-receipt"><span>Receipt ${escapeHtml(run.receipt.digest)}</span><a href="receipts/route-${run.choice}.receipt.json" download>Download receipt ↓</a><a href="examples/route.responses.${run.choice}.json" download>Scripted answers ↓</a></div>
+        <div class="route-receipt"><span>Receipt ${escapeHtml(run.receipt.digest)}</span><a href="receipts/route-${run.choice}.receipt.json" download>Download receipt ${siteIcon("download")}</a><a href="examples/route.responses.${run.choice}.json" download>Scripted answers ${siteIcon("download")}</a></div>
       </article>`).join("\n");
 
 // Load the two-file example as a real local source project, retaining its
@@ -186,7 +188,7 @@ const childViews = inboxReplies.map((reply, index) => {
   return { index, focus, reply, diagram };
 });
 const childTabs = childViews.map(({ index }) => `<button type="button" role="tab" id="tab-inbox-item-${index}" aria-controls="inbox-item-${index}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}">Email ${index + 1}</button>`).join("");
-const childPanels = childViews.map(({ index, focus, reply }) => `<article class="child-panel" id="inbox-item-${index}" aria-labelledby="inbox-item-${index}-title"><h3 id="inbox-item-${index}-title">Email ${index + 1} · one recorded invocation</h3><p class="child-reply">${escapeHtml(reply)}</p><p class="child-path">${escapeHtml(focus)} · draft.algal</p><div class="child-graph-scroll" tabindex="0" role="region" aria-label="Email ${index + 1} child graph, scroll horizontally on small screens"><img src="diagrams/inbox-item-${index}.svg" alt="Exact draft helper graph and recorded cell states for email ${index + 1}, bound to the original inbox receipt." loading="lazy"></div><a href="diagrams/inbox-item-${index}.svg" target="_blank" rel="noopener">Expand child graph ↗</a></article>`).join("");
+const childPanels = childViews.map(({ index, focus, reply }) => `<article class="child-panel" id="inbox-item-${index}" aria-labelledby="inbox-item-${index}-title"><h3 id="inbox-item-${index}-title">Email ${index + 1} · one recorded invocation</h3><p class="child-reply">${escapeHtml(reply)}</p><p class="child-path">${escapeHtml(focus)} · draft.algal</p><div class="child-graph-scroll" tabindex="0" role="region" aria-label="Email ${index + 1} child graph, scroll horizontally on small screens"><img src="diagrams/inbox-item-${index}.svg" alt="Exact draft helper graph and recorded cell states for email ${index + 1}, bound to the original inbox receipt." loading="lazy"></div><a href="diagrams/inbox-item-${index}.svg" target="_blank" rel="noopener">Expand child graph ${siteIcon("arrow-up-right")}</a></article>`).join("");
 
 const ratios = await loadSourceProject(join(ROOT, "examples/source/projects/ratios/ratios.algal"));
 const ratioStore = new MemoryStore();
@@ -264,10 +266,32 @@ await rm(DIST, { recursive: true, force: true });
 await mkdir(join(DIST, "diagrams"), { recursive: true });
 await mkdir(join(DIST, "examples"), { recursive: true });
 await mkdir(join(DIST, "receipts"), { recursive: true });
-for (const f of ["styles.css", "robots.txt", "sitemap.xml", "llms.txt", "og.png", "favicon.svg"]) {
+for (const f of ["robots.txt", "sitemap.xml", "llms.txt", "og.png", "favicon.svg"]) {
   await cp(join(SITE, f), join(DIST, f));
 }
-await cp(join(SITE, "icons"), join(DIST, "icons"), { recursive: true });
+// Shared presentation and iconography are build-time dependencies only. The
+// shipped site has self-hosted fonts/assets; the CLI gains no browser runtime.
+const styles = await buildSiteStyles(DIST);
+const browserScripts = await Bun.build({
+  entrypoints: [join(SITE, "appearance.ts"), join(SITE, "client.ts")], outdir: DIST,
+  target: "browser", format: "iife", minify: true,
+  naming: { entry: "[name].js", asset: "assets/[name]-[hash].[ext]" },
+});
+if (!styles.success || !browserScripts.success) throw new AggregateError([...styles.logs, ...browserScripts.logs], "Site asset build failed");
+await writeFile(join(DIST, "icons.svg"), renderIconSprite());
+await mkdir(join(DIST, "licenses"), { recursive: true });
+await cp(join(SITE, "licenses/hugeicons-MIT.txt"), join(DIST, "licenses/hugeicons-MIT.txt"));
+await cp(join(SITE, "licenses/hugeicons-provenance.md"), join(DIST, "licenses/hugeicons-provenance.md"));
+for (const [source, target] of [
+  ["@hraness/design-kit/LICENSE", "design-kit-MIT.txt"],
+  ["@hraness/ui/LICENSE", "ui-MIT.txt"],
+  ["@hraness/design-kit/src/fonts/nebula-sans/LICENSE.txt", "nebula-sans-OFL.txt"],
+  ["@hraness/design-kit/src/fonts/nebula-sans/PROVENANCE.md", "nebula-sans-provenance.md"],
+  ["@hraness/design-kit/src/fonts/geist-mono/OFL.txt", "geist-mono-OFL.txt"],
+  ["@hraness/design-kit/src/fonts/geist-mono/PROVENANCE.md", "geist-mono-provenance.md"],
+  ["@hraness/design-kit/src/fonts/instrument-serif/OFL.txt", "instrument-serif-OFL.txt"],
+  ["@hraness/design-kit/src/fonts/instrument-serif/UPSTREAM.md", "instrument-serif-provenance.md"],
+] as const) await cp(join(ROOT, "node_modules", source), join(DIST, "licenses", target));
 await writeFile(join(DIST, "index.html"), html);
 await writeFile(join(DIST, "examples/reply.algal"), replySource);
 await writeFile(join(DIST, "examples/reply.source-map.json"), `${JSON.stringify(reply.sourceMap, null, 2)}\n`);

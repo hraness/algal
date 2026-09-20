@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { Database } from "bun:sqlite";
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hostLease } from "./host-state";
@@ -93,5 +94,66 @@ test("legacy and wrong-owner markers fail closed and remain byte-for-byte intact
     await expect(hostLease(dir, "actor", async () => { called = true; })).rejects.toThrow("requires operator reconciliation");
     expect(called).toBe(false);
     expect(await readFile(join(dir, ".lock"), "utf8")).toBe(marker);
+  }
+});
+
+test("initialized custody needs no bootstrap writes while a reader retains a shared lock", async () => {
+  for (const uppercase of [false, true]) {
+    const dir = await directory();
+    const path = join(dir, ".owner.sqlite");
+    if (uppercase) {
+      const database = new Database(path);
+      database.exec("CREATE TABLE ALGAL_OWNER(contract TEXT PRIMARY KEY); INSERT INTO ALGAL_OWNER VALUES('algal.process-owner.v2');");
+      database.close();
+    } else await hostLease(dir, "actor", async () => undefined);
+    const before = await readFile(path);
+    const inode = (await stat(path)).ino;
+    const reader = new Database(path);
+    try {
+      reader.exec("BEGIN; SELECT contract FROM algal_owner;");
+      expect(await hostLease(dir, "actor", async () => "admitted")).toBe("admitted");
+      expect(await readFile(path)).toEqual(before);
+      expect((await stat(path)).ino).toBe(inode);
+      expect(await readdir(dir)).not.toContain(".lock");
+    } finally { reader.exec("ROLLBACK;"); reader.close(); }
+  }
+});
+
+test("empty interrupted initialization recovers explicitly without replacing the database", async () => {
+  const dir = await directory();
+  const path = join(dir, ".owner.sqlite");
+  const partial = new Database(path);
+  partial.exec("CREATE TABLE algal_owner(contract TEXT PRIMARY KEY);");
+  partial.close();
+  const inode = (await stat(path)).ino;
+  expect(await hostLease(dir, "actor", async () => "recovered")).toBe("recovered");
+  expect((await stat(path)).ino).toBe(inode);
+  expect(await hostLease(dir, "actor", async () => "reopened")).toBe("reopened");
+  expect(await readdir(dir)).not.toContain(".lock");
+});
+
+test("incompatible owner schema and contracts remain unchanged without admitting an action", async () => {
+  for (const setup of [
+    "CREATE VIEW algal_owner AS SELECT 'algal.process-owner.v2' AS contract;",
+    "CREATE VIEW ALGAL_OWNER AS SELECT 'algal.process-owner.v2' AS contract;",
+    "CREATE TABLE algal_owner(contract TEXT PRIMARY KEY); INSERT INTO algal_owner VALUES('unknown');",
+    "CREATE TABLE algal_owner(contract TEXT PRIMARY KEY); INSERT INTO algal_owner VALUES('algal.process-owner.v2'),('unknown');",
+    "CREATE TABLE algal_owner(contract TEXT PRIMARY KEY); INSERT INTO algal_owner VALUES(NULL);",
+    "CREATE TABLE algal_owner(other TEXT);",
+    "CREATE TABLE algal_owner(contract INTEGER PRIMARY KEY);",
+    "CREATE TABLE algal_owner(contract TEXT PRIMARY KEY, other TEXT);",
+    "CREATE TABLE algal_owner(contract TEXT PRIMARY KEY DEFAULT 'unknown');",
+  ]) {
+    const dir = await directory();
+    const path = join(dir, ".owner.sqlite");
+    const database = new Database(path);
+    database.exec(setup); database.close();
+    const before = await readFile(path);
+    let called = false;
+    await expect(hostLease(dir, "actor", async () => { called = true; })).rejects.toThrow();
+    expect(called).toBe(false);
+    expect(await readFile(path)).toEqual(before);
+    expect(await readdir(dir)).not.toContain(".lock");
+    expect(await readdir(dir)).not.toContain("owners");
   }
 });

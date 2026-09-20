@@ -3,17 +3,60 @@ use crate::{
     canonical::{MAX_DOCUMENT_BYTES, read_json},
     contract::{Manifest, Ports, Signature, object, ports},
     registry,
-    store::{Store, unpack},
+    store::{Store, open_input_file, unpack},
 };
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
-    fs::File,
     path::PathBuf,
 };
 
 pub type ToolSignatures = BTreeMap<String, Signature>;
 pub type Transports = BTreeMap<String, PathBuf>;
+
+pub const MAX_COMPILE_INSTANCES: usize = 1_024;
+pub const MAX_COMPILE_CELLS: usize = 4_096;
+pub const MAX_COMPILE_EDGES: usize = 16_384;
+pub const MAX_COMPILE_MANIFEST_BYTES: usize = 67_108_864;
+
+#[derive(Default)]
+struct CompilationBudget {
+    instances: usize,
+    cells: usize,
+    edges: usize,
+    bytes: usize,
+}
+
+impl CompilationBudget {
+    fn admit(&mut self, manifest: &Manifest) -> Result<()> {
+        // Each occurrence is charged, even when a small DAG reuses one digest.
+        // Check before creating compiled maps or resolving further children.
+        let instances = self.instances.saturating_add(1);
+        let cells = self.cells.saturating_add(manifest.cells.len());
+        let edges = self.edges.saturating_add(manifest.edges.len());
+        if instances > MAX_COMPILE_INSTANCES
+            || cells > MAX_COMPILE_CELLS
+            || edges > MAX_COMPILE_EDGES
+        {
+            return Err(Error::limit("expanded compilation count budget exceeded"));
+        }
+        let bytes = self
+            .bytes
+            .saturating_add(crate::canonical::canonical(&manifest.value)?.len());
+        if bytes > MAX_COMPILE_MANIFEST_BYTES {
+            return Err(Error::limit(
+                "expanded compilation manifest byte budget exceeded",
+            ));
+        }
+        *self = Self {
+            instances,
+            cells,
+            edges,
+            bytes,
+        };
+        Ok(())
+    }
+}
 
 #[derive(Clone)]
 pub struct Compiled {
@@ -104,9 +147,28 @@ pub fn compile(
     transports: &Transports,
     depth: usize,
 ) -> Result<Compiled> {
+    compile_with_budget(
+        manifest,
+        store,
+        tools,
+        transports,
+        depth,
+        &mut CompilationBudget::default(),
+    )
+}
+
+fn compile_with_budget(
+    manifest: Manifest,
+    store: &mut Store,
+    tools: &ToolSignatures,
+    transports: &Transports,
+    depth: usize,
+    budget: &mut CompilationBudget,
+) -> Result<Compiled> {
     if depth > 64 {
         return Err(Error::new("DEPTH_EXCEEDED", "compile depth exceeds 64"));
     }
+    budget.admit(&manifest)?;
     let mut result = Compiled {
         manifest,
         signatures: BTreeMap::new(),
@@ -127,10 +189,10 @@ pub fn compile(
                 let directory = transports
                     .get(via)
                     .ok_or_else(|| Error::new("STORE_MISS", "transport is not configured"))?;
-                let bundle = read_json(
-                    File::open(directory.join(format!("{}.bundle.json", &digest[7..])))?,
-                    MAX_DOCUMENT_BYTES,
-                )?;
+                let path = directory.join(format!("{}.bundle.json", &digest[7..]));
+                let file = open_input_file(&path, MAX_DOCUMENT_BYTES)?
+                    .ok_or_else(|| Error::new("STORE_MISS", "transport bundle is missing"))?;
+                let bundle = read_json(file, MAX_DOCUMENT_BYTES)?;
                 if bundle["root"] != digest {
                     return Err(Error::new("DIGEST_MISMATCH", "transport bundle root"));
                 }
@@ -139,7 +201,14 @@ pub fn compile(
             }
             result.children.insert(
                 name.to_owned(),
-                compile(store.manifest(digest)?, store, tools, transports, depth + 1)?,
+                compile_with_budget(
+                    store.manifest(digest)?,
+                    store,
+                    tools,
+                    transports,
+                    depth + 1,
+                    budget,
+                )?,
             );
         }
         let sig = match cell["kind"].as_str().unwrap() {

@@ -76,6 +76,16 @@ wrong-rooted or tampered bundle fails `DIGEST_MISMATCH`. Trust is the
 digest itself: a transport can only deliver content the manifest already
 named — execution stays local, metered, and receipted either way.
 
+Bundle transports admit at most 67,108,864 received bytes before parsing.
+File transports validate the opened descriptor as a regular file and use
+nonblocking admission on Unix; explicitly configured regular-file symlinks
+remain supported. HTTP transport is a Bun host feature: it bounds streamed
+decoded-body bytes even without `Content-Length`, cancels rejected bodies,
+and bounds the entire request/body lifetime (default 15 seconds, configured
+integer range 1–600,000 milliseconds). Native transports currently accept
+file directories. Both reject invalid UTF-8 and a leading BOM. These limits
+bound ingestion; the bundle's digest checks still establish its identity.
+
 ### Port types
 
 Every port declares one of:
@@ -610,6 +620,24 @@ lifecycle responsibilities.
   failure; its fail edges die with the rest.
 - The graph must be acyclic.
 
+## Compilation admission bounds
+
+Before execution, both runtimes bound the complete expanded static compilation:
+1,024 manifest instances, 4,096 cells, 16,384 edges, and 67,108,864 cumulative
+canonical UTF-8 manifest bytes. The root and every `organism`, `repeat`, or
+`each` child occurrence count, including repeated references to the same digest.
+The maximum static embedding depth remains 64 (root depth zero).
+
+One compilation shares these counters across its entire recursive traversal.
+Admission fails with `BUDGET_EXHAUSTED` before allocating the next compiled
+instance's maps or resolving its children; excessive depth is `DEPTH_EXCEEDED`.
+The byte budget counts normalized manifest JSON, including defaults. These host
+admission ceilings prevent compact shared DAGs from causing unbounded expansion
+before runtime budgets take effect. They add no manifest or receipt fields and
+do not change execution or receipts for programs within the ceilings. Dynamic
+compilations start a fresh admission budget and still consume their run's normal
+step, depth and work limits.
+
 ## Run semantics
 
 - Cells activate in declared order when every declared input is resolved
@@ -657,6 +685,11 @@ effects, `maxContextBytes`/`maxOutputBytes` bound each effect's I/O.
 Each cell record carries the work attributed to it — for `organism`,
 `repeat`, and `each` cells that is the whole subtree's units, while inner
 cells keep their own records.
+
+A cell that fails still spends work. A declared `on:"fail"` edge handles
+its failure but does not replenish `maxWork`; exhaustion is checked before
+another recovery cell can activate. The failed activation and its charged
+units remain in the receipt in both runtimes.
 
 ## Effects
 
