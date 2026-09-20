@@ -14,7 +14,6 @@ use algal::{
 use clap::{Args, Parser, Subcommand};
 use serde_json::{Value, json};
 use std::{
-    fs::File,
     io::{self, IsTerminal},
     path::{Path, PathBuf},
 };
@@ -163,6 +162,10 @@ enum Commands {
         #[command(subcommand)]
         command: MailboxCommand,
     },
+    /// Try durable local review, owned crash recovery, and offline evidence.
+    #[command(
+        after_help = "Decision effects are deterministic fixtures. Demo commands use their explicit ROOT or FILE argument and reject --dir."
+    )]
     Demo {
         #[command(subcommand)]
         command: DemoCommand,
@@ -358,7 +361,11 @@ enum SlotCommand {
 #[derive(Subcommand)]
 enum DemoCommand {
     /// Demonstrate approval, denial, detached verification, and two owned crashes.
+    #[command(
+        after_help = "Uses deterministic fixtures. ROOT must be new. Demo commands reject --dir."
+    )]
     Prove {
+        /// New directory for the crash laboratory and retained proof.json.
         root: PathBuf,
     },
     #[command(hide = true)]
@@ -377,32 +384,65 @@ enum DemoCommand {
         #[arg(long)]
         intent: String,
     },
+    /// Retain a fixture proposal and leave it waiting for your decision.
+    #[command(
+        after_help = "Open ROOT/report.html for the exact approve or deny command. Use the explicit ROOT; demo commands reject --dir."
+    )]
     Start {
+        /// New review directory; it must not already exist.
         root: PathBuf,
+        /// Optional JSON evidence file, at most 8 KiB; retained without AI analysis.
         #[arg(long)]
         evidence: Option<PathBuf>,
     },
+    /// Verify retained state and refresh the report without advancing the VM.
+    #[command(after_help = "Use the explicit ROOT; demo commands reject --dir.")]
     Inspect {
+        /// Existing review workbench directory.
         root: PathBuf,
     },
+    /// Authorize the exact retained proposal for local publication.
+    #[command(
+        after_help = "Copy the digest and action from ROOT/report.html. Repeating the same completed decision creates no new publication. Demo commands reject --dir."
+    )]
     Approve {
+        /// Existing review workbench directory.
         root: PathBuf,
+        /// Exact sha256 proposal digest shown in the review report.
         #[arg(long)]
         proposal: String,
+        /// Allowed local action: publish-local-report.
         #[arg(long)]
         action: String,
     },
+    /// Finish the retained review without publishing its proposal.
+    #[command(
+        after_help = "Copy the digest and action from ROOT/report.html. A conflicting prior decision is rejected. Demo commands reject --dir."
+    )]
     Deny {
+        /// Existing review workbench directory.
         root: PathBuf,
+        /// Exact sha256 proposal digest shown in the review report.
         #[arg(long)]
         proposal: String,
+        /// Allowed local action: publish-local-report.
         #[arg(long)]
         action: String,
     },
+    /// Write portable evidence JSON to stdout and retain a copy in the workbench.
+    #[command(
+        after_help = "Inspect retained prompts, outputs, and capability strings before sharing; exports do not redact them. Demo commands reject --dir."
+    )]
     Export {
+        /// Existing review workbench directory.
         root: PathBuf,
     },
+    /// Verify an exported evidence file offline without its original store.
+    #[command(
+        after_help = "Checks recorded execution consistency, not factual truth or provider identity. Demo commands reject --dir."
+    )]
     Verify {
+        /// Portable evidence JSON produced by demo export or process export.
         file: PathBuf,
     },
 }
@@ -531,7 +571,9 @@ enum ContextCommand {
 }
 
 fn load(path: &Path, max: usize) -> Result<Value> {
-    read_json(File::open(path)?, max)
+    let file = algal::store::open_input_file(path, max)?
+        .ok_or_else(|| Error::from(io::Error::from(io::ErrorKind::NotFound)))?;
+    read_json(file, max)
 }
 fn emit(value: &Value) -> Result<()> {
     println!("{}", canonical(value)?);

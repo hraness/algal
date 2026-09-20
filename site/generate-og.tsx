@@ -17,7 +17,7 @@ const mark = (
 
 const card = createSocialImageCard({
   description:
-    "A language for growing agent programs. Typed workflows, bounded model calls, inspectable memory, and evidence-driven evolution.",
+    "A language and application VM for bounded agent programs. Durable review, retained work, and portable execution evidence.",
   domain: "algal.dev",
   eyebrow: "ALGAL",
   mark,
@@ -27,7 +27,7 @@ const card = createSocialImageCard({
     foreground: "#1c1a18",
     muted: "#6b675f",
   },
-  title: "Programs that grow. More from every model.",
+  title: "Agent work that survives a pause.",
 });
 
 const svg = await satori(card.element, {

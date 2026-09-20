@@ -50,6 +50,7 @@ jobs:
       - run: bun scripts/native-parity.ts
       - run: bun scripts/source-inspection-parity.ts
       - run: bun scripts/schema-parity.ts
+      - run: bun scripts/mailbox-admission-parity.ts
       - run: bun scripts/vm-demo.ts --native ./target/debug/algal
       - run: bun scripts/recovery-demo.ts --native ./target/debug/algal
       - run: bun scripts/repair-demo.ts --native ./target/debug/algal

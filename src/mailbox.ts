@@ -1,11 +1,11 @@
 import { randomBytes } from "node:crypto";
+import { constants } from "node:fs";
 import {
   link,
   lstat,
   mkdir,
   open,
   opendir,
-  readFile,
   rename,
   unlink,
 } from "node:fs/promises";
@@ -19,6 +19,7 @@ import {
 import { BOUNDS } from "./contract";
 import { asDigest, digestCanonical, type Digest } from "./digest";
 import { AlgalError } from "./errors";
+import { hostLease } from "./host-state";
 import type { ToolRegistry } from "./tools";
 import {
   asInt,
@@ -432,12 +433,35 @@ async function noLink(path: string): Promise<void> {
 }
 
 async function readJson(path: string): Promise<unknown | undefined> {
+  const maximum = 67_108_864; // Same host-artifact ceiling as the native reader.
   try {
-    return JSON.parse(await readFile(path, "utf8")) as unknown;
+    const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    try {
+      const info = await file.stat();
+      if (!info.isFile() || info.size > maximum) {
+        throw new AlgalError("BUDGET_EXHAUSTED", "mailbox artifact file type or bytes");
+      }
+      const chunks: Buffer[] = [];
+      let size = 0;
+      for (;;) {
+        const buffer = Buffer.alloc(Math.min(65_536, maximum + 1 - size));
+        const { bytesRead } = await file.read(buffer, 0, buffer.length, null);
+        if (bytesRead === 0) break;
+        size += bytesRead;
+        if (size > maximum) throw new AlgalError("BUDGET_EXHAUSTED", "mailbox artifact bytes");
+        chunks.push(buffer.subarray(0, bytesRead));
+      }
+      try {
+        const text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(Buffer.concat(chunks));
+        return JSON.parse(text) as unknown;
+      } catch (error) {
+        throw new AlgalError("PARSE_FAILED", `${path}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    } finally { await file.close(); }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    if (error instanceof SyntaxError) {
-      throw new AlgalError("PARSE_FAILED", `${path}: ${error.message}`);
+    if ((error as NodeJS.ErrnoException).code === "ELOOP") {
+      throw new AlgalError("IO_FAILED", "mailbox symlinks are not admitted");
     }
     throw error;
   }
@@ -548,6 +572,16 @@ export class FileMailboxService implements MailboxService {
     const checked = asSafeId(name, "mailbox name");
     await this.guard(checked);
     const bounds = normalizeOptions(options);
+    // One shared Bun/Rust admission lease protects both identity and capacity.
+    return hostLease(join(this.dir, ".mailbox-admission"), "mailbox-admission",
+      () => this.createLocked(checked, bounds));
+  }
+
+  private async createLocked(
+    checked: string,
+    bounds: { maxMessages: number; maxMessageBytes: number },
+  ): Promise<MailboxConfig> {
+    await this.guard(checked);
     const existing = await this.inspect(checked);
     if (existing) {
       if (
@@ -582,6 +616,9 @@ export class FileMailboxService implements MailboxService {
     if (!await writeNew(this.configPath(checked), config as unknown as JsonValue)) {
       const raced = await this.inspect(checked);
       if (!raced) throw new AlgalError("IO_FAILED", "mailbox creation raced without a config");
+      if (raced.maxMessages !== bounds.maxMessages || raced.maxMessageBytes !== bounds.maxMessageBytes) {
+        throw new AlgalError("PARSE_FAILED", `mailbox "${checked}" already has different bounds`);
+      }
       return raced;
     }
     return config;
@@ -831,6 +868,11 @@ export class FileMailboxService implements MailboxService {
           message.mailbox !== config.name
         ) {
           throw new AlgalError("DIGEST_MISMATCH", `mailbox delivery ${file} is corrupt`);
+        }
+        const bytes = canonicalBytes(message.value);
+        if (bytes > config.maxMessageBytes) {
+          throw new AlgalError("BUDGET_EXHAUSTED",
+            `mailbox message ${bytes}B exceeds ${config.maxMessageBytes}B`);
         }
         try {
           await rename(source, join(this.consumedDir(config.name), file));
