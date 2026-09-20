@@ -7,8 +7,30 @@ import { compileSource } from "./source";
 import { MemoryStore } from "./store";
 import { builtinRegistry } from "./registry";
 import { runOrganism, receiptDigest } from "./run";
+import { compileOrganism } from "./graph";
 
 const examples = join(import.meta.dir, "../examples");
+
+test("project annotations recompile imported content and resolve child signatures", async () => {
+  const source = 'import child from "./child.algal" program caller(email: text) -> text { budget { max_agent_calls: 0 } return call child using { email: email } }';
+  const child = 'program child(email: text) -> text { budget { max_agent_calls: 0 } return email }';
+  const sourceOptions = { entry: "caller.algal", modules: { "child.algal": child } };
+  const result = compileSource(source, sourceOptions);
+  const store = new MemoryStore();
+  for (const module of result.modules) await store.putManifest(module);
+  const compiled = await compileOrganism(result.manifest, builtinRegistry(), store);
+  const view = createProgramDiagram(result.manifest, { source, sourceOptions, ports: compiled.ports });
+  expect(view.nodes.length).toBe(result.manifest.cells.length);
+  expect(view.edges.length).toBe(result.manifest.edges.length);
+  const call = view.nodes.find(node => node.kind === "organism")!;
+  expect(call.source?.operation).toBe("call");
+  expect(call.inputs.find(port => port.name === "email")?.type?.type).toBe("text");
+  expect(renderSvg(view)).toContain("CALL");
+  expect(() => createProgramDiagram(result.manifest, { source })).toThrow();
+  expect(() => createProgramDiagram(result.manifest, { sourceOptions })).toThrow(/requires original source/);
+  expect(() => createProgramDiagram(result.manifest, { source, sourceOptions: { ...sourceOptions,
+    modules: { "child.algal": child.replace("return email", 'return "Changed"') } } })).toThrow(/does not compile to this manifest/);
+});
 
 test("all bundled manifest kinds render deterministically without executing effects", async () => {
   const files = (await readdir(examples)).filter(f => f.endsWith(".algal.json"));

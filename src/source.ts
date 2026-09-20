@@ -10,10 +10,15 @@ export const SOURCE_BOUNDS = Object.freeze({
   maxSourceBytes: 65_536, maxTokens: 8_192, maxNodes: 1_024,
   maxDepth: 16, maxBindings: 24, maxParameters: 16,
   maxNameLength: 40, maxChoiceLabels: 16, maxCollectionItems: 64,
+  maxFiles: 16, maxImports: 16, maxProjectBytes: 1_048_576, maxImportDepth: 8,
+});
+export const SOURCE_PROJECT_BOUNDS = Object.freeze({
+  maxFiles: SOURCE_BOUNDS.maxFiles, maxImports: SOURCE_BOUNDS.maxImports,
+  maxTotalBytes: SOURCE_BOUNDS.maxProjectBytes, maxImportDepth: SOURCE_BOUNDS.maxImportDepth,
 });
 /** Changing these defaults or the model-visible envelope changes compilation. */
 export const SOURCE_PROFILE = Object.freeze({
-  id: "algal.source.profile.v1", compilerVersion: "1.1.0",
+  id: "algal.source.profile.v1", compilerVersion: "1.2.0",
   budgets: Object.freeze({ maxSteps: 256, maxAgentCalls: 0, maxWork: 1_000_000,
     maxContextBytes: 65_536, maxOutputBytes: 65_536, maxDepth: 4 }),
   exprFuel: BOUNDS.maxExprFuel,
@@ -32,6 +37,15 @@ export type SourceMap = {
   profile: string;
   cells: { cellId: string; role: string; span: SourceSpan; annotation?: SourceAnnotation }[];
 };
+export type SourceCompilerOptions = { entry?: string; modules?: Readonly<Record<string, string>> };
+export type SourceCompilation = {
+  manifest: OrganismManifest;
+  sourceMap: SourceMap;
+  /** Reachable dependency closure, child before parent, excluding the root. */
+  modules: OrganismManifest[];
+  analysis: { maxAgentCalls: number; requiredDepth: number };
+};
+export type SourceImport = { path: string; alias: string; span: SourceSpan };
 export class SourceError extends AlgalError {
   readonly diagnostic: { message: string; span: SourceSpan };
   constructor(message: string, span: SourceSpan) {
@@ -56,9 +70,11 @@ type Expr = Span & (
   | { kind: "match"; value: Expr; arms: [string, Expr][] }
   | { kind: "decide"; question: string; context: Expr; criteria: [string, string][] }
   | { kind: "generate"; instruction: Expr; context: Expr }
+  | { kind: "call"; alias: string; args: Expr }
+  | { kind: "each"; alias: string; over: string; items: Expr; args: Expr; maxItems: number }
 );
 type SourceProgram = Span & { name: string; parameters: { name: string; type: "text" | "json"; span: Span }[]; output: "text" | "json"; budgets: Budgets; bindings: { name: string; expr: Expr }[]; result: Expr };
-const reserved = new Set(["program", "budget", "let", "return", "decide", "generate", "using", "as", "choice", "match", "if", "else", "true", "false", "null", "text", "json", "__proto__", "prototype", "constructor"]);
+const reserved = new Set(["program", "budget", "let", "return", "decide", "generate", "using", "as", "choice", "match", "if", "else", "true", "false", "null", "text", "json", "import", "from", "call", "each", "over", "in", "max_items", "__proto__", "prototype", "constructor"]);
 const operators: Record<string, { precedence: number; op: string }> = {
   "||": { precedence: 1, op: "or" }, "&&": { precedence: 2, op: "and" },
   "==": { precedence: 3, op: "eq" }, "!=": { precedence: 3, op: "neq" },
@@ -132,6 +148,18 @@ class Parser {
       this.expect(",");
     }
     return items;
+  }
+  imports(): SourceImport[] {
+    const imports: SourceImport[] = [];
+    while (this.peek().text === "import") {
+      const start = this.take().start;
+      if (imports.length >= SOURCE_BOUNDS.maxImports) this.fail("import limit exceeded");
+      const alias = this.name().text; this.expect("from"); const path = this.string();
+      const end = this.tokens[this.index - 1]!.end; this.eat(";");
+      if (imports.some(item => item.alias === alias)) this.fail(`duplicate import alias ${alias}`, { start, end });
+      imports.push({ alias, path, span: this.span({ start, end }) });
+    }
+    return imports;
   }
   program(): SourceProgram {
     const start = this.expect("program").start;
@@ -216,6 +244,17 @@ class Parser {
       return build({ kind: "decide", question, context, criteria } as never);
     }
     if (token.text === "generate") { const instruction = this.expression(0, depth + 1); this.expect("using"); const context = this.expression(0, depth + 1); return build({ kind: "generate", instruction, context } as never); }
+    if (token.text === "call") {
+      const alias = this.name().text; this.expect("using"); const args = this.expression(0, depth + 1);
+      return build({ kind: "call", alias, args } as never);
+    }
+    if (token.text === "each") {
+      const alias = this.name().text; this.expect("over"); const over = this.name().text; this.expect("in");
+      const items = this.expression(0, depth + 1); this.expect("using"); const args = this.expression(0, depth + 1);
+      this.expect("max_items"); const bound = this.take(); const maxItems = Number(bound.text);
+      if (bound.kind !== "number" || !Number.isSafeInteger(maxItems) || maxItems < 1 || maxItems > BOUNDS.maxEachItems) this.fail(`max_items must be an integer in 1..${BOUNDS.maxEachItems}`, bound);
+      return build({ kind: "each", alias, over, items, args, maxItems } as never);
+    }
     if (token.kind === "id" && !reserved.has(token.text)) { if (token.text.length > SOURCE_BOUNDS.maxNameLength) this.fail("identifier exceeds 40 characters", token); return build({ kind: "name", name: token.text } as never); }
     return this.fail(`unsupported expression ${JSON.stringify(token.text)}`, token);
   }
@@ -225,6 +264,7 @@ class Parser {
 type Type = { kind: "text"; literal?: string } | { kind: "json" | "number" | "boolean" | "null" | "list" } | { kind: "choice" | "decision"; labels: string[] } | { kind: "record"; fields: Map<string, Type> };
 type Reference = { cell: string; port: string; type: Type };
 type Pure = { program: JsonValue; type: Type; refs: Map<string, Reference> };
+type CompiledModule = SourceCompilation & { program: SourceProgram; importDepth: number };
 const isText = (t: Type): boolean => t.kind === "text" || t.kind === "choice";
 function port(type: Type): PortType { return type.kind === "choice" ? { type: "choice", labels: type.labels } : { type: isText(type) ? "text" : "json" }; }
 function output(type: Type): AgentOutput {
@@ -256,6 +296,8 @@ function describe(expr: Expr): string {
     case "match": text = `match ${show(expr.value)}`; break;
     case "decide": text = `decide ${JSON.stringify(expr.question)} using ${show(expr.context)}`; break;
     case "generate": text = `generate ${show(expr.instruction)} using ${show(expr.context)}`; break;
+    case "call": text = `call ${expr.alias} using ${show(expr.args)}`; break;
+    case "each": text = `each ${expr.alias} over ${expr.over} in ${show(expr.items)} max_items ${expr.maxItems}`; break;
   }
   return clipped(text);
 }
@@ -268,12 +310,14 @@ function expressionAnnotation(title: string, expr: Expr, role: string): SourceAn
   if (expr.kind === "generate") details = [`instruction: ${describe(expr.instruction)}`, `context: ${describe(expr.context)}`];
   if (expr.kind === "match") details = expr.arms.map(([label, arm]) => `${label} => ${describe(arm)}`);
   if (expr.kind === "if") details = [`condition: ${describe(expr.condition)}`, `true => ${describe(expr.yes)}`, `false => ${describe(expr.no)}`];
+  if (expr.kind === "call") details = [`arguments: ${describe(expr.args)}`];
+  if (expr.kind === "each") details = [`arguments: ${describe(expr.args)}`, `At most ${expr.maxItems} items; ordered results`];
   if (role === "decision-check") return annotation(title, role, "Validate the declared choice, confidence, and every probability before use.", expr.kind === "decide" ? expr.criteria.map(([label]) => `admitted label: ${label}`) : []);
   return annotation(title, role === "expression" ? expr.kind : role, describe(expr), details);
 }
 function hasEffect(expr: Expr): boolean {
   switch (expr.kind) {
-    case "decide": case "generate": return true;
+    case "decide": case "generate": case "call": case "each": return true;
     case "literal": case "name": return false;
     case "field": case "unary": return hasEffect(expr.value);
     case "probability": return hasEffect(expr.value) || hasEffect(expr.label);
@@ -291,15 +335,17 @@ class Compiler {
   private readonly edges: Edge[] = [];
   private readonly mappings: SourceMap["cells"] = [];
   private calls = 0;
+  private requiredDepth = 0;
+  private readonly modules = new Map<Digest, OrganismManifest>();
   private branches = 0;
   private readonly controls: { selector: Reference; label: string }[] = [];
-  constructor(private readonly parser: Parser) {}
-  private add(cell: Cell, span: Span, role: string, sourceAnnotation: SourceAnnotation): void {
+  constructor(private readonly parser: Parser, private readonly imports: ReadonlyMap<string, CompiledModule>) {}
+  private add(cell: Cell, span: Span, role: string, sourceAnnotation: SourceAnnotation, guarded = true): void {
     if (this.cells.length >= BOUNDS.maxCells) this.parser.fail("lowered cell limit exceeded", span);
     // Each newly created arm cell is gated, even a constant or an effect's pure
     // operands. Required controls are deliberately absent from model views.
     const control = this.controls.at(-1);
-    if (control) {
+    if (control && guarded) {
       // The nearest selector is itself gated by its parent. Carrying every
       // ancestor again would needlessly consume the core's bounded edge count.
       const name = "source-control-1";
@@ -384,7 +430,7 @@ class Compiler {
           const body = branch(arms);
           return { program: ["let", "_source_match", value.program, body], type };
         }
-        case "decide": case "generate": return this.parser.fail("effects require a whole binding, return, or branch arm; conditions, operands, and context expressions must be pure", expr);
+        case "decide": case "generate": case "call": case "each": return this.parser.fail("effects and calls require a whole binding, return, or branch arm; conditions, operands, and context expressions must be pure", expr);
       }
     };
     return { ...visit(expr), refs };
@@ -437,6 +483,7 @@ class Compiler {
   }
   private lower(id: string, expr: Expr, title: string): Reference {
     if ((expr.kind === "if" || expr.kind === "match") && hasEffect(expr)) return this.branch(id, expr, title);
+    if (expr.kind === "call" || expr.kind === "each") return this.composition(id, expr, title);
     if (expr.kind === "generate") {
       const instruction = this.operand(`${id}-instruction`, expr.instruction, `${title} · instruction`);
       if (!isText(instruction.type)) this.parser.fail("generation instruction must be text", expr.instruction);
@@ -473,10 +520,79 @@ class Compiler {
     }
     return this.expression(id, expr, "expression", title);
   }
-  compile(program: SourceProgram): { manifest: OrganismManifest; sourceMap: SourceMap } {
+  private composition(id: string, expr: Extract<Expr, { kind: "call" | "each" }>, title: string): Reference {
+    const child = this.imports.get(expr.alias);
+    if (!child) this.parser.fail(`unknown imported program ${expr.alias}`, expr);
+    if (expr.args.kind !== "record") this.parser.fail("call arguments must be a record literal with named parameters", expr.args);
+    const parameters = child.program.parameters;
+    const args = new Map(expr.args.entries);
+    if (expr.kind === "each") {
+      if (!parameters.some(param => param.name === expr.over)) this.parser.fail(`each input ${expr.over} is not a parameter of ${expr.alias}`, expr);
+      if (args.has(expr.over)) this.parser.fail(`each input ${expr.over} is already supplied by the item list`, expr.args);
+      args.set(expr.over, expr.items);
+    }
+    if (args.size !== parameters.length || parameters.some(param => !args.has(param.name))) {
+      this.parser.fail(`arguments must match exactly: ${parameters.map(param => param.name).join(", ") || "(none)"}`, expr.args);
+    }
+    for (const module of [...child.modules, child.manifest]) this.modules.set(digestCanonical(manifestToJson(module)), module);
+    const refs = new Map<string, Reference>();
+    for (const [index, param] of parameters.entries()) {
+      const arg = args.get(param.name)!;
+      const pure = this.pure(arg);
+      const over = expr.kind === "each" && param.name === expr.over;
+      if (over && pure.type.kind !== "list" && pure.type.kind !== "json") this.parser.fail("each input must be a list or a dynamic JSON value", arg);
+      if (!over && param.type === "text" && !isText(pure.type) && pure.type.kind !== "json") this.parser.fail(`argument ${param.name} must be text`, arg);
+      // A dynamic JSON argument destined for text needs an explicit runtime
+      // assertion before graph admission can claim the text producer type.
+      const type: Type = over ? { kind: "json" } : { kind: param.type };
+      const program = !over && param.type === "text" && !isText(pure.type)
+        ? ["sconcat", "", pure.program] : pure.program;
+      const argId = `${id}-arg-${index + 1}`;
+      this.add({ id: argId, kind: "expr", inputs: this.wire(argId, pure.refs), expr: { contract: "algal.expr.v1", program }, output: output(type) }, arg, "call-argument", expressionAnnotation(`${title} · ${param.name}`, arg, "call-argument"));
+      refs.set(param.name.toLowerCase().replaceAll("_", "-"), { cell: argId, port: "out", type });
+    }
+    let manifestDigest = child.sourceMap.manifestDigest;
+    let depth = child.analysis.requiredDepth + 1;
+    if (expr.kind === "call" && parameters.length === 0 && this.controls.length) {
+      // The wrapper's required trigger gates its entire invocation. Its inner
+      // parameterless child sees no trigger input or additional model context.
+      const wrapper = parseOrganismManifest({
+        contract: "algal.organism.v1", key: "organism:source-call-trigger", name: "Guarded parameterless call",
+        budgets: { ...SOURCE_PROFILE.budgets, maxAgentCalls: child.analysis.maxAgentCalls, maxDepth: Math.min(BOUNDS.maxDepth, depth) },
+        interface: { inputs: { trigger: { cell: "input", port: "trigger" } }, outputs: { result: { cell: "call", port: "result" } } },
+        cells: [{ id: "input", kind: "input", outputs: { trigger: { type: "json" } } }, { id: "call", kind: "organism", manifest: manifestDigest }], edges: [],
+      });
+      manifestDigest = digestCanonical(manifestToJson(wrapper)); this.modules.set(manifestDigest, wrapper); depth++;
+      const triggerId = `${id}-trigger`;
+      this.add({ id: triggerId, kind: "expr", inputs: {}, expr: { contract: "algal.expr.v1", program: true }, output: { kind: "json", schema: { type: "boolean" } } }, expr, "call-trigger", annotation(`${title} · trigger`, "call-trigger", "Activate the parameterless child only on the selected branch."));
+      refs.set("trigger", { cell: triggerId, port: "out", type: { kind: "json" } });
+    }
+    this.calls += child.analysis.maxAgentCalls * (expr.kind === "each" ? expr.maxItems : 1);
+    this.requiredDepth = Math.max(this.requiredDepth, depth);
+    const compositionId = expr.kind === "each" ? `${id}-each` : id;
+    this.wire(compositionId, refs);
+    const cell: Cell = expr.kind === "call" ? { id, kind: "organism", manifest: manifestDigest }
+      : { id: compositionId, kind: "each", manifest: manifestDigest, over: expr.over.toLowerCase().replaceAll("_", "-"), maxItems: expr.maxItems };
+    const sourceAnnotation = expressionAnnotation(title, expr, expr.kind);
+    sourceAnnotation.details.push(`Child ${child.program.name}: ${child.sourceMap.manifestDigest}`, `At most ${child.analysis.maxAgentCalls * (expr.kind === "each" ? expr.maxItems : 1)} executor attempts`);
+    // Composition signatures are defined by child interfaces. Every supplied
+    // argument was gated above, so no caller control port enters that interface.
+    this.add(cell, expr, expr.kind, sourceAnnotation, false);
+    if (expr.kind === "each") {
+      // Core each outputs are many ports. Capture the entire list as one JSON
+      // value before a source branch merge, whose many input must count arms,
+      // not flatten the selected list into its individual items.
+      this.edges.push({ from: { cell: compositionId, port: "result" }, to: { cell: id, port: "items" } });
+      this.add({ id, kind: "expr", inputs: { items: { type: "json" } }, expr: { contract: "algal.expr.v1", program: ["get", "items"] }, output: { kind: "json", schema: { type: "array" } } }, expr, "each-results", annotation(title, "each-results", "Collect the ordered child results as one JSON list."));
+      return { cell: id, port: "out", type: { kind: "list" } };
+    }
+    return { cell: id, port: "result", type: { kind: child.program.output } };
+  }
+  compile(program: SourceProgram): SourceCompilation {
     const inputs: PortMap = {}; const interfaceInputs: Record<string, { cell: string; port: string }> = {};
     this.parser.unique(program.parameters.map(p => p.name), "parameter", program);
     for (const param of program.parameters) {
+      if (this.imports.has(param.name)) this.parser.fail(`parameter ${param.name} shadows an import`, param.span);
       const name = param.name.toLowerCase().replaceAll("_", "-");
       if (!/^[a-z][a-z0-9-]*$/.test(name) || Object.hasOwn(inputs, name)) {
         this.parser.fail("parameter names must produce distinct lowercase kebab-case interface names", param.span);
@@ -487,17 +603,18 @@ class Compiler {
     }
     if (program.parameters.length) this.add({ id: "input", kind: "input", outputs: inputs }, { start: program.start, end: program.parameters[program.parameters.length - 1]!.span.end }, "input", annotation("parameters", "input", `${program.name} inputs`, program.parameters.map(param => `${param.name}: ${param.type}`)));
     for (const [i, binding] of program.bindings.entries()) {
-      if (this.env.has(binding.name)) this.parser.fail(`duplicate binding ${binding.name}; values are immutable`, binding.expr);
+      if (this.env.has(binding.name) || this.imports.has(binding.name)) this.parser.fail(`duplicate binding ${binding.name}; values and imports are immutable`, binding.expr);
       const ref = this.lower(`b${i + 1}-${binding.name.toLowerCase().replaceAll("_", "-")}`, binding.expr, binding.name); this.env.set(binding.name, ref);
     }
     const result = this.lower("result", program.result, "return");
     if (program.output === "text" && !isText(result.type)) this.parser.fail(`program declares text but returns ${result.type.kind}`, program.result);
     if (program.output === "json" && isText(result.type)) this.parser.fail("program declares json but returns text", program.result);
     if (this.calls > program.budgets.maxAgentCalls) this.parser.fail(`${this.calls} explicit effects exceed max_agent_calls ${program.budgets.maxAgentCalls}; the budget counts executor attempts, including retries`, program);
+    if (this.requiredDepth > program.budgets.maxDepth) this.parser.fail(`composition requires depth ${this.requiredDepth}, exceeding max_depth ${program.budgets.maxDepth}`, program);
     let manifest: OrganismManifest;
     try { manifest = parseOrganismManifest({ contract: "algal.organism.v1", key: `organism:${program.name.replaceAll("_", "-")}`, name: program.name, budgets: program.budgets, interface: { inputs: interfaceInputs, outputs: { result: { cell: result.cell, port: result.port } } }, cells: this.cells, edges: this.edges }); }
     catch (error) { if (error instanceof AlgalError) this.parser.fail(`lowered manifest: ${error.message}`, program); throw error; }
-    return { manifest, sourceMap: { contract: "algal.source-map.v1", sourceDigest: digestText(this.parser.source), manifestDigest: digestCanonical(manifestToJson(manifest)), compilerVersion: SOURCE_PROFILE.compilerVersion, profile: SOURCE_PROFILE.id, cells: this.mappings } };
+    return { manifest, sourceMap: { contract: "algal.source-map.v1", sourceDigest: digestText(this.parser.source), manifestDigest: digestCanonical(manifestToJson(manifest)), compilerVersion: SOURCE_PROFILE.compilerVersion, profile: SOURCE_PROFILE.id, cells: this.mappings }, modules: [...this.modules.values()], analysis: { maxAgentCalls: this.calls, requiredDepth: this.requiredDepth } };
   }
 }
 
@@ -505,7 +622,86 @@ class Compiler {
  * Graph admission and normal runtime input checks still apply to the result.
  * JSON inputs retain dynamic types; strict expr operators check them at run time.
  */
-export function compileSource(source: string): { manifest: OrganismManifest; sourceMap: SourceMap } {
-  const parser = new Parser(source);
-  return new Compiler(parser).compile(parser.program());
+export function sourceImports(source: string): SourceImport[] { return new Parser(source).imports(); }
+
+const originSpan: SourceSpan = { start: { offset: 0, line: 1, column: 1 }, end: { offset: 0, line: 1, column: 1 } };
+function invalidPathCharacters(value: string): boolean {
+  return value.includes("\\") || value.includes(":") || [...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127);
+}
+function projectKey(key: string, span = originSpan): string {
+  if (typeof key !== "string" || !key.endsWith(".algal") || key.length > 512 || invalidPathCharacters(key) || key.split("/").some(part => !part || part === "." || part === "..")) {
+    throw new SourceError("source keys must be normalized project-relative .algal paths", span);
+  }
+  return key;
+}
+/** Resolve only logical source keys. This function never reads the filesystem. */
+export function resolveSourceImport(importerKey: string, path: string, span: SourceSpan): string {
+  projectKey(importerKey, span);
+  if (typeof path !== "string" || !(path.startsWith("./") || path.startsWith("../")) || !path.endsWith(".algal") || path.length > 512 || invalidPathCharacters(path)) {
+    throw new SourceError("imports require a relative ./ or ../ .algal path; absolute paths and URLs are not supported", span);
+  }
+  const parts = importerKey.split("/").slice(0, -1);
+  for (const part of path.split("/")) {
+    if (part === ".") continue;
+    if (part === "..") {
+      if (!parts.length) throw new SourceError("import escapes the source project root", span);
+      parts.pop();
+    } else {
+      if (!part) throw new SourceError("import paths cannot contain empty segments", span);
+      parts.push(part);
+    }
+  }
+  return projectKey(parts.join("/"), span);
+}
+
+export function compileSource(source: string, options: SourceCompilerOptions = {}): SourceCompilation {
+  const entry = projectKey(options.entry ?? "main.algal");
+  const sources = new Map<string, string>();
+  let totalBytes = 0;
+  const insert = (key: string, text: string): void => {
+    projectKey(key);
+    if (typeof text !== "string") throw new SourceError(`source module ${key} must contain source text`, originSpan);
+    if (sources.has(key)) {
+      if (sources.get(key) !== text) throw new SourceError(`entry source differs from modules[${JSON.stringify(key)}]`, originSpan);
+      return;
+    }
+    const bytes = Buffer.byteLength(text);
+    if (bytes > SOURCE_BOUNDS.maxSourceBytes) throw new SourceError(`${key}: source exceeds ${SOURCE_BOUNDS.maxSourceBytes} UTF-8 bytes`, originSpan);
+    if (sources.size >= SOURCE_PROJECT_BOUNDS.maxFiles) throw new SourceError(`source project exceeds ${SOURCE_PROJECT_BOUNDS.maxFiles} files`, originSpan);
+    totalBytes += bytes;
+    if (totalBytes > SOURCE_PROJECT_BOUNDS.maxTotalBytes) throw new SourceError(`source project exceeds ${SOURCE_PROJECT_BOUNDS.maxTotalBytes} UTF-8 bytes`, originSpan);
+    sources.set(key, text);
+  };
+  insert(entry, source);
+  for (const [key, text] of Object.entries(options.modules ?? {})) insert(key, text);
+  const memo = new Map<string, CompiledModule>();
+  const active = new Set<string>();
+  const visit = (key: string, depth: number, location = originSpan): CompiledModule => {
+    if (active.has(key)) throw new SourceError(`source import cycle at ${key}`, location);
+    if (depth > SOURCE_PROJECT_BOUNDS.maxImportDepth) throw new SourceError(`source import depth exceeds ${SOURCE_PROJECT_BOUNDS.maxImportDepth}`, location);
+    const cached = memo.get(key);
+    if (cached) {
+      if (depth + cached.importDepth > SOURCE_PROJECT_BOUNDS.maxImportDepth) throw new SourceError(`source import depth exceeds ${SOURCE_PROJECT_BOUNDS.maxImportDepth}`, location);
+      return cached;
+    }
+    const text = sources.get(key);
+    if (text === undefined) throw new SourceError(`source module not supplied: ${key}`, location);
+    active.add(key);
+    try {
+      const parser = new Parser(text);
+      const declarations = parser.imports();
+      const program = parser.program();
+      const imports = new Map<string, CompiledModule>();
+      for (const declaration of declarations) imports.set(declaration.alias, visit(resolveSourceImport(key, declaration.path, declaration.span), depth + 1, declaration.span));
+      const importDepth = imports.size ? 1 + Math.max(...[...imports.values()].map(child => child.importDepth)) : 0;
+      const result = { ...new Compiler(parser, imports).compile(program), program, importDepth };
+      memo.set(key, result);
+      return result;
+    } catch (error) {
+      if (error instanceof SourceError && key !== entry) throw new SourceError(`${key}: ${error.diagnostic.message}`, error.diagnostic.span);
+      throw error;
+    } finally { active.delete(key); }
+  };
+  const { program: _program, importDepth: _importDepth, ...result } = visit(entry, 0);
+  return result;
 }

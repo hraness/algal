@@ -128,6 +128,37 @@ figcaption { font-size: .65rem; line-height: 1.6; color: var(--muted); }
 .route-source[open] summary > span { transform: rotate(45deg); }
 .route-source .source-code { margin: .5rem 0 1rem; }
 .route-source > p { font-size: .68rem; color: var(--muted); }
+.composition-section { padding-top: 4.5rem; }
+.composition-section .section-heading > p { max-width: 27rem; }
+.composition-card { display: grid; grid-template-columns: 1fr; border: 1px solid var(--line); border-radius: 7px; margin-top: 2rem; overflow: hidden; background: var(--white); }
+.composition-source { min-width: 0; display: grid; grid-template-columns: 1.1fr .9fr; }
+.composition-tabs { display: flex; grid-column: 1 / -1; background: #edf1e8; border-bottom: 1px solid var(--line); }
+.composition-tabs button { appearance: none; cursor: pointer; background: transparent; border: 0; border-bottom: 2px solid transparent; color: var(--muted); padding: .9rem 1.25rem; font: .69rem var(--mono); }
+.composition-tabs button[aria-selected="true"] { color: var(--green); border-bottom-color: var(--green); background: #f6f8f1; }
+.composition-source-panel { grid-column: 1; padding: 1.1rem 1.3rem; }
+.composition-source-panel .source-code { font-size: .72rem; line-height: 1.8; margin-top: 1rem; }
+.composition-budget { grid-column: 2; grid-row: 2; align-self: center; padding: 0 1.3rem; margin: .2rem 0 1rem; }
+.composition-budget strong { display: block; font-size: .78rem; font-weight: 500; margin: .5rem 0 .3rem; }
+.composition-budget p { color: var(--muted); font-size: .69rem; line-height: 1.7; }
+.composition-links { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: .4rem 1rem; padding: 0 1.3rem; font-size: .65rem; }
+.composition-links a { text-decoration: none; }
+.composition-graph { margin: 0; padding: 1rem; background: #f4f6ef; border-top: 1px solid var(--line); min-width: 0; display: flex; flex-direction: column; }
+.composition-graph-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
+.composition-graph img { display: block; width: 100%; height: auto; margin: 1rem auto; flex-grow: 1; object-fit: contain; }
+.composition-graph figcaption { font-size: .62rem; border-top: 1px solid var(--line); padding-top: .7rem; }
+.composition-evidence { border: 1px solid var(--line); border-radius: 5px; margin-top: .7rem; }
+.composition-evidence summary { cursor: pointer; display: flex; justify-content: space-between; gap: .6rem; padding: .9rem 1.15rem; font-size: .77rem; color: var(--green); }
+.composition-evidence summary::-webkit-details-marker { display: none; }
+.composition-proof { display: inline-block; color: var(--muted); font: .6rem var(--mono); margin-left: .9rem; }
+.composition-evidence[open] summary > span:last-child { transform: rotate(45deg); }
+.composition-evidence-body { padding: .3rem 1.15rem 1rem; }
+.inbox-results { list-style: none; counter-reset: inbox; padding: 0; margin: 1rem 0; display: grid; grid-template-columns: repeat(3,1fr); gap: 1.1rem; }
+.inbox-results li { counter-increment: inbox; border-top: 1px solid var(--line); padding-top: .7rem; font-size: .75rem; line-height: 1.8; }
+.inbox-results li::before { content: '0' counter(inbox); display: block; color: #819578; font: .64rem var(--mono); margin-bottom: .5rem; }
+.composition-empty { padding: .8rem 0; border-top: 1px solid var(--line); }
+.composition-empty strong { font-size: .76rem; font-weight: 500; }
+.composition-empty p { font-size: .72rem; color: var(--muted); margin: .3rem 0 0; }
+.composition-evidence-body > .composition-links { padding: 0; margin-bottom: 0; }
 .examples-section { padding-top: 4.5rem; }
 .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 3rem; }
 .section-heading > p { max-width: 26rem; color: var(--muted); font-size: .89rem; line-height: 1.8; margin-bottom: .2rem; }
@@ -249,6 +280,18 @@ footer a { text-decoration: none; }
   .route-receipt { padding: .7rem .9rem; font-size: .55rem; }
   .route-source { padding: 0 1rem; }
   .route-source summary { font-size: .65rem; }
+  .composition-section { padding-top: 3rem; }
+  .composition-card { grid-template-columns: 1fr; margin-top: 1.5rem; }
+  .composition-source { display: block; }
+  .composition-source-panel { grid-column: 1; padding: 1rem; }
+  .composition-source-panel .source-code { font-size: .62rem; }
+  .composition-tabs button { font-size: .63rem; padding: .8rem 1rem; }
+  .composition-budget, .composition-links { padding-left: 1rem; padding-right: 1rem; }
+  .composition-graph { border-left: 0; border-top: 1px solid var(--line); }
+  .composition-graph img { min-width: 960px; }
+  .composition-proof { display: block; margin: .4rem 0 0; font-size: .53rem; }
+  .composition-evidence summary { font-size: .7rem; padding: .8rem 1rem; }
+  .inbox-results { grid-template-columns: 1fr; gap: .8rem; }
   .examples-section { padding-top: 3rem; }
   .section-heading { display: block; }
   .section-heading > p { margin-top: 1.2rem; max-width: none; font-size: .84rem; }

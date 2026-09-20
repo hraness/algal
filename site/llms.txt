@@ -14,8 +14,9 @@ is not part of this first source-language release.
 
 The first source-language subset includes typed program inputs, immutable let
 bindings, literal values, typed decide operations, generate with explicit
-context, deterministic if and exhaustive match, conditional model effects, and return. Advanced repeat,
-each, tool, wait, and evolution operations remain available through manifests.
+context, deterministic if and exhaustive match, conditional model effects, local
+imports, named call, bounded each, and return. Advanced repeat, tool, wait, and
+evolution operations remain available through manifests.
 
 The site reads examples/source/reply.algal during its build and renders diagrams
 from the compiled reply manifest and existing executable examples. Graphs show
@@ -33,6 +34,21 @@ run is replay-verified before publication. Source, manifest, source map, args,
 scripted responses, receipts, and receipt-overlaid diagrams are downloadable.
 The browser selector switches recorded evidence; it performs no model calls.
 These fixtures demonstrate orchestration, not live provider quality.
+
+Local source projects add relative .algal imports, named child calls, and bounded
+ordered each. The loader admits a directory-rooted source closure without
+network imports, symlink traversal, or cycles. The compiler infers transitive
+executor-attempt and nesting-depth requirements. An each bound multiplies the
+child's inferred effect bound; the runtime root budget is shared across nested
+work, not reset per child. Current each execution is sequential.
+
+The inbox project reuses one draft helper for one preview and up to three emails.
+The site build loads its child closure, generates its exact graph, packs a
+portable algal.bundle.v1 bundle, and runs/replay-verifies three-item and empty
+fixtures. The three-item run uses four executor attempts; the empty run uses
+one for the separate preview, returns [] replies, and executes no each child.
+Source, bundle, inputs, scripted answers, and receipts are downloadable. A root
+manifest alone references its children by digest and does not embed them.
 
 Run from the repository root with Bun 1.3 or newer:
 
@@ -53,6 +69,11 @@ bun cli.ts diagram examples/source/reply.algal --format svg --out reply.svg
 - Support receipt: https://algal.dev/receipts/route-help.receipt.json
 - Sales receipt: https://algal.dev/receipts/route-sales.receipt.json
 - Human-review receipt: https://algal.dev/receipts/route-other.receipt.json
+- Reusable inbox project: https://algal.dev/examples/projects/inbox/inbox.algal
+- Draft helper: https://algal.dev/examples/projects/inbox/draft.algal
+- Portable inbox bundle: https://algal.dev/examples/projects/inbox/inbox.bundle.json
+- Inbox receipt: https://algal.dev/receipts/inbox.receipt.json
+- Empty-inbox receipt: https://algal.dev/receipts/inbox-empty.receipt.json
 - Manifest contract: https://github.com/hraness/algal/blob/main/spec/v1/organism.md
 - Durable process demonstration: https://github.com/hraness/algal/blob/main/docs/vm.md
 - Selection and populations: https://github.com/hraness/algal/blob/main/docs/civilization.md
