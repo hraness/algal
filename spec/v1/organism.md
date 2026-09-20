@@ -175,7 +175,7 @@ an active admission record and may revoke it independently.
   `{tool, inputs}` response naming a ref outside `tools` is ordinary output.
   Tool calls that omit a required fn input fail the cell.
 - `compact` (optional, agent only, requires `tools`) is
-  `{"maxLogBytes": 1..262144, "keepRecent"?: 0..8, "route"?: Route}` — a
+  `{"maxLogBytes": 1..262144, "keepRecent"?: 0..8, "route"?: Route, "mode"?: "elide"}` — a
   recorded tool-log compaction policy. When the canonical `toolLog` exceeds
   `maxLogBytes` at the start of a turn, the runtime issues a `decide` effect
   asking one `noul` keep-question per unpinned entry (`keepRecent` pins the
@@ -187,6 +187,25 @@ an active admission record and may revoke it independently.
   triage to a different provider than the cell — a cheap decision backend
   can compact while a frontier model runs the agent. A compaction effect
   failure is recorded like any other and fails the cell.
+- `compact.mode?: "elide"` opts into deterministic result-body projection instead
+  of a `decide` effect. Omitting `mode` preserves the policy above and its receipt
+  identity. `route` is invalid with `mode: "elide"`. Before each agent call, if
+  either the canonical tool log exceeds `maxLogBytes` or the complete context
+  exceeds `maxContextBytes`, replace old, unpinned result bodies oldest-first
+  with `{contract:"algal.tool-output-ref.v1", source:Digest, bytes:Integer}`. The
+  digest and byte count bind the original canonical result; the marker is not a
+  summary or evidence of its contents. Only use a marker when it is smaller.
+  Existing markers remain unchanged. Stop when both budgets fit or eligible
+  bodies are exhausted. `maxLogBytes` is a soft reduction target: fn names,
+  inputs, order, current inputs, notes, other cell views, and the recent tail
+  remain exact. The ordinary complete-context bound still fails closed if
+  protected material cannot fit. This mode makes no extra model call and does
+  not change stored effects or the complete `cells[path].toolCalls` log. Each
+  turn derives a fresh projection from that source log; replay reconstructs the
+  same view. Pure tool results remain reproducible from their recorded calls;
+  external tool results remain in their effect receipts. No recall tool or
+  semantic summary is introduced. Byte savings do not establish token, cost,
+  or task-quality improvements. See `examples/compact-elide.algal.json`.
 - `budget.maxEffectMs` (1–600 000) supplies a per-effect timeout enforced
   at the host executor boundary. Receipts never record the clock itself.
   A settled timeout records `{code:"BUDGET_EXHAUSTED"}`; retry requires an

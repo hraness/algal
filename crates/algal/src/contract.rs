@@ -378,7 +378,15 @@ fn normalize_cell(value: &Value) -> Result<Value> {
                         "compact is agent-only — only tool-bearing cells accumulate a log",
                     ));
                 }
-                keys(compact, &["maxLogBytes", "keepRecent", "route"])?;
+                keys(compact, &["maxLogBytes", "keepRecent", "route", "mode"])?;
+                if let Some(mode) = compact.get("mode") {
+                    if mode != "elide" {
+                        return Err(Error::invalid("compact.mode must be elide"));
+                    }
+                    if compact.get("route").is_some() {
+                        return Err(Error::invalid("compact.route is not used by elide mode"));
+                    }
+                }
                 integer(&compact["maxLogBytes"], 1, 262_144)?;
                 if let Some(recent) = compact.get("keepRecent") {
                     integer(recent, 0, 8)?;

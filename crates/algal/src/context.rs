@@ -86,6 +86,42 @@ pub fn verify(source: &Value, view: &Value) -> Result<bool> {
     Ok(canonical(&compact(source, &view["policy"])?)? == canonical(view)?)
 }
 
+/// Deterministic model-facing projection; callers retain the original tool log
+/// in receipts and enforce the full context byte bound after this pass.
+/// maxLogBytes is a soft target: protected metadata and tail are never removed.
+pub fn elide_tool_context(context: &Value, policy: &Value, max_context: usize) -> Result<Value> {
+    let Some(log) = context["toolLog"].as_array() else {
+        return Ok(context.clone());
+    };
+    let max_log = policy["maxLogBytes"].as_u64().unwrap() as usize;
+    if canonical(&json!(log))?.len() <= max_log && canonical(context)?.len() <= max_context {
+        return Ok(context.clone());
+    }
+    let pinned = policy["keepRecent"].as_u64().unwrap_or(0) as usize;
+    let mut view = context.clone();
+    for (index, entry) in log
+        .iter()
+        .take(log.len().saturating_sub(pinned))
+        .enumerate()
+    {
+        if canonical(&view["toolLog"])?.len() <= max_log && canonical(&view)?.len() <= max_context {
+            break;
+        }
+        let output = &entry["output"];
+        if output["contract"] == "algal.tool-output-ref.v1" {
+            continue;
+        }
+        let bytes = canonical(output)?.len();
+        let stub =
+            json!({"contract":"algal.tool-output-ref.v1","source":digest(output)?,"bytes":bytes});
+        if canonical(&stub)?.len() >= bytes {
+            continue;
+        }
+        view["toolLog"][index]["output"] = stub;
+    }
+    Ok(view)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -109,6 +145,53 @@ mod tests {
         );
         assert!(verify(&source, &view).unwrap());
         assert!(view["afterBytes"].as_u64().unwrap() < view["beforeBytes"].as_u64().unwrap());
+    }
+
+    #[test]
+    fn tool_projection_preserves_source_tail_and_unicode_provenance() {
+        let source = json!({"inputs":{}, "turn":2, "toolLog":[
+            {"fn":"echo.v1", "inputs":{"value":"a"}, "output":{"value":"🍄".repeat(300)}},
+            {"fn":"echo.v1", "inputs":{"value":"b"}, "output":{"value":"b".repeat(300)}}
+        ]});
+        let before = source.clone();
+        let policy = json!({"mode":"elide", "maxLogBytes":400, "keepRecent":1});
+        let view = elide_tool_context(&source, &policy, 800).unwrap();
+        assert_eq!(source, before);
+        assert_eq!(view["toolLog"][0]["inputs"], source["toolLog"][0]["inputs"]);
+        assert_eq!(view["toolLog"][0]["fn"], source["toolLog"][0]["fn"]);
+        assert_eq!(view["toolLog"][1], source["toolLog"][1]);
+        assert_eq!(
+            view["toolLog"][0]["output"],
+            json!({
+                "contract":"algal.tool-output-ref.v1", "source":digest(&source["toolLog"][0]["output"]).unwrap(),
+                "bytes":canonical(&source["toolLog"][0]["output"]).unwrap().len()
+            })
+        );
+        assert_eq!(elide_tool_context(&view, &policy, 800).unwrap(), view);
+        assert!(canonical(&view).unwrap().len() < canonical(&source).unwrap().len());
+        let protected = json!({"mode":"elide", "maxLogBytes":1, "keepRecent":2});
+        assert_eq!(
+            elide_tool_context(&source, &protected, 800).unwrap(),
+            source
+        );
+    }
+
+    #[test]
+    fn tool_projection_preserves_small_bodies_and_fits_full_context() {
+        let source = json!({"inputs":{}, "turn":1, "note":"n".repeat(400), "toolLog":[
+            {"fn":"echo.v1", "inputs":{"value":"a"}, "output":{"value":"a".repeat(500)}}
+        ]});
+        let policy = json!({"mode":"elide", "maxLogBytes":2000, "keepRecent":0});
+        assert_eq!(elide_tool_context(&source, &policy, 2000).unwrap(), source);
+        let view = elide_tool_context(&source, &policy, 800).unwrap();
+        assert!(canonical(&view).unwrap().len() <= 800);
+        assert_eq!(view["note"], source["note"]);
+        let small =
+            json!({"toolLog":[{"fn":"inc.v1", "inputs":{"value":1}, "output":{"value":2}}]});
+        assert_eq!(
+            elide_tool_context(&small, &json!({"maxLogBytes":1}), 1).unwrap(),
+            small
+        );
     }
 
     #[test]

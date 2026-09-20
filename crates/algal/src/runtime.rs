@@ -1082,6 +1082,7 @@ impl Runtime<'_> {
             // receipt — replay reproduces the rebuilt log bit-for-bit.
             if cell["kind"] == "agent"
                 && let Some(compact) = cell.get("compact")
+                && compact["mode"] != "elide"
             {
                 let pinned = compact["keepRecent"].as_u64().unwrap_or(0) as usize;
                 let max_log = compact["maxLogBytes"].as_u64().unwrap() as usize;
@@ -1176,6 +1177,10 @@ impl Runtime<'_> {
             }
             if !log.is_empty() {
                 context["toolLog"] = json!(log);
+            }
+            if cell["kind"] == "agent" && cell["compact"]["mode"] == "elide" {
+                context =
+                    crate::context::elide_tool_context(&context, &cell["compact"], max_context)?;
             }
             let context_bytes = canonical(&context)?.len();
             if context_bytes > max_context {

@@ -1,0 +1,30 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:compact-elide",
+  "name": "Deterministic stale tool output elision",
+  "cells": [
+    {
+      "id": "agent",
+      "kind": "agent",
+      "inputs": {},
+      "prompt": "Read two records, then report completion. Elided tool-output references are not verbatim results.",
+      "output": {
+        "kind": "text"
+      },
+      "tools": [
+        "pick.v1"
+      ],
+      "compact": {
+        "mode": "elide",
+        "maxLogBytes": 700,
+        "keepRecent": 1
+      },
+      "budget": {
+        "maxTurns": 4,
+        "maxContextBytes": 1100,
+        "maxOutputBytes": 2000
+      }
+    }
+  ],
+  "edges": []
+}
