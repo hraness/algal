@@ -16,6 +16,7 @@ import signal
 import subprocess
 import sys
 import time
+import tomllib
 from typing import Any
 
 HERE = Path(__file__).resolve().parent
@@ -83,6 +84,77 @@ def validate_staged_task(task_root: Path, task: dict[str, Any]) -> Path:
     return path
 
 
+def runtime_fingerprint(repo_root: Path) -> dict[str, Any]:
+    """Bind actual reference-runtime bytes, including dirty files and WASM."""
+    paths = sorted([repo_root / "index.ts", *(path for path in (repo_root / "src").rglob("*") if path.is_file())])
+    if len(paths) > 4096 or not (repo_root / "index.ts").is_file() or not (repo_root / "src" / "algal_expr.wasm").is_file():
+        raise ValueError("Missing or oversized ALGAL runtime source set")
+    total_bytes = 0
+    hashes = {}
+    for path in paths:
+        total_bytes += path.stat().st_size
+        if total_bytes > 64 * 1024 * 1024:
+            raise ValueError("ALGAL runtime exceeds source fingerprint byte bound")
+        with path.open("rb") as stream:
+            data = stream.read(64 * 1024 * 1024 + 1)
+        if len(data) != path.stat().st_size or len(data) > 64 * 1024 * 1024:
+            raise ValueError("ALGAL runtime source changed or exceeded bound during fingerprint")
+        hashes[path.relative_to(repo_root).as_posix()] = hashlib.sha256(data).hexdigest()
+    return {"digest": digest(hashes), "files": len(hashes), "bytes": total_bytes}
+
+
+def docker_json(docker: str, arguments: list[str]) -> Any:
+    result = subprocess.run([docker, *arguments], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            timeout=30, check=False)
+    if result.returncode != 0:
+        raise ValueError("Read-only Docker image/version admission failed; runner never pulls or builds images")
+    if len(result.stdout) > 1024 * 1024:
+        raise ValueError("Docker metadata exceeds admission byte bound")
+    return json.loads(result.stdout)
+
+
+def validate_image_metadata(raw: Any, task: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise ValueError("Docker image metadata must be an object")
+    repository = task["image"].rsplit(":", 1)[0]
+    expected = repository + "@" + task["imageDigest"]
+    repo_digests = raw.get("RepoDigests")
+    platform = str(raw.get("Os", "")) + "/" + str(raw.get("Architecture", ""))
+    if raw.get("Variant"):
+        platform += "/" + str(raw["Variant"])
+    if (not isinstance(repo_digests, list) or len(repo_digests) > 128 or
+            not all(isinstance(value, str) and len(value) <= 512 for value in repo_digests) or expected not in repo_digests):
+        raise ValueError(f"Cached image digest differs from frozen benchmark: {task['id']}")
+    if platform != task["imagePlatform"]:
+        raise ValueError(f"Cached image platform differs from frozen benchmark: {task['id']}")
+    image_id = raw.get("Id")
+    if not isinstance(image_id, str) or not image_id.startswith("sha256:") or len(image_id) != 71:
+        raise ValueError("Docker image lacks a content identity")
+    return {"taskId": task["id"], "expectedRepoDigest": expected, "imageId": image_id,
+            "platform": platform, "repoDigests": sorted(repo_digests)}
+
+
+def inspect_task_environment(docker: str, task_root: Path, task: dict[str, Any]) -> dict[str, Any]:
+    path = validate_staged_task(task_root, task)
+    config = tomllib.loads((path / "task.toml").read_text())
+    image = config.get("environment", {}).get("docker_image")
+    repository = task["image"].rsplit(":", 1)[0]
+    pinned_reference = repository + "@" + task["imageDigest"]
+    if image not in (task["image"], pinned_reference):
+        raise ValueError("Staged task image reference differs from frozen benchmark")
+    raw = docker_json(docker, ["image", "inspect", "--format", "{{json .}}", image])
+    admitted = validate_image_metadata(raw, task)
+    versions = docker_json(docker, ["version", "--format", "{{json .}}"])
+    recorded_versions = {}
+    for role in ("Client", "Server"):
+        value = versions.get(role) if isinstance(versions, dict) else None
+        if not isinstance(value, dict) or not isinstance(value.get("Version"), str) or not 1 <= len(value["Version"]) <= 128:
+            raise ValueError("Docker client/server version evidence is missing")
+        recorded_versions[role.lower()] = value["Version"]
+    return {"schema": "algal.coding-harness.environment.v1", **admitted, "requestedImage": image,
+            "dockerVersions": recorded_versions, "checkedAtUnix": time.time()}
+
+
 def settings(args: argparse.Namespace, benchmark: dict[str, Any]) -> dict[str, Any]:
     if importlib.metadata.version("harbor") != benchmark["harbor"]["version"]:
         raise ValueError("Installed Harbor version differs from benchmark pin")
@@ -105,6 +177,7 @@ def settings(args: argparse.Namespace, benchmark: dict[str, Any]) -> dict[str, A
         "pythonVersion": sys.version.split()[0],
         "bunVersion": subprocess.check_output([args.bun, "--version"], text=True).strip(),
         "sourceSha256": {name: hashlib.sha256((HERE / name).read_bytes()).hexdigest() for name in files},
+        "algalRuntime": runtime_fingerprint(HERE.parent.parent),
         "stagedTaskDigests": task_files,
         "paidInferenceCapUsd": 20, "billing": "existing-subscription", "paidApiFallback": False,
         "modelVersionLimitation": "Configured selector; immutable upstream model weights are unavailable.",
@@ -216,14 +289,15 @@ def collect_trial(job_dir: Path, row: dict[str, Any], duration_ms: int, exit_cod
     }
 
 
-def run_episode(args: argparse.Namespace, row: dict[str, Any], config_path: Path) -> dict[str, Any]:
+def run_episode(args: argparse.Namespace, row: dict[str, Any], config_path: Path, environment_receipt: dict[str, Any]) -> dict[str, Any]:
     launch = args.output_dir / "launches" / (row["jobName"] + ".json")
     launch.parent.mkdir(parents=True, exist_ok=True)
     # Exclusive creation refuses retries even when a prior outcome is unknown.
     host_controller = controller_environment(args, row)
+    write_json(args.output_dir / "environments" / (row["jobName"] + ".json"), environment_receipt, immutable=True)
     with launch.open("x") as stream:
         json.dump({"startedAtUnix": time.time(), "configSha256": hashlib.sha256(config_path.read_bytes()).hexdigest(),
-                   "hostControllerEnvironmentId": digest(host_controller)}, stream)
+                   "hostControllerEnvironmentId": digest(host_controller), "environmentReceiptId": digest(environment_receipt)}, stream)
     env = {**{key: value for key, value in os.environ.items() if not key.startswith("ALGAL_HARNESS_")},
            **host_controller, "PYTHONPATH": str(HERE), "TMPDIR": str(args.output_dir / "tmp")}
     Path(env["TMPDIR"]).mkdir(exist_ok=True)
@@ -246,6 +320,7 @@ def run_episode(args: argparse.Namespace, row: dict[str, Any], config_path: Path
             for sig, previous in old.items():
                 signal.signal(sig, previous)
     result = collect_trial(args.output_dir / "jobs" / row["jobName"], row, round((time.monotonic() - started) * 1000), code)
+    result["environmentReceiptId"] = digest(environment_receipt)
     if cancelled:
         result["outcome"]["status"] = "invalid"
         result["statusReason"] = "cancelled-no-retry"
@@ -328,6 +403,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--xcb-executable", default="/Users/benguo/.local/bin/xcb")
     parser.add_argument("--bun", default="/Users/benguo/.bun/bin/bun")
     parser.add_argument("--harbor", default=str(Path(sys.executable).with_name("harbor")))
+    parser.add_argument("--docker", default="docker", help="Read-only image/version inspection CLI inside the admitted Docker wrapper")
     parser.add_argument("--max-model-attempts", type=int, default=4, choices=range(1, 17))
     parser.add_argument("--smoke-task", default="regex-log", help="One development task for smoke (cached regex-log by default)")
     args = parser.parse_args(argv)
@@ -385,8 +461,12 @@ def main(argv: list[str] | None = None) -> None:
               "billing": "existing-subscription", "incrementalPaidApiSpendUsd": 0, "paidInferenceCapUsd": 20}
     report_path = args.output_dir / "reports" / f"{args.mode}.json"
     try:
+        # Admit every image before spending inference on any matrix row. This
+        # never pulls, builds, starts, or modifies Docker resources.
+        admitted_environments = {task_id: inspect_task_environment(args.docker, args.task_root, task_lookup[task_id])
+                                 for task_id in dict.fromkeys(row["taskId"] for row in rows)}
         for row in rows:
-            episode = run_episode(args, row, args.output_dir / "configs" / (row["jobName"] + ".json"))
+            episode = run_episode(args, row, args.output_dir / "configs" / (row["jobName"] + ".json"), admitted_environments[row["taskId"]])
             report["episodes"].append(episode)
             write_json(report_path, report)
             print(json.dumps({"arm": row["arm"], "taskId": row["taskId"], "status": episode["outcome"]["status"], "reason": episode["statusReason"]}), flush=True)

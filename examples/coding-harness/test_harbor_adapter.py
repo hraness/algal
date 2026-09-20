@@ -23,14 +23,15 @@ import harbor_adapter as adapter
 
 
 def wrapper_request(command):
-    return json.loads(base64.b64decode(shlex.split(command)[-1]))
+    payload, maximum, timeout = shlex.split(command)[-3:]
+    return {"command": base64.b64decode(payload).decode(), "maxOutputBytes": int(maximum), "timeoutMs": int(timeout)}
 
 
 def fake_envelope(request, stdout="", stderr="", exit_code=0):
     limit = request["maxOutputBytes"]
-    envelope = {"version": 1,
-                "result": adapter.bounded_terminal_result(stdout, stderr, exit_code, limit),
-                "truncated": len(stdout.encode()) + len(stderr.encode()) > limit,
+    envelope = {"version": 2, "stdoutHex": stdout.encode()[:limit].hex(),
+                "stderrHex": stderr.encode()[:limit].hex(), "exitCode": exit_code,
+                "rawBytes": min(limit + 1, len(stdout.encode()) + len(stderr.encode())),
                 "timedOut": False, "interrupted": None}
     return SimpleNamespace(stdout=json.dumps(envelope) + "\n", stderr="", return_code=0)
 
@@ -144,6 +145,28 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.calls), 1)
         self.assertEqual(self.receipt()["terminalErrors"], 1)
         self.assertNotIn("SECRET", (self.logs / "algal-harness.jsonl").read_text())
+        self.assertNotIn("SECRET", json.dumps(self.receipt()))
+        self.assertEqual(self.receipt()["terminalFailure"], {"errorType": "RuntimeError"})
+
+    async def test_internal_terminal_diagnostic_survives_in_host_receipt(self):
+        argv = self.child('''
+            json.loads(sys.stdin.readline())
+            print(json.dumps({'type':'terminal','id':1,'request':{'command':'work','maxOutputBytes':64,'timeoutMs':1000}}), flush=True)
+            reply = json.loads(sys.stdin.readline())
+            assert reply['type'] == 'terminal-error' and 'exitCode' not in reply['error']
+            print(json.dumps({'type':'result','result':{'termination':'failed'}}), flush=True)
+        ''')
+        async def execute(**kwargs):
+            self.calls.append(kwargs)
+            return SimpleNamespace(stdout="", stderr="SECRET provider diagnostics", return_code=127)
+        with self.assertRaises(adapter.AdapterProtocolError):
+            await adapter.run_controller(argv, {}, SimpleNamespace(exec=execute), self.logs)
+        failure = self.receipt()["terminalFailure"]
+        self.assertEqual(failure["errorType"], "AdapterProtocolError")
+        self.assertIn("exitCode=127", failure["error"])
+        self.assertIn("stderrPresent=true", failure["error"])
+        self.assertNotIn("SECRET", json.dumps(self.receipt()))
+        self.assertEqual(len(self.calls), 1)
 
     async def test_duplicate_terminal_id_is_not_executed_twice(self):
         argv = self.child('''
@@ -375,9 +398,9 @@ class SandboxCaptureTests(unittest.IsolatedAsyncioTestCase):
             })
         self.assertEqual(reply["result"]["stdout"], "")
 
-    async def test_wrapper_skips_task_python_startup_hooks(self):
-        (self.root / "sitecustomize.py").write_text("print('unexpected-startup-output')\n")
-        with patch.dict(os.environ, {"PYTHONPATH": str(self.root)}):
+    async def test_wrapper_skips_task_perl_startup_hooks(self):
+        (self.root / "TaskStartup.pm").write_text("print 'unexpected-startup-output'; 1;\n")
+        with patch.dict(os.environ, {"PERL5LIB": str(self.root), "PERL5OPT": "-MTaskStartup"}):
             reply = await adapter.execute_terminal(self.environment(), 8, {
                 "command": "printf task-output", "maxOutputBytes": 100, "timeoutMs": 3000,
             })

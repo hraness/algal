@@ -15,7 +15,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
-import inspect
 import json
 import math
 import os
@@ -137,123 +136,165 @@ def bounded_terminal_result(stdout: str | None, stderr: str | None, exit_code: i
     return {"stdout": bounded_out, "stderr": bounded_err, "exitCode": exit_code}
 
 
-# This code executes in the task sandbox, never on the controller host. It keeps
-# at most maxOutputBytes per stream and drains all remaining bytes. In particular,
-# it never uses `head` or closes a pipe early, which would inject SIGPIPE into the
-# task command and could falsely report a successful/failed build.
+# One capture backend for every task and engine. Perl/POSIX are part of the
+# essential perl-base package in the selected Ubuntu/Debian images. The helper
+# retains at most maxOutputBytes per stream and drains the rest without SIGPIPE.
+# A forked watchdog uses builtin fractional select sleep: no optional Time::HiRes,
+# JSON module, Python installation, task-image mutation, or runtime fallback.
+CAPTURE_BACKEND = "perl-core-v2"
 _SANDBOX_CAPTURE_SOURCE = r'''
-import base64
-import json
-import os
-import selectors
-import signal
-import subprocess
-import sys
-import time
-
-def capture_command(request):
-    limit = request["maxOutputBytes"]
-    requested_signal = [None]
-    def receive_signal(signum, frame):
-        requested_signal[0] = signum
-    signal.signal(signal.SIGTERM, receive_signal)
-    signal.signal(signal.SIGINT, receive_signal)
-    process = None
-    selector = selectors.DefaultSelector()
-    buffers = {"stdout": bytearray(), "stderr": bytearray()}
-    raw_bytes = 0
-    timed_out = False
-    stopping_at = None
-    killed = False
-    def signal_group(signum):
-        if process is not None:
-            try:
-                os.killpg(process.pid, signum)
-            except ProcessLookupError:
-                pass
-    try:
-        process = subprocess.Popen(
-            ["bash", "-lc", request["command"]], stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
-        )
-        for name, stream in (("stdout", process.stdout), ("stderr", process.stderr)):
-            os.set_blocking(stream.fileno(), False)
-            selector.register(stream, selectors.EVENT_READ, name)
-        deadline = time.monotonic() + request["timeoutMs"] / 1000.0
-        while selector.get_map() or process.poll() is None:
-            now = time.monotonic()
-            if stopping_at is None and (requested_signal[0] is not None or now >= deadline):
-                timed_out = requested_signal[0] is None
-                stopping_at = now
-                signal_group(signal.SIGTERM)
-            if stopping_at is not None and not killed and now - stopping_at >= TERM_GRACE_SEC:
-                signal_group(signal.SIGKILL)
-                killed = True
-            for key, events in selector.select(0.025):
-                try:
-                    chunk = os.read(key.fileobj.fileno(), 8192)
-                except (BlockingIOError, InterruptedError):
-                    continue
-                if not chunk:
-                    selector.unregister(key.fileobj)
-                    key.fileobj.close()
-                    continue
-                raw_bytes = min(limit + 1, raw_bytes + len(chunk))
-                buffer = buffers[key.data]
-                if len(buffer) < limit:
-                    buffer.extend(chunk[:limit - len(buffer)])
-        return_code = process.wait()
-        # Match shell-style signal exit status; ordinary exit codes are unchanged.
-        if return_code < 0:
-            return_code = 128 - return_code
-        out = bytes(buffers["stdout"]).decode("utf-8", errors="replace")
-        err = bytes(buffers["stderr"]).decode("utf-8", errors="replace")
-        decoded_bytes = len(out.encode("utf-8")) + len(err.encode("utf-8"))
-        truncated = raw_bytes > limit or decoded_bytes > limit
-        if truncated and decoded_bytes <= limit:
-            # Retaining exactly the cap can hide that more bytes were drained.
-            # Add one byte solely to activate the shared bounded marker logic.
-            if out:
-                out += " " * (limit - decoded_bytes + 1)
-            else:
-                err += " " * (limit - decoded_bytes + 1)
-        result = bounded_terminal_result(out, err, return_code, limit)
-        return {"version": 1, "result": result, "truncated": truncated,
-                "timedOut": timed_out, "interrupted": requested_signal[0]}
-    finally:
-        if process is not None:
-            if process.poll() is None or stopping_at is not None:
-                signal_group(signal.SIGKILL)
-            process.wait()
-            for stream in (process.stdout, process.stderr):
-                if stream is not None:
-                    stream.close()
-        selector.close()
-
-try:
-    request = json.loads(base64.b64decode(sys.argv[1]).decode("utf-8"))
-    envelope = capture_command(request)
-    print(json.dumps(envelope, ensure_ascii=True, separators=(",", ":")), flush=True)
-except BaseException as exc:
-    print(json.dumps({"version": 1, "error": "Sandbox wrapper failed: " + type(exc).__name__[:80]}), flush=True)
-    sys.exit(70)
+use strict;
+use POSIX ();
+my ($encoded, $limit, $timeout_ms) = @ARGV;
+my $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+my %values = map { substr($alphabet, $_, 1) => $_ } 0..63;
+my ($bits, $available, $command) = (0, 0, '');
+for my $letter (split //, $encoded) {
+    last if $letter eq '=';
+    die "Invalid encoded request\n" unless exists $values{$letter};
+    $bits = ($bits << 6) | $values{$letter};
+    $available += 6;
+    if ($available >= 8) {
+        $available -= 8;
+        $command .= chr(($bits >> $available) & 255);
+        $bits &= (1 << $available) - 1;
+    }
+}
+my ($pid, $timer, $status);
+my ($interrupted, $stopping, $kill_due, $timed_out, $raw_bytes) = (0, 0, 0, 0, 0);
+my %buffers = (stdout => '', stderr => '');
+my %handles;
+$SIG{TERM} = sub { $interrupted = 15; };
+$SIG{INT} = sub { $interrupted = 2; };
+$SIG{ALRM} = sub { $kill_due = 1; };
+my $ok = eval {
+    pipe(my $out_r, my $out_w) or die "pipe";
+    pipe(my $err_r, my $err_w) or die "pipe";
+    pipe(my $clock_r, my $clock_w) or die "pipe";
+    $pid = fork();
+    die "fork" unless defined $pid;
+    if ($pid == 0) {
+        $SIG{TERM} = $SIG{INT} = $SIG{ALRM} = 'DEFAULT';
+        close $out_r; close $err_r; close $clock_r; close $clock_w;
+        setpgrp(0, 0) or POSIX::_exit(70);
+        open(STDIN, '<', '/dev/null') or POSIX::_exit(70);
+        open(STDOUT, '>&', $out_w) or POSIX::_exit(70);
+        open(STDERR, '>&', $err_w) or POSIX::_exit(70);
+        close $out_w; close $err_w;
+        exec('/bin/bash', '-lc', $command);
+        POSIX::_exit(127);
+    }
+    # Close the fork/exec race before a very short deadline can signal the group.
+    setpgrp($pid, $pid);
+    close $out_w; close $err_w;
+    $timer = fork();
+    die "watchdog fork" unless defined $timer;
+    if ($timer == 0) {
+        $SIG{TERM} = $SIG{INT} = $SIG{ALRM} = 'DEFAULT';
+        close $out_r; close $err_r; close $clock_r;
+        select(undef, undef, undef, $timeout_ms / 1000);
+        syswrite($clock_w, 'T');
+        close $clock_w;
+        POSIX::_exit(0);
+    }
+    close $clock_w;
+    %handles = (stdout => $out_r, stderr => $err_r, clock => $clock_r);
+    while (exists $handles{stdout} || exists $handles{stderr} || !defined $status) {
+        if (!$stopping && ($interrupted || $timed_out)) {
+            $stopping = 1;
+            kill 'TERM', -$pid;
+            alarm 2;
+        }
+        if ($kill_due) {
+            kill 'KILL', -$pid;
+            $kill_due = 0;
+        }
+        my $readers = '';
+        for my $handle (values %handles) { vec($readers, fileno($handle), 1) = 1; }
+        my $ready = $readers;
+        my $count = select($ready, undef, undef, 0.025);
+        if (defined $count && $count > 0) {
+            for my $name (keys %handles) {
+                my $handle = $handles{$name};
+                next unless vec($ready, fileno($handle), 1);
+                my $size = sysread($handle, my $chunk, 8192);
+                if (!defined $size) { next if $!{EINTR}; die "read"; }
+                if ($size == 0) { close $handle; delete $handles{$name}; next; }
+                if ($name eq 'clock') { $timed_out = 1 unless $interrupted; next; }
+                $raw_bytes += $size;
+                $raw_bytes = $limit + 1 if $raw_bytes > $limit;
+                my $remaining = $limit - length($buffers{$name});
+                $buffers{$name} .= substr($chunk, 0, $remaining) if $remaining > 0;
+            }
+        }
+        if (!defined $status) {
+            my $waited = waitpid($pid, POSIX::WNOHANG());
+            if ($waited == $pid) { $status = $?; }
+            elsif ($waited == -1) { die "wait"; }
+        }
+    }
+    1;
+};
+alarm 0;
+# Join every direct child before emitting the envelope. Group cleanup covers
+# ordinary descendants that still hold command pipes after a deadline/signal.
+if (defined $pid && $pid > 0 && (!$ok || $stopping)) { kill 'KILL', -$pid; }
+if (defined $pid && $pid > 0 && !defined $status) {
+    while (waitpid($pid, 0) == -1 && $!{EINTR}) {}
+    $status = $?;
+}
+if (defined $timer && $timer > 0) {
+    kill 'TERM', $timer;
+    while (waitpid($timer, 0) == -1 && $!{EINTR}) {}
+}
+for my $handle (values %handles) { close $handle; }
+if (!$ok) { print qq({"version":2,"error":"Sandbox wrapper failed"}\n); exit 70; }
+my $exit_code = ($status & 127) ? 128 + ($status & 127) : $status >> 8;
+my $out_hex = unpack('H*', $buffers{stdout});
+my $err_hex = unpack('H*', $buffers{stderr});
+my $timeout_json = $timed_out ? 'true' : 'false';
+my $signal_json = $interrupted || 'null';
+print qq({"version":2,"stdoutHex":"$out_hex","stderrHex":"$err_hex","exitCode":$exit_code,"rawBytes":$raw_bytes,"timedOut":$timeout_json,"interrupted":$signal_json}\n);
 '''
 
 
 def sandbox_terminal_command(request: Mapping[str, Any]) -> str:
-    """Encode trusted wrapper code and untrusted command data separately."""
+    # Encode command data separately from the fixed, explicitly selected helper.
     terminal_request({"type": "terminal", "id": 0, "request": dict(request)}, set())
-    payload = base64.b64encode(encode_frame(request)).decode("ascii")
-    source = (
-        "from __future__ import annotations\nfrom typing import Any\n"
-        "MAX_OUTPUT_BYTES = " + str(MAX_OUTPUT_BYTES) + "\n"
-        "TERM_GRACE_SEC = " + repr(SANDBOX_TERM_GRACE_SEC) + "\n"
-        "class AdapterProtocolError(RuntimeError): pass\n"
-        + inspect.getsource(bounded_terminal_result) + _SANDBOX_CAPTURE_SOURCE
-    )
-    # Task Python startup hooks must not run before the bounded capture begins.
-    # This wrapper needs only the stdlib; the task command keeps its normal env.
-    return "exec python3 -I -S -c " + shlex.quote(source) + " " + shlex.quote(payload)
+    payload = base64.b64encode(request["command"].encode("utf-8")).decode("ascii")
+    # Ignore task-supplied Perl startup hooks before bounded capture begins.
+    return ("PERL5OPT= PERL5LIB= PERLLIB= exec /usr/bin/perl -e " + shlex.quote(_SANDBOX_CAPTURE_SOURCE)
+            + " -- " + shlex.quote(payload) + " " + str(request["maxOutputBytes"])
+            + " " + str(request["timeoutMs"]))
+
+
+def decode_terminal_envelope(stdout: str, max_bytes: int) -> dict[str, Any]:
+    envelope = decode_frame(stdout.encode("utf-8"))
+    if set(envelope) != {"version", "stdoutHex", "stderrHex", "exitCode", "rawBytes", "timedOut", "interrupted"} or envelope["version"] != 2:
+        raise AdapterProtocolError("Sandbox output wrapper returned an invalid envelope")
+    if type(envelope["exitCode"]) is not int or not 0 <= envelope["exitCode"] <= 255:
+        raise AdapterProtocolError("Sandbox output wrapper returned invalid terminal data")
+    if type(envelope["rawBytes"]) is not int or not 0 <= envelope["rawBytes"] <= max_bytes + 1 or type(envelope["timedOut"]) is not bool:
+        raise AdapterProtocolError("Sandbox output wrapper returned invalid status data")
+    if envelope["interrupted"] is not None and (type(envelope["interrupted"]) is not int or envelope["interrupted"] not in (2, 15)):
+        raise AdapterProtocolError("Sandbox output wrapper returned invalid signal data")
+    decoded = []
+    for key in ("stdoutHex", "stderrHex"):
+        value = envelope[key]
+        if not isinstance(value, str) or len(value) > max_bytes * 2 or len(value) % 2 or any(char not in "0123456789abcdef" for char in value):
+            raise AdapterProtocolError("Sandbox output wrapper returned invalid captured bytes")
+        decoded.append(bytes.fromhex(value).decode("utf-8", errors="replace"))
+    out, err = decoded
+    decoded_bytes = len(out.encode("utf-8")) + len(err.encode("utf-8"))
+    truncated = envelope["rawBytes"] > max_bytes or decoded_bytes > max_bytes
+    if truncated and decoded_bytes <= max_bytes:
+        # Activate the visible marker even when a retained prefix fits exactly.
+        if out:
+            out += " " * (max_bytes - decoded_bytes + 1)
+        else:
+            err += " " * (max_bytes - decoded_bytes + 1)
+    return {"result": bounded_terminal_result(out, err, envelope["exitCode"], max_bytes),
+            "truncated": truncated, "timedOut": envelope["timedOut"], "interrupted": envelope["interrupted"]}
 
 
 async def execute_terminal(
@@ -289,25 +330,14 @@ async def execute_terminal(
             pending.exception()  # Retrieve a provider failure without hiding cancellation.
         raise
     if response.return_code != 0 or response.stderr:
-        raise AdapterProtocolError("Sandbox output wrapper did not complete cleanly")
+        # Only structural details are safe to retain: provider stderr may include
+        # private state, and never belongs in a transport exception or prompt.
+        code = str(response.return_code) if type(response.return_code) is int else "invalid"
+        raise AdapterProtocolError("Sandbox output wrapper did not complete cleanly (exitCode=" + code + ", stderrPresent=" + str(bool(response.stderr)).lower() + ")")
     if not isinstance(response.stdout, str):
         raise AdapterProtocolError("Sandbox output wrapper returned no JSON envelope")
-    envelope = decode_frame(response.stdout.encode("utf-8"))
-    if set(envelope) != {"version", "result", "truncated", "timedOut", "interrupted"} or envelope["version"] != 1:
-        raise AdapterProtocolError("Sandbox output wrapper returned an invalid envelope")
-    result = envelope["result"]
-    if not isinstance(result, dict) or set(result) != {"stdout", "stderr", "exitCode"}:
-        raise AdapterProtocolError("Sandbox output wrapper returned invalid terminal data")
-    if type(envelope["truncated"]) is not bool or type(envelope["timedOut"]) is not bool:
-        raise AdapterProtocolError("Sandbox output wrapper returned invalid status data")
-    if envelope["interrupted"] is not None and (type(envelope["interrupted"]) is not int or envelope["interrupted"] not in (2, 15)):
-        raise AdapterProtocolError("Sandbox output wrapper returned invalid signal data")
-    bounded = bounded_terminal_result(result["stdout"], result["stderr"], result["exitCode"], request["maxOutputBytes"])
-    if bounded != result:
-        raise AdapterProtocolError("Sandbox output wrapper exceeded the requested byte limit")
-    return {"type": "terminal-result", "id": ident, "result": result,
-            "truncated": envelope["truncated"], "timedOut": envelope["timedOut"],
-            "interrupted": envelope["interrupted"]}
+    return {"type": "terminal-result", "id": ident,
+            **decode_terminal_envelope(response.stdout, request["maxOutputBytes"])}
 
 
 def controller_config(instruction: str, values: Mapping[str, str], model_name: str | None) -> dict[str, Any]:
@@ -396,6 +426,7 @@ async def run_controller(
     receipt: dict[str, Any] = {
         "schema": "algal.coding-harness.harbor.v1", "status": "running",
         "initialConfigSha256": hashlib.sha256(initial_frame).hexdigest(),
+        "captureBackend": CAPTURE_BACKEND,
         "terminalRequests": 0, "terminalReplies": 0, "controllerExitCode": None,
         "traceTruncated": False, "stderrBytes": 0, "stderrTruncated": False,
     }
@@ -485,6 +516,12 @@ async def run_controller(
                         reply = await execute_terminal(environment, ident, request, on_cancel=stop_controller)
                     except Exception as exc:
                         terminal_failure = True
+                        diagnostic = {"errorType": type(exc).__name__[:80]}
+                        if isinstance(exc, AdapterProtocolError):
+                            # AdapterProtocolError text is authored here, never a
+                            # raw provider message. Keep it only in host evidence.
+                            diagnostic["error"] = str(exc).encode("utf-8")[:512].decode("utf-8", errors="ignore")
+                        receipt["terminalFailure"] = diagnostic
                         # Exception text may contain provider credentials or huge output.
                         reply = {"type": "terminal-error", "id": ident,
                                  "error": "Sandbox execution failed (" + type(exc).__name__[:80] + "); completion is unknown; command was not retried"}
@@ -568,7 +605,7 @@ class AlgalHarborAgent(BaseAgent):
         return "algal-coding-harness"
 
     def version(self) -> str:
-        return "0.1.0"
+        return "0.2.0"
 
     async def setup(self, environment: BaseEnvironment) -> None:
         # The controller stays on the Mac; the benchmark image stays unchanged.

@@ -169,6 +169,14 @@ setting or ALGAL manifest is not OS confinement. Never run model-generated
 commands against a host checkout merely because a task path was configured.
 The benchmark runner owns filesystem/process isolation and hidden grading.
 
+The Harbor adapter runs on host Python, while terminal capture inside the task
+uses the explicit `perl-core-v2` helper and distro-core Perl/POSIX. It drains
+excess stdout/stderr, bounds retained bytes, and owns timeout process-group
+cleanup. It does not install Python or rebuild the benchmark image. A missing
+helper runtime is an invalid integration trial, never an automatic fallback or
+an execution retry. Controller evidence is written to an unmounted host sibling
+of Harbor's sandbox-writable agent logs.
+
 Persistent cross-task memory is intentionally a later experiment. First compare
 the same frozen harness with and without such memory, separating code changes
 from recalled experience. Memory-schema migration and equal-budget program

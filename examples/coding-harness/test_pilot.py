@@ -1,9 +1,13 @@
 import argparse
 import copy
+import hashlib
 import json
+import os
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import pilot
 
@@ -91,7 +95,9 @@ class PilotTest(unittest.TestCase):
         JobConfig.model_validate(config)
 
     def test_freeze_charges_proposal_and_all_candidates_and_rejects_overwrite(self):
-        bun = "/Users/benguo/.bun/bin/bun"
+        bun = os.environ.get("ALGAL_HARNESS_BUN") or shutil.which("bun")
+        if not bun:
+            self.fail("Bun is required for protocol integration checks; set ALGAL_HARNESS_BUN or install Bun on PATH")
         baseline = pilot.protocol(bun, {"op": "policy", "policy": pilot.BASELINE})
         candidate = pilot.protocol(bun, {"op": "policy", "policy": pilot.MANUAL_CANDIDATE})
         with tempfile.TemporaryDirectory() as directory:
@@ -147,6 +153,60 @@ class PilotTest(unittest.TestCase):
             bad["fixed"] = "changed"
             with self.assertRaisesRegex(ValueError, "unchanged settings"):
                 pilot.freeze(args, self.benchmark, bad)
+
+    def test_runtime_fingerprint_binds_dirty_source_index_and_wasm_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "src").mkdir()
+            (root / "index.ts").write_text("export {};\n")
+            (root / "src" / "run.ts").write_text("export const version = 1;\n")
+            (root / "src" / "algal_expr.wasm").write_bytes(b"\0asm-fixture")
+            initial = pilot.runtime_fingerprint(root)
+            self.assertEqual(initial, pilot.runtime_fingerprint(root))
+            self.assertEqual(initial["files"], 3)
+            for path in (root / "index.ts", root / "src" / "run.ts", root / "src" / "algal_expr.wasm"):
+                old = pilot.runtime_fingerprint(root)
+                path.write_bytes(path.read_bytes() + b"changed")
+                self.assertNotEqual(old["digest"], pilot.runtime_fingerprint(root)["digest"])
+            (root / "src" / "algal_expr.wasm").unlink()
+            with self.assertRaisesRegex(ValueError, "Missing"):
+                pilot.runtime_fingerprint(root)
+
+    def image_metadata(self, task):
+        return {"RepoDigests": [task["image"].rsplit(":", 1)[0] + "@" + task["imageDigest"]],
+                "Id": "sha256:" + "a" * 64, "Os": "linux", "Architecture": "amd64", "Variant": ""}
+
+    def test_image_admission_rejects_mutable_tag_drift_and_wrong_platform(self):
+        task = next(task for task in self.benchmark["tasks"] if task["id"] == "regex-log")
+        good = self.image_metadata(task)
+        self.assertEqual(pilot.validate_image_metadata(good, task)["platform"], "linux/amd64")
+        for changes in ({"RepoDigests": []}, {"RepoDigests": ["alexgshaw/regex-log@sha256:" + "b" * 64]},
+                        {"Architecture": "arm64"}, {"Variant": "v8"}, {"Id": "missing"}):
+            with self.assertRaises(ValueError):
+                pilot.validate_image_metadata({**good, **changes}, task)
+
+    def test_environment_receipt_uses_only_read_only_inspection_and_versions(self):
+        task = copy.deepcopy(next(task for task in self.benchmark["tasks"] if task["id"] == "regex-log"))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            task_path = root / task["id"]
+            task_path.mkdir()
+            instruction = b"Fixture instruction only"
+            (task_path / "instruction.md").write_bytes(instruction)
+            (task_path / "task.toml").write_text('[environment]\ndocker_image = "' + task["image"] + '"\n')
+            task["instructionBytes"] = len(instruction)
+            task["instructionSha256"] = hashlib.sha256(instruction).hexdigest()
+            versions = {"Client": {"Version": "29.0.0"}, "Server": {"Version": "29.1.0"}}
+            with patch.object(pilot, "docker_json", side_effect=[self.image_metadata(task), versions]) as invoke:
+                receipt = pilot.inspect_task_environment("/admitted/docker", root, task)
+            self.assertEqual(receipt["dockerVersions"], {"client": "29.0.0", "server": "29.1.0"})
+            self.assertEqual(invoke.call_args_list[0].args[1], ["image", "inspect", "--format", "{{json .}}", task["image"]])
+            self.assertEqual(invoke.call_args_list[1].args[1], ["version", "--format", "{{json .}}"])
+            (task_path / "task.toml").write_text('[environment]\ndocker_image = "unadmitted:latest"\n')
+            with patch.object(pilot, "docker_json") as invoke:
+                with self.assertRaisesRegex(ValueError, "reference differs"):
+                    pilot.inspect_task_environment("/admitted/docker", root, task)
+                invoke.assert_not_called()
 
 
 if __name__ == "__main__":
