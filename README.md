@@ -8,6 +8,25 @@ Compile that source into a typed program, inspect its diagram, and keep a
 receipt of what happened. Programs are values: compose them, propose variants,
 evaluate them, and let the host select what to retain.
 
+## Try a VM that survives the terminal
+
+The [native workbench](docs/native-workbench.md) runs from one executable, without
+Bun, Cargo, credentials, or a checkout. Retain a proposal, leave it waiting, then
+approve the exact local action in a new CLI invocation. Open its self-contained
+HTML report and export a history another binary can verify without your store.
+
+```sh
+algal demo start ./my-review
+algal demo inspect ./my-review
+algal demo prove ./crash-laboratory
+```
+
+The crash laboratory kills its own VM child at a durable journal barrier. It
+proves that a read can recover without repeating its completed prefix write,
+and that an uncertain write stays blocked. These use deterministic decision
+fixtures; the state, journals, recovery, and verification are real.
+[Get and verify a native prerelease](docs/native-release.md).
+
 ## Read the program. See its structure.
 
 This is executable `.algal` source. It makes one typed decision, selects an

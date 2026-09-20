@@ -468,6 +468,7 @@ impl Runtime<'_> {
                         activated.store(true, std::sync::atomic::Ordering::Relaxed);
                         Err(Error::new("VERIFY_FAILED", "portable evidence cannot activate tools"))
                     },
+                    ToolBackend::DemoCrash(fixture) => fixture.run(&idempotency_key, timeout).await,
                     ToolBackend::External(Backend::Scripted { responses }) => responses.get(&canonical(inputs)?).cloned().ok_or_else(|| Error::new("TOOL_FAILED", "scripted tool result missing")),
                     ToolBackend::External(backend) => self.host.execute_backend(name, backend, &json!({"inputs":inputs,"requestDigest":request_digest,"idempotencyKey":idempotency_key}), tool.max_bytes, timeout).await.map(|(v, _)| v),
                     ToolBackend::MailboxSend => self.host.mailbox.as_ref().ok_or_else(|| Error::new("CAPABILITY_DENIED", "mailbox host is not admitted")).and_then(|mailbox| mailbox.send(inputs["mailbox"].as_str().unwrap_or(""), inputs["message"].clone(), &idempotency_key)),

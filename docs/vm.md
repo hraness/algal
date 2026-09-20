@@ -1,5 +1,8 @@
 # The ALGAL process VM
 
+For a one-binary hands-on tour with a passive HTML workbench and actual SIGKILL
+proofs, start with [the native workbench](native-workbench.md).
+
 ALGAL can run a bounded graph as a durable named process. A process records
 its manifest, inputs, generation budget, checkpoint, and wake capabilities.
 Each CLI invocation can exit; a later invocation verifies the checkpoint and
@@ -174,7 +177,9 @@ The [PR shepherd](pr-shepherd.md) is a practical host application: it collects
 live exact-revision GitHub evidence, suspends on pending CI, and wakes from a
 durable timer or deduplicated event. It produces review or repair packets with
 no model calls in the waiting/readiness path. It currently performs read-only
-GitHub work; durable external coding-job reconciliation remains future work.
+GitHub work. The Bun coding-job host supports explicit reconciliation through
+a qualified durable operation adapter; existing xcb v1 jobs do not expose that
+operation lookup. Provider qualification and native host parity remain separate.
 
 Mailbox duplicate suppression applies to the supported durable mailbox
 operations and their idempotency keys. Host tools must implement their own

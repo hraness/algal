@@ -1,5 +1,6 @@
 pub mod acp;
 pub mod bench;
+pub mod build_info;
 pub mod canonical;
 pub mod capabilities;
 pub mod civilization;
@@ -7,6 +8,7 @@ pub mod context;
 pub mod contract;
 pub mod credentials;
 pub mod decisions;
+pub mod demo;
 pub mod effects;
 pub mod embeddings;
 pub mod error;
@@ -26,3 +28,5 @@ pub mod store;
 pub mod suite;
 
 pub use error::{Error, Result};
+
+pub mod demo_report;

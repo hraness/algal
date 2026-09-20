@@ -556,6 +556,8 @@ pub enum ToolBackend {
     External(Backend),
     MailboxSend,
     MailboxReceive,
+    /// Only the native deterministic crash demonstration constructs this backend.
+    DemoCrash(crate::demo::CrashBarrier),
 }
 
 #[derive(Clone)]
