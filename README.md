@@ -27,6 +27,11 @@ and that an uncertain write stays blocked. These use deterministic decision
 fixtures; the state, journals, recovery, and verification are real.
 [Get and verify a native prerelease](docs/native-release.md).
 
+On a compatible Mac, [the private change-brief demo](docs/apple-brief.md) uses the
+on-device Apple model for one proposal, then holds for exact human approval.
+Continuation admits no model executor; the generated result must come from the
+retained execution. This optional workflow requires the separate Apple bridge.
+
 ## Read the program. See its structure.
 
 This is executable `.algal` source. It makes one typed decision, selects an
@@ -747,8 +752,11 @@ name → command, so a cell's `route.provider`/`route.preset` picks its model.
   `onMiss` is declared.
 - Effect cells may declare `retry: {"attempts": n}` (≤8): a failed effect —
   executor error or contract violation — is recorded with its request digest
-  and the same request re-issued. Every attempt is metered and replayed in
-  order; exhaustion fails the cell, routable through `on:"fail"`.
+  and the same request re-issued when the executor permits retry. The native
+  Apple adapter does not retry, including after invalid output. Every attempt
+  is metered and replayed in order; exhaustion fails the cell, routable through
+  `on:"fail"`. Unknown completion in a journaled process remains uncertain
+  and blocks another dispatch.
 - Effect routing is capability-aware and fails closed: every executor
   declares the effect kinds it serves (`agent`, `classifier`, `gate`,
   `decide`, `recall`), an unrouted request binds the first admitting

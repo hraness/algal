@@ -2,7 +2,7 @@ use algal::{
     canonical::{canonical, digest},
     capabilities::parse_wake_capabilities,
     contract::Manifest,
-    effects::Host,
+    effects::{Backend, Host},
     graph::Transports,
     mailbox::{MailboxService, external_wake_key},
     process::{ProcessRecord, ProcessService},
@@ -751,4 +751,86 @@ async fn timed_out_external_write_keeps_intent_uncertain_and_blocks_failure_disp
             .is_err()
     );
     assert!(!directory.path().join("fallback").exists());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn poisoned_journal_keeps_executor_cause_without_settlement_or_redispatch() {
+    let directory = tempfile::tempdir().unwrap();
+    let marker = directory.path().join("dispatches");
+    let root = directory.path().join("store");
+    let mut host = Host::default();
+    host.entries.push((
+        "owned-command".into(),
+        Backend::Command {
+            argv: vec![
+                "/bin/sh".into(),
+                "-c".into(),
+                "/bin/cat >/dev/null; printf x >> \"$1\"; kill -KILL $$".into(),
+                "algal-uncertain-fixture".into(),
+                marker.to_string_lossy().into_owned(),
+            ],
+            cwd: None,
+            timeout_ms: 3000,
+        },
+    ));
+    let manifest = Manifest::parse(&json!({
+        "contract":"algal.organism.v1","key":"organism:uncertain-cause","name":"Uncertain cause",
+        "cells":[{"id":"worker","kind":"agent","prompt":"Return one word.","output":{"kind":"text"}}],
+        "edges":[]
+    }))
+    .unwrap();
+    let mut service = ProcessService::open(&root).unwrap();
+    service
+        .create("cause", manifest, json!({}), 3, &host, &Transports::new())
+        .unwrap();
+    let error = service
+        .tick_journal("cause", None, &mut host, &Transports::new(), true, 2)
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, "RECOVERY_BLOCKED");
+    assert!(
+        error.message.contains("execution cause EFFECT_FAILED:")
+            && error.message.contains("terminated by a signal")
+            && error.message.contains("cell worker"),
+        "original executor failure must survive the settlement guard: {error:?}"
+    );
+    assert!(error.message.len() <= 1024);
+    assert_eq!(fs::read(&marker).unwrap(), b"x");
+    let uncertain = service.inspect("cause").unwrap();
+    assert_eq!(uncertain.process.status, "uncertain");
+    assert!(uncertain.process.receipt.is_none());
+    assert!(!root.join("runs").exists(), "unsettled receipt was stored");
+    let journal = service.journal("cause").unwrap();
+    assert_eq!(journal["effects"].as_array().unwrap().len(), 1);
+    assert_eq!(journal["effects"][0]["record"]["state"], "started");
+    assert_eq!(journal["effects"][0]["record"]["attempt"], 0);
+    assert!(journal["effects"][0]["record"].get("receipt").is_none());
+    drop(service);
+    let mut restarted = ProcessService::open(&root).unwrap();
+    assert!(
+        restarted
+            .tick_journal("cause", None, &mut host, &Transports::new(), true, 2)
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        restarted
+            .schedule_journal(16, &mut host, &Transports::new(), true, 2)
+            .await
+            .unwrap()["ticks"],
+        0
+    );
+    assert_eq!(
+        restarted
+            .recover("cause", &uncertain.digest, &mut host, &Transports::new())
+            .await
+            .unwrap_err()
+            .code,
+        "RECOVERY_BLOCKED"
+    );
+    assert_eq!(fs::read(&marker).unwrap(), b"x");
+    assert_eq!(restarted.inspect("cause").unwrap().digest, uncertain.digest);
+    assert_eq!(restarted.journal("cause").unwrap(), journal);
+    assert!(!root.join("runs").exists());
 }

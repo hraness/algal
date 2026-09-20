@@ -125,9 +125,11 @@ impl Backend {
     }
 
     pub fn retryable(&self) -> bool {
+        // Apple calls preserve one admitted generation even when output binding
+        // fails. A cell retry must not turn a strict bridge call into a resend.
         !matches!(
             self,
-            Self::Command { .. } | Self::Xcb { .. } | Self::Acp { .. }
+            Self::Command { .. } | Self::Xcb { .. } | Self::Acp { .. } | Self::Apple { .. }
         )
     }
     /// Whether a completed response may be memoized for later identical
@@ -1024,23 +1026,10 @@ impl Host {
                 let client = apple_bridge(bridge)?;
                 let request_timeout = Duration::from_millis(deadline);
                 let output = tokio::task::spawn_blocking(move || {
-                    match client.request_with_timeout(&apple_req, request_timeout) {
-                        // The retired one-shot bridge silently fell back to
-                        // bounded free-text JSON when a schema would not
-                        // translate; preserve that contract here.
-                        Err(apple_foundation::Error::Bridge(code))
-                            if apple_req.schema.is_some() && schema_error(&code) =>
-                        {
-                            let mut retry = apple_req.clone();
-                            retry.schema = None;
-                            retry.expect_json = true;
-                            client.request_with_timeout(&retry, request_timeout)
-                        }
-                        other => other,
-                    }
+                    client.request_no_retry_with_timeout(&apple_req, request_timeout)
                 })
                 .await
-                .map_err(|e| Error::new("EFFECT_FAILED", format!("apple bridge join: {e}")))?
+                .map_err(apple_join_error)?
                 .map_err(apple_error)?;
                 Ok((
                     output,
@@ -1340,22 +1329,9 @@ fn apple_request(request: &Value, max: usize) -> Result<apple_foundation::Reques
     })
 }
 
-fn schema_error(code: &str) -> bool {
-    matches!(
-        code,
-        "invalidSchema"
-            | "schemaDepthExceeded"
-            | "invalidEnum"
-            | "invalidPattern"
-            | "arraySchemaRequiresItems"
-            | "tooManyProperties"
-            | "requiredPropertyMissing"
-            | "unsupportedSchemaType"
-    )
-}
-
 /// One persistent bridge per configured path, shared by every effect — the
-/// model is serial, so requests queue in-process rather than respawning.
+/// model is serial, so concurrent requests fail before submission instead of
+/// waiting outside the bridge's request timeout.
 fn apple_bridge(path: &Path) -> Result<std::sync::Arc<apple_foundation::Bridge>> {
     static BRIDGES: std::sync::OnceLock<
         std::sync::Mutex<
@@ -1363,16 +1339,37 @@ fn apple_bridge(path: &Path) -> Result<std::sync::Arc<apple_foundation::Bridge>>
         >,
     > = std::sync::OnceLock::new();
     let map = BRIDGES.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
-    let mut guard = map.lock().unwrap();
+    let mut guard = map
+        .lock()
+        .map_err(|_| Error::new("EFFECT_UNBOUND", "apple bridge registry is poisoned"))?;
     if let Some(client) = guard.get(path) {
         return Ok(client.clone());
     }
     let client = std::sync::Arc::new(
-        apple_foundation::Bridge::new(&[path.to_string_lossy().into_owned()])
-            .map_err(|e| Error::new("EFFECT_UNBOUND", format!("apple bridge: {e}")))?,
+        apple_foundation::Bridge::with_options(
+            &[path.to_string_lossy().into_owned()],
+            apple_foundation::Options {
+                max_pending: 1,
+                ..apple_foundation::Options::default()
+            },
+        )
+        .map_err(|e| Error::new("EFFECT_UNBOUND", format!("apple bridge: {e}")))?,
     );
     guard.insert(path.to_path_buf(), client.clone());
     Ok(client)
+}
+
+fn apple_join_error(error: tokio::task::JoinError) -> Error {
+    let reason = if error.is_panic() {
+        "panicked"
+    } else {
+        "was cancelled"
+    };
+    Error::new(
+        "EFFECT_FAILED",
+        format!("apple bridge blocking task {reason}; generation may be uncertain"),
+    )
+    .uncertain()
 }
 
 fn apple_error(error: apple_foundation::Error) -> Error {
@@ -1590,6 +1587,18 @@ mod tests {
         ] {
             assert!(!apple_error(error).uncertain);
         }
+    }
+
+    #[tokio::test]
+    async fn apple_blocking_task_failure_is_uncertain() {
+        let failed = tokio::task::spawn_blocking(|| panic!("owned fixture panic"))
+            .await
+            .unwrap_err();
+        let error = apple_join_error(failed);
+        assert_eq!(error.code, "EFFECT_FAILED");
+        assert!(error.uncertain);
+        assert!(error.message.contains("panicked"));
+        assert!(!error.message.contains("owned fixture panic"));
     }
 
     #[tokio::test]

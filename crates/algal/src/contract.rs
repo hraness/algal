@@ -746,9 +746,13 @@ pub fn check_schema(schema: &Value, value: &Value) -> Result<()> {
         }
     }
     if let (Some(props), Some(values)) = (schema["properties"].as_object(), value.as_object()) {
-        for (key, sub) in props {
+        // serde_json may preserve source insertion order. Error selection is
+        // receipt data, so keep it stable across canonical storage and replay.
+        let mut keys: Vec<_> = props.keys().collect();
+        keys.sort();
+        for key in keys {
             if let Some(value) = values.get(key) {
-                check_schema(sub, value)?;
+                check_schema(&props[key], value)?;
             }
         }
     }

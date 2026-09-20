@@ -738,10 +738,46 @@ impl ProcessService {
         host.process_scope = scope;
         host.journal = previous_journal;
         if let Some(journal) = journal {
-            journal
+            if let Err(mut blocked) = journal
                 .lock()
                 .map_err(|_| Error::new("RECOVERY_BLOCKED", "journal mutex poisoned"))?
-                .finish()?;
+                .finish()
+            {
+                // The runtime may have caught an uncertain executor error in a
+                // failed receipt. Keep the journal's settlement refusal, while
+                // preserving a bounded diagnostic from that unpublished result.
+                // It must not become a stored receipt or a terminal process head.
+                fn excerpt(value: &str, maximum: usize) -> &str {
+                    let mut end = value.len().min(maximum);
+                    while !value.is_char_boundary(end) {
+                        end -= 1;
+                    }
+                    &value[..end]
+                }
+                let cause = match &result {
+                    Err(error) => Some((error.code.as_str(), error.message.as_str(), None)),
+                    Ok(receipt) => receipt.get("failure").and_then(|failure| {
+                        Some((
+                            failure.get("code")?.as_str()?,
+                            failure.get("message")?.as_str()?,
+                            failure.get("path").and_then(Value::as_str),
+                        ))
+                    }),
+                };
+                if let Some((code, message, path)) = cause {
+                    blocked.message.push_str(&format!(
+                        "; execution cause {}: {}",
+                        excerpt(code, 64),
+                        excerpt(message, 640)
+                    ));
+                    if let Some(path) = path {
+                        blocked
+                            .message
+                            .push_str(&format!(" (cell {})", excerpt(path, 128)));
+                    }
+                }
+                return Err(blocked);
+            }
         }
         let receipt = result?;
         bounded_nodes(&receipt)?;

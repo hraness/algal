@@ -47,7 +47,9 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
       - run: cargo build --locked
+      - run: python3 scripts/test_apple_brief_demo.py --native "$PWD/target/debug/algal" --out "$RUNNER_TEMP/algal-private-brief-fixture"
       - run: bun scripts/native-parity.ts
+      - run: bun scripts/schema-parity.ts
       - run: bun scripts/vm-demo.ts --native ./target/debug/algal
       - run: bun scripts/recovery-demo.ts --native ./target/debug/algal
       - run: bun scripts/repair-demo.ts --native ./target/debug/algal
