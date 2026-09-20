@@ -1,36 +1,83 @@
 # ALGAL
 
-**Small programs that decide, act, and show their work.**
+**Agent work that survives a pause—and comes back with evidence.**
 
-ALGAL is a language and runtime for growing agent programs. Write down the
-judgment a model should make, the values it can see, and the limits on its work.
-Compile that source into a typed program, inspect its diagram, and keep a
-receipt of what happened. Programs are values: compose them, propose variants,
-evaluate them, and let the host select what to retain.
+ALGAL is a language and application VM for bounded agent programs. Use it when
+an AI-assisted task needs to wait for a person, survive a CLI restart, reuse
+completed work, or explain what happened without calling the model again.
+The host chooses the tools and authority; the program makes decisions, limits,
+and approval points explicit. A native Rust CLI and an independently runnable
+Bun runtime share the program, receipt, and durable process contracts.
 
-## Try a VM that survives the terminal
+## Pick the job you need done
 
-The [native workbench](docs/native-workbench.md) runs from one executable, without
-Bun, Cargo, credentials, or a checkout. Retain a proposal, leave it waiting, then
-approve the exact local action in a new CLI invocation. Open its self-contained
-HTML report and export a history another binary can verify without your store.
+| Your job | What ALGAL retains | Start here |
+| --- | --- | --- |
+| Review a change brief now; approve the exact local report later | Evidence, proposal, human decision, and publication history across separate invocations | [Native workbench](docs/native-workbench.md); optional [on-device Apple brief](docs/apple-brief.md) |
+| Turn a coding attempt into a checked patch | Admitted source revision, proposed patch, host-selected test results, and unresolved operation custody | [Durable repairs](docs/repair.md) |
+| Give another reviewer a verifiable execution history | One portable evidence file that replays without your store, credentials, or model | [Offline evidence](docs/vm.md#verify-a-process-away-from-its-original-host) |
+| Route support requests and reuse a draft helper over a bounded inbox | Explicit context, selected branches, child program identities, and recorded results | [Readable programs](#read-the-program-see-its-structure) and [reuse](#write-a-program-once-call-it-or-use-it-for-each-item) |
+| Observe a PR until checks settle, without spending model calls on polling | Exact Git revision and policy evidence, bounded waits, and a review or repair packet | [Read-only PR shepherd](docs/pr-shepherd.md) |
+
+The [use-case guide](docs/use-cases.md) connects each job to runnable commands,
+expected artifacts, and the work your host still owns. Start with the packaged
+VM below; author a custom program once the retained workflow is useful to you.
+
+## Try the VM with one executable
+
+[Download and verify the native prerelease](docs/native-release.md)
+([published packages](https://github.com/hraness/algal/releases)).
+The workbench needs no Bun, Cargo, checkout, credentials, or web server.
+Use fresh output directories:
 
 ```sh
+algal doctor
 algal demo start ./my-review
 algal demo inspect ./my-review
 algal demo prove ./crash-laboratory
 ```
 
-The crash laboratory kills its own VM child at a durable journal barrier. It
-proves that a read can recover without repeating its completed prefix write,
-and that an uncertain write stays blocked. These use deterministic decision
-fixtures; the state, journals, recovery, and verification are real.
-[Get and verify a native prerelease](docs/native-release.md).
+Open `my-review/report.html`. Review the retained proposal and copy its exact
+approve or deny command into a later terminal invocation. Approval publishes
+that proposal locally; denial completes without publication. Repeating the same
+decision preserves the completed VM head and creates no second publication.
+For your own small JSON evidence, add `--evidence ./checks.json` to `demo start`.
 
-On a compatible Mac, [the private change-brief demo](docs/apple-brief.md) uses the
-on-device Apple model for one proposal, then holds for exact human approval.
-Continuation admits no model executor; the generated result must come from the
-retained execution. This optional workflow requires the separate Apple bridge.
+`crash-laboratory/proof.json` records actual owned-process SIGKILL tests: recover
+an interrupted read without repeating the completed prefix write, and stop
+before redispatching an uncertain write. It also checks approval, denial, and
+offline verification after moving the source store away. These default demos
+use **deterministic decision fixtures**; their durable state, journals, recovery,
+and verification are real. They do not evaluate live model quality.
+
+On a compatible Mac, the optional [private change brief](docs/apple-brief.md)
+uses **one real on-device Apple model request** to draft from your supplied
+evidence. It requires the separate Apple bridge and Python demo harness. The
+workflow then waits for exact human approval; continuation admits no model
+executor and reuses the retained result. The generated prose still needs review.
+
+### What makes this useful
+
+The unit of work is a saved, typed program plus its recorded execution. A wait
+does not require keeping a model conversation alive. A restart can reuse settled
+effects. A reviewer can check a portable history offline. The same program can
+run in the native kernel or the Bun reference runtime, and the cross-runtime
+demo resumes each runtime's saved work in the other on a shared local store.
+
+Efficiency comes from explicit context, bounded selected paths, retained effects,
+and model-free waiting and verification. The demos measure those operations;
+they do not establish token, cost, or latency savings against other engines.
+
+### Adoption boundary
+
+This is working **prerelease software for bounded, host-owned workflows**.
+Native packages are unsigned and unnotarized. ALGAL is an application VM, not
+an OS sandbox; host tools retain their host permissions. Coding jobs and the
+PR shepherd currently use the Bun host. There is no multi-tenant service,
+distributed custody, global storage quota, or retention service. Unknown writes
+require reconciliation, and a verifying receipt proves execution consistency,
+not factual truth or exactly-once arbitrary external effects. See the
+[operating boundary](docs/use-cases.md#choose-the-right-boundary) before deployment.
 
 ## Read the program. See its structure.
 
@@ -226,21 +273,22 @@ show recorded cell states and are bound to the exact manifest and receipt.
 execution consistency; it does not establish that a model answer is true or
 attest to a provider. [Diagram format and lifecycle views](docs/diagrams.md).
 
-The first source front end supports immutable values, pure expressions,
-exhaustive choices, decisions, generation, and budgets. Composition, tools,
-waits, and evolution remain available through the full manifest API. No
+The source front end supports immutable values, pure expressions, exhaustive
+choices, decisions, generation, budgets, local imports, named calls, and bounded
+`each`. Tools, waits, advanced loops, and evolution remain available through the
+full manifest API. No
 executable statechart syntax is claimed. Existing wire identifiers, manifest
 digests, and receipts remain unchanged.
 
-## Two clear value props
+## Reuse successful programs; evaluate their successors
 
-### A living agent harness
+### Programs remain inspectable artifacts
 
 A successful agent workflow becomes a reusable organism. Organisms can propose
 children; the host tests and selects them. A population records programs and
 evidence, not consciousness or permission to rewrite its own runtime.
 
-### Squeeze more juice from LLMs
+### Give the model a narrow, testable role
 
 Use structure where structure helps: fetch missing evidence, calculate rather
 than guess, validate outputs, and escalate on a measured failure condition.
@@ -248,17 +296,14 @@ Vercel AI Gateway and host-supplied executors are implemented. There is no
 universal small-model-to-frontier-quality guarantee; compare systems with the
 same tools, inputs, and evaluation budget.
 
-The sharpest version of this trick: **ask the model for the smallest
-sufficient decision, then let the host own everything else.** In `algal civ`,
-the designer organism is `agent(plan) → fn(manifest.compile.v1)` — the model
-emits a flat plan like `["fn:format.v1;prefix=Hello, "]` and a deterministic
-host fn compiles it into a type-checked manifest. On a Mac with Apple
-Intelligence, `algal civ --live --apple` runs the whole civilization epoch
-on-device: the model proposed plans, the host compiled, measured, and promoted
-all four goals (greet, double, invert, shout), and the population verifies
-offline — no cloud, no subscription, fully receipted.
+For example, the civilization designer uses
+`agent(plan) → fn(manifest.compile.v1)`: the model proposes a small flat plan,
+and a host function compiles it into a checked manifest. Host-owned cases and
+selection decide which candidate to retain. The [civilization guide](docs/civilization.md)
+contains fixture and optional on-device execution paths. A candidate's successful
+execution does not itself establish that it improved the task.
 
-## Why this is a new primitive
+### One program and evidence contract across runtimes
 
 ALGAL combines bounded, typed, content-addressed programs with explicit model
 effects and replayable execution evidence. Durable workflows and checkpointed
@@ -403,33 +448,26 @@ ports are single-assignment unless declared `many`, in which case every
 delivered edge collects into a list — fan-in, including conditional fan-in
 through guards. The graph must be acyclic.
 
-## Why does it exist?
+## Put checkable decisions in the structure
 
-Prompt conventions do not compose and cannot be checked. ALGAL moves what
-can be checked into the structure — routing, context, budgets, capabilities —
-and leaves to the model only what is declared inside a cell boundary. A run is
-then something you can replay, diff, and audit rather than a transcript you
-have to trust.
+ALGAL makes routing, context, budgets, and capabilities explicit in the program.
+The model supplies the judgment declared inside its cell. Receipts preserve the
+admitted inputs and recorded effects, so reviewers can replay and compare the
+execution rather than reconstructing its orchestration from a conversation.
 
-## Where it wins
+These are useful candidate shapes to evaluate on your workload:
 
-ALGAL wins where the work is **structured, verifiable, and cheaper to split
-into many small decisions** than to pack into one long prompt. The fastest wins
-are workloads where a single LLM call is missing information or has no way to
-check itself:
-
-- **Tool-grounded investigation** — a model call cannot look up a customer
-  record, run a calculation, or inspect a ledger; ALGAL routes a typed
-  `tool` cell before the judgment, then checks the result deterministically.
-- **Multi-decision classifiers over one shared context** — dozens of narrow
-  `classifier` cells see only the slices they need, each with a tiny prompt,
-  instead of one monolithic completion.
-- **Escalation by disagreement** — two cheap lanes plus an `assert.v1` guard
-  escalate only when the cheap models disagree; frontier inference is sparse,
-  not the default.
-- **Verification before promotion** — a generated organism must pass train,
-  validation, and holdout cases, and `algal verify` replays every receipt
-  bit-for-bit before the organism is promoted.
+- **Evidence before judgment.** Retrieve a record through an admitted typed tool,
+  then provide it to a narrow decision. This helps when the missing ingredient
+  is evidence access, rather than a larger prompt.
+- **Many decisions over selected context.** Give each classifier the inputs it
+  needs and record its closed-set result. More cells can also add latency and
+  cost; measure the complete path.
+- **Conditional escalation.** Route disagreement or failed validation to a
+  separately admitted decision path, keeping the escalation condition visible.
+- **Evaluation before promotion.** Test candidate programs on declared cases,
+  keep their receipts, and apply host-controlled selection. Replay verifies
+  execution; the evaluation criteria determine whether a result is useful.
 
 ### Case study: billing-dispute investigation
 

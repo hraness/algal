@@ -47,6 +47,41 @@ fn no_link(path: &Path) -> Result<()> {
     }
 }
 
+/// Open a bounded JSON artifact and validate the descriptor, not a racy stat.
+/// On Unix, reject its final symlink and never wait for a special-file writer.
+/// Absence remains a miss; callers retain their own JSON and node validation.
+pub fn open_regular_file(path: &Path, max_bytes: usize) -> Result<Option<File>> {
+    open_json_file(path, max_bytes, false)
+}
+
+/// Explicitly selected inputs may be symlinks to regular files. The opened
+/// target must be regular and bounded; on Unix, a FIFO never waits for a writer.
+pub fn open_input_file(path: &Path, max_bytes: usize) -> Result<Option<File>> {
+    open_json_file(path, max_bytes, true)
+}
+
+fn open_json_file(path: &Path, max_bytes: usize, follow_links: bool) -> Result<Option<File>> {
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NONBLOCK | if follow_links { 0 } else { libc::O_NOFOLLOW });
+    }
+    #[cfg(not(unix))]
+    let _ = follow_links;
+    let file = match options.open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    let metadata = file.metadata()?;
+    if !metadata.is_file() || metadata.len() > max_bytes as u64 {
+        return Err(Error::limit("JSON artifact file type or bytes"));
+    }
+    Ok(Some(file))
+}
+
 fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
@@ -305,17 +340,9 @@ impl Store {
         let Some(path) = path else {
             return self.source_read(kind, key, None);
         };
-        let file = match File::open(path) {
-            Ok(file) => file,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                return self.source_read(kind, key, None);
-            }
-            Err(e) => return Err(e.into()),
+        let Some(file) = open_regular_file(&path, bound)? else {
+            return self.source_read(kind, key, None);
         };
-        let metadata = file.metadata()?;
-        if !metadata.is_file() || metadata.len() > bound as u64 {
-            return Err(Error::limit("store object file type or bytes"));
-        }
         let raw = read_json(file, bound)?;
         let value = if kind == "manifests" {
             Manifest::parse(&raw)?.value
@@ -341,7 +368,9 @@ impl Store {
             && let Some(path) = path
         {
             publish(&path, canonical(value)?.as_bytes(), false)?;
-            let installed = read_json(File::open(&path)?, MAX_DOCUMENT_BYTES)?;
+            let file = open_regular_file(&path, MAX_DOCUMENT_BYTES)?
+                .ok_or_else(|| Error::from(std::io::Error::from(std::io::ErrorKind::NotFound)))?;
+            let installed = read_json(file, MAX_DOCUMENT_BYTES)?;
             if digest(&installed)? != key {
                 return Err(Error::new(
                     "DIGEST_MISMATCH",
@@ -413,10 +442,8 @@ impl Store {
         let Some(path) = self.effect_path(&key)? else {
             return Ok(None);
         };
-        let file = match File::open(&path) {
-            Ok(file) => file,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(e) => return Err(e.into()),
+        let Some(file) = open_regular_file(&path, MAX_DOCUMENT_BYTES)? else {
+            return Ok(None);
         };
         let value = read_json(file, MAX_DOCUMENT_BYTES)?;
         if value["requestDigest"].as_str() != Some(request_digest) {
@@ -479,11 +506,9 @@ impl Store {
         no_link(&root.join("slots"))?;
         let path = root.join("slots").join(format!("{name}.json"));
         no_link(&path)?;
-        match File::open(path) {
-            Ok(file) => Ok(Some(read_json(file, 262_144)?)),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(e) => Err(e.into()),
-        }
+        open_regular_file(&path, 262_144)?
+            .map(|file| read_json(file, 262_144))
+            .transpose()
     }
 
     pub fn set_slot(&mut self, name: &str, value: &Value) -> Result<()> {
@@ -522,7 +547,10 @@ impl Store {
                 if count >= 512 {
                     return Err(Error::limit("module count"));
                 }
-                let manifest = Manifest::parse(&read_json(File::open(path)?, 1_048_576)?)?;
+                let file = open_input_file(&path, 1_048_576)?.ok_or_else(|| {
+                    Error::from(std::io::Error::from(std::io::ErrorKind::NotFound))
+                })?;
+                let manifest = Manifest::parse(&read_json(file, 1_048_576)?)?;
                 self.admit(&manifest)?;
                 count += 1;
             }

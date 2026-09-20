@@ -376,11 +376,9 @@ impl ProcessService {
         no_link(&directory)?;
         let path = directory.join(format!("{}.json", &key[7..]));
         no_link(&path)?;
-        let metadata = fs::symlink_metadata(&path)?;
-        if !metadata.file_type().is_file() || metadata.len() > max_bytes as u64 {
-            return Err(Error::limit("process CAS file type or bytes"));
-        }
-        let value = read_json(File::open(path)?, max_bytes)?;
+        let file = crate::store::open_regular_file(&path, max_bytes)?
+            .ok_or_else(|| Error::from(std::io::Error::from(std::io::ErrorKind::NotFound)))?;
+        let value = read_json(file, max_bytes)?;
         bounded_nodes(&value)?;
         if crate::canonical::digest(&value)? != key {
             return Err(Error::new("DIGEST_MISMATCH", "process CAS digest mismatch"));
@@ -399,11 +397,9 @@ impl ProcessService {
     fn chain(&self, name: &str) -> Result<Vec<ProcessState>> {
         let path = self.directory(name)?.join("head.json");
         no_link(&path)?;
-        let metadata = fs::symlink_metadata(&path)?;
-        if !metadata.file_type().is_file() || metadata.len() > 4096 {
-            return Err(Error::limit("process head file type or bytes"));
-        }
-        let head: Head = serde_json::from_value(read_json(File::open(path)?, 4096)?)?;
+        let file = crate::store::open_regular_file(&path, 4096)?
+            .ok_or_else(|| Error::from(std::io::Error::from(std::io::ErrorKind::NotFound)))?;
+        let head: Head = serde_json::from_value(read_json(file, 4096)?)?;
         if head.contract != "algal.process-head.v1" || head.name != name {
             return Err(Error::invalid("process head contract or name"));
         }

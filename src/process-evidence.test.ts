@@ -493,6 +493,7 @@ describe("portable process evidence", () => {
     let nested: unknown = {};
     for (let i = 0; i < 66; i++) nested = { nested };
     expect(() => parseProcessEvidence(nested)).toThrow("structure bound");
+    await expect(verifyProcessEvidence(nested)).rejects.toThrow("structure bound");
     const extra = structuredClone(evidence),
       value = { harmless: true },
       key = digestCanonical(value);
@@ -589,6 +590,24 @@ describe("portable process evidence", () => {
     evidence.program.manifests = {};
     expect((await pending).evidenceDigest).toBe(originalDigest);
   });
+  test("verification bounds a foreign object's materialized snapshot before replay", async () => {
+    const store = new MemoryStore(),
+      { snapshot } = await execute(store, simple()),
+      evidence = await exportProcessEvidence(snapshot, store);
+    let nested: unknown = {};
+    for (let i = 0; i < 66; i++) nested = { nested };
+    let reads = 0;
+    // The original checks read tools three times (structure, JSON validity and
+    // canonicalization). structuredClone then materializes this fourth value.
+    Object.defineProperty(evidence, "tools", {
+      enumerable: true,
+      get: () => ++reads <= 3 ? {} : nested,
+    });
+    await expect(verifyProcessEvidence(evidence)).rejects.toMatchObject({
+      code: "BUDGET_EXHAUSTED",
+    });
+  });
+
   test("export bounds foreign snapshot structure before cloning or recursive hashing", async () => {
     const store = new MemoryStore(),
       { snapshot } = await execute(store, simple());

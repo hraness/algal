@@ -3,7 +3,8 @@
 // Data on stdout (JSON), diagnostics on stderr. Exit 0 ok, 1 run/verify
 // failure, 2 usage or parse error.
 
-import { readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { open, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BOUNDS, manifestToJson, parseOrganismManifest, type OrganismManifest } from "./src/contract";
@@ -323,8 +324,24 @@ async function readJsonBounded(
   label: string,
 ): Promise<JsonValue> {
   try {
-    const bytes = await boundedBytes(Bun.file(path).stream(), maxBytes, label);
-    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as JsonValue;
+    // Explicit input symlinks may name regular files. Nonblocking admission
+    // rejects FIFOs/devices before a byte bound could otherwise take effect.
+    const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
+    try {
+      const info = await file.stat();
+      if (!info.isFile() || info.size > maxBytes) throw new AlgalError("BUDGET_EXHAUSTED", `${label}: regular file byte bound`);
+      const chunks: Buffer[] = [];
+      let size = 0;
+      for (;;) {
+        const buffer = Buffer.alloc(Math.min(65_536, maxBytes + 1 - size));
+        const { bytesRead } = await file.read(buffer, 0, buffer.length, null);
+        if (bytesRead === 0) break;
+        size += bytesRead;
+        if (size > maxBytes) throw new AlgalError("BUDGET_EXHAUSTED", `${label} exceeds ${maxBytes} bytes`);
+        chunks.push(buffer.subarray(0, bytesRead));
+      }
+      return JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(Buffer.concat(chunks))) as JsonValue;
+    } finally { await file.close(); }
   } catch (error) {
     if (error instanceof AlgalError) throw error;
     throw new AlgalError(
@@ -419,7 +436,7 @@ async function loadModules(
   let loaded = 0;
   for (const f of files.sort()) {
     if (!/\.algal\.json$/.test(f)) continue;
-    const m = parseOrganismManifest(await readJson(join(resolved, f)));
+    const m = parseOrganismManifest(await readJsonBounded(join(resolved, f), BOUNDS.maxManifestBytes, "manifest"));
     await store.putManifest(m);
     loaded++;
   }
@@ -693,7 +710,7 @@ async function main(): Promise<number> {
   // Every manifest command receives the same source closure, including verify,
   // foundry, and durable processes. No ambient module directory is required.
   const readManifest = async (path: string): Promise<OrganismManifest> => {
-    if (!path.endsWith(".algal")) return parseOrganismManifest(await readJson(path));
+    if (!path.endsWith(".algal")) return parseOrganismManifest(await readJsonBounded(path, BOUNDS.maxManifestBytes, "manifest"));
     const project = await readProject(path);
     await installSource(project, store);
     return project.manifest;

@@ -2,7 +2,7 @@
 // replays immutable history in memory; it cannot import or activate a process.
 import { type Bundle } from "./bundle";
 import { manifestToJson, parseOrganismManifest } from "./contract";
-import { asDigest, digestCanonical, type Digest } from "./digest";
+import { asDigest, digestCanonical, digestText, type Digest } from "./digest";
 import { AlgalError } from "./errors";
 import { compileOrganism } from "./graph";
 import { mailboxToolRegistry, MemoryMailboxService } from "./mailbox";
@@ -27,6 +27,7 @@ import {
   asObject,
   asString,
   canonicalBytes,
+  canonicalize,
   noUnknownKeys,
   type JsonValue,
 } from "./values";
@@ -60,6 +61,12 @@ function bound(
   value: unknown,
   bytes: number = PROCESS_EVIDENCE_BOUNDS.maxBytes,
 ): JsonValue {
+  return boundedDocument(value, bytes).value;
+}
+function boundedDocument(
+  value: unknown,
+  bytes: number = PROCESS_EVIDENCE_BOUNDS.maxBytes,
+): { value: JsonValue; canonical: string } {
   const pending = [{ value, depth: 0 }];
   let nodes = 0,
     stringBytes = 0;
@@ -92,12 +99,17 @@ function bound(
       );
   }
   const checked = asJsonValue(value, "process evidence");
-  if (canonicalBytes(checked) > bytes)
+  const canonical = canonicalize(checked);
+  if (Buffer.byteLength(canonical, "utf8") > bytes)
     throw new AlgalError(
       "BUDGET_EXHAUSTED",
       "process evidence byte bound exceeded",
     );
-  return checked;
+  return { value: checked, canonical };
+}
+function boundedDigest(value: unknown): { value: JsonValue; digest: Digest } {
+  const checked = boundedDocument(value);
+  return { value: checked.value, digest: digestText(checked.canonical) };
 }
 function entries(
   raw: unknown,
@@ -155,7 +167,13 @@ function offlineTools(tools: Record<string, ToolSignature>): ToolRegistry {
 
 /** Validate all structure, claimed digests and object bounds before admission. */
 export function parseProcessEvidence(raw: unknown): ProcessEvidence {
-  const value = asObject(bound(raw), "process evidence");
+  return parseBoundedProcessEvidence(bound(raw));
+}
+
+/** Only use after the complete foreign document passed `bound`. Kept private so
+ * callers cannot bypass the public parser's depth, node and byte admission. */
+function parseBoundedProcessEvidence(raw: JsonValue): ProcessEvidence {
+  const value = asObject(raw, "process evidence");
   noUnknownKeys(
     value,
     ["contract", "head", "records", "receipts", "program", "tools", "missing"],
@@ -323,8 +341,11 @@ export async function verifyProcessEvidence(
   raw: unknown,
 ): Promise<ProcessEvidenceReport> {
   const supplied = structuredClone(bound(raw));
-  const evidence = parseProcessEvidence(supplied),
-    evidenceDigest = digestCanonical(supplied),
+  // Bound the detached snapshot too: foreign objects can change while cloning.
+  // Reuse its checked canonical bytes without retaining the string during replay.
+  const checked = boundedDigest(supplied);
+  const evidence = parseBoundedProcessEvidence(checked.value),
+    evidenceDigest = checked.digest,
     absentManifests = new Set(evidence.missing.manifests),
     absentValues = new Set(evidence.missing.values);
   let undeclaredRead = false;

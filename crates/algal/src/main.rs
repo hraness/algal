@@ -14,7 +14,6 @@ use algal::{
 use clap::{Args, Parser, Subcommand};
 use serde_json::{Value, json};
 use std::{
-    fs::File,
     io::{self, IsTerminal},
     path::{Path, PathBuf},
 };
@@ -531,7 +530,9 @@ enum ContextCommand {
 }
 
 fn load(path: &Path, max: usize) -> Result<Value> {
-    read_json(File::open(path)?, max)
+    let file = algal::store::open_input_file(path, max)?
+        .ok_or_else(|| Error::from(io::Error::from(io::ErrorKind::NotFound)))?;
+    read_json(file, max)
 }
 fn emit(value: &Value) -> Result<()> {
     println!("{}", canonical(value)?);

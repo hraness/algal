@@ -1,8 +1,52 @@
 # ALGAL
 
-> Small programs that decide, act, and show their work. ALGAL is a language for
-> typed, bounded agent programs with readable source, generated diagrams,
-> replayable execution, and host-controlled program evolution.
+> Agent work that survives a pause—and comes back with evidence. ALGAL is a
+> language and application VM for bounded agent programs with durable human
+> review, explicit effects, reusable program artifacts, and portable evidence.
+
+## Start with a practical job
+
+Native prerelease v0.2.0-vm.7 packages are available for Apple silicon macOS and
+Linux x86_64. Follow the release guide to verify and install. The native demo
+needs no Bun, Cargo, checkout, credentials, or web server:
+
+```sh
+algal doctor
+algal demo start ./my-review
+algal demo inspect ./my-review
+algal demo prove ./crash-laboratory
+```
+
+Open my-review/report.html. The exact approve/deny command binds the proposal
+and local action. The first invocation exits while waiting; a later invocation
+reuses the retained decision. Default decisions are deterministic fixtures.
+The crash laboratory kills its own child at a journal barrier, verifies that a
+read recovery reuses a completed prefix write, and blocks an uncertain write.
+These are real local execution/recovery checks, not live model quality claims.
+
+Practical paths:
+- Human-reviewed change briefs: retained evidence, proposal and exact local
+  publication. The optional private brief uses one real on-device Apple model
+  request, a compatible separate bridge, Python harness, and a new root. A
+  later approval continues without a model executor; errors are not retried.
+- Checked coding repairs: Bun host fixes the source revision and acceptance
+  commands, retains a proposed patch, and validates it before creating a review
+  packet. Uncertain provider work keeps custody and is not automatically relaunched.
+  The bundled reproducible demo uses a deterministic adapter; live provider
+  configuration and qualification are separate.
+- Detached evidence: export a bounded process history and replay it without the
+  original store, credentials or model. Verification checks recorded execution;
+  it does not authenticate an author, attest a provider, or establish prose truth.
+- Reusable support workflows: typed routing, only selected branches execute,
+  and a named helper runs over a bounded inbox with ordered results.
+- PR observation: the Bun read-only shepherd collects revision-bound GitHub
+  evidence and suspends while CI is pending. Waiting requires no model calls.
+
+These are host-owned application workflows. There is no OS sandbox,
+multi-tenant service, distributed custody, global store quota or retention
+service. Native packages remain unsigned and unnotarized prereleases. External
+effects need adapter-specific idempotency and reconciliation; the VM does not
+promise exactly-once arbitrary writes or measured cost savings over other engines.
 
 The public package is @hraness/algal. Executable manifests use the
 algal.organism.v1 contract. Source authoring uses .algal files; the deterministic
@@ -62,6 +106,13 @@ bun cli.ts diagram examples/source/reply.algal --format svg --out reply.svg
 ## Source and examples
 
 - Repository: https://github.com/hraness/algal
+- Native release: https://github.com/hraness/algal/releases/tag/v0.2.0-vm.7
+- Verify and install: https://github.com/hraness/algal/blob/main/docs/native-release.md
+- Practical use cases: https://github.com/hraness/algal/blob/main/docs/use-cases.md
+- Native workbench: https://github.com/hraness/algal/blob/main/docs/native-workbench.md
+- On-device private brief: https://github.com/hraness/algal/blob/main/docs/apple-brief.md
+- Durable coding repairs: https://github.com/hraness/algal/blob/main/docs/repair.md
+- Read-only PR shepherd: https://github.com/hraness/algal/blob/main/docs/pr-shepherd.md
 - Readable example: https://algal.dev/examples/reply.algal
 - Compiled example: https://algal.dev/examples/reply.algal.json
 - Generated diagram: https://algal.dev/diagrams/reply.svg

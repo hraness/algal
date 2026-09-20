@@ -202,7 +202,7 @@ await rm(DIST, { recursive: true, force: true });
 await mkdir(join(DIST, "diagrams"), { recursive: true });
 await mkdir(join(DIST, "examples"), { recursive: true });
 await mkdir(join(DIST, "receipts"), { recursive: true });
-for (const f of ["styles.css", "robots.txt", "sitemap.xml", "llms.txt", "og.png"]) {
+for (const f of ["styles.css", "robots.txt", "sitemap.xml", "llms.txt", "og.png", "favicon.svg"]) {
   await cp(join(SITE, f), join(DIST, f));
 }
 await cp(join(SITE, "icons"), join(DIST, "icons"), { recursive: true });

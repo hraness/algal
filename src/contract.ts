@@ -35,6 +35,7 @@ export const CONTRACT = "algal.organism.v1" as const;
 // ---------------------------------------------------------------- bounds ---
 
 export const BOUNDS = {
+  maxManifestBytes: 1_048_576,
   maxCells: 64,
   maxEdges: 256,
   maxIdLen: 64,
@@ -402,6 +403,7 @@ function parsePortType(u: unknown, what: string): PortType {
     }
     schema = asObject(schemaRaw, `${what}.schema`);
     checkSchemaDepth(schema, `${what}.schema`, 0);
+    checkSchemaDeclaration(schema, `${what}.schema`);
   }
   const capabilityRaw = optField(obj, "capability");
   let capability: string | undefined;
@@ -489,6 +491,7 @@ function parseAgentOutput(u: unknown, what: string): AgentOutput {
       noUnknownKeys(obj, ["kind", "schema"], what);
       const schema = asObject(reqField(obj, "schema", what), `${what}.schema`);
       checkSchemaDepth(schema, `${what}.schema`, 0);
+      checkSchemaDeclaration(schema, `${what}.schema`);
       return { kind: "json", schema };
     }
     case "choice": {
@@ -527,6 +530,26 @@ function parseAgentOutput(u: unknown, what: string): AgentOutput {
         "PARSE_FAILED",
         `${what}.kind: unknown "${kind}"`,
       );
+  }
+}
+
+/** Admit the enforced vocabulary before any executor can be activated.
+ * Other keywords remain opaque provider hints, including nested `items`. */
+function checkSchemaDeclaration(schema: JsonObject, what: string): void {
+  const type = optField(schema, "type");
+  if (type !== undefined && (typeof type !== "string" ||
+      !["object", "array", "string", "number", "integer", "boolean", "null"].includes(type))) {
+    throw new AlgalError("PARSE_FAILED", `${what}.type must name a supported JSON type`);
+  }
+  const required = optField(schema, "required");
+  if (required !== undefined) {
+    for (const key of asArray(required, `${what}.required`)) asString(key, `${what}.required entry`, 64);
+  }
+  const properties = optField(schema, "properties");
+  if (properties !== undefined) {
+    for (const [key, child] of Object.entries(asObject(properties, `${what}.properties`))) {
+      checkSchemaDeclaration(asObject(child, `${what}.properties.${key}`), `${what}.properties.${key}`);
+    }
   }
 }
 
@@ -1432,9 +1455,67 @@ function parseInterface(u: unknown): OrganismInterface | undefined {
 
 // ------------------------------------------------------------- manifest ----
 
+/** Count exact canonical JSON bytes without sorting/copying the input.
+ * Key order cannot affect length. Scalar allocations and traversal are bounded;
+ * the depth bound matches native canonical admission. */
+function checkManifestSize(value: unknown): void {
+  let bytes = 0;
+  let visits = 0;
+  const visitNode = () => {
+    // Canonical bytes alone do not charge omitted SDK members. Counting
+    // members (including undefined) bounds subsequent validation/normalization.
+    if (++visits > BOUNDS.maxManifestBytes) throw new AlgalError("BUDGET_EXHAUSTED", "manifest traversal");
+  };
+  const add = (count: number) => {
+    bytes += count;
+    if (bytes > BOUNDS.maxManifestBytes) throw new AlgalError("BUDGET_EXHAUSTED", "manifest bytes");
+  };
+  const stringBytes = (value: string) => {
+    // UTF-16 length is a lower bound on serialized UTF-8 bytes.
+    if (value.length > BOUNDS.maxManifestBytes - bytes) add(BOUNDS.maxManifestBytes + 1);
+    add(Buffer.byteLength(JSON.stringify(value), "utf8"));
+  };
+  const visit = (item: unknown, depth: number): void => {
+    visitNode();
+    if (depth > 64) throw new AlgalError("BUDGET_EXHAUSTED", "JSON depth exceeds 64");
+    if (item === null) { add(4); return; }
+    if (typeof item === "string") { stringBytes(item); return; }
+    if (typeof item === "boolean") { add(item ? 4 : 5); return; }
+    if (typeof item === "number" && Number.isFinite(item)) { add(JSON.stringify(item).length); return; }
+    if (Array.isArray(item)) {
+      add(2 + Math.max(0, item.length - 1));
+      for (const child of item) visit(child, depth + 1);
+      return;
+    }
+    if (typeof item !== "object" || (Object.getPrototypeOf(item) !== Object.prototype && Object.getPrototypeOf(item) !== null)) {
+      throw new AlgalError("PARSE_FAILED", "manifest must contain JSON values");
+    }
+    add(2);
+    let first = true;
+    for (const key in item) {
+      if (!Object.prototype.hasOwnProperty.call(item, key)) continue;
+      visitNode();
+      const child = (item as Record<string, unknown>)[key];
+      // SDK callers may explicitly omit optional members with undefined;
+      // canonical JSON and manifest normalization both omit those members.
+      if (child === undefined) continue;
+      add(first ? 1 : 2); // colon, plus comma after the first property
+      first = false;
+      stringBytes(key);
+      visit(child, depth + 1);
+    }
+  };
+  visit(value, 0);
+}
+
 export function parseOrganismManifest(u: unknown): OrganismManifest {
   const what = "manifest";
   const obj = asObject(u, what);
+  const cells = asArray(reqField(obj, "cells", what), "manifest.cells");
+  const edges = obj.edges === undefined ? [] : asArray(obj.edges, "manifest.edges");
+  if (cells.length > BOUNDS.maxCells) throw new AlgalError("PARSE_FAILED", `manifest.cells exceeds ${BOUNDS.maxCells}`);
+  if (edges.length > BOUNDS.maxEdges) throw new AlgalError("PARSE_FAILED", `manifest.edges exceeds ${BOUNDS.maxEdges}`);
+  checkManifestSize(u);
   noUnknownKeys(
     obj,
     ["contract", "key", "name", "note", "budgets", "interface", "cells", "edges"],
@@ -1460,15 +1541,10 @@ export function parseOrganismManifest(u: unknown): OrganismManifest {
     key,
     name,
     budgets: parseBudgets(obj.budgets),
-    cells: asArray(reqField(obj, "cells", what), `${what}.cells`).map((c, i) =>
+    cells: cells.map((c, i) =>
       parseCell(c, `${what}.cells[${i}]`),
     ),
-    edges:
-      obj.edges === undefined
-        ? []
-        : asArray(obj.edges, `${what}.edges`).map((e, i) =>
-            parseEdge(e, `${what}.edges[${i}]`),
-          ),
+    edges: edges.map((e, i) => parseEdge(e, `${what}.edges[${i}]`)),
   };
   const note = optField(obj, "note");
   if (note !== undefined) {
@@ -1477,18 +1553,8 @@ export function parseOrganismManifest(u: unknown): OrganismManifest {
   const iface = parseInterface(obj.interface);
   if (iface) manifest.interface = iface;
 
-  if (manifest.cells.length > BOUNDS.maxCells) {
-    throw new AlgalError(
-      "PARSE_FAILED",
-      `manifest.cells exceeds ${BOUNDS.maxCells}`,
-    );
-  }
-  if (manifest.edges.length > BOUNDS.maxEdges) {
-    throw new AlgalError(
-      "PARSE_FAILED",
-      `manifest.edges exceeds ${BOUNDS.maxEdges}`,
-    );
-  }
+  // Persisted normalized manifests must remain admissible on replay too.
+  checkManifestSize(manifestToJson(manifest));
   return manifest;
 }
 

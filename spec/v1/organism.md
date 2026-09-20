@@ -35,6 +35,12 @@ rather than the host language.
 | `cells` | ≤ 64, unique kebab ids |
 | `edges` | ≤ 256 |
 
+JSON manifest files and canonical SDK manifest inputs are each bounded to
+1,048,576 bytes in both runtimes, including the normalized manifest with defaults. Bun counts SDK JSON bytes before allocating a
+canonical copy; cell and edge counts are checked before parsing their entries.
+CLI JSON manifests and other bounded-input paths must resolve to regular files. A symlink to a
+regular input is supported; a FIFO, device, or directory is rejected before read.
+
 ## Cells
 
 | kind | role | ports |
@@ -149,7 +155,11 @@ an active admission record and may revoke it independently.
   `{"kind":"choice","labels":[…],"onMiss"?}`.
   JSON output may be an object, array, string, number, integer, boolean, or
   null when the schema declares that type. An omitted `type` defaults to
-  `object`. The VM checks `required` and declared `properties` recursively
+  `object`. Known keywords are validated during manifest admission, before any
+  effect: `type` must name one supported type; `required` must be an array of
+  strings of at most 64 UTF-16 code units; `properties` must map names to object
+  schemas. Null/scalar child schemas and misspelled declared types are rejected.
+  The VM checks `required` and declared `properties` recursively
   within the existing schema-depth bound. Declared properties are checked in
   UTF-8 lexicographic key order so failure evidence is independent of source
   key order. Other keywords, including
@@ -795,3 +805,10 @@ the original runtime even when their rejection was valid. Native failures with
 multiple invalid properties may also need their original runtime and source
 key order; native now checks properties in a deterministic order. This
 correction does not relax exact replay or ignore diagnostic differences.
+
+Strict schema admission also corrects malformed declarations that older versions
+silently ignored or interpreted as default object schemas. Existing valid
+schemas retain their data and execution semantics; unsupported keywords remain
+hints. Preserve VM.7 or the original matching runtime alongside historical
+receipts containing malformed declarations. The current parser intentionally
+rejects those manifests rather than spending an effect or weakening replay.

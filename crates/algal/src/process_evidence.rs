@@ -2,7 +2,7 @@
 //! to install a named process, activate tools or access provider credentials.
 use crate::{
     Error, Result,
-    canonical::{MAX_DOCUMENT_BYTES, canonical, check_digest, digest},
+    canonical::{MAX_DOCUMENT_BYTES, canonical, check_digest, digest_bytes},
     contract::{Manifest, Signature, integer, keys, object, ports, text},
     effects::{Host, Tool, ToolBackend},
     process::{
@@ -22,7 +22,7 @@ use std::{
 
 pub const CONTRACT: &str = "algal.process-evidence.v1";
 
-fn bounded(value: &Value) -> Result<()> {
+fn bounded_digest(value: &Value) -> Result<String> {
     let mut stack = vec![(value, 0)];
     let mut count = 0;
     while let Some((value, depth)) = stack.pop() {
@@ -44,10 +44,12 @@ fn bounded(value: &Value) -> Result<()> {
             _ => (),
         }
     }
-    if canonical(value)?.len() > MAX_DOCUMENT_BYTES {
+    let bytes = canonical(value)?;
+    if bytes.len() > MAX_DOCUMENT_BYTES {
         return Err(Error::limit("process evidence bytes"));
     }
-    Ok(())
+    // The same canonical bytes establish the size bound and the evidence digest.
+    Ok(digest_bytes(bytes.as_bytes()))
 }
 
 /// Signature-only parsing. Executable/configuration/callback fields are refused;
@@ -107,10 +109,11 @@ fn positive(raw: &Value, max: usize, bytes: usize) -> Result<&Map<String, Value>
     }
     for (key, value) in objects {
         check_digest(key)?;
-        if canonical(value)?.len() > bytes {
+        let encoded = canonical(value)?;
+        if encoded.len() > bytes {
             return Err(Error::limit("process evidence object bytes"));
         }
-        if digest(value)? != *key {
+        if digest_bytes(encoded.as_bytes()) != *key {
             return Err(Error::new(
                 "DIGEST_MISMATCH",
                 "process evidence claimed digest",
@@ -262,7 +265,7 @@ fn receipt_metadata(receipt: &Value) -> Result<()> {
 /// Verify entirely in memory. Every claimed digest is checked before admission;
 /// negative dependencies are explicit and omissions poison replay out of band.
 pub async fn verify_process_evidence(raw: &Value) -> Result<Value> {
-    bounded(raw)?;
+    let evidence_digest = bounded_digest(raw)?;
     keys(
         raw,
         &[
@@ -364,7 +367,7 @@ pub async fn verify_process_evidence(raw: &Value) -> Result<Value> {
     let mut report = verify_process_snapshot(&snapshot, &store, &host).await?;
     store.check_evidence_reads()?;
     inactive(&host)?;
-    report["evidenceDigest"] = json!(digest(raw)?);
+    report["evidenceDigest"] = json!(evidence_digest);
     Ok(report)
 }
 

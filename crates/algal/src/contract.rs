@@ -118,6 +118,35 @@ fn schema_depth(value: &Value, depth: usize) -> Result<()> {
     Ok(())
 }
 
+// Unknown vocabulary remains provider hints, still subject to depth/byte bounds.
+fn schema_declaration(value: &Value) -> Result<()> {
+    let schema = object(value)?;
+    if let Some(kind) = schema.get("type")
+        && ![
+            "object", "array", "string", "number", "integer", "boolean", "null",
+        ]
+        .contains(&text(kind, 16)?)
+    {
+        return Err(Error::invalid(
+            "schema type must name a supported JSON type",
+        ));
+    }
+    if let Some(required) = schema.get("required") {
+        for key in required
+            .as_array()
+            .ok_or_else(|| Error::invalid("schema required must be an array"))?
+        {
+            text(key, 64)?;
+        }
+    }
+    if let Some(properties) = schema.get("properties") {
+        for child in object(properties)?.values() {
+            schema_declaration(child)?;
+        }
+    }
+    Ok(())
+}
+
 fn labels(value: &Value) -> Result<()> {
     let values = list(value, 32)?;
     if values.is_empty() {
@@ -185,6 +214,7 @@ pub fn ports(value: &Value, producer: bool, constant: bool) -> Result<Ports> {
             }
             object(schema)?;
             schema_depth(schema, 0)?;
+            schema_declaration(schema)?;
         }
         if kind == "cap" {
             id(p.get("capability")
@@ -210,6 +240,7 @@ pub fn output_contract(value: &Value) -> Result<()> {
             keys(value, &["kind", "schema"])?;
             object(&value["schema"])?;
             schema_depth(&value["schema"], 0)?;
+            schema_declaration(&value["schema"])?;
             Ok(())
         }
         "choice" => {
@@ -709,6 +740,10 @@ impl Manifest {
                 }
             }
             normalized["interface"] = iface;
+        }
+        // Defaults and normalized ports must not create an unreloadable manifest.
+        if canonical(&normalized)?.len() > 1_048_576 {
+            return Err(Error::limit("manifest bytes"));
         }
         Ok(Self {
             value: normalized,

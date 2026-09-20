@@ -189,11 +189,9 @@ fn write_replace(path: &Path, value: &Value) -> Result<()> {
 
 fn read_optional(path: &Path) -> Result<Option<Value>> {
     no_link(path)?;
-    match File::open(path) {
-        Ok(file) => Ok(Some(read_json(file, MAX_DOCUMENT_BYTES)?)),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(error.into()),
-    }
+    crate::store::open_regular_file(path, MAX_DOCUMENT_BYTES)?
+        .map(|file| read_json(file, MAX_DOCUMENT_BYTES))
+        .transpose()
 }
 
 fn parse_config(value: Value) -> Result<MailboxConfig> {
@@ -341,6 +339,13 @@ impl MailboxService {
         {
             return Err(Error::limit("mailbox bounds"));
         }
+        // All creators share custody before observing admission or its bound.
+        // Kept outside mailboxes/ so lease history cannot become a mailbox.
+        no_link(&self.root)?;
+        let _admission = crate::lease::OwnerLease::acquire(
+            &self.root.join(".mailbox-admission"),
+            "mailbox-admission",
+        )?;
         if let Some(existing) = self.inspect(name)? {
             if existing.max_messages != max_messages
                 || existing.max_message_bytes != max_message_bytes
@@ -376,9 +381,15 @@ impl MailboxService {
             &serde_json::to_value(receive)?,
         )?;
         if !write_new(&self.config_path(name)?, &serde_json::to_value(&config)?)? {
-            return self
+            let existing = self
                 .inspect(name)?
-                .ok_or_else(|| Error::new("IO_FAILED", "mailbox creation raced"));
+                .ok_or_else(|| Error::new("IO_FAILED", "mailbox creation raced"))?;
+            if existing.max_messages != max_messages
+                || existing.max_message_bytes != max_message_bytes
+            {
+                return Err(Error::invalid("mailbox already has different bounds"));
+            }
+            return Ok(existing);
         }
         Ok(config)
     }
@@ -666,6 +677,13 @@ impl MailboxService {
                     || message.mailbox != config.name
                 {
                     return Err(Error::new("DIGEST_MISMATCH", "mailbox delivery is corrupt"));
+                }
+                let bytes = canonical(&message.value)?.len();
+                if bytes > config.max_message_bytes {
+                    return Err(Error::limit(format!(
+                        "mailbox message {bytes}B exceeds {}B",
+                        config.max_message_bytes
+                    )));
                 }
                 match fs::rename(&source, self.consumed_dir(&config.name)?.join(file)) {
                     Ok(()) => {

@@ -1,0 +1,88 @@
+[
+  {
+    "name": "null-type",
+    "schema": {
+      "type": null
+    }
+  },
+  {
+    "name": "array-type",
+    "schema": {
+      "type": [
+        "object"
+      ]
+    }
+  },
+  {
+    "name": "unknown-type",
+    "schema": {
+      "type": "strnig"
+    }
+  },
+  {
+    "name": "null-required",
+    "schema": {
+      "required": null
+    }
+  },
+  {
+    "name": "string-required",
+    "schema": {
+      "required": "owner"
+    }
+  },
+  {
+    "name": "number-required",
+    "schema": {
+      "required": [
+        3
+      ]
+    }
+  },
+  {
+    "name": "long-required",
+    "schema": {
+      "required": [
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      ]
+    }
+  },
+  {
+    "name": "null-properties",
+    "schema": {
+      "properties": null
+    }
+  },
+  {
+    "name": "array-properties",
+    "schema": {
+      "properties": []
+    }
+  },
+  {
+    "name": "null-child",
+    "schema": {
+      "properties": {
+        "owner": null
+      }
+    }
+  },
+  {
+    "name": "array-child",
+    "schema": {
+      "properties": {
+        "owner": []
+      }
+    }
+  },
+  {
+    "name": "nested-required",
+    "schema": {
+      "properties": {
+        "owner": {
+          "required": "name"
+        }
+      }
+    }
+  }
+]
