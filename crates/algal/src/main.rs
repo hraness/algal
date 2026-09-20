@@ -353,6 +353,16 @@ enum SlotCommand {
 
 #[derive(Subcommand)]
 enum ProcessCommand {
+    /// Export bounded execution evidence without executable tool bindings.
+    Export {
+        name: String,
+        #[arg(long)]
+        tools: Option<PathBuf>,
+    },
+    /// Verify one portable evidence file in memory, with no host/store setup.
+    VerifyEvidence {
+        file: PathBuf,
+    },
     Create {
         name: String,
         manifest: PathBuf,
@@ -1440,9 +1450,72 @@ async fn execute(cli: Cli) -> Result<bool> {
             }
             Ok(true)
         }
+        Commands::Process {
+            command: ProcessCommand::VerifyEvidence { file },
+        } => {
+            if std::env::args().skip(1).any(|arg| arg.starts_with("--")) {
+                return Err(Error::invalid(
+                    "process verify-evidence accepts no host flags",
+                ));
+            }
+            emit(
+                &algal::process_evidence::verify_process_evidence(&load(
+                    &file,
+                    MAX_DOCUMENT_BYTES,
+                )?)
+                .await?,
+            )?;
+            Ok(true)
+        }
         Commands::Process { command } => {
             let mut service = ProcessService::open(&cli.dir)?;
             match command {
+                ProcessCommand::VerifyEvidence { .. } => unreachable!(),
+                ProcessCommand::Export { name, tools } => {
+                    let mut host = Host::default();
+                    host.install_mailboxes(MailboxService::open(&cli.dir))?;
+                    if let Some(file) = tools {
+                        let definitions = load(&file, 1_048_576)?;
+                        let mut signatures = serde_json::Map::new();
+                        for (name, entry) in object(&definitions)? {
+                            if name.is_empty()
+                                || name.len() > 128
+                                || !name.as_bytes()[0].is_ascii_alphanumeric()
+                                || !name.bytes().all(|b| {
+                                    b.is_ascii_lowercase()
+                                        || b.is_ascii_digit()
+                                        || b == b'.'
+                                        || b == b'-'
+                                })
+                            {
+                                return Err(Error::invalid("evidence CLI tool name"));
+                            }
+                            algal::contract::keys(entry, &["signature", "exec"])?;
+                            if entry.get("exec").is_some_and(|value| !value.is_string()) {
+                                return Err(Error::invalid("evidence CLI tool exec must be text"));
+                            }
+                            signatures.insert(name.clone(), entry["signature"].clone());
+                        }
+                        for (name, tool) in
+                            algal::process_evidence::evidence_host(&Value::Object(signatures))?
+                                .tools
+                        {
+                            if host.tools.insert(name, tool).is_some() {
+                                return Err(Error::invalid("duplicate evidence tool"));
+                            }
+                        }
+                    }
+                    let snapshot = service.inspect(&name)?;
+                    let evidence = algal::process_evidence::export_process_evidence(
+                        &snapshot,
+                        &service.store,
+                        &host,
+                    )
+                    .await?;
+                    // A maximum-size capsule must round-trip through the same
+                    // byte-bounded reader; do not append an extra newline.
+                    print!("{}", canonical(&evidence)?);
+                }
                 ProcessCommand::Create {
                     name,
                     manifest: file,

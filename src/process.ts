@@ -40,7 +40,7 @@ import {
   runOrganism,
   type RunReceipt,
 } from "./run";
-import { FileStore } from "./store";
+import { FileStore, type Store } from "./store";
 import type { ToolRegistry } from "./tools";
 import type { Transport } from "./transport";
 import { resumeRun, verifyReceipt } from "./verify";
@@ -303,6 +303,192 @@ async function replace(path: string, value: JsonValue): Promise<void> {
   } finally {
     await unlink(temporary).catch(() => undefined);
   }
+}
+
+/** Read immutable process objects through the Store seam without host state. */
+async function readProcessObject(
+  store: Store,
+  kind: "values" | "runs" | "manifests",
+  digest: Digest,
+  max: number,
+): Promise<JsonValue> {
+  const raw =
+    kind === "values"
+      ? await store.getValue(digest)
+      : kind === "runs"
+        ? await store.getReceipt(digest)
+        : await store
+            .getManifest(digest)
+            .then((value) =>
+              value === undefined ? undefined : manifestToJson(value),
+            );
+  if (raw === undefined)
+    throw new AlgalError("STORE_MISS", `missing process ${kind} object`);
+  const value = boundedValue(raw, max);
+  if (digestCanonical(value) !== digest) invalid("process CAS digest mismatch");
+  return value;
+}
+
+export type ProcessObjectReader = (
+  kind: "values" | "runs" | "manifests",
+  digest: Digest,
+  max: number,
+) => Promise<JsonValue>;
+
+/** Validate a fixed process head and its complete immutable transition chain. */
+export async function readProcessHistory(
+  snapshot: ProcessSnapshot,
+  store: Store,
+  read: ProcessObjectReader = (kind, digest, max) =>
+    readProcessObject(store, kind, digest, max),
+): Promise<ProcessSnapshot[]> {
+  snapshot = {
+    digest: asDigest(snapshot.digest, "process head"),
+    process: parseProcessRecord(snapshot.process),
+  };
+  if (digestCanonical(json(snapshot.process)) !== snapshot.digest)
+    invalid("process head digest mismatch");
+  const chain = [snapshot];
+  let current = snapshot;
+  while (current.process.previous) {
+    if (chain.length >= 1 + 2 * PROCESS_BOUNDS.maxGenerations)
+      invalid("process history bound exceeded");
+    const digest = current.process.previous;
+    current = {
+      digest,
+      process: parseProcessRecord(
+        await read("values", digest, PROCESS_BOUNDS.maxRecordBytes),
+      ),
+    };
+    chain.push(current);
+  }
+  chain.reverse();
+  const first = chain[0]!.process;
+  if (
+    first.status !== "ready" ||
+    first.generation !== 0 ||
+    first.receipt ||
+    first.cause ||
+    first.wake.length
+  )
+    invalid("invalid initial process record");
+  const definition = (r: ProcessRecord) => [
+    r.name,
+    r.manifestDigest,
+    r.args,
+    r.maxGenerations,
+  ];
+  for (let i = 1; i < chain.length; i++) {
+    const prior = chain[i - 1]!.process;
+    const next = chain[i]!.process;
+    if (!same(definition(first), definition(next)))
+      invalid("process definition changed");
+    if (next.status === "uncertain") {
+      if (
+        !["ready", "suspended"].includes(prior.status) ||
+        next.generation !== prior.generation + 1 ||
+        next.receipt !== prior.receipt ||
+        !same(next.wake, prior.wake)
+      )
+        invalid("invalid dispatch intent");
+      if (
+        prior.status === "ready"
+          ? next.cause !== "start"
+          : next.cause !== "manual" &&
+            !prior.wake.includes(next.cause as CapabilityHandle)
+      )
+        invalid("dispatch cause does not match prior wake");
+    } else {
+      if (
+        prior.status !== "uncertain" ||
+        next.status === "ready" ||
+        next.generation !== prior.generation ||
+        !next.receipt ||
+        next.cause !== prior.cause
+      )
+        invalid("invalid process completion transition");
+      const receipt = parseRunReceipt(
+        await read("runs", next.receipt, PROCESS_BOUNDS.maxReceiptBytes),
+      );
+      if (
+        receipt.manifestDigest !== next.manifestDigest ||
+        !same(receipt.args, next.args) ||
+        receipt.outcome !== next.status ||
+        !same(wakeOf(receipt), next.wake)
+      )
+        invalid("process receipt does not match record");
+      if (prior.receipt) {
+        const checkpoint = parseRunReceipt(
+          await read("runs", prior.receipt, PROCESS_BOUNDS.maxReceiptBytes),
+        );
+        const prefix = checkpoint.effects.filter(
+          (effect) => effect.error?.code !== "EFFECT_SUSPENDED",
+        );
+        if (!same(prefix, receipt.effects.slice(0, prefix.length)))
+          invalid("process continuation changed completed effects");
+        for (const [path, cell] of Object.entries(checkpoint.cells)) {
+          if (
+            (cell.status === "committed" || cell.status === "skipped") &&
+            !same(cell, receipt.cells[path])
+          )
+            invalid("process continuation changed completed cells");
+        }
+      }
+    }
+  }
+  return chain;
+}
+
+/** Replay retained generations without leases, head writes, or live effects. */
+export async function verifyProcessSnapshot(
+  snapshot: ProcessSnapshot,
+  store: Store,
+  fns: FnRegistry = builtinRegistry(),
+  tools?: ToolRegistry,
+  read: ProcessObjectReader = (kind, digest, max) =>
+    readProcessObject(store, kind, digest, max),
+): Promise<{
+  ok: true;
+  generations: number;
+  receipts: number;
+  digest: Digest;
+}> {
+  const chain = await readProcessHistory(snapshot, store, read);
+  const manifest = parseOrganismManifest(
+    await read(
+      "manifests",
+      snapshot.process.manifestDigest,
+      PROCESS_BOUNDS.maxManifestBytes,
+    ),
+  );
+  let receipts = 0;
+  for (const item of chain) {
+    if (item.process.status === "uncertain" || !item.process.receipt) continue;
+    const raw = await read(
+      "runs",
+      item.process.receipt,
+      PROCESS_BOUNDS.maxReceiptBytes,
+    );
+    const report = await verifyReceipt(
+      raw,
+      manifestToJson(manifest),
+      store,
+      fns,
+      undefined,
+      tools,
+    );
+    if (!report.ok)
+      invalid(
+        `process generation ${item.process.generation} does not replay: ${report.mismatches.join("; ")}`,
+      );
+    receipts++;
+  }
+  return {
+    ok: true,
+    generations: snapshot.process.generation,
+    receipts,
+    digest: snapshot.digest,
+  };
 }
 
 export class ProcessSupervisor {
@@ -585,140 +771,47 @@ export class ProcessSupervisor {
     return (await ProcessJournal.open(this.dir, name, intent.digest, intent.process.manifestDigest)).describe();
   }
   private async history(snapshot: ProcessSnapshot): Promise<ProcessSnapshot[]> {
-    const chain = [snapshot];
-    let current = snapshot;
-    while (current.process.previous) {
-      if (chain.length >= 1 + 2 * PROCESS_BOUNDS.maxGenerations)
-        invalid("process history bound exceeded");
-      const digest = current.process.previous;
-      current = {
-        digest,
-        process: parseProcessRecord(
-          await this.cas("values", digest, PROCESS_BOUNDS.maxRecordBytes),
-        ),
-      };
-      chain.push(current);
-    }
-    chain.reverse();
-    const first = chain[0]!.process;
-    if (
-      first.status !== "ready" ||
-      first.generation !== 0 ||
-      first.receipt ||
-      first.cause ||
-      first.wake.length
-    )
-      invalid("invalid initial process record");
-    const definition = (r: ProcessRecord) => [
-      r.name,
-      r.manifestDigest,
-      r.args,
-      r.maxGenerations,
-    ];
-    for (let i = 1; i < chain.length; i++) {
-      const prior = chain[i - 1]!.process;
-      const next = chain[i]!.process;
-      if (!same(definition(first), definition(next)))
-        invalid("process definition changed");
-      if (next.status === "uncertain") {
-        if (
-          !["ready", "suspended"].includes(prior.status) ||
-          next.generation !== prior.generation + 1 ||
-          next.receipt !== prior.receipt ||
-          !same(next.wake, prior.wake)
-        )
-          invalid("invalid dispatch intent");
-        if (
-          prior.status === "ready"
-            ? next.cause !== "start"
-            : next.cause !== "manual" &&
-              !prior.wake.includes(next.cause as CapabilityHandle)
-        )
-          invalid("dispatch cause does not match prior wake");
-      } else {
-        if (
-          prior.status !== "uncertain" ||
-          next.status === "ready" ||
-          next.generation !== prior.generation ||
-          !next.receipt ||
-          next.cause !== prior.cause
-        )
-          invalid("invalid process completion transition");
-        const receipt = parseRunReceipt(
-          await this.cas("runs", next.receipt, PROCESS_BOUNDS.maxReceiptBytes),
-        );
-        if (
-          receipt.manifestDigest !== next.manifestDigest ||
-          !same(receipt.args, next.args) ||
-          receipt.outcome !== next.status ||
-          !same(wakeOf(receipt), next.wake)
-        )
-          invalid("process receipt does not match record");
-        if (prior.receipt) {
-          const checkpoint = parseRunReceipt(
-            await this.cas(
-              "runs",
-              prior.receipt,
-              PROCESS_BOUNDS.maxReceiptBytes,
-            ),
-          );
-          const prefix = checkpoint.effects.filter(
-            (effect) => effect.error?.code !== "EFFECT_SUSPENDED",
-          );
-          if (!same(prefix, receipt.effects.slice(0, prefix.length)))
-            invalid("process continuation changed completed effects");
-          for (const [path, cell] of Object.entries(checkpoint.cells)) {
-            if (
-              (cell.status === "committed" || cell.status === "skipped") &&
-              !same(cell, receipt.cells[path])
-            )
-              invalid("process continuation changed completed cells");
-          }
-        }
-      }
-    }
-    return chain;
+    return readProcessHistory(snapshot, this.store, (kind, digest, max) =>
+      this.cas(kind, digest, max),
+    );
   }
-  async verify(name: string): Promise<{
+  async verify(
+    name: string,
+  ): Promise<{
     ok: true;
     generations: number;
     receipts: number;
     digest: Digest;
   }> {
-    const snapshot = await this.inspect(name);
-    const chain = await this.history(snapshot);
-    const manifest = await this.manifest(snapshot.process.manifestDigest);
-    if (!manifest)
-      throw new AlgalError("STORE_MISS", "process manifest missing");
-    let receipts = 0;
-    for (const item of chain) {
-      if (item.process.status === "uncertain" || !item.process.receipt)
-        continue;
-      const raw = await this.cas(
-        "runs",
-        item.process.receipt,
-        PROCESS_BOUNDS.maxReceiptBytes,
+    return verifyProcessSnapshot(
+      await this.inspect(name),
+      this.store,
+      this.fns,
+      this.tools,
+      (kind, digest, max) => this.cas(kind, digest, max),
+    );
+  }
+  /** Data-only signatures for portable replay; no host callbacks or identities. */
+  evidenceTools(): ToolRegistry {
+    if (!isBuiltinRegistry(this.fns))
+      throw new AlgalError(
+        "CAPABILITY_DENIED",
+        "portable evidence requires unchanged built-in pure functions",
       );
-      const report = await verifyReceipt(
-        raw,
-        manifestToJson(manifest),
-        this.store,
-        this.fns,
-        undefined,
-        this.tools,
-      );
-      if (!report.ok)
-        invalid(
-          `process generation ${item.process.generation} does not replay: ${report.mismatches.join("; ")}`,
-        );
-      receipts++;
-    }
-    return {
-      ok: true,
-      generations: snapshot.process.generation,
-      receipts,
-      digest: snapshot.digest,
-    };
+    return new Map(
+      [...this.tools].map(([name, entry]) => [
+        name,
+        {
+          signature: structuredClone(entry.signature),
+          tool: async () => {
+            throw new AlgalError(
+              "CAPABILITY_DENIED",
+              "portable evidence cannot invoke live tools",
+            );
+          },
+        },
+      ]),
+    );
   }
   async tick(
     name: string,

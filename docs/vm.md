@@ -128,6 +128,38 @@ own intrinsic digest field, so the two digests have different meanings.
 offline, returning `{ok, generations, receipts, digest}`. No live executor is
 needed for verification.
 
+## Verify a process away from its original host
+
+```sh
+algal process export review --dir .algal > review.evidence.json
+# Copy just review.evidence.json to another machine with Algal installed:
+algal process verify-evidence review.evidence.json
+
+# Demonstrate this with a crash-recovered repair and both runtimes:
+bun scripts/process-evidence-demo.ts --native ./target/debug/algal
+```
+
+Export packages the fixed process head, immutable history, replay dependencies,
+and tool signatures into one bounded JSON file. The recipient can check every
+completed generation with Bun or the standalone native binary. Verification
+requires no original store, live adapter, credentials, or host configuration,
+and creates no runnable process. The report includes the head digest, document
+digest, retained status, and generation/receipt counts.
+
+The demonstration repairs a failing scheduler through a deterministic durable
+adapter, recovers after killing the caller, then exports the completed process.
+It moves the original store, adapter and ledger away, runs fresh verifier
+processes in an empty directory, rejects removed or forged history, and checks
+that no host state was created or changed. Both runtimes verify both exports.
+
+For custom tools, pass `--tools tools.json` during export; only signatures are
+read. `verify-evidence` rejects host flags. Evidence preserves recorded prompts,
+outputs, and capability strings, so review it before sharing. Replay establishes
+internal consistency, not provider truth; an independently trusted digest is
+needed to identify whose history was supplied. Host patch attachments, provider
+ledgers, and execution custody are outside this format. See the
+[portable evidence contract](../spec/v1/process-evidence.md).
+
 ## Failure boundary and current limits
 
 A process that stops after dispatch intent and before recording its result

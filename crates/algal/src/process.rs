@@ -131,7 +131,7 @@ fn bounded_nodes(value: &Value) -> Result<()> {
     Ok(())
 }
 
-fn record(value: Value) -> Result<ProcessRecord> {
+pub(crate) fn record(value: Value) -> Result<ProcessRecord> {
     bounded_nodes(&value)?;
     if canonical(&value)?.len() > MAX_RECORD_BYTES {
         return Err(Error::limit("process record bytes"));
@@ -408,47 +408,11 @@ impl ProcessService {
             return Err(Error::invalid("process head contract or name"));
         }
         check_digest(&head.record)?;
-        let mut chain = Vec::new();
-        let mut key = head.record;
-        let mut seen = BTreeSet::new();
-        loop {
-            if chain.len() >= MAX_CHAIN || !seen.insert(key.clone()) {
-                return Err(Error::limit("process chain bound or cycle"));
-            }
-            let state = self.load_record(&key)?;
-            if state.process.name != name {
-                return Err(Error::invalid("process record name mismatch"));
-            }
-            let previous = state.process.previous.clone();
-            chain.push(state);
-            match previous {
-                Some(previous) => key = previous,
-                None => break,
-            }
+        let snapshot = self.load_record(&head.record)?;
+        if snapshot.process.name != name {
+            return Err(Error::invalid("process record name mismatch"));
         }
-        chain.reverse();
-        if chain[0].process.status != "ready" {
-            return Err(Error::invalid("process chain has no ready origin"));
-        }
-        for pair in chain.windows(2) {
-            transition(&pair[0].process, &pair[1].process)?;
-        }
-        for (index, state) in chain.iter().enumerate() {
-            if !["ready", "uncertain"].contains(&state.process.status.as_str()) {
-                let receipt = self.load_receipt(&state.process)?;
-                if let Some(previous) = index.checked_sub(1).and_then(|index| chain.get(index))
-                    && previous.process.receipt.is_some()
-                {
-                    continuation(&self.load_receipt(&previous.process)?, &receipt)?;
-                }
-                if receipt["outcome"] != state.process.status
-                    || wake(&receipt)? != state.process.wake
-                {
-                    return Err(Error::invalid("process outcome does not match receipt"));
-                }
-            }
-        }
-        Ok(chain)
+        read_process_history(&snapshot, &self.store)
     }
 
     fn manifest(&self, process: &ProcessRecord) -> Result<Manifest> {
@@ -879,28 +843,150 @@ impl ProcessService {
     }
 
     pub async fn verify(&self, name: &str, host: &Host) -> Result<Value> {
-        let chain = self.chain(name)?;
-        let mut receipts = BTreeSet::new();
-        for state in &chain {
-            if let Some(key) = &state.process.receipt
-                && receipts.insert(key.clone())
+        let snapshot = self.inspect(name)?;
+        let mut report = verify_process_snapshot(&snapshot, &self.store, host).await?;
+        report.as_object_mut().unwrap().remove("status");
+        Ok(report)
+    }
+}
+
+/// Store-only process history validation, shared by named processes and portable
+/// evidence. It never opens a process directory, mailbox, owner lease or journal.
+fn stored(store: &Store, kind: &str, key: &str, bound: usize) -> Result<Value> {
+    check_digest(key)?;
+    let value = store
+        .get_bounded(kind, key, bound)?
+        .ok_or_else(|| Error::new("STORE_MISS", "process evidence object missing"))?;
+    bounded_nodes(&value)?;
+    if canonical(&value)?.len() > bound {
+        return Err(Error::limit("process evidence object bytes"));
+    }
+    if crate::canonical::digest(&value)? != key {
+        return Err(Error::new(
+            "DIGEST_MISMATCH",
+            "process evidence object digest",
+        ));
+    }
+    Ok(value)
+}
+
+pub(crate) fn stored_receipt(store: &Store, process: &ProcessRecord) -> Result<Value> {
+    let key = process
+        .receipt
+        .as_ref()
+        .ok_or_else(|| Error::invalid("process has no receipt"))?;
+    let receipt = stored(store, "runs", key, MAX_RECEIPT_BYTES)?;
+    if receipt["contract"] != "algal.run.v1"
+        || receipt["manifestDigest"] != process.manifest_digest
+        || receipt["args"] != process.args
+        || receipt["digest"] != runtime::receipt_digest(&receipt)?
+    {
+        return Err(Error::new(
+            "DIGEST_MISMATCH",
+            "process receipt binding mismatch",
+        ));
+    }
+    Ok(receipt)
+}
+
+pub fn read_process_history(snapshot: &ProcessState, store: &Store) -> Result<Vec<ProcessState>> {
+    if crate::canonical::digest(&serde_json::to_value(&snapshot.process)?)? != snapshot.digest {
+        return Err(Error::new(
+            "DIGEST_MISMATCH",
+            "process snapshot binding mismatch",
+        ));
+    }
+    let mut chain = Vec::new();
+    let mut key = snapshot.digest.clone();
+    let mut seen = BTreeSet::new();
+    loop {
+        if chain.len() >= MAX_CHAIN || !seen.insert(key.clone()) {
+            return Err(Error::limit("process chain bound or cycle"));
+        }
+        let process = record(stored(store, "values", &key, MAX_RECORD_BYTES)?)?;
+        if process.name != snapshot.process.name {
+            return Err(Error::invalid("process record name mismatch"));
+        }
+        let previous = process.previous.clone();
+        chain.push(ProcessState {
+            digest: key,
+            process,
+        });
+        match previous {
+            Some(previous) => key = previous,
+            None => break,
+        }
+    }
+    chain.reverse();
+    if chain[0].process.status != "ready" {
+        return Err(Error::invalid("process chain has no ready origin"));
+    }
+    for pair in chain.windows(2) {
+        transition(&pair[0].process, &pair[1].process)?;
+    }
+    for (index, state) in chain.iter().enumerate() {
+        if !["ready", "uncertain"].contains(&state.process.status.as_str()) {
+            let receipt = stored_receipt(store, &state.process)?;
+            if let Some(previous) = index.checked_sub(1).and_then(|index| chain.get(index))
+                && previous.process.receipt.is_some()
             {
-                let receipt = self.load_receipt(&state.process)?;
-                let manifest = self.manifest(&state.process)?;
-                if runtime::verify(&receipt, manifest, &self.store, host).await?["ok"] != true {
-                    return Err(Error::new(
-                        "VERIFY_FAILED",
-                        "process generation does not replay",
-                    ));
-                }
+                continuation(&stored_receipt(store, &previous.process)?, &receipt)?;
+            }
+            if receipt["outcome"] != state.process.status || wake(&receipt)? != state.process.wake {
+                return Err(Error::invalid("process outcome does not match receipt"));
             }
         }
-        self.manifest(&chain[0].process)?;
-        let head = chain
-            .last()
-            .ok_or_else(|| Error::invalid("empty process chain"))?;
-        Ok(
-            json!({"ok":true,"generations":head.process.generation,"receipts":chain.iter().filter(|state| !["ready", "uncertain"].contains(&state.process.status.as_str())).count(),"digest":head.digest}),
-        )
     }
+    Ok(chain)
+}
+
+pub async fn verify_process_snapshot(
+    snapshot: &ProcessState,
+    store: &Store,
+    host: &Host,
+) -> Result<Value> {
+    let root = Manifest::parse(&stored(
+        store,
+        "manifests",
+        &snapshot.process.manifest_digest,
+        1_048_576,
+    )?)?;
+    compile(
+        root,
+        &mut store.overlay(),
+        &host.tool_signatures(),
+        &Transports::new(),
+        0,
+    )?;
+    let chain = read_process_history(snapshot, store)?;
+    let mut receipts = BTreeSet::new();
+    for state in &chain {
+        if let Some(key) = &state.process.receipt
+            && receipts.insert(key.clone())
+        {
+            let receipt = stored_receipt(store, &state.process)?;
+            let manifest = Manifest::parse(&stored(
+                store,
+                "manifests",
+                &state.process.manifest_digest,
+                1_048_576,
+            )?)?;
+            if runtime::verify(&receipt, manifest, store, host).await?["ok"] != true {
+                return Err(Error::new(
+                    "VERIFY_FAILED",
+                    "process generation does not replay",
+                ));
+            }
+        }
+    }
+    Manifest::parse(&stored(
+        store,
+        "manifests",
+        &chain[0].process.manifest_digest,
+        1_048_576,
+    )?)?;
+    store.check_evidence_reads()?;
+    Ok(json!({"ok":true,"generations":snapshot.process.generation,
+        "receipts":chain.iter().filter(|state| !["ready", "uncertain"].contains(&state.process.status.as_str())).count(),
+        "digest":snapshot.digest,"status":snapshot.process.status}))
 }

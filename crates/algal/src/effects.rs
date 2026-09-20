@@ -551,6 +551,8 @@ async fn hosted(
 
 #[derive(Clone)]
 pub enum ToolBackend {
+    /// Evidence tools carry signatures only and can never activate.
+    EvidenceDenied(std::sync::Arc<std::sync::atomic::AtomicBool>),
     External(Backend),
     MailboxSend,
     MailboxReceive,
