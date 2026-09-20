@@ -5,12 +5,12 @@
 // content the manifest already named — worst case is nondelivery, which
 // fails the cell like any other miss.
 
-import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { parseBundle, type Bundle } from "./bundle";
 import { BOUNDS } from "./contract";
 import type { Digest } from "./digest";
 import { AlgalError } from "./errors";
+import { boundedBytes, boundedFileBytes } from "./io";
 
 export interface Transport {
   id: string;
@@ -27,14 +27,11 @@ export function fileTransport(dir: string, id = dir): Transport {
       const file = join(dir, `${root.slice("sha256:".length)}.bundle.json`);
       let text: string;
       try {
-        const st = await stat(file);
-        if (st.size > BOUNDS.maxBundleBytes) {
-          throw new AlgalError(
-            "BUDGET_EXHAUSTED",
-            `transport "${id}": bundle ${file} exceeds ${BOUNDS.maxBundleBytes} bytes`,
-          );
-        }
-        text = await readFile(file, "utf8");
+        // Configured bundle files may be regular-file symlinks, as before.
+        // The descriptor is admitted before any bytes are read.
+        const bytes = await boundedFileBytes(file, BOUNDS.maxBundleBytes, `transport "${id}"`, true);
+        try { text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes); }
+        catch { throw new AlgalError("PARSE_FAILED", `transport "${id}": invalid UTF-8`); }
       } catch (e) {
         if (e instanceof AlgalError) throw e;
         if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
@@ -71,15 +68,20 @@ export function httpTransport(
   base: string,
   opts: { timeoutMs?: number } = {},
 ): Transport {
+  const timeoutMs = opts.timeoutMs ?? 15_000;
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 600_000) {
+    throw new AlgalError("PARSE_FAILED", "transport timeout must be 1–600000 milliseconds");
+  }
   const url = base.endsWith("/") ? base : base + "/";
   return {
     id: base,
     async getBundle(root) {
       const target = `${url}${root.slice("sha256:".length)}.bundle.json`;
+      const signal = AbortSignal.timeout(timeoutMs);
       let res: Response;
       try {
         res = await fetch(target, {
-          signal: AbortSignal.timeout(opts.timeoutMs ?? 15_000),
+          signal,
         });
       } catch (e) {
         throw new AlgalError(
@@ -87,8 +89,9 @@ export function httpTransport(
           `transport "${base}": ${e instanceof Error ? e.message : String(e)}`,
         );
       }
-      if (res.status === 404) return null;
+      if (res.status === 404) { await res.body?.cancel().catch(() => {}); return null; }
       if (!res.ok) {
+        await res.body?.cancel().catch(() => {});
         throw new AlgalError(
           "IO_FAILED",
           `transport "${base}": HTTP ${res.status} for ${target}`,
@@ -96,21 +99,21 @@ export function httpTransport(
       }
       const declared = Number(res.headers.get("content-length") ?? 0);
       if (declared > BOUNDS.maxBundleBytes) {
+        await res.body?.cancel().catch(() => {});
         throw new AlgalError(
           "BUDGET_EXHAUSTED",
           `transport "${base}": bundle exceeds ${BOUNDS.maxBundleBytes} bytes`,
         );
       }
-      const text = await res.text();
-      if (text.length > BOUNDS.maxBundleBytes) {
-        throw new AlgalError(
-          "BUDGET_EXHAUSTED",
-          `transport "${base}": bundle exceeds ${BOUNDS.maxBundleBytes} bytes`,
-        );
+      let bytes: Uint8Array;
+      try { bytes = await boundedBytes(res.body, BOUNDS.maxBundleBytes, `transport "${base}"`, signal); }
+      catch (error) {
+        if (error instanceof AlgalError) throw error;
+        throw new AlgalError("IO_FAILED", `transport "${base}": response body unavailable`);
       }
       let raw: unknown;
       try {
-        raw = JSON.parse(text);
+        raw = JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes));
       } catch {
         throw new AlgalError(
           "PARSE_FAILED",

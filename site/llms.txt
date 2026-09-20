@@ -6,7 +6,7 @@
 
 ## Start with a practical job
 
-Native prerelease v0.2.0-vm.7 packages are available for Apple silicon macOS and
+Native prerelease v0.2.0-vm.8 packages are available for Apple silicon macOS and
 Linux x86_64. Follow the release guide to verify and install. The native demo
 needs no Bun, Cargo, checkout, credentials, or web server:
 
@@ -133,7 +133,7 @@ bun cli.ts diagram examples/source/reply.algal --format svg --out reply.svg
 ## Source and examples
 
 - Repository: https://github.com/hraness/algal
-- Native release: https://github.com/hraness/algal/releases/tag/v0.2.0-vm.7
+- Native release: https://github.com/hraness/algal/releases/tag/v0.2.0-vm.8
 - Verify and install: https://github.com/hraness/algal/blob/main/docs/native-release.md
 - Practical use cases: https://github.com/hraness/algal/blob/main/docs/use-cases.md
 - Native workbench: https://github.com/hraness/algal/blob/main/docs/native-workbench.md

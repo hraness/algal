@@ -155,6 +155,12 @@ its referenced record exists. Symlinked supervisor paths and digest leaves
 are rejected. These checks assume a trusted host filesystem; they do not
 isolate concurrent malicious writers or authenticate a store owner.
 
+Process heads and record objects are read only after the opened descriptor
+passes regular-file and byte admission. On Unix, FIFOs and devices cannot
+block these reads while waiting for a writer. Invalid UTF-8 and leading BOM
+bytes are rejected before process interpretation; failed admission leaves
+the retained path untouched.
+
 ## CLI output and offline verification
 
 `create`, `inspect`, and `tick` return `{digest, process}`. `list` returns

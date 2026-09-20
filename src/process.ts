@@ -27,6 +27,7 @@ import type { Executor } from "./effects";
 import { AlgalError } from "./errors";
 import { compileOrganism, type CompiledOrganism } from "./graph";
 import { hostLease } from "./host-state";
+import { boundedFileBytes } from "./io";
 import { ProcessJournal } from "./process-journal";
 import {
   FileMailboxService,
@@ -245,39 +246,17 @@ async function readBounded(
   path: string,
   max: number,
 ): Promise<JsonValue | undefined> {
-  let file;
+  let bytes: Uint8Array;
   try {
-    file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    bytes = await boundedFileBytes(path, max, "process file");
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     throw e;
   }
-  try {
-    const st = await file.stat();
-    if (!st.isFile() || st.size > max)
-      throw new AlgalError(
-        "BUDGET_EXHAUSTED",
-        "process file type/size is not admitted",
-      );
-    const buffer = Buffer.alloc(max + 1);
-    let count = 0;
-    while (count <= max) {
-      const read = await file.read(buffer, count, buffer.length - count, null);
-      if (!read.bytesRead) break;
-      count += read.bytesRead;
-    }
-    if (count > max)
-      throw new AlgalError(
-        "BUDGET_EXHAUSTED",
-        "process file exceeds byte bound",
-      );
-    return boundedValue(
-      JSON.parse(buffer.subarray(0, count).toString("utf8")),
-      max,
-    );
-  } finally {
-    await file.close();
-  }
+  let value: unknown;
+  try { value = JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes)); }
+  catch { throw new AlgalError("PARSE_FAILED", "process file is not UTF-8 JSON"); }
+  return boundedValue(value, max);
 }
 async function syncDirectory(path: string): Promise<void> {
   const dir = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);

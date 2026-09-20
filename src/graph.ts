@@ -13,11 +13,11 @@ import type {
 import type { FnRegistry } from "./registry";
 import type { Store } from "./store";
 import { asDigest } from "./digest";
-import { parseOrganismManifest } from "./contract";
+import { manifestToJson, parseOrganismManifest } from "./contract";
 import { unpackBundle } from "./bundle";
 import type { Transport } from "./transport";
 import type { ToolRegistry } from "./tools";
-import type { JsonValue } from "./values";
+import { canonicalBytes, type JsonValue } from "./values";
 
 export type CellPorts = { inputs: PortMap; outputs: PortMap };
 
@@ -337,7 +337,31 @@ export function portCompatible(producer: PortType, consumer: PortType): boolean 
 
 /** Check and compile: resolves organism sub-manifests from the store,
  * validates structure, rejects cycles. Pure — no execution. */
-const MAX_COMPILE_DEPTH = 64;
+export const COMPILE_BOUNDS = {
+  maxDepth: 64,
+  maxInstances: 1_024,
+  maxCells: 4_096,
+  maxEdges: 16_384,
+  maxManifestBytes: 67_108_864,
+} as const;
+
+type CompilationBudget = { instances: number; cells: number; edges: number; bytes: number };
+
+function admitCompilation(manifest: OrganismManifest, budget: CompilationBudget): void {
+  // Charge every occurrence, including repeated digest references. Depth alone
+  // cannot bound a small shared DAG's exponentially expanded compiled tree.
+  const instances = budget.instances + 1;
+  const cells = budget.cells + manifest.cells.length;
+  const edges = budget.edges + manifest.edges.length;
+  if (instances > COMPILE_BOUNDS.maxInstances || cells > COMPILE_BOUNDS.maxCells || edges > COMPILE_BOUNDS.maxEdges) {
+    throw new AlgalError("BUDGET_EXHAUSTED", "expanded compilation count budget exceeded");
+  }
+  const bytes = budget.bytes + canonicalBytes(manifestToJson(manifest));
+  if (bytes > COMPILE_BOUNDS.maxManifestBytes) {
+    throw new AlgalError("BUDGET_EXHAUSTED", "expanded compilation manifest byte budget exceeded");
+  }
+  Object.assign(budget, { instances, cells, edges, bytes });
+}
 
 export async function compileOrganism(
   manifest: OrganismManifest,
@@ -347,12 +371,25 @@ export async function compileOrganism(
   transports?: Record<string, Transport>,
   tools?: ToolRegistry,
 ): Promise<CompiledOrganism> {
-  if (depth > MAX_COMPILE_DEPTH) {
+  return compileWithBudget(manifest, fns, store, depth, transports, tools, { instances: 0, cells: 0, edges: 0, bytes: 0 });
+}
+
+async function compileWithBudget(
+  manifest: OrganismManifest,
+  fns: FnRegistry,
+  store: Store,
+  depth: number,
+  transports: Record<string, Transport> | undefined,
+  tools: ToolRegistry | undefined,
+  budget: CompilationBudget,
+): Promise<CompiledOrganism> {
+  if (depth > COMPILE_BOUNDS.maxDepth) {
     throw new AlgalError(
       "DEPTH_EXCEEDED",
-      `embedding chain exceeds compile depth ${MAX_COMPILE_DEPTH}`,
+      `embedding chain exceeds compile depth ${COMPILE_BOUNDS.maxDepth}`,
     );
   }
+  admitCompilation(manifest, budget);
   const seen = new Set<string>();
   for (const cell of manifest.cells) {
     if (seen.has(cell.id)) {
@@ -401,7 +438,7 @@ export async function compileOrganism(
     }
     children.set(
       cell.id,
-      await compileOrganism(sub, fns, store, depth + 1, transports, tools),
+      await compileWithBudget(sub, fns, store, depth + 1, transports, tools, budget),
     );
   }
 

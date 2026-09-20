@@ -100,6 +100,30 @@ fn explicit_inputs_reject_fifos_and_directories_but_preserve_regular_symlinks() 
 }
 
 #[test]
+fn transport_bundle_descriptor_rejects_fifo_and_preserves_regular_symlink_support() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = json!({"contract":"algal.organism.v1","key":"organism:transport-leaf","name":"Leaf","cells":[{"id":"input","kind":"input","outputs":{"v":"text"}}],"edges":[],"interface":{"inputs":{"v":{"cell":"input","port":"v"}},"outputs":{"v":{"cell":"input","port":"v"}}}});
+    let leaf = Manifest::parse(&source).unwrap();
+    let bundle = algal::store::pack(&leaf, &Store::default()).unwrap();
+    let key = bundle["root"].as_str().unwrap();
+    let path = temp.path().join(format!("{}.bundle.json", &key[7..]));
+    fifo(&path);
+    let outer = temp.path().join("outer.json");
+    write(&outer, &json!({"contract":"algal.organism.v1","key":"organism:transport-outer","name":"Outer","cells":[{"id":"nested","kind":"organism","manifest":key,"via":"bundles"}],"edges":[]}));
+    let transports = temp.path().join("transports.json");
+    write(&transports, &json!({"bundles":temp.path().to_str().unwrap()}));
+    let args = ["check", outer.to_str().unwrap(), "--transports", transports.to_str().unwrap()];
+    rejected(&cli(&temp.path().join("store"), &args), "BUDGET_EXHAUSTED");
+    assert!(fs::symlink_metadata(&path).unwrap().file_type().is_fifo());
+    fs::remove_file(&path).unwrap();
+    let content = temp.path().join("content.json");
+    write(&content, &bundle);
+    symlink(&content, &path).unwrap();
+    success(&cli(&temp.path().join("store"), &args));
+    assert!(fs::symlink_metadata(&path).unwrap().file_type().is_symlink());
+}
+
+#[test]
 fn cas_get_and_existing_put_reject_special_files_without_mutation() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().join("store");
