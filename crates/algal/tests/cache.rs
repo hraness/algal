@@ -106,19 +106,36 @@ async fn invalid_outputs_are_not_memoized() {
 
 #[tokio::test]
 async fn side_effecting_backends_are_never_memoized() {
+    let directory = tempfile::tempdir().unwrap();
     let mut store = Store::default();
     let mut host = Host::default();
     host.cache = true;
     host.entries.push((
         "shell".into(),
         Backend::Command {
-            argv: vec!["/bin/sh".into(), "-c".into(), "printf '{\"v\":1}'".into()],
-            cwd: None,
+            argv: vec![
+                "/bin/sh".into(),
+                "-c".into(),
+                // A command executor must consume its request before exiting.
+                // Printing immediately races the host's stdin writer.
+                r#"set -eu
+/bin/cat >/dev/null
+value=0
+if [ -f count ]; then read -r value <count; fi
+value=$((value + 1))
+printf '%s\n' "$value" >count
+printf '{"v":%s}' "$value""#
+                    .into(),
+            ],
+            cwd: Some(directory.path().to_path_buf()),
             timeout_ms: 5000,
         },
     ));
-    let req = request(json!({"kind":"json","schema":{}}));
+    let mut req = request(json!({"kind":"json","schema":{}}));
+    // Exceed an ordinary pipe buffer so the fixture must drain the input.
+    req["context"] = json!({"padding":"x".repeat(262_144)});
     let receipt = host.effect(&req, 5000, Some(&mut store)).await.unwrap();
+    assert!(receipt.get("error").is_none(), "executor failed: {receipt}");
     assert_eq!(receipt["output"], json!({"v":1}));
     assert!(
         store
@@ -127,5 +144,17 @@ async fn side_effecting_backends_are_never_memoized() {
             .is_none()
     );
     let again = host.effect(&req, 5000, Some(&mut store)).await.unwrap();
+    assert!(again.get("error").is_none(), "executor failed: {again}");
+    assert_eq!(again["output"], json!({"v":2}));
     assert!(again.get("cached").is_none());
+    assert_eq!(
+        std::fs::read_to_string(directory.path().join("count")).unwrap(),
+        "2\n"
+    );
+    assert!(
+        store
+            .get_effect(&algal::canonical::digest(&req).unwrap(), "shell")
+            .unwrap()
+            .is_none()
+    );
 }
