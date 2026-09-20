@@ -60,12 +60,24 @@ export type SourceCompilation = {
   project: SourceProjectIndex;
 };
 export type SourceImport = { path: string; alias: string; span: SourceSpan };
+export type SourceErrorImport = { source: string; path: string; span: SourceSpan };
+export type SourceErrorContext = { source?: string; sourceText?: string; imports?: SourceErrorImport[] };
 export class SourceError extends AlgalError {
-  readonly diagnostic: { message: string; span: SourceSpan };
-  constructor(message: string, span: SourceSpan) {
-    super("PARSE_FAILED", `${span.start.line}:${span.start.column}: ${message}`);
+  readonly diagnostic: { message: string; span: SourceSpan; source?: string; imports: SourceErrorImport[]; importsTruncated?: true };
+  declare readonly sourceText?: string;
+  constructor(message: string, span: SourceSpan, context: SourceErrorContext = {}) {
+    super("PARSE_FAILED", `${context.source === undefined ? "" : `${context.source}:`}${span.start.line}:${span.start.column}: ${message}`);
     this.name = "SourceError";
-    this.diagnostic = { message, span };
+    this.diagnostic = { message, span: structuredClone(span),
+      ...(context.source === undefined ? {} : { source: context.source }),
+      imports: structuredClone((context.imports ?? []).slice(0, SOURCE_PROJECT_BOUNDS.maxImportDepth)),
+      ...((context.imports?.length ?? 0) > SOURCE_PROJECT_BOUNDS.maxImportDepth ? { importsTruncated: true as const } : {}),
+    };
+    // Full source is available only to an in-process formatter. It is neither
+    // diagnostic JSON nor an enumerable error field; oversized text is absent.
+    if (context.sourceText !== undefined && Buffer.byteLength(context.sourceText) <= SOURCE_BOUNDS.maxSourceBytes) {
+      Object.defineProperty(this, "sourceText", { value: context.sourceText, enumerable: false, writable: false, configurable: false });
+    }
   }
 }
 
@@ -140,7 +152,7 @@ class Parser {
     return { offset, line: prefix.split("\n").length, column: offset - prefix.lastIndexOf("\n") };
   }
   span(value: Span): SourceSpan { return { start: this.position(value.start), end: this.position(value.end) }; }
-  fail(message: string, span: Span = this.peek()): never { throw new SourceError(message, this.span(span)); }
+  fail(message: string, span: Span = this.peek()): never { throw new SourceError(message, this.span(span), { sourceText: this.source }); }
   private peek(): Token { return this.tokens[Math.min(this.index, this.tokens.length - 1)]!; }
   private take(): Token { const token = this.peek(); if (this.index < this.tokens.length - 1) this.index++; return token; }
   private eat(text: string): boolean { if (this.peek().text !== text) return false; this.take(); return true; }
@@ -673,50 +685,70 @@ export function resolveSourceImport(importerKey: string, path: string, span: Sou
 }
 
 export function compileSource(source: string, options: SourceCompilerOptions = {}): SourceCompilation {
-  const entry = projectKey(options.entry ?? "main.algal");
+  const entryKey = options.entry ?? "main.algal";
+  let entry: string;
+  try { entry = projectKey(entryKey); }
+  catch (error) {
+    if (error instanceof SourceError) throw new SourceError(error.diagnostic.message, error.diagnostic.span, { source: entryKey, sourceText: source });
+    throw error;
+  }
   const sources = new Map<string, string>();
   let totalBytes = 0;
   const insert = (key: string, text: string): void => {
-    projectKey(key);
-    if (typeof text !== "string") throw new SourceError(`source module ${key} must contain source text`, originSpan);
-    if (sources.has(key)) {
-      if (sources.get(key) !== text) throw new SourceError(`entry source differs from modules[${JSON.stringify(key)}]`, originSpan);
-      return;
+    try {
+      projectKey(key);
+      if (typeof text !== "string") throw new SourceError(`source module ${key} must contain source text`, originSpan);
+      if (sources.has(key)) {
+        if (sources.get(key) !== text) throw new SourceError(`entry source differs from modules[${JSON.stringify(key)}]`, originSpan);
+        return;
+      }
+      const bytes = Buffer.byteLength(text);
+      if (bytes > SOURCE_BOUNDS.maxSourceBytes) throw new SourceError(`source exceeds ${SOURCE_BOUNDS.maxSourceBytes} UTF-8 bytes`, originSpan);
+      if (sources.size >= SOURCE_PROJECT_BOUNDS.maxFiles) throw new SourceError(`source project exceeds ${SOURCE_PROJECT_BOUNDS.maxFiles} files`, originSpan);
+      totalBytes += bytes;
+      if (totalBytes > SOURCE_PROJECT_BOUNDS.maxTotalBytes) throw new SourceError(`source project exceeds ${SOURCE_PROJECT_BOUNDS.maxTotalBytes} UTF-8 bytes`, originSpan);
+      sources.set(key, text);
+    } catch (error) {
+      if (error instanceof SourceError) throw new SourceError(error.diagnostic.message, error.diagnostic.span, { source: key, ...(typeof text === "string" ? { sourceText: text } : {}) });
+      throw error;
     }
-    const bytes = Buffer.byteLength(text);
-    if (bytes > SOURCE_BOUNDS.maxSourceBytes) throw new SourceError(`${key}: source exceeds ${SOURCE_BOUNDS.maxSourceBytes} UTF-8 bytes`, originSpan);
-    if (sources.size >= SOURCE_PROJECT_BOUNDS.maxFiles) throw new SourceError(`source project exceeds ${SOURCE_PROJECT_BOUNDS.maxFiles} files`, originSpan);
-    totalBytes += bytes;
-    if (totalBytes > SOURCE_PROJECT_BOUNDS.maxTotalBytes) throw new SourceError(`source project exceeds ${SOURCE_PROJECT_BOUNDS.maxTotalBytes} UTF-8 bytes`, originSpan);
-    sources.set(key, text);
   };
   insert(entry, source);
   for (const [key, text] of Object.entries(options.modules ?? {})) insert(key, text);
   const memo = new Map<string, CompiledModule>();
   const active = new Set<string>();
-  const visit = (key: string, depth: number, location = originSpan): CompiledModule => {
-    if (active.has(key)) throw new SourceError(`source import cycle at ${key}`, location);
-    if (depth > SOURCE_PROJECT_BOUNDS.maxImportDepth) throw new SourceError(`source import depth exceeds ${SOURCE_PROJECT_BOUNDS.maxImportDepth}`, location);
+  const visit = (key: string, depth: number, frames: SourceErrorImport[] = []): CompiledModule => {
+    const incoming = frames.at(-1);
+    const failImport = (message: string): never => {
+      const primary = incoming?.source ?? key;
+      throw new SourceError(message, incoming?.span ?? originSpan, { source: primary,
+        ...(sources.has(primary) ? { sourceText: sources.get(primary)! } : {}),
+        imports: incoming ? frames.slice(0, -1) : [],
+      });
+    };
+    if (active.has(key)) failImport(`source import cycle at ${key}`);
+    if (depth > SOURCE_PROJECT_BOUNDS.maxImportDepth) failImport(`source import depth exceeds ${SOURCE_PROJECT_BOUNDS.maxImportDepth}`);
     const cached = memo.get(key);
     if (cached) {
-      if (depth + cached.importDepth > SOURCE_PROJECT_BOUNDS.maxImportDepth) throw new SourceError(`source import depth exceeds ${SOURCE_PROJECT_BOUNDS.maxImportDepth}`, location);
+      if (depth + cached.importDepth > SOURCE_PROJECT_BOUNDS.maxImportDepth) failImport(`source import depth exceeds ${SOURCE_PROJECT_BOUNDS.maxImportDepth}`);
       return cached;
     }
     const text = sources.get(key);
-    if (text === undefined) throw new SourceError(`source module not supplied: ${key}`, location);
+    if (text === undefined) return failImport(`source module not supplied: ${key}`);
     active.add(key);
     try {
       const parser = new Parser(text);
       const declarations = parser.imports();
       const program = parser.program();
       const imports = new Map<string, CompiledModule>();
-      for (const declaration of declarations) imports.set(declaration.alias, visit(resolveSourceImport(key, declaration.path, declaration.span), depth + 1, declaration.span));
+      for (const declaration of declarations) imports.set(declaration.alias, visit(resolveSourceImport(key, declaration.path, declaration.span), depth + 1,
+        [...frames, { source: key, path: declaration.path, span: declaration.span }]));
       const importDepth = imports.size ? 1 + Math.max(...[...imports.values()].map(child => child.importDepth)) : 0;
       const result = { ...new Compiler(parser, imports, key).compile(program), program, importDepth, sourceKey: key };
       memo.set(key, result);
       return result;
     } catch (error) {
-      if (error instanceof SourceError && key !== entry) throw new SourceError(`${key}: ${error.diagnostic.message}`, error.diagnostic.span);
+      if (error instanceof SourceError && error.diagnostic.source === undefined) throw new SourceError(error.diagnostic.message, error.diagnostic.span, { source: key, sourceText: text, imports: frames });
       throw error;
     } finally { active.delete(key); }
   };

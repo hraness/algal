@@ -96,6 +96,22 @@ and native Rust kernel. The native CLI takes the compiled JSON; it does not
 silently invoke Bun. See the [source language guide](docs/source-language.md)
 for the grammar, uncertainty routing, bounds, and current subset.
 
+`check` also reports the source entry, file count, inferred maximum executor
+attempts, and required nesting depth. For the two-file inbox project these
+are four attempts and one child level. These are structural bounds, not a
+price or runtime estimate.
+
+Compiler errors identify the original file, expression, and import chain:
+
+```sh
+# Intentionally misspelled binding in an imported helper; exits with an error.
+bun cli.ts check examples/source/errors/unknown-binding/main.algal \
+  --diagnostic-format text
+```
+
+JSON is the default error format; `--diagnostic-format json` makes that choice
+explicit for tools. [Inspect the generated authoring error](https://algal.dev/#authoring-error).
+
 ### Run only the selected branch
 
 Put generation directly inside an exhaustive choice. In the

@@ -1,0 +1,6 @@
+import draft from "./helpers/draft.algal"
+
+program inbox(email: text) -> text {
+  budget { max_agent_calls: 1 }
+  return call draft using { email: email }
+}

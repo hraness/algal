@@ -8,6 +8,8 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BOUNDS, manifestToJson, parseOrganismManifest, type OrganismManifest } from "./src/contract";
 import { loadSourceProject } from "./src/source-project";
+import { SourceError } from "./src/source";
+import { createSourceErrorReport, renderSourceError } from "./src/source-errors";
 import { diagnoseSource, renderSourceDiagnostics } from "./src/source-diagnostics";
 import { createProgramDiagram, renderMermaid, renderSvg } from "./src/diagram";
 import { compileOrganism } from "./src/graph";
@@ -90,6 +92,7 @@ import {
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const EXAMPLES_DIR = join(ROOT, "examples");
+let diagnosticFormat: "json" | "text" = "json";
 
 /** Wrap an executor under a route-selectable id (bench/foundry systems and
  * `--executors` maps name executors; receipts record the named id). */
@@ -172,8 +175,8 @@ usage:
       --write                                 persist manifest + receipt under --dir
       --cache-effects                         memoize effects: identical request digests
                                               serve the store's recorded response
-  algal check <manifest.json> [--modules <dir>] [--transports <file>] [--dir <path>]
-                                              admit a manifest without running it
+  algal check <program.algal|manifest.json> [--modules <dir>] [--transports <file>] [--dir <path>]
+                                              admit without running; source includes attempt/depth bounds
   algal explain <manifest.json> [--modules <dir>] [--transports <file>] [--dir <path>]
                                               print the compiled signature: resolved ports, guards
   algal verify <receipt.json> [manifest.json] [--modules <dir>] [--transports <file>] [--dir <path>]
@@ -280,6 +283,10 @@ usage:
                                               never echoes the key
   algal doctor [--jev]                        runtime and provider availability check
   algal --version | --help
+
+Source diagnostics (all commands that load .algal files):
+  --diagnostic-format json|text               stderr format for compile errors (default json)
+                                              JSON preserves error/message and adds diagnostic
 `;
 
 type ParsedArgs = {
@@ -678,6 +685,12 @@ function deriveInputs(c: {
 
 async function main(): Promise<number> {
   const { cmd, positional, flags } = parseArgs(process.argv.slice(2));
+  const requestedDiagnosticFormat = artifactFlag(flags, "diagnostic-format") ?? "json";
+  if (requestedDiagnosticFormat !== "json" && requestedDiagnosticFormat !== "text") {
+    usageError("--diagnostic-format must be json or text");
+  }
+  diagnosticFormat = requestedDiagnosticFormat;
+  delete flags["diagnostic-format"];
   if (cmd === "process" && positional[0] === "verify-evidence") {
     if (positional.length !== 2 || Object.keys(flags).length !== 0)
       usageError("algal process verify-evidence <file> accepts no host flags");
@@ -1048,12 +1061,14 @@ async function main(): Promise<number> {
 
     case "check": {
       const file = positional[0];
-      if (!file) usageError("algal check <manifest.json> [--modules <dir>]");
+      if (!file) usageError("algal check <program.algal|manifest.json> [--modules <dir>]");
       if (flags.modules !== undefined) {
         const n = await loadModules(String(flags.modules), store);
         diag(`loaded ${n} module(s) from ${flags.modules}`);
       }
-      const manifest = await readManifest(resolve(file));
+      const project = file.endsWith(".algal") ? await readProject(file) : undefined;
+      if (project !== undefined) await installSource(project, store);
+      const manifest = project?.manifest ?? await readManifest(resolve(file));
       const compiled = await compileOrganism(
         manifest,
         fns,
@@ -1070,6 +1085,9 @@ async function main(): Promise<number> {
         digest: digestCanonical(manifestToJson(manifest)),
         cells: compiled.manifest.cells.map((c) => ({ id: c.id, kind: c.kind })),
         edges: compiled.manifest.edges.length,
+        ...(project === undefined ? {} : {
+          source: { entry: project.entry, files: project.files.length, ...project.analysis },
+        }),
       });
       return 0;
     }
@@ -2431,6 +2449,16 @@ main()
   .then((code) => process.exit(code))
   .catch((e) => {
     const rep = errorReport(e);
+    if (e instanceof SourceError) {
+      const diagnostic = createSourceErrorReport(e);
+      const location = [diagnostic.source, diagnostic.span?.start.line, diagnostic.span?.start.column]
+        .filter(value => value !== undefined).join(":");
+      process.stderr.write(diagnosticFormat === "text"
+        ? renderSourceError(diagnostic)
+        : canonicalize({ error: rep.code, message: `${location ? `${location}: ` : ""}${diagnostic.message}`,
+          diagnostic: diagnostic as unknown as JsonValue }) + "\n");
+      process.exit(2);
+    }
     process.stderr.write(
       canonicalize({ error: rep.code, message: rep.message }) + "\n",
     );
