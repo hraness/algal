@@ -168,6 +168,65 @@ fn sql(error: rusqlite::Error) -> Error {
     Error::new("IO_FAILED", format!("host lease database: {error}"))
 }
 
+// Finish every read before attempting custody. A ready database must not run
+// autocommit CREATE/INSERT: competing preparatory writes can both return BUSY.
+#[derive(PartialEq)]
+enum OwnerState {
+    Missing,
+    Empty,
+    Ready,
+}
+
+fn owner_state(connection: &Connection) -> Result<OwnerState> {
+    let objects: Vec<String> = connection
+        .prepare("SELECT type FROM sqlite_schema WHERE name='algal_owner' COLLATE NOCASE LIMIT 2")
+        .map_err(sql)?
+        .query_map([], |row| row.get(0))
+        .map_err(sql)?
+        .collect::<std::result::Result<_, _>>()
+        .map_err(sql)?;
+    if objects.is_empty() {
+        return Ok(OwnerState::Missing);
+    }
+    if objects != ["table"] {
+        return Err(Error::new("IO_FAILED", "unknown host lease schema"));
+    }
+    let rows: Vec<String> = connection
+        .prepare("SELECT contract FROM algal_owner LIMIT 2")
+        .map_err(sql)?
+        .query_map([], |row| row.get(0))
+        .map_err(sql)?
+        .collect::<std::result::Result<_, _>>()
+        .map_err(sql)?;
+    if rows == ["algal.process-owner.v2"] {
+        return Ok(OwnerState::Ready);
+    }
+    if !rows.is_empty() {
+        return Err(Error::new("IO_FAILED", "unknown host lease contract"));
+    }
+    // Only the known empty bootstrap schema may be completed. Do not populate
+    // arbitrary empty tables, including ones with hidden/generated columns.
+    let columns: Vec<(String, String, Option<String>, i64, i64)> = connection
+        .prepare("SELECT name, type, dflt_value, pk, hidden FROM pragma_table_xinfo('algal_owner') LIMIT 2")
+        .map_err(sql)?
+        .query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
+        })
+        .map_err(sql)?
+        .collect::<std::result::Result<_, _>>()
+        .map_err(sql)?;
+    if columns.len() != 1
+        || columns[0].0 != "contract"
+        || !columns[0].1.eq_ignore_ascii_case("TEXT")
+        || columns[0].2.is_some()
+        || columns[0].3 != 1
+        || columns[0].4 != 0
+    {
+        return Err(Error::new("IO_FAILED", "unknown host lease schema"));
+    }
+    Ok(OwnerState::Empty)
+}
+
 pub(crate) struct OwnerLease {
     connection: Connection,
     path: PathBuf,
@@ -201,28 +260,38 @@ impl OwnerLease {
         for (phase, statement) in [
             ("journal mode", "PRAGMA journal_mode=DELETE;"),
             ("synchronous mode", "PRAGMA synchronous=FULL;"),
-            (
-                "schema",
-                "CREATE TABLE IF NOT EXISTS algal_owner(contract TEXT PRIMARY KEY);",
-            ),
-            (
-                "contract",
-                "INSERT OR IGNORE INTO algal_owner(contract) VALUES('algal.process-owner.v2');",
-            ),
-            ("custody", "BEGIN IMMEDIATE;"),
         ] {
             connection.execute_batch(statement).map_err(|error| {
                 Error::new("IO_FAILED", format!("host lease database {phase}: {error}"))
             })?;
         }
-        let rows: Vec<String> = connection
-            .prepare("SELECT contract FROM algal_owner")
-            .map_err(sql)?
-            .query_map([], |r| r.get(0))
-            .map_err(sql)?
-            .collect::<std::result::Result<_, _>>()
-            .map_err(sql)?;
-        if rows != ["algal.process-owner.v2"] {
+        let mut state = owner_state(&connection)?;
+        if state == OwnerState::Missing {
+            connection
+                .execute_batch("CREATE TABLE IF NOT EXISTS algal_owner(contract TEXT PRIMARY KEY);")
+                .map_err(|error| {
+                    Error::new("IO_FAILED", format!("host lease database schema: {error}"))
+                })?;
+            state = owner_state(&connection)?;
+        }
+        if state == OwnerState::Empty {
+            connection
+                .execute_batch(
+                    "INSERT OR IGNORE INTO algal_owner(contract) VALUES('algal.process-owner.v2');",
+                )
+                .map_err(|error| {
+                    Error::new(
+                        "IO_FAILED",
+                        format!("host lease database contract: {error}"),
+                    )
+                })?;
+        }
+        connection
+            .execute_batch("BEGIN IMMEDIATE;")
+            .map_err(|error| {
+                Error::new("IO_FAILED", format!("host lease database custody: {error}"))
+            })?;
+        if owner_state(&connection)? != OwnerState::Ready {
             return Err(Error::new("IO_FAILED", "unknown host lease contract"));
         }
         let lock = path.join(".lock");

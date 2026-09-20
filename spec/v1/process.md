@@ -148,8 +148,12 @@ external completion from elapsed time or automatically reissues an uncertain
 effect. See the [journal and custody ABI](process-journal.md) for exact records,
 bounds, publication ordering, and explicit recovery semantics.
 
-SQLite custody uses a zero busy timeout. Contention fails immediately without
-retrying an operation. On a fresh lease database, simultaneous schema
+SQLite custody uses a zero busy timeout. An initialized database is inspected
+read-only before `BEGIN IMMEDIATE`, and its contract is revalidated under
+custody before marker recovery or dispatch. An interrupted empty table is
+initialized only when its schema is compatible with the owner contract.
+Contention fails immediately without retrying an operation. On a fresh lease
+database, simultaneous schema
 initializers can all return `IO_FAILED` before any owner is admitted; the
 protocol guarantees exclusion, not that one cold starter makes progress.
 This rejection publishes no process dispatch intent or mailbox authority.
