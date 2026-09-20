@@ -93,6 +93,24 @@
     <p class="under-note">Each view comes from an actual runtime receipt generated and replay-checked during the site build. The selector changes which receipt you inspect; it does not run a model in your browser.</p>
   </section>
 
+  <section class="composition-section" id="reuse" aria-labelledby="composition-title">
+    <div class="section-heading"><div><p class="eyebrow">A useful program becomes a building block</p><h2 id="composition-title">Write it once.<br><em>Use it across an inbox.</em></h2></div><p>Import a local helper, call it for one preview, then apply it to a bounded list. The same compiled child handles every email with the tone you pass explicitly.</p></div>
+    <div class="composition-card">
+      <div class="composition-source">
+        <div class="composition-tabs" data-tabset role="tablist" aria-label="Reusable source project files" hidden>
+          <button type="button" role="tab" id="tab-inbox-source" aria-controls="inbox-source" aria-selected="true" tabindex="0">inbox.algal</button>
+          <button type="button" role="tab" id="tab-draft-source" aria-controls="draft-source" aria-selected="false" tabindex="-1">draft.algal</button>
+        </div>
+        <div class="composition-source-panel" id="inbox-source" aria-labelledby="inbox-source-title"><h3 id="inbox-source-title" class="eyebrow">The caller · inbox.algal</h3><pre class="source-code"><code>{{INBOX_SOURCE}}</code></pre></div>
+        <div class="composition-source-panel" id="draft-source" aria-labelledby="draft-source-title"><h3 id="draft-source-title" class="eyebrow">The reusable helper · draft.algal</h3><pre class="source-code"><code>{{DRAFT_SOURCE}}</code></pre></div>
+        <div class="composition-budget"><span class="eyebrow">The limit composes</span><strong>1 preview + {{INBOX_MAX_ITEMS}} emails × 1 child call</strong><p>{{INBOX_STATIC_CALLS}} executor attempts maximum. Replies keep input order; items execute sequentially.</p></div>
+        <p class="composition-links"><a href="examples/projects/inbox/inbox.algal" download>Caller ↓</a><a href="examples/projects/inbox/draft.algal" download>Helper ↓</a><a href="examples/projects/inbox/inbox.bundle.json" download>Portable bundle ↓</a></p>
+      </div>
+      <figure class="composition-graph"><div class="graph-caption"><span class="eyebrow">Actual program / call + each</span><a href="diagrams/inbox.svg" target="_blank" rel="noopener">Expand ↗</a></div><div class="composition-graph-scroll" tabindex="0" role="region" aria-label="Inbox program graph, scroll horizontally on small screens"><img src="diagrams/inbox.svg" alt="Generated inbox graph with one named child call for a preview and a bounded each cell for up to {{INBOX_MAX_ITEMS}} emails. Both use the same digest-addressed draft program." width="1000" height="850" loading="lazy"></div><figcaption>Each child boundary pins the helper's compiled digest. The downloadable bundle includes the caller and its full child closure.</figcaption></figure>
+    </div>
+    <details class="composition-evidence"><summary><span>Inspect the recorded results <span class="composition-proof">{{INBOX_RESULT_COUNT}} replies · {{INBOX_RECORDED_CALLS}} attempts · replay checked</span></span><span aria-hidden="true">+</span></summary><div class="composition-evidence-body"><p class="fixture-label">Scripted executions; no live model calls</p>{{INBOX_RESULTS}}<div class="composition-empty"><strong>Empty inbox? No child applications.</strong><p>The empty-list run returns <code>[]</code> for replies and uses {{INBOX_EMPTY_CALLS}} executor attempt for the separate preview. <a href="receipts/inbox-empty.receipt.json" download>Empty-list receipt ↓</a></p></div><p class="composition-links"><a href="receipts/inbox.receipt.json" download>Three-item receipt ↓</a><a href="examples/projects/inbox/inbox.args.json" download>Input ↓</a><a href="examples/projects/inbox/inbox.responses.json" download>Scripted answers ↓</a></p></div></details>
+  </section>
+
   <section class="examples-section" id="examples" aria-labelledby="examples-title">
     <div class="section-heading"><div><p class="eyebrow">The same core, more ambitious programs</p><h2 id="examples-title">Start small.<br><em>Grow deliberately.</em></h2></div><p>Refine a draft. Suspend for approval. Apply a child program to a collection. Propose a new program. Every effect and boundary has a place in the graph.</p></div>
     <div class="example-tabs" data-tabset role="tablist" aria-label="Program examples" hidden>
@@ -121,7 +139,7 @@
       <div class="example-copy"><span class="capability-label">Programs as values</span><h3 id="evolve-title">A program can<br> propose its successor.</h3><p>A designer produces a child manifest as data. A bounded <code>spawn</code> operation admits and runs it, and its digest is appended to a persistent population slot.</p><p>That is the starting point for a habitat. Foundry and civilization workflows evaluate candidates on declared cases; host selection decides what to retain or promote.</p><div class="bound-card"><span class="eyebrow">Proposal is not promotion</span><strong>Inspect → evaluate → select</strong><p>The graph shown records a proposed child's digest. It does not itself prove improvement or promote a winner.</p></div><a class="text-link" href="https://github.com/hraness/algal/blob/main/docs/civilization.md">Explore measured populations and lineage ↗</a></div>
       <figure class="example-graph"><div class="graph-caption"><span class="eyebrow">Actual program / spawn + persistent slot</span><a href="diagrams/habitat.svg" target="_blank" rel="noopener">Expand ↗</a></div><img src="diagrams/habitat.svg" alt="Generated habitat graph: a goal reaches a designer agent that proposes a child manifest; spawn runs the admitted child, then its digest joins population history and is written to a slot." width="790" height="840" loading="lazy"><figcaption>Execution explains what a program did. Evaluation and lineage explain why a version was retained.</figcaption></figure>
     </article>
-    <p class="under-note">These are generated views of existing executable manifests. The first source-language release covers values, decisions, generation, and conditional branches; composition, waits, and evolution remain available through the manifest API.</p>
+    <p class="under-note">These are generated views of existing executable manifests. Readable source covers values, decisions, generation, conditional branches, local imports, named calls, and bounded <code>each</code>; repeat, waits, and evolution remain available through the manifest API.</p>
   </section>
 
   <section class="evolution-section" aria-labelledby="evolution-title">

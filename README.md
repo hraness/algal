@@ -98,6 +98,56 @@ than adding the costs of mutually exclusive arms. Nested `if` and `match`
 work the same way. Source diagrams show binding names and operation summaries
 while retaining every exact cell ID. [Inspect the recorded paths on the site](https://algal.dev/#branch-demo).
 
+### Write a program once. Call it or use it for each item.
+
+The [draft helper](examples/source/projects/inbox/draft.algal) takes an email
+and tone, then generates one reply. An inbox program can call it for a preview
+and reuse it for a bounded list of messages:
+
+<!-- inbox-example:start -->
+
+```algal
+import draft from "./draft.algal"
+
+program inbox(sample: text, emails: json) -> json {
+  budget { max_agent_calls: 4 }
+
+  let preview = call draft using {
+    email: sample, tone: "helpful"
+  }
+  let replies = each draft over email in emails
+    using { tone: "helpful" } max_items 3
+
+  return { preview: preview, replies: replies }
+}
+```
+
+<!-- inbox-example:end -->
+
+![Generated inbox graph: a named call produces the preview, a bounded each invokes the same child for up to three messages, and the results join into one record.](docs/diagrams/inbox.svg)
+
+One preview plus at most three replies means a worst-case budget of four
+model calls. `each` preserves input order and returns an empty list for an
+empty batch; its child runs are currently sequential. Child budgets are
+checked during compilation, and the root budget limits the entire execution.
+Local imports resolve to content-addressed child manifests. The diagram
+shows those actual call boundaries; the receipt records the nested execution.
+[Inspect the executable example](https://algal.dev/#reuse).
+
+Compile the whole project into one portable bundle:
+
+```sh
+bun cli.ts compile examples/source/projects/inbox/inbox.algal \
+  --out inbox.algal.json --bundle-out inbox.bundle.json
+bun cli.ts call inbox.bundle.json \
+  --args examples/source/projects/inbox/inbox.args.json \
+  --responses examples/source/projects/inbox/inbox.responses.json
+```
+
+The bundle contains the complete manifest closure and runs without the source
+files. The [language guide](docs/source-language.md) covers the SDK, project
+roots, and native bundle calls.
+
 ## More than a chain of prompts
 
 ### Refine within a limit

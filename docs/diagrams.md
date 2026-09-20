@@ -20,7 +20,7 @@ remain explicitly unknown unless supplied. With `--modules`, `--tools`, or
 `--transports`, normal graph admission resolves those signatures. `check` is
 the admission command; a render alone is not evidence that a graph can run.
 
-The SDK exports `createProgramDiagram(manifest, {receipt?, ports?, source?})`,
+The SDK exports `createProgramDiagram(manifest, {receipt?, ports?, source?, sourceOptions?})`,
 `renderMermaid(view)`, and `renderSvg(view, {compact?, header?})`. Pass
 `compileOrganism(...).ports` to expose exact admitted signatures. Renderer
 inputs are typed views produced by `createProgramDiagram`; this release has
@@ -73,6 +73,39 @@ compact views keep every cell and edge rather than silently removing effects.
 Source summaries are bounded display text; the original source and spans remain
 the complete reference. Long source matches retain all arm summaries in JSON.
 
+## Source projects and child boundaries
+
+For a multi-file source project, the diagram receives the original entry source
+and the complete source-module options used by the compiler. It recompiles that
+closed project and matches the resulting root manifest digest before showing
+source annotations:
+
+```ts
+const project = await loadSourceProject(entryPath);
+for (const child of project.modules) await store.putManifest(child);
+const compiled = await compileOrganism(project.manifest, fns, store);
+const diagram = createProgramDiagram(project.manifest, {
+  source: project.source,
+  sourceOptions: project.compilerOptions,
+  ports: compiled.ports,
+});
+```
+
+`CALL` and `EACH` remain exact manifest cells. Their source labels identify the
+imported helper and argument expressions; their manifest details identify the
+pinned child digest. An `EACH` cell retains its item limit. The outer graph does
+not silently expand one child call into many invented cells or imply parallel
+execution. Admitted `ports` provide the child's exact interface. Inspect the
+child manifest or bundled closure for its internals; nested execution evidence
+remains in the receipt.
+
+The [inbox project](../examples/source/projects/inbox/README.md) uses the same
+helper for one named call and a bounded collection. The site's compact project
+view is generated from that project, with downloadable source files and a
+portable bundle. Its three-item and empty-list fixtures run and replay-verify
+during the site build. The displayed replies and attempt counts come from those
+receipts, including zero child applications for the empty list.
+
 ## Recorded execution
 
 An overlay checks the receipt's manifest/key binding and self-digest before
@@ -124,4 +157,6 @@ same source and manifests to generate its downloadable artifacts and seven
 base diagram assets. It also runs every scripted route case during the build,
 verifies the receipts, and generates recorded overlays. The branch selector on
 the site switches between those recorded runs; it does not call a live model.
+The local inbox project also compiles with its child closure, runs both
+nonempty and empty scripted collections, and publishes a portable bundle.
 No hand-maintained marketing graph defines program behavior.

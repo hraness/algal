@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { compileSource, SOURCE_BOUNDS, SourceError } from "./source";
+import { compileSource, sourceImports, resolveSourceImport, SOURCE_BOUNDS, SOURCE_PROJECT_BOUNDS, SourceError, type SourceCompilation } from "./source";
 import { manifestToJson } from "./contract";
 import { compileOrganism } from "./graph";
 import { builtinRegistry } from "./registry";
@@ -10,6 +10,7 @@ import { scriptedExecutor, type EffectRequest, type Executor } from "./effects";
 import { runOrganism } from "./run";
 import { verifyReceipt } from "./verify";
 import type { JsonValue } from "./values";
+import { packOrganism, unpackBundle } from "./bundle";
 
 const examples = join(import.meta.dir, "../examples/source");
 const fixture = async (name: string) => readFile(join(examples, name), "utf8");
@@ -312,4 +313,177 @@ test("the maximum choice set compiles and dispatches every exhaustive arm", asyn
     expect(receipt.outcome).toBe("complete");
     expect(receipt.cells.result?.outputs?.out).toBe(choice);
   }
+});
+
+const childText = `program draft(email: text, tone: text) -> text {
+  budget { max_agent_calls: 1 }
+  return generate tone using email
+}`;
+async function projectStore(compilation: SourceCompilation): Promise<MemoryStore> {
+  const store = new MemoryStore();
+  for (const manifest of compilation.modules) await store.putManifest(manifest);
+  return store;
+}
+
+test("source imports share parser diagnostics and resolve only bounded project-relative keys", () => {
+  const source = `// header\nimport draft from "./parts/draft.algal"; /* ok */\nimport other from "../other.algal"\n${pure("1")}`;
+  const imports = sourceImports(source);
+  expect(imports.map(({ alias, path }) => ({ alias, path }))).toEqual([{ alias: "draft", path: "./parts/draft.algal" }, { alias: "other", path: "../other.algal" }]);
+  expect(imports[0]!.span.start.line).toBe(2);
+  expect(resolveSourceImport("app/main.algal", imports[0]!.path, imports[0]!.span)).toBe("app/parts/draft.algal");
+  expect(resolveSourceImport("app/main.algal", imports[1]!.path, imports[1]!.span)).toBe("other.algal");
+  for (const path of ["/tmp/a.algal", "https://x/a.algal", "a.algal", "./a.json", "../../outside.algal", "./a\\b.algal", "./a\nb.algal", "./a//b.algal"]) {
+    expect(() => resolveSourceImport("app/main.algal", path, imports[0]!.span), path).toThrow(SourceError);
+  }
+  expect(() => sourceImports(`import x from "./a.algal" import x from "./b.algal" ${pure("1")}`)).toThrow(/duplicate import/);
+  expect(() => sourceImports(`${Array.from({ length: 17 }, (_, i) => `import a${i} from "./a.algal"`).join("\n")} ${pure("1")}`)).toThrow(/import limit/);
+});
+
+test("source calls preserve child identity and exact named context through portable closures", async () => {
+  const source = `import draft from "./draft.algal"
+    program caller(email: text) -> text { budget { max_agent_calls: 1 }
+      let secret = "LOCAL SECRET"
+      return call draft using { tone: "helpful", email: email }
+    }`;
+  const compilation = compileSource(source, { modules: { "draft.algal": childText } });
+  const child = compileSource(childText);
+  expect(compilation.analysis).toEqual({ maxAgentCalls: 1, requiredDepth: 1 });
+  expect(compilation.modules).toEqual([child.manifest]);
+  expect(compilation.manifest.cells.find(cell => cell.id === "result")).toEqual({ id: "result", kind: "organism", manifest: child.sourceMap.manifestDigest });
+  const store = await projectStore(compilation);
+  const delegate = scriptedExecutor({ result: "reply" });
+  const requests: EffectRequest[] = [];
+  const executor: Executor = { ...delegate, execute: async request => { requests.push(request); return delegate.execute(request); } };
+  const receipt = await runOrganism({ manifest: compilation.manifest, args: { input: { email: "question" } }, store, fns: builtinRegistry(), executors: [executor] });
+  expect(receipt.outcome).toBe("complete"); expect(receipt.cells.result?.outputs?.result).toBe("reply");
+  expect(JSON.stringify(requests)).toContain("question"); expect(JSON.stringify(requests)).toContain("helpful");
+  expect(JSON.stringify(requests)).not.toContain("LOCAL SECRET"); expect(JSON.stringify(requests)).not.toContain("source-control");
+  const bundle = await packOrganism(compilation.manifest, store);
+  const portable = new MemoryStore(); await unpackBundle(bundle, portable);
+  expect((await verifyReceipt(receipt as unknown as JsonValue, manifestToJson(compilation.manifest), portable, builtinRegistry())).ok).toBe(true);
+  const changed = compileSource(source, { modules: { "draft.algal": childText.replace("generate tone", 'generate "different"') } });
+  expect(changed.sourceMap.manifestDigest).not.toBe(compilation.sourceMap.manifestDigest);
+});
+
+test("call branches gate every argument and preserve child contexts for dynamic text", async () => {
+  const source = `import draft from "./draft.algal"
+    program caller(data: json) -> text { budget { max_agent_calls: 1 }
+      return if data.run { call draft using {email: data.email, tone: "helpful"} }
+      else { "skip" }
+    }`;
+  const compilation = compileSource(source, { modules: { "draft.algal": childText } });
+  for (const [data, outcome, result, calls] of [
+    [{ run: false, email: 42 }, "complete", "skip", 0],
+    [{ run: true, email: "hello" }, "complete", "reply", 1],
+    [{ run: true, email: 42 }, "failed", undefined, 0],
+  ] as const) {
+    const receipt = await runOrganism({ manifest: compilation.manifest, args: { input: { data } }, store: await projectStore(compilation), fns: builtinRegistry(), executors: [scriptedExecutor({ result: "reply" })] });
+    expect(receipt.outcome).toBe(outcome); expect(receipt.work.agentCalls).toBe(calls);
+    expect(receipt.cells.result?.outputs?.out).toBe(result);
+    if (!data.run) { expect(receipt.cells["branch-1-arm-1"]?.status).toBe("skipped"); expect(receipt.cells["branch-1-arm-1-arg-1"]?.status).toBe("skipped"); }
+  }
+  const unsafe = source.replace("data.email", "1 / 0");
+  expect(() => compileSource(unsafe, { modules: { "draft.algal": childText } })).toThrow(/must be text/);
+});
+
+test("guarded parameterless calls use a trigger wrapper without changing the child", async () => {
+  const child = `program ping() -> text { budget { max_agent_calls: 1 } return generate "ping" using "known" }`;
+  const source = `import ping from "./ping.algal" program root(flag: json) -> text {
+    budget { max_agent_calls: 1, max_depth: 2 }
+    return if flag { call ping using {} } else { "skip" }
+  }`;
+  const compilation = compileSource(source, { modules: { "ping.algal": child } });
+  expect(compilation.analysis).toEqual({ maxAgentCalls: 1, requiredDepth: 2 });
+  expect(compilation.modules).toHaveLength(2);
+  expect(compilation.modules[0]).toEqual(compileSource(child).manifest);
+  for (const flag of [false, true]) {
+    const delegate = scriptedExecutor({ result: "pong" }); const requests: EffectRequest[] = [];
+    const receipt = await runOrganism({ manifest: compilation.manifest, args: { input: { flag } }, store: await projectStore(compilation), fns: builtinRegistry(), executors: [{ ...delegate, execute: async request => { requests.push(request); return delegate.execute(request); } }] });
+    expect(receipt.outcome).toBe("complete"); expect(receipt.work.agentCalls).toBe(Number(flag));
+    expect(receipt.cells.result?.outputs?.out).toBe(flag ? "pong" : "skip");
+    expect(JSON.stringify(requests)).not.toContain("trigger"); expect(JSON.stringify(requests)).not.toContain("source-control");
+  }
+  expect(() => compileSource(source.replace("max_depth: 2", "max_depth: 1"), { modules: { "ping.algal": child } })).toThrow(/requires depth 2/);
+  const direct = compileSource(`import ping from "./ping.algal" program root() -> text { budget { max_agent_calls: 1 } return call ping using {} }`, { modules: { "ping.algal": child } });
+  expect(direct.analysis.requiredDepth).toBe(1); expect(direct.modules).toHaveLength(1);
+});
+
+test("each returns ordered whole lists including empty lists and enforces runtime element limits", async () => {
+  const child = 'program label(item: text, prefix: text) -> text { budget { max_agent_calls: 0 } return prefix + item }';
+  const source = `import label from "./label.algal" program batch(data: json) -> json {
+    budget { max_agent_calls: 0 }
+    return if data.run { each label over item in data.items using {prefix: "#"} max_items 3 } else { [] }
+  }`;
+  const compilation = compileSource(source, { modules: { "label.algal": child } });
+  expect(compilation.analysis).toEqual({ maxAgentCalls: 0, requiredDepth: 1 });
+  for (const [run, items, outcome, expected] of [
+    [true, ["a", "b"], "complete", ["#a", "#b"]], [true, [], "complete", []],
+    [false, "not a list", "complete", []], [true, "not a list", "failed", undefined],
+    [true, [2], "failed", undefined], [true, ["a", "b", "c", "d"], "failed", undefined],
+  ] as const) {
+    const receipt = await runOrganism({ manifest: compilation.manifest, args: { input: { data: { run, items: items as unknown as JsonValue } } }, store: await projectStore(compilation), fns: builtinRegistry(), executors: [] });
+    expect(receipt.outcome).toBe(outcome); expect(receipt.cells.result?.outputs?.out).toEqual(expected === undefined ? undefined : [...expected]);
+    if (outcome === "complete") expect((await verifyReceipt(receipt as unknown as JsonValue, manifestToJson(compilation.manifest), await projectStore(compilation), builtinRegistry())).ok).toBe(true);
+  }
+});
+
+test("composition bounds count transitive calls, maximum arms, each limits and real embedding depth", () => {
+  const middle = `import draft from "./draft.algal" program twice(email: text) -> text { budget { max_agent_calls: 2 }
+    let first = call draft using {email: email, tone: "first"}
+    return call draft using {email: first, tone: "second"}
+  }`;
+  const modules = { "twice.algal": middle, "draft.algal": childText };
+  const source = `import twice from "./twice.algal" program batch(emails: json) -> json { budget { max_agent_calls: 6, max_depth: 2 }
+    return each twice over email in emails using {} max_items 3
+  }`;
+  const compilation = compileSource(source, { modules });
+  expect(compilation.analysis).toEqual({ maxAgentCalls: 6, requiredDepth: 2 }); expect(compilation.modules).toHaveLength(2);
+  expect(() => compileSource(source.replace("max_agent_calls: 6", "max_agent_calls: 5"), { modules })).toThrow(/6 explicit effects/);
+  expect(() => compileSource(source.replace("max_depth: 2", "max_depth: 1"), { modules })).toThrow(/requires depth 2/);
+  for (const limit of ["0", "65", "1.5"]) expect(() => compileSource(source.replace("max_items 3", `max_items ${limit}`), { modules })).toThrow(/max_items/);
+  const branched = `import twice from "./twice.algal" import draft from "./draft.algal" program fork(flag: json) -> text {
+    budget { max_agent_calls: 2 } return if flag { call twice using {email: "hello"} } else { call draft using {email: "hello", tone: "one"} }
+  }`;
+  expect(compileSource(branched, { modules }).analysis.maxAgentCalls).toBe(2);
+});
+
+test("module closure is deterministic, shared imports deduplicate, and unused supplied modules add no authority", () => {
+  const source = `import a from "./same.algal" import b from "./same.algal" import unused from "./unused.algal"
+    program root() -> text { budget { max_agent_calls: 0 } let first = call a using {name: "A"} return call b using {name: first} }`;
+  const same = 'program same(name: text) -> text { budget { max_agent_calls: 0 } return name }';
+  const modules = { "same.algal": same, "unused.algal": pure("1") };
+  const a = compileSource(source, { modules }); const b = compileSource(source, { modules: { "main.algal": source, ...modules } });
+  expect(a).toEqual(b); expect(a.modules).toHaveLength(1);
+  const nested = compileSource(`import same from "../same.algal" program nested() -> text { budget { max_agent_calls: 0 } return call same using {name: "x"} }`, { entry: "app/main.algal", modules });
+  expect(nested.modules).toEqual(a.modules);
+});
+
+test("imports reject missing files, cycles, excessive depth, invalid keys and untrusted module objects", () => {
+  const source = `import child from "./child.algal" ${pure("1")}`;
+  expect(() => compileSource(source)).toThrow(/not supplied/);
+  expect(() => compileSource(source, { modules: { "child.algal": `import parent from "./main.algal" ${pure("1")}` } })).toThrow(/cycle/);
+  expect(() => compileSource(source, { modules: { "child.algal": "program bad(" } })).toThrow(/child.algal/);
+  for (const entry of ["/main.algal", "./main.algal", "a/../main.algal", "a//main.algal", "https://x/main.algal", "main.json"]) expect(() => compileSource(pure("1"), { entry })).toThrow(/normalized/);
+  expect(() => compileSource(pure("1"), { modules: { "main.algal": pure("2") } })).toThrow(/differs/);
+  expect(() => compileSource(source, { modules: { "child.algal": compileSource(pure("1")) as unknown as string } })).toThrow(/source text/);
+  const tooMany = Object.fromEntries(Array.from({ length: SOURCE_PROJECT_BOUNDS.maxFiles }, (_, i) => [`m${i}.algal`, pure("1")]));
+  expect(() => compileSource(pure("1"), { modules: tooMany })).toThrow(/files/);
+  const chain = Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`m${i}.algal`, `${i < 8 ? `import next from "./m${i + 1}.algal"` : ""} ${pure("1")}`]));
+  expect(() => compileSource(`import first from "./m0.algal" ${pure("1")}`, { modules: chain })).toThrow(/import depth/);
+  // Visiting a shared subtree first must not let memoization hide a deeper path.
+  expect(() => compileSource(`import early from "./m5.algal" import first from "./m0.algal" ${pure("1")}`, { modules: chain })).toThrow(/import depth/);
+});
+
+test("composition rejects invalid argument records, alias shadowing and effects in call operands", () => {
+  const source = (expression: string) => `import draft from "./draft.algal" program caller(email: text) -> text { budget { max_agent_calls: 4 } return ${expression} }`;
+  for (const expression of [
+    'call missing using {}', 'call draft using email', 'call draft using {email: email}',
+    'call draft using {email: email, tone: "x", extra: "bad"}', 'call draft using {email: 2, tone: "x"}',
+    'call draft using {email: generate "x" using email, tone: "x"}',
+    'generate "x" using (call draft using {email: email, tone: "x"})',
+    'each draft over missing in [] using {email: email, tone: "x"} max_items 2',
+    'each draft over email in [] using {email: email, tone: "x"} max_items 2',
+  ]) expect(() => compileSource(source(expression), { modules: { "draft.algal": childText } }), expression).toThrow(SourceError);
+  expect(() => compileSource(source('"ok"').replace("email: text", "draft: text"), { modules: { "draft.algal": childText } })).toThrow(/shadows/);
+  expect(() => compileSource(source('"ok"').replace('return "ok"', 'let draft = "bad" return "ok"'), { modules: { "draft.algal": childText } })).toThrow(/immutable/);
 });

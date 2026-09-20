@@ -1,7 +1,9 @@
 // Algal public surface: contract, compile, run, verify, store, effects.
 
-export { compileSource, SourceError, SOURCE_BOUNDS, SOURCE_PROFILE, SOURCE_VERSION, GENERATE_PROMPT } from "./src/source";
-export type { SourceAnnotation, SourceMap, SourcePosition, SourceSpan } from "./src/source";
+export { compileSource, sourceImports, SourceError, SOURCE_BOUNDS, SOURCE_PROJECT_BOUNDS, SOURCE_PROFILE, SOURCE_VERSION, GENERATE_PROMPT } from "./src/source";
+export type { SourceAnnotation, SourceCompilation, SourceCompilerOptions, SourceImport, SourceMap, SourcePosition, SourceSpan } from "./src/source";
+export { loadSourceProject } from "./src/source-project";
+export type { SourceProject, SourceProjectOptions } from "./src/source-project";
 export { createProgramDiagram, renderMermaid, renderSvg } from "./src/diagram";
 export type { ProgramDiagram, DiagramOptions, DiagramNode, DiagramEdge, SvgDiagramOptions } from "./src/diagram";
 

@@ -1,0 +1,10 @@
+{
+  "input": {
+    "sample": "Can you help me get started?",
+    "emails": [
+      "I cannot sign in to my account.",
+      "Can I change my delivery address?",
+      "Where can I download my invoice?"
+    ]
+  }
+}
