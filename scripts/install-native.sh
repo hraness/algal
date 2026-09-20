@@ -17,6 +17,9 @@ while [ "$#" -gt 0 ]; do
   esac
   shift
 done
+if [ -L "$prefix" ] || [ -L "$prefix/bin" ]; then
+  printf '%s\n' 'Installation prefix and bin directory must not be symlinks.' >&2; exit 1
+fi
 if [ -e "$prefix/bin/algal" ] && [ ! -f "$prefix/bin/algal" ]; then
   printf '%s\n' 'Installation target must be a regular executable file.' >&2; exit 1
 fi
@@ -36,7 +39,7 @@ staging=$(mktemp -d "$prefix/bin/.algal-install.XXXXXX")
 trap 'rm -rf "$staging"' EXIT
 trap 'exit 1' HUP INT TERM
 if [ -n "$archive" ]; then
-  python3 "$root/scripts/unpack-native.py" --archive "$archive" --checksum "$checksum" --out "$staging/algal"
+  python3 "$root/scripts/unpack-native.py" --archive "$archive" --checksum "$checksum" --out "$staging/algal" --retain-metadata
 else
   build_dir=${CARGO_TARGET_DIR:-"$root/target"}
   case "$build_dir" in /*) ;; *) build_dir="$PWD/$build_dir" ;; esac
@@ -45,6 +48,11 @@ else
 fi
 chmod 755 "$staging/algal"
 "$staging/algal" doctor > "$staging/doctor.json"
+# Metadata is immutable and addressed by the verified executable bytes. Publish
+# it first: interruption cannot attach a new release label to the old binary.
+if [ -n "$archive" ]; then
+  python3 "$root/scripts/unpack-native.py" --publish-metadata-from "$staging/algal" --metadata-dir "$prefix/bin/.algal-releases"
+fi
 # Install on the same filesystem. A concurrent target creation never gets
 # overwritten without --force; both publication paths expose complete bytes.
 if [ "$force" = true ]; then

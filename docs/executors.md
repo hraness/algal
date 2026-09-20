@@ -90,8 +90,7 @@ even for BYOK, and topping up is a dashboard action.
 ## OpenAI-compatible endpoints
 
 The native CLI also speaks to any OpenAI-compatible Chat Completions endpoint
-through `--openai-model`, `--openai-base-url`, and a credential environment
-variable — OpenRouter and a self-hosted server are presets of the same
+through `--model`, `--base-url`, and `--credential-env` — OpenRouter and a self-hosted server are presets of the same
 adapter, not new auth. The endpoint is host-configured, never taken from a
 model response; HTTPS is required except for explicit loopback, redirects and
 URL credentials are rejected, and upstream error bodies are not echoed.

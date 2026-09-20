@@ -77,5 +77,8 @@ that the model's answer is true.
 Typed graphs and bounded expressions reduce the executable surface, but
 admitted functions, executors, storage, and capability custody are part of the
 trusted host. Do not infer that an arbitrary manifest is safe to execute with
-arbitrary tools. Distributed durability, general crash reconciliation, and OS
+arbitrary tools. Ordered journals support bounded exact-intent recovery, and
+qualified durable operation adapters support explicit coding-job reconciliation.
+Unknown writes still require settlement evidence; arbitrary external effects do
+not acquire exactly-once guarantees. Distributed custody transfer and OS
 isolation remain outside the current process VM.

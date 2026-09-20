@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import gzip
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,7 @@ import platform
 import subprocess
 import tempfile
 import tarfile
+from types import SimpleNamespace
 from unittest.mock import patch
 import sys
 
@@ -33,7 +35,36 @@ def check(binary, commit, rustc_version):
     with tempfile.TemporaryDirectory(prefix="algal-release-test-") as temporary:
         directory = Path(temporary)
         archives = directory / "archives"
-        version = json.loads(call([str(binary), "doctor"]).stdout)["version"]
+        diagnostic = json.loads(call([str(binary), "doctor"]).stdout)
+        version = diagnostic["version"]
+        build = diagnostic["build"]
+        assert build["sourceCommit"] == commit
+        assert build["rustc"] == rustc_version
+        assert build["target"] == target
+        overridden = json.loads(call([str(binary), "doctor"], env={**os.environ, "ALGAL_BUILD_COMMIT": "0" * 40, "ALGAL_BUILD_STATE": "clean"}).stdout)["build"]
+        assert overridden["sourceCommit"] == build["sourceCommit"]
+        assert overridden["sourceState"] == build["sourceState"]
+        assert call([str(binary), "--version"]).stdout.strip() == f"algal {version}"
+        spec = importlib.util.spec_from_file_location("native_package", ROOT / "scripts/package-native.py")
+        packager = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(packager)
+        inputs_digest = packager.source_inputs_sha256(ROOT)
+        assert build["sourceInputsSha256"] == inputs_digest, "rebuild the binary after changing Rust inputs"
+        admission = SimpleNamespace(commit=commit, target=target, rustc_version=rustc_version, allow_dirty=True)
+        embedded = packager.validate_build(build, admission, version, inputs_digest)
+        for key, value in [("sourceCommit", "0" * 40), ("sourceInputsSha256", "0" * 64),
+                           ("sourceState", "unknown"), ("target", "wrong-target"), ("rustc", "wrong-compiler")]:
+            try:
+                packager.validate_build({**build, key: value}, admission, version, inputs_digest)
+                raise AssertionError(f"mismatched embedded {key} accepted")
+            except ValueError:
+                pass
+        if build["sourceState"] == "dirty":
+            try:
+                packager.validate_build(build, SimpleNamespace(**{**vars(admission), "allow_dirty": False}), version, inputs_digest)
+                raise AssertionError("dirty binary accepted for a clean release")
+            except ValueError:
+                pass
         call(["python3", str(ROOT / "scripts/package-native.py"), "--binary", str(binary), "--target", target,
               "--tag", f"v{version}-test", "--commit", commit, "--rustc-version", rustc_version, "--out", str(archives), "--allow-dirty"])
         archive = next(archives.glob("*.tar.gz"))
@@ -44,12 +75,66 @@ def check(binary, commit, rustc_version):
         installed = prefix / "bin/algal"
         expected = hashlib.sha256(binary.read_bytes()).hexdigest()
         assert hashlib.sha256(installed.read_bytes()).hexdigest() == expected
+        retained = prefix / "bin/.algal-releases" / f"{expected}.json"
+        original_metadata = retained.read_bytes()
+        metadata = json.loads(original_metadata)
+        assert metadata["build"] == embedded
+        assert metadata["binarySha256"] == expected
+        installed_diagnostic = json.loads(call([str(installed), "doctor"]).stdout)["build"]
+        assert installed_diagnostic["release"]["status"] == "matched"
+        assert installed_diagnostic["release"]["metadata"]["tag"] == f"v{version}-test"
+        assert installed_diagnostic["sourceCommit"] == commit
         call(install, success=False)
         call([*install, "--force"])
+        assert retained.read_bytes() == original_metadata
         call(["python3", str(ROOT / "scripts/standalone-native-smoke.py"), str(installed)])
         corrupted = directory / archive.name
         corrupted.write_bytes(archive.read_bytes() + b"tampered")
         call(["sh", str(ROOT / "scripts/install-native.sh"), str(prefix), "--archive", str(corrupted), "--checksum", str(checksum), "--force"], success=False)
+        assert hashlib.sha256(installed.read_bytes()).hexdigest() == expected
+        assert retained.read_bytes() == original_metadata
+        # Sidecars cannot claim signatures, accept foreign fields, or substitute
+        # another source commit while retaining the binary's filename/hash.
+        for mutation in [{"signed": True}, {"extra": "untrusted"}, {"commit": "0" * 40}]:
+            retained.write_text(json.dumps({**metadata, **mutation}))
+            rejected = json.loads(call([str(installed), "doctor"]).stdout)["build"]
+            assert rejected["release"]["status"] == "rejected"
+        retained.write_bytes(original_metadata)
+
+        def changed_archive(label, changed):
+            path = directory / f"{label}.tar.gz"
+            with tarfile.open(archive) as source, tarfile.open(path, "w:gz") as destination:
+                for member in source:
+                    data = source.extractfile(member).read()
+                    if member.name.endswith("/release.json"):
+                        data = json.dumps({**json.loads(data), **changed}).encode()
+                        member.size = len(data)
+                    destination.addfile(member, io.BytesIO(data))
+            proof = path.with_suffix(".gz.sha256")
+            proof.write_text(hashlib.sha256(path.read_bytes()).hexdigest() + f"  {path.name}\n")
+            return ["sh", str(ROOT / "scripts/install-native.sh"), str(prefix), "--archive", str(path), "--checksum", str(proof), "--force"]
+
+        call(changed_archive("wrong-embedded-commit", {"commit": "0" * 40}), success=False)
+        call(changed_archive("stripped-build-identity", {"build": None}), success=False)
+        call(changed_archive("conflicting-release-tag", {"tag": f"v{version}-other"}), success=False)
+        assert retained.read_bytes() == original_metadata
+        assert hashlib.sha256(installed.read_bytes()).hexdigest() == expected
+        # Existing metadata and executable survive directory/file symlink attacks.
+        retained.unlink()
+        elsewhere = directory / "metadata-elsewhere.json"
+        elsewhere.write_bytes(original_metadata)
+        retained.symlink_to(elsewhere)
+        call([*install, "--force"], success=False)
+        assert json.loads(call([str(installed), "doctor"]).stdout)["build"]["release"]["status"] == "rejected"
+        retained.unlink()
+        retained.write_bytes(original_metadata)
+        records = retained.parent
+        preserved_records = records.with_name("preserved-records")
+        records.rename(preserved_records)
+        records.symlink_to(preserved_records, target_is_directory=True)
+        call([*install, "--force"], success=False)
+        records.unlink()
+        preserved_records.rename(records)
         assert hashlib.sha256(installed.read_bytes()).hexdigest() == expected
         # A valid checksum does not make adversarial archive headers safe. A
         # PAX extension is interpreted internally before yielded member checks.
@@ -97,7 +182,7 @@ def check(binary, commit, rustc_version):
         assert (directory / "custom-target/release/algal").is_file()
         assert (directory / "source-installed/bin/algal").is_file()
         assert not list((prefix / "bin").glob(".algal-install.*"))
-    print(json.dumps({"ok": True, "checks": ["release-source-admission", "package-extracted-smoke", "verified-install", "overwrite-refusal", "explicit-force", "tampered-checksum-refusal", "existing-binary-preserved", "relative-CARGO_TARGET_DIR", "staging-cleanup", "oversized-PAX-refusal", "bounded-gzip-expansion"]}))
+    print(json.dumps({"ok": True, "checks": ["release-source-admission", "embedded-source-input-binding", "unchanged-semver", "package-extracted-smoke", "verified-install", "retained-hash-bound-release-identity", "conflicting-release-identity-refusal", "metadata-symlink-refusal", "untrusted-sidecar-refusal", "overwrite-refusal", "explicit-force", "tampered-checksum-refusal", "existing-binary-preserved", "relative-CARGO_TARGET_DIR", "staging-cleanup", "oversized-PAX-refusal", "bounded-gzip-expansion"]}))
 
 
 if __name__ == "__main__":

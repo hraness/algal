@@ -163,6 +163,10 @@ enum Commands {
         #[command(subcommand)]
         command: MailboxCommand,
     },
+    Demo {
+        #[command(subcommand)]
+        command: DemoCommand,
+    },
     Process {
         #[command(subcommand)]
         command: ProcessCommand,
@@ -349,6 +353,58 @@ enum StoreCommand {
 enum SlotCommand {
     Get { name: String },
     Set { name: String, value: PathBuf },
+}
+
+#[derive(Subcommand)]
+enum DemoCommand {
+    /// Demonstrate approval, denial, detached verification, and two owned crashes.
+    Prove {
+        root: PathBuf,
+    },
+    #[command(hide = true)]
+    FixtureStart {
+        root: PathBuf,
+        #[arg(long)]
+        mode: String,
+        #[arg(long)]
+        token: String,
+    },
+    #[command(hide = true)]
+    FixtureRecover {
+        root: PathBuf,
+        #[arg(long)]
+        token: String,
+        #[arg(long)]
+        intent: String,
+    },
+    Start {
+        root: PathBuf,
+        #[arg(long)]
+        evidence: Option<PathBuf>,
+    },
+    Inspect {
+        root: PathBuf,
+    },
+    Approve {
+        root: PathBuf,
+        #[arg(long)]
+        proposal: String,
+        #[arg(long)]
+        action: String,
+    },
+    Deny {
+        root: PathBuf,
+        #[arg(long)]
+        proposal: String,
+        #[arg(long)]
+        action: String,
+    },
+    Export {
+        root: PathBuf,
+    },
+    Verify {
+        file: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -932,6 +988,53 @@ fn receipt_diff(a: &Value, b: &Value) -> Vec<String> {
 
 async fn execute(cli: Cli) -> Result<bool> {
     match cli.command {
+        Commands::Demo { command } => {
+            if std::env::args().any(|arg| arg == "--dir" || arg.starts_with("--dir=")) {
+                return Err(Error::invalid(
+                    "demo commands use their explicit root and accept no --dir",
+                ));
+            }
+            let report = match command {
+                DemoCommand::Prove { root } => algal::demo::prove(&root).await?,
+                DemoCommand::FixtureStart { root, mode, token } => {
+                    algal::demo::fixture_start(&root, &mode, &token).await?
+                }
+                DemoCommand::FixtureRecover {
+                    root,
+                    token,
+                    intent,
+                } => algal::demo::fixture_recover(&root, &token, &intent).await?,
+                DemoCommand::Start { root, evidence } => {
+                    algal::demo::start(&root, evidence.map(|file| load(&file, 8192)).transpose()?)
+                        .await?
+                }
+                DemoCommand::Inspect { root } => algal::demo::refresh(&root).await?,
+                DemoCommand::Approve {
+                    root,
+                    proposal,
+                    action,
+                } => algal::demo::choose(&root, &proposal, &action, true).await?,
+                DemoCommand::Deny {
+                    root,
+                    proposal,
+                    action,
+                } => algal::demo::choose(&root, &proposal, &action, false).await?,
+                DemoCommand::Export { root } => {
+                    let evidence = algal::demo::export(&root).await?;
+                    print!("{}", canonical(&evidence)?);
+                    return Ok(true);
+                }
+                DemoCommand::Verify { file } => {
+                    algal::process_evidence::verify_process_evidence(&load(
+                        &file,
+                        MAX_DOCUMENT_BYTES,
+                    )?)
+                    .await?
+                }
+            };
+            emit(&report)?;
+            Ok(true)
+        }
         Commands::Civ {
             live,
             goals,
@@ -2038,7 +2141,7 @@ async fn execute(cli: Cli) -> Result<bool> {
                 Ok(result["available"] == true)
             } else {
                 emit(
-                    &json!({"runtime":"algal","version":env!("CARGO_PKG_VERSION"),"native":true,"platform":std::env::consts::OS,"legacyWireContract":"algal.organism.v1"}),
+                    &json!({"runtime":"algal","version":env!("CARGO_PKG_VERSION"),"native":true,"platform":std::env::consts::OS,"legacyWireContract":"algal.organism.v1","build":algal::build_info::diagnostic()}),
                 )?;
                 Ok(true)
             }
