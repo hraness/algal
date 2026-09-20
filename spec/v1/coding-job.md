@@ -1,5 +1,9 @@
 # Foreground coding jobs
 
+This document specifies the unchanged v1 xcb host contract. The additive
+[v2 operation-job contract](coding-job-v2.md) applies only to explicitly admitted
+operation adapters; it cannot migrate or reconcile an existing v1 job.
+
 `CodingJobService` is a Bun host service, separate from the portable process
 journal. It admits one foreground xcb invocation against one exact clean Git
 workspace. Preparing, running, and observing a job are distinct operations. A

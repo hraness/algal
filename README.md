@@ -96,6 +96,10 @@ local mailbox. The model cannot approve itself. [Run the VM demo](docs/vm.md).
 The [durable repair workflow](docs/repair.md) now admits one coding attempt,
 retains its exact patch, and resumes independent host validation after a wait.
 Failed or interrupted work cannot silently become a successful review packet.
+For qualified adapters with durable operation identity, explicit
+[operation reconciliation](docs/coding-operations.md) can recover a retained
+terminal result after a lost acknowledgement without launching the job again.
+The current xcb adapter remains conservative when its outcome is unknown.
 [Native release packages](docs/native-release.md) distribute the process kernel
 for Ubuntu 24.04 x86_64 and macOS 14+ Apple silicon without Bun or Cargo. The
 repair and GitHub integration hosts still require Bun. These are qualified

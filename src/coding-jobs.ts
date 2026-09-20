@@ -13,7 +13,13 @@ import {
 } from "node:path";
 import { asDigest, digestCanonical, digestText, type Digest } from "./digest";
 import { AlgalError } from "./errors";
-import { hostDirectory, hostLease, hostRead, hostWrite } from "./host-state";
+import {
+  hostDirectory,
+  hostLease,
+  hostNames,
+  hostRead,
+  hostWrite,
+} from "./host-state";
 import { FileStore } from "./store";
 import type { ToolRegistry } from "./tools";
 import {
@@ -25,6 +31,16 @@ import {
   type JsonValue,
 } from "./values";
 import { codingCommand, parseXcbEnvelope, xcbTransport } from "./xcb";
+import {
+  codingOperationCommandTransport,
+  parseCodingOperationAdapter,
+  parseCodingOperationBinding,
+  parseCodingOperationOutcome,
+  type CodingOperationAdapter,
+  type CodingOperationBinding,
+  type CodingOperationOutcome,
+  type CodingOperationTransport,
+} from "./coding-operations";
 
 export const CODING_JOB_TOOL = "coding.job.observe.v1";
 export const CODING_JOB_BOUNDS = {
@@ -78,8 +94,22 @@ export type CodingJobIntent = {
   limits: CodingJobLimits;
   source?: CodingJobSource;
 };
+export type CodingJobOperationOptions = Omit<CodingJobOptions, "adapter"> & {
+  operationId: string;
+  adapter: CodingOperationAdapter;
+};
+export type CodingJobOperationIntent = Omit<
+  CodingJobIntent,
+  "contract" | "adapter"
+> & {
+  contract: "algal.coding-job.v2";
+  adapter: CodingOperationAdapter;
+  operation: CodingOperationBinding;
+};
+export type AnyCodingJobIntent = CodingJobIntent | CodingJobOperationIntent;
 export type CodingJobResult = {
   session: string;
+  operationId?: string;
   exitCode: number;
   outputRef: Digest;
   patchRef?: Digest;
@@ -88,7 +118,7 @@ export type CodingJobResult = {
 };
 export type CodingJobSnapshot = {
   jobId: Digest;
-  intent: CodingJobIntent;
+  intent: AnyCodingJobIntent;
   status: "prepared" | "uncertain" | "completed" | "failed";
   result?: CodingJobResult;
   reason?: string;
@@ -98,7 +128,7 @@ export type CodingJobTransport = (request: {
   signal: AbortSignal;
 }) => Promise<{ exitCode: number; envelope: unknown }>;
 type Terminal = {
-  contract: "algal.coding-job-result.v1";
+  contract: "algal.coding-job-result.v1" | "algal.coding-job-result.v2";
   jobId: Digest;
   status: "uncertain" | "completed" | "failed";
   result?: CodingJobResult;
@@ -231,7 +261,7 @@ function options(raw: unknown): CodingJobOptions & { limits: CodingJobLimits } {
       : { source: source(value.source, expectedHead) }),
   };
 }
-function parseIntent(raw: unknown): CodingJobIntent {
+function parseV1Intent(raw: unknown): CodingJobIntent {
   const value = asObject(raw, "coding intent");
   noUnknownKeys(
     value,
@@ -278,7 +308,98 @@ function parseIntent(raw: unknown): CodingJobIntent {
     workspaceIdentity: { device, inode },
   };
 }
-function parseTerminal(raw: unknown, jobId: Digest): Terminal {
+/** The immutable provider request binds the complete admitted source and route. */
+export function codingJobOperationPayload(
+  intent: CodingJobOperationIntent,
+): JsonValue {
+  const { contract: _contract, operation, ...request } = intent;
+  return json({
+    contract: "algal.coding-job-request.v2",
+    operationId: operation.operationId,
+    ...request,
+  });
+}
+function operationOptions(
+  raw: unknown,
+): CodingJobOperationOptions & { limits: CodingJobLimits } {
+  const value = asObject(raw, "coding operation options");
+  noUnknownKeys(
+    value,
+    [
+      "workspace",
+      "expectedHead",
+      "prompt",
+      "adapter",
+      "operationId",
+      "source",
+      "limits",
+    ],
+    "coding operation options",
+  );
+  const route = parseCodingOperationAdapter(value.adapter);
+  const binding = parseCodingOperationBinding({
+    operationId: value.operationId,
+    authorityId: route.authorityId,
+    requestDigest: digestText(""),
+  });
+  const { operationId: _operationId, adapter: _adapter, ...common } = value;
+  const parsed = options({
+    ...common,
+    adapter: { executable: route.executable },
+  });
+  return { ...parsed, operationId: binding.operationId, adapter: route };
+}
+function parseIntent(raw: unknown): AnyCodingJobIntent {
+  const value = asObject(raw, "coding intent");
+  if (value.contract !== "algal.coding-job.v2") return parseV1Intent(raw);
+  noUnknownKeys(
+    value,
+    [
+      "contract",
+      "workspace",
+      "expectedHead",
+      "sourceTree",
+      "sourceRawDigest",
+      "gitDirectory",
+      "workspaceIdentity",
+      "prompt",
+      "adapter",
+      "source",
+      "limits",
+      "operation",
+    ],
+    "coding operation intent",
+  );
+  const route = parseCodingOperationAdapter(value.adapter),
+    operation = parseCodingOperationBinding(value.operation);
+  const { operation: _operation, ...common } = value;
+  const parsed = parseV1Intent({
+    ...common,
+    contract: "algal.coding-job.v1",
+    adapter: { executable: route.executable },
+  });
+  const intent: CodingJobOperationIntent = {
+    ...parsed,
+    contract: "algal.coding-job.v2",
+    adapter: route,
+    operation,
+  };
+  if (
+    operation.authorityId !== route.authorityId ||
+    digestCanonical(codingJobOperationPayload(intent)) !==
+      operation.requestDigest
+  )
+    throw new AlgalError(
+      "DIGEST_MISMATCH",
+      "coding operation request binding mismatch",
+    );
+  return intent;
+}
+function parseTerminal(
+  raw: unknown,
+  jobId: Digest,
+  contract: Terminal["contract"] = "algal.coding-job-result.v1",
+): Terminal {
   const value = asObject(raw, "coding result");
   noUnknownKeys(
     value,
@@ -286,14 +407,14 @@ function parseTerminal(raw: unknown, jobId: Digest): Terminal {
     "coding result",
   );
   if (
-    value.contract !== "algal.coding-job-result.v1" ||
+    value.contract !== contract ||
     value.jobId !== jobId ||
     typeof value.status !== "string" ||
     !["uncertain", "completed", "failed"].includes(value.status)
   )
     invalid("invalid coding result binding");
   const result: Terminal = {
-    contract: "algal.coding-job-result.v1",
+    contract,
     jobId,
     status: value.status as Terminal["status"],
   };
@@ -310,6 +431,7 @@ function parseTerminal(raw: unknown, jobId: Digest): Terminal {
         "patchRef",
         "patchDigest",
         "changedFiles",
+        ...(contract === "algal.coding-job-result.v2" ? ["operationId"] : []),
       ],
       "coding artifacts",
     );
@@ -318,6 +440,12 @@ function parseTerminal(raw: unknown, jobId: Digest): Terminal {
       exitCode: asInt(item.exitCode, "coding exit code", 0, 255),
       outputRef: asDigest(item.outputRef, "outputRef"),
     };
+    if (contract === "algal.coding-job-result.v2")
+      result.result.operationId = text(
+        item.operationId,
+        "coding operationId",
+        160,
+      );
     if (item.patchRef !== undefined) {
       const ref = asDigest(item.patchRef, "patchRef");
       if (item.patchDigest !== ref) invalid("coding patch digest mismatch");
@@ -670,7 +798,7 @@ async function readUntracked(
   }
 }
 async function patch(
-  intent: CodingJobIntent,
+  intent: AnyCodingJobIntent,
   signal?: AbortSignal,
 ): Promise<JsonValue> {
   const capture = async (): Promise<JsonValue> => {
@@ -783,15 +911,23 @@ export class CodingJobService {
   readonly root: string;
   private readonly transport: CodingJobTransport;
   private readonly store: FileStore;
-  constructor(root: string, options: { transport?: CodingJobTransport } = {}) {
+  private readonly operationTransport: CodingOperationTransport | undefined;
+  constructor(
+    root: string,
+    options: {
+      transport?: CodingJobTransport;
+      operationTransport?: CodingOperationTransport;
+    } = {},
+  ) {
     this.root = resolve(root);
     this.transport = options.transport ?? xcbTransport;
+    this.operationTransport = options.operationTransport;
     this.store = new FileStore(this.root);
   }
   private path(jobId: Digest): string {
     return join(this.root, "coding-jobs", asDigest(jobId, "jobId").slice(7));
   }
-  private async job(jobId: Digest): Promise<CodingJobIntent> {
+  private async job(jobId: Digest): Promise<AnyCodingJobIntent> {
     for (const path of [
       this.root,
       join(this.root, "coding-jobs"),
@@ -810,13 +946,42 @@ export class CodingJobService {
     const intent = parseIntent(raw);
     if (digestCanonical(json(intent)) !== jobId)
       throw new AlgalError("DIGEST_MISMATCH", "coding intent digest mismatch");
+    if (intent.contract === "algal.coding-job.v2") {
+      const key = digestCanonical({
+        authorityId: intent.operation.authorityId,
+        operationId: intent.operation.operationId,
+      });
+      const directory = join(this.root, "coding-operations"),
+        stat = await lstat(directory);
+      if (!stat.isDirectory() || stat.isSymbolicLink())
+        throw new AlgalError(
+          "IO_FAILED",
+          "operation admission directory must not be a symlink",
+        );
+      const admission = await hostRead(
+        join(directory, `${key.slice(7)}.json`),
+        4096,
+      );
+      if (
+        digestCanonical(admission ?? null) !==
+        digestCanonical({
+          contract: "algal.coding-operation-admission.v1",
+          jobId,
+          ...intent.operation,
+        })
+      )
+        throw new AlgalError(
+          "DIGEST_MISMATCH",
+          "operation admission binding mismatch",
+        );
+    }
     return intent;
   }
   private workspacePath(workspace: string): string {
     return join(this.root, "coding-workspaces", digestText(workspace).slice(7));
   }
   private async assertWorkspaceClaim(
-    intent: CodingJobIntent,
+    intent: AnyCodingJobIntent,
     jobId: Digest,
     allowOwn: boolean,
   ): Promise<void> {
@@ -857,6 +1022,19 @@ export class CodingJobService {
         "CAPABILITY_DENIED",
         "workspace has an unresolved coding job claim",
       );
+    if (owner.intent.contract === "algal.coding-job.v2") {
+      const outcome = parseCodingOperationOutcome(
+        await this.store.getValue(owner.result.outputRef),
+        owner.intent.operation,
+        { maxOutputBytes: owner.intent.limits.maxOutputBytes },
+      );
+      if (outcome.state !== "terminal")
+        throw new AlgalError(
+          "CAPABILITY_DENIED",
+          "workspace claim has no proven settled operation",
+        );
+      return;
+    }
     const envelope = parseXcbEnvelope(
       await this.store.getValue(owner.result.outputRef),
       owner.intent.limits.maxOutputBytes,
@@ -868,7 +1046,18 @@ export class CodingJobService {
       );
   }
   async prepare(input: CodingJobOptions): Promise<CodingJobSnapshot> {
-    const admitted = options(input); // Copy caller-owned configuration before awaiting.
+    return this.admit(options(input));
+  }
+  async prepareOperation(
+    input: CodingJobOperationOptions,
+  ): Promise<CodingJobSnapshot> {
+    return this.admit(operationOptions(input));
+  }
+  private async admit(
+    admitted: (CodingJobOptions | CodingJobOperationOptions) & {
+      limits: CodingJobLimits;
+    },
+  ): Promise<CodingJobSnapshot> {
     const { workspace, identity } = await workspaceIdentity(admitted.workspace);
     const stateRoot = await canonicalTarget(this.root);
     if (inside(workspace, stateRoot) || inside(stateRoot, workspace))
@@ -886,15 +1075,40 @@ export class CodingJobService {
             "DIGEST_MISMATCH",
             "prepare requires the exact clean Git HEAD",
           );
-        const intent: CodingJobIntent = {
-          contract: "algal.coding-job.v1",
-          ...admitted,
+        const { adapter: route, ...admission } = admitted;
+        const { operationId: _operationId, ...common } =
+          admission as typeof admission & { operationId?: string };
+        const fields = {
+          ...common,
           workspace,
           sourceTree: repo.tree,
           sourceRawDigest: repo.rawDigest,
           gitDirectory: repo.gitDirectory,
           workspaceIdentity: identity,
         };
+        let intent: AnyCodingJobIntent;
+        if ("operationId" in admitted) {
+          const adapter = route as CodingOperationAdapter;
+          const draft: CodingJobOperationIntent = {
+            ...fields,
+            contract: "algal.coding-job.v2",
+            adapter,
+            operation: {
+              operationId: admitted.operationId,
+              authorityId: adapter.authorityId,
+              requestDigest: digestText(""),
+            },
+          };
+          draft.operation.requestDigest = digestCanonical(
+            codingJobOperationPayload(draft),
+          );
+          intent = parseIntent(draft);
+        } else
+          intent = {
+            ...fields,
+            contract: "algal.coding-job.v1",
+            adapter: route as CodingJobAdapter,
+          };
         const jobId = digestCanonical(json(intent));
         await this.assertWorkspaceClaim(intent, jobId, true);
         await hostDirectory(this.root);
@@ -955,6 +1169,36 @@ export class CodingJobService {
                 "BUDGET_EXHAUSTED",
                 "coding job count limit",
               );
+            if (intent.contract === "algal.coding-job.v2") {
+              const operationKey = digestCanonical({
+                authorityId: intent.operation.authorityId,
+                operationId: intent.operation.operationId,
+              });
+              const operationDirectory = join(this.root, "coding-operations"),
+                operationName = `${operationKey.slice(7)}.json`;
+              const admittedNames = await hostNames(
+                operationDirectory,
+                CODING_JOB_BOUNDS.maxJobs,
+                /^[a-f0-9]{64}\.json$/,
+              );
+              if (
+                admittedNames.length >= CODING_JOB_BOUNDS.maxJobs &&
+                !admittedNames.includes(operationName)
+              )
+                throw new AlgalError(
+                  "BUDGET_EXHAUSTED",
+                  "operation admission count limit",
+                );
+              await hostWrite(
+                join(operationDirectory, operationName),
+                {
+                  contract: "algal.coding-operation-admission.v1",
+                  jobId,
+                  ...intent.operation,
+                },
+                4096,
+              );
+            }
             await hostDirectory(this.path(jobId));
             await hostWrite(
               join(this.path(jobId), "intent.json"),
@@ -985,6 +1229,8 @@ export class CodingJobService {
           "coding launch binding mismatch",
         );
     }
+    if (intent.contract === "algal.coding-job.v2")
+      return this.inspectOperation(jobId, intent, started !== undefined);
     const raw = await hostRead(join(this.path(jobId), "result.json"), 4096);
     if (raw !== undefined) {
       if (started === undefined)
@@ -1062,6 +1308,8 @@ export class CodingJobService {
         const before = await this.inspect(jobId);
         if (before.status !== "prepared") return before;
         const intent = before.intent;
+        if (intent.contract === "algal.coding-job.v2")
+          return this.runOperation(jobId, intent, options);
         const lock = this.workspacePath(intent.workspace);
         return hostLease(lock, "coding-workspace", async () => {
           if (options.signal?.aborted)
@@ -1210,6 +1458,650 @@ export class CodingJobService {
           );
           return this.inspect(jobId);
         });
+      },
+    );
+  }
+  private async operationHistory(
+    jobId: Digest,
+    intent: CodingJobOperationIntent,
+  ): Promise<{ ref: Digest; outcome: CodingOperationOutcome }[]> {
+    const directory = join(this.path(jobId), "observations");
+    let names: string[];
+    try {
+      const stat = await lstat(directory);
+      if (!stat.isDirectory() || stat.isSymbolicLink())
+        throw new AlgalError(
+          "IO_FAILED",
+          "invalid operation evidence directory",
+        );
+      names = await hostNames(directory, 16, /^[0-9]{4}\.json$/);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw error;
+    }
+    const history: { ref: Digest; outcome: CodingOperationOutcome }[] = [];
+    for (const [index, name] of names.entries()) {
+      if (name !== `${String(index + 1).padStart(4, "0")}.json`)
+        throw new AlgalError(
+          "DIGEST_MISMATCH",
+          "operation evidence sequence gap",
+        );
+      const record = asObject(
+        await hostRead(
+          join(directory, name),
+          intent.limits.maxOutputBytes + 1024,
+        ),
+        "operation evidence",
+      );
+      noUnknownKeys(
+        record,
+        ["contract", "jobId", "previousRef", "outcomeRef", "outcome"],
+        "operation evidence",
+      );
+      if (
+        record.contract !== "algal.coding-job-observation.v1" ||
+        record.jobId !== jobId ||
+        record.previousRef !== (history.at(-1)?.ref ?? null)
+      )
+        throw new AlgalError(
+          "DIGEST_MISMATCH",
+          "operation evidence chain mismatch",
+        );
+      const ref = asDigest(record.outcomeRef, "outcomeRef"),
+        raw = record.outcome;
+      if (digestCanonical(raw!) !== ref)
+        throw new AlgalError(
+          "DIGEST_MISMATCH",
+          "operation evidence digest mismatch",
+        );
+      const outcome = parseCodingOperationOutcome(raw, intent.operation, {
+        maxOutputBytes: intent.limits.maxOutputBytes,
+      });
+      for (const previous of history)
+        parseCodingOperationOutcome(raw, intent.operation, {
+          maxOutputBytes: intent.limits.maxOutputBytes,
+          previous: previous.outcome,
+        });
+      history.push({ ref, outcome });
+    }
+    return history;
+  }
+  private async retainOperationOutcome(
+    jobId: Digest,
+    intent: CodingJobOperationIntent,
+    raw: unknown,
+  ): Promise<{ ref: Digest; outcome: CodingOperationOutcome }> {
+    const history = await this.operationHistory(jobId, intent);
+    const outcome = parseCodingOperationOutcome(raw, intent.operation, {
+      maxOutputBytes: intent.limits.maxOutputBytes,
+    });
+    for (const previous of history)
+      parseCodingOperationOutcome(outcome, intent.operation, {
+        maxOutputBytes: intent.limits.maxOutputBytes,
+        previous: previous.outcome,
+      });
+    const ref = digestCanonical(json(outcome)),
+      last = history.at(-1);
+    if (last?.ref === ref) {
+      await this.store.putValue(json(outcome));
+      return last;
+    }
+    // Reject capacity, regressions and foreign proofs before writing any CAS object.
+    if (history.length >= 16)
+      throw new AlgalError(
+        "BUDGET_EXHAUSTED",
+        "operation evidence count limit",
+      );
+    await hostWrite(
+      join(
+        this.path(jobId),
+        "observations",
+        `${String(history.length + 1).padStart(4, "0")}.json`,
+      ),
+      {
+        contract: "algal.coding-job-observation.v1",
+        jobId,
+        previousRef: last?.ref ?? null,
+        outcomeRef: ref,
+        outcome: json(outcome),
+      },
+      intent.limits.maxOutputBytes + 1024,
+    );
+    await this.store.putValue(json(outcome));
+    return { ref, outcome };
+  }
+  private async inspectOperation(
+    jobId: Digest,
+    intent: CodingJobOperationIntent,
+    started: boolean,
+  ): Promise<CodingJobSnapshot> {
+    const history = await this.operationHistory(jobId, intent);
+    const initial = await hostRead(join(this.path(jobId), "result.json"), 4096),
+      resolution = await hostRead(
+        join(this.path(jobId), "resolution.json"),
+        4096,
+      );
+    const reservation = await hostRead(
+      join(this.path(jobId), "settlement.json"),
+      intent.limits.maxPatchBytes + 8192,
+    );
+    if (
+      !started &&
+      (initial !== undefined ||
+        resolution !== undefined ||
+        reservation !== undefined ||
+        history.length)
+    )
+      throw new AlgalError(
+        "DIGEST_MISMATCH",
+        "operation evidence has no launch intent",
+      );
+    let reserved: Terminal | undefined,
+      missingPublication = false;
+    if (reservation !== undefined) {
+      const latest = history.at(-1);
+      if (!latest)
+        throw new AlgalError(
+          "DIGEST_MISMATCH",
+          "settlement has no operation evidence",
+        );
+      reserved = this.parseOperationSettlement(
+        reservation,
+        jobId,
+        intent,
+        latest,
+      ).terminal;
+    }
+    const terminals = [initial, resolution]
+      .filter((value) => value !== undefined)
+      .map((value) =>
+        parseTerminal(value, jobId, "algal.coding-job-result.v2"),
+      );
+    for (const terminal of terminals) {
+      if (
+        terminal.status !== "uncertain" &&
+        (!reserved ||
+          digestCanonical(json(terminal)) !== digestCanonical(json(reserved)))
+      )
+        throw new AlgalError(
+          "DIGEST_MISMATCH",
+          "operation result conflicts with immutable settlement",
+        );
+      if (terminal.result) {
+        const evidence = history.find(
+          (item) => item.ref === terminal.result!.outputRef,
+        );
+        if (
+          !evidence ||
+          terminal.result.session !== intent.operation.operationId ||
+          terminal.result.operationId !== intent.operation.operationId
+        )
+          throw new AlgalError(
+            "DIGEST_MISMATCH",
+            "operation result binding mismatch",
+          );
+        if ((await this.store.getValue(evidence.ref)) === undefined)
+          missingPublication = true;
+        if (
+          terminal.status !== "uncertain" &&
+          evidence.outcome.state !== "terminal"
+        )
+          throw new AlgalError(
+            "DIGEST_MISMATCH",
+            "operation result has no settlement proof",
+          );
+        if (
+          terminal.status === "completed" &&
+          (evidence.outcome.state !== "terminal" ||
+            evidence.outcome.outcome !== "completed" ||
+            terminal.result.exitCode !== 0)
+        )
+          throw new AlgalError(
+            "DIGEST_MISMATCH",
+            "completed operation lacks successful settlement",
+          );
+        if (terminal.result.patchRef) {
+          const rawPatch = await this.store.getValue(terminal.result.patchRef);
+          if (rawPatch === undefined) {
+            missingPublication = true;
+            continue;
+          }
+          const artifact = asObject(rawPatch, "coding patch");
+          if (
+            artifact.contract !== "algal.coding-patch.v1" ||
+            artifact.sourceHead !== intent.expectedHead ||
+            artifact.sourceTree !== intent.sourceTree ||
+            artifact.sourceRawDigest !== intent.sourceRawDigest ||
+            artifact.changedFiles !== terminal.result.changedFiles ||
+            canonicalBytes(artifact) > intent.limits.maxPatchBytes
+          )
+            throw new AlgalError(
+              "DIGEST_MISMATCH",
+              "coding patch binding mismatch",
+            );
+        }
+      } else if (terminal.status !== "uncertain")
+        throw new AlgalError(
+          "DIGEST_MISMATCH",
+          "settled operation result requires evidence",
+        );
+    }
+    if (resolution !== undefined) {
+      const final = terminals.at(-1)!;
+      if (
+        final.status === "uncertain" ||
+        final.result?.outputRef !== history.at(-1)?.ref ||
+        (initial !== undefined && terminals[0]!.status !== "uncertain")
+      )
+        throw new AlgalError("DIGEST_MISMATCH", "invalid operation resolution");
+    }
+    if (missingPublication)
+      return {
+        jobId,
+        intent,
+        status: "uncertain",
+        reason: "operation-evidence-publication-incomplete",
+      };
+    const terminal = terminals.at(-1);
+    return {
+      jobId,
+      intent,
+      status: terminal?.status ?? (started ? "uncertain" : "prepared"),
+      ...(terminal?.result ? { result: terminal.result } : {}),
+      ...(terminal?.reason
+        ? { reason: terminal.reason }
+        : started && !terminal
+          ? { reason: "launch-started-without-terminal-acknowledgement" }
+          : {}),
+    };
+  }
+  private parseOperationSettlement(
+    raw: JsonValue,
+    jobId: Digest,
+    intent: CodingJobOperationIntent,
+    evidence: { ref: Digest; outcome: CodingOperationOutcome },
+  ): { terminal: Terminal; artifact?: JsonValue } {
+    const { ref: outputRef, outcome } = evidence;
+    if (outcome.state !== "terminal")
+      throw new AlgalError(
+        "DIGEST_MISMATCH",
+        "settlement lacks terminal operation evidence",
+      );
+    const record = asObject(raw, "operation settlement");
+    noUnknownKeys(
+      record,
+      ["contract", "jobId", "outputRef", "terminal", "patch"],
+      "operation settlement",
+    );
+    if (
+      record.contract !== "algal.coding-job-settlement.v1" ||
+      record.jobId !== jobId ||
+      record.outputRef !== outputRef
+    )
+      throw new AlgalError(
+        "DIGEST_MISMATCH",
+        "operation settlement binding mismatch",
+      );
+    const terminal = parseTerminal(
+      record.terminal,
+      jobId,
+      "algal.coding-job-result.v2",
+    );
+    if (
+      terminal.status === "uncertain" ||
+      terminal.result?.outputRef !== outputRef ||
+      terminal.result.operationId !== intent.operation.operationId ||
+      terminal.result.session !== intent.operation.operationId ||
+      (terminal.status === "completed" && outcome.outcome !== "completed")
+    )
+      throw new AlgalError(
+        "DIGEST_MISMATCH",
+        "invalid retained operation settlement",
+      );
+    const artifact = record.patch;
+    if (artifact !== undefined) {
+      const captured = asObject(artifact, "retained coding patch");
+      if (
+        digestCanonical(artifact) !== terminal.result.patchRef ||
+        captured.contract !== "algal.coding-patch.v1" ||
+        captured.sourceHead !== intent.expectedHead ||
+        captured.sourceTree !== intent.sourceTree ||
+        captured.sourceRawDigest !== intent.sourceRawDigest ||
+        captured.changedFiles !== terminal.result.changedFiles ||
+        canonicalBytes(artifact) > intent.limits.maxPatchBytes
+      )
+        throw new AlgalError(
+          "DIGEST_MISMATCH",
+          "retained patch binding mismatch",
+        );
+    } else if (terminal.result.patchRef)
+      throw new AlgalError("STORE_MISS", "retained settlement patch missing");
+    return { terminal, ...(artifact === undefined ? {} : { artifact }) };
+  }
+  private async settleOperation(
+    jobId: Digest,
+    intent: CodingJobOperationIntent,
+    evidence: { ref: Digest; outcome: CodingOperationOutcome },
+    signal: AbortSignal,
+  ): Promise<Terminal> {
+    const { outcome, ref: outputRef } = evidence;
+    const result: CodingJobResult = {
+      session: intent.operation.operationId,
+      operationId: intent.operation.operationId,
+      exitCode:
+        outcome.state === "terminal" && outcome.outcome === "completed"
+          ? 0
+          : outcome.state === "terminal" && outcome.outcome === "cancelled"
+            ? 130
+            : 1,
+      outputRef,
+    };
+    if (outcome.state !== "terminal")
+      return {
+        contract: "algal.coding-job-result.v2",
+        jobId,
+        status: "uncertain",
+        result,
+        reason: "external-task-not-proven-settled",
+      };
+    const settlementPath = join(this.path(jobId), "settlement.json"),
+      bound = intent.limits.maxPatchBytes + 8192;
+    const existing = await hostRead(settlementPath, bound);
+    let terminal: Terminal, artifact: JsonValue | undefined;
+    if (existing !== undefined) {
+      const retained = this.parseOperationSettlement(
+        existing,
+        jobId,
+        intent,
+        evidence,
+      );
+      terminal = retained.terminal;
+      artifact = retained.artifact;
+    } else {
+      // Provider settlement is independent of patch admission. Invalid local
+      // files are retained, but cannot make a settled operation run again.
+      try {
+        artifact = await patch(intent, signal);
+        const patchRef = digestCanonical(artifact);
+        result.patchRef = patchRef;
+        result.patchDigest = patchRef;
+        result.changedFiles = asObject(artifact, "patch")
+          .changedFiles as number;
+        const completed = outcome.outcome === "completed";
+        terminal = {
+          contract: "algal.coding-job-result.v2",
+          jobId,
+          status: completed ? "completed" : "failed",
+          result,
+          ...(completed ? {} : { reason: `external-task-${outcome.outcome}` }),
+        };
+      } catch (error) {
+        terminal = {
+          contract: "algal.coding-job-result.v2",
+          jobId,
+          status: "failed",
+          result,
+          reason:
+            error instanceof AlgalError
+              ? `settled-patch-rejected:${error.code}`
+              : "settled-patch-rejected",
+        };
+      }
+      // Reserve one immutable patch before CAS writes. Recovery reuses these
+      // bytes even if a host later changes the workspace during the crash gap.
+      await hostWrite(
+        settlementPath,
+        json({
+          contract: "algal.coding-job-settlement.v1",
+          jobId,
+          outputRef,
+          terminal,
+          ...(artifact === undefined ? {} : { patch: artifact }),
+        }),
+        bound,
+      );
+    }
+    if (artifact !== undefined) await this.store.putValue(artifact);
+    return terminal;
+  }
+  private async operationCall(
+    intent: CodingJobOperationIntent,
+    action: "submit" | "observe",
+    signal: AbortSignal | undefined,
+  ): Promise<unknown> {
+    const transport =
+        this.operationTransport ??
+        codingOperationCommandTransport(intent.adapter),
+      controller = new AbortController();
+    const combined = signal
+      ? AbortSignal.any([signal, controller.signal])
+      : controller.signal;
+    const timer = setTimeout(
+      () => controller.abort(),
+      intent.limits.maxRuntimeMs,
+    );
+    let abort: (() => void) | undefined;
+    try {
+      if (combined.aborted)
+        throw new AlgalError("BUDGET_EXHAUSTED", "operation call cancelled");
+      const interrupted = new Promise<never>((_resolve, reject) => {
+        abort = () =>
+          reject(
+            new AlgalError(
+              "BUDGET_EXHAUSTED",
+              "operation call interrupted; completion unknown",
+            ),
+          );
+        combined.addEventListener("abort", abort, { once: true });
+      });
+      const request = {
+        binding: structuredClone(intent.operation),
+        signal: combined,
+        timeoutMs: intent.limits.maxRuntimeMs,
+        maxOutputBytes: intent.limits.maxOutputBytes,
+      };
+      return await Promise.race([
+        action === "submit"
+          ? transport.submit({
+              ...request,
+              payload: structuredClone(codingJobOperationPayload(intent)),
+            })
+          : transport.observe(request),
+        interrupted,
+      ]);
+    } finally {
+      clearTimeout(timer);
+      if (abort) combined.removeEventListener("abort", abort);
+      controller.abort();
+    }
+  }
+  private async runOperation(
+    jobId: Digest,
+    intent: CodingJobOperationIntent,
+    options: { signal?: AbortSignal },
+  ): Promise<CodingJobSnapshot> {
+    return hostLease(
+      this.workspacePath(intent.workspace),
+      "coding-workspace",
+      async () => {
+        if (options.signal?.aborted)
+          throw new AlgalError(
+            "BUDGET_EXHAUSTED",
+            "coding job cancelled before launch",
+          );
+        const current = await workspaceIdentity(intent.workspace),
+          repo = await repository(intent.workspace, options.signal);
+        if (
+          current.workspace !== intent.workspace ||
+          digestCanonical(current.identity) !==
+            digestCanonical(intent.workspaceIdentity) ||
+          repo.head !== intent.expectedHead ||
+          repo.tree !== intent.sourceTree ||
+          repo.rawDigest !== intent.sourceRawDigest ||
+          repo.gitDirectory !== intent.gitDirectory ||
+          repo.status
+        )
+          throw new AlgalError(
+            "DIGEST_MISMATCH",
+            "run requires the admitted unchanged clean workspace",
+          );
+        if (options.signal?.aborted)
+          throw new AlgalError(
+            "BUDGET_EXHAUSTED",
+            "coding job cancelled before launch",
+          );
+        await this.assertWorkspaceClaim(intent, jobId, true);
+        await hostWrite(
+          join(this.workspacePath(intent.workspace), "claim.json"),
+          {
+            contract: "algal.coding-workspace-claim.v1",
+            workspace: intent.workspace,
+            jobId,
+          },
+          8192,
+          false,
+        );
+        await hostWrite(
+          join(this.path(jobId), "started.json"),
+          { contract: "algal.coding-job-started.v1", jobId },
+          1024,
+        );
+        const controller = new AbortController(),
+          signal = options.signal
+            ? AbortSignal.any([options.signal, controller.signal])
+            : controller.signal;
+        const timer = setTimeout(
+          () => controller.abort(),
+          intent.limits.maxRuntimeMs,
+        );
+        let terminal: Terminal;
+        try {
+          const raw = await this.operationCall(intent, "submit", signal);
+          const evidence = await this.retainOperationOutcome(
+            jobId,
+            intent,
+            raw,
+          );
+          terminal = await this.settleOperation(
+            jobId,
+            intent,
+            evidence,
+            signal,
+          );
+        } catch (error) {
+          terminal = {
+            contract: "algal.coding-job-result.v2",
+            jobId,
+            status: "uncertain",
+            reason:
+              error instanceof AlgalError
+                ? `external-result-unavailable:${error.code}`
+                : "external-result-unavailable",
+          };
+        }
+        clearTimeout(timer);
+        controller.abort();
+        await hostWrite(
+          join(this.path(jobId), "result.json"),
+          json(terminal),
+          4096,
+        );
+        return this.inspect(jobId);
+      },
+    );
+  }
+  /** Explicit host-only, read-only provider lookup. It never submits or clears a claim. */
+  async reconcile(
+    jobId: Digest,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<CodingJobSnapshot> {
+    const admitted = await this.job(jobId);
+    if (admitted.contract !== "algal.coding-job.v2")
+      throw new AlgalError(
+        "CAPABILITY_DENIED",
+        "legacy coding jobs have no operation reconciliation protocol",
+      );
+    return hostLease(
+      this.path(jobId),
+      `coding-${jobId.slice(7, 31)}`,
+      async () => {
+        const before = await this.inspect(jobId);
+        if (before.status === "prepared")
+          throw new AlgalError(
+            "CAPABILITY_DENIED",
+            "operation has not been submitted",
+          );
+        if (before.status !== "uncertain") return before;
+        return hostLease(
+          this.workspacePath(admitted.workspace),
+          "coding-workspace",
+          async () => {
+            const claim = await hostRead(
+              join(this.workspacePath(admitted.workspace), "claim.json"),
+              8192,
+            );
+            if (!claim || asObject(claim, "workspace claim").jobId !== jobId)
+              throw new AlgalError(
+                "CAPABILITY_DENIED",
+                "reconciliation requires the retained workspace claim",
+              );
+            await this.assertWorkspaceClaim(admitted, jobId, true);
+            const controller = new AbortController(),
+              signal = options.signal
+                ? AbortSignal.any([options.signal, controller.signal])
+                : controller.signal;
+            const timer = setTimeout(
+              () => controller.abort(),
+              admitted.limits.maxRuntimeMs,
+            );
+            try {
+              if (signal.aborted)
+                throw new AlgalError(
+                  "BUDGET_EXHAUSTED",
+                  "reconciliation cancelled",
+                );
+              const history = await this.operationHistory(jobId, admitted),
+                last = history.at(-1);
+              for (const retained of history)
+                await this.store.putValue(json(retained.outcome));
+              const evidence =
+                last?.outcome.state === "terminal"
+                  ? last
+                  : await this.retainOperationOutcome(
+                      jobId,
+                      admitted,
+                      await this.operationCall(admitted, "observe", signal),
+                    );
+              if (evidence.outcome.state !== "terminal")
+                return this.inspect(jobId);
+              await this.store.putValue(json(evidence.outcome));
+              const terminal = await this.settleOperation(
+                jobId,
+                admitted,
+                evidence,
+                signal,
+              );
+              const initial = await hostRead(
+                join(this.path(jobId), "result.json"),
+                4096,
+              );
+              if (
+                initial === undefined ||
+                parseTerminal(initial, jobId, "algal.coding-job-result.v2")
+                  .status === "uncertain"
+              )
+                await hostWrite(
+                  join(this.path(jobId), "resolution.json"),
+                  json(terminal),
+                  4096,
+                );
+              return this.inspect(jobId);
+            } finally {
+              clearTimeout(timer);
+              controller.abort();
+            }
+          },
+        );
       },
     );
   }
