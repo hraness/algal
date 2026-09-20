@@ -18,6 +18,12 @@ use std::{
     time::{Duration, Instant},
 };
 
+// These fixtures assert protocol and single-dispatch behavior, not cold shell
+// startup latency. On a loaded macOS host the unchanged baseline can take over
+// three seconds to receive its first request. Keep that setup allowance local
+// to this test target; the queue-rejection latency assertion remains one second.
+const FIXTURE_TIMEOUT_MS: u64 = 10_000;
+
 struct Fixture {
     directory: tempfile::TempDir,
     bridge: PathBuf,
@@ -78,7 +84,7 @@ fn manifest() -> Manifest {
         "cells":[{
             "id":"worker","kind":"agent","prompt":"Return one word.",
             "output":{"kind":"text"},"retry":{"attempts":3},
-            "budget":{"maxEffectMs":2000}
+            "budget":{"maxEffectMs":FIXTURE_TIMEOUT_MS}
         }],
         "edges":[]
     }))
@@ -172,7 +178,8 @@ async fn lost_or_malformed_reply_keeps_original_cause_and_blocks_redispatch() {
         assert_eq!(error.code, "RECOVERY_BLOCKED");
         assert!(
             error.message.contains(cause),
-            "original cause was masked: {error:?}"
+            "expected {cause}; received {} fixture requests; error: {error:?}",
+            fixture.requests().len()
         );
         assert!(error.message.contains("execution cause EFFECT_FAILED:"));
         assert!(error.message.len() <= 1024);
@@ -252,21 +259,27 @@ async fn concurrent_call_fails_before_submission_and_warm_connection_is_reused()
          printf '{\"id\":%s,\"ok\":true,\"value\":\"ready\"}\\n' \"$id\"",
     );
     let mut first_host = fixture.host();
-    let first = tokio::spawn(async move { first_host.effect(&request(), 5000, None).await });
+    let first = tokio::spawn(async move {
+        first_host
+            .effect(&request(), FIXTURE_TIMEOUT_MS, None)
+            .await
+    });
     let started = Instant::now();
     while fixture.requests().is_empty() {
         assert!(
-            started.elapsed() < Duration::from_secs(3),
+            started.elapsed() < Duration::from_millis(FIXTURE_TIMEOUT_MS),
             "fixture did not receive request"
         );
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
     let mut host = fixture.host();
-    let rejected =
-        tokio::time::timeout(Duration::from_secs(1), host.effect(&request(), 5000, None))
-            .await
-            .expect("concurrent call queued behind the active request")
-            .unwrap();
+    let rejected = tokio::time::timeout(
+        Duration::from_secs(1),
+        host.effect(&request(), FIXTURE_TIMEOUT_MS, None),
+    )
+    .await
+    .expect("concurrent call queued behind the active request")
+    .unwrap();
     assert_eq!(rejected["error"]["message"], "apple bridge queue full");
     assert_eq!(rejected["retryable"], false);
     assert_eq!(fixture.requests().len(), 1);
@@ -274,7 +287,10 @@ async fn concurrent_call_fails_before_submission_and_warm_connection_is_reused()
     let completed = first.await.unwrap().unwrap();
     assert_eq!(completed["output"], "ready", "{completed}");
     // A new explicit request after a settled response still uses the warm child.
-    let next = host.effect(&request(), 5000, None).await.unwrap();
+    let next = host
+        .effect(&request(), FIXTURE_TIMEOUT_MS, None)
+        .await
+        .unwrap();
     assert_eq!(next["output"], "ready", "{next}");
     assert_eq!(fixture.requests().len(), 2);
     fixture.assert_one_spawn();
