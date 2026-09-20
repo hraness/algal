@@ -237,9 +237,14 @@ roots, and native bundle calls.
 
 ### Follow a result into the code that produced it
 
-Focus a diagram on one recorded child invocation. For the second inbox email:
+First retain a receipt from the deterministic inbox example. The earlier
+`call` command prints a compact result; `run` emits the full receipt used below.
+Then focus the diagram on the second inbox email:
 
 ```sh
+bun cli.ts run examples/source/projects/inbox/inbox.algal \
+  --args examples/source/projects/inbox/inbox.args.json \
+  --responses examples/source/projects/inbox/inbox.responses.json > inbox.receipt.json
 bun cli.ts diagram examples/source/projects/inbox/inbox.algal \
   --receipt inbox.receipt.json --focus b2-replies-each/i1 \
   --format svg --out second-email.svg
@@ -250,9 +255,13 @@ overlay remains bound to the root receipt and the exact invocation path;
 it is not a newly manufactured child receipt. Without `--receipt`, the same
 command shows the static child definition.
 
-When a run fails, map its recorded failure back to the source:
+Create the pure failure fixture's receipt, then map its recorded failure back
+to the source. This run intentionally exits 1; run the diagnostic afterward:
 
 ```sh
+bun cli.ts run examples/source/projects/ratios/ratios.algal \
+  --args examples/source/projects/ratios/ratios.args.json > ratios.receipt.json
+# Expected exit 1: the fixture divides by zero in its second item.
 bun cli.ts diagnose ratios.receipt.json \
   --source examples/source/projects/ratios/ratios.algal --format text
 ```
