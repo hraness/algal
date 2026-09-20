@@ -1,5 +1,9 @@
 # Coding-harness pilot
 
+The [completed first pilot](coding-harness-pilot-results.md) records the live
+development/proposal/frozen-holdout results and limitations. It established the
+integration path but no task-solving or policy-search benefit.
+
 This example tests whether ALGAL can represent and replay a coding harness whose
 bounded policy can be searched. It is an experimental scaffold, not evidence of
 a benchmark improvement, a production coding agent, or a need for a new VM.
