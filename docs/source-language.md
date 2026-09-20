@@ -21,6 +21,65 @@ work. A decision provider must serve `decide`; a generation provider must serve
 `agent`. One provider need not support both. The normal executor admission
 rules remain in force.
 
+## Check bounds and compiler errors
+
+`check` loads the local source closure, compiles it, and checks the resulting
+graph without calling an executor. Its JSON result includes a `source` object.
+For the [inbox project](../examples/source/projects/inbox/inbox.algal):
+
+```json
+{
+  "entry": "inbox.algal",
+  "files": 2,
+  "maxAgentCalls": 4,
+  "requiredDepth": 1
+}
+```
+
+`files` counts source files in the loaded project. `maxAgentCalls` is the
+compiler's transitive maximum executor attempts: it adds sequential work,
+takes the largest mutually exclusive arm, and multiplies a child's bound by
+`max_items`. `requiredDepth` counts nested child levels below the root. These
+are inferred structural bounds, not the declared budget, a bill estimate, or
+a timing prediction. A run may use less work; the root runtime budget still
+governs all nested execution.
+
+Source loading and compilation errors preserve `error` and `message` in the
+default JSON response and add a structured `diagnostic`. Use
+`--diagnostic-format text` for a readable file location, source excerpt, and
+import chain, or `--diagnostic-format json` for a machine-readable report.
+This flag applies wherever the Bun CLI loads source, including `check`,
+`compile`, `run`, and `diagram`. It changes `SourceError` presentation;
+other CLI errors retain their normal JSON format.
+
+The SDK's `createSourceErrorReport(error)` builds an `algal.source-error.v1`
+report from a `SourceError`; `renderSourceError(report)` produces the text
+view. The report retains the source path, span, source digest when text is
+available, and import locations. Excerpts are limited to three lines and 120
+display columns per line, with at most eight import frames. Non-ASCII and
+control characters are visibly escaped with corresponding caret positions.
+Missing or unreadable source produces an explicit excerpt-unavailable reason.
+The report does not include the full original source or create an execution
+receipt.
+
+The intentionally invalid [authoring example](../examples/source/errors/unknown-binding/main.algal)
+imports `helpers/draft.algal`, which refers to `emial` instead of `email`:
+
+```sh
+# Both commands fail before execution; no provider credentials are needed.
+bun cli.ts check examples/source/errors/unknown-binding/main.algal --diagnostic-format text
+bun cli.ts check examples/source/errors/unknown-binding/main.algal --diagnostic-format json
+```
+
+The compiler locates the unknown binding in the helper and retains the import
+site in `main.algal`. Correcting `emial` to `email` repairs this example. The
+[site demonstration](https://algal.dev/#authoring-error) generates its report
+from the actual failing compilation at build time.
+
+Compiler errors happen before a program can run. For a recorded runtime
+failure, use `diagnose receipt.json --source program.algal`; source diagnostics
+inspect receipt evidence, while `verify` separately replays execution.
+
 ## A small, explicit first version
 
 ```algal
