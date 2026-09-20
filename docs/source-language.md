@@ -95,10 +95,9 @@ adapter before a dependent branch or generation can run. The adapter retains
 declared-label probabilities; it does not assert calibration or establish
 that they describe reality. It does not impose an additional sum-to-one rule.
 
-`match` requires a closed choice and exactly one arm per declared label. It
-does not make another model call. Both `if` and `match` have pure branches;
-putting `generate` or `decide` inside a branch is rejected in this version.
-Choose an instruction as a value, then pass it to an explicit effect.
+`match` requires a closed choice and exactly one arm per declared label. The
+selection itself makes no model call. Pure `if` and `match` expressions stay
+inside one pure cell; they can select an instruction for a later effect.
 
 ```algal
 let task = if intent.probability(intent.value) < 0.80 {
@@ -114,6 +113,43 @@ probability and provider confidence are separate values. An `other` category
 is also distinct from uncertainty. See [uncertain.algal](../examples/source/uncertain.algal)
 and its scripted fixture for a complete example.
 
+### Run only the selected branch
+
+`if` and `match` arms can also contain `generate`, `decide`, or another branch.
+Each arm is one expression. Conditions, match discriminants, and effect
+operands remain pure.
+
+```algal
+return match intent.value {
+  help => generate "Draft a helpful support reply." using email,
+  sales => generate "Draft a concise sales reply." using email,
+  other => "Needs a human review."
+}
+```
+
+The [complete route program](../examples/source/route.algal) uses at most two
+executor attempts: one decision, then one generation on the help or sales
+path. The other path returns its fixed text after the decision alone.
+
+```sh
+bun cli.ts run examples/source/route.algal \
+  --args examples/source/route.args.json \
+  --responses examples/source/route.responses.help.json > route.receipt.json
+bun cli.ts diagram examples/source/route.algal \
+  --receipt route.receipt.json --format svg --out route.svg
+```
+
+Effectful branches lower to ordinary guarded dependencies and a checked
+single-result merge. Every cell in an inactive arm is skipped, including pure
+instruction/context calculations, so inactive arithmetic cannot fail the
+selected path. Compiler control inputs never enter a model's declared view.
+Both arms must agree on text versus JSON. Decision values retain their closed
+choice refinement across an effectful merge only when every arm validates the
+same label set. All arms remain visible in the manifest and execution receipt.
+
+Effects inside arbitrary arithmetic, records, conditions, or another effect's
+context are rejected. Put them in a whole binding, return, or branch arm.
+
 ### Generation and context
 
 `generate instruction using context` returns text. The instruction must be
@@ -125,13 +161,17 @@ only `instruction` and `context` inputs in its view. The versioned prompt is:
 This envelope is part of the compiled artifact. Changing it changes program
 identity. The model receives no other local binding or capability implicitly.
 Normal host admission and provider behavior still apply; a prompt is not an
-OS sandbox. `decide` and `generate` must occupy a whole binding or the return
-expression. All declared effects remain in the graph, including unused ones.
+OS sandbox. `decide` and `generate` occupy a whole binding, return expression,
+or branch arm. All declared effects remain in the graph, including unused
+bindings and inactive arms. Inactive arms are skipped at execution.
 
 ## Budgets and compiler bounds
 
 `max_agent_calls` must be explicitly declared, including zero for pure work.
-The compiler rejects a program with more explicit effects than its budget.
+The compiler adds the effect bounds of bindings and return, taking the maximum
+across mutually exclusive arms. It rejects a program whose resulting bound
+exceeds the budget. This is conservative: it does not assume that conditions
+in separate branches are correlated.
 The runtime enforces its normal limits; exactly using the budget is allowed,
 while admitting another attempt fails with `BUDGET_EXHAUSTED`.
 
@@ -164,12 +204,14 @@ limit. The compiler/profile constants expose the exact current defaults.
 import { compileSource, createProgramDiagram, renderSvg } from "@hraness/algal";
 
 const { manifest, sourceMap } = compileSource(source);
-const svg = renderSvg(createProgramDiagram(manifest));
+const svg = renderSvg(createProgramDiagram(manifest, { source }));
 ```
 
-The compiler's version is `1.0.0`; its profile is `algal.source.profile.v1`.
+The compiler's version is `1.1.0`; its profile is `algal.source.profile.v1`.
 Source maps contain source and manifest digests, compiler/profile identity,
-and source spans for each generated cell. Locations and presentation metadata
+source spans, and bounded source annotations for each generated cell.
+Annotations preserve binding names and describe parsed operations, decisions,
+and branch arms. Locations and presentation metadata
 remain outside the manifest. Formatting/comments change the source digest
 but not the compiled manifest digest. Binding renames and changes to compiler
 lowering can change identity. Source-map offsets count JavaScript UTF-16 code
@@ -185,6 +227,11 @@ Compilation parses and checks the source and resulting manifest. `compile`
 also runs graph admission. SDK callers should use `compileOrganism`, `check`,
 or ordinary execution admission before running the result. No source map is
 necessary to run or verify the emitted JSON.
+
+Passing original source to the diagram API recompiles it and requires the
+executable digest to match before using source annotations. For compiled JSON,
+the equivalent CLI option is `diagram manifest.json --source program.algal`.
+Persisted source-map labels alone are not trusted as evidence of source meaning.
 
 ## Scope
 

@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="1519" viewBox="0 0 1320 1519" role="img" aria-labelledby="algal-69a990085c0a-title algal-69a990085c0a-desc">
+<title id="algal-69a990085c0a-title">route — Algal program</title>
+<desc id="algal-69a990085c0a-desc">Exact data dependencies of organism:route. 10 cells and 15 edges. Arrows carry named values; layout does not imply time or parallel execution. Dashed arrows carry failure records. No execution status is implied.</desc>
+<defs><marker id="algal-69a990085c0a-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/></marker></defs>
+<rect width="1320" height="1519" rx="16" fill="#ffffff"/>
+<g font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" fill="#0f172a">
+<text x="32" y="34" font-size="20" font-weight="700"><title>route</title>route</text>
+<text x="32" y="56" font-size="11" fill="#475569">Exact manifest · sha256:69a990085c0a8a3454d5facac5bc41684b107648d1ac0f07a75468a0dd77c323</text>
+<text x="32" y="78" font-size="12" fill="#475569">Limits: 2 executor calls · 256 steps · depth 4</text>
+<text x="32" y="98" font-size="11" fill="#475569">Arrows are data dependencies; dashed = failure.</text>
+<path d="M 524 248 V 264 H 608 V 331" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-69a990085c0a-arrow)"><title>email → context · text</title></path>
+<rect x="496.2" y="255" width="139.6" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="566" y="266" font-size="10" text-anchor="middle" fill="#475569"><title>email → context · text</title>email → context · text</text>
+<path d="M 608 481 V 497 H 608 V 549" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-69a990085c0a-arrow)"><title>out → raw · json</title></path>
+<rect x="555.6" y="488" width="104.8" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="608" y="499" font-size="10" text-anchor="middle" fill="#475569"><title>out → raw · json</title>out → raw · json</text>
+<path d="M 608 648 V 664 H 608 V 716" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-69a990085c0a-arrow)"><title>out → value-1 · json</title></path>
+<rect x="544" y="655" width="128" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="608" y="666" font-size="10" text-anchor="middle" fill="#475569"><title>out → value-1 · json</title>out → value-1 · json</text>
+<path d="M 496 866 V 882 H 200 V 987" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-69a990085c0a-arrow)"><title>out → source-control-1 · choice · if value = &quot;help&quot;</title></path>
+<rect x="237.60000000000002" y="873" width="220.79999999999998" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="348" y="884" font-size="10" text-anchor="middle" fill="#475569"><title>out → source-control-1 · choice · if value = &quot;help&quot;</title>when &quot;help&quot; · out → source-control-1</text>
+<path d="M 200 1086 V 1102 H 320 V 1169" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-69a990085c0a-arrow)"><title>out → instruction · text</title></path>
+<rect x="184.4" y="1093" width="151.2" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="260" y="1104" font-size="10" text-anchor="middle" fill="#475569"><title>out → instruction · text</title>out → instruction · text</text>
+<path d="M 608 248 V 283 H 1210 V 1153 H 404 V 1169" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-69a990085c0a-arrow)"><title>email → context · text</title></path>
+<rect x="538.2" y="274" width="139.6" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="608" y="285" font-size="10" text-anchor="middle" fill="#475569"><title>email → context · text</title>email → context · text</text>
+<path d="M 552 866 V 901 H 1222 V 1153 H 488 V 1169" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-69a990085c0a-arrow)"><title>out → source-control-1 · choice · if value = &quot;help&quot;</title></path>
+<rect x="441.6" y="892" width="220.79999999999998" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="552" y="903" font-size="10" text-anchor="middle" fill="#475569"><title>out → source-control-1 · choice · if value = &quot;help&quot;</title>when &quot;help&quot; · out → source-control-1</text>
+<path d="M 608 866 V 920 H 608 V 987" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-69a990085c0a-arrow)"><title>out → source-control-1 · choice · if value = &quot;sales&quot;</title></path>
+<rect x="494.7" y="911" width="226.6" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="608" y="922" font-size="10" text-anchor="middle" fill="#475569"><title>out → source-control-1 · choice · if value = &quot;sales&quot;</title>when &quot;sales&quot; · out → source-control-1</text>
+<path d="M 608 1086 V 1121 H 728 V 1169" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-69a990085c0a-arrow)"><title>out → instruction · text</title></path>
+<rect x="592.4" y="1112" width="151.2" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="668" y="1123" font-size="10" text-anchor="middle" fill="#475569"><title>out → instruction · text</title>out → instruction · text</text>
+<path d="M 692 248 V 302 H 1234 V 1153 H 812 V 1169" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-69a990085c0a-arrow)"><title>email → context · text</title></path>
+<rect x="622.2" y="293" width="139.6" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="692" y="304" font-size="10" text-anchor="middle" fill="#475569"><title>email → context · text</title>email → context · text</text>
+<path d="M 664 866 V 939 H 1246 V 1153 H 896 V 1169" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-69a990085c0a-arrow)"><title>out → source-control-1 · choice · if value = &quot;sales&quot;</title></path>
+<rect x="550.7" y="930" width="226.6" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="664" y="941" font-size="10" text-anchor="middle" fill="#475569"><title>out → source-control-1 · choice · if value = &quot;sales&quot;</title>when &quot;sales&quot; · out → source-control-1</text>
+<path d="M 720 866 V 958 H 1016 V 987" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-69a990085c0a-arrow)"><title>out → source-control-1 · choice · if value = &quot;other&quot;</title></path>
+<rect x="754.7" y="949" width="226.6" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="868" y="960" font-size="10" text-anchor="middle" fill="#475569"><title>out → source-control-1 · choice · if value = &quot;other&quot;</title>when &quot;other&quot; · out → source-control-1</text>
+<path d="M 404 1285 V 1301 H 524 V 1353" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-69a990085c0a-arrow)"><title>out → selected · text</title></path>
+<rect x="397.1" y="1292" width="133.8" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="464" y="1303" font-size="10" text-anchor="middle" fill="#475569"><title>out → selected · text</title>out → selected · text</text>
+<path d="M 812 1285 V 1320 H 608 V 1353" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-69a990085c0a-arrow)"><title>out → selected · text</title></path>
+<rect x="643.1" y="1311" width="133.8" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="710" y="1322" font-size="10" text-anchor="middle" fill="#475569"><title>out → selected · text</title>out → selected · text</text>
+<path d="M 1016 1086 V 1140 H 1258 V 1337 H 692 V 1353" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#algal-69a990085c0a-arrow)"><title>out → selected · text</title></path>
+<rect x="949.1" y="1131" width="133.8" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>
+<text x="1016" y="1142" font-size="10" text-anchor="middle" fill="#475569"><title>out → selected · text</title>out → selected · text</text>
+<g><title>INPUT; input; parameters; route inputs; email: text; Source line 1; out email: text; email: text; ID input · Source line 1; INPUT email → email</title>
+<rect x="440" y="132" width="336" height="116" rx="10" fill="#eff6ff" stroke="#2563eb" stroke-width="1.4"/>
+<rect x="440" y="144" width="4" height="92" rx="2" fill="#2563eb"/>
+<text x="457" y="155" font-size="10" letter-spacing="0.5" font-weight="700" fill="#2563eb">INPUT · input</text>
+<text x="457" y="178" font-size="16" font-weight="650">parameters</text>
+<text x="457" y="198" font-size="11" fill="#475569"><title>email: text</title>email: text</text>
+<text x="457" y="215" font-size="11" fill="#475569"><title>ID input · Source line 1</title>ID input · Source line 1</text>
+<text x="457" y="232" font-size="11" fill="#475569"><title>INPUT email → email</title>INPUT email → email</text>
+</g>
+<g><title>MODEL · decide; b1-intent-decide; intent · decide; decide &quot;What does this email need?&quot; using email; help: Help with a problem; sales: Information before buying; other: Anything else; Source lines 4–9; answer: choice (help | other | sales); in context: text; out out: json; decide &quot;What does this email need?&quot; using email; help: Help with a problem; sales: Information before buying; other: Anything else; ID b1-intent-decide · Source lines 4–9</title>
+<rect x="440" y="331" width="336" height="150" rx="10" fill="#eef2ff" stroke="#6366f1" stroke-width="1.4"/>
+<rect x="440" y="343" width="4" height="126" rx="2" fill="#6366f1"/>
+<text x="457" y="354" font-size="10" letter-spacing="0.5" font-weight="700" fill="#6366f1">MODEL · decide</text>
+<text x="457" y="377" font-size="16" font-weight="650">intent · decide</text>
+<text x="457" y="397" font-size="11" fill="#475569"><title>decide &quot;What does this email need?&quot; using email</title>decide &quot;What does this email need?&quot; using email</text>
+<text x="457" y="414" font-size="11" fill="#475569"><title>help: Help with a problem</title>help: Help with a problem</text>
+<text x="457" y="431" font-size="11" fill="#475569"><title>sales: Information before buying</title>sales: Information before buying</text>
+<text x="457" y="448" font-size="11" fill="#475569"><title>other: Anything else</title>other: Anything else</text>
+<text x="457" y="465" font-size="11" fill="#475569"><title>ID b1-intent-decide · Source lines 4–9</title>ID b1-intent-decide · Source lines 4–9</text>
+</g>
+<g><title>PURE · expression; b1-intent; intent; Validate the declared choice, confidence, and every probability before use.; admitted label: help; admitted label: sales; admitted label: other; Source lines 4–9; Bounded algal.expr.v1; in raw: json; out out: json; Validate choice and probability metadata.; ID b1-intent · Source lines 4–9</title>
+<rect x="440" y="549" width="336" height="99" rx="10" fill="#f1f5f9" stroke="#64748b" stroke-width="1.4"/>
+<rect x="440" y="561" width="4" height="75" rx="2" fill="#64748b"/>
+<text x="457" y="572" font-size="10" letter-spacing="0.5" font-weight="700" fill="#64748b">PURE · decision check</text>
+<text x="457" y="595" font-size="16" font-weight="650">intent</text>
+<text x="457" y="615" font-size="11" fill="#475569"><title>Validate choice and probability metadata.</title>Validate choice and probability metadata.</text>
+<text x="457" y="632" font-size="11" fill="#475569"><title>ID b1-intent · Source lines 4–9</title>ID b1-intent · Source lines 4–9</text>
+</g>
+<g><title>PURE · expression; branch-1-select; return · select; match intent.value; help =&gt; generate &quot;Draft a helpful support reply.&quot; using email; sales =&gt; generate &quot;Draft a concise sales reply.&quot; using email; other =&gt; &quot;Needs a human review.&quot;; Source lines 11–15; Bounded algal.expr.v1; in value-1: json; out out: choice; match intent.value; help =&gt; generate &quot;Draft a helpful support reply.&quot; using email; sales =&gt; generate &quot;Draft a concise sales reply.&quot; using email; other =&gt; &quot;Needs a human review.&quot;; ID branch-1-select · Source lines 11–15</title>
+<rect x="440" y="716" width="336" height="150" rx="10" fill="#f1f5f9" stroke="#64748b" stroke-width="1.4"/>
+<rect x="440" y="728" width="4" height="126" rx="2" fill="#64748b"/>
+<text x="457" y="739" font-size="10" letter-spacing="0.5" font-weight="700" fill="#64748b">PURE · branch selector</text>
+<text x="457" y="762" font-size="16" font-weight="650">return · select</text>
+<text x="457" y="782" font-size="11" fill="#475569"><title>match intent.value</title>match intent.value</text>
+<text x="457" y="799" font-size="11" fill="#475569"><title>help =&gt; generate &quot;Draft a helpful support reply.&quot; using email</title>help =&gt; generate &quot;Draft a helpful support repl…</text>
+<text x="457" y="816" font-size="11" fill="#475569"><title>sales =&gt; generate &quot;Draft a concise sales reply.&quot; using email</title>sales =&gt; generate &quot;Draft a concise sales reply…</text>
+<text x="457" y="833" font-size="11" fill="#475569"><title>other =&gt; &quot;Needs a human review.&quot;</title>other =&gt; &quot;Needs a human review.&quot;</text>
+<text x="457" y="850" font-size="11" fill="#475569"><title>ID branch-1-select · Source lines 11–15</title>ID branch-1-select · Source lines 11–15</text>
+</g>
+<g><title>PURE · expression; branch-1-arm-1-instruction; return · help · instruction; &quot;Draft a helpful support reply.&quot;; Source line 12; Bounded algal.expr.v1; in source-control-1: choice; out out: text; &quot;Draft a helpful support reply.&quot;; ID branch-1-arm-1-instruction · Source line 12</title>
+<rect x="32" y="987" width="336" height="99" rx="10" fill="#f1f5f9" stroke="#64748b" stroke-width="1.4"/>
+<rect x="32" y="999" width="4" height="75" rx="2" fill="#64748b"/>
+<text x="49" y="1010" font-size="10" letter-spacing="0.5" font-weight="700" fill="#64748b">PURE · effect input</text>
+<text x="49" y="1033" font-size="16" font-weight="650">return · help · instruction</text>
+<text x="49" y="1053" font-size="11" fill="#475569"><title>&quot;Draft a helpful support reply.&quot;</title>&quot;Draft a helpful support reply.&quot;</text>
+<text x="49" y="1070" font-size="11" fill="#475569"><title>ID branch-1-arm-1-instruction · Source line 12</title>ID branch-1-arm-1-instruction · Source line 12</text>
+</g>
+<g><title>PURE · expression; branch-1-arm-2-instruction; return · sales · instruction; &quot;Draft a concise sales reply.&quot;; Source line 13; Bounded algal.expr.v1; in source-control-1: choice; out out: text; &quot;Draft a concise sales reply.&quot;; ID branch-1-arm-2-instruction · Source line 13</title>
+<rect x="440" y="987" width="336" height="99" rx="10" fill="#f1f5f9" stroke="#64748b" stroke-width="1.4"/>
+<rect x="440" y="999" width="4" height="75" rx="2" fill="#64748b"/>
+<text x="457" y="1010" font-size="10" letter-spacing="0.5" font-weight="700" fill="#64748b">PURE · effect input</text>
+<text x="457" y="1033" font-size="16" font-weight="650">return · sales · instruction</text>
+<text x="457" y="1053" font-size="11" fill="#475569"><title>&quot;Draft a concise sales reply.&quot;</title>&quot;Draft a concise sales reply.&quot;</text>
+<text x="457" y="1070" font-size="11" fill="#475569"><title>ID branch-1-arm-2-instruction · Source line 13</title>ID branch-1-arm-2-instruction · Source line 13</text>
+</g>
+<g><title>PURE · expression; branch-1-arm-3; return · other; &quot;Needs a human review.&quot;; Source line 14; Bounded algal.expr.v1; in source-control-1: choice; out out: text; &quot;Needs a human review.&quot;; ID branch-1-arm-3 · Source line 14</title>
+<rect x="848" y="987" width="336" height="99" rx="10" fill="#f1f5f9" stroke="#64748b" stroke-width="1.4"/>
+<rect x="848" y="999" width="4" height="75" rx="2" fill="#64748b"/>
+<text x="865" y="1010" font-size="10" letter-spacing="0.5" font-weight="700" fill="#64748b">PURE · literal</text>
+<text x="865" y="1033" font-size="16" font-weight="650">return · other</text>
+<text x="865" y="1053" font-size="11" fill="#475569"><title>&quot;Needs a human review.&quot;</title>&quot;Needs a human review.&quot;</text>
+<text x="865" y="1070" font-size="11" fill="#475569"><title>ID branch-1-arm-3 · Source line 14</title>ID branch-1-arm-3 · Source line 14</text>
+</g>
+<g><title>MODEL · generate; branch-1-arm-1; return · help; generate &quot;Draft a helpful support reply.&quot; using email; instruction: &quot;Draft a helpful support reply.&quot;; context: email; Source line 12; Algal source generation envelope v1. Follow the instruction in inputs.instruction. Use only inputs.context as task context. Return the requested text.; in context: text; in instruction: text; in source-control-1: choice; out out: text; instruction: &quot;Draft a helpful support reply.&quot;; context: email; ID branch-1-arm-1 · Source line 12</title>
+<rect x="236" y="1169" width="336" height="116" rx="10" fill="#eef2ff" stroke="#6366f1" stroke-width="1.4"/>
+<rect x="236" y="1181" width="4" height="92" rx="2" fill="#6366f1"/>
+<text x="253" y="1192" font-size="10" letter-spacing="0.5" font-weight="700" fill="#6366f1">MODEL · generate</text>
+<text x="253" y="1215" font-size="16" font-weight="650">return · help</text>
+<text x="253" y="1235" font-size="11" fill="#475569"><title>instruction: &quot;Draft a helpful support reply.&quot;</title>instruction: &quot;Draft a helpful support reply.&quot;</text>
+<text x="253" y="1252" font-size="11" fill="#475569"><title>context: email</title>context: email</text>
+<text x="253" y="1269" font-size="11" fill="#475569"><title>ID branch-1-arm-1 · Source line 12</title>ID branch-1-arm-1 · Source line 12</text>
+</g>
+<g><title>MODEL · generate; branch-1-arm-2; return · sales; generate &quot;Draft a concise sales reply.&quot; using email; instruction: &quot;Draft a concise sales reply.&quot;; context: email; Source line 13; Algal source generation envelope v1. Follow the instruction in inputs.instruction. Use only inputs.context as task context. Return the requested text.; in context: text; in instruction: text; in source-control-1: choice; out out: text; instruction: &quot;Draft a concise sales reply.&quot;; context: email; ID branch-1-arm-2 · Source line 13</title>
+<rect x="644" y="1169" width="336" height="116" rx="10" fill="#eef2ff" stroke="#6366f1" stroke-width="1.4"/>
+<rect x="644" y="1181" width="4" height="92" rx="2" fill="#6366f1"/>
+<text x="661" y="1192" font-size="10" letter-spacing="0.5" font-weight="700" fill="#6366f1">MODEL · generate</text>
+<text x="661" y="1215" font-size="16" font-weight="650">return · sales</text>
+<text x="661" y="1235" font-size="11" fill="#475569"><title>instruction: &quot;Draft a concise sales reply.&quot;</title>instruction: &quot;Draft a concise sales reply.&quot;</text>
+<text x="661" y="1252" font-size="11" fill="#475569"><title>context: email</title>context: email</text>
+<text x="661" y="1269" font-size="11" fill="#475569"><title>ID branch-1-arm-2 · Source line 13</title>ID branch-1-arm-2 · Source line 13</text>
+</g>
+<g><title>PURE · expression; result; return; match intent.value; help =&gt; generate &quot;Draft a helpful support reply.&quot; using email; sales =&gt; generate &quot;Draft a concise sales reply.&quot; using email; other =&gt; &quot;Needs a human review.&quot;; Source lines 11–15; Bounded algal.expr.v1; in selected: text[]; out out: text; Exactly one selected arm supplies the result.; ID result · Source lines 11–15; OUTPUT out → result</title>
+<rect x="440" y="1353" width="336" height="116" rx="10" fill="#f1f5f9" stroke="#64748b" stroke-width="1.4"/>
+<rect x="440" y="1365" width="4" height="92" rx="2" fill="#64748b"/>
+<text x="457" y="1376" font-size="10" letter-spacing="0.5" font-weight="700" fill="#64748b">PURE · branch merge</text>
+<text x="457" y="1399" font-size="16" font-weight="650">return</text>
+<text x="457" y="1419" font-size="11" fill="#475569"><title>Exactly one selected arm supplies the result.</title>Exactly one selected arm supplies the result.</text>
+<text x="457" y="1436" font-size="11" fill="#475569"><title>ID result · Source lines 11–15</title>ID result · Source lines 11–15</text>
+<text x="457" y="1453" font-size="11" fill="#475569"><title>OUTPUT out → result</title>OUTPUT out → result</text>
+</g>
+</g></svg>

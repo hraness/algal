@@ -1,0 +1,16 @@
+program route(email: text) -> text {
+  budget { max_agent_calls: 2 }
+
+  let intent = decide "What does this email need?" using email
+    as choice {
+      help: "Help with a problem",
+      sales: "Information before buying",
+      other: "Anything else"
+    }
+
+  return match intent.value {
+    help => generate "Draft a helpful support reply." using email,
+    sales => generate "Draft a concise sales reply." using email,
+    other => "Needs a human review."
+  }
+}

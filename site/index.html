@@ -60,7 +60,7 @@
         <figure class="graph-pane">
           <div class="pane-heading"><span class="eyebrow">02 / See the structure</span><a href="diagrams/reply.svg" target="_blank" rel="noopener">Expand ↗</a></div>
           <img class="reply-diagram" src="diagrams/reply.svg" alt="Generated reply program graph: email flows into a typed decision, a pure decision adapter and match, then generation. Email also flows directly into generation as explicit context." width="480" height="730" fetchpriority="high">
-          <figcaption>Generated from the compiled manifest, including the pure decision adapter. Arrows are data dependencies.</figcaption>
+          <figcaption>Source names explain the work; exact cell IDs remain visible. The graph includes the pure decision check.</figcaption>
         </figure>
       </div>
       <div class="window-footer"><span><span class="legend-dot model" aria-hidden="true"></span>Model judgment</span><span><span class="legend-dot pure" aria-hidden="true"></span>Deterministic logic</span><a href="examples/reply.algal.json">Inspect the executable manifest ↗</a></div>
@@ -78,9 +78,24 @@
     <p class="boundary-note">Replay checks execution consistency. It does not establish that a model answer is true or attest that a provider performed an operation.</p>
   </section>
 
+  <section class="route-section" id="branch-demo" aria-labelledby="route-title">
+    <div class="section-heading"><div><p class="eyebrow">Follow one execution</p><h2 id="route-title">Only the chosen<br><em>branch runs.</em></h2></div><p>Choose a recorded decision. Support and sales each draft a reply with the declared email context. Human review returns a fixed message. Inactive branches stay visible—and skipped.</p></div>
+    <div class="route-demo">
+      <div class="route-demo-bar"><span class="fixture-label"><span aria-hidden="true">◌</span> Scripted execution; no live model call</span><a href="examples/route.algal" download>route.algal ↓</a></div>
+      <div class="route-tabs" data-tabset role="tablist" aria-label="Recorded routing decisions" hidden>
+        <button type="button" role="tab" id="tab-route-help" aria-controls="route-help" aria-selected="true" tabindex="0">Support <code>help</code></button>
+        <button type="button" role="tab" id="tab-route-sales" aria-controls="route-sales" aria-selected="false" tabindex="-1">Sales <code>sales</code></button>
+        <button type="button" role="tab" id="tab-route-other" aria-controls="route-other" aria-selected="false" tabindex="-1">Human review <code>other</code></button>
+      </div>
+      {{ROUTE_PANELS}}
+      <details class="route-source"><summary>Read the program behind all three runs <span aria-hidden="true">+</span></summary><pre class="source-code"><code>{{ROUTE_SOURCE}}</code></pre><p><a href="examples/route.algal.json">Compiled manifest ↗</a> · <a href="examples/route.source-map.json">Source map ↗</a> · <a href="examples/route.args.json">Shared input ↗</a></p></details>
+    </div>
+    <p class="under-note">Each view comes from an actual runtime receipt generated and replay-checked during the site build. The selector changes which receipt you inspect; it does not run a model in your browser.</p>
+  </section>
+
   <section class="examples-section" id="examples" aria-labelledby="examples-title">
     <div class="section-heading"><div><p class="eyebrow">The same core, more ambitious programs</p><h2 id="examples-title">Start small.<br><em>Grow deliberately.</em></h2></div><p>Refine a draft. Suspend for approval. Apply a child program to a collection. Propose a new program. Every effect and boundary has a place in the graph.</p></div>
-    <div class="example-tabs" role="tablist" aria-label="Program examples" hidden>
+    <div class="example-tabs" data-tabset role="tablist" aria-label="Program examples" hidden>
       <button type="button" role="tab" id="tab-refine" aria-controls="example-refine" aria-selected="true" tabindex="0"><span>01</span> Refine</button>
       <button type="button" role="tab" id="tab-wait" aria-controls="example-wait" aria-selected="false" tabindex="-1"><span>02</span> Wait</button>
       <button type="button" role="tab" id="tab-fanout" aria-controls="example-fanout" aria-selected="false" tabindex="-1"><span>03</span> Fan out</button>
@@ -106,7 +121,7 @@
       <div class="example-copy"><span class="capability-label">Programs as values</span><h3 id="evolve-title">A program can<br> propose its successor.</h3><p>A designer produces a child manifest as data. A bounded <code>spawn</code> operation admits and runs it, and its digest is appended to a persistent population slot.</p><p>That is the starting point for a habitat. Foundry and civilization workflows evaluate candidates on declared cases; host selection decides what to retain or promote.</p><div class="bound-card"><span class="eyebrow">Proposal is not promotion</span><strong>Inspect → evaluate → select</strong><p>The graph shown records a proposed child's digest. It does not itself prove improvement or promote a winner.</p></div><a class="text-link" href="https://github.com/hraness/algal/blob/main/docs/civilization.md">Explore measured populations and lineage ↗</a></div>
       <figure class="example-graph"><div class="graph-caption"><span class="eyebrow">Actual program / spawn + persistent slot</span><a href="diagrams/habitat.svg" target="_blank" rel="noopener">Expand ↗</a></div><img src="diagrams/habitat.svg" alt="Generated habitat graph: a goal reaches a designer agent that proposes a child manifest; spawn runs the admitted child, then its digest joins population history and is written to a slot." width="790" height="840" loading="lazy"><figcaption>Execution explains what a program did. Evaluation and lineage explain why a version was retained.</figcaption></figure>
     </article>
-    <p class="under-note">These are generated views of existing executable manifests. The first source-language release covers values, decisions, generation, and pure selection; composition, waits, and evolution remain available through the manifest API.</p>
+    <p class="under-note">These are generated views of existing executable manifests. The first source-language release covers values, decisions, generation, and conditional branches; composition, waits, and evolution remain available through the manifest API.</p>
   </section>
 
   <section class="evolution-section" aria-labelledby="evolution-title">
@@ -145,9 +160,7 @@ bun cli.ts diagram examples/source/reply.algal \
 </main>
 <footer><a class="wordmark" href="/">ALGAL</a><p>Programs that grow.</p><div><a href="https://github.com/hraness/algal">Source</a><a href="https://github.com/hraness/algal/tree/main/docs">Documentation</a><a href="llms.txt">llms.txt</a><span>MIT · Early, working software</span></div></footer>
 <script>
-(() => {
-  const tablist = document.querySelector('.example-tabs');
-  if (!tablist) return;
+document.querySelectorAll('[data-tabset]').forEach(tablist => {
   const tabs = Array.from(tablist.querySelectorAll('[role="tab"]'));
   const panels = tabs.map(tab => document.getElementById(tab.getAttribute('aria-controls')));
   if (panels.some(panel => !panel)) return;
@@ -175,7 +188,7 @@ bun cli.ts diagram examples/source/reply.algal \
   });
   select(0, false);
   tablist.hidden = false;
-})();
+});
 </script>
 </body>
 </html>
