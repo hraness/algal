@@ -306,3 +306,6 @@ export type { RepairCheck, RepairConfig, RepairCheckResult, RepairPacket, Repair
 
 export { CODING_OPERATION_PROTOCOL, CODING_OPERATION_BOUNDS, codingOperationCommandTransport, parseCodingOperationAdapter, parseCodingOperationBinding, parseCodingOperationOutcome, parseCodingOperationRequest } from "./src/coding-operations";
 export type { CodingOperationAdapter, CodingOperationBinding, CodingOperationOutcome, CodingOperationRequest, CodingOperationTransport, CodingOperationWireRequest } from "./src/coding-operations";
+
+export { PROCESS_EVIDENCE_CONTRACT, PROCESS_EVIDENCE_BOUNDS, parseProcessEvidence, exportProcessEvidence, verifyProcessEvidence } from "./src/process-evidence";
+export type { ProcessEvidence, ProcessEvidenceReport } from "./src/process-evidence";

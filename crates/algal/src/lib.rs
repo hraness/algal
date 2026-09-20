@@ -17,6 +17,7 @@ mod lease;
 pub mod mailbox;
 pub mod memory;
 pub mod process;
+pub mod process_evidence;
 pub mod registry;
 pub mod runtime;
 pub mod scorer;

@@ -48,6 +48,7 @@ import { parseRunReceipt, runOrganism, type RunReceipt } from "./src/run";
 import { packOrganism, parseBundle, unpackBundle } from "./src/bundle";
 import { FileStore, MemoryStore, type Store } from "./src/store";
 import { ProcessSupervisor, PROCESS_BOUNDS } from "./src/process";
+import { exportProcessEvidence, verifyProcessEvidence, PROCESS_EVIDENCE_BOUNDS } from "./src/process-evidence";
 import { PullRequestShepherd } from "./src/shepherd";
 import { CodingJobService, type CodingJobOptions, type CodingJobOperationOptions } from "./src/coding-jobs";
 import { RepairWorkflow, type RepairCheck } from "./src/repair";
@@ -180,6 +181,9 @@ usage:
   algal process create <name> <manifest.json> [--args <file>] [--max-generations 16]
       [--modules <dir>] [--tools <file>] [--dir <path>]
                                               admit a durable, bounded process
+  algal process export <name> [--dir <path>] [--tools <file>]
+                                              write portable process evidence JSON to stdout
+  algal process verify-evidence <file>          verify evidence without a store or host configuration
   algal process recover <name> --expected-intent SHA [same tool/executor options]
   algal process journal <name>
   algal job prepare <config.json>           admit a bounded coding job in a clean checkout
@@ -518,6 +522,26 @@ async function loadTools(file: string): Promise<ToolRegistry> {
   return registry;
 }
 
+/** Export only needs declarations: never open scripted data or bind commands. */
+async function evidenceTools(file: string | undefined, dir: string): Promise<ToolRegistry> {
+  const standard = mailboxToolRegistry(new FileMailboxService(dir));
+  if (file === undefined) return standard;
+  const entries = asRecord(await readJsonBounded(resolve(file), 1_048_576, "evidence tools"), "tools");
+  if (Object.keys(entries).length > 64) usageError("evidence tools exceeds 64 entries");
+  const registry: ToolRegistry = new Map();
+  for (const [name, raw] of Object.entries(entries)) {
+    if (!/^[a-z0-9][a-z0-9.-]*$/.test(name) || name.length > TOOL_SIGNATURE_BOUNDS.maxNameLen)
+      usageError("invalid evidence tool name");
+    const entry = asRecord(raw, `tools.${name}`);
+    if (entry.signature === undefined || Object.keys(entry).some(key => key !== "signature" && key !== "exec") ||
+        (entry.exec !== undefined && typeof entry.exec !== "string"))
+      usageError(`tools.${name} requires signature and optional exec`);
+    registry.set(name, {signature: parseToolSignature(entry.signature, `tools.${name}.signature`),
+      tool: async () => { throw new AlgalError("RECEIPT_MISMATCH", "evidence cannot execute a host tool"); }});
+  }
+  return mergeToolRegistries(standard, registry);
+}
+
 async function resolveTools(
   flags: Record<string, string | boolean>,
   dir: string,
@@ -650,6 +674,13 @@ function deriveInputs(c: {
 
 async function main(): Promise<number> {
   const { cmd, positional, flags } = parseArgs(process.argv.slice(2));
+  if (cmd === "process" && positional[0] === "verify-evidence") {
+    if (positional.length !== 2 || Object.keys(flags).length !== 0)
+      usageError("algal process verify-evidence <file> accepts no host flags");
+    out(await verifyProcessEvidence(await readJsonBounded(resolve(positional[1]!),
+      PROCESS_EVIDENCE_BOUNDS.maxBytes, "process evidence")) as unknown as JsonValue);
+    return 0;
+  }
   const dir = String(flags.dir ?? ".algal");
   const store = new FileStore(dir);
   const fns = builtinRegistry();
@@ -1947,6 +1978,16 @@ async function main(): Promise<number> {
     case "process": {
       const sub = positional[0];
       const name = positional[1];
+      if (sub === "export") {
+        if (positional.length !== 2 || !name || Object.keys(flags).some(key => key !== "dir" && key !== "tools"))
+          usageError("algal process export <name> [--dir <path>] [--tools <file>]");
+        artifactFlag(flags, "dir");
+        const supervisor = new ProcessSupervisor(dir, {tools: await evidenceTools(artifactFlag(flags, "tools"), dir)});
+        const evidence = await exportProcessEvidence(await supervisor.inspect(name), supervisor.store, supervisor.evidenceTools());
+        // The complete exported file, including framing, must fit the reader bound.
+        process.stdout.write(canonicalize(evidence as unknown as JsonValue));
+        return 0;
+      }
       if (flags.modules !== undefined) await loadModules(String(flags.modules), store);
       const tools = await resolveTools(flags, dir);
       const executors = sub === "tick" || sub === "schedule" || sub === "recover" ? await resolveExecutors(flags, dir) : [];
@@ -1982,7 +2023,7 @@ async function main(): Promise<number> {
         return next.process.status === "failed" || next.process.status === "stuck" ? 1 : 0;
       } else if (sub === "journal") out(await supervisor.journal(name));
       else if (sub === "verify") out(await supervisor.verify(name));
-      else usageError("algal process create|list|inspect|tick|schedule|recover|journal|verify");
+      else usageError("algal process create|list|inspect|tick|schedule|recover|journal|verify|export|verify-evidence");
       return 0;
     }
 

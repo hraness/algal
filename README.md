@@ -450,6 +450,13 @@ read-only GitHub evidence packets. Opt-in [ordered journals](spec/v1/process-jou
 allow exact-intent crash recovery across Bun and Rust, replaying completed effects
 and refusing uncertain writes.
 
+A completed process can also travel as one bounded evidence file:
+`algal process export NAME --dir .algal > evidence.json`, followed by
+`algal process verify-evidence evidence.json` on another machine. Verification
+replays recorded generations in memory without the original host or adapters;
+it does not activate a copy. The [portable evidence demo](scripts/process-evidence-demo.ts)
+checks both runtimes after removing the original store and adapter paths.
+
 See [the process VM guide](docs/vm.md) for the lifecycle, JSON report, commands,
 and host trust boundary.
 

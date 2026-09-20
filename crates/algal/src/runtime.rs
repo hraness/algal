@@ -464,6 +464,10 @@ impl Runtime<'_> {
             Some(receipt) => receipt,
             None => {
                 let result = match &tool.backend {
+                    ToolBackend::EvidenceDenied(activated) => {
+                        activated.store(true, std::sync::atomic::Ordering::Relaxed);
+                        Err(Error::new("VERIFY_FAILED", "portable evidence cannot activate tools"))
+                    },
                     ToolBackend::External(Backend::Scripted { responses }) => responses.get(&canonical(inputs)?).cloned().ok_or_else(|| Error::new("TOOL_FAILED", "scripted tool result missing")),
                     ToolBackend::External(backend) => self.host.execute_backend(name, backend, &json!({"inputs":inputs,"requestDigest":request_digest,"idempotencyKey":idempotency_key}), tool.max_bytes, timeout).await.map(|(v, _)| v),
                     ToolBackend::MailboxSend => self.host.mailbox.as_ref().ok_or_else(|| Error::new("CAPABILITY_DENIED", "mailbox host is not admitted")).and_then(|mailbox| mailbox.send(inputs["mailbox"].as_str().unwrap_or(""), inputs["message"].clone(), &idempotency_key)),
@@ -536,13 +540,27 @@ impl Runtime<'_> {
                     };
                     if let Some(value) = value {
                         check_value(decl, value)?;
-                        if decl["type"] == "ref"
-                            && self.store.get("values", value.as_str().unwrap())?.is_none()
-                        {
-                            return Err(Error::new(
-                                "STORE_MISS",
-                                "input/const reference does not resolve",
-                            ));
+                        if decl["type"] == "ref" {
+                            let refs = if decl["many"] == true {
+                                value
+                                    .as_array()
+                                    .ok_or_else(|| Error::invalid("reference array"))?
+                                    .iter()
+                                    .collect::<Vec<_>>()
+                            } else {
+                                vec![value]
+                            };
+                            for reference in refs {
+                                let key = reference
+                                    .as_str()
+                                    .ok_or_else(|| Error::invalid("reference digest"))?;
+                                if self.store.get("values", key)?.is_none() {
+                                    return Err(Error::new(
+                                        "STORE_MISS",
+                                        "input/const reference does not resolve",
+                                    ));
+                                }
+                            }
                         }
                         output.insert(port.clone(), value.clone());
                     }

@@ -5,21 +5,35 @@ use crate::{
 };
 use serde_json::{Value, json};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs::{self, File, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
 static TEMP_ID: AtomicU64 = AtomicU64::new(0);
 
+pub type SourceReads = BTreeMap<(String, String), Option<Value>>;
+#[derive(Default)]
+struct ReadTrace {
+    source_keys: BTreeSet<(String, String)>,
+    reads: SourceReads,
+    bytes: usize,
+}
 #[derive(Clone, Default)]
 pub struct Store {
     root: Option<PathBuf>,
     writable: bool,
     data: BTreeMap<(String, String), Value>,
     slots: BTreeMap<String, Value>,
+    trace: Option<Arc<Mutex<ReadTrace>>>,
+    overlay_written: BTreeSet<(String, String)>,
+    allowed_missing: Option<Arc<BTreeSet<(String, String)>>>,
+    evidence_violation: Arc<Mutex<bool>>,
 }
 
 fn no_link(path: &Path) -> Result<()> {
@@ -96,6 +110,114 @@ impl Store {
         }
     }
 
+    /// Trace the immutable source layer. Subsequent overlay writes are excluded;
+    /// all overlays share the collector, including reads of preseeded SDK data.
+    pub fn trace_source_reads(&self) -> Self {
+        Self {
+            writable: false,
+            overlay_written: BTreeSet::new(),
+            evidence_violation: Arc::new(Mutex::new(false)),
+            trace: Some(Arc::new(Mutex::new(ReadTrace {
+                source_keys: self.data.keys().cloned().collect(),
+                ..ReadTrace::default()
+            }))),
+            ..self.clone()
+        }
+    }
+
+    pub fn source_reads(&self) -> Result<SourceReads> {
+        Ok(self
+            .trace
+            .as_ref()
+            .ok_or_else(|| Error::invalid("store is not traced"))?
+            .lock()
+            .map_err(|_| Error::invalid("read trace poisoned"))?
+            .reads
+            .clone())
+    }
+
+    /// Only declared negative dependencies may resolve to None. Undeclared reads
+    /// poison verification even if a replay catches their error in a receipt.
+    pub fn evidence_memory(missing: BTreeSet<(String, String)>) -> Self {
+        Self {
+            allowed_missing: Some(Arc::new(missing)),
+            ..Self::default()
+        }
+    }
+
+    pub fn check_evidence_reads(&self) -> Result<()> {
+        if *self
+            .evidence_violation
+            .lock()
+            .map_err(|_| Error::invalid("evidence read state poisoned"))?
+        {
+            return Err(Error::new(
+                "VERIFY_FAILED",
+                "process evidence omitted a store dependency",
+            ));
+        }
+        Ok(())
+    }
+
+    fn source_read(&self, kind: &str, key: &str, value: Option<Value>) -> Result<Option<Value>> {
+        if let Some(allowed) = &self.allowed_missing
+            && value.is_none()
+            && ["manifests", "values"].contains(&kind)
+            && !allowed.contains(&(kind.to_owned(), key.to_owned()))
+        {
+            *self
+                .evidence_violation
+                .lock()
+                .map_err(|_| Error::invalid("evidence read state poisoned"))? = true;
+            return Err(Error::new(
+                "VERIFY_FAILED",
+                "undeclared process evidence dependency",
+            ));
+        }
+        if let Some(trace) = &self.trace
+            && ["manifests", "values"].contains(&kind)
+        {
+            let mut trace = trace
+                .lock()
+                .map_err(|_| Error::invalid("read trace poisoned"))?;
+            let identity = (kind.to_owned(), key.to_owned());
+            if let Some(previous) = trace.reads.get(&identity) {
+                if previous != &value {
+                    return Err(Error::new(
+                        "DIGEST_MISMATCH",
+                        "source store changed during evidence export",
+                    ));
+                }
+            } else {
+                let count = trace
+                    .reads
+                    .iter()
+                    .filter(|((namespace, _), item)| {
+                        namespace == kind && item.is_some() == value.is_some()
+                    })
+                    .count();
+                let maximum = if kind == "values" && value.is_some() {
+                    641
+                } else {
+                    512
+                };
+                if count >= maximum {
+                    return Err(Error::limit("process evidence read count"));
+                }
+                trace.bytes += value
+                    .as_ref()
+                    .map(canonical)
+                    .transpose()?
+                    .map_or(0, |bytes| bytes.len());
+                if trace.bytes > MAX_DOCUMENT_BYTES {
+                    return Err(Error::limit("process evidence read bytes"));
+                }
+                trace.reads.insert(identity, value.clone());
+            }
+        }
+        Ok(value)
+    }
+
     fn path(&self, kind: &str, key: &str) -> Result<Option<PathBuf>> {
         if !["manifests", "values", "runs"].contains(&kind) {
             return Err(Error::invalid("store namespace"));
@@ -114,19 +236,87 @@ impl Store {
     }
 
     pub fn get(&self, kind: &str, key: &str) -> Result<Option<Value>> {
+        self.get_bounded(
+            kind,
+            key,
+            if kind == "manifests" && (self.trace.is_some() || self.allowed_missing.is_some()) {
+                1_048_576
+            } else {
+                MAX_DOCUMENT_BYTES
+            },
+        )
+    }
+
+    pub fn reserve_trace_bytes(&self, bytes: usize) -> Result<()> {
+        if let Some(trace) = &self.trace {
+            let mut trace = trace
+                .lock()
+                .map_err(|_| Error::invalid("read trace poisoned"))?;
+            trace.bytes = trace
+                .bytes
+                .checked_add(bytes)
+                .ok_or_else(|| Error::limit("process evidence bytes"))?;
+            if trace.bytes > MAX_DOCUMENT_BYTES {
+                return Err(Error::limit("process evidence bytes"));
+            }
+        }
+        Ok(())
+    }
+
+    pub fn get_bounded(&self, kind: &str, key: &str, bound: usize) -> Result<Option<Value>> {
+        let result = self.get_bounded_inner(kind, key, bound);
+        if result.is_err() && (self.trace.is_some() || self.allowed_missing.is_some()) {
+            *self
+                .evidence_violation
+                .lock()
+                .map_err(|_| Error::invalid("evidence read state poisoned"))? = true;
+        }
+        result
+    }
+
+    fn get_bounded_inner(&self, kind: &str, key: &str, bound: usize) -> Result<Option<Value>> {
+        if bound > MAX_DOCUMENT_BYTES {
+            return Err(Error::limit("store object byte bound"));
+        }
         let path = self.path(kind, key)?;
-        if let Some(value) = self.data.get(&(kind.to_owned(), key.to_owned())) {
-            return Ok(Some(value.clone()));
+        let identity = (kind.to_owned(), key.to_owned());
+        if let Some(value) = self.data.get(&identity) {
+            if canonical(value)?.len() > bound {
+                return Err(Error::limit("store object bytes"));
+            }
+            let source = self
+                .trace
+                .as_ref()
+                .map(|trace| {
+                    trace
+                        .lock()
+                        .map(|trace| trace.source_keys.contains(&identity))
+                        .map_err(|_| Error::invalid("read trace poisoned"))
+                })
+                .transpose()?
+                .unwrap_or(false)
+                && !self.overlay_written.contains(&identity);
+            return if source {
+                self.source_read(kind, key, Some(value.clone()))
+            } else {
+                Ok(Some(value.clone()))
+            };
         }
         let Some(path) = path else {
-            return Ok(None);
+            return self.source_read(kind, key, None);
         };
         let file = match File::open(path) {
             Ok(file) => file,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return self.source_read(kind, key, None);
+            }
             Err(e) => return Err(e.into()),
         };
-        let raw = read_json(file, MAX_DOCUMENT_BYTES)?;
+        let metadata = file.metadata()?;
+        if !metadata.is_file() || metadata.len() > bound as u64 {
+            return Err(Error::limit("store object file type or bytes"));
+        }
+        let raw = read_json(file, bound)?;
         let value = if kind == "manifests" {
             Manifest::parse(&raw)?.value
         } else {
@@ -138,11 +328,14 @@ impl Store {
                 "store content does not match its digest",
             ));
         }
-        Ok(Some(value))
+        self.source_read(kind, key, Some(value))
     }
 
     pub fn put(&mut self, kind: &str, value: &Value) -> Result<String> {
         let key = digest(value)?;
+        if self.trace.is_some() {
+            self.overlay_written.insert((kind.to_owned(), key.clone()));
+        }
         let path = self.path(kind, &key)?;
         if self.writable
             && let Some(path) = path
@@ -202,6 +395,17 @@ impl Store {
     /// A stored record must name the request it claims — a corrupt or
     /// foreign file is a hard error, never a silent miss.
     pub fn get_effect(&self, request_digest: &str, executor: &str) -> Result<Option<Value>> {
+        if self.allowed_missing.is_some() || self.trace.is_some() {
+            *self
+                .evidence_violation
+                .lock()
+                .map_err(|_| Error::invalid("evidence read state poisoned"))? = true;
+            return Err(Error::new(
+                "VERIFY_FAILED",
+                "process evidence cannot read host slots or effect cache",
+            ));
+        }
+
         let key = Self::effect_key(request_digest, executor)?;
         if let Some(value) = self.data.get(&("effects".to_owned(), key.clone())) {
             return Ok(Some(value.clone()));
@@ -251,6 +455,17 @@ impl Store {
     }
 
     pub fn get_slot(&self, name: &str) -> Result<Option<Value>> {
+        if self.allowed_missing.is_some() || self.trace.is_some() {
+            *self
+                .evidence_violation
+                .lock()
+                .map_err(|_| Error::invalid("evidence read state poisoned"))? = true;
+            return Err(Error::new(
+                "VERIFY_FAILED",
+                "process evidence cannot read host slots or effect cache",
+            ));
+        }
+
         id(&json!(name))?;
         if (!self.writable || self.root.is_none())
             && let Some(value) = self.slots.get(name)
