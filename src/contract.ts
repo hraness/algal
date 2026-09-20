@@ -134,8 +134,12 @@ export type CellView = { cell: string; ports?: PortName[] };
  * canonical tool log exceeds `maxLogBytes`, the runtime issues a `decide`
  * effect asking a noul keep-question per unpinned entry; dropped entries
  * leave the log verbatim and the decision is an ordinary replayable effect.
- * Compaction preserves sources — kept entries are byte-identical. */
+ * Compaction preserves sources — kept entries are byte-identical. With
+ * mode elide, a fresh prompt projection masks stale result bodies and keeps
+ * the full toolCalls log in the receipt, without issuing a decide effect. */
 export type CompactPolicy = {
+  /** Omitted uses recorded decide effects; elide projects old result bodies without a model call. */
+  mode?: "elide";
   /** Trigger threshold on canonical toolLog bytes (1..maxContextBytes). */
   maxLogBytes: number;
   /** Pinned tail entries never considered for dropping (0..8). */
@@ -1024,7 +1028,7 @@ function parseCell(u: unknown, what: string): Cell {
       let compact: CompactPolicy | undefined;
       if (obj.compact !== undefined) {
         const c = asObject(obj.compact, `${what}.compact`);
-        noUnknownKeys(c, ["maxLogBytes", "keepRecent", "route"], `${what}.compact`);
+        noUnknownKeys(c, ["maxLogBytes", "keepRecent", "route", "mode"], `${what}.compact`);
         compact = {
           maxLogBytes: asInt(
             reqField(c, "maxLogBytes", `${what}.compact`),
@@ -1033,6 +1037,11 @@ function parseCell(u: unknown, what: string): Cell {
             BOUNDS.maxContextBytes,
           ),
         };
+        if (c.mode !== undefined) {
+          if (c.mode !== "elide") throw new AlgalError("PARSE_FAILED", `${what}.compact.mode must be elide`);
+          if (c.route !== undefined) throw new AlgalError("PARSE_FAILED", `${what}.compact.route is not used by elide mode`);
+          compact.mode = "elide";
+        }
         const recent = optField(c, "keepRecent");
         if (recent !== undefined) {
           compact.keepRecent = asInt(
@@ -1666,6 +1675,7 @@ export function manifestToJson(m: OrganismManifest): JsonObject {
         if (c.kind !== "gate" && c.tools) o.tools = c.tools;
         if (c.kind === "agent" && c.compact) {
           const cp: JsonObject = { maxLogBytes: c.compact.maxLogBytes };
+          if (c.compact.mode !== undefined) cp.mode = c.compact.mode;
           if (c.compact.keepRecent !== undefined) cp.keepRecent = c.compact.keepRecent;
           if (c.compact.route) cp.route = routeJson(c.compact.route);
           o.compact = cp;

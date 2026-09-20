@@ -147,6 +147,62 @@ async fn compact_triages_the_tool_log_through_a_recorded_decide_effect() {
 }
 
 #[tokio::test]
+async fn compact_elide_keeps_full_receipt_log_without_a_decision_effect() {
+    let examples = root().join("examples");
+    let source = read_json(
+        File::open(examples.join("compact-elide.algal.json")).unwrap(),
+        1_048_576,
+    )
+    .unwrap();
+    let responses = read_json(
+        File::open(examples.join("compact-elide.responses.json")).unwrap(),
+        1_048_576,
+    )
+    .unwrap();
+    let manifest = Manifest::parse(&source).unwrap();
+    let mut store = Store::default();
+    let receipt = runtime::run(
+        manifest.clone(),
+        json!({}),
+        &mut store,
+        &mut Host::scripted(responses),
+        &transports(),
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(receipt["outcome"], "complete");
+    assert_eq!(receipt["work"]["agentCalls"], 3);
+    assert_eq!(receipt["effects"].as_array().unwrap().len(), 3);
+    let log = receipt["cells"]["agent"]["toolCalls"].as_array().unwrap();
+    assert_eq!(log.len(), 2);
+    assert_eq!(log[0]["output"]["value"], "a".repeat(250));
+    assert_eq!(log[1]["output"]["value"], "b".repeat(250));
+    assert_eq!(
+        runtime::verify(&receipt, manifest, &store, &Host::default())
+            .await
+            .unwrap()["ok"],
+        true
+    );
+}
+
+#[test]
+fn compact_elide_mode_is_closed_and_rejects_unused_routes() {
+    let mut source = read_json(
+        File::open(root().join("examples/compact-elide.algal.json")).unwrap(),
+        1_048_576,
+    )
+    .unwrap();
+    for mode in [json!("decide"), json!("summary"), json!(true), Value::Null] {
+        source["cells"][0]["compact"]["mode"] = mode;
+        assert!(Manifest::parse(&source).is_err());
+    }
+    source["cells"][0]["compact"]["mode"] = json!("elide");
+    source["cells"][0]["compact"]["route"] = json!({"provider":"ignored"});
+    assert!(Manifest::parse(&source).is_err());
+}
+
+#[tokio::test]
 async fn recall_records_ranked_hits_and_feeds_load_by_ref() {
     let manifest = Manifest::parse(&json!({
         "contract":"algal.organism.v1",
