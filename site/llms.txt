@@ -62,6 +62,33 @@ context, deterministic if and exhaustive match, conditional model effects, local
 imports, named call, bounded each, and return. Advanced repeat, tool, wait, and
 evolution operations remain available through manifests.
 
+`bun cli.ts check program.algal` also returns source analysis: entry module,
+source-file count, inferred maximum executor attempts (`maxAgentCalls`), and
+required child nesting levels (`requiredDepth`). These are structural bounds,
+not price, latency, or model-quality forecasts. The inbox project has two
+source files, a maximum of four attempts, and one child nesting level.
+
+Compiler and source-loading failures use JSON by default, preserving error and
+message and adding a structured diagnostic. The Bun CLI accepts
+`--diagnostic-format text|json` wherever it loads source. Readable errors show
+the file, a bounded source excerpt, and import origins when available. These
+flags affect SourceError presentation; other errors retain JSON output. These
+are authoring errors before execution; `diagnose` separately explains recorded
+runtime failures. The https://algal.dev/#authoring-error demonstration compiles
+an intentionally invalid helper containing `emial` instead of `email` and
+publishes the real structured compiler report. The site build checks that
+correcting the binding makes the example compile. No program or model executes
+for this demonstration.
+
+`algal diagnose receipt.json --source program.algal` maps a recorded terminal
+failure or suspension to source locations and callers. `algal diagram
+program.algal --receipt receipt.json --focus child/i1` inspects one recorded
+child invocation, preserving the original root receipt binding. These are
+read-only frontend views; neither runs a model nor substitutes for replay
+verification. Source text is recompiled and matched before annotations apply.
+The live page includes separate inbox-item graphs and a replay-verified pure
+failure at https://algal.dev/#source-failure.
+
 The site reads examples/source/reply.algal during its build and renders diagrams
 from the compiled reply manifest and existing executable examples. Graphs show
 data dependencies, not an implicit promise of parallel wall-clock execution.
@@ -125,6 +152,9 @@ bun cli.ts diagram examples/source/reply.algal --format svg --out reply.svg
 - Portable inbox bundle: https://algal.dev/examples/projects/inbox/inbox.bundle.json
 - Inbox receipt: https://algal.dev/receipts/inbox.receipt.json
 - Empty-inbox receipt: https://algal.dev/receipts/inbox-empty.receipt.json
+- Authoring error report: https://algal.dev/examples/errors/unknown-binding/diagnostic.json
+- Intentionally invalid project: https://algal.dev/examples/errors/unknown-binding/main.algal
+- Helper with the typo: https://algal.dev/examples/errors/unknown-binding/helpers/draft.algal
 - Manifest contract: https://github.com/hraness/algal/blob/main/spec/v1/organism.md
 - Durable process demonstration: https://github.com/hraness/algal/blob/main/docs/vm.md
 - Selection and populations: https://github.com/hraness/algal/blob/main/docs/civilization.md

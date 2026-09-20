@@ -5,8 +5,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { manifestToJson, parseOrganismManifest, type OrganismManifest } from "../src/contract";
 import { createProgramDiagram, renderSvg } from "../src/diagram";
-import { compileSource } from "../src/source";
+import { compileSource, SourceError } from "../src/source";
 import { loadSourceProject } from "../src/source-project";
+import { diagnoseSource, renderSourceDiagnostics } from "../src/source-diagnostics";
+import { createSourceErrorReport, renderSourceError } from "../src/source-errors";
 import { packOrganism } from "../src/bundle";
 import { compileOrganism } from "../src/graph";
 import { scriptedExecutor } from "../src/effects";
@@ -173,6 +175,60 @@ if (!Array.isArray(fullInbox.result.replies) || !fullInbox.result.replies.every(
 }
 const inboxReplies = fullInbox.result.replies;
 const inboxResults = `<ol class="inbox-results">${inboxReplies.map(value => `<li>${escapeHtml(value)}</li>`).join("")}</ol>`;
+const childViews = inboxReplies.map((reply, index) => {
+  const focus = `${inboxEach.id}/i${index}`;
+  const diagram = createProgramDiagram(inbox.manifest, {
+    source: inbox.source, sourceOptions: inbox.compilerOptions, receipt: fullInbox.receipt, focus,
+  });
+  if (diagram.scope?.invocationPath !== focus || diagram.receipt?.digest !== fullInbox.receipt.digest || diagram.nodes.find(node => node.id === "result")?.status !== "committed") {
+    throw new Error(`Inbox item ${index}: scoped diagram lost its invocation or receipt binding`);
+  }
+  return { index, focus, reply, diagram };
+});
+const childTabs = childViews.map(({ index }) => `<button type="button" role="tab" id="tab-inbox-item-${index}" aria-controls="inbox-item-${index}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}">Email ${index + 1}</button>`).join("");
+const childPanels = childViews.map(({ index, focus, reply }) => `<article class="child-panel" id="inbox-item-${index}" aria-labelledby="inbox-item-${index}-title"><h3 id="inbox-item-${index}-title">Email ${index + 1} · one recorded invocation</h3><p class="child-reply">${escapeHtml(reply)}</p><p class="child-path">${escapeHtml(focus)} · draft.algal</p><div class="child-graph-scroll" tabindex="0" role="region" aria-label="Email ${index + 1} child graph, scroll horizontally on small screens"><img src="diagrams/inbox-item-${index}.svg" alt="Exact draft helper graph and recorded cell states for email ${index + 1}, bound to the original inbox receipt." loading="lazy"></div><a href="diagrams/inbox-item-${index}.svg" target="_blank" rel="noopener">Expand child graph ↗</a></article>`).join("");
+
+const ratios = await loadSourceProject(join(ROOT, "examples/source/projects/ratios/ratios.algal"));
+const ratioStore = new MemoryStore();
+for (const child of ratios.modules) await ratioStore.putManifest(child);
+const ratioArgsRaw = await readFixture("projects/ratios/ratios.args.json");
+const ratioArgs = Object.fromEntries(Object.entries(ratioArgsRaw).map(([cell, values]) => [cell, asObject(values, `ratios.args.${cell}`)]));
+const ratioReceipt = await runOrganism({ manifest: ratios.manifest, args: ratioArgs, store: ratioStore, fns: builtinRegistry(), executors: [] });
+const ratioReport = diagnoseSource(ratioReceipt, ratios.source, ratios.compilerOptions);
+if (ratioReceipt.outcome !== "failed" || ratioReport.issues[0]?.path !== "result-each/i1/b1-fraction" || ratioReport.issues[0]?.location?.source !== "ratio.algal" || ratioReport.issues[0]?.location?.span.start.line !== 4 || ratioReceipt.work.agentCalls !== 0) {
+  throw new Error("Ratio failure example no longer maps the second item to the original division expression");
+}
+const ratioVerification = await verifyReceipt(asJsonValue(ratioReceipt, "ratio receipt"), manifestToJson(ratios.manifest), ratioStore, builtinRegistry());
+if (!ratioVerification.ok) throw new Error("Ratio failure receipt did not replay");
+const ratioDiagram = createProgramDiagram(ratios.manifest, { source: ratios.source, sourceOptions: ratios.compilerOptions, receipt: ratioReceipt, focus: "result-each/i1" });
+if (ratioDiagram.nodes.find(node => node.id === "b1-fraction")?.status !== "failed") throw new Error("Ratio focused view lost the failed expression");
+
+// A deliberate authoring mistake is compiled, never executed. Publish the
+// formatter's actual bounded report alongside the original two-file example.
+const authoringDirectory = join(ROOT, "examples/source/errors/unknown-binding");
+const authoringSource = await readFile(join(authoringDirectory, "main.algal"), "utf8");
+const authoringHelper = await readFile(join(authoringDirectory, "helpers/draft.algal"), "utf8");
+const authoringOptions = { entry: "main.algal", modules: { "helpers/draft.algal": authoringHelper } };
+const authoringReport = (() => {
+  try { compileSource(authoringSource, authoringOptions); }
+  catch (error) {
+    if (error instanceof SourceError) return createSourceErrorReport(error);
+    throw error;
+  }
+  throw new Error("The intentionally invalid authoring example unexpectedly compiled");
+})();
+if (authoringReport.source !== "helpers/draft.algal" || authoringReport.span?.start.line !== 5
+  || !authoringReport.message.includes("emial") || authoringReport.imports.length !== 1
+  || authoringReport.imports[0]?.source !== "main.algal" || authoringReport.imports[0]?.path !== "./helpers/draft.algal"
+  || authoringReport.imports[0]?.span?.start.line !== 1 || !authoringReport.excerpt?.lines.some(line => line.text.includes("emial") && line.highlight)) {
+  throw new Error("Authoring error no longer locates the misspelled binding and its import site");
+}
+const repairedAuthoring = compileSource(authoringSource, { ...authoringOptions,
+  modules: { "helpers/draft.algal": authoringHelper.replace("using emial", "using email") },
+});
+if (repairedAuthoring.analysis.maxAgentCalls !== 1 || repairedAuthoring.analysis.requiredDepth !== 1) {
+  throw new Error("The advertised one-word repair no longer restores the expected program bounds");
+}
 
 const replacements: Record<string, string> = {
   REPLY_SOURCE: highlightSource(replySource.trimEnd()),
@@ -180,10 +236,16 @@ const replacements: Record<string, string> = {
   DRAFT_SOURCE: highlightSource(draftSource.trimEnd()),
   INBOX_MAX_ITEMS: String(inboxEach.maxItems),
   INBOX_STATIC_CALLS: String(inbox.analysis.maxAgentCalls),
+  INBOX_REQUIRED_DEPTH: String(inbox.analysis.requiredDepth),
+  INBOX_SOURCE_FILES: String(inbox.files.length),
   INBOX_RESULT_COUNT: String(inboxReplies.length),
   INBOX_RECORDED_CALLS: String(fullInbox.receipt.work.agentCalls),
   INBOX_EMPTY_CALLS: String(emptyInbox.receipt.work.agentCalls),
   INBOX_RESULTS: inboxResults,
+  INBOX_CHILD_TABS: childTabs,
+  INBOX_CHILD_PANELS: childPanels,
+  SOURCE_DIAGNOSTIC: escapeHtml(renderSourceDiagnostics(ratioReport)),
+  AUTHORING_ERROR: escapeHtml(renderSourceError(authoringReport)),
   ROUTE_SOURCE: highlightSource(routeSource.trimEnd()),
   ROUTE_PANELS: routePanels,
   REPLY_MAX_AGENT_CALLS: String(reply.manifest.budgets.maxAgentCalls),
@@ -246,5 +308,25 @@ for (const run of inboxRuns) {
   await writeFile(join(inboxDirectory, `${run.prefix}.args.json`), `${JSON.stringify(run.args, null, 2)}\n`);
   await writeFile(join(inboxDirectory, `${run.prefix}.responses.json`), `${JSON.stringify(run.responses, null, 2)}\n`);
 }
+for (const child of childViews) {
+  await writeFile(join(DIST, "diagrams", `inbox-item-${child.index}.svg`), renderSvg(child.diagram, { compact: true }));
+  await writeFile(join(DIST, "diagrams", `inbox-item-${child.index}.json`), `${JSON.stringify(child.diagram, null, 2)}\n`);
+}
+const ratiosDirectory = join(DIST, "examples/projects/ratios");
+await mkdir(ratiosDirectory, { recursive: true });
+for (const [file, source] of Object.entries(ratios.sources)) await writeFile(join(ratiosDirectory, file), source);
+await writeFile(join(ratiosDirectory, "ratios.args.json"), `${JSON.stringify(ratioArgs, null, 2)}\n`);
+await writeFile(join(ratiosDirectory, "ratios.algal.json"), `${JSON.stringify(manifestToJson(ratios.manifest), null, 2)}\n`);
+await writeFile(join(ratiosDirectory, "ratios.bundle.json"), `${JSON.stringify(await packOrganism(ratios.manifest, ratioStore), null, 2)}\n`);
+await writeFile(join(DIST, "receipts/ratios.receipt.json"), `${canonicalizeReceipt(ratioReceipt)}\n`);
+await writeFile(join(DIST, "receipts/ratios.diagnostics.json"), `${JSON.stringify(ratioReport, null, 2)}\n`);
+await writeFile(join(DIST, "diagrams/ratio-failure.svg"), renderSvg(ratioDiagram, { compact: true }));
+await writeFile(join(DIST, "diagrams/ratio-failure.json"), `${JSON.stringify(ratioDiagram, null, 2)}\n`);
 
-console.log(`site built → ${DIST} (${manifests.size + 1} structural diagrams + ${routeRuns.length + inboxRuns.length} replay-checked scripted executions)`);
+const authoringDownloadDirectory = join(DIST, "examples/errors/unknown-binding");
+await mkdir(join(authoringDownloadDirectory, "helpers"), { recursive: true });
+await writeFile(join(authoringDownloadDirectory, "main.algal"), authoringSource);
+await writeFile(join(authoringDownloadDirectory, "helpers/draft.algal"), authoringHelper);
+await writeFile(join(authoringDownloadDirectory, "diagnostic.json"), `${JSON.stringify(authoringReport, null, 2)}\n`);
+
+console.log(`site built → ${DIST} (${manifests.size + 1} structural diagrams, ${childViews.length + 1} focused views, ${routeRuns.length + inboxRuns.length + 1} replay-checked executions, 1 checked authoring error)`);

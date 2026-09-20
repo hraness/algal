@@ -21,6 +21,65 @@ work. A decision provider must serve `decide`; a generation provider must serve
 `agent`. One provider need not support both. The normal executor admission
 rules remain in force.
 
+## Check bounds and compiler errors
+
+`check` loads the local source closure, compiles it, and checks the resulting
+graph without calling an executor. Its JSON result includes a `source` object.
+For the [inbox project](../examples/source/projects/inbox/inbox.algal):
+
+```json
+{
+  "entry": "inbox.algal",
+  "files": 2,
+  "maxAgentCalls": 4,
+  "requiredDepth": 1
+}
+```
+
+`files` counts source files in the loaded project. `maxAgentCalls` is the
+compiler's transitive maximum executor attempts: it adds sequential work,
+takes the largest mutually exclusive arm, and multiplies a child's bound by
+`max_items`. `requiredDepth` counts nested child levels below the root. These
+are inferred structural bounds, not the declared budget, a bill estimate, or
+a timing prediction. A run may use less work; the root runtime budget still
+governs all nested execution.
+
+Source loading and compilation errors preserve `error` and `message` in the
+default JSON response and add a structured `diagnostic`. Use
+`--diagnostic-format text` for a readable file location, source excerpt, and
+import chain, or `--diagnostic-format json` for a machine-readable report.
+This flag applies wherever the Bun CLI loads source, including `check`,
+`compile`, `run`, and `diagram`. It changes `SourceError` presentation;
+other CLI errors retain their normal JSON format.
+
+The SDK's `createSourceErrorReport(error)` builds an `algal.source-error.v1`
+report from a `SourceError`; `renderSourceError(report)` produces the text
+view. The report retains the source path, span, source digest when text is
+available, and import locations. Excerpts are limited to three lines and 120
+display columns per line, with at most eight import frames. Non-ASCII and
+control characters are visibly escaped with corresponding caret positions.
+Missing or unreadable source produces an explicit excerpt-unavailable reason.
+The report does not include the full original source or create an execution
+receipt.
+
+The intentionally invalid [authoring example](../examples/source/errors/unknown-binding/main.algal)
+imports `helpers/draft.algal`, which refers to `emial` instead of `email`:
+
+```sh
+# Both commands fail before execution; no provider credentials are needed.
+bun cli.ts check examples/source/errors/unknown-binding/main.algal --diagnostic-format text
+bun cli.ts check examples/source/errors/unknown-binding/main.algal --diagnostic-format json
+```
+
+The compiler locates the unknown binding in the helper and retains the import
+site in `main.algal`. Correcting `emial` to `email` repairs this example. The
+[site demonstration](https://algal.dev/#authoring-error) generates its report
+from the actual failing compilation at build time.
+
+Compiler errors happen before a program can run. For a recorded runtime
+failure, use `diagnose receipt.json --source program.algal`; source diagnostics
+inspect receipt evidence, while `verify` separately replays execution.
+
 ## A small, explicit first version
 
 ```algal
@@ -372,6 +431,55 @@ Passing original source to the diagram API recompiles it and requires the
 executable digest to match before using source annotations. For compiled JSON,
 the equivalent CLI option is `diagram manifest.json --source program.algal`.
 Persisted source-map labels alone are not trusted as evidence of source meaning.
+
+## Locate a recorded failure
+
+`diagnose` reads a receipt and the original source project without running a
+model, replaying effects, or changing the receipt:
+
+```sh
+bun cli.ts diagnose ratios.receipt.json \
+  --source examples/source/projects/ratios/ratios.algal --format text
+# Default output is JSON; --out writes an independent diagnostic artifact.
+```
+
+The `algal.source-diagnostics.v1` report identifies the root manifest,
+supplied entry source, and original receipt, plus one terminal issue when present.
+Each resolved location also includes its own file's source digest.
+A failure points to its exact execution path and source expression, with up
+to eight caller frames. A suspension is reported as a suspension. A complete
+run has no terminal issue, even if it handled earlier cell failures. The
+recorded failure message is clipped to 512 characters; each source excerpt
+is at most three lines and 320 characters. The report does not expand inputs,
+model contexts, or effect payloads. Failure messages and source text retain
+their recorded contents and may themselves contain sensitive text.
+
+```ts
+const project = await loadSourceProject(entryPath);
+const report = diagnoseSource(receipt, project.source, project.compilerOptions);
+console.log(renderSourceDiagnostics(report));
+```
+
+The original sources are recompiled. A mismatched root executable or receipt
+self-digest is rejected; persisted source-map labels are never trusted.
+The report says `digest-bound`: this establishes association and integrity,
+not successful replay or provider attestation. Use `verify` for replay.
+Formatting-only source changes can keep the same executable digest while
+moving line numbers; source digests identify the supplied text revision.
+Unresolvable or absent failure paths remain explicitly unavailable, rather
+than being assigned a guessed source location. Displayed paths are capped at
+1,024 characters with `pathTruncated` set when clipping occurs. Successful diagnosis exits 0
+even when the inspected run failed; invalid arguments or artifacts exit
+nonzero.
+
+Compilation also returns `project`, a deterministic source index containing
+the entry key, per-file source maps, and structured call origins. Calls record
+the actual imported file even when two files compile to the same manifest
+digest. Generated wrappers are represented explicitly. For lower-level
+inspection, `createSourceTrace(source, options)` constructs an immutable
+compiler-derived context; `resolveSourcePath(context, path, "cell")` or
+`"invocation"` follows manifest call boundaries and bounded item indices.
+Serialized or modified tracing contexts are not accepted as source evidence.
 
 ## Scope
 

@@ -148,15 +148,51 @@ The marketing site's selection strip is a labeled conceptual lifecycle, not
 a fabricated execution record. See [foundry](../spec/v1/foundry.md) and
 [civilization](civilization.md) for the recorded evaluation contracts.
 
+## Inspect one child invocation
+
+```sh
+bun cli.ts diagram examples/source/projects/inbox/inbox.algal \
+  --receipt inbox.receipt.json --focus b2-replies-each/i1 \
+  --format svg --out second-email.svg
+```
+
+`--focus` follows the exact child boundary in a recompiled source project.
+An `each` path requires a zero-based `iN` component within its declared bound.
+Nested calls append their actual cell IDs. Generated parameterless-call
+wrappers remain explicit boundaries; append `/call` to enter their real
+child. Without a receipt, focus displays a static definition and no statuses.
+With a receipt, the invocation must have recorded execution evidence; skipped
+branches and unstarted batch items do not acquire invented child records.
+An attempted child can have a recorded failure before any cell completed;
+its graph then has no fabricated cell statuses.
+
+The focused diagram's `manifestDigest`, nodes, edges, and budget describe the
+displayed child. `scope` retains the root manifest digest, original receipt
+digest when supplied, exact invocation path, source file, and caller frames.
+The `receipt` field always identifies the original root receipt and outcome.
+It is never a sliced or relabeled child receipt. Displayed status is looked
+up only under that invocation's exact prefix. A failed sibling cannot color
+another item's graph. All association is digest-bound; replay verification
+remains a separate check.
+
+The SDK accepts the same `focus` option on `createProgramDiagram`. Original
+`source` and, for projects, `sourceOptions` are required so source origins are
+reconstructed rather than trusted from a sidecar. Child ports are resolved
+from the compiled closure; a supplied root port map is not reused for a child.
+SVG and Mermaid output retain scope breadcrumbs and the root binding.
+
 ## Keeping public examples honest
 
-`bun run docs:diagrams` regenerates the README source blocks and six committed
+`bun run docs:diagrams` regenerates the README source blocks and seven committed
 SVGs from their exact fixtures. `bun run docs:check` detects drift and is part
 of the aggregate check. The marketing-site build independently reads the
-same source and manifests to generate its downloadable artifacts and seven
+same source and manifests to generate its downloadable artifacts and eight
 base diagram assets. It also runs every scripted route case during the build,
 verifies the receipts, and generates recorded overlays. The branch selector on
 the site switches between those recorded runs; it does not call a live model.
 The local inbox project also compiles with its child closure, runs both
 nonempty and empty scripted collections, and publishes a portable bundle.
+Each recorded inbox item has a separate focused child view. A pure ratios
+fixture intentionally fails on its second item; the build replay-verifies
+that failed receipt and checks its source diagnostic and focused graph.
 No hand-maintained marketing graph defines program behavior.

@@ -62,7 +62,7 @@ test("loaded compiler options reproduce the digest-bound executable module closu
     expect(loaded.modules).toHaveLength(1);
     expect(loaded.modules[0]?.name).toBe("echo");
     expect(loaded.analysis).toEqual({ maxAgentCalls: 0, requiredDepth: 1 });
-    expect(compileSource(loaded.source, loaded.compilerOptions)).toEqual({ manifest: loaded.manifest, sourceMap: loaded.sourceMap, modules: loaded.modules, analysis: loaded.analysis });
+    expect(compileSource(loaded.source, loaded.compilerOptions)).toEqual({ manifest: loaded.manifest, sourceMap: loaded.sourceMap, modules: loaded.modules, analysis: loaded.analysis, project: loaded.project });
     await writeFile(join(directory, "child.algal"), 'program echo(message: text) -> text { budget { max_agent_calls: 0 } return "changed" }');
     expect((await loadSourceProject(join(directory, "entry.algal"))).sourceMap.manifestDigest).not.toBe(loaded.sourceMap.manifestDigest);
   });
@@ -122,10 +122,93 @@ test("source projects reject cycles and report importing file and location for m
       expect(error).toBeInstanceOf(SourceError);
       const sourceError = error as SourceError;
       expect(sourceError.diagnostic.span.start.line).toBe(2);
-      expect(sourceError.diagnostic.message).toContain("entry.algal");
+      expect(sourceError.diagnostic.source).toBe("entry.algal");
       expect(sourceError.diagnostic.message).toContain("missing.algal");
       expect(sourceError.diagnostic.message).toContain("ENOENT");
     }
+  });
+});
+
+async function projectError(path: string): Promise<SourceError> {
+  try { await loadSourceProject(path); }
+  catch (error) { expect(error).toBeInstanceOf(SourceError); return error as SourceError; }
+  throw new Error("invalid source project was accepted");
+}
+
+test("filesystem compiler errors retain the actual child source and the complete import chain", async () => {
+  await temporary(async directory => {
+    const entry = '// root\nimport middle from "./nested/middle.algal"\n' + program("root");
+    const middle = '// middle\n\nimport leaf from "../leaf.algal"\n' + program("middle");
+    await files(directory, { "entry.algal": entry, "nested/middle.algal": middle });
+    for (const [result, expected, column] of [["@", "unsupported character", 10], [")", "expression", 10], ["42", "declares text", 10], ['generate "x" using "context"', "explicit effects", 1]] as const) {
+      const leaf = `program leaf() -> text {\n  budget { max_agent_calls: 0 }\n  return ${result}\n}`;
+      await writeFile(join(directory, "leaf.algal"), leaf);
+      const error = await projectError(join(directory, "entry.algal"));
+      expect(error.diagnostic.source).toBe("leaf.algal"); expect(error.sourceText).toBe(leaf);
+      expect(error.diagnostic.message).toContain(expected); expect(error.diagnostic.message).not.toContain("middle.algal");
+      expect(error.diagnostic.span.start.column).toBe(column);
+      expect(error.diagnostic.span.start.line).toBe(column === 1 ? 1 : 3);
+      expect(error.diagnostic.imports.map(frame => [frame.source, frame.path, frame.span.start.line, frame.span.start.column])).toEqual([
+        ["entry.algal", "./nested/middle.algal", 2, 1], ["nested/middle.algal", "../leaf.algal", 3, 1],
+      ]);
+    }
+  });
+});
+
+test("filesystem missing imports, invalid paths, and cycles point to the importer instead of an unread child", async () => {
+  await temporary(async directory => {
+    const entry = 'import middle from "./middle.algal"\n' + program("root");
+    await files(directory, { "entry.algal": entry });
+    for (const [path, expected] of [["./missing.algal", "ENOENT"], ["../outside.algal", "escapes"], ["./entry.algal", "cycle"]] as const) {
+      const declaration = `import child from ${JSON.stringify(path)}`;
+      const middle = `// middle\n\n${declaration}\n${program("middle")}`;
+      await writeFile(join(directory, "middle.algal"), middle);
+      const error = await projectError(join(directory, "entry.algal"));
+      expect(error.diagnostic.source).toBe("middle.algal"); expect(error.sourceText).toBe(middle);
+      expect(error.diagnostic.message).toContain(expected);
+      expect(error.diagnostic.span.start).toEqual({ offset: middle.indexOf("import"), line: 3, column: 1 });
+      expect(error.diagnostic.span.end).toEqual({ offset: middle.indexOf("import") + declaration.length, line: 3, column: declaration.length + 1 });
+      expect(error.diagnostic.imports.map(frame => [frame.source, frame.path])).toEqual([["entry.algal", "./middle.algal"]]);
+    }
+    const missingEntry = await projectError(join(directory, "missing.algal"));
+    expect(missingEntry.diagnostic.source).toBe("missing.algal"); expect(missingEntry.sourceText).toBeUndefined();
+    expect(missingEntry.diagnostic.imports).toEqual([]); expect(missingEntry.diagnostic.span.start.line).toBe(1);
+  });
+});
+
+test("invalid or excessive source bytes retain file identity without inventing decoded source", async () => {
+  await temporary(async directory => {
+    const entry = '// root\nimport child from "./child.algal"\n' + program("root");
+    await files(directory, { "entry.algal": entry });
+    for (const bytes of [new Uint8Array([0x61, 0xc0, 0x80]), Buffer.from(" ".repeat(SOURCE_BOUNDS.maxSourceBytes + 1))]) {
+      await writeFile(join(directory, "child.algal"), bytes);
+      const child = await projectError(join(directory, "entry.algal"));
+      expect(child.diagnostic.source).toBe("child.algal"); expect(child.sourceText).toBeUndefined();
+      expect(child.diagnostic.span).toEqual({ start: { offset: 0, line: 1, column: 1 }, end: { offset: 0, line: 1, column: 1 } });
+      expect(child.diagnostic.imports.map(frame => [frame.source, frame.path, frame.span.start.line])).toEqual([["entry.algal", "./child.algal", 2]]);
+      await writeFile(join(directory, "root.algal"), bytes);
+      const rootError = await projectError(join(directory, "root.algal"));
+      expect(rootError.diagnostic.source).toBe("root.algal"); expect(rootError.sourceText).toBeUndefined(); expect(rootError.diagnostic.imports).toEqual([]);
+    }
+  });
+});
+
+test("filesystem depth errors locate the rejecting declaration with bounded import ancestry", async () => {
+  await temporary(async directory => {
+    const sources: Record<string, string> = {};
+    for (let depth = 0; depth <= 9; depth++) sources[`d${depth}.algal`] = `${depth < 9 ? `// depth\nimport child from "./d${depth + 1}.algal"\n` : ""}${program()}`;
+    await files(directory, sources);
+    const error = await projectError(join(directory, "d0.algal"));
+    expect(error.diagnostic.source).toBe("d8.algal"); expect(error.sourceText).toBe(sources["d8.algal"]);
+    expect(error.diagnostic.span.start.line).toBe(2); expect(error.diagnostic.span.start.column).toBe(1);
+    expect(error.diagnostic.imports.map(frame => frame.source)).toEqual(Array.from({ length: 8 }, (_, index) => `d${index}.algal`));
+    expect(error.diagnostic.importsTruncated).toBeUndefined();
+    await writeFile(join(directory, "d8.algal"), program());
+    await writeFile(join(directory, "detour.algal"), `import again from "./d1.algal"\n${program()}`);
+    await writeFile(join(directory, "entry.algal"), `import first from "./d1.algal"\nimport later from "./detour.algal"\n${program()}`);
+    const cached = await projectError(join(directory, "entry.algal"));
+    expect(cached.diagnostic.source).toBe("detour.algal"); expect(cached.diagnostic.span.start.line).toBe(1);
+    expect(cached.diagnostic.imports.map(frame => [frame.source, frame.path, frame.span.start.line])).toEqual([["entry.algal", "./detour.algal", 2]]);
   });
 });
 

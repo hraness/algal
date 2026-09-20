@@ -140,6 +140,7 @@ figcaption { font-size: .65rem; line-height: 1.6; color: var(--muted); }
 .composition-budget { grid-column: 2; grid-row: 2; align-self: center; padding: 0 1.3rem; margin: .2rem 0 1rem; }
 .composition-budget strong { display: block; font-size: .78rem; font-weight: 500; margin: .5rem 0 .3rem; }
 .composition-budget p { color: var(--muted); font-size: .69rem; line-height: 1.7; }
+.composition-budget .composition-analysis { border-top: 1px solid var(--line); padding-top: .6rem; margin-top: .7rem; }
 .composition-links { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: .4rem 1rem; padding: 0 1.3rem; font-size: .65rem; }
 .composition-links a { text-decoration: none; }
 .composition-graph { margin: 0; padding: 1rem; background: #f4f6ef; border-top: 1px solid var(--line); min-width: 0; display: flex; flex-direction: column; }
@@ -159,6 +160,17 @@ figcaption { font-size: .65rem; line-height: 1.6; color: var(--muted); }
 .composition-empty strong { font-size: .76rem; font-weight: 500; }
 .composition-empty p { font-size: .72rem; color: var(--muted); margin: .3rem 0 0; }
 .composition-evidence-body > .composition-links { padding: 0; margin-bottom: 0; }
+.child-panel { padding: 1rem 0; }
+.child-panel h3 { font-size: .85rem; font-weight: 500; }
+.child-panel .child-reply { font-size: .8rem; line-height: 1.8; }
+.child-path { font: .62rem var(--mono); overflow-wrap: anywhere; color: var(--muted); }
+.child-graph-scroll { overflow-x: auto; margin: 1rem 0; border-radius: 5px; background: white; }
+.child-graph-scroll img { display: block; width: 100%; min-width: 800px; max-width: 1000px; height: auto; margin: auto; }
+.source-failure img { display: block; width: 100%; max-width: 480px; height: auto; margin: 1rem auto; }
+.child-panel > a { font-size: .72rem; }
+.child-inspection .composition-evidence-body > p, .source-failure .composition-evidence-body > p, .authoring-error .composition-evidence-body > p { font-size: .78rem; line-height: 1.8; }
+.source-diagnostic { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--soft-green); padding: 1rem; border-radius: 4px; font: .7rem/1.8 var(--mono); }
+.authoring-diagnostic { white-space: pre; overflow-x: auto; overscroll-behavior-x: contain; border-left: 3px solid #a77539; background: #faf5eb; }
 .examples-section { padding-top: 4.5rem; }
 .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 3rem; }
 .section-heading > p { max-width: 26rem; color: var(--muted); font-size: .89rem; line-height: 1.8; margin-bottom: .2rem; }

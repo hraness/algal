@@ -18,7 +18,7 @@ export const SOURCE_PROJECT_BOUNDS = Object.freeze({
 });
 /** Changing these defaults or the model-visible envelope changes compilation. */
 export const SOURCE_PROFILE = Object.freeze({
-  id: "algal.source.profile.v1", compilerVersion: "1.2.0",
+  id: "algal.source.profile.v1", compilerVersion: "1.3.0",
   budgets: Object.freeze({ maxSteps: 256, maxAgentCalls: 0, maxWork: 1_000_000,
     maxContextBytes: 65_536, maxOutputBytes: 65_536, maxDepth: 4 }),
   exprFuel: BOUNDS.maxExprFuel,
@@ -38,20 +38,46 @@ export type SourceMap = {
   cells: { cellId: string; role: string; span: SourceSpan; annotation?: SourceAnnotation }[];
 };
 export type SourceCompilerOptions = { entry?: string; modules?: Readonly<Record<string, string>> };
+export type SourceCallOrigin = {
+  source: string;
+  cellId: string;
+  childSource: string;
+  childManifestDigest: Digest;
+  wrapper?: { manifestDigest: Digest; innerCellId: string };
+};
+export type SourceProjectIndex = {
+  entry: string;
+  units: Record<string, SourceMap>;
+  calls: SourceCallOrigin[];
+};
 export type SourceCompilation = {
   manifest: OrganismManifest;
   sourceMap: SourceMap;
   /** Reachable dependency closure, child before parent, excluding the root. */
   modules: OrganismManifest[];
   analysis: { maxAgentCalls: number; requiredDepth: number };
+  /** Compiler-derived origins, outside executable manifest identity. */
+  project: SourceProjectIndex;
 };
 export type SourceImport = { path: string; alias: string; span: SourceSpan };
+export type SourceErrorImport = { source: string; path: string; span: SourceSpan };
+export type SourceErrorContext = { source?: string; sourceText?: string; imports?: SourceErrorImport[] };
 export class SourceError extends AlgalError {
-  readonly diagnostic: { message: string; span: SourceSpan };
-  constructor(message: string, span: SourceSpan) {
-    super("PARSE_FAILED", `${span.start.line}:${span.start.column}: ${message}`);
+  readonly diagnostic: { message: string; span: SourceSpan; source?: string; imports: SourceErrorImport[]; importsTruncated?: true };
+  declare readonly sourceText?: string;
+  constructor(message: string, span: SourceSpan, context: SourceErrorContext = {}) {
+    super("PARSE_FAILED", `${context.source === undefined ? "" : `${context.source}:`}${span.start.line}:${span.start.column}: ${message}`);
     this.name = "SourceError";
-    this.diagnostic = { message, span };
+    this.diagnostic = { message, span: structuredClone(span),
+      ...(context.source === undefined ? {} : { source: context.source }),
+      imports: structuredClone((context.imports ?? []).slice(0, SOURCE_PROJECT_BOUNDS.maxImportDepth)),
+      ...((context.imports?.length ?? 0) > SOURCE_PROJECT_BOUNDS.maxImportDepth ? { importsTruncated: true as const } : {}),
+    };
+    // Full source is available only to an in-process formatter. It is neither
+    // diagnostic JSON nor an enumerable error field; oversized text is absent.
+    if (context.sourceText !== undefined && Buffer.byteLength(context.sourceText) <= SOURCE_BOUNDS.maxSourceBytes) {
+      Object.defineProperty(this, "sourceText", { value: context.sourceText, enumerable: false, writable: false, configurable: false });
+    }
   }
 }
 
@@ -126,7 +152,7 @@ class Parser {
     return { offset, line: prefix.split("\n").length, column: offset - prefix.lastIndexOf("\n") };
   }
   span(value: Span): SourceSpan { return { start: this.position(value.start), end: this.position(value.end) }; }
-  fail(message: string, span: Span = this.peek()): never { throw new SourceError(message, this.span(span)); }
+  fail(message: string, span: Span = this.peek()): never { throw new SourceError(message, this.span(span), { sourceText: this.source }); }
   private peek(): Token { return this.tokens[Math.min(this.index, this.tokens.length - 1)]!; }
   private take(): Token { const token = this.peek(); if (this.index < this.tokens.length - 1) this.index++; return token; }
   private eat(text: string): boolean { if (this.peek().text !== text) return false; this.take(); return true; }
@@ -264,7 +290,8 @@ class Parser {
 type Type = { kind: "text"; literal?: string } | { kind: "json" | "number" | "boolean" | "null" | "list" } | { kind: "choice" | "decision"; labels: string[] } | { kind: "record"; fields: Map<string, Type> };
 type Reference = { cell: string; port: string; type: Type };
 type Pure = { program: JsonValue; type: Type; refs: Map<string, Reference> };
-type CompiledModule = SourceCompilation & { program: SourceProgram; importDepth: number };
+type CompiledUnit = Omit<SourceCompilation, "project"> & { calls: SourceCallOrigin[] };
+type CompiledModule = CompiledUnit & { program: SourceProgram; importDepth: number; sourceKey: string };
 const isText = (t: Type): boolean => t.kind === "text" || t.kind === "choice";
 function port(type: Type): PortType { return type.kind === "choice" ? { type: "choice", labels: type.labels } : { type: isText(type) ? "text" : "json" }; }
 function output(type: Type): AgentOutput {
@@ -337,9 +364,10 @@ class Compiler {
   private calls = 0;
   private requiredDepth = 0;
   private readonly modules = new Map<Digest, OrganismManifest>();
+  private readonly callOrigins: SourceCallOrigin[] = [];
   private branches = 0;
   private readonly controls: { selector: Reference; label: string }[] = [];
-  constructor(private readonly parser: Parser, private readonly imports: ReadonlyMap<string, CompiledModule>) {}
+  constructor(private readonly parser: Parser, private readonly imports: ReadonlyMap<string, CompiledModule>, private readonly sourceKey: string) {}
   private add(cell: Cell, span: Span, role: string, sourceAnnotation: SourceAnnotation, guarded = true): void {
     if (this.cells.length >= BOUNDS.maxCells) this.parser.fail("lowered cell limit exceeded", span);
     // Each newly created arm cell is gated, even a constant or an effect's pure
@@ -570,6 +598,8 @@ class Compiler {
     this.calls += child.analysis.maxAgentCalls * (expr.kind === "each" ? expr.maxItems : 1);
     this.requiredDepth = Math.max(this.requiredDepth, depth);
     const compositionId = expr.kind === "each" ? `${id}-each` : id;
+    this.callOrigins.push({ source: this.sourceKey, cellId: compositionId, childSource: child.sourceKey, childManifestDigest: child.sourceMap.manifestDigest,
+      ...(manifestDigest !== child.sourceMap.manifestDigest ? { wrapper: { manifestDigest, innerCellId: "call" } } : {}) });
     this.wire(compositionId, refs);
     const cell: Cell = expr.kind === "call" ? { id, kind: "organism", manifest: manifestDigest }
       : { id: compositionId, kind: "each", manifest: manifestDigest, over: expr.over.toLowerCase().replaceAll("_", "-"), maxItems: expr.maxItems };
@@ -588,7 +618,7 @@ class Compiler {
     }
     return { cell: id, port: "result", type: { kind: child.program.output } };
   }
-  compile(program: SourceProgram): SourceCompilation {
+  compile(program: SourceProgram): CompiledUnit {
     const inputs: PortMap = {}; const interfaceInputs: Record<string, { cell: string; port: string }> = {};
     this.parser.unique(program.parameters.map(p => p.name), "parameter", program);
     for (const param of program.parameters) {
@@ -614,7 +644,7 @@ class Compiler {
     let manifest: OrganismManifest;
     try { manifest = parseOrganismManifest({ contract: "algal.organism.v1", key: `organism:${program.name.replaceAll("_", "-")}`, name: program.name, budgets: program.budgets, interface: { inputs: interfaceInputs, outputs: { result: { cell: result.cell, port: result.port } } }, cells: this.cells, edges: this.edges }); }
     catch (error) { if (error instanceof AlgalError) this.parser.fail(`lowered manifest: ${error.message}`, program); throw error; }
-    return { manifest, sourceMap: { contract: "algal.source-map.v1", sourceDigest: digestText(this.parser.source), manifestDigest: digestCanonical(manifestToJson(manifest)), compilerVersion: SOURCE_PROFILE.compilerVersion, profile: SOURCE_PROFILE.id, cells: this.mappings }, modules: [...this.modules.values()], analysis: { maxAgentCalls: this.calls, requiredDepth: this.requiredDepth } };
+    return { manifest, sourceMap: { contract: "algal.source-map.v1", sourceDigest: digestText(this.parser.source), manifestDigest: digestCanonical(manifestToJson(manifest)), compilerVersion: SOURCE_PROFILE.compilerVersion, profile: SOURCE_PROFILE.id, cells: this.mappings }, modules: [...this.modules.values()], analysis: { maxAgentCalls: this.calls, requiredDepth: this.requiredDepth }, calls: this.callOrigins };
   }
 }
 
@@ -655,53 +685,80 @@ export function resolveSourceImport(importerKey: string, path: string, span: Sou
 }
 
 export function compileSource(source: string, options: SourceCompilerOptions = {}): SourceCompilation {
-  const entry = projectKey(options.entry ?? "main.algal");
+  const entryKey = options.entry ?? "main.algal";
+  let entry: string;
+  try { entry = projectKey(entryKey); }
+  catch (error) {
+    if (error instanceof SourceError) throw new SourceError(error.diagnostic.message, error.diagnostic.span, { source: entryKey, sourceText: source });
+    throw error;
+  }
   const sources = new Map<string, string>();
   let totalBytes = 0;
   const insert = (key: string, text: string): void => {
-    projectKey(key);
-    if (typeof text !== "string") throw new SourceError(`source module ${key} must contain source text`, originSpan);
-    if (sources.has(key)) {
-      if (sources.get(key) !== text) throw new SourceError(`entry source differs from modules[${JSON.stringify(key)}]`, originSpan);
-      return;
+    try {
+      projectKey(key);
+      if (typeof text !== "string") throw new SourceError(`source module ${key} must contain source text`, originSpan);
+      if (sources.has(key)) {
+        if (sources.get(key) !== text) throw new SourceError(`entry source differs from modules[${JSON.stringify(key)}]`, originSpan);
+        return;
+      }
+      const bytes = Buffer.byteLength(text);
+      if (bytes > SOURCE_BOUNDS.maxSourceBytes) throw new SourceError(`source exceeds ${SOURCE_BOUNDS.maxSourceBytes} UTF-8 bytes`, originSpan);
+      if (sources.size >= SOURCE_PROJECT_BOUNDS.maxFiles) throw new SourceError(`source project exceeds ${SOURCE_PROJECT_BOUNDS.maxFiles} files`, originSpan);
+      totalBytes += bytes;
+      if (totalBytes > SOURCE_PROJECT_BOUNDS.maxTotalBytes) throw new SourceError(`source project exceeds ${SOURCE_PROJECT_BOUNDS.maxTotalBytes} UTF-8 bytes`, originSpan);
+      sources.set(key, text);
+    } catch (error) {
+      if (error instanceof SourceError) throw new SourceError(error.diagnostic.message, error.diagnostic.span, { source: key, ...(typeof text === "string" ? { sourceText: text } : {}) });
+      throw error;
     }
-    const bytes = Buffer.byteLength(text);
-    if (bytes > SOURCE_BOUNDS.maxSourceBytes) throw new SourceError(`${key}: source exceeds ${SOURCE_BOUNDS.maxSourceBytes} UTF-8 bytes`, originSpan);
-    if (sources.size >= SOURCE_PROJECT_BOUNDS.maxFiles) throw new SourceError(`source project exceeds ${SOURCE_PROJECT_BOUNDS.maxFiles} files`, originSpan);
-    totalBytes += bytes;
-    if (totalBytes > SOURCE_PROJECT_BOUNDS.maxTotalBytes) throw new SourceError(`source project exceeds ${SOURCE_PROJECT_BOUNDS.maxTotalBytes} UTF-8 bytes`, originSpan);
-    sources.set(key, text);
   };
   insert(entry, source);
   for (const [key, text] of Object.entries(options.modules ?? {})) insert(key, text);
   const memo = new Map<string, CompiledModule>();
   const active = new Set<string>();
-  const visit = (key: string, depth: number, location = originSpan): CompiledModule => {
-    if (active.has(key)) throw new SourceError(`source import cycle at ${key}`, location);
-    if (depth > SOURCE_PROJECT_BOUNDS.maxImportDepth) throw new SourceError(`source import depth exceeds ${SOURCE_PROJECT_BOUNDS.maxImportDepth}`, location);
+  const visit = (key: string, depth: number, frames: SourceErrorImport[] = []): CompiledModule => {
+    const incoming = frames.at(-1);
+    const failImport = (message: string): never => {
+      const primary = incoming?.source ?? key;
+      throw new SourceError(message, incoming?.span ?? originSpan, { source: primary,
+        ...(sources.has(primary) ? { sourceText: sources.get(primary)! } : {}),
+        imports: incoming ? frames.slice(0, -1) : [],
+      });
+    };
+    if (active.has(key)) failImport(`source import cycle at ${key}`);
+    if (depth > SOURCE_PROJECT_BOUNDS.maxImportDepth) failImport(`source import depth exceeds ${SOURCE_PROJECT_BOUNDS.maxImportDepth}`);
     const cached = memo.get(key);
     if (cached) {
-      if (depth + cached.importDepth > SOURCE_PROJECT_BOUNDS.maxImportDepth) throw new SourceError(`source import depth exceeds ${SOURCE_PROJECT_BOUNDS.maxImportDepth}`, location);
+      if (depth + cached.importDepth > SOURCE_PROJECT_BOUNDS.maxImportDepth) failImport(`source import depth exceeds ${SOURCE_PROJECT_BOUNDS.maxImportDepth}`);
       return cached;
     }
     const text = sources.get(key);
-    if (text === undefined) throw new SourceError(`source module not supplied: ${key}`, location);
+    if (text === undefined) return failImport(`source module not supplied: ${key}`);
     active.add(key);
     try {
       const parser = new Parser(text);
       const declarations = parser.imports();
       const program = parser.program();
       const imports = new Map<string, CompiledModule>();
-      for (const declaration of declarations) imports.set(declaration.alias, visit(resolveSourceImport(key, declaration.path, declaration.span), depth + 1, declaration.span));
+      for (const declaration of declarations) imports.set(declaration.alias, visit(resolveSourceImport(key, declaration.path, declaration.span), depth + 1,
+        [...frames, { source: key, path: declaration.path, span: declaration.span }]));
       const importDepth = imports.size ? 1 + Math.max(...[...imports.values()].map(child => child.importDepth)) : 0;
-      const result = { ...new Compiler(parser, imports).compile(program), program, importDepth };
+      const result = { ...new Compiler(parser, imports, key).compile(program), program, importDepth, sourceKey: key };
       memo.set(key, result);
       return result;
     } catch (error) {
-      if (error instanceof SourceError && key !== entry) throw new SourceError(`${key}: ${error.diagnostic.message}`, error.diagnostic.span);
+      if (error instanceof SourceError && error.diagnostic.source === undefined) throw new SourceError(error.diagnostic.message, error.diagnostic.span, { source: key, sourceText: text, imports: frames });
       throw error;
     } finally { active.delete(key); }
   };
-  const { program: _program, importDepth: _importDepth, ...result } = visit(entry, 0);
-  return result;
+  const { program: _program, importDepth: _importDepth, sourceKey: _sourceKey, calls: _calls, ...result } = visit(entry, 0);
+  const units: Record<string, SourceMap> = Object.create(null);
+  const calls: SourceCallOrigin[] = [];
+  for (const key of [...memo.keys()].sort()) {
+    const unit = memo.get(key)!;
+    units[key] = unit.sourceMap;
+    calls.push(...unit.calls);
+  }
+  return { ...result, project: { entry, units, calls } };
 }

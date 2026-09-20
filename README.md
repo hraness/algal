@@ -143,6 +143,22 @@ and native Rust kernel. The native CLI takes the compiled JSON; it does not
 silently invoke Bun. See the [source language guide](docs/source-language.md)
 for the grammar, uncertainty routing, bounds, and current subset.
 
+`check` also reports the source entry, file count, inferred maximum executor
+attempts, and required nesting depth. For the two-file inbox project these
+are four attempts and one child level. These are structural bounds, not a
+price or runtime estimate.
+
+Compiler errors identify the original file, expression, and import chain:
+
+```sh
+# Intentionally misspelled binding in an imported helper; exits with an error.
+bun cli.ts check examples/source/errors/unknown-binding/main.algal \
+  --diagnostic-format text
+```
+
+JSON is the default error format; `--diagnostic-format json` makes that choice
+explicit for tools. [Inspect the generated authoring error](https://algal.dev/#authoring-error).
+
 ### Run only the selected branch
 
 Put generation directly inside an exhaustive choice. In the
@@ -218,6 +234,35 @@ bun cli.ts call inbox.bundle.json \
 The bundle contains the complete manifest closure and runs without the source
 files. The [language guide](docs/source-language.md) covers the SDK, project
 roots, and native bundle calls.
+
+### Follow a result into the code that produced it
+
+Focus a diagram on one recorded child invocation. For the second inbox email:
+
+```sh
+bun cli.ts diagram examples/source/projects/inbox/inbox.algal \
+  --receipt inbox.receipt.json --focus b2-replies-each/i1 \
+  --format svg --out second-email.svg
+```
+
+The child keeps its original source labels and local cell IDs. Its status
+overlay remains bound to the root receipt and the exact invocation path;
+it is not a newly manufactured child receipt. Without `--receipt`, the same
+command shows the static child definition.
+
+When a run fails, map its recorded failure back to the source:
+
+```sh
+bun cli.ts diagnose ratios.receipt.json \
+  --source examples/source/projects/ratios/ratios.algal --format text
+```
+
+The [pure ratios example](examples/source/projects/ratios) deliberately fails
+on its second item. The report locates the division in `ratio.algal:4` and
+shows the caller in `ratios.algal`. Original source is recompiled and checked
+against the receipt before any location is displayed. Diagnosis inspects
+recorded evidence; `verify` separately replays it.
+[Explore child calls and a failed execution on the site](https://algal.dev/#inspect-children).
 
 ## More than a chain of prompts
 
