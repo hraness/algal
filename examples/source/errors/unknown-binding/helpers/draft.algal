@@ -1,0 +1,6 @@
+program draft(email: text) -> text {
+  budget { max_agent_calls: 1 }
+
+  return generate "Draft a helpful reply."
+    using emial
+}

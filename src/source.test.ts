@@ -510,3 +510,95 @@ test("project source origins retain per-call file identity outside executable di
   expect(reformatted.sourceMap.sourceDigest).not.toBe(compilation.sourceMap.sourceDigest);
   expect(reformatted.project.units["main.algal"]?.cells[0]?.span.start.line).not.toBe(compilation.project.units["main.algal"]?.cells[0]?.span.start.line);
 });
+
+function compilationError(source: string, options?: Parameters<typeof compileSource>[1]): SourceError {
+  try { compileSource(source, options); }
+  catch (error) {
+    expect(error).toBeInstanceOf(SourceError);
+    return error as SourceError;
+  }
+  throw new Error("invalid source was accepted");
+}
+
+test("source errors preserve exact primary locations and bounded private source text", () => {
+  const source = 'program root() -> json {\n  budget { max_agent_calls: 0 }\n  return unknown\n}';
+  const error = compilationError(source);
+  expect(error.code).toBe("PARSE_FAILED");
+  expect(error.message).toBe("main.algal:3:10: unknown name unknown");
+  expect(error.diagnostic).toEqual({ message: "unknown name unknown", source: "main.algal", imports: [],
+    span: { start: { offset: source.indexOf("unknown"), line: 3, column: 10 }, end: { offset: source.indexOf("unknown") + 7, line: 3, column: 17 } },
+  });
+  expect(error.sourceText).toBe(source);
+  expect(Object.keys(error)).not.toContain("sourceText");
+  expect(JSON.stringify(error)).not.toContain("max_agent_calls");
+  const frame = { source: "main.algal", path: "./child.algal", span: error.diagnostic.span };
+  const bounded = new SourceError("example", error.diagnostic.span, { sourceText: "é".repeat(SOURCE_BOUNDS.maxSourceBytes), imports: Array(12).fill(frame) });
+  expect(bounded.sourceText).toBeUndefined(); expect(bounded.diagnostic.imports).toHaveLength(8);
+  expect(bounded.diagnostic.importsTruncated).toBe(true);
+  frame.span.start.line = 99;
+  expect(bounded.diagnostic.span.start.line).toBe(3); expect(bounded.diagnostic.imports[0]!.span.start.line).toBe(3);
+  const maximum = new SourceError("example", bounded.diagnostic.span, { sourceText: "é".repeat(SOURCE_BOUNDS.maxSourceBytes / 2) });
+  expect(Buffer.byteLength(maximum.sourceText!)).toBe(SOURCE_BOUNDS.maxSourceBytes);
+});
+
+test("nested compiler syntax, type, and budget errors identify the child and ordered import declarations", () => {
+  const source = '// root\nimport middle from "./middle.algal"\nprogram root() -> json { budget { max_agent_calls: 0 } return 1 }';
+  const middle = '// middle\n\nimport leaf from "./leaf.algal"\nprogram middle() -> json { budget { max_agent_calls: 0 } return 1 }';
+  for (const [result, outputType, expected, endColumn] of [
+    [")", "json", "unsupported expression", 11],
+    ["42", "text", "program declares text", 12],
+    ['generate "draft" using "context"', "text", "1 explicit effects", 2],
+  ] as const) {
+    const leaf = `program leaf() -> ${outputType} {\n  budget { max_agent_calls: 0 }\n  return ${result}\n}`;
+    const error = compilationError(source, { entry: "entry.algal", modules: { "middle.algal": middle, "leaf.algal": leaf } });
+    expect(error.diagnostic.source).toBe("leaf.algal"); expect(error.sourceText).toBe(leaf);
+    expect(error.diagnostic.message).toContain(expected);
+    expect(error.diagnostic.message).not.toContain("middle.algal");
+    expect(error.message).toStartWith("leaf.algal:");
+    expect(error.diagnostic.span.start.line).toBe(expected === "1 explicit effects" ? 1 : 3);
+    expect(error.diagnostic.span.start.column).toBe(expected === "1 explicit effects" ? 1 : 10);
+    expect(error.diagnostic.span.end.column).toBe(endColumn);
+    expect(error.diagnostic.imports.map(frame => [frame.source, frame.path, frame.span.start.line, frame.span.start.column])).toEqual([
+      ["entry.algal", "./middle.algal", 2, 1], ["middle.algal", "./leaf.algal", 3, 1],
+    ]);
+    for (const [index, text] of [source, middle].entries()) {
+      const frame = error.diagnostic.imports[index]!;
+      expect(text.slice(frame.span.start.offset, frame.span.end.offset)).toBe(index === 0 ? 'import middle from "./middle.algal"' : 'import leaf from "./leaf.algal"');
+    }
+  }
+});
+
+test("missing imports, invalid paths, and cycles identify the importing declaration", () => {
+  const source = 'import middle from "./middle.algal"\nprogram root() -> json { budget { max_agent_calls: 0 } return 1 }';
+  for (const [path, message] of [["./missing.algal", "not supplied"], ["../outside.algal", "escapes"], ["./entry.algal", "cycle"]] as const) {
+    const declaration = `import child from ${JSON.stringify(path)}`;
+    const middle = `// middle\n\n${declaration}\nprogram middle() -> json { budget { max_agent_calls: 0 } return 1 }`;
+    const error = compilationError(source, { entry: "entry.algal", modules: { "middle.algal": middle } });
+    expect(error.diagnostic.source).toBe("middle.algal"); expect(error.sourceText).toBe(middle);
+    expect(error.diagnostic.message).toContain(message);
+    expect(error.diagnostic.span.start).toEqual({ offset: middle.indexOf("import"), line: 3, column: 1 });
+    expect(error.diagnostic.span.end).toEqual({ offset: middle.indexOf("import") + declaration.length, line: 3, column: declaration.length + 1 });
+    expect(error.diagnostic.imports.map(frame => [frame.source, frame.path])).toEqual([["entry.algal", "./middle.algal"]]);
+  }
+  const rootMissing = compilationError(source, { entry: "entry.algal" });
+  expect(rootMissing.diagnostic.source).toBe("entry.algal"); expect(rootMissing.diagnostic.imports).toEqual([]);
+  expect(rootMissing.sourceText).toBe(source);
+});
+
+test("import depth errors preserve the rejecting declaration and a bounded ancestry even through cached modules", () => {
+  const modules: Record<string, string> = {};
+  for (let index = 0; index <= 9; index++) modules[`d${index}.algal`] = `${index < 9 ? `// depth\nimport child from "./d${index + 1}.algal"\n` : ""}program leaf() -> json { budget { max_agent_calls: 0 } return 1 }`;
+  const error = compilationError(modules["d0.algal"]!, { entry: "d0.algal", modules });
+  expect(error.diagnostic.source).toBe("d8.algal"); expect(error.sourceText).toBe(modules["d8.algal"]);
+  expect(error.diagnostic.span.start.line).toBe(2); expect(error.diagnostic.span.start.column).toBe(1);
+  expect(error.diagnostic.imports.map(frame => frame.source)).toEqual(Array.from({ length: 8 }, (_, index) => `d${index}.algal`));
+  expect(error.diagnostic.importsTruncated).toBeUndefined();
+  delete modules["d0.algal"]; delete modules["d9.algal"];
+  modules["d8.algal"] = 'program leaf() -> json { budget { max_agent_calls: 0 } return 1 }';
+  modules["detour.algal"] = 'import child from "./d1.algal"\nprogram detour() -> json { budget { max_agent_calls: 0 } return 1 }';
+  const root = 'import first from "./d1.algal"\nimport later from "./detour.algal"\nprogram root() -> json { budget { max_agent_calls: 0 } return 1 }';
+  const cached = compilationError(root, { modules });
+  expect(cached.diagnostic.source).toBe("detour.algal"); expect(cached.sourceText).toBe(modules["detour.algal"]);
+  expect(cached.diagnostic.span.start.line).toBe(1);
+  expect(cached.diagnostic.imports.map(frame => [frame.source, frame.path, frame.span.start.line])).toEqual([["main.algal", "./detour.algal", 2]]);
+});

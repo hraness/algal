@@ -5,9 +5,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { manifestToJson, parseOrganismManifest, type OrganismManifest } from "../src/contract";
 import { createProgramDiagram, renderSvg } from "../src/diagram";
-import { compileSource } from "../src/source";
+import { compileSource, SourceError } from "../src/source";
 import { loadSourceProject } from "../src/source-project";
 import { diagnoseSource, renderSourceDiagnostics } from "../src/source-diagnostics";
+import { createSourceErrorReport, renderSourceError } from "../src/source-errors";
 import { packOrganism } from "../src/bundle";
 import { compileOrganism } from "../src/graph";
 import { scriptedExecutor } from "../src/effects";
@@ -202,12 +203,41 @@ if (!ratioVerification.ok) throw new Error("Ratio failure receipt did not replay
 const ratioDiagram = createProgramDiagram(ratios.manifest, { source: ratios.source, sourceOptions: ratios.compilerOptions, receipt: ratioReceipt, focus: "result-each/i1" });
 if (ratioDiagram.nodes.find(node => node.id === "b1-fraction")?.status !== "failed") throw new Error("Ratio focused view lost the failed expression");
 
+// A deliberate authoring mistake is compiled, never executed. Publish the
+// formatter's actual bounded report alongside the original two-file example.
+const authoringDirectory = join(ROOT, "examples/source/errors/unknown-binding");
+const authoringSource = await readFile(join(authoringDirectory, "main.algal"), "utf8");
+const authoringHelper = await readFile(join(authoringDirectory, "helpers/draft.algal"), "utf8");
+const authoringOptions = { entry: "main.algal", modules: { "helpers/draft.algal": authoringHelper } };
+const authoringReport = (() => {
+  try { compileSource(authoringSource, authoringOptions); }
+  catch (error) {
+    if (error instanceof SourceError) return createSourceErrorReport(error);
+    throw error;
+  }
+  throw new Error("The intentionally invalid authoring example unexpectedly compiled");
+})();
+if (authoringReport.source !== "helpers/draft.algal" || authoringReport.span?.start.line !== 5
+  || !authoringReport.message.includes("emial") || authoringReport.imports.length !== 1
+  || authoringReport.imports[0]?.source !== "main.algal" || authoringReport.imports[0]?.path !== "./helpers/draft.algal"
+  || authoringReport.imports[0]?.span?.start.line !== 1 || !authoringReport.excerpt?.lines.some(line => line.text.includes("emial") && line.highlight)) {
+  throw new Error("Authoring error no longer locates the misspelled binding and its import site");
+}
+const repairedAuthoring = compileSource(authoringSource, { ...authoringOptions,
+  modules: { "helpers/draft.algal": authoringHelper.replace("using emial", "using email") },
+});
+if (repairedAuthoring.analysis.maxAgentCalls !== 1 || repairedAuthoring.analysis.requiredDepth !== 1) {
+  throw new Error("The advertised one-word repair no longer restores the expected program bounds");
+}
+
 const replacements: Record<string, string> = {
   REPLY_SOURCE: highlightSource(replySource.trimEnd()),
   INBOX_SOURCE: highlightSource(inbox.source.trimEnd()),
   DRAFT_SOURCE: highlightSource(draftSource.trimEnd()),
   INBOX_MAX_ITEMS: String(inboxEach.maxItems),
   INBOX_STATIC_CALLS: String(inbox.analysis.maxAgentCalls),
+  INBOX_REQUIRED_DEPTH: String(inbox.analysis.requiredDepth),
+  INBOX_SOURCE_FILES: String(inbox.files.length),
   INBOX_RESULT_COUNT: String(inboxReplies.length),
   INBOX_RECORDED_CALLS: String(fullInbox.receipt.work.agentCalls),
   INBOX_EMPTY_CALLS: String(emptyInbox.receipt.work.agentCalls),
@@ -215,6 +245,7 @@ const replacements: Record<string, string> = {
   INBOX_CHILD_TABS: childTabs,
   INBOX_CHILD_PANELS: childPanels,
   SOURCE_DIAGNOSTIC: escapeHtml(renderSourceDiagnostics(ratioReport)),
+  AUTHORING_ERROR: escapeHtml(renderSourceError(authoringReport)),
   ROUTE_SOURCE: highlightSource(routeSource.trimEnd()),
   ROUTE_PANELS: routePanels,
   REPLY_MAX_AGENT_CALLS: String(reply.manifest.budgets.maxAgentCalls),
@@ -292,4 +323,10 @@ await writeFile(join(DIST, "receipts/ratios.diagnostics.json"), `${JSON.stringif
 await writeFile(join(DIST, "diagrams/ratio-failure.svg"), renderSvg(ratioDiagram, { compact: true }));
 await writeFile(join(DIST, "diagrams/ratio-failure.json"), `${JSON.stringify(ratioDiagram, null, 2)}\n`);
 
-console.log(`site built → ${DIST} (${manifests.size + 1} structural diagrams, ${childViews.length + 1} focused views, ${routeRuns.length + inboxRuns.length + 1} replay-checked executions)`);
+const authoringDownloadDirectory = join(DIST, "examples/errors/unknown-binding");
+await mkdir(join(authoringDownloadDirectory, "helpers"), { recursive: true });
+await writeFile(join(authoringDownloadDirectory, "main.algal"), authoringSource);
+await writeFile(join(authoringDownloadDirectory, "helpers/draft.algal"), authoringHelper);
+await writeFile(join(authoringDownloadDirectory, "diagnostic.json"), `${JSON.stringify(authoringReport, null, 2)}\n`);
+
+console.log(`site built → ${DIST} (${manifests.size + 1} structural diagrams, ${childViews.length + 1} focused views, ${routeRuns.length + inboxRuns.length + 1} replay-checked executions, 1 checked authoring error)`);
