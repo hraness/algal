@@ -198,7 +198,23 @@ impl OwnerLease {
         connection
             .busy_timeout(std::time::Duration::ZERO)
             .map_err(sql)?;
-        connection.execute_batch("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS algal_owner(contract TEXT PRIMARY KEY); INSERT OR IGNORE INTO algal_owner(contract) VALUES('algal.process-owner.v2'); BEGIN IMMEDIATE;").map_err(sql)?;
+        for (phase, statement) in [
+            ("journal mode", "PRAGMA journal_mode=DELETE;"),
+            ("synchronous mode", "PRAGMA synchronous=FULL;"),
+            (
+                "schema",
+                "CREATE TABLE IF NOT EXISTS algal_owner(contract TEXT PRIMARY KEY);",
+            ),
+            (
+                "contract",
+                "INSERT OR IGNORE INTO algal_owner(contract) VALUES('algal.process-owner.v2');",
+            ),
+            ("custody", "BEGIN IMMEDIATE;"),
+        ] {
+            connection.execute_batch(statement).map_err(|error| {
+                Error::new("IO_FAILED", format!("host lease database {phase}: {error}"))
+            })?;
+        }
         let rows: Vec<String> = connection
             .prepare("SELECT contract FROM algal_owner")
             .map_err(sql)?

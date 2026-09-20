@@ -1,6 +1,9 @@
 use algal::{
     canonical::{canonical, digest},
-    mailbox::{MAILBOX_DELIVERY_CONTRACT, MAILBOX_MESSAGE_CONTRACT, MAX_MAILBOXES, MailboxService},
+    mailbox::{
+        MAILBOX_DELIVERY_CONTRACT, MAILBOX_MESSAGE_CONTRACT, MAX_MAILBOXES, MailboxConfig,
+        MailboxService,
+    },
 };
 use serde_json::{Value, json};
 use std::{
@@ -15,15 +18,13 @@ fn write(path: &Path, value: &Value) {
     fs::write(path, canonical(value).unwrap()).unwrap();
 }
 
-#[test]
-fn concurrent_conflicting_creators_never_widen_the_requested_bounds() {
-    let temp = tempfile::tempdir().unwrap();
+fn conflicting_creators(root: &Path) -> Vec<((usize, usize), algal::Result<MailboxConfig>)> {
     let barrier = Arc::new(Barrier::new(3));
     let threads: Vec<_> = [(1, 32), (64, 1024)]
         .into_iter()
         .map(|bounds| {
             let barrier = barrier.clone();
-            let root = temp.path().to_owned();
+            let root = root.to_owned();
             thread::spawn(move || {
                 barrier.wait();
                 (
@@ -34,13 +35,24 @@ fn concurrent_conflicting_creators_never_widen_the_requested_bounds() {
         })
         .collect();
     barrier.wait();
-    let results: Vec<_> = threads
+    threads
         .into_iter()
         .map(|child| child.join().unwrap())
-        .collect();
+        .collect()
+}
+
+#[test]
+fn concurrent_conflicting_creators_never_widen_the_requested_bounds() {
+    let temp = tempfile::tempdir().unwrap();
+    let service = MailboxService::open(temp.path());
+    // Test conflicting mailbox bounds independently of SQLite's cold schema
+    // bootstrap, where zero-wait contenders may both fail before admission.
+    let seed = service.create("seed", 2, 8).unwrap();
+    let results = conflicting_creators(temp.path());
     assert_eq!(
         results.iter().filter(|(_, result)| result.is_ok()).count(),
-        1
+        1,
+        "creator outcomes: {results:?}"
     );
     for ((messages, bytes), result) in results {
         match result {
@@ -51,8 +63,8 @@ fn concurrent_conflicting_creators_never_widen_the_requested_bounds() {
             Err(error) => assert!(["IO_FAILED", "PARSE_FAILED"].contains(&error.code.as_str())),
         }
     }
-    let service = MailboxService::open(temp.path());
     let config = service.inspect("same").unwrap().unwrap();
+    assert_eq!(service.inspect("seed").unwrap(), Some(seed));
     assert_eq!(
         service
             .create("same", config.max_messages, config.max_message_bytes)
@@ -63,8 +75,95 @@ fn concurrent_conflicting_creators_never_widen_the_requested_bounds() {
         fs::read_dir(temp.path().join("capabilities"))
             .unwrap()
             .count(),
-        2
+        4
     );
+}
+
+#[test]
+fn cold_start_contention_preserves_state_and_uncontended_admission_recovers() {
+    for round in 0..32 {
+        let temp = tempfile::tempdir().unwrap();
+        let service = MailboxService::open(temp.path());
+        let results = conflicting_creators(temp.path());
+        let winners: Vec<_> = results
+            .iter()
+            .filter_map(|(bounds, result)| result.as_ref().ok().map(|config| (bounds, config)))
+            .collect();
+        assert!(winners.len() <= 1, "round {round}: {results:?}");
+        assert!(!temp.path().join(".mailbox-admission/.lock").exists());
+        for (_, result) in &results {
+            if let Err(error) = result {
+                assert!(
+                    ["IO_FAILED", "PARSE_FAILED"].contains(&error.code.as_str()),
+                    "round {round}: {results:?}"
+                );
+            }
+        }
+        let expected = if let Some((bounds, config)) = winners.first() {
+            assert_eq!((config.max_messages, config.max_message_bytes), **bounds);
+            assert_eq!(service.list().unwrap(), [(*config).clone()]);
+            assert_eq!(
+                fs::read_dir(temp.path().join("capabilities"))
+                    .unwrap()
+                    .count(),
+                2
+            );
+            (*config).clone()
+        } else {
+            assert!(service.list().unwrap().is_empty());
+            assert!(!temp.path().join("mailboxes/same").exists());
+            assert!(!temp.path().join("capabilities").exists());
+            // This is a new explicit invocation after both rejected attempts
+            // have joined. The runtime never silently retries admission.
+            service.create("same", 3, 64).unwrap()
+        };
+        assert_eq!(
+            service
+                .create("same", expected.max_messages, expected.max_message_bytes)
+                .unwrap(),
+            expected
+        );
+        assert_eq!(service.inspect("same").unwrap(), Some(expected));
+        assert_eq!(
+            fs::read_dir(temp.path().join("capabilities"))
+                .unwrap()
+                .count(),
+            2
+        );
+        assert!(!temp.path().join(".mailbox-admission/.lock").exists());
+    }
+}
+
+#[test]
+fn cold_schema_reader_rejection_publishes_no_mailbox_or_authority() {
+    let temp = tempfile::tempdir().unwrap();
+    let admission = temp.path().join(".mailbox-admission");
+    fs::create_dir(&admission).unwrap();
+    let database = admission.join(".owner.sqlite");
+    let reader = rusqlite::Connection::open(&database).unwrap();
+    // Hold the transient SHARED read lock that a competing SQLite initializer
+    // can have while the creator tries to commit its first schema write.
+    reader
+        .execute_batch("BEGIN; SELECT name FROM sqlite_schema;")
+        .unwrap();
+    let service = MailboxService::open(temp.path());
+    let error = service.create("cold", 2, 32).unwrap_err();
+    assert_eq!(error.code, "IO_FAILED");
+    assert!(
+        error
+            .message
+            .contains("database schema: database is locked"),
+        "{error:?}"
+    );
+    assert!(!temp.path().join("mailboxes").exists());
+    assert!(!temp.path().join("capabilities").exists());
+    assert!(!admission.join(".lock").exists());
+    assert!(!admission.join("owners").exists());
+    reader.execute_batch("ROLLBACK;").unwrap();
+    drop(reader);
+    let admitted = service.create("cold", 2, 32).unwrap();
+    assert_eq!(service.inspect("cold").unwrap(), Some(admitted));
+    assert!(!admission.join(".lock").exists());
 }
 
 #[test]
