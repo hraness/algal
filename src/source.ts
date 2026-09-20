@@ -13,7 +13,7 @@ export const SOURCE_BOUNDS = Object.freeze({
 });
 /** Changing these defaults or the model-visible envelope changes compilation. */
 export const SOURCE_PROFILE = Object.freeze({
-  id: "algal.source.profile.v1", compilerVersion: "1.0.0",
+  id: "algal.source.profile.v1", compilerVersion: "1.1.0",
   budgets: Object.freeze({ maxSteps: 256, maxAgentCalls: 0, maxWork: 1_000_000,
     maxContextBytes: 65_536, maxOutputBytes: 65_536, maxDepth: 4 }),
   exprFuel: BOUNDS.maxExprFuel,
@@ -22,13 +22,15 @@ export const GENERATE_PROMPT = "Algal source generation envelope v1. Follow the 
 
 export type SourcePosition = { offset: number; line: number; column: number };
 export type SourceSpan = { start: SourcePosition; end: SourcePosition };
+/** Bounded presentation metadata; never part of executable manifest identity. */
+export type SourceAnnotation = { title: string; operation: string; summary: string; details: string[] };
 export type SourceMap = {
   contract: "algal.source-map.v1";
   sourceDigest: Digest;
   manifestDigest: Digest;
   compilerVersion: string;
   profile: string;
-  cells: { cellId: string; role: string; span: SourceSpan }[];
+  cells: { cellId: string; role: string; span: SourceSpan; annotation?: SourceAnnotation }[];
 };
 export class SourceError extends AlgalError {
   readonly diagnostic: { message: string; span: SourceSpan };
@@ -236,14 +238,77 @@ function field(program: JsonValue, key: JsonValue): JsonValue {
   return Array.isArray(program) && program[0] === "get" ? [...program, key] : ["let", "_source_value", program, ["get", "_source_value", key]];
 }
 
+function clipped(value: string, max = 160): string { return value.length <= max ? value : `${value.slice(0, max - 1)}…`; }
+/** Render the parsed expression, retaining source names without parsing cell IDs. */
+function describe(expr: Expr): string {
+  const show = (value: Expr): string => describe(value);
+  let text: string;
+  switch (expr.kind) {
+    case "literal": text = JSON.stringify(expr.value); break;
+    case "name": text = expr.name; break;
+    case "field": text = `${show(expr.value)}.${expr.field}`; break;
+    case "probability": text = `${show(expr.value)}.probability(${show(expr.label)})`; break;
+    case "unary": text = `${expr.op === "not" ? "!" : "-"}${show(expr.value)}`; break;
+    case "binary": { const operator = Object.entries(operators).find(([, value]) => value.op === expr.op)?.[0] ?? expr.op; text = `(${show(expr.left)} ${operator} ${show(expr.right)})`; break; }
+    case "record": text = `{ ${expr.entries.map(([key, value]) => `${JSON.stringify(key)}: ${show(value)}`).join(", ")} }`; break;
+    case "list": text = `[${expr.items.map(show).join(", ")}]`; break;
+    case "if": text = `if ${show(expr.condition)} { ${show(expr.yes)} } else { ${show(expr.no)} }`; break;
+    case "match": text = `match ${show(expr.value)}`; break;
+    case "decide": text = `decide ${JSON.stringify(expr.question)} using ${show(expr.context)}`; break;
+    case "generate": text = `generate ${show(expr.instruction)} using ${show(expr.context)}`; break;
+  }
+  return clipped(text);
+}
+function annotation(title: string, operation: string, summary: string, details: string[] = []): SourceAnnotation {
+  return { title: clipped(title, 96), operation: clipped(operation, 40), summary: clipped(summary), details: details.slice(0, 16).map(detail => clipped(detail)) };
+}
+function expressionAnnotation(title: string, expr: Expr, role: string): SourceAnnotation {
+  let details: string[] = [];
+  if (expr.kind === "decide") details = expr.criteria.map(([label, description]) => `${label}: ${description}`);
+  if (expr.kind === "generate") details = [`instruction: ${describe(expr.instruction)}`, `context: ${describe(expr.context)}`];
+  if (expr.kind === "match") details = expr.arms.map(([label, arm]) => `${label} => ${describe(arm)}`);
+  if (expr.kind === "if") details = [`condition: ${describe(expr.condition)}`, `true => ${describe(expr.yes)}`, `false => ${describe(expr.no)}`];
+  if (role === "decision-check") return annotation(title, role, "Validate the declared choice, confidence, and every probability before use.", expr.kind === "decide" ? expr.criteria.map(([label]) => `admitted label: ${label}`) : []);
+  return annotation(title, role === "expression" ? expr.kind : role, describe(expr), details);
+}
+function hasEffect(expr: Expr): boolean {
+  switch (expr.kind) {
+    case "decide": case "generate": return true;
+    case "literal": case "name": return false;
+    case "field": case "unary": return hasEffect(expr.value);
+    case "probability": return hasEffect(expr.value) || hasEffect(expr.label);
+    case "binary": return hasEffect(expr.left) || hasEffect(expr.right);
+    case "record": return expr.entries.some(([, value]) => hasEffect(value));
+    case "list": return expr.items.some(hasEffect);
+    case "if": return hasEffect(expr.condition) || hasEffect(expr.yes) || hasEffect(expr.no);
+    case "match": return hasEffect(expr.value) || expr.arms.some(([, arm]) => hasEffect(arm));
+  }
+}
+
 class Compiler {
   private readonly env = new Map<string, Reference>();
   private readonly cells: Cell[] = [];
   private readonly edges: Edge[] = [];
   private readonly mappings: SourceMap["cells"] = [];
   private calls = 0;
+  private branches = 0;
+  private readonly controls: { selector: Reference; label: string }[] = [];
   constructor(private readonly parser: Parser) {}
-  private add(cell: Cell, span: Span, role: string): void { if (this.cells.length >= BOUNDS.maxCells) this.parser.fail("lowered cell limit exceeded", span); this.cells.push(cell); this.mappings.push({ cellId: cell.id, role, span: this.parser.span(span) }); }
+  private add(cell: Cell, span: Span, role: string, sourceAnnotation: SourceAnnotation): void {
+    if (this.cells.length >= BOUNDS.maxCells) this.parser.fail("lowered cell limit exceeded", span);
+    // Each newly created arm cell is gated, even a constant or an effect's pure
+    // operands. Required controls are deliberately absent from model views.
+    const control = this.controls.at(-1);
+    if (control) {
+      // The nearest selector is itself gated by its parent. Carrying every
+      // ancestor again would needlessly consume the core's bounded edge count.
+      const name = "source-control-1";
+      if (cell.kind !== "expr" && cell.kind !== "agent" && cell.kind !== "decide") this.parser.fail("unsupported guarded source cell", span);
+      cell.inputs[name] = port(control.selector.type);
+      this.edges.push({ from: { cell: control.selector.cell, port: control.selector.port }, to: { cell: cell.id, port: name }, guard: { equals: control.label } });
+    }
+    this.cells.push(cell); this.mappings.push({ cellId: cell.id, role, span: this.parser.span(span), annotation: sourceAnnotation });
+  }
   private wire(id: string, refs: Map<string, Reference>): PortMap {
     const inputs: PortMap = {};
     for (const [name, ref] of refs) { inputs[name] = port(ref.type); this.edges.push({ from: { cell: ref.cell, port: ref.port }, to: { cell: id, port: name } }); }
@@ -319,27 +384,69 @@ class Compiler {
           const body = branch(arms);
           return { program: ["let", "_source_match", value.program, body], type };
         }
-        case "decide": case "generate": return this.parser.fail("effects are only allowed as a whole let binding or return; branches and context expressions must be pure", expr);
+        case "decide": case "generate": return this.parser.fail("effects require a whole binding, return, or branch arm; conditions, operands, and context expressions must be pure", expr);
       }
     };
     return { ...visit(expr), refs };
   }
-  private expression(id: string, expr: Expr, role = "expression"): Reference {
-    const pure = this.pure(expr); this.add({ id, kind: "expr", inputs: this.wire(id, pure.refs), expr: { contract: "algal.expr.v1", program: pure.program }, output: output(pure.type) }, expr, role);
+  private expression(id: string, expr: Expr, role = "expression", title = "expression"): Reference {
+    const pure = this.pure(expr); this.add({ id, kind: "expr", inputs: this.wire(id, pure.refs), expr: { contract: "algal.expr.v1", program: pure.program }, output: output(pure.type) }, expr, role, expressionAnnotation(title, expr, role));
     return { cell: id, port: "out", type: pure.type };
   }
-  private operand(id: string, expr: Expr): Reference { if (expr.kind === "name") { const ref = this.env.get(expr.name); if (!ref) this.parser.fail(`unknown name ${expr.name}`, expr); return ref; } return this.expression(id, expr, "effect-input"); }
-  private lower(id: string, expr: Expr): Reference {
+  private operand(id: string, expr: Expr, title: string): Reference { if (expr.kind === "name") { const ref = this.env.get(expr.name); if (!ref) this.parser.fail(`unknown name ${expr.name}`, expr); return ref; } return this.expression(id, expr, "effect-input", title); }
+  private branch(id: string, expr: Extract<Expr, { kind: "if" | "match" }>, title: string): Reference {
+    const prefix = `branch-${++this.branches}`;
+    const value = this.pure(expr.kind === "if" ? expr.condition : expr.value);
+    let labels: string[];
+    let arms: [string, Expr][];
+    let program: JsonValue;
+    if (expr.kind === "if") {
+      this.require(value.type, "boolean", expr.condition);
+      labels = ["yes", "no"]; arms = [["yes", expr.yes], ["no", expr.no]];
+      program = ["if", value.program, "yes", "no"];
+    } else {
+      if (value.type.kind !== "choice") this.parser.fail("match requires a closed choice, such as decision.value", expr.value);
+      labels = value.type.labels; arms = expr.arms;
+      if (arms.length !== labels.length || labels.some(label => !arms.some(([arm]) => arm === label))) this.parser.fail(`match must cover exactly: ${labels.join(", ")}`, expr);
+      program = value.program;
+    }
+    const selector: Reference = { cell: `${prefix}-select`, port: "out", type: { kind: "choice", labels } };
+    this.add({ id: selector.cell, kind: "expr", inputs: this.wire(selector.cell, value.refs), expr: { contract: "algal.expr.v1", program }, output: output(selector.type) }, expr, "branch-selector", expressionAnnotation(`${title} · select`, expr, "branch-selector"));
+    const results: Reference[] = [];
+    const baseline = this.calls; let maximum = 0;
+    for (const [index, [label, arm]] of arms.entries()) {
+      this.calls = baseline;
+      this.controls.push({ selector, label });
+      const result = this.lower(`${prefix}-arm-${index + 1}`, arm, `${title} · ${label}`);
+      this.controls.pop();
+      results.push(result); maximum = Math.max(maximum, this.calls - baseline);
+    }
+    this.calls = baseline + maximum;
+    let type = results[0]!.type;
+    for (const result of results.slice(1)) {
+      // Preserve a decision refinement only when every arm validates the same
+      // closed labels. Pure-expression lowering retains its original types.
+      if (type.kind === "decision" && result.type.kind === "decision" && type.labels.length === result.type.labels.length && type.labels.every(label => result.type.kind === "decision" && result.type.labels.includes(label))) continue;
+      type = this.compatible(type, result.type, expr);
+    }
+    for (const result of results) this.edges.push({ from: { cell: result.cell, port: result.port }, to: { cell: id, port: "selected" } });
+    const selected: JsonValue = ["get", "selected"];
+    const merge: JsonValue = ["nth", ["if", ["eq", ["len", selected], 1], selected, ["list"]], 0];
+    this.add({ id, kind: "expr", inputs: { selected: { ...port(type), many: true } }, expr: { contract: "algal.expr.v1", program: merge }, output: output(type) }, expr, "branch-merge", expressionAnnotation(title, expr, "branch-merge"));
+    return { cell: id, port: "out", type };
+  }
+  private lower(id: string, expr: Expr, title: string): Reference {
+    if ((expr.kind === "if" || expr.kind === "match") && hasEffect(expr)) return this.branch(id, expr, title);
     if (expr.kind === "generate") {
-      const instruction = this.operand(`${id}-instruction`, expr.instruction);
+      const instruction = this.operand(`${id}-instruction`, expr.instruction, `${title} · instruction`);
       if (!isText(instruction.type)) this.parser.fail("generation instruction must be text", expr.instruction);
-      const context = this.operand(`${id}-context`, expr.context); this.calls++;
-      this.add({ id, kind: "agent", inputs: this.wire(id, new Map([["instruction", instruction], ["context", context]])), prompt: GENERATE_PROMPT, view: { inputs: ["instruction", "context"] }, output: { kind: "text" } }, expr, "generate");
+      const context = this.operand(`${id}-context`, expr.context, `${title} · context`); this.calls++;
+      this.add({ id, kind: "agent", inputs: this.wire(id, new Map([["instruction", instruction], ["context", context]])), prompt: GENERATE_PROMPT, view: { inputs: ["instruction", "context"] }, output: { kind: "text" } }, expr, "generate", expressionAnnotation(title, expr, "generate"));
       return { cell: id, port: "out", type: { kind: "text" } };
     }
     if (expr.kind === "decide") {
-      const context = this.operand(`${id}-context`, expr.context); const raw = `${id}-decide`; const labels = expr.criteria.map(([label]) => label); this.calls++;
-      this.add({ id: raw, kind: "decide", inputs: this.wire(raw, new Map([["context", context]])), questions: { answer: { type: "choice", instructions: expr.question, criteria: Object.fromEntries(expr.criteria) } }, view: { inputs: ["context"] } }, expr, "decide");
+      const context = this.operand(`${id}-context`, expr.context, `${title} · context`); const raw = `${id}-decide`; const labels = expr.criteria.map(([label]) => label); this.calls++;
+      this.add({ id: raw, kind: "decide", inputs: this.wire(raw, new Map([["context", context]])), questions: { answer: { type: "choice", instructions: expr.question, criteria: Object.fromEntries(expr.criteria) } }, view: { inputs: ["context"] } }, expr, "decide", expressionAnnotation(`${title} · decide`, expr, "decide"));
       // Core decide results are JSON. Check every source refinement before a
       // downstream branch can rely on it; malformed labels never take an else.
       const get = (...path: string[]): JsonValue => ["get", "_source_decision", ...path];
@@ -361,10 +468,10 @@ class Compiler {
           type: "object", required: ["value", "confidence", "probabilities"],
           properties: { value: { type: "string" }, confidence: { type: "number" }, probabilities: { type: "object" } },
         } },
-      }, expr, "decision-check");
+      }, expr, "decision-check", expressionAnnotation(title, expr, "decision-check"));
       return { cell: id, port: "out", type: { kind: "decision", labels } };
     }
-    return this.expression(id, expr);
+    return this.expression(id, expr, "expression", title);
   }
   compile(program: SourceProgram): { manifest: OrganismManifest; sourceMap: SourceMap } {
     const inputs: PortMap = {}; const interfaceInputs: Record<string, { cell: string; port: string }> = {};
@@ -378,12 +485,12 @@ class Compiler {
       interfaceInputs[name] = { cell: "input", port: name };
       this.env.set(param.name, { cell: "input", port: name, type: { kind: param.type } });
     }
-    if (program.parameters.length) this.add({ id: "input", kind: "input", outputs: inputs }, { start: program.start, end: program.parameters[program.parameters.length - 1]!.span.end }, "input");
+    if (program.parameters.length) this.add({ id: "input", kind: "input", outputs: inputs }, { start: program.start, end: program.parameters[program.parameters.length - 1]!.span.end }, "input", annotation("parameters", "input", `${program.name} inputs`, program.parameters.map(param => `${param.name}: ${param.type}`)));
     for (const [i, binding] of program.bindings.entries()) {
       if (this.env.has(binding.name)) this.parser.fail(`duplicate binding ${binding.name}; values are immutable`, binding.expr);
-      const ref = this.lower(`b${i + 1}-${binding.name.toLowerCase().replaceAll("_", "-")}`, binding.expr); this.env.set(binding.name, ref);
+      const ref = this.lower(`b${i + 1}-${binding.name.toLowerCase().replaceAll("_", "-")}`, binding.expr, binding.name); this.env.set(binding.name, ref);
     }
-    const result = this.lower("result", program.result);
+    const result = this.lower("result", program.result, "return");
     if (program.output === "text" && !isText(result.type)) this.parser.fail(`program declares text but returns ${result.type.kind}`, program.result);
     if (program.output === "json" && isText(result.type)) this.parser.fail("program declares json but returns text", program.result);
     if (this.calls > program.budgets.maxAgentCalls) this.parser.fail(`${this.calls} explicit effects exceed max_agent_calls ${program.budgets.maxAgentCalls}; the budget counts executor attempts, including retries`, program);

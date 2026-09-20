@@ -92,3 +92,41 @@ test("diagrams reject ambiguous IDs, missing endpoints and cycles", () => {
   ]) expect(() => createProgramDiagram(parseOrganismManifest({ ...base, edges }))).toThrow();
   expect(() => createProgramDiagram(parseOrganismManifest({ ...base, cells: [base.cells[0], base.cells[0]] }))).toThrow(/duplicate/);
 });
+
+test("source annotations explain the source without changing exact graph or receipt identity", async () => {
+  const source = await readFile(join(examples, "source/reply.algal"), "utf8");
+  const { manifest, sourceMap } = compileSource(source);
+  const plain = createProgramDiagram(manifest);
+  const annotated = createProgramDiagram(manifest, { source });
+  expect(annotated.manifestDigest).toBe(plain.manifestDigest);
+  expect(annotated.source?.digest).toBe(sourceMap.sourceDigest);
+  expect(annotated.nodes.map(({ source: _source, ...node }) => node)).toEqual(plain.nodes);
+  expect(annotated.edges).toEqual(plain.edges);
+  expect(annotated.nodes.every(node => node.source !== undefined)).toBe(true);
+  const match = annotated.nodes.find(node => node.id === "b2-task")!;
+  expect(match.source?.title).toContain("task");
+  expect(match.source?.operation).toBe("match");
+  const text = JSON.stringify(match.source);
+  for (const word of ["intent", "help", "sales", "other", "support", "clarifying"]) expect(text).toContain(word);
+  const svg = renderSvg(annotated, { compact: true });
+  expect(svg).toContain("What does this email need?");
+  expect(svg).toContain("ID b2-task");
+  expect(svg).not.toContain("undefined");
+  expect(renderMermaid(annotated)).toContain("ID b2-task");
+  expect(createProgramDiagram(manifest, { source: `// formatting only\n${source}` }).source?.digest).not.toBe(annotated.source?.digest);
+  expect(() => createProgramDiagram(manifest, { source: source.replace("budget { max_agent_calls: 2 }", "budget { max_agent_calls: 3 }") })).toThrow(/does not compile/);
+});
+
+test("source-derived content stays escaped and supports receipt overlays", async () => {
+  const payload = '</text><script>bad()</script>\\nclick n0 "https://invalid.test"';
+  const source = `program demo() -> text { budget { max_agent_calls: 0 } return ${JSON.stringify(payload)} }`;
+  const { manifest } = compileSource(source);
+  const receipt = await runOrganism({ manifest, store: new MemoryStore(), fns: builtinRegistry(), executors: [] });
+  const diagram = createProgramDiagram(manifest, { source, receipt });
+  expect(diagram.nodes[0]?.source).toBeDefined();
+  expect(diagram.nodes[0]?.status).toBe("committed");
+  expect(diagram.receipt?.digest).toBe(receipt.digest);
+  expect(renderSvg(diagram)).not.toContain("<script>");
+  expect(renderSvg(diagram)).toContain("&lt;script&gt;");
+  expect(renderMermaid(diagram)).not.toContain("\nclick");
+});

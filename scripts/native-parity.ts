@@ -19,17 +19,27 @@ const files = (await readdir(examples)).filter((f) => /\.algal\.json$/.test(f)).
 const modules = await Promise.all(files.map(async (file) => parseOrganismManifest(JSON.parse(await readFile(join(examples, file), "utf8")))));
 // The readable front end stays outside the kernel: both runtimes receive the
 // exact same compiled artifact. Exercise all committed source examples too.
-const sourceEntries = (await readdir(join(examples, "source"))).filter(f => f.endsWith(".algal")).sort();
-const generated = new Map<string, { manifestPath: string; fixtureBase: string }>();
+const sourceFiles = await readdir(join(examples, "source"));
+const sourceEntries = sourceFiles.filter(f => f.endsWith(".algal")).sort();
+const generated = new Map<string, { manifestPath: string; fixtureBase: string; responsesPath?: string }>();
 for (const file of sourceEntries) {
   const source = await readFile(join(examples, "source", file), "utf8");
   const { manifest } = compileSource(source);
-  const name = `source-${file.slice(0, -6)}`;
+  const base = file.slice(0, -6);
+  const name = `source-${base}`;
   const manifestPath = join(temporary, `${name}.algal.json`);
   await writeFile(manifestPath, canonicalize(manifestToJson(manifest)));
-  files.push(`${name}.algal.json`);
-  modules.push(manifest);
-  generated.set(name, { manifestPath, fixtureBase: join(examples, "source", file.slice(0, -6)) });
+  // Named response fixtures exercise every selected path of a source program.
+  // Keep each run's store and receipt separate even when the manifest is shared.
+  const variants = sourceFiles.filter(f => f.startsWith(`${base}.responses.`) && f.endsWith(".json") && f.length > `${base}.responses..json`.length).sort();
+  for (const variant of variants.length ? variants : [undefined]) {
+    const label = variant?.slice(`${base}.responses.`.length, -5);
+    const caseName = label === undefined ? name : `${name}-${label}`;
+    files.push(`${caseName}.algal.json`);
+    modules.push(manifest);
+    generated.set(caseName, { manifestPath, fixtureBase: join(examples, "source", base),
+      ...(variant === undefined ? {} : { responsesPath: join(examples, "source", variant) }) });
+  }
 }
 let failed = 0;
 
@@ -52,7 +62,7 @@ try {
     const fixtureBase = generated.get(name)?.fixtureBase ?? join(examples, name);
     const runArgs = ["run", manifestPath, "--modules", examples, "--dir", join(temporary, name), "--write"];
     for (const suffix of ["args", "responses"] as const) {
-      const path = `${fixtureBase}.${suffix}.json`;
+      const path = suffix === "responses" ? generated.get(name)?.responsesPath ?? `${fixtureBase}.responses.json` : `${fixtureBase}.args.json`;
       try {
         const value = JSON.parse(await readFile(path, "utf8"));
         if (suffix === "args") args = value;
@@ -71,6 +81,7 @@ try {
     }
     const reference = await runOrganism({ manifest, args, store, transports, fns: builtinRegistry(), executors: [scriptedExecutor(responses)] });
     try {
+      if (generated.has(name) && reference.outcome !== "complete") throw new Error(`source example did not complete: ${reference.outcome}`);
       const result = await native(runArgs);
       const expected = reference as unknown as Record<string, JsonValue>;
       const differences = ["manifestDigest", "manifestKey", "args", "outcome", "cells", "effects", "events", "work", "failure"]

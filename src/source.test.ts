@@ -6,7 +6,7 @@ import { manifestToJson } from "./contract";
 import { compileOrganism } from "./graph";
 import { builtinRegistry } from "./registry";
 import { MemoryStore } from "./store";
-import { scriptedExecutor, type Executor } from "./effects";
+import { scriptedExecutor, type EffectRequest, type Executor } from "./effects";
 import { runOrganism } from "./run";
 import { verifyReceipt } from "./verify";
 import type { JsonValue } from "./values";
@@ -110,7 +110,7 @@ test("JSON runtime types are checked by pure operators and bindings use safe wir
   }
 });
 
-test("source diagnostics reject invalid programs, effects in branches and authority fabrication", async () => {
+test("source diagnostics reject invalid programs, insufficient budgets and authority fabrication", async () => {
   const reply = await fixture("reply.algal");
   const invalid = [
     reply.replace('other => "Draft a clarifying question."', ""),
@@ -127,6 +127,169 @@ test("source diagnostics reject invalid programs, effects in branches and author
     pure('"x"', "text") + ' trailing', pure('"raw\tcontrol"', "text"),
   ];
   for (const source of invalid) expect(() => compileSource(source), source).toThrow(SourceError);
+});
+
+test("effectful match selects one arm, gates every inactive cell, and replays its receipt", async () => {
+  const { manifest, sourceMap } = compileSource(await fixture("route.algal"));
+  const args = JSON.parse(await fixture("route.args.json"));
+  for (const [choice, selected, calls] of [["help", 1, 2], ["sales", 2, 2], ["other", 3, 1]] as const) {
+    const store = new MemoryStore();
+    await compileOrganism(manifest, builtinRegistry(), store);
+    const responses = JSON.parse(await fixture(`route.responses.${choice}.json`));
+    const delegate = scriptedExecutor(responses); const requests: EffectRequest[] = [];
+    const executor: Executor = { ...delegate, execute: async request => { requests.push(request); return delegate.execute(request); } };
+    const receipt = await runOrganism({ manifest, args, store, fns: builtinRegistry(), executors: [executor] });
+    expect(receipt.outcome).toBe("complete");
+    expect(receipt.work.agentCalls).toBe(calls);
+    expect(requests.map(request => request.cellId)).toEqual(choice === "other" ? ["b1-intent-decide"] : ["b1-intent-decide", `branch-1-arm-${selected}`]);
+    for (const request of requests) expect(Object.keys(request.context.inputs as object)).toEqual(request.kind === "decide" ? ["context"] : ["instruction", "context"]);
+    for (const cell of manifest.cells.filter(cell => cell.id.startsWith("branch-1-arm-"))) {
+      expect(receipt.cells[cell.id]?.status).toBe(cell.id.startsWith(`branch-1-arm-${selected}`) ? "committed" : "skipped");
+      expect("inputs" in cell && cell.inputs?.["source-control-1"]?.optional).not.toBe(true);
+      expect(manifest.edges.some(edge => edge.to.cell === cell.id && edge.to.port === "source-control-1" && edge.guard)).toBe(true);
+    }
+    expect(receipt.cells.result?.outputs?.out).toBe(choice === "other" ? "Needs a human review." : responses[`branch-1-arm-${selected}`]);
+    expect(sourceMap.manifestDigest).toBe(receipt.manifestDigest);
+    expect((await verifyReceipt(receipt as unknown as JsonValue, manifestToJson(manifest), store, builtinRegistry())).ok).toBe(true);
+    expect(requests).toHaveLength(calls);
+  }
+});
+
+test("effectful if gates nested selectors, failing operands, bare names, and constants", async () => {
+  const source = `program nested(flags: json, email: text) -> text {
+    budget { max_agent_calls: 1 }
+    let resultText = if flags.outer {
+      if flags.inner {
+        generate "use the number" using (1 / 0)
+      } else { generate "reply" using email }
+    } else { email }
+    return resultText
+  }`;
+  const { manifest } = compileSource(source);
+  for (const [flags, expected, calls] of [[{ outer: false, inner: "invalid" }, "message", 0], [{ outer: true, inner: false }, "response", 1]] as const) {
+    const receipt = await runOrganism({ manifest, args: { input: { flags, email: "message" } }, store: new MemoryStore(), fns: builtinRegistry(), executors: [scriptedExecutor({ "branch-2-arm-2": "response" })] });
+    expect(receipt.outcome).toBe("complete");
+    expect(receipt.work.agentCalls).toBe(calls);
+    expect(receipt.cells.result?.outputs?.out).toBe(expected);
+    expect(receipt.cells["branch-2-arm-1-context"]?.status).toBe("skipped");
+    if (!flags.outer) {
+      expect(receipt.cells["branch-2-select"]?.status).toBe("skipped");
+      expect(receipt.cells["branch-1-arm-1"]?.status).toBe("skipped");
+      expect(receipt.cells["branch-1-arm-2"]?.status).toBe("committed");
+    }
+  }
+  const selectedFailure = await runOrganism({ manifest, args: { input: { flags: { outer: true, inner: true }, email: "message" } }, store: new MemoryStore(), fns: builtinRegistry(), executors: [] });
+  expect(selectedFailure.outcome).toBe("failed");
+  expect(selectedFailure.work.agentCalls).toBe(0);
+});
+
+test("branch-local decisions validate before use and preserve matching closed label sets", async () => {
+  const source = `program choices(flags: json, email: text) -> text {
+    budget { max_agent_calls: 2 }
+    let decision = if flags.first {
+      decide "first" using email as choice { help: "support", other: "review" }
+    } else { decide "second" using email as choice { other: "review", help: "support" } }
+    return match decision.value {
+      help => generate "reply" using email,
+      other => "review"
+    }
+  }`;
+  const { manifest } = compileSource(source);
+  for (const first of [true, false]) {
+    const id = `branch-1-arm-${first ? 1 : 2}-decide`;
+    const answer = { choice: "help", confidence: 0.9, probabilities: { help: 0.9, other: 0.1 } };
+    const responses = { [id]: { answers: { answer } }, "branch-2-arm-1": "reply" };
+    const run = () => runOrganism({ manifest, args: { input: { flags: { first }, email: "message" } }, store: new MemoryStore(), fns: builtinRegistry(), executors: [scriptedExecutor(responses)] });
+    const receipt = await run();
+    expect(receipt.outcome).toBe("complete"); expect(receipt.work.agentCalls).toBe(2);
+    expect(receipt.cells.result?.outputs?.out).toBe("reply");
+    answer.choice = "unlisted";
+    const malformed = await run();
+    expect(malformed.outcome).toBe("failed"); expect(malformed.work.agentCalls).toBe(1);
+    expect(malformed.cells["branch-2-arm-1"]?.status).not.toBe("committed");
+  }
+  expect(() => compileSource(source.replace('other: "review", help: "support"', 'other: "review", different: "support"'))).toThrow(/closed choice/);
+});
+
+test("branch budgets use maximum arm attempts and add sequential effects", async () => {
+  const source = `program attempts(flag: json) -> text {
+    budget { max_agent_calls: 2 }
+    let first = if flag { generate "a" using flag } else { generate "b" using flag }
+    return if flag { generate "c" using first } else { "done" }
+  }`;
+  const { manifest } = compileSource(source);
+  expect(manifest.cells.filter(cell => cell.kind === "agent")).toHaveLength(3);
+  expect(() => compileSource(source.replace("max_agent_calls: 2", "max_agent_calls: 1"))).toThrow(/2 explicit effects/);
+  for (const [flag, calls, output] of [[true, 2, "c"], [false, 1, "done"]] as const) {
+    const receipt = await runOrganism({ manifest, args: { input: { flag } }, store: new MemoryStore(), fns: builtinRegistry(), executors: [scriptedExecutor({ "branch-1-arm-1": "a", "branch-1-arm-2": "b", "branch-2-arm-1": "c" })] });
+    expect(receipt.outcome).toBe("complete"); expect(receipt.work.agentCalls).toBe(calls); expect(receipt.cells.result?.outputs?.out).toBe(output);
+  }
+});
+
+test("deep branches inherit control transitively without quadratic edge growth", async () => {
+  let body = 'generate "draft" using "context"';
+  for (let depth = 0; depth < 12; depth++) body = `if true { ${body} } else { "skip" }`;
+  const { manifest } = compileSource(`program deep() -> text { budget { max_agent_calls: 1 } return ${body} }`);
+  expect(manifest.cells.length).toBe(39);
+  expect(manifest.edges.length).toBeLessThan(100);
+  const receipt = await runOrganism({ manifest, store: new MemoryStore(), fns: builtinRegistry(), executors: [scriptedExecutor({ "branch-12-arm-1": "draft" })] });
+  expect(receipt.outcome).toBe("complete"); expect(receipt.work.agentCalls).toBe(1); expect(receipt.cells.result?.outputs?.out).toBe("draft");
+});
+
+test("effects stay out of composite values, conditions, discriminants and effect operands", () => {
+  const effect = 'generate "reply" using "context"';
+  const program = (result: string, output = "text") => `program invalid() -> ${output} { budget { max_agent_calls: 4 } return ${result} }`;
+  for (const source of [
+    program(`{hidden: ${effect}}`, "json"), program(`[${effect}]`, "json"),
+    program(`"prefix" + (${effect})`), program(`if (${effect}) == "yes" { "a" } else { "b" }`),
+    program(`match (${effect}) { yes => "a", no => "b" }`),
+    program(`generate (${effect}) using "context"`), program(`generate "reply" using (${effect})`),
+    program(`if true { ${effect} } else { 2 }`), program(`if "yes" { ${effect} } else { "no" }`),
+  ]) expect(() => compileSource(source), source).toThrow(SourceError);
+});
+
+test("effectful match admits every maximum-width arm and still enforces core cell bounds", async () => {
+  const labels = Array.from({ length: SOURCE_BOUNDS.maxChoiceLabels }, (_, i) => `label${i}`);
+  const wide = `program wide(context: text) -> text { budget { max_agent_calls: 2 }
+    let decision = decide "Select a label" using context as choice { ${labels.map(l => `${l}: "${l}"`).join(",")} }
+    return match decision.value { ${labels.map(l => `${l} => generate "${l}" using context`).join(",")} }
+  }`;
+  const { manifest } = compileSource(wide);
+  for (const [index, choice] of labels.entries()) {
+    const responses = { "b1-decision-decide": { answers: { answer: { choice, confidence: 1, probabilities: Object.fromEntries(labels.map(l => [l, l === choice ? 1 : 0])) } } }, [`branch-1-arm-${index + 1}`]: choice };
+    const receipt = await runOrganism({ manifest, args: { input: { context: "select" } }, store: new MemoryStore(), fns: builtinRegistry(), executors: [scriptedExecutor(responses)] });
+    expect(receipt.outcome).toBe("complete"); expect(receipt.work.agentCalls).toBe(2); expect(receipt.cells.result?.outputs?.out).toBe(choice);
+  }
+  const oversized = wide.replace(/generate "(label[0-9]+)" using context/g, 'if true { generate "$1" using "x" } else { generate "$1" using "y" }');
+  expect(() => compileSource(oversized)).toThrow(/cell limit/);
+  const long = `program long() -> text { budget { max_agent_calls: 1 } let ${"a".repeat(40)} = if true { generate "x" using "y" } else { "z" } return ${"a".repeat(40)} }`;
+  expect(compileSource(long).manifest.cells.every(cell => cell.id.length <= 64)).toBe(true);
+});
+
+test("annotations retain source meaning and names while existing executable identities stay stable", async () => {
+  for (const [name, digest] of [
+    ["reply", "sha256:fa60e616cc9c4474cc3f31962932cc3ff33ac12155f011919b09e2f1e2d08012"],
+    ["quote", "sha256:040dae4481f1d996b39019cd9ba8595c837b20a151c661bc86d2a305301c4ea9"],
+    ["uncertain", "sha256:da4e470b18a03926ae69a9706037f77448ed7a1179eba4ea22ea85824db362c9"],
+  ] as const) expect(compileSource(await fixture(`${name}.algal`)).sourceMap.manifestDigest).toBe(digest);
+  const { sourceMap } = compileSource(await fixture("route.algal"));
+  const item = (id: string) => sourceMap.cells.find(cell => cell.cellId === id)?.annotation;
+  expect(item("input")?.details).toEqual(["email: text"]);
+  expect(item("b1-intent-decide")?.summary).toContain('"What does this email need?"');
+  expect(item("b1-intent-decide")?.details).toEqual(["help: Help with a problem", "sales: Information before buying", "other: Anything else"]);
+  expect(item("b1-intent")?.summary).toContain("Validate");
+  expect(item("result")?.title).toBe("return"); expect(item("result")?.summary).toBe("match intent.value");
+  expect(item("result")?.details).toEqual(['help => generate "Draft a helpful support reply." using email', 'sales => generate "Draft a concise sales reply." using email', 'other => "Needs a human review."']);
+  expect(item("branch-1-arm-1")?.details).toEqual(['instruction: "Draft a helpful support reply."', "context: email"]);
+  const spelled = compileSource('program names(orderData: json) -> json { budget { max_agent_calls: 0 } let unitPrice = orderData.price return unitPrice }');
+  expect(spelled.sourceMap.cells.find(cell => cell.role === "expression")?.annotation?.title).toBe("unitPrice");
+  const long = compileSource(`program long() -> text { budget { max_agent_calls: 1 } return generate "${"x".repeat(3000)}" using "${"y".repeat(3000)}" }`);
+  for (const cell of [...sourceMap.cells, ...long.sourceMap.cells]) {
+    expect(cell.annotation).toBeDefined();
+    expect(cell.annotation!.title.length).toBeLessThanOrEqual(96); expect(cell.annotation!.operation.length).toBeLessThanOrEqual(40);
+    expect(cell.annotation!.summary.length).toBeLessThanOrEqual(160); expect(cell.annotation!.details.length).toBeLessThanOrEqual(16);
+    for (const detail of cell.annotation!.details) expect(detail.length).toBeLessThanOrEqual(160);
+  }
 });
 
 test("source parsing and lowering stay bounded", () => {

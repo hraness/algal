@@ -138,7 +138,8 @@ usage:
   algal compile <program.algal> [--out <manifest.json>] [--source-map <map.json>]
                                               compile readable source to the existing v1 manifest
   algal diagram <program.algal|manifest.json> [--format mermaid|svg|json]
-      [--receipt <receipt.json>] [--out <file>] [--modules <dir>] [--tools <file>]
+      [--source <program.algal>] [--receipt <receipt.json>] [--out <file>]
+      [--modules <dir>] [--tools <file>]
                                               render dependencies, bounds, and recorded cell states
                                               .algal source is also accepted by manifest commands
   algal examples                          list bundled examples
@@ -684,9 +685,9 @@ async function main(): Promise<number> {
     }
 
     case "diagram": {
-      if (positional.length !== 1) usageError("algal diagram <program.algal|manifest.json> [--format mermaid|svg|json] [--receipt <file>] [--out <file>]");
+      if (positional.length !== 1) usageError("algal diagram <program.algal|manifest.json> [--source <program.algal>] [--format mermaid|svg|json] [--receipt <file>] [--out <file>]");
       for (const key of Object.keys(flags)) {
-        if (!["out", "format", "receipt", "modules", "tools", "transports", "dir"].includes(key)) {
+        if (!["out", "format", "receipt", "source", "modules", "tools", "transports", "dir"].includes(key)) {
           usageError(`unknown diagram option --${key}`);
         }
         artifactFlag(flags, key);
@@ -696,8 +697,12 @@ async function main(): Promise<number> {
       if (!["mermaid", "svg", "json"].includes(format)) usageError("diagram format must be mermaid, svg, or json");
       const output = artifactFlag(flags, "out");
       const receiptPath = artifactFlag(flags, "receipt");
-      await distinctArtifactPaths([file, ...(receiptPath === undefined ? [] : [receiptPath])], [output]);
-      const manifest = await readManifest(resolve(file));
+      const sourcePath = artifactFlag(flags, "source");
+      if (file.endsWith(".algal") && sourcePath !== undefined) usageError("a .algal input already supplies source; --source is for compiled manifests");
+      await distinctArtifactPaths([file, ...(receiptPath === undefined ? [] : [receiptPath]), ...(sourcePath === undefined ? [] : [sourcePath])], [output]);
+      const source = file.endsWith(".algal") ? await readSource(resolve(file))
+        : sourcePath === undefined ? undefined : await readSource(resolve(sourcePath));
+      const manifest = file.endsWith(".algal") ? compileSource(source!).manifest : await readManifest(resolve(file));
       const receipt = receiptPath === undefined ? undefined : parseRunReceipt(await readJson(resolve(receiptPath)));
       if (flags.modules !== undefined) await loadModules(String(flags.modules), store);
       const compiled = flags.modules !== undefined || flags.tools !== undefined || flags.transports !== undefined
@@ -706,6 +711,7 @@ async function main(): Promise<number> {
           await resolveTools(flags, dir))
         : undefined;
       const view = createProgramDiagram(manifest, {
+        ...(source === undefined ? {} : { source }),
         ...(receipt === undefined ? {} : { receipt }),
         ...(compiled === undefined ? {} : { ports: compiled.ports }),
       });

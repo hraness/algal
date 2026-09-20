@@ -10,6 +10,7 @@ bun cli.ts diagram examples/source/reply.algal --format svg --out reply.svg
 bun cli.ts diagram examples/refine.algal.json --format mermaid
 bun cli.ts diagram examples/vm/release-review.algal.json --format json
 bun cli.ts diagram reply.algal.json --receipt reply.receipt.json --format svg
+bun cli.ts diagram reply.algal.json --source examples/source/reply.algal --format svg
 ```
 
 Without host/module options the command inspects the manifest without fetching
@@ -19,17 +20,35 @@ remain explicitly unknown unless supplied. With `--modules`, `--tools`, or
 `--transports`, normal graph admission resolves those signatures. `check` is
 the admission command; a render alone is not evidence that a graph can run.
 
-The SDK exports `createProgramDiagram(manifest, {receipt?, ports?})`,
+The SDK exports `createProgramDiagram(manifest, {receipt?, ports?, source?})`,
 `renderMermaid(view)`, and `renderSvg(view, {compact?, header?})`. Pass
 `compileOrganism(...).ports` to expose exact admitted signatures. Renderer
 inputs are typed views produced by `createProgramDiagram`; this release has
 no arbitrary diagram-import parser. Treat exported JSON as a report.
 
+## Source names on exact cells
+
+For `.algal` input, diagrams automatically show compiler-derived binding names,
+decision questions, expression summaries, and branch arms. Exact cell IDs remain
+visible as secondary identifiers. The diagram still contains every manifest
+cell and edge, including decision checks, branch selectors, and result merges.
+
+SDK callers pass the original `source` text; CLI callers rendering compiled
+JSON use `--source program.algal`. The source is recompiled and its executable
+digest must match the selected manifest. Comments and formatting may differ
+without changing that digest. Imported sidecar labels cannot supply these
+annotations. The JSON report includes source identity and cell spans alongside
+the unchanged execution identities.
+
+A pure match can show its source arms inside one expression box. An effectful
+match has guarded arm cells, and a receipt overlay shows which committed or
+were skipped. These are different executable structures, not a layout choice.
+
 ## Visual grammar
 
 | Mark | Meaning |
 | --- | --- |
-| Box with a kind label and stable cell ID | One exact manifest cell |
+| Box with an operation label and stable cell ID | One exact manifest cell; a source title is included when verified source is supplied |
 | `MODEL` | Generation, classification, or typed decision |
 | `PURE` | Function, expression, or constant |
 | `EFFECT`, `TOOL`, `SLOT` | An explicit executor, tool, or state boundary |
@@ -51,6 +70,8 @@ SVG exports contain no scripts, remote assets, or `foreignObject` content.
 Labels are escaped for their output format, bounded for display, and kept in
 SVG titles and the JSON view. Dense diagrams are best inspected at full size;
 compact views keep every cell and edge rather than silently removing effects.
+Source summaries are bounded display text; the original source and spans remain
+the complete reference. Long source matches retain all arm summaries in JSON.
 
 ## Recorded execution
 
@@ -96,8 +117,11 @@ a fabricated execution record. See [foundry](../spec/v1/foundry.md) and
 
 ## Keeping public examples honest
 
-`bun run docs:diagrams` regenerates the README source block and five committed
+`bun run docs:diagrams` regenerates the README source blocks and six committed
 SVGs from their exact fixtures. `bun run docs:check` detects drift and is part
 of the aggregate check. The marketing-site build independently reads the
 same source and manifests to generate its downloadable artifacts and seven
-diagram assets. No hand-maintained marketing graph defines program behavior.
+base diagram assets. It also runs every scripted route case during the build,
+verifies the receipts, and generates recorded overlays. The branch selector on
+the site switches between those recorded runs; it does not call a live model.
+No hand-maintained marketing graph defines program behavior.
