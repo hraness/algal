@@ -141,7 +141,7 @@ def bounded_terminal_result(stdout: str | None, stderr: str | None, exit_code: i
 # retains at most maxOutputBytes per stream and drains the rest without SIGPIPE.
 # A forked watchdog uses builtin fractional select sleep: no optional Time::HiRes,
 # JSON module, Python installation, task-image mutation, or runtime fallback.
-CAPTURE_BACKEND = "perl-core-v2"
+CAPTURE_BACKEND = "perl-core-v3"
 _SANDBOX_CAPTURE_SOURCE = r'''
 use strict;
 use POSIX ();
@@ -236,9 +236,11 @@ my $ok = eval {
     1;
 };
 alarm 0;
-# Join every direct child before emitting the envelope. Group cleanup covers
-# ordinary descendants that still hold command pipes after a deadline/signal.
-if (defined $pid && $pid > 0 && (!$ok || $stopping)) { kill 'KILL', -$pid; }
+# A finished root and closed pipes do not prove its background descendants
+# settled: redirected children can outlive both. Kill the ordinary process group
+# on every completion, preserving the already recorded root status.
+my $background = defined $pid && $pid > 0 && kill(0, -$pid) ? 1 : 0;
+if (defined $pid && $pid > 0) { kill 'KILL', -$pid; }
 if (defined $pid && $pid > 0 && !defined $status) {
     while (waitpid($pid, 0) == -1 && $!{EINTR}) {}
     $status = $?;
@@ -248,13 +250,23 @@ if (defined $timer && $timer > 0) {
     while (waitpid($timer, 0) == -1 && $!{EINTR}) {}
 }
 for my $handle (values %handles) { close $handle; }
-if (!$ok) { print qq({"version":2,"error":"Sandbox wrapper failed"}\n); exit 70; }
+my $settled = 1;
+if (defined $pid && $pid > 0) {
+    for (1..80) {
+        last unless kill(0, -$pid);
+        select(undef, undef, undef, 0.025);
+    }
+    $settled = kill(0, -$pid) ? 0 : 1;
+}
+if (!$ok) { print qq({"version":3,"error":"Sandbox wrapper failed"}\n); exit 70; }
 my $exit_code = ($status & 127) ? 128 + ($status & 127) : $status >> 8;
 my $out_hex = unpack('H*', $buffers{stdout});
 my $err_hex = unpack('H*', $buffers{stderr});
 my $timeout_json = $timed_out ? 'true' : 'false';
 my $signal_json = $interrupted || 'null';
-print qq({"version":2,"stdoutHex":"$out_hex","stderrHex":"$err_hex","exitCode":$exit_code,"rawBytes":$raw_bytes,"timedOut":$timeout_json,"interrupted":$signal_json}\n);
+my $background_json = $background ? 'true' : 'false';
+my $settled_json = $settled ? 'true' : 'false';
+print qq({"version":3,"stdoutHex":"$out_hex","stderrHex":"$err_hex","exitCode":$exit_code,"rawBytes":$raw_bytes,"timedOut":$timeout_json,"interrupted":$signal_json,"backgroundDetected":$background_json,"settled":$settled_json}\n);
 '''
 
 
@@ -270,7 +282,7 @@ def sandbox_terminal_command(request: Mapping[str, Any]) -> str:
 
 def decode_terminal_envelope(stdout: str, max_bytes: int) -> dict[str, Any]:
     envelope = decode_frame(stdout.encode("utf-8"))
-    if set(envelope) != {"version", "stdoutHex", "stderrHex", "exitCode", "rawBytes", "timedOut", "interrupted"} or envelope["version"] != 2:
+    if set(envelope) != {"version", "stdoutHex", "stderrHex", "exitCode", "rawBytes", "timedOut", "interrupted", "backgroundDetected", "settled"} or envelope["version"] != 3:
         raise AdapterProtocolError("Sandbox output wrapper returned an invalid envelope")
     if type(envelope["exitCode"]) is not int or not 0 <= envelope["exitCode"] <= 255:
         raise AdapterProtocolError("Sandbox output wrapper returned invalid terminal data")
@@ -278,6 +290,10 @@ def decode_terminal_envelope(stdout: str, max_bytes: int) -> dict[str, Any]:
         raise AdapterProtocolError("Sandbox output wrapper returned invalid status data")
     if envelope["interrupted"] is not None and (type(envelope["interrupted"]) is not int or envelope["interrupted"] not in (2, 15)):
         raise AdapterProtocolError("Sandbox output wrapper returned invalid signal data")
+    if type(envelope["backgroundDetected"]) is not bool or type(envelope["settled"]) is not bool:
+        raise AdapterProtocolError("Sandbox output wrapper returned invalid settlement data")
+    if not envelope["settled"]:
+        raise AdapterProtocolError("Sandbox process-group settlement is unproven (rootExitCode=" + str(envelope["exitCode"]) + "); background commands are unsupported")
     decoded = []
     for key in ("stdoutHex", "stderrHex"):
         value = envelope[key]
@@ -285,6 +301,8 @@ def decode_terminal_envelope(stdout: str, max_bytes: int) -> dict[str, Any]:
             raise AdapterProtocolError("Sandbox output wrapper returned invalid captured bytes")
         decoded.append(bytes.fromhex(value).decode("utf-8", errors="replace"))
     out, err = decoded
+    if envelope["backgroundDetected"]:
+        err = "[background processes terminated]\n" + err
     decoded_bytes = len(out.encode("utf-8")) + len(err.encode("utf-8"))
     truncated = envelope["rawBytes"] > max_bytes or decoded_bytes > max_bytes
     if truncated and decoded_bytes <= max_bytes:
@@ -294,7 +312,8 @@ def decode_terminal_envelope(stdout: str, max_bytes: int) -> dict[str, Any]:
         else:
             err += " " * (max_bytes - decoded_bytes + 1)
     return {"result": bounded_terminal_result(out, err, envelope["exitCode"], max_bytes),
-            "truncated": truncated, "timedOut": envelope["timedOut"], "interrupted": envelope["interrupted"]}
+            "truncated": truncated, "timedOut": envelope["timedOut"], "interrupted": envelope["interrupted"],
+            "backgroundTerminated": envelope["backgroundDetected"]}
 
 
 async def execute_terminal(
@@ -605,7 +624,7 @@ class AlgalHarborAgent(BaseAgent):
         return "algal-coding-harness"
 
     def version(self) -> str:
-        return "0.2.0"
+        return "0.3.0"
 
     async def setup(self, environment: BaseEnvironment) -> None:
         # The controller stays on the Mac; the benchmark image stays unchanged.

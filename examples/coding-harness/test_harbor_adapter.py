@@ -29,10 +29,11 @@ def wrapper_request(command):
 
 def fake_envelope(request, stdout="", stderr="", exit_code=0):
     limit = request["maxOutputBytes"]
-    envelope = {"version": 2, "stdoutHex": stdout.encode()[:limit].hex(),
+    envelope = {"version": 3, "stdoutHex": stdout.encode()[:limit].hex(),
                 "stderrHex": stderr.encode()[:limit].hex(), "exitCode": exit_code,
                 "rawBytes": min(limit + 1, len(stdout.encode()) + len(stderr.encode())),
-                "timedOut": False, "interrupted": None}
+                "timedOut": False, "interrupted": None,
+                "backgroundDetected": False, "settled": True}
     return SimpleNamespace(stdout=json.dumps(envelope) + "\n", stderr="", return_code=0)
 
 
@@ -367,6 +368,29 @@ class SandboxCaptureTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reply["result"]["exitCode"], 137)
         with self.assertRaises(ProcessLookupError):
             os.kill(int(pidfile.read_text()), 0)
+
+    async def test_normal_completion_kills_redirected_background_process(self):
+        pidfile = self.root / "background-pid"
+        marker = self.root / "must-not-be-created"
+        child = "import time,pathlib; time.sleep(0.5); pathlib.Path(" + repr(str(marker)) + ").write_text('survived')"
+        command = (self.python_command(child) + " </dev/null >/dev/null 2>&1 & "
+                   + "printf '%s' \"$!\" > " + shlex.quote(str(pidfile)) + "; exit 17")
+        reply = await adapter.execute_terminal(self.environment(), 9, {
+            "command": command, "maxOutputBytes": 100, "timeoutMs": 3000,
+        })
+        self.assertEqual(reply["result"]["exitCode"], 17)
+        self.assertTrue(reply["backgroundTerminated"])
+        self.assertIn("background processes terminated", reply["result"]["stderr"])
+        with self.assertRaises(ProcessLookupError):
+            os.kill(int(pidfile.read_text()), 0)
+        await asyncio.sleep(0.55)
+        self.assertFalse(marker.exists())
+
+    async def test_unproven_group_settlement_is_not_clean_completion(self):
+        envelope = json.loads(fake_envelope({"maxOutputBytes": 100}, exit_code=17).stdout)
+        envelope.update(backgroundDetected=True, settled=False)
+        with self.assertRaisesRegex(adapter.AdapterProtocolError, "settlement is unproven.*rootExitCode=17"):
+            adapter.decode_terminal_envelope(json.dumps(envelope) + "\n", 100)
 
     async def test_cancellation_joins_existing_exec_before_propagating(self):
         finished = asyncio.Event()
