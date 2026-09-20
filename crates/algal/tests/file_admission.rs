@@ -109,10 +109,21 @@ fn transport_bundle_descriptor_rejects_fifo_and_preserves_regular_symlink_suppor
     let path = temp.path().join(format!("{}.bundle.json", &key[7..]));
     fifo(&path);
     let outer = temp.path().join("outer.json");
-    write(&outer, &json!({"contract":"algal.organism.v1","key":"organism:transport-outer","name":"Outer","cells":[{"id":"nested","kind":"organism","manifest":key,"via":"bundles"}],"edges":[]}));
+    write(
+        &outer,
+        &json!({"contract":"algal.organism.v1","key":"organism:transport-outer","name":"Outer","cells":[{"id":"nested","kind":"organism","manifest":key,"via":"bundles"}],"edges":[]}),
+    );
     let transports = temp.path().join("transports.json");
-    write(&transports, &json!({"bundles":temp.path().to_str().unwrap()}));
-    let args = ["check", outer.to_str().unwrap(), "--transports", transports.to_str().unwrap()];
+    write(
+        &transports,
+        &json!({"bundles":temp.path().to_str().unwrap()}),
+    );
+    let args = [
+        "check",
+        outer.to_str().unwrap(),
+        "--transports",
+        transports.to_str().unwrap(),
+    ];
     rejected(&cli(&temp.path().join("store"), &args), "BUDGET_EXHAUSTED");
     assert!(fs::symlink_metadata(&path).unwrap().file_type().is_fifo());
     fs::remove_file(&path).unwrap();
@@ -120,7 +131,12 @@ fn transport_bundle_descriptor_rejects_fifo_and_preserves_regular_symlink_suppor
     write(&content, &bundle);
     symlink(&content, &path).unwrap();
     success(&cli(&temp.path().join("store"), &args));
-    assert!(fs::symlink_metadata(&path).unwrap().file_type().is_symlink());
+    assert!(
+        fs::symlink_metadata(&path)
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
 }
 
 #[test]
