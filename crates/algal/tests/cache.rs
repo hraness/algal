@@ -112,14 +112,19 @@ async fn side_effecting_backends_are_never_memoized() {
     host.entries.push((
         "shell".into(),
         Backend::Command {
-            argv: vec!["/bin/sh".into(), "-c".into(), "printf '{\"v\":1}'".into()],
+            // A successful command consumes the complete request before replying.
+            argv: vec![
+                "/bin/sh".into(),
+                "-c".into(),
+                "cat >/dev/null && printf '{\"v\":1}'".into(),
+            ],
             cwd: None,
             timeout_ms: 5000,
         },
     ));
     let req = request(json!({"kind":"json","schema":{}}));
     let receipt = host.effect(&req, 5000, Some(&mut store)).await.unwrap();
-    assert_eq!(receipt["output"], json!({"v":1}));
+    assert_eq!(receipt["output"], json!({"v":1}), "receipt: {receipt}");
     assert!(
         store
             .get_effect(&algal::canonical::digest(&req).unwrap(), "shell")
@@ -127,5 +132,6 @@ async fn side_effecting_backends_are_never_memoized() {
             .is_none()
     );
     let again = host.effect(&req, 5000, Some(&mut store)).await.unwrap();
+    assert_eq!(again["output"], json!({"v":1}), "receipt: {again}");
     assert!(again.get("cached").is_none());
 }
