@@ -12,10 +12,11 @@ import {
 } from "./contract";
 import { digestCanonical, type Digest } from "./digest";
 import { AlgalError } from "./errors";
-import { cellSignature, type CellPorts } from "./graph";
+import { cellSignature, type CellPorts, type CompiledOrganism } from "./graph";
 import { builtinRegistry } from "./registry";
 import { parseRunReceipt, receiptDigest, type CellRecord, type RunReceipt } from "./run";
-import { compileSource, type SourceCompilerOptions, type SourceSpan } from "./source";
+import { type SourceCompilerOptions, type SourceSpan } from "./source";
+import { createSourceTrace, resolveSourcePath, type SourceTraceFrame } from "./source-trace";
 import { canonicalize } from "./values";
 
 export type DiagramCategory = "input" | "pure" | "model" | "effect" | "tool" | "composition" | "state";
@@ -54,7 +55,17 @@ export type ProgramDiagram = {
   nodes: DiagramNode[];
   edges: DiagramEdge[];
   source?: { digest: Digest; compilerVersion: string; profile: string };
-  receipt?: { digest: Digest; outcome: RunReceipt["outcome"]; verification: "digest-bound" };
+  /** A child view remains bound to the original root artifact and receipt.
+   * Frames and module paths are reconstructed from the original source. */
+  scope?: {
+    rootManifestDigest: Digest;
+    rootReceiptDigest?: Digest;
+    invocationPath: string;
+    source?: string;
+    generated: boolean;
+    frames: SourceTraceFrame[];
+  };
+  receipt?: { digest: Digest; outcome: RunReceipt["outcome"]; verification: "digest-bound"; failure?: NonNullable<RunReceipt["failure"]> };
 };
 export type DiagramOptions = {
   receipt?: RunReceipt;
@@ -63,6 +74,9 @@ export type DiagramOptions = {
   source?: string;
   /** Explicit local module texts used to recompile the original project. */
   sourceOptions?: SourceCompilerOptions;
+  /** Exact invocation prefix, such as replies-each/i1. Requires source;
+   * with a receipt, the invocation must actually have been recorded. */
+  focus?: string;
   /** Pass compileOrganism(...).ports for host/child signatures. Without it,
    * externally defined ports remain unknown, never guessed from names. */
   ports?: ReadonlyMap<string, CellPorts>;
@@ -108,6 +122,34 @@ function declaredSignature(cell: Cell): CellPorts | undefined {
   return cellSignature(cell, builtinRegistry(), new Map());
 }
 
+/** Resolve only signatures from the already compiled, closed source project.
+ * This is structural inspection, not tool admission or graph execution. */
+function sourcePorts(manifest: OrganismManifest, modules: OrganismManifest[]): ReadonlyMap<string, CellPorts> {
+  const manifests = new Map<string, OrganismManifest>([manifest, ...modules].map(m => [digestCanonical(manifestToJson(m)), m]));
+  const cache = new Map<Digest, CompiledOrganism>();
+  const visiting = new Set<Digest>();
+  const inspect = (m: OrganismManifest): CompiledOrganism => {
+    const digest = digestCanonical(manifestToJson(m));
+    const cached = cache.get(digest);
+    if (cached) return cached;
+    if (visiting.has(digest)) throw new AlgalError("MANIFEST_INVALID", "diagram: cyclic source closure");
+    visiting.add(digest);
+    const children = new Map<string, CompiledOrganism>();
+    for (const cell of m.cells) {
+      if (cell.kind !== "organism" && cell.kind !== "each" && cell.kind !== "repeat") continue;
+      const child = manifests.get(cell.manifest);
+      if (!child) throw new AlgalError("MANIFEST_INVALID", "diagram: child is missing from the compiled source closure");
+      children.set(cell.id, inspect(child));
+    }
+    const ports = new Map(m.cells.map(cell => [cell.id, cellSignature(cell, builtinRegistry(), children)]));
+    const result: CompiledOrganism = { manifest: m, ports, children, inbound: new Map(), resolvedVia: new Map() };
+    visiting.delete(digest);
+    cache.set(digest, result);
+    return result;
+  };
+  return inspect(manifest).ports;
+}
+
 function portList(ports: PortMap | undefined, names: string[]): DiagramPort[] {
   return [...new Set([...Object.keys(ports ?? {}), ...names])].sort(compare)
     .map(name => ({ name, type: ports?.[name] ? structuredClone(ports[name]) : null }));
@@ -129,18 +171,54 @@ function guardLabel(guard: Edge["guard"]): string {
  * fetching nested manifests. External signatures can be supplied separately.
  * Receipt self-digests establish integrity, not replay or provider truth. */
 export function createProgramDiagram(manifest: OrganismManifest, options: DiagramOptions = {}): ProgramDiagram {
-  const m = parseOrganismManifest(manifest);
-  const manifestDigest = digestCanonical(manifestToJson(m));
+  const root = parseOrganismManifest(manifest);
+  const rootManifestDigest = digestCanonical(manifestToJson(root));
   if (options.source !== undefined && typeof options.source !== "string") {
     throw new AlgalError("MANIFEST_INVALID", "diagram: source must be text");
   }
   if (options.source === undefined && options.sourceOptions !== undefined) {
     throw new AlgalError("MANIFEST_INVALID", "diagram: sourceOptions requires original source");
   }
-  const sourceMap = options.source === undefined ? undefined : compileSource(options.source, options.sourceOptions).sourceMap;
-  if (sourceMap && sourceMap.manifestDigest !== manifestDigest) {
+  if (options.focus !== undefined && options.source === undefined) {
+    throw new AlgalError("MANIFEST_INVALID", "diagram: focus requires original source");
+  }
+  const trace = options.source === undefined ? undefined : createSourceTrace(options.source, options.sourceOptions);
+  if (trace && trace.compilation.sourceMap.manifestDigest !== rootManifestDigest) {
     throw new AlgalError("MANIFEST_INVALID", "diagram: source does not compile to this manifest");
   }
+  let receipt: RunReceipt | undefined;
+  if (options.receipt) {
+    receipt = parseRunReceipt(options.receipt);
+    if (receipt.manifestDigest !== rootManifestDigest || receipt.manifestKey !== root.key) {
+      throw new AlgalError("MANIFEST_INVALID", "diagram: receipt does not belong to this manifest");
+    }
+    if (receiptDigest(receipt) !== receipt.digest) throw new AlgalError("MANIFEST_INVALID", "diagram: receipt digest mismatch");
+  }
+  const resolved = trace && options.focus !== undefined ? resolveSourcePath(trace, options.focus, "invocation") : undefined;
+  if (resolved && !resolved.ok) throw new AlgalError("MANIFEST_INVALID", `diagram: invalid focus: ${resolved.reason}`);
+  const m = resolved?.ok ? resolved.manifest : root;
+  const manifestDigest = resolved?.ok ? resolved.manifestDigest : rootManifestDigest;
+  const sourceMap = resolved?.ok ? resolved.sourceMap : trace?.compilation.sourceMap;
+  const invocationPath = resolved?.ok ? resolved.invocationPath : "";
+  const receiptCellId = (cellId: string): string => invocationPath ? `${invocationPath}/${cellId}` : cellId;
+  if (receipt && trace && invocationPath) {
+    // A budget failure can enter a child before recording its first cell.
+    // Resolve terminal/event paths through the same closed manifest walk;
+    // matching arbitrary receipt prefixes would invent invocation evidence.
+    const recordsCell = m.cells.some(cell => Object.hasOwn(receipt.cells, receiptCellId(cell.id)));
+    const recordsBoundary = (path: string, mode: "cell" | "invocation"): boolean => {
+      const found = resolveSourcePath(trace, path, mode);
+      return found.ok && found.frames.some(frame => frame.path === invocationPath);
+    };
+    const recordsFailure = !recordsCell && receipt.failure?.path !== undefined && recordsBoundary(receipt.failure.path, "cell");
+    const recordsEvent = !recordsCell && !recordsFailure && receipt.events.some(event => (event.kind === "run.start" || event.kind === "run.end")
+      && event.path !== undefined && (event.path === invocationPath || event.path.startsWith(`${invocationPath}/`))
+      && recordsBoundary(event.path, "invocation"));
+    if (!recordsCell && !recordsFailure && !recordsEvent) {
+      throw new AlgalError("MANIFEST_INVALID", "diagram: focus invocation was not recorded in this receipt");
+    }
+  }
+  const ports = trace ? sourcePorts(m, trace.compilation.modules) : undefined;
   const ids = new Set(m.cells.map(c => c.id));
   if (ids.size !== m.cells.length) throw new AlgalError("MANIFEST_INVALID", "diagram: duplicate cell id");
   for (const edge of m.edges) {
@@ -149,17 +227,10 @@ export function createProgramDiagram(manifest: OrganismManifest, options: Diagra
   for (const endpoint of [...Object.values(m.interface?.inputs ?? {}), ...Object.values(m.interface?.outputs ?? {})]) {
     if (!ids.has(endpoint.cell)) throw new AlgalError("MANIFEST_INVALID", "diagram: interface references missing cell");
   }
-  let receipt: RunReceipt | undefined;
-  if (options.receipt) {
-    receipt = parseRunReceipt(options.receipt);
-    if (receipt.manifestDigest !== manifestDigest || receipt.manifestKey !== m.key) {
-      throw new AlgalError("MANIFEST_INVALID", "diagram: receipt does not belong to this manifest");
-    }
-    if (receiptDigest(receipt) !== receipt.digest) throw new AlgalError("MANIFEST_INVALID", "diagram: receipt digest mismatch");
-  }
   const nodes: DiagramNode[] = [...m.cells].sort((a, b) => compare(a.id, b.id)).map(cell => {
-    const signature = options.ports?.get(cell.id) ?? declaredSignature(cell);
-    const record = receipt && Object.hasOwn(receipt.cells, cell.id) ? receipt.cells[cell.id] : undefined;
+    const signature = (!invocationPath ? options.ports?.get(cell.id) : undefined) ?? ports?.get(cell.id) ?? declaredSignature(cell);
+    const recordId = receiptCellId(cell.id);
+    const record = receipt && Object.hasOwn(receipt.cells, recordId) ? receipt.cells[recordId] : undefined;
     const ifaceIn = sortedEntries(m.interface?.inputs ?? {}).filter(([, p]) => p.cell === cell.id);
     const ifaceOut = sortedEntries(m.interface?.outputs ?? {}).filter(([, p]) => p.cell === cell.id);
     const inputs = portList(signature?.inputs, m.edges.filter(e => e.to.cell === cell.id).map(e => e.to.port));
@@ -209,7 +280,14 @@ export function createProgramDiagram(manifest: OrganismManifest, options: Diagra
     contract: "algal.diagram.v1", view: "exact", name: m.name, key: m.key,
     manifestDigest, budgets: { ...m.budgets }, nodes, edges,
     ...(sourceMap ? { source: { digest: sourceMap.sourceDigest, compilerVersion: sourceMap.compilerVersion, profile: sourceMap.profile } } : {}),
-    ...(receipt ? { receipt: { digest: receipt.digest, outcome: receipt.outcome, verification: "digest-bound" as const } } : {}),
+    ...(resolved?.ok ? { scope: {
+      rootManifestDigest, ...(receipt ? { rootReceiptDigest: receipt.digest } : {}),
+      invocationPath, ...(resolved.source === undefined ? {} : { source: resolved.source }),
+      generated: resolved.generated, frames: structuredClone(resolved.frames),
+    } } : {}),
+    ...(receipt ? { receipt: { digest: receipt.digest, outcome: receipt.outcome, verification: "digest-bound" as const,
+      ...(receipt.failure ? { failure: structuredClone(receipt.failure) } : {}),
+    } } : {}),
   };
 }
 
@@ -247,11 +325,29 @@ const palette: Record<DiagramCategory, { fill: string; stroke: string }> = {
   state: { fill: "#fdf4ff", stroke: "#a21caf" },
 };
 
+function scopeDetails(view: ProgramDiagram): string[] {
+  if (!view.scope) return [];
+  const scope = view.scope;
+  const breadcrumb = ["Root", ...scope.frames.map(frame => {
+    const title = frame.location?.annotation?.title ?? frame.kind;
+    return `${title}${frame.index === undefined ? "" : ` [${frame.kind === "each" ? "item" : "round"} ${frame.index}]`}`;
+  })].join(" → ");
+  return [
+    breadcrumb,
+    `Invocation: ${scope.invocationPath || "root"}`,
+    scope.generated ? "Source: generated wrapper (exact manifest)" : `Source: ${scope.source}`,
+    `Root manifest: ${scope.rootManifestDigest}`,
+    ...(scope.rootReceiptDigest ? [`Root receipt: ${scope.rootReceiptDigest} · ${view.receipt?.outcome ?? "recorded"} · digest-bound`] : ["Static definition · no execution status"]),
+    ...(view.receipt?.failure ? [`Root failure: ${view.receipt.failure.code}${view.receipt.failure.path ? ` at ${view.receipt.failure.path}` : ""}`] : []),
+  ];
+}
+
 export function renderMermaid(view: ProgramDiagram): string {
   const ids = new Map(view.nodes.map((node, index) => [node.id, `n${index}`]));
   const lines = ["flowchart TD", `  accTitle: ${mermaid(clip(view.name, 160))}`, "  accDescr: Exact manifest data dependencies. Layout does not imply timing or parallel execution.",
     `  limits["Limits: ${view.budgets.maxAgentCalls} executor attempts · ${view.budgets.maxSteps} steps · depth ${view.budgets.maxDepth}"]`,
   ];
+  if (view.scope) lines.push(`  scope["${scopeDetails(view).map(mermaid).join("<br/>")}"]`);
   for (const node of view.nodes) {
     const labels = [nodeLabel(node), ...(node.source
       ? [node.source.title, `ID ${node.id}`, node.source.summary, ...node.source.details, sourceLocation(node)]
@@ -315,7 +411,9 @@ export function renderSvg(view: ProgramDiagram, options: SvgDiagramOptions = {})
   const gapX = 72;
   const gapY = compact ? 68 : 86;
   const margin = 32;
-  const headerHeight = header ? (view.receipt ? 154 : 132) : 20;
+  const scopeLines = scopeDetails(view);
+  const mainHeaderHeight = header ? (view.receipt ? 154 : 132) : 20;
+  const headerHeight = mainHeaderHeight + (scopeLines.length ? scopeLines.length * 19 + 12 : 0);
   const levels: DiagramNode[][] = [];
   for (const node of view.nodes) (levels[node.rank] ??= []).push(node);
   // Stable barycentric ordering reduces crossings without a layout dependency.
@@ -351,11 +449,11 @@ export function renderSvg(view: ProgramDiagram, options: SvgDiagramOptions = {})
   }
   const height = Math.max(headerHeight + 48, y - (levelGaps.at(-1) ?? gapY) + 50);
   const byId = new Map(placed.map(n => [n.node.id, n]));
-  const prefix = `algal-${view.manifestDigest.slice(7, 19)}`;
+  const prefix = `algal-${view.manifestDigest.slice(7, 19)}${view.scope ? `-${digestCanonical({ root: view.scope.rootManifestDigest, path: view.scope.invocationPath }).slice(7, 19)}` : ""}`;
   const out = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="${prefix}-title ${prefix}-desc">`,
     `<title id="${prefix}-title">${xml(view.name)} — Algal program</title>`,
-    `<desc id="${prefix}-desc">Exact data dependencies of ${xml(view.key)}. ${view.nodes.length} cells and ${view.edges.length} edges. Arrows carry named values; layout does not imply time or parallel execution. Dashed arrows carry failure records. ${view.receipt ? "Statuses are from a digest-bound receipt, not replay-verified here. Missing statuses are unobserved." : "No execution status is implied."}</desc>`,
+    `<desc id="${prefix}-desc">Exact data dependencies of ${xml(view.key)}. ${view.nodes.length} cells and ${view.edges.length} edges. Arrows carry named values; layout does not imply time or parallel execution. Dashed arrows carry failure records. ${view.receipt ? "Statuses are from a digest-bound root receipt, not replay-verified here. Missing statuses are unobserved." : "No execution status is implied."}${scopeLines.length ? ` ${xml(scopeLines.join(". "))}` : ""}</desc>`,
     `<defs><marker id="${prefix}-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/></marker></defs>`,
     `<rect width="${width}" height="${height}" rx="16" fill="#ffffff"/>`,
     `<g font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" fill="#0f172a">`,
@@ -365,8 +463,9 @@ export function renderSvg(view: ProgramDiagram, options: SvgDiagramOptions = {})
     out.push(`<text x="${margin}" y="56" font-size="11" fill="#475569">${xml(clip(`Exact manifest · ${view.manifestDigest}`, Math.floor((width - margin * 2) / 6)))}</text>`);
     out.push(`<text x="${margin}" y="78" font-size="12" fill="#475569">${xml(clip(`Limits: ${view.budgets.maxAgentCalls} executor calls · ${view.budgets.maxSteps} steps · depth ${view.budgets.maxDepth}`, Math.floor((width - margin * 2) / 6.3)))}</text>`);
     out.push(`<text x="${margin}" y="98" font-size="11" fill="#475569">Arrows are data dependencies; dashed = failure.</text>`);
-    if (view.receipt) out.push(`<text x="${margin}" y="119" font-size="11" fill="#475569">${xml(clip(`Recorded ${view.receipt.outcome} · digest-bound, not replay-verified`, Math.floor((width - margin * 2) / 6)))}</text>`);
+    if (view.receipt) out.push(`<text x="${margin}" y="119" font-size="11" fill="#475569">${xml(clip(`Recorded ${view.scope ? "root " : ""}${view.receipt.outcome} · digest-bound, not replay-verified`, Math.floor((width - margin * 2) / 6)))}</text>`);
   }
+  scopeLines.forEach((line, index) => out.push(`<text x="${margin}" y="${mainHeaderHeight + index * 19}" font-size="11" fill="#475569"><title>${xml(line)}</title>${xml(clip(line, Math.floor((width - margin * 2) / 6)))}</text>`));
   view.edges.forEach(edge => {
     const from = byId.get(edge.from.cell)!;
     const to = byId.get(edge.to.cell)!;

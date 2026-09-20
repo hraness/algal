@@ -1,0 +1,6 @@
+program ratio(sample: json) -> json {
+  budget { max_agent_calls: 0 }
+
+  let fraction = sample.numerator / sample.denominator
+  return { fraction: fraction }
+}

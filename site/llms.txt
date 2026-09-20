@@ -18,6 +18,15 @@ context, deterministic if and exhaustive match, conditional model effects, local
 imports, named call, bounded each, and return. Advanced repeat, tool, wait, and
 evolution operations remain available through manifests.
 
+`algal diagnose receipt.json --source program.algal` maps a recorded terminal
+failure or suspension to source locations and callers. `algal diagram
+program.algal --receipt receipt.json --focus child/i1` inspects one recorded
+child invocation, preserving the original root receipt binding. These are
+read-only frontend views; neither runs a model nor substitutes for replay
+verification. Source text is recompiled and matched before annotations apply.
+The live page includes separate inbox-item graphs and a replay-verified pure
+failure at https://algal.dev/#source-failure.
+
 The site reads examples/source/reply.algal during its build and renders diagrams
 from the compiled reply manifest and existing executable examples. Graphs show
 data dependencies, not an implicit promise of parallel wall-clock execution.

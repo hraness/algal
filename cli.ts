@@ -8,6 +8,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BOUNDS, manifestToJson, parseOrganismManifest, type OrganismManifest } from "./src/contract";
 import { loadSourceProject } from "./src/source-project";
+import { diagnoseSource, renderSourceDiagnostics } from "./src/source-diagnostics";
 import { createProgramDiagram, renderMermaid, renderSvg } from "./src/diagram";
 import { compileOrganism } from "./src/graph";
 import { asDigest, digestCanonical } from "./src/digest";
@@ -44,7 +45,7 @@ import {
 } from "./src/mailbox";
 import { parseCapabilityHandle } from "./src/capabilities";
 import { builtinRegistry } from "./src/registry";
-import { parseRunReceipt, runOrganism, type RunReceipt } from "./src/run";
+import { parseRunReceipt, RECEIPT_BOUNDS, runOrganism, type RunReceipt } from "./src/run";
 import { packOrganism, parseBundle, unpackBundle } from "./src/bundle";
 import { FileStore, MemoryStore, type Store } from "./src/store";
 import { ProcessSupervisor, PROCESS_BOUNDS } from "./src/process";
@@ -140,11 +141,14 @@ usage:
       [--bundle-out <bundle.json>] [--source-root <dir>]
                                               compile source; bundle its complete local import closure
   algal diagram <program.algal|manifest.json> [--format mermaid|svg|json]
-      [--source <program.algal>] [--receipt <receipt.json>] [--out <file>]
+      [--source <program.algal>] [--receipt <receipt.json>] [--focus <invocation>] [--out <file>]
       [--modules <dir>] [--tools <file>]
                                               render dependencies, bounds, and recorded cell states
                                               .algal source is also accepted by manifest commands
                                               --source-root bounds imports (default: entry directory)
+  algal diagnose <receipt.json> --source <program.algal>
+      [--source-root <dir>] [--format json|text] [--out <file>]
+                                              locate a recorded failure in its original source
   algal examples                          list bundled examples
   algal example <id>                      print the example manifest
   algal run <manifest.json> [options]     run an organism, print its receipt
@@ -724,7 +728,7 @@ async function main(): Promise<number> {
     case "diagram": {
       if (positional.length !== 1) usageError("algal diagram <program.algal|manifest.json> [--source <program.algal>] [--format mermaid|svg|json] [--receipt <file>] [--out <file>]");
       for (const key of Object.keys(flags)) {
-        if (!["out", "format", "receipt", "source", "source-root", "modules", "tools", "transports", "dir"].includes(key)) {
+        if (!["out", "format", "receipt", "source", "source-root", "focus", "modules", "tools", "transports", "dir"].includes(key)) {
           usageError(`unknown diagram option --${key}`);
         }
         artifactFlag(flags, key);
@@ -735,6 +739,7 @@ async function main(): Promise<number> {
       const output = artifactFlag(flags, "out");
       const receiptPath = artifactFlag(flags, "receipt");
       const sourcePath = artifactFlag(flags, "source");
+      const focus = artifactFlag(flags, "focus");
       if (file.endsWith(".algal") && sourcePath !== undefined) usageError("a .algal input already supplies source; --source is for compiled manifests");
       const project = file.endsWith(".algal") ? await readProject(file)
         : sourcePath === undefined ? undefined : await readProject(sourcePath);
@@ -744,7 +749,7 @@ async function main(): Promise<number> {
         throw new AlgalError("MANIFEST_INVALID", "diagram: source does not compile to this manifest");
       }
       if (project !== undefined) await installSource(project, store);
-      const receipt = receiptPath === undefined ? undefined : parseRunReceipt(await readJson(resolve(receiptPath)));
+      const receipt = receiptPath === undefined ? undefined : parseRunReceipt(await readJsonBounded(resolve(receiptPath), RECEIPT_BOUNDS.maxBytes, "run receipt"));
       if (flags.modules !== undefined) await loadModules(String(flags.modules), store);
       const compiled = project !== undefined || flags.modules !== undefined || flags.tools !== undefined || flags.transports !== undefined
         ? await compileOrganism(manifest, fns, store, 0,
@@ -754,12 +759,33 @@ async function main(): Promise<number> {
       const view = createProgramDiagram(manifest, {
         ...(project === undefined ? {} : { source: project.source, sourceOptions: project.compilerOptions }),
         ...(receipt === undefined ? {} : { receipt }),
-        ...(compiled === undefined ? {} : { ports: compiled.ports }),
+        ...(compiled === undefined || focus !== undefined ? {} : { ports: compiled.ports }),
+        ...(focus === undefined ? {} : { focus }),
       });
       const contents = format === "svg" ? renderSvg(view)
         : format === "json" ? canonicalize(view as unknown as JsonValue)
         : renderMermaid(view);
       await emitArtifact(contents, output);
+      return 0;
+    }
+
+    case "diagnose": {
+      if (positional.length !== 1) usageError("algal diagnose <receipt.json> --source <program.algal> [--format json|text] [--source-root <dir>] [--out <file>]");
+      for (const key of Object.keys(flags)) {
+        if (!["source", "source-root", "format", "out"].includes(key)) usageError(`unknown diagnose option --${key}`);
+        artifactFlag(flags, key);
+      }
+      const sourcePath = artifactFlag(flags, "source");
+      if (sourcePath === undefined) usageError("diagnose requires --source <program.algal>");
+      const format = artifactFlag(flags, "format") ?? "json";
+      if (format !== "json" && format !== "text") usageError("diagnose format must be json or text");
+      const output = artifactFlag(flags, "out");
+      const receiptPath = resolve(positional[0]!);
+      const project = await readProject(sourcePath);
+      await distinctArtifactPaths([receiptPath, ...project.files], [output]);
+      const receipt = await readJsonBounded(receiptPath, RECEIPT_BOUNDS.maxBytes, "run receipt");
+      const report = diagnoseSource(receipt, project.source, project.compilerOptions);
+      await emitArtifact(format === "text" ? renderSourceDiagnostics(report) : canonicalize(report as unknown as JsonValue), output);
       return 0;
     }
 
