@@ -39,7 +39,7 @@ import {
   storeCredential,
   providerSpec,
 } from "./src/credentials";
-import { boundedBytes, commandJson } from "./src/io";
+import { commandJson } from "./src/io";
 import {
   externalWakeKey,
   FileMailboxService,
