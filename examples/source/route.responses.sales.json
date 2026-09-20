@@ -1,0 +1,12 @@
+{
+  "b1-intent-decide": {
+    "answers": {
+      "answer": {
+        "choice": "sales",
+        "confidence": 0.89,
+        "probabilities": {"help": 0.03, "sales": 0.91, "other": 0.06}
+      }
+    }
+  },
+  "branch-1-arm-2": "Tell me about your team and I can suggest a plan that fits."
+}

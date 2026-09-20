@@ -72,6 +72,32 @@ and native Rust kernel. The native CLI takes the compiled JSON; it does not
 silently invoke Bun. See the [source language guide](docs/source-language.md)
 for the grammar, uncertainty routing, bounds, and current subset.
 
+### Run only the selected branch
+
+Put generation directly inside an exhaustive choice. In the
+[route example](examples/source/route.algal), help and sales each perform one
+generation after the decision; the other path returns a fixed human-review
+message. Inactive arms, including their pure calculations, are skipped.
+
+<!-- route-example:start -->
+
+```algal
+return match intent.value {
+  help => generate "Draft a helpful support reply." using email,
+  sales => generate "Draft a concise sales reply." using email,
+  other => "Needs a human review."
+}
+```
+
+<!-- route-example:end -->
+
+![Source-annotated route graph: a decision selects one guarded arm, and exactly one result reaches the merge.](docs/diagrams/route.svg)
+
+The budget covers the largest selected path: two executor attempts, rather
+than adding the costs of mutually exclusive arms. Nested `if` and `match`
+work the same way. Source diagrams show binding names and operation summaries
+while retaining every exact cell ID. [Inspect the recorded paths on the site](https://algal.dev/#branch-demo).
+
 ## More than a chain of prompts
 
 ### Refine within a limit

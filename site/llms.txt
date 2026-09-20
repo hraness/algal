@@ -14,14 +14,25 @@ is not part of this first source-language release.
 
 The first source-language subset includes typed program inputs, immutable let
 bindings, literal values, typed decide operations, generate with explicit
-context, deterministic if and exhaustive match, and return. Advanced repeat,
+context, deterministic if and exhaustive match, conditional model effects, and return. Advanced repeat,
 each, tool, wait, and evolution operations remain available through manifests.
 
 The site reads examples/source/reply.algal during its build and renders diagrams
 from the compiled reply manifest and existing executable examples. Graphs show
 data dependencies, not an implicit promise of parallel wall-clock execution.
 The SVG, Mermaid, and JSON diagram formats share one manifest-derived view.
-Receipt overlays describe one identified execution; they are not live traces.
+Source-generated diagrams recompile the original source and match the manifest
+digest before showing readable binding names, choice arms, and explicit context.
+Exact cell IDs, edges, skipped cells, and runtime boundaries remain visible.
+
+The "Only the chosen branch runs" demo executes examples/source/route.algal
+three times during the site build using committed scripted response fixtures.
+Support and sales each take two executor attempts; human review takes one and
+returns fixed text. Inactive generation branches are checked as skipped. Every
+run is replay-verified before publication. Source, manifest, source map, args,
+scripted responses, receipts, and receipt-overlaid diagrams are downloadable.
+The browser selector switches recorded evidence; it performs no model calls.
+These fixtures demonstrate orchestration, not live provider quality.
 
 Run from the repository root with Bun 1.3 or newer:
 
@@ -38,6 +49,10 @@ bun cli.ts diagram examples/source/reply.algal --format svg --out reply.svg
 - Readable example: https://algal.dev/examples/reply.algal
 - Compiled example: https://algal.dev/examples/reply.algal.json
 - Generated diagram: https://algal.dev/diagrams/reply.svg
+- Conditional program: https://algal.dev/examples/route.algal
+- Support receipt: https://algal.dev/receipts/route-help.receipt.json
+- Sales receipt: https://algal.dev/receipts/route-sales.receipt.json
+- Human-review receipt: https://algal.dev/receipts/route-other.receipt.json
 - Manifest contract: https://github.com/hraness/algal/blob/main/spec/v1/organism.md
 - Durable process demonstration: https://github.com/hraness/algal/blob/main/docs/vm.md
 - Selection and populations: https://github.com/hraness/algal/blob/main/docs/civilization.md

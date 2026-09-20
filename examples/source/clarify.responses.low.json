@@ -1,0 +1,12 @@
+{
+  "b1-intent-decide": {
+    "answers": {
+      "answer": {
+        "choice": "help",
+        "confidence": 0.92,
+        "probabilities": {"help": 0.45, "sales": 0.30, "other": 0.25}
+      }
+    }
+  },
+  "branch-1-arm-1": "Could you tell me what you were trying to do and what happened?"
+}

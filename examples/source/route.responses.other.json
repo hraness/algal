@@ -1,0 +1,11 @@
+{
+  "b1-intent-decide": {
+    "answers": {
+      "answer": {
+        "choice": "other",
+        "confidence": 0.88,
+        "probabilities": {"help": 0.03, "sales": 0.04, "other": 0.93}
+      }
+    }
+  }
+}

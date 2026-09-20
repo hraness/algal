@@ -63,6 +63,18 @@ test("source compiles, runs, verifies and renders through the CLI without provid
     const graph = await cli("diagram", manifestPath, "--format", "json");
     expect(graph.code, graph.stderr).toBe(0);
     expect(JSON.parse(graph.stdout).nodes.length).toBeGreaterThan(0);
+    expect(JSON.parse(graph.stdout).source).toBeUndefined();
+    const annotated = await cli("diagram", file, "--format", "json");
+    expect(annotated.code, annotated.stderr).toBe(0);
+    expect(JSON.parse(annotated.stdout).source.digest).toBe(mapping.sourceDigest);
+    const withSource = await cli("diagram", manifestPath, "--source", file, "--format", "json");
+    expect(withSource.code, withSource.stderr).toBe(0);
+    expect(JSON.parse(withSource.stdout)).toEqual(JSON.parse(annotated.stdout));
+    expect((await cli("diagram", manifestPath, "--source", file, "--out", file)).code).not.toBe(0);
+    await writeFile(file, source.replace("return message", 'return "changed"'));
+    const mismatched = await cli("diagram", manifestPath, "--source", file);
+    expect(mismatched.code).not.toBe(0);
+    expect(JSON.parse(mismatched.stderr).message).toContain("does not compile to this manifest");
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
@@ -83,6 +95,8 @@ test("new artifact commands reject invalid flags and input/output collisions", a
       ["diagram", file, "--format", "html"],
       ["diagram", file, "--out", file],
       ["diagram", file, "--receipt"],
+      ["diagram", file, "--source"],
+      ["diagram", file, "--source", file],
     ]) {
       const result = await cli(...args);
       expect(result.code, result.stderr).toBe(2);
