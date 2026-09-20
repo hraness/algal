@@ -7,7 +7,7 @@ import { readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BOUNDS, manifestToJson, parseOrganismManifest, type OrganismManifest } from "./src/contract";
-import { compileSource, SOURCE_BOUNDS } from "./src/source";
+import { loadSourceProject } from "./src/source-project";
 import { createProgramDiagram, renderMermaid, renderSvg } from "./src/diagram";
 import { compileOrganism } from "./src/graph";
 import { asDigest, digestCanonical } from "./src/digest";
@@ -46,7 +46,7 @@ import { parseCapabilityHandle } from "./src/capabilities";
 import { builtinRegistry } from "./src/registry";
 import { parseRunReceipt, runOrganism, type RunReceipt } from "./src/run";
 import { packOrganism, parseBundle, unpackBundle } from "./src/bundle";
-import { FileStore } from "./src/store";
+import { FileStore, MemoryStore, type Store } from "./src/store";
 import { ProcessSupervisor, PROCESS_BOUNDS } from "./src/process";
 import { PullRequestShepherd } from "./src/shepherd";
 import { CodingJobService, type CodingJobOptions, type CodingJobOperationOptions } from "./src/coding-jobs";
@@ -136,12 +136,14 @@ const USAGE = `algal — typed, replayable workflow organisms
 
 usage:
   algal compile <program.algal> [--out <manifest.json>] [--source-map <map.json>]
-                                              compile readable source to the existing v1 manifest
+      [--bundle-out <bundle.json>] [--source-root <dir>]
+                                              compile source; bundle its complete local import closure
   algal diagram <program.algal|manifest.json> [--format mermaid|svg|json]
       [--source <program.algal>] [--receipt <receipt.json>] [--out <file>]
       [--modules <dir>] [--tools <file>]
                                               render dependencies, bounds, and recorded cell states
                                               .algal source is also accepted by manifest commands
+                                              --source-root bounds imports (default: entry directory)
   algal examples                          list bundled examples
   algal example <id>                      print the example manifest
   algal run <manifest.json> [options]     run an organism, print its receipt
@@ -326,21 +328,6 @@ async function readJsonBounded(
       `${path}: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
-}
-
-async function readSource(path: string): Promise<string> {
-  try {
-    const bytes = await boundedBytes(Bun.file(path).stream(), SOURCE_BOUNDS.maxSourceBytes, "Algal source");
-    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  } catch (error) {
-    throw new AlgalError("PARSE_FAILED", `${path}: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function readManifest(path: string): Promise<OrganismManifest> {
-  return path.endsWith(".algal")
-    ? compileSource(await readSource(path)).manifest
-    : parseOrganismManifest(await readJson(path));
 }
 
 function artifactFlag(flags: ParsedArgs["flags"], key: string): string | undefined {
@@ -666,20 +653,39 @@ async function main(): Promise<number> {
   const dir = String(flags.dir ?? ".algal");
   const store = new FileStore(dir);
   const fns = builtinRegistry();
+  const sourceRoot = artifactFlag(flags, "source-root");
+  const readProject = (path: string) => loadSourceProject(resolve(path),
+    sourceRoot === undefined ? {} : { root: resolve(sourceRoot) });
+  const installSource = async (project: Awaited<ReturnType<typeof readProject>>, target: Store) => {
+    for (const module of project.modules) await target.putManifest(module);
+  };
+  // Every manifest command receives the same source closure, including verify,
+  // foundry, and durable processes. No ambient module directory is required.
+  const readManifest = async (path: string): Promise<OrganismManifest> => {
+    if (!path.endsWith(".algal")) return parseOrganismManifest(await readJson(path));
+    const project = await readProject(path);
+    await installSource(project, store);
+    return project.manifest;
+  };
 
   switch (cmd) {
     case "compile": {
-      if (positional.length !== 1) usageError("algal compile <program.algal> [--out <manifest.json>] [--source-map <map.json>]");
+      if (positional.length !== 1) usageError("algal compile <program.algal> [--out <manifest.json>] [--source-map <map.json>] [--bundle-out <bundle.json>] [--source-root <dir>]");
       for (const key of Object.keys(flags)) {
-        if (!["out", "source-map"].includes(key)) usageError(`unknown compile option --${key}`);
+        if (!["out", "source-map", "bundle-out", "source-root"].includes(key)) usageError(`unknown compile option --${key}`);
       }
       const file = positional[0]!;
       const output = artifactFlag(flags, "out");
       const mapPath = artifactFlag(flags, "source-map");
-      await distinctArtifactPaths([file], [output, mapPath]);
-      const result = compileSource(await readSource(resolve(file)));
-      await compileOrganism(result.manifest, fns, store);
+      const bundlePath = artifactFlag(flags, "bundle-out");
+      const result = await readProject(file);
+      await distinctArtifactPaths(result.files, [output, mapPath, bundlePath]);
+      const compilationStore = new MemoryStore();
+      await installSource(result, compilationStore);
+      await compileOrganism(result.manifest, fns, compilationStore);
+      const bundle = bundlePath === undefined ? undefined : await packOrganism(result.manifest, compilationStore);
       if (mapPath !== undefined) await emitArtifact(canonicalize(result.sourceMap as unknown as JsonValue), mapPath);
+      if (bundle !== undefined) await emitArtifact(canonicalize(bundle as unknown as JsonValue), bundlePath);
       await emitArtifact(canonicalize(manifestToJson(result.manifest)), output);
       return 0;
     }
@@ -687,7 +693,7 @@ async function main(): Promise<number> {
     case "diagram": {
       if (positional.length !== 1) usageError("algal diagram <program.algal|manifest.json> [--source <program.algal>] [--format mermaid|svg|json] [--receipt <file>] [--out <file>]");
       for (const key of Object.keys(flags)) {
-        if (!["out", "format", "receipt", "source", "modules", "tools", "transports", "dir"].includes(key)) {
+        if (!["out", "format", "receipt", "source", "source-root", "modules", "tools", "transports", "dir"].includes(key)) {
           usageError(`unknown diagram option --${key}`);
         }
         artifactFlag(flags, key);
@@ -699,19 +705,23 @@ async function main(): Promise<number> {
       const receiptPath = artifactFlag(flags, "receipt");
       const sourcePath = artifactFlag(flags, "source");
       if (file.endsWith(".algal") && sourcePath !== undefined) usageError("a .algal input already supplies source; --source is for compiled manifests");
-      await distinctArtifactPaths([file, ...(receiptPath === undefined ? [] : [receiptPath]), ...(sourcePath === undefined ? [] : [sourcePath])], [output]);
-      const source = file.endsWith(".algal") ? await readSource(resolve(file))
-        : sourcePath === undefined ? undefined : await readSource(resolve(sourcePath));
-      const manifest = file.endsWith(".algal") ? compileSource(source!).manifest : await readManifest(resolve(file));
+      const project = file.endsWith(".algal") ? await readProject(file)
+        : sourcePath === undefined ? undefined : await readProject(sourcePath);
+      await distinctArtifactPaths([file, ...(receiptPath === undefined ? [] : [receiptPath]), ...(project?.files ?? [])], [output]);
+      const manifest = file.endsWith(".algal") ? project!.manifest : await readManifest(resolve(file));
+      if (project !== undefined && project.sourceMap.manifestDigest !== digestCanonical(manifestToJson(manifest))) {
+        throw new AlgalError("MANIFEST_INVALID", "diagram: source does not compile to this manifest");
+      }
+      if (project !== undefined) await installSource(project, store);
       const receipt = receiptPath === undefined ? undefined : parseRunReceipt(await readJson(resolve(receiptPath)));
       if (flags.modules !== undefined) await loadModules(String(flags.modules), store);
-      const compiled = flags.modules !== undefined || flags.tools !== undefined || flags.transports !== undefined
+      const compiled = project !== undefined || flags.modules !== undefined || flags.tools !== undefined || flags.transports !== undefined
         ? await compileOrganism(manifest, fns, store, 0,
           flags.transports === undefined ? undefined : await loadTransports(String(flags.transports)),
           await resolveTools(flags, dir))
         : undefined;
       const view = createProgramDiagram(manifest, {
-        ...(source === undefined ? {} : { source }),
+        ...(project === undefined ? {} : { source: project.source, sourceOptions: project.compilerOptions }),
         ...(receipt === undefined ? {} : { receipt }),
         ...(compiled === undefined ? {} : { ports: compiled.ports }),
       });

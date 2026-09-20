@@ -15,7 +15,7 @@ import { AlgalError } from "./errors";
 import { cellSignature, type CellPorts } from "./graph";
 import { builtinRegistry } from "./registry";
 import { parseRunReceipt, receiptDigest, type CellRecord, type RunReceipt } from "./run";
-import { compileSource, type SourceSpan } from "./source";
+import { compileSource, type SourceCompilerOptions, type SourceSpan } from "./source";
 import { canonicalize } from "./values";
 
 export type DiagramCategory = "input" | "pure" | "model" | "effect" | "tool" | "composition" | "state";
@@ -61,6 +61,8 @@ export type DiagramOptions = {
   /** Original source is recompiled and matched to the manifest before any
    * source labels are displayed. Persisted annotations are never trusted. */
   source?: string;
+  /** Explicit local module texts used to recompile the original project. */
+  sourceOptions?: SourceCompilerOptions;
   /** Pass compileOrganism(...).ports for host/child signatures. Without it,
    * externally defined ports remain unknown, never guessed from names. */
   ports?: ReadonlyMap<string, CellPorts>;
@@ -132,7 +134,10 @@ export function createProgramDiagram(manifest: OrganismManifest, options: Diagra
   if (options.source !== undefined && typeof options.source !== "string") {
     throw new AlgalError("MANIFEST_INVALID", "diagram: source must be text");
   }
-  const sourceMap = options.source === undefined ? undefined : compileSource(options.source).sourceMap;
+  if (options.source === undefined && options.sourceOptions !== undefined) {
+    throw new AlgalError("MANIFEST_INVALID", "diagram: sourceOptions requires original source");
+  }
+  const sourceMap = options.source === undefined ? undefined : compileSource(options.source, options.sourceOptions).sourceMap;
   if (sourceMap && sourceMap.manifestDigest !== manifestDigest) {
     throw new AlgalError("MANIFEST_INVALID", "diagram: source does not compile to this manifest");
   }

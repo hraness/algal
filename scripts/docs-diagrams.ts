@@ -4,7 +4,11 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parseOrganismManifest } from "../src/contract";
 import { compileSource } from "../src/source";
+import { loadSourceProject } from "../src/source-project";
 import { createProgramDiagram, renderSvg } from "../src/diagram";
+import { compileOrganism } from "../src/graph";
+import { builtinRegistry } from "../src/registry";
+import { MemoryStore } from "../src/store";
 
 const root = resolve(import.meta.dir, "..");
 const check = process.argv.includes("--check");
@@ -13,6 +17,12 @@ const sources = new Map([["reply", source]]);
 const routeSource = await readFile(join(root, "examples/source/route.algal"), "utf8");
 sources.set("route", routeSource);
 const manifests = new Map([...sources].map(([name, text]) => [name, compileSource(text).manifest]));
+const inbox = await loadSourceProject(join(root, "examples/source/projects/inbox/inbox.algal"));
+const store = new MemoryStore();
+for (const module of inbox.modules) await store.putManifest(module);
+const inboxGraph = await compileOrganism(inbox.manifest, builtinRegistry(), store);
+sources.set("inbox", inbox.source);
+manifests.set("inbox", inbox.manifest);
 for (const [name, file] of [
   ["refine", "examples/refine.algal.json"],
   ["approval", "examples/vm/release-review.algal.json"],
@@ -30,7 +40,10 @@ async function artifact(path: string, expected: string) {
 if (!check) await mkdir(join(root, "docs/diagrams"), { recursive: true });
 for (const [name, manifest] of manifests) {
   const source = sources.get(name);
-  await artifact(join(root, "docs/diagrams", `${name}.svg`), renderSvg(createProgramDiagram(manifest, source === undefined ? {} : { source }), { compact: true }));
+  await artifact(join(root, "docs/diagrams", `${name}.svg`), renderSvg(createProgramDiagram(manifest, {
+    ...(source === undefined ? {} : { source }),
+    ...(name === "inbox" ? { sourceOptions: inbox.compilerOptions, ports: inboxGraph.ports } : {}),
+  }), { compact: true }));
 }
 const readmePath = join(root, "README.md");
 const readme = await readFile(readmePath, "utf8");
@@ -38,11 +51,14 @@ const marker = /<!-- source-example:start -->[\s\S]*?<!-- source-example:end -->
 if (!marker.test(readme)) throw new Error("README is missing source example markers");
 const routeMarker = /<!-- route-example:start -->[\s\S]*?<!-- route-example:end -->/;
 if (!routeMarker.test(readme)) throw new Error("README is missing route example markers");
+const inboxMarker = /<!-- inbox-example:start -->[\s\S]*?<!-- inbox-example:end -->/;
+if (!inboxMarker.test(readme)) throw new Error("README is missing inbox example markers");
 const resultSpan = compileSource(routeSource).sourceMap.cells.find(cell => cell.cellId === "result")?.span;
 if (!resultSpan) throw new Error("Route example has no result source mapping");
 const routeExcerpt = `return ${routeSource.slice(resultSpan.start.offset, resultSpan.end.offset).replace(/\n {2}/g, "\n")}`;
 await artifact(readmePath, readme
   .replace(marker, `<!-- source-example:start -->\n\n\`\`\`algal\n${source.trimEnd()}\n\`\`\`\n\n<!-- source-example:end -->`)
-  .replace(routeMarker, `<!-- route-example:start -->\n\n\`\`\`algal\n${routeExcerpt}\n\`\`\`\n\n<!-- route-example:end -->`));
+  .replace(routeMarker, `<!-- route-example:start -->\n\n\`\`\`algal\n${routeExcerpt}\n\`\`\`\n\n<!-- route-example:end -->`)
+  .replace(inboxMarker, `<!-- inbox-example:start -->\n\n\`\`\`algal\n${inbox.source.trimEnd()}\n\`\`\`\n\n<!-- inbox-example:end -->`));
 if (failures) { console.error("Run bun run docs:diagrams to regenerate."); process.exitCode = 1; }
 else console.log(`${check ? "Checked" : "Generated"} ${manifests.size} executable diagrams and README source examples.`);

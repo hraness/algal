@@ -6,11 +6,14 @@ import { fileURLToPath } from "node:url";
 import { manifestToJson, parseOrganismManifest, type OrganismManifest } from "../src/contract";
 import { createProgramDiagram, renderSvg } from "../src/diagram";
 import { compileSource } from "../src/source";
+import { loadSourceProject } from "../src/source-project";
+import { packOrganism } from "../src/bundle";
+import { compileOrganism } from "../src/graph";
 import { scriptedExecutor } from "../src/effects";
 import { builtinRegistry } from "../src/registry";
 import { canonicalizeReceipt, runOrganism } from "../src/run";
 import { MemoryStore } from "../src/store";
-import { asJsonValue, asObject, type JsonObject } from "../src/values";
+import { asJsonValue, asObject, canonicalize, type JsonObject } from "../src/values";
 import { verifyReceipt } from "../src/verify";
 
 const SITE = dirname(fileURLToPath(import.meta.url));
@@ -24,7 +27,7 @@ function escapeHtml(value: string): string {
 
 function highlightSource(source: string): string {
   // Highlight only lexical tokens and escape all source text before injection.
-  const tokens = /"(?:\\.|[^"\\])*"|\/\/[^\n]*|\b(?:program|budget|let|decide|using|as|choice|match|return|generate|if|else|true|false|text|number|boolean|json)\b|\b\d+(?:\.\d+)?\b/g;
+  const tokens = /"(?:\\.|[^"\\])*"|\/\/[^\n]*|\b(?:program|budget|let|decide|using|as|choice|match|return|generate|if|else|true|false|text|number|boolean|json|import|from|call|each|over|in|max_items)\b|\b\d+(?:\.\d+)?\b/g;
   let result = "";
   let cursor = 0;
   for (const match of source.matchAll(tokens)) {
@@ -121,8 +124,66 @@ const routePanels = routeRuns.map(run => `
         <div class="route-receipt"><span>Receipt ${escapeHtml(run.receipt.digest)}</span><a href="receipts/route-${run.choice}.receipt.json" download>Download receipt ↓</a><a href="examples/route.responses.${run.choice}.json" download>Scripted answers ↓</a></div>
       </article>`).join("\n");
 
+// Load the two-file example as a real local source project, retaining its
+// digest-addressed children before graph admission, execution, and packing.
+const inbox = await loadSourceProject(join(ROOT, "examples/source/projects/inbox/inbox.algal"));
+const inboxEach = inbox.manifest.cells.find(cell => cell.kind === "each");
+const inboxCall = inbox.manifest.cells.find(cell => cell.kind === "organism");
+const inboxResult = inbox.manifest.interface?.outputs.result;
+if (inboxEach?.kind !== "each" || inboxCall?.kind !== "organism" || !inboxResult || inboxEach.manifest !== inboxCall.manifest) {
+  throw new Error("Inbox demo must reuse one child for its preview call and bounded collection");
+}
+const draftSource = inbox.sources["draft.algal"];
+if (draftSource === undefined) throw new Error("Inbox project is missing draft.algal");
+const inboxStore = new MemoryStore();
+for (const child of inbox.modules) await inboxStore.putManifest(child);
+const inboxCompiled = await compileOrganism(inbox.manifest, builtinRegistry(), inboxStore);
+const inboxBundle = await packOrganism(inbox.manifest, inboxStore);
+const inboxDiagram = createProgramDiagram(inbox.manifest, {
+  source: inbox.source, sourceOptions: inbox.compilerOptions, ports: inboxCompiled.ports,
+});
+const expectedInbox = await readFixture("projects/inbox/inbox.expected.json");
+const inboxRuns = [];
+for (const variant of ["full", "empty"] as const) {
+  const prefix = variant === "empty" ? "inbox.empty" : "inbox";
+  const raw = await readFixture(`projects/inbox/${prefix}.args.json`);
+  const args = Object.fromEntries(Object.entries(raw).map(([cell, values]) => [cell, asObject(values, `${prefix}.args.${cell}`)]));
+  const responses = await readFixture(`projects/inbox/${prefix}.responses.json`);
+  const store = new MemoryStore();
+  for (const child of inbox.modules) await store.putManifest(child);
+  const receipt = await runOrganism({ manifest: inbox.manifest, args, store, fns: builtinRegistry(), executors: [scriptedExecutor(responses)] });
+  const result = asObject(receipt.cells[inboxResult.cell]?.outputs?.[inboxResult.port], "inbox result");
+  const expected = variant === "empty" ? { preview: expectedInbox.preview!, replies: [] } : expectedInbox;
+  const expectedItems = variant === "empty" ? 0 : inboxEach.maxItems;
+  const expectedCalls = variant === "empty" ? 1 : inbox.analysis.maxAgentCalls;
+  if (receipt.outcome !== "complete" || receipt.work.agentCalls !== expectedCalls || (expectedItems > 0 && receipt.cells[inboxEach.id]?.items !== expectedItems) || canonicalize(result) !== canonicalize(expected)) {
+    throw new Error(`Inbox ${variant}: result, item count, or executor count no longer matches the demonstration`);
+  }
+  if (variant === "empty" && Object.keys(receipt.cells).some(id => id.startsWith(`${inboxEach.id}/`))) {
+    throw new Error("Empty inbox unexpectedly executed a child");
+  }
+  const verification = await verifyReceipt(asJsonValue(receipt, "inbox receipt"), manifestToJson(inbox.manifest), store, builtinRegistry());
+  if (!verification.ok) throw new Error(`Inbox ${variant}: receipt failed replay verification`);
+  inboxRuns.push({ variant, prefix, result, receipt, args, responses });
+}
+const fullInbox = inboxRuns.find(run => run.variant === "full")!;
+const emptyInbox = inboxRuns.find(run => run.variant === "empty")!;
+if (!Array.isArray(fullInbox.result.replies) || !fullInbox.result.replies.every(value => typeof value === "string")) {
+  throw new Error("Inbox results must be an ordered list of text replies");
+}
+const inboxReplies = fullInbox.result.replies;
+const inboxResults = `<ol class="inbox-results">${inboxReplies.map(value => `<li>${escapeHtml(value)}</li>`).join("")}</ol>`;
+
 const replacements: Record<string, string> = {
   REPLY_SOURCE: highlightSource(replySource.trimEnd()),
+  INBOX_SOURCE: highlightSource(inbox.source.trimEnd()),
+  DRAFT_SOURCE: highlightSource(draftSource.trimEnd()),
+  INBOX_MAX_ITEMS: String(inboxEach.maxItems),
+  INBOX_STATIC_CALLS: String(inbox.analysis.maxAgentCalls),
+  INBOX_RESULT_COUNT: String(inboxReplies.length),
+  INBOX_RECORDED_CALLS: String(fullInbox.receipt.work.agentCalls),
+  INBOX_EMPTY_CALLS: String(emptyInbox.receipt.work.agentCalls),
+  INBOX_RESULTS: inboxResults,
   ROUTE_SOURCE: highlightSource(routeSource.trimEnd()),
   ROUTE_PANELS: routePanels,
   REPLY_MAX_AGENT_CALLS: String(reply.manifest.budgets.maxAgentCalls),
@@ -167,4 +228,23 @@ for (const run of routeRuns) {
   await writeFile(join(DIST, "examples", `route.responses.${run.choice}.json`), `${JSON.stringify(run.responses, null, 2)}\n`);
 }
 
-console.log(`site built → ${DIST} (${manifests.size} structural diagrams + ${routeRuns.length} replay-checked scripted executions)`);
+const inboxDirectory = join(DIST, "examples/projects/inbox");
+await mkdir(inboxDirectory, { recursive: true });
+for (const [file, source] of Object.entries(inbox.sources)) {
+  const path = join(inboxDirectory, file);
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, source);
+}
+await writeFile(join(inboxDirectory, "inbox.algal.json"), `${JSON.stringify(manifestToJson(inbox.manifest), null, 2)}\n`);
+await writeFile(join(inboxDirectory, "inbox.bundle.json"), `${JSON.stringify(inboxBundle, null, 2)}\n`);
+await writeFile(join(inboxDirectory, "inbox.source-map.json"), `${JSON.stringify(inbox.sourceMap, null, 2)}\n`);
+await writeFile(join(DIST, "diagrams/inbox.svg"), renderSvg(inboxDiagram, { compact: true, header: false }));
+await writeFile(join(DIST, "diagrams/inbox.json"), `${JSON.stringify(inboxDiagram, null, 2)}\n`);
+for (const run of inboxRuns) {
+  const name = run.variant === "empty" ? "inbox-empty" : "inbox";
+  await writeFile(join(DIST, "receipts", `${name}.receipt.json`), `${canonicalizeReceipt(run.receipt)}\n`);
+  await writeFile(join(inboxDirectory, `${run.prefix}.args.json`), `${JSON.stringify(run.args, null, 2)}\n`);
+  await writeFile(join(inboxDirectory, `${run.prefix}.responses.json`), `${JSON.stringify(run.responses, null, 2)}\n`);
+}
+
+console.log(`site built → ${DIST} (${manifests.size + 1} structural diagrams + ${routeRuns.length + inboxRuns.length} replay-checked scripted executions)`);
