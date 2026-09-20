@@ -78,7 +78,8 @@ creating a prerelease if needed. Stable releases and existing asset names are
 never overwritten. Publishing is one explicit owner-operated workflow action;
 merging source alone does not publish binaries.
 
-The next intended source prerelease is `v0.2.0-vm.3`; the native semver remains
-`0.2.0`. The metadata's tag and source commit distinguish prerelease builds even
-when `algal --version` is identical. These packages distribute the native kernel
-and process CLI; the GitHub shepherd host currently remains a Bun application.
+The native semver remains `0.2.0`. The metadata's tag and source commit distinguish
+prerelease builds even when `algal --version` is identical. These packages
+distribute the native kernel and process CLI. GitHub shepherd, coding-job
+reconciliation, and repair validation currently run through the Bun host; the
+native CLI independently verifies their portable process histories.

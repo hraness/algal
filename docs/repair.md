@@ -77,6 +77,15 @@ portable change proposal is a Git patch; raw digests bind the local validation
 state but do not contain a complete checkout. Applying the patch elsewhere still
 requires validation in that environment.
 
+## Explicit operation reconciliation
+
+For an adapter with qualified durable operation identity and read-only outcome
+lookup, [versioned operation jobs](coding-operations.md) can append a verified
+resolution after a lost acknowledgement. Use `job prepare-operation` and an
+explicit `job reconcile`; ordinary xcb jobs and existing uncertain v1 records
+remain unchanged. Repair ticks and inspection never contact a provider to infer
+completion.
+
 ## Interruption and limits
 
 The launch intent is synced before xcb starts. Lost acknowledgement, timeout,

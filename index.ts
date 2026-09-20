@@ -297,7 +297,10 @@ export { githubCliTransport } from "./src/github-cli";
 export { PullRequestShepherd, shepherdProgram, shepherdPacket, SHEPHERD_TOOL } from "./src/shepherd";
 export type { ShepherdConfig, ShepherdOptions, ShepherdReport } from "./src/shepherd";
 
-export { CODING_JOB_BOUNDS, CODING_JOB_TOOL, CodingJobService } from "./src/coding-jobs";
-export type { CodingJobAdapter, CodingJobIntent, CodingJobLimits, CodingJobOptions, CodingJobResult, CodingJobSnapshot, CodingJobSource, CodingJobTransport } from "./src/coding-jobs";
+export { CODING_JOB_BOUNDS, CODING_JOB_TOOL, CodingJobService, codingJobOperationPayload } from "./src/coding-jobs";
+export type { AnyCodingJobIntent, CodingJobAdapter, CodingJobIntent, CodingJobLimits, CodingJobOptions, CodingJobOperationIntent, CodingJobOperationOptions, CodingJobResult, CodingJobSnapshot, CodingJobSource, CodingJobTransport } from "./src/coding-jobs";
 export { RepairWorkflow, repairProgram, REPAIR_AWAIT_TOOL, REPAIR_VALIDATE_TOOL, REPAIR_BOUNDS } from "./src/repair";
 export type { RepairCheck, RepairConfig, RepairCheckResult, RepairPacket, RepairReport } from "./src/repair";
+
+export { CODING_OPERATION_PROTOCOL, CODING_OPERATION_BOUNDS, codingOperationCommandTransport, parseCodingOperationAdapter, parseCodingOperationBinding, parseCodingOperationOutcome, parseCodingOperationRequest } from "./src/coding-operations";
+export type { CodingOperationAdapter, CodingOperationBinding, CodingOperationOutcome, CodingOperationRequest, CodingOperationTransport, CodingOperationWireRequest } from "./src/coding-operations";

@@ -49,7 +49,7 @@ import { packOrganism, parseBundle, unpackBundle } from "./src/bundle";
 import { FileStore } from "./src/store";
 import { ProcessSupervisor, PROCESS_BOUNDS } from "./src/process";
 import { PullRequestShepherd } from "./src/shepherd";
-import { CodingJobService, type CodingJobOptions } from "./src/coding-jobs";
+import { CodingJobService, type CodingJobOptions, type CodingJobOperationOptions } from "./src/coding-jobs";
 import { RepairWorkflow, type RepairCheck } from "./src/repair";
 import { githubCliTransport } from "./src/github-cli";
 import {
@@ -180,7 +180,9 @@ usage:
   algal process recover <name> --expected-intent SHA [same tool/executor options]
   algal process journal <name>
   algal job prepare <config.json>           admit a bounded coding job in a clean checkout
+  algal job prepare-operation <config.json> admit an explicitly keyed operation adapter job
   algal job run|inspect <job-digest>         run once in foreground or inspect retained state
+  algal job reconcile <job-digest>          observe an admitted v2 operation; never resubmit
   algal repair start <name> --job <digest> --checks <checks.json>
   algal repair tick|inspect|verify <name>    wait for the job, validate its exact patch, or replay
   algal shepherd start <name> --repo owner/repo --pr NUMBER [--max-polls 16]
@@ -1853,22 +1855,28 @@ async function main(): Promise<number> {
 
     case "job": {
       const [sub, target] = positional;
-      if (!target) usageError("algal job prepare <config.json> | run|inspect <job-digest>");
+      if (!target) usageError("algal job prepare|prepare-operation <config.json> | run|inspect|reconcile <job-digest>");
       const jobs = new CodingJobService(dir);
       if (sub === "prepare") {
         const config = await readJsonBounded(resolve(target), 131_072, "coding job config");
         out(await jobs.prepare(config as unknown as CodingJobOptions) as unknown as JsonValue);
+      } else if (sub === "prepare-operation") {
+        const config = await readJsonBounded(resolve(target), 131_072, "coding operation config");
+        out(await jobs.prepareOperation(config as unknown as CodingJobOperationOptions) as unknown as JsonValue);
       } else if (sub === "inspect") out(await jobs.inspect(asDigest(target, "job digest")) as unknown as JsonValue);
-      else if (sub === "run") {
+      else if (sub === "run" || sub === "reconcile") {
         const controller = new AbortController();
         const stop = () => controller.abort();
         process.once("SIGINT", stop); process.once("SIGTERM", stop);
         try {
-          const result = await jobs.run(asDigest(target, "job digest"), {signal: controller.signal});
+          const jobId = asDigest(target, "job digest");
+          const result = sub === "run"
+            ? await jobs.run(jobId, {signal: controller.signal})
+            : await jobs.reconcile(jobId, {signal: controller.signal});
           out(result as unknown as JsonValue);
           return result.status === "completed" ? 0 : 1;
         } finally { process.removeListener("SIGINT", stop); process.removeListener("SIGTERM", stop); }
-      } else usageError("algal job prepare|run|inspect");
+      } else usageError("algal job prepare|prepare-operation|run|inspect|reconcile");
       return 0;
     }
 
