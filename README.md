@@ -372,8 +372,10 @@ Cell kinds:
   frontier model runs the cell.
   Opt in to `compact.mode: "elide"` to replace old result bodies with
   digest-linked byte markers before the next call, without a compaction model
-  call. Names, inputs, and the recent tail remain exact; receipts retain the
-  full tool log. Protected context that still exceeds the byte budget fails
+  call. Names, inputs, and the tail pinned by `keepRecent` remain exact;
+  `keepRecent` defaults to zero, so pin outputs the next call must retain.
+  Receipts retain the full tool log but do not add model recall.
+  Protected context that still exceeds the byte budget fails
   closed. See [the runnable elision example](examples/compact-elide.algal.json)
   and [the precise contract](spec/v1/organism.md). This is a byte-budget policy,
   not a measured task-quality or token-cost improvement.

@@ -196,9 +196,10 @@ an active admission record and may revoke it independently.
   digest and byte count bind the original canonical result; the marker is not a
   summary or evidence of its contents. Only use a marker when it is smaller.
   Existing markers remain unchanged. Stop when both budgets fit or eligible
-  bodies are exhausted. `maxLogBytes` is a soft reduction target: fn names,
-  inputs, order, current inputs, notes, other cell views, and the recent tail
-  remain exact. The ordinary complete-context bound still fails closed if
+  bodies are exhausted. `keepRecent` defaults to zero; set it to pin results
+  that the next call must retain. `maxLogBytes` is a soft reduction target:
+  fn names, inputs, order, current inputs, notes, other cell views, and the
+  pinned recent tail remain exact. The ordinary complete-context bound still fails closed if
   protected material cannot fit. This mode makes no extra model call and does
   not change stored effects or the complete `cells[path].toolCalls` log. Each
   turn derives a fresh projection from that source log; replay reconstructs the
