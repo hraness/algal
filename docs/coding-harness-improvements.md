@@ -1,0 +1,35 @@
+# ALGAL coding-harness improvement ledger
+
+This ledger distinguishes implemented example-level fixes from proposed ALGAL
+work. A promising direction or a missing convenience API is not evidence that a
+new core feature is required. Live results must be attached before closing items
+whose acceptance criteria depend on live inference or benchmark performance.
+
+| ID | Status | Observation / evidence | Current action and acceptance criterion |
+| --- | --- | --- | --- |
+| CH-01 | Implemented in pilot; core change unnecessary | `src/run.ts` already owns `agent` cell tool loops; `examples/coding-harness/harness.ts` supplies one model call and one terminal effect at a time. | Compare deterministic baseline/ALGAL traces and verify completed ALGAL receipts. Do not wrap an entire external coding agent and call that an ALGAL-owned loop. |
+| CH-02 | Implemented in pilot | `examples/coding-harness/protocol.ts` admits a bounded data-only policy and hashes canonical values. | Reject unknown fields and code-bearing proposals; bind model, runtime, prompt version, and limits in the experiment report separately. The policy digest alone is not an experiment identity. |
+| CH-03 | Implemented protocol and serial runner; live evidence pending | `protocol.ts` separates development evidence, frozen selection, and held-out scoring; `pilot.py` creates serial Harbor jobs and parses independent verifier rewards. Their tests exercise leakage, invalid grading, settings identity, and accounting failures. | Persist selection before holdout. Include every evaluated candidate and supplied proposal cost. Establish behavior on pinned independent benchmark tasks; no quality claim from fixtures. |
+| CH-04 | Host adapter responsibility; pending live qualification | `src/effects.ts` provides the executor boundary; `examples/coding-harness/xcb.ts` connects the existing subscription backend without delegating the coding loop. | Require qualified single-call inference, exact account/model selection, bounded output/calls, settled completion, and no paid fallback. Report unprovided token/cost attribution as unknown. |
+| CH-05 | Open; measure before extending core | Context/test/recovery policies are selected through fixed example code; test and recovery labels currently change instructions, not enforced transitions. | If useful improvements depend on enforced test/repair structure, encode the policy using existing tool/repeat/guard primitives first. Consider core changes only for a demonstrated missing semantic operation. |
+| CH-06 | Bounded proposal path implemented; live evidence pending | `propose.ts` makes one zero-tool model call using development outcomes and retains admission, ancestry, and usage. `pilot.py --policy` evaluates the admitted policy; `freeze --proposal-record` binds the proposal to exact development evidence and charges its usage. | Retain every admitted/rejected proposal and its usage, then compare equal-budget conventional search. Do not describe manual candidate selection as autonomous evolution; one generated proposal is a bounded first step. |
+| CH-07 | Open; application responsibility | Completed ALGAL receipts are replayable, but ordinary host terminal writes are not automatically crash-safe or idempotent. See `docs/coding-operations.md` and `src/process.ts`. | Use isolated task environments and surface uncertain termination without automatic retry. A durable live harness needs a qualified effect adapter and reconciliation evidence before claiming safe restart. |
+| CH-08 | Deferred pending a useful fixed-policy result | Code, selected context, evidence, and stored values are accessible through separate existing APIs; host callback implementations remain opaque. See `src/store.ts`, `src/registry.ts`, and `spec/v1/organism.md`. | Record candidate ancestry and policy/evidence digests at the application level. Add a general introspection primitive only when a concrete evolving component cannot obtain the information it needs through current APIs. |
+| CH-09 | Deferred experiment | The first pilot has no cross-task persistent memory treatment. | Compare the same frozen policy with/without memory on a predeclared task sequence, then test a memory-schema migration. Preserve source experience and provenance. |
+| CH-10 | Open; report limitation | Task-ID disjointness does not establish semantic independence or absence of benchmark contamination. | Review task provenance, pin revisions, prevent hidden grader access, and expand to enough repeats/tasks before drawing performance conclusions. |
+| CH-11 | Open; provider limitation | The configured XCB selector is `claude/sonnet/low`; executable and qualification evidence digests are available, but immutable upstream model weights are not. | Record the selector and available qualification identity per episode. Do not claim exact model-version pinning; if the backend changes during comparisons, record it and rerun affected comparisons as needed. |
+| CH-12 | Fixed in pilot; core change unnecessary | Integration review found that escaped full traces could hit ALGAL's context cap earlier than the baseline, while an extra serialization bound incorrectly rejected valid multiline terminal output. | Both engines now enforce the same 262,144-byte canonical unprojected context bound. Regression tests in `harness.test.ts` cover equal stopping points under full/recent policies and acceptance of bounded multiline output. |
+| CH-13 | Fixed in pilot integration | Harbor forwards agent `env` fields into sandbox execution and mounts the normal agent-log directory into the task. Those defaults exposed host routing and could let a task tamper with controller evidence. | `pilot.py` now passes inference routing only through the parent process environment; the adapter keeps controller evidence in the unmounted `algal-host` sibling directory. Keep these boundaries in integration tests. |
+| CH-14 | Fixed in pilot integration | Startup capability queries could ignore cancellation; terminal output was initially buffered without a bound by Harbor before trimming. | XCB startup now has a cancellation deadline and joins its child. The controller joins outstanding terminal replies. A sandbox-side Python wrapper drains excess output, retains bounded bytes, and settles command processes on timeout; 23 adapter regressions include noisy output, cancellation, private host evidence, and isolated interpreter startup. |
+
+## Update rules
+
+For each observed issue, retain the failing task/run ID, exact configuration,
+symptom, and smallest reproducer. Link a focused test or concrete live artifact
+when moving an item to implemented/qualified. Keep live qualification distinct
+from deterministic implementation checks. Do not attach secrets, hidden solutions,
+or private subscription/account state to this public ledger.
+
+Small fixes that preserve the existing contract belong in this pilot or an
+ordinary focused patch. Coordinate any public-runtime or wire-contract changes
+with the parallel ALGAL owner before editing shared core files.

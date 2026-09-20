@@ -1062,6 +1062,7 @@ forged-output detection.
 - `spec/v1/foundry.md` — candidate generation, evidence, promotion, and verification.
 - `spec/v1/search.md` — bounded generations, feedback, survivors, and lineage.
 - `spec/v1/bench.md` — workload comparison, attribution, and the pareto claim.
+- [Coding-harness pilot](docs/coding-harness.md) — matched conventional/ALGAL loops, bounded policy proposals, and independent benchmark grading.
 - `docs/` — design notes as they land.
 
 ## Related work

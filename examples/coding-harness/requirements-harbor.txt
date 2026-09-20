@@ -1,0 +1,5 @@
+# CPython >=3.12. Harbor v0.23.0 resolves to upstream commit:
+# 1e5c5c6db929a10a140d05e606882c671ae20729
+# The Docker backend needs no cloud-provider extra. This pins Harbor itself;
+# transitive dependencies are not locked by this requirements file.
+harbor==0.23.0
