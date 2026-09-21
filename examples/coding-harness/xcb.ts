@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import type { ModelCallback } from "./harness";
+import type { EffectRequest, Executor, ExecutorResult } from "../../src/effects";
+import { canonicalize, type JsonValue } from "../../src/values";
+import { digestCanonical } from "../../src/digest";
 
 // XCB owns authentication and provider isolation. This adapter only uses the
 // qualified, zero-tool application API; it never falls back to `xcb run`.
@@ -183,4 +186,109 @@ export async function createXcbModel(config: XcbConfig, parentSignal?: AbortSign
     return promise;
   };
   return { model, accounting, settle: async () => { await Promise.allSettled([...pending]); } };
+}
+
+// The same qualified application route as a substrate Executor: an agent
+// cell's declared output schema rides as a {"value": ...} JSON instruction,
+// and the response text must be exactly that object. Capability admission,
+// per-call inventory recheck, executable pinning and call bounds are identical
+// to createXcbModel — the only difference is the substrate's request shape.
+export async function createXcbExecutor(config: XcbConfig, parentSignal?: AbortSignal): Promise<{
+  executor: Executor;
+  accounting: XcbAccounting;
+  settle: () => Promise<void>;
+}> {
+  const timeoutMs = config.timeoutMs ?? 60_000;
+  const maxCalls = config.maxCalls ?? 12;
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 120_000 ||
+      !Number.isInteger(maxCalls) || maxCalls < 1 || maxCalls > 64) {
+    throw new Error("Invalid XCB call bounds");
+  }
+  const executableDigest = createHash("sha256").update(await readFile(config.executable)).digest("hex");
+  const boundedSignal = (signal?: AbortSignal) => AbortSignal.any([
+    AbortSignal.timeout(timeoutMs),
+    ...(parentSignal ? [parentSignal] : []),
+    ...(signal ? [signal] : []),
+  ]);
+  const capabilities = await invoke(config.executable, ["--capabilities"], undefined, 2_097_152, boundedSignal());
+  validateXcbCapability(capabilities, config, executableDigest);
+  const accounting: XcbAccounting = {
+    calls: 0, completedCalls: 0, model: config.model, executableDigest, requestIds: [],
+    inputTokens: null, outputTokens: null, costUsd: null,
+    billing: "existing-subscription", incrementalPaidApiSpendUsd: 0,
+  };
+  const pending = new Set<Promise<unknown>>();
+  const call = async (request: EffectRequest, signal?: AbortSignal): Promise<ExecutorResult> => {
+    if (request.kind !== "agent" && request.kind !== "classifier") {
+      throw new Error(`XCB cannot serve effect kind "${request.kind}"`);
+    }
+    if (accounting.calls >= maxCalls) throw new Error("XCB pilot call limit exhausted");
+    validateXcbCapability(capabilities, config, executableDigest);
+    const currentDigest = createHash("sha256").update(await readFile(config.executable)).digest("hex");
+    if (currentDigest !== executableDigest) throw new Error("XCB executable changed during the experiment");
+    const prompt = [
+      "Execute the declared bounded cell.",
+      "",
+      request.prompt,
+      "",
+      "Request (JSON):",
+      canonicalize({ context: request.context, output: request.output as unknown as JsonValue }),
+      "",
+      "Respond with exactly one JSON object of the form {\"value\": <result>}, where <result> validates against the request's output schema. No prose, no markdown fences.",
+    ].join("\n");
+    const maxOutputBytes = Math.min(request.budget.maxOutputBytes, 65_536);
+    const input = { version: 1, account: config.account, model: config.model, prompt, timeoutMs, maxOutputBytes };
+    if (Buffer.byteLength(JSON.stringify(input)) > 1_048_576) throw new Error("XCB input exceeds 1 MiB");
+    accounting.calls++;
+    const raw = await invoke(config.executable, [], input, maxOutputBytes * 6 + 4096, boundedSignal(signal));
+    const response = parseXcbResponse(raw, config);
+    if (Buffer.byteLength(response.text) > maxOutputBytes) throw new Error("XCB model text exceeds bound");
+    accounting.completedCalls++;
+    accounting.requestIds.push(response.requestId);
+    let parsed: unknown;
+    const text = response.text.trim().replace(/^```(?:json)?\s*\n([\s\S]*?)\n```$/s, "$1").trim();
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      throw new Error("XCB application output is not JSON");
+    }
+    const structured = object(parsed);
+    if (Object.keys(structured).join(",") !== "value") {
+      throw new Error("XCB application output must be a single value field");
+    }
+    return {
+      output: structured.value as JsonValue,
+      metadata: {
+        executor: `xcb:${config.model}`,
+        usage: { model: config.model },
+      },
+    };
+  };
+  const executor: Executor = {
+    id: `xcb:${config.model}`,
+    capabilities: { effects: ["agent", "classifier"] },
+    cacheIdentity: digestCanonical({ kind: "xcb", executableDigest, account: config.account, model: config.model }),
+    receiptFor: () => ({
+      configurationDigest: digestCanonical({ kind: "xcb", executableDigest, account: config.account, model: config.model }),
+    }),
+    execute: async (request, signal) => {
+      const promise = call(request, signal);
+      pending.add(promise);
+      try {
+        return (await promise).output;
+      } finally {
+        pending.delete(promise);
+      }
+    },
+    executeEffect: async (request, signal) => {
+      const promise = call(request, signal);
+      pending.add(promise);
+      try {
+        return await promise;
+      } finally {
+        pending.delete(promise);
+      }
+    },
+  };
+  return { executor, accounting, settle: async () => { await Promise.allSettled([...pending]); } };
 }

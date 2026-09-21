@@ -3,12 +3,14 @@
  * is the trusted decoder, the mutation frontier tracks the actual dependency
  * files, and episode dispatch runs the entrypoint manifest through the VM. */
 import { afterEach, describe, expect, test } from "bun:test";
+import { createXcbExecutor } from "./xcb";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   ApplicationService, admitApplicationActivation, builtinRegistry, evaluateApplicationRevision,
-  getApplicationRecord, parseApplicationRevision, putApplicationRecord, runOrganism,
+  getApplicationRecord, manifestToJson, parseApplicationRevision, putApplicationRecord,
+  runOrganism, vercelGatewayExecutor, verifyReceipt,
 } from "../../index";
 import {
   ApplicationMemoryService, parseMemoryScope,
@@ -399,4 +401,99 @@ describe("development-workspace organism on the real harness boundary", () => {
     const upgraded = await activate(same, "op-same-decls");
     expect(upgraded.state.epoch).toBe(1);
   });
+
+  // A live-provider leg: with VERCEL_OIDC_TOKEN or AI_GATEWAY_API_KEY in the
+  // environment the investigator inhabitant makes a real model call through
+  // the Vercel AI Gateway; its receipt is durable evidence that replays
+  // offline. Without the credential the test skips like the native suite.
+  const gatewayKey = process.env.VERCEL_OIDC_TOKEN ?? process.env.AI_GATEWAY_API_KEY;
+  const liveTest = gatewayKey ? test : test.skip;
+  liveTest("model-backed investigator decides through the real AI gateway", async () => {
+    const f = await fixture();
+    const { service, memory, domain } = f;
+    const gateway = vercelGatewayExecutor({ model: "anthropic/claude-haiku-4.5" });
+    const dispatcher = createHarnessDispatcher(domain, service.store, harnessTerminal(f.cwd), f.admission.currentFrontier, { "model-inference": [gateway] });
+
+    const scheduled = await scheduleInvestigations(service, memory, {
+      application: "workspace", operation: ref("op-live-schedule"), expectedHead: f.genesis.digest,
+      expectedMemory: f.genesis.state.memory, route: "probes", entrypoints: ["run"],
+    });
+    if (!scheduled.snapshot) throw new Error("expected an investigate commit");
+    const [d1] = await service.dispatchPending("workspace", dispatcher);
+    if (!d1 || d1.status !== "settled") throw new Error("probe request was not settled");
+    const drained = await drainProbes(domain, service, memory);
+    expect(drained.rejected).toEqual([]);
+
+    // The decision receipt is a real provider call: one agent effect served
+    // by the gateway executor with metered usage — not a scripted response.
+    const channel = JSON.parse(await readFile(join(domain.stateDir, "probes", scheduled.requests[0]!.slice(7) + ".json"), "utf8")) as { outcomes: Digest[] };
+    const outcome = await getApplicationRecord(service.store, channel.outcomes[0]!, r => r as { proposal: Digest });
+    const proposal = await getApplicationRecord(service.store, outcome.proposal, r => r as { receipt: Digest | null; probes: Digest[] });
+    const receipt = await getApplicationRecord(service.store, proposal.receipt!, r => r as { outcome: string; effects: { executor: string; usage?: { model?: string; tokensIn?: number } }[] });
+    expect(receipt.outcome).toBe("complete");
+    const effect = receipt.effects.find(e => e.executor.startsWith("vercel:"))!;
+    expect(effect.executor).toBe("vercel:anthropic/claude-haiku-4.5");
+    expect(effect.usage?.tokensIn).toBeGreaterThan(0);
+    // The model chose a subset of the admitted procedures; the drain probed
+    // exactly those and committed their real observations.
+    expect(proposal.probes.length).toBeGreaterThan(0);
+    expect(drained.committed.length).toBe(proposal.probes.length);
+
+    // The recorded call replays bit-for-bit without touching the provider —
+    // the receipt itself is the restart-safe evidence.
+    const investigatorManifest = await service.store.getManifest(f.investigator);
+    const report = await verifyReceipt(await getApplicationRecord(service.store, proposal.receipt!, r => r as JsonValue), manifestToJson(investigatorManifest!), service.store);
+    expect(report.ok).toBe(true);
+  });
+
+  // The subscription route: with ALGAL_XCB_LIVE=1 plus XCB_EXECUTABLE,
+  // XCB_ACCOUNT and XCB_MODEL, the investigator inhabitant runs through a
+  // qualified xcb `generate` call — a real subscription turn with zero tools
+  // and zero hooks whose receipt is durable evidence replayable offline.
+  // Skips by default; createXcbExecutor still hard-fails if the account is
+  // not currently qualified for the requested model.
+  const xcbLive = process.env.ALGAL_XCB_LIVE === "1"
+    && process.env.XCB_EXECUTABLE && process.env.XCB_ACCOUNT && process.env.XCB_MODEL;
+  const xcbTest = xcbLive ? test : test.skip;
+  xcbTest("model-backed investigator decides through a qualified XCB subscription", async () => {
+    const f = await fixture();
+    const { service, memory, domain } = f;
+    const { executor: xcb, accounting } = await createXcbExecutor({
+      executable: process.env.XCB_EXECUTABLE!,
+      account: process.env.XCB_ACCOUNT!,
+      model: process.env.XCB_MODEL!,
+      maxCalls: 4,
+    });
+    const dispatcher = createHarnessDispatcher(domain, service.store, harnessTerminal(f.cwd), f.admission.currentFrontier, { "model-inference": [xcb] });
+
+    const scheduled = await scheduleInvestigations(service, memory, {
+      application: "workspace", operation: ref("op-xcb-schedule"), expectedHead: f.genesis.digest,
+      expectedMemory: f.genesis.state.memory, route: "probes", entrypoints: ["run"],
+    });
+    if (!scheduled.snapshot) throw new Error("expected an investigate commit");
+    const [d1] = await service.dispatchPending("workspace", dispatcher);
+    if (!d1 || d1.status !== "settled") throw new Error("probe request was not settled");
+    const drained = await drainProbes(domain, service, memory);
+    expect(drained.rejected).toEqual([]);
+
+    // The decision receipt is a real subscription turn: one agent effect
+    // served by the xcb executor, request settled through the qualified
+    // zero-tool application route with no paid API spend.
+    const channel = JSON.parse(await readFile(join(domain.stateDir, "probes", scheduled.requests[0]!.slice(7) + ".json"), "utf8")) as { outcomes: Digest[] };
+    const outcome = await getApplicationRecord(service.store, channel.outcomes[0]!, r => r as { proposal: Digest });
+    const proposal = await getApplicationRecord(service.store, outcome.proposal, r => r as { receipt: Digest | null; probes: Digest[] });
+    const receipt = await getApplicationRecord(service.store, proposal.receipt!, r => r as { outcome: string; effects: { executor: string }[] });
+    expect(receipt.outcome).toBe("complete");
+    expect(receipt.effects.find(e => e.executor.startsWith("xcb:"))!.executor).toBe(`xcb:${process.env.XCB_MODEL}`);
+    expect(accounting.completedCalls).toBe(1);
+    expect(accounting.incrementalPaidApiSpendUsd).toBe(0);
+    expect(accounting.requestIds.length).toBe(1);
+    expect(proposal.probes.length).toBeGreaterThan(0);
+    expect(drained.committed.length).toBe(proposal.probes.length);
+
+    // The recorded subscription turn replays bit-for-bit without the provider.
+    const investigatorManifest = await service.store.getManifest(f.investigator);
+    const report = await verifyReceipt(await getApplicationRecord(service.store, proposal.receipt!, r => r as JsonValue), manifestToJson(investigatorManifest!), service.store);
+    expect(report.ok).toBe(true);
+  }, 120_000);
 });
