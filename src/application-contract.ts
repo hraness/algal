@@ -53,14 +53,15 @@ export const APPLICATION_LIMITS = Object.freeze({ recordBytes: 262_144, depth: 2
 /** Bound first, then copy, before any asynchronous admission or caller mutation. */
 export function applicationJson(input: unknown): JsonValue {
   let nodes = 0;
-  const seen = new Set<object>();
+  const active = new Set<object>();
   const visit = (value: unknown, depth: number): void => {
     if (++nodes > APPLICATION_LIMITS.nodes || depth > APPLICATION_LIMITS.depth) throw new Error("Application structure bound exceeded");
     if (value && typeof value === "object") {
-      if (seen.has(value)) throw new Error("Application cyclic or aliased input");
-      seen.add(value);
+      if (active.has(value)) throw new Error("Application record contains a cycle");
+      active.add(value);
       if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) throw new Error("Application record must be plain JSON");
       for (const child of Object.values(value)) visit(child, depth + 1);
+      active.delete(value);
     }
   };
   visit(input, 0);

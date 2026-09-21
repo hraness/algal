@@ -315,3 +315,93 @@ export type { CodingOperationAdapter, CodingOperationBinding, CodingOperationOut
 
 export { PROCESS_EVIDENCE_CONTRACT, PROCESS_EVIDENCE_BOUNDS, parseProcessEvidence, exportProcessEvidence, verifyProcessEvidence } from "./src/process-evidence";
 export type { ProcessEvidence, ProcessEvidenceReport } from "./src/process-evidence";
+
+// Experimental programmable-application host surface. Native application
+// parity and automatic interrupted-process creation recovery are not claimed.
+export {
+  ApplicationService,
+  applicationProcessName,
+  parseApplicationCommand,
+} from "./src/application";
+export type {
+  ApplicationAdmission,
+  ApplicationCommand,
+  ApplicationDispatcher,
+  ApplicationDispatch,
+  ApplicationDispatchContext,
+  ApplicationDispatchOutcome,
+  ApplicationOptions,
+  ApplicationSnapshot,
+} from "./src/application";
+export {
+  applicationJson,
+  getApplicationRecord,
+  parseApplicationHead,
+  parseApplicationRevision,
+  parseApplicationState,
+  parseApplicationTransition,
+  parseEpisodeBinding,
+  parseWorkIntent,
+  putApplicationRecord,
+} from "./src/application-contract";
+export type {
+  ApplicationHead,
+  ApplicationRevision,
+  ApplicationState,
+  ApplicationTransition,
+  EpisodeBinding,
+  WorkIntent,
+} from "./src/application-contract";
+export {
+  ApplicationMemoryService,
+  validateMemoryForRevision,
+  parseMemoryFrontier,
+  parseMemoryHypothesis,
+  parseMemoryNativeProgram,
+  parseMemoryObservation,
+  parseMemoryProcedure,
+  parseMemoryQuery,
+  parseMemoryQueries,
+  parseMemoryResourceVersion,
+  parseMemorySchema,
+  parseMemoryScope,
+  parseMemorySnapshot,
+} from "./src/application-memory";
+export type {
+  MemoryAdmissionHost,
+  MemoryClaim,
+  MemoryDerivation,
+  MemoryEngineResult,
+  MemoryFrontier,
+  MemoryHypothesis,
+  MemoryObservation,
+  MemoryObservationInput,
+  MemoryProcedure,
+  MemoryQuery,
+  MemoryQueryEngine,
+  MemoryQueries,
+  MemoryResourceVersion,
+  MemorySchema,
+  MemoryScope,
+  MemorySnapshot,
+} from "./src/application-memory";
+export { NativeMemoryQueryEngine } from "./src/application-native-memory";
+export {
+  admitApplicationActivation,
+  checkApplicationCompatibility,
+  evaluateApplicationRevision,
+  parseApplicationEvaluationRequest,
+  parseEvaluationCases,
+  parseEvaluationPolicy,
+  parseEvaluationScorer,
+  verifyApplicationEvaluation,
+} from "./src/application-adaptation";
+export type {
+  AdaptationRuntime,
+  ApplicationEvaluation,
+  ApplicationEvaluationRequest,
+  CompatibilityResult,
+  EvaluationCaseSet,
+  EvaluationPolicy,
+  EvaluationScorer,
+} from "./src/application-adaptation";
