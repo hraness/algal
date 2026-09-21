@@ -45,11 +45,22 @@ function parseHarnessReceipt(input: unknown): { request: Digest; command: string
   if (row.contract !== "algal.harness-probe-receipt.v1" || typeof row.request !== "string" || !row.request.startsWith("sha256:") || typeof row.command !== "string" || Buffer.byteLength(row.command) > 32_768) throw new Error("Invalid probe receipt");
   return { request: row.request as Digest, command: row.command };
 }
-function parseProbeOutcome(input: unknown): { request: Digest; procedure: Digest; scope: Digest; raw: Digest; receipt: Digest; frontier: Digest } {
-  const row = object(input); keys(row, ["contract", "request", "procedure", "scope", "raw", "receipt", "frontier"]);
+function parseProbeOutcome(input: unknown): { request: Digest; procedure: Digest; scope: Digest; raw: Digest; receipt: Digest; frontier: Digest; proposal: Digest } {
+  const row = object(input); keys(row, ["contract", "request", "procedure", "scope", "raw", "receipt", "frontier", "proposal"]);
   if (row.contract !== "algal.harness-probe-outcome.v1") throw new Error("Invalid probe outcome");
-  for (const key of ["request", "procedure", "scope", "raw", "receipt", "frontier"] as const) if (typeof row[key] !== "string" || !(row[key] as string).startsWith("sha256:")) throw new Error("Invalid probe outcome reference");
-  return { request: row.request as Digest, procedure: row.procedure as Digest, scope: row.scope as Digest, raw: row.raw as Digest, receipt: row.receipt as Digest, frontier: row.frontier as Digest };
+  for (const key of ["request", "procedure", "scope", "raw", "receipt", "frontier", "proposal"] as const) if (typeof row[key] !== "string" || !(row[key] as string).startsWith("sha256:")) throw new Error("Invalid probe outcome reference");
+  return { request: row.request as Digest, procedure: row.procedure as Digest, scope: row.scope as Digest, raw: row.raw as Digest, receipt: row.receipt as Digest, frontier: row.frontier as Digest, proposal: row.proposal as Digest };
+}
+/** `algal.investigation-proposal.v1` — the inhabitant's probe decision: which
+ * of the request's admitted procedures to run, plus the receipt of the ALGAL
+ * program that decided. A null receipt is the default all-admitted policy. */
+export function parseInvestigationProposal(input: unknown): { request: Digest; probes: Digest[]; receipt: Digest | null } {
+  const row = object(input); keys(row, ["contract", "request", "probes", "receipt"]);
+  if (row.contract !== "algal.investigation-proposal.v1") throw new Error("Invalid investigation proposal");
+  if (typeof row.request !== "string" || !row.request.startsWith("sha256:")) throw new Error("Invalid proposal request");
+  if (!Array.isArray(row.probes) || row.probes.length > 8 || row.probes.some((p): p is string => typeof p !== "string" || !p.startsWith("sha256:")) || new Set(row.probes as string[]).size !== (row.probes as string[]).length) throw new Error("Invalid proposal probes");
+  if (row.receipt !== null && (typeof row.receipt !== "string" || !row.receipt.startsWith("sha256:"))) throw new Error("Invalid proposal receipt");
+  return { request: row.request as Digest, probes: row.probes as Digest[], receipt: row.receipt as Digest | null };
 }
 
 export type HarnessDomain = {
@@ -64,6 +75,8 @@ export type HarnessDomain = {
   scope: Digest; frontier: Digest;
   /** Mutation record capturing the dependency digests admitted at genesis. */
   baseline: Digest;
+  /** Optional ALGAL manifest deciding which admitted procedures to probe. */
+  investigator?: Digest;
 };
 
 const digestDependencies = async (cwd: string, dependencies: Record<string, string>): Promise<MemoryScope["dependencies"]> => {
@@ -84,6 +97,8 @@ export async function createHarnessDomain(store: ApplicationService["store"], in
   /** Substrate memory schema the domain's claims are admitted under. */
   schema: Digest;
   dependencies: Record<string, string>; procedures: MemoryProcedure[]; cwd: string; stateDir: string;
+  /** Optional ALGAL manifest deciding which admitted procedures to probe. */
+  investigator?: Digest;
 }): Promise<HarnessDomain> {
   const dependencies = Object.fromEntries(Object.entries(input.dependencies).sort());
   if (Object.keys(dependencies).length > 8) throw new Error("At most eight memory dependencies");
@@ -246,8 +261,40 @@ export function createHarnessDispatcher(domain: HarnessDomain, store: Applicatio
         const harnessScopeRef = binding.version.reference;
         const harnessScope = parseHarnessScopeRecord(await store.getValue(harnessScopeRef));
         await mkdir(channelDir, { recursive: true, mode: 0o700 });
+
+        // The inhabitant decides which admitted procedures to probe. Its
+        // decision program is ordinary data run through the VM; the receipt
+        // becomes part of the proposal record the drain validates.
+        const substrateProcedures = new Map<Digest, SubstrateProcedure>();
+        for (const procedureRef of request.procedures) substrateProcedures.set(procedureRef, await getApplicationRecord(store, procedureRef, parseMemoryProcedure));
+        let probes = request.procedures, decisionReceipt: Digest | null = null;
+        if (domain.investigator) {
+          const manifest = await store.getManifest(domain.investigator);
+          if (!manifest) throw new Error("Investigator manifest missing from the store");
+          const decision = await runOrganism({
+            manifest, fns: builtinRegistry(), store, executors: [],
+            args: { req: { value: json({ entrypoint: request.entrypoint, procedures: [...substrateProcedures.values()].map(p => p.id) }) } },
+            processName: `investigator-${work.message.slice(7, 15)}`,
+          });
+          decisionReceipt = await putApplicationRecord(store, decision);
+          if (decision.outcome !== "complete") {
+            probes = [];
+          } else {
+            const out = manifest.interface?.outputs?.probes;
+            const chosen = object(out ? decision.cells[out.cell]?.outputs?.[out.port] : undefined, "investigator output");
+            if (!Array.isArray(chosen.procedures) || chosen.procedures.length > 8 || chosen.procedures.some((p): p is string => typeof p !== "string" || !/^[a-z][a-z0-9._-]{0,63}$/.test(p))) throw new Error("Investigator returned invalid procedures");
+            const byId = new Map([...substrateProcedures].map(([r, p]) => [p.id, r]));
+            probes = (chosen.procedures as string[]).map(id => {
+              const ref = byId.get(id);
+              if (!ref) throw new Error("Investigator proposed an unadmitted procedure");
+              return ref;
+            });
+          }
+        }
+        const proposal = await putApplicationRecord(store, { contract: "algal.investigation-proposal.v1", request: work.message, probes, receipt: decisionReceipt });
+
         const outcomes: Digest[] = [];
-        for (const procedureRef of request.procedures) {
+        for (const procedureRef of probes) {
           const procedure = await getApplicationRecord(store, procedureRef, parseMemoryProcedure);
           const harnessProcedure = parseHarnessProcedureRecord(await store.getValue(procedure.decoder));
           const command = probeCommand(harnessProcedure, harnessScope);
@@ -257,7 +304,7 @@ export function createHarnessDispatcher(domain: HarnessDomain, store: Applicatio
           // The frontier binds the observation to the world at probe time; a
           // later mutation makes it stale rather than silently current.
           const frontier = await currentFrontier(domain.application);
-          outcomes.push(await putApplicationRecord(store, { contract: "algal.harness-probe-outcome.v1", request: work.message, procedure: procedureRef, scope: harnessScopeRef, raw, receipt, frontier }));
+          outcomes.push(await putApplicationRecord(store, { contract: "algal.harness-probe-outcome.v1", request: work.message, procedure: procedureRef, scope: harnessScopeRef, raw, receipt, frontier, proposal }));
         }
         const channel = join(channelDir, work.message.slice(7) + ".json");
         const existing = await readFile(channel, "utf8").then(r => (JSON.parse(r) as { outcomes?: Digest[] }).outcomes ?? []).catch(() => [] as Digest[]);
@@ -298,7 +345,14 @@ export async function drainProbes(domain: HarnessDomain, lifecycle: ApplicationS
       const harnessScope = parseHarnessScopeRecord(await lifecycle.store.getValue(outcome.scope));
       const raw = await lifecycle.store.getValue(outcome.raw);
       let decoded: ReturnType<typeof decodeProbe>;
-      try { decoded = decodeProbe(harnessProcedure, harnessScope, raw); } catch { rejected.push(outcomeRef); continue; }
+      try {
+        decoded = decodeProbe(harnessProcedure, harnessScope, raw);
+        // The outcome must carry a proposal that admits exactly this procedure
+        // for this request — an unproposed probe never reaches the head.
+        const proposal = parseInvestigationProposal(await lifecycle.store.getValue(outcome.proposal));
+        const request = await getApplicationRecord(lifecycle.store, outcome.request, parseInvestigationRequest);
+        if (proposal.request !== outcome.request || !proposal.probes.includes(outcome.procedure) || !request.procedures.includes(outcome.procedure) || proposal.probes.some(p => !request.procedures.includes(p))) throw new Error("Outcome procedure was not admitted by the investigation proposal");
+      } catch { rejected.push(outcomeRef); continue; }
       const observedScope = await putApplicationRecord(lifecycle.store, { contract: "algal.harness-scope.v1", scope: { sequenceId: harnessScope.sequenceId, taskId: harnessScope.taskId, environmentId: harnessScope.environmentId, dependencies: decoded.dependencies } });
       const bindings = [
         { key: "scope", version: { kind: "store", reference: observedScope } as MemoryResourceVersion },

@@ -54,10 +54,21 @@ async function fixture() {
   const store = service.store;
   const schema = await store.putValue({ contract: "algal.application-memory-schema.v1", relations: [{ name: "observed-result", arity: 2 }] });
   const procedure: MemoryProcedure = { id: "factor", description: "Read configured factor", operation: { kind: "read-json-field", path: "config.json", field: "factor" }, dependencies: ["config"] };
+  const notesProbe: MemoryProcedure = { id: "notes", description: "Fingerprint notes", operation: { kind: "fingerprint-file", path: "notes.txt" }, dependencies: ["unrelated"] };
+  // The investigation strategy is an ordinary ALGAL program: it reads the
+  // request's admitted procedures and decides which to run.
+  const investigator = await store.putManifest(parseOrganismManifest({
+    contract: "algal.organism.v1", key: "organism:workspace-investigator", name: "workspace investigator",
+    interface: { inputs: { req: { cell: "req", port: "value" } }, outputs: { probes: { cell: "out", port: "value" } } },
+    cells: [
+      { id: "req", kind: "input", outputs: { value: "json" } },
+      { id: "out", kind: "const", outputs: { value: { type: "json", value: { procedures: ["factor"] } } } },
+    ], edges: [],
+  }));
   const domain = await createHarnessDomain(store, {
     application: "workspace", environmentId: "fixture", taskId: "task-1", sequenceId: "sequence", schema,
-    dependencies: { config: "config.json", unrelated: "notes.txt" }, procedures: [procedure],
-    cwd, stateDir: join(dir, "host"),
+    dependencies: { config: "config.json", unrelated: "notes.txt" }, procedures: [procedure, notesProbe],
+    cwd, stateDir: join(dir, "host"), investigator,
   });
   const admission = createHarnessAdmission(domain, store);
   const memory = new ApplicationMemoryService({ store, engine, admission });
@@ -68,7 +79,7 @@ async function fixture() {
     edges: [{ from: { cell: "src", port: "value" }, to: { cell: "out", port: "value" } }],
   }));
   const program = await store.putValue({ contract: "algal.query.v1", rules: [], query: { relation: "observed-result", terms: [{ var: "p" }, { var: "v" }, { var: "polarity" }] }, limits: { maxWork: 50_000, maxRounds: 32, maxDerived: 128, maxBindings: 128, maxRows: 16, maxOutputBytes: 262_144 } });
-  const query = await store.putValue({ contract: "algal.application-memory-query.v1", id: "observed", schema, program, procedures: [domain.procedureRefs.factor!], polarityColumn: 2, conflict: "single-value" });
+  const query = await store.putValue({ contract: "algal.application-memory-query.v1", id: "observed", schema, program, procedures: [domain.procedureRefs.factor!, domain.procedureRefs.notes!].sort(), polarityColumn: 2, conflict: "single-value" });
   const queries = await store.putValue({ contract: "algal.application-memory-queries.v1", queries: [query] });
   const views = await store.putValue({ contract: "algal.application-view-spec.v1", title: "Workspace", widgets: ["investigations", "memory", "procedures"] });
   const runtimeProfile = await store.putValue({ contract: "algal.application-runtime-profile.v1", runtime: "bun-native-memory", policy: "pure-case-evaluation.v1" });
@@ -107,9 +118,16 @@ describe("development-workspace organism on the real harness boundary", () => {
     expect(drained.committed.length).toBe(1);
     const head1 = (await service.inspect("workspace"))!;
     expect(head1.state.sequence).toBe(2);
-    // The deposited evidence is a real bounded probe record of the admitted command.
+    // The deposited evidence is a real bounded probe record of the admitted
+    // command, and the inhabitant program decided the probe set: the request
+    // admitted two procedures, the investigator chose only "factor".
     const channel = JSON.parse(await readFile(join(domain.stateDir, "probes", scheduled.requests[0]!.slice(7) + ".json"), "utf8")) as { outcomes: Digest[] };
-    const outcome = await getApplicationRecord(service.store, channel.outcomes[0]!, r => r as { raw: Digest; procedure: Digest });
+    expect(channel.outcomes.length).toBe(1);
+    const outcome = await getApplicationRecord(service.store, channel.outcomes[0]!, r => r as { raw: Digest; procedure: Digest; proposal: Digest });
+    const proposal = await getApplicationRecord(service.store, outcome.proposal, r => r as { request: Digest; probes: Digest[]; receipt: Digest | null });
+    expect(proposal.request).toBe(scheduled.requests[0]!);
+    expect(proposal.probes).toEqual([domain.procedureRefs.factor!]);
+    expect(proposal.receipt).not.toBeNull();
     const raw = await getApplicationRecord(service.store, outcome.raw, r => r as { contract: string; command: string; result: { exitCode: number } });
     expect(raw.contract).toBe("algal.harness-probe-raw.v1");
     expect(raw.command).toContain("perl -e");
