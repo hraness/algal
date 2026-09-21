@@ -1,3 +1,8 @@
+import { attachFoil } from "@hraness/design-kit/browser";
+
+const header = document.querySelector<HTMLElement>(".site-header");
+if (header) attachFoil(header);
+
 // Progressive recorded-run tabs. Without JavaScript every retained panel stays
 // visible; enhancement changes presentation only and never starts a VM run.
 document.querySelectorAll<HTMLElement>("[data-tabset]").forEach(tablist => {
