@@ -117,15 +117,28 @@ fn join(
     work: &mut usize,
     limits: &Limits,
 ) -> Result<Vec<Binding>> {
+    // Group tuples by relation once, so a literal only scans tuples it could
+    // possibly match. Previously every literal scanned the whole set and
+    // charged a work unit per tuple before testing the relation, so a fact no
+    // rule mentions cost real budget on every literal of every round. Results
+    // are unchanged: the map is keyed by canonical [relation, values], so
+    // same-relation tuples are already contiguous and ordered, and collecting
+    // them preserves that order exactly. Only `work` counts fall.
+    let mut by_relation: BTreeMap<&str, Vec<&Tuple>> = BTreeMap::new();
+    for tuple in tuples.values() {
+        by_relation
+            .entry(tuple.relation.as_str())
+            .or_default()
+            .push(tuple);
+    }
+    let empty: Vec<&Tuple> = Vec::new();
     let mut bindings = vec![Binding::default()];
     for literal in literals {
+        let candidates = by_relation.get(literal.relation.as_str()).unwrap_or(&empty);
         let mut next = Vec::new();
         for binding in &bindings {
-            for tuple in tuples.values() {
+            for tuple in candidates {
                 charge(work, limits)?;
-                if tuple.relation != literal.relation {
-                    continue;
-                }
                 let mut candidate = binding.clone();
                 let mut matched = true;
                 for (term, value) in literal.terms.iter().zip(&tuple.values) {
