@@ -21,7 +21,7 @@ import { parseOrganismManifest } from "../../src/contract";
 import { digestCanonical, type Digest } from "../../src/digest";
 import type { JsonValue } from "../../src/values";
 import {
-  createHarnessAdmission, createHarnessDispatcher, createHarnessDomain, drainProbes,
+  createHarnessAdmission, createHarnessDispatcher, createHarnessDomain, drainProbes, drainProposals,
   harnessApplicationAdmission, harnessTerminal,
 } from "./application";
 import type { MemoryProcedure } from "./memory-contract";
@@ -57,6 +57,30 @@ async function fixture() {
   const schema = await store.putValue({ contract: "algal.application-memory-schema.v1", relations: [{ name: "observed-result", arity: 2 }] });
   const procedure: MemoryProcedure = { id: "factor", description: "Read configured factor", operation: { kind: "read-json-field", path: "config.json", field: "factor" }, dependencies: ["config"] };
   const notesProbe: MemoryProcedure = { id: "notes", description: "Fingerprint notes", operation: { kind: "fingerprint-file", path: "notes.txt" }, dependencies: ["unrelated"] };
+  // The proposer inhabitant emits a candidate manifest as data: an agent
+  // cell returns the whole manifest record for the named entrypoint.
+  const candidateManifestJson = {
+    contract: "algal.organism.v1", key: "organism:workspace-run-v2", name: "workspace run v2",
+    interface: { inputs: { q: { cell: "src", port: "value" } }, outputs: { answer: { cell: "out", port: "value" } } },
+    cells: [
+      { id: "src", kind: "input", outputs: { value: "json" } },
+      { id: "fix", kind: "expr", inputs: { value: "json" }, expr: { contract: "algal.expr.v1", program: ["if", ["eq", ["get", "value"], "b-raw"], "b", ["get", "value"]] }, output: { kind: "text" } },
+      { id: "out", kind: "fn", fn: "echo.v1" },
+    ],
+    edges: [
+      { from: { cell: "src", port: "value" }, to: { cell: "fix", port: "value" } },
+      { from: { cell: "fix", port: "out" }, to: { cell: "out", port: "value" } },
+    ],
+  };
+  const proposer = await store.putManifest(parseOrganismManifest({
+    contract: "algal.organism.v1", key: "organism:workspace-proposer", name: "workspace proposer",
+    interface: { inputs: { req: { cell: "req", port: "value" } }, outputs: { proposed: { cell: "propose", port: "out" } } },
+    cells: [
+      { id: "req", kind: "input", outputs: { value: "json" } },
+      { id: "propose", kind: "agent", inputs: { req: "json" }, prompt: "Emit a candidate manifest for the entrypoint that preserves its interface.", view: { inputs: ["req"] }, output: { kind: "json", schema: { type: "object" } } },
+    ],
+    edges: [{ from: { cell: "req", port: "value" }, to: { cell: "propose", port: "req" } }],
+  }));
   // The investigation strategy is a model-backed ALGAL program: an agent
   // cell reads the request's admitted procedures and decides which to run.
   const investigator = await store.putManifest(parseOrganismManifest({
@@ -68,11 +92,11 @@ async function fixture() {
     ],
     edges: [{ from: { cell: "req", port: "value" }, to: { cell: "decide", port: "req" } }],
   }));
-  const investigatorExecutor = scriptedExecutor({ decide: { procedures: ["factor"] } });
+  const investigatorExecutor = scriptedExecutor({ decide: { procedures: ["factor"] }, propose: candidateManifestJson });
   const domain = await createHarnessDomain(store, {
     application: "workspace", environmentId: "fixture", taskId: "task-1", sequenceId: "sequence", schema,
     dependencies: { config: "config.json", unrelated: "notes.txt" }, procedures: [procedure, notesProbe],
-    cwd, stateDir: join(dir, "host"), investigator,
+    cwd, stateDir: join(dir, "host"), investigator, proposer,
   });
   const admission = createHarnessAdmission(domain, store);
   const memory = new ApplicationMemoryService({ store, engine, admission });
@@ -96,7 +120,7 @@ async function fixture() {
     const admission = createHarnessAdmission(domain, service.store);
     return { service, memory: new ApplicationMemoryService({ store: service.store, engine, admission }), admission };
   };
-  return { dir, cwd, service, memory, store, domain, query, genesis, reopen, manifest, admission, schema, queries, views, runtimeProfile, evaluationPolicy, executors: [investigatorExecutor] };
+  return { dir, cwd, service, memory, store, domain, query, genesis, reopen, manifest, admission, schema, queries, views, runtimeProfile, evaluationPolicy, executors: [investigatorExecutor], candidateManifestJson };
 }
 
 describe("development-workspace organism on the real harness boundary", () => {
@@ -193,24 +217,24 @@ describe("development-workspace organism on the real harness boundary", () => {
     expect(drained3.committed).toEqual([]);
     expect((await r.service.inspect("workspace"))!.digest).toBe(head2.digest);
 
-    // 8. Evaluated adaptation on the real organism: a candidate revision whose
-    //    run manifest rewrites "b-raw" to "b" is evaluated against the
-    //    incumbent through the foundry (bounded real case runs of both
-    //    manifests), admitted by the trusted gate, and activated through an
-    //    expected-head transition. The epoch bump preserves memory and work.
-    const candidateManifest = await service.store.putManifest(parseOrganismManifest({
-      contract: "algal.organism.v1", key: "organism:workspace-run-v2", name: "workspace run v2",
-      interface: { inputs: { q: { cell: "src", port: "value" } }, outputs: { answer: { cell: "out", port: "value" } } },
-      cells: [
-        { id: "src", kind: "input", outputs: { value: "json" } },
-        { id: "fix", kind: "expr", inputs: { value: "json" }, expr: { contract: "algal.expr.v1", program: ["if", ["eq", ["get", "value"], "b-raw"], "b", ["get", "value"]] }, output: { kind: "text" } },
-        { id: "out", kind: "fn", fn: "echo.v1" },
-      ],
-      edges: [
-        { from: { cell: "src", port: "value" }, to: { cell: "fix", port: "value" } },
-        { from: { cell: "fix", port: "out" }, to: { cell: "out", port: "value" } },
-      ],
-    }));
+    // 8. Evaluated adaptation on the real organism: a proposer inhabitant
+    //    emits the candidate manifest as data through the real VM; the drain
+    //    validates it against the incumbent interface; the foundry evaluates
+    //    both manifests over bounded cases; the trusted gate admits the
+    //    activation; an expected-head commit bumps the epoch.
+    const proposalRequest = await f.store.putValue({ contract: "algal.proposal-request.v1", application: "workspace", entrypoint: "run", state: head2.digest, nonce: "prop-1" });
+    const sProp = await r.service.commit({
+      application: "workspace", operation: ref("op-propose-1"), kind: "investigate",
+      expectedHead: head2.digest, revision: head2.state.revision, memory: head2.state.memory,
+      intents: [{ kind: "deliver", route: "proposals", message: proposalRequest }], evidence: [], causedBy: null,
+    });
+    const [dProp] = await r.service.dispatchPending("workspace", dispatcher2);
+    if (!dProp || dProp.status !== "settled") throw new Error("proposal request was not delivered");
+    const drainedP = await drainProposals(domain, r.service);
+    expect(drainedP.rejected).toEqual([]);
+    if (drainedP.proposals.length !== 1) throw new Error("expected one admitted proposal");
+    const candidateManifest = drainedP.proposals[0]!.manifest;
+    expect(candidateManifest).toBe(await f.store.putManifest(parseOrganismManifest(f.candidateManifestJson)));
     const candidate = await putApplicationRecord(f.store, {
       contract: "algal.application-revision.v1", application: "workspace", parent: head2.state.revision,
       schema: f.schema, queries: f.queries, views: f.views, runtimeProfile: f.runtimeProfile, evaluationPolicy: f.evaluationPolicy, capabilityRequirements: [],
@@ -224,15 +248,15 @@ describe("development-workspace organism on the real harness boundary", () => {
     const scorer = await f.store.putValue({ contract: "algal.application-evaluation-scorer.v1", scorer: null });
     const runtime = { fns: builtinRegistry(), executors: [] };
     const evaluated = await evaluateApplicationRevision(f.store, {
-      contract: "algal.application-evaluation-request.v1", parentState: head2.digest,
+      contract: "algal.application-evaluation-request.v1", parentState: sProp.digest,
       candidateRevision: candidate, entrypoint: "run", cases, scorer, policy: f.evaluationPolicy,
     }, runtime);
     expect(evaluated.evaluation.verdict.status).toBe("accepted");
-    const admitted = await admitApplicationActivation(f.store, { evaluation: evaluated.evaluationRef, expectedState: head2.digest, revision: candidate }, runtime);
+    const admitted = await admitApplicationActivation(f.store, { evaluation: evaluated.evaluationRef, expectedState: sProp.digest, revision: candidate }, runtime);
     expect(admitted.revision).toBe(candidate);
     const s4 = await r.service.commit({
       application: "workspace", operation: ref("op-activate-1"), kind: "activate",
-      expectedHead: head2.digest, revision: admitted.revision, memory: head2.state.memory,
+      expectedHead: sProp.digest, revision: admitted.revision, memory: sProp.state.memory,
       intents: [], evidence: [evaluated.evaluationRef], causedBy: null,
     });
     expect(s4.state.epoch).toBe(1);

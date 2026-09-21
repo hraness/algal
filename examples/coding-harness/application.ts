@@ -13,8 +13,9 @@ import { open } from "node:fs/promises";
 import { join } from "node:path";
 import {
   appendObservation, applicationProcessName, builtinRegistry, capabilityHandle,
-  getApplicationRecord, parseMemoryFrontier, parseMemoryProcedure, parseMemoryScope,
-  parseMemorySnapshot, putApplicationRecord, runOrganism,
+  getApplicationRecord, manifestToJson, parseApplicationRevision, parseApplicationState,
+  parseMemoryFrontier, parseMemoryProcedure, parseMemoryScope,
+  parseMemorySnapshot, parseOrganismManifest, putApplicationRecord, runOrganism,
   type ApplicationAdmission, type ApplicationDispatchContext, type ApplicationDispatcher,
   type ApplicationService, type Digest,
   type ApplicationMemoryService, type MemoryAdmissionHost, type MemoryClaim,
@@ -52,6 +53,28 @@ function parseProbeOutcome(input: unknown): { request: Digest; procedure: Digest
   for (const key of ["request", "procedure", "scope", "raw", "receipt", "frontier", "proposal"] as const) if (typeof row[key] !== "string" || !(row[key] as string).startsWith("sha256:")) throw new Error("Invalid probe outcome reference");
   return { request: row.request as Digest, procedure: row.procedure as Digest, scope: row.scope as Digest, raw: row.raw as Digest, receipt: row.receipt as Digest, frontier: row.frontier as Digest, proposal: row.proposal as Digest };
 }
+/** `algal.proposal-request.v1` — asks the proposer inhabitant for a candidate
+ * revision of one entrypoint, parented on the revision of a named state. */
+export function parseProposalRequest(input: unknown): { application: string; entrypoint: string; state: Digest; nonce: string | null } {
+  const row = object(input); keys(row, ["contract", "application", "entrypoint", "state", "nonce"]);
+  if (row.contract !== "algal.proposal-request.v1" || typeof row.application !== "string" || !row.application || row.application.length > 64) throw new Error("Invalid proposal request");
+  if (typeof row.entrypoint !== "string" || !/^[a-z][a-z0-9._-]{0,63}$/.test(row.entrypoint)) throw new Error("Invalid proposal request entrypoint");
+  if (typeof row.state !== "string" || !row.state.startsWith("sha256:")) throw new Error("Invalid proposal request state");
+  if (row.nonce !== undefined && row.nonce !== null && (typeof row.nonce !== "string" || Buffer.byteLength(row.nonce) > 128)) throw new Error("Invalid proposal request nonce");
+  return { application: row.application, entrypoint: row.entrypoint, state: row.state as Digest, nonce: (row.nonce as string | null | undefined) ?? null };
+}
+/** `algal.revision-proposal.v1` — a proposer inhabitant's emitted candidate
+ * manifest plus the receipt of the program that produced it. A null manifest
+ * records a decision that produced no admissible candidate. */
+export function parseRevisionProposal(input: unknown): { request: Digest; entrypoint: string; manifest: Digest | null; receipt: Digest } {
+  const row = object(input); keys(row, ["contract", "request", "entrypoint", "manifest", "receipt"]);
+  if (row.contract !== "algal.revision-proposal.v1" || typeof row.request !== "string" || !row.request.startsWith("sha256:")) throw new Error("Invalid revision proposal");
+  if (typeof row.entrypoint !== "string" || !/^[a-z][a-z0-9._-]{0,63}$/.test(row.entrypoint)) throw new Error("Invalid proposal entrypoint");
+  if (row.manifest !== null && (typeof row.manifest !== "string" || !row.manifest.startsWith("sha256:"))) throw new Error("Invalid proposal manifest");
+  if (typeof row.receipt !== "string" || !row.receipt.startsWith("sha256:")) throw new Error("Invalid proposal receipt");
+  return { request: row.request as Digest, entrypoint: row.entrypoint, manifest: row.manifest as Digest | null, receipt: row.receipt as Digest };
+}
+
 /** `algal.investigation-proposal.v1` — the inhabitant's probe decision: which
  * of the request's admitted procedures to run, plus the receipt of the ALGAL
  * program that decided. A null receipt is the default all-admitted policy. */
@@ -78,6 +101,8 @@ export type HarnessDomain = {
   baseline: Digest;
   /** Optional ALGAL manifest deciding which admitted procedures to probe. */
   investigator?: Digest;
+  /** Optional ALGAL manifest emitting candidate revision manifests. */
+  proposer?: Digest;
 };
 
 const digestDependencies = async (cwd: string, dependencies: Record<string, string>): Promise<MemoryScope["dependencies"]> => {
@@ -100,6 +125,8 @@ export async function createHarnessDomain(store: ApplicationService["store"], in
   dependencies: Record<string, string>; procedures: MemoryProcedure[]; cwd: string; stateDir: string;
   /** Optional ALGAL manifest deciding which admitted procedures to probe. */
   investigator?: Digest;
+  /** Optional ALGAL manifest emitting candidate revision manifests. */
+  proposer?: Digest;
 }): Promise<HarnessDomain> {
   const dependencies = Object.fromEntries(Object.entries(input.dependencies).sort());
   if (Object.keys(dependencies).length > 8) throw new Error("At most eight memory dependencies");
@@ -248,10 +275,45 @@ export function harnessTerminal(cwd: string): MemoryTerminal {
  * `stateDir/probes/<request>.json`. The drain commits the state transition. */
 export function createHarnessDispatcher(domain: HarnessDomain, store: ApplicationService["store"], terminal: MemoryTerminal, currentFrontier: (application: string) => Promise<Digest>, executors: Executor[] = []): ApplicationDispatcher {
   const channelDir = join(domain.stateDir, "probes");
+  const proposalDir = join(domain.stateDir, "proposals");
   return {
-    configurationDigest: ref({ contract: "algal.harness-dispatcher.v1", routes: ["probes"] }),
+    configurationDigest: ref({ contract: "algal.harness-dispatcher.v1", routes: ["probes", "proposals"] }),
     async dispatch(context: ApplicationDispatchContext) {
       const work = context.intent;
+      if (work.kind === "deliver" && work.route === "proposals") {
+        // The proposer inhabitant: an ALGAL program (possibly model-backed)
+        // emits a candidate manifest as data. Its run receipt plus the
+        // parsed manifest digest are deposited as a durable proposal; the
+        // drain validates it against the incumbent interface.
+        const request = await getApplicationRecord(store, work.message, parseProposalRequest);
+        if (request.application !== domain.application) throw new Error("Cross-application proposal request");
+        const manifest = domain.proposer ? await store.getManifest(domain.proposer) : undefined;
+        if (!manifest) throw new Error("Proposer manifest missing from the store");
+        const state = await getApplicationRecord(store, request.state, parseApplicationState);
+        const revision = await getApplicationRecord(store, state.revision, parseApplicationRevision);
+        const entry = revision.entrypoints.find(e => e.name === request.entrypoint);
+        if (!entry) throw new Error("Proposal request names an unknown entrypoint");
+        const incumbent = await store.getManifest(entry.manifest);
+        const decision = await runOrganism({
+          manifest, fns: builtinRegistry(), store, executors,
+          args: { req: { value: json({ entrypoint: request.entrypoint, manifest: incumbent ? manifestToJson(incumbent) : null }) } },
+          processName: `proposer-${work.message.slice(7, 15)}`,
+        });
+        const receipt = await putApplicationRecord(store, decision);
+        let candidate: Digest | null = null;
+        const out = manifest.interface?.outputs?.proposed;
+        if (decision.outcome === "complete" && out) {
+          try { candidate = await store.putManifest(parseOrganismManifest(decision.cells[out.cell]?.outputs?.[out.port])); } catch { candidate = null; }
+        }
+        const proposal = await putApplicationRecord(store, { contract: "algal.revision-proposal.v1", request: work.message, entrypoint: request.entrypoint, manifest: candidate, receipt });
+        await mkdir(proposalDir, { recursive: true, mode: 0o700 });
+        const channel = join(proposalDir, work.message.slice(7) + ".json");
+        const existing = await readFile(channel, "utf8").then(r => (JSON.parse(r) as { proposals?: Digest[] }).proposals ?? []).catch(() => [] as Digest[]);
+        const merged = [...new Set([...existing, proposal])].sort();
+        const file = await open(channel, constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW, 0o600);
+        try { await file.writeFile(canonicalize(json({ contract: "algal.proposal-channel.v1", request: work.message, proposals: merged }))); } finally { await file.close(); }
+        return { status: "settled" as const, result: { kind: "delivery" as const, message: work.message, idempotencyKey: context.dispatch.identity } };
+      }
       if (work.kind === "deliver") {
         const request = await getApplicationRecord(store, work.message, parseInvestigationRequest);
         if (request.application !== domain.application) throw new Error("Cross-application investigation request");
@@ -381,4 +443,36 @@ export async function drainProbes(domain: HarnessDomain, lifecycle: ApplicationS
     }
   }
   return { committed, rejected };
+}
+
+/** Drains the proposals channel: validates each deposited proposal — its
+ * request belongs to this application and names the same entrypoint, the
+ * emitted manifest resolves and parses, and its interface matches the
+ * incumbent entrypoint's — before returning admissible candidates for the
+ * caller to evaluate. */
+export async function drainProposals(domain: HarnessDomain, lifecycle: ApplicationService): Promise<{ proposals: { ref: Digest; request: Digest; entrypoint: string; manifest: Digest }[]; rejected: Digest[] }> {
+  const dir = join(domain.stateDir, "proposals");
+  const proposals: { ref: Digest; request: Digest; entrypoint: string; manifest: Digest }[] = [], rejected: Digest[] = [];
+  const files = (await readdir(dir).catch(() => [] as string[])).filter(f => /^[a-f0-9]{64}\.json$/.test(f)).sort();
+  for (const file of files) {
+    const channel = object(JSON.parse(await readFile(join(dir, file), "utf8")) as unknown);
+    const refs = (Array.isArray(channel.proposals) ? channel.proposals : []).slice(0, 16) as Digest[];
+    for (const proposalRef of refs) {
+      try {
+        const proposal = parseRevisionProposal(await lifecycle.store.getValue(proposalRef));
+        const request = await getApplicationRecord(lifecycle.store, proposal.request, parseProposalRequest);
+        if (channel.request !== proposal.request || request.application !== domain.application || proposal.entrypoint !== request.entrypoint || proposal.manifest === null) throw new Error("Invalid proposal binding");
+        const state = await getApplicationRecord(lifecycle.store, request.state, parseApplicationState);
+        const revision = await getApplicationRecord(lifecycle.store, state.revision, parseApplicationRevision);
+        const entry = revision.entrypoints.find(e => e.name === request.entrypoint);
+        if (!entry) throw new Error("Proposal names an unknown entrypoint");
+        const incumbent = await lifecycle.store.getManifest(entry.manifest);
+        const candidate = await lifecycle.store.getManifest(proposal.manifest);
+        if (!incumbent || !candidate) throw new Error("Proposal manifest is not in the store");
+        if (canonicalize(json(incumbent.interface ?? null)) !== canonicalize(json(candidate.interface ?? null))) throw new Error("Candidate interface differs from the incumbent");
+        proposals.push({ ref: proposalRef, request: proposal.request, entrypoint: proposal.entrypoint, manifest: proposal.manifest });
+      } catch { rejected.push(proposalRef); }
+    }
+  }
+  return { proposals, rejected };
 }
