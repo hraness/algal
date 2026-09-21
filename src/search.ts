@@ -142,6 +142,7 @@ export async function runFoundrySearch(opts: SearchOptions): Promise<SearchRepor
     store: opts.store,
     executors: opts.executors,
     ...(opts.transports ? { transports: opts.transports } : {}),
+    ...(opts.tools ? { tools: opts.tools } : {}),
     ...(opts.scorer ? { scorer: opts.scorer } : {}),
     lineage: {
       generatorDigest: last.generatorDigest,
