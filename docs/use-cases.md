@@ -180,7 +180,7 @@ run uses scripted answers and sends no email.
 The [routing example](../examples/source/route.algal) adds an explicit choice:
 support and sales select their own draft branch; the other branch returns a fixed
 human-review message. Unselected effect branches are skipped. The website's
-[recorded views](https://algal.dev/#branch-demo) expose actual fixture receipts
+[recorded views](https://algal.computer/#branch-demo) expose actual fixture receipts
 and the model work used by each path.
 
 **Adapting it:** replace the helper's declared task and input shape, select an
