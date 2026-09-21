@@ -7,7 +7,8 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  ApplicationService, builtinRegistry, getApplicationRecord, putApplicationRecord, runOrganism,
+  ApplicationService, admitApplicationActivation, builtinRegistry, evaluateApplicationRevision,
+  getApplicationRecord, putApplicationRecord, runOrganism,
 } from "../../index";
 import {
   ApplicationMemoryService,
@@ -92,7 +93,7 @@ async function fixture() {
     const admission = createHarnessAdmission(domain, service.store);
     return { service, memory: new ApplicationMemoryService({ store: service.store, engine, admission }), admission };
   };
-  return { dir, cwd, service, memory, store, domain, query, genesis, reopen, manifest, admission };
+  return { dir, cwd, service, memory, store, domain, query, genesis, reopen, manifest, admission, schema, queries, views, runtimeProfile, evaluationPolicy };
 }
 
 describe("development-workspace organism on the real harness boundary", () => {
@@ -169,7 +170,8 @@ describe("development-workspace organism on the real harness boundary", () => {
       expectedMemory: s3.state.memory, route: "probes",
     });
     if (!again.snapshot) throw new Error("expected a re-investigation commit");
-    const [d3] = await r.service.dispatchPending("workspace", createHarnessDispatcher(domain, r.service.store, harnessTerminal(f.cwd), r.admission.currentFrontier));
+    const dispatcher2 = createHarnessDispatcher(domain, r.service.store, harnessTerminal(f.cwd), r.admission.currentFrontier);
+    const [d3] = await r.service.dispatchPending("workspace", dispatcher2);
     if (!d3 || d3.status !== "settled") throw new Error("re-investigation was not dispatched");
     const drained2 = await drainProbes(domain, r.service, r.memory);
     expect(drained2.committed.length).toBe(1);
@@ -181,5 +183,69 @@ describe("development-workspace organism on the real harness boundary", () => {
     const drained3 = await drainProbes(domain, r.service, r.memory);
     expect(drained3.committed).toEqual([]);
     expect((await r.service.inspect("workspace"))!.digest).toBe(head2.digest);
+
+    // 8. Evaluated adaptation on the real organism: a candidate revision whose
+    //    run manifest rewrites "b-raw" to "b" is evaluated against the
+    //    incumbent through the foundry (bounded real case runs of both
+    //    manifests), admitted by the trusted gate, and activated through an
+    //    expected-head transition. The epoch bump preserves memory and work.
+    const candidateManifest = await service.store.putManifest(parseOrganismManifest({
+      contract: "algal.organism.v1", key: "organism:workspace-run-v2", name: "workspace run v2",
+      interface: { inputs: { q: { cell: "src", port: "value" } }, outputs: { answer: { cell: "out", port: "value" } } },
+      cells: [
+        { id: "src", kind: "input", outputs: { value: "json" } },
+        { id: "fix", kind: "expr", inputs: { value: "json" }, expr: { contract: "algal.expr.v1", program: ["if", ["eq", ["get", "value"], "b-raw"], "b", ["get", "value"]] }, output: { kind: "text" } },
+        { id: "out", kind: "fn", fn: "echo.v1" },
+      ],
+      edges: [
+        { from: { cell: "src", port: "value" }, to: { cell: "fix", port: "value" } },
+        { from: { cell: "fix", port: "out" }, to: { cell: "out", port: "value" } },
+      ],
+    }));
+    const candidate = await putApplicationRecord(f.store, {
+      contract: "algal.application-revision.v1", application: "workspace", parent: head2.state.revision,
+      schema: f.schema, queries: f.queries, views: f.views, runtimeProfile: f.runtimeProfile, evaluationPolicy: f.evaluationPolicy, capabilityRequirements: [],
+      entrypoints: [{ name: "run", manifest: candidateManifest, applicability: f.query, maxGenerations: 1 }],
+    });
+    const cases = await f.store.putValue({ contract: "algal.application-evaluation-cases.v1", cases: [
+      { id: "train-a", split: "train", args: { q: "a" }, expect: { answer: "a" } },
+      { id: "validation-b", split: "validation", args: { q: "b-raw" }, expect: { answer: "b" } },
+      { id: "holdout-c", split: "holdout", args: { q: "c" }, expect: { answer: "c" } },
+    ] });
+    const scorer = await f.store.putValue({ contract: "algal.application-evaluation-scorer.v1", scorer: null });
+    const runtime = { fns: builtinRegistry(), executors: [] };
+    const evaluated = await evaluateApplicationRevision(f.store, {
+      contract: "algal.application-evaluation-request.v1", parentState: head2.digest,
+      candidateRevision: candidate, entrypoint: "run", cases, scorer, policy: f.evaluationPolicy,
+    }, runtime);
+    expect(evaluated.evaluation.verdict.status).toBe("accepted");
+    const admitted = await admitApplicationActivation(f.store, { evaluation: evaluated.evaluationRef, expectedState: head2.digest, revision: candidate }, runtime);
+    expect(admitted.revision).toBe(candidate);
+    const s4 = await r.service.commit({
+      application: "workspace", operation: ref("op-activate-1"), kind: "activate",
+      expectedHead: head2.digest, revision: admitted.revision, memory: head2.state.memory,
+      intents: [], evidence: [evaluated.evaluationRef], causedBy: null,
+    });
+    expect(s4.state.epoch).toBe(1);
+    expect(s4.state.revision).toBe(candidate);
+
+    // 9. Post-upgrade execution runs the new manifest through the real VM:
+    //    the same supported memory, the upgraded entrypoint, the corrected
+    //    answer deposited as episode evidence.
+    const q4 = await r.memory.query(s4.digest, f.query);
+    expect(q4.derivation.status).toBe("supported");
+    const input2 = await service.store.putValue({ src: { value: "b-raw" } });
+    await requestExecution(r.service, {
+      application: "workspace", operation: ref("op-exec-2"), expectedHead: s4.digest,
+      expectedMemory: s4.state.memory, entrypoint: "run", input: input2, derivation: q4.ref,
+    });
+    const [d4] = await r.service.dispatchPending("workspace", dispatcher2);
+    if (!d4 || d4.plan.kind !== "episode" || d4.status !== "settled") throw new Error("post-upgrade episode was not settled");
+    const result2 = await getApplicationRecord(service.store, d4.result!, r2 => r2 as { binding: Digest });
+    const binding2 = await getApplicationRecord(service.store, result2.binding, r2 => r2 as { manifest: Digest; process: string });
+    expect(binding2.manifest).toBe(candidateManifest);
+    const replay2 = await runOrganism({ manifest: (await service.store.getManifest(candidateManifest))!, fns: builtinRegistry(), store: service.store, executors: [], args: { src: { value: "b-raw" } }, processName: binding2.process });
+    const outcome2Ref = digestCanonical(applicationJson({ contract: "algal.episode-outcome.v1", binding: result2.binding, receipt: replay2 }));
+    await getApplicationRecord(service.store, outcome2Ref, r2 => r2); // resolves only if the dispatcher deposited it
   });
 });
