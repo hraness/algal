@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://algal.dev/sitemap.xml
+Sitemap: https://algal.computer/sitemap.xml

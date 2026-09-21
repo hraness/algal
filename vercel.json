@@ -6,8 +6,30 @@
   "redirects": [
     {
       "source": "/(.*)",
-      "has": [{ "type": "host", "value": "algal-teal.vercel.app" }],
-      "destination": "https://algal.dev/$1",
+      "has": [{ "type": "host", "value": "algal.dev" }],
+      "destination": "https://algal.computer/$1",
+      "permanent": true
+    },
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "www.algal.dev" }],
+      "destination": "https://algal.computer/$1",
+      "permanent": true
+    },
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "www.algal.computer" }],
+      "destination": "https://algal.computer/$1",
+      "permanent": true
+    },
+    {
+      "source": "/(.*)",
+      "has": [
+        { "type": "host", "value": "algal.vercel.app" },
+        { "type": "host", "value": "algal-hraness.vercel.app" },
+        { "type": "host", "value": "algal-teal.vercel.app" }
+      ],
+      "destination": "https://algal.computer/$1",
       "permanent": true
     }
   ]

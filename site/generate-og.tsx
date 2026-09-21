@@ -18,7 +18,7 @@ const mark = (
 const card = createSocialImageCard({
   description:
     "A language and application VM for bounded agent programs. Durable review, retained work, and portable execution evidence.",
-  domain: "algal.dev",
+  domain: "algal.computer",
   eyebrow: "ALGAL",
   mark,
   theme: {

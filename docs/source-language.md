@@ -73,7 +73,7 @@ bun cli.ts check examples/source/errors/unknown-binding/main.algal --diagnostic-
 
 The compiler locates the unknown binding in the helper and retains the import
 site in `main.algal`. Correcting `emial` to `email` repairs this example. The
-[site demonstration](https://algal.dev/#authoring-error) generates its report
+[site demonstration](https://algal.computer/#authoring-error) generates its report
 from the actual failing compilation at build time.
 
 Compiler errors happen before a program can run. For a recorded runtime
