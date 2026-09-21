@@ -1,6 +1,6 @@
 /** Experimental Bun host lifecycle. Process execution remains the existing VM's.
  * No native application parity or automatic interrupted process creation is claimed. */
-import { opendir } from "node:fs/promises";
+import { lstat, opendir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
   APPLICATION_LIMITS, applicationId, applicationInt, applicationJson, applicationList,
@@ -32,8 +32,9 @@ export type ApplicationDispatch = {
   sourceState: Digest; configurationDigest: Digest; identity: Digest; plan: ApplicationDispatchPlan;
   status: "started" | "settled" | "blocked" | "uncertain"; result: Digest | null; reason: string | null;
 };
-export type ApplicationDispatchContext = {snapshot: ApplicationSnapshot; intent: WorkIntent; dispatch: ApplicationDispatch};
-export type ApplicationDispatchOutcome = {status: "settled"; result: JsonValue} | {status: "blocked" | "uncertain"; reason: string};
+export type ApplicationDispatchContext = {current: ApplicationSnapshot; snapshot: ApplicationSnapshot; intent: WorkIntent; dispatch: ApplicationDispatch};
+export type ApplicationDispatchResult = {kind: "episode"; binding: Digest; process: string} | {kind: "delivery"; message: Digest; idempotencyKey: Digest};
+export type ApplicationDispatchOutcome = {status: "settled"; result: ApplicationDispatchResult} | {status: "blocked" | "uncertain"; reason: string};
 export interface ApplicationDispatcher {
   configurationDigest: Digest;
   /** Admit one logical delivery/episode; success does not claim task completion. */
@@ -51,7 +52,10 @@ export interface ApplicationAdmission {
     pending: ApplicationPending[]; store: FileStore;
   }): Promise<void>;
   /** No dispatch authority exists if this method is absent. */
-  admitDispatch?(context: {snapshot: ApplicationSnapshot; intent: WorkIntent; store: FileStore}): Promise<unknown>;
+  admitDispatch?(context: {
+    current: ApplicationSnapshot; snapshot: ApplicationSnapshot; intent: WorkIntent;
+    previousDispatch: ApplicationDispatch | null; store: FileStore;
+  }): Promise<unknown>;
 }
 export type ApplicationFaultPoint = "prepared" | "head-published" | "dispatch-started" | "dispatch-settled";
 export type ApplicationOptions = {fault?: (point: ApplicationFaultPoint) => void | Promise<void>};
@@ -115,12 +119,26 @@ function parseDispatch(raw: unknown): ApplicationDispatch {
   if (identity !== dispatchIdentity(application, intent, plan)) fail("Dispatch identity changed");
   return {contract: "algal.application-dispatch.v1", application, intent, sourceState: applicationRef(v.sourceState), configurationDigest: applicationRef(v.configurationDigest), identity, plan, status, result, reason: why};
 }
-function parseOutcome(raw: unknown): ApplicationDispatchOutcome {
+function parseDispatchResult(raw: unknown, record: ApplicationDispatch): ApplicationDispatchResult {
+  if (record.plan.kind === "episode") {
+    const value = applicationObject(raw, ["kind", "binding", "process"]);
+    applicationTag(value.kind, "episode");
+    const binding = applicationRef(value.binding), process = applicationId(value.process);
+    if (binding !== hash(record.plan.binding) || process !== record.plan.binding.process) fail("Episode settlement changed its binding");
+    return {kind: "episode", binding, process};
+  }
+  const value = applicationObject(raw, ["kind", "message", "idempotencyKey"]);
+  applicationTag(value.kind, "delivery");
+  const message = applicationRef(value.message), idempotencyKey = applicationRef(value.idempotencyKey);
+  if (idempotencyKey !== record.identity) fail("Delivery settlement changed its identity");
+  return {kind: "delivery", message, idempotencyKey};
+}
+function parseOutcome(raw: unknown, record: ApplicationDispatch): ApplicationDispatchOutcome {
   const v = json(raw);
   if (!v || typeof v !== "object" || Array.isArray(v)) throw new Error("Invalid dispatch outcome");
   if (v.status === "settled") {
     const p = applicationObject(v, ["status", "result"]);
-    return {status: "settled", result: p.result!};
+    return {status: "settled", result: parseDispatchResult(p.result, record)};
   }
   const p = applicationObject(v, ["status", "reason"]);
   if (p.status !== "blocked" && p.status !== "uncertain") throw new Error("Invalid dispatch outcome status");
@@ -177,7 +195,13 @@ export class ApplicationService {
   }
   async history(application: unknown): Promise<ApplicationSnapshot[]> {
     const name = applicationId(application);
-    await hostDirectory(this.path(name));
+    // Inspection never reserves a name or bypasses the creation count limit.
+    for (const path of [this.dir, join(this.dir, "applications"), this.path(name)]) {
+      try {
+        const stat = await lstat(path);
+        if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("Invalid application directory");
+      } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; }
+    }
     const raw = await hostRead(join(this.path(name), "head.json"), 512);
     if (raw === undefined) return [];
     const head = parseApplicationHead(raw);
@@ -221,7 +245,7 @@ export class ApplicationService {
     if (raw === undefined) return null;
     const record = parseDispatch(raw);
     if (record.application !== application || record.intent !== ref) fail("Outbox identity mismatch");
-    if (record.result !== null) await this.value(record.result);
+    if (record.result !== null) parseDispatchResult(await this.value(record.result), record);
     return record;
   }
   private async pending(history: ApplicationSnapshot[]): Promise<ApplicationPending[]> {
@@ -299,13 +323,20 @@ export class ApplicationService {
   }
   private async validatePlan(snapshot: ApplicationSnapshot, work: WorkIntent, ref: Digest, plan: ApplicationDispatchPlan): Promise<void> {
     if (work.kind === "deliver") { if (plan.kind !== "delivery") fail("Delivery requires a delivery plan"); return; }
-    if (plan.kind !== "episode") fail("Episode requires an episode binding");
-    if (plan.kind !== "episode") return;
+    if (plan.kind !== "episode") throw new Error("Episode requires an episode binding");
     const b = plan.binding, entry = snapshot.revision.entrypoints.find(e => e.name === work.entrypoint);
-    if (!entry || b.application !== snapshot.state.application || b.intent !== ref || b.sourceState !== snapshot.digest || b.revision !== snapshot.state.revision || b.memory !== snapshot.state.memory || b.epoch !== snapshot.state.epoch || b.entrypoint !== entry.name || b.manifest !== entry.manifest || b.maxGenerations !== entry.maxGenerations || b.process !== applicationProcessName(b.application, ref)) fail("Episode binding does not preserve its captured state");
+    if (!entry || b.application !== snapshot.state.application || b.intent !== ref || b.sourceState !== snapshot.digest || b.revision !== snapshot.state.revision || b.memory !== snapshot.state.memory || b.epoch !== snapshot.state.epoch || b.entrypoint !== entry.name || b.manifest !== entry.manifest || b.arguments !== work.input || b.maxGenerations !== entry.maxGenerations || b.process !== applicationProcessName(b.application, ref)) fail("Episode binding does not preserve its captured state");
     await this.value(b.arguments);
   }
-  private async execute(snapshot: ApplicationSnapshot, work: WorkIntent, record: ApplicationDispatch, dispatcher: ApplicationDispatcher, reconciliation: boolean): Promise<ApplicationDispatch> {
+  private async admitPlan(current: ApplicationSnapshot, snapshot: ApplicationSnapshot, work: WorkIntent, ref: Digest, previousDispatch: ApplicationDispatch | null): Promise<ApplicationDispatchPlan> {
+    if (!this.admission.admitDispatch) throw new AlgalError("CAPABILITY_DENIED", "Trusted dispatch admission is required");
+    const plan = parsePlan(await this.admission.admitDispatch({current: structuredClone(current), snapshot: structuredClone(snapshot), intent: structuredClone(work), previousDispatch: structuredClone(previousDispatch), store: this.store}));
+    await this.validatePlan(snapshot, work, ref, plan);
+    if (previousDispatch && !same(plan, previousDispatch.plan)) fail("Reconciliation cannot change the admitted dispatch plan");
+    if (plan.kind === "episode" && plan.binding.access === "external-write" && snapshot.digest !== current.digest) throw new Error("Stale episode cannot acquire an external writer");
+    return plan;
+  }
+  private async execute(current: ApplicationSnapshot, snapshot: ApplicationSnapshot, work: WorkIntent, record: ApplicationDispatch, dispatcher: ApplicationDispatcher, reconciliation: boolean): Promise<ApplicationDispatch> {
     if (record.configurationDigest !== dispatcher.configurationDigest) fail("Dispatcher configuration changed");
     const path = join(this.path(record.application), "outbox", record.intent.slice(7) + ".json");
     if (!reconciliation) {
@@ -314,8 +345,8 @@ export class ApplicationService {
     }
     let outcome: ApplicationDispatchOutcome;
     try {
-      const context = structuredClone({snapshot, intent: work, dispatch: record});
-      outcome = parseOutcome(await (reconciliation ? dispatcher.reconcile!(context) : dispatcher.dispatch(context)));
+      const context = structuredClone({current, snapshot, intent: work, dispatch: record});
+      outcome = parseOutcome(await (reconciliation ? dispatcher.reconcile!(context) : dispatcher.dispatch(context)), record);
     } catch {
       outcome = {status: "uncertain", reason: "Dispatcher did not establish settlement; explicit reconciliation required"};
     }
@@ -332,14 +363,11 @@ export class ApplicationService {
       const history = await this.history(name), pending = await this.pending(history), results: ApplicationDispatch[] = [];
       for (const row of pending.slice(0, limit)) {
         if (row.dispatch) { results.push(row.dispatch); continue; } // Never automatically repeat an uncertain or blocked admission.
-        if (!this.admission.admitDispatch) throw new AlgalError("CAPABILITY_DENIED", "Trusted dispatch admission is required");
-        const snapshot = history.find(s => s.digest === row.sourceState)!;
-        const plan = parsePlan(await this.admission.admitDispatch({snapshot: structuredClone(snapshot), intent: structuredClone(row.work), store: this.store}));
-        await this.validatePlan(snapshot, row.work, row.intent, plan);
-        if (plan.kind === "episode" && plan.binding.access === "external-write" && snapshot.state.epoch !== history.at(-1)!.state.epoch) throw new Error("Stale episode cannot acquire an external writer");
+        const snapshot = history.find(s => s.digest === row.sourceState)!, current = history.at(-1)!;
+        const plan = await this.admitPlan(current, snapshot, row.work, row.intent, null);
         if (plan.kind === "episode") await putApplicationRecord(this.store, plan.binding);
         const record: ApplicationDispatch = {contract: "algal.application-dispatch.v1", application: name, intent: row.intent, sourceState: snapshot.digest, configurationDigest, identity: dispatchIdentity(name, row.intent, plan), plan, status: "started", result: null, reason: null};
-        results.push(await this.execute(snapshot, row.work, record, bound, false));
+        results.push(await this.execute(current, snapshot, row.work, record, bound, false));
       }
       return structuredClone(results);
     });
@@ -357,9 +385,10 @@ export class ApplicationService {
         throw new Error("No reachable unsettled dispatch");
       }
       if (!row.dispatch) throw new Error("Dispatch has not been admitted");
-      const snapshot = history.find(s => s.digest === row.sourceState)!;
-      await this.validatePlan(snapshot, row.work, ref, row.dispatch.plan);
-      return this.execute(snapshot, row.work, row.dispatch, {configurationDigest: config, dispatch: dispatcher.dispatch.bind(dispatcher), reconcile}, true);
+      const snapshot = history.find(s => s.digest === row.sourceState)!, current = history.at(-1)!;
+      if (row.dispatch.configurationDigest !== config) fail("Dispatcher configuration changed");
+      await this.admitPlan(current, snapshot, row.work, ref, row.dispatch);
+      return this.execute(current, snapshot, row.work, row.dispatch, {configurationDigest: config, dispatch: dispatcher.dispatch.bind(dispatcher), reconcile}, true);
     });
   }
 }

@@ -1,0 +1,44 @@
+import { afterEach, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { ApplicationService } from "./application";
+import { evaluateApplicationRevision, admitApplicationActivation } from "./application-adaptation";
+import { putApplicationRecord } from "./application-contract";
+import { parseOrganismManifest } from "./contract";
+import { digestCanonical } from "./digest";
+import { builtinRegistry } from "./registry";
+
+const dirs: string[] = [];
+const ref = (value: unknown) => digestCanonical(value as never);
+afterEach(async () => { for (const dir of dirs.splice(0)) await rm(dir, {recursive: true, force: true}); });
+
+test("integrates lifecycle, foundry acceptance, activation, and a fenced view state", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "algal-application-integration-")); dirs.push(dir);
+  const service = new ApplicationService(dir, {async admitCommit() {}});
+  const constant = parseOrganismManifest({contract: "algal.organism.v1", key: "organism:integrated-constant", name: "constant", interface: {inputs: {q: {cell: "src", port: "value"}}, outputs: {answer: {cell: "out", port: "value"}}}, cells: [{id: "src", kind: "input", outputs: {value: "json"}}, {id: "out", kind: "const", outputs: {value: {type: "json", value: "wrong"}}}], edges: []});
+  const echo = parseOrganismManifest({contract: "algal.organism.v1", key: "organism:integrated-echo", name: "echo", interface: {inputs: {q: {cell: "src", port: "value"}}, outputs: {answer: {cell: "out", port: "value"}}}, cells: [{id: "src", kind: "input", outputs: {value: "json"}}, {id: "out", kind: "fn", fn: "echo.v1"}], edges: [{from: {cell: "src", port: "value"}, to: {cell: "out", port: "value"}}]});
+  const incumbentManifest = await service.store.putManifest(constant), candidateManifest = await service.store.putManifest(echo);
+  const schema = await service.store.putValue({contract: "algal.application-memory-schema.v1", relations: [{name: "available", arity: 2}]});
+  const program = await service.store.putValue({contract: "algal.query.v1", rules: [], query: {relation: "available", terms: [{var: "x"}, {var: "polarity"}]}, limits: {maxWork: 50_000, maxRounds: 32, maxDerived: 128, maxBindings: 128, maxRows: 16, maxOutputBytes: 262_144}});
+  const applicability = await service.store.putValue({contract: "algal.application-memory-query.v1", id: "available", schema, program, procedures: [], polarityColumn: 1, conflict: "single-value"});
+  const queries = await service.store.putValue({contract: "algal.application-memory-queries.v1", queries: [applicability]});
+  const view = await service.store.putValue({contract: "algal.application-view-spec.v1", title: "Integrated", widgets: ["procedures"]});
+  const runtimeProfile = await service.store.putValue({contract: "algal.application-runtime-profile.v1", runtime: "bun-native-memory", policy: "pure-case-evaluation.v1"});
+  const policy = await service.store.putValue({contract: "algal.application-evaluation-policy.v1", maxCases: 8, maxWork: 1_000_000, maxModelCalls: 0, requireHoldoutPass: true, strictValidationImprovement: true});
+  const revision = (parent: string | null, manifest: string) => ({contract: "algal.application-revision.v1", application: "integrated", parent, schema, queries, views: view, runtimeProfile, evaluationPolicy: policy, capabilityRequirements: [], entrypoints: [{name: "discover", manifest, applicability, maxGenerations: 1}]});
+  const incumbentRevision = await putApplicationRecord(service.store, revision(null, incumbentManifest));
+  const memory = await service.store.putValue({contract: "algal.application-memory.v1", application: "integrated", schema, previous: null, scope: schema, observations: [], hypotheses: [], withdrawn: []});
+  const genesis = await service.create({application: "integrated", operation: ref("genesis"), kind: "create", expectedHead: null, revision: incumbentRevision, memory, intents: [], evidence: [], causedBy: null});
+  const candidateRevision = await putApplicationRecord(service.store, revision(incumbentRevision, candidateManifest));
+  const cases = await service.store.putValue({contract: "algal.application-evaluation-cases.v1", cases: [{id: "train-a", split: "train", args: {q: "a"}, expect: {answer: "a"}}, {id: "validation-b", split: "validation", args: {q: "b"}, expect: {answer: "b"}}, {id: "holdout-c", split: "holdout", args: {q: "c"}, expect: {answer: "c"}}]});
+  const scorer = await service.store.putValue({contract: "algal.application-evaluation-scorer.v1", scorer: null});
+  const request = {contract: "algal.application-evaluation-request.v1", parentState: genesis.digest, candidateRevision, entrypoint: "discover", cases, scorer, policy};
+  const evaluated = await evaluateApplicationRevision(service.store, request, {fns: builtinRegistry(), executors: []});
+  expect(evaluated.evaluation.verdict.status).toBe("accepted");
+  const admission = await admitApplicationActivation(service.store, {evaluation: evaluated.evaluationRef, expectedState: genesis.digest, revision: candidateRevision}, {fns: builtinRegistry(), executors: []});
+  const activated = await service.commit({application: "integrated", operation: ref("activate"), kind: "activate", expectedHead: genesis.digest, revision: admission.revision, memory, intents: [], evidence: [evaluated.evaluationRef], causedBy: evaluated.evaluationRef});
+  expect(activated.state.epoch).toBe(1);
+  expect(activated.state.revision).toBe(candidateRevision);
+  expect((await service.history("integrated")).map(item => item.state.revision)).toEqual([incumbentRevision, candidateRevision]);
+});

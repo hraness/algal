@@ -330,6 +330,7 @@ export type {
   ApplicationDispatch,
   ApplicationDispatchContext,
   ApplicationDispatchOutcome,
+  ApplicationDispatchResult,
   ApplicationOptions,
   ApplicationSnapshot,
 } from "./src/application";
@@ -396,6 +397,22 @@ export {
   parseEvaluationScorer,
   verifyApplicationEvaluation,
 } from "./src/application-adaptation";
+export {
+  APPLICATION_VIEW_WIDGETS,
+  loadApplicationRuntimeProfile,
+  loadApplicationViewSpec,
+  parseApplicationRuntimeProfile,
+  parseApplicationView,
+  parseApplicationViewSpec,
+  projectApplicationView,
+} from "./src/application-view";
+export type {
+  ApplicationRuntimeProfile,
+  ApplicationView,
+  ApplicationViewAction,
+  ApplicationViewSpec,
+  ApplicationViewWidget,
+} from "./src/application-view";
 export type {
   AdaptationRuntime,
   ApplicationEvaluation,
