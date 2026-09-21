@@ -1,5 +1,11 @@
 > WIP checkpoint: application contracts and design are initial implementation work.
-> Lifecycle, memory services, adaptation, native parity, and the integrated demonstration are not yet complete.
+> The lifecycle, memory services and declarative `algal.application-host.v1`
+> policy now run on both runtimes — `bun scripts/application-parity.ts` replays
+> one shared case (create → investigate → delivery → observe → derive →
+> episode binding → reconcile) and requires identical digests and records.
+> Adaptation/migration parity, the domain dispatcher and the integrated
+> demonstration are not yet complete; kernel guarantees remain gated on wider
+> shared coverage.
 > The harness memory pilot is paused and unqualified. See the checkpoint section below.
 
 # ALGAL: programmable organisms

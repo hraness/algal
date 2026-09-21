@@ -387,6 +387,8 @@ export type {
   MemoryScope,
   MemorySnapshot,
 } from "./src/application-memory";
+export { createApplicationPolicyHost, parseApplicationHostPolicy } from "./src/application-host";
+export type { ApplicationHostPolicy } from "./src/application-host";
 export { NativeMemoryQueryEngine } from "./src/application-native-memory";
 export { appendObservation } from "./src/application-observation";
 export type { AppendObservationInput, AppendedObservation } from "./src/application-observation";

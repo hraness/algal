@@ -1,4 +1,7 @@
 pub mod acp;
+pub mod application;
+pub mod application_host;
+pub mod application_memory;
 pub mod bench;
 pub mod build_info;
 pub mod canonical;

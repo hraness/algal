@@ -1,6 +1,8 @@
 use algal::{
-    Error, Result,
-    canonical::{MAX_DOCUMENT_BYTES, canonical, read_json},
+    Error, Result, application,
+    application_host::PolicyHost,
+    application_memory::{self as app_memory, MemoryService, NativeEngine},
+    canonical::{MAX_DOCUMENT_BYTES, canonical, digest_bytes, read_json},
     context,
     contract::{Manifest, object},
     effects::{Backend, Host, ResponseFormat},
@@ -17,6 +19,51 @@ use std::{
     io::{self, IsTerminal},
     path::{Path, PathBuf},
 };
+
+/// Reject-all admission used when no `--policy` record is supplied; read-only
+/// commands still work, every trusted boundary denies.
+struct NoAdmission;
+
+impl application::Admission for NoAdmission {
+    fn admit_commit(&self, _: &application::CommitContext) -> Result<()> {
+        Err(Error::new(
+            "CAPABILITY_DENIED",
+            "No application admission host",
+        ))
+    }
+    fn admit_dispatch(&self, _: &application::DispatchAdmission) -> Result<Value> {
+        Err(Error::new(
+            "CAPABILITY_DENIED",
+            "No dispatch admission host",
+        ))
+    }
+}
+
+impl app_memory::MemoryAdmission for NoAdmission {
+    fn identity(&self) -> &str {
+        "denied"
+    }
+    fn current_frontier(&self, _: &str) -> Result<String> {
+        Err(Error::new("CAPABILITY_DENIED", "No memory admission host"))
+    }
+    fn validate_scope(
+        &self,
+        _: &app_memory::MemoryScope,
+        _: &app_memory::MemoryFrontier,
+        _: &Value,
+    ) -> Result<()> {
+        Err(Error::new("CAPABILITY_DENIED", "No memory admission host"))
+    }
+    fn decode_observation(
+        &self,
+        _: &app_memory::ObservationAdmission,
+    ) -> Result<Vec<app_memory::Claim>> {
+        Err(Error::new(
+            "CAPABILITY_DENIED",
+            "No observation admission host",
+        ))
+    }
+}
 
 #[derive(Parser)]
 #[command(
@@ -224,6 +271,21 @@ enum Commands {
         #[command(subcommand)]
         command: MemoryCommand,
     },
+    /// Durable application lifecycle over the content-addressed store.
+    /// `--dir` is the application root; host authority comes from the
+    /// declarative `algal.application-host.v1` policy record.
+    Application {
+        /// `algal.application-host.v1` policy record; required for
+        /// operations that admit work.
+        #[arg(long)]
+        policy: Option<PathBuf>,
+        /// Channel directory for the policy dispatcher
+        /// (default `<dir>/channels`).
+        #[arg(long)]
+        channels: Option<PathBuf>,
+        #[command(subcommand)]
+        command: ApplicationCommand,
+    },
     Context {
         #[command(subcommand)]
         command: ContextCommand,
@@ -347,9 +409,22 @@ enum FoundryCommand {
 
 #[derive(Subcommand)]
 enum StoreCommand {
-    Put { file: String },
-    Get { digest: String },
-    Has { digest: String },
+    Put {
+        file: String,
+        /// CAS kind; manifests and values are the durable record kinds.
+        #[arg(long, default_value = "values", value_parser = ["manifests", "values"])]
+        kind: String,
+    },
+    Get {
+        digest: String,
+        #[arg(long, default_value = "values", value_parser = ["manifests", "values"])]
+        kind: String,
+    },
+    Has {
+        digest: String,
+        #[arg(long, default_value = "values", value_parser = ["manifests", "values"])]
+        kind: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -549,6 +624,43 @@ enum MemoryCommand {
         #[arg(long)]
         snapshot: Option<PathBuf>,
     },
+}
+
+#[derive(Subcommand)]
+enum ApplicationCommand {
+    /// Persist a bounded JSON value into the store; emits its digest.
+    Put { value: PathBuf },
+    /// Admit + persist an `algal.application-memory-scope.v1` record.
+    Scope { scope: PathBuf },
+    /// Admit + persist an `algal.application-memory.v1` snapshot input.
+    Snapshot { memory: PathBuf },
+    /// Admit + persist an observation record; emits the observation digest.
+    Observe { observation: PathBuf },
+    /// Derive a query over a captured state; emits the derivation digest.
+    Query { state: String, query: String },
+    /// Genesis commit: `command` is an `ApplicationCommand` record with
+    /// kind `create` and `expectedHead: null`.
+    Create { command: PathBuf },
+    /// Expected-head commit.
+    Commit { command: PathBuf },
+    /// Print the current head snapshot (`null` when absent).
+    Inspect { application: String },
+    /// Print unsettled intents.
+    Pending { application: String },
+    /// Admit and dispatch pending intents through the policy host.
+    Dispatch {
+        application: String,
+        #[arg(long, default_value_t = 32)]
+        max: usize,
+    },
+    /// Explicitly reconcile one uncertain dispatch.
+    Reconcile { application: String, intent: String },
+    /// `schedule_investigations`: derivation → investigation requests → commit.
+    Schedule { input: PathBuf },
+    /// `request_execution`: verified support → start-episode commit.
+    Execute { input: PathBuf },
+    /// `append_observation`: observation → snapshot → memory commit.
+    Publish { input: PathBuf },
 }
 
 #[derive(Subcommand)]
@@ -1918,21 +2030,21 @@ async fn execute(cli: Cli) -> Result<bool> {
         Commands::Store { command } => {
             let mut store = Store::open(&cli.dir, true)?;
             match command {
-                StoreCommand::Put { file } => {
+                StoreCommand::Put { file, kind } => {
                     let value = if file == "-" {
                         read_json(io::stdin().lock(), 262_144)?
                     } else {
                         load(Path::new(&file), 262_144)?
                     };
-                    emit(&json!({"ref":store.put("values", &value)?}))?;
+                    emit(&json!({"ref":store.put(&kind, &value)?}))?;
                 }
-                StoreCommand::Get { digest } => emit(
+                StoreCommand::Get { digest, kind } => emit(
                     &store
-                        .get("values", &digest)?
+                        .get(&kind, &digest)?
                         .ok_or_else(|| Error::new("STORE_MISS", "value not in store"))?,
                 )?,
-                StoreCommand::Has { digest } => {
-                    emit(&json!({"ref":digest,"ok":store.get("values", &digest)?.is_some()}))?
+                StoreCommand::Has { digest, kind } => {
+                    emit(&json!({"ref":digest,"ok":store.get(&kind, &digest)?.is_some()}))?
                 }
             }
             Ok(true)
@@ -1973,6 +2085,146 @@ async fn execute(cli: Cli) -> Result<bool> {
                     emit(
                         &json!({"source":store.put("values",&source)?,"previous":store.put("values",&snapshot)?,"snapshot":store.put("values",&next)?,"memory":next}),
                     )?;
+                }
+            }
+            Ok(true)
+        }
+        Commands::Application {
+            policy,
+            channels,
+            command,
+        } => {
+            let channels_dir = channels.unwrap_or_else(|| cli.dir.join("channels"));
+            let host = match &policy {
+                Some(path) => Some(PolicyHost::new(&load(path, 262_144)?, &channels_dir)?),
+                None => None,
+            };
+            let denied = NoAdmission;
+            let engine_sha = digest_bytes(&std::fs::read(std::env::current_exe()?)?);
+            let engine = NativeEngine::new(engine_sha.trim_start_matches("sha256:"), 10_000)?;
+            // Read-only commands (inspect/pending/put) admit nothing, so a
+            // missing policy substitutes a host that denies all admission.
+            let mut service = match &host {
+                Some(host) => application::Service::new(&cli.dir, host)?,
+                None => application::Service::new(&cli.dir, &denied)?,
+            };
+            let memory_service = match &host {
+                Some(host) => MemoryService {
+                    engine: &engine,
+                    admission: host,
+                },
+                None => MemoryService {
+                    engine: &engine,
+                    admission: &denied,
+                },
+            };
+            match command {
+                ApplicationCommand::Put { value } => {
+                    let digest = service
+                        .store
+                        .put("values", &app_memory::app_json(&load(&value, 262_144)?)?)?;
+                    emit(&json!({"digest": digest}))?;
+                }
+                ApplicationCommand::Scope { scope } => {
+                    let digest =
+                        memory_service.put_scope(&mut service.store, &load(&scope, 262_144)?)?;
+                    emit(&json!({"scope": digest}))?;
+                }
+                ApplicationCommand::Snapshot { memory } => {
+                    let digest =
+                        memory_service.snapshot(&mut service.store, &load(&memory, 262_144)?)?;
+                    emit(&json!({"memory": digest}))?;
+                }
+                ApplicationCommand::Observe { observation } => {
+                    let digest = memory_service
+                        .observe(&mut service.store, &load(&observation, 262_144)?)?;
+                    emit(&json!({"observation": digest}))?;
+                }
+                ApplicationCommand::Query { state, query } => {
+                    let (digest, derivation) =
+                        memory_service.query(&mut service.store, &state, &query)?;
+                    emit(&json!({"derivation": digest, "status": derivation.status}))?;
+                }
+                ApplicationCommand::Create { command } => {
+                    let snapshot = service.create(&load(&command, 262_144)?)?;
+                    emit(&json!({
+                        "state": snapshot.digest, "transition": snapshot.state.transition,
+                        "revision": snapshot.state.revision, "memory": snapshot.state.memory,
+                    }))?;
+                }
+                ApplicationCommand::Commit { command } => {
+                    let snapshot = service.commit(&load(&command, 262_144)?)?;
+                    emit(&json!({
+                        "state": snapshot.digest, "transition": snapshot.state.transition,
+                        "revision": snapshot.state.revision, "memory": snapshot.state.memory,
+                    }))?;
+                }
+                ApplicationCommand::Inspect { application: name } => {
+                    match service.inspect(&name)? {
+                        Some(snapshot) => emit(&json!({
+                            "state": snapshot.digest, "sequence": snapshot.state.sequence,
+                            "epoch": snapshot.state.epoch, "revision": snapshot.state.revision,
+                            "memory": snapshot.state.memory,
+                            "kind": snapshot.transition.kind.as_str(),
+                        }))?,
+                        None => emit(&Value::Null)?,
+                    }
+                }
+                ApplicationCommand::Pending { application: name } => {
+                    let history = service.history(&name)?;
+                    let pending = service.pending(&history)?;
+                    emit(&json!({
+                        "pending": pending.iter().map(|p| json!({
+                            "intent": p.intent, "sourceState": p.source_state,
+                            "dispatch": p.dispatch.as_ref().map(|d| d.value.clone()),
+                        })).collect::<Vec<_>>(),
+                    }))?;
+                }
+                ApplicationCommand::Dispatch {
+                    application: name,
+                    max,
+                } => {
+                    let host = host
+                        .as_ref()
+                        .ok_or_else(|| Error::invalid("application dispatch requires --policy"))?;
+                    let results = service.dispatch_pending(&name, host, max)?;
+                    emit(&json!({
+                        "dispatches": results.iter().map(|d| d.value.clone()).collect::<Vec<_>>(),
+                    }))?;
+                }
+                ApplicationCommand::Reconcile {
+                    application: name,
+                    intent,
+                } => {
+                    let host = host
+                        .as_ref()
+                        .ok_or_else(|| Error::invalid("application reconcile requires --policy"))?;
+                    let result = service.reconcile_dispatch(&name, &intent, host)?;
+                    emit(&result.value)?;
+                }
+                ApplicationCommand::Schedule { input } => {
+                    let result = application::schedule_investigations(
+                        &mut service,
+                        &memory_service,
+                        &load(&input, 262_144)?,
+                    )?;
+                    emit(&json!({
+                        "snapshot": result.snapshot.map(|s| s.digest),
+                        "derivations": result.derivations, "requests": result.requests,
+                    }))?;
+                }
+                ApplicationCommand::Execute { input } => {
+                    let snapshot =
+                        application::request_execution(&mut service, &load(&input, 262_144)?)?;
+                    emit(&json!({"state": snapshot.digest}))?;
+                }
+                ApplicationCommand::Publish { input } => {
+                    let result = application::append_observation(
+                        &mut service,
+                        &memory_service,
+                        &load(&input, 262_144)?,
+                    )?;
+                    emit(&result)?;
                 }
             }
             Ok(true)

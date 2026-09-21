@@ -66,7 +66,11 @@
   `cargo clippy --workspace --all-targets --locked -- -D warnings`, and
   `cargo fmt --all -- --check`. Use `cargo build --locked` followed by
   `bun scripts/native-parity.ts` to compare all 44 existing examples and verify
-  receipts in both directions between TypeScript and Rust.
+  receipts in both directions between TypeScript and Rust, and
+  `bun scripts/application-parity.ts` to replay the durable application
+  lifecycle (create/commit/dispatch/reconcile, memory scope/observe/snapshot/
+  query, and the `algal.application-host.v1` policy host) through both
+  runtimes with identical digests.
 - The Foundation Models bridge comes from the pinned `apple-foundation`
   crate (`hraness/apple-foundation`); `sh scripts/build-apple.sh` emits its
   embedded source and builds it with Xcode 26 on Apple Silicon, and the
