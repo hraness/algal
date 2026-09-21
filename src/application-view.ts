@@ -106,7 +106,30 @@ export async function loadApplicationRuntimeProfile(store: Store, ref: Digest): 
 export function parseApplicationView(input: unknown): ApplicationView {
   const v = applicationObject(input, ["contract", "application", "state", "revision", "memory", "title", "widgets", "procedures", "history", "investigations", "actions", "truncated"]);
   applicationTag(v.contract, "algal.application-view.v1");
+  const application = applicationId(v.application), state = applicationRef(v.state), revision = applicationRef(v.revision), memory = applicationRef(v.memory);
+  const procedures = applicationList(v.procedures, 32, raw => {
+    const p = applicationObject(raw, ["name", "manifest", "applicability"]);
+    if (!["unknown", "supported", "stale", "opposed", "conflicted"].includes(String(p.applicability))) throw new Error("Invalid view applicability");
+    return {name: applicationId(p.name), manifest: applicationRef(p.manifest), applicability: p.applicability as ApplicationView["procedures"][number]["applicability"]};
+  });
+  const history = applicationList(v.history, 128, raw => {
+    const h = applicationObject(raw, ["state", "sequence", "revision", "memory"]);
+    return {state: applicationRef(h.state), sequence: applicationInt(h.sequence, 0, 4095), revision: applicationRef(h.revision), memory: applicationRef(h.memory)};
+  });
+  const investigations = applicationList(v.investigations, 32, raw => {
+    const i = applicationObject(raw, ["intent", "expectedState"]);
+    return {intent: applicationRef(i.intent), expectedState: applicationRef(i.expectedState)};
+  });
+  const actions = applicationList(v.actions, 32, raw => {
+    const a = applicationJson(raw);
+    if (!a || typeof a !== "object" || Array.isArray(a)) throw new Error("Invalid view action");
+    if (a.kind === "investigate") {
+      const i = applicationObject(a, ["kind", "expectedState", "intent"]); return {kind: "investigate" as const, expectedState: applicationRef(i.expectedState), intent: applicationRef(i.intent)};
+    }
+    const e = applicationObject(a, ["kind", "expectedState", "procedure", "queryResult"]); applicationTag(e.kind, "execute-procedure");
+    return {kind: "execute-procedure" as const, expectedState: applicationRef(e.expectedState), procedure: applicationRef(e.procedure), queryResult: applicationRef(e.queryResult)};
+  });
   applicationId(v.application); applicationRef(v.state); applicationRef(v.revision); applicationRef(v.memory); text(v.title, 256); widgets(v.widgets);
   if (typeof v.truncated !== "boolean") throw new Error("Invalid view truncation marker");
-  return applicationJson(v) as ApplicationView;
+  return {contract: "algal.application-view.v1", application, state, revision, memory, title: text(v.title, 256), widgets: widgets(v.widgets), procedures, history, investigations, actions, truncated: v.truncated};
 }
