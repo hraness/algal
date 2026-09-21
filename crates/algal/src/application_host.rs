@@ -36,6 +36,11 @@ pub struct RoutePolicy {
 pub struct DecoderPolicy {
     pub raw_contract: String,
     pub receipt_contract: String,
+    /// "names-raw": the receipt carries the raw digest (probe evidence).
+    /// "names-receipt": the raw record carries the producing receipt's digest
+    /// — under CAS the same binding inverted (a migration record cannot be
+    /// named by the run receipt that produced it).
+    pub receipt_binding: String,
 }
 
 /// A parsed `algal.application-host.v1` record.
@@ -95,7 +100,15 @@ pub fn parse_policy(input: &Value) -> Result<Policy> {
     let mut decoders = BTreeMap::new();
     let mut previous_decoder = String::new();
     for row in list(&v["decoders"], 16)? {
-        let d = app_object(row, &["decoder", "rawContract", "receiptContract"])?;
+        let d = app_object(
+            row,
+            &[
+                "decoder",
+                "rawContract",
+                "receiptContract",
+                "receiptBinding",
+            ],
+        )?;
         let decoder = app_ref(&d["decoder"])?.to_owned();
         if decoder <= previous_decoder {
             return Err(Error::invalid(
@@ -103,11 +116,16 @@ pub fn parse_policy(input: &Value) -> Result<Policy> {
             ));
         }
         previous_decoder = decoder.clone();
+        let receipt_binding = bounded_text(&d["receiptBinding"], 32)?;
+        if receipt_binding != "names-raw" && receipt_binding != "names-receipt" {
+            return Err(Error::invalid("Invalid receipt binding mode"));
+        }
         decoders.insert(
             decoder,
             DecoderPolicy {
                 raw_contract: bounded_text(&d["rawContract"], 128)?,
                 receipt_contract: bounded_text(&d["receiptContract"], 128)?,
+                receipt_binding,
             },
         );
     }
@@ -299,9 +317,14 @@ impl MemoryAdmission for PolicyHost {
             claims.push(mem::parse_claim(row)?);
         }
         let proof = object(&input.receipt)?;
-        if proof.get("contract") != Some(&json!(decoder.receipt_contract))
-            || proof.get("raw") != Some(&json!(input.observation.raw))
-        {
+        if proof.get("contract") != Some(&json!(decoder.receipt_contract)) {
+            return Err(Error::invalid("Receipt does not bind the raw evidence"));
+        }
+        if decoder.receipt_binding == "names-raw" {
+            if proof.get("raw") != Some(&json!(input.observation.raw)) {
+                return Err(Error::invalid("Receipt does not bind the raw evidence"));
+            }
+        } else if bounded.get("receipt") != Some(&json!(input.observation.receipt)) {
             return Err(Error::invalid("Receipt does not bind the raw evidence"));
         }
         Ok(claims)
@@ -378,7 +401,7 @@ mod tests {
             "frontier": refn(1), "hostProfile": refn(2), "episodeAccess": "observe",
             "attestation": "algal.test-attestation.v1",
             "routes": [{"route": "investigate", "recipient": mailbox(3), "hostProfile": refn(4)}],
-            "decoders": [{"decoder": refn(5), "rawContract": "algal.test-raw.v1", "receiptContract": "algal.test-receipt.v1"}],
+            "decoders": [{"decoder": refn(5), "rawContract": "algal.test-raw.v1", "receiptContract": "algal.test-receipt.v1", "receiptBinding": "names-raw"}],
         })
     }
 
@@ -392,8 +415,8 @@ mod tests {
         assert!(parse_policy(&p).is_err());
         let mut d = policy_value();
         d["decoders"] = json!([
-            {"decoder": refn(7), "rawContract": "a", "receiptContract": "b"},
-            {"decoder": refn(7), "rawContract": "a", "receiptContract": "b"},
+            {"decoder": refn(7), "rawContract": "a", "receiptContract": "b", "receiptBinding": "names-raw"},
+            {"decoder": refn(7), "rawContract": "a", "receiptContract": "b", "receiptBinding": "names-raw"},
         ]);
         assert!(parse_policy(&d).is_err());
         d["episodeAccess"] = json!("execute");
@@ -582,6 +605,90 @@ mod tests {
             MemoryAdmission::decode_observation(&host, &admission(&raw, &bad_receipt, &base))
                 .is_err()
         );
+    }
+
+    #[test]
+    fn names_receipt_binding_lets_the_raw_record_name_its_receipt() {
+        let tmp = tempdir().unwrap();
+        let mut policy = policy_value();
+        policy["decoders"] = json!([
+            {"decoder": refn(5), "rawContract": "algal.application-migration.v1", "receiptContract": "algal.run.v1", "receiptBinding": "names-receipt"},
+        ]);
+        let host = PolicyHost::new(&policy, tmp.path()).unwrap();
+        // The migration record names its producing run receipt; the
+        // observation's receipt ref must be that same digest.
+        let receipt = json!({"contract": "algal.run.v1", "outcome": "complete"});
+        let receipt_ref = hashed(receipt.clone());
+        let raw = json!({
+            "contract": "algal.application-migration.v1", "receipt": receipt_ref,
+            "claims": [{"relation": "supported-tool", "tuple": ["tool-a"], "polarity": "supported"}],
+            "program": refn(50), "from": refn(51),
+        });
+        let raw_ref = hashed(raw.clone());
+        let observation = ObservationInput {
+            application: "parity".to_owned(),
+            scope: refn(31),
+            procedure: refn(32),
+            raw: raw_ref.clone(),
+            receipt: receipt_ref.clone(),
+            decoder: refn(5),
+        };
+        let scope = mem::MemoryScope {
+            application: "parity".to_owned(),
+            environment: "fixture".to_owned(),
+            task: "task-1".to_owned(),
+            frontier: refn(1),
+            bindings: vec![],
+            complete_for: vec![refn(32)],
+            attestation: refn(33),
+            value: Value::Null,
+        };
+        let frontier = mem::MemoryFrontier {
+            application: "parity".to_owned(),
+            sequence: 0,
+            previous: None,
+            mutation: None,
+            status: "settled".to_owned(),
+        };
+        let procedure = mem::MemoryProcedure {
+            id: "migrate".to_owned(),
+            schema: refn(34),
+            manifest: refn(35),
+            decoder: refn(5),
+            dependencies: vec![],
+            prerequisite: None,
+            value: Value::Null,
+        };
+        let admission = |receipt: Value| ObservationAdmission {
+            observation: observation.clone(),
+            scope: scope.clone(),
+            frontier: frontier.clone(),
+            procedure: procedure.clone(),
+            raw: raw.clone(),
+            receipt,
+        };
+        assert_eq!(
+            MemoryAdmission::decode_observation(&host, &admission(receipt.clone())).unwrap(),
+            vec![parse_claim(&raw["claims"][0]).unwrap()],
+        );
+        // A raw naming a different digest than the observation's receipt ref
+        // is denied — the record must name its own producing receipt.
+        let mut stray = raw.clone();
+        stray["receipt"] = json!(refn(99));
+        let mut stray_observation = observation.clone();
+        stray_observation.raw = hashed(stray.clone());
+        let stray_admission = ObservationAdmission {
+            observation: stray_observation,
+            scope: scope.clone(),
+            frontier: frontier.clone(),
+            procedure: procedure.clone(),
+            raw: stray,
+            receipt: receipt.clone(),
+        };
+        assert!(MemoryAdmission::decode_observation(&host, &stray_admission).is_err());
+        // The receipt contract is still enforced under names-receipt.
+        let wrong_contract = json!({"contract": "algal.test-receipt.v1", "receipt": receipt_ref});
+        assert!(MemoryAdmission::decode_observation(&host, &admission(wrong_contract)).is_err());
     }
 
     #[test]

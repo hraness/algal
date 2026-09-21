@@ -180,8 +180,9 @@ The site keeps its configured origin until a new domain is actually provisioned.
   (nested organisms, bounded loops, tool calls, spawn, replay), memory/context
   primitives, the CLI, `bun scripts/native-parity.ts` parity across the
   bundled examples, and `bun scripts/application-parity.ts` parity for the
-  durable application lifecycle (revisions, commits including activation and
-  schema-migration transitions, intents, dispatch, reconciliation, memory
+  durable application lifecycle (revisions, commits including evaluated
+  activation and schema-migration transitions, the foundry evaluation and
+  migration producers, intents, dispatch, reconciliation, memory
   scopes/observations/derivations, and the `algal.application-host.v1` policy
   host).
 - VM kernel layers: fail-closed effect capabilities, suspended/resumable runs,

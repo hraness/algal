@@ -15,6 +15,12 @@ use std::{collections::BTreeSet, future::Future, pin::Pin};
 /// still bounds total burn; this caps the synchronous eval itself.
 const MAX_EXPR_FUEL: u64 = 100_000;
 
+/// The `runtime` stamp on a fresh receipt records the shared `algal.run.v1`
+/// semantics version, not the crate release — it must match `RUNTIME_VERSION`
+/// in src/run.ts so the reference and native runtimes produce byte-identical
+/// receipts for the same run. Implementation identity belongs to build_info.
+const RUNTIME_STAMP_VERSION: &str = "0.1.0";
+
 pub fn receipt_digest(receipt: &Value) -> Result<String> {
     let mut body = receipt.clone();
     body.as_object_mut()
@@ -1352,7 +1358,7 @@ pub async fn run(
     runtime.event("run.end", None, None, Some(&outcome))?;
     let mut receipt = json!({
         "contract":replay.and_then(|r| r.get("contract")).cloned().unwrap_or(json!("algal.run.v1")),
-        "runtime":replay.and_then(|r| r.get("runtime")).cloned().unwrap_or(json!({"name":"algal","version":env!("CARGO_PKG_VERSION")})),
+        "runtime":replay.and_then(|r| r.get("runtime")).cloned().unwrap_or(json!({"name":"algal","version":RUNTIME_STAMP_VERSION})),
         "manifestDigest":manifest_digest,"manifestKey":compiled.manifest.value["key"],"args":args,
         "outcome":outcome,"cells":runtime.cells,"effects":runtime.effects,"events":runtime.events,
         "work":{"steps":runtime.steps,"agentCalls":runtime.calls,"units":runtime.work},

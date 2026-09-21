@@ -1,7 +1,8 @@
 use algal::{
-    Error, Result, application,
+    Error, Result, application, application_adaptation,
     application_host::PolicyHost,
     application_memory::{self as app_memory, MemoryService, NativeEngine},
+    application_migration,
     canonical::{MAX_DOCUMENT_BYTES, canonical, digest_bytes, read_json},
     context,
     contract::{Manifest, object},
@@ -661,6 +662,21 @@ enum ApplicationCommand {
     Execute { input: PathBuf },
     /// `append_observation`: observation → snapshot → memory commit.
     Publish { input: PathBuf },
+    /// `evaluateApplicationRevision`: foundry over incumbent/candidate
+    /// entrypoints; emits the stored evaluation digest and verdict.
+    Evaluate { request: PathBuf },
+    /// `verifyApplicationEvaluation`: re-verify a stored evaluation record
+    /// against an expected parent state.
+    VerifyEvaluation { input: PathBuf },
+    /// `admitApplicationActivation`: require a reproducibly accepted
+    /// candidate revision; emits the bound revision and state digests.
+    AdmitActivation { input: PathBuf },
+    /// `checkApplicationCompatibility` between two stored revisions; input
+    /// is `{"previous": <ref>, "candidate": <ref>}`.
+    Compatible { input: PathBuf },
+    /// `migrateApplicationMemory`: run the migration program and admit its
+    /// emitted claims into a fresh memory chain under the new schema.
+    MigrateMemory { input: PathBuf },
 }
 
 #[derive(Subcommand)]
@@ -2224,6 +2240,69 @@ async fn execute(cli: Cli) -> Result<bool> {
                         &memory_service,
                         &load(&input, 262_144)?,
                     )?;
+                    emit(&result)?;
+                }
+                ApplicationCommand::Evaluate { request } => {
+                    // Case-pure evaluation runs without executors or tools:
+                    // the builtin fn registry is the only admitted surface.
+                    let mut run_host = Host::default();
+                    let (digest, evaluation) =
+                        application_adaptation::evaluate_application_revision(
+                            &mut service.store,
+                            &load(&request, 262_144)?,
+                            &mut run_host,
+                            &Transports::new(),
+                        )
+                        .await?;
+                    emit(&json!({
+                        "evaluation": digest, "verdict": evaluation["verdict"],
+                    }))?;
+                }
+                ApplicationCommand::VerifyEvaluation { input } => {
+                    let input = load(&input, 262_144)?;
+                    let v = app_memory::app_object(&input, &["evaluation", "expectedState"])?;
+                    let evaluation = app_memory::app_ref(&v["evaluation"])?.to_owned();
+                    let state = app_memory::app_ref(&v["expectedState"])?.to_owned();
+                    let checked = application_adaptation::verify_application_evaluation(
+                        &service.store,
+                        &evaluation,
+                        &state,
+                        &Host::default(),
+                    )
+                    .await?;
+                    emit(&json!({"ok": true, "verdict": checked["verdict"]}))?;
+                }
+                ApplicationCommand::AdmitActivation { input } => {
+                    let admitted = application_adaptation::admit_application_activation(
+                        &service.store,
+                        &load(&input, 262_144)?,
+                        &Host::default(),
+                    )
+                    .await?;
+                    emit(&admitted)?;
+                }
+                ApplicationCommand::Compatible { input } => {
+                    let input = load(&input, 262_144)?;
+                    let v = app_memory::app_object(&input, &["previous", "candidate"])?;
+                    let previous = app_memory::app_ref(&v["previous"])?.to_owned();
+                    let candidate = app_memory::app_ref(&v["candidate"])?.to_owned();
+                    let compatibility = application_adaptation::check_application_compatibility(
+                        &service.store,
+                        &previous,
+                        &candidate,
+                    )?;
+                    emit(&json!({"compatibility": compatibility}))?;
+                }
+                ApplicationCommand::MigrateMemory { input } => {
+                    let mut run_host = Host::default();
+                    let result = application_migration::migrate_memory(
+                        &memory_service,
+                        &mut service.store,
+                        &mut run_host,
+                        &Transports::new(),
+                        &load(&input, 262_144)?,
+                    )
+                    .await?;
                     emit(&result)?;
                 }
             }

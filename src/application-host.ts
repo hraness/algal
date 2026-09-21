@@ -32,7 +32,7 @@ export interface ApplicationHostPolicy {
   readonly episodeAccess: "observe" | "external-write";
   readonly routes: ReadonlyMap<string, { recipient: string; hostProfile: Digest }>;
   readonly attestation: string | null;
-  readonly decoders: ReadonlyMap<Digest, { rawContract: string; receiptContract: string }>;
+  readonly decoders: ReadonlyMap<Digest, { rawContract: string; receiptContract: string; receiptBinding: "names-raw" | "names-receipt" }>;
   readonly value: JsonValue;
 }
 
@@ -48,13 +48,14 @@ export function parseApplicationHostPolicy(input: unknown): ApplicationHostPolic
     previousRoute = route;
     routes.set(route, { recipient: parseCapabilityHandle(row.recipient, "mailbox-send").handle, hostProfile: applicationRef(row.hostProfile) });
   }
-  const decoders = new Map<Digest, { rawContract: string; receiptContract: string }>();
+  const decoders = new Map<Digest, { rawContract: string; receiptContract: string; receiptBinding: "names-raw" | "names-receipt" }>();
   let previousDecoder = "";
-  for (const row of applicationList(v.decoders, 16, d => applicationObject(d, ["decoder", "rawContract", "receiptContract"]))) {
+  for (const row of applicationList(v.decoders, 16, d => applicationObject(d, ["decoder", "rawContract", "receiptContract", "receiptBinding"]))) {
     const decoder = applicationRef(row.decoder);
     if (decoder <= previousDecoder) throw new Error("Host decoder policies must be sorted and unique");
     previousDecoder = decoder;
-    decoders.set(decoder, { rawContract: boundedText(row.rawContract, 128), receiptContract: boundedText(row.receiptContract, 128) });
+    if (row.receiptBinding !== "names-raw" && row.receiptBinding !== "names-receipt") throw new Error("Invalid receipt binding mode");
+    decoders.set(decoder, { rawContract: boundedText(row.rawContract, 128), receiptContract: boundedText(row.receiptContract, 128), receiptBinding: row.receiptBinding });
   }
   return {
     application: applicationId(v.application), frontier: applicationRef(v.frontier), hostProfile: applicationRef(v.hostProfile),
@@ -127,7 +128,17 @@ export function createApplicationPolicyHost(input: unknown, options: { channelsD
       if (bounded["contract"] !== decoder.rawContract) throw new Error("Raw evidence is not the admitted contract");
       const claims = applicationList(bounded["claims"], 32, parseMemoryClaim);
       const proof = asObject(receipt, "observation receipt");
-      if (proof["contract"] !== decoder.receiptContract || proof["raw"] !== observation.raw) throw new Error("Receipt does not bind the raw evidence");
+      if (proof["contract"] !== decoder.receiptContract) throw new Error("Receipt does not bind the raw evidence");
+      // Two custody shapes: "names-raw" receipts carry the raw digest
+      // (probe evidence); "names-receipt" raws carry the producing receipt's
+      // digest, so the observation's receipt ref must equal raw.receipt —
+      // under CAS that is the same binding inverted (a migration record
+      // cannot be named by the run receipt that produced it).
+      if (decoder.receiptBinding === "names-raw") {
+        if (proof["raw"] !== observation.raw) throw new Error("Receipt does not bind the raw evidence");
+      } else if (bounded["receipt"] !== observation.receipt) {
+        throw new Error("Receipt does not bind the raw evidence");
+      }
       return claims;
     },
     async dispatch(context: ApplicationDispatchContext) {
