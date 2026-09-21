@@ -479,13 +479,14 @@ async function runInto(
         );
         if (handled) {
           delete ctx.failure;
-          progress = true;
-          continue;
+        } else {
+          fail(ctx, cellPath(cell.id), rep.code, rep.message);
+          break;
         }
-        fail(ctx, cellPath(cell.id), rep.code, rep.message);
-        break;
       }
       progress = true;
+      // Handled failures still spend work. Check before a recovery cell can
+      // activate, just as for successful activations and in the native runtime.
       if (ctx.work.units > budgets.maxWork) {
         fail(ctx, cellPath(cell.id), "BUDGET_EXHAUSTED", "maxWork exhausted");
         break;

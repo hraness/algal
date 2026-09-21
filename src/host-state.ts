@@ -103,6 +103,12 @@ async function releaseMarker(lock: string, marker: JsonValue, directory: string)
   await syncDirectory(directory);
 }
 
+function ownerTableExists(db: Database): boolean {
+  const schema = db.query("SELECT type FROM sqlite_schema WHERE name='algal_owner' COLLATE NOCASE LIMIT 2").all() as {type: unknown}[];
+  if (schema.length > 1 || (schema.length === 1 && schema[0]?.type !== "table")) throw new AlgalError("IO_FAILED", "invalid owner database schema");
+  return schema.length === 1;
+}
+
 /** SQLite's process-owned transaction provides a shared Bun/Rust mutex that
  * the OS releases on process death. The database inode is retained forever;
  * no PID, age, or deletable lock pathname is treated as proof of ownership. */
@@ -122,10 +128,21 @@ export async function hostLease<T>(directory: string, processName: string, actio
   try {
     db = new Database(path, sqlite.SQLITE_OPEN_READWRITE | sqlite.SQLITE_OPEN_CREATE | sqlite.SQLITE_OPEN_NOFOLLOW | sqlite.SQLITE_OPEN_PRIVATECACHE);
     db.exec("PRAGMA busy_timeout=0; PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;");
-    db.exec("CREATE TABLE IF NOT EXISTS algal_owner(contract TEXT PRIMARY KEY);");
-    db.exec("INSERT OR IGNORE INTO algal_owner(contract) VALUES('algal.process-owner.v2');");
+    if (!ownerTableExists(db)) db.exec("CREATE TABLE IF NOT EXISTS algal_owner(contract TEXT PRIMARY KEY);");
+    // A retained, initialized database needs no schema or contract writes.
+    // Even INSERT OR IGNORE can contend before custody has been acquired.
+    // Empty tables can result from an interrupted first initialization.
+    const initial = db.query("SELECT contract FROM algal_owner LIMIT 2").all() as {contract: unknown}[];
+    if (initial.length === 0) {
+      const columns = db.query("SELECT name, type, pk, hidden, dflt_value FROM pragma_table_xinfo('algal_owner') LIMIT 2").all() as {name: unknown; type: unknown; pk: unknown; hidden: unknown; dflt_value: unknown}[];
+      const column = columns[0];
+      if (columns.length !== 1 || column?.name !== "contract" || typeof column.type !== "string" || column.type.toUpperCase() !== "TEXT" || column.pk !== 1 || column.hidden !== 0 || column.dflt_value !== null) throw new AlgalError("IO_FAILED", "invalid owner database schema");
+      db.exec("INSERT OR IGNORE INTO algal_owner(contract) VALUES('algal.process-owner.v2');");
+    }
+    else if (initial.length !== 1 || initial[0]?.contract !== "algal.process-owner.v2") throw new AlgalError("IO_FAILED", "unknown owner database contract");
     db.exec("BEGIN IMMEDIATE;");
-    const rows = db.query("SELECT contract FROM algal_owner").all() as {contract: unknown}[];
+    if (!ownerTableExists(db)) throw new AlgalError("IO_FAILED", "invalid owner database schema");
+    const rows = db.query("SELECT contract FROM algal_owner LIMIT 2").all() as {contract: unknown}[];
     if (rows.length !== 1 || rows[0]?.contract !== "algal.process-owner.v2") throw new AlgalError("IO_FAILED", "unknown owner database contract");
     const previous = await hostRead(lock, 4096);
     if (previous !== undefined) {

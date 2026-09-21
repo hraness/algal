@@ -68,6 +68,14 @@ Efficiency comes from explicit context, bounded selected paths, retained effects
 and model-free waiting and verification. The demos measure those operations;
 they do not establish token, cost, or latency savings against other engines.
 
+Admission is bounded as well as execution: recursive compilation shares a
+1,024-manifest, 4,096-cell, 16,384-edge, 64 MiB normalized-input allowance.
+Repeated child occurrences count toward that allowance. Bundle transports
+stream within a 64 MiB byte ceiling; non-regular files are rejected before
+reading, and HTTP bodies have a deadline. Handled failures still consume the
+work budget before a recovery effect can run. See the
+[manifest and transport limits](spec/v1/organism.md) for the exact contract.
+
 ### Adoption boundary
 
 This is working **prerelease software for bounded, host-owned workflows**.
