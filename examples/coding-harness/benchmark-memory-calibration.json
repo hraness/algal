@@ -1,0 +1,62 @@
+{
+  "schema": "algal.coding-harness.pilot.v1",
+  "purpose": "Two fresh development calibration tasks for the memory spike; no memory treatment or policy search.",
+  "harbor": {
+    "version": "0.23.0",
+    "gitUrl": "https://github.com/harbor-framework/harbor.git",
+    "gitCommitId": "1e5c5c6db929a10a140d05e606882c671ae20729",
+    "requiresPython": ">=3.12"
+  },
+  "split": {
+    "benchmark": "terminal-bench@2.0",
+    "revision": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "devTaskIds": [
+      "fix-git",
+      "openssl-selfsigned-cert"
+    ],
+    "holdoutTaskIds": []
+  },
+  "taskGitUrl": "https://github.com/harbor-framework/terminal-bench-2.git",
+  "selection": "Two short public instructions spanning repository repair and deterministic file generation. Selected before execution; original independent graders remain opaque.",
+  "evaluation": {
+    "developmentUse": "Tune controller policy using development tasks only.",
+    "holdoutUse": "Freeze policy first; execute each arm in fresh containers with fresh task memory. Keep holdout verifier results out of policy search.",
+    "grading": "Harbor's original task verifier runs after the agent returns. Controller completion and replay verification are not benchmark success.",
+    "agentInput": "instruction.md and the initialized task environment only; no solution, hidden verifier, or host metadata descriptions.",
+    "comparisons": [
+      "plain",
+      "algal"
+    ],
+    "concurrentTrials": 1,
+    "automaticRetries": 0,
+    "costReporting": "Unreported token counts and subscription-attributable costs stay null. Zero incremental paid API spend is not a zero-cost claim."
+  },
+  "tasks": [
+    {
+      "id": "fix-git",
+      "split": "development",
+      "instructionBytes": 158,
+      "instructionSha256": "f98174e47ba5ce040f6fad22ef3cbca4dd27b3192868ea5d082077222c3ec4e8",
+      "image": "alexgshaw/fix-git:20251031",
+      "imageDigest": "sha256:61e431c00c58df652287aadce5457634d9f9330cfdd153ebdf2802df0d540119",
+      "imagePlatform": "linux/amd64",
+      "compressedLayerBytes": 158051230
+    },
+    {
+      "id": "openssl-selfsigned-cert",
+      "split": "development",
+      "instructionBytes": 1381,
+      "instructionSha256": "38054a3371f7c2c853478a2f9af0bff858437d5b28a9a07483238f06e566921f",
+      "image": "alexgshaw/openssl-selfsigned-cert:20251031",
+      "imageDigest": "sha256:4c948a4e630af2435ae0a19108fc0814a946ac2fa29a512469e0fc77b38c8c12",
+      "imagePlatform": "linux/amd64",
+      "compressedLayerBytes": 44165464
+    }
+  ],
+  "provenance": {
+    "registry": "https://github.com/harbor-framework/harbor/blob/1e5c5c6db929a10a140d05e606882c671ae20729/registry.json",
+    "instructions": "https://raw.githubusercontent.com/harbor-framework/terminal-bench-2/69671fbaac6d67a7ef0dfec016cc38a64ef7a77c/{task}/instruction.md",
+    "configuration": "https://raw.githubusercontent.com/harbor-framework/terminal-bench-2/69671fbaac6d67a7ef0dfec016cc38a64ef7a77c/{task}/task.toml",
+    "imageInspection": "Docker Registry v2 manifests/config metadata only; no layers pulled during selection. Digests are observed immutable identities for the tag references; expanded disk and build peaks remain unmeasured."
+  }
+}

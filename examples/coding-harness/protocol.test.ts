@@ -3,7 +3,7 @@ import {
   BASELINE_POLICY, DEFAULT_CANDIDATE_POLICIES,
   parseCandidateProposal, parseExperimentSplit, parseHarnessPolicy, parseTrialOutcome,
   policyId, selectAndFreezePolicy, selectContext, summarizeHoldout, summarizeOutcomes,
-  type ExperimentSplit, type HarnessPolicy, type TrialOutcome,
+  type ExperimentSplit, type HarnessMessage, type HarnessPolicy, type TrialOutcome,
 } from "./protocol";
 
 const split: ExperimentSplit = {
@@ -30,20 +30,46 @@ describe("coding harness policy", () => {
   test("rejects executable/unknown fields and malformed or unbounded policies", () => {
     expect(() => parseHarnessPolicy({ ...BASELINE_POLICY, code: "return true" })).toThrow("unknown keys");
     expect(() => parseHarnessPolicy({ ...BASELINE_POLICY, context: { mode: "full", maxMessages: 4 } })).toThrow("unknown keys");
-    for (const maxMessages of [1, 129, 4.5, Infinity, "12"]) {
+    for (const maxMessages of [1, 2, 129, 4.5, Infinity, "12"]) {
       expect(() => parseHarnessPolicy({ ...BASELINE_POLICY, context: { mode: "recent-with-first", maxMessages } })).toThrow();
     }
     expect(() => parseHarnessPolicy({ ...BASELINE_POLICY, recoveryPolicy: "run-anything" })).toThrow();
     expect(() => parseHarnessPolicy(null)).toThrow();
   });
 
-  test("context projection keeps original instruction and latest observations", () => {
-    const policy = { ...BASELINE_POLICY, context: { mode: "recent-with-first" as const, maxMessages: 3 } };
-    const messages = ["instruction", "old-action", "old-output", "new-action", "new-output"];
-    expect(selectContext(messages, policy)).toEqual(["instruction", "new-action", "new-output"]);
+  test("context projection keeps the instruction and complete latest action/result pairs", () => {
+    const policy: HarnessPolicy = { ...BASELINE_POLICY, context: { mode: "recent-with-first", maxMessages: 3 } };
+    const messages: HarnessMessage[] = [
+      { role: "user", content: "instruction" },
+      { role: "assistant", content: "old-action" }, { role: "tool", content: "old-output" },
+      { role: "assistant", content: "new-action" }, { role: "tool", content: "new-output" },
+    ];
+    for (const maxMessages of [3, 4]) {
+      const projected = selectContext(messages, { ...policy, context: { mode: "recent-with-first", maxMessages } });
+      expect(projected).toEqual([messages[0]!, messages[3]!, messages[4]!]);
+      expect(projected.map(message => message.role)).toEqual(["user", "assistant", "tool"]);
+    }
+    for (const maxMessages of [5, 6, 128]) {
+      expect(selectContext(messages, { ...policy, context: { mode: "recent-with-first", maxMessages } })).toEqual(messages);
+    }
     expect(selectContext(messages, BASELINE_POLICY)).toEqual(messages);
     expect(selectContext([], policy)).toEqual([]);
-    expect(() => selectContext(Array.from({ length: 129 }, (_, i) => i), policy)).toThrow("128 messages");
+    expect(selectContext(messages.slice(0, 1), policy)).toEqual(messages.slice(0, 1));
+    expect(() => selectContext(Array.from({ length: 129 }, () => messages[0]!), policy)).toThrow("128 messages");
+  });
+
+  test("impossible bounds and incomplete projected pairs are rejected explicitly", () => {
+    expect(() => parseHarnessPolicy({ ...BASELINE_POLICY, context: { mode: "recent-with-first", maxMessages: 2 } }))
+      .toThrow("instruction plus a complete assistant/tool pair");
+    const policy: HarnessPolicy = { ...BASELINE_POLICY, context: { mode: "recent-with-first", maxMessages: 3 } };
+    const user: HarnessMessage = { role: "user", content: "instruction" };
+    const action: HarnessMessage = { role: "assistant", content: "action" };
+    const result: HarnessMessage = { role: "tool", content: "result" };
+    for (const messages of [[user, result], [user, action], [user, result, action], [action, action, result]]) {
+      expect(() => selectContext(messages, policy)).toThrow("complete assistant/tool pairs");
+    }
+    // The full-context path retains its original pass-through behavior.
+    expect(selectContext([user, action], BASELINE_POLICY)).toEqual([user, action]);
   });
 });
 

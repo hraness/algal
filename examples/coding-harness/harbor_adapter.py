@@ -366,7 +366,7 @@ def controller_config(instruction: str, values: Mapping[str, str], model_name: s
         raise AdapterProtocolError("ALGAL_HARNESS_CONFIG_JSON must contain JSON") from exc
     if not isinstance(config, dict):
         raise AdapterProtocolError("ALGAL_HARNESS_CONFIG_JSON must be an object")
-    allowed = {"instruction", "mode", "policy", "xcb", "maxModelAttempts", "maxTerminalOutputBytes", "terminalTimeoutMs", "modelTimeoutMs"}
+    allowed = {"instruction", "mode", "policy", "xcb", "scriptedResponses", "memory", "maxModelAttempts", "maxTerminalOutputBytes", "terminalTimeoutMs", "modelTimeoutMs"}
     if set(config) - allowed:
         raise AdapterProtocolError("Unknown controller configuration fields")
     if "ALGAL_HARNESS_MODE" in values:
@@ -379,11 +379,18 @@ def controller_config(instruction: str, values: Mapping[str, str], model_name: s
         if not isinstance(config["policy"], dict):
             raise AdapterProtocolError("ALGAL_HARNESS_POLICY must be an object")
     xcb = config.get("xcb")
-    if not isinstance(xcb, dict) or not isinstance(xcb.get("model"), str) or not xcb["model"]:
-        raise AdapterProtocolError("Host configuration requires xcb.model")
-    for selected in (values.get("ALGAL_HARNESS_MODEL"), model_name):
-        if selected is not None and selected != xcb["model"]:
-            raise AdapterProtocolError("Selected model must exactly match xcb.model")
+    if "scriptedResponses" in config:
+        responses = config["scriptedResponses"]
+        if "xcb" in config or not isinstance(responses, list) or not 1 <= len(responses) <= 16:
+            raise AdapterProtocolError("Choose one bounded explicit scripted fixture backend")
+        if any(selected not in (None, "scripted-fixture") for selected in (values.get("ALGAL_HARNESS_MODEL"), model_name)):
+            raise AdapterProtocolError("Scripted backend requires explicit scripted-fixture model selection")
+    else:
+        if not isinstance(xcb, dict) or not isinstance(xcb.get("model"), str) or not xcb["model"]:
+            raise AdapterProtocolError("Host configuration requires xcb.model")
+        for selected in (values.get("ALGAL_HARNESS_MODEL"), model_name):
+            if selected is not None and selected != xcb["model"]:
+                raise AdapterProtocolError("Selected model must exactly match xcb.model")
     config["instruction"] = instruction  # Configuration cannot substitute a task.
     encode_frame(config)
     return config
@@ -411,6 +418,27 @@ def host_evidence_dir(agent_logs_dir: Path, environment: Any) -> Path:
     if not private.is_dir():
         raise AdapterProtocolError("Host evidence path is not a directory")
     return private
+
+
+def validate_memory_location(config: Mapping[str, Any], agent_logs_dir: Path, environment: Any) -> None:
+    """Memory stores are host-private, including when reused between trials."""
+    if "memory" not in config:
+        return
+    memory = config["memory"]
+    if not isinstance(memory, dict) or not isinstance(memory.get("storeDir"), str):
+        raise AdapterProtocolError("Memory configuration requires a host storeDir")
+    raw = Path(memory["storeDir"])
+    if not raw.is_absolute() or any(path.is_symlink() for path in (raw, *raw.parents)):
+        raise AdapterProtocolError("Memory store must be absolute and contain no symlinks")
+    store = raw.resolve()
+    trial = agent_logs_dir.absolute().parent.resolve(strict=True)
+    exposed = [agent_logs_dir.resolve(), trial / "verifier", trial / "artifacts"]
+    for mount in getattr(environment, "_mounts", ()):
+        source = getattr(mount, "source", None)
+        if source and Path(source).is_absolute():
+            exposed.append(Path(source).resolve())
+    if any(store == mount or mount in store.parents or store in mount.parents for mount in exposed):
+        raise AdapterProtocolError("Memory store overlaps a sandbox mount")
 
 
 async def settle_child(process: asyncio.subprocess.Process) -> None:
@@ -624,7 +652,7 @@ class AlgalHarborAgent(BaseAgent):
         return "algal-coding-harness"
 
     def version(self) -> str:
-        return "0.3.0"
+        return "0.4.0"
 
     async def setup(self, environment: BaseEnvironment) -> None:
         # The controller stays on the Mac; the benchmark image stays unchanged.
@@ -634,6 +662,7 @@ class AlgalHarborAgent(BaseAgent):
         values = {**os.environ, **self.extra_env}
         config = controller_config(instruction, values, self.model_name)
         private_logs = host_evidence_dir(self.logs_dir, environment)
+        validate_memory_location(config, self.logs_dir, environment)
         config["artifactDir"] = str(private_logs / "algal")
         argv = [values.get("ALGAL_HARNESS_BUN", "/Users/benguo/.bun/bin/bun"), values.get("ALGAL_HARNESS_CLI", "")]
         def progress(receipt: dict[str, Any]) -> None:

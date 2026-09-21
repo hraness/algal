@@ -4,6 +4,9 @@ The [completed first pilot](coding-harness-pilot-results.md) records the live
 development/proposal/frozen-holdout results and limitations. It established the
 integration path but no task-solving or policy-search benefit.
 
+The [memory follow-up](coding-harness-memory-spike.md) keeps the policy fixed and
+compares no persistent memory, episodic observations, and native logical queries.
+
 This example tests whether ALGAL can represent and replay a coding harness whose
 bounded policy can be searched. It is an experimental scaffold, not evidence of
 a benchmark improvement, a production coding agent, or a need for a new VM.
@@ -57,7 +60,7 @@ VM was necessary.
 
 | Field | Admitted values | Meaning |
 | --- | --- | --- |
-| `context` | `{ "mode": "full" }` or `{ "mode": "recent-with-first", "maxMessages": 2..128 }` | Preserve the full bounded trace, or the original instruction plus its latest messages. |
+| `context` | `{ "mode": "full" }` or `{ "mode": "recent-with-first", "maxMessages": 3..128 }` | Preserve the full bounded trace, or the original instruction plus complete recent action/result pairs. Even bounds round down to the preceding complete pair. |
 | `testPolicy` | `focused-first`, `test-after-edit` | A fixed instruction about running visible workspace tests. |
 | `recoveryPolicy` | `diagnose-once`, `retry-with-context` | A fixed instruction about using failed-command observations. |
 

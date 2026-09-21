@@ -87,6 +87,36 @@ class FramingTests(unittest.TestCase):
         with self.assertRaises(adapter.AdapterProtocolError):
             adapter.controller_config("actual", values, "m")
 
+    def test_scripted_seed_backend_is_explicit_and_cannot_mix_with_live(self):
+        config = {"scriptedResponses": [{"type": "finish", "summary": "seed"}]}
+        values = {"ALGAL_HARNESS_CONFIG_JSON": json.dumps(config)}
+        self.assertEqual(adapter.controller_config("seed", values, "scripted-fixture")["scriptedResponses"], config["scriptedResponses"])
+        with self.assertRaises(adapter.AdapterProtocolError):
+            adapter.controller_config("seed", values, "live-model")
+        values["ALGAL_HARNESS_CONFIG_JSON"] = json.dumps({**config, "xcb": {"model": "m"}})
+        with self.assertRaises(adapter.AdapterProtocolError):
+            adapter.controller_config("seed", values, "scripted-fixture")
+
+    def test_memory_store_cannot_overlap_task_mounts_or_symlinks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            trial = root / "trial"
+            logs = trial / "agent"
+            logs.mkdir(parents=True)
+            environment = SimpleNamespace(_mounts=[])
+            adapter.validate_memory_location({"memory": {"storeDir": str(root / "private-memory")}}, logs, environment)
+            for store in (root, trial, logs, logs / "memory", trial / "verifier" / "memory"):
+                with self.subTest(store=store), self.assertRaises(adapter.AdapterProtocolError):
+                    adapter.validate_memory_location({"memory": {"storeDir": str(store)}}, logs, environment)
+            link = root / "link"
+            link.symlink_to(root / "private-memory")
+            with self.assertRaises(adapter.AdapterProtocolError):
+                adapter.validate_memory_location({"memory": {"storeDir": str(link / "child")}}, logs, environment)
+            mounted = root / "custom"
+            environment._mounts = [SimpleNamespace(source=str(mounted))]
+            with self.assertRaises(adapter.AdapterProtocolError):
+                adapter.validate_memory_location({"memory": {"storeDir": str(mounted / "memory")}}, logs, environment)
+
 
 class TransportTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):

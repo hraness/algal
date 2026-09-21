@@ -86,7 +86,7 @@ export function parseHarnessPolicy(value: unknown): HarnessPolicy {
     context = { mode };
   } else if (mode === "recent-with-first") {
     const c = object(contextValue, ["mode", "maxMessages"], "policy.context");
-    context = { mode, maxMessages: integer(c.maxMessages, 2, 128, "policy.context.maxMessages") };
+    context = { mode, maxMessages: integer(c.maxMessages, 3, 128, "policy.context.maxMessages (instruction plus a complete assistant/tool pair)") };
   } else throw new Error("policy.context.mode is not admitted");
   if (obj.testPolicy !== "focused-first" && obj.testPolicy !== "test-after-edit") {
     throw new Error("policy.testPolicy is not admitted");
@@ -101,11 +101,22 @@ export function policyId(policy: HarnessPolicy): string {
   return hash(parseHarnessPolicy(policy));
 }
 
-export function selectContext<T>(messages: readonly T[], policy: HarnessPolicy): T[] {
+export function selectContext<T extends HarnessMessage>(messages: readonly T[], policy: HarnessPolicy): T[] {
   const admitted = parseHarnessPolicy(policy);
   if (messages.length > 128) throw new Error("context exceeds 128 messages");
-  if (admitted.context.mode === "full" || messages.length <= admitted.context.maxMessages) return [...messages];
-  return [messages[0]!, ...messages.slice(-(admitted.context.maxMessages - 1))];
+  if (admitted.context.mode === "full" || messages.length === 0) return [...messages];
+  if (messages[0]!.role !== "user" || messages.length % 2 !== 1) {
+    throw new Error("recent context requires an instruction followed by complete assistant/tool pairs");
+  }
+  for (let index = 1; index < messages.length; index += 2) {
+    if (messages[index]!.role !== "assistant" || messages[index + 1]!.role !== "tool") {
+      throw new Error("recent context requires complete assistant/tool pairs");
+    }
+  }
+  if (messages.length <= admitted.context.maxMessages) return [...messages];
+  // An unused slot is preferable to a result whose action has been discarded.
+  const retainedMessages = 2 * Math.floor((admitted.context.maxMessages - 1) / 2);
+  return [messages[0]!, ...messages.slice(-retainedMessages)];
 }
 
 export interface ExperimentSplit {

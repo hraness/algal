@@ -29,7 +29,7 @@ class PilotTest(unittest.TestCase):
                 "verifier_result": {"rewards": {"reward": reward}}}
 
     def test_matrix_is_serial_sized_and_uses_only_the_declared_split(self):
-        for mode, count in (("smoke", 1), ("paired-dev", 4), ("candidate-dev", 2)):
+        for mode, count in (("smoke", 1), ("calibration", 2), ("paired-dev", 4), ("candidate-dev", 2)):
             rows = pilot.build_matrix(mode, self.benchmark, self.baseline, self.candidate, None)
             self.assertEqual(len(rows), count)
             self.assertTrue(all(row["taskId"] in self.benchmark["split"]["devTaskIds"] for row in rows))

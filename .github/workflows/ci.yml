@@ -62,6 +62,7 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
       - run: cargo build --locked
+      - run: ALGAL_MEMORY_NATIVE="$PWD/target/debug/algal" bun test examples/coding-harness/memory-records.test.ts examples/coding-harness/memory.test.ts
       - run: bun scripts/native-parity.ts
       - run: bun scripts/source-inspection-parity.ts
       - run: bun scripts/schema-parity.ts

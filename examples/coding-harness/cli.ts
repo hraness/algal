@@ -3,6 +3,8 @@ import { isAbsolute, join } from "node:path";
 import { runHarness, type HarnessModel, type HarnessOptions, type HarnessTerminalResult } from "./harness";
 import { parseHarnessPolicy } from "./protocol";
 import { createXcbModel, type XcbConfig } from "./xcb";
+import { createHarnessMemory } from "./memory";
+import type { HarnessMemory } from "./memory-contract";
 
 const MAX_FRAME = 1_048_576;
 async function* lines(): AsyncGenerator<unknown> {
@@ -51,7 +53,7 @@ export async function main(): Promise<void> {
   const first = await input.next();
   if (first.done) throw new Error("Initial controller configuration required");
   const config = closed(first.value, ["instruction", "mode", "policy", "xcb", "scriptedResponses", "artifactDir",
-    "maxModelAttempts", "maxTerminalOutputBytes", "terminalTimeoutMs", "modelTimeoutMs"]);
+    "maxModelAttempts", "maxTerminalOutputBytes", "terminalTimeoutMs", "modelTimeoutMs", "memory"]);
   if (typeof config.instruction !== "string" || (config.mode !== "baseline" && config.mode !== "algal") ||
       typeof config.artifactDir !== "string" || !isAbsolute(config.artifactDir)) {
     throw new Error("Instruction, mode, and absolute host artifactDir are required");
@@ -65,12 +67,19 @@ export async function main(): Promise<void> {
   process.on("SIGINT", abort);
   let settle = async () => {};
   let accounting: unknown;
+  let memory: HarnessMemory | undefined;
   const pendingTerminals = new Set<Promise<HarnessTerminalResult>>();
   const settleAll = async () => {
-    await settle();
-    await Promise.allSettled([...pendingTerminals]);
+    const outcomes = await Promise.allSettled([settle(), memory?.settle(), ...pendingTerminals]);
+    const failure = outcomes.find(outcome => outcome.status === "rejected");
+    if (failure?.status === "rejected") throw failure.reason;
+  };
+  const write = async (name: string, value: unknown) => {
+    await mkdir(config.artifactDir as string, { recursive: true, mode: 0o700 });
+    await writeFile(join(config.artifactDir as string, name), `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
   };
   try {
+    if (config.memory !== undefined) memory = await createHarnessMemory(config.memory);
     let model: HarnessModel;
     let modelId: string;
     if (config.scriptedResponses !== undefined) {
@@ -116,12 +125,12 @@ export async function main(): Promise<void> {
     }
     const result = await runHarness({ ...limits, instruction: config.instruction, mode: config.mode,
       policy: parseHarnessPolicy(config.policy), model, terminal, modelId,
-      terminalId: "harbor-environment-exec.v1", signal: controller.signal });
+      terminalId: "harbor-environment-exec.v1", signal: controller.signal,
+      ...(memory === undefined ? {} : { memory }) });
     await settleAll();
-    await mkdir(config.artifactDir, { recursive: true, mode: 0o700 });
-    const write = async (name: string, value: unknown) => writeFile(join(config.artifactDir as string, name), `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
     await write("result.json", result);
     await write("accounting.json", accounting);
+    if (memory) await write("memory-evidence.json", memory.evidence());
     if (result.receipt) await write("receipt.json", result.receipt);
     if (result.manifest) await write("manifest.json", result.manifest);
     emit({ type: "result", result: {
@@ -129,11 +138,21 @@ export async function main(): Promise<void> {
       summary: result.summary, error: result.error, modelAttempts: result.modelAttempts,
       terminalCalls: result.terminalCalls, verification: result.verification ?? null,
       accounting, artifactDir: config.artifactDir,
+      ...(memory === undefined ? {} : { memory: memory.evidence() }),
     } });
   } finally {
-    await settleAll();
-    process.off("SIGTERM", abort);
-    process.off("SIGINT", abort);
+    try {
+      await settleAll();
+    } finally {
+      // Retain attempted-call accounting even if a later adapter/audit fails.
+      try {
+        if (accounting !== undefined) await write("accounting.json", accounting);
+        if (memory) await write("memory-evidence.json", memory.evidence());
+      } finally {
+        process.off("SIGTERM", abort);
+        process.off("SIGINT", abort);
+      }
+    }
   }
 }
 

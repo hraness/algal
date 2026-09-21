@@ -22,7 +22,7 @@ from typing import Any
 HERE = Path(__file__).resolve().parent
 MAX_JSON_BYTES = 8 * 1024 * 1024
 BASELINE = {"version": 1, "context": {"mode": "full"}, "testPolicy": "focused-first", "recoveryPolicy": "diagnose-once"}
-MANUAL_CANDIDATE = {**BASELINE, "context": {"mode": "recent-with-first", "maxMessages": 2}}
+MANUAL_CANDIDATE = {**BASELINE, "context": {"mode": "recent-with-first", "maxMessages": 3}}
 BRIDGE = """
 import {parseHarnessPolicy,parseCandidateProposal,policyId,selectAndFreezePolicy,summarizeOutcomes,summarizeHoldout} from './protocol.ts';
 const input=JSON.parse(await Bun.stdin.text());
@@ -158,7 +158,7 @@ def inspect_task_environment(docker: str, task_root: Path, task: dict[str, Any])
 def settings(args: argparse.Namespace, benchmark: dict[str, Any]) -> dict[str, Any]:
     if importlib.metadata.version("harbor") != benchmark["harbor"]["version"]:
         raise ValueError("Installed Harbor version differs from benchmark pin")
-    files = ["harness.ts", "protocol.ts", "xcb.ts", "cli.ts", "propose.ts", "harbor_adapter.py", "pilot.py"]
+    files = sorted(path.name for pattern in ("*.ts", "*.py") for path in HERE.glob(pattern) if path.is_file())
     task_files = {}
     for task in benchmark["tasks"]:
         root = validate_staged_task(args.task_root, task)
@@ -194,7 +194,12 @@ def build_matrix(mode: str, benchmark: dict[str, Any], baseline: dict[str, Any],
     dev = benchmark["split"]["devTaskIds"]
     holdout = benchmark["split"]["holdoutTaskIds"]
     rows = []
-    if mode == "smoke":
+    if mode == "calibration":
+        if len(dev) != 2:
+            raise ValueError("Calibration requires exactly two development tasks")
+        arms = [("calibration-algal", "algal", baseline)]
+        tasks = dev
+    elif mode == "smoke":
         if smoke_task not in dev:
             raise ValueError("Smoke task must belong to the pinned development split")
         arms = [("smoke-algal", "algal", baseline)]
@@ -391,7 +396,8 @@ def freeze(args: argparse.Namespace, benchmark: dict[str, Any], current: dict[st
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=["smoke", "paired-dev", "candidate-dev", "freeze", "heldout"])
+    parser.add_argument("mode", choices=["smoke", "calibration", "paired-dev", "candidate-dev", "freeze", "heldout"])
+    parser.add_argument("--benchmark-file", type=Path, default=HERE / "benchmark-pilot.json")
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--task-root", type=Path, required=True)
     parser.add_argument("--execute", action="store_true", help="Run serial live trials; omitted means plan only")
@@ -413,7 +419,9 @@ def main(argv: list[str] | None = None) -> None:
     args.task_root = args.task_root.resolve()
     if args.frozen:
         args.frozen = args.frozen.resolve()
-    benchmark = read_json(HERE / "benchmark-pilot.json")
+    benchmark = read_json(args.benchmark_file)
+    if args.mode == "calibration" and args.max_model_attempts != 8:
+        parser.error("Calibration uses exactly eight attempts per task")
     current = settings(args, benchmark)
     if args.mode == "freeze":
         if not args.execute:
@@ -456,7 +464,7 @@ def main(argv: list[str] | None = None) -> None:
     lock = args.output_dir / ".runner-lock"
     with lock.open("x") as stream:
         stream.write(str(os.getpid()))
-    report = {"schema": "algal.coding-harness.report.v1", "mode": args.mode, "settingsId": digest(current),
+    report = {"schema": "algal.coding-harness.report.v1", "mode": args.mode, "settingsId": digest(current), "settings": current,
               "planId": digest(plan), "complete": False, "episodes": [], "summaries": {},
               "billing": "existing-subscription", "incrementalPaidApiSpendUsd": 0, "paidInferenceCapUsd": 20}
     report_path = args.output_dir / "reports" / f"{args.mode}.json"
