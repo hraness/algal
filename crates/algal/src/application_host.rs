@@ -287,12 +287,15 @@ impl MemoryAdmission for PolicyHost {
             .decoders
             .get(&input.observation.decoder)
             .ok_or_else(|| Error::invalid("Host policy denies this decoder"))?;
-        let bounded = app_object(&input.raw, &["contract", "claims"])?;
-        if bounded["contract"] != json!(decoder.raw_contract) {
+        // The contract binds the evidence kind, not the record shape:
+        // lifecycle records such as algal.application-migration.v1
+        // legitimately carry claims alongside their other fields.
+        let bounded = object(&input.raw)?;
+        if bounded.get("contract") != Some(&json!(decoder.raw_contract)) {
             return Err(Error::invalid("Raw evidence is not the admitted contract"));
         }
         let mut claims = Vec::new();
-        for row in list(&bounded["claims"], 32)? {
+        for row in list(bounded.get("claims").unwrap_or(&Value::Null), 32)? {
             claims.push(mem::parse_claim(row)?);
         }
         let proof = object(&input.receipt)?;
@@ -544,6 +547,23 @@ mod tests {
         let claims =
             MemoryAdmission::decode_observation(&host, &admission(&raw, &receipt, &base)).unwrap();
         assert_eq!(claims, vec![parse_claim(&raw["claims"][0]).unwrap()]);
+        // The contract binds the evidence kind, not a closed record shape:
+        // lifecycle records carrying claims alongside other fields decode.
+        let mut wide = raw.clone();
+        wide["extra"] = json!("field");
+        let wide_ref = hashed(wide.clone());
+        let wide_receipt = json!({"contract": "algal.test-receipt.v1", "raw": wide_ref});
+        let mut wide_observation = base.clone();
+        wide_observation.raw = wide_ref;
+        wide_observation.receipt = hashed(wide_receipt.clone());
+        assert_eq!(
+            MemoryAdmission::decode_observation(
+                &host,
+                &admission(&wide, &wide_receipt, &wide_observation),
+            )
+            .unwrap(),
+            vec![parse_claim(&raw["claims"][0]).unwrap()],
+        );
         // Undeclared decoder denied.
         let mut other = base.clone();
         other.decoder = refn(99);

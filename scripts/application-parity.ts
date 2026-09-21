@@ -82,18 +82,73 @@ const raw = { contract: "algal.parity-raw.v1", claims: [{ relation: "available",
 const rawRef = digestCanonical(raw);
 const receipt = { contract: "algal.parity-receipt.v1", raw: rawRef };
 const observationInput = { application: APP, scope: scopeRef, procedure: procedureRef, raw: rawRef, receipt: digestCanonical(receipt), decoder: digests.decoder };
+
+// Activation and migration fixtures: a compatible candidate revision under the
+// same schema, then a schema-2 revision bridged by a migration record whose
+// claims arrive as an ordinary observation decoded by the policy host.
+const decoder2 = { contract: "algal.parity-decoder2.v1" };
+const decoder2Ref = digestCanonical(decoder2);
+const schema2 = { contract: "algal.application-memory-schema.v1", relations: [{ name: "supported-tool", arity: 1 }] };
+const schema2Ref = digestCanonical(schema2);
+const manifest2Value = manifestToJson(parseOrganismManifest({
+  contract: "algal.organism.v1", key: "organism:parity-migrate", name: "parity-migrate",
+  interface: { inputs: { claims: { cell: "src", port: "value" } }, outputs: { migrated: { cell: "out", port: "value" } } },
+  cells: [
+    { id: "src", kind: "input", outputs: { value: "json" } },
+    { id: "out", kind: "const", outputs: { value: { type: "json", value: { claims: [{ relation: "supported-tool", tuple: ["tool-a"], polarity: "supported" }] } } } },
+  ], edges: [],
+}));
+const manifest2Ref = digestCanonical(manifest2Value);
+const procedure2 = { contract: "algal.application-memory-procedure.v1", id: "migrate", schema: schema2Ref, manifest: manifest2Ref, decoder: decoder2Ref, dependencies: [], prerequisite: null };
+const procedure2Ref = digestCanonical(procedure2);
+const scope2 = { contract: "algal.application-memory-scope.v1", application: APP, environment: "fixture", task: "task-1", frontier: digests.frontier, bindings: [], completeFor: [procedure2Ref], attestation: digests.attestation };
+const scope2Ref = digestCanonical(scope2);
+const revision2 = { ...revision, parent: revisionRef };
+const revision2Ref = digestCanonical(revision2);
+const revision3 = { ...revision, parent: revision2Ref, schema: schema2Ref };
+const revision3Ref = digestCanonical(revision3);
 const mailbox = capabilityHandle("mailbox-send", { fixture: "parity" });
 const policy = {
   contract: "algal.application-host.v1", application: APP, frontier: digests.frontier,
   hostProfile: digests.hostProfile, episodeAccess: "observe", attestation: "algal.parity-attestation.v1",
   routes: [{ route: "investigate", recipient: mailbox, hostProfile: digests.hostProfile }],
-  decoders: [{ decoder: digests.decoder, rawContract: "algal.parity-raw.v1", receiptContract: "algal.parity-receipt.v1" }],
+  decoders: [
+    { decoder: digests.decoder, rawContract: "algal.parity-raw.v1", receiptContract: "algal.parity-receipt.v1" },
+    { decoder: decoder2Ref, rawContract: "algal.application-migration.v1", receiptContract: "algal.parity-migration-receipt.v1" },
+  ].sort((a, b) => (a.decoder < b.decoder ? -1 : 1)),
 };
+
+// The published memory chain is deterministic: the host identity derives from
+// the policy, so the stored observation and successor snapshot digests are
+// computable before either leg runs.
+const hostIdentity = digestCanonical({ contract: "algal.host-admission.v1", policy: digestCanonical(policy) });
+const genesisMemoryRef = digestCanonical({ contract: "algal.application-memory.v1", ...genesisMemory });
+const observation1Record = { contract: "algal.application-memory-observation.v1", ...observationInput, admission: hostIdentity, claims: raw.claims };
+const observation1Ref = digestCanonical(observation1Record);
+const publishedMemory = { contract: "algal.application-memory.v1", application: APP, schema: digests.schema, previous: genesisMemoryRef, scope: scopeRef, observations: [observation1Ref], hypotheses: [], withdrawn: [] };
+const publishedMemoryRef = digestCanonical(publishedMemory);
+
+const migrationRun = { contract: "algal.parity-migration-run.v1", program: manifest2Ref, outcome: "complete" };
+const migrationRunRef = digestCanonical(migrationRun);
+const migratedClaim = { relation: "supported-tool", tuple: ["tool-a"], polarity: "supported" };
+const migration = {
+  contract: "algal.application-migration.v1", application: APP,
+  from: publishedMemoryRef, previousRevision: revision2Ref, candidateRevision: revision3Ref,
+  program: manifest2Ref, receipt: migrationRunRef, claims: [migratedClaim],
+};
+const migrationRef = digestCanonical(migration);
+const receipt2 = { contract: "algal.parity-migration-receipt.v1", raw: migrationRef };
+const receipt2Ref = digestCanonical(receipt2);
+const observation2Input = { application: APP, scope: scope2Ref, procedure: procedure2Ref, raw: migrationRef, receipt: receipt2Ref, decoder: decoder2Ref };
+const observation2Record = { contract: "algal.application-memory-observation.v1", ...observation2Input, admission: hostIdentity, claims: [migratedClaim] };
+const observation2Ref = digestCanonical(observation2Record);
+const migratedMemory = { application: APP, schema: schema2Ref, previous: null, scope: scope2Ref, observations: [observation2Ref], hypotheses: [], withdrawn: [] };
 
 // Input files shared by both legs.
 const files: Record<string, JsonValue> = {
-  ...values, procedure, query, queries, revision, scope, genesisMemory, raw, receipt, policy,
-  observation: observationInput,
+  ...values, manifest2: manifest2Value, procedure, query, queries, revision, scope, genesisMemory, raw, receipt, policy,
+  schema2, decoder2, procedure2, scope2, revision2, revision3, migrationRun, migration, receipt2,
+  observation: observationInput, observation2: observation2Input, migratedMemory,
 };
 const fixturePath = new Map<string, string>();
 for (const [name, value] of Object.entries(files)) {
@@ -131,8 +186,9 @@ const putStep = (name: string, value: JsonValue, kind: "values" | "manifests" = 
     native: async () => ["store", "put", fixturePath.get(name)!, "--kind", kind],
   });
 putStep("manifest", manifestValue, "manifests");
+putStep("manifest2", manifest2Value, "manifests");
 for (const name of ["schema", "decoder", "attestation", "hostProfile", "views", "runtimeProfile", "evaluationPolicy", "program", "frontier", "episodeArgs"] as const) putStep(name, values[name]);
-for (const [name, value] of Object.entries({ procedure, query, queries, revision, raw, receipt })) putStep(name, value as JsonValue);
+for (const [name, value] of Object.entries({ procedure, query, queries, revision, raw, receipt, schema2, decoder2, procedure2, revision2, revision3, migrationRun, migration, receipt2 })) putStep(name, value as JsonValue);
 
 const dynamic = async (name: string, value: JsonValue) => {
   const path = join(fixtureDir, `${name}.json`);
@@ -184,6 +240,22 @@ steps.push(
     },
     native: async () => app("publish", await dynamic("publish", { application: APP, operation: op("publish"), expectedHead: head, expectedMemory: memoryRef, observation: observationInput })),
   },
+  // A blocked episode dispatch would stay pending forever under the policy
+  // host, so activation must land before the episode intent is dispatched.
+  {
+    name: "scope-migrated",
+    ts: async () => ({ scope: await memory.putScope(scope2) }),
+    native: async () => app("scope", fixturePath.get("scope2")!),
+  },
+  {
+    name: "activate",
+    ts: async () => {
+      const s = await service.commit({ application: APP, operation: op("activate"), kind: "activate", expectedHead: head, revision: revision2Ref, memory: memoryRef, intents: [], evidence: [], causedBy: null });
+      head = s.digest;
+      return { state: s.digest, transition: s.state.transition, revision: s.state.revision, memory: s.state.memory };
+    },
+    native: async () => app("commit", await dynamic("activate", { application: APP, operation: op("activate"), kind: "activate", expectedHead: head, revision: revision2Ref, memory: memoryRef, intents: [], evidence: [], causedBy: null })),
+  },
   {
     name: "query-supported",
     ts: async () => { const r = await memory.query(head, queryRef); derivationRef = r.ref; return { derivation: r.ref, status: r.derivation.status }; },
@@ -197,6 +269,27 @@ steps.push(
       return { state: s.digest };
     },
     native: async () => app("execute", await dynamic("execute", { application: APP, operation: op("execute"), expectedHead: head, expectedMemory: memoryRef, entrypoint: "run", input: digests.episodeArgs, derivation: derivationRef })),
+  },
+  // Migration runs while the episode intent is committed but undispatched —
+  // only an admitted-but-unsettled dispatch blocks an activating transition.
+  {
+    name: "observe-migration",
+    ts: async () => ({ observation: await memory.observe(observation2Input) }),
+    native: async () => app("observe", fixturePath.get("observation2")!),
+  },
+  {
+    name: "snapshot-migrated",
+    ts: async () => ({ memory: await memory.snapshot(migratedMemory) }),
+    native: async () => app("snapshot", fixturePath.get("migratedMemory")!),
+  },
+  {
+    name: "migrate",
+    ts: async () => {
+      const s = await service.commit({ application: APP, operation: op("migrate"), kind: "migrate", expectedHead: head, revision: revision3Ref, memory: digestCanonical({ contract: "algal.application-memory.v1", ...migratedMemory }), intents: [], evidence: [migrationRef], causedBy: null });
+      head = s.digest; memoryRef = s.state.memory;
+      return { state: s.digest, transition: s.state.transition, revision: s.state.revision, memory: s.state.memory };
+    },
+    native: async () => app("commit", await dynamic("migrate", { application: APP, operation: op("migrate"), kind: "migrate", expectedHead: head, revision: revision3Ref, memory: digestCanonical({ contract: "algal.application-memory.v1", ...migratedMemory }), intents: [], evidence: [migrationRef], causedBy: null })),
   },
   { name: "dispatch-episode", ts: async () => ({ dispatches: await service.dispatchPending(APP, host) }), native: async () => app("dispatch", APP) },
   {

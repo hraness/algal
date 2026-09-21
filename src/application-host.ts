@@ -120,7 +120,10 @@ export function createApplicationPolicyHost(input: unknown, options: { channelsD
     async decodeObservation({ observation, raw, receipt }): Promise<MemoryClaim[]> {
       const decoder = policy.decoders.get(observation.decoder);
       if (!decoder) throw new Error("Host policy denies this decoder");
-      const bounded = applicationObject(raw, ["contract", "claims"]);
+      // The contract binds the evidence kind, not the record shape: lifecycle
+      // records such as algal.application-migration.v1 legitimately carry
+      // claims alongside their other fields.
+      const bounded = asObject(raw, "raw evidence");
       if (bounded["contract"] !== decoder.rawContract) throw new Error("Raw evidence is not the admitted contract");
       const claims = applicationList(bounded["claims"], 32, parseMemoryClaim);
       const proof = asObject(receipt, "observation receipt");

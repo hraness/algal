@@ -1,10 +1,12 @@
 > WIP checkpoint: application contracts and design are initial implementation work.
 > The lifecycle, memory services and declarative `algal.application-host.v1`
 > policy now run on both runtimes — `bun scripts/application-parity.ts` replays
-> one shared case (create → investigate → delivery → observe → derive →
-> episode binding → reconcile) and requires identical digests and records.
-> Adaptation/migration parity, the domain dispatcher and the integrated
-> demonstration are not yet complete; kernel guarantees remain gated on wider
+> one shared case (create → investigate → delivery → observe → activate →
+> derive → episode binding → migrate → reconcile) and requires identical
+> digests and records across 46 steps. The activation and migration commit
+> gates are parity-checked; the evaluation/migration *producers*
+> (`application-adaptation.ts`, `migrateApplicationMemory`) and the domain
+> dispatcher remain reference-only, and kernel guarantees stay gated on wider
 > shared coverage.
 > The harness memory pilot is paused and unqualified. See the checkpoint section below.
 

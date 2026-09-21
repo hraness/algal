@@ -2327,4 +2327,127 @@ mod tests {
         );
         assert!(service.create(&create).is_err());
     }
+
+    #[test]
+    fn activation_and_migration_transitions() {
+        let tmp = tempdir().unwrap();
+        let (revision, memory, _, manifest) = seed(tmp.path());
+        let allow = Allow;
+        let mut service = Service::new(tmp.path(), &allow).unwrap();
+        let head = service
+            .create(&command(
+                "parity",
+                &ops("create"),
+                "create",
+                None,
+                &revision,
+                &memory,
+                vec![],
+            ))
+            .unwrap();
+        let mut store = Store::open(tmp.path(), true).unwrap();
+        let record = get_record(&store, &revision).unwrap();
+
+        // A compatible candidate — same schema, parented on the incumbent —
+        // activates and bumps the epoch.
+        let mut candidate = record.clone();
+        candidate["parent"] = json!(revision);
+        let candidate_ref = put_record(&mut store, &candidate).unwrap();
+        let activated = service
+            .commit(&command(
+                "parity",
+                &ops("activate"),
+                "activate",
+                Some(&head.digest),
+                &candidate_ref,
+                &memory,
+                vec![],
+            ))
+            .unwrap();
+        assert_eq!(activated.state.epoch, 1);
+        assert_eq!(activated.state.revision, candidate_ref);
+
+        // A schema change through activate is rejected; migrate is the path.
+        let schema2 = put_record(
+            &mut store,
+            &json!({"contract":"algal.application-memory-schema.v1","relations":[{"name":"moved","arity":1}]}),
+        )
+        .unwrap();
+        let mut next = candidate.clone();
+        next["parent"] = json!(candidate_ref);
+        next["schema"] = json!(schema2);
+        let next_ref = put_record(&mut store, &next).unwrap();
+        let bad = command(
+            "parity",
+            &ops("bad-activate"),
+            "activate",
+            Some(&activated.digest),
+            &next_ref,
+            &memory,
+            vec![],
+        );
+        assert!(service.commit(&bad).is_err());
+
+        // Migration evidence must bind the transition and be consumed by the
+        // migrated memory — an observation whose raw record is the migration.
+        let migration = json!({
+            "contract":"algal.application-migration.v1","application":"parity",
+            "from":memory,"previousRevision":candidate_ref,"candidateRevision":next_ref,
+            "program":manifest,"receipt":manifest,
+            "claims":[{"relation":"moved","tuple":["tool-a"],"polarity":"supported"}],
+        });
+        let migration_ref = put_record(&mut store, &migration).unwrap();
+        let observation = put_record(
+            &mut store,
+            &json!({"contract":"algal.application-memory-observation.v1","application":"parity","scope":revision,"procedure":revision,"raw":migration_ref,"receipt":revision,"decoder":revision,"admission":revision,"claims":[]}),
+        )
+        .unwrap();
+        let migrated = put_record(
+            &mut store,
+            &json!({"contract":"algal.application-memory.v1","application":"parity","schema":schema2,"previous":null,"scope":revision,"observations":[observation],"hypotheses":[],"withdrawn":[]}),
+        )
+        .unwrap();
+
+        // No evidence: rejected.
+        let none = command(
+            "parity",
+            &ops("migrate-none"),
+            "migrate",
+            Some(&activated.digest),
+            &next_ref,
+            &migrated,
+            vec![],
+        );
+        assert!(service.commit(&none).is_err());
+        // Evidence the migrated memory does not consume: rejected.
+        let mut other = migration.clone();
+        other["claims"] = json!([]);
+        let other_ref = put_record(&mut store, &other).unwrap();
+        let mut unconsumed = command(
+            "parity",
+            &ops("migrate-stale"),
+            "migrate",
+            Some(&activated.digest),
+            &next_ref,
+            &migrated,
+            vec![],
+        );
+        unconsumed["evidence"] = json!([other_ref]);
+        assert!(service.commit(&unconsumed).is_err());
+        // Bound and consumed evidence migrates the epoch and the schema.
+        let mut migrate = command(
+            "parity",
+            &ops("migrate"),
+            "migrate",
+            Some(&activated.digest),
+            &next_ref,
+            &migrated,
+            vec![],
+        );
+        migrate["evidence"] = json!([migration_ref]);
+        let migrated_state = service.commit(&migrate).unwrap();
+        assert_eq!(migrated_state.state.epoch, 2);
+        assert_eq!(migrated_state.state.memory, migrated);
+        assert_eq!(migrated_state.state.revision, next_ref);
+    }
 }
