@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   ApplicationService, admitApplicationActivation, builtinRegistry, evaluateApplicationRevision,
-  getApplicationRecord, putApplicationRecord, runOrganism,
+  getApplicationRecord, parseApplicationRevision, putApplicationRecord, runOrganism,
 } from "../../index";
 import {
   ApplicationMemoryService, parseMemoryScope,
@@ -84,8 +84,10 @@ async function fixture() {
   }));
   // The investigation strategy is a model-backed ALGAL program: an agent
   // cell reads the request's admitted procedures and decides which to run.
+  // Its manifest budget is distinct — at most one model call per decision.
   const investigator = await store.putManifest(parseOrganismManifest({
     contract: "algal.organism.v1", key: "organism:workspace-investigator", name: "workspace investigator",
+    budgets: { maxAgentCalls: 1 },
     interface: { inputs: { req: { cell: "req", port: "value" } }, outputs: { probes: { cell: "decide", port: "out" } } },
     cells: [
       { id: "req", kind: "input", outputs: { value: "json" } },
@@ -115,14 +117,16 @@ async function fixture() {
   const evaluationPolicy = await store.putValue({ contract: "algal.application-evaluation-policy.v1", maxCases: 8, maxWork: 1_000_000, maxModelCalls: 0, requireHoldoutPass: true, strictValidationImprovement: true });
   // The revision carries every inhabitant as an entrypoint — the worker
   // ("run"), the probe strategist ("investigator"), and the revision
-  // generator ("proposer") — so activation upgrades them together.
+  // generator ("proposer") — so activation upgrades them together. The
+  // inhabitants have distinct declared capabilities: only the strategist and
+  // proposer may exercise model inference; the worker runs with none.
   const revision = await putApplicationRecord(store, {
     contract: "algal.application-revision.v1", application: "workspace", parent: null,
-    schema, queries, views, runtimeProfile, evaluationPolicy, capabilityRequirements: [],
+    schema, queries, views, runtimeProfile, evaluationPolicy, capabilityRequirements: ["model-inference"],
     entrypoints: [
-      { name: "investigator", manifest: investigator, applicability: query, maxGenerations: 1 },
-      { name: "proposer", manifest: proposer, applicability: query, maxGenerations: 1 },
-      { name: "run", manifest, applicability: query, maxGenerations: 1 },
+      { name: "investigator", manifest: investigator, applicability: query, maxGenerations: 1, capabilities: ["model-inference"], queries: [query] },
+      { name: "proposer", manifest: proposer, applicability: query, maxGenerations: 1, capabilities: ["model-inference"], queries: [query] },
+      { name: "run", manifest, applicability: query, maxGenerations: 1, capabilities: [], queries: [query] },
     ],
   });
   const genesisMemory = await memory.snapshot({ application: "workspace", schema, previous: null, scope: domain.scope, observations: [], hypotheses: [], withdrawn: [] });
@@ -139,7 +143,7 @@ describe("development-workspace organism on the real harness boundary", () => {
   test("investigate → real probe → observe → execute → stale → restart → re-investigate", async () => {
     const f = await fixture();
     const { service, memory, domain } = f;
-    const dispatcher = createHarnessDispatcher(domain, service.store, harnessTerminal(f.cwd), f.admission.currentFrontier, f.executors);
+    const dispatcher = createHarnessDispatcher(domain, service.store, harnessTerminal(f.cwd), f.admission.currentFrontier, { "model-inference": f.executors });
 
     // 1. Applicability is unresolved; scheduling publishes a durable intent.
     const scheduled = await scheduleInvestigations(service, memory, {
@@ -215,7 +219,7 @@ describe("development-workspace organism on the real harness boundary", () => {
       expectedMemory: s3.state.memory, route: "probes", entrypoints: ["run"],
     });
     if (!again.snapshot) throw new Error("expected a re-investigation commit");
-    const dispatcher2 = createHarnessDispatcher(domain, r.service.store, harnessTerminal(f.cwd), r.admission.currentFrontier, f.executors);
+    const dispatcher2 = createHarnessDispatcher(domain, r.service.store, harnessTerminal(f.cwd), r.admission.currentFrontier, { "model-inference": f.executors });
     const [d3] = await r.service.dispatchPending("workspace", dispatcher2);
     if (!d3 || d3.status !== "settled") throw new Error("re-investigation was not dispatched");
     const drained2 = await drainProbes(domain, r.service, r.memory);
@@ -249,11 +253,11 @@ describe("development-workspace organism on the real harness boundary", () => {
     expect(candidateManifest).toBe(await f.store.putManifest(parseOrganismManifest(f.candidateManifestJson)));
     const candidate = await putApplicationRecord(f.store, {
       contract: "algal.application-revision.v1", application: "workspace", parent: head2.state.revision,
-      schema: f.schema, queries: f.queries, views: f.views, runtimeProfile: f.runtimeProfile, evaluationPolicy: f.evaluationPolicy, capabilityRequirements: [],
+      schema: f.schema, queries: f.queries, views: f.views, runtimeProfile: f.runtimeProfile, evaluationPolicy: f.evaluationPolicy, capabilityRequirements: ["model-inference"],
       entrypoints: [
-        { name: "investigator", manifest: f.investigator, applicability: f.query, maxGenerations: 1 },
-        { name: "proposer", manifest: f.proposer, applicability: f.query, maxGenerations: 1 },
-        { name: "run", manifest: candidateManifest, applicability: f.query, maxGenerations: 1 },
+        { name: "investigator", manifest: f.investigator, applicability: f.query, maxGenerations: 1, capabilities: ["model-inference"], queries: [f.query] },
+        { name: "proposer", manifest: f.proposer, applicability: f.query, maxGenerations: 1, capabilities: ["model-inference"], queries: [f.query] },
+        { name: "run", manifest: candidateManifest, applicability: f.query, maxGenerations: 1, capabilities: [], queries: [f.query] },
       ],
     });
     const cases = await f.store.putValue({ contract: "algal.application-evaluation-cases.v1", cases: [
@@ -324,11 +328,11 @@ describe("development-workspace organism on the real harness boundary", () => {
     const queries2 = await service.store.putValue({ contract: "algal.application-memory-queries.v1", queries: [query2] });
     const revision2 = await putApplicationRecord(service.store, {
       contract: "algal.application-revision.v1", application: "workspace", parent: s4.state.revision,
-      schema: schema2, queries: queries2, views: f.views, runtimeProfile: f.runtimeProfile, evaluationPolicy: f.evaluationPolicy, capabilityRequirements: [],
+      schema: schema2, queries: queries2, views: f.views, runtimeProfile: f.runtimeProfile, evaluationPolicy: f.evaluationPolicy, capabilityRequirements: ["model-inference"],
       entrypoints: [
-        { name: "investigator", manifest: f.investigator, applicability: query2, maxGenerations: 1 },
-        { name: "proposer", manifest: f.proposer, applicability: query2, maxGenerations: 1 },
-        { name: "run", manifest: candidateManifest, applicability: query2, maxGenerations: 1 },
+        { name: "investigator", manifest: f.investigator, applicability: query2, maxGenerations: 1, capabilities: ["model-inference"], queries: [query2] },
+        { name: "proposer", manifest: f.proposer, applicability: query2, maxGenerations: 1, capabilities: ["model-inference"], queries: [query2] },
+        { name: "run", manifest: candidateManifest, applicability: query2, maxGenerations: 1, capabilities: [], queries: [query2] },
       ],
     });
     // A migrate commit without migration evidence is refused.
@@ -365,5 +369,34 @@ describe("development-workspace organism on the real harness boundary", () => {
       expectedHead: s4.digest, revision: revision2, memory: migrated.snapshot,
       intents: [], evidence: [migrated.migration], causedBy: null,
     })).rejects.toThrow();
+  });
+
+  test("distinct inhabitant capability and memory-view declarations are enforced", async () => {
+    const f = await fixture();
+    const { service } = f;
+    const base = await getApplicationRecord(service.store, f.genesis.state.revision, parseApplicationRevision);
+    const widen = (name: string, patch: Partial<(typeof base.entrypoints)[number]>) =>
+      base.entrypoints.map(e => e.name === name ? { ...e, ...patch } : e);
+    const activate = (revision: Digest, operation: string) => service.commit({
+      application: "workspace", operation: ref(operation), kind: "activate",
+      expectedHead: f.genesis.digest, revision, memory: f.genesis.state.memory,
+      intents: [], evidence: [], causedBy: null,
+    });
+    // A capability declaration outside the revision's requirements is refused.
+    const badCaps = await putApplicationRecord(service.store, { ...base, parent: f.genesis.state.revision, entrypoints: widen("run", { capabilities: ["terminal-access"] }) });
+    await expect(activate(badCaps, "op-badcap")).rejects.toThrow("Entrypoint capability exceeds");
+    // A memory view that excludes the entrypoint's own applicability query is refused.
+    const narrowView = await putApplicationRecord(service.store, { ...base, parent: f.genesis.state.revision, entrypoints: widen("run", { queries: [] }) });
+    await expect(activate(narrowView, "op-narrowview")).rejects.toThrow("outside its declared memory view");
+    // A memory view reaching outside the revision's query bundle is refused by
+    // memory-layer validation.
+    const foreign = ref({ contract: "foreign-query" }) as Digest;
+    const wideView = await putApplicationRecord(service.store, { ...base, parent: f.genesis.state.revision, entrypoints: widen("run", { queries: [...base.entrypoints.find(e => e.name === "run")!.queries, foreign].sort() }) });
+    const wideRevision = await getApplicationRecord(service.store, wideView, parseApplicationRevision);
+    await expect(f.memory.validateForRevision(f.genesis.state.memory, wideRevision)).rejects.toThrow("exceeds the revision's queries");
+    // A conforming revision — same declarations as the incumbent — activates fine.
+    const same = await putApplicationRecord(service.store, { ...base, parent: f.genesis.state.revision });
+    const upgraded = await activate(same, "op-same-decls");
+    expect(upgraded.state.epoch).toBe(1);
   });
 });

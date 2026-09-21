@@ -27,7 +27,7 @@ async function fixture(options: {fault?: (point: "prepared" | "head-published" |
   const runtime = await service.store.putValue({contract: "algal.runtime.fixture.v1"});
   const policy = await service.store.putValue({contract: "algal.policy.fixture.v1"});
   const applicability = await service.store.putValue({contract: "algal.query.fixture.v1"});
-  const revision = {contract: "algal.application-revision.v1", application: "fixture", parent: null, schema, queries, views, runtimeProfile: runtime, evaluationPolicy: policy, capabilityRequirements: [], entrypoints: [{name: "run", manifest: manifestRef, applicability, maxGenerations: 1}]};
+  const revision = {contract: "algal.application-revision.v1", application: "fixture", parent: null, schema, queries, views, runtimeProfile: runtime, evaluationPolicy: policy, capabilityRequirements: [], entrypoints: [{name: "run", manifest: manifestRef, applicability, maxGenerations: 1, capabilities: [], queries: [applicability]}]};
   const revisionRef = await service.store.putValue(revision);
   const memory = await service.store.putValue({contract: "algal.memory.fixture.v1", facts: []});
   return {service, revisionRef, memory};

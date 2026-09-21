@@ -13,7 +13,11 @@ export type ApplicationRevision = {
   runtimeProfile: Digest;
   evaluationPolicy: Digest;
   capabilityRequirements: string[];
-  entrypoints: { name: string; manifest: Digest; applicability: Digest; maxGenerations: number }[];
+  /** An inhabitant: `capabilities` names the subset of the revision's
+   * capability requirements it may exercise, `queries` the subset of the
+   * revision's memory queries it may consult (its memory view). Both are
+   * explicit — no inheritance. `applicability` must be one of `queries`. */
+  entrypoints: { name: string; manifest: Digest; applicability: Digest; maxGenerations: number; capabilities: string[]; queries: Digest[] }[];
 };
 export type ApplicationTransition = {
   contract: "algal.application-transition.v1";
@@ -113,8 +117,10 @@ export function parseApplicationRevision(input: unknown): ApplicationRevision {
   const capabilities = applicationList(v.capabilityRequirements, 32, applicationId);
   if (new Set(capabilities).size !== capabilities.length || capabilities.some((s, i) => i > 0 && s < capabilities[i - 1]!)) throw new Error("Capabilities must be sorted and unique");
   const entrypoints = applicationList(v.entrypoints, 32, input => {
-    const e = applicationObject(input, ["name", "manifest", "applicability", "maxGenerations"]);
-    return {name: applicationId(e.name), manifest: applicationRef(e.manifest), applicability: applicationRef(e.applicability), maxGenerations: applicationInt(e.maxGenerations, 1, 64)};
+    const e = applicationObject(input, ["name", "manifest", "applicability", "maxGenerations", "capabilities", "queries"]);
+    const caps = applicationList(e.capabilities, 8, applicationId);
+    if (new Set(caps).size !== caps.length || caps.some((c, i) => i > 0 && c < caps[i - 1]!)) throw new Error("Entrypoint capabilities must be sorted and unique");
+    return {name: applicationId(e.name), manifest: applicationRef(e.manifest), applicability: applicationRef(e.applicability), maxGenerations: applicationInt(e.maxGenerations, 1, 64), capabilities: caps, queries: applicationRefs(e.queries, 32)};
   });
   if (!entrypoints.length || new Set(entrypoints.map(e => e.name)).size !== entrypoints.length || entrypoints.some((e, i) => i > 0 && e.name < entrypoints[i - 1]!.name)) throw new Error("Entrypoints must be nonempty, sorted, unique");
   return {contract: "algal.application-revision.v1", application: applicationId(v.application), parent: nullableApplicationRef(v.parent), schema: applicationRef(v.schema), queries: applicationRef(v.queries), views: applicationRef(v.views), runtimeProfile: applicationRef(v.runtimeProfile), evaluationPolicy: applicationRef(v.evaluationPolicy), capabilityRequirements: capabilities, entrypoints};

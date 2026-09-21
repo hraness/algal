@@ -10,7 +10,7 @@ const ref = digestCanonical("fixture");
 const revision = () => ({
   contract: "algal.application-revision.v1", application: "workspace", parent: null,
   schema: ref, queries: ref, views: ref, runtimeProfile: ref, evaluationPolicy: ref,
-  capabilityRequirements: [], entrypoints: [{name: "discover", manifest: ref, applicability: ref, maxGenerations: 8}],
+  capabilityRequirements: [], entrypoints: [{name: "discover", manifest: ref, applicability: ref, maxGenerations: 8, capabilities: [], queries: [ref]}],
 });
 const state = () => ({contract: "algal.application-state.v1", application: "workspace", sequence: 0, epoch: 0, revision: ref, memory: ref, previous: null, transition: ref});
 

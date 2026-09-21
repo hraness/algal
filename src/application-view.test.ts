@@ -6,7 +6,7 @@ import type { ApplicationSnapshot } from "./application";
 const ref = (value: unknown) => digestCanonical(value as never);
 const snapshot = (): ApplicationSnapshot => {
   const schema = ref("schema"), query = ref("query"), view = ref({contract: "algal.application-view-spec.v1", title: "x", widgets: []}), profile = ref({contract: "algal.application-runtime-profile.v1", runtime: "bun-native-memory", policy: "pure-case-evaluation.v1"}), policy = ref("policy"), manifest = ref("manifest"), memory = ref("memory"), transition = ref("transition");
-  const revision = {contract: "algal.application-revision.v1" as const, application: "demo", parent: null, schema, queries: query, views: view, runtimeProfile: profile, evaluationPolicy: policy, capabilityRequirements: [], entrypoints: [{name: "discover", manifest, applicability: query, maxGenerations: 1}]};
+  const revision = {contract: "algal.application-revision.v1" as const, application: "demo", parent: null, schema, queries: query, views: view, runtimeProfile: profile, evaluationPolicy: policy, capabilityRequirements: [], entrypoints: [{name: "discover", manifest, applicability: query, maxGenerations: 1, capabilities: [], queries: [query]}]};
   const state = {contract: "algal.application-state.v1" as const, application: "demo", sequence: 0, epoch: 0, revision: ref(revision), memory, previous: null, transition};
   return {digest: ref(state), state, revision, transition: {contract: "algal.application-transition.v1", application: "demo", operation: ref("op"), request: ref("request"), kind: "create", previous: null, revision: ref(revision), memory, intents: [], evidence: [], causedBy: null}};
 };

@@ -317,6 +317,15 @@ export class ApplicationService {
       const revision = await getApplicationRecord(this.store, command.revision, parseApplicationRevision);
       if (revision.application !== command.application) fail("Revision belongs to another application");
       for (const ref of [command.memory, revision.schema, revision.queries, revision.views, revision.runtimeProfile, revision.evaluationPolicy, ...command.evidence, ...(command.causedBy ? [command.causedBy] : []), ...revision.entrypoints.map(e => e.applicability)]) await this.value(ref);
+      // An inhabitant's declared capabilities must be a subset of what the
+      // revision admits, and its applicability query must be inside its own
+      // declared memory view — both checkable inside the revision record
+      // itself. The view's membership in the queries bundle is a memory-layer
+      // property, enforced by validateForRevision.
+      for (const entry of revision.entrypoints) {
+        if (entry.capabilities.some(c => !revision.capabilityRequirements.includes(c))) fail("Entrypoint capability exceeds the revision's requirements");
+        if (!entry.queries.includes(entry.applicability)) fail("Entrypoint applicability is outside its declared memory view");
+      }
       for (const entry of revision.entrypoints) if (!await this.store.getManifest(entry.manifest)) fail("Missing entrypoint manifest");
       const pending = await this.pending(history);
       if (pending.length + command.intents.length > APPLICATION_SERVICE_LIMITS.pending) throw new Error("Pending intent capacity exceeded");

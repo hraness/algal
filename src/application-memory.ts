@@ -313,6 +313,9 @@ export class ApplicationMemoryService {
     const revision = parseApplicationRevision(input), { memory } = await this.validateSnapshot(await this.value(memoryRef));
     if (memory.application !== revision.application || memory.schema !== revision.schema) throw new Error("Memory incompatible with application revision schema");
     const queries = await getApplicationRecord(this.store, revision.queries, parseMemoryQueries);
+    for (const entry of revision.entrypoints) {
+      if (entry.queries.some(q => !queries.queries.includes(q))) throw new Error("Entrypoint memory view exceeds the revision's queries");
+    }
     for (const ref of queries.queries) {
       const query = await getApplicationRecord(this.store, ref, parseMemoryQuery);
       if (query.schema !== revision.schema) throw new Error("Query schema incompatible with revision");
