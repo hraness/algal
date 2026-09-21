@@ -387,6 +387,8 @@ export type {
   MemorySnapshot,
 } from "./src/application-memory";
 export { NativeMemoryQueryEngine } from "./src/application-native-memory";
+export { appendObservation } from "./src/application-observation";
+export type { AppendObservationInput, AppendedObservation } from "./src/application-observation";
 export {
   admitApplicationActivation,
   checkApplicationCompatibility,
