@@ -390,6 +390,8 @@ export type {
 export { NativeMemoryQueryEngine } from "./src/application-native-memory";
 export { appendObservation } from "./src/application-observation";
 export type { AppendObservationInput, AppendedObservation } from "./src/application-observation";
+export { migrateApplicationMemory, parseApplicationMigration } from "./src/application-migration";
+export type { ApplicationMigration, MigrateMemoryInput } from "./src/application-migration";
 export { parseInvestigationRequest, requestExecution, scheduleInvestigations } from "./src/application-investigation";
 export type {
   EntrypointDerivation, InvestigationRequest, RequestExecutionInput,

@@ -11,9 +11,10 @@ import {
   getApplicationRecord, putApplicationRecord, runOrganism,
 } from "../../index";
 import {
-  ApplicationMemoryService,
+  ApplicationMemoryService, parseMemoryScope,
   type MemoryQueryEngine,
 } from "../../src/application-memory";
+import { migrateApplicationMemory } from "../../src/application-migration";
 import { requestExecution, scheduleInvestigations } from "../../src/application-investigation";
 import { scriptedExecutor } from "../../src/effects";
 import { applicationJson } from "../../src/application-contract";
@@ -295,5 +296,74 @@ describe("development-workspace organism on the real harness boundary", () => {
     const replay2 = await runOrganism({ manifest: (await service.store.getManifest(candidateManifest))!, fns: builtinRegistry(), store: service.store, executors: [], args: { src: { value: "b-raw" } }, processName: binding2.process });
     const outcome2Ref = digestCanonical(applicationJson({ contract: "algal.episode-outcome.v1", binding: result2.binding, receipt: replay2 }));
     await getApplicationRecord(service.store, outcome2Ref, r2 => r2); // resolves only if the dispatcher deposited it
+
+    // 10. Schema evolution: a bounded migration program maps the schema-1
+    //     claims into a renamed relation; the migrate transition activates a
+    //     schema-2 revision carrying the migrated memory — the old claims ride
+    //     the migration record as evidence, not a silent copy.
+    const schema2 = await service.store.putValue({ contract: "algal.application-memory-schema.v1", relations: [{ name: "probe-result", arity: 2 }] });
+    const migrationManifest = await service.store.putManifest(parseOrganismManifest({
+      contract: "algal.organism.v1", key: "organism:workspace-migrate", name: "workspace migrate",
+      interface: { inputs: { claims: { cell: "claims", port: "value" }, frontier: { cell: "frontier", port: "value" } }, outputs: { migrated: { cell: "map", port: "out" } } },
+      cells: [
+        { id: "claims", kind: "input", outputs: { value: "json" } },
+        { id: "frontier", kind: "input", outputs: { value: "json" } },
+        // Carry forward only claims still on the current frontier — the
+        // mutation-staled factor=3 observation does not migrate.
+        { id: "map", kind: "expr", inputs: { claims: "json", frontier: "json" }, expr: { contract: "algal.expr.v1", program: { claims: ["map", ["filter", ["get", "claims"], "c", ["eq", ["get", "c", "frontier"], ["get", "frontier"]]], "c", { relation: "probe-result", tuple: ["get", "c", "claim", "tuple"], polarity: ["get", "c", "claim", "polarity"] }] } }, output: { kind: "json", schema: { type: "object", required: ["claims"], properties: { claims: { type: "array", maxItems: 64 } }, additionalProperties: false } } },
+      ],
+      edges: [
+        { from: { cell: "claims", port: "value" }, to: { cell: "map", port: "claims" } },
+        { from: { cell: "frontier", port: "value" }, to: { cell: "map", port: "frontier" } },
+      ],
+    }));
+    const migrationDecoder = await service.store.putValue({ contract: "algal.migration-decoder.v1" });
+    const migrationProcedure = await service.store.putValue({ contract: "algal.application-memory-procedure.v1", id: "migrate", schema: schema2, manifest: migrationManifest, decoder: migrationDecoder, dependencies: [], prerequisite: null });
+    const program2 = await service.store.putValue({ contract: "algal.query.v1", rules: [], query: { relation: "probe-result", terms: [{ var: "p" }, { var: "v" }, { var: "polarity" }] }, limits: { maxWork: 50_000, maxRounds: 32, maxDerived: 128, maxBindings: 128, maxRows: 16, maxOutputBytes: 262_144 } });
+    const query2 = await service.store.putValue({ contract: "algal.application-memory-query.v1", id: "observed", schema: schema2, program: program2, procedures: [migrationProcedure], polarityColumn: 2, conflict: "single-value" });
+    const queries2 = await service.store.putValue({ contract: "algal.application-memory-queries.v1", queries: [query2] });
+    const revision2 = await putApplicationRecord(service.store, {
+      contract: "algal.application-revision.v1", application: "workspace", parent: s4.state.revision,
+      schema: schema2, queries: queries2, views: f.views, runtimeProfile: f.runtimeProfile, evaluationPolicy: f.evaluationPolicy, capabilityRequirements: [],
+      entrypoints: [
+        { name: "investigator", manifest: f.investigator, applicability: query2, maxGenerations: 1 },
+        { name: "proposer", manifest: f.proposer, applicability: query2, maxGenerations: 1 },
+        { name: "run", manifest: candidateManifest, applicability: query2, maxGenerations: 1 },
+      ],
+    });
+    // A migrate commit without migration evidence is refused.
+    const head4 = (await r.service.inspect("workspace"))!;
+    const frontierNow = await r.admission.currentFrontier("workspace");
+    const genesisScope = await getApplicationRecord(service.store, domain.scope, parseMemoryScope);
+    const scope2 = await putApplicationRecord(service.store, { ...genesisScope, frontier: frontierNow, completeFor: [...genesisScope.completeFor, migrationProcedure].sort() });
+    const migrated = await migrateApplicationMemory(r.memory, {
+      application: "workspace", from: head4.state.memory, schema: schema2, scope: scope2,
+      program: migrationManifest, procedure: migrationProcedure, decoder: migrationDecoder,
+      previousRevision: head4.state.revision, candidateRevision: revision2,
+    }, { fns: builtinRegistry(), executors: [] });
+    await expect(r.service.commit({
+      application: "workspace", operation: ref("op-migrate-noev"), kind: "migrate",
+      expectedHead: head4.digest, revision: revision2, memory: migrated.snapshot,
+      intents: [], evidence: [], causedBy: null,
+    })).rejects.toThrow("Migration transition lacks migration evidence");
+    const s5 = await r.service.commit({
+      application: "workspace", operation: ref("op-migrate-1"), kind: "migrate",
+      expectedHead: head4.digest, revision: revision2, memory: migrated.snapshot,
+      intents: [], evidence: [migrated.migration], causedBy: null,
+    });
+    expect(s5.state.epoch).toBe(2);
+    expect(s5.state.revision).toBe(revision2);
+    // The migrated claim answers the schema-2 query — the renamed relation,
+    // the probed tuple, and the current frontier all check out.
+    const q5 = await r.memory.query(s5.digest, query2);
+    expect(q5.derivation.status).toBe("supported");
+    const migratedResult = await getApplicationRecord(service.store, q5.derivation.result!, r2 => r2 as { rows: { tuple: JsonValue[] }[] });
+    expect(migratedResult.rows[0]!.tuple).toEqual(["factor", 7, "supported"]);
+    // A stale migrate commit against the pre-migration head is fenced out.
+    await expect(r.service.commit({
+      application: "workspace", operation: ref("op-migrate-stale"), kind: "migrate",
+      expectedHead: s4.digest, revision: revision2, memory: migrated.snapshot,
+      intents: [], evidence: [migrated.migration], causedBy: null,
+    })).rejects.toThrow();
   });
 });

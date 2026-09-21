@@ -13,8 +13,8 @@ import { open } from "node:fs/promises";
 import { join } from "node:path";
 import {
   appendObservation, applicationProcessName, builtinRegistry, capabilityHandle,
-  getApplicationRecord, manifestToJson, parseApplicationRevision, parseApplicationState,
-  parseMemoryFrontier, parseMemoryProcedure, parseMemoryScope,
+  getApplicationRecord, manifestToJson, parseApplicationMigration, parseApplicationRevision,
+  parseApplicationState, parseMemoryFrontier, parseMemoryProcedure, parseMemoryScope,
   parseMemorySnapshot, parseOrganismManifest, putApplicationRecord, runOrganism,
   type ApplicationAdmission, type ApplicationDispatchContext, type ApplicationDispatcher,
   type ApplicationService, type Digest,
@@ -200,11 +200,21 @@ export function createHarnessAdmission(domain: HarnessDomain, store: Application
     },
     async decodeObservation({ observation, scope, procedure, raw, receipt }) {
       if (observation.decoder !== procedure.decoder) throw new Error("Observation decoder is not the admitted procedure decoder");
-      const harnessProcedure = parseHarnessProcedureRecord(await store.getValue(procedure.decoder));
       const binding = scope.bindings.find(b => b.key === "scope");
       if (binding?.version.kind !== "store") throw new Error("Observation scope lacks the harness scope binding");
+      const bounded = object(raw);
+      // A migration observation's raw is the migration record: the admitted
+      // decoder re-emits the program's claims, bound to the run receipt.
+      if (bounded.contract === "algal.application-migration.v1") {
+        const decoderRecord = object(await store.getValue(procedure.decoder));
+        if (decoderRecord.contract !== "algal.migration-decoder.v1") throw new Error("Migration procedure decoder does not admit migrations");
+        const migration = parseApplicationMigration(bounded);
+        if (migration.receipt !== observation.receipt) throw new Error("Migration record does not bind the observation receipt");
+        return migration.claims;
+      }
+      const harnessProcedure = parseHarnessProcedureRecord(await store.getValue(procedure.decoder));
       const harnessScope = parseHarnessScopeRecord(await store.getValue(binding.version.reference));
-      const bounded = object(raw); keys(bounded, ["contract", "command", "result"]);
+      keys(bounded, ["contract", "command", "result"]);
       const decoded = decodeProbe(harnessProcedure, harnessScope, bounded);
       const proof = parseHarnessReceipt(receipt);
       if (proof.command !== bounded.command) throw new Error("Receipt does not bind the raw probe command");
