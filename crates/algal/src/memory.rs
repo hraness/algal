@@ -494,4 +494,39 @@ mod tests {
         assert_eq!(next["facts"].as_array().unwrap().len(), 1);
         assert_ne!(digest(&snapshot).unwrap(), digest(&next).unwrap());
     }
+
+    #[test]
+    fn canonically_equal_numbers_share_a_join_bucket_without_matching() {
+        // Two equality notions meet in the join and must not be conflated.
+        // `canonical` renders 1 and 1.0 identically, and the join index keys on
+        // it, so these two tuples land in the same bucket. The term loop then
+        // compares `Value`s, which distinguishes them, so no match is produced.
+        // The index narrows the scan; the strict compare decides. If the compare
+        // ever became canonical, or the index key stopped agreeing with the
+        // store's dedup key, this join would start succeeding. Pin it.
+        let source = digest(&json!("numeric forms")).unwrap();
+        let snapshot = json!({"contract":"algal.memory.v1","facts":[
+            {"relation":"p","tuple":[1],"sources":[source]},
+            {"relation":"q","tuple":[1.0],"sources":[source]}
+        ]});
+        let program = json!({"contract":"algal.query.v1","rules":[
+            {"id":"both","head":{"relation":"both","terms":[{"var":"x"}]},
+             "body":[{"relation":"p","terms":[{"var":"x"}]},
+                     {"relation":"q","terms":[{"var":"x"}]}]}
+        ],"query":{"relation":"both","terms":[{"var":"x"}]}});
+        let result = query(&snapshot, &program).unwrap();
+        assert!(
+            result["rows"].as_array().unwrap().is_empty(),
+            "1 and 1.0 must not join: {result}"
+        );
+
+        // The same variable bound to a literal 1 still matches a stored 1, so
+        // the strict compare is not simply rejecting every numeric join.
+        let same = json!({"contract":"algal.memory.v1","facts":[
+            {"relation":"p","tuple":[1],"sources":[source]},
+            {"relation":"q","tuple":[1],"sources":[source]}
+        ]});
+        let result = query(&same, &program).unwrap();
+        assert_eq!(result["rows"].as_array().unwrap().len(), 1);
+    }
 }
