@@ -208,6 +208,16 @@ export function parseMemorySnapshot(input: unknown): MemorySnapshot {
   if (withdrawn.some(ref => !observations.includes(ref))) throw new Error("Withdrawal must name an admitted observation");
   return { contract: "algal.application-memory.v1", application: applicationId(v.application), schema: applicationRef(v.schema), previous: nullableApplicationRef(v.previous), scope: applicationRef(v.scope), observations, hypotheses: applicationRefs(v.hypotheses, 64), withdrawn };
 }
+const MEMORY_STATUSES: MemoryStatus[] = ["supported", "opposed", "conflicted", "unknown", "stale", "exhausted", "failed", "cancelled"];
+export function parseMemoryDerivation(input: unknown): MemoryDerivation {
+  const v = applicationObject(input, ["contract", "application", "capturedState", "memory", "query", "frontier", "engine", "admission", "status", "conditional", "verified", "result", "snapshot", "program", "sourceRefs", "work", "reason"]);
+  applicationTag(v.contract, "algal.application-memory-derivation.v1");
+  if (!MEMORY_STATUSES.includes(v.status as MemoryStatus)) throw new Error("Invalid memory derivation status");
+  if (v.conditional !== true || typeof v.verified !== "boolean") throw new Error("Invalid memory derivation evidence flags");
+  const status = v.status as MemoryStatus, result = nullableApplicationRef(v.result), snapshot = nullableApplicationRef(v.snapshot), work = v.work === null ? null : applicationInt(v.work, 0, 50_000), reason = v.reason === null ? null : boundedText(v.reason, 256);
+  if ((status === "supported" || status === "opposed" || status === "conflicted") && (result === null || snapshot === null || !v.verified)) throw new Error("A resolved derivation requires a verified result and fact snapshot");
+  return { contract: "algal.application-memory-derivation.v1", application: applicationId(v.application), capturedState: applicationRef(v.capturedState), memory: applicationRef(v.memory), query: applicationRef(v.query), frontier: applicationRef(v.frontier), engine: applicationRef(v.engine), admission: applicationRef(v.admission), status, conditional: true, verified: v.verified, result, snapshot, program: applicationRef(v.program), sourceRefs: applicationRefs(v.sourceRefs, 128), work, reason };
+}
 
 type Admitted = { observation: MemoryObservation; scope: MemoryScope; procedure: MemoryProcedure };
 export class ApplicationMemoryService {

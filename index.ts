@@ -357,6 +357,7 @@ export {
   ApplicationMemoryService,
   validateMemoryForRevision,
   parseMemoryFrontier,
+  parseMemoryDerivation,
   parseMemoryHypothesis,
   parseMemoryNativeProgram,
   parseMemoryObservation,
@@ -389,6 +390,11 @@ export type {
 export { NativeMemoryQueryEngine } from "./src/application-native-memory";
 export { appendObservation } from "./src/application-observation";
 export type { AppendObservationInput, AppendedObservation } from "./src/application-observation";
+export { parseInvestigationRequest, requestExecution, scheduleInvestigations } from "./src/application-investigation";
+export type {
+  EntrypointDerivation, InvestigationRequest, RequestExecutionInput,
+  ScheduledInvestigations, ScheduleInvestigationsInput,
+} from "./src/application-investigation";
 export {
   admitApplicationActivation,
   checkApplicationCompatibility,
