@@ -13,7 +13,9 @@ export function probeCommand(procedure: MemoryProcedure, scope: MemoryScope): st
   const op = procedure.operation;
   const args = [op.kind, op.kind === "resolve-tool" ? op.tool : op.path, ...Object.entries(scope.dependencies).sort().flatMap(([name, dep]) => [name, dep.path])];
   const script = `use strict; use warnings;
-sub hash_file { my ($p)=@_; die "dependency missing" unless -f $p; open my $h,"-|","sha256sum","--",$p or die "hash launch"; my $s=<$h>; close $h or die "hash failed"; die "hash format" unless defined($s) && $s =~ /^([a-f0-9]{64}) /; return $1; }
+my $HAS_SHA=eval { require Digest::SHA; 1 };
+sub hash_cmd { for my $c (["sha256sum"],["shasum","-a","256"]) { for my $dir (split /:/,($ENV{PATH}//""),-1) { $dir="." if $dir eq ""; my $p="$dir/".$c->[0]; return $c if -f $p && -x $p; } } return undef; }
+sub hash_file { my ($p)=@_; die "dependency missing" unless -f $p; if ($HAS_SHA) { my $d=eval { Digest::SHA->new(256)->addfile($p,"b")->hexdigest }; die "hash failed" unless defined($d) && $d=~/^[a-f0-9]{64}$/; return $d; } my $c=hash_cmd(); die "hash unavailable" unless $c; open my $h,"-|",@$c,"--",$p or die "hash launch"; my $s=<$h>; close $h or die "hash failed"; die "hash format" unless defined($s) && $s=~/^([a-f0-9]{64})[ *]/; return $1; }
 my ($kind,$arg,@deps)=@ARGV; my @before; while(@deps){ my $name=shift @deps; my $path=shift @deps; push @before,[$name,$path,hash_file($path)]; }
 my ($present,$payload)=(0,"");
 if($kind eq "resolve-tool"){ for my $dir(split /:/,($ENV{PATH}//""),-1){ $dir="." if $dir eq ""; my $p="$dir/$arg"; if(-f $p && -x $p){($present,$payload)=(1,$p);last;} } }
