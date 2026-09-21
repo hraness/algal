@@ -117,15 +117,83 @@ fn join(
     work: &mut usize,
     limits: &Limits,
 ) -> Result<Vec<Binding>> {
+    // Group tuples by relation once, so a literal only scans tuples it could
+    // possibly match. Previously every literal scanned the whole set and
+    // charged a work unit per tuple before testing the relation, so a fact no
+    // rule mentions cost real budget on every literal of every round. Results
+    // are unchanged: the map is keyed by canonical [relation, values], so
+    // same-relation tuples are already contiguous and ordered, and collecting
+    // them preserves that order exactly. Only `work` counts fall.
+    let mut by_relation: BTreeMap<&str, Vec<&Tuple>> = BTreeMap::new();
+    for tuple in tuples.values() {
+        by_relation
+            .entry(tuple.relation.as_str())
+            .or_default()
+            .push(tuple);
+    }
+    let empty: Vec<&Tuple> = Vec::new();
     let mut bindings = vec![Binding::default()];
     for literal in literals {
+        let candidates = by_relation.get(literal.relation.as_str()).unwrap_or(&empty);
+
+        // Hash join. A nested loop re-scanned every candidate for every
+        // binding, so a two-literal rule cost |bindings| * |candidates| and
+        // work grew as the product of the two relations' sizes. Instead, index
+        // the candidates once on the positions this literal already has values
+        // for, then probe that index per binding: |candidates| + |matches|
+        // rather than |bindings| * |candidates|.
+        //
+        // The bound-variable set is uniform across `bindings` at this step,
+        // because every binding here came through the same earlier literals, so
+        // one probe shape serves them all. The index only narrows the scan; the
+        // term loop below still checks every position, which keeps repeated
+        // variables inside one literal (`depends(x, x)`) correct.
+        //
+        // Ordering is preserved, so results are unchanged. Buckets are filled
+        // by walking `candidates` in order, so each bucket holds its members in
+        // scan order, and bindings are still consumed in order. Only `work`
+        // falls.
+        let probe: Vec<(usize, &str)> = match bindings.first() {
+            Some(first) => literal
+                .terms
+                .iter()
+                .enumerate()
+                .filter_map(|(at, term)| {
+                    variable(term)
+                        .filter(|name| first.values.contains_key(*name))
+                        .map(|name| (at, name))
+                })
+                .collect(),
+            None => Vec::new(),
+        };
+
+        let key_of = |values: &dyn Fn(usize, &str) -> Option<Value>| -> Result<String> {
+            let mut parts = Vec::with_capacity(probe.len());
+            for (at, name) in &probe {
+                parts.push(values(*at, name).unwrap_or(Value::Null));
+            }
+            canonical(&json!(parts))
+        };
+
+        let mut index: BTreeMap<String, Vec<&Tuple>> = BTreeMap::new();
+        if !probe.is_empty() {
+            for tuple in candidates {
+                charge(work, limits)?;
+                let key = key_of(&|at, _| tuple.values.get(at).cloned())?;
+                index.entry(key).or_default().push(tuple);
+            }
+        }
+
         let mut next = Vec::new();
         for binding in &bindings {
-            for tuple in tuples.values() {
+            let bucket = if probe.is_empty() {
+                candidates
+            } else {
+                let key = key_of(&|_, name| binding.values.get(name).cloned())?;
+                index.get(&key).unwrap_or(&empty)
+            };
+            for tuple in bucket {
                 charge(work, limits)?;
-                if tuple.relation != literal.relation {
-                    continue;
-                }
                 let mut candidate = binding.clone();
                 let mut matched = true;
                 for (term, value) in literal.terms.iter().zip(&tuple.values) {
@@ -425,5 +493,40 @@ mod tests {
         assert_eq!(snapshot["facts"], json!([]));
         assert_eq!(next["facts"].as_array().unwrap().len(), 1);
         assert_ne!(digest(&snapshot).unwrap(), digest(&next).unwrap());
+    }
+
+    #[test]
+    fn canonically_equal_numbers_share_a_join_bucket_without_matching() {
+        // Two equality notions meet in the join and must not be conflated.
+        // `canonical` renders 1 and 1.0 identically, and the join index keys on
+        // it, so these two tuples land in the same bucket. The term loop then
+        // compares `Value`s, which distinguishes them, so no match is produced.
+        // The index narrows the scan; the strict compare decides. If the compare
+        // ever became canonical, or the index key stopped agreeing with the
+        // store's dedup key, this join would start succeeding. Pin it.
+        let source = digest(&json!("numeric forms")).unwrap();
+        let snapshot = json!({"contract":"algal.memory.v1","facts":[
+            {"relation":"p","tuple":[1],"sources":[source]},
+            {"relation":"q","tuple":[1.0],"sources":[source]}
+        ]});
+        let program = json!({"contract":"algal.query.v1","rules":[
+            {"id":"both","head":{"relation":"both","terms":[{"var":"x"}]},
+             "body":[{"relation":"p","terms":[{"var":"x"}]},
+                     {"relation":"q","terms":[{"var":"x"}]}]}
+        ],"query":{"relation":"both","terms":[{"var":"x"}]}});
+        let result = query(&snapshot, &program).unwrap();
+        assert!(
+            result["rows"].as_array().unwrap().is_empty(),
+            "1 and 1.0 must not join: {result}"
+        );
+
+        // The same variable bound to a literal 1 still matches a stored 1, so
+        // the strict compare is not simply rejecting every numeric join.
+        let same = json!({"contract":"algal.memory.v1","facts":[
+            {"relation":"p","tuple":[1],"sources":[source]},
+            {"relation":"q","tuple":[1],"sources":[source]}
+        ]});
+        let result = query(&same, &program).unwrap();
+        assert_eq!(result["rows"].as_array().unwrap().len(), 1);
     }
 }
