@@ -8,12 +8,12 @@ import { manifestToJson, parseOrganismManifest } from "./contract";
 
 const dirs: string[] = [];
 const ref = (v: unknown) => digestCanonical(v as never);
-async function fixture() {
+async function fixture(options: {fault?: (point: "prepared" | "head-published" | "dispatch-started" | "dispatch-settled") => void} = {}) {
   const dir = await mkdtemp(join(tmpdir(), "algal-application-")); dirs.push(dir);
   const service = new ApplicationService(dir, {
     async admitCommit() {},
     async admitDispatch() { throw new Error("not used"); },
-  });
+  }, options);
   const manifest = parseOrganismManifest({
     contract: "algal.organism.v1", key: "organism:application-fixture", name: "Application fixture",
     cells: [{id: "out", kind: "const", outputs: {value: {type: "json", value: "ok"}}}], edges: [],
@@ -48,5 +48,14 @@ describe("experimental application lifecycle", () => {
     const advance = await service.commit({application: "fixture", operation: ref("memory-1"), kind: "memory", expectedHead: first.digest, revision: revisionRef, memory: nextMemory, intents: [], evidence: [], causedBy: null});
     await expect(service.commit({application: "fixture", operation: ref("stale"), kind: "memory", expectedHead: first.digest, revision: revisionRef, memory, intents: [], evidence: [], causedBy: null})).rejects.toThrow("Stale application head");
     expect((await service.inspect("fixture"))?.digest).toBe(advance.digest);
+  });
+  test("retains an uncertain head publication for exact operation reconciliation", async () => {
+    const {service, revisionRef, memory} = await fixture({fault: point => { if (point === "head-published") throw new Error("simulated lost acknowledgement"); }});
+    const command = {application: "fixture", operation: ref("uncertain-1"), kind: "create", expectedHead: null, revision: revisionRef, memory, intents: [], evidence: [], causedBy: null};
+    await expect(service.create(command)).rejects.toMatchObject({uncertain: true});
+    const committed = await service.inspect("fixture");
+    expect(committed?.state.sequence).toBe(0);
+    // The same operation is read back from the durable head; no second state is created.
+    expect((await service.create(command)).digest).toBe(committed?.digest);
   });
 });
