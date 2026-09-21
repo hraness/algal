@@ -20,6 +20,7 @@ import {
   type ApplicationMemoryService, type MemoryAdmissionHost, type MemoryClaim,
   type MemoryProcedure as SubstrateProcedure, type MemoryResourceVersion, type MemoryScope as SubstrateScope,
 } from "../../index";
+import type { Executor } from "../../src/effects";
 import { parseInvestigationRequest } from "../../src/application-investigation";
 import { decodeProbe, probeCommand } from "./memory";
 import { json, keys, object, parseProcedure, parseScope, sha256 } from "./memory-records";
@@ -245,7 +246,7 @@ export function harnessTerminal(cwd: string): MemoryTerminal {
  * names, run the real probe command, deposit the bounded raw record and an
  * outcome record into CAS, and append the outcome to the durable channel file
  * `stateDir/probes/<request>.json`. The drain commits the state transition. */
-export function createHarnessDispatcher(domain: HarnessDomain, store: ApplicationService["store"], terminal: MemoryTerminal, currentFrontier: (application: string) => Promise<Digest>): ApplicationDispatcher {
+export function createHarnessDispatcher(domain: HarnessDomain, store: ApplicationService["store"], terminal: MemoryTerminal, currentFrontier: (application: string) => Promise<Digest>, executors: Executor[] = []): ApplicationDispatcher {
   const channelDir = join(domain.stateDir, "probes");
   return {
     configurationDigest: ref({ contract: "algal.harness-dispatcher.v1", routes: ["probes"] }),
@@ -272,7 +273,7 @@ export function createHarnessDispatcher(domain: HarnessDomain, store: Applicatio
           const manifest = await store.getManifest(domain.investigator);
           if (!manifest) throw new Error("Investigator manifest missing from the store");
           const decision = await runOrganism({
-            manifest, fns: builtinRegistry(), store, executors: [],
+            manifest, fns: builtinRegistry(), store, executors,
             args: { req: { value: json({ entrypoint: request.entrypoint, procedures: [...substrateProcedures.values()].map(p => p.id) }) } },
             processName: `investigator-${work.message.slice(7, 15)}`,
           });
@@ -319,7 +320,7 @@ export function createHarnessDispatcher(domain: HarnessDomain, store: Applicatio
       const manifest = await store.getManifest(binding.manifest);
       if (!manifest) throw new Error("Episode manifest missing from the store");
       const args = object(await store.getValue(binding.arguments));
-      const receipt = await runOrganism({ manifest, fns: builtinRegistry(), store, executors: [], args: args as Record<string, Record<string, JsonValue>>, processName: binding.process });
+      const receipt = await runOrganism({ manifest, fns: builtinRegistry(), store, executors, args: args as Record<string, Record<string, JsonValue>>, processName: binding.process });
       const bindingRef = await putApplicationRecord(store, binding);
       await putApplicationRecord(store, { contract: "algal.episode-outcome.v1", binding: bindingRef, receipt });
       return { status: "settled" as const, result: { kind: "episode" as const, binding: bindingRef, process: binding.process } };

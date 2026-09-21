@@ -15,6 +15,7 @@ import {
   type MemoryQueryEngine,
 } from "../../src/application-memory";
 import { requestExecution, scheduleInvestigations } from "../../src/application-investigation";
+import { scriptedExecutor } from "../../src/effects";
 import { applicationJson } from "../../src/application-contract";
 import { parseOrganismManifest } from "../../src/contract";
 import { digestCanonical, type Digest } from "../../src/digest";
@@ -56,16 +57,18 @@ async function fixture() {
   const schema = await store.putValue({ contract: "algal.application-memory-schema.v1", relations: [{ name: "observed-result", arity: 2 }] });
   const procedure: MemoryProcedure = { id: "factor", description: "Read configured factor", operation: { kind: "read-json-field", path: "config.json", field: "factor" }, dependencies: ["config"] };
   const notesProbe: MemoryProcedure = { id: "notes", description: "Fingerprint notes", operation: { kind: "fingerprint-file", path: "notes.txt" }, dependencies: ["unrelated"] };
-  // The investigation strategy is an ordinary ALGAL program: it reads the
-  // request's admitted procedures and decides which to run.
+  // The investigation strategy is a model-backed ALGAL program: an agent
+  // cell reads the request's admitted procedures and decides which to run.
   const investigator = await store.putManifest(parseOrganismManifest({
     contract: "algal.organism.v1", key: "organism:workspace-investigator", name: "workspace investigator",
-    interface: { inputs: { req: { cell: "req", port: "value" } }, outputs: { probes: { cell: "out", port: "value" } } },
+    interface: { inputs: { req: { cell: "req", port: "value" } }, outputs: { probes: { cell: "decide", port: "out" } } },
     cells: [
       { id: "req", kind: "input", outputs: { value: "json" } },
-      { id: "out", kind: "const", outputs: { value: { type: "json", value: { procedures: ["factor"] } } } },
-    ], edges: [],
+      { id: "decide", kind: "agent", inputs: { req: "json" }, prompt: "Choose which admitted procedures to probe for this entrypoint.", view: { inputs: ["req"] }, output: { kind: "json", schema: { type: "object", required: ["procedures"], properties: { procedures: { type: "array", items: { type: "string", maxLength: 64 }, maxItems: 8 } }, additionalProperties: false } } },
+    ],
+    edges: [{ from: { cell: "req", port: "value" }, to: { cell: "decide", port: "req" } }],
   }));
+  const investigatorExecutor = scriptedExecutor({ decide: { procedures: ["factor"] } });
   const domain = await createHarnessDomain(store, {
     application: "workspace", environmentId: "fixture", taskId: "task-1", sequenceId: "sequence", schema,
     dependencies: { config: "config.json", unrelated: "notes.txt" }, procedures: [procedure, notesProbe],
@@ -93,14 +96,14 @@ async function fixture() {
     const admission = createHarnessAdmission(domain, service.store);
     return { service, memory: new ApplicationMemoryService({ store: service.store, engine, admission }), admission };
   };
-  return { dir, cwd, service, memory, store, domain, query, genesis, reopen, manifest, admission, schema, queries, views, runtimeProfile, evaluationPolicy };
+  return { dir, cwd, service, memory, store, domain, query, genesis, reopen, manifest, admission, schema, queries, views, runtimeProfile, evaluationPolicy, executors: [investigatorExecutor] };
 }
 
 describe("development-workspace organism on the real harness boundary", () => {
   test("investigate → real probe → observe → execute → stale → restart → re-investigate", async () => {
     const f = await fixture();
     const { service, memory, domain } = f;
-    const dispatcher = createHarnessDispatcher(domain, service.store, harnessTerminal(f.cwd), f.admission.currentFrontier);
+    const dispatcher = createHarnessDispatcher(domain, service.store, harnessTerminal(f.cwd), f.admission.currentFrontier, f.executors);
 
     // 1. Applicability is unresolved; scheduling publishes a durable intent.
     const scheduled = await scheduleInvestigations(service, memory, {
@@ -129,6 +132,12 @@ describe("development-workspace organism on the real harness boundary", () => {
     expect(proposal.request).toBe(scheduled.requests[0]!);
     expect(proposal.probes).toEqual([domain.procedureRefs.factor!]);
     expect(proposal.receipt).not.toBeNull();
+    // The proposal's receipt is the investigator organism's run record: its
+    // decide cell consumed one agent call — the strategy was model-backed.
+    const decisionReceipt = await getApplicationRecord(service.store, proposal.receipt!, r => r as { outcome: string; cells: Record<string, { status: string }>; work: { agentCalls: number } });
+    expect(decisionReceipt.outcome).toBe("complete");
+    expect(decisionReceipt.cells.decide?.status).toBe("committed");
+    expect(decisionReceipt.work.agentCalls).toBe(1);
     const raw = await getApplicationRecord(service.store, outcome.raw, r => r as { contract: string; command: string; result: { exitCode: number } });
     expect(raw.contract).toBe("algal.harness-probe-raw.v1");
     expect(raw.command).toContain("perl -e");
@@ -170,7 +179,7 @@ describe("development-workspace organism on the real harness boundary", () => {
       expectedMemory: s3.state.memory, route: "probes",
     });
     if (!again.snapshot) throw new Error("expected a re-investigation commit");
-    const dispatcher2 = createHarnessDispatcher(domain, r.service.store, harnessTerminal(f.cwd), r.admission.currentFrontier);
+    const dispatcher2 = createHarnessDispatcher(domain, r.service.store, harnessTerminal(f.cwd), r.admission.currentFrontier, f.executors);
     const [d3] = await r.service.dispatchPending("workspace", dispatcher2);
     if (!d3 || d3.status !== "settled") throw new Error("re-investigation was not dispatched");
     const drained2 = await drainProbes(domain, r.service, r.memory);
