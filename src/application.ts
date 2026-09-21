@@ -119,8 +119,9 @@ function parseDispatch(raw: unknown): ApplicationDispatch {
   if (identity !== dispatchIdentity(application, intent, plan)) fail("Dispatch identity changed");
   return {contract: "algal.application-dispatch.v1", application, intent, sourceState: applicationRef(v.sourceState), configurationDigest: applicationRef(v.configurationDigest), identity, plan, status, result, reason: why};
 }
-function parseDispatchResult(raw: unknown, record: ApplicationDispatch, work?: WorkIntent): ApplicationDispatchResult {
+function parseDispatchResult(raw: unknown, record: ApplicationDispatch, work: WorkIntent): ApplicationDispatchResult {
   if (record.plan.kind === "episode") {
+    if (work.kind !== "start-episode") fail("Episode settlement does not bind a start intent");
     const value = applicationObject(raw, ["kind", "binding", "process"]);
     applicationTag(value.kind, "episode");
     const binding = applicationRef(value.binding), process = applicationId(value.process);
@@ -130,7 +131,7 @@ function parseDispatchResult(raw: unknown, record: ApplicationDispatch, work?: W
   const value = applicationObject(raw, ["kind", "message", "idempotencyKey"]);
   applicationTag(value.kind, "delivery");
   const message = applicationRef(value.message), idempotencyKey = applicationRef(value.idempotencyKey);
-  if (idempotencyKey !== record.identity || (work?.kind === "deliver" && message !== work.message)) fail("Delivery settlement changed its identity or message");
+  if (work.kind !== "deliver" || idempotencyKey !== record.identity || message !== work.message) fail("Delivery settlement changed its identity or message");
   return {kind: "delivery", message, idempotencyKey};
 }
 function parseOutcome(raw: unknown, record: ApplicationDispatch, work: WorkIntent): ApplicationDispatchOutcome {
