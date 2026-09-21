@@ -2,10 +2,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ApplicationService, applicationProcessName, type ApplicationAdmission } from "./application";
+import { ApplicationService, applicationProcessName, type ApplicationAdmission, type ApplicationDispatchContext } from "./application";
 import { digestCanonical, type Digest } from "./digest";
 import { capabilityHandle } from "./capabilities";
-import { manifestToJson, parseOrganismManifest } from "./contract";
+import { parseOrganismManifest } from "./contract";
 
 const dirs: string[] = [];
 type DispatchAdmissionContext = Parameters<NonNullable<ApplicationAdmission["admitDispatch"]>>[0];
@@ -89,15 +89,28 @@ describe("experimental application lifecycle", () => {
     const message = await service.store.putValue({contract: "algal.message.fixture.v1", value: "hello"});
     await service.commit({application: "fixture", operation: ref("delivery-2"), kind: "investigate", expectedHead: (await service.inspect("fixture"))!.digest, revision: revisionRef, memory, intents: [{kind: "deliver", route: "inbox", message}], evidence: [], causedBy: null});
     let calls = 0;
-    const dispatcher = {configurationDigest: ref("dispatcher-v2"), async dispatch(context: {dispatch: {identity: Digest}}) {
+    const dispatcher = {configurationDigest: ref("dispatcher-v2"), async dispatch(context: ApplicationDispatchContext) {
       calls++;
-      return {status: "settled", result: {kind: "delivery", message: ref("mailbox-message"), idempotencyKey: context.dispatch.identity}};
+      if (context.intent.kind !== "deliver") throw new Error("expected delivery intent");
+      return {status: "settled", result: {kind: "delivery", message: context.intent.message, idempotencyKey: context.dispatch.identity}};
     }};
     const first = await service.dispatchPending("fixture", dispatcher);
     expect(first[0]?.status).toBe("settled");
     expect(calls).toBe(1);
     expect(await service.dispatchPending("fixture", dispatcher)).toEqual([]);
     expect(calls).toBe(1);
+  });
+
+  test("rejects a delivery settlement for a different message", async () => {
+    const {service, revisionRef, memory} = await fixture();
+    await service.create({application: "fixture", operation: ref("create-message-binding"), kind: "create", expectedHead: null, revision: revisionRef, memory, intents: [], evidence: [], causedBy: null});
+    const message = await service.store.putValue({contract: "algal.message.fixture.v1", value: "bound"});
+    await service.commit({application: "fixture", operation: ref("delivery-message-binding"), kind: "investigate", expectedHead: (await service.inspect("fixture"))!.digest, revision: revisionRef, memory, intents: [{kind: "deliver", route: "inbox", message}], evidence: [], causedBy: null});
+    const dispatcher = {configurationDigest: ref("dispatcher-message-binding"), async dispatch(context: {dispatch: {identity: Digest}}) {
+      return {status: "settled", result: {kind: "delivery", message: ref("wrong-message"), idempotencyKey: context.dispatch.identity}};
+    }};
+    const [record] = await service.dispatchPending("fixture", dispatcher);
+    expect(record?.status).toBe("uncertain");
   });
 
   test("rejects arbitrary success output and requires explicit reconciliation for uncertainty", async () => {

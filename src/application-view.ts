@@ -1,11 +1,11 @@
 /** Pure, bounded projection of one captured application state. The renderer
  * receives data and fenced actions; it never probes, dispatches, or resolves a
  * mutable latest pointer. */
-import { applicationId, applicationInt, applicationJson, applicationList, applicationObject, applicationRef, applicationTag, type ApplicationRevision } from "./application-contract";
+import { applicationId, applicationInt, applicationJson, applicationList, applicationObject, applicationRef, applicationTag } from "./application-contract";
 import type { ApplicationSnapshot } from "./application";
 import type { Digest } from "./digest";
 import type { Store } from "./store";
-import { canonicalize, type JsonValue } from "./values";
+import { canonicalize } from "./values";
 
 export const APPLICATION_VIEW_WIDGETS = ["procedures", "memory", "history", "investigations"] as const;
 export type ApplicationViewWidget = (typeof APPLICATION_VIEW_WIDGETS)[number];
@@ -22,6 +22,12 @@ export type ApplicationRuntimeProfile = {
 export type ApplicationViewAction =
   | { kind: "investigate"; expectedState: Digest; intent: Digest }
   | { kind: "execute-procedure"; expectedState: Digest; procedure: Digest; queryResult: Digest };
+export type ApplicationApplicability = {
+  status: ApplicationView["procedures"][number]["applicability"];
+  /** A supported result is only actionable when its producer records the
+   * exact captured state and procedure it queried. */
+  queryResult?: { digest: Digest; state: Digest; procedure: Digest };
+};
 export type ApplicationView = {
   contract: "algal.application-view.v1";
   application: string;
@@ -65,11 +71,16 @@ export function projectApplicationView(input: {
   snapshot: ApplicationSnapshot;
   spec: ApplicationViewSpec;
   history?: ApplicationSnapshot[];
-  applicability?: Record<string, { status: ApplicationView["procedures"][number]["applicability"]; queryResult?: Digest }>;
+  applicability?: Record<string, ApplicationApplicability>;
 }): ApplicationView {
   const { snapshot, spec } = input;
   const history = input.history ?? [snapshot];
   if (history.length > 128) throw new Error("View history bound exceeded");
+  if (!history.length || history[history.length - 1]!.digest !== snapshot.digest) throw new Error("View history must terminate at the captured state");
+  for (let i = 0; i < history.length; i++) {
+    if (history[i]!.state.application !== snapshot.state.application) throw new Error("View history crosses application boundaries");
+    if (i > 0 && history[i]!.state.sequence <= history[i - 1]!.state.sequence) throw new Error("View history sequences must increase");
+  }
   const applicability = input.applicability ?? {};
   const procedures = snapshot.revision.entrypoints.map(entry => ({
     name: entry.name,
@@ -79,7 +90,10 @@ export function projectApplicationView(input: {
   const actions: ApplicationViewAction[] = [];
   for (const entry of snapshot.revision.entrypoints) {
     const result = applicability[entry.name]?.queryResult;
-    if (result && applicability[entry.name]?.status === "supported") actions.push({kind: "execute-procedure", expectedState: snapshot.digest, procedure: entry.manifest, queryResult: result});
+    if (result && applicability[entry.name]?.status === "supported") {
+      if (result.state !== snapshot.digest || result.procedure !== entry.manifest) throw new Error("Applicability result is not bound to the captured application state");
+      actions.push({kind: "execute-procedure", expectedState: snapshot.digest, procedure: entry.manifest, queryResult: result.digest});
+    }
   }
   const investigations = snapshot.transition.intents.map(intent => ({intent, expectedState: snapshot.digest}));
   const view: ApplicationView = {
@@ -116,18 +130,23 @@ export function parseApplicationView(input: unknown): ApplicationView {
     const h = applicationObject(raw, ["state", "sequence", "revision", "memory"]);
     return {state: applicationRef(h.state), sequence: applicationInt(h.sequence, 0, 4095), revision: applicationRef(h.revision), memory: applicationRef(h.memory)};
   });
+  if (!history.length || history[history.length - 1]!.state !== state || history[history.length - 1]!.revision !== revision || history[history.length - 1]!.memory !== memory) throw new Error("View history does not terminate at the captured state");
+  for (let i = 1; i < history.length; i++) if (history[i]!.sequence <= history[i - 1]!.sequence) throw new Error("View history sequences must increase");
   const investigations = applicationList(v.investigations, 32, raw => {
     const i = applicationObject(raw, ["intent", "expectedState"]);
-    return {intent: applicationRef(i.intent), expectedState: applicationRef(i.expectedState)};
+    const expectedState = applicationRef(i.expectedState); if (expectedState !== state) throw new Error("Investigation is not fenced to the captured state");
+    return {intent: applicationRef(i.intent), expectedState};
   });
   const actions = applicationList(v.actions, 32, raw => {
     const a = applicationJson(raw);
     if (!a || typeof a !== "object" || Array.isArray(a)) throw new Error("Invalid view action");
     if (a.kind === "investigate") {
-      const i = applicationObject(a, ["kind", "expectedState", "intent"]); return {kind: "investigate" as const, expectedState: applicationRef(i.expectedState), intent: applicationRef(i.intent)};
+      const i = applicationObject(a, ["kind", "expectedState", "intent"]); const expectedState = applicationRef(i.expectedState); if (expectedState !== state) throw new Error("Investigation action is not fenced to the captured state"); return {kind: "investigate" as const, expectedState, intent: applicationRef(i.intent)};
     }
     const e = applicationObject(a, ["kind", "expectedState", "procedure", "queryResult"]); applicationTag(e.kind, "execute-procedure");
-    return {kind: "execute-procedure" as const, expectedState: applicationRef(e.expectedState), procedure: applicationRef(e.procedure), queryResult: applicationRef(e.queryResult)};
+    const expectedState = applicationRef(e.expectedState), procedure = applicationRef(e.procedure);
+    if (expectedState !== state || !procedures.some(item => item.manifest === procedure)) throw new Error("Procedure action is not fenced to the captured state");
+    return {kind: "execute-procedure" as const, expectedState, procedure, queryResult: applicationRef(e.queryResult)};
   });
   applicationId(v.application); applicationRef(v.state); applicationRef(v.revision); applicationRef(v.memory); text(v.title, 256); widgets(v.widgets);
   if (typeof v.truncated !== "boolean") throw new Error("Invalid view truncation marker");

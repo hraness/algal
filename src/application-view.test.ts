@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseApplicationRuntimeProfile, parseApplicationViewSpec, projectApplicationView } from "./application-view";
+import { parseApplicationRuntimeProfile, parseApplicationView, parseApplicationViewSpec, projectApplicationView } from "./application-view";
 import { digestCanonical } from "./digest";
 import type { ApplicationSnapshot } from "./application";
 
@@ -19,9 +19,17 @@ describe("application reflection", () => {
   });
   test("projects one captured state and fences supported actions to it", () => {
     const current = snapshot(), result = ref({contract: "algal.query-result.v1"});
-    const view = projectApplicationView({snapshot: current, spec: parseApplicationViewSpec({contract: "algal.application-view-spec.v1", title: "Demo", widgets: ["procedures"]}), applicability: {discover: {status: "supported", queryResult: result}}});
+    const view = projectApplicationView({snapshot: current, spec: parseApplicationViewSpec({contract: "algal.application-view-spec.v1", title: "Demo", widgets: ["procedures"]}), applicability: {discover: {status: "supported", queryResult: {digest: result, state: current.digest, procedure: current.revision.entrypoints[0]!.manifest}}}});
     expect(view.state).toBe(current.digest);
     expect(view.actions).toEqual([{kind: "execute-procedure", expectedState: current.digest, procedure: current.revision.entrypoints[0]!.manifest, queryResult: result}]);
     expect(view.investigations).toEqual([]);
+  });
+  test("rejects applicability and action records that cross the captured state", () => {
+    const current = snapshot(), other = ref("other-state"), result = ref({contract: "algal.query-result.v1"});
+    const spec = parseApplicationViewSpec({contract: "algal.application-view-spec.v1", title: "Demo", widgets: ["procedures"]});
+    expect(() => projectApplicationView({snapshot: current, spec, applicability: {discover: {status: "supported", queryResult: {digest: result, state: other, procedure: current.revision.entrypoints[0]!.manifest}}}})).toThrow("captured application state");
+    const view = projectApplicationView({snapshot: current, spec});
+    expect(() => parseApplicationView({...view, actions: [{kind: "investigate", expectedState: other, intent: ref("intent") }]})).toThrow("captured state");
+    expect(() => parseApplicationView({...view, history: [{...view.history[0]!, state: other}]})).toThrow("terminate");
   });
 });

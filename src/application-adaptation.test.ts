@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseApplicationRevision, parseApplicationState, putApplicationRecord } from "./application-contract";
+import { putApplicationRecord } from "./application-contract";
 import { parseApplicationEvaluationRequest, evaluateApplicationRevision, verifyApplicationEvaluation, admitApplicationActivation, checkApplicationCompatibility } from "./application-adaptation";
 import { parseOrganismManifest } from "./contract";
 import { digestCanonical, type Digest } from "./digest";
@@ -72,6 +72,20 @@ describe("application adaptation", () => {
     const compatibility = await checkApplicationCompatibility(f.store, f.incumbentRevision, f.candidateRevision);
     expect(compatibility.status).toBe("incompatible");
     expect(compatibility.reasons).toContain("capability-expansion");
+  });
+
+  test("binds evaluation policy to the candidate revision", async () => {
+    const f = await fixture();
+    const alternate = await f.store.putValue({ contract: "algal.application-evaluation-policy.v1", maxCases: 3, maxWork: 1_000_000, maxModelCalls: 0, requireHoldoutPass: true, strictValidationImprovement: true });
+    await expect(evaluateApplicationRevision(f.store, { ...f.request, policy: alternate }, { fns: builtinRegistry(), executors: [] })).rejects.toThrow("policy");
+  });
+
+  test("rejects an evaluation whose top-level candidate differs from its request", async () => {
+    const f = await fixture();
+    const runtime = { fns: builtinRegistry(), executors: [] };
+    const result = await evaluateApplicationRevision(f.store, f.request, runtime);
+    const forged = await putApplicationRecord(f.store, { ...result.evaluation, candidateRevision: f.state });
+    await expect(admitApplicationActivation(f.store, { evaluation: forged, expectedState: f.state, revision: f.state }, runtime)).rejects.toThrow("bound to its request");
   });
 
   test("rejects stale parent and tampered frozen case evidence", async () => {

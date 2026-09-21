@@ -6,24 +6,24 @@
  * effect executors); lifecycle code can use the final admission as its CAS
  * boundary.
  */
-import { manifestToJson, type OrganismManifest } from "./contract";
+import { type OrganismManifest } from "./contract";
 import {
   applicationId, applicationInt, applicationJson, applicationList, applicationObject,
   applicationRef, applicationTag, getApplicationRecord, parseApplicationRevision,
   parseApplicationState, putApplicationRecord, type ApplicationRevision, type ApplicationState,
 } from "./application-contract";
 import {
-  parseMemoryProcedure, parseMemoryQueries, parseMemoryQuery, parseMemorySchema,
+  parseMemoryQueries, parseMemoryQuery, parseMemorySchema,
 } from "./application-memory";
 import { digestCanonical, type Digest } from "./digest";
-import { runFoundry, type FoundryCase, type FoundryReport } from "./foundry";
+import { runFoundry, type FoundryCase, type FoundryCaseResult, type FoundryReport } from "./foundry";
 import { verifyFoundryReport } from "./foundry-verify";
 import { parseExprScorer, type ExprScorer } from "./expr";
 import { isBuiltinRegistry, type FnRegistry } from "./registry";
 import { parseRunReceipt } from "./run";
 import type { Executor } from "./effects";
 import type { Store } from "./store";
-import { canonicalize, type JsonObject, type JsonValue } from "./values";
+import { canonicalize, type JsonValue } from "./values";
 
 export const APPLICATION_ADAPTATION_CONTRACT = "algal.application-adaptation.v1" as const;
 
@@ -99,9 +99,9 @@ function keys(value: Record<string, JsonValue>, allowed: string[], at: string): 
   if (Object.keys(value).some(key => !allowed.includes(key))) throw new Error(`${at} has unknown fields`);
   if (allowed.some(key => !(key in value))) throw new Error(`${at} is missing a field`);
 }
-function digest(value: unknown, at: string): Digest { return applicationRef(value); }
-function text(value: unknown, at: string): string {
-  if (typeof value !== "string" || value.length === 0 || Buffer.byteLength(value) > 256 || value.includes("\0")) throw new Error(`${at} must be bounded text`);
+function digest(value: unknown, _at: string): Digest { return applicationRef(value); }
+function text(value: unknown, _at: string): string {
+  if (typeof value !== "string" || value.length === 0 || Buffer.byteLength(value) > 256 || value.includes("\0")) throw new Error(`${_at} must be bounded text`);
   return value;
 }
 function optionalObject(store: Store, ref: Digest): Promise<JsonValue> {
@@ -179,7 +179,7 @@ async function loadRevision(store: Store, ref: Digest): Promise<{ revision: Appl
   }
   await optionalObject(store, revision.views);
   await optionalObject(store, revision.runtimeProfile);
-  await optionalObject(store, revision.evaluationPolicy);
+  parseEvaluationPolicy(await optionalObject(store, revision.evaluationPolicy));
   if (!schema.relations.length) throw new Error("Empty memory schema");
   return { revision, manifests };
 }
@@ -193,8 +193,6 @@ function pureManifest(manifest: OrganismManifest, fns: FnRegistry): void {
 function entrypoint(revision: ApplicationRevision, name: string): ApplicationRevision["entrypoints"][number] {
   const value = revision.entrypoints.find(item => item.name === name); if (!value) throw new Error(`Unknown application entrypoint ${name}`); return value;
 }
-function reasonList(...reasons: (string | false)[]): string[] { return [...new Set(reasons.filter((reason): reason is string => typeof reason === "string"))]; }
-
 async function checkCompatibilityLoaded(_store: Store, previous: { revision: ApplicationRevision; manifests: Map<string, OrganismManifest> }, candidate: { revision: ApplicationRevision; manifests: Map<string, OrganismManifest> }): Promise<CompatibilityResult> {
   const reasons: string[] = [];
   if (previous.revision.application !== candidate.revision.application) reasons.push("application-identity");
@@ -228,28 +226,44 @@ async function reportCases(report: FoundryReport, cases: EvaluationCaseSet, incu
   for (const result of all) {
     const expected = frozen.get(result.id); if (!expected || expected.split !== result.split || !same(expected.args, result.args) || !same(expected.expect, result.expect)) throw new Error(`Foundry case ${result.id} differs from frozen case set`);
   }
-  // IDs repeat across candidate populations; each result is checked against
-  // the same frozen case definition above.
+  const exactCaseIds = (actual: FoundryCaseResult[], expected: FoundryCase[], label: string): void => {
+    const actualIds = actual.map(c => c.id), expectedIds = expected.map(c => c.id);
+    if (actualIds.length !== expectedIds.length || new Set(actualIds).size !== actualIds.length ||
+        [...actualIds].sort().join("\0") !== [...expectedIds].sort().join("\0")) {
+      throw new Error(`${label} case population differs from frozen case set`);
+    }
+  };
+  // Each population must contain every frozen case exactly once. A valid
+  // receipt for a duplicated passing case cannot stand in for an omitted
+  // failing case.
   const selection = cases.cases.filter(c => c.split !== "holdout");
   const holdout = cases.cases.filter(c => c.split === "holdout");
-  for (const result of [incumbentResult, candidateResult]) {
-    if (result.cases.length !== selection.length || result.cases.some(c => c.split === "holdout" || !selection.some(f => f.id === c.id))) throw new Error("Foundry candidate case population differs from frozen selection");
-    const manifest = await store.getManifest(result.manifestDigest);
+  exactCaseIds(candidateResult.cases, selection, "Candidate");
+  exactCaseIds(incumbentResult.cases, selection, "Incumbent");
+  exactCaseIds(report.holdout.cases, holdout, "Holdout");
+  const verifyReceiptArgs = async (resultCase: FoundryCaseResult, manifestDigest: Digest): Promise<void> => {
+    const manifest = await store.getManifest(manifestDigest);
     if (!manifest?.interface) throw new Error("Foundry candidate manifest interface missing");
+    const args: Record<string, Record<string, JsonValue>> = Object.create(null) as Record<string, Record<string, JsonValue>>;
+    for (const [name, value] of Object.entries(frozen.get(resultCase.id)!.args)) {
+      const target = manifest.interface.inputs[name];
+      if (!target) throw new Error(`Frozen case input ${name} is not in candidate interface`);
+      (args[target.cell] ??= Object.create(null) as Record<string, JsonValue>)[target.port] = value;
+    }
+    const receiptValue = await store.getReceipt(resultCase.receiptDigest);
+    if (!receiptValue) throw new Error("Foundry receipt missing during binding verification");
+    if (!same(parseRunReceipt(receiptValue).args, args)) throw new Error(`Foundry receipt args differ for case ${resultCase.id}`);
+  };
+  for (const result of [incumbentResult, candidateResult]) {
+    if (result.cases.some(c => c.split === "holdout" || !selection.some(f => f.id === c.id))) throw new Error("Foundry candidate case population differs from frozen selection");
     for (const resultCase of result.cases) {
-      const frozenCase = frozen.get(resultCase.id)!;
-      const args: Record<string, Record<string, JsonValue>> = Object.create(null) as Record<string, Record<string, JsonValue>>;
-      for (const [name, value] of Object.entries(frozenCase.args)) {
-        const target = manifest.interface.inputs[name];
-        if (!target) throw new Error(`Frozen case input ${name} is not in candidate interface`);
-        (args[target.cell] ??= Object.create(null) as Record<string, JsonValue>)[target.port] = value;
-      }
-      const receiptValue = await store.getReceipt(resultCase.receiptDigest);
-      if (!receiptValue) throw new Error("Foundry receipt missing during binding verification");
-      if (!same(parseRunReceipt(receiptValue).args, args)) throw new Error(`Foundry receipt args differ for case ${resultCase.id}`);
+      await verifyReceiptArgs(resultCase, result.manifestDigest);
     }
   }
-  if (report.holdout.cases.length !== holdout.length || report.holdout.cases.some(c => c.split !== "holdout" || !holdout.some(f => f.id === c.id))) throw new Error("Foundry holdout differs from frozen holdout");
+  if (report.holdout.cases.some(c => c.split !== "holdout" || !holdout.some(f => f.id === c.id))) throw new Error("Foundry holdout differs from frozen holdout");
+  // Holdout receipts are execution evidence too. Bind their actual input to
+  // the frozen case, using the manifest that the foundry selected for holdout.
+  await Promise.all(report.holdout.cases.map(resultCase => verifyReceiptArgs(resultCase, report.promoted)));
 }
 
 function acceptance(report: FoundryReport, incumbent: Digest, candidate: Digest, policy: EvaluationPolicy, compatibility: CompatibilityResult): Verdict {
@@ -283,6 +297,7 @@ export async function evaluateApplicationRevision(store: Store, input: unknown, 
   const state = await getApplicationRecord(store, request.parentState, parseApplicationState);
   const candidate = await loadRevision(store, request.candidateRevision), incumbent = await loadRevision(store, state.revision);
   if (candidate.revision.parent !== state.revision) throw new Error("Candidate revision parent is not the application state revision");
+  if (request.policy !== candidate.revision.evaluationPolicy) throw new Error("Evaluation policy is not bound to candidate revision");
   const policy = parseEvaluationPolicy(await optionalObject(store, request.policy));
   const cases = parseEvaluationCases(await optionalObject(store, request.cases));
   const scorerRecord = parseEvaluationScorer(await optionalObject(store, request.scorer));
@@ -304,12 +319,23 @@ export async function evaluateApplicationRevision(store: Store, input: unknown, 
 export async function verifyApplicationEvaluation(store: Store, evaluationRef: Digest, expectedStateRef: Digest, runtime: AdaptationRuntime): Promise<{ evaluation: ApplicationEvaluation; verdict: Verdict; report: FoundryReport }> {
   const evaluation = await getApplicationRecord(store, evaluationRef, parseEvaluation);
   const request = await getApplicationRecord(store, evaluation.request, parseApplicationEvaluationRequest);
+  if (digestCanonical(applicationJson(request)) !== evaluation.request ||
+      evaluation.parentState !== request.parentState ||
+      evaluation.candidateRevision !== request.candidateRevision ||
+      evaluation.cases !== request.cases ||
+      evaluation.scorer !== request.scorer ||
+      evaluation.policy !== request.policy) {
+    throw new Error("Evaluation fields are not bound to its request");
+  }
   if (request.parentState !== expectedStateRef || evaluation.parentState !== expectedStateRef) throw new Error("Evaluation parent state is stale");
   const state = await getApplicationRecord(store, expectedStateRef, parseApplicationState);
   const candidate = await loadRevision(store, request.candidateRevision), incumbent = await loadRevision(store, state.revision);
+  if (request.policy !== candidate.revision.evaluationPolicy) throw new Error("Evaluation policy is not bound to candidate revision");
   const cases = parseEvaluationCases(await optionalObject(store, request.cases));
+  const scorerRecord = parseEvaluationScorer(await optionalObject(store, request.scorer));
   const reportValue = await optionalObject(store, evaluation.foundryReport); const report = reportValue as unknown as FoundryReport;
   const verified = await verifyFoundryReport(report, store, runtime.fns); if (!verified.ok) throw new Error(`Foundry evidence is invalid: ${verified.mismatches.join("; ")}`);
+  if (!same(report.scorer ?? null, scorerRecord.scorer)) throw new Error("Foundry scorer is not bound to the evaluation request");
   await verifyBinding(store, request, state, report, cases, candidate, incumbent, runtime.fns);
   const compatibility = await checkCompatibilityLoaded(store, incumbent, candidate);
   const storedCompatibility = await getApplicationRecord(store, evaluation.compatibility, parseCompatibility);

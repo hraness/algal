@@ -119,7 +119,7 @@ function parseDispatch(raw: unknown): ApplicationDispatch {
   if (identity !== dispatchIdentity(application, intent, plan)) fail("Dispatch identity changed");
   return {contract: "algal.application-dispatch.v1", application, intent, sourceState: applicationRef(v.sourceState), configurationDigest: applicationRef(v.configurationDigest), identity, plan, status, result, reason: why};
 }
-function parseDispatchResult(raw: unknown, record: ApplicationDispatch): ApplicationDispatchResult {
+function parseDispatchResult(raw: unknown, record: ApplicationDispatch, work?: WorkIntent): ApplicationDispatchResult {
   if (record.plan.kind === "episode") {
     const value = applicationObject(raw, ["kind", "binding", "process"]);
     applicationTag(value.kind, "episode");
@@ -130,15 +130,15 @@ function parseDispatchResult(raw: unknown, record: ApplicationDispatch): Applica
   const value = applicationObject(raw, ["kind", "message", "idempotencyKey"]);
   applicationTag(value.kind, "delivery");
   const message = applicationRef(value.message), idempotencyKey = applicationRef(value.idempotencyKey);
-  if (idempotencyKey !== record.identity) fail("Delivery settlement changed its identity");
+  if (idempotencyKey !== record.identity || (work?.kind === "deliver" && message !== work.message)) fail("Delivery settlement changed its identity or message");
   return {kind: "delivery", message, idempotencyKey};
 }
-function parseOutcome(raw: unknown, record: ApplicationDispatch): ApplicationDispatchOutcome {
+function parseOutcome(raw: unknown, record: ApplicationDispatch, work: WorkIntent): ApplicationDispatchOutcome {
   const v = json(raw);
   if (!v || typeof v !== "object" || Array.isArray(v)) throw new Error("Invalid dispatch outcome");
   if (v.status === "settled") {
     const p = applicationObject(v, ["status", "result"]);
-    return {status: "settled", result: parseDispatchResult(p.result, record)};
+    return {status: "settled", result: parseDispatchResult(p.result, record, work)};
   }
   const p = applicationObject(v, ["status", "reason"]);
   if (p.status !== "blocked" && p.status !== "uncertain") throw new Error("Invalid dispatch outcome status");
@@ -240,12 +240,12 @@ export class ApplicationService {
     if (hash(command) !== snapshot.transition.request) fail("Transition normalized request mismatch");
     return rows;
   }
-  private async dispatchRecord(application: string, ref: Digest): Promise<ApplicationDispatch | null> {
+  private async dispatchRecord(application: string, ref: Digest, work: WorkIntent): Promise<ApplicationDispatch | null> {
     const raw = await hostRead(join(this.path(application), "outbox", ref.slice(7) + ".json"), APPLICATION_LIMITS.recordBytes);
     if (raw === undefined) return null;
     const record = parseDispatch(raw);
     if (record.application !== application || record.intent !== ref) fail("Outbox identity mismatch");
-    if (record.result !== null) parseDispatchResult(await this.value(record.result), record);
+    if (record.result !== null) parseDispatchResult(await this.value(record.result), record, work);
     return record;
   }
   private async pending(history: ApplicationSnapshot[]): Promise<ApplicationPending[]> {
@@ -253,7 +253,7 @@ export class ApplicationService {
     let total = 0;
     for (const snapshot of history) for (const {ref, work} of await this.intents(snapshot)) {
       if (++total > APPLICATION_SERVICE_LIMITS.dispatches) throw new Error("Retained application intent bound exceeded");
-      const dispatch = await this.dispatchRecord(snapshot.state.application, ref);
+      const dispatch = await this.dispatchRecord(snapshot.state.application, ref, work);
       if (dispatch && dispatch.sourceState !== snapshot.digest) fail("Dispatch state binding mismatch");
       if (dispatch?.status !== "settled") pending.push({intent: ref, sourceState: snapshot.digest, work, dispatch});
     }
@@ -346,7 +346,7 @@ export class ApplicationService {
     let outcome: ApplicationDispatchOutcome;
     try {
       const context = structuredClone({current, snapshot, intent: work, dispatch: record});
-      outcome = parseOutcome(await (reconciliation ? dispatcher.reconcile!(context) : dispatcher.dispatch(context)), record);
+      outcome = parseOutcome(await (reconciliation ? dispatcher.reconcile!(context) : dispatcher.dispatch(context)), record, work);
     } catch {
       outcome = {status: "uncertain", reason: "Dispatcher did not establish settlement; explicit reconciliation required"};
     }
@@ -380,7 +380,10 @@ export class ApplicationService {
       const history = await this.history(name);
       const row = (await this.pending(history)).find(p => p.intent === ref);
       if (!row) {
-        const settled = await this.dispatchRecord(name, ref);
+        const source = history.find(s => s.transition.intents.includes(ref));
+        const work = source ? (await this.intents(source)).find(item => item.ref === ref)?.work : undefined;
+        if (!source || !work) throw new Error("No reachable application intent");
+        const settled = await this.dispatchRecord(name, ref, work);
         if (settled?.status === "settled" && history.some(s => s.digest === settled.sourceState && s.transition.intents.includes(ref))) return settled;
         throw new Error("No reachable unsettled dispatch");
       }
