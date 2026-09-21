@@ -1,9 +1,15 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { digestCanonical } from "./digest";
 import { parseMemoryFrontier, parseMemoryProcedure, parseMemoryResourceVersion, parseMemorySchema } from "./application-memory";
 import { NativeMemoryQueryEngine } from "./application-native-memory";
 
 const ref = (value: unknown) => digestCanonical(value as never);
+const pinnedExecutable = "/Users/benguo/Documents/Codex/2026-09-20/i-w/work/native-memory-target/debug/algal";
+const configuredExecutable = process.env.ALGAL_MEMORY_NATIVE;
+const nativeExecutable = configuredExecutable ?? pinnedExecutable;
+const nativeTest = existsSync(nativeExecutable) ? test : test.skip;
 
 describe("application memory records", () => {
   test("keeps resource versions and frontiers closed", () => {
@@ -17,10 +23,13 @@ describe("application memory records", () => {
     const procedure = parseMemoryProcedure({contract: "algal.application-memory-procedure.v1", id: "discover", schema: ref("schema"), manifest: ref("manifest"), decoder: ref("decoder"), dependencies: ["tool"], prerequisite: null});
     expect(procedure.dependencies).toEqual(["tool"]);
   });
-  test("native adapter preserves the query contract and verifies its witness", async () => {
+  nativeTest("native adapter preserves the query contract and verifies its witness", async () => {
+    const expectedSha256 = configuredExecutable
+      ? createHash("sha256").update(Buffer.from(await Bun.file(nativeExecutable).arrayBuffer())).digest("hex")
+      : "d24044d99ab184edd86ec4970f350ec124b5d2d76b82f42eb07fd69e65310797";
     const engine = new NativeMemoryQueryEngine({
-      executable: "/Users/benguo/Documents/Codex/2026-09-20/i-w/work/native-memory-target/debug/algal",
-      expectedSha256: "d24044d99ab184edd86ec4970f350ec124b5d2d76b82f42eb07fd69e65310797",
+      executable: nativeExecutable,
+      expectedSha256,
     });
     const source = "sha256:" + "a".repeat(64);
     const snapshot = {contract: "algal.memory.v1", facts: [{relation: "available", tuple: ["tool", "supported"], sources: [source]}]};
