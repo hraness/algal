@@ -96,7 +96,7 @@ async function fixture() {
   const domain = await createHarnessDomain(store, {
     application: "workspace", environmentId: "fixture", taskId: "task-1", sequenceId: "sequence", schema,
     dependencies: { config: "config.json", unrelated: "notes.txt" }, procedures: [procedure, notesProbe],
-    cwd, stateDir: join(dir, "host"), investigator, proposer,
+    cwd, stateDir: join(dir, "host"),
   });
   const admission = createHarnessAdmission(domain, store);
   const memory = new ApplicationMemoryService({ store, engine, admission });
@@ -112,7 +112,18 @@ async function fixture() {
   const views = await store.putValue({ contract: "algal.application-view-spec.v1", title: "Workspace", widgets: ["investigations", "memory", "procedures"] });
   const runtimeProfile = await store.putValue({ contract: "algal.application-runtime-profile.v1", runtime: "bun-native-memory", policy: "pure-case-evaluation.v1" });
   const evaluationPolicy = await store.putValue({ contract: "algal.application-evaluation-policy.v1", maxCases: 8, maxWork: 1_000_000, maxModelCalls: 0, requireHoldoutPass: true, strictValidationImprovement: true });
-  const revision = await putApplicationRecord(store, { contract: "algal.application-revision.v1", application: "workspace", parent: null, schema, queries, views, runtimeProfile, evaluationPolicy, capabilityRequirements: [], entrypoints: [{ name: "run", manifest, applicability: query, maxGenerations: 1 }] });
+  // The revision carries every inhabitant as an entrypoint — the worker
+  // ("run"), the probe strategist ("investigator"), and the revision
+  // generator ("proposer") — so activation upgrades them together.
+  const revision = await putApplicationRecord(store, {
+    contract: "algal.application-revision.v1", application: "workspace", parent: null,
+    schema, queries, views, runtimeProfile, evaluationPolicy, capabilityRequirements: [],
+    entrypoints: [
+      { name: "investigator", manifest: investigator, applicability: query, maxGenerations: 1 },
+      { name: "proposer", manifest: proposer, applicability: query, maxGenerations: 1 },
+      { name: "run", manifest, applicability: query, maxGenerations: 1 },
+    ],
+  });
   const genesisMemory = await memory.snapshot({ application: "workspace", schema, previous: null, scope: domain.scope, observations: [], hypotheses: [], withdrawn: [] });
   const genesis = await service.create({ application: "workspace", operation: ref("genesis"), kind: "create", expectedHead: null, revision, memory: genesisMemory, intents: [], evidence: [], causedBy: null });
   const reopen = () => {
@@ -120,7 +131,7 @@ async function fixture() {
     const admission = createHarnessAdmission(domain, service.store);
     return { service, memory: new ApplicationMemoryService({ store: service.store, engine, admission }), admission };
   };
-  return { dir, cwd, service, memory, store, domain, query, genesis, reopen, manifest, admission, schema, queries, views, runtimeProfile, evaluationPolicy, executors: [investigatorExecutor], candidateManifestJson };
+  return { dir, cwd, service, memory, store, domain, query, genesis, reopen, manifest, admission, schema, queries, views, runtimeProfile, evaluationPolicy, executors: [investigatorExecutor], candidateManifestJson, investigator, proposer };
 }
 
 describe("development-workspace organism on the real harness boundary", () => {
@@ -132,7 +143,7 @@ describe("development-workspace organism on the real harness boundary", () => {
     // 1. Applicability is unresolved; scheduling publishes a durable intent.
     const scheduled = await scheduleInvestigations(service, memory, {
       application: "workspace", operation: ref("op-schedule-1"), expectedHead: f.genesis.digest,
-      expectedMemory: f.genesis.state.memory, route: "probes",
+      expectedMemory: f.genesis.state.memory, route: "probes", entrypoints: ["run"],
     });
     if (!scheduled.snapshot) throw new Error("expected an investigate commit");
     expect(scheduled.derivations[0]!.status).toBe("unknown");
@@ -200,7 +211,7 @@ describe("development-workspace organism on the real harness boundary", () => {
     // 6. Re-investigation under the new frontier re-converges to supported.
     const again = await scheduleInvestigations(r.service, r.memory, {
       application: "workspace", operation: ref("op-schedule-2"), expectedHead: s3.digest,
-      expectedMemory: s3.state.memory, route: "probes",
+      expectedMemory: s3.state.memory, route: "probes", entrypoints: ["run"],
     });
     if (!again.snapshot) throw new Error("expected a re-investigation commit");
     const dispatcher2 = createHarnessDispatcher(domain, r.service.store, harnessTerminal(f.cwd), r.admission.currentFrontier, f.executors);
@@ -238,7 +249,11 @@ describe("development-workspace organism on the real harness boundary", () => {
     const candidate = await putApplicationRecord(f.store, {
       contract: "algal.application-revision.v1", application: "workspace", parent: head2.state.revision,
       schema: f.schema, queries: f.queries, views: f.views, runtimeProfile: f.runtimeProfile, evaluationPolicy: f.evaluationPolicy, capabilityRequirements: [],
-      entrypoints: [{ name: "run", manifest: candidateManifest, applicability: f.query, maxGenerations: 1 }],
+      entrypoints: [
+        { name: "investigator", manifest: f.investigator, applicability: f.query, maxGenerations: 1 },
+        { name: "proposer", manifest: f.proposer, applicability: f.query, maxGenerations: 1 },
+        { name: "run", manifest: candidateManifest, applicability: f.query, maxGenerations: 1 },
+      ],
     });
     const cases = await f.store.putValue({ contract: "algal.application-evaluation-cases.v1", cases: [
       { id: "train-a", split: "train", args: { q: "a" }, expect: { answer: "a" } },

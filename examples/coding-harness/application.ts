@@ -99,10 +99,6 @@ export type HarnessDomain = {
   scope: Digest; frontier: Digest;
   /** Mutation record capturing the dependency digests admitted at genesis. */
   baseline: Digest;
-  /** Optional ALGAL manifest deciding which admitted procedures to probe. */
-  investigator?: Digest;
-  /** Optional ALGAL manifest emitting candidate revision manifests. */
-  proposer?: Digest;
 };
 
 const digestDependencies = async (cwd: string, dependencies: Record<string, string>): Promise<MemoryScope["dependencies"]> => {
@@ -123,10 +119,6 @@ export async function createHarnessDomain(store: ApplicationService["store"], in
   /** Substrate memory schema the domain's claims are admitted under. */
   schema: Digest;
   dependencies: Record<string, string>; procedures: MemoryProcedure[]; cwd: string; stateDir: string;
-  /** Optional ALGAL manifest deciding which admitted procedures to probe. */
-  investigator?: Digest;
-  /** Optional ALGAL manifest emitting candidate revision manifests. */
-  proposer?: Digest;
 }): Promise<HarnessDomain> {
   const dependencies = Object.fromEntries(Object.entries(input.dependencies).sort());
   if (Object.keys(dependencies).length > 8) throw new Error("At most eight memory dependencies");
@@ -287,12 +279,15 @@ export function createHarnessDispatcher(domain: HarnessDomain, store: Applicatio
         // drain validates it against the incumbent interface.
         const request = await getApplicationRecord(store, work.message, parseProposalRequest);
         if (request.application !== domain.application) throw new Error("Cross-application proposal request");
-        const manifest = domain.proposer ? await store.getManifest(domain.proposer) : undefined;
-        if (!manifest) throw new Error("Proposer manifest missing from the store");
         const state = await getApplicationRecord(store, request.state, parseApplicationState);
         const revision = await getApplicationRecord(store, state.revision, parseApplicationRevision);
         const entry = revision.entrypoints.find(e => e.name === request.entrypoint);
         if (!entry) throw new Error("Proposal request names an unknown entrypoint");
+        // The proposer is revision data: the request's state names the
+        // revision whose "proposer" entrypoint emits the candidate.
+        const proposerEntry = revision.entrypoints.find(e => e.name === "proposer");
+        const manifest = proposerEntry ? await store.getManifest(proposerEntry.manifest) : undefined;
+        if (!manifest) throw new Error("Proposer manifest missing from the store");
         const incumbent = await store.getManifest(entry.manifest);
         const decision = await runOrganism({
           manifest, fns: builtinRegistry(), store, executors,
@@ -326,13 +321,17 @@ export function createHarnessDispatcher(domain: HarnessDomain, store: Applicatio
         await mkdir(channelDir, { recursive: true, mode: 0o700 });
 
         // The inhabitant decides which admitted procedures to probe. Its
-        // decision program is ordinary data run through the VM; the receipt
+        // decision program is revision data — the request's state names the
+        // revision whose "investigator" entrypoint runs — and its receipt
         // becomes part of the proposal record the drain validates.
         const substrateProcedures = new Map<Digest, SubstrateProcedure>();
         for (const procedureRef of request.procedures) substrateProcedures.set(procedureRef, await getApplicationRecord(store, procedureRef, parseMemoryProcedure));
+        const requestState = await getApplicationRecord(store, request.state, parseApplicationState);
+        const requestRevision = await getApplicationRecord(store, requestState.revision, parseApplicationRevision);
+        const investigatorEntry = requestRevision.entrypoints.find(e => e.name === "investigator");
         let probes = request.procedures, decisionReceipt: Digest | null = null;
-        if (domain.investigator) {
-          const manifest = await store.getManifest(domain.investigator);
+        if (investigatorEntry) {
+          const manifest = await store.getManifest(investigatorEntry.manifest);
           if (!manifest) throw new Error("Investigator manifest missing from the store");
           const decision = await runOrganism({
             manifest, fns: builtinRegistry(), store, executors,
