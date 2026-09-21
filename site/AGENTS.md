@@ -1,7 +1,7 @@
 # Contents
 
 - `index.html`, `styles.css`, and `build.ts` own the static ALGAL website and its executable example projections.
-- `algal-mark.svg`, `BRAND_ASSETS.md`, and `client.ts` bind the public catalog identity to the released metallic treatment.
+- `algal-mark.svg`, `BRAND_ASSETS.md`, and `client.ts` bind the existing product identity to the released metallic treatment.
 
 # Guidelines
 

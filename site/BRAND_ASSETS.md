@@ -1,11 +1,14 @@
 # ALGAL header identity
 
-The header uses the checked transparent ALGAL mark from the Hraness public
-project catalog, preserving the header’s current 28px sizing. The name and
-mark share the released Design Kit metallic foil recipe. The original SVG stays
-visible when masks or forced colors disable the decorative paint.
+The header preserves the three overlapping circles from `favicon.svg` at its
+current 28px size. `algal-mark.svg` removes only the opaque rounded background
+rectangle; its view box, circle coordinates, strokes, and group are unchanged.
+The name and transparent mark share the released Design Kit metallic foil recipe.
+The extracted original artwork remains visible when masks or forced colors
+disable the decorative paint. The favicon itself is unchanged.
 
-`algal-mark.svg` SHA-256: `856ad5092fc3ac85863ba0ba079c8a2e1ecb195df06bd289a2602899244b4272`.
+- Original `favicon.svg` SHA-256: `340aad988f525145b7caf7545abf311fa5f52cf46c399f172bc948de437d4a88`.
+- Transparent `algal-mark.svg` SHA-256: `c962e23d88fea8c8e4aa10ebadbad97af09d54d65b3ed3d63080eef94396a07b`.
 
 The stylesheet and browser controller are build-only dependencies; the CLI keeps
 its zero required runtime dependency contract. No product copy or page layout
