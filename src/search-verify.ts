@@ -136,6 +136,7 @@ export async function verifySearchReport(
         contract: FOUNDRY_CONTRACT,
         candidates: generation.candidates,
         promoted: generation.promoted,
+        ...(report.result.scorer !== undefined ? { scorer: report.result.scorer } : {}),
         holdout: {
           passed: evidence.passed ? 1 : 0,
           total: 1,
