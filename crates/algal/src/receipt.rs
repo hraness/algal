@@ -391,15 +391,23 @@ pub fn diff(a: &Value, b: &Value) -> Vec<String> {
         if ac["rounds"] != bc["rounds"] {
             out.push(format!(
                 "cell {name}: rounds {} vs {}",
-                disp(&ac["rounds"]),
-                disp(&bc["rounds"])
+                ac.get("rounds")
+                    .map(disp)
+                    .unwrap_or_else(|| "undefined".into()),
+                bc.get("rounds")
+                    .map(disp)
+                    .unwrap_or_else(|| "undefined".into())
             ));
         }
         if ac["items"] != bc["items"] {
             out.push(format!(
                 "cell {name}: items {} vs {}",
-                disp(&ac["items"]),
-                disp(&bc["items"])
+                ac.get("items")
+                    .map(disp)
+                    .unwrap_or_else(|| "undefined".into()),
+                bc.get("items")
+                    .map(disp)
+                    .unwrap_or_else(|| "undefined".into())
             ));
         }
         if !canon_eq(ac.get("failure"), bc.get("failure")) {

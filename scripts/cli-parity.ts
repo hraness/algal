@@ -79,6 +79,12 @@ try {
   await compare("verify-tampered-digest", ["verify", await fixture("tampered-digest.json", tamperedDigest), triage], 1);
   await compare("verify-wrong-manifest", ["verify", receiptFile, join(root, "examples/hello.algal.json")], 1);
   await compare("diff-equal", ["diff", receiptFile, receiptFile]);
+  for (const field of ["rounds", "items"]) {
+    const optional = structuredClone(receipt);
+    ((optional.cells as JsonObject).ticket as JsonObject)[field] = 1;
+    optional.digest = receiptDigest(optional as unknown as RunReceipt);
+    await compare(`diff-optional-${field}`, ["diff", receiptFile, await fixture(`optional-${field}.json`, optional)], 1);
+  }
   for (const [name, mutate] of [
     ["runtime", (copy: JsonObject) => { (copy.runtime as JsonObject).name = "foreign-runtime"; }],
     ["foreign-field", (copy: JsonObject) => { copy.unrecognized = true; }],
