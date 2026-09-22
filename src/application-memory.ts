@@ -49,8 +49,18 @@ export type MemoryHypothesis = {
 export type MemorySnapshotInput = {
   application: string; schema: Digest; previous: Digest | null; scope: Digest;
   observations: Digest[]; hypotheses: Digest[]; withdrawn: Digest[];
+  /** Retained historical selection; omitted on existing, unarchived records. */
+  archive?: Digest;
 };
 export type MemorySnapshot = MemorySnapshotInput & { contract: "algal.application-memory.v1" };
+export type MemoryArchive = {
+  contract: "algal.application-memory-archive.v1"; application: string; schema: Digest;
+  sequence: number; previous: Digest | null; snapshot: Digest;
+};
+export type MemoryArchiveEntry = { reference: Digest; archive: MemoryArchive; snapshot: MemorySnapshot };
+export type MemoryRolloverInput = { memory: Digest; retainObservations: Digest[]; retainHypotheses: Digest[] };
+export type MemoryRollover = { memory: Digest; archive: Digest };
+export const APPLICATION_MEMORY_ARCHIVE_LIMIT = 128;
 export type MemoryStatus = "supported" | "opposed" | "conflicted" | "unknown" | "stale" | "exhausted" | "failed" | "cancelled";
 export type MemoryDerivation = {
   contract: "algal.application-memory-derivation.v1"; application: string; capturedState: Digest;
@@ -202,11 +212,19 @@ export function parseMemoryHypothesis(input: unknown): MemoryHypothesis {
   return { contract: "algal.application-memory-hypothesis.v1", application: applicationId(v.application), scope: applicationRef(v.scope), claim: parseMemoryClaim(v.claim), proposedBy: applicationRef(v.proposedBy), evidence: applicationRefs(v.evidence, 16) };
 }
 export function parseMemorySnapshot(input: unknown): MemorySnapshot {
-  const v = applicationObject(input, ["contract", "application", "schema", "previous", "scope", "observations", "hypotheses", "withdrawn"]);
+  const hasArchive = !!input && typeof input === "object" && Object.hasOwn(input, "archive");
+  const v = applicationObject(input, ["contract", "application", "schema", "previous", "scope", "observations", "hypotheses", "withdrawn", ...(hasArchive ? ["archive"] : [])]);
   applicationTag(v.contract, "algal.application-memory.v1");
   const observations = applicationRefs(v.observations, 128), withdrawn = applicationRefs(v.withdrawn, 128);
   if (withdrawn.some(ref => !observations.includes(ref))) throw new Error("Withdrawal must name an admitted observation");
-  return { contract: "algal.application-memory.v1", application: applicationId(v.application), schema: applicationRef(v.schema), previous: nullableApplicationRef(v.previous), scope: applicationRef(v.scope), observations, hypotheses: applicationRefs(v.hypotheses, 64), withdrawn };
+  return { contract: "algal.application-memory.v1", application: applicationId(v.application), schema: applicationRef(v.schema), previous: nullableApplicationRef(v.previous), scope: applicationRef(v.scope), observations, hypotheses: applicationRefs(v.hypotheses, 64), withdrawn, ...(hasArchive ? { archive: applicationRef(v.archive) } : {}) };
+}
+export function parseMemoryArchive(input: unknown): MemoryArchive {
+  const v = applicationObject(input, ["contract", "application", "schema", "sequence", "previous", "snapshot"]);
+  applicationTag(v.contract, "algal.application-memory-archive.v1");
+  const sequence = applicationInt(v.sequence, 0, APPLICATION_MEMORY_ARCHIVE_LIMIT - 1), previous = nullableApplicationRef(v.previous);
+  if ((sequence === 0) !== (previous === null)) throw new Error("Invalid memory archive predecessor");
+  return { contract: "algal.application-memory-archive.v1", application: applicationId(v.application), schema: applicationRef(v.schema), sequence, previous, snapshot: applicationRef(v.snapshot) };
 }
 const MEMORY_STATUSES: MemoryStatus[] = ["supported", "opposed", "conflicted", "unknown", "stale", "exhausted", "failed", "cancelled"];
 export function parseMemoryDerivation(input: unknown): MemoryDerivation {
@@ -278,14 +296,46 @@ export class ApplicationMemoryService {
     if (!same(claims, decoded.claims)) throw new Error("Stored claim differs from trusted source decoding");
     return { observation, scope: decoded.scope, procedure: decoded.procedure };
   }
+  private async archives(memory: MemorySnapshot): Promise<MemoryArchiveEntry[]> {
+    const result: MemoryArchiveEntry[] = [], seen = new Set<Digest>();
+    let reference: Digest | null = memory.archive ?? null, expected: number | null = null;
+    while (reference !== null) {
+      if (result.length >= APPLICATION_MEMORY_ARCHIVE_LIMIT || seen.has(reference)) throw new Error("Memory archive bound/cycle");
+      seen.add(reference);
+      const archive = await getApplicationRecord(this.store, reference, parseMemoryArchive);
+      const snapshot = await getApplicationRecord(this.store, archive.snapshot, parseMemorySnapshot);
+      if (archive.application !== memory.application || archive.schema !== memory.schema || snapshot.application !== memory.application || snapshot.schema !== memory.schema) throw new Error("Memory archive application/schema mismatch");
+      if ((expected !== null && archive.sequence !== expected) || (snapshot.archive ?? null) !== archive.previous) throw new Error("Memory archive lineage mismatch");
+      result.push({ reference, archive, snapshot });
+      expected = archive.sequence - 1; reference = archive.previous;
+    }
+    return result;
+  }
+  /** Newest-first retained cutovers. Archived observations are provenance,
+   * not selected facts; their original snapshots/raw/receipts remain in CAS. */
+  async archiveHistory(memoryRef: Digest): Promise<MemoryArchiveEntry[]> {
+    return this.archives(await getApplicationRecord(this.store, memoryRef, parseMemorySnapshot));
+  }
   private async validateSnapshot(input: unknown): Promise<{ memory: MemorySnapshot; scope: MemoryScope; observations: Map<Digest, Admitted> }> {
     const memory = parseMemorySnapshot(input), schema = await getApplicationRecord(this.store, memory.schema, parseMemorySchema);
     const scope = await this.validateScope(await this.value(memory.scope));
     if (scope.application !== memory.application) throw new Error("Cross-application memory scope");
+    const archives = await this.archives(memory);
+    if (!memory.previous && memory.archive) throw new Error("Memory archive requires a predecessor");
     if (memory.previous) {
       const previous = await getApplicationRecord(this.store, memory.previous, parseMemorySnapshot);
       if (previous.application !== memory.application || previous.schema !== memory.schema) throw new Error("Memory predecessor application/schema mismatch; migration required");
-      if (previous.withdrawn.some(ref => !memory.withdrawn.includes(ref)) || previous.observations.some(ref => !memory.observations.includes(ref))) throw new Error("Memory history or withdrawals cannot silently disappear");
+      if (memory.archive !== previous.archive) {
+        const cutover = archives[0]?.archive;
+        if (!cutover || cutover.snapshot !== memory.previous || cutover.previous !== (previous.archive ?? null)) throw new Error("Memory rollover must archive its exact predecessor");
+        if (memory.scope !== previous.scope || memory.observations.some(ref => !previous.observations.includes(ref)) || memory.hypotheses.some(ref => !previous.hypotheses.includes(ref))) throw new Error("Memory rollover may only retain the previous selection and scope");
+        if (!same(memory.withdrawn, previous.withdrawn.filter(ref => memory.observations.includes(ref)))) throw new Error("Memory rollover must retain selected withdrawals");
+        if (memory.observations.length === previous.observations.length && memory.hypotheses.length === previous.hypotheses.length) throw new Error("Memory rollover must retire an observation or hypothesis");
+      } else {
+        if (previous.withdrawn.some(ref => !memory.withdrawn.includes(ref)) || previous.observations.some(ref => !memory.observations.includes(ref))) throw new Error("Memory history or withdrawals cannot silently disappear");
+        const archived = new Set(archives.flatMap(entry => entry.snapshot.observations));
+        if (memory.observations.some(ref => !previous.observations.includes(ref) && archived.has(ref))) throw new Error("Retired observations cannot be resurrected");
+      }
     }
     const observations = new Map<Digest, Admitted>();
     for (const ref of memory.observations) {
@@ -304,9 +354,25 @@ export class ApplicationMemoryService {
     return { memory, scope, observations };
   }
   async snapshot(input: MemorySnapshotInput): Promise<Digest> {
-    const checked = parseMemorySnapshot({ ...applicationObject(input, ["application", "schema", "previous", "scope", "observations", "hypotheses", "withdrawn"]), contract: "algal.application-memory.v1" });
+    const hasArchive = !!input && typeof input === "object" && Object.hasOwn(input, "archive");
+    const checked = parseMemorySnapshot({ ...applicationObject(input, ["application", "schema", "previous", "scope", "observations", "hypotheses", "withdrawn", ...(hasArchive ? ["archive"] : [])]), contract: "algal.application-memory.v1" });
     await this.validateSnapshot(checked);
     return putApplicationRecord(this.store, checked);
+  }
+  /** Explicit active-selection cutover. Does not publish a lifecycle head,
+   * erase provenance, reclaim storage, or reset state/intent capacity. */
+  async rollover(input: MemoryRolloverInput): Promise<MemoryRollover> {
+    const v = applicationObject(input, ["memory", "retainObservations", "retainHypotheses"]);
+    const previous = applicationRef(v.memory), observations = applicationRefs(v.retainObservations, 128), hypotheses = applicationRefs(v.retainHypotheses, 64);
+    const { memory } = await this.validateSnapshot(await this.value(previous));
+    const archive = await putApplicationRecord(this.store, parseMemoryArchive({
+      contract: "algal.application-memory-archive.v1", application: memory.application, schema: memory.schema,
+      sequence: memory.archive ? (await getApplicationRecord(this.store, memory.archive, parseMemoryArchive)).sequence + 1 : 0,
+      previous: memory.archive ?? null, snapshot: previous,
+    }));
+    const next = await this.snapshot({ application: memory.application, schema: memory.schema, previous,
+      scope: memory.scope, observations, hypotheses, withdrawn: memory.withdrawn.filter(ref => observations.includes(ref)), archive });
+    return { memory: next, archive };
   }
   /** Admission helper for root-owned lifecycle commits; no hidden native query or effect. */
   async validateForRevision(memoryRef: Digest, input: ApplicationRevision): Promise<MemorySnapshot> {

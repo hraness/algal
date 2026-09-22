@@ -368,6 +368,8 @@ export {
   parseMemorySchema,
   parseMemoryScope,
   parseMemorySnapshot,
+  parseMemoryArchive,
+  APPLICATION_MEMORY_ARCHIVE_LIMIT,
 } from "./src/application-memory";
 export type {
   MemoryAdmissionHost,
@@ -386,6 +388,11 @@ export type {
   MemorySchema,
   MemoryScope,
   MemorySnapshot,
+  MemorySnapshotInput,
+  MemoryArchive,
+  MemoryArchiveEntry,
+  MemoryRolloverInput,
+  MemoryRollover,
 } from "./src/application-memory";
 export { createApplicationDomainDispatcher, createApplicationPolicyHost, parseApplicationHostPolicy } from "./src/application-host";
 export type { ApplicationHostPolicy } from "./src/application-host";
@@ -404,6 +411,8 @@ export { APPLICATION_QUOTA_LIMITS } from "./src/application-quota";
 export { NativeMemoryQueryEngine } from "./src/application-native-memory";
 export { appendObservation } from "./src/application-observation";
 export type { AppendObservationInput, AppendedObservation } from "./src/application-observation";
+export { rolloverApplicationMemory } from "./src/application-rollover";
+export type { RolloverApplicationMemoryInput, RolledApplicationMemory } from "./src/application-rollover";
 export { migrateApplicationMemory, parseApplicationMigration } from "./src/application-migration";
 export type { ApplicationMigration, MigrateMemoryInput } from "./src/application-migration";
 export { parseInvestigationRequest, requestExecution, scheduleInvestigations } from "./src/application-investigation";

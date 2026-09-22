@@ -55,7 +55,8 @@ advance sequence while retaining epoch. Previous states are retained.
 | `algal.episode-outcome.v2` | Bounded references to the episode binding, durable process state, and actual run receipt |
 | `algal.application-memory-observation.v1` | Host-decoded claims and their immutable raw evidence, receipt, procedure, and scope |
 | `algal.application-memory-hypothesis.v1` | A proposed claim, kept distinct from admitted observations |
-| `algal.application-memory.v1` | Selected observations, withdrawals, hypotheses, schema, scope, and predecessor |
+| `algal.application-memory.v1` | Selected observations, withdrawals, hypotheses, schema, scope, predecessor, and optional retained archive |
+| `algal.application-memory-archive.v1` | Exact pre-cutover snapshot, application/schema, archive sequence, and previous archive |
 | `algal.application-memory-derivation.v1` | Conditional query result bound to captured state, selected facts, program, engine, frontier, and admission |
 | `algal.application-evaluation.v1` | Frozen evaluation request, foundry evidence, compatibility, and reproducible acceptance verdict |
 | `algal.application-migration.v1` | Source snapshot, both revisions, pure migration program, producing receipt, and emitted claims |
@@ -121,6 +122,59 @@ Statuses remain distinct: `supported`, `opposed`, `conflicted`, `unknown`,
 `stale`, `exhausted`, `failed`, and `cancelled`. Exhaustion is not an empty
 successful answer. Unknown is not opposition. A historical supported result
 does not authorize execution against a newer state.
+
+### Active memory rollover
+
+An explicit rollover retires observations or hypotheses from the active query
+selection while retaining their original snapshots, raw evidence, receipts,
+scopes and procedures in CAS. It is not deletion, source authentication,
+summarization, or garbage collection. Queries still derive only from the
+selected active observations. The caller must retain observations needed for
+current applicability, such as a project-ready fact or procedure prerequisite.
+
+A snapshot may carry `archive: Digest`. Existing snapshots omit the field and
+keep their exact canonical bytes. Each archive is the closed record:
+
+```json
+{"contract":"algal.application-memory-archive.v1","application":"inventory","schema":"sha256:...","sequence":0,"previous":null,"snapshot":"sha256:..."}
+```
+
+The digests above abbreviate complete references. `snapshot` names the exact
+memory predecessor at cutover; its optional archive must equal `previous`.
+Sequences begin at zero and increase by one, with at most 128 archive segments.
+Application and schema must match throughout. Every archive and archived
+snapshot must resolve. A cutover keeps the prior scope and can only select
+subsets of its observations and hypotheses; it must retire at least one item.
+Withdrawn observations that remain selected retain their withdrawals. Retired
+withdrawals remain in the archived snapshot. An ordinary successor keeps the
+archive unchanged, preserves its active predecessor's observations and
+withdrawals, and cannot resurrect any retired observation reference. Fresh
+source evidence can be admitted as a new observation; merely selecting an old
+archived reference cannot make it current again.
+
+`ApplicationMemoryService.rollover({memory, retainObservations,
+retainHypotheses})` writes an immutable archive and successor snapshot but
+does not select a head. `archiveHistory(memory)` returns bounded cutovers in
+newest-first order. `rolloverApplicationMemory(lifecycle, memory, input)` adds
+the archive to transition evidence and commits an ordinary `memory` transition
+using `application`, `operation`, `expectedHead`, `expectedMemory`,
+`retainObservations`, and `retainHypotheses`; optional `evidence` (at most 15)
+and `causedBy` retain their usual meanings. Native `application rollover-memory
+<input.json>` implements the same bridge. An identical operation retry returns
+the original state. A stale head or altered operation is refused. CAS records
+created before a refused commit are unselected evidence, never a second head.
+
+Rollover preserves revision, epoch, all lifecycle history, operation identities
+and outbox custody. It invokes no dispatcher and does not retry uncertain work.
+Fresh episode applicability must be rederived against the new state; explicit
+reconciliation still uses the original effect identity and plan.
+
+This extension permits more than 128 cumulative observations under a bounded
+active selection. It does **not** remove the separate 4,096-state/retained-intent
+limits, the application namespace quotas, or the absence of shared-CAS ownership
+accounting and reclamation. Reaching any bound fails closed. Lifecycle
+checkpointing and storage reclamation remain separate work; this is not an
+indefinite-retention guarantee.
 
 ## Dispatch, restart, and inhabitants
 
@@ -314,7 +368,8 @@ of observations.
 | Pending intents / retained dispatches | 128 / 4,096 |
 | Fresh dispatch batch / pending scan | 32 / 128 |
 | Durable channel outcomes / channel file | 4,096 / 1,048,576 bytes |
-| Memory observations / hypotheses | 128 / 64 |
+| Active memory observations / hypotheses | 128 / 64 |
+| Retained memory archive segments | 128 |
 | Evaluation cases / work / model calls | 32 / 1,000,000 / 16 |
 | View history / action records | 128 / 32 |
 | Evidence queries / probes / sources / revisions / work | 32 rows per array, with separate truncation flags |

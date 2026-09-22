@@ -2112,14 +2112,15 @@ pub async fn append_observation(
     observations.push(observation.clone());
     observations.sort();
     observations.dedup();
-    let next_memory = memory.snapshot(
-        &mut lifecycle.store,
-        &json!({
-            "application": application, "schema": prior.schema, "previous": expected.memory,
-            "scope": observation_in.scope, "observations": observations,
-            "hypotheses": prior.hypotheses, "withdrawn": prior.withdrawn,
-        }),
-    )?;
+    let mut next_input = json!({
+        "application": application, "schema": prior.schema, "previous": expected.memory,
+        "scope": observation_in.scope, "observations": observations,
+        "hypotheses": prior.hypotheses, "withdrawn": prior.withdrawn,
+    });
+    if let Some(archive) = prior.archive {
+        next_input["archive"] = json!(archive);
+    }
+    let next_memory = memory.snapshot(&mut lifecycle.store, &next_input)?;
     let snapshot = lifecycle
         .commit(&json!({
             "application": application, "operation": operation, "kind": "memory",
@@ -2131,6 +2132,54 @@ pub async fn append_observation(
     Ok(json!({
         "snapshot": snapshot.digest, "observation": observation, "memory": next_memory,
     }))
+}
+
+/// Active memory selection rollover through the ordinary expected-head commit.
+/// No application history, operation identity, or dispatch custody is reset.
+pub async fn rollover_memory(
+    lifecycle: &mut Service<'_>,
+    memory: &mem::MemoryService<'_>,
+    input: &Value,
+) -> Result<Value> {
+    let v = app_object_opt(
+        input,
+        &[
+            "application",
+            "operation",
+            "expectedHead",
+            "expectedMemory",
+            "retainObservations",
+            "retainHypotheses",
+        ],
+        &["evidence", "causedBy"],
+    )?;
+    let application = app_id(&v["application"])?.to_owned();
+    let operation = app_ref(&v["operation"])?.to_owned();
+    let expected_head = app_ref(&v["expectedHead"])?.to_owned();
+    let expected_memory = app_ref(&v["expectedMemory"])?.to_owned();
+    let observations = app_refs(&v["retainObservations"], 128)?;
+    let hypotheses = app_refs(&v["retainHypotheses"], 64)?;
+    let mut evidence = match v.get("evidence") {
+        Some(value) => app_refs(value, 15)?,
+        None => Vec::new(),
+    };
+    let caused_by = opt_ref(v.get("causedBy").unwrap_or(&Value::Null))?;
+    let expected = parse_state(&get_record(&lifecycle.store, &expected_head)?)?;
+    if expected.application != application || expected.memory != expected_memory {
+        return Err(Error::invalid(
+            "Rollover expectation does not match the named application state",
+        ));
+    }
+    let rolled = memory.rollover(&mut lifecycle.store, &json!({"memory": expected_memory, "retainObservations": observations, "retainHypotheses": hypotheses}))?;
+    evidence.push(app_ref(&rolled["archive"])?.to_owned());
+    evidence.sort();
+    evidence.dedup();
+    let snapshot = lifecycle.commit(&json!({"application": application, "operation": operation, "kind": "memory",
+        "expectedHead": expected_head, "revision": expected.revision, "memory": rolled["memory"], "intents": [],
+        "evidence": evidence, "causedBy": caused_by})).await?;
+    Ok(
+        json!({"snapshot": snapshot.digest, "memory": rolled["memory"], "archive": rolled["archive"]}),
+    )
 }
 
 #[cfg(test)]

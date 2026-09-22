@@ -28,7 +28,8 @@ import { scheduleInvestigations, requestExecution } from "../src/application-inv
 import { collectApplicationViewEvidence, parseApplicationView, parseApplicationViewSpec, projectApplicationView, type ApplicationApplicability, type ApplicationView } from "../src/application-view";
 import { migrateApplicationMemory } from "../src/application-migration";
 import { appendObservation } from "../src/application-observation";
-import { ApplicationMemoryService } from "../src/application-memory";
+import { rolloverApplicationMemory } from "../src/application-rollover";
+import { ApplicationMemoryService, parseMemorySnapshot } from "../src/application-memory";
 import { NativeMemoryQueryEngine } from "../src/application-native-memory";
 import { capabilityHandle } from "../src/capabilities";
 import { builtinRegistry } from "../src/registry";
@@ -729,6 +730,45 @@ async function checkGoalAndQuotaParity(): Promise<void> {
     equal(`${name} leaves no head`, await p.lifecycle.inspect(APP), await runNative(app("inspect", APP), p.native));
     checked++;
   };
+  // Active selection rollover preserves the application, history and native
+  // applicability while both runtimes reject forgotten archives/resurrection.
+  {
+    const p = await pair("memory-rollover"), memory = new ApplicationMemoryService({ store: p.lifecycle.store, engine, admission: p.admission });
+    let current = await create(p, revisionRef, "memory-rollover-create");
+    const references: Digest[] = [];
+    for (let i = 0; i < 2; i++) {
+      const raw = await p.put({ contract: "algal.parity-raw.v1", claims: [{ relation: "available", tuple: ["tool-a"], polarity: "supported" }], note: i });
+      const receipt = await p.put({ contract: "algal.parity-receipt.v1", raw });
+      const input = { application: APP, operation: op(`rollover-publish-${i}`), expectedHead: current.digest, expectedMemory: current.state.memory,
+        observation: { ...observationInput, raw, receipt } };
+      const result = await appendObservation(p.lifecycle, memory, input);
+      equal(`rollover publish ${i}`, { snapshot: result.snapshot.digest, memory: result.memory, observation: result.observation }, await runNative(app("publish", await dynamic(`rollover-publish-${i}`, input)), p.native));
+      current = result.snapshot; references.push(result.observation);
+    }
+    const input = { application: APP, operation: op("memory-rollover"), expectedHead: current.digest, expectedMemory: current.state.memory, retainObservations: [references[0]!], retainHypotheses: [] };
+    const rolled = await rolloverApplicationMemory(p.lifecycle, memory, input);
+    const result = { snapshot: rolled.snapshot.digest, memory: rolled.memory, archive: rolled.archive };
+    equal("rollover commit", result, await runNative(app("rollover-memory", await dynamic("memory-rollover", input)), p.native));
+    equal("rollover snapshot bytes", await p.lifecycle.store.getValue(rolled.memory), await p.nativeStore.getValue(rolled.memory));
+    equal("rollover archive bytes", await p.lifecycle.store.getValue(rolled.archive), await p.nativeStore.getValue(rolled.archive));
+    const derived = await memory.query(rolled.snapshot.digest, queryRef);
+    if (derived.derivation.status !== "supported") throw new Error("Rollover lost the retained applicability source");
+    equal("rollover applicability", { derivation: derived.ref, status: derived.derivation.status }, await runNative(app("query", rolled.snapshot.digest, queryRef), p.native));
+    const { contract: _contract, ...body } = parseMemorySnapshot(await p.lifecycle.store.getValue(rolled.memory));
+    const successor = { ...body, previous: rolled.memory };
+    const { archive: _archive, ...dropped } = successor;
+    for (const [name, bad] of [["archive-loss", dropped], ["resurrection", { ...successor, observations: [...references].sort() }]] as const) {
+      const rejected = await memory.snapshot(bad).then(() => false, () => true);
+      const attempt = await runNativeAttempt(app("snapshot", await dynamic(`rollover-${name}`, bad)), p.native);
+      if (!rejected || attempt.code !== 2) throw new Error(`Memory rollover rejection differs: ${name}`);
+      checked++;
+    }
+    const appendInput = { application: APP, operation: op("rollover-ordinary-append"), expectedHead: rolled.snapshot.digest, expectedMemory: rolled.memory, observation: observationInput };
+    const appended = await appendObservation(p.lifecycle, memory, appendInput);
+    equal("append carries archive", { snapshot: appended.snapshot.digest, memory: appended.memory, observation: appended.observation }, await runNative(app("publish", await dynamic("rollover-ordinary-append", appendInput)), p.native));
+    if (parseMemorySnapshot(await p.lifecycle.store.getValue(appended.memory)).archive !== rolled.archive) throw new Error("Ordinary append lost rollover provenance");
+    equal("rollover retry preserves operation", { snapshot: (await rolloverApplicationMemory(p.lifecycle, memory, input)).snapshot.digest, memory: rolled.memory, archive: rolled.archive }, await runNative(app("rollover-memory", await dynamic("memory-rollover-retry", input)), p.native));
+  }
   // An admitted identifier may match an inherited Object property: missing
   // evidence must remain unknown, and an own supplied digest must still work.
   const goal = { contract: "algal.application-goal.v1", application: APP, id: "constructor", description: "Find an available tool", query: queryRef, entrypoint: "run" };
