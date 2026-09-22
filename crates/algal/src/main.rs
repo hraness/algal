@@ -1018,10 +1018,16 @@ fn inspect_receipt(raw: &Value) -> Value {
     })
 }
 
-
 async fn execute(cli: Cli) -> Result<bool> {
-    if let Commands::Application { command: ApplicationCommand::Report { view }, .. } = &cli.command {
-        print!("{}", algal::application_report::render(&load(view, 262_144)?)?);
+    if let Commands::Application {
+        command: ApplicationCommand::Report { view },
+        ..
+    } = &cli.command
+    {
+        print!(
+            "{}",
+            algal::application_report::render(&load(view, 262_144)?)?
+        );
         return Ok(true);
     }
     match cli.command {
@@ -1431,7 +1437,10 @@ async fn execute(cli: Cli) -> Result<bool> {
             let ok = receipt["outcome"] == "complete";
             let outputs: serde_json::Map<String, Value> = object(&receipt["cells"])?
                 .iter()
-                .filter_map(|(name, cell)| cell.get("outputs").map(|outputs| (name.clone(), outputs.clone())))
+                .filter_map(|(name, cell)| {
+                    cell.get("outputs")
+                        .map(|outputs| (name.clone(), outputs.clone()))
+                })
                 .collect();
             let mut result = json!({"ok":ok,"outputs":outputs,"receiptDigest":reference,"manifestDigest":receipt["manifestDigest"]});
             if !ok {
@@ -1455,9 +1464,15 @@ async fn execute(cli: Cli) -> Result<bool> {
                 &transports,
                 0,
             )?;
-            let cells: Vec<_> = compiled.manifest.cells.iter()
-                .map(|cell| json!({"id":cell["id"],"kind":cell["kind"]})).collect();
-            emit(&json!({"ok":true,"key":compiled.manifest.value["key"],"digest":compiled.manifest.digest()?,"cells":cells,"edges":compiled.manifest.edges.len()}))?;
+            let cells: Vec<_> = compiled
+                .manifest
+                .cells
+                .iter()
+                .map(|cell| json!({"id":cell["id"],"kind":cell["kind"]}))
+                .collect();
+            emit(
+                &json!({"ok":true,"key":compiled.manifest.value["key"],"digest":compiled.manifest.digest()?,"cells":cells,"edges":compiled.manifest.edges.len()}),
+            )?;
             Ok(true)
         }
         Commands::Explain {
@@ -1494,7 +1509,9 @@ async fn execute(cli: Cli) -> Result<bool> {
                 if let Some(on) = edge.get("on") { value["on"] = on.clone(); }
                 value
             }).collect();
-            emit(&json!({"key":compiled.manifest.value["key"],"digest":compiled.manifest.digest()?,"cells":cells,"edges":edges}))?;
+            emit(
+                &json!({"key":compiled.manifest.value["key"],"digest":compiled.manifest.digest()?,"cells":cells,"edges":edges}),
+            )?;
             Ok(true)
         }
         Commands::Digest { manifest: file } => {
@@ -2017,7 +2034,9 @@ async fn execute(cli: Cli) -> Result<bool> {
             let denied = NoAdmission;
             let engine_sha = digest_bytes(&std::fs::read(std::env::current_exe()?)?);
             let engine = NativeEngine::new(engine_sha.trim_start_matches("sha256:"), 10_000)?;
-            if let Some(host) = host.as_mut() { host.set_memory_engine(engine.clone()); }
+            if let Some(host) = host.as_mut() {
+                host.set_memory_engine(engine.clone());
+            }
             // Read-only commands (inspect/pending/put) admit nothing, so a
             // missing policy substitutes a host that denies all admission.
             let mut service = match &host {
@@ -2137,7 +2156,8 @@ async fn execute(cli: Cli) -> Result<bool> {
                         &mut service,
                         &memory_service,
                         &load(&input, 262_144)?,
-                    ).await?;
+                    )
+                    .await?;
                     emit(&json!({
                         "snapshot": result.snapshot.map(|s| s.digest),
                         "derivations": result.derivations, "requests": result.requests,
@@ -2145,7 +2165,8 @@ async fn execute(cli: Cli) -> Result<bool> {
                 }
                 ApplicationCommand::Execute { input } => {
                     let snapshot =
-                        application::request_execution(&mut service, &load(&input, 262_144)?).await?;
+                        application::request_execution(&mut service, &load(&input, 262_144)?)
+                            .await?;
                     emit(&json!({"state": snapshot.digest}))?;
                 }
                 ApplicationCommand::Publish { input } => {
@@ -2153,7 +2174,8 @@ async fn execute(cli: Cli) -> Result<bool> {
                         &mut service,
                         &memory_service,
                         &load(&input, 262_144)?,
-                    ).await?;
+                    )
+                    .await?;
                     emit(&result)?;
                 }
                 ApplicationCommand::Evaluate { request } => {
@@ -2223,7 +2245,10 @@ async fn execute(cli: Cli) -> Result<bool> {
                     emit(&application_view::view(&service, &load(&input, 262_144)?)?)?;
                 }
                 ApplicationCommand::Report { view } => {
-                    print!("{}", algal::application_report::render(&load(&view, 262_144)?)?);
+                    print!(
+                        "{}",
+                        algal::application_report::render(&load(&view, 262_144)?)?
+                    );
                 }
             }
             Ok(true)

@@ -454,7 +454,10 @@ fn join_checks_amplified_bytes_before_allocating_the_result() {
     env.insert("separator".into(), json!("x".repeat(MAX_STRING_BYTES)));
     let program = json!(["join", ["get", "items"], ["get", "separator"]]);
     assert_eq!(err_eval(program, &env).code, "EXPR_BOUNDS");
-    assert_eq!(ok_eval(json!(["join", ["quote", []], "ignored"]), &Map::new()), json!(""));
+    assert_eq!(
+        ok_eval(json!(["join", ["quote", []], "ignored"]), &Map::new()),
+        json!("")
+    );
 }
 
 // ------------------------------------------------------------- predicates ---

@@ -48,10 +48,16 @@ process:NAME,nonce:64_lowercase_hex}`. After acquiring the SQLite transaction,
 a matching abandoned marker is archived under `owners/NONCE.json` (maximum
 256) before replacement. Unknown or old lock formats require operator
 reconciliation. No PID, clock age, or failed heartbeat authorizes takeover.
-Process creation still uses the older fail-closed `processes/.lock` interlock;
-the `.creating.json` marker described in [process.md](process.md) is the only
-admitted proof that an interrupted initial creation belongs to the retrying
-caller.
+Process creation holds the same retained SQLite custody protocol in
+`.process-creation/`, with owner name `process-creation`. While held, it also
+occupies `processes/.lock` with
+`{contract:"algal.process-creation-owner.v1",nonce:64_lowercase_hex}` so older
+runtimes cannot bypass creation exclusion. Only after acquiring SQLite custody
+may a recognized abandoned creation marker be archived under
+`.process-creation/creation-owners/NONCE.json` (maximum 256) and replaced.
+Legacy plaintext or unknown markers remain untouched and require operator
+reconciliation. The per-process `.creating.json` marker described in
+[process.md](process.md) separately proves which exact initial record may resume.
 
 ## Ordered effects
 

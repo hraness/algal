@@ -122,13 +122,25 @@ fn schema_depth(value: &Value, depth: usize) -> Result<()> {
 fn schema_declaration(value: &Value) -> Result<()> {
     let schema = object(value)?;
     if let Some(kind) = schema.get("type") {
-        let types: Vec<&Value> = match kind.as_array() { Some(items) => items.iter().collect(), None => vec![kind] };
+        let types: Vec<&Value> = match kind.as_array() {
+            Some(items) => items.iter().collect(),
+            None => vec![kind],
+        };
         let mut seen = BTreeSet::new();
-        if types.is_empty() || types.len() > 7 { return Err(Error::invalid("schema type union bound")); }
+        if types.is_empty() || types.len() > 7 {
+            return Err(Error::invalid("schema type union bound"));
+        }
         for entry in types {
             let name = text(entry, 16)?;
-            if !["object", "array", "string", "number", "integer", "boolean", "null"].contains(&name) || !seen.insert(name) {
-                return Err(Error::invalid("schema type must name supported unique JSON types"));
+            if ![
+                "object", "array", "string", "number", "integer", "boolean", "null",
+            ]
+            .contains(&name)
+                || !seen.insert(name)
+            {
+                return Err(Error::invalid(
+                    "schema type must name supported unique JSON types",
+                ));
             }
         }
     }
@@ -777,7 +789,10 @@ pub fn check_schema(schema: &Value, value: &Value) -> Result<()> {
         _ => false,
     });
     if !matches {
-        return Err(Error::new("TYPE_MISMATCH", format!("expected {}", types.join("|"))));
+        return Err(Error::new(
+            "TYPE_MISMATCH",
+            format!("expected {}", types.join("|")),
+        ));
     }
     if let Some(required) = schema["required"].as_array() {
         for key in required {

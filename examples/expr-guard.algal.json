@@ -12,7 +12,7 @@
         "contract": "algal.expr.v1",
         "program": ["mul", ["get", "n"], 2]
       },
-      "output": { "kind": "json", "schema": {} }
+      "output": { "kind": "json", "schema": { "type": "number" } }
     },
     { "id": "sink", "kind": "fn", "fn": "echo.v1" }
   ],

@@ -21,7 +21,16 @@ const VIEW_SPEC: &str = "algal.application-view-spec.v1";
 const VIEW: &str = "algal.application-view.v1";
 const PROFILE: &str = "algal.application-runtime-profile.v1";
 const WIDGETS: [&str; 4] = ["procedures", "memory", "history", "investigations"];
-const STATUSES: [&str; 8] = ["unknown", "supported", "stale", "opposed", "conflicted", "exhausted", "failed", "cancelled"];
+const STATUSES: [&str; 8] = [
+    "unknown",
+    "supported",
+    "stale",
+    "opposed",
+    "conflicted",
+    "exhausted",
+    "failed",
+    "cancelled",
+];
 
 pub struct ViewSpec {
     pub title: String,
@@ -290,7 +299,11 @@ pub fn parse_view(input: &Value) -> Result<Value> {
             Some("investigate") => {
                 let i = app_object(raw, &["kind", "expectedState", "intent"])?;
                 let expected = app_ref(&i["expectedState"])?;
-                if expected != state || !investigations.iter().any(|row| row["intent"] == i["intent"]) {
+                if expected != state
+                    || !investigations
+                        .iter()
+                        .any(|row| row["intent"] == i["intent"])
+                {
                     return Err(fail(
                         "Investigation action is not fenced to the captured state",
                     ));
@@ -307,9 +320,10 @@ pub fn parse_view(input: &Value) -> Result<Value> {
                 let expected = app_ref(&e["expectedState"])?;
                 let procedure = app_ref(&e["procedure"])?;
                 if expected != state
-                    || !procedures
-                        .iter()
-                        .any(|p| p["manifest"].as_str() == Some(procedure) && p["applicability"] == "supported")
+                    || !procedures.iter().any(|p| {
+                        p["manifest"].as_str() == Some(procedure)
+                            && p["applicability"] == "supported"
+                    })
                 {
                     return Err(fail("Procedure action is not fenced to the captured state"));
                 }
@@ -478,7 +492,13 @@ mod tests {
     fn preserves_incomplete_applicability_and_rejects_actions() {
         let current = snapshot();
         for status in ["exhausted", "failed", "cancelled"] {
-            let applicability = BTreeMap::from([("run".to_owned(), Applicability { status: status.to_owned(), query_result: None })]);
+            let applicability = BTreeMap::from([(
+                "run".to_owned(),
+                Applicability {
+                    status: status.to_owned(),
+                    query_result: None,
+                },
+            )]);
             let mut view = project_view(&current, &spec(), None, &applicability).unwrap();
             assert_eq!(view["procedures"][0]["applicability"], status);
             assert_eq!(view["actions"], json!([]));
@@ -489,12 +509,14 @@ mod tests {
 
     #[test]
     fn long_history_retains_captured_tail_with_truncation() {
-        let history: Vec<_> = (0..130).map(|sequence| {
-            let mut item = snapshot();
-            item.state.sequence = sequence;
-            item.digest = hashed(&json!({"sequence": sequence}));
-            item
-        }).collect();
+        let history: Vec<_> = (0..130)
+            .map(|sequence| {
+                let mut item = snapshot();
+                item.state.sequence = sequence;
+                item.digest = hashed(&json!({"sequence": sequence}));
+                item
+            })
+            .collect();
         let view = project_view(&history[129], &spec(), Some(&history), &BTreeMap::new()).unwrap();
         assert_eq!(view["truncated"], true);
         assert_eq!(view["history"].as_array().unwrap().len(), 128);

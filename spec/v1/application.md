@@ -52,6 +52,7 @@ advance sequence while retaining epoch. Previous states are retained.
 | `algal.application-dispatch.v1` | Admitted plan, configuration identity, and dispatch settlement or uncertainty |
 | `algal.application-admission-denied.v1` | Bounded dispatch-attempt result identifying the intent, source state, current state, and refusal reason; grants no plan or authority |
 | `algal.application-episode.v1` | Exact source state, revision, memory, manifest, input, process, and host profile for one episode |
+| `algal.episode-outcome.v2` | Bounded references to the episode binding, durable process state, and actual run receipt |
 | `algal.application-memory-observation.v1` | Host-decoded claims and their immutable raw evidence, receipt, procedure, and scope |
 | `algal.application-memory-hypothesis.v1` | A proposed claim, kept distinct from admitted observations |
 | `algal.application-memory.v1` | Selected observations, withdrawals, hypotheses, schema, scope, and predecessor |
@@ -163,8 +164,10 @@ silently treated as receipts for a new dispatch.
 
 Default episode settlement includes an `outcome` digest in its immutable
 result. Following the dispatch's `result` and then `outcome` reaches the actual
-`algal.episode-outcome.v1` record, its `processState` digest, and run receipt
-without executing the program again. Legacy or custom trusted episode results may omit this optional field;
+`algal.episode-outcome.v2` record and its `processState` digest. The record's
+`receipt` digest resolves in the run-receipt store, keeping the application
+record bounded even for large valid receipts. No program execution is needed.
+Legacy v1 outcomes retain their embedded receipt shape unchanged. Legacy or custom trusted episode results may omit this optional field;
 consumers requiring execution evidence must reject that absence.
 
 The built-in domain dispatcher creates a durable process in the application's

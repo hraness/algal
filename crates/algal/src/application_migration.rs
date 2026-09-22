@@ -28,8 +28,15 @@ fn fail(message: &str) -> Error {
 }
 
 fn admit_program(manifest: &Manifest) -> Result<()> {
-    if manifest.cells.iter().any(|cell| !matches!(cell["kind"].as_str(), Some("input" | "const" | "fn" | "expr"))) {
-        return Err(fail("Migration programs must be pure bounded transformations"));
+    if manifest.cells.iter().any(|cell| {
+        !matches!(
+            cell["kind"].as_str(),
+            Some("input" | "const" | "fn" | "expr")
+        )
+    }) {
+        return Err(fail(
+            "Migration programs must be pure bounded transformations",
+        ));
     }
     Ok(())
 }
@@ -37,32 +44,49 @@ fn admit_program(manifest: &Manifest) -> Result<()> {
 fn migration_arguments(store: &Store, from_ref: &str, scope_ref: &str) -> Result<Value> {
     let from = parse_snapshot(&get_record(store, from_ref)?)?;
     let scope = parse_scope(&get_record(store, scope_ref)?)?;
-    if from.application != scope.application { return Err(fail("Migration scope belongs to another application")); }
+    if from.application != scope.application {
+        return Err(fail("Migration scope belongs to another application"));
+    }
     let mut claims = Vec::new();
     for reference in &from.observations {
-        if from.withdrawn.contains(reference) { continue; }
+        if from.withdrawn.contains(reference) {
+            continue;
+        }
         let observation = parse_observation(&get_record(store, reference)?)?;
         let observation_scope = parse_scope(&get_record(store, &observation.input.scope)?)?;
         for claim in &observation.claims {
-            claims.push(json!({"claim": claim_value(claim), "frontier": observation_scope.frontier}));
+            claims
+                .push(json!({"claim": claim_value(claim), "frontier": observation_scope.frontier}));
         }
     }
     // Retained hypotheses are never promoted into the observation projection.
-    if claims.len() > 64 { return Err(fail("Migration claim input bound exceeded")); }
+    if claims.len() > 64 {
+        return Err(fail("Migration claim input bound exceeded"));
+    }
     Ok(json!({"claims":{"value":claims},"frontier":{"value":scope.frontier}}))
 }
 
 /// Replay a pure producer and bind the emitted claims to its exact source projection.
-pub async fn verify_migration(store: &Store, migration: &crate::application::Migration, scope: &str) -> Result<()> {
+pub async fn verify_migration(
+    store: &Store,
+    migration: &crate::application::Migration,
+    scope: &str,
+) -> Result<()> {
     let manifest = store.manifest(&migration.program)?;
     admit_program(&manifest)?;
     let receipt = get_record(store, &migration.receipt)?;
     let args = migration_arguments(store, &migration.from, scope)?;
-    if receipt["outcome"] != "complete" || receipt["manifestDigest"] != migration.program || receipt["args"] != args {
-        return Err(fail("Migration receipt does not bind its source and program"));
+    if receipt["outcome"] != "complete"
+        || receipt["manifestDigest"] != migration.program
+        || receipt["args"] != args
+    {
+        return Err(fail(
+            "Migration receipt does not bind its source and program",
+        ));
     }
     let output = &manifest.value["interface"]["outputs"]["migrated"];
-    let produced = &receipt["cells"][output["cell"].as_str().unwrap_or("")]["outputs"][output["port"].as_str().unwrap_or("")];
+    let produced = &receipt["cells"][output["cell"].as_str().unwrap_or("")]["outputs"]
+        [output["port"].as_str().unwrap_or("")];
     let emitted = &app_object(produced, &["claims"])?["claims"];
     if emitted != &json!(migration.claims.iter().map(claim_value).collect::<Vec<_>>()) {
         return Err(fail("Migration claims differ from producing receipt"));
@@ -129,15 +153,7 @@ pub async fn migrate_memory(
     let prior_scope = host
         .process_scope
         .replace(format!("migrate-{}", &from_ref[7..15]));
-    let run = runtime::run(
-        manifest.clone(),
-        args,
-        store,
-        host,
-        transports,
-        None,
-    )
-    .await;
+    let run = runtime::run(manifest.clone(), args, store, host, transports, None).await;
     host.process_scope = prior_scope;
     let receipt = run?;
     if receipt["outcome"] != "complete" {
@@ -418,10 +434,24 @@ mod tests {
             json!("supported-tool")
         );
         let scope = fixture.input["scope"].as_str().unwrap();
-        verify_migration(&store, &crate::application::parse_migration(&migration).unwrap(), scope).await.unwrap();
+        verify_migration(
+            &store,
+            &crate::application::parse_migration(&migration).unwrap(),
+            scope,
+        )
+        .await
+        .unwrap();
         let mut forged = migration.clone();
         forged["claims"][0]["tuple"] = json!(["invented-tool"]);
-        assert!(verify_migration(&store, &crate::application::parse_migration(&forged).unwrap(), scope).await.is_err());
+        assert!(
+            verify_migration(
+                &store,
+                &crate::application::parse_migration(&forged).unwrap(),
+                scope
+            )
+            .await
+            .is_err()
+        );
     }
 
     #[tokio::test]

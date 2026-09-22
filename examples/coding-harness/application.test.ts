@@ -10,7 +10,7 @@ import { join } from "node:path";
 import {
   ApplicationService, admitApplicationActivation, builtinRegistry, evaluateApplicationRevision,
   getApplicationRecord, manifestToJson, parseApplicationRevision, putApplicationRecord,
-  parseRunReceipt, vercelGatewayExecutor, verifyReceipt,
+  parseRunReceipt, ProcessSupervisor, vercelGatewayExecutor, verifyReceipt,
 } from "../../index";
 import {
   ApplicationMemoryService, parseMemoryScope, parseMemorySnapshot,
@@ -141,6 +141,28 @@ async function fixture() {
 }
 
 describe("development-workspace organism on the real harness boundary", () => {
+  test("the domain reconciles a completed episode after losing its dispatch acknowledgment", async () => {
+    const f = await fixture();
+    const dispatcher = createHarnessDispatcher(f.domain, f.store, harnessTerminal(f.cwd), f.admission.currentFrontier, { "model-inference": f.executors });
+    await scheduleInvestigations(f.service, f.memory, { application: "workspace", operation: ref("reconcile-probe"), expectedHead: f.genesis.digest, expectedMemory: f.genesis.state.memory, route: "probes", entrypoints: ["run"] });
+    await f.service.dispatchPending("workspace", dispatcher);
+    await drainProbes(f.domain, f.service, f.memory);
+    const head = (await f.service.inspect("workspace"))!, derived = await f.memory.query(head.digest, f.query);
+    const input = await f.store.putValue({ src: { value: "retained" } });
+    await requestExecution(f.service, { application: "workspace", operation: ref("reconcile-episode"), expectedHead: head.digest, expectedMemory: head.state.memory, entrypoint: "run", input, derivation: derived.ref });
+    let dispatches = 0;
+    const losing = { ...dispatcher, async dispatch(context: Parameters<typeof dispatcher.dispatch>[0]) { dispatches++; await dispatcher.dispatch(context); throw new Error("lost acknowledgment"); } };
+    const [uncertain] = await f.service.dispatchPending("workspace", losing);
+    if (!uncertain || uncertain.status !== "uncertain" || uncertain.plan.kind !== "episode") throw new Error("Expected uncertain episode dispatch");
+    const processes = new ProcessSupervisor(f.service.dir), original = await processes.inspect(uncertain.plan.binding.process);
+    expect(original.process.status).toBe("complete");
+    const recovered = await f.service.reconcileDispatch("workspace", uncertain.intent, dispatcher);
+    expect(recovered.status).toBe("settled");
+    expect((await processes.inspect(uncertain.plan.binding.process)).digest).toBe(original.digest);
+    expect(dispatches).toBe(1);
+    expect(await f.service.dispatchPending("workspace", dispatcher)).toEqual([]);
+  });
+
   test("a mutation after a probe cannot relabel its evidence as the new frontier", async () => {
     const f = await fixture();
     const terminal = harnessTerminal(f.cwd);
@@ -259,9 +281,10 @@ describe("development-workspace organism on the real harness boundary", () => {
     // must not redispatch the episode to reconstruct an evidence address.
     const result = await getApplicationRecord(service.store, d2.result!, r => r as { kind: string; binding: Digest; outcome: Digest });
     const binding = await getApplicationRecord(service.store, result.binding, r => r as { manifest: Digest; arguments: Digest; process: string });
-    const settled = await getApplicationRecord(service.store, result.outcome, r => r as { binding: Digest; receipt: unknown });
+    const settled = await getApplicationRecord(service.store, result.outcome, r => r as { contract: string; binding: Digest; receipt: Digest });
+    expect(settled.contract).toBe("algal.episode-outcome.v2");
     expect(settled.binding).toBe(result.binding);
-    const actual = parseRunReceipt(settled.receipt);
+    const actual = parseRunReceipt(await service.store.getReceipt(settled.receipt));
     expect(actual.cells.out?.outputs?.value).toBe("ship it");
     expect((await verifyReceipt(actual, manifestToJson((await service.store.getManifest(binding.manifest))!), service.store)).ok).toBe(true);
 
@@ -361,9 +384,10 @@ describe("development-workspace organism on the real harness boundary", () => {
     const result2 = await getApplicationRecord(service.store, d4.result!, r2 => r2 as { binding: Digest; outcome: Digest });
     const binding2 = await getApplicationRecord(service.store, result2.binding, r2 => r2 as { manifest: Digest; process: string });
     expect(binding2.manifest).toBe(candidateManifest);
-    const settled2 = await getApplicationRecord(service.store, result2.outcome, r2 => r2 as { binding: Digest; receipt: unknown });
+    const settled2 = await getApplicationRecord(service.store, result2.outcome, r2 => r2 as { contract: string; binding: Digest; receipt: Digest });
+    expect(settled2.contract).toBe("algal.episode-outcome.v2");
     expect(settled2.binding).toBe(result2.binding);
-    const actual2 = parseRunReceipt(settled2.receipt);
+    const actual2 = parseRunReceipt(await service.store.getReceipt(settled2.receipt));
     expect(actual2.cells.out?.outputs?.value).toBe("b");
     expect((await verifyReceipt(actual2, manifestToJson((await service.store.getManifest(candidateManifest))!), service.store)).ok).toBe(true);
 

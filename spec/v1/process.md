@@ -68,6 +68,13 @@ publication. There is no reset, replacement, or delete command in this
 contract. Retaining a process name also retains its effect idempotency
 namespace.
 
+Creation is serialized by retained SQLite custody under `.process-creation/`,
+with a mirrored `processes/.lock` interlock for older runtimes. Process death
+releases custody; only recognized abandoned interlock markers may be archived
+and replaced. Legacy locks remain fail-closed. An exact interrupted creation
+can resume at the 1,024-name limit because it consumes no additional name.
+See [process-journal.md](process-journal.md) for the custody record formats.
+
 ## Bounds
 
 | Item | Maximum |

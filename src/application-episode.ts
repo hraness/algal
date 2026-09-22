@@ -1,8 +1,8 @@
 /** Durable domain episode execution — the `start-episode` dispatch leg shared by the
  * coding harness and the parity driver. The admitted episode binding carries
  * the captured application state: the bound manifest runs under the
- * entrypoint's declared capabilities, its run receipt embeds in an
- * `algal.episode-outcome.v1` record, and the dispatch settles with
+ * entrypoint's declared capabilities, its run receipt is referenced by an
+ * `algal.episode-outcome.v2` record, and the dispatch settles with
  * `{kind: "episode", binding, process, outcome}`. Settlement is not a task claim —
  * the run outcome and process state live in the evidence, so a failed episode still settles
  * (its receipt records the failure). Mirrors
@@ -72,7 +72,7 @@ async function episode(
   if (!["complete", "failed", "stuck"].includes(state.process.status) || !state.process.receipt) return { status: "blocked", reason: "Episode process has no terminal receipt" };
   const receipt = parseRunReceipt(await processes.store.getReceipt(state.process.receipt));
   if (receipt.manifestDigest !== binding.manifest || canonicalize(receipt.args) !== canonicalize(args)) throw new Error("Episode process receipt binding changed");
-  const outcome = await putApplicationRecord(runtime.store, { contract: "algal.episode-outcome.v1", binding: bindingRef, processState: state.digest, receipt });
+  const outcome = await putApplicationRecord(runtime.store, { contract: "algal.episode-outcome.v2", binding: bindingRef, processState: state.digest, receipt: state.process.receipt });
   return { status: "settled", result: { kind: "episode", binding: bindingRef, process: binding.process, outcome } };
 }
 

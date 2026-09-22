@@ -1,19 +1,29 @@
 //! Passive application workbench over one validated, captured view record.
 //! Rendering never opens a store, resolves a current head, or runs an effect.
-use crate::{Result, application_view::parse_view, canonical::{canonical, digest}};
+use crate::{
+    Result,
+    application_view::parse_view,
+    canonical::{canonical, digest},
+};
 use serde_json::Value;
 
 fn escape(text: &str) -> String {
-    text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
-        .replace('"', "&quot;").replace('\'', "&#39;")
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
 }
-fn label(value: &Value) -> String { escape(value.as_str().unwrap_or("")) }
+fn label(value: &Value) -> String {
+    escape(value.as_str().unwrap_or(""))
+}
 
 pub fn render(input: &Value) -> Result<String> {
     let view = parse_view(input)?;
     let evidence = canonical(&view)?;
     let view_digest = digest(&view)?;
-    let mut html = format!(r#"<!doctype html>
+    let mut html = format!(
+        r#"<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer"><title>{}</title>
@@ -22,7 +32,15 @@ pub fn render(input: &Value) -> Result<String> {
 </style></head><body><div class="eyebrow">ALGAL · APPLICATION WORKBENCH</div><h1>{}</h1>
 <p class="note">Historical snapshot. This page performs no actions and contacts no providers. Applicability is the captured producer's report; rendering validates its structure and state references, not the truth of observations or replay of proofs. Submit retained action records through an admitted host, which must recheck the current state.</p>
 <div class="refs"><span>Application</span><code>{}</code><span>View</span><code>{}</code><span>State</span><code>{}</code><span>Revision</span><code>{}</code><span>Memory</span><code>{}</code></div>
-"#, label(&view["title"]), label(&view["title"]), label(&view["application"]), escape(&view_digest), label(&view["state"]), label(&view["revision"]), label(&view["memory"]));
+"#,
+        label(&view["title"]),
+        label(&view["title"]),
+        label(&view["application"]),
+        escape(&view_digest),
+        label(&view["state"]),
+        label(&view["revision"]),
+        label(&view["memory"])
+    );
     let widgets = view["widgets"].as_array().unwrap();
     if widgets.iter().any(|v| v == "procedures") {
         html.push_str("<h2>Procedures and applicability</h2><table><thead><tr><th>Procedure</th><th>Reported state</th><th>Manifest</th></tr></thead><tbody>");
@@ -36,7 +54,9 @@ pub fn render(input: &Value) -> Result<String> {
     }
     if widgets.iter().any(|v| v == "history") {
         html.push_str("<h2>Revision and memory history</h2>");
-        if view["truncated"] == true { html.push_str("<p class=\"note\">The latest 128 captured states are shown. Earlier source records remain in the store.</p>"); }
+        if view["truncated"] == true {
+            html.push_str("<p class=\"note\">The latest 128 captured states are shown. Earlier source records remain in the store.</p>");
+        }
         html.push_str("<table><thead><tr><th>Sequence</th><th>State</th><th>Revision / memory</th></tr></thead><tbody>");
         for row in view["history"].as_array().unwrap().iter().rev() {
             html.push_str(&format!("<tr><td>{}</td><td><code>{}</code></td><td><code>{}</code><br><code>{}</code></td></tr>", row["sequence"], label(&row["state"]), label(&row["revision"]), label(&row["memory"])));
@@ -45,13 +65,22 @@ pub fn render(input: &Value) -> Result<String> {
     }
     if widgets.iter().any(|v| v == "investigations") {
         html.push_str("<h2>Retained intents</h2><p>These references name the captured transition's intents. Inspect their durable dispatch records to determine whether delivery is pending, settled, blocked, or uncertain.</p>");
-        html.push_str(&format!("<pre>{}</pre>", escape(&canonical(&view["investigations"])?)));
+        html.push_str(&format!(
+            "<pre>{}</pre>",
+            escape(&canonical(&view["investigations"])?)
+        ));
     }
     html.push_str("<h2>Fenced action records</h2><p>Action data grants no authority. Every record names the captured state, so later memory or revision changes require renewed admission.</p>");
     for action in view["actions"].as_array().unwrap() {
-        html.push_str(&format!("<details><summary>{}</summary><pre>{}</pre></details>", label(&action["kind"]), escape(&canonical(action)?)));
+        html.push_str(&format!(
+            "<details><summary>{}</summary><pre>{}</pre></details>",
+            label(&action["kind"]),
+            escape(&canonical(action)?)
+        ));
     }
-    if view["actions"].as_array().unwrap().is_empty() { html.push_str("<p>No actionable derivation was supplied for this snapshot.</p>"); }
+    if view["actions"].as_array().unwrap().is_empty() {
+        html.push_str("<p>No actionable derivation was supplied for this snapshot.</p>");
+    }
     html.push_str(&format!("<details id=\"evidence\"><summary>Complete captured view record</summary><pre>{}</pre></details></body></html>\n", escape(&evidence)));
     Ok(html)
 }

@@ -31,6 +31,7 @@ import { digestCanonical } from "../../src/digest";
 import { hostDirectory, hostLease, hostNames, hostRead, hostWrite } from "../../src/host-state";
 import { parseRunReceipt } from "../../src/run";
 import { verifyApplicationMigration } from "../../src/application-migration";
+import { reconcileApplicationEpisode } from "../../src/application-episode";
 
 const ref = (value: unknown): Digest => digestCanonical(json(value));
 const isRef = (value: unknown): value is Digest => typeof value === "string" && /^sha256:[a-f0-9]{64}$/.test(value);
@@ -343,6 +344,10 @@ export function createHarnessDispatcher(domain: HarnessDomain, store: Applicatio
     [...new Set(entry.capabilities.flatMap(c => capabilityExecutors[c] ?? []))];
   return {
     configurationDigest: ref({ contract: "algal.harness-dispatcher.v1", routes: ["probes", "proposals"] }),
+    async reconcile(context: ApplicationDispatchContext) {
+      if (context.intent.kind !== "start-episode") return undefined;
+      return reconcileApplicationEpisode(context, { store, executors: inhabitantExecutors });
+    },
     async dispatch(context: ApplicationDispatchContext) {
       const work = context.intent;
       if (work.kind === "deliver" && work.route === "proposals") {

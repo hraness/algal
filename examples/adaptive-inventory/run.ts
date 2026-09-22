@@ -218,8 +218,8 @@ async function runPhase(root: string, executable: string, phase: Phase): Promise
     const settled = object(await store.getValue(episode.result));
     ensure(typeof settled.outcome === "string", "Settled episode omitted its retained outcome");
     const outcome = object(await store.getValue(settled.outcome as Digest));
-    ensure(outcome.contract === "algal.episode-outcome.v1" && outcome.binding === identity(episode.plan.binding), "Outcome does not bind the episode");
-    const receipt = parseRunReceipt(outcome.receipt), manifest = await store.getManifest(episode.plan.binding.manifest);
+    ensure(outcome.contract === "algal.episode-outcome.v2" && outcome.binding === identity(episode.plan.binding) && typeof outcome.receipt === "string", "Outcome does not bind the episode");
+    const receipt = parseRunReceipt(await store.getReceipt(outcome.receipt as Digest)), manifest = await store.getManifest(episode.plan.binding.manifest);
     ensure(manifest && (await verifyReceipt(receipt, manifestToJson(manifest), store)).ok, "Episode receipt failed replay verification");
     ensure(receipt.cells.plan?.outputs?.out === expectedDecision && receipt.cells.tool?.outputs?.out === expectedTool, "Planner did not discover the current tool and decision");
     ensure(expectedTool === toolA || expectedTool === toolB, "Tool path is outside the authored fixture");

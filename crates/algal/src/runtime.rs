@@ -1434,7 +1434,9 @@ pub async fn verify(
     crate::receipt::validate(receipt)?;
     let manifest_digest = manifest.digest()?;
     if receipt["manifestDigest"] != manifest_digest {
-        return Ok(json!({"ok":false,"digest":receipt["digest"],"outcome":receipt["outcome"],"mismatches":[format!("manifestDigest: receipt records {}, supplied manifest hashes to {}", receipt["manifestDigest"].as_str().unwrap(), manifest_digest)]}));
+        return Ok(
+            json!({"ok":false,"digest":receipt["digest"],"outcome":receipt["outcome"],"mismatches":[format!("manifestDigest: receipt records {}, supplied manifest hashes to {}", receipt["manifestDigest"].as_str().unwrap(), manifest_digest)]}),
+        );
     }
     let mut host = Host::replay(&receipt["effects"])?;
     host.tools = tools.tools.clone();

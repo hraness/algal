@@ -139,10 +139,11 @@ test("episode settlement makes its actual receipt and process reachable without 
   const { f, binding, context, processes } = await episodeFixture();
   const result = await dispatchApplicationEpisode(context, { store: f.store });
   if (result.status !== "settled" || result.result.kind !== "episode" || !result.result.outcome) throw new Error("missing episode outcome");
-  const evidence = await f.store.getValue(result.result.outcome) as { binding: string; processState: string; receipt: {manifestDigest: string; outcome: string} };
+  const evidence = await f.store.getValue(result.result.outcome) as { binding: string; processState: string; receipt: `sha256:${string}` };
+  const receipt = await f.store.getReceipt(evidence.receipt) as { manifestDigest: string; outcome: string };
   expect(evidence.binding).toBe(result.result.binding);
-  expect(evidence.receipt.manifestDigest).toBe(binding.manifest);
-  expect(evidence.receipt.outcome).toBe("complete");
+  expect(receipt.manifestDigest).toBe(binding.manifest);
+  expect(receipt.outcome).toBe("complete");
   const process = await processes.inspect(binding.process);
   expect(process.process.maxGenerations).toBe(binding.maxGenerations);
   expect(process.digest).toBe(evidence.processState);
@@ -180,6 +181,22 @@ test("slot programs run once and their completed process is reused without rewri
   await f.store.setSlot("episode-slot", "later-value");
   expect(await reconcileApplicationEpisode(context, { store: f.store })).toEqual(result);
   expect(await f.store.getSlot("episode-slot")).toBe("later-value");
+});
+
+test("a large valid process receipt settles through a bounded outcome reference", async () => {
+  const { f, context, binding } = await episodeFixture();
+  const manifest = await f.store.putManifest(parseOrganismManifest({ contract: "algal.organism.v1", key: "organism:large-episode", name: "Large episode",
+    cells: Array.from({ length: 6 }, (_, i) => ({ id: `value${i}`, kind: "const", outputs: { value: { type: "text", value: "x".repeat(60_000) } } })), edges: [] }));
+  const revision = await f.put({ ...f.body, entrypoints: [{ ...f.body.entrypoints[0]!, manifest }] });
+  if (context.dispatch.plan.kind !== "episode") throw new Error("wrong plan");
+  context.dispatch.plan.binding = { ...binding, manifest, revision, arguments: await f.put({}) };
+  const result = await dispatchApplicationEpisode(context, { store: f.store });
+  if (result.status !== "settled" || result.result.kind !== "episode" || !result.result.outcome) throw new Error("large receipt did not settle");
+  const outcome = await f.store.getValue(result.result.outcome) as { contract: string; receipt: `sha256:${string}` };
+  expect(outcome.contract).toBe("algal.episode-outcome.v2");
+  expect(JSON.stringify(outcome).length).toBeLessThan(1024);
+  expect(JSON.stringify(await f.store.getReceipt(outcome.receipt)).length).toBeGreaterThan(262_144);
+  expect(await reconcileApplicationEpisode(context, { store: f.store })).toEqual(result);
 });
 
 test("explicit episode recovery resumes a pure intent but never repeats an unknown write", async () => {

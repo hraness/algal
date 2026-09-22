@@ -358,14 +358,27 @@ fn check_compatibility_loaded(
     }
     for name in &old_names {
         let old_entry = entrypoint(&previous.revision, name)?;
-        let Some(new_entry) = candidate.revision.entrypoints.iter().find(|entry| entry.name == *name) else { continue; };
+        let Some(new_entry) = candidate
+            .revision
+            .entrypoints
+            .iter()
+            .find(|entry| entry.name == *name)
+        else {
+            continue;
+        };
         if old_entry.max_generations != new_entry.max_generations {
             reasons.push(format!("changed-{name}-budget"));
         }
-        if new_entry.capabilities.iter().any(|cap| !old_entry.capabilities.contains(cap)) {
+        if new_entry
+            .capabilities
+            .iter()
+            .any(|cap| !old_entry.capabilities.contains(cap))
+        {
             reasons.push(format!("changed-{name}-capabilities"));
         }
-        if new_entry.applicability != old_entry.applicability || new_entry.queries != old_entry.queries {
+        if new_entry.applicability != old_entry.applicability
+            || new_entry.queries != old_entry.queries
+        {
             reasons.push(format!("changed-{name}-memory-view"));
         }
         let old_manifest = previous.manifests.get(*name);
@@ -380,10 +393,24 @@ fn check_compatibility_loaded(
         if !same_interface {
             reasons.push(format!("changed-{name}-interface"));
         } else if let (Some(old), Some(new)) = (old_manifest, new_manifest)
-            && old.value.get("interface").is_some() && new.value.get("interface").is_some() {
+            && old.value.get("interface").is_some()
+            && new.value.get("interface").is_some()
+        {
             let mut overlay = store.overlay();
-            let old = interface_signature(&compile(old.clone(), &mut overlay, &Default::default(), &Transports::new(), 0)?)?;
-            let new = interface_signature(&compile(new.clone(), &mut overlay, &Default::default(), &Transports::new(), 0)?)?;
+            let old = interface_signature(&compile(
+                old.clone(),
+                &mut overlay,
+                &Default::default(),
+                &Transports::new(),
+                0,
+            )?)?;
+            let new = interface_signature(&compile(
+                new.clone(),
+                &mut overlay,
+                &Default::default(),
+                &Transports::new(),
+                0,
+            )?)?;
             if old.inputs != new.inputs || old.outputs != new.outputs {
                 reasons.push(format!("changed-{name}-interface-types"));
             }
@@ -1081,7 +1108,12 @@ mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(evaluation["verdict"]["status"], json!("accepted"), "{}", evaluation["verdict"]);
+        assert_eq!(
+            evaluation["verdict"]["status"],
+            json!("accepted"),
+            "{}",
+            evaluation["verdict"]
+        );
         assert_eq!(
             evaluation["verdict"]["selectedManifest"],
             json!(fixture.candidate)
