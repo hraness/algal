@@ -143,9 +143,9 @@ describe("foundry", () => {
     let calls = 0;
     const store = new MemoryStore();
     const scorer = {
-      contract: "algal.expr.v1",
+      contract: "algal.expr.v1" as const,
       program: ["eq", ["get", "outputs", "answer"], ["get", "args", "q"]],
-    } as const;
+    };
     const result = await runFoundrySearch({
       generator,
       generatorArgs: {},
