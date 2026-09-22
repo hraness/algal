@@ -89,6 +89,9 @@ not factual truth or exactly-once arbitrary external effects. See the
 [operating boundary](docs/use-cases.md#choose-the-right-boundary) before deployment.
 The application lifecycle does enforce conservative [namespace byte limits](spec/v1/application.md#conservative-namespace-quota);
 these do not attribute shared content-addressed objects to applications.
+Explicit [active-memory rollover](spec/v1/application.md#active-memory-rollover)
+can retire selected observations while retaining source history. It preserves
+run/effect custody and does not reset lifecycle or storage limits.
 
 ## Read the program. See its structure.
 

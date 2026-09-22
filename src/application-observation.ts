@@ -59,6 +59,7 @@ export async function appendObservation(
   const nextMemory = await memory.snapshot({
     application, schema: prior.schema, previous: expected.memory, scope: input.observation.scope,
     observations, hypotheses: prior.hypotheses, withdrawn: prior.withdrawn,
+    ...(prior.archive ? { archive: prior.archive } : {}),
   });
   const snapshot = await lifecycle.commit({
     application, operation, kind: "memory", expectedHead,

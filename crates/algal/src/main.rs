@@ -674,6 +674,8 @@ enum ApplicationCommand {
     Execute { input: PathBuf },
     /// `append_observation`: observation → snapshot → memory commit.
     Publish { input: PathBuf },
+    /// Archive an active memory selection and commit on the exact expected head.
+    RolloverMemory { input: PathBuf },
     /// `evaluateApplicationRevision`: foundry over incumbent/candidate
     /// entrypoints; emits the stored evaluation digest and verdict.
     Evaluate { request: PathBuf },
@@ -2217,6 +2219,15 @@ async fn execute(cli: Cli) -> Result<bool> {
                 }
                 ApplicationCommand::Publish { input } => {
                     let result = application::append_observation(
+                        &mut service,
+                        &memory_service,
+                        &load(&input, 262_144)?,
+                    )
+                    .await?;
+                    emit(&result)?;
+                }
+                ApplicationCommand::RolloverMemory { input } => {
+                    let result = application::rollover_memory(
                         &mut service,
                         &memory_service,
                         &load(&input, 262_144)?,

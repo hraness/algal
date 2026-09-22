@@ -18,6 +18,7 @@ use std::collections::BTreeSet;
 pub const RECORD_BYTES: usize = 262_144;
 pub const DEPTH: usize = 24;
 pub const NODES: usize = 16_384;
+pub const ARCHIVE_LIMIT: usize = 128;
 
 pub fn app_json(value: &Value) -> Result<Value> {
     let mut stack = vec![(value, 0usize)];
@@ -676,11 +677,12 @@ pub struct Snapshot {
     pub observations: Vec<String>,
     pub hypotheses: Vec<String>,
     pub withdrawn: Vec<String>,
+    pub archive: Option<String>,
     pub value: Value,
 }
 
 pub fn parse_snapshot(input: &Value) -> Result<Snapshot> {
-    let v = app_object(
+    let v = app_object_opt(
         input,
         &[
             "contract",
@@ -692,6 +694,7 @@ pub fn parse_snapshot(input: &Value) -> Result<Snapshot> {
             "hypotheses",
             "withdrawn",
         ],
+        &["archive"],
     )?;
     app_tag(&v["contract"], "algal.application-memory.v1")?;
     let observations = app_refs(&v["observations"], 128)?;
@@ -709,8 +712,57 @@ pub fn parse_snapshot(input: &Value) -> Result<Snapshot> {
         observations,
         hypotheses: app_refs(&v["hypotheses"], 64)?,
         withdrawn,
+        archive: v
+            .get("archive")
+            .map(|value| app_ref(value).map(str::to_owned))
+            .transpose()?,
         value: input.clone(),
     })
+}
+
+#[derive(Clone, Debug)]
+pub struct Archive {
+    pub application: String,
+    pub schema: String,
+    pub sequence: usize,
+    pub previous: Option<String>,
+    pub snapshot: String,
+    pub value: Value,
+}
+
+pub fn parse_archive(input: &Value) -> Result<Archive> {
+    let v = app_object(
+        input,
+        &[
+            "contract",
+            "application",
+            "schema",
+            "sequence",
+            "previous",
+            "snapshot",
+        ],
+    )?;
+    app_tag(&v["contract"], "algal.application-memory-archive.v1")?;
+    let sequence = integer(&v["sequence"], 0, ARCHIVE_LIMIT - 1)?;
+    let previous = opt_ref(&v["previous"])?;
+    if (sequence == 0) != previous.is_none() {
+        return Err(Error::invalid("Invalid memory archive predecessor"));
+    }
+    Ok(Archive {
+        application: app_id(&v["application"])?.to_owned(),
+        schema: app_ref(&v["schema"])?.to_owned(),
+        sequence,
+        previous,
+        snapshot: app_ref(&v["snapshot"])?.to_owned(),
+        value: input.clone(),
+    })
+}
+
+#[derive(Clone, Debug)]
+pub struct ArchiveEntry {
+    pub reference: String,
+    pub archive: Archive,
+    pub snapshot: Snapshot,
 }
 
 pub const STATUSES: [&str; 8] = [
@@ -1094,12 +1146,55 @@ impl MemoryService<'_> {
         })
     }
 
+    fn archives(&self, store: &Store, memory: &Snapshot) -> Result<Vec<ArchiveEntry>> {
+        let mut entries = Vec::new();
+        let mut seen = BTreeSet::new();
+        let mut reference = memory.archive.clone();
+        let mut expected = None;
+        while let Some(current) = reference {
+            if entries.len() >= ARCHIVE_LIMIT || !seen.insert(current.clone()) {
+                return Err(Error::invalid("Memory archive bound/cycle"));
+            }
+            let archive = parse_archive(&get_record(store, &current)?)?;
+            let snapshot = parse_snapshot(&get_record(store, &archive.snapshot)?)?;
+            if archive.application != memory.application
+                || archive.schema != memory.schema
+                || snapshot.application != memory.application
+                || snapshot.schema != memory.schema
+            {
+                return Err(Error::invalid("Memory archive application/schema mismatch"));
+            }
+            if expected.is_some_and(|sequence| archive.sequence != sequence)
+                || snapshot.archive != archive.previous
+            {
+                return Err(Error::invalid("Memory archive lineage mismatch"));
+            }
+            expected = archive.sequence.checked_sub(1);
+            reference = archive.previous.clone();
+            entries.push(ArchiveEntry {
+                reference: current,
+                archive,
+                snapshot,
+            });
+        }
+        Ok(entries)
+    }
+
+    /// Retained cutovers, newest first. Historical selection is not active truth.
+    pub fn archive_history(&self, store: &Store, memory_ref: &str) -> Result<Vec<ArchiveEntry>> {
+        self.archives(store, &parse_snapshot(&get_record(store, memory_ref)?)?)
+    }
+
     fn validate_snapshot(&self, store: &Store, input: &Value) -> Result<ValidatedSnapshot> {
         let memory = parse_snapshot(input)?;
         let schema = parse_schema(&get_record(store, &memory.schema)?)?;
         let scope = self.validate_scope(store, &get_record(store, &memory.scope)?)?;
         if scope.application != memory.application {
             return Err(Error::invalid("Cross-application memory scope"));
+        }
+        let archives = self.archives(store, &memory)?;
+        if memory.previous.is_none() && memory.archive.is_some() {
+            return Err(Error::invalid("Memory archive requires a predecessor"));
         }
         if let Some(previous) = &memory.previous {
             let prior = parse_snapshot(&get_record(store, previous)?)?;
@@ -1108,18 +1203,73 @@ impl MemoryService<'_> {
                     "Memory predecessor application/schema mismatch; migration required",
                 ));
             }
-            if prior
-                .withdrawn
-                .iter()
-                .any(|r| !memory.withdrawn.contains(r))
-                || prior
-                    .observations
+            if memory.archive != prior.archive {
+                let cutover = archives
+                    .first()
+                    .map(|entry| &entry.archive)
+                    .ok_or_else(|| {
+                        Error::invalid("Memory rollover must archive its exact predecessor")
+                    })?;
+                if cutover.snapshot != *previous || cutover.previous != prior.archive {
+                    return Err(Error::invalid(
+                        "Memory rollover must archive its exact predecessor",
+                    ));
+                }
+                if memory.scope != prior.scope
+                    || memory
+                        .observations
+                        .iter()
+                        .any(|reference| !prior.observations.contains(reference))
+                    || memory
+                        .hypotheses
+                        .iter()
+                        .any(|reference| !prior.hypotheses.contains(reference))
+                {
+                    return Err(Error::invalid(
+                        "Memory rollover may only retain the previous selection and scope",
+                    ));
+                }
+                let withdrawals: Vec<_> = prior
+                    .withdrawn
                     .iter()
-                    .any(|r| !memory.observations.contains(r))
-            {
-                return Err(Error::invalid(
-                    "Memory history or withdrawals cannot silently disappear",
-                ));
+                    .filter(|reference| memory.observations.contains(reference))
+                    .cloned()
+                    .collect();
+                if memory.withdrawn != withdrawals {
+                    return Err(Error::invalid(
+                        "Memory rollover must retain selected withdrawals",
+                    ));
+                }
+                if memory.observations.len() == prior.observations.len()
+                    && memory.hypotheses.len() == prior.hypotheses.len()
+                {
+                    return Err(Error::invalid(
+                        "Memory rollover must retire an observation or hypothesis",
+                    ));
+                }
+            } else {
+                if prior
+                    .withdrawn
+                    .iter()
+                    .any(|r| !memory.withdrawn.contains(r))
+                    || prior
+                        .observations
+                        .iter()
+                        .any(|r| !memory.observations.contains(r))
+                {
+                    return Err(Error::invalid(
+                        "Memory history or withdrawals cannot silently disappear",
+                    ));
+                }
+                let archived: BTreeSet<_> = archives
+                    .iter()
+                    .flat_map(|entry| &entry.snapshot.observations)
+                    .collect();
+                if memory.observations.iter().any(|reference| {
+                    !prior.observations.contains(reference) && archived.contains(reference)
+                }) {
+                    return Err(Error::invalid("Retired observations cannot be resurrected"));
+                }
             }
         }
         let mut observations = Vec::new();
@@ -1158,7 +1308,7 @@ impl MemoryService<'_> {
 
     /// Admit a snapshot record; `input` supplies the contract-free fields.
     pub fn snapshot(&self, store: &mut Store, input: &Value) -> Result<String> {
-        let mut record = app_object(
+        let mut record = app_object_opt(
             input,
             &[
                 "application",
@@ -1169,12 +1319,41 @@ impl MemoryService<'_> {
                 "hypotheses",
                 "withdrawn",
             ],
+            &["archive"],
         )?
         .clone();
         record.insert("contract".to_owned(), json!("algal.application-memory.v1"));
         let checked = parse_snapshot(&Value::Object(record))?;
         self.validate_snapshot(store, &checked.value)?;
         put_record(store, &checked.value)
+    }
+
+    /// Archive an active selection without changing any application head or custody.
+    pub fn rollover(&self, store: &mut Store, input: &Value) -> Result<Value> {
+        let v = app_object(input, &["memory", "retainObservations", "retainHypotheses"])?;
+        let previous = app_ref(&v["memory"])?.to_owned();
+        let observations = app_refs(&v["retainObservations"], 128)?;
+        let hypotheses = app_refs(&v["retainHypotheses"], 64)?;
+        let memory = self
+            .validate_snapshot(store, &get_record(store, &previous)?)?
+            .memory;
+        let sequence = match &memory.archive {
+            Some(reference) => parse_archive(&get_record(store, reference)?)?.sequence + 1,
+            None => 0,
+        };
+        let archive = parse_archive(
+            &json!({ "contract": "algal.application-memory-archive.v1", "application": memory.application,
+            "schema": memory.schema, "sequence": sequence, "previous": memory.archive, "snapshot": previous }),
+        )?;
+        let archive_ref = put_record(store, &archive.value)?;
+        let withdrawn: Vec<_> = memory
+            .withdrawn
+            .iter()
+            .filter(|reference| observations.contains(reference))
+            .collect();
+        let next = self.snapshot(store, &json!({ "application": memory.application, "schema": memory.schema, "previous": previous,
+            "scope": memory.scope, "observations": observations, "hypotheses": hypotheses, "withdrawn": withdrawn, "archive": archive_ref }))?;
+        Ok(json!({"memory": next, "archive": archive_ref}))
     }
 
     /// Root-owned lifecycle check: snapshot validity + revision compatibility
@@ -1760,6 +1939,128 @@ mod tests {
         assert!(
             !derivation.verified || derivation.result.is_none() || derivation.status == "stale"
         );
+    }
+
+    #[test]
+    fn rollover_preserves_sources_and_support_beyond_128_observations() {
+        let tmp = tempdir().unwrap();
+        let mut store = Store::open(tmp.path(), true).unwrap();
+        let (fixture, frontier) = seed(&mut store);
+        let engine = NativeEngine::new(&"0".repeat(64), 10_000).unwrap();
+        let host = Host {
+            frontier,
+            identity: digest(&json!("rollover-admission")).unwrap(),
+        };
+        let service = MemoryService {
+            engine: &engine,
+            admission: &host,
+        };
+        let mut observations: Vec<_> = (0..128)
+            .map(|index| observed(&mut store, &service, &fixture, &format!("tool-{index}")))
+            .collect();
+        observations.sort();
+        let memory = service.snapshot(&mut store, &json!({"application":"parity","schema":fixture.schema,"previous":null,
+            "scope":fixture.scope,"observations":observations,"hypotheses":[],"withdrawn":[observations[1]]})).unwrap();
+        let rolled = service.rollover(&mut store, &json!({"memory":memory,"retainObservations":[observations[0]],"retainHypotheses":[]})).unwrap();
+        let active =
+            parse_snapshot(&get_record(&store, rolled["memory"].as_str().unwrap()).unwrap())
+                .unwrap();
+        assert_eq!(active.observations, vec![observations[0].clone()]);
+        assert!(active.withdrawn.is_empty());
+        let history = service
+            .archive_history(&store, rolled["memory"].as_str().unwrap())
+            .unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].snapshot.observations, observations);
+        for reference in &history[0].snapshot.observations {
+            let observation = parse_observation(&get_record(&store, reference).unwrap()).unwrap();
+            get_record(&store, &observation.input.raw).unwrap();
+            get_record(&store, &observation.input.receipt).unwrap();
+        }
+        let state = revision_and_state(&mut store, &fixture, rolled["memory"].as_str().unwrap());
+        assert_eq!(
+            service
+                .query(&mut store, &state, &fixture.query)
+                .unwrap()
+                .1
+                .status,
+            "supported"
+        );
+        let additional = observed(&mut store, &service, &fixture, "tool-129");
+        let mut selected = vec![observations[0].clone(), additional];
+        selected.sort();
+        let input = json!({"application":"parity","schema":fixture.schema,"previous":rolled["memory"],"scope":fixture.scope,
+            "observations":selected,"hypotheses":[],"withdrawn":[],"archive":rolled["archive"]});
+        service.snapshot(&mut store, &input).unwrap();
+        let mut resurrected = input.clone();
+        let mut selected = vec![observations[0].clone(), observations[1].clone()];
+        selected.sort();
+        resurrected["observations"] = json!(selected);
+        assert!(
+            service
+                .snapshot(&mut store, &resurrected)
+                .unwrap_err()
+                .to_string()
+                .contains("resurrected")
+        );
+        let mut dropped = input.clone();
+        dropped.as_object_mut().unwrap().remove("archive");
+        assert!(service.snapshot(&mut store, &dropped).is_err());
+        let mut invalid = history[0].archive.value.clone();
+        invalid["application"] = json!("foreign");
+        let foreign = put(&mut store, invalid);
+        let mut forged = input;
+        forged["archive"] = json!(foreign);
+        assert!(service.snapshot(&mut store, &forged).is_err());
+    }
+
+    #[test]
+    fn rollover_retains_selected_withdrawals_and_fails_closed_at_bounds() {
+        let tmp = tempdir().unwrap();
+        let mut store = Store::open(tmp.path(), true).unwrap();
+        let (fixture, frontier) = seed(&mut store);
+        let engine = NativeEngine::new(&"0".repeat(64), 10_000).unwrap();
+        let host = Host {
+            frontier,
+            identity: digest(&json!("rollover-admission")).unwrap(),
+        };
+        let service = MemoryService {
+            engine: &engine,
+            admission: &host,
+        };
+        let mut observations = vec![
+            observed(&mut store, &service, &fixture, "keep"),
+            observed(&mut store, &service, &fixture, "retire"),
+        ];
+        observations.sort();
+        let memory = service.snapshot(&mut store, &json!({"application":"parity","schema":fixture.schema,"previous":null,
+            "scope":fixture.scope,"observations":observations,"hypotheses":[],"withdrawn":[observations[0]]})).unwrap();
+        let rolled = service.rollover(&mut store, &json!({"memory":memory,"retainObservations":[observations[0]],"retainHypotheses":[]})).unwrap();
+        let active =
+            parse_snapshot(&get_record(&store, rolled["memory"].as_str().unwrap()).unwrap())
+                .unwrap();
+        assert_eq!(active.withdrawn, vec![observations[0].clone()]);
+        let mut reset = active.value.clone();
+        reset.as_object_mut().unwrap().remove("contract");
+        reset["withdrawn"] = json!([]);
+        assert!(
+            service
+                .snapshot(&mut store, &reset)
+                .unwrap_err()
+                .to_string()
+                .contains("selected withdrawals")
+        );
+        let archive = get_record(&store, rolled["archive"].as_str().unwrap()).unwrap();
+        let mut invalid = archive.clone();
+        invalid["sequence"] = json!(ARCHIVE_LIMIT);
+        assert!(parse_archive(&invalid).is_err());
+        let mut invalid = archive.clone();
+        invalid["extra"] = json!(true);
+        assert!(parse_archive(&invalid).is_err());
+        let mut invalid = active.value.clone();
+        invalid["archive"] = Value::Null;
+        assert!(parse_snapshot(&invalid).is_err());
+        assert!(service.rollover(&mut store, &json!({"memory":rolled["memory"],"retainObservations":[observations[0]],"retainHypotheses":[]})).is_err());
     }
 
     #[test]
