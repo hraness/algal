@@ -80,10 +80,14 @@ await mkdir(tsMb, { recursive: true });
 await mkdir(nativeMb, { recursive: true });
 const mailboxes = new FileMailboxService(tsMb);
 const box = await mailboxes.create("inbox");
+const outbox = await mailboxes.create("outbox");
 for (const sub of ["capabilities", "mailboxes"]) {
   await cp(join(tsMb, sub), join(nativeMb, sub), { recursive: true });
 }
 const sleeperService = new ProcessSupervisor(tsMb);
+const journaledService = new ProcessSupervisor(tsMb, {
+  journal: { maxRecoveries: 2 },
+});
 
 const sleeper = parseOrganismManifest({
   contract: "algal.organism.v1",
@@ -113,14 +117,67 @@ await writeFile(
 );
 const sendFile = join(temporary, "send.json");
 await writeFile(sendFile, canonicalize({ approve: true } as JsonValue));
+const wakeFile = join(temporary, "wake.json");
+await writeFile(wakeFile, canonicalize({ wake: true } as JsonValue));
 const wakeKey = digestCanonical({
   contract: "algal.process-parity-send.v1",
   seq: 1,
 } as JsonValue);
-const wrongKey = digestCanonical({
+const wakeKey2 = digestCanonical({
   contract: "algal.process-parity-send.v1",
   seq: 2,
 } as JsonValue);
+const wrongKey = digestCanonical({
+  contract: "algal.process-parity-send.v1",
+  seq: 3,
+} as JsonValue);
+
+/* A forwarder completes a journaled `mailbox.send` effect, then suspends on an
+ * empty `mailbox.receive` — the journal holds a completed send entry and a
+ * started receive entry, all deterministic. */
+const forwarder = parseOrganismManifest({
+  contract: "algal.organism.v1",
+  key: "organism:process-parity-forwarder",
+  name: "process parity forwarder",
+  cells: [
+    {
+      id: "a-source",
+      kind: "input",
+      outputs: {
+        inbox: { type: "cap", capability: "mailbox-receive" },
+        outbox: { type: "cap", capability: "mailbox-send" },
+        payload: { type: "json" },
+      },
+    },
+    { id: "b-send", kind: "tool", tool: "mailbox.send.v1" },
+    { id: "c-wait", kind: "tool", tool: "mailbox.receive.v1" },
+  ],
+  edges: [
+    {
+      from: { cell: "a-source", port: "outbox" },
+      to: { cell: "b-send", port: "mailbox" },
+    },
+    {
+      from: { cell: "a-source", port: "payload" },
+      to: { cell: "b-send", port: "message" },
+    },
+    {
+      from: { cell: "a-source", port: "inbox" },
+      to: { cell: "c-wait", port: "mailbox" },
+    },
+  ],
+});
+const forwarderFile = join(temporary, "forwarder.json");
+await writeFile(forwarderFile, canonicalize(manifestToJson(forwarder)));
+const forwarderArgsFile = join(temporary, "forwarder-args.json");
+const forwarderArgs = {
+  "a-source": {
+    inbox: outbox.receive,
+    outbox: box.send,
+    payload: { op: "ping" },
+  },
+} as JsonValue;
+await writeFile(forwarderArgsFile, canonicalize(forwarderArgs));
 
 /** Fabricate an interrupted creation exactly as `create` would have left it. */
 const interrupted = async (
@@ -466,6 +523,76 @@ const steps: {
     ts: async () => sleeperService.journal("runner"),
     native: () => ["process", "journal", "runner"],
   },
+  /* Journaled dispatch: the forwarder's send completes and journals a
+   * completed effect entry before the receive suspends as a `started` entry.
+   * `journal` describes both, then an ordinary send wakes it through the
+   * scheduler on an unjournaled generation. */
+  {
+    name: "create-forwarder",
+    dir: nativeMb,
+    ts: async () => sleeperService.create("forwarder", forwarder, forwarderArgs),
+    native: () => [
+      "process",
+      "create",
+      "forwarder",
+      forwarderFile,
+      "--args",
+      forwarderArgsFile,
+    ],
+  },
+  {
+    name: "tick-journal-suspends",
+    dir: nativeMb,
+    ts: async () => journaledService.tick("forwarder"),
+    native: () => ["process", "tick", "forwarder", "--journal"],
+  },
+  {
+    name: "journal-forwarder-suspended",
+    dir: nativeMb,
+    ts: async () => sleeperService.journal("forwarder"),
+    native: () => ["process", "journal", "forwarder"],
+  },
+  {
+    name: "send-to-outbox",
+    dir: nativeMb,
+    ts: async () => mailboxes.send(outbox.send, { wake: true }, wakeKey2),
+    native: () => [
+      "mailbox",
+      "send",
+      outbox.send,
+      wakeFile,
+      "--idempotency-key",
+      wakeKey2,
+    ],
+  },
+  {
+    name: "schedule-wakes-forwarder",
+    dir: nativeMb,
+    ts: async () => sleeperService.schedule(),
+    native: () => ["process", "schedule"],
+  },
+  {
+    name: "inspect-forwarder",
+    dir: nativeMb,
+    ts: async () => sleeperService.inspect("forwarder"),
+    native: () => ["process", "inspect", "forwarder"],
+  },
+  {
+    name: "verify-forwarder",
+    dir: nativeMb,
+    ts: async () => sleeperService.verify("forwarder"),
+    native: () => ["process", "verify", "forwarder"],
+  },
+  {
+    // `journal` resolves the latest uncertain intent in the chain — the
+    // unjournaled wake tick — and finds no journal for it, even though an
+    // earlier journaled intent exists. Latest-intent-only is the contract.
+    name: "journal-forwarder-latest-unjournaled",
+    dir: nativeMb,
+    ts: async () => sleeperService.journal("forwarder"),
+    native: () => ["process", "journal", "forwarder"],
+    fails: true,
+  },
   {
     name: "create-duplicate",
     ts: async () => service.create("worker", manifest),
@@ -526,34 +653,39 @@ const same = (a: unknown, b: unknown) =>
 let checked = 0;
 try {
   for (const step of steps) {
-    if (step.before) await step.before();
-    const args = await step.native();
-    if (step.fails) {
-      const tsRejected = await step.ts().then(
-        () => false,
-        () => true,
-      );
-      const { code } = await runNativeAttempt(args, step.dir);
-      if (!tsRejected || code === 0) {
-        console.error(
-          `PARITY DIVERGENCE at "${step.name}": expected rejection — ts ${
-            tsRejected ? "rejected" : "accepted"
-          }, native exit ${code}`,
+    try {
+      if (step.before) await step.before();
+      const args = await step.native();
+      if (step.fails) {
+        const tsRejected = await step.ts().then(
+          () => false,
+          () => true,
         );
+        const { code } = await runNativeAttempt(args, step.dir);
+        if (!tsRejected || code === 0) {
+          console.error(
+            `PARITY DIVERGENCE at "${step.name}": expected rejection — ts ${
+              tsRejected ? "rejected" : "accepted"
+            }, native exit ${code}`,
+          );
+          process.exit(1);
+        }
+        checked++;
+        continue;
+      }
+      const tsOut = await step.ts();
+      const nativeOut = await runNative(args, step.dir);
+      if (!same(tsOut, nativeOut)) {
+        console.error(`PARITY DIVERGENCE at "${step.name}"`);
+        console.error(`  ts:     ${canonicalize(tsOut as JsonValue)}`);
+        console.error(`  native: ${canonicalize(nativeOut as JsonValue)}`);
         process.exit(1);
       }
       checked++;
-      continue;
+    } catch (error) {
+      console.error(`PARITY STEP CRASHED at "${step.name}"`);
+      throw error;
     }
-    const tsOut = await step.ts();
-    const nativeOut = await runNative(args, step.dir);
-    if (!same(tsOut, nativeOut)) {
-      console.error(`PARITY DIVERGENCE at "${step.name}"`);
-      console.error(`  ts:     ${canonicalize(tsOut as JsonValue)}`);
-      console.error(`  native: ${canonicalize(nativeOut as JsonValue)}`);
-      process.exit(1);
-    }
-    checked++;
   }
 } finally {
   await rm(temporary, { recursive: true, force: true });
