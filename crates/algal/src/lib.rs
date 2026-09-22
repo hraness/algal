@@ -5,6 +5,7 @@ pub mod application_episode;
 pub mod application_host;
 pub mod application_memory;
 pub mod application_migration;
+pub mod application_view;
 pub mod bench;
 pub mod build_info;
 pub mod canonical;

@@ -22,6 +22,7 @@ import {
 } from "../src/application-adaptation";
 import { createApplicationDomainDispatcher, createApplicationPolicyHost } from "../src/application-host";
 import { scheduleInvestigations, requestExecution } from "../src/application-investigation";
+import { parseApplicationViewSpec, projectApplicationView } from "../src/application-view";
 import { migrateApplicationMemory } from "../src/application-migration";
 import { appendObservation } from "../src/application-observation";
 import { ApplicationMemoryService } from "../src/application-memory";
@@ -332,6 +333,22 @@ steps.push(
     name: "query-supported",
     ts: async () => { const r = await memory.query(head, queryRef); derivationRef = r.ref; return { derivation: r.ref, status: r.derivation.status }; },
     native: async () => app("query", head, queryRef),
+  },
+  // The reflection view is a pure projection of the captured head: history
+  // must terminate there and the supported `run` procedure's query result is
+  // fenced to exactly this state and manifest.
+  {
+    name: "view",
+    ts: async () => projectApplicationView({
+      snapshot: (await service.inspect(APP))!,
+      spec: parseApplicationViewSpec(values.views),
+      history: await service.history(APP),
+      applicability: { run: { status: "supported", queryResult: { digest: derivationRef, state: head, procedure: manifestEvalRef } } },
+    }),
+    native: async () => app("view", await dynamic("view", {
+      application: APP, spec: digests.views,
+      applicability: { run: { status: "supported", queryResult: { digest: derivationRef, state: head, procedure: manifestEvalRef } } },
+    })),
   },
   {
     name: "execute",

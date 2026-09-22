@@ -728,7 +728,12 @@ pub struct Dispatch {
 }
 
 fn reason(value: &Value) -> Result<String> {
-    let s = text(value, 1024)?;
+    let s = value
+        .as_str()
+        .ok_or_else(|| Error::invalid("Invalid application dispatch reason"))?;
+    if s.len() > 1024 {
+        return Err(Error::invalid("text exceeds bound"));
+    }
     if s.is_empty() {
         return Err(Error::invalid("Invalid application dispatch reason"));
     }

@@ -2,7 +2,7 @@ use algal::{
     Error, Result, application, application_adaptation,
     application_host::{DomainDispatcher, PolicyHost},
     application_memory::{self as app_memory, MemoryService, NativeEngine},
-    application_migration,
+    application_migration, application_view,
     canonical::{MAX_DOCUMENT_BYTES, canonical, digest_bytes, read_json},
     context,
     contract::{Manifest, object},
@@ -677,6 +677,9 @@ enum ApplicationCommand {
     /// `migrateApplicationMemory`: run the migration program and admit its
     /// emitted claims into a fresh memory chain under the new schema.
     MigrateMemory { input: PathBuf },
+    /// `projectApplicationView`: pure bounded projection of the captured
+    /// head — fenced procedures, history, investigations and actions.
+    View { input: PathBuf },
 }
 
 #[derive(Subcommand)]
@@ -2308,6 +2311,9 @@ async fn execute(cli: Cli) -> Result<bool> {
                     )
                     .await?;
                     emit(&result)?;
+                }
+                ApplicationCommand::View { input } => {
+                    emit(&application_view::view(&service, &load(&input, 262_144)?)?)?;
                 }
             }
             Ok(true)

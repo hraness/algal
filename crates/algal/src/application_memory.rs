@@ -136,7 +136,12 @@ pub fn app_tag(value: &Value, tag: &str) -> Result<()> {
 }
 
 pub fn bounded_text(value: &Value, max: usize) -> Result<String> {
-    let s = text(value, max)?;
+    let s = value
+        .as_str()
+        .ok_or_else(|| Error::invalid("expected text"))?;
+    if s.len() > max {
+        return Err(Error::invalid("text exceeds bound"));
+    }
     if s.is_empty() || s.contains('\0') {
         return Err(Error::invalid("Invalid bounded text"));
     }
