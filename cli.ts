@@ -85,6 +85,7 @@ import { runBenchmark, type BenchCase, type BenchPrice, type BenchSystem } from 
 import { parseBenchAxes, parseBenchReport, verifyBenchReport } from "./src/bench-verify";
 import {
   asInt,
+  asJsonValue,
   canonicalBytes,
   canonicalize,
   type JsonObject,
@@ -264,9 +265,11 @@ usage:
                                               --out also writes <root-hex>.bundle.json
   algal unpack <bundle.json> [--dir <path>]
                                               install a bundle into the store, digests verified
-  algal call <bundle.json> [options]
+  algal call <bundle.json> [--interface] [options]
                                               run a packed organism and print a compact result:
                                               { ok, outputs, receiptDigest, manifestDigest }.
+                                              --interface maps named interface arguments and
+                                              returns only declared interface outputs.
                                               options mirror algal run: --args, --responses,
                                               --executor-cmd, --gateway-model, --jev, --recall,
                                               --executors, --modules, --tools, --cache-effects, --dir
@@ -305,6 +308,12 @@ function parseArgs(argv: string[]): ParsedArgs {
     const a = rest[i]!;
     if (a.startsWith("--")) {
       const key = a.slice(2);
+      if (key === "interface") {
+        if (Object.hasOwn(flags, key)) usageError("--interface may be supplied only once");
+        flags[key] = true;
+        continue;
+      }
+      if (key.startsWith("interface=")) usageError("--interface is a boolean flag without a value");
       const next = rest[i + 1];
       if (next !== undefined && !next.startsWith("--")) {
         flags[key] = next;
@@ -328,6 +337,17 @@ async function readJson(path: string): Promise<JsonValue> {
       `${path}: ${e instanceof Error ? e.message : String(e)}`,
     );
   }
+}
+
+async function readOptionalJson(path: string): Promise<JsonValue | undefined> {
+  let source: string;
+  try { source = await readFile(path, "utf8"); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
+  try { return asJsonValue(JSON.parse(source), path); }
+  catch (error) { throw new AlgalError("PARSE_FAILED", `${path}: ${error instanceof Error ? error.message : String(error)}`); }
 }
 
 async function readJsonBounded(
@@ -409,11 +429,16 @@ async function emitArtifact(contents: string, path: string | undefined): Promise
 }
 
 async function readJsonStdin(): Promise<JsonValue> {
-  const text = await Bun.stdin.text();
-  if (!text.trim()) {
-    throw new AlgalError("INPUT_MISSING", "stdin was empty");
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for await (const chunk of Bun.stdin.stream()) {
+    size += chunk.byteLength;
+    if (size > BOUNDS.maxArgsBytes) throw new AlgalError("BUDGET_EXHAUSTED", "stdin arguments exceed the byte bound");
+    chunks.push(chunk);
   }
   try {
+    const text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(Buffer.concat(chunks));
+    if (!text.trim()) throw new Error("stdin was empty");
     return JSON.parse(text) as JsonValue;
   } catch (e) {
     throw new AlgalError(
@@ -955,7 +980,7 @@ async function main(): Promise<number> {
 
     case "call": {
       const file = positional[0];
-      if (!file) usageError("algal call <bundle.json> [options]");
+      if (!file || positional.length !== 1) usageError("algal call <bundle.json> [--interface] [options]");
       if (flags.modules !== undefined) {
         const n = await loadModules(String(flags.modules), store);
         diag(`loaded ${n} module(s) from ${flags.modules}`);
@@ -972,11 +997,22 @@ async function main(): Promise<number> {
         flags.args === "-"
           ? asRecord(await readJsonStdin(), "args")
           : flags.args !== undefined
-            ? asRecord(await readJson(resolve(String(flags.args))), "args")
+            ? asRecord(await readJsonBounded(resolve(String(flags.args)), BOUNDS.maxArgsBytes, "call arguments"), "args")
             : {};
-      const args: Record<string, Record<string, JsonValue>> = {};
-      for (const [cellId, ports] of Object.entries(argsRaw)) {
-        args[cellId] = asRecord(ports as JsonValue, `args.${cellId}`);
+      if (flags.interface !== undefined && flags.interface !== true) usageError("--interface is a boolean flag");
+      const viaInterface = flags.interface === true;
+      const args: Record<string, Record<string, JsonValue>> = Object.create(null);
+      if (viaInterface) {
+        const declared = manifest.interface;
+        if (!declared) usageError("call --interface requires a declared manifest interface");
+        if (Object.keys(argsRaw).length !== Object.keys(declared.inputs).length || Object.keys(argsRaw).some(name => !Object.hasOwn(declared.inputs, name))) usageError("call --interface requires exactly the declared input names");
+        for (const [name, target] of Object.entries(declared.inputs)) {
+          const ports = args[target.cell] ??= Object.create(null) as Record<string, JsonValue>;
+          if (Object.hasOwn(ports, target.port) && canonicalize(ports[target.port]!) !== canonicalize(argsRaw[name]!)) usageError("call --interface aliases contain conflicting arguments");
+          ports[target.port] = argsRaw[name]!;
+        }
+      } else {
+        for (const [cellId, ports] of Object.entries(argsRaw)) args[cellId] = asRecord(ports, `args.${cellId}`);
       }
 
       const executors = await resolveExecutors(flags, dir);
@@ -999,11 +1035,14 @@ async function main(): Promise<number> {
         ...(tools ? { tools } : {}),
       });
 
-      const outputs: JsonObject = {};
-      for (const [id, cell] of Object.entries(receipt.cells)) {
-        if (cell.outputs) {
-          outputs[id] = cell.outputs as JsonValue;
+      const outputs: JsonObject = Object.create(null);
+      if (viaInterface) {
+        for (const [name, target] of Object.entries(manifest.interface!.outputs)) {
+          const ports = receipt.cells[target.cell]?.outputs;
+          if (ports && Object.hasOwn(ports, target.port)) outputs[name] = ports[target.port]!;
         }
+      } else {
+        for (const [id, cell] of Object.entries(receipt.cells)) if (cell.outputs) outputs[id] = cell.outputs as JsonValue;
       }
       const rd = await store.putReceipt(receipt as unknown as JsonValue);
       const compact: JsonObject = {
@@ -1181,14 +1220,8 @@ async function main(): Promise<number> {
         edges: manifest.edges.map((e) => ({
           from: `${e.from.cell}.${e.from.port}`,
           to: `${e.to.cell}.${e.to.port}`,
-          ...(e.guard
-            ? {
-                guard:
-                  "expr" in e.guard
-                    ? { expr: e.guard.expr }
-                    : { equals: e.guard.equals },
-              }
-            : {}),
+          ...(e.guard ? { guard: e.guard } : {}),
+          ...(e.on ? { on: e.on } : {}),
         })),
       });
       return 0;
@@ -1815,7 +1848,7 @@ async function main(): Promise<number> {
     case "inspect": {
       const file = positional[0];
       if (!file) usageError("algal inspect <receipt.json>");
-      const raw = (await readJson(resolve(file))) as JsonObject;
+      const raw = parseRunReceipt(await readJson(resolve(file))) as unknown as JsonObject;
       const cells = (raw.cells ?? {}) as JsonObject;
       const summary: JsonObject = {
         contract: raw.contract ?? null,
@@ -2163,9 +2196,11 @@ async function main(): Promise<number> {
       // Self-check: run every bundled example with its scripted responses
       // and default args, then verify each receipt offline.
       const { readdir } = await import("node:fs/promises");
-      const files = (await readdir(EXAMPLES_DIR)).filter((f) =>
+      const examplesDir = flags.examples === undefined ? EXAMPLES_DIR : resolve(String(flags.examples));
+      const files = (await readdir(examplesDir)).filter((f) =>
         /\.algal\.json$/.test(f),
       );
+      if (!files.length || files.length > 256) throw new AlgalError("BUDGET_EXHAUSTED", "suite requires between 1 and 256 examples");
       const results: JsonObject[] = [];
       let allOk = true;
       // preload every example into the store so organism cells resolve
@@ -2173,35 +2208,30 @@ async function main(): Promise<number> {
       const parsed = new Map<string, { raw: JsonValue; manifest: ReturnType<typeof parseOrganismManifest> }>();
       for (const f of files.sort()) {
         const id = f.replace(/\.algal\.json$/, "");
-        const raw = await readJson(join(EXAMPLES_DIR, f));
+        const raw = await readJson(join(examplesDir, f));
         const manifest = parseOrganismManifest(raw);
         await store.putManifest(manifest);
         parsed.set(id, { raw, manifest });
       }
       for (const [id, { raw: manifestRaw, manifest }] of parsed) {
         let responses: Record<string, JsonValue> = {};
-        try {
-          responses = asRecord(
-            await readJson(join(EXAMPLES_DIR, `${id}.responses.json`)),
-            "responses",
-          ) as Record<string, JsonValue>;
-        } catch { /* no responses file: organism has no agent cells */ }
+        const responseValue = await readOptionalJson(join(examplesDir, `${id}.responses.json`));
+        if (responseValue !== undefined) responses = asRecord(responseValue, "responses");
         const args: Record<string, Record<string, JsonValue>> = {};
-        try {
-          const raw = asRecord(
-            await readJson(join(EXAMPLES_DIR, `${id}.args.json`)),
-            "args",
-          );
+        const argsValue = await readOptionalJson(join(examplesDir, `${id}.args.json`));
+        if (argsValue !== undefined) {
+          const raw = asRecord(argsValue, "args");
           for (const [k, v] of Object.entries(raw)) {
             args[k] = asRecord(v, `args.${k}`) as Record<string, JsonValue>;
           }
-        } catch { /* no args file */ }
+        }
         let transports: Record<string, Transport> | undefined;
         try {
+          await readFile(join(examplesDir, `${id}.transports.json`), "utf8");
           transports = await loadTransports(
-            join(EXAMPLES_DIR, `${id}.transports.json`),
+            join(examplesDir, `${id}.transports.json`),
           );
-        } catch { /* no transports file */ }
+        } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
         const receipt = await runOrganism({
           manifest,
           args,
@@ -2229,8 +2259,10 @@ async function main(): Promise<number> {
         // cachedExecutor: the first run's recorded effects are seeded into
         // the memo index, the rerun must serve them (cached: true), and the
         // memoized run must still verify bit-for-bit
-        try {
-          await readFile(join(EXAMPLES_DIR, `${id}.cache.json`), "utf8");
+        let cacheMarker = false;
+        try { await readFile(join(examplesDir, `${id}.cache.json`), "utf8"); cacheMarker = true; }
+        catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+        if (cacheMarker) {
           for (const e of receipt.effects) {
             if (e.output !== undefined) await store.putEffect(e, scriptedExecutor(responses).cacheIdentity);
           }
@@ -2255,7 +2287,7 @@ async function main(): Promise<number> {
           result.cacheOk = cacheOk;
           result.cacheHits = hits.length;
           allOk = allOk && cacheOk;
-        } catch { /* no cache marker */ }
+        }
         results.push(result);
       }
       out({ suite: "examples", ok: allOk, results });

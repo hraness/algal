@@ -50,11 +50,14 @@ Register that definition with the agent. When the agent decides to call the tool
 
 ## Call
 
-The agent invokes `algal call` with the bundled organism and the tool arguments. Pass `--args -` to read the arguments from stdin:
+The agent invokes `algal call --interface` with the bundled organism and the
+named arguments described by `tool-def`. This mode requires a declared
+interface, rejects missing or undeclared arguments, and returns only its named
+outputs. Pass `--args -` to read the arguments from stdin:
 
 ```sh
-echo '{"ticket":{"text":"I cannot log in after the update"}}' | \
-  algal call ./tools/<bundle>.bundle.json \
+echo '{"ticket":"I cannot log in after the update"}' | \
+  algal call ./tools/<bundle>.bundle.json --interface \
   --args - \
   --responses examples/triage.responses.json
 ```
@@ -62,8 +65,8 @@ echo '{"ticket":{"text":"I cannot log in after the update"}}' | \
 Or write the args to a file:
 
 ```sh
-echo '{"ticket":{"text":"I cannot log in after the update"}}' > /tmp/triage.args.json
-algal call ./tools/<bundle>.bundle.json \
+echo '{"ticket":"I cannot log in after the update"}' > /tmp/triage.args.json
+algal call ./tools/<bundle>.bundle.json --interface \
   --args /tmp/triage.args.json \
   --responses examples/triage.responses.json
 ```
@@ -74,13 +77,16 @@ The output is compact, so the agent does not need to parse the full receipt:
 {
   "ok": true,
   "outputs": {
-    "route": { "out": "bug" },
-    "result": { "value": "BUG: I cannot log in after the update" }
+    "summary": "BUG: I cannot log in after the update"
   },
   "receiptDigest": "sha256:...",
   "manifestDigest": "sha256:..."
 }
 ```
+
+Without `--interface`, `call` keeps the same cell-keyed argument shape as `run`
+(for example, `{"ticket":{"text":"..."}}`) and returns every committed cell
+output. The mode is explicit; JSON argument shapes are never guessed.
 
 ## Wiring into a coding agent
 

@@ -75,34 +75,81 @@ fn no_link(path: &Path) -> Result<()> {
 
 struct Lease {
     path: PathBuf,
-    _file: File,
+    marker: Value,
+    _custody: OwnerLease,
 }
 impl Lease {
     fn acquire(path: PathBuf) -> Result<Self> {
         no_link(&path)?;
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let file = options.open(&path).map_err(|error| {
-            if error.kind() == std::io::ErrorKind::AlreadyExists {
-                Error::new(
-                    "IO_FAILED",
-                    "process is locked; reconcile the owning operation before retrying",
-                )
-            } else {
-                error.into()
-            }
+        let parent = path
+            .parent()
+            .ok_or_else(|| Error::invalid("creation lease parent"))?;
+        let root = parent
+            .parent()
+            .ok_or_else(|| Error::invalid("creation lease root"))?;
+        let custody = root.join(".process-creation");
+        let owner = OwnerLease::acquire(&custody, "process-creation")?;
+        let prior = crate::lease::read(&path, 4096).map_err(|_| {
+            Error::new(
+                "IO_FAILED",
+                "legacy process creation lease requires operator reconciliation",
+            )
         })?;
-        Ok(Self { path, _file: file })
+        if let Some(prior) = prior {
+            let nonce = prior["nonce"].as_str().unwrap_or("");
+            if prior.as_object().is_none_or(|v| v.len() != 2)
+                || prior["contract"] != "algal.process-creation-owner.v1"
+                || nonce.len() != 64
+                || !nonce
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            {
+                return Err(Error::new(
+                    "IO_FAILED",
+                    "legacy process creation lease requires operator reconciliation",
+                ));
+            }
+            let history = custody.join("creation-owners");
+            let names = crate::lease::names(&history, 256)?;
+            if names.iter().any(|name| {
+                !name.strip_suffix(".json").is_some_and(|stem| {
+                    stem.len() == 64
+                        && stem
+                            .bytes()
+                            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                })
+            }) {
+                return Err(Error::invalid("invalid creation recovery evidence name"));
+            }
+            let filename = format!("{nonce}.json");
+            if names.len() >= 256 && !names.contains(&filename) {
+                return Err(Error::limit("creation recovery evidence limit exceeded"));
+            }
+            crate::lease::write(&history.join(filename), &prior, false)?;
+            fs::remove_file(&path)?;
+            File::open(parent)?.sync_all()?;
+        }
+        let mut nonce = [0u8; 32];
+        getrandom::fill(&mut nonce)
+            .map_err(|_| Error::new("IO_FAILED", "creation lease entropy unavailable"))?;
+        let nonce: String = nonce.iter().map(|b| format!("{b:02x}")).collect();
+        let marker = json!({"contract":"algal.process-creation-owner.v1","nonce":nonce});
+        crate::lease::write(&path, &marker, false)?;
+        Ok(Self {
+            path,
+            marker,
+            _custody: owner,
+        })
     }
 }
 impl Drop for Lease {
     fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
+        if crate::lease::read(&self.path, 4096).ok().flatten().as_ref() == Some(&self.marker) {
+            let _ = fs::remove_file(&self.path);
+            if let Some(parent) = self.path.parent() {
+                let _ = File::open(parent).and_then(|file| file.sync_all());
+            }
+        }
     }
 }
 
@@ -444,7 +491,7 @@ impl ProcessService {
             .ok_or_else(|| Error::invalid("empty process chain"))
     }
 
-    pub fn list(&self) -> Result<Vec<ProcessState>> {
+    fn names(&self) -> Result<Vec<String>> {
         let entries = match fs::read_dir(self.processes_dir()?) {
             Ok(entries) => entries,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -473,7 +520,14 @@ impl ProcessService {
             }
         }
         names.sort();
-        names.iter().map(|name| self.inspect(name)).collect()
+        Ok(names)
+    }
+
+    pub fn list(&self) -> Result<Vec<ProcessState>> {
+        self.names()?
+            .iter()
+            .map(|name| self.inspect(name))
+            .collect()
     }
 
     pub fn create(
@@ -514,18 +568,8 @@ impl ProcessService {
         let processes = self.processes_dir()?;
         fs::create_dir_all(&processes)?;
         let _creation = Lease::acquire(processes.join(".lock"))?;
-        if self.list()?.len() >= MAX_PROCESSES {
-            return Err(Error::limit("process count"));
-        }
-        let directory = self.directory(name)?;
-        if directory.exists() {
-            return Err(Error::invalid("process name already exists"));
-        }
-        fs::create_dir(&directory)?;
-        File::open(&processes)?.sync_all()?;
-        let _lease = OwnerLease::acquire(&directory, name)?;
-        let manifest_digest = self.store.admit(&manifest)?;
-        File::open(self.root.join("manifests"))?.sync_all()?;
+        let retained = self.names()?.len();
+        let manifest_digest = crate::canonical::digest(&manifest.value)?;
         let process = ProcessRecord {
             contract: "algal.process.v1".into(),
             name: name.into(),
@@ -539,8 +583,74 @@ impl ProcessService {
             receipt: None,
             cause: None,
         };
+        let expected = crate::canonical::digest(&serde_json::to_value(&process)?)?;
+        let directory = self.directory(name)?;
+        let marker_path = directory.join(".creating.json");
+        if directory.exists() {
+            // A retained name's directory is only recoverable when its creation
+            // marker proves this exact intended record was interrupted before
+            // the head published. Legacy and foreign directories stay closed.
+            if directory.join("head.json").exists() {
+                return Err(Error::invalid("process name already exists"));
+            }
+            let claimed = match crate::store::open_regular_file(&marker_path, 4096)? {
+                Some(file) => {
+                    let marker = read_json(file, 4096)?;
+                    marker.as_object().is_some_and(|o| o.len() == 3)
+                        && marker["contract"] == "algal.process-creation.v1"
+                        && marker["name"] == name
+                        && marker["record"] == expected
+                }
+                None => false,
+            };
+            if !claimed {
+                return Err(Error::invalid(
+                    "process name is retained by a completed or interrupted creation",
+                ));
+            }
+            for entry in fs::read_dir(&directory)? {
+                let entry = entry?;
+                let name = entry.file_name();
+                let name = name.to_str().unwrap_or("");
+                let scratch = name == ".creating.json"
+                    || name == ".lock"
+                    || matches!(
+                        name,
+                        ".owner.sqlite"
+                            | ".owner.sqlite-journal"
+                            | ".owner.sqlite-wal"
+                            | ".owner.sqlite-shm"
+                    )
+                    || name.starts_with(".tmp-")
+                    || name.starts_with(".head-")
+                    || name.ends_with(".tmp")
+                    || (name == "owners" && entry.file_type()?.is_dir());
+                if !scratch {
+                    return Err(Error::invalid(
+                        "interrupted process creation contains foreign entries",
+                    ));
+                }
+            }
+        } else {
+            if retained >= MAX_PROCESSES {
+                return Err(Error::limit("process count"));
+            }
+            fs::create_dir(&directory)?;
+            File::open(&processes)?.sync_all()?;
+            crate::lease::write(
+                &marker_path,
+                &json!({"contract":"algal.process-creation.v1","name":name,"record":expected}),
+                false,
+            )?;
+        }
+        let _lease = OwnerLease::acquire(&directory, name)?;
+        let admitted = self.store.admit(&manifest)?;
+        debug_assert_eq!(admitted, process.manifest_digest);
+        File::open(self.root.join("manifests"))?.sync_all()?;
         let state = self.persist(&process)?;
         self.publish(&state)?;
+        fs::remove_file(&marker_path)?;
+        File::open(&directory)?.sync_all()?;
         Ok(state)
     }
 
@@ -1020,4 +1130,294 @@ pub async fn verify_process_snapshot(
     Ok(json!({"ok":true,"generations":snapshot.process.generation,
         "receipts":chain.iter().filter(|state| !["ready", "uncertain"].contains(&state.process.status.as_str())).count(),
         "digest":snapshot.digest,"status":snapshot.process.status}))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::canonical::digest;
+    use tempfile::tempdir;
+
+    fn manifest(value: &str) -> Manifest {
+        Manifest::parse(&json!({
+            "contract": "algal.organism.v1", "key": "organism:create-recovery",
+            "name": "create recovery",
+            "cells": [{"id": "out", "kind": "const",
+                "outputs": {"value": {"type": "json", "value": value}}}],
+            "edges": [],
+        }))
+        .unwrap()
+    }
+
+    fn intended_record(name: &str, manifest: &Manifest) -> Value {
+        serde_json::to_value(ProcessRecord {
+            contract: "algal.process.v1".into(),
+            name: name.into(),
+            manifest_digest: digest(&manifest.value).unwrap(),
+            args: json!({}),
+            max_generations: 16,
+            generation: 0,
+            status: "ready".into(),
+            wake: Vec::new(),
+            previous: None,
+            receipt: None,
+            cause: None,
+        })
+        .unwrap()
+    }
+
+    fn marker(name: &str, record: &Value) -> Value {
+        json!({
+            "contract": "algal.process-creation.v1",
+            "name": name,
+            "record": digest(record).unwrap(),
+        })
+    }
+
+    fn plant(root: &Path, name: &str, marker: &Value) -> PathBuf {
+        let directory = root.join("processes").join(name);
+        fs::create_dir_all(&directory).unwrap();
+        crate::lease::write(&directory.join(".creating.json"), marker, false).unwrap();
+        directory
+    }
+
+    fn service(root: &Path) -> ProcessService {
+        ProcessService::open(root).unwrap()
+    }
+
+    #[test]
+    fn exact_interrupted_creation_can_recover_at_capacity() {
+        let root = tempdir().unwrap();
+        let program = manifest("ok");
+        plant(
+            root.path(),
+            "retained",
+            &marker("retained", &intended_record("retained", &program)),
+        );
+        for i in 1..MAX_PROCESSES {
+            fs::create_dir(root.path().join("processes").join(format!("reserved-{i}"))).unwrap();
+        }
+        let mut service = service(root.path());
+        service
+            .create(
+                "retained",
+                program.clone(),
+                json!({}),
+                16,
+                &Host::default(),
+                &Transports::new(),
+            )
+            .unwrap();
+        assert_eq!(
+            service
+                .create(
+                    "new",
+                    program,
+                    json!({}),
+                    16,
+                    &Host::default(),
+                    &Transports::new()
+                )
+                .unwrap_err()
+                .code,
+            "BUDGET_EXHAUSTED"
+        );
+    }
+
+    #[test]
+    fn legacy_creation_lock_is_preserved() {
+        let root = tempdir().unwrap();
+        fs::create_dir(root.path().join("processes")).unwrap();
+        let lock = root.path().join("processes/.lock");
+        fs::write(&lock, "algal process lease\n").unwrap();
+        assert!(
+            service(root.path())
+                .create(
+                    "legacy",
+                    manifest("ok"),
+                    json!({}),
+                    16,
+                    &Host::default(),
+                    &Transports::new()
+                )
+                .is_err()
+        );
+        assert_eq!(fs::read_to_string(lock).unwrap(), "algal process lease\n");
+        assert!(!root.path().join("processes/legacy").exists());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn creation_custody_crash_child() {
+        let Ok(root) = std::env::var("ALGAL_CREATION_CRASH_ROOT") else {
+            return;
+        };
+        let root = Path::new(&root);
+        fs::create_dir_all(root.join("processes")).unwrap();
+        let _lease = Lease::acquire(root.join("processes/.lock")).unwrap();
+        plant(
+            root,
+            "crashed",
+            &marker("crashed", &intended_record("crashed", &manifest("ok"))),
+        );
+        let _ = std::process::Command::new("/bin/kill")
+            .arg("-KILL")
+            .arg(std::process::id().to_string())
+            .status();
+        unreachable!();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn killed_creation_owner_releases_custody_and_exact_marker_recovers() {
+        use std::os::unix::process::ExitStatusExt;
+        let root = tempdir().unwrap();
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "process::tests::creation_custody_crash_child"])
+            .env("ALGAL_CREATION_CRASH_ROOT", root.path())
+            .stdout(std::process::Stdio::null())
+            .status()
+            .unwrap();
+        assert_eq!(status.signal(), Some(libc::SIGKILL));
+        assert!(root.path().join("processes/.lock").exists());
+        let mut service = service(root.path());
+        let recovered = service
+            .create(
+                "crashed",
+                manifest("ok"),
+                json!({}),
+                16,
+                &Host::default(),
+                &Transports::new(),
+            )
+            .unwrap();
+        assert_eq!(recovered.process.status, "ready");
+        assert_eq!(service.inspect("crashed").unwrap().digest, recovered.digest);
+        assert!(!root.path().join("processes/.lock").exists());
+        assert_eq!(
+            fs::read_dir(root.path().join(".process-creation/creation-owners"))
+                .unwrap()
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn interrupted_creation_resumes_when_marker_matches() {
+        let root = tempdir().unwrap();
+        let manifest = manifest("ok");
+        let record = intended_record("ghost", &manifest);
+        plant(root.path(), "ghost", &marker("ghost", &record));
+        let mut service = service(root.path());
+        let host = Host::default();
+        let transports = Transports::new();
+        let state = service
+            .create("ghost", manifest, json!({}), 16, &host, &transports)
+            .unwrap();
+        assert_eq!(state.process.status, "ready");
+        assert_eq!(state.digest, digest(&record).unwrap());
+        let directory = root.path().join("processes/ghost");
+        assert!(!directory.join(".creating.json").exists());
+        assert!(directory.join("head.json").exists());
+    }
+
+    #[test]
+    fn interrupted_creation_resumes_over_owner_lease_scratch() {
+        let root = tempdir().unwrap();
+        let manifest = manifest("ok");
+        let record = intended_record("leased", &manifest);
+        let directory = plant(root.path(), "leased", &marker("leased", &record));
+        // A crash after the owner lease acquired leaves its SQLite custody
+        // database and stale lock marker beside the creation marker.
+        {
+            let _owner = OwnerLease::acquire(&directory, "leased").unwrap();
+        }
+        fs::remove_file(directory.join(".lock")).unwrap_or(());
+        crate::lease::write(
+            &directory.join(".lock"),
+            &json!({"contract":"algal.process-owner.v2","process":"leased","nonce":"a".repeat(64)}),
+            false,
+        )
+        .unwrap();
+        let mut service = service(root.path());
+        let host = Host::default();
+        let transports = Transports::new();
+        service
+            .create("leased", manifest, json!({}), 16, &host, &transports)
+            .unwrap();
+    }
+
+    #[test]
+    fn bare_interrupted_directory_stays_closed() {
+        let root = tempdir().unwrap();
+        fs::create_dir_all(root.path().join("processes/bare")).unwrap();
+        let mut service = service(root.path());
+        let host = Host::default();
+        let transports = Transports::new();
+        assert!(
+            service
+                .create("bare", manifest("ok"), json!({}), 16, &host, &transports)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn completed_process_name_still_rejects() {
+        let root = tempdir().unwrap();
+        let mut service = service(root.path());
+        let host = Host::default();
+        let transports = Transports::new();
+        service
+            .create("settled", manifest("ok"), json!({}), 16, &host, &transports)
+            .unwrap();
+        assert!(
+            service
+                .create("settled", manifest("ok"), json!({}), 16, &host, &transports)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn mismatched_and_foreign_interrupted_directories_stay_closed() {
+        let root = tempdir().unwrap();
+        // A marker pinning a different intended record must not be reused.
+        let organism = manifest("ok");
+        let other = intended_record("other", &manifest("different"));
+        plant(root.path(), "other", &marker("other", &other));
+        let mut service = service(root.path());
+        let host = Host::default();
+        let transports = Transports::new();
+        assert!(
+            service
+                .create("other", organism.clone(), json!({}), 16, &host, &transports)
+                .is_err()
+        );
+        // A matching marker plus a foreign entry must not be reused.
+        let record = intended_record("foreign", &organism);
+        let directory = plant(root.path(), "foreign", &marker("foreign", &record));
+        fs::write(directory.join("foreign.txt"), "not ours").unwrap();
+        assert!(
+            service
+                .create(
+                    "foreign",
+                    organism.clone(),
+                    json!({}),
+                    16,
+                    &host,
+                    &transports
+                )
+                .is_err()
+        );
+        // A malformed marker must not be reused.
+        plant(
+            root.path(),
+            "malformed",
+            &json!({"contract": "algal.process-creation.v1"}),
+        );
+        assert!(
+            service
+                .create("malformed", organism, json!({}), 16, &host, &transports)
+                .is_err()
+        );
+    }
 }

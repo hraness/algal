@@ -1,0 +1,12 @@
+{
+  "schema": "algal.coding-harness.memory-fixtures.v1",
+  "image": "alexgshaw/cancel-async-tasks:20251031",
+  "imageDigest": "sha256:84c7fae6b256dcc56a350790e2a9715eefc7dad662a9d8e8a472363aa71ef18d",
+  "imagePlatform": "linux/amd64",
+  "families": [
+    {"id":"unrelated","purpose":"Reuse an unchanged config after unrelated documentation edits","seed":{"factor":2,"checker":true,"toolchain":"v1"},"seedProcedures":["factor","checker","program"],"episodes":[{"factor":2,"checker":true,"toolchain":"v1","offset":1,"maxWork":50000},{"factor":2,"checker":true,"toolchain":"v1","offset":2,"maxWork":50000}]},
+    {"id":"direct-change","purpose":"Reject prior config observations after the observed artifact changes","seed":{"factor":2,"checker":true,"toolchain":"v1"},"seedProcedures":["factor","checker","program"],"episodes":[{"factor":5,"checker":true,"toolchain":"v1","offset":1,"maxWork":50000},{"factor":7,"checker":true,"toolchain":"v1","offset":2,"maxWork":50000}]},
+    {"id":"dependency-change","purpose":"Revalidate a checker lookup after declared toolchain changes","seed":{"factor":3,"checker":true,"toolchain":"v1"},"seedProcedures":["factor","checker","program"],"episodes":[{"factor":3,"checker":false,"toolchain":"v2","offset":1,"maxWork":50000},{"factor":3,"checker":true,"toolchain":"v3","offset":2,"maxWork":50000}]},
+    {"id":"unknown-limits","purpose":"Investigate an unseeded config; surface bounded query exhaustion","seed":{"factor":4,"checker":true,"toolchain":"v1"},"seedProcedures":["checker"],"episodes":[{"factor":4,"checker":true,"toolchain":"v1","offset":1,"maxWork":50000},{"factor":6,"checker":true,"toolchain":"v1","offset":2,"maxWork":1}]}
+  ]
+}

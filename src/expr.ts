@@ -31,6 +31,7 @@ export const EXPR_BOUNDS = {
   maxObjectKeys: 256,
   maxStringBytes: 65_536,
   maxOutputBytes: 65_536,
+  maxValueBytes: 262_144,
   maxVarLen: 64,
   maxFuel: 1_000_000,
 } as const;

@@ -8,12 +8,22 @@ use crate::{
     store::Store,
 };
 use serde_json::{Map, Value, json};
-use std::{collections::BTreeSet, future::Future, pin::Pin};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    future::Future,
+    pin::Pin,
+};
 
 /// Fuel budget for a single `expr` cell activation — mirrors
 /// `BOUNDS.maxExprFuel` in src/contract.ts. The run-level `max_work` budget
 /// still bounds total burn; this caps the synchronous eval itself.
 const MAX_EXPR_FUEL: u64 = 100_000;
+
+/// The `runtime` stamp on a fresh receipt records the shared `algal.run.v1`
+/// semantics version, not the crate release — it must match `RUNTIME_VERSION`
+/// in src/run.ts so the reference and native runtimes produce byte-identical
+/// receipts for the same run. Implementation identity belongs to build_info.
+const RUNTIME_STAMP_VERSION: &str = "0.1.0";
 
 pub fn receipt_digest(receipt: &Value) -> Result<String> {
     let mut body = receipt.clone();
@@ -141,8 +151,9 @@ impl Runtime<'_> {
             let mut progress = true;
             while progress && self.failure.is_none() && !self.suspended {
                 progress = false;
-                for cell in &compiled.manifest.cells {
+                'cells: for cell in &compiled.manifest.cells {
                     let name = cell["id"].as_str().unwrap();
+                    let cell_path = path(&prefix, name);
                     if resolved.contains(name) {
                         continue;
                     }
@@ -157,6 +168,82 @@ impl Runtime<'_> {
                     }) {
                         continue;
                     }
+                    // Guards run once in manifest edge order, after all
+                    // producers resolve. Keep their errors in the run receipt.
+                    let mut delivered = BTreeMap::new();
+                    for index in &inbound {
+                        let edge = &compiled.manifest.edges[*index];
+                        let from = edge["from"]["cell"].as_str().unwrap();
+                        let record = &self.cells[&path(&prefix, from)];
+                        let value = if edge["on"] == "fail" && record["status"] == "failed" {
+                            record.get("failure")
+                        } else if edge["on"] != "fail" && record["status"] == "committed" {
+                            record["outputs"].get(edge["from"]["port"].as_str().unwrap())
+                        } else {
+                            None
+                        };
+                        let Some(value) = value else {
+                            continue;
+                        };
+                        if let Some(guard) = edge.get("guard") {
+                            let hit = if let Some(expr) = guard.get("expr") {
+                                let mut env = Map::new();
+                                env.insert("value".to_string(), value.clone());
+                                match algal_expr::run(&expr["program"], &env, MAX_EXPR_FUEL) {
+                                    Ok((v, fuel)) => {
+                                        self.work += fuel as usize;
+                                        match v {
+                                            Value::Bool(b) => b,
+                                            other => {
+                                                let got = match &other {
+                                                    Value::Null => "null",
+                                                    Value::Number(_) => "number",
+                                                    Value::String(_) => "string",
+                                                    Value::Array(_) => "list",
+                                                    Value::Object(_) => "object",
+                                                    Value::Bool(_) => "bool",
+                                                };
+                                                self.failure(&cell_path, &Error::new(
+                                                    "GUARD_INVALID",
+                                                    format!(
+                                                        "guard expr must produce boolean, got {got}"
+                                                    ),
+                                                ));
+                                                break 'cells;
+                                            }
+                                        }
+                                    }
+                                    Err((e, fuel)) => {
+                                        self.work += fuel as usize;
+                                        let detail = canonical(&e.to_json())
+                                            .unwrap_or_else(|_| e.to_json().to_string());
+                                        self.failure(
+                                            &cell_path,
+                                            &Error::new(
+                                                "GUARD_INVALID",
+                                                format!("guard expr {detail}"),
+                                            ),
+                                        );
+                                        break 'cells;
+                                    }
+                                }
+                            } else {
+                                let actual = match guard["field"].as_str() {
+                                    Some(field) => value.get(field),
+                                    None => Some(value),
+                                };
+                                actual == Some(&guard["equals"])
+                            };
+                            if self.work > self.budgets.max_work {
+                                self.failure(&cell_path, &Error::limit("maxWork exhausted"));
+                                break 'cells;
+                            }
+                            if !hit {
+                                continue;
+                            }
+                        }
+                        delivered.insert(*index, value.clone());
+                    }
                     let mut inputs = Map::new();
                     let mut nonempty = 0;
                     let mut required_missing = false;
@@ -168,65 +255,9 @@ impl Runtime<'_> {
                                 continue;
                             }
                             let from = edge["from"]["cell"].as_str().unwrap();
-                            let record = &self.cells[&path(&prefix, from)];
-                            let value = if edge["on"] == "fail" && record["status"] == "failed" {
-                                record.get("failure")
-                            } else if edge["on"] != "fail" && record["status"] == "committed" {
-                                record["outputs"].get(edge["from"]["port"].as_str().unwrap())
-                            } else {
-                                None
-                            };
-                            let Some(value) = value else {
+                            let Some(value) = delivered.get(index) else {
                                 continue;
                             };
-                            if let Some(guard) = edge.get("guard") {
-                                let hit = if let Some(expr) = guard.get("expr") {
-                                    let mut env = Map::new();
-                                    env.insert("value".to_string(), value.clone());
-                                    match algal_expr::run(&expr["program"], &env, MAX_EXPR_FUEL) {
-                                        Ok((v, fuel)) => {
-                                            self.work += fuel as usize;
-                                            match v {
-                                                Value::Bool(b) => b,
-                                                other => {
-                                                    let got = match &other {
-                                                        Value::Null => "null",
-                                                        Value::Number(_) => "number",
-                                                        Value::String(_) => "string",
-                                                        Value::Array(_) => "list",
-                                                        Value::Object(_) => "map",
-                                                        Value::Bool(_) => "bool",
-                                                    };
-                                                    return Err(Error::new(
-                                                        "GUARD_INVALID",
-                                                        format!(
-                                                            "guard expr must produce boolean, got {got}"
-                                                        ),
-                                                    ));
-                                                }
-                                            }
-                                        }
-                                        Err((e, fuel)) => {
-                                            self.work += fuel as usize;
-                                            let detail = canonical(&e.to_json())
-                                                .unwrap_or_else(|_| e.to_json().to_string());
-                                            return Err(Error::new(
-                                                "GUARD_INVALID",
-                                                format!("guard expr {detail}"),
-                                            ));
-                                        }
-                                    }
-                                } else {
-                                    let actual = match guard["field"].as_str() {
-                                        Some(field) => value.get(field),
-                                        None => Some(value),
-                                    };
-                                    actual == Some(&guard["equals"])
-                                };
-                                if !hit {
-                                    continue;
-                                }
-                            }
                             let producer = &compiled.signatures[from].outputs
                                 [edge["from"]["port"].as_str().unwrap()];
                             if decl["many"] == true && producer["many"] == true {
@@ -252,7 +283,6 @@ impl Runtime<'_> {
                             inputs.insert(port_name.clone(), value.clone());
                         }
                     }
-                    let cell_path = path(&prefix, name);
                     if !signature.inputs.is_empty() && (nonempty == 0 || required_missing) {
                         self.cells
                             .insert(cell_path.clone(), json!({"status":"skipped","work":0}));
@@ -648,6 +678,20 @@ impl Runtime<'_> {
                     self.transports,
                     depth + 1,
                 )?;
+                for side in ["inputs", "outputs"] {
+                    if let Some(ports) = child.manifest.value["interface"][side].as_object() {
+                        for target in ports.values() {
+                            let cell = target["cell"].as_str().unwrap();
+                            let port = target["port"].as_str().unwrap();
+                            if child.signatures[cell].outputs[port]["type"] == "cap" {
+                                return Err(Error::new(
+                                    "TYPE_MISMATCH",
+                                    "spawn cannot expose capability ports through json; use a typed organism cell",
+                                ));
+                            }
+                        }
+                    }
+                }
                 let data = self
                     .child(
                         &child,
@@ -1138,7 +1182,13 @@ impl Runtime<'_> {
                         return Err(serde_json::from_value(error.clone())?);
                     }
                     let raw = receipt["output"].clone();
-                    self.work += canonical(&raw)?.len();
+                    let output_bytes = canonical(&raw)?.len();
+                    if output_bytes > max_output {
+                        return Err(Error::limit(format!(
+                            "effect output {output_bytes}B exceeds maxOutputBytes {max_output}B"
+                        )));
+                    }
+                    self.work += output_bytes;
                     let bound = bind_output(&req["output"].clone(), raw).map_err(|e| {
                         Error::new(
                             "EFFECT_UNPARSEABLE",
@@ -1283,6 +1333,14 @@ impl Runtime<'_> {
                 .clone()
                 .or_else(|| self.host.tools.get(tool).map(|t| t.signature.clone()))
                 .ok_or_else(|| Error::new("TOOL_UNKNOWN", "agent tool is not configured"))?;
+            for name in object(&call["inputs"])?.keys() {
+                if !signature.inputs.contains_key(name) {
+                    return Err(Error::new(
+                        "TYPE_MISMATCH",
+                        format!("tool {tool} received undeclared input {name}"),
+                    ));
+                }
+            }
             for (port, decl) in &signature.inputs {
                 if let Some(value) = call["inputs"].get(port) {
                     check_value(decl, value)?;
@@ -1327,6 +1385,9 @@ pub async fn run(
     if canonical(&args)?.len() > 1_048_576 {
         return Err(Error::limit("run argument bytes"));
     }
+    for value in object(&args)?.values() {
+        object(value)?;
+    }
     let manifest_digest = manifest.digest()?;
     let budgets = manifest.budgets.clone();
     let compiled = compile(manifest, store, &host.tool_signatures(), transports, 0)?;
@@ -1352,7 +1413,7 @@ pub async fn run(
     runtime.event("run.end", None, None, Some(&outcome))?;
     let mut receipt = json!({
         "contract":replay.and_then(|r| r.get("contract")).cloned().unwrap_or(json!("algal.run.v1")),
-        "runtime":replay.and_then(|r| r.get("runtime")).cloned().unwrap_or(json!({"name":"algal","version":env!("CARGO_PKG_VERSION")})),
+        "runtime":replay.and_then(|r| r.get("runtime")).cloned().unwrap_or(json!({"name":"algal","version":RUNTIME_STAMP_VERSION})),
         "manifestDigest":manifest_digest,"manifestKey":compiled.manifest.value["key"],"args":args,
         "outcome":outcome,"cells":runtime.cells,"effects":runtime.effects,"events":runtime.events,
         "work":{"steps":runtime.steps,"agentCalls":runtime.calls,"units":runtime.work},
@@ -1370,13 +1431,12 @@ pub async fn verify(
     store: &Store,
     tools: &Host,
 ) -> Result<Value> {
-    if receipt["contract"] != "algal.run.v1" {
-        return Err(Error::invalid("run receipt contract"));
-    }
-    if receipt["digest"] != receipt_digest(receipt)?
-        || receipt["manifestDigest"] != manifest.digest()?
-    {
-        return Ok(json!({"ok":false,"mismatches":["receipt or manifest digest mismatch"]}));
+    crate::receipt::validate(receipt)?;
+    let manifest_digest = manifest.digest()?;
+    if receipt["manifestDigest"] != manifest_digest {
+        return Ok(
+            json!({"ok":false,"digest":receipt["digest"],"outcome":receipt["outcome"],"mismatches":[format!("manifestDigest: receipt records {}, supplied manifest hashes to {}", receipt["manifestDigest"].as_str().unwrap(), manifest_digest)]}),
+        );
     }
     let mut host = Host::replay(&receipt["effects"])?;
     host.tools = tools.tools.clone();
@@ -1390,9 +1450,10 @@ pub async fn verify(
         Some(receipt),
     )
     .await?;
-    let ok = canonical(receipt)? == canonical(&replayed)?;
+    let mismatches = crate::receipt::diff(receipt, &replayed);
+    let ok = mismatches.is_empty();
     Ok(
-        json!({"ok":ok,"digest":replayed["digest"],"outcome":replayed["outcome"],"mismatches":if ok {json!([])} else {json!(["deterministic replay differs"])} }),
+        json!({"ok":ok,"digest":replayed["digest"],"outcome":replayed["outcome"],"mismatches":mismatches }),
     )
 }
 

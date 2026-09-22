@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { digestCanonical } from "./digest";
@@ -7,8 +7,10 @@ import { localEmbedder } from "./embeddings";
 import type { EffectRequest } from "./effects";
 import {
   bindRecallOutput,
+  chunkText,
   indexSearcher,
   indexStore,
+  openIndex,
   recallExecutor,
   recallOutputSchema,
   searchIndex,
@@ -16,6 +18,41 @@ import {
 } from "./semantic";
 import { FileStore } from "./store";
 import type { JsonObject } from "./values";
+
+test("chunk byte bounds preserve Unicode and normalize paragraph runs deterministically", () => {
+  expect(chunkText("é".repeat(80), 64)).toEqual(["é".repeat(32), "é".repeat(32), "é".repeat(16)]);
+  expect(chunkText("😀".repeat(9), 16)).toEqual(["😀".repeat(4), "😀".repeat(4), "😀"]);
+  expect(chunkText("aaaaa\n\n\nbbbbb\n\ncccccc", 8)).toEqual(["aaaaa", "bbbbb", "cccccc"]);
+  for (const max of [0, 1, 3, 3.5, 65537]) expect(() => chunkText("😀", max)).toThrow();
+});
+
+test("index rows retain exact chunk text and rebuild previously corrupt text/digest pairs", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "algal-chunks-"));
+  try {
+    const docs = join(dir, "docs");
+    await mkdir(docs);
+    const source = `${"coral ".repeat(10000)}\n\n\n${"forest ".repeat(10000)}`;
+    await writeFile(join(docs, "large.md"), source);
+    const pieces = chunkText(source);
+    expect(pieces.length).toBeGreaterThan(1);
+    const embedder = localEmbedder();
+    await indexStore(dir, embedder, { docs });
+    const db = openIndex(dir);
+    try {
+      const rows = db.query("SELECT text, text_digest FROM chunks ORDER BY seq").all() as { text: string; text_digest: string }[];
+      expect(rows.map(row => row.text)).toEqual(pieces);
+      for (const row of rows) expect(row.text_digest).toBe(digestCanonical(row.text));
+      db.prepare("UPDATE chunks SET text = ?").run(source);
+    } finally { db.close(); }
+    const repaired = await indexStore(dir, embedder, { docs });
+    expect(repaired.embedded).toBe(pieces.length);
+    expect(repaired.reused).toBe(0);
+    const check = openIndex(dir);
+    try {
+      expect((check.query("SELECT text FROM chunks ORDER BY seq").all() as { text: string }[]).map(row => row.text)).toEqual(pieces);
+    } finally { check.close(); }
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
 
 const request = (overrides: Partial<EffectRequest> = {}): EffectRequest => ({
   contract: "algal.effect.v1",

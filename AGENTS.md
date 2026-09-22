@@ -25,7 +25,8 @@
 - `index.ts` — the package's public surface.
 - `examples/` — bundled manifests and scripted responses used by `suite`.
 - `spec/v1/organism.md`, `spec/v1/expr.md`, `spec/v1/foundry.md`,
-  `spec/v1/search.md`, `spec/v1/bench.md`, `spec/v1/process.md` — authoritative
+  `spec/v1/search.md`, `spec/v1/bench.md`, `spec/v1/process.md`,
+  `spec/v1/application.md` — authoritative
   contract prose, including the bounded durable process filesystem ABI.
 - `site/` — the static algal.computer source; `build.ts` writes `site/dist`.
 - `README.md`, `CONTRIBUTING.md`, `SECURITY.md` — the public contract.
@@ -66,7 +67,23 @@
   `cargo clippy --workspace --all-targets --locked -- -D warnings`, and
   `cargo fmt --all -- --check`. Use `cargo build --locked` followed by
   `bun scripts/native-parity.ts` to compare all 44 existing examples and verify
-  receipts in both directions between TypeScript and Rust.
+  receipts in both directions between TypeScript and Rust, and
+  `bun scripts/application-parity.ts` to replay the durable application
+  lifecycle (create/commit including activate and migrate transitions,
+  dispatch/reconcile, memory scope/observe/snapshot/query, and the
+  `algal.application-host.v1` policy host) through both runtimes with
+  identical digests, and `bun scripts/process-parity.ts` for the durable
+  process lifecycle (create/inspect/list/tick/verify/schedule, the mailbox
+  suspension/wake chain with shared capability records, uncertain-intent
+  recovery through `recover`/`journal`, journaled dispatch,
+  `export`/`verify-evidence` portable bundles, agent-cell suspension and
+  resumption through the shared EX_TEMPFAIL command-executor contract, and
+  the `.creating.json` interrupted-creation recovery contract). Add
+  `bun scripts/store-parity.ts` for the CAS store/slot/listing CLI surface —
+  the only driver that spawns the reference `cli.ts` rather than calling the
+  service layer, since those commands live only in the CLIs. Run
+  `bun scripts/cli-parity.ts` for public check/explain/inspect/diff,
+  bundle calls, suspension/resume, and installed-example suite parity.
 - The Foundation Models bridge comes from the pinned `apple-foundation`
   crate (`hraness/apple-foundation`); `sh scripts/build-apple.sh` emits its
   embedded source and builds it with Xcode 26 on Apple Silicon, and the

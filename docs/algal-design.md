@@ -178,8 +178,13 @@ The site keeps its configured origin until a new domain is actually provisioned.
   and fail-closed replay of missing tool receipts.
 - Native Rust path: canonical identity, manifest parsing, the scheduler
   (nested organisms, bounded loops, tool calls, spawn, replay), memory/context
-  primitives, the CLI, and `bun scripts/native-parity.ts` parity across the
-  bundled examples.
+  primitives, the CLI, `bun scripts/native-parity.ts` parity across the
+  bundled examples, and `bun scripts/application-parity.ts` parity for the
+  durable application lifecycle (revisions, commits including evaluated
+  activation and schema-migration transitions, the foundry evaluation and
+  migration producers, intents, dispatch, reconciliation, memory
+  scopes/observations/derivations, and the `algal.application-host.v1` policy
+  host).
 - VM kernel layers: fail-closed effect capabilities, suspended/resumable runs,
   exact-class `cap` ports, and bounded durable mailbox drivers with independent
   send/receive rights, revocation, and replay-safe wakeups are implemented in

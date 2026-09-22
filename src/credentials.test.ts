@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -44,6 +44,59 @@ describe("credential shape + redaction", () => {
     expect(redact("ts_abcdefghijklmnop")).toBe("…mnop");
     expect(redact("tiny")).toBe("…");
     expect(redact("")).toBe("…");
+    expect(redact("abcdefghé😀é😀é")).toBe("…😀é😀é");
+  });
+});
+
+describe("private credential file admission", () => {
+  const run = async () => ({ code: 1, stdout: "", stderr: "" });
+
+  test("atomic fallback publication creates private files and replaces only admitted state", async () => {
+    home = await freshHome();
+    process.env.ALGAL_HOME = home;
+    const first = await storeCredential("jev", "fixture-key-one", { run });
+    await storeCredential("jev", "fixture-key-two", { run });
+    expect(await readFile(first.location, "utf8")).toBe("fixture-key-two\n");
+    if (process.platform !== "win32") {
+      expect((await lstat(first.location)).mode & 0o777).toBe(0o600);
+      expect((await lstat(join(home, "credentials"))).mode & 0o777).toBe(0o700);
+    }
+  });
+
+  test.skipIf(process.platform === "win32")("symlinks cannot read, overwrite, or remove another file", async () => {
+    home = await freshHome();
+    process.env.ALGAL_HOME = home;
+    await mkdir(join(home, "credentials"), { mode: 0o700 });
+    const outside = join(await freshHome(), "unrelated");
+    await writeFile(outside, "unrelated-user-data", { mode: 0o600 });
+    await symlink(outside, join(home, "credentials", "jev.key"));
+    await expect(resolveCredential("jev", { run })).rejects.toThrow();
+    await expect(storeCredential("jev", "fixture-new-key", { run })).rejects.toThrow();
+    await expect(forgetCredential("jev", { run })).rejects.toThrow();
+    expect(await readFile(outside, "utf8")).toBe("unrelated-user-data");
+  });
+
+  test.skipIf(process.platform === "win32")("public modes and symlinked homes fail closed", async () => {
+    home = await freshHome();
+    process.env.ALGAL_HOME = home;
+    const stored = await storeCredential("jev", "fixture-private-key", { run });
+    await chmod(stored.location, 0o644);
+    await expect(resolveCredential("jev", { run })).rejects.toThrow();
+    await expect(storeCredential("jev", "replacement-key", { run })).rejects.toThrow();
+    const outside = await freshHome();
+    const link = join(await freshHome(), "home-link");
+    await symlink(outside, link);
+    process.env.ALGAL_HOME = link;
+    await expect(storeCredential("jev", "replacement-key", { run })).rejects.toThrow();
+    await expect(lstat(join(outside, "credentials"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  test("invalid environment and vault values never bypass shape validation", async () => {
+    process.env[ENV] = "short";
+    await expect(resolveCredential("jev", { run })).rejects.toThrow();
+    delete process.env[ENV];
+    const invalidVault = async () => ({ code: 0, stdout: "short", stderr: "" });
+    await expect(resolveCredential("jev", { run: invalidVault })).rejects.toThrow();
   });
 });
 

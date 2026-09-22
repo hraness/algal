@@ -1114,10 +1114,10 @@ impl Host {
             // Resume keeps recorded prefix effects but routes a digest miss
             // live; strict replay (verify) treats a miss as unbound.
             if !self.replay_fallthrough {
-                return Err(Error::new(
-                    "EFFECT_UNBOUND",
-                    "replay has no matching effect",
-                ));
+                return Ok(
+                    json!({"requestDigest":request_digest,"executor":"unbound","retryable":false,
+                    "error":{"code":"EFFECT_UNBOUND","message":"no host-admitted executor for this request"}}),
+                );
             }
         }
         let wanted: Vec<_> = ["provider", "preset"]

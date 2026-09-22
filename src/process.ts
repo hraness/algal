@@ -8,6 +8,7 @@ import {
   mkdir,
   open,
   opendir,
+  readdir,
   rename,
   unlink,
 } from "node:fs/promises";
@@ -26,7 +27,7 @@ import { asDigest, digestCanonical, type Digest } from "./digest";
 import type { Executor } from "./effects";
 import { AlgalError } from "./errors";
 import { compileOrganism, type CompiledOrganism } from "./graph";
-import { hostLease } from "./host-state";
+import { hostLease, hostNames, hostRead, hostWrite } from "./host-state";
 import { boundedFileBytes } from "./io";
 import { ProcessJournal } from "./process-journal";
 import {
@@ -498,29 +499,35 @@ export class ProcessSupervisor {
   }
   private async lease<T>(path: string, action: () => Promise<T>): Promise<T> {
     // Process dispatches share a process-owned SQLite mutex across Bun/Rust.
-    // Creation keeps its existing non-recoverable global admission lock.
     if (dirname(path) !== join(this.dir, "processes")) {
       return hostLease(dirname(path), basename(dirname(path)), action);
     }
-    let file;
-    try {
-      file = await open(path, "wx", 0o600);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "EEXIST")
-        throw new AlgalError(
-          "IO_FAILED",
-          "process lease is held; interrupted work requires reconciliation",
-        );
-      throw error;
-    }
-    try {
-      await file.writeFile("algal process lease\n");
-      await file.sync();
-      return await action();
-    } finally {
-      await file.close();
-      await unlink(path);
-    }
+    // Keep the old global lock pathname occupied so older runtimes cannot
+    // bypass new custody. Only a recognized marker may be recovered after
+    // acquiring the crash-released SQLite mutex; legacy locks stay closed.
+    const custody = join(this.dir, ".process-creation");
+    return hostLease(custody, "process-creation", async () => {
+      let prior: JsonValue | undefined;
+      try { prior = await hostRead(path, 4096); }
+      catch { throw new AlgalError("IO_FAILED", "legacy process creation lease requires operator reconciliation"); }
+      if (prior !== undefined) {
+        if (!prior || typeof prior !== "object" || Array.isArray(prior) || Object.keys(prior).sort().join(",") !== "contract,nonce" ||
+            prior.contract !== "algal.process-creation-owner.v1" || typeof prior.nonce !== "string" || !/^[a-f0-9]{64}$/.test(prior.nonce)) {
+          throw new AlgalError("IO_FAILED", "legacy process creation lease requires operator reconciliation");
+        }
+        const history = join(custody, "creation-owners");
+        const names = await hostNames(history, 256, /^[a-f0-9]{64}\.json$/);
+        if (names.length >= 256 && !names.includes(`${prior.nonce}.json`)) throw new AlgalError("BUDGET_EXHAUSTED", "creation recovery evidence limit exceeded");
+        await hostWrite(join(history, `${prior.nonce}.json`), prior, 4096);
+        await unlink(path); await syncDirectory(dirname(path));
+      }
+      const marker = { contract: "algal.process-creation-owner.v1", nonce: randomBytes(32).toString("hex") };
+      await hostWrite(path, marker, 4096);
+      try { return await action(); }
+      finally {
+        if (same(await hostRead(path, 4096), marker)) { await unlink(path); await syncDirectory(dirname(path)); }
+      }
+    });
   }
   private async cas(
     kind: "values" | "runs" | "manifests",
@@ -662,13 +669,72 @@ export class ProcessSupervisor {
     await mkdir(base, { recursive: true, mode: 0o700 });
     await syncDirectory(this.dir);
     return this.lease(join(base, ".lock"), async () => {
-      if ((await this.names()).length >= PROCESS_BOUNDS.maxProcesses)
-        throw new AlgalError("BUDGET_EXHAUSTED", "process count exhausted");
+      const retained = (await this.names()).length;
       const path = await this.paths(name);
-      await mkdir(path, { mode: 0o700 }); // Never replace an existing identity, even if initial creation was interrupted.
-      await syncDirectory(base);
+      const expected = digestCanonical(json(parseProcessRecord(record)));
+      const markerPath = join(path, ".creating.json");
+      let exists = false;
+      try {
+        await lstat(path);
+        exists = true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+      if (exists) {
+        // A retained name's directory is only recoverable when its creation
+        // marker proves this exact intended record was interrupted before the
+        // head published. Legacy and foreign directories stay fail-closed.
+        const entries = await readdir(path);
+        if (entries.includes("head.json"))
+          throw new AlgalError("IO_FAILED", "process name already exists");
+        const marker = await readBounded(markerPath, 2048);
+        const claimed =
+          marker !== null &&
+          typeof marker === "object" &&
+          !Array.isArray(marker) &&
+          Object.keys(marker).length === 3 &&
+          marker.contract === "algal.process-creation.v1" &&
+          marker.name === name &&
+          marker.record === expected;
+        if (!claimed)
+          throw new AlgalError(
+            "IO_FAILED",
+            "process name is retained by a completed or interrupted creation",
+          );
+        for (const entry of entries) {
+          const scratch =
+            entry === ".creating.json" ||
+            entry === ".lock" ||
+            entry === ".owner.sqlite" ||
+            entry === ".owner.sqlite-journal" ||
+            entry === ".owner.sqlite-wal" ||
+            entry === ".owner.sqlite-shm" ||
+            entry.startsWith(".tmp-") ||
+            entry.startsWith(".head-") ||
+            entry.endsWith(".tmp") ||
+            (entry === "owners" &&
+              (await lstat(join(path, entry))).isDirectory());
+          if (!scratch)
+            throw new AlgalError(
+              "IO_FAILED",
+              "interrupted process creation contains foreign entries",
+            );
+        }
+      } else {
+        if (retained >= PROCESS_BOUNDS.maxProcesses) throw new AlgalError("BUDGET_EXHAUSTED", "process count exhausted");
+        await mkdir(path, { mode: 0o700 });
+        await syncDirectory(base);
+        await replace(markerPath, {
+          contract: "algal.process-creation.v1",
+          name,
+          record: expected,
+        });
+      }
       await this.publish("manifests", manifestToJson(manifest));
-      return this.save(record);
+      const snapshot = await this.save(record);
+      await unlink(markerPath);
+      await syncDirectory(path);
+      return snapshot;
     });
   }
   async inspect(name: string): Promise<ProcessSnapshot> {

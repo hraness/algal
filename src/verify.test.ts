@@ -7,9 +7,9 @@ import {
 } from "./contract";
 import { scriptedExecutor } from "./effects";
 import { builtinRegistry } from "./registry";
-import { runOrganism, type RunReceipt } from "./run";
+import { receiptDigest, runOrganism, type RunReceipt } from "./run";
 import { MemoryStore } from "./store";
-import { verifyReceipt } from "./verify";
+import { diffReceipts, verifyReceipt } from "./verify";
 import type { JsonObject, JsonValue } from "./values";
 
 const EXAMPLES = join(__dirname, "..", "examples");
@@ -38,6 +38,20 @@ async function runTriage() {
 }
 
 describe("verify", () => {
+  test("receipt comparison includes arguments and runtime identity", async () => {
+    const { receipt } = await runTriage();
+    for (const change of [
+      (copy: RunReceipt) => { copy.args.ticket = { text: "different input" }; },
+      (copy: RunReceipt) => { copy.runtime.version = "0.1.1"; },
+    ]) {
+      const changed = structuredClone(receipt);
+      change(changed);
+      changed.digest = receiptDigest(changed);
+      expect(diffReceipts(receipt, changed)).toContain("receipt records differ");
+    }
+    expect(diffReceipts(receipt, structuredClone(receipt))).toEqual([]);
+  });
+
   test("a clean run verifies bit-for-bit", async () => {
     const { manifestRaw, receipt } = await runTriage();
     expect(receipt.outcome).toBe("complete");

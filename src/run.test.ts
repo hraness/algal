@@ -130,20 +130,14 @@ describe("scheduler", () => {
     expect(big.cells.sink?.outputs?.value).toBe(60);
     const small = await run(fires, { args: { src: { n: 3 } } });
     expect(small.cells.sink?.status).toBe("skipped");
-    // a thrown guard is a manifest bug — the run hard-fails GUARD_INVALID
-    const boom = manifest(shape(["div", 1, ["get", "value", "missing"]]));
-    const e1 = await run(boom, { args: { src: { n: 1 } } }).then(
-      () => null,
-      (e: unknown) => e as AlgalError,
-    );
-    expect(e1?.code).toBe("GUARD_INVALID");
-    // non-boolean guard result fails the same way
-    const notBool = manifest(shape(["add", ["get", "value"], 1]));
-    const e2 = await run(notBool, { args: { src: { n: 1 } } }).then(
-      () => null,
-      (e: unknown) => e as AlgalError,
-    );
-    expect(e2?.code).toBe("GUARD_INVALID");
+    // Guard failures retain a replayable failed receipt and the completed prefix.
+    for (const program of [["div", 1, ["get", "value", "missing"]], ["add", ["get", "value"], 1]]) {
+      const invalid = manifest(shape(program as JsonValue));
+      const failed = await run(invalid, { args: { src: { n: 1 } } });
+      expect(failed.outcome).toBe("failed");
+      expect(failed.failure?.code).toBe("GUARD_INVALID");
+      expect((await verifyReceipt(failed as unknown as JsonValue, manifestToJson(invalid), new MemoryStore())).ok).toBe(true);
+    }
     // guard burns replay identically under verify
     const v = await verifyReceipt(
       big as unknown as JsonValue,

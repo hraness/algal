@@ -24,6 +24,8 @@ const cases: { name: string; schema: JsonObject; good: JsonValue; bad: JsonValue
   { name: "root null", schema: { type: "null" }, good: null, bad: {} },
   { name: "root array", schema: { type: "array" }, good: ["one"], bad: {} },
   { name: "root object", schema: { type: "object" }, good: {}, bad: [] },
+  { name: "nullable string", schema: { type: ["null", "string"] }, good: null, bad: false },
+  { name: "number or array", schema: { type: ["number", "array"] }, good: [1], bad: "1" },
   { name: "nested required", schema: nestedRequired, good: { ticket: { owner: "reviewer" } }, bad: { ticket: {} } },
   { name: "nested object type", schema: nestedType, good: { ticket: { detail: {} } }, bad: { ticket: { detail: "not a record" } } },
 ];
@@ -37,6 +39,14 @@ function agent(schema: JsonObject) {
 }
 
 describe("the declared schema subset at execution boundaries", () => {
+  test("type unions are nonempty, unique, finite supported alternatives", () => {
+    for (const type of [[], ["string", "string"], ["string", "unknown"], ["number", null], ["object", "array", "string", "number", "integer", "boolean", "null", "string"]]) {
+      expect(() => agent({ type })).toThrow();
+    }
+    const schema = { type: ["null", "boolean", "object", "array", "number", "string"] };
+    for (const value of [null, true, {}, [], 3, "text"]) expect(() => checkSchema(schema, value, "dynamic JSON")).not.toThrow();
+    expect(() => checkSchema({}, 3, "legacy default")).toThrow("expected object");
+  });
   for (const item of cases) {
     test(`${item.name}: reject malformed agent output and replay a valid output`, async () => {
       const manifest = agent(item.schema);

@@ -1,10 +1,13 @@
 use algal::{
-    Error, Result,
-    canonical::{MAX_DOCUMENT_BYTES, canonical, read_json},
+    Error, Result, application, application_adaptation,
+    application_host::{DomainDispatcher, PolicyHost},
+    application_memory::{self as app_memory, MemoryService, NativeEngine},
+    application_migration, application_view,
+    canonical::{MAX_DOCUMENT_BYTES, canonical, digest_bytes, read_json},
     context,
     contract::{Manifest, object},
     effects::{Backend, Host, ResponseFormat},
-    graph::{Transports, compile, interface_args, interface_signature},
+    graph::{Transports, compile, interface_signature},
     mailbox::{self, MailboxService},
     memory,
     process::ProcessService,
@@ -17,6 +20,51 @@ use std::{
     io::{self, IsTerminal},
     path::{Path, PathBuf},
 };
+
+/// Reject-all admission used when no `--policy` record is supplied; read-only
+/// commands still work, every trusted boundary denies.
+struct NoAdmission;
+
+impl application::Admission for NoAdmission {
+    fn admit_commit(&self, _: &application::CommitContext) -> Result<()> {
+        Err(Error::new(
+            "CAPABILITY_DENIED",
+            "No application admission host",
+        ))
+    }
+    fn admit_dispatch(&self, _: &application::DispatchAdmission) -> Result<Value> {
+        Err(Error::new(
+            "CAPABILITY_DENIED",
+            "No dispatch admission host",
+        ))
+    }
+}
+
+impl app_memory::MemoryAdmission for NoAdmission {
+    fn identity(&self) -> &str {
+        "denied"
+    }
+    fn current_frontier(&self, _: &str) -> Result<String> {
+        Err(Error::new("CAPABILITY_DENIED", "No memory admission host"))
+    }
+    fn validate_scope(
+        &self,
+        _: &app_memory::MemoryScope,
+        _: &app_memory::MemoryFrontier,
+        _: &Value,
+    ) -> Result<()> {
+        Err(Error::new("CAPABILITY_DENIED", "No memory admission host"))
+    }
+    fn decode_observation(
+        &self,
+        _: &app_memory::ObservationAdmission,
+    ) -> Result<Vec<app_memory::Claim>> {
+        Err(Error::new(
+            "CAPABILITY_DENIED",
+            "No observation admission host",
+        ))
+    }
+}
 
 #[derive(Parser)]
 #[command(
@@ -125,6 +173,9 @@ enum Commands {
     },
     Call {
         bundle: PathBuf,
+        /// Accept named interface arguments and return declared interface outputs.
+        #[arg(long)]
+        interface: bool,
         #[command(flatten)]
         options: Execution,
     },
@@ -223,6 +274,21 @@ enum Commands {
     Memory {
         #[command(subcommand)]
         command: MemoryCommand,
+    },
+    /// Durable application lifecycle over the content-addressed store.
+    /// `--dir` is the application root; host authority comes from the
+    /// declarative `algal.application-host.v1` policy record.
+    Application {
+        /// `algal.application-host.v1` policy record; required for
+        /// operations that admit work.
+        #[arg(long)]
+        policy: Option<PathBuf>,
+        /// Channel directory for the policy dispatcher
+        /// (default `<dir>/channels`).
+        #[arg(long)]
+        channels: Option<PathBuf>,
+        #[command(subcommand)]
+        command: ApplicationCommand,
     },
     Context {
         #[command(subcommand)]
@@ -347,9 +413,22 @@ enum FoundryCommand {
 
 #[derive(Subcommand)]
 enum StoreCommand {
-    Put { file: String },
-    Get { digest: String },
-    Has { digest: String },
+    Put {
+        file: String,
+        /// CAS kind; manifests and values are the durable record kinds.
+        #[arg(long, default_value = "values", value_parser = ["manifests", "values"])]
+        kind: String,
+    },
+    Get {
+        digest: String,
+        #[arg(long, default_value = "values", value_parser = ["manifests", "values"])]
+        kind: String,
+    },
+    Has {
+        digest: String,
+        #[arg(long, default_value = "values", value_parser = ["manifests", "values"])]
+        kind: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -549,6 +628,72 @@ enum MemoryCommand {
         #[arg(long)]
         snapshot: Option<PathBuf>,
     },
+}
+
+#[derive(Subcommand)]
+enum ApplicationCommand {
+    /// Persist a bounded JSON value into the store; emits its digest.
+    Put { value: PathBuf },
+    /// Admit + persist an `algal.application-memory-scope.v1` record.
+    Scope { scope: PathBuf },
+    /// Admit + persist an `algal.application-memory.v1` snapshot input.
+    Snapshot { memory: PathBuf },
+    /// Admit + persist an observation record; emits the observation digest.
+    Observe { observation: PathBuf },
+    /// Derive a query over a captured state; emits the derivation digest.
+    Query { state: String, query: String },
+    /// Genesis commit: `command` is an `ApplicationCommand` record with
+    /// kind `create` and `expectedHead: null`.
+    Create { command: PathBuf },
+    /// Expected-head commit.
+    Commit { command: PathBuf },
+    /// Print the current head snapshot (`null` when absent).
+    Inspect { application: String },
+    /// Print unsettled intents.
+    Pending { application: String },
+    /// Admit and dispatch pending intents through the policy host.
+    Dispatch {
+        application: String,
+        #[arg(long, default_value_t = 32)]
+        max: usize,
+        /// Dispatch through the bare `algal.application-host.v1` host rather
+        /// than the domain dispatcher — episodes are blocked honestly.
+        #[arg(long)]
+        host_only: bool,
+    },
+    /// Explicitly reconcile one uncertain dispatch.
+    Reconcile {
+        application: String,
+        intent: String,
+        #[arg(long)]
+        host_only: bool,
+    },
+    /// `schedule_investigations`: derivation → investigation requests → commit.
+    Schedule { input: PathBuf },
+    /// `request_execution`: verified support → start-episode commit.
+    Execute { input: PathBuf },
+    /// `append_observation`: observation → snapshot → memory commit.
+    Publish { input: PathBuf },
+    /// `evaluateApplicationRevision`: foundry over incumbent/candidate
+    /// entrypoints; emits the stored evaluation digest and verdict.
+    Evaluate { request: PathBuf },
+    /// `verifyApplicationEvaluation`: re-verify a stored evaluation record
+    /// against an expected parent state.
+    VerifyEvaluation { input: PathBuf },
+    /// `admitApplicationActivation`: require a reproducibly accepted
+    /// candidate revision; emits the bound revision and state digests.
+    AdmitActivation { input: PathBuf },
+    /// `checkApplicationCompatibility` between two stored revisions; input
+    /// is `{"previous": <ref>, "candidate": <ref>}`.
+    Compatible { input: PathBuf },
+    /// `migrateApplicationMemory`: run the migration program and admit its
+    /// emitted claims into a fresh memory chain under the new schema.
+    MigrateMemory { input: PathBuf },
+    /// `projectApplicationView`: pure bounded projection of the captured
+    /// head — fenced procedures, history, investigations and actions.
+    View { input: PathBuf },
+    /// Render a captured view as a passive, standalone HTML workbench.
+    Report { view: PathBuf },
 }
 
 #[derive(Subcommand)]
@@ -827,12 +972,6 @@ fn listing(dir: &Path, kind: &str) -> Result<Vec<PathBuf>> {
     Ok(files)
 }
 
-fn canon_eq(a: Option<&Value>, b: Option<&Value>) -> bool {
-    let empty = Value::Null;
-    canonical(a.unwrap_or(&empty)).unwrap_or_default()
-        == canonical(b.unwrap_or(&empty)).unwrap_or_default()
-}
-
 fn disp(value: &Value) -> String {
     value
         .as_str()
@@ -882,153 +1021,18 @@ fn inspect_receipt(raw: &Value) -> Value {
     })
 }
 
-/// Compare two run receipts field by field — the `algal diff` surface.
-fn receipt_diff(a: &Value, b: &Value) -> Vec<String> {
-    let mut out = Vec::new();
-    if a["outcome"] != b["outcome"] {
-        out.push(format!(
-            "outcome: {} vs {}",
-            disp(&a["outcome"]),
-            disp(&b["outcome"])
-        ));
-    }
-    let a_cells: Vec<String> = a["cells"]
-        .as_object()
-        .map(|m| m.keys().cloned().collect())
-        .unwrap_or_default();
-    let b_cells: Vec<String> = b["cells"]
-        .as_object()
-        .map(|m| m.keys().cloned().collect())
-        .unwrap_or_default();
-    if a_cells != b_cells {
-        out.push(format!(
-            "cells: {} vs {}",
-            a_cells.join(","),
-            b_cells.join(",")
-        ));
-    }
-    for name in &a_cells {
-        let (ac, bc) = (&a["cells"][name], &b["cells"][name]);
-        if bc.is_null() {
-            continue;
-        }
-        if ac["status"] != bc["status"] {
-            out.push(format!(
-                "cell {name}: status {} vs {}",
-                disp(&ac["status"]),
-                disp(&bc["status"])
-            ));
-        }
-        let empty = json!({});
-        if !canon_eq(
-            Some(if ac["outputs"].is_null() {
-                &empty
-            } else {
-                &ac["outputs"]
-            }),
-            Some(if bc["outputs"].is_null() {
-                &empty
-            } else {
-                &bc["outputs"]
-            }),
-        ) {
-            out.push(format!("cell {name}: outputs differ"));
-        }
-        if ac["work"] != bc["work"] {
-            out.push(format!(
-                "cell {name}: work {} vs {}",
-                disp(&ac["work"]),
-                disp(&bc["work"])
-            ));
-        }
-        if ac["rounds"] != bc["rounds"] {
-            out.push(format!(
-                "cell {name}: rounds {} vs {}",
-                disp(&ac["rounds"]),
-                disp(&bc["rounds"])
-            ));
-        }
-        if ac["items"] != bc["items"] {
-            out.push(format!(
-                "cell {name}: items {} vs {}",
-                disp(&ac["items"]),
-                disp(&bc["items"])
-            ));
-        }
-        if !canon_eq(ac.get("failure"), bc.get("failure")) {
-            out.push(format!("cell {name}: failure differs"));
-        }
-        if !canon_eq(ac.get("toolCalls"), bc.get("toolCalls")) {
-            out.push(format!("cell {name}: toolCalls differ"));
-        }
-        if !canon_eq(ac.get("shadowOut"), bc.get("shadowOut")) {
-            out.push(format!("cell {name}: shadowOut differs"));
-        }
-        if ac["via"] != bc["via"] {
-            out.push(format!(
-                "cell {name}: via {} vs {}",
-                ac["via"].as_str().unwrap_or("local"),
-                bc["via"].as_str().unwrap_or("local")
-            ));
-        }
-        if !canon_eq(ac.get("slot"), bc.get("slot")) {
-            out.push(format!("cell {name}: slot differs"));
-        }
-    }
-    let a_effects = a["effects"].as_array().map(|e| e.len()).unwrap_or(0);
-    let b_effects = b["effects"].as_array().map(|e| e.len()).unwrap_or(0);
-    if a_effects != b_effects {
-        out.push(format!("effects: {a_effects} vs {b_effects}"));
-    } else if let (Some(ae), Some(be)) = (a["effects"].as_array(), b["effects"].as_array()) {
-        for (i, (e, o)) in ae.iter().zip(be.iter()).enumerate() {
-            if e["requestDigest"] != o["requestDigest"] {
-                out.push(format!("effect {i}: requestDigest differs"));
-            }
-            if !canon_eq(e.get("output"), o.get("output")) {
-                out.push(format!("effect {i}: output differs"));
-            }
-            if !canon_eq(e.get("error"), o.get("error")) {
-                out.push(format!("effect {i}: error differs"));
-            }
-            if e["executor"] != o["executor"] {
-                out.push(format!(
-                    "effect {i}: executor {} vs {}",
-                    disp(&e["executor"]),
-                    disp(&o["executor"])
-                ));
-            }
-            if !canon_eq(e.get("usage"), o.get("usage")) {
-                out.push(format!("effect {i}: usage differs"));
-            }
-        }
-    }
-    if !canon_eq(a.get("events"), b.get("events")) {
-        out.push("events: event logs differ".into());
-    }
-    for field in ["steps", "agentCalls", "units"] {
-        if a["work"][field] != b["work"][field] {
-            out.push(format!(
-                "work.{field}: {} vs {}",
-                disp(&a["work"][field]),
-                disp(&b["work"][field])
-            ));
-        }
-    }
-    if a.get("failure").is_some() != b.get("failure").is_some() {
-        out.push("failure presence differs".into());
-    } else if let (Some(af), Some(bf)) = (a.get("failure"), b.get("failure"))
-        && af["code"] != bf["code"]
-    {
-        out.push(format!(
-            "failure.code: {} vs {}",
-            disp(&af["code"]),
-            disp(&bf["code"])
-        ));
-    }
-    out
-}
-
 async fn execute(cli: Cli) -> Result<bool> {
+    if let Commands::Application {
+        command: ApplicationCommand::Report { view },
+        ..
+    } = &cli.command
+    {
+        print!(
+            "{}",
+            algal::application_report::render(&load(view, 262_144)?)?
+        );
+        return Ok(true);
+    }
     match cli.command {
         Commands::Demo { command } => {
             if std::env::args().any(|arg| arg == "--dir" || arg.starts_with("--dir=")) {
@@ -1415,12 +1419,46 @@ async fn execute(cli: Cli) -> Result<bool> {
         }
         Commands::Call {
             bundle,
+            interface,
             mut options,
         } => {
             options.write = true;
             let (mut store, mut host, transports) = prepare(&options, &cli.dir)?;
             let manifest = unpack(&load(&bundle, MAX_DOCUMENT_BYTES)?, &mut store)?;
-            let input = interface_args(&manifest, &args(&options)?)?;
+            let raw = args(&options)?;
+            let input = if interface {
+                let declared = manifest.value.get("interface").ok_or_else(|| {
+                    Error::invalid("call --interface requires a declared manifest interface")
+                })?;
+                let inputs = object(&declared["inputs"])?;
+                let supplied = object(&raw)?;
+                if inputs.len() != supplied.len()
+                    || supplied.keys().any(|name| !inputs.contains_key(name))
+                {
+                    return Err(Error::invalid(
+                        "call --interface requires exactly the declared input names",
+                    ));
+                }
+                let mut mapped = json!({});
+                for (name, target) in inputs {
+                    let cell = target["cell"].as_str().unwrap();
+                    let port = target["port"].as_str().unwrap();
+                    if mapped.get(cell).is_none() {
+                        mapped[cell] = json!({});
+                    }
+                    if let Some(previous) = mapped[cell].get(port)
+                        && canonical(previous)? != canonical(&supplied[name])?
+                    {
+                        return Err(Error::invalid(
+                            "call --interface aliases contain conflicting arguments",
+                        ));
+                    }
+                    mapped[cell][port] = supplied[name].clone();
+                }
+                mapped
+            } else {
+                raw
+            };
             let receipt = runtime::run(
                 manifest.clone(),
                 input,
@@ -1432,9 +1470,32 @@ async fn execute(cli: Cli) -> Result<bool> {
             .await?;
             let reference = persist(&mut store, &manifest, &receipt)?;
             let ok = receipt["outcome"] == "complete";
-            emit(
-                &json!({"ok":ok,"outputs":runtime::outputs(&manifest,&receipt)?,"receiptDigest":reference,"manifestDigest":receipt["manifestDigest"],"error":receipt.get("failure")}),
-            )?;
+            let outputs: serde_json::Map<String, Value> = if interface {
+                object(&manifest.value["interface"]["outputs"])?
+                    .iter()
+                    .filter_map(|(name, target)| {
+                        receipt["cells"][target["cell"].as_str().unwrap()]["outputs"]
+                            .get(target["port"].as_str().unwrap())
+                            .map(|value| (name.clone(), value.clone()))
+                    })
+                    .collect()
+            } else {
+                object(&receipt["cells"])?
+                    .iter()
+                    .filter_map(|(name, cell)| {
+                        cell.get("outputs")
+                            .map(|outputs| (name.clone(), outputs.clone()))
+                    })
+                    .collect()
+            };
+            let mut result = json!({"ok":ok,"outputs":outputs,"receiptDigest":reference,"manifestDigest":receipt["manifestDigest"]});
+            if !ok {
+                result["error"] = match receipt.get("failure") {
+                    Some(failure) => json!({"code":failure["code"],"message":failure["message"]}),
+                    None => json!({"code":"FAILED","message":receipt["outcome"]}),
+                };
+            }
+            emit(&result)?;
             Ok(ok)
         }
         Commands::Check {
@@ -1449,8 +1510,14 @@ async fn execute(cli: Cli) -> Result<bool> {
                 &transports,
                 0,
             )?;
+            let cells: Vec<_> = compiled
+                .manifest
+                .cells
+                .iter()
+                .map(|cell| json!({"id":cell["id"],"kind":cell["kind"]}))
+                .collect();
             emit(
-                &json!({"ok":true,"manifestDigest":compiled.manifest.digest()?,"cells":compiled.manifest.cells.len()}),
+                &json!({"ok":true,"key":compiled.manifest.value["key"],"digest":compiled.manifest.digest()?,"cells":cells,"edges":compiled.manifest.edges.len()}),
             )?;
             Ok(true)
         }
@@ -1466,12 +1533,30 @@ async fn execute(cli: Cli) -> Result<bool> {
                 &transports,
                 0,
             )?;
-            let cells: Vec<_> = compiled.manifest.cells.iter().map(|cell| {
+            let cells: serde_json::Map<String, Value> = compiled.manifest.cells.iter().map(|cell| {
                 let name = cell["id"].as_str().unwrap();
-                json!({"id":name,"kind":cell["kind"],"inputs":compiled.signatures[name].inputs,"outputs":compiled.signatures[name].outputs})
+                let summarize = |ports: &algal::contract::Ports| -> serde_json::Map<String, Value> {
+                    ports.iter().map(|(name, port)| {
+                        let mut value = json!({"type":port["type"]});
+                        for field in ["optional", "many"] {
+                            if port[field] == true { value[field] = json!(true); }
+                        }
+                        for field in ["labels", "schema", "capability"] {
+                            if let Some(v) = port.get(field) { value[field] = v.clone(); }
+                        }
+                        (name.clone(), value)
+                    }).collect()
+                };
+                (name.to_owned(), json!({"kind":cell["kind"],"inputs":summarize(&compiled.signatures[name].inputs),"outputs":summarize(&compiled.signatures[name].outputs)}))
+            }).collect();
+            let edges: Vec<_> = compiled.manifest.edges.iter().map(|edge| {
+                let mut value = json!({"from":format!("{}.{}",edge["from"]["cell"].as_str().unwrap(),edge["from"]["port"].as_str().unwrap()),"to":format!("{}.{}",edge["to"]["cell"].as_str().unwrap(),edge["to"]["port"].as_str().unwrap())});
+                if let Some(guard) = edge.get("guard") { value["guard"] = guard.clone(); }
+                if let Some(on) = edge.get("on") { value["on"] = on.clone(); }
+                value
             }).collect();
             emit(
-                &json!({"manifestDigest":compiled.manifest.digest()?,"cells":cells,"edges":compiled.manifest.edges}),
+                &json!({"key":compiled.manifest.value["key"],"digest":compiled.manifest.digest()?,"cells":cells,"edges":edges}),
             )?;
             Ok(true)
         }
@@ -1480,13 +1565,17 @@ async fn execute(cli: Cli) -> Result<bool> {
             Ok(true)
         }
         Commands::Inspect { receipt } => {
-            emit(&inspect_receipt(&load(&receipt, MAX_DOCUMENT_BYTES)?))?;
+            let receipt = load(&receipt, MAX_DOCUMENT_BYTES)?;
+            algal::receipt::validate(&receipt)?;
+            emit(&inspect_receipt(&receipt))?;
             Ok(true)
         }
         Commands::Diff { a, b } => {
             let a = load(&a, MAX_DOCUMENT_BYTES)?;
             let b = load(&b, MAX_DOCUMENT_BYTES)?;
-            let mut mismatches = receipt_diff(&a, &b);
+            algal::receipt::validate(&a)?;
+            algal::receipt::validate(&b)?;
+            let mut mismatches = algal::receipt::diff(&a, &b);
             if a["manifestDigest"] != b["manifestDigest"] {
                 mismatches.insert(
                     0,
@@ -1918,21 +2007,22 @@ async fn execute(cli: Cli) -> Result<bool> {
         Commands::Store { command } => {
             let mut store = Store::open(&cli.dir, true)?;
             match command {
-                StoreCommand::Put { file } => {
+                StoreCommand::Put { file, kind } => {
                     let value = if file == "-" {
                         read_json(io::stdin().lock(), 262_144)?
                     } else {
                         load(Path::new(&file), 262_144)?
                     };
-                    emit(&json!({"ref":store.put("values", &value)?}))?;
+                    let bytes = canonical(&value)?.len();
+                    emit(&json!({"ref":store.put(&kind, &value)?, "bytes":bytes}))?;
                 }
-                StoreCommand::Get { digest } => emit(
+                StoreCommand::Get { digest, kind } => emit(
                     &store
-                        .get("values", &digest)?
+                        .get(&kind, &digest)?
                         .ok_or_else(|| Error::new("STORE_MISS", "value not in store"))?,
                 )?,
-                StoreCommand::Has { digest } => {
-                    emit(&json!({"ref":digest,"ok":store.get("values", &digest)?.is_some()}))?
+                StoreCommand::Has { digest, kind } => {
+                    emit(&json!({"ref":digest,"ok":store.get(&kind, &digest)?.is_some()}))?
                 }
             }
             Ok(true)
@@ -1973,6 +2063,238 @@ async fn execute(cli: Cli) -> Result<bool> {
                     emit(
                         &json!({"source":store.put("values",&source)?,"previous":store.put("values",&snapshot)?,"snapshot":store.put("values",&next)?,"memory":next}),
                     )?;
+                }
+            }
+            Ok(true)
+        }
+        Commands::Application {
+            policy,
+            channels,
+            command,
+        } => {
+            let channels_dir = channels.unwrap_or_else(|| cli.dir.join("channels"));
+            let mut host = match &policy {
+                Some(path) => Some(PolicyHost::new(&load(path, 262_144)?, &channels_dir)?),
+                None => None,
+            };
+            let denied = NoAdmission;
+            let engine_sha = digest_bytes(&std::fs::read(std::env::current_exe()?)?);
+            let engine = NativeEngine::new(engine_sha.trim_start_matches("sha256:"), 10_000)?;
+            if let Some(host) = host.as_mut() {
+                host.set_memory_engine(engine.clone());
+            }
+            // Read-only commands (inspect/pending/put) admit nothing, so a
+            // missing policy substitutes a host that denies all admission.
+            let mut service = match &host {
+                Some(host) => application::Service::new(&cli.dir, host)?,
+                None => application::Service::new(&cli.dir, &denied)?,
+            };
+            let memory_service = match &host {
+                Some(host) => MemoryService {
+                    engine: &engine,
+                    admission: host,
+                },
+                None => MemoryService {
+                    engine: &engine,
+                    admission: &denied,
+                },
+            };
+            match command {
+                ApplicationCommand::Put { value } => {
+                    let digest = service
+                        .store
+                        .put("values", &app_memory::app_json(&load(&value, 262_144)?)?)?;
+                    emit(&json!({"digest": digest}))?;
+                }
+                ApplicationCommand::Scope { scope } => {
+                    let digest =
+                        memory_service.put_scope(&mut service.store, &load(&scope, 262_144)?)?;
+                    emit(&json!({"scope": digest}))?;
+                }
+                ApplicationCommand::Snapshot { memory } => {
+                    let digest =
+                        memory_service.snapshot(&mut service.store, &load(&memory, 262_144)?)?;
+                    emit(&json!({"memory": digest}))?;
+                }
+                ApplicationCommand::Observe { observation } => {
+                    let digest = memory_service
+                        .observe(&mut service.store, &load(&observation, 262_144)?)?;
+                    emit(&json!({"observation": digest}))?;
+                }
+                ApplicationCommand::Query { state, query } => {
+                    let (digest, derivation) =
+                        memory_service.query(&mut service.store, &state, &query)?;
+                    emit(&json!({"derivation": digest, "status": derivation.status}))?;
+                }
+                ApplicationCommand::Create { command } => {
+                    let snapshot = service.create(&load(&command, 262_144)?).await?;
+                    emit(&json!({
+                        "state": snapshot.digest, "transition": snapshot.state.transition,
+                        "revision": snapshot.state.revision, "memory": snapshot.state.memory,
+                    }))?;
+                }
+                ApplicationCommand::Commit { command } => {
+                    let snapshot = service.commit(&load(&command, 262_144)?).await?;
+                    emit(&json!({
+                        "state": snapshot.digest, "transition": snapshot.state.transition,
+                        "revision": snapshot.state.revision, "memory": snapshot.state.memory,
+                    }))?;
+                }
+                ApplicationCommand::Inspect { application: name } => {
+                    match service.inspect(&name)? {
+                        Some(snapshot) => emit(&json!({
+                            "state": snapshot.digest, "sequence": snapshot.state.sequence,
+                            "epoch": snapshot.state.epoch, "revision": snapshot.state.revision,
+                            "memory": snapshot.state.memory,
+                            "kind": snapshot.transition.kind.as_str(),
+                        }))?,
+                        None => emit(&Value::Null)?,
+                    }
+                }
+                ApplicationCommand::Pending { application: name } => {
+                    let history = service.history(&name)?;
+                    let pending = service.pending(&history)?;
+                    emit(&json!({
+                        "pending": pending.iter().map(|p| json!({
+                            "intent": p.intent, "sourceState": p.source_state,
+                            "dispatch": p.dispatch.as_ref().map(|d| d.value.clone()),
+                        })).collect::<Vec<_>>(),
+                    }))?;
+                }
+                ApplicationCommand::Dispatch {
+                    application: name,
+                    max,
+                    host_only,
+                } => {
+                    let host = host
+                        .as_ref()
+                        .ok_or_else(|| Error::invalid("application dispatch requires --policy"))?;
+                    let results = if host_only {
+                        service.dispatch_pending(&name, host, max).await?
+                    } else {
+                        let dispatcher = DomainDispatcher::new(host, &cli.dir)?;
+                        service.dispatch_pending(&name, &dispatcher, max).await?
+                    };
+                    emit(&json!({
+                        "dispatches": results.iter().map(|d| d.value()).collect::<Vec<_>>(),
+                    }))?;
+                }
+                ApplicationCommand::Reconcile {
+                    application: name,
+                    intent,
+                    host_only,
+                } => {
+                    let host = host
+                        .as_ref()
+                        .ok_or_else(|| Error::invalid("application reconcile requires --policy"))?;
+                    let result = if host_only {
+                        service.reconcile_dispatch(&name, &intent, host).await?
+                    } else {
+                        let dispatcher = DomainDispatcher::new(host, &cli.dir)?;
+                        service
+                            .reconcile_dispatch(&name, &intent, &dispatcher)
+                            .await?
+                    };
+                    emit(&result.value)?;
+                }
+                ApplicationCommand::Schedule { input } => {
+                    let result = application::schedule_investigations(
+                        &mut service,
+                        &memory_service,
+                        &load(&input, 262_144)?,
+                    )
+                    .await?;
+                    emit(&json!({
+                        "snapshot": result.snapshot.map(|s| s.digest),
+                        "derivations": result.derivations, "requests": result.requests,
+                    }))?;
+                }
+                ApplicationCommand::Execute { input } => {
+                    let snapshot =
+                        application::request_execution(&mut service, &load(&input, 262_144)?)
+                            .await?;
+                    emit(&json!({"state": snapshot.digest}))?;
+                }
+                ApplicationCommand::Publish { input } => {
+                    let result = application::append_observation(
+                        &mut service,
+                        &memory_service,
+                        &load(&input, 262_144)?,
+                    )
+                    .await?;
+                    emit(&result)?;
+                }
+                ApplicationCommand::Evaluate { request } => {
+                    // Case-pure evaluation runs without executors or tools:
+                    // the builtin fn registry is the only admitted surface.
+                    let mut run_host = Host::default();
+                    let (digest, evaluation) =
+                        application_adaptation::evaluate_application_revision(
+                            &mut service.store,
+                            &load(&request, 262_144)?,
+                            &mut run_host,
+                            &Transports::new(),
+                        )
+                        .await?;
+                    emit(&json!({
+                        "evaluation": digest, "verdict": evaluation["verdict"],
+                    }))?;
+                }
+                ApplicationCommand::VerifyEvaluation { input } => {
+                    let input = load(&input, 262_144)?;
+                    let v = app_memory::app_object(&input, &["evaluation", "expectedState"])?;
+                    let evaluation = app_memory::app_ref(&v["evaluation"])?.to_owned();
+                    let state = app_memory::app_ref(&v["expectedState"])?.to_owned();
+                    let checked = application_adaptation::verify_application_evaluation(
+                        &service.store,
+                        &evaluation,
+                        &state,
+                        &Host::default(),
+                    )
+                    .await?;
+                    emit(&json!({"ok": true, "verdict": checked["verdict"]}))?;
+                }
+                ApplicationCommand::AdmitActivation { input } => {
+                    let admitted = application_adaptation::admit_application_activation(
+                        &service.store,
+                        &load(&input, 262_144)?,
+                        &Host::default(),
+                    )
+                    .await?;
+                    emit(&admitted)?;
+                }
+                ApplicationCommand::Compatible { input } => {
+                    let input = load(&input, 262_144)?;
+                    let v = app_memory::app_object(&input, &["previous", "candidate"])?;
+                    let previous = app_memory::app_ref(&v["previous"])?.to_owned();
+                    let candidate = app_memory::app_ref(&v["candidate"])?.to_owned();
+                    let compatibility = application_adaptation::check_application_compatibility(
+                        &service.store,
+                        &previous,
+                        &candidate,
+                    )?;
+                    emit(&json!({"compatibility": compatibility}))?;
+                }
+                ApplicationCommand::MigrateMemory { input } => {
+                    let mut run_host = Host::default();
+                    let result = application_migration::migrate_memory(
+                        &memory_service,
+                        &mut service.store,
+                        &mut run_host,
+                        &Transports::new(),
+                        &load(&input, 262_144)?,
+                    )
+                    .await?;
+                    emit(&result)?;
+                }
+                ApplicationCommand::View { input } => {
+                    emit(&application_view::view(&service, &load(&input, 262_144)?)?)?;
+                }
+                ApplicationCommand::Report { view } => {
+                    print!(
+                        "{}",
+                        algal::application_report::render(&load(&view, 262_144)?)?
+                    );
                 }
             }
             Ok(true)

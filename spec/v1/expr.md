@@ -119,8 +119,15 @@ result (overflow, `0/0`) is `EXPR_NUM`.
 | object keys | 256 |
 | string bytes | 65,536 |
 | output canonical bytes | 65,536 |
+| intermediate value canonical bytes | 262,144 |
 | variable name length | 64 |
 | fuel ceiling | 1,000,000 |
+
+Every intermediate value must obey the value depth, string, array, object,
+and byte bounds, even when a later operation discards it. Collection builders
+check cumulative bytes before retaining each child. A fold that duplicates its
+accumulator therefore fails with `EXPR_BOUNDS` before exponential expansion;
+the final output check is not the memory safety boundary.
 
 Fuel is a deterministic work meter: each evaluated node spends its op's
 base cost (1 for control and predicates, 2 for most, 2 + argc for `get`)

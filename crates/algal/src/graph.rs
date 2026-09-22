@@ -117,6 +117,9 @@ pub fn interface_signature(compiled: &Compiled) -> Result<Signature> {
 }
 
 fn compatible(from: &Value, to: &Value) -> bool {
+    if from["many"] == true && to["many"] != true && to["type"] != "json" {
+        return false;
+    }
     if from["type"] == "cap" || to["type"] == "cap" {
         return from["type"] == "cap"
             && to["type"] == "cap"
@@ -124,9 +127,6 @@ fn compatible(from: &Value, to: &Value) -> bool {
     }
     if from["type"] == "ref" || to["type"] == "ref" {
         return from["type"] == to["type"];
-    }
-    if from["many"] == true && to["many"] != true && to["type"] != "json" {
-        return false;
     }
     if to["type"] == "json" {
         return true;
@@ -232,6 +232,9 @@ fn compile_with_budget(
                 if let Some(labels) = cell["output"].get("labels") {
                     output["labels"] = labels.clone();
                 }
+                if let Some(schema) = cell["output"].get("schema") {
+                    output["schema"] = schema.clone();
+                }
                 Signature {
                     inputs: ports(cell.get("inputs").unwrap_or(&json!({})), false, false)?,
                     outputs: port_map(json!({"out":output}))?,
@@ -242,6 +245,9 @@ fn compile_with_budget(
                 let mut output = json!({"type":cell["output"]["kind"]});
                 if let Some(labels) = cell["output"].get("labels") {
                     output["labels"] = labels.clone();
+                }
+                if let Some(schema) = cell["output"].get("schema") {
+                    output["schema"] = schema.clone();
                 }
                 Signature {
                     inputs: ports(cell.get("inputs").unwrap_or(&json!({})), false, false)?,
@@ -298,6 +304,16 @@ fn compile_with_budget(
                                     "carry must name interface ports",
                                 ));
                             }
+                            let source = &sig.outputs[output];
+                            let target = &sig.inputs[input];
+                            if !compatible(source, target)
+                                || (target["many"] == true && source["many"] != true)
+                            {
+                                return Err(Error::new(
+                                    "TYPE_MISMATCH",
+                                    "repeat carry must preserve interface port types and cardinality",
+                                ));
+                            }
                             sig.inputs.get_mut(input).unwrap()["optional"] = json!(true);
                         }
                     }
@@ -330,6 +346,12 @@ fn compile_with_budget(
                         return Err(Error::new(
                             "INTERFACE_MISMATCH",
                             "each.over must name an interface input",
+                        ));
+                    }
+                    if sig.inputs[over]["type"] == "cap" {
+                        return Err(Error::new(
+                            "TYPE_MISMATCH",
+                            "each cannot convert a json list into capability inputs; use a typed pass-through input",
                         ));
                     }
                     sig.inputs.insert(over.to_owned(), json!({"type":"json"}));
@@ -515,4 +537,23 @@ pub fn interface_args(manifest: &Manifest, inputs: &Value) -> Result<Value> {
         }
     }
     Ok(args)
+}
+
+#[cfg(test)]
+mod compatibility_tests {
+    use super::compatible;
+    use serde_json::json;
+
+    #[test]
+    fn capability_and_ref_lists_cannot_feed_scalar_ports() {
+        for port in [
+            json!({"type":"ref"}),
+            json!({"type":"cap","capability":"mailbox-send"}),
+        ] {
+            let mut list = port.clone();
+            list["many"] = json!(true);
+            assert!(!compatible(&list, &port));
+            assert!(compatible(&port, &list));
+        }
+    }
 }

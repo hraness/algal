@@ -162,7 +162,7 @@ try {
           .map(([name, end]) => [name, args[end.cell]![end.port]!]));
         const namedArgsPath = join(temporary, `${name}.named-args.json`);
         await writeFile(namedArgsPath, canonicalize(namedArgs));
-        const called = await native(["call", bundlePath, "--args", namedArgsPath,
+        const called = await native(["call", bundlePath, "--interface", "--args", namedArgsPath,
           "--responses", generated.get(name)!.responsesPath!, "--dir", join(temporary, `${name}-offline`)]);
         const expectedOutputs = Object.fromEntries(Object.entries(manifest.interface!.outputs)
           .map(([name, end]) => [name, reference.cells[end.cell]!.outputs![end.port]!]));

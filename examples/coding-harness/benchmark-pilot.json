@@ -1,0 +1,76 @@
+{
+  "schema": "algal.coding-harness.pilot.v1",
+  "purpose": "Small paired compatibility pilot; not a current Terminal-Bench leaderboard result.",
+  "harbor": {
+    "version": "0.23.0",
+    "gitUrl": "https://github.com/harbor-framework/harbor.git",
+    "gitCommitId": "1e5c5c6db929a10a140d05e606882c671ae20729",
+    "requiresPython": ">=3.12"
+  },
+  "split": {
+    "benchmark": "terminal-bench@2.0",
+    "revision": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "devTaskIds": ["polyglot-c-py", "regex-log"],
+    "holdoutTaskIds": ["cancel-async-tasks", "build-cython-ext"]
+  },
+  "taskGitUrl": "https://github.com/harbor-framework/terminal-bench-2.git",
+  "selection": "Four short-instruction coding, parsing, concurrency, and build-repair tasks with one CPU, a 900-second agent timeout, and modest prebuilt-image transfer sizes. Selection uses public instructions and configuration only; difficulty is not inferred from model outcomes.",
+  "evaluation": {
+    "developmentUse": "Tune controller policy using development tasks only.",
+    "holdoutUse": "Freeze policy first; execute each arm in fresh containers with fresh task memory. Keep holdout verifier results out of policy search.",
+    "grading": "Harbor's original task verifier runs after the agent returns. Controller completion and replay verification are not benchmark success.",
+    "agentInput": "instruction.md and the initialized task environment only; no solution, hidden verifier, or host metadata descriptions.",
+    "comparisons": ["plain", "algal"],
+    "concurrentTrials": 1,
+    "automaticRetries": 0,
+    "costReporting": "Unreported token counts and subscription-attributable costs stay null. Zero incremental paid API spend is not a zero-cost claim."
+  },
+  "tasks": [
+    {
+      "id": "polyglot-c-py",
+      "split": "development",
+      "instructionSha256": "a57c0c0e1232113113cd29a154ea7e0ac9ea45e4aedc16958fbc6bc753a4ef96",
+      "instructionBytes": 339,
+      "image": "alexgshaw/polyglot-c-py:20251031",
+      "imageDigest": "sha256:0f1c3b7816d70cf5551573fd6aeef76893f2ae3000be2419997b6871b5d987ed",
+      "imagePlatform": "linux/amd64",
+      "compressedLayerBytes": 148540671
+    },
+    {
+      "id": "regex-log",
+      "split": "development",
+      "instructionSha256": "4f7ac05e70cf9220ea0f1e5a052c5f908cd0fa884e847d80b0bd51bae2e96f9c",
+      "instructionBytes": 1021,
+      "image": "alexgshaw/regex-log:20251031",
+      "imageDigest": "sha256:90101b2e815323a8da20528a1439bebc407eb9761c9c68a3d557730856c878e9",
+      "imagePlatform": "linux/amd64",
+      "compressedLayerBytes": 29723240
+    },
+    {
+      "id": "cancel-async-tasks",
+      "split": "holdout",
+      "instructionSha256": "23d22f7039b50682941652c716f96dac314b8585c32c133614cac77dc067f47e",
+      "instructionBytes": 537,
+      "image": "alexgshaw/cancel-async-tasks:20251031",
+      "imageDigest": "sha256:84c7fae6b256dcc56a350790e2a9715eefc7dad662a9d8e8a472363aa71ef18d",
+      "imagePlatform": "linux/amd64",
+      "compressedLayerBytes": 44164493
+    },
+    {
+      "id": "build-cython-ext",
+      "split": "holdout",
+      "instructionSha256": "7e52874e45f88505bd21540229719de6639a401477557d814489981d472f0e34",
+      "instructionBytes": 1614,
+      "image": "alexgshaw/build-cython-ext:20251031",
+      "imageDigest": "sha256:3612a38fadb89a96f74a1a951fb0b0af734198fd160571eeaba6401593234594",
+      "imagePlatform": "linux/amd64",
+      "compressedLayerBytes": 303214315
+    }
+  ],
+  "provenance": {
+    "registry": "https://github.com/harbor-framework/harbor/blob/1e5c5c6db929a10a140d05e606882c671ae20729/registry.json",
+    "instructions": "https://raw.githubusercontent.com/harbor-framework/terminal-bench-2/69671fbaac6d67a7ef0dfec016cc38a64ef7a77c/{task}/instruction.md",
+    "configuration": "https://raw.githubusercontent.com/harbor-framework/terminal-bench-2/69671fbaac6d67a7ef0dfec016cc38a64ef7a77c/{task}/task.toml",
+    "imageInspection": "Docker Registry v2 manifests/config metadata only; no layers pulled during selection. Digests are observed immutable identities for the tag references; expanded disk and build peaks remain unmeasured."
+  }
+}

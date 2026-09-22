@@ -32,16 +32,28 @@ const VEC_WEIGHT: f64 = 0.65;
 const LEX_WEIGHT: f64 = 0.35;
 
 /// Split text into ≤max-byte chunks on paragraph boundaries — the mirror
-/// of `chunkText` in src/semantic.ts. Where TS slices UTF-16 code units,
-/// the native side cuts at UTF-8 char boundaries; chunk boundaries agree
-/// on ASCII and differ only in the multi-byte edge case.
-pub fn chunk_text(text: &str, max: usize) -> Vec<String> {
+/// of `chunkText` in src/semantic.ts, including UTF-8 character boundaries.
+pub fn chunk_text(text: &str, max: usize) -> Result<Vec<String>> {
+    if !(4..=MAX_TEXT_BYTES).contains(&max) {
+        return Err(Error::invalid(format!(
+            "chunk byte bound must be 4..{MAX_TEXT_BYTES}"
+        )));
+    }
     if text.len() <= max {
-        return vec![text.to_owned()];
+        return Ok(vec![text.to_owned()]);
     }
     let mut chunks: Vec<String> = Vec::new();
     let mut current = String::new();
-    for part in text.split("\n\n") {
+    for (index, part) in text.split("\n\n").enumerate() {
+        // Match the reference's split on runs of two or more newlines.
+        let part = if index == 0 {
+            part
+        } else {
+            part.trim_start_matches('\n')
+        };
+        if part.is_empty() {
+            continue;
+        }
         let next = if current.is_empty() {
             part.to_owned()
         } else {
@@ -77,8 +89,10 @@ pub fn chunk_text(text: &str, max: usize) -> Vec<String> {
     if !current.is_empty() {
         chunks.push(current);
     }
-    chunks.truncate(MAX_CHUNKS);
-    chunks
+    if chunks.len() > MAX_CHUNKS {
+        return Err(Error::limit("semantic chunk count"));
+    }
+    Ok(chunks)
 }
 
 fn sources(dir: &Path, docs: Option<&Path>) -> Result<Vec<(String, String)>> {
@@ -226,7 +240,7 @@ pub async fn index_store(
     let mut reused = 0usize;
     for (reference, text) in sources(dir, docs)? {
         sources_seen += 1;
-        for (seq, piece) in chunk_text(&text, MAX_TEXT_BYTES).into_iter().enumerate() {
+        for (seq, piece) in chunk_text(&text, MAX_TEXT_BYTES)?.into_iter().enumerate() {
             if rows.len() >= MAX_CHUNKS {
                 break;
             }
@@ -467,4 +481,28 @@ pub fn snippet(text: &str, max: usize) -> String {
 /// Query tokens for diagnostics — mirrors `embedTokens`.
 pub fn query_tokens(query: &str) -> Vec<String> {
     embed_tokens(query, 16_384)
+}
+
+#[cfg(test)]
+mod chunk_tests {
+    use super::chunk_text;
+
+    #[test]
+    fn utf8_bounds_and_paragraph_runs_match_reference() {
+        assert_eq!(
+            chunk_text(&"é".repeat(80), 64).unwrap(),
+            ["é".repeat(32), "é".repeat(32), "é".repeat(16)]
+        );
+        assert_eq!(
+            chunk_text(&"😀".repeat(9), 16).unwrap(),
+            ["😀".repeat(4), "😀".repeat(4), "😀".to_owned()]
+        );
+        assert_eq!(
+            chunk_text("aaaaa\n\n\nbbbbb\n\ncccccc", 8).unwrap(),
+            ["aaaaa", "bbbbb", "cccccc"]
+        );
+        for max in [0, 1, 3, 65537] {
+            assert!(chunk_text("😀", max).is_err());
+        }
+    }
 }

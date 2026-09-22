@@ -18,6 +18,7 @@ Bun runtime share the program, receipt, and durable process contracts.
 | Give another reviewer a verifiable execution history | One portable evidence file that replays without your store, credentials, or model | [Offline evidence](docs/vm.md#verify-a-process-away-from-its-original-host) |
 | Route support requests and reuse a draft helper over a bounded inbox | Explicit context, selected branches, child program identities, and recorded results | [Readable programs](#read-the-program-see-its-structure) and [reuse](#write-a-program-once-call-it-or-use-it-for-each-item) |
 | Observe a PR until checks settle, without spending model calls on polling | Exact Git revision and policy evidence, bounded waits, and a review or repair packet | [Read-only PR shepherd](docs/pr-shepherd.md) |
+| Retain observations, investigate changed premises, and activate an evaluated procedure revision | Expected-head application state, scope-bound derivations, durable intents, and captured views | [Adaptive inventory](docs/adaptive-inventory.md) and [application contract](spec/v1/application.md) |
 
 The [use-case guide](docs/use-cases.md) connects each job to runnable commands,
 expected artifacts, and the work your host still owns. Start with the packaged
@@ -86,6 +87,8 @@ distributed custody, global storage quota, or retention service. Unknown writes
 require reconciliation, and a verifying receipt proves execution consistency,
 not factual truth or exactly-once arbitrary external effects. See the
 [operating boundary](docs/use-cases.md#choose-the-right-boundary) before deployment.
+The application lifecycle does enforce conservative [namespace byte limits](spec/v1/application.md#conservative-namespace-quota);
+these do not attribute shared content-addressed objects to applications.
 
 ## Read the program. See its structure.
 
@@ -240,7 +243,9 @@ bun cli.ts call inbox.bundle.json \
 ```
 
 The bundle contains the complete manifest closure and runs without the source
-files. The [language guide](docs/source-language.md) covers the SDK, project
+files. The command above uses the same cell-keyed arguments as `run`.
+Use `call --interface` for named program arguments and only the declared
+interface outputs. The [language guide](docs/source-language.md) covers the SDK, project
 roots, and native bundle calls.
 
 ### Follow a result into the code that produced it
@@ -1028,17 +1033,20 @@ algal tool-def ticket.algal.json > ticket-tool.json
 Then call it from an agent:
 
 ```sh
-algal call ./tools/<bundle>.bundle.json \
-  --args ticket.args.json \
+algal call ./tools/<bundle>.bundle.json --interface \
+  --args ticket.interface-args.json \
   --gateway-model alibaba/qwen3.5-flash
 ```
 
-The result is compact enough for an agent to consume:
+The interface argument file uses names from `tool-def`, for example
+`{"ticket":"App crashes when I press export twice"}` for the triage organism.
+Missing and undeclared names are rejected. The result contains only the declared
+interface outputs:
 
 ```json
 {
   "ok": true,
-  "outputs": { "out": "billing" },
+  "outputs": { "summary": "BUG: App crashes when I press export twice" },
   "receiptDigest": "sha256:...",
   "manifestDigest": "sha256:..."
 }
@@ -1070,6 +1078,8 @@ forged-output detection.
 - `spec/v1/foundry.md` — candidate generation, evidence, promotion, and verification.
 - `spec/v1/search.md` — bounded generations, feedback, survivors, and lineage.
 - `spec/v1/bench.md` — workload comparison, attribution, and the pareto claim.
+- [Coding-harness pilot](docs/coding-harness.md) — matched conventional/ALGAL loops, bounded policy proposals, and independent benchmark grading.
+- [Coding-harness memory spike](docs/coding-harness-memory-spike.md) — scoped observations, inspectable procedures, and native prerequisite proofs in an opt-in memory comparison.
 - `docs/` — design notes as they land.
 
 ## Related work

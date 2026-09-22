@@ -1,0 +1,741 @@
+{
+  "schema": "algal.harness-pilot.public-evidence.v1",
+  "generatedAt": "2026-09-20T23:43:54.535772+00:00",
+  "implementationCommit": "0bc12d8707da663472b0468e83b3f75899b77c07",
+  "experimentComplete": true,
+  "pullRequest": "https://github.com/hraness/algal/pull/32",
+  "model": "claude/sonnet/low",
+  "benchmark": "Terminal-Bench 2.0",
+  "benchmarkCommit": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+  "harborVersion": "0.23.0",
+  "maxModelAttemptsPerTrial": 4,
+  "reports": {
+    "candidate-dev": {
+      "complete": true,
+      "settingsId": "sha256:669e06b8a198482e02d8f7cb0dd76647d9f6ef3a4a889c7c1bb4f6168ef48e4f",
+      "episodes": [
+        {
+          "arm": "algal-candidate",
+          "engine": "algal",
+          "taskId": "polyglot-c-py",
+          "policyId": "sha256:c4e14d758dfb899fcef2c8682af0c4ef6d314fbb96973535cbb90ec2fb57fdc7",
+          "policy": {
+            "context": {
+              "maxMessages": 4,
+              "mode": "recent-with-first"
+            },
+            "recoveryPolicy": "diagnose-once",
+            "testPolicy": "focused-first",
+            "version": 1
+          },
+          "statusReason": "independent-verifier",
+          "outcome": {
+            "durationMs": 232814,
+            "inputTokens": null,
+            "outputTokens": null,
+            "paidCostUsd": null,
+            "policyId": "sha256:c4e14d758dfb899fcef2c8682af0c4ef6d314fbb96973535cbb90ec2fb57fdc7",
+            "repeat": 0,
+            "status": "failure",
+            "taskId": "polyglot-c-py"
+          }
+        },
+        {
+          "arm": "algal-candidate",
+          "engine": "algal",
+          "taskId": "regex-log",
+          "policyId": "sha256:c4e14d758dfb899fcef2c8682af0c4ef6d314fbb96973535cbb90ec2fb57fdc7",
+          "policy": {
+            "context": {
+              "maxMessages": 4,
+              "mode": "recent-with-first"
+            },
+            "recoveryPolicy": "diagnose-once",
+            "testPolicy": "focused-first",
+            "version": 1
+          },
+          "statusReason": "independent-verifier",
+          "outcome": {
+            "durationMs": 150139,
+            "inputTokens": null,
+            "outputTokens": null,
+            "paidCostUsd": null,
+            "policyId": "sha256:c4e14d758dfb899fcef2c8682af0c4ef6d314fbb96973535cbb90ec2fb57fdc7",
+            "repeat": 0,
+            "status": "failure",
+            "taskId": "regex-log"
+          }
+        }
+      ],
+      "summaries": {
+        "algal-candidate": {
+          "attempted": 2,
+          "failure": 2,
+          "gradedSuccessRate": 0,
+          "invalid": 0,
+          "success": 0,
+          "successRate": 0,
+          "uncertain": 0,
+          "usage": {
+            "knownPaidCostUsd": 0,
+            "records": 2,
+            "totalDurationMs": 382953,
+            "totalInputTokens": null,
+            "totalOutputTokens": null,
+            "totalPaidCostUsd": null,
+            "unknownCostRecords": 2
+          }
+        }
+      }
+    },
+    "heldout": {
+      "complete": true,
+      "settingsId": "sha256:669e06b8a198482e02d8f7cb0dd76647d9f6ef3a4a889c7c1bb4f6168ef48e4f",
+      "episodes": [
+        {
+          "arm": "baseline-fixed",
+          "engine": "baseline",
+          "taskId": "cancel-async-tasks",
+          "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+          "policy": {
+            "context": {
+              "mode": "full"
+            },
+            "recoveryPolicy": "diagnose-once",
+            "testPolicy": "focused-first",
+            "version": 1
+          },
+          "statusReason": "independent-verifier",
+          "outcome": {
+            "durationMs": 74780,
+            "inputTokens": null,
+            "outputTokens": null,
+            "paidCostUsd": null,
+            "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+            "repeat": 0,
+            "status": "failure",
+            "taskId": "cancel-async-tasks"
+          }
+        },
+        {
+          "arm": "algal-fixed",
+          "engine": "algal",
+          "taskId": "cancel-async-tasks",
+          "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+          "policy": {
+            "context": {
+              "mode": "full"
+            },
+            "recoveryPolicy": "diagnose-once",
+            "testPolicy": "focused-first",
+            "version": 1
+          },
+          "statusReason": "independent-verifier",
+          "outcome": {
+            "durationMs": 76760,
+            "inputTokens": null,
+            "outputTokens": null,
+            "paidCostUsd": null,
+            "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+            "repeat": 0,
+            "status": "failure",
+            "taskId": "cancel-async-tasks"
+          }
+        },
+        {
+          "arm": "algal-selected",
+          "engine": "algal",
+          "taskId": "cancel-async-tasks",
+          "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+          "policy": {
+            "context": {
+              "mode": "full"
+            },
+            "recoveryPolicy": "diagnose-once",
+            "testPolicy": "focused-first",
+            "version": 1
+          },
+          "statusReason": "independent-verifier",
+          "outcome": {
+            "durationMs": 99950,
+            "inputTokens": null,
+            "outputTokens": null,
+            "paidCostUsd": null,
+            "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+            "repeat": 0,
+            "status": "failure",
+            "taskId": "cancel-async-tasks"
+          }
+        },
+        {
+          "arm": "baseline-fixed",
+          "engine": "baseline",
+          "taskId": "build-cython-ext",
+          "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+          "policy": {
+            "context": {
+              "mode": "full"
+            },
+            "recoveryPolicy": "diagnose-once",
+            "testPolicy": "focused-first",
+            "version": 1
+          },
+          "statusReason": "independent-verifier",
+          "outcome": {
+            "durationMs": 216741,
+            "inputTokens": null,
+            "outputTokens": null,
+            "paidCostUsd": null,
+            "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+            "repeat": 0,
+            "status": "failure",
+            "taskId": "build-cython-ext"
+          }
+        },
+        {
+          "arm": "algal-fixed",
+          "engine": "algal",
+          "taskId": "build-cython-ext",
+          "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+          "policy": {
+            "context": {
+              "mode": "full"
+            },
+            "recoveryPolicy": "diagnose-once",
+            "testPolicy": "focused-first",
+            "version": 1
+          },
+          "statusReason": "independent-verifier",
+          "outcome": {
+            "durationMs": 114993,
+            "inputTokens": null,
+            "outputTokens": null,
+            "paidCostUsd": null,
+            "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+            "repeat": 0,
+            "status": "failure",
+            "taskId": "build-cython-ext"
+          }
+        },
+        {
+          "arm": "algal-selected",
+          "engine": "algal",
+          "taskId": "build-cython-ext",
+          "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+          "policy": {
+            "context": {
+              "mode": "full"
+            },
+            "recoveryPolicy": "diagnose-once",
+            "testPolicy": "focused-first",
+            "version": 1
+          },
+          "statusReason": "independent-verifier",
+          "outcome": {
+            "durationMs": 113698,
+            "inputTokens": null,
+            "outputTokens": null,
+            "paidCostUsd": null,
+            "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+            "repeat": 0,
+            "status": "failure",
+            "taskId": "build-cython-ext"
+          }
+        }
+      ],
+      "summaries": {
+        "algal-fixed": {
+          "attempted": 2,
+          "failure": 2,
+          "gradedSuccessRate": 0,
+          "invalid": 0,
+          "success": 0,
+          "successRate": 0,
+          "uncertain": 0,
+          "usage": {
+            "knownPaidCostUsd": 0,
+            "records": 2,
+            "totalDurationMs": 191753,
+            "totalInputTokens": null,
+            "totalOutputTokens": null,
+            "totalPaidCostUsd": null,
+            "unknownCostRecords": 2
+          }
+        },
+        "algal-selected": {
+          "attempted": 2,
+          "failure": 2,
+          "gradedSuccessRate": 0,
+          "invalid": 0,
+          "success": 0,
+          "successRate": 0,
+          "uncertain": 0,
+          "usage": {
+            "knownPaidCostUsd": 0,
+            "records": 2,
+            "totalDurationMs": 213648,
+            "totalInputTokens": null,
+            "totalOutputTokens": null,
+            "totalPaidCostUsd": null,
+            "unknownCostRecords": 2
+          }
+        },
+        "baseline-fixed": {
+          "attempted": 2,
+          "failure": 2,
+          "gradedSuccessRate": 0,
+          "invalid": 0,
+          "success": 0,
+          "successRate": 0,
+          "uncertain": 0,
+          "usage": {
+            "knownPaidCostUsd": 0,
+            "records": 2,
+            "totalDurationMs": 291521,
+            "totalInputTokens": null,
+            "totalOutputTokens": null,
+            "totalPaidCostUsd": null,
+            "unknownCostRecords": 2
+          }
+        }
+      },
+      "selectedHoldout": {
+        "attempted": 2,
+        "failure": 2,
+        "gradedSuccessRate": 0,
+        "invalid": 0,
+        "success": 0,
+        "successRate": 0,
+        "uncertain": 0,
+        "usage": {
+          "knownPaidCostUsd": 0,
+          "records": 2,
+          "totalDurationMs": 213648,
+          "totalInputTokens": null,
+          "totalOutputTokens": null,
+          "totalPaidCostUsd": null,
+          "unknownCostRecords": 2
+        }
+      }
+    },
+    "paired-dev": {
+      "complete": true,
+      "settingsId": "sha256:669e06b8a198482e02d8f7cb0dd76647d9f6ef3a4a889c7c1bb4f6168ef48e4f",
+      "episodes": [
+        {
+          "arm": "baseline-fixed",
+          "engine": "baseline",
+          "taskId": "polyglot-c-py",
+          "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+          "policy": {
+            "context": {
+              "mode": "full"
+            },
+            "recoveryPolicy": "diagnose-once",
+            "testPolicy": "focused-first",
+            "version": 1
+          },
+          "statusReason": "independent-verifier",
+          "outcome": {
+            "durationMs": 191827,
+            "inputTokens": null,
+            "outputTokens": null,
+            "paidCostUsd": null,
+            "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+            "repeat": 0,
+            "status": "failure",
+            "taskId": "polyglot-c-py"
+          }
+        },
+        {
+          "arm": "algal-fixed",
+          "engine": "algal",
+          "taskId": "polyglot-c-py",
+          "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+          "policy": {
+            "context": {
+              "mode": "full"
+            },
+            "recoveryPolicy": "diagnose-once",
+            "testPolicy": "focused-first",
+            "version": 1
+          },
+          "statusReason": "independent-verifier",
+          "outcome": {
+            "durationMs": 164698,
+            "inputTokens": null,
+            "outputTokens": null,
+            "paidCostUsd": null,
+            "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+            "repeat": 0,
+            "status": "failure",
+            "taskId": "polyglot-c-py"
+          }
+        },
+        {
+          "arm": "baseline-fixed",
+          "engine": "baseline",
+          "taskId": "regex-log",
+          "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+          "policy": {
+            "context": {
+              "mode": "full"
+            },
+            "recoveryPolicy": "diagnose-once",
+            "testPolicy": "focused-first",
+            "version": 1
+          },
+          "statusReason": "independent-verifier",
+          "outcome": {
+            "durationMs": 147447,
+            "inputTokens": null,
+            "outputTokens": null,
+            "paidCostUsd": null,
+            "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+            "repeat": 0,
+            "status": "failure",
+            "taskId": "regex-log"
+          }
+        },
+        {
+          "arm": "algal-fixed",
+          "engine": "algal",
+          "taskId": "regex-log",
+          "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+          "policy": {
+            "context": {
+              "mode": "full"
+            },
+            "recoveryPolicy": "diagnose-once",
+            "testPolicy": "focused-first",
+            "version": 1
+          },
+          "statusReason": "independent-verifier",
+          "outcome": {
+            "durationMs": 158170,
+            "inputTokens": null,
+            "outputTokens": null,
+            "paidCostUsd": null,
+            "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+            "repeat": 0,
+            "status": "failure",
+            "taskId": "regex-log"
+          }
+        }
+      ],
+      "summaries": {
+        "algal-fixed": {
+          "attempted": 2,
+          "failure": 2,
+          "gradedSuccessRate": 0,
+          "invalid": 0,
+          "success": 0,
+          "successRate": 0,
+          "uncertain": 0,
+          "usage": {
+            "knownPaidCostUsd": 0,
+            "records": 2,
+            "totalDurationMs": 322868,
+            "totalInputTokens": null,
+            "totalOutputTokens": null,
+            "totalPaidCostUsd": null,
+            "unknownCostRecords": 2
+          }
+        },
+        "baseline-fixed": {
+          "attempted": 2,
+          "failure": 2,
+          "gradedSuccessRate": 0,
+          "invalid": 0,
+          "success": 0,
+          "successRate": 0,
+          "uncertain": 0,
+          "usage": {
+            "knownPaidCostUsd": 0,
+            "records": 2,
+            "totalDurationMs": 339274,
+            "totalInputTokens": null,
+            "totalOutputTokens": null,
+            "totalPaidCostUsd": null,
+            "unknownCostRecords": 2
+          }
+        }
+      }
+    }
+  },
+  "proposal": {
+    "status": "admitted",
+    "source": "model-generated",
+    "proposal": {
+      "policy": {
+        "version": 1,
+        "context": {
+          "mode": "recent-with-first",
+          "maxMessages": 4
+        },
+        "testPolicy": "focused-first",
+        "recoveryPolicy": "diagnose-once"
+      },
+      "parentPolicyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+      "evidenceTaskIds": [
+        "polyglot-c-py",
+        "regex-log"
+      ]
+    },
+    "usage": {
+      "durationMs": 17867,
+      "paidCostUsd": null,
+      "inputTokens": null,
+      "outputTokens": null
+    },
+    "error": null
+  },
+  "frozen": {
+    "settingsId": "sha256:669e06b8a198482e02d8f7cb0dd76647d9f6ef3a4a889c7c1bb4f6168ef48e4f",
+    "selection": {
+      "developmentEvidenceId": "sha256:47ac5b00b314d1f68abe78dd12d65787766628ab141b1130e179f5af18d77c14",
+      "developmentSummary": {
+        "attempted": 2,
+        "failure": 2,
+        "gradedSuccessRate": 0,
+        "invalid": 0,
+        "success": 0,
+        "successRate": 0,
+        "uncertain": 0,
+        "usage": {
+          "knownPaidCostUsd": 0,
+          "records": 2,
+          "totalDurationMs": 322868,
+          "totalInputTokens": null,
+          "totalOutputTokens": null,
+          "totalPaidCostUsd": null,
+          "unknownCostRecords": 2
+        }
+      },
+      "policy": {
+        "context": {
+          "mode": "full"
+        },
+        "recoveryPolicy": "diagnose-once",
+        "testPolicy": "focused-first",
+        "version": 1
+      },
+      "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+      "searchUsage": {
+        "knownPaidCostUsd": 0,
+        "records": 5,
+        "totalDurationMs": 723688,
+        "totalInputTokens": null,
+        "totalOutputTokens": null,
+        "totalPaidCostUsd": null,
+        "unknownCostRecords": 5
+      },
+      "selectionRule": "development-success-then-validity-then-policy-id-v1",
+      "splitId": "sha256:6ea593d486fd4baca1057ff6f3f003ee3a80d9e6b3a73f7342065981e83583bc",
+      "version": 1
+    },
+    "candidateOrigin": "model-proposal",
+    "proposalRecordId": "sha256:fc0154597aeeb8e7da9c89cf40e587660c8bc210d3dc09e413ef4448ef8de0d7",
+    "developmentReports": {
+      "candidate-dev": "sha256:4e33818b88c3b25a949832417c13a4fcd3da3fb52a8206173b453fa589f01377",
+      "paired-dev": "sha256:0a57582285d56e4a7036e75ecefd9bf998a8b387b00553bf6dac547aafaae01c"
+    }
+  },
+  "selectedPolicyChanged": false,
+  "completedControllerRuns": [
+    {
+      "job": "algal-candidate--polyglot-c-py--c4e14d758dfb",
+      "mode": "algal",
+      "policyId": "sha256:c4e14d758dfb899fcef2c8682af0c4ef6d314fbb96973535cbb90ec2fb57fdc7",
+      "termination": "budget-exhausted",
+      "modelAttempts": 4,
+      "terminalCalls": 4,
+      "verification": {
+        "ok": true,
+        "outcome": "failed",
+        "digest": "sha256:082714f1236ad93d92dbf11ea1a223da72a018ea05eb6b5e056daef2d63f7977",
+        "mismatches": []
+      }
+    },
+    {
+      "job": "algal-candidate--regex-log--c4e14d758dfb",
+      "mode": "algal",
+      "policyId": "sha256:c4e14d758dfb899fcef2c8682af0c4ef6d314fbb96973535cbb90ec2fb57fdc7",
+      "termination": "finished",
+      "modelAttempts": 3,
+      "terminalCalls": 2,
+      "verification": {
+        "ok": true,
+        "outcome": "complete",
+        "digest": "sha256:a51989abfb461cfc67d23dae551fc5c64bc4d6fe6d550d24ad78d21099a6726f",
+        "mismatches": []
+      }
+    },
+    {
+      "job": "algal-fixed--build-cython-ext--ae7e222ad27f",
+      "mode": "algal",
+      "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+      "termination": "budget-exhausted",
+      "modelAttempts": 4,
+      "terminalCalls": 4,
+      "verification": {
+        "ok": true,
+        "outcome": "failed",
+        "digest": "sha256:72cc3ea49e75b98d09309019e65f5d63e02762f6b3ffb20fa1f4db4013a3f660",
+        "mismatches": []
+      }
+    },
+    {
+      "job": "algal-fixed--cancel-async-tasks--ae7e222ad27f",
+      "mode": "algal",
+      "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+      "termination": "finished",
+      "modelAttempts": 2,
+      "terminalCalls": 1,
+      "verification": {
+        "ok": true,
+        "outcome": "complete",
+        "digest": "sha256:cb808a6062f3453ba4dce535b320774be9196e65c8f7f45e49f62d23eecd5ecf",
+        "mismatches": []
+      }
+    },
+    {
+      "job": "algal-fixed--polyglot-c-py--ae7e222ad27f",
+      "mode": "algal",
+      "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+      "termination": "budget-exhausted",
+      "modelAttempts": 4,
+      "terminalCalls": 4,
+      "verification": {
+        "ok": true,
+        "outcome": "failed",
+        "digest": "sha256:4b410bc0d4f49288b74308b27bda44973dca01ac8d5992d5992fc48d173554cd",
+        "mismatches": []
+      }
+    },
+    {
+      "job": "algal-fixed--regex-log--ae7e222ad27f",
+      "mode": "algal",
+      "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+      "termination": "finished",
+      "modelAttempts": 3,
+      "terminalCalls": 2,
+      "verification": {
+        "ok": true,
+        "outcome": "complete",
+        "digest": "sha256:55c7e16df9ae0a88d8b2de8ac80c0b965680c055b0f0671d5a1d401cd744bebe",
+        "mismatches": []
+      }
+    },
+    {
+      "job": "algal-selected--build-cython-ext--ae7e222ad27f",
+      "mode": "algal",
+      "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+      "termination": "budget-exhausted",
+      "modelAttempts": 4,
+      "terminalCalls": 4,
+      "verification": {
+        "ok": true,
+        "outcome": "failed",
+        "digest": "sha256:a9e86a7f316b766c3ae672ffef553bd52077a06cda169076631a29fb5698782d",
+        "mismatches": []
+      }
+    },
+    {
+      "job": "algal-selected--cancel-async-tasks--ae7e222ad27f",
+      "mode": "algal",
+      "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+      "termination": "finished",
+      "modelAttempts": 3,
+      "terminalCalls": 2,
+      "verification": {
+        "ok": true,
+        "outcome": "complete",
+        "digest": "sha256:9b3033efb0752ff855794e6e0f000ccdf1de1a180a37c4bac39bcded68eae743",
+        "mismatches": []
+      }
+    },
+    {
+      "job": "baseline-fixed--build-cython-ext--ae7e222ad27f",
+      "mode": "baseline",
+      "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+      "termination": "budget-exhausted",
+      "modelAttempts": 4,
+      "terminalCalls": 4,
+      "verification": null
+    },
+    {
+      "job": "baseline-fixed--cancel-async-tasks--ae7e222ad27f",
+      "mode": "baseline",
+      "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+      "termination": "finished",
+      "modelAttempts": 2,
+      "terminalCalls": 1,
+      "verification": null
+    },
+    {
+      "job": "baseline-fixed--polyglot-c-py--ae7e222ad27f",
+      "mode": "baseline",
+      "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+      "termination": "budget-exhausted",
+      "modelAttempts": 4,
+      "terminalCalls": 4,
+      "verification": null
+    },
+    {
+      "job": "baseline-fixed--regex-log--ae7e222ad27f",
+      "mode": "baseline",
+      "policyId": "sha256:ae7e222ad27ff37db72dd606329a38b93720e5616c77b2e0d03246ad149b4b3f",
+      "termination": "finished",
+      "modelAttempts": 4,
+      "terminalCalls": 3,
+      "verification": null
+    }
+  ],
+  "inference": {
+    "calls": 47,
+    "completedCalls": 47,
+    "incrementalPaidApiSpendUsd": 0,
+    "paidInferenceCapUsd": 20,
+    "subscriptionCostUsd": null,
+    "inputTokens": null,
+    "outputTokens": null
+  },
+  "episodeCallsByRun": {
+    "smoke-live-v1": {
+      "calls": 1,
+      "completedCalls": 1
+    },
+    "smoke-live-v2": {
+      "calls": 4,
+      "completedCalls": 4
+    },
+    "experiment-v1": {
+      "calls": 41,
+      "completedCalls": 41
+    }
+  },
+  "smokes": [
+    {
+      "run": "smoke-live-v1",
+      "status": "invalid",
+      "reason": "Missing Python capture interpreter; command did not execute",
+      "modelCalls": 1
+    },
+    {
+      "run": "smoke-live-v2",
+      "status": "failure",
+      "reward": 0,
+      "modelCalls": 4,
+      "terminalCalls": 3,
+      "receiptVerified": true
+    }
+  ],
+  "limitations": [
+    "Four tasks and one repeat; not a statistically meaningful performance estimate.",
+    "Older benchmark compatibility pilot, not a current leaderboard run.",
+    "Upstream immutable model weights and subscription token/cost attribution are unavailable.",
+    "No cross-task persistent-memory treatment or equal-budget conventional policy search.",
+    "Linux amd64 runs through QEMU on ARM64; ordinary persistent background jobs are unsupported."
+  ]
+}

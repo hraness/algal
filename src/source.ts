@@ -298,7 +298,7 @@ function output(type: Type): AgentOutput {
   if (type.kind === "choice") return { kind: "choice", labels: type.labels };
   if (isText(type)) return { kind: "text" };
   // The core schema is shallow. Only claim what the expression itself proves.
-  const schema: JsonObject = type.kind === "json" ? {} : { type: type.kind === "record" || type.kind === "decision" ? "object" : type.kind === "list" ? "array" : type.kind };
+  const schema: JsonObject = { type: type.kind === "json" ? ["null", "boolean", "object", "array", "number", "string"] : type.kind === "record" || type.kind === "decision" ? "object" : type.kind === "list" ? "array" : type.kind };
   return { kind: "json", schema };
 }
 function field(program: JsonValue, key: JsonValue): JsonValue {

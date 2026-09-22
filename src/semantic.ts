@@ -101,35 +101,36 @@ function blobVec(blob: Uint8Array): number[] {
 
 /** Split doc text into ≤maxTextBytes chunks on paragraph boundaries;
  * single-chunk for store objects. Deterministic — same bytes, same split. */
-export function chunkText(text: string, max = SEMANTIC_BOUNDS.maxTextBytes): string[] {
+export function chunkText(text: string, max: number = SEMANTIC_BOUNDS.maxTextBytes): string[] {
+  if (!Number.isSafeInteger(max) || max < 4 || max > SEMANTIC_BOUNDS.maxTextBytes) {
+    throw new AlgalError("PARSE_FAILED", `chunk byte bound must be 4..${SEMANTIC_BOUNDS.maxTextBytes}`);
+  }
   if (Buffer.byteLength(text, "utf8") <= max) return [text];
-  const parts = text.split(/\n{2,}/);
   const chunks: string[] = [];
   let current = "";
-  for (const part of parts) {
+  for (const part of text.split(/\n{2,}/)) {
     const next = current.length === 0 ? part : `${current}\n\n${part}`;
-    if (Buffer.byteLength(next, "utf8") <= max) {
-      current = next;
-      continue;
-    }
+    if (Buffer.byteLength(next, "utf8") <= max) { current = next; continue; }
     if (current.length > 0) chunks.push(current);
-    if (Buffer.byteLength(part, "utf8") > max) {
-      // a single oversized paragraph splits on byte boundaries
-      let rest = part;
-      while (Buffer.byteLength(rest, "utf8") > max) {
-        const cut = rest.slice(0, max);
-        const last = cut.lastIndexOf("\n");
-        const take = last > 0 ? cut.slice(0, last) : cut;
-        chunks.push(take);
-        rest = rest.slice(take.length).replace(/^\n+/, "");
-      }
-      current = rest;
-    } else {
-      current = part;
+    let rest = Buffer.from(part, "utf8");
+    while (rest.length > max) {
+      let end = max;
+      // UTF-8 continuation bytes cannot start the next chunk. max >= 4
+      // guarantees at least one complete Unicode scalar and forward progress.
+      while ((rest[end]! & 0xc0) === 0x80) end--;
+      const cut = rest.subarray(0, end);
+      const newline = cut.lastIndexOf(10);
+      const take = newline > 0 ? newline : end;
+      chunks.push(rest.subarray(0, take).toString("utf8"));
+      let offset = take;
+      while (rest[offset] === 10) offset++;
+      rest = rest.subarray(offset);
     }
+    current = rest.toString("utf8");
   }
   if (current.length > 0) chunks.push(current);
-  return chunks.slice(0, SEMANTIC_BOUNDS.maxChunks);
+  if (chunks.length > SEMANTIC_BOUNDS.maxChunks) throw new AlgalError("BUDGET_EXHAUSTED", "semantic chunk count");
+  return chunks;
 }
 
 async function listJson(dir: string): Promise<string[]> {
@@ -187,80 +188,87 @@ export async function indexStore(
   options: { docs?: string; signal?: AbortSignal } = {},
 ): Promise<IndexReport> {
   const db = openIndex(dir);
-  const existing = new Map<string, string>();
-  for (const row of db
-    .query("SELECT id, text_digest FROM chunks WHERE model = ?")
-    .all(embedder.model) as { id: string; text_digest: string }[]) {
-    existing.set(row.id, row.text_digest);
-  }
-  const insert = db.prepare(
-    "INSERT OR REPLACE INTO chunks(id, model, source, seq, text_digest, bytes, text, vec) VALUES(?,?,?,?,?,?,?,?)",
-  );
-  const pending: { chunk: Omit<Chunk, "vec"> }[] = [];
-  const seen = new Set<string>();
-  let sourcesSeen = 0;
-  let chunks = 0;
-  let reused = 0;
-  for await (const { ref, text } of sources(dir, options.docs)) {
-    sourcesSeen++;
-    for (const [seq, piece] of chunkText(text).entries()) {
-      if (chunks >= SEMANTIC_BOUNDS.maxChunks) break;
-      const textDigest = digestCanonical(piece as unknown as JsonValue);
-      const id = digestCanonical(
-        `${embedder.model}|${ref}|${seq}` as unknown as JsonValue,
-      );
-      seen.add(id);
-      chunks++;
-      if (existing.get(id) === textDigest) {
-        reused++;
-        continue;
-      }
-      pending.push({ chunk: { id, ref, seq, text: piece, textDigest } });
+  try {
+    const existing = new Map<string, string>();
+    for (const row of db
+      .query("SELECT id, text_digest, text FROM chunks WHERE model = ?")
+      .all(embedder.model) as { id: string; text_digest: string; text: string }[]) {
+      // Rebuild rows written by earlier versions that stored the full source
+      // alongside a chunk digest; a matching digest alone cannot validate reuse.
+      const valid = Buffer.byteLength(row.text, "utf8") <= SEMANTIC_BOUNDS.maxTextBytes && digestCanonical(row.text) === row.text_digest;
+      existing.set(row.id, valid ? row.text_digest : "");
     }
-  }
-  // prune rows whose source vanished or shrank — the index tracks the store
-  const prune = db.prepare("DELETE FROM chunks WHERE model = ? AND id = ?");
-  for (const id of existing.keys()) {
-    if (!seen.has(id)) prune.run(embedder.model, id);
-  }
-  let embedded = 0;
-  const BATCH = 64;
-  for (let i = 0; i < pending.length; i += BATCH) {
-    const slice = pending.slice(i, i + BATCH);
-    const vectors = await embedder.embed(
-      slice.map((s) => s.chunk.text),
-      options.signal,
+    const insert = db.prepare(
+      "INSERT OR REPLACE INTO chunks(id, model, source, seq, text_digest, bytes, text, vec) VALUES(?,?,?,?,?,?,?,?)",
     );
-    if (vectors.length !== slice.length) {
-      throw new AlgalError("EFFECT_UNPARSEABLE", "embedder returned wrong count");
-    }
-    const tx = db.transaction(() => {
-      for (const [j, vec] of vectors.entries()) {
-        const { chunk } = slice[j]!;
-        insert.run(
-          chunk.id,
-          embedder.model,
-          chunk.ref,
-          chunk.seq,
-          chunk.textDigest,
-          Buffer.byteLength(chunk.text, "utf8"),
-          chunk.text,
-          vecBlob(vec),
+    const pending: { chunk: Omit<Chunk, "vec"> }[] = [];
+    const seen = new Set<string>();
+    let sourcesSeen = 0;
+    let chunks = 0;
+    let reused = 0;
+    for await (const { ref, text } of sources(dir, options.docs)) {
+      sourcesSeen++;
+      for (const [seq, piece] of chunkText(text).entries()) {
+        if (chunks >= SEMANTIC_BOUNDS.maxChunks) break;
+        const textDigest = digestCanonical(piece as unknown as JsonValue);
+        const id = digestCanonical(
+          `${embedder.model}|${ref}|${seq}` as unknown as JsonValue,
         );
-        embedded++;
+        seen.add(id);
+        chunks++;
+        if (existing.get(id) === textDigest) {
+          reused++;
+          continue;
+        }
+        pending.push({
+          chunk: { id, ref, seq, text: piece, textDigest },
+        });
       }
-    });
-    tx();
-  }
-  db.prepare("INSERT OR REPLACE INTO meta(k, v) VALUES('model', ?)").run(embedder.model);
-  return {
-    model: embedder.model,
-    dimension: embedder.dimension,
-    sources: sourcesSeen,
-    chunks,
-    embedded,
-    reused,
-  };
+    }
+    // prune rows whose source vanished or shrank — the index tracks the store
+    const prune = db.prepare("DELETE FROM chunks WHERE model = ? AND id = ?");
+    for (const id of existing.keys()) {
+      if (!seen.has(id)) prune.run(embedder.model, id);
+    }
+    let embedded = 0;
+    const BATCH = 64;
+    for (let i = 0; i < pending.length; i += BATCH) {
+      const slice = pending.slice(i, i + BATCH);
+      const vectors = await embedder.embed(
+        slice.map((s) => s.chunk.text),
+        options.signal,
+      );
+      if (vectors.length !== slice.length) {
+        throw new AlgalError("EFFECT_UNPARSEABLE", "embedder returned wrong count");
+      }
+      const tx = db.transaction(() => {
+        for (const [j, vec] of vectors.entries()) {
+          const { chunk } = slice[j]!;
+          insert.run(
+            chunk.id,
+            embedder.model,
+            chunk.ref,
+            chunk.seq,
+            chunk.textDigest,
+            Buffer.byteLength(chunk.text, "utf8"),
+            chunk.text,
+            vecBlob(vec),
+          );
+          embedded++;
+        }
+      });
+      tx();
+    }
+    db.prepare("INSERT OR REPLACE INTO meta(k, v) VALUES('model', ?)").run(embedder.model);
+    return {
+      model: embedder.model,
+      dimension: embedder.dimension,
+      sources: sourcesSeen,
+      chunks,
+      embedded,
+      reused,
+    };
+  } finally { db.close(); }
 }
 
 const VEC_WEIGHT = 0.65;
@@ -281,16 +289,21 @@ export async function searchIndex(
   if (Buffer.byteLength(query, "utf8") > SEMANTIC_BOUNDS.maxQueryBytes) {
     throw new AlgalError("BUDGET_EXHAUSTED", "query exceeds maxQueryBytes");
   }
-  const db = openIndex(dir);
-  const rows = db
-    .query("SELECT id, source, seq, text, vec FROM chunks WHERE model = ?")
-    .all(embedder.model) as {
-    id: string;
-    source: string;
-    seq: number;
-    text: string;
-    vec: Uint8Array;
-  }[];
+  const rows = (() => {
+    const db = openIndex(dir);
+    try {
+      return db
+        .query("SELECT id, source, seq, text, vec FROM chunks WHERE model = ?")
+        .all(embedder.model) as {
+        id: string;
+        source: string;
+        seq: number;
+        text: string;
+        vec: Uint8Array;
+      }[];
+
+    } finally { db.close(); }
+  })();
   const [qv] = await embedder.embed([query]);
   const hits: SearchHit[] = rows.map((row) => {
     const score =

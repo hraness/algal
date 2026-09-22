@@ -33,6 +33,16 @@ test("bundled examples are discoverable and runnable", async () => {
   expect(JSON.parse(run.stdout).cells.hello.outputs.text).toBe("Programs that grow.");
 });
 
+test("suite rejects malformed optional evidence instead of silently dropping it", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "algal-suite-invalid-"));
+  try {
+    await writeFile(join(dir, "hello.algal.json"), await readFile(join(root, "examples/hello.algal.json")));
+    expect((await cli("suite", "--examples", dir, "--dir", join(dir, "store"))).code).toBe(0);
+    await writeFile(join(dir, "hello.responses.json"), "{malformed");
+    expect((await cli("suite", "--examples", dir, "--dir", join(dir, "store"))).code).not.toBe(0);
+  } finally { await rm(dir, {recursive: true, force: true}); }
+});
+
 test("mailbox commands create capabilities and deliver a durable wakeup", async () => {
   const dir = await mkdtemp(join(tmpdir(), "algal-cli-mailbox-"));
   const value = join(dir, "wake.json");

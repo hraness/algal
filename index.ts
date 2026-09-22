@@ -315,3 +315,137 @@ export type { CodingOperationAdapter, CodingOperationBinding, CodingOperationOut
 
 export { PROCESS_EVIDENCE_CONTRACT, PROCESS_EVIDENCE_BOUNDS, parseProcessEvidence, exportProcessEvidence, verifyProcessEvidence } from "./src/process-evidence";
 export type { ProcessEvidence, ProcessEvidenceReport } from "./src/process-evidence";
+
+// Programmable-application records, lifecycle, and captured evidence.
+export {
+  ApplicationService,
+  applicationProcessName,
+  parseApplicationCommand,
+} from "./src/application";
+export type {
+  ApplicationAdmission,
+  ApplicationCommand,
+  ApplicationDispatcher,
+  ApplicationDispatch,
+  ApplicationDispatchAttempt,
+  ApplicationDispatchContext,
+  ApplicationDispatchOutcome,
+  ApplicationDispatchResult,
+  ApplicationOptions,
+  ApplicationSnapshot,
+} from "./src/application";
+export {
+  applicationJson,
+  getApplicationRecord,
+  parseApplicationHead,
+  parseApplicationRevision,
+  parseApplicationState,
+  parseApplicationTransition,
+  parseEpisodeBinding,
+  parseWorkIntent,
+  putApplicationRecord,
+} from "./src/application-contract";
+export type {
+  ApplicationHead,
+  ApplicationRevision,
+  ApplicationState,
+  ApplicationTransition,
+  EpisodeBinding,
+  WorkIntent,
+} from "./src/application-contract";
+export {
+  ApplicationMemoryService,
+  validateMemoryForRevision,
+  parseMemoryFrontier,
+  parseMemoryDerivation,
+  parseMemoryHypothesis,
+  parseMemoryNativeProgram,
+  parseMemoryObservation,
+  parseMemoryProcedure,
+  parseMemoryQuery,
+  parseMemoryQueries,
+  parseMemoryResourceVersion,
+  parseMemorySchema,
+  parseMemoryScope,
+  parseMemorySnapshot,
+} from "./src/application-memory";
+export type {
+  MemoryAdmissionHost,
+  MemoryClaim,
+  MemoryDerivation,
+  MemoryEngineResult,
+  MemoryFrontier,
+  MemoryHypothesis,
+  MemoryObservation,
+  MemoryObservationInput,
+  MemoryProcedure,
+  MemoryQuery,
+  MemoryQueryEngine,
+  MemoryQueries,
+  MemoryResourceVersion,
+  MemorySchema,
+  MemoryScope,
+  MemorySnapshot,
+} from "./src/application-memory";
+export { createApplicationDomainDispatcher, createApplicationPolicyHost, parseApplicationHostPolicy } from "./src/application-host";
+export type { ApplicationHostPolicy } from "./src/application-host";
+export { dispatchApplicationEpisode, reconcileApplicationEpisode } from "./src/application-episode";
+export type { EpisodeExecutors } from "./src/application-episode";
+export {
+  parseApplicationGoal,
+  parseApplicationGoalCapture,
+  validateApplicationGoals,
+  bindApplicationGoalCaptures,
+  captureApplicationGoals,
+  evaluateApplicationGoals,
+} from "./src/application-goal";
+export type { ApplicationGoal, ApplicationGoalCapture } from "./src/application-goal";
+export { APPLICATION_QUOTA_LIMITS } from "./src/application-quota";
+export { NativeMemoryQueryEngine } from "./src/application-native-memory";
+export { appendObservation } from "./src/application-observation";
+export type { AppendObservationInput, AppendedObservation } from "./src/application-observation";
+export { migrateApplicationMemory, parseApplicationMigration } from "./src/application-migration";
+export type { ApplicationMigration, MigrateMemoryInput } from "./src/application-migration";
+export { parseInvestigationRequest, requestExecution, scheduleInvestigations } from "./src/application-investigation";
+export type {
+  EntrypointDerivation, InvestigationRequest, RequestExecutionInput,
+  ScheduledInvestigations, ScheduleInvestigationsInput,
+} from "./src/application-investigation";
+export {
+  admitApplicationActivation,
+  checkApplicationCompatibility,
+  evaluateApplicationRevision,
+  parseApplicationEvaluationRequest,
+  parseEvaluationCases,
+  parseEvaluationPolicy,
+  parseEvaluationScorer,
+  verifyApplicationEvaluation,
+} from "./src/application-adaptation";
+export {
+  APPLICATION_VIEW_WIDGETS,
+  loadApplicationRuntimeProfile,
+  loadApplicationViewSpec,
+  parseApplicationRuntimeProfile,
+  parseApplicationView,
+  parseApplicationViewSpec,
+  projectApplicationView,
+  collectApplicationViewEvidence,
+  parseApplicationViewEvidence,
+} from "./src/application-view";
+export type {
+  ApplicationRuntimeProfile,
+  ApplicationView,
+  ApplicationViewAction,
+  ApplicationViewSpec,
+  ApplicationViewWidget,
+  ApplicationViewEvidence,
+} from "./src/application-view";
+export type {
+  AdaptationRuntime,
+  ApplicationEvaluation,
+  ApplicationEvaluationRequest,
+  CompatibilityResult,
+  EvaluationCaseSet,
+  EvaluationPolicy,
+  EvaluationScorer,
+} from "./src/application-adaptation";
