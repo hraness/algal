@@ -14,7 +14,7 @@ export type ApplicationViewRevisionEvidence = {state: Digest; revision: Digest; 
 export type ApplicationViewWorkEvidence = {intent: Digest; sourceState: Digest; revision: Digest; memory: Digest; kind: "deliver" | "start-episode"; status: "pending" | ApplicationDispatch["status"]; request: Digest | null; query: Digest | null; procedures: Digest[]; process: string | null; binding: Digest | null; result: Digest | null; reason: string | null};
 export type ApplicationViewEvidence = {contract: "algal.application-view-evidence.v1"; state: Digest; memory: Digest; queries: ApplicationViewQueryEvidence[]; probes: ApplicationViewProbeEvidence[]; sources: ApplicationViewSourceEvidence[]; revisions: ApplicationViewRevisionEvidence[]; work: ApplicationViewWorkEvidence[]; truncated: {queries: boolean; probes: boolean; sources: boolean; revisions: boolean; work: boolean}};
 const statuses = ["supported", "opposed", "conflicted", "unknown", "stale", "exhausted", "failed", "cancelled"];
-const kinds = ["create", "memory", "investigate", "activate", "migrate"];
+const kinds = ["create", "memory", "investigate", "activate", "migrate", "restore"];
 const fail = (message: string): never => { throw new Error("View evidence: " + message); };
 function text(value: unknown, max = 1024): string | null {
   if (value === null) return null;

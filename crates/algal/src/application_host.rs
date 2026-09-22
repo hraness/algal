@@ -228,6 +228,7 @@ pub struct PolicyHost {
     configuration_digest: String,
     channels_dir: PathBuf,
     memory_engine: Option<mem::NativeEngine>,
+    restoration_policy: Option<Value>,
 }
 
 impl PolicyHost {
@@ -250,7 +251,19 @@ impl PolicyHost {
             configuration_digest,
             channels_dir: channels_dir.to_path_buf(),
             memory_engine: None,
+            restoration_policy: None,
         })
+    }
+
+    pub fn set_restoration_policy(&mut self, input: &Value) -> Result<()> {
+        let policy = crate::application_restoration::parse_policy(input)?;
+        if policy["application"] != self.policy.application {
+            return Err(Error::invalid(
+                "Restoration policy belongs to another application",
+            ));
+        }
+        self.restoration_policy = Some(policy);
+        Ok(())
     }
 
     pub fn set_memory_engine(&mut self, engine: mem::NativeEngine) {
@@ -319,6 +332,27 @@ impl Admission for PolicyHost {
             return Err(Error::invalid(
                 "Memory update must preserve the current snapshot as its predecessor",
             ));
+        }
+        if context.command.kind == TransitionKind::Restore {
+            let policy = self
+                .restoration_policy
+                .as_ref()
+                .ok_or_else(|| Error::invalid("Host policy denies restoration"))?;
+            let current = context
+                .current
+                .ok_or_else(|| Error::invalid("Restoration requires an incumbent"))?;
+            let checked = crate::application_restoration::verify_restoration(
+                context.store,
+                &context.command.application,
+                &current.digest,
+                &context.command.revision,
+                &context.command.evidence,
+            )?;
+            if checked["policy"] != digest(policy)? {
+                return Err(Error::invalid(
+                    "Restoration requires the explicit host policy",
+                ));
+            }
         }
         let mut overlay = context.store.overlay();
         for entry in &context.revision.entrypoints {

@@ -8,6 +8,7 @@ pub mod application_memory;
 pub mod application_migration;
 mod application_quota;
 pub mod application_report;
+pub mod application_restoration;
 pub mod application_view;
 pub mod application_view_evidence;
 pub mod bench;

@@ -422,3 +422,41 @@ not establish general coding gains, independent observations, benchmark
 representativeness, provider attestation, distributed linearizability, or
 optimal adaptation. Such claims need separately retained evidence and stated
 assumptions.
+
+
+## Explicit pure strategy restoration
+
+`restore` is a forward revision transition, separately authorized from
+improvement-driven `activate`. `restoreApplicationRevision(lifecycle, input)`
+accepts `{application, operation, expectedHead, targetState, policy, evidence?,
+causedBy?}`. The target must be a retained ancestor of the expected state.
+The resulting child of the **current** revision copies only that ancestor's
+entrypoint manifest references, with at least one actual change. Current
+memory, schema, queries, views, runtime/evaluation policy, goals, capabilities,
+entrypoint applicability, memory views and generation ceilings remain exact.
+The epoch advances; no new intents are permitted. The ordinary unsettled
+dispatch barrier, operation replay, expected-head check and custody still apply.
+No historical head is installed, and effects or operation identities are never
+rewound.
+
+Every changed incumbent and historical manifest must contain only `input`,
+`const`, builtin `fn` and `expr` cells. Fixed effectful harness manifests cannot
+change. Both compiled interfaces must match exactly. Each normalized manifest
+ceiling (`maxSteps`, `maxAgentCalls`, `maxWork`, `maxContextBytes`,
+`maxOutputBytes`, `maxDepth`) must be no larger than the current manifest's.
+An incompatible historical strategy is rejected, never silently adjusted.
+The core lifecycle repeats these structural checks during commit and history
+inspection, including when the caller supplies a custom trusted host.
+
+The evidence is exactly one `algal.application-restoration.v1` record with
+`application`, `parentState`, `targetState`, `candidateRevision`, and `policy`.
+The closed policy record is `{contract:
+"algal.application-restoration-policy.v1", application, mode:
+"retained-pure-strategy-manifests"}`. The built-in policy host denies restoration
+unless the host explicitly supplies this policy through `restorationPolicy` in
+`createApplicationPolicyHost`. Native hosts use `set_restoration_policy`; the
+CLI uses `application --policy host.json --restoration-policy restore-policy.json
+restore input.json`. The policy named by the evidence must equal that host
+option. Merely putting a policy into CAS grants no authority. Ordinary pure
+case evaluation and activation remain unchanged; restoration never fabricates
+an improvement verdict. Retained history and namespace bounds still apply.

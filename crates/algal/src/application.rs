@@ -173,6 +173,7 @@ pub enum TransitionKind {
     Investigate,
     Activate,
     Migrate,
+    Restore,
 }
 
 impl TransitionKind {
@@ -183,6 +184,7 @@ impl TransitionKind {
             Some("investigate") => Ok(Self::Investigate),
             Some("activate") => Ok(Self::Activate),
             Some("migrate") => Ok(Self::Migrate),
+            Some("restore") => Ok(Self::Restore),
             _ => Err(Error::invalid("Invalid application transition kind")),
         }
     }
@@ -193,6 +195,7 @@ impl TransitionKind {
             Self::Investigate => "investigate",
             Self::Activate => "activate",
             Self::Migrate => "migrate",
+            Self::Restore => "restore",
         }
     }
 }
@@ -1112,7 +1115,7 @@ impl<'a> Service<'a> {
                 }
                 let activating = matches!(
                     transition.kind,
-                    TransitionKind::Activate | TransitionKind::Migrate
+                    TransitionKind::Activate | TransitionKind::Migrate | TransitionKind::Restore
                 );
                 if state.epoch != prior.state.epoch + usize::from(activating) {
                     return Err(fail("Invalid activation epoch"));
@@ -1142,6 +1145,13 @@ impl<'a> Service<'a> {
                     }
                 } else if state.revision != prior.state.revision {
                     return Err(fail("Memory/investigation cannot change the revision"));
+                }
+                if transition.kind == TransitionKind::Restore
+                    && (state.memory != prior.state.memory || !transition.intents.is_empty())
+                {
+                    return Err(fail(
+                        "Restoration must preserve current memory and create no intents",
+                    ));
                 }
                 if transition.kind == TransitionKind::Investigate
                     && (state.memory != prior.state.memory || transition.intents.is_empty())
@@ -1239,6 +1249,15 @@ impl<'a> Service<'a> {
             Self::check_step(if i == 0 { None } else { Some(&history[i - 1]) }, item)?;
             if item.transition.kind == TransitionKind::Migrate {
                 self.check_migration(&history[i - 1], item)?;
+            }
+            if item.transition.kind == TransitionKind::Restore {
+                crate::application_restoration::verify_restoration(
+                    &self.store,
+                    &name,
+                    &history[i - 1].digest,
+                    &item.state.revision,
+                    &item.transition.evidence,
+                )?;
             }
             if !operations.insert(item.transition.operation.clone()) {
                 return Err(fail("Repeated operation in application history"));
@@ -1454,7 +1473,7 @@ impl<'a> Service<'a> {
         }
         if matches!(
             command.kind,
-            TransitionKind::Activate | TransitionKind::Migrate
+            TransitionKind::Activate | TransitionKind::Migrate | TransitionKind::Restore
         ) && pending.iter().any(|p| p.dispatch.is_some())
         {
             return Err(Error::invalid("Unsettled dispatch blocks activation"));
@@ -1507,7 +1526,7 @@ impl<'a> Service<'a> {
             "epoch": current.map(|c| c.state.epoch).unwrap_or(0)
                 + usize::from(matches!(
                     command.kind,
-                    TransitionKind::Activate | TransitionKind::Migrate
+                    TransitionKind::Activate | TransitionKind::Migrate | TransitionKind::Restore
                 )),
             "revision": command.revision, "memory": command.memory,
             "previous": command.expected_head, "transition": hash(&transition.value)?,
@@ -1523,6 +1542,17 @@ impl<'a> Service<'a> {
             self.check_migration(
                 current.ok_or_else(|| fail("Migration requires a prior state"))?,
                 &next,
+            )?;
+        }
+        if next.transition.kind == TransitionKind::Restore {
+            crate::application_restoration::verify_restoration(
+                &self.store,
+                &command.application,
+                &current
+                    .ok_or_else(|| fail("Restoration requires a prior state"))?
+                    .digest,
+                &command.revision,
+                &command.evidence,
             )?;
         }
         let operation = parse_operation(&json!({

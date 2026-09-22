@@ -28,6 +28,7 @@ import { scheduleInvestigations, requestExecution } from "../src/application-inv
 import { collectApplicationViewEvidence, parseApplicationView, parseApplicationViewSpec, projectApplicationView, type ApplicationApplicability, type ApplicationView } from "../src/application-view";
 import { migrateApplicationMemory } from "../src/application-migration";
 import { appendObservation } from "../src/application-observation";
+import { restoreApplicationRevision, type ApplicationRestorationPolicy } from "../src/application-restoration";
 import { rolloverApplicationMemory } from "../src/application-rollover";
 import { ApplicationMemoryService, parseMemorySnapshot } from "../src/application-memory";
 import { NativeMemoryQueryEngine } from "../src/application-native-memory";
@@ -730,6 +731,40 @@ async function checkGoalAndQuotaParity(): Promise<void> {
     equal(`${name} leaves no head`, await p.lifecycle.inspect(APP), await runNative(app("inspect", APP), p.native));
     checked++;
   };
+  // Restoration requires explicit host authority, creates a forward child,
+  // preserves current memory and replays exactly on both independent stores.
+  {
+    const p = await pair("strategy-restoration");
+    const original = await create(p, revisionRef, "restoration-create");
+    const request = { contract: "algal.application-evaluation-request.v1", parentState: original.digest, candidateRevision: revision2Ref, entrypoint: "run", cases: digests.evalCases, scorer: digests.evalScorer, policy: digests.evaluationPolicy };
+    const evaluated = await evaluateApplicationRevision(p.lifecycle.store, request, { fns: builtinRegistry() });
+    equal("restoration preceding evaluation", { evaluation: evaluated.evaluationRef, verdict: evaluated.evaluation.verdict }, await runNative(app("evaluate", await dynamic("restoration-evaluate", request)), p.native));
+    const activation = { application: APP, operation: op("restoration-activate"), kind: "activate", expectedHead: original.digest, revision: revision2Ref, memory: original.state.memory, intents: [], evidence: [evaluated.evaluationRef], causedBy: null };
+    const active = await p.lifecycle.commit(activation);
+    equal("restoration preceding activation", shape(active), await runNative(app("commit", await dynamic("restoration-activate", activation)), p.native));
+    const authority: ApplicationRestorationPolicy = { contract: "algal.application-restoration-policy.v1", application: APP, mode: "retained-pure-strategy-manifests" };
+    const input = { application: APP, operation: op("restoration"), expectedHead: active.digest, targetState: original.digest, policy: await p.put(authority) };
+    const authorityFile = await dynamic("restoration-policy", authority);
+    const deny = await restoreApplicationRevision(p.lifecycle, input).then(() => false, () => true);
+    const denied = await runNativeAttempt(app("restore", await dynamic("restoration-denied", input)), p.native);
+    if (!deny || denied.code !== 2) throw new Error("Restoration default-deny differs");
+    checked++;
+    const lifecycle = new ApplicationService(p.typescript, createApplicationPolicyHost(policy, { channelsDir: join(p.typescript, "channels"), memoryEngine: engine, restorationPolicy: authority }));
+    const restored = await restoreApplicationRevision(lifecycle, input);
+    const result = { snapshot: restored.snapshot.digest, revision: restored.revision, restoration: restored.restoration };
+    equal("restoration forward child", result, await runNative(app("--restoration-policy", authorityFile, "restore", await dynamic("restoration", input)), p.native));
+    equal("restoration revision bytes", await lifecycle.store.getValue(restored.revision), await p.nativeStore.getValue(restored.revision));
+    equal("restoration evidence bytes", await lifecycle.store.getValue(restored.restoration), await p.nativeStore.getValue(restored.restoration));
+    if (restored.snapshot.state.memory !== active.state.memory || restored.snapshot.state.epoch !== active.state.epoch + 1) throw new Error("Restoration replaced memory or rewound its epoch");
+    equal("restoration reopen", { state: restored.snapshot.digest, sequence: restored.snapshot.state.sequence, epoch: restored.snapshot.state.epoch, revision: restored.revision, memory: restored.snapshot.state.memory, kind: "restore" }, await runNative(app("inspect", APP), p.native));
+    equal("restoration exact replay", { snapshot: (await restoreApplicationRevision(lifecycle, input)).snapshot.digest, revision: restored.revision, restoration: restored.restoration }, await runNative(app("--restoration-policy", authorityFile, "restore", await dynamic("restoration-replay", input)), p.native));
+    for (const [name, bad] of [["stale", { ...input, operation: op("restoration-stale") }], ["no-op", { ...input, expectedHead: restored.snapshot.digest, operation: op("restoration-no-op") }], ["not-ancestor", { ...input, expectedHead: restored.snapshot.digest, targetState: restored.snapshot.digest, operation: op("restoration-non-ancestor") }]] as const) {
+      const refused = await restoreApplicationRevision(lifecycle, bad).then(() => false, () => true);
+      const attempt = await runNativeAttempt(app("--restoration-policy", authorityFile, "restore", await dynamic(`restoration-${name}`, bad)), p.native);
+      if (!refused || attempt.code !== 2) throw new Error(`Restoration rejection differs: ${name}`);
+      checked++;
+    }
+  }
   // Active selection rollover preserves the application, history and native
   // applicability while both runtimes reject forgotten archives/resurrection.
   {

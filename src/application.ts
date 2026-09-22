@@ -11,6 +11,7 @@ import {
   type EpisodeBinding, type WorkIntent,
 } from "./application-contract";
 import { parseApplicationMigration, type ApplicationMigration } from "./application-migration";
+import { verifyApplicationRestoration } from "./application-restoration";
 import { validateApplicationGoals } from "./application-goal";
 import { withApplicationQuota } from "./application-quota";
 import { parseMemoryObservation, parseMemorySnapshot } from "./application-memory";
@@ -92,7 +93,7 @@ function intentSpec(raw: unknown): ApplicationIntentSpec {
 }
 export function parseApplicationCommand(raw: unknown): ApplicationCommand {
   const v = applicationObject(raw, ["application", "operation", "kind", "expectedHead", "revision", "memory", "intents", "evidence", "causedBy"]);
-  if (v.kind !== "create" && v.kind !== "memory" && v.kind !== "investigate" && v.kind !== "activate" && v.kind !== "migrate") throw new Error("Invalid application command kind");
+  if (v.kind !== "create" && v.kind !== "memory" && v.kind !== "investigate" && v.kind !== "activate" && v.kind !== "migrate" && v.kind !== "restore") throw new Error("Invalid application command kind");
   return {application: applicationId(v.application), operation: applicationRef(v.operation), kind: v.kind,
     expectedHead: nullableApplicationRef(v.expectedHead), revision: applicationRef(v.revision), memory: applicationRef(v.memory),
     intents: applicationList(v.intents, APPLICATION_LIMITS.intents, intentSpec), evidence: applicationRefs(v.evidence, 16), causedBy: nullableApplicationRef(v.causedBy)};
@@ -202,7 +203,7 @@ export class ApplicationService {
       return;
     }
     if (state.application !== prior.state.application || state.previous !== prior.digest || state.sequence !== prior.state.sequence + 1 || transition.kind === "create") fail("Invalid application state succession");
-    const activating = transition.kind === "activate" || transition.kind === "migrate";
+    const activating = transition.kind === "activate" || transition.kind === "migrate" || transition.kind === "restore";
     if (state.epoch !== prior.state.epoch + Number(activating)) fail("Invalid activation epoch");
     if (activating) {
       if (state.revision === prior.state.revision || revision.parent !== prior.state.revision || revision.runtimeProfile !== prior.revision.runtimeProfile || revision.capabilityRequirements.some(c => !prior.revision.capabilityRequirements.includes(c)) || prior.revision.entrypoints.some(e => !revision.entrypoints.some(n => n.name === e.name))) fail("Incompatible application activation");
@@ -210,6 +211,7 @@ export class ApplicationService {
       // migrate kind carrying migration evidence, verified asynchronously.
       if (transition.kind === "activate" && revision.schema !== prior.revision.schema) fail("Incompatible application activation");
     } else if (state.revision !== prior.state.revision) fail("Memory/investigation cannot change the revision");
+    if (transition.kind === "restore" && (state.memory !== prior.state.memory || transition.intents.length)) fail("Restoration must preserve current memory and create no intents");
     if (transition.kind === "investigate" && (state.memory !== prior.state.memory || !transition.intents.length)) fail("Invalid investigation transition");
   }
   /** A migrate transition must carry migration evidence that binds the prior
@@ -263,6 +265,7 @@ export class ApplicationService {
       const item = history[i]!;
       this.checkStep(history[i - 1] ?? null, item);
       if (item.transition.kind === "migrate") await this.checkMigration(history[i - 1]!, item);
+      if (item.transition.kind === "restore") await verifyApplicationRestoration(this.store, { application: name, parentState: history[i - 1]!.digest, candidateRevision: item.state.revision, evidence: item.transition.evidence });
       if (operations.has(item.transition.operation)) fail("Repeated operation in application history");
       operations.add(item.transition.operation);
       await this.intents(item);
@@ -358,17 +361,18 @@ export class ApplicationService {
       if (pending.length + command.intents.length > APPLICATION_SERVICE_LIMITS.pending) throw new Error("Pending intent capacity exceeded");
       const total = history.reduce((sum, s) => sum + s.transition.intents.length, 0);
       if (total + command.intents.length > APPLICATION_SERVICE_LIMITS.dispatches) throw new Error("Retained intent capacity exceeded");
-      if ((command.kind === "activate" || command.kind === "migrate") && pending.some(p => p.dispatch !== null)) throw new Error("Unsettled dispatch blocks activation");
+      if ((command.kind === "activate" || command.kind === "migrate" || command.kind === "restore") && pending.some(p => p.dispatch !== null)) throw new Error("Unsettled dispatch blocks activation");
       const intents: WorkIntent[] = command.intents.map((spec, ordinal) => parseWorkIntent({contract: "algal.application-intent.v1", application: command.application, operation: command.operation, ordinal, ...spec}));
       for (const work of intents) {
         await this.value(work.kind === "start-episode" ? work.input : work.message);
         if (work.kind === "start-episode" && !revision.entrypoints.some(e => e.name === work.entrypoint)) fail("Unknown intent entrypoint");
       }
       const transition = parseApplicationTransition({contract: "algal.application-transition.v1", application: command.application, operation: command.operation, request, kind: command.kind, previous: command.expectedHead, revision: command.revision, memory: command.memory, intents: intents.map(hash).sort(), evidence: command.evidence, causedBy: command.causedBy});
-      const state = parseApplicationState({contract: "algal.application-state.v1", application: command.application, sequence: history.length, epoch: (current?.state.epoch ?? 0) + Number(command.kind === "activate" || command.kind === "migrate"), revision: command.revision, memory: command.memory, previous: command.expectedHead, transition: hash(transition)});
+      const state = parseApplicationState({contract: "algal.application-state.v1", application: command.application, sequence: history.length, epoch: (current?.state.epoch ?? 0) + Number(command.kind === "activate" || command.kind === "migrate" || command.kind === "restore"), revision: command.revision, memory: command.memory, previous: command.expectedHead, transition: hash(transition)});
       const next = {digest: hash(state), state, transition, revision};
       this.checkStep(current, next);
       if (next.transition.kind === "migrate") await this.checkMigration(current!, next);
+      if (next.transition.kind === "restore") await verifyApplicationRestoration(this.store, { application: command.application, parentState: current!.digest, candidateRevision: command.revision, evidence: command.evidence });
       const operation: Operation = {contract: "algal.application-operation.v1", application: command.application, operation: command.operation, request, transition: state.transition, state: next.digest};
       if (prepared && !same(prepared, operation)) fail("Prepared operation changed");
       // Copies keep trusted admission from accidentally mutating the prepared commit.
