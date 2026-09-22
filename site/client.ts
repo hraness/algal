@@ -14,8 +14,10 @@ if (location.pathname === "/" && location.hash) {
     "#source-failure": "/tour/#source-failure",
     "#grow": "/tour/#grow",
     "#use-cases": "/use-cases/",
+    "#adopt": "/use-cases/#adopt",
     "#try": "/#install",
     "#source": "/#language",
+    "#evolution": "/#evolution",
   };
   const target = moved[location.hash];
   if (target) location.replace(target);

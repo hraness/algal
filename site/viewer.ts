@@ -43,6 +43,7 @@ async function initDiagramFrame(frame: HTMLElement): Promise<void> {
   const nodesById = new Map(diagram.nodes.map(node => [node.id, node]));
   const layoutById = new Map(layout.nodes.map(node => [node.id, node]));
   const edgePaths = new Map<string, SVGPathElement>();
+  const edgeGroups = new Map<string, SVGGElement>();
   const nodeEls = new Map<string, SVGGElement>();
 
   const shell = document.createElement("div");
@@ -106,6 +107,7 @@ async function initDiagramFrame(frame: HTMLElement): Promise<void> {
     text(g, edge.labelX, edge.labelY + 2, edge.label, { "font-size": 10, "text-anchor": "middle", fill: edge.kind === "failure" ? "#92400e" : "#475569" });
     edgeLayer.appendChild(g);
     edgePaths.set(edge.id, path);
+    edgeGroups.set(edge.id, g);
   }
 
   const card = document.createElement("div");
@@ -148,12 +150,14 @@ async function initDiagramFrame(frame: HTMLElement): Promise<void> {
     selected = id;
     if (!id) {
       nodeEls.forEach(el => el.classList.remove("is-dim", "is-hot"));
-      edgePaths.forEach(el => el.classList.remove("is-dim", "is-hot"));
+      edgeGroups.forEach(el => el.classList.remove("is-dim"));
+      edgePaths.forEach(el => el.classList.remove("is-hot"));
       return;
     }
     const { near, edges } = neighborsOf(id);
     nodeEls.forEach((el, key) => { el.classList.toggle("is-dim", !near.has(key)); el.classList.toggle("is-hot", key === id); });
-    edgePaths.forEach((el, key) => { el.classList.toggle("is-dim", !edges.has(key)); el.classList.toggle("is-hot", edges.has(key)); });
+    edgeGroups.forEach((el, key) => el.classList.toggle("is-dim", !edges.has(key)));
+    edgePaths.forEach((el, key) => el.classList.toggle("is-hot", edges.has(key)));
   };
 
   for (const box of layout.nodes) {
