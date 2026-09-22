@@ -32,7 +32,7 @@ import { capabilityHandle } from "../src/capabilities";
 import { builtinRegistry } from "../src/registry";
 import { manifestToJson, parseOrganismManifest } from "../src/contract";
 import { digestCanonical, type Digest } from "../src/digest";
-import { canonicalize, type JsonValue } from "../src/values";
+import { canonicalize, canonicalBytes, type JsonValue } from "../src/values";
 
 const root = resolve(import.meta.dir, "..");
 const binary = process.env.ALGAL_BIN ?? join(root, "target/debug/algal");
@@ -226,7 +226,13 @@ const steps: Step[] = [];
 const putStep = (name: string, value: JsonValue, kind: "values" | "manifests" = "values") =>
   steps.push({
     name: `put ${name}`,
-    ts: async () => ({ ref: kind === "values" ? await service.store.putValue(value) : await service.store.putManifest(parseOrganismManifest(value)) }),
+    ts: async () => {
+      if (kind === "manifests") {
+        const m = parseOrganismManifest(value);
+        return { ref: await service.store.putManifest(m), bytes: canonicalBytes(manifestToJson(m)) };
+      }
+      return { ref: await service.store.putValue(value), bytes: canonicalBytes(value) };
+    },
     native: async () => ["store", "put", fixturePath.get(name)!, "--kind", kind],
   });
 putStep("manifest", manifestValue, "manifests");

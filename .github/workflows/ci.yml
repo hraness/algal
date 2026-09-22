@@ -66,6 +66,7 @@ jobs:
       - run: bun scripts/native-parity.ts
       - run: bun scripts/application-parity.ts
       - run: bun scripts/process-parity.ts
+      - run: bun scripts/store-parity.ts
       - run: bun scripts/source-inspection-parity.ts
       - run: bun scripts/schema-parity.ts
       - run: bun scripts/compilation-parity.ts

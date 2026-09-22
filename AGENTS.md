@@ -77,7 +77,10 @@
   recovery through `recover`/`journal`, journaled dispatch,
   `export`/`verify-evidence` portable bundles, agent-cell suspension and
   resumption through the shared EX_TEMPFAIL command-executor contract, and
-  the `.creating.json` interrupted-creation recovery contract).
+  the `.creating.json` interrupted-creation recovery contract). Add
+  `bun scripts/store-parity.ts` for the CAS store/slot/listing CLI surface —
+  the only driver that spawns the reference `cli.ts` rather than calling the
+  service layer, since those commands live only in the CLIs.
 - The Foundation Models bridge comes from the pinned `apple-foundation`
   crate (`hraness/apple-foundation`); `sh scripts/build-apple.sh` emits its
   embedded source and builds it with Xcode 26 on Apple Silicon, and the

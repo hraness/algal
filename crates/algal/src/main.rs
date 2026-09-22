@@ -2064,7 +2064,8 @@ async fn execute(cli: Cli) -> Result<bool> {
                     } else {
                         load(Path::new(&file), 262_144)?
                     };
-                    emit(&json!({"ref":store.put(&kind, &value)?}))?;
+                    let bytes = canonical(&value)?.len();
+                    emit(&json!({"ref":store.put(&kind, &value)?, "bytes":bytes}))?;
                 }
                 StoreCommand::Get { digest, kind } => emit(
                     &store
