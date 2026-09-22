@@ -317,7 +317,20 @@ algal run inbox.algal.json --dir inbox-store \
 ```
 
 The native CLI executes the JSON and stored child manifests; it does not load
-or parse the `.algal` source files.
+or parse the `.algal` source files. For a named program call, pass
+`--interface` explicitly:
+
+```sh
+printf '%s\n' '{"sample":"Can you help me?","emails":[]}' > inbox.interface-args.json
+algal call inbox.bundle.json --interface --dir inbox-store \
+  --args inbox.interface-args.json \
+  --responses examples/source/projects/inbox/inbox.empty.responses.json
+```
+
+This accepts exactly the program's named parameters and returns its named
+interface outputs. Without `--interface`, `call` uses the same cell-keyed
+arguments as `run` and returns all committed cell outputs. A JSON-valued named
+parameter remains opaque data; argument shapes do not select the mode.
 
 For SDK code, `loadSourceProject(path)` reads the local project and returns
 `manifest`, `sourceMap`, `modules`, `analysis`, the original entry `source`, and

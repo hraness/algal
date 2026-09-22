@@ -265,9 +265,11 @@ usage:
                                               --out also writes <root-hex>.bundle.json
   algal unpack <bundle.json> [--dir <path>]
                                               install a bundle into the store, digests verified
-  algal call <bundle.json> [options]
+  algal call <bundle.json> [--interface] [options]
                                               run a packed organism and print a compact result:
                                               { ok, outputs, receiptDigest, manifestDigest }.
+                                              --interface maps named interface arguments and
+                                              returns only declared interface outputs.
                                               options mirror algal run: --args, --responses,
                                               --executor-cmd, --gateway-model, --jev, --recall,
                                               --executors, --modules, --tools, --cache-effects, --dir
@@ -306,6 +308,12 @@ function parseArgs(argv: string[]): ParsedArgs {
     const a = rest[i]!;
     if (a.startsWith("--")) {
       const key = a.slice(2);
+      if (key === "interface") {
+        if (Object.hasOwn(flags, key)) usageError("--interface may be supplied only once");
+        flags[key] = true;
+        continue;
+      }
+      if (key.startsWith("interface=")) usageError("--interface is a boolean flag without a value");
       const next = rest[i + 1];
       if (next !== undefined && !next.startsWith("--")) {
         flags[key] = next;
@@ -421,11 +429,16 @@ async function emitArtifact(contents: string, path: string | undefined): Promise
 }
 
 async function readJsonStdin(): Promise<JsonValue> {
-  const text = await Bun.stdin.text();
-  if (!text.trim()) {
-    throw new AlgalError("INPUT_MISSING", "stdin was empty");
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for await (const chunk of Bun.stdin.stream()) {
+    size += chunk.byteLength;
+    if (size > BOUNDS.maxArgsBytes) throw new AlgalError("BUDGET_EXHAUSTED", "stdin arguments exceed the byte bound");
+    chunks.push(chunk);
   }
   try {
+    const text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(Buffer.concat(chunks));
+    if (!text.trim()) throw new Error("stdin was empty");
     return JSON.parse(text) as JsonValue;
   } catch (e) {
     throw new AlgalError(
@@ -967,7 +980,7 @@ async function main(): Promise<number> {
 
     case "call": {
       const file = positional[0];
-      if (!file) usageError("algal call <bundle.json> [options]");
+      if (!file || positional.length !== 1) usageError("algal call <bundle.json> [--interface] [options]");
       if (flags.modules !== undefined) {
         const n = await loadModules(String(flags.modules), store);
         diag(`loaded ${n} module(s) from ${flags.modules}`);
@@ -984,11 +997,22 @@ async function main(): Promise<number> {
         flags.args === "-"
           ? asRecord(await readJsonStdin(), "args")
           : flags.args !== undefined
-            ? asRecord(await readJson(resolve(String(flags.args))), "args")
+            ? asRecord(await readJsonBounded(resolve(String(flags.args)), BOUNDS.maxArgsBytes, "call arguments"), "args")
             : {};
-      const args: Record<string, Record<string, JsonValue>> = {};
-      for (const [cellId, ports] of Object.entries(argsRaw)) {
-        args[cellId] = asRecord(ports as JsonValue, `args.${cellId}`);
+      if (flags.interface !== undefined && flags.interface !== true) usageError("--interface is a boolean flag");
+      const viaInterface = flags.interface === true;
+      const args: Record<string, Record<string, JsonValue>> = Object.create(null);
+      if (viaInterface) {
+        const declared = manifest.interface;
+        if (!declared) usageError("call --interface requires a declared manifest interface");
+        if (Object.keys(argsRaw).length !== Object.keys(declared.inputs).length || Object.keys(argsRaw).some(name => !Object.hasOwn(declared.inputs, name))) usageError("call --interface requires exactly the declared input names");
+        for (const [name, target] of Object.entries(declared.inputs)) {
+          const ports = args[target.cell] ??= Object.create(null) as Record<string, JsonValue>;
+          if (Object.hasOwn(ports, target.port) && canonicalize(ports[target.port]!) !== canonicalize(argsRaw[name]!)) usageError("call --interface aliases contain conflicting arguments");
+          ports[target.port] = argsRaw[name]!;
+        }
+      } else {
+        for (const [cellId, ports] of Object.entries(argsRaw)) args[cellId] = asRecord(ports, `args.${cellId}`);
       }
 
       const executors = await resolveExecutors(flags, dir);
@@ -1011,11 +1035,14 @@ async function main(): Promise<number> {
         ...(tools ? { tools } : {}),
       });
 
-      const outputs: JsonObject = {};
-      for (const [id, cell] of Object.entries(receipt.cells)) {
-        if (cell.outputs) {
-          outputs[id] = cell.outputs as JsonValue;
+      const outputs: JsonObject = Object.create(null);
+      if (viaInterface) {
+        for (const [name, target] of Object.entries(manifest.interface!.outputs)) {
+          const ports = receipt.cells[target.cell]?.outputs;
+          if (ports && Object.hasOwn(ports, target.port)) outputs[name] = ports[target.port]!;
         }
+      } else {
+        for (const [id, cell] of Object.entries(receipt.cells)) if (cell.outputs) outputs[id] = cell.outputs as JsonValue;
       }
       const rd = await store.putReceipt(receipt as unknown as JsonValue);
       const compact: JsonObject = {

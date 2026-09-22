@@ -173,6 +173,9 @@ enum Commands {
     },
     Call {
         bundle: PathBuf,
+        /// Accept named interface arguments and return declared interface outputs.
+        #[arg(long)]
+        interface: bool,
         #[command(flatten)]
         options: Execution,
     },
@@ -1416,14 +1419,46 @@ async fn execute(cli: Cli) -> Result<bool> {
         }
         Commands::Call {
             bundle,
+            interface,
             mut options,
         } => {
             options.write = true;
             let (mut store, mut host, transports) = prepare(&options, &cli.dir)?;
             let manifest = unpack(&load(&bundle, MAX_DOCUMENT_BYTES)?, &mut store)?;
-            // Like `run`, the public call surface accepts cell-keyed arguments.
-            // Interface projection belongs to embedded organism calls.
-            let input = args(&options)?;
+            let raw = args(&options)?;
+            let input = if interface {
+                let declared = manifest.value.get("interface").ok_or_else(|| {
+                    Error::invalid("call --interface requires a declared manifest interface")
+                })?;
+                let inputs = object(&declared["inputs"])?;
+                let supplied = object(&raw)?;
+                if inputs.len() != supplied.len()
+                    || supplied.keys().any(|name| !inputs.contains_key(name))
+                {
+                    return Err(Error::invalid(
+                        "call --interface requires exactly the declared input names",
+                    ));
+                }
+                let mut mapped = json!({});
+                for (name, target) in inputs {
+                    let cell = target["cell"].as_str().unwrap();
+                    let port = target["port"].as_str().unwrap();
+                    if mapped.get(cell).is_none() {
+                        mapped[cell] = json!({});
+                    }
+                    if let Some(previous) = mapped[cell].get(port)
+                        && canonical(previous)? != canonical(&supplied[name])?
+                    {
+                        return Err(Error::invalid(
+                            "call --interface aliases contain conflicting arguments",
+                        ));
+                    }
+                    mapped[cell][port] = supplied[name].clone();
+                }
+                mapped
+            } else {
+                raw
+            };
             let receipt = runtime::run(
                 manifest.clone(),
                 input,
@@ -1435,13 +1470,24 @@ async fn execute(cli: Cli) -> Result<bool> {
             .await?;
             let reference = persist(&mut store, &manifest, &receipt)?;
             let ok = receipt["outcome"] == "complete";
-            let outputs: serde_json::Map<String, Value> = object(&receipt["cells"])?
-                .iter()
-                .filter_map(|(name, cell)| {
-                    cell.get("outputs")
-                        .map(|outputs| (name.clone(), outputs.clone()))
-                })
-                .collect();
+            let outputs: serde_json::Map<String, Value> = if interface {
+                object(&manifest.value["interface"]["outputs"])?
+                    .iter()
+                    .filter_map(|(name, target)| {
+                        receipt["cells"][target["cell"].as_str().unwrap()]["outputs"]
+                            .get(target["port"].as_str().unwrap())
+                            .map(|value| (name.clone(), value.clone()))
+                    })
+                    .collect()
+            } else {
+                object(&receipt["cells"])?
+                    .iter()
+                    .filter_map(|(name, cell)| {
+                        cell.get("outputs")
+                            .map(|outputs| (name.clone(), outputs.clone()))
+                    })
+                    .collect()
+            };
             let mut result = json!({"ok":ok,"outputs":outputs,"receiptDigest":reference,"manifestDigest":receipt["manifestDigest"]});
             if !ok {
                 result["error"] = match receipt.get("failure") {

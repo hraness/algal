@@ -243,7 +243,9 @@ bun cli.ts call inbox.bundle.json \
 ```
 
 The bundle contains the complete manifest closure and runs without the source
-files. The [language guide](docs/source-language.md) covers the SDK, project
+files. The command above uses the same cell-keyed arguments as `run`.
+Use `call --interface` for named program arguments and only the declared
+interface outputs. The [language guide](docs/source-language.md) covers the SDK, project
 roots, and native bundle calls.
 
 ### Follow a result into the code that produced it
@@ -1031,17 +1033,20 @@ algal tool-def ticket.algal.json > ticket-tool.json
 Then call it from an agent:
 
 ```sh
-algal call ./tools/<bundle>.bundle.json \
-  --args ticket.args.json \
+algal call ./tools/<bundle>.bundle.json --interface \
+  --args ticket.interface-args.json \
   --gateway-model alibaba/qwen3.5-flash
 ```
 
-The result is compact enough for an agent to consume:
+The interface argument file uses names from `tool-def`, for example
+`{"ticket":"App crashes when I press export twice"}` for the triage organism.
+Missing and undeclared names are rejected. The result contains only the declared
+interface outputs:
 
 ```json
 {
   "ok": true,
-  "outputs": { "out": "billing" },
+  "outputs": { "summary": "BUG: App crashes when I press export twice" },
   "receiptDigest": "sha256:...",
   "manifestDigest": "sha256:..."
 }
