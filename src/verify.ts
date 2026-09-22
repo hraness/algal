@@ -248,6 +248,11 @@ export function diffReceipts(a: RunReceipt, b: RunReceipt): string[] {
   } else if (a.failure && b.failure && a.failure.code !== b.failure.code) {
     out.push(`failure.code: ${a.failure.code} vs ${b.failure.code}`);
   }
+  // The diagnostic list is intentionally compact, but equality must cover
+  // every admitted receipt field (including args, runtime and suspension).
+  if (out.length === 0 && canonicalizeReceipt(a) !== canonicalizeReceipt(b)) {
+    out.push("receipt records differ");
+  }
   return out;
 }
 

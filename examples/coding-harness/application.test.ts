@@ -4,22 +4,21 @@
  * files, and episode dispatch runs the entrypoint manifest through the VM. */
 import { afterEach, describe, expect, test } from "bun:test";
 import { createXcbExecutor } from "./xcb";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   ApplicationService, admitApplicationActivation, builtinRegistry, evaluateApplicationRevision,
   getApplicationRecord, manifestToJson, parseApplicationRevision, putApplicationRecord,
-  runOrganism, vercelGatewayExecutor, verifyReceipt,
+  parseRunReceipt, vercelGatewayExecutor, verifyReceipt,
 } from "../../index";
 import {
-  ApplicationMemoryService, parseMemoryScope,
+  ApplicationMemoryService, parseMemoryScope, parseMemorySnapshot,
   type MemoryQueryEngine,
 } from "../../src/application-memory";
 import { migrateApplicationMemory } from "../../src/application-migration";
 import { requestExecution, scheduleInvestigations } from "../../src/application-investigation";
 import { scriptedExecutor } from "../../src/effects";
-import { applicationJson } from "../../src/application-contract";
 import { parseOrganismManifest } from "../../src/contract";
 import { digestCanonical, type Digest } from "../../src/digest";
 import type { JsonValue } from "../../src/values";
@@ -142,6 +141,64 @@ async function fixture() {
 }
 
 describe("development-workspace organism on the real harness boundary", () => {
+  test("a mutation after a probe cannot relabel its evidence as the new frontier", async () => {
+    const f = await fixture();
+    const terminal = harnessTerminal(f.cwd);
+    const dispatcher = createHarnessDispatcher(f.domain, f.store, async (request, signal) => {
+      const result = await terminal(request, signal);
+      await writeFile(join(f.cwd, "config.json"), '{"factor":99}');
+      return result;
+    }, f.admission.currentFrontier, { "model-inference": f.executors });
+    await scheduleInvestigations(f.service, f.memory, {
+      application: "workspace", operation: ref("race-probe"), expectedHead: f.genesis.digest,
+      expectedMemory: f.genesis.state.memory, route: "probes", entrypoints: ["run"],
+    });
+    expect((await f.service.dispatchPending("workspace", dispatcher))[0]!.status).toBe("uncertain");
+    expect((await drainProbes(f.domain, f.service, f.memory)).committed).toEqual([]);
+  });
+
+  test("frontier metadata must agree with the referenced chain tip", async () => {
+    const f = await fixture();
+    await f.admission.currentFrontier("workspace");
+    await writeFile(join(f.domain.stateDir, "frontier.json"), JSON.stringify({ ref: f.domain.frontier, sequence: 11 }));
+    await expect(f.admission.currentFrontier("workspace")).rejects.toThrow("frontier");
+  });
+
+  test("frontier and channel corruption or symlinks fail closed", async () => {
+    const f = await fixture();
+    const path = join(f.domain.stateDir, "frontier.json");
+    await writeFile(path, "{broken");
+    await expect(f.admission.currentFrontier("workspace")).rejects.toThrow();
+    expect(await readFile(path, "utf8")).toBe("{broken");
+    await rm(path);
+    const target = join(f.dir, "external.json"); await writeFile(target, "{}"); await symlink(target, path);
+    await expect(f.admission.currentFrontier("workspace")).rejects.toThrow();
+    expect(await readFile(target, "utf8")).toBe("{}");
+    const channelDir = join(f.domain.stateDir, "probes"); await mkdir(channelDir);
+    await writeFile(join(channelDir, "a".repeat(64) + ".json"), JSON.stringify({ contract: "algal.probe-channel.v1", request: ref("different"), outcomes: [] }));
+    await expect(drainProbes(f.domain, f.service, f.memory)).rejects.toThrow("channel");
+  });
+
+  test("reconstructing a harness domain retains its original genesis", async () => {
+    const f = await fixture();
+    await writeFile(join(f.cwd, "config.json"), '{"factor":99}');
+    const domain = await createHarnessDomain(f.store, { ...f.domain, schema: f.schema });
+    expect(domain.baseline).toBe(f.domain.baseline);
+    expect(domain.scope).toBe(f.domain.scope);
+    const frontier = await createHarnessAdmission(domain, f.store).currentFrontier("workspace");
+    expect(frontier).not.toBe(f.domain.frontier);
+  });
+
+  test("a candidate cannot borrow an unrelated generator receipt", async () => {
+    const f = await fixture();
+    const request = await f.store.putValue({ contract: "algal.proposal-request.v1", application: "workspace", entrypoint: "run", state: f.genesis.digest, nonce: "forged" });
+    const manifest = await f.store.putManifest(parseOrganismManifest(f.candidateManifestJson));
+    const proposal = await f.store.putValue({ contract: "algal.revision-proposal.v1", request, entrypoint: "run", manifest, receipt: await f.store.putValue({ unrelated: "evidence" }) });
+    const dir = join(f.domain.stateDir, "proposals"); await mkdir(dir);
+    await writeFile(join(dir, request.slice(7) + ".json"), JSON.stringify({ contract: "algal.proposal-channel.v1", request, proposals: [proposal] }));
+    expect(await drainProposals(f.domain, f.service)).toEqual({ proposals: [], rejected: [proposal] });
+  });
+
   test("investigate → real probe → observe → execute → stale → restart → re-investigate", async () => {
     const f = await fixture();
     const { service, memory, domain } = f;
@@ -184,6 +241,9 @@ describe("development-workspace organism on the real harness boundary", () => {
     expect(raw.contract).toBe("algal.harness-probe-raw.v1");
     expect(raw.command).toContain("perl -e");
     expect(raw.result.exitCode).toBe(0);
+    const observedMemory = await getApplicationRecord(service.store, head1.state.memory, parseMemorySnapshot);
+    const observedScope = await getApplicationRecord(service.store, observedMemory.scope, parseMemoryScope);
+    expect(observedScope.completeFor).toEqual(Object.values(domain.procedureRefs).sort());
 
     // 3. Applicability is supported now; the episode runs through the real VM.
     const q1 = await memory.query(head1.digest, f.query);
@@ -194,14 +254,16 @@ describe("development-workspace organism on the real harness boundary", () => {
       expectedMemory: head1.state.memory, entrypoint: "run", input, derivation: q1.ref,
     });
     const [d2] = await service.dispatchPending("workspace", dispatcher);
-    if (!d2 || d2.plan.kind !== "episode" || d2.status !== "settled") throw new Error("expected a settled episode");
-    // The episode outcome is real CAS evidence: replaying the bound manifest
-    // reproduces the deposited record bit-for-bit.
-    const result = await getApplicationRecord(service.store, d2.result!, r => r as { kind: string; binding: Digest });
+    if (!d2 || d2.status !== "settled" || d2.plan.kind !== "episode") throw new Error("expected a settled episode");
+    // Resolve the actual settled outcome and replay its receipt. Verification
+    // must not redispatch the episode to reconstruct an evidence address.
+    const result = await getApplicationRecord(service.store, d2.result!, r => r as { kind: string; binding: Digest; outcome: Digest });
     const binding = await getApplicationRecord(service.store, result.binding, r => r as { manifest: Digest; arguments: Digest; process: string });
-    const replay = await runOrganism({ manifest: (await service.store.getManifest(binding.manifest))!, fns: builtinRegistry(), store: service.store, executors: [], args: { src: { value: "ship it" } }, processName: binding.process });
-    const outcomeRef = digestCanonical(applicationJson({ contract: "algal.episode-outcome.v1", binding: result.binding, receipt: replay }));
-    await getApplicationRecord(service.store, outcomeRef, r => r); // resolves only if the dispatcher deposited it
+    const settled = await getApplicationRecord(service.store, result.outcome, r => r as { binding: Digest; receipt: unknown });
+    expect(settled.binding).toBe(result.binding);
+    const actual = parseRunReceipt(settled.receipt);
+    expect(actual.cells.out?.outputs?.value).toBe("ship it");
+    expect((await verifyReceipt(actual, manifestToJson((await service.store.getManifest(binding.manifest))!), service.store)).ok).toBe(true);
 
     // 4. A dependency mutation flips the same supported applicability stale.
     await writeFile(join(f.cwd, "config.json"), '{"factor":7}');
@@ -295,13 +357,15 @@ describe("development-workspace organism on the real harness boundary", () => {
       expectedMemory: s4.state.memory, entrypoint: "run", input: input2, derivation: q4.ref,
     });
     const [d4] = await r.service.dispatchPending("workspace", dispatcher2);
-    if (!d4 || d4.plan.kind !== "episode" || d4.status !== "settled") throw new Error("post-upgrade episode was not settled");
-    const result2 = await getApplicationRecord(service.store, d4.result!, r2 => r2 as { binding: Digest });
+    if (!d4 || d4.status !== "settled" || d4.plan.kind !== "episode") throw new Error("post-upgrade episode was not settled");
+    const result2 = await getApplicationRecord(service.store, d4.result!, r2 => r2 as { binding: Digest; outcome: Digest });
     const binding2 = await getApplicationRecord(service.store, result2.binding, r2 => r2 as { manifest: Digest; process: string });
     expect(binding2.manifest).toBe(candidateManifest);
-    const replay2 = await runOrganism({ manifest: (await service.store.getManifest(candidateManifest))!, fns: builtinRegistry(), store: service.store, executors: [], args: { src: { value: "b-raw" } }, processName: binding2.process });
-    const outcome2Ref = digestCanonical(applicationJson({ contract: "algal.episode-outcome.v1", binding: result2.binding, receipt: replay2 }));
-    await getApplicationRecord(service.store, outcome2Ref, r2 => r2); // resolves only if the dispatcher deposited it
+    const settled2 = await getApplicationRecord(service.store, result2.outcome, r2 => r2 as { binding: Digest; receipt: unknown });
+    expect(settled2.binding).toBe(result2.binding);
+    const actual2 = parseRunReceipt(settled2.receipt);
+    expect(actual2.cells.out?.outputs?.value).toBe("b");
+    expect((await verifyReceipt(actual2, manifestToJson((await service.store.getManifest(candidateManifest))!), service.store)).ok).toBe(true);
 
     // 10. Schema evolution: a bounded migration program maps the schema-1
     //     claims into a renamed relation; the migrate transition activates a
@@ -340,8 +404,9 @@ describe("development-workspace organism on the real harness boundary", () => {
     // A migrate commit without migration evidence is refused.
     const head4 = (await r.service.inspect("workspace"))!;
     const frontierNow = await r.admission.currentFrontier("workspace");
-    const genesisScope = await getApplicationRecord(service.store, domain.scope, parseMemoryScope);
-    const scope2 = await putApplicationRecord(service.store, { ...genesisScope, frontier: frontierNow, completeFor: [...genesisScope.completeFor, migrationProcedure].sort() });
+    const currentMemory = await getApplicationRecord(service.store, head4.state.memory, parseMemorySnapshot);
+    const currentScope = await getApplicationRecord(service.store, currentMemory.scope, parseMemoryScope);
+    const scope2 = await putApplicationRecord(service.store, { ...currentScope, frontier: frontierNow, completeFor: [...currentScope.completeFor, migrationProcedure].sort() });
     const migrated = await migrateApplicationMemory(r.memory, {
       application: "workspace", from: head4.state.memory, schema: schema2, scope: scope2,
       program: migrationManifest, procedure: migrationProcedure, decoder: migrationDecoder,
@@ -407,7 +472,7 @@ describe("development-workspace organism on the real harness boundary", () => {
   // the Vercel AI Gateway; its receipt is durable evidence that replays
   // offline. Without the credential the test skips like the native suite.
   const gatewayKey = process.env.VERCEL_OIDC_TOKEN ?? process.env.AI_GATEWAY_API_KEY;
-  const liveTest = gatewayKey ? test : test.skip;
+  const liveTest = process.env.ALGAL_GATEWAY_LIVE === "1" && gatewayKey ? test : test.skip;
   liveTest("model-backed investigator decides through the real AI gateway", async () => {
     const f = await fixture();
     const { service, memory, domain } = f;

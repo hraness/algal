@@ -25,7 +25,8 @@
 - `index.ts` — the package's public surface.
 - `examples/` — bundled manifests and scripted responses used by `suite`.
 - `spec/v1/organism.md`, `spec/v1/expr.md`, `spec/v1/foundry.md`,
-  `spec/v1/search.md`, `spec/v1/bench.md`, `spec/v1/process.md` — authoritative
+  `spec/v1/search.md`, `spec/v1/bench.md`, `spec/v1/process.md`,
+  `spec/v1/application.md` — authoritative
   contract prose, including the bounded durable process filesystem ABI.
 - `site/` — the static algal.dev source; `build.ts` writes `site/dist`.
 - `README.md`, `CONTRIBUTING.md`, `SECURITY.md` — the public contract.
@@ -80,7 +81,9 @@
   the `.creating.json` interrupted-creation recovery contract). Add
   `bun scripts/store-parity.ts` for the CAS store/slot/listing CLI surface —
   the only driver that spawns the reference `cli.ts` rather than calling the
-  service layer, since those commands live only in the CLIs.
+  service layer, since those commands live only in the CLIs. Run
+  `bun scripts/cli-parity.ts` for public check/explain/inspect/diff,
+  bundle calls, suspension/resume, and installed-example suite parity.
 - The Foundation Models bridge comes from the pinned `apple-foundation`
   crate (`hraness/apple-foundation`); `sh scripts/build-apple.sh` emits its
   embedded source and builds it with Xcode 26 on Apple Silicon, and the

@@ -541,9 +541,10 @@ function parseAgentOutput(u: unknown, what: string): AgentOutput {
  * Other keywords remain opaque provider hints, including nested `items`. */
 function checkSchemaDeclaration(schema: JsonObject, what: string): void {
   const type = optField(schema, "type");
-  if (type !== undefined && (typeof type !== "string" ||
-      !["object", "array", "string", "number", "integer", "boolean", "null"].includes(type))) {
-    throw new AlgalError("PARSE_FAILED", `${what}.type must name a supported JSON type`);
+  const types = Array.isArray(type) ? type : type === undefined ? undefined : [type];
+  if (types !== undefined && (types.length < 1 || types.length > 7 || new Set(types).size !== types.length ||
+      types.some(t => typeof t !== "string" || !["object", "array", "string", "number", "integer", "boolean", "null"].includes(t)))) {
+    throw new AlgalError("PARSE_FAILED", `${what}.type must name a supported JSON type or a nonempty unique union`);
   }
   const required = optField(schema, "required");
   if (required !== undefined) {

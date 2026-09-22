@@ -395,16 +395,16 @@ export function checkSchema(
   _what: string,
   code: "EFFECT_UNPARSEABLE" | "TYPE_MISMATCH" = "EFFECT_UNPARSEABLE",
 ): void {
-  const type = typeof schema.type === "string" ? schema.type : "object";
-  const matches =
+  const types = Array.isArray(schema.type) ? schema.type : [typeof schema.type === "string" ? schema.type : "object"];
+  const matches = types.some(type =>
     (type === "string" && typeof value === "string") ||
     (type === "number" && typeof value === "number") ||
     (type === "integer" && typeof value === "number" && Number.isInteger(value)) ||
     (type === "boolean" && typeof value === "boolean") ||
     (type === "array" && Array.isArray(value)) ||
     (type === "object" && value !== null && typeof value === "object" && !Array.isArray(value)) ||
-    (type === "null" && value === null);
-  if (!matches) throw new AlgalError(code, `expected ${type}`);
+    (type === "null" && value === null));
+  if (!matches) throw new AlgalError(code, `expected ${types.join("|")}`);
   const values = value !== null && typeof value === "object" && !Array.isArray(value)
     ? value as JsonObject : undefined;
   const required = Array.isArray(schema.required) ? schema.required : [];

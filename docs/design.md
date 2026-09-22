@@ -83,7 +83,8 @@ between stores as data. A `via` field on an embedding cell names a transport
 (`--transports` maps names to bundle sources); on a local miss the closure
 arrives through it, verified the same way. This is the honest half of remote
 organisms: remote *resolution*, local execution — no signature needed because
-the digest is the authentication. Delegating the run itself to a remote host
+the digest checks content integrity against the selected reference. It does not
+authenticate the publisher. Delegating the run itself to a remote host
 (trusting someone else's receipt) is what needs signed identity, and stays
 deferred to Valhalla.
 
@@ -95,7 +96,7 @@ list is what lets replay serve attempts one-for-one and reproduce the run
 bit-for-bit. Attempts count against `maxAgentCalls` and work like any other
 call, and exhaustion is an ordinary cell failure — `on:"fail"` decides what
 happens next. There is no jittered backoff or mutated prompt: resilience is
-bounded repetition of a signed request, fully visible on the receipt.
+bounded repetition of a content-identified request, fully visible on the receipt.
 
 **Iteration and fan-out are cells, not edges.** `repeat` runs a
 digest-embedded sub-manifest up to `maxRounds`, carrying named interface
@@ -146,9 +147,10 @@ as ordinary `json` edge data, parses it through the same contract that
 admits manifests on disk, stores it by digest, and runs it nested under
 the spawning cell's path. Generated manifests inherit the host's registry,
 executors, store, transports, budgets, and depth bound — they are data
-products of cells, never a code-execution mechanism, so "an agent wrote
-this program" is no more dangerous than "an agent wrote this string":
-every cell name, port type, and digest still had to parse. The rest of
+products of cells interpreted by the admitted VM. Parsing is necessary but
+does not alone authorize their effects: generated programs can select the
+registry functions and executors that the host exposes. Hosts must bound that
+surface, and capability-bearing dynamic interfaces are rejected. The rest of
 the breeding loop is composition: `each` over a spawn wrapper is a bounded
 population, `repeat` with `carry` is bounded generations, a `slot` plus
 `push.v1` is a durable lineage journal, and a `gate` *inside* a generated

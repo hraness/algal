@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 
 use crate::application_memory::{
     MemoryService, app_id, app_object, app_ref, claim_value, get_record, parse_claim,
-    parse_hypothesis, parse_observation, parse_schema, parse_scope, parse_snapshot, put_record,
+    parse_observation, parse_schema, parse_scope, parse_snapshot, put_record,
 };
 use crate::contract::Manifest;
 use crate::effects::Host;
@@ -25,6 +25,52 @@ use crate::{Error, Result, runtime};
 
 fn fail(message: &str) -> Error {
     Error::invalid(message)
+}
+
+fn admit_program(manifest: &Manifest) -> Result<()> {
+    if manifest.cells.iter().any(|cell| !matches!(cell["kind"].as_str(), Some("input" | "const" | "fn" | "expr"))) {
+        return Err(fail("Migration programs must be pure bounded transformations"));
+    }
+    Ok(())
+}
+
+fn migration_arguments(store: &Store, from_ref: &str, scope_ref: &str) -> Result<Value> {
+    let from = parse_snapshot(&get_record(store, from_ref)?)?;
+    let scope = parse_scope(&get_record(store, scope_ref)?)?;
+    if from.application != scope.application { return Err(fail("Migration scope belongs to another application")); }
+    let mut claims = Vec::new();
+    for reference in &from.observations {
+        if from.withdrawn.contains(reference) { continue; }
+        let observation = parse_observation(&get_record(store, reference)?)?;
+        let observation_scope = parse_scope(&get_record(store, &observation.input.scope)?)?;
+        for claim in &observation.claims {
+            claims.push(json!({"claim": claim_value(claim), "frontier": observation_scope.frontier}));
+        }
+    }
+    // Retained hypotheses are never promoted into the observation projection.
+    if claims.len() > 64 { return Err(fail("Migration claim input bound exceeded")); }
+    Ok(json!({"claims":{"value":claims},"frontier":{"value":scope.frontier}}))
+}
+
+/// Replay a pure producer and bind the emitted claims to its exact source projection.
+pub async fn verify_migration(store: &Store, migration: &crate::application::Migration, scope: &str) -> Result<()> {
+    let manifest = store.manifest(&migration.program)?;
+    admit_program(&manifest)?;
+    let receipt = get_record(store, &migration.receipt)?;
+    let args = migration_arguments(store, &migration.from, scope)?;
+    if receipt["outcome"] != "complete" || receipt["manifestDigest"] != migration.program || receipt["args"] != args {
+        return Err(fail("Migration receipt does not bind its source and program"));
+    }
+    let output = &manifest.value["interface"]["outputs"]["migrated"];
+    let produced = &receipt["cells"][output["cell"].as_str().unwrap_or("")]["outputs"][output["port"].as_str().unwrap_or("")];
+    let emitted = &app_object(produced, &["claims"])?["claims"];
+    if emitted != &json!(migration.claims.iter().map(claim_value).collect::<Vec<_>>()) {
+        return Err(fail("Migration claims differ from producing receipt"));
+    }
+    if runtime::verify(&receipt, manifest, store, &Host::default()).await?["ok"] != true {
+        return Err(fail("Migration producing receipt does not replay"));
+    }
+    Ok(())
 }
 
 /// `migrateApplicationMemory` — runs the migration program over the source
@@ -71,33 +117,12 @@ pub async fn migrate_memory(
         return Err(fail("Migration requires a schema change"));
     }
     let target = parse_schema(&get_record(store, &schema_ref)?)?;
-    // The program sees the whole admitted claim set — observations and
-    // hypotheses alike — annotated with each observation's scope frontier and
-    // the migration scope's frontier, so the program can decide what carries
-    // forward rather than copying stale evidence.
-    let target_scope = parse_scope(&get_record(store, &scope)?)?;
-    let mut claims: Vec<Value> = Vec::new();
-    for reference in &from.observations {
-        let observation = parse_observation(&get_record(store, reference)?)?;
-        let observation_scope = parse_scope(&get_record(store, &observation.input.scope)?)?;
-        for claim in &observation.claims {
-            claims.push(json!({
-                "claim": claim_value(claim),
-                "frontier": observation_scope.frontier,
-            }));
-        }
-    }
-    for reference in &from.hypotheses {
-        let hypothesis = parse_hypothesis(&get_record(store, reference)?)?;
-        claims.push(json!({"claim": claim_value(&hypothesis.claim), "frontier": Value::Null}));
-    }
-    if claims.len() > 64 {
-        return Err(fail("Migration claim input bound exceeded"));
-    }
+    let args = migration_arguments(store, &from_ref, &scope)?;
     let manifest_value = store
         .get("manifests", &program)?
         .ok_or_else(|| fail("Migration manifest missing from the store"))?;
     let manifest = Manifest::parse(&manifest_value)?;
+    admit_program(&manifest)?;
     // `runOrganism` carries `processName`; the native equivalent is the host
     // process scope, which binds effect idempotency keys to the same
     // `algal.process-effect.v1` record. Restore it after the run.
@@ -106,10 +131,7 @@ pub async fn migrate_memory(
         .replace(format!("migrate-{}", &from_ref[7..15]));
     let run = runtime::run(
         manifest.clone(),
-        json!({
-            "claims": {"value": claims},
-            "frontier": {"value": target_scope.frontier},
-        }),
+        args,
         store,
         host,
         transports,
@@ -395,6 +417,11 @@ mod tests {
             migrated_observation["claims"][0]["relation"],
             json!("supported-tool")
         );
+        let scope = fixture.input["scope"].as_str().unwrap();
+        verify_migration(&store, &crate::application::parse_migration(&migration).unwrap(), scope).await.unwrap();
+        let mut forged = migration.clone();
+        forged["claims"][0]["tuple"] = json!(["invented-tool"]);
+        assert!(verify_migration(&store, &crate::application::parse_migration(&forged).unwrap(), scope).await.is_err());
     }
 
     #[tokio::test]

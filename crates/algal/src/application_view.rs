@@ -21,7 +21,7 @@ const VIEW_SPEC: &str = "algal.application-view-spec.v1";
 const VIEW: &str = "algal.application-view.v1";
 const PROFILE: &str = "algal.application-runtime-profile.v1";
 const WIDGETS: [&str; 4] = ["procedures", "memory", "history", "investigations"];
-const STATUSES: [&str; 5] = ["unknown", "supported", "stale", "opposed", "conflicted"];
+const STATUSES: [&str; 8] = ["unknown", "supported", "stale", "opposed", "conflicted", "exhausted", "failed", "cancelled"];
 
 pub struct ViewSpec {
     pub title: String,
@@ -119,7 +119,7 @@ pub fn project_view(
             &empty[..]
         }
     };
-    if history.len() > 128 {
+    if history.len() > 4096 {
         return Err(fail("View history bound exceeded"));
     }
     if history.is_empty() || history[history.len() - 1].digest != snapshot.digest {
@@ -182,7 +182,7 @@ pub fn project_view(
         "title": spec.title,
         "widgets": spec.widgets,
         "procedures": procedures,
-        "history": history.iter().map(|item| json!({
+        "history": history.iter().skip(history.len().saturating_sub(128)).map(|item| json!({
             "state": item.digest,
             "sequence": item.state.sequence,
             "revision": item.state.revision,
@@ -195,7 +195,7 @@ pub fn project_view(
     if canonical(&view)?.len() > 262_144 {
         return Err(fail("Application view byte bound exceeded"));
     }
-    Ok(view)
+    parse_view(&view)
 }
 
 pub fn load_view_spec(service: &Service, reference: &str) -> Result<ViewSpec> {
@@ -229,12 +229,16 @@ pub fn parse_view(input: &Value) -> Result<Value> {
     let revision = app_ref(&v["revision"])?.to_owned();
     let memory = app_ref(&v["memory"])?.to_owned();
     let mut procedures = Vec::new();
+    let mut procedure_names = std::collections::BTreeSet::new();
     for raw in list(&v["procedures"], 32)? {
         let p = app_object(raw, &["name", "manifest", "applicability"])?;
         let applicability = p["applicability"]
             .as_str()
             .filter(|s| STATUSES.contains(s))
             .ok_or_else(|| fail("Invalid view applicability"))?;
+        if !procedure_names.insert(app_id(&p["name"])?.to_owned()) {
+            return Err(fail("Duplicate view procedure"));
+        }
         procedures.push(json!({
             "name": app_id(&p["name"])?,
             "manifest": app_ref(&p["manifest"])?,
@@ -286,7 +290,7 @@ pub fn parse_view(input: &Value) -> Result<Value> {
             Some("investigate") => {
                 let i = app_object(raw, &["kind", "expectedState", "intent"])?;
                 let expected = app_ref(&i["expectedState"])?;
-                if expected != state {
+                if expected != state || !investigations.iter().any(|row| row["intent"] == i["intent"]) {
                     return Err(fail(
                         "Investigation action is not fenced to the captured state",
                     ));
@@ -305,7 +309,7 @@ pub fn parse_view(input: &Value) -> Result<Value> {
                 if expected != state
                     || !procedures
                         .iter()
-                        .any(|p| p["manifest"].as_str() == Some(procedure))
+                        .any(|p| p["manifest"].as_str() == Some(procedure) && p["applicability"] == "supported")
                 {
                     return Err(fail("Procedure action is not fenced to the captured state"));
                 }
@@ -468,6 +472,34 @@ mod tests {
             }))
             .is_err()
         );
+    }
+
+    #[test]
+    fn preserves_incomplete_applicability_and_rejects_actions() {
+        let current = snapshot();
+        for status in ["exhausted", "failed", "cancelled"] {
+            let applicability = BTreeMap::from([("run".to_owned(), Applicability { status: status.to_owned(), query_result: None })]);
+            let mut view = project_view(&current, &spec(), None, &applicability).unwrap();
+            assert_eq!(view["procedures"][0]["applicability"], status);
+            assert_eq!(view["actions"], json!([]));
+            view["actions"] = json!([{"kind":"execute-procedure","expectedState":current.digest,"procedure":current.revision.entrypoints[0].manifest,"queryResult":hashed(&json!("unsupported"))}]);
+            assert!(parse_view(&view).is_err());
+        }
+    }
+
+    #[test]
+    fn long_history_retains_captured_tail_with_truncation() {
+        let history: Vec<_> = (0..130).map(|sequence| {
+            let mut item = snapshot();
+            item.state.sequence = sequence;
+            item.digest = hashed(&json!({"sequence": sequence}));
+            item
+        }).collect();
+        let view = project_view(&history[129], &spec(), Some(&history), &BTreeMap::new()).unwrap();
+        assert_eq!(view["truncated"], true);
+        assert_eq!(view["history"].as_array().unwrap().len(), 128);
+        assert_eq!(view["history"][0]["sequence"], 2);
+        assert_eq!(view["history"][127]["state"], history[129].digest);
     }
 
     #[test]

@@ -38,3 +38,8 @@ test("hypotheses cannot impersonate source observations", () => {
   expect(() => parseObservation({ contract: "algal.hypothesis.v1", claim: ["available", "python"] })).toThrow();
   expect(() => parseObservation({ contract: "algal.harness-observation.v1", owner: "agent", ordinal: 1, scope: config.scope, procedureRef: `sha256:${"a".repeat(64)}`, rawRef: `sha256:${"b".repeat(64)}`, decoder: "model-extraction.v1" })).toThrow();
 });
+test("legacy observations default to task-bound reuse and unknown policies reject", () => {
+  const record = { contract: "algal.harness-observation.v1", owner: "agent", ordinal: 1, scope: config.scope, procedureRef: `sha256:${"a".repeat(64)}`, rawRef: `sha256:${"b".repeat(64)}`, decoder: "algal.harness-probe.v1" };
+  expect(parseObservation(record).reuse).toBe("task");
+  expect(() => parseObservation({ ...record, reuse: "anywhere" })).toThrow("reuse");
+});

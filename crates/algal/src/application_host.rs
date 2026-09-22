@@ -11,8 +11,11 @@ use crate::{
     Error, Result,
     application::{
         Admission, CommitContext, DispatchAdmission, DispatchContext, Dispatcher, WorkIntent,
-        parse_episode_binding, process_name,
+        TransitionKind, parse_episode_binding, parse_migration, process_name,
     },
+    application_adaptation::{admit_application_activation, parse_evaluation_policy, parse_evaluation_request},
+    application_migration::verify_migration,
+    application_view::{parse_runtime_profile, parse_view_spec},
     application_memory::{
         self as mem, MemoryAdmission, MemoryService, ObservationAdmission, app_id, app_json,
         app_object, app_ref, bounded_text,
@@ -20,10 +23,12 @@ use crate::{
     canonical::digest,
     capabilities::parse_capability_handle,
     contract::{list, object, text},
+    effects::Host,
+    graph::{self, Transports},
     lease,
 };
 use serde_json::{Value, json};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
@@ -154,54 +159,70 @@ pub fn parse_policy(input: &Value) -> Result<Policy> {
     })
 }
 
-fn read_channel(channels_dir: &Path, route: &str) -> Result<Vec<String>> {
-    // The TypeScript channel read is unbounded; the outcome list itself is
-    // capped at 4096 digests (~300KiB), so this byte bound is generous slack
-    // and never rejects a legal channel.
+#[derive(Clone, Debug, PartialEq)]
+struct ChannelDelivery { identity: String, message: String }
+
+fn read_channel(channels_dir: &Path, route: &str) -> Result<Vec<ChannelDelivery>> {
+    lease::directory(channels_dir)?;
     let raw = match lease::read(&channels_dir.join(format!("{route}.json")), 1_048_576)? {
         Some(raw) => raw,
         None => return Ok(Vec::new()),
     };
-    let v = app_object(&raw, &["contract", "route", "outcomes"])?;
-    mem::app_tag(&v["contract"], "algal.host-channel.v1")?;
+    // The channel has its own byte bound, independent of application records.
+    let v = object(&raw)?;
+    if v.len() != 3 || !["contract", "route", "outcomes"].iter().all(|key| v.contains_key(*key)) {
+        return Err(Error::invalid("Unknown or missing channel field"));
+    }
+    if v["contract"] == "algal.host-channel.v1" {
+        return Err(Error::invalid("Legacy channel lacks dispatch identities; explicit migration required"));
+    }
+    mem::app_tag(&v["contract"], "algal.host-channel.v2")?;
     if v["route"] != json!(route) {
         return Err(Error::invalid("Channel route mismatch"));
     }
     app_refs_channel(&v["outcomes"], 4096)
 }
 
-fn app_refs_channel(value: &Value, max: usize) -> Result<Vec<String>> {
+fn app_refs_channel(value: &Value, max: usize) -> Result<Vec<ChannelDelivery>> {
     let rows = list(value, max)?;
     let mut out = Vec::with_capacity(rows.len());
+    let mut seen = BTreeSet::new();
     for row in rows {
-        out.push(app_ref(row)?.to_owned());
+        let row = app_object(row, &["identity", "message"])?;
+        let identity = app_ref(&row["identity"])?.to_owned();
+        if !seen.insert(identity.clone()) {
+            return Err(Error::invalid("Duplicate channel dispatch identity"));
+        }
+        out.push(ChannelDelivery { identity, message: app_ref(&row["message"])?.to_owned() });
     }
     Ok(out)
 }
 
-fn write_channel(channels_dir: &Path, route: &str, outcomes: &[String]) -> Result<()> {
+fn write_channel(channels_dir: &Path, route: &str, outcomes: &[ChannelDelivery]) -> Result<()> {
     lease::write(
         &channels_dir.join(format!("{route}.json")),
-        &json!({"contract":"algal.host-channel.v1","route":route,"outcomes":outcomes}),
+        &json!({"contract":"algal.host-channel.v2","route":route,"outcomes":outcomes.iter().map(|row| json!({"identity":row.identity,"message":row.message})).collect::<Vec<_>>()}),
         true,
     )
 }
 
-/// The three host traits on one value. `identity` and
-/// `configuration_digest` bind the exact policy digest so a policy change is
-/// a new host, never silent drift.
+/// Admission pins all policy fields except frontier selection; dispatch
+/// configuration continues to pin the complete policy record.
 pub struct PolicyHost {
     pub policy: Policy,
     identity: String,
     configuration_digest: String,
     channels_dir: PathBuf,
+    memory_engine: Option<mem::NativeEngine>,
 }
 
 impl PolicyHost {
     pub fn new(input: &Value, channels_dir: &Path) -> Result<Self> {
         let policy = parse_policy(input)?;
+        let mut authority = policy.value.clone();
+        authority.as_object_mut().expect("parsed policy object").remove("frontier");
         let identity = digest(&app_json(&json!({
-            "contract": "algal.host-admission.v1", "policy": policy.reference,
+            "contract": "algal.host-admission.v2", "policy": digest(&authority)?,
         }))?)?;
         let configuration_digest = digest(&app_json(&json!({
             "contract": "algal.host-dispatcher.v1", "policy": policy.reference,
@@ -211,13 +232,24 @@ impl PolicyHost {
             identity,
             configuration_digest,
             channels_dir: channels_dir.to_path_buf(),
+            memory_engine: None,
         })
     }
 
+    pub fn set_memory_engine(&mut self, engine: mem::NativeEngine) { self.memory_engine = Some(engine); }
+
     fn settle_delivery(&self, work_route: &str, message: &str, identity: &str) -> Result<Value> {
+        let _lease = lease::OwnerLease::acquire(
+            &self.channels_dir.join(".custody").join(work_route),
+            &format!("channel-{work_route}"),
+        )?;
         let mut outcomes = read_channel(&self.channels_dir, work_route)?;
-        if !outcomes.contains(&message.to_owned()) {
-            outcomes.push(message.to_owned());
+        let prior = outcomes.iter().find(|row| row.identity == identity);
+        if prior.is_some_and(|row| row.message != message) {
+            return Err(Error::invalid("Channel dispatch identity changed its message"));
+        }
+        if prior.is_none() {
+            outcomes.push(ChannelDelivery { identity: identity.to_owned(), message: message.to_owned() });
             if outcomes.len() > 4096 {
                 return Err(Error::limit("Channel bound exceeded"));
             }
@@ -231,10 +263,96 @@ impl PolicyHost {
 }
 
 impl Admission for PolicyHost {
-    fn admit_commit(&self, _context: &CommitContext) -> Result<()> {
+    fn admit_commit(&self, context: &CommitContext) -> Result<()> {
+        if context.command.application != self.policy.application
+            || context.revision.application != self.policy.application
+        {
+            return Err(Error::invalid("Host policy belongs to another application"));
+        }
+        let memory = MemoryService { engine: &AdmissionOnlyEngine, admission: self };
+        let snapshot = memory.validate_for_revision(context.store, &context.command.memory, context.revision)?;
+        parse_runtime_profile(&mem::get_record(context.store, &context.revision.runtime_profile)?)?;
+        parse_view_spec(&mem::get_record(context.store, &context.revision.views)?)?;
+        parse_evaluation_policy(&mem::get_record(context.store, &context.revision.evaluation_policy)?)?;
+        if let Some(current) = context.current
+            && context.command.kind != TransitionKind::Migrate
+            && context.command.memory != current.state.memory
+            && snapshot.previous.as_deref() != Some(current.state.memory.as_str())
+        {
+            return Err(Error::invalid("Memory update must preserve the current snapshot as its predecessor"));
+        }
+        let mut overlay = context.store.overlay();
+        for entry in &context.revision.entrypoints {
+            graph::compile(overlay.manifest(&entry.manifest)?, &mut overlay, &Default::default(), &Transports::new(), 0)?;
+        }
         Ok(())
     }
+    fn verify_commit<'a>(&'a self, context: &'a CommitContext<'a>) -> Pin<Box<dyn Future<Output = Result<()>> + 'a>> {
+        Box::pin(async move {
+            self.admit_commit(context)?;
+            for intent in &context.command.intents {
+                if let crate::application::IntentSpec::StartEpisode { entrypoint, .. } = intent {
+                    let current = context.current.ok_or_else(|| Error::invalid("Execution must preserve the selected memory and revision"))?;
+                    if context.command.memory != current.state.memory || context.command.revision != current.state.revision {
+                        return Err(Error::invalid("Execution must preserve the selected memory and revision"));
+                    }
+                    let engine = self.memory_engine.as_ref().ok_or_else(|| Error::invalid("Episode admission requires an explicit memory query engine"))?;
+                    let entry = context.revision.entrypoints.iter().find(|entry| &entry.name == entrypoint).ok_or_else(|| Error::invalid("Unknown episode entrypoint"))?;
+                    let memory = MemoryService { engine, admission: self };
+                    let (reference, derived) = memory.query(&mut context.store.overlay(), &current.digest, &entry.applicability)?;
+                    if derived.status != "supported" || !derived.verified || !context.command.evidence.contains(&reference) {
+                        return Err(Error::invalid("Execution requires reproduced supported applicability evidence"));
+                    }
+                }
+            }
+            if matches!(context.command.kind, TransitionKind::Activate | TransitionKind::Migrate) {
+                let current = context.current.ok_or_else(|| Error::invalid("Revision change requires an incumbent"))?;
+                for entry in &context.revision.entrypoints {
+                    if let Some(old) = current.revision.entrypoints.iter().find(|previous| previous.name == entry.name)
+                        && (entry.max_generations != old.max_generations || entry.capabilities.iter().any(|capability| !old.capabilities.contains(capability))) {
+                        return Err(Error::invalid("Revision change widens an entrypoint's budget or authority"));
+                    }
+                }
+                let mut accepted = std::collections::BTreeSet::new();
+                for evidence in &context.command.evidence {
+                    let record = mem::get_record(context.store, evidence)?;
+                    if record["contract"] == "algal.application-evaluation.v1" {
+                        let checked = admit_application_activation(context.store, &json!({
+                            "evaluation": evidence, "expectedState": current.digest, "revision": context.command.revision,
+                        }), &Host::default()).await?;
+                        let request = parse_evaluation_request(&mem::get_record(context.store, app_ref(&checked["evaluation"]["request"])?)?)?;
+                        accepted.insert(request.entrypoint);
+                    }
+                }
+                if context.command.kind == TransitionKind::Activate && accepted.is_empty() {
+                    return Err(Error::invalid("Activation requires reproducibly accepted evaluation evidence"));
+                }
+                for entry in &context.revision.entrypoints {
+                    if current.revision.entrypoints.iter().find(|old| old.name == entry.name).map(|old| old.manifest.as_str()) != Some(entry.manifest.as_str()) && !accepted.contains(&entry.name) {
+                        return Err(Error::invalid("Every changed entrypoint requires accepted evaluation evidence"));
+                    }
+                }
+                if context.command.kind == TransitionKind::Migrate {
+                    let snapshot = mem::parse_snapshot(&mem::get_record(context.store, &context.command.memory)?)?;
+                    let mut verified = 0;
+                    for evidence in &context.command.evidence {
+                        let record = mem::get_record(context.store, evidence)?;
+                        if record["contract"] == "algal.application-migration.v1" {
+                            verify_migration(context.store, &parse_migration(&record)?, &snapshot.scope).await?;
+                            verified += 1;
+                        }
+                    }
+                    if verified == 0 { return Err(Error::invalid("Migration requires verified producing evidence")); }
+                }
+            }
+            Ok(())
+        })
+    }
     fn admit_dispatch(&self, context: &DispatchAdmission) -> Result<Value> {
+        if context.snapshot.state.application != self.policy.application || context.intent.application != self.policy.application {
+            return Err(Error::invalid("Host policy belongs to another application"));
+        }
+        if let Some(previous) = context.previous_dispatch { return Ok(previous.plan.value()); }
         match &context.intent.work {
             WorkIntent::Deliver { route, .. } => {
                 let policy = self
@@ -255,6 +373,15 @@ impl Admission for PolicyHost {
                     .iter()
                     .find(|e| &e.name == entrypoint)
                     .ok_or_else(|| Error::invalid("Unknown episode entrypoint"))?;
+                if snapshot.state.memory != context.current.state.memory || snapshot.state.revision != context.current.state.revision {
+                    return Err(Error::invalid("Episode source memory or revision is no longer selected"));
+                }
+                let engine = self.memory_engine.as_ref().ok_or_else(|| Error::invalid("Episode admission requires an explicit memory query engine"))?;
+                let memory = MemoryService { engine, admission: self };
+                let (_, derived) = memory.query(&mut context.store.overlay(), &snapshot.digest, &entry.applicability)?;
+                if derived.status != "supported" || !derived.verified {
+                    return Err(Error::invalid("Episode applicability is not currently supported"));
+                }
                 let intent_ref = digest(&app_json(&context.intent.value)?)?;
                 let binding = parse_episode_binding(&json!({
                     "contract": "algal.application-episode.v1",
@@ -342,6 +469,9 @@ impl Dispatcher for PolicyHost {
         context: &'a DispatchContext<'a>,
     ) -> Pin<Box<dyn Future<Output = Result<Value>> + 'a>> {
         Box::pin(async move {
+            if context.intent.application != self.policy.application {
+                return Err(Error::invalid("Host policy belongs to another application"));
+            }
             match &context.intent.work {
                 WorkIntent::Deliver { route, message } => {
                     self.settle_delivery(route, message, &context.dispatch.identity)
@@ -361,14 +491,20 @@ impl Dispatcher for PolicyHost {
         context: &'a DispatchContext<'a>,
     ) -> Pin<Box<dyn Future<Output = Option<Result<Value>>> + 'a>> {
         Box::pin(async move {
+            if context.intent.application != self.policy.application {
+                return Some(Err(Error::invalid("Host policy belongs to another application")));
+            }
             match &context.intent.work {
                 WorkIntent::Deliver { route, message } => {
                     match read_channel(&self.channels_dir, route) {
-                        Ok(outcomes) if outcomes.contains(message) => Some(Ok(json!({
-                            "status": "settled",
-                            "result": {"kind":"delivery","message":message,"idempotencyKey":context.dispatch.identity},
-                        }))),
-                        Ok(_) => None,
+                        Ok(outcomes) => match outcomes.iter().find(|row| row.identity == context.dispatch.identity) {
+                            Some(row) if &row.message == message => Some(Ok(json!({
+                                "status": "settled",
+                                "result": {"kind":"delivery","message":message,"idempotencyKey":context.dispatch.identity},
+                            }))),
+                            Some(_) => Some(Err(Error::invalid("Channel dispatch identity changed its message"))),
+                            None => None,
+                        },
                         Err(e) => Some(Err(e)),
                     }
                 }
@@ -376,6 +512,16 @@ impl Dispatcher for PolicyHost {
             }
         })
     }
+}
+
+/// Structural admission cannot accidentally invoke or attest an inference engine.
+struct AdmissionOnlyEngine;
+impl mem::MemoryEngine for AdmissionOnlyEngine {
+    fn identity(&self) -> &str { "admission-only" }
+    fn query(&self, _: &Value, _: &Value) -> mem::EngineResult {
+        mem::EngineResult::Incomplete { status: "failed".into(), reason: "admission-only".into(), work: None }
+    }
+    fn verify(&self, _: &Value, _: &Value, _: &Value) -> bool { false }
 }
 
 /// The composed application dispatcher — `createApplicationDomainDispatcher`
@@ -425,10 +571,11 @@ impl Dispatcher for DomainDispatcher<'_> {
         &'a self,
         context: &'a DispatchContext<'a>,
     ) -> Pin<Box<dyn Future<Output = Option<Result<Value>>> + 'a>> {
-        // Episodes never silently retry: an uncertain episode is an uncertain
-        // external write, so reconcile falls through to the policy host's
-        // `None` and the dispatch stays uncertain until the caller settles it.
-        self.host.reconcile(context)
+        if matches!(context.dispatch.plan, crate::application::DispatchPlan::Episode { .. }) {
+            Box::pin(async move { Some(crate::application_episode::reconcile_episode(context, &self.dir).await) })
+        } else {
+            self.host.reconcile(context)
+        }
     }
 }
 
@@ -461,6 +608,14 @@ mod tests {
     fn mailbox(n: usize) -> String {
         format!("cap:mailbox-send:{}", refn(n))
     }
+    #[test]
+    fn full_channel_remains_readable() {
+        let tmp = tempdir().unwrap();
+        let outcomes = (0..4096).map(|i| ChannelDelivery { identity: hashed(json!(i)), message: hashed(json!("same")) }).collect::<Vec<_>>();
+        write_channel(tmp.path(), "full", &outcomes).unwrap();
+        assert_eq!(read_channel(tmp.path(), "full").unwrap(), outcomes);
+    }
+
     fn policy_value() -> Value {
         json!({
             "contract": "algal.application-host.v1", "application": "parity",
@@ -488,6 +643,25 @@ mod tests {
         d["episodeAccess"] = json!("execute");
         assert!(parse_policy(&d).is_err());
         assert!(parse_policy(&policy_value()).is_ok());
+    }
+
+    #[test]
+    fn deliveries_bind_identity_and_legacy_channels_fail_closed() {
+        let tmp = tempdir().unwrap();
+        let host = PolicyHost::new(&policy_value(), tmp.path()).unwrap();
+        let message = refn(70);
+        host.settle_delivery("investigate", &message, &refn(71)).unwrap();
+        host.settle_delivery("investigate", &message, &refn(72)).unwrap();
+        host.settle_delivery("investigate", &message, &refn(71)).unwrap();
+        let outcomes = read_channel(tmp.path(), "investigate").unwrap();
+        assert_eq!(outcomes.len(), 2);
+        assert_eq!(outcomes[0].identity, refn(71));
+        assert_eq!(outcomes[1].identity, refn(72));
+        assert!(host.settle_delivery("investigate", &refn(73), &refn(71)).is_err());
+        let legacy = json!({"contract":"algal.host-channel.v1","route":"investigate","outcomes":[message]});
+        lease::write(&tmp.path().join("investigate.json"), &legacy, true).unwrap();
+        assert!(host.settle_delivery("investigate", &message, &refn(74)).is_err());
+        assert_eq!(lease::read(&tmp.path().join("investigate.json"), 1_048_576).unwrap(), Some(legacy));
     }
 
     fn snapshot() -> Snapshot {
@@ -581,6 +755,14 @@ mod tests {
             store: &store,
         };
         assert!(Admission::admit_dispatch(&host, &denied).is_err());
+        let foreign = crate::application::parse_intent(&json!({
+            "contract": "algal.application-intent.v1", "application": "foreign",
+            "operation": refn(23), "ordinal": 0,
+            "kind": "deliver", "route": "investigate", "message": refn(30),
+        })).unwrap();
+        assert!(Admission::admit_dispatch(&host, &DispatchAdmission {
+            current: &current, snapshot: &current, intent: &foreign, previous_dispatch: None, store: &store,
+        }).is_err());
     }
 
     #[test]
@@ -799,7 +981,7 @@ mod tests {
             &std::fs::read_to_string(tmp.path().join("investigate.json")).unwrap(),
         )
         .unwrap();
-        assert_eq!(channel["outcomes"], json!([message]));
+        assert_eq!(channel["outcomes"], json!([{"identity":context.dispatch.identity,"message":message}]));
         // Reconcile settles a recorded delivery; an absent one stays open.
         assert!(
             Dispatcher::reconcile(&host, &context)
@@ -815,7 +997,13 @@ mod tests {
             intent: &other_intent,
             dispatch: &record,
         };
-        assert!(Dispatcher::reconcile(&host, &other).await.is_none());
+        assert!(Dispatcher::reconcile(&host, &other).await.unwrap().is_err());
+        let mut other_record = record.clone();
+        other_record.identity = refn(44);
+        let same_message_new_identity = DispatchContext {
+            current: &current, snapshot: &current, intent: &intent, dispatch: &other_record,
+        };
+        assert!(Dispatcher::reconcile(&host, &same_message_new_identity).await.is_none());
     }
 
     #[tokio::test]

@@ -36,6 +36,8 @@ pub const MAX_OBJECT_KEYS: usize = 256;
 pub const MAX_STRING_BYTES: usize = 65_536;
 /// Canonical bytes of the final result.
 pub const MAX_OUTPUT_BYTES: usize = 65_536;
+/// Canonical bytes of any intermediate value, checked before growing containers.
+pub const MAX_VALUE_BYTES: usize = MAX_ENV_BYTES;
 /// let/map/filter/fold binder names.
 pub const MAX_VAR_LEN: usize = 64;
 /// Ceiling on the fuel budget a caller may request.
@@ -201,6 +203,59 @@ fn value_depth(v: &Value) -> usize {
     }
 }
 
+// Check while walking rather than serializing an unbounded intermediate.
+// Every child has already passed this check before a parent can retain it;
+// collection builders also charge each child before extending the collection.
+fn add_value_bytes(total: &mut usize, bytes: usize) -> Result<(), E> {
+    *total = total.saturating_add(bytes);
+    if *total > MAX_VALUE_BYTES {
+        return Err(err_bounds("value-bytes", MAX_VALUE_BYTES));
+    }
+    Ok(())
+}
+
+fn value_bytes(value: &Value, depth: usize) -> Result<usize, E> {
+    if depth > MAX_VALUE_DEPTH {
+        return Err(err_bounds("value-depth", MAX_VALUE_DEPTH));
+    }
+    let mut bytes;
+    match value {
+        Value::String(text) => {
+            if text.len() > MAX_STRING_BYTES {
+                return Err(err_bounds("string-bytes", MAX_STRING_BYTES));
+            }
+            bytes = canonical_bytes(value);
+        }
+        Value::Array(items) => {
+            if items.len() > MAX_LIST_LEN {
+                return Err(err_bounds("list-len", MAX_LIST_LEN));
+            }
+            bytes = 2 + items.len().saturating_sub(1);
+            for item in items {
+                add_value_bytes(&mut bytes, value_bytes(item, depth + 1)?)?;
+            }
+        }
+        Value::Object(fields) => {
+            if fields.len() > MAX_OBJECT_KEYS {
+                return Err(err_bounds("object-keys", MAX_OBJECT_KEYS));
+            }
+            bytes = 2 + fields.len().saturating_sub(1);
+            for (key, item) in fields {
+                if key.len() > MAX_STRING_BYTES {
+                    return Err(err_bounds("string-bytes", MAX_STRING_BYTES));
+                }
+                add_value_bytes(&mut bytes, canonical_bytes(&Value::String(key.clone())) + 1)?;
+                add_value_bytes(&mut bytes, value_bytes(item, depth + 1)?)?;
+            }
+        }
+        _ => bytes = canonical_bytes(value),
+    }
+    if bytes > MAX_VALUE_BYTES {
+        return Err(err_bounds("value-bytes", MAX_VALUE_BYTES));
+    }
+    Ok(bytes)
+}
+
 /// Static program validation. `scope` is the set of names visible at this
 /// point in the program: input-port names supplied by the caller plus binder
 /// names from enclosing let/map/filter/fold positions. A literal `["get",
@@ -342,7 +397,7 @@ struct Eval<'a> {
 
 impl<'a> Eval<'a> {
     fn eval(&mut self, node: &Value) -> R {
-        match node {
+        let result = match node {
             Value::Array(arr) => {
                 // op head guaranteed by check()
                 let op = arr.first().and_then(Value::as_str).unwrap_or("");
@@ -357,12 +412,21 @@ impl<'a> Eval<'a> {
                     return Err(err_bounds("object-keys", MAX_OBJECT_KEYS));
                 }
                 let mut out = Map::new();
+                let mut bytes = 2;
                 // BTreeMap order = sorted-key order.
                 for (k, v) in obj {
                     let base = self.scope.vars.len();
                     let r = self.eval(v);
                     self.scope.vars.truncate(base);
-                    out.insert(k.clone(), r?);
+                    let value = r?;
+                    add_value_bytes(
+                        &mut bytes,
+                        canonical_bytes(&Value::String(k.clone()))
+                            + 1
+                            + usize::from(!out.is_empty()),
+                    )?;
+                    add_value_bytes(&mut bytes, value_bytes(&value, 1)?)?;
+                    out.insert(k.clone(), value);
                 }
                 Ok(Value::Object(out))
             }
@@ -370,13 +434,21 @@ impl<'a> Eval<'a> {
                 self.fuel.spend(1)?;
                 Ok(node.clone())
             }
-        }
+        }?;
+        value_bytes(&result, 0)?;
+        Ok(result)
     }
 
     fn eval_args(&mut self, arr: &[Value]) -> Result<Vec<Value>, E> {
         let mut out = Vec::with_capacity(arr.len().saturating_sub(1));
+        let mut bytes = 2;
         for a in arr.iter().skip(1) {
-            out.push(self.eval(a)?);
+            let value = self.eval(a)?;
+            add_value_bytes(
+                &mut bytes,
+                value_bytes(&value, 0)? + usize::from(!out.is_empty()),
+            )?;
+            out.push(value);
         }
         Ok(out)
     }
@@ -496,9 +568,12 @@ impl<'a> Eval<'a> {
                     "abs" => n.abs(),
                     "floor" => n.floor(),
                     "ceil" => n.ceil(),
-                    // half toward +∞ — JS Math.round semantics; the
-                    // (x + 0.5).floor() form pins the spec's tie rule.
-                    _ => (n + 0.5).floor(),
+                    // Adding 0.5 first can round the addition itself (both
+                    // just below a half and at large exact integers).
+                    _ => {
+                        let floor = n.floor();
+                        if n - floor < 0.5 { floor } else { floor + 1.0 }
+                    }
                 };
                 if !r.is_finite() {
                     return Err(err_num(op));
@@ -694,6 +769,7 @@ impl<'a> Eval<'a> {
                 let name = arr.get(2).and_then(Value::as_str).unwrap_or("");
                 let body = arr.get(3).unwrap_or(&Value::Null);
                 let mut out = Vec::new();
+                let mut bytes = 2;
                 for (i, item) in items.into_iter().enumerate() {
                     self.fuel.spend(1)?;
                     let base = self.scope.vars.len();
@@ -702,8 +778,16 @@ impl<'a> Eval<'a> {
                     self.scope.vars.truncate(base);
                     let v = r?;
                     if op == "map" {
+                        add_value_bytes(
+                            &mut bytes,
+                            value_bytes(&v, 1)? + usize::from(!out.is_empty()),
+                        )?;
                         out.push(v);
                     } else if self.boolean(&v, op, i)? {
+                        add_value_bytes(
+                            &mut bytes,
+                            value_bytes(&item, 1)? + usize::from(!out.is_empty()),
+                        )?;
                         out.push(item);
                     }
                     if out.len() > MAX_LIST_LEN {
@@ -868,18 +952,21 @@ impl<'a> Eval<'a> {
                 let items = self.list(arr.get(1).unwrap_or(&Value::Null), op, 0)?;
                 let sep = self.string(arr.get(2).unwrap_or(&Value::Null), op, 1)?;
                 let mut parts = Vec::with_capacity(items.len());
+                let mut bytes = sep.len().saturating_mul(items.len().saturating_sub(1));
                 for (i, v) in items.iter().enumerate() {
                     match v {
-                        Value::String(s) => parts.push(s.clone()),
+                        Value::String(s) => {
+                            bytes = bytes.saturating_add(s.len());
+                            parts.push(s.as_str());
+                        }
                         _ => return Err(err_type(op, i, "string", kind_of(v))),
                     }
                 }
-                let out = parts.join(&sep);
-                if out.len() > MAX_STRING_BYTES {
+                if bytes > MAX_STRING_BYTES {
                     return Err(err_bounds("string-bytes", MAX_STRING_BYTES));
                 }
-                self.fuel.spend(out.len() as u64)?;
-                Ok(Value::String(out))
+                self.fuel.spend(bytes as u64)?;
+                Ok(Value::String(parts.join(&sep)))
             }
             "scontains" => {
                 let s = self.string(arr.get(1).unwrap_or(&Value::Null), op, 0)?;
@@ -1155,11 +1242,19 @@ pub fn run(
     env: &Map<String, Value>,
     budget: u64,
 ) -> Result<(Value, u64), (ExprErr, u64)> {
+    if env.len() > MAX_OBJECT_KEYS {
+        return Err((err_bounds("object-keys", MAX_OBJECT_KEYS), 0));
+    }
     if canonical_map_bytes(env) > MAX_ENV_BYTES {
         return Err((err_bounds("env-bytes", MAX_ENV_BYTES), 0));
     }
     if map_depth(env) > MAX_VALUE_DEPTH {
         return Err((err_bounds("value-depth", MAX_VALUE_DEPTH), 0));
+    }
+    for value in env.values() {
+        if let Err(error) = value_bytes(value, 1) {
+            return Err((error, 0));
+        }
     }
     let names: BTreeSet<String> = env.keys().cloned().collect();
     if let Err(e) = check_program(program, &names) {
@@ -1229,10 +1324,21 @@ pub fn eval_json(input: &[u8]) -> String {
         .and_then(Value::as_object)
         .cloned()
         .unwrap_or_default();
-    let fuel = doc
-        .get("fuel")
-        .and_then(Value::as_u64)
-        .unwrap_or(DEFAULT_FUEL);
+    let fuel = match doc.get("fuel") {
+        None => DEFAULT_FUEL,
+        Some(value) => match value.as_u64() {
+            Some(value) => value,
+            None => {
+                return respond(Err((
+                    err_bounds(
+                        "fuel budget must be an integer in [0, 1000000]",
+                        MAX_FUEL as usize,
+                    ),
+                    0,
+                )));
+            }
+        },
+    };
     respond(run(program, &env, fuel))
 }
 

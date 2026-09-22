@@ -138,7 +138,7 @@ describe("application investigation scheduling", () => {
       entrypoint: "run", query: f.query, procedures: [f.procedure], derivation: scheduled.derivations[0]!.derivation,
     });
     const [dispatched] = await f.service.dispatchPending("workspace", f.dispatcher);
-    if (!dispatched) throw new Error("investigation intent was not dispatched");
+    if (!dispatched || dispatched.status === "denied") throw new Error("investigation intent was not dispatched");
     expect(dispatched.plan.kind).toBe("delivery");
   });
 
@@ -190,7 +190,7 @@ describe("application execution requests", () => {
     expect(snapshot.transition.kind).toBe("investigate");
     expect(snapshot.transition.intents.length).toBe(1);
     const [dispatched] = await f.service.dispatchPending("workspace", f.dispatcher);
-    if (!dispatched) throw new Error("episode intent was not dispatched");
+    if (!dispatched || dispatched.status === "denied") throw new Error("episode intent was not dispatched");
     expect(dispatched.plan.kind).toBe("episode");
   });
 

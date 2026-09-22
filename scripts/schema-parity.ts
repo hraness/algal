@@ -21,6 +21,8 @@ const cases: { name: string; schema: JsonObject; good: JsonValue; bad: JsonValue
   { name: "null", schema: { type: "null" }, good: null, bad: {} },
   { name: "array", schema: { type: "array" }, good: ["one"], bad: {} },
   { name: "object", schema: { type: "object" }, good: {}, bad: [] },
+  { name: "nullable-string", schema: { type: ["null", "string"] }, good: null, bad: false },
+  { name: "number-or-array", schema: { type: ["number", "array"] }, good: [1, 2], bad: "2" },
   { name: "nested-required", schema: { required: ["ticket"], properties: { ticket: { required: ["owner"] } } },
     good: { ticket: { owner: "reviewer" } }, bad: { ticket: {} } },
   { name: "nested-type", schema: { properties: { ticket: { properties: { detail: {} } } } },

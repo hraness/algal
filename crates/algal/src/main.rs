@@ -7,7 +7,7 @@ use algal::{
     context,
     contract::{Manifest, object},
     effects::{Backend, Host, ResponseFormat},
-    graph::{Transports, compile, interface_args, interface_signature},
+    graph::{Transports, compile, interface_signature},
     mailbox::{self, MailboxService},
     memory,
     process::ProcessService,
@@ -689,6 +689,8 @@ enum ApplicationCommand {
     /// `projectApplicationView`: pure bounded projection of the captured
     /// head — fenced procedures, history, investigations and actions.
     View { input: PathBuf },
+    /// Render a captured view as a passive, standalone HTML workbench.
+    Report { view: PathBuf },
 }
 
 #[derive(Subcommand)]
@@ -967,12 +969,6 @@ fn listing(dir: &Path, kind: &str) -> Result<Vec<PathBuf>> {
     Ok(files)
 }
 
-fn canon_eq(a: Option<&Value>, b: Option<&Value>) -> bool {
-    let empty = Value::Null;
-    canonical(a.unwrap_or(&empty)).unwrap_or_default()
-        == canonical(b.unwrap_or(&empty)).unwrap_or_default()
-}
-
 fn disp(value: &Value) -> String {
     value
         .as_str()
@@ -1022,153 +1018,12 @@ fn inspect_receipt(raw: &Value) -> Value {
     })
 }
 
-/// Compare two run receipts field by field — the `algal diff` surface.
-fn receipt_diff(a: &Value, b: &Value) -> Vec<String> {
-    let mut out = Vec::new();
-    if a["outcome"] != b["outcome"] {
-        out.push(format!(
-            "outcome: {} vs {}",
-            disp(&a["outcome"]),
-            disp(&b["outcome"])
-        ));
-    }
-    let a_cells: Vec<String> = a["cells"]
-        .as_object()
-        .map(|m| m.keys().cloned().collect())
-        .unwrap_or_default();
-    let b_cells: Vec<String> = b["cells"]
-        .as_object()
-        .map(|m| m.keys().cloned().collect())
-        .unwrap_or_default();
-    if a_cells != b_cells {
-        out.push(format!(
-            "cells: {} vs {}",
-            a_cells.join(","),
-            b_cells.join(",")
-        ));
-    }
-    for name in &a_cells {
-        let (ac, bc) = (&a["cells"][name], &b["cells"][name]);
-        if bc.is_null() {
-            continue;
-        }
-        if ac["status"] != bc["status"] {
-            out.push(format!(
-                "cell {name}: status {} vs {}",
-                disp(&ac["status"]),
-                disp(&bc["status"])
-            ));
-        }
-        let empty = json!({});
-        if !canon_eq(
-            Some(if ac["outputs"].is_null() {
-                &empty
-            } else {
-                &ac["outputs"]
-            }),
-            Some(if bc["outputs"].is_null() {
-                &empty
-            } else {
-                &bc["outputs"]
-            }),
-        ) {
-            out.push(format!("cell {name}: outputs differ"));
-        }
-        if ac["work"] != bc["work"] {
-            out.push(format!(
-                "cell {name}: work {} vs {}",
-                disp(&ac["work"]),
-                disp(&bc["work"])
-            ));
-        }
-        if ac["rounds"] != bc["rounds"] {
-            out.push(format!(
-                "cell {name}: rounds {} vs {}",
-                disp(&ac["rounds"]),
-                disp(&bc["rounds"])
-            ));
-        }
-        if ac["items"] != bc["items"] {
-            out.push(format!(
-                "cell {name}: items {} vs {}",
-                disp(&ac["items"]),
-                disp(&bc["items"])
-            ));
-        }
-        if !canon_eq(ac.get("failure"), bc.get("failure")) {
-            out.push(format!("cell {name}: failure differs"));
-        }
-        if !canon_eq(ac.get("toolCalls"), bc.get("toolCalls")) {
-            out.push(format!("cell {name}: toolCalls differ"));
-        }
-        if !canon_eq(ac.get("shadowOut"), bc.get("shadowOut")) {
-            out.push(format!("cell {name}: shadowOut differs"));
-        }
-        if ac["via"] != bc["via"] {
-            out.push(format!(
-                "cell {name}: via {} vs {}",
-                ac["via"].as_str().unwrap_or("local"),
-                bc["via"].as_str().unwrap_or("local")
-            ));
-        }
-        if !canon_eq(ac.get("slot"), bc.get("slot")) {
-            out.push(format!("cell {name}: slot differs"));
-        }
-    }
-    let a_effects = a["effects"].as_array().map(|e| e.len()).unwrap_or(0);
-    let b_effects = b["effects"].as_array().map(|e| e.len()).unwrap_or(0);
-    if a_effects != b_effects {
-        out.push(format!("effects: {a_effects} vs {b_effects}"));
-    } else if let (Some(ae), Some(be)) = (a["effects"].as_array(), b["effects"].as_array()) {
-        for (i, (e, o)) in ae.iter().zip(be.iter()).enumerate() {
-            if e["requestDigest"] != o["requestDigest"] {
-                out.push(format!("effect {i}: requestDigest differs"));
-            }
-            if !canon_eq(e.get("output"), o.get("output")) {
-                out.push(format!("effect {i}: output differs"));
-            }
-            if !canon_eq(e.get("error"), o.get("error")) {
-                out.push(format!("effect {i}: error differs"));
-            }
-            if e["executor"] != o["executor"] {
-                out.push(format!(
-                    "effect {i}: executor {} vs {}",
-                    disp(&e["executor"]),
-                    disp(&o["executor"])
-                ));
-            }
-            if !canon_eq(e.get("usage"), o.get("usage")) {
-                out.push(format!("effect {i}: usage differs"));
-            }
-        }
-    }
-    if !canon_eq(a.get("events"), b.get("events")) {
-        out.push("events: event logs differ".into());
-    }
-    for field in ["steps", "agentCalls", "units"] {
-        if a["work"][field] != b["work"][field] {
-            out.push(format!(
-                "work.{field}: {} vs {}",
-                disp(&a["work"][field]),
-                disp(&b["work"][field])
-            ));
-        }
-    }
-    if a.get("failure").is_some() != b.get("failure").is_some() {
-        out.push("failure presence differs".into());
-    } else if let (Some(af), Some(bf)) = (a.get("failure"), b.get("failure"))
-        && af["code"] != bf["code"]
-    {
-        out.push(format!(
-            "failure.code: {} vs {}",
-            disp(&af["code"]),
-            disp(&bf["code"])
-        ));
-    }
-    out
-}
 
 async fn execute(cli: Cli) -> Result<bool> {
+    if let Commands::Application { command: ApplicationCommand::Report { view }, .. } = &cli.command {
+        print!("{}", algal::application_report::render(&load(view, 262_144)?)?);
+        return Ok(true);
+    }
     match cli.command {
         Commands::Demo { command } => {
             if std::env::args().any(|arg| arg == "--dir" || arg.starts_with("--dir=")) {
@@ -1560,7 +1415,9 @@ async fn execute(cli: Cli) -> Result<bool> {
             options.write = true;
             let (mut store, mut host, transports) = prepare(&options, &cli.dir)?;
             let manifest = unpack(&load(&bundle, MAX_DOCUMENT_BYTES)?, &mut store)?;
-            let input = interface_args(&manifest, &args(&options)?)?;
+            // Like `run`, the public call surface accepts cell-keyed arguments.
+            // Interface projection belongs to embedded organism calls.
+            let input = args(&options)?;
             let receipt = runtime::run(
                 manifest.clone(),
                 input,
@@ -1572,9 +1429,18 @@ async fn execute(cli: Cli) -> Result<bool> {
             .await?;
             let reference = persist(&mut store, &manifest, &receipt)?;
             let ok = receipt["outcome"] == "complete";
-            emit(
-                &json!({"ok":ok,"outputs":runtime::outputs(&manifest,&receipt)?,"receiptDigest":reference,"manifestDigest":receipt["manifestDigest"],"error":receipt.get("failure")}),
-            )?;
+            let outputs: serde_json::Map<String, Value> = object(&receipt["cells"])?
+                .iter()
+                .filter_map(|(name, cell)| cell.get("outputs").map(|outputs| (name.clone(), outputs.clone())))
+                .collect();
+            let mut result = json!({"ok":ok,"outputs":outputs,"receiptDigest":reference,"manifestDigest":receipt["manifestDigest"]});
+            if !ok {
+                result["error"] = match receipt.get("failure") {
+                    Some(failure) => json!({"code":failure["code"],"message":failure["message"]}),
+                    None => json!({"code":"FAILED","message":receipt["outcome"]}),
+                };
+            }
+            emit(&result)?;
             Ok(ok)
         }
         Commands::Check {
@@ -1589,9 +1455,9 @@ async fn execute(cli: Cli) -> Result<bool> {
                 &transports,
                 0,
             )?;
-            emit(
-                &json!({"ok":true,"manifestDigest":compiled.manifest.digest()?,"cells":compiled.manifest.cells.len()}),
-            )?;
+            let cells: Vec<_> = compiled.manifest.cells.iter()
+                .map(|cell| json!({"id":cell["id"],"kind":cell["kind"]})).collect();
+            emit(&json!({"ok":true,"key":compiled.manifest.value["key"],"digest":compiled.manifest.digest()?,"cells":cells,"edges":compiled.manifest.edges.len()}))?;
             Ok(true)
         }
         Commands::Explain {
@@ -1606,13 +1472,29 @@ async fn execute(cli: Cli) -> Result<bool> {
                 &transports,
                 0,
             )?;
-            let cells: Vec<_> = compiled.manifest.cells.iter().map(|cell| {
+            let cells: serde_json::Map<String, Value> = compiled.manifest.cells.iter().map(|cell| {
                 let name = cell["id"].as_str().unwrap();
-                json!({"id":name,"kind":cell["kind"],"inputs":compiled.signatures[name].inputs,"outputs":compiled.signatures[name].outputs})
+                let summarize = |ports: &algal::contract::Ports| -> serde_json::Map<String, Value> {
+                    ports.iter().map(|(name, port)| {
+                        let mut value = json!({"type":port["type"]});
+                        for field in ["optional", "many"] {
+                            if port[field] == true { value[field] = json!(true); }
+                        }
+                        for field in ["labels", "schema", "capability"] {
+                            if let Some(v) = port.get(field) { value[field] = v.clone(); }
+                        }
+                        (name.clone(), value)
+                    }).collect()
+                };
+                (name.to_owned(), json!({"kind":cell["kind"],"inputs":summarize(&compiled.signatures[name].inputs),"outputs":summarize(&compiled.signatures[name].outputs)}))
             }).collect();
-            emit(
-                &json!({"manifestDigest":compiled.manifest.digest()?,"cells":cells,"edges":compiled.manifest.edges}),
-            )?;
+            let edges: Vec<_> = compiled.manifest.edges.iter().map(|edge| {
+                let mut value = json!({"from":format!("{}.{}",edge["from"]["cell"].as_str().unwrap(),edge["from"]["port"].as_str().unwrap()),"to":format!("{}.{}",edge["to"]["cell"].as_str().unwrap(),edge["to"]["port"].as_str().unwrap())});
+                if let Some(guard) = edge.get("guard") { value["guard"] = guard.clone(); }
+                if let Some(on) = edge.get("on") { value["on"] = on.clone(); }
+                value
+            }).collect();
+            emit(&json!({"key":compiled.manifest.value["key"],"digest":compiled.manifest.digest()?,"cells":cells,"edges":edges}))?;
             Ok(true)
         }
         Commands::Digest { manifest: file } => {
@@ -1620,13 +1502,17 @@ async fn execute(cli: Cli) -> Result<bool> {
             Ok(true)
         }
         Commands::Inspect { receipt } => {
-            emit(&inspect_receipt(&load(&receipt, MAX_DOCUMENT_BYTES)?))?;
+            let receipt = load(&receipt, MAX_DOCUMENT_BYTES)?;
+            algal::receipt::validate(&receipt)?;
+            emit(&inspect_receipt(&receipt))?;
             Ok(true)
         }
         Commands::Diff { a, b } => {
             let a = load(&a, MAX_DOCUMENT_BYTES)?;
             let b = load(&b, MAX_DOCUMENT_BYTES)?;
-            let mut mismatches = receipt_diff(&a, &b);
+            algal::receipt::validate(&a)?;
+            algal::receipt::validate(&b)?;
+            let mut mismatches = algal::receipt::diff(&a, &b);
             if a["manifestDigest"] != b["manifestDigest"] {
                 mismatches.insert(
                     0,
@@ -2124,13 +2010,14 @@ async fn execute(cli: Cli) -> Result<bool> {
             command,
         } => {
             let channels_dir = channels.unwrap_or_else(|| cli.dir.join("channels"));
-            let host = match &policy {
+            let mut host = match &policy {
                 Some(path) => Some(PolicyHost::new(&load(path, 262_144)?, &channels_dir)?),
                 None => None,
             };
             let denied = NoAdmission;
             let engine_sha = digest_bytes(&std::fs::read(std::env::current_exe()?)?);
             let engine = NativeEngine::new(engine_sha.trim_start_matches("sha256:"), 10_000)?;
+            if let Some(host) = host.as_mut() { host.set_memory_engine(engine.clone()); }
             // Read-only commands (inspect/pending/put) admit nothing, so a
             // missing policy substitutes a host that denies all admission.
             let mut service = match &host {
@@ -2175,14 +2062,14 @@ async fn execute(cli: Cli) -> Result<bool> {
                     emit(&json!({"derivation": digest, "status": derivation.status}))?;
                 }
                 ApplicationCommand::Create { command } => {
-                    let snapshot = service.create(&load(&command, 262_144)?)?;
+                    let snapshot = service.create(&load(&command, 262_144)?).await?;
                     emit(&json!({
                         "state": snapshot.digest, "transition": snapshot.state.transition,
                         "revision": snapshot.state.revision, "memory": snapshot.state.memory,
                     }))?;
                 }
                 ApplicationCommand::Commit { command } => {
-                    let snapshot = service.commit(&load(&command, 262_144)?)?;
+                    let snapshot = service.commit(&load(&command, 262_144)?).await?;
                     emit(&json!({
                         "state": snapshot.digest, "transition": snapshot.state.transition,
                         "revision": snapshot.state.revision, "memory": snapshot.state.memory,
@@ -2224,7 +2111,7 @@ async fn execute(cli: Cli) -> Result<bool> {
                         service.dispatch_pending(&name, &dispatcher, max).await?
                     };
                     emit(&json!({
-                        "dispatches": results.iter().map(|d| d.value.clone()).collect::<Vec<_>>(),
+                        "dispatches": results.iter().map(|d| d.value()).collect::<Vec<_>>(),
                     }))?;
                 }
                 ApplicationCommand::Reconcile {
@@ -2250,7 +2137,7 @@ async fn execute(cli: Cli) -> Result<bool> {
                         &mut service,
                         &memory_service,
                         &load(&input, 262_144)?,
-                    )?;
+                    ).await?;
                     emit(&json!({
                         "snapshot": result.snapshot.map(|s| s.digest),
                         "derivations": result.derivations, "requests": result.requests,
@@ -2258,7 +2145,7 @@ async fn execute(cli: Cli) -> Result<bool> {
                 }
                 ApplicationCommand::Execute { input } => {
                     let snapshot =
-                        application::request_execution(&mut service, &load(&input, 262_144)?)?;
+                        application::request_execution(&mut service, &load(&input, 262_144)?).await?;
                     emit(&json!({"state": snapshot.digest}))?;
                 }
                 ApplicationCommand::Publish { input } => {
@@ -2266,7 +2153,7 @@ async fn execute(cli: Cli) -> Result<bool> {
                         &mut service,
                         &memory_service,
                         &load(&input, 262_144)?,
-                    )?;
+                    ).await?;
                     emit(&result)?;
                 }
                 ApplicationCommand::Evaluate { request } => {
@@ -2334,6 +2221,9 @@ async fn execute(cli: Cli) -> Result<bool> {
                 }
                 ApplicationCommand::View { input } => {
                     emit(&application_view::view(&service, &load(&input, 262_144)?)?)?;
+                }
+                ApplicationCommand::Report { view } => {
+                    print!("{}", algal::application_report::render(&load(&view, 262_144)?)?);
                 }
             }
             Ok(true)

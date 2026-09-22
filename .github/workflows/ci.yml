@@ -63,10 +63,12 @@ jobs:
       - run: cargo test --workspace --locked
       - run: cargo build --locked
       - run: ALGAL_MEMORY_NATIVE="$PWD/target/debug/algal" bun test examples/coding-harness/memory-records.test.ts examples/coding-harness/memory.test.ts
+      - run: ALGAL_MEMORY_NATIVE="$PWD/target/debug/algal" bun test examples/adaptive-inventory/run.test.ts
       - run: bun scripts/native-parity.ts
       - run: bun scripts/application-parity.ts
       - run: bun scripts/process-parity.ts
       - run: bun scripts/store-parity.ts
+      - run: bun scripts/cli-parity.ts
       - run: bun scripts/source-inspection-parity.ts
       - run: bun scripts/schema-parity.ts
       - run: bun scripts/compilation-parity.ts

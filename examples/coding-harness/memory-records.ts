@@ -126,11 +126,14 @@ export async function getMemoryRecord(storeDir: string, ref: string): Promise<un
 export type Observation = {
   contract: "algal.harness-observation.v1"; owner: string; ordinal: number; scope: MemoryScope;
   procedureRef: string; rawRef: string; decoder: "algal.harness-probe.v1";
+  reuse: "dependencies" | "task";
 };
 export function parseObservation(value: unknown): Observation {
-  const row = object(value); keys(row, ["contract", "owner", "ordinal", "scope", "procedureRef", "rawRef", "decoder"]);
+  const row = object(value); const required = ["contract", "owner", "ordinal", "scope", "procedureRef", "rawRef", "decoder"];
+  keys(row, [...required, "reuse"], required);
   if (row.contract !== "algal.harness-observation.v1" || row.decoder !== "algal.harness-probe.v1" || typeof row.procedureRef !== "string" || !REF.test(row.procedureRef) || typeof row.rawRef !== "string" || !REF.test(row.rawRef)) throw new Error("Not an admitted observation");
-  return { contract: row.contract, owner: id(row.owner), ordinal: boundedInteger(row.ordinal, 1, 128), scope: parseScope(row.scope), procedureRef: row.procedureRef, rawRef: row.rawRef, decoder: row.decoder };
+  if (row.reuse !== undefined && row.reuse !== "dependencies" && row.reuse !== "task") throw new Error("Invalid observation reuse policy");
+  return { contract: row.contract, owner: id(row.owner), ordinal: boundedInteger(row.ordinal, 1, 128), scope: parseScope(row.scope), procedureRef: row.procedureRef, rawRef: row.rawRef, decoder: row.decoder, reuse: row.reuse ?? "task" };
 }
 export function applicable(observed: MemoryScope, current: MemoryScope, procedure: MemoryProcedure): boolean {
   return observed.sequenceId === current.sequenceId && observed.environmentId === current.environmentId && procedure.dependencies.every((name) => {

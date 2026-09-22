@@ -692,6 +692,7 @@ pub enum DispatchResult {
     Episode {
         binding: String,
         process: String,
+        outcome: Option<String>,
     },
     Delivery {
         message: String,
@@ -702,8 +703,16 @@ pub enum DispatchResult {
 impl DispatchResult {
     fn value(&self) -> Value {
         match self {
-            Self::Episode { binding, process } => {
-                json!({"kind":"episode","binding":binding,"process":process})
+            Self::Episode {
+                binding,
+                process,
+                outcome,
+            } => {
+                let mut value = json!({"kind":"episode","binding":binding,"process":process});
+                if let Some(outcome) = outcome {
+                    value["outcome"] = json!(outcome);
+                }
+                value
             }
             Self::Delivery {
                 message,
@@ -745,7 +754,7 @@ fn parse_dispatch_result(raw: &Value, record: &Dispatch, work: &Intent) -> Resul
         if !matches!(work.work, WorkIntent::StartEpisode { .. }) {
             return Err(fail("Episode settlement does not bind a start intent"));
         }
-        let value = app_object(raw, &["kind", "binding", "process"])?;
+        let value = app_object_opt(raw, &["kind", "binding", "process"], &["outcome"])?;
         app_tag(&value["kind"], "episode")?;
         let binding_ref = app_ref(&value["binding"])?.to_owned();
         let process = app_id(&value["process"])?.to_owned();
@@ -755,6 +764,10 @@ fn parse_dispatch_result(raw: &Value, record: &Dispatch, work: &Intent) -> Resul
         return Ok(DispatchResult::Episode {
             binding: binding_ref,
             process,
+            outcome: value
+                .get("outcome")
+                .map(|reference| app_ref(reference).map(str::to_owned))
+                .transpose()?,
         });
     }
     let value = app_object(raw, &["kind", "message", "idempotencyKey"])?;
@@ -877,6 +890,36 @@ pub struct Pending {
     pub dispatch: Option<Dispatch>,
 }
 
+#[derive(Clone, Debug)]
+pub enum DispatchAttempt {
+    Admitted(Box<Dispatch>),
+    Denied {
+        application: String,
+        intent: String,
+        source_state: String,
+        current_state: String,
+        reason: String,
+    },
+}
+impl DispatchAttempt {
+    pub fn value(&self) -> Value {
+        match self {
+            Self::Admitted(dispatch) => dispatch.value.clone(),
+            Self::Denied {
+                application,
+                intent,
+                source_state,
+                current_state,
+                reason,
+            } => json!({
+                "contract":"algal.application-admission-denied.v1", "application": application,
+                "intent": intent, "sourceState": source_state, "currentState": current_state,
+                "status":"denied", "reason": reason,
+            }),
+        }
+    }
+}
+
 /// Trusted admission boundary — identical authority to TypeScript's
 /// `ApplicationAdmission`. `admit_commit` runs under application custody
 /// before publication; `admit_dispatch` mints the dispatch plan (return
@@ -884,6 +927,13 @@ pub struct Pending {
 /// the host confers no dispatch authority).
 pub trait Admission {
     fn admit_commit(&self, context: &CommitContext) -> Result<()>;
+    /// Replay admission evidence while the application lease remains held.
+    fn verify_commit<'a>(
+        &'a self,
+        context: &'a CommitContext<'a>,
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + 'a>> {
+        Box::pin(async move { self.admit_commit(context) })
+    }
     fn admit_dispatch(&self, context: &DispatchAdmission) -> Result<Value>;
 }
 
@@ -942,6 +992,7 @@ pub struct Service<'a> {
     pub dir: PathBuf,
     pub store: Store,
     admission: &'a dyn Admission,
+    fault_hook: Option<&'a (dyn Fn(&'static str) -> Result<()> + Send + Sync)>,
 }
 
 impl<'a> Service<'a> {
@@ -950,51 +1001,69 @@ impl<'a> Service<'a> {
             dir: dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf()),
             store: Store::open(dir, true)?,
             admission,
+            fault_hook: None,
         })
+    }
+
+    /// Diagnostic hook matching the TypeScript application's four durable
+    /// publication boundaries. No hook is installed by the CLI or default host.
+    pub fn with_fault_hook(
+        mut self,
+        hook: &'a (dyn Fn(&'static str) -> Result<()> + Send + Sync),
+    ) -> Self {
+        self.fault_hook = Some(hook);
+        self
+    }
+
+    fn fault(&self, point: &'static str) -> Result<()> {
+        self.fault_hook.map_or(Ok(()), |hook| hook(point))
     }
 
     fn path(&self, application: &str) -> PathBuf {
         self.dir.join("applications").join(application)
     }
 
-    fn prepare(&self, application: &str) -> Result<PathBuf> {
+    fn custody(&self, application: &str, creating: bool) -> Result<lease::OwnerLease> {
         let root = self.dir.join("applications");
         lease::directory(&root)?;
-        // Reservation alone is not application creation; failed reservations
-        // remain counted, exactly as the TypeScript creation lease.
-        {
-            let _creation =
-                lease::OwnerLease::acquire(&root.join(".creation"), "application-creation")?;
-            let mut count = 0usize;
-            let mut exists = false;
-            let mut scanned = 0usize;
-            for entry in std::fs::read_dir(&root)? {
-                scanned += 1;
-                if scanned > APPLICATIONS + 2 {
-                    return Err(Error::limit("Application directory bound exceeded"));
-                }
-                let entry = entry?;
-                let name = entry
-                    .file_name()
-                    .into_string()
-                    .map_err(|_| Error::invalid("Invalid application directory"))?;
-                if name == ".creation" {
-                    continue;
-                }
-                let ty = entry.file_type()?;
-                if !ty.is_dir() || ty.is_symlink() {
-                    return Err(Error::new("IO_FAILED", "Invalid application directory"));
-                }
-                app_id(&json!(name))?;
-                count += 1;
-                exists |= name == application;
+        // First publication owns supervisor custody without reserving a name
+        // before admission. Existing applications keep their independent mutex.
+        let creation = lease::OwnerLease::acquire(&root.join(".creation"), "application-creation")?;
+        let mut count = 0usize;
+        let mut exists = false;
+        let mut scanned = 0usize;
+        for entry in std::fs::read_dir(&root)? {
+            scanned += 1;
+            if scanned > APPLICATIONS + 2 {
+                return Err(Error::limit("Application directory bound exceeded"));
             }
-            if !exists && count >= APPLICATIONS {
-                return Err(Error::limit("Application count exhausted"));
+            let entry = entry?;
+            let name = entry
+                .file_name()
+                .into_string()
+                .map_err(|_| Error::invalid("Invalid application directory"))?;
+            if name == ".creation" {
+                continue;
             }
-            lease::directory(&self.path(application))?;
+            let ty = entry.file_type()?;
+            if !ty.is_dir() || ty.is_symlink() {
+                return Err(Error::new("IO_FAILED", "Invalid application directory"));
+            }
+            app_id(&json!(name))?;
+            count += 1;
+            exists |= name == application;
         }
-        Ok(self.path(application))
+        if !exists && creating && count >= APPLICATIONS {
+            return Err(Error::limit("Application count exhausted"));
+        }
+        if !exists {
+            return Ok(creation);
+        }
+        drop(creation);
+        lease::OwnerLease::acquire(
+            &self.path(application),
+            &format!("application-{application}"),
+        )
     }
 
     fn snapshot(&self, reference: &str) -> Result<Snapshot> {
@@ -1282,22 +1351,21 @@ impl<'a> Service<'a> {
         Ok(pending)
     }
 
-    pub fn create(&mut self, command: &Value) -> Result<Snapshot> {
+    pub async fn create(&mut self, command: &Value) -> Result<Snapshot> {
         let parsed = parse_command(command)?;
         if parsed.kind != TransitionKind::Create || parsed.expected_head.is_some() {
             return Err(Error::invalid("create requires a genesis command"));
         }
-        self.commit_value(&parsed)
+        self.commit_value(&parsed).await
     }
 
-    pub fn commit(&mut self, input: &Value) -> Result<Snapshot> {
-        self.commit_value(&parse_command(input)?)
+    pub async fn commit(&mut self, input: &Value) -> Result<Snapshot> {
+        self.commit_value(&parse_command(input)?).await
     }
 
-    fn commit_value(&mut self, command: &Command) -> Result<Snapshot> {
-        let path = self.prepare(&command.application)?;
-        let _lease =
-            lease::OwnerLease::acquire(&path, &format!("application-{}", command.application))?;
+    async fn commit_value(&mut self, command: &Command) -> Result<Snapshot> {
+        let _lease = self.custody(&command.application, true)?;
+        let path = self.path(&command.application);
         let history = self.history(&command.application)?;
         let current = history.last();
         let request = command.request()?;
@@ -1463,14 +1531,16 @@ impl<'a> Service<'a> {
         {
             return Err(fail("Prepared operation changed"));
         }
-        self.admission.admit_commit(&CommitContext {
-            command,
-            current,
-            revision: &next.revision,
-            previous_revision: current.map(|c| &c.revision),
-            pending: &pending,
-            store: &self.store,
-        })?;
+        self.admission
+            .verify_commit(&CommitContext {
+                command,
+                current,
+                revision: &next.revision,
+                previous_revision: current.map(|c| &c.revision),
+                pending: &pending,
+                store: &self.store,
+            })
+            .await?;
         let operations = lease::names(&path.join("operations"), STATES)?
             .into_iter()
             .filter(|n| operation_name(n))
@@ -1484,6 +1554,7 @@ impl<'a> Service<'a> {
         put_record(&mut self.store, &next.transition.value)?;
         put_record(&mut self.store, &next.state.value)?;
         lease::write(&operation_path, &operation.value, false)?;
+        self.fault("prepared")?;
         if lease::write(
             &path.join("head.json"),
             &json!({
@@ -1492,6 +1563,7 @@ impl<'a> Service<'a> {
             }),
             true,
         )
+        .and_then(|()| self.fault("head-published"))
         .is_err()
         {
             return Err(Error::new(
@@ -1578,6 +1650,7 @@ impl<'a> Service<'a> {
             ));
         }
         if let DispatchPlan::Episode { binding } = &plan
+            && previous_dispatch.is_none()
             && binding.access == "external-write"
             && snapshot.digest != current.digest
         {
@@ -1606,6 +1679,7 @@ impl<'a> Service<'a> {
             .join(format!("{}.json", &record.intent[7..]));
         if !reconciliation {
             lease::write(&path, &record.value, false)?;
+            self.fault("dispatch-started")?;
         }
         let context = DispatchContext {
             current,
@@ -1647,6 +1721,7 @@ impl<'a> Service<'a> {
             "result": result_ref, "reason": why,
         }))?;
         lease::write(&path, &updated.value, true)?;
+        self.fault("dispatch-settled")?;
         Ok(updated)
     }
 
@@ -1655,21 +1730,24 @@ impl<'a> Service<'a> {
         application: &str,
         dispatcher: &dyn Dispatcher,
         max: usize,
-    ) -> Result<Vec<Dispatch>> {
+    ) -> Result<Vec<DispatchAttempt>> {
         let name = app_id(&json!(application))?.to_owned();
         if !(1..=DISPATCH_BATCH).contains(&max) {
             return Err(Error::invalid("Invalid application integer"));
         }
         let configuration_digest = app_ref(&json!(dispatcher.configuration_digest()))?.to_owned();
-        self.prepare(&name)?;
-        let _lease = lease::OwnerLease::acquire(&self.path(&name), &format!("application-{name}"))?;
+        let _lease = self.custody(&name, false)?;
         let history = self.history(&name)?;
         let pending = self.pending(&history)?;
         let mut results = Vec::new();
-        for row in pending.iter().take(max) {
+        let mut dispatched = 0;
+        for row in &pending {
             if let Some(dispatch) = &row.dispatch {
                 // Never automatically repeat an uncertain or blocked admission.
-                results.push(dispatch.clone());
+                results.push(DispatchAttempt::Admitted(Box::new(dispatch.clone())));
+                continue;
+            }
+            if dispatched >= max {
                 continue;
             }
             let snapshot = history
@@ -1679,7 +1757,19 @@ impl<'a> Service<'a> {
             let current = history
                 .last()
                 .expect("history is nonempty when pending exists");
-            let plan = self.admit_plan(current, snapshot, &row.work, &row.intent, None)?;
+            let plan = match self.admit_plan(current, snapshot, &row.work, &row.intent, None) {
+                Ok(plan) => plan,
+                Err(error) => {
+                    results.push(DispatchAttempt::Denied {
+                        application: name.clone(),
+                        intent: row.intent.clone(),
+                        source_state: snapshot.digest.clone(),
+                        current_state: current.digest.clone(),
+                        reason: error.message.chars().take(256).collect(),
+                    });
+                    continue;
+                }
+            };
             if let DispatchPlan::Episode { binding } = &plan {
                 put_record(&mut self.store, &binding.value)?;
             }
@@ -1690,10 +1780,11 @@ impl<'a> Service<'a> {
                 "identity": dispatch_identity(&name, &row.intent, &plan)?,
                 "plan": plan.value(), "status": "started", "result": null, "reason": null,
             }))?;
-            results.push(
+            results.push(DispatchAttempt::Admitted(Box::new(
                 self.execute(current, snapshot, &row.work, &record, dispatcher, false)
                     .await?,
-            );
+            )));
+            dispatched += 1;
         }
         Ok(results)
     }
@@ -1712,8 +1803,7 @@ impl<'a> Service<'a> {
                 "Explicit dispatcher reconciliation is required",
             ));
         }
-        self.prepare(&name)?;
-        let _lease = lease::OwnerLease::acquire(&self.path(&name), &format!("application-{name}"))?;
+        let _lease = self.custody(&name, false)?;
         let history = self.history(&name)?;
         let pending = self.pending(&history)?;
         let row = match pending.iter().find(|p| p.intent == intent_ref) {
@@ -1777,9 +1867,9 @@ pub struct ScheduledInvestigations {
 /// state; unsupported derivations become durable investigation requests
 /// delivered through a commit. No request means no commit — a memory
 /// transition must never carry empty intents.
-pub fn schedule_investigations(
-    lifecycle: &mut Service,
-    memory: &mem::MemoryService,
+pub async fn schedule_investigations(
+    lifecycle: &mut Service<'_>,
+    memory: &mem::MemoryService<'_>,
     input: &Value,
 ) -> Result<ScheduledInvestigations> {
     let v = app_object_opt(
@@ -1875,7 +1965,7 @@ pub fn schedule_investigations(
         "memory": expected_memory,
         "intents": requests.iter().map(|message| json!({"kind":"deliver","route":route,"message":message})).collect::<Vec<_>>(),
         "evidence": evidence, "causedBy": caused_by,
-    }))?;
+    })).await?;
     Ok(ScheduledInvestigations {
         snapshot: Some(snapshot),
         derivations,
@@ -1886,7 +1976,7 @@ pub fn schedule_investigations(
 /// An execution request commits a `start-episode` intent only when the named
 /// entrypoint's applicability derivation is verified `supported` on the
 /// expected state — stale support never launches an episode.
-pub fn request_execution(lifecycle: &mut Service, input: &Value) -> Result<Snapshot> {
+pub async fn request_execution(lifecycle: &mut Service<'_>, input: &Value) -> Result<Snapshot> {
     let v = app_object_opt(
         input,
         &[
@@ -1952,15 +2042,15 @@ pub fn request_execution(lifecycle: &mut Service, input: &Value) -> Result<Snaps
         "memory": expected_memory,
         "intents": [{"kind":"start-episode","entrypoint":entrypoint_name,"input":episode_input}],
         "evidence": evidence, "causedBy": caused_by,
-    }))
+    })).await
 }
 
 /// Observation-to-state bridge (src/application-observation.ts parity):
 /// admit the observation through the memory service, chain the snapshot,
 /// then commit the memory transition on the expected head.
-pub fn append_observation(
-    lifecycle: &mut Service,
-    memory: &mem::MemoryService,
+pub async fn append_observation(
+    lifecycle: &mut Service<'_>,
+    memory: &mem::MemoryService<'_>,
     input: &Value,
 ) -> Result<Value> {
     let v = app_object_opt(
@@ -2010,12 +2100,14 @@ pub fn append_observation(
             "hypotheses": prior.hypotheses, "withdrawn": prior.withdrawn,
         }),
     )?;
-    let snapshot = lifecycle.commit(&json!({
-        "application": application, "operation": operation, "kind": "memory",
-        "expectedHead": expected_head, "revision": expected.revision,
-        "memory": next_memory, "intents": [], "evidence": evidence,
-        "causedBy": caused_by,
-    }))?;
+    let snapshot = lifecycle
+        .commit(&json!({
+            "application": application, "operation": operation, "kind": "memory",
+            "expectedHead": expected_head, "revision": expected.revision,
+            "memory": next_memory, "intents": [], "evidence": evidence,
+            "causedBy": caused_by,
+        }))
+        .await?;
     Ok(json!({
         "snapshot": snapshot.digest, "observation": observation, "memory": next_memory,
     }))
@@ -2182,8 +2274,143 @@ mod tests {
         hashed(&json!({"contract":"algal.test-op.v1","name":name}))
     }
 
-    #[test]
-    fn genesis_create_is_durable_and_idempotent() {
+    #[tokio::test]
+    async fn failed_first_commits_and_unknown_dispatches_do_not_reserve_capacity() {
+        let tmp = tempdir().unwrap();
+        let (revision, memory, _, _) = seed(tmp.path());
+        let allow = Allow;
+        let mut service = Service::new(tmp.path(), &allow).unwrap();
+        let sink = Sink {
+            config: ops("unused"),
+            delivery: true,
+        };
+        for i in 0..40 {
+            assert!(
+                service
+                    .create(&command(
+                        &format!("rejected-{i}"),
+                        &ops("rejected"),
+                        "create",
+                        None,
+                        &ops("missing"),
+                        &memory,
+                        vec![]
+                    ))
+                    .await
+                    .is_err()
+            );
+            assert!(
+                service
+                    .dispatch_pending(&format!("unknown-{i}"), &sink, 1)
+                    .await
+                    .unwrap()
+                    .is_empty()
+            );
+        }
+        struct Deny;
+        impl Admission for Deny {
+            fn admit_commit(&self, _: &CommitContext) -> Result<()> {
+                Err(Error::invalid("host denied genesis"))
+            }
+            fn admit_dispatch(&self, _: &DispatchAdmission) -> Result<Value> {
+                Err(Error::invalid("host denied dispatch"))
+            }
+        }
+        let create = command(
+            "parity",
+            &ops("valid-create"),
+            "create",
+            None,
+            &revision,
+            &memory,
+            vec![],
+        );
+        assert!(
+            Service::new(tmp.path(), &Deny)
+                .unwrap()
+                .create(&create)
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            std::fs::read_dir(tmp.path().join("applications"))
+                .unwrap()
+                .count(),
+            1
+        );
+        assert_eq!(service.create(&create).await.unwrap().state.sequence, 0);
+    }
+
+    #[tokio::test]
+    async fn first_publication_holds_custody_and_preserves_application_bound() {
+        let tmp = tempdir().unwrap();
+        let (revision, memory, _, _) = seed(tmp.path());
+        let allow = Allow;
+        let mut service = Service::new(tmp.path(), &allow).unwrap();
+        let create = command(
+            "parity",
+            &ops("create-custody"),
+            "create",
+            None,
+            &revision,
+            &memory,
+            vec![],
+        );
+        let custody = service.custody("parity", true).unwrap();
+        assert!(!service.path("parity").exists());
+        assert!(
+            Service::new(tmp.path(), &allow)
+                .unwrap()
+                .create(&create)
+                .await
+                .is_err()
+        );
+        drop(custody);
+        let initial = service.create(&create).await.unwrap();
+        assert_eq!(
+            service.create(&create).await.unwrap().digest,
+            initial.digest
+        );
+        let body = get_record(&service.store, &revision).unwrap();
+        for i in 1..32 {
+            let application = format!("admitted-{i}");
+            let mut candidate = body.clone();
+            candidate["application"] = json!(application);
+            let selected = put_record(&mut service.store, &candidate).unwrap();
+            service
+                .create(&command(
+                    &application,
+                    &ops(&application),
+                    "create",
+                    None,
+                    &selected,
+                    &memory,
+                    vec![],
+                ))
+                .await
+                .unwrap();
+        }
+        let overflow = service
+            .create(&command(
+                "overflow",
+                &ops("overflow"),
+                "create",
+                None,
+                &revision,
+                &memory,
+                vec![],
+            ))
+            .await
+            .unwrap_err();
+        assert_eq!(overflow.message, "Application count exhausted");
+        assert_eq!(
+            service.inspect("parity").unwrap().unwrap().digest,
+            initial.digest
+        );
+    }
+
+    #[tokio::test]
+    async fn genesis_create_is_durable_and_idempotent() {
         let tmp: TempDir = tempdir().unwrap();
         let (revision, memory, _, _) = seed(tmp.path());
         let allow = Allow;
@@ -2197,9 +2424,9 @@ mod tests {
             &memory,
             vec![],
         );
-        let first = service.create(&create).unwrap();
+        let first = service.create(&create).await.unwrap();
         assert_eq!(first.state.sequence, 0);
-        let replay = service.create(&create).unwrap();
+        let replay = service.create(&create).await.unwrap();
         assert_eq!(first.digest, replay.digest);
         let inspected = service.inspect("parity").unwrap().unwrap();
         assert_eq!(inspected.digest, first.digest);
@@ -2207,7 +2434,7 @@ mod tests {
         let mut mutated = create.clone();
         mutated["memory"] = json!(revision);
         assert_eq!(
-            service.create(&mutated).unwrap_err().code,
+            service.create(&mutated).await.unwrap_err().code,
             "RECEIPT_MISMATCH"
         );
         // A stale expected head is a receipt mismatch, never a silent fork.
@@ -2220,7 +2447,10 @@ mod tests {
             &memory,
             vec![],
         );
-        assert_eq!(service.commit(&stale).unwrap_err().code, "RECEIPT_MISMATCH");
+        assert_eq!(
+            service.commit(&stale).await.unwrap_err().code,
+            "RECEIPT_MISMATCH"
+        );
     }
 
     #[tokio::test]
@@ -2238,7 +2468,7 @@ mod tests {
             &memory,
             vec![],
         );
-        let head = service.create(&create).unwrap();
+        let head = service.create(&create).await.unwrap();
         let investigate = command(
             "parity",
             &ops("investigate"),
@@ -2248,7 +2478,7 @@ mod tests {
             &memory,
             vec![json!({"kind":"deliver","route":"investigate","message":message})],
         );
-        let next = service.commit(&investigate).unwrap();
+        let next = service.commit(&investigate).await.unwrap();
         let history = service.history("parity").unwrap();
         let pending = service.pending(&history).unwrap();
         assert_eq!(pending.len(), 1);
@@ -2259,7 +2489,7 @@ mod tests {
         };
         let dispatched = service.dispatch_pending("parity", &sink, 32).await.unwrap();
         assert_eq!(dispatched.len(), 1);
-        assert_eq!(dispatched[0].status, "settled");
+        assert_eq!(dispatched[0].value()["status"], "settled");
         let history = service.history("parity").unwrap();
         assert!(service.pending(&history).unwrap().is_empty());
         // Settlement is durable: reconcile returns the recorded dispatch.
@@ -2287,6 +2517,7 @@ mod tests {
                 &memory,
                 vec![],
             ))
+            .await
             .unwrap();
         let head = service.inspect("parity").unwrap().unwrap().digest;
         service
@@ -2299,24 +2530,29 @@ mod tests {
                 &memory,
                 vec![json!({"kind":"deliver","route":"investigate","message":message})],
             ))
+            .await
             .unwrap();
         let sink = Sink {
             config: hashed(&json!({"contract":"algal.test-sink.v1"})),
             delivery: false,
         };
         let dispatched = service.dispatch_pending("parity", &sink, 32).await.unwrap();
-        assert_eq!(dispatched[0].status, "uncertain");
+        assert_eq!(dispatched[0].value()["status"], "uncertain");
         // The uncertain admission is returned, never retried implicitly.
         let again = service.dispatch_pending("parity", &sink, 32).await.unwrap();
-        assert_eq!(again[0].status, "uncertain");
-        assert_eq!(again[0].value, dispatched[0].value);
+        assert_eq!(again[0].value()["status"], "uncertain");
+        assert_eq!(again[0].value(), dispatched[0].value());
         // Explicit reconcile settles it.
         let settled_sink = Sink {
             config: sink.config.clone(),
             delivery: true,
         };
         let reconciled = service
-            .reconcile_dispatch("parity", &dispatched[0].intent, &settled_sink)
+            .reconcile_dispatch(
+                "parity",
+                dispatched[0].value()["intent"].as_str().unwrap(),
+                &settled_sink,
+            )
             .await
             .unwrap();
         assert_eq!(reconciled.status, "settled");
@@ -2324,8 +2560,179 @@ mod tests {
         assert!(service.pending(&history).unwrap().is_empty());
     }
 
-    #[test]
-    fn entrypoint_manifests_must_exist_and_views_stay_declared() {
+    #[tokio::test]
+    async fn admitted_writer_keeps_its_old_binding_during_reconciliation() {
+        use std::cell::Cell;
+        struct WriterAdmission {
+            change: Cell<bool>,
+        }
+        impl Admission for WriterAdmission {
+            fn admit_commit(&self, _: &CommitContext) -> Result<()> {
+                Ok(())
+            }
+            fn admit_dispatch(&self, context: &DispatchAdmission) -> Result<Value> {
+                let mut value = context
+                    .previous_dispatch
+                    .ok_or_else(|| Error::invalid("missing prior admission"))?
+                    .plan
+                    .value();
+                if self.change.get() {
+                    value["binding"]["hostProfile"] = json!(ops("changed-host"));
+                }
+                Ok(value)
+            }
+        }
+        let tmp = tempdir().unwrap();
+        let (revision, memory, input, manifest) = seed(tmp.path());
+        let admission = WriterAdmission {
+            change: Cell::new(false),
+        };
+        let mut service = Service::new(tmp.path(), &admission).unwrap();
+        let source = service
+            .create(&command(
+                "parity",
+                &ops("writer"),
+                "create",
+                None,
+                &revision,
+                &memory,
+                vec![json!({"kind":"start-episode","entrypoint":"run","input":input})],
+            ))
+            .await
+            .unwrap();
+        let intents = service.intents(&source).unwrap();
+        let (intent_ref, intent) = &intents[0];
+        let plan = parse_plan(&json!({"kind":"episode","binding":{
+            "contract":"algal.application-episode.v1","application":"parity","intent":intent_ref,
+            "sourceState":source.digest,"revision":revision,"memory":memory,"epoch":0,"entrypoint":"run",
+            "manifest":manifest,"arguments":input,"process":process_name("parity", intent_ref).unwrap(),
+            "maxGenerations":1,"hostProfile":ops("profile"),"access":"external-write"
+        }})).unwrap();
+        let previous = parse_dispatch(
+            &json!({"contract":"algal.application-dispatch.v1","application":"parity",
+            "intent":intent_ref,"sourceState":source.digest,"configurationDigest":ops("dispatcher"),
+            "identity":dispatch_identity("parity", intent_ref, &plan).unwrap(),"plan":plan.value(),
+            "status":"uncertain","result":null,"reason":"lost acknowledgement"}),
+        )
+        .unwrap();
+        let next_memory = put_record(&mut service.store, &json!("next-memory")).unwrap();
+        let current = service
+            .commit(&command(
+                "parity",
+                &ops("advance-writer-memory"),
+                "memory",
+                Some(&source.digest),
+                &revision,
+                &next_memory,
+                vec![],
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            service
+                .admit_plan(&current, &source, intent, intent_ref, Some(&previous))
+                .unwrap()
+                .value(),
+            plan.value()
+        );
+        admission.change.set(true);
+        assert!(
+            service
+                .admit_plan(&current, &source, intent, intent_ref, Some(&previous))
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn denied_and_blocked_intents_do_not_starve_later_work() {
+        use std::cell::RefCell;
+        struct Selective;
+        impl Admission for Selective {
+            fn admit_commit(&self, _: &CommitContext) -> Result<()> {
+                Ok(())
+            }
+            fn admit_dispatch(&self, context: &DispatchAdmission) -> Result<Value> {
+                if matches!(&context.intent.work, WorkIntent::Deliver { route, .. } if route == "denied")
+                {
+                    return Err(Error::invalid("policy denies this route"));
+                }
+                Allow.admit_dispatch(context)
+            }
+        }
+        struct FairSink {
+            config: String,
+            calls: RefCell<Vec<String>>,
+        }
+        impl Dispatcher for FairSink {
+            fn configuration_digest(&self) -> &str {
+                &self.config
+            }
+            fn dispatch<'a>(
+                &'a self,
+                context: &'a DispatchContext<'a>,
+            ) -> Pin<Box<dyn Future<Output = Result<Value>> + 'a>> {
+                Box::pin(async move {
+                    let WorkIntent::Deliver { route, message } = &context.intent.work else {
+                        unreachable!()
+                    };
+                    self.calls.borrow_mut().push(route.clone());
+                    if route == "blocked" {
+                        return Ok(json!({"status":"blocked","reason":"unavailable"}));
+                    }
+                    Ok(
+                        json!({"status":"settled","result":{"kind":"delivery","message":message,"idempotencyKey":context.dispatch.identity}}),
+                    )
+                })
+            }
+        }
+        let tmp = tempdir().unwrap();
+        let (revision, memory, message, _) = seed(tmp.path());
+        let allow = Selective;
+        let mut service = Service::new(tmp.path(), &allow).unwrap();
+        service
+            .create(&command(
+                "parity",
+                &ops("fairness"),
+                "create",
+                None,
+                &revision,
+                &memory,
+                ["denied", "blocked", "eligible"]
+                    .iter()
+                    .map(|route| json!({"kind":"deliver","route":route,"message":message}))
+                    .collect(),
+            ))
+            .await
+            .unwrap();
+        let sink = FairSink {
+            config: ops("fair-sink"),
+            calls: RefCell::new(Vec::new()),
+        };
+        for expected in [
+            vec!["denied", "blocked"],
+            vec!["denied", "blocked", "settled"],
+            vec!["denied", "blocked"],
+        ] {
+            let rows = service.dispatch_pending("parity", &sink, 1).await.unwrap();
+            let values = rows.iter().map(DispatchAttempt::value).collect::<Vec<_>>();
+            assert_eq!(
+                values
+                    .iter()
+                    .map(|v| v["status"].as_str().unwrap())
+                    .collect::<Vec<_>>(),
+                expected
+            );
+            assert_eq!(
+                values[0]["contract"],
+                "algal.application-admission-denied.v1"
+            );
+            assert!(values[0].get("plan").is_none());
+        }
+        assert_eq!(*sink.calls.borrow(), ["blocked", "eligible"]);
+    }
+
+    #[tokio::test]
+    async fn entrypoint_manifests_must_exist_and_views_stay_declared() {
         let tmp = tempdir().unwrap();
         let (revision, memory, _, manifest) = seed(tmp.path());
         let mut record = get_record(&Store::open(tmp.path(), false).unwrap(), &revision).unwrap();
@@ -2344,7 +2751,7 @@ mod tests {
             &memory,
             vec![],
         );
-        assert!(service.create(&create).is_err());
+        assert!(service.create(&create).await.is_err());
         // An applicability outside the entrypoint's declared view is rejected.
         let widened = json!({"contract":"algal.application-memory-query.v1","id":"outside","schema":record["schema"],"program":record["entrypoints"][0]["applicability"],"procedures":[],"polarityColumn":1,"conflict":"single-value"});
         let outside = put_record(&mut store, &widened).unwrap();
@@ -2360,11 +2767,11 @@ mod tests {
             &memory,
             vec![],
         );
-        assert!(service.create(&create).is_err());
+        assert!(service.create(&create).await.is_err());
     }
 
-    #[test]
-    fn activation_and_migration_transitions() {
+    #[tokio::test]
+    async fn activation_and_migration_transitions() {
         let tmp = tempdir().unwrap();
         let (revision, memory, _, manifest) = seed(tmp.path());
         let allow = Allow;
@@ -2379,6 +2786,7 @@ mod tests {
                 &memory,
                 vec![],
             ))
+            .await
             .unwrap();
         let mut store = Store::open(tmp.path(), true).unwrap();
         let record = get_record(&store, &revision).unwrap();
@@ -2398,6 +2806,7 @@ mod tests {
                 &memory,
                 vec![],
             ))
+            .await
             .unwrap();
         assert_eq!(activated.state.epoch, 1);
         assert_eq!(activated.state.revision, candidate_ref);
@@ -2421,7 +2830,7 @@ mod tests {
             &memory,
             vec![],
         );
-        assert!(service.commit(&bad).is_err());
+        assert!(service.commit(&bad).await.is_err());
 
         // Migration evidence must bind the transition and be consumed by the
         // migrated memory — an observation whose raw record is the migration.
@@ -2453,7 +2862,7 @@ mod tests {
             &migrated,
             vec![],
         );
-        assert!(service.commit(&none).is_err());
+        assert!(service.commit(&none).await.is_err());
         // Evidence the migrated memory does not consume: rejected.
         let mut other = migration.clone();
         other["claims"] = json!([]);
@@ -2468,7 +2877,7 @@ mod tests {
             vec![],
         );
         unconsumed["evidence"] = json!([other_ref]);
-        assert!(service.commit(&unconsumed).is_err());
+        assert!(service.commit(&unconsumed).await.is_err());
         // Bound and consumed evidence migrates the epoch and the schema.
         let mut migrate = command(
             "parity",
@@ -2480,7 +2889,7 @@ mod tests {
             vec![],
         );
         migrate["evidence"] = json!([migration_ref]);
-        let migrated_state = service.commit(&migrate).unwrap();
+        let migrated_state = service.commit(&migrate).await.unwrap();
         assert_eq!(migrated_state.state.epoch, 2);
         assert_eq!(migrated_state.state.memory, migrated);
         assert_eq!(migrated_state.state.revision, next_ref);

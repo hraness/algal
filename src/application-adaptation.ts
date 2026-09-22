@@ -19,7 +19,8 @@ import { digestCanonical, type Digest } from "./digest";
 import { runFoundry, type FoundryCase, type FoundryCaseResult, type FoundryReport } from "./foundry";
 import { verifyFoundryReport } from "./foundry-verify";
 import { parseExprScorer, type ExprScorer } from "./expr";
-import { isBuiltinRegistry, type FnRegistry } from "./registry";
+import { builtinRegistry, isBuiltinRegistry, type FnRegistry } from "./registry";
+import { compileOrganism, interfaceSignature } from "./graph";
 import { parseRunReceipt } from "./run";
 import type { Executor } from "./effects";
 import type { Store } from "./store";
@@ -193,7 +194,7 @@ function pureManifest(manifest: OrganismManifest, fns: FnRegistry): void {
 function entrypoint(revision: ApplicationRevision, name: string): ApplicationRevision["entrypoints"][number] {
   const value = revision.entrypoints.find(item => item.name === name); if (!value) throw new Error(`Unknown application entrypoint ${name}`); return value;
 }
-async function checkCompatibilityLoaded(_store: Store, previous: { revision: ApplicationRevision; manifests: Map<string, OrganismManifest> }, candidate: { revision: ApplicationRevision; manifests: Map<string, OrganismManifest> }): Promise<CompatibilityResult> {
+async function checkCompatibilityLoaded(store: Store, previous: { revision: ApplicationRevision; manifests: Map<string, OrganismManifest> }, candidate: { revision: ApplicationRevision; manifests: Map<string, OrganismManifest> }): Promise<CompatibilityResult> {
   const reasons: string[] = [];
   if (previous.revision.application !== candidate.revision.application) reasons.push("application-identity");
   for (const key of ["schema", "queries", "views", "runtimeProfile", "evaluationPolicy"] as const) if (previous.revision[key] !== candidate.revision[key]) reasons.push(`changed-${key}`);
@@ -202,10 +203,18 @@ async function checkCompatibilityLoaded(_store: Store, previous: { revision: App
   const oldNames = previous.revision.entrypoints.map(e => e.name), newNames = candidate.revision.entrypoints.map(e => e.name);
   if (!same(oldNames, newNames)) reasons.push("entrypoint-set");
   for (const name of oldNames) {
-    const oldEntry = entrypoint(previous.revision, name), newEntry = entrypoint(candidate.revision, name);
+    const oldEntry = entrypoint(previous.revision, name), newEntry = candidate.revision.entrypoints.find(entry => entry.name === name);
+    if (!newEntry) continue;
     if (oldEntry.maxGenerations !== newEntry.maxGenerations) reasons.push(`changed-${name}-budget`);
+    if (newEntry.capabilities.some(capability => !oldEntry.capabilities.includes(capability))) reasons.push(`changed-${name}-capabilities`);
+    if (newEntry.applicability !== oldEntry.applicability || !same(newEntry.queries, oldEntry.queries)) reasons.push(`changed-${name}-memory-view`);
     const oldManifest = previous.manifests.get(name), newManifest = candidate.manifests.get(name);
     if (!oldManifest || !newManifest || !same(oldManifest.interface ?? null, newManifest.interface ?? null)) reasons.push(`changed-${name}-interface`);
+    else if (oldManifest.interface && newManifest.interface) {
+      const oldCompiled = await compileOrganism(oldManifest, builtinRegistry(), store);
+      const newCompiled = await compileOrganism(newManifest, builtinRegistry(), store);
+      if (!same(interfaceSignature(name, oldCompiled), interfaceSignature(name, newCompiled))) reasons.push(`changed-${name}-interface-types`);
+    }
   }
   return { contract: "algal.application-compatibility.v1", previousRevision: digestCanonical(applicationJson(previous.revision)), candidateRevision: digestCanonical(applicationJson(candidate.revision)), status: reasons.length ? "incompatible" : "compatible", reasons };
 }

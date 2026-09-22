@@ -85,6 +85,7 @@ import { runBenchmark, type BenchCase, type BenchPrice, type BenchSystem } from 
 import { parseBenchAxes, parseBenchReport, verifyBenchReport } from "./src/bench-verify";
 import {
   asInt,
+  asJsonValue,
   canonicalBytes,
   canonicalize,
   type JsonObject,
@@ -1165,14 +1166,8 @@ async function main(): Promise<number> {
         edges: manifest.edges.map((e) => ({
           from: `${e.from.cell}.${e.from.port}`,
           to: `${e.to.cell}.${e.to.port}`,
-          ...(e.guard
-            ? {
-                guard:
-                  "expr" in e.guard
-                    ? { expr: e.guard.expr }
-                    : { equals: e.guard.equals },
-              }
-            : {}),
+          ...(e.guard ? { guard: e.guard } : {}),
+          ...(e.on ? { on: e.on } : {}),
         })),
       });
       return 0;
@@ -1799,7 +1794,7 @@ async function main(): Promise<number> {
     case "inspect": {
       const file = positional[0];
       if (!file) usageError("algal inspect <receipt.json>");
-      const raw = (await readJson(resolve(file))) as JsonObject;
+      const raw = parseRunReceipt(await readJson(resolve(file))) as unknown as JsonObject;
       const cells = (raw.cells ?? {}) as JsonObject;
       const summary: JsonObject = {
         contract: raw.contract ?? null,
@@ -2147,9 +2142,11 @@ async function main(): Promise<number> {
       // Self-check: run every bundled example with its scripted responses
       // and default args, then verify each receipt offline.
       const { readdir } = await import("node:fs/promises");
-      const files = (await readdir(EXAMPLES_DIR)).filter((f) =>
+      const examplesDir = flags.examples === undefined ? EXAMPLES_DIR : resolve(String(flags.examples));
+      const files = (await readdir(examplesDir)).filter((f) =>
         /\.algal\.json$/.test(f),
       );
+      if (!files.length || files.length > 256) throw new AlgalError("BUDGET_EXHAUSTED", "suite requires between 1 and 256 examples");
       const results: JsonObject[] = [];
       let allOk = true;
       // preload every example into the store so organism cells resolve
@@ -2157,7 +2154,7 @@ async function main(): Promise<number> {
       const parsed = new Map<string, { raw: JsonValue; manifest: ReturnType<typeof parseOrganismManifest> }>();
       for (const f of files.sort()) {
         const id = f.replace(/\.algal\.json$/, "");
-        const raw = await readJson(join(EXAMPLES_DIR, f));
+        const raw = await readJson(join(examplesDir, f));
         const manifest = parseOrganismManifest(raw);
         await store.putManifest(manifest);
         parsed.set(id, { raw, manifest });
@@ -2166,26 +2163,27 @@ async function main(): Promise<number> {
         let responses: Record<string, JsonValue> = {};
         try {
           responses = asRecord(
-            await readJson(join(EXAMPLES_DIR, `${id}.responses.json`)),
+            asJsonValue(JSON.parse(await readFile(join(examplesDir, `${id}.responses.json`), "utf8")), "responses"),
             "responses",
           ) as Record<string, JsonValue>;
-        } catch { /* no responses file: organism has no agent cells */ }
+        } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
         const args: Record<string, Record<string, JsonValue>> = {};
         try {
           const raw = asRecord(
-            await readJson(join(EXAMPLES_DIR, `${id}.args.json`)),
+            asJsonValue(JSON.parse(await readFile(join(examplesDir, `${id}.args.json`), "utf8")), "args"),
             "args",
           );
           for (const [k, v] of Object.entries(raw)) {
             args[k] = asRecord(v, `args.${k}`) as Record<string, JsonValue>;
           }
-        } catch { /* no args file */ }
+        } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
         let transports: Record<string, Transport> | undefined;
         try {
+          await readFile(join(examplesDir, `${id}.transports.json`), "utf8");
           transports = await loadTransports(
-            join(EXAMPLES_DIR, `${id}.transports.json`),
+            join(examplesDir, `${id}.transports.json`),
           );
-        } catch { /* no transports file */ }
+        } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
         const receipt = await runOrganism({
           manifest,
           args,
@@ -2213,8 +2211,10 @@ async function main(): Promise<number> {
         // cachedExecutor: the first run's recorded effects are seeded into
         // the memo index, the rerun must serve them (cached: true), and the
         // memoized run must still verify bit-for-bit
-        try {
-          await readFile(join(EXAMPLES_DIR, `${id}.cache.json`), "utf8");
+        let cacheMarker = false;
+        try { await readFile(join(examplesDir, `${id}.cache.json`), "utf8"); cacheMarker = true; }
+        catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+        if (cacheMarker) {
           for (const e of receipt.effects) {
             if (e.output !== undefined) await store.putEffect(e, scriptedExecutor(responses).cacheIdentity);
           }
@@ -2239,7 +2239,7 @@ async function main(): Promise<number> {
           result.cacheOk = cacheOk;
           result.cacheHits = hits.length;
           allOk = allOk && cacheOk;
-        } catch { /* no cache marker */ }
+        }
         results.push(result);
       }
       out({ suite: "examples", ok: allOk, results });

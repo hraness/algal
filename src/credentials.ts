@@ -8,7 +8,9 @@
 // is `~/.algal/credentials/<provider>` mode 0600 inside a 0700 directory.
 // `algal auth` owns store/forget/status; executors own resolve.
 
-import { chmod, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { constants } from "node:fs";
+import { lstat, mkdir, open, rename, unlink } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
 import { AlgalError } from "./errors";
@@ -75,7 +77,7 @@ export function checkCredentialShape(key: string, at: string): void {
 }
 
 export function redact(key: string): string {
-  return key.length > 8 ? `…${key.slice(-4)}` : "…";
+  return key.length > 8 ? `…${Array.from(key).slice(-4).join("")}` : "…";
 }
 
 // -------------------------------------------------------------- os vault ---
@@ -256,29 +258,79 @@ function dpapiBackend(provider: CredentialProvider): VaultBackend | undefined {
 }
 
 async function fileGet(provider: CredentialProvider): Promise<string | undefined> {
+  if (!await credentialDirectory(false)) return undefined;
+  let file;
   try {
-    const key = (await readFile(credentialFile(provider), "utf8")).trim();
-    return key.length > 0 ? key : undefined;
-  } catch {
-    return undefined;
+    file = await open(credentialFile(provider), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw new AlgalError("IO_FAILED", "credential file cannot be safely opened");
   }
+  try {
+    const metadata = await file.stat();
+    checkPrivate(metadata, false);
+    if (metadata.size > KEY_MAX * 4 + 1) throw new AlgalError("IO_FAILED", "credential file exceeds its byte bound");
+    const bytes = Buffer.alloc(KEY_MAX * 4 + 2);
+    const { bytesRead } = await file.read(bytes, 0, bytes.length, 0);
+    if (bytesRead !== metadata.size) throw new AlgalError("IO_FAILED", "credential file changed while reading");
+    const key = new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(0, bytesRead)).trim();
+    checkCredentialShape(key, "stored credential");
+    return key;
+  } finally { await file.close(); }
+}
+
+function checkPrivate(metadata: import("node:fs").Stats, directory: boolean): void {
+  if (metadata.isSymbolicLink() || (directory ? !metadata.isDirectory() : !metadata.isFile()) ||
+      (platform() !== "win32" && ((metadata.mode & 0o077) !== 0 || (!directory && metadata.nlink !== 1) || (process.getuid && metadata.uid !== process.getuid())))) {
+    throw new AlgalError("IO_FAILED", "credential state must be private, owned, and free of symlinks");
+  }
+}
+async function credentialDirectory(create: boolean): Promise<boolean> {
+  const dir = join(algalHome(), "credentials");
+  try {
+    const home = await lstat(algalHome());
+    if (home.isSymbolicLink() || !home.isDirectory()) throw new AlgalError("IO_FAILED", "credential home must be a real directory");
+    if (platform() !== "win32" && ((home.mode & 0o022) !== 0 || (process.getuid && home.uid !== process.getuid()))) {
+      throw new AlgalError("IO_FAILED", "credential home must be owned and not writable by others");
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    if (!create) return false;
+  }
+  if (create) await mkdir(dir, { recursive: true, mode: 0o700 });
+  try { checkPrivate(await lstat(dir), true); }
+  catch (error) { if (!create && (error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; }
+  return true;
 }
 
 async function fileSet(provider: CredentialProvider, key: string): Promise<void> {
   const dir = join(algalHome(), "credentials");
-  await mkdir(dir, { recursive: true, mode: 0o700 });
-  await chmod(dir, 0o700).catch(() => {});
+  await credentialDirectory(true);
   const file = credentialFile(provider);
-  await writeFile(file, `${key}\n`, { mode: 0o600 });
-  await chmod(file, 0o600).catch(() => {});
+  try { checkPrivate(await lstat(file), false); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+  const temporary = join(dir, `.credential-${randomBytes(24).toString("hex")}`);
+  const handle = await open(temporary, "wx", 0o600);
+  try {
+    await handle.writeFile(`${key}\n`); await handle.sync(); await handle.close();
+    await credentialDirectory(false);
+    await rename(temporary, file);
+    if (process.platform !== "win32") {
+      const directory = await open(dir, constants.O_RDONLY | constants.O_NOFOLLOW);
+      try { await directory.sync(); } finally { await directory.close(); }
+    }
+  } finally { await handle.close().catch(() => undefined); await unlink(temporary).catch(error => { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }); }
 }
 
 async function fileForget(provider: CredentialProvider): Promise<boolean> {
+  if (!await credentialDirectory(false)) return false;
   try {
+    checkPrivate(await lstat(credentialFile(provider)), false);
     await unlink(credentialFile(provider));
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
   }
 }
 
@@ -314,13 +366,14 @@ export async function resolveCredential(
   const envName = options.env ?? PROVIDERS[provider].env;
   const envValue = process.env[envName];
   if (typeof envValue === "string" && envValue.length > 0) {
+    checkCredentialShape(envValue, `${provider} environment credential`);
     return { key: envValue, source: "env" };
   }
   const run = options.run ?? defaultRun;
   const backend = osBackend(provider);
   if (backend) {
     const key = await backend.get(run, PROVIDERS[provider]);
-    if (key !== undefined) return { key, source: "keychain" };
+    if (key !== undefined) { checkCredentialShape(key, `${provider} vault credential`); return { key, source: "keychain" }; }
   }
   const file = await fileGet(provider);
   if (file !== undefined) return { key: file, source: "file" };

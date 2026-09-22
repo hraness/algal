@@ -134,13 +134,17 @@ export async function createHarnessMemory(input: unknown): Promise<HarnessMemory
   const procedureRefs: Record<string, string> = {};
   for (const procedure of config.procedures) procedureRefs[procedure.id] = await putMemoryRecord(config.storeDir, json({ contract: "algal.harness-procedure.v1", procedure }));
   const indexPath = join(config.storeDir, `index-${sha256(canonicalize(json([config.owner, config.scope.sequenceId])))}.json`);
-  let liveRefs: string[] = [], restoredInvalidated: string[] = [];
+  let liveRefs: string[] = [], restoredInvalidated: string[] = [], mutationSeen = false;
   try {
-    const index = object(JSON.parse(await readBoundedFile(indexPath, 32_768))); keys(index, ["contract", "owner", "sequenceId", "taskId", "sourceRefs", "invalidatedRefs"]);
+    const index = object(JSON.parse(await readBoundedFile(indexPath, 32_768)));
+    const required = ["contract", "owner", "sequenceId", "taskId", "sourceRefs", "invalidatedRefs"];
+    keys(index, [...required, "mutationSeen"], required);
     if (index.contract !== "algal.harness-memory-index.v1" || index.owner !== config.owner || index.sequenceId !== config.scope.sequenceId || !Array.isArray(index.sourceRefs) || index.sourceRefs.length > 128 || index.sourceRefs.some((r) => typeof r !== "string" || !/^sha256:[a-f0-9]{64}$/.test(r))) throw new Error("Invalid memory index");
     if (typeof index.taskId !== "string" || !/^[a-z][a-z0-9._-]{0,63}$/.test(index.taskId) || !Array.isArray(index.invalidatedRefs) || index.invalidatedRefs.length > 128 || index.invalidatedRefs.some((r) => typeof r !== "string" || !/^sha256:[a-f0-9]{64}$/.test(r))) throw new Error("Invalid persisted memory invalidations");
     liveRefs = index.sourceRefs as string[];
-    if (index.taskId === config.scope.taskId) restoredInvalidated = index.invalidatedRefs as string[];
+    if (index.mutationSeen !== undefined && typeof index.mutationSeen !== "boolean") throw new Error("Invalid persisted mutation state");
+    restoredInvalidated = index.invalidatedRefs as string[];
+    mutationSeen = index.mutationSeen !== false;
   } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
   const initialRefs = [...new Set([...(config.seedRefs ?? []), ...liveRefs])];
   if (initialRefs.length > 128) throw new Error("Memory source count exceeded");
@@ -150,8 +154,9 @@ export async function createHarnessMemory(input: unknown): Promise<HarnessMemory
   if (restoredInvalidated.some((ref) => !initialRefs.includes(ref))) throw new Error("Persisted invalidation references an unadmitted source");
   let scope = structuredClone(config.scope), dirty = restoredInvalidated.length > 0;
   const invalidated = new Set(restoredInvalidated);
+  const initialMutationSeen = mutationSeen;
   function saveIndex(): void {
-    const index = canonicalize(json({ contract: "algal.harness-memory-index.v1", owner: config.owner, sequenceId: scope.sequenceId, taskId: scope.taskId, sourceRefs: liveRefs, invalidatedRefs: [...invalidated] }));
+    const index = canonicalize(json({ contract: "algal.harness-memory-index.v1", owner: config.owner, sequenceId: scope.sequenceId, taskId: scope.taskId, sourceRefs: liveRefs, invalidatedRefs: [...invalidated], mutationSeen }));
     const temp = `${indexPath}.${process.pid}.tmp`;
     const fd = openSync(temp, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
     try { writeFileSync(fd, index); } finally { closeSync(fd); }
@@ -160,7 +165,7 @@ export async function createHarnessMemory(input: unknown): Promise<HarnessMemory
   let operations = 0, visibleBytes = 0, probeCalls = 0, queryCalls = 0, nativeCalls = 0, nativeWork = 0;
   const queries: JsonValue[] = [], probes: JsonValue[] = [], outcomes: JsonValue[] = [];
   let pending: Promise<JsonValue> | undefined;
-  const configurationDigest = digestCanonical(json({ adapter: MEMORY_ADAPTER_VERSION, mode: config.mode, owner: config.owner, scope: config.scope, sources: initialRefs, invalidatedRefs: restoredInvalidated, exclusions: config.excludedRefs, procedureRefs, rules: RULES, limits: { maxOperations: config.maxOperations, maxVisibleBytes: config.maxVisibleBytes, maxWork: config.maxWork }, native: config.expectedNativeSha256 }));
+  const configurationDigest = digestCanonical(json({ adapter: MEMORY_ADAPTER_VERSION, mode: config.mode, owner: config.owner, scope: config.scope, sources: initialRefs, invalidatedRefs: restoredInvalidated, mutationSeen, exclusions: config.excludedRefs, procedureRefs, rules: RULES, limits: { maxOperations: config.maxOperations, maxVisibleBytes: config.maxVisibleBytes, maxWork: config.maxWork }, native: config.expectedNativeSha256 }));
   async function admit(ref: string): Promise<Admitted> {
     const observation = parseObservation(await getMemoryRecord(config.storeDir, ref));
     if (observation.scope.sequenceId !== config.scope.sequenceId || (!seeds.has(ref) && observation.owner !== config.owner)) throw new Error("Cross-owner or out-of-sequence memory source rejected");
@@ -179,7 +184,7 @@ export async function createHarnessMemory(input: unknown): Promise<HarnessMemory
     const entries = await Promise.all(sourceRefs.filter((ref) => !excluded.has(ref)).map(admit));
     return entries.sort((a, b) => a.observation.ordinal - b.observation.ordinal || a.ref.localeCompare(b.ref));
   };
-  const current = (row: Admitted): boolean => !invalidated.has(row.ref) && row.observation.procedureRef === procedureRefs[row.procedure.id] && applicable(row.observation.scope, scope, row.procedure);
+  const current = (row: Admitted): boolean => !invalidated.has(row.ref) && (row.observation.reuse === "dependencies" || row.observation.scope.taskId === scope.taskId) && row.observation.procedureRef === procedureRefs[row.procedure.id] && applicable(row.observation.scope, scope, row.procedure);
   const visible = (value: JsonValue): JsonValue => {
     let output = value; const bytes = Buffer.byteLength(canonicalize(value));
     const limit = config.maxVisibleBytes ?? 8192;
@@ -217,7 +222,7 @@ export async function createHarnessMemory(input: unknown): Promise<HarnessMemory
       }
       scope = { ...scope, dependencies: decoded.dependencies }; dirty = false;
       if (!rawRef) throw new Error("Accepted probe exceeds raw record bound");
-      const observation: Observation = { contract: "algal.harness-observation.v1", owner: config.owner, ordinal: initialRefs.length + probes.filter((p) => object(p).status === "observed").length + 1, scope: structuredClone(scope), procedureRef: procedureRefs[procedure!.id]!, rawRef, decoder: "algal.harness-probe.v1" };
+      const observation: Observation = { contract: "algal.harness-observation.v1", owner: config.owner, ordinal: initialRefs.length + probes.filter((p) => object(p).status === "observed").length + 1, scope: structuredClone(scope), procedureRef: procedureRefs[procedure!.id]!, rawRef, decoder: "algal.harness-probe.v1", reuse: mutationSeen ? "task" : "dependencies" };
       const sourceRef = await putMemoryRecord(config.storeDir, json(observation));
       sourceRefs = [...new Set([...sourceRefs, sourceRef])]; liveRefs = [...new Set([...liveRefs, sourceRef])];
       saveIndex();
@@ -281,8 +286,8 @@ export async function createHarnessMemory(input: unknown): Promise<HarnessMemory
       pending = execute(action, terminal, signal).then((value) => { outcomes.push(json({ action, status: value && typeof value === "object" && !Array.isArray(value) ? value.status ?? null : null })); return value; });
       return pending.finally(() => { pending = undefined; });
     },
-    invalidate() { dirty = true; for (const ref of sourceRefs) invalidated.add(ref); saveIndex(); },
+    invalidate() { dirty = true; mutationSeen = true; for (const ref of sourceRefs) invalidated.add(ref); saveIndex(); },
     async settle() { if (pending) await pending; },
-    evidence() { return json({ version: MEMORY_ADAPTER_VERSION, mode: config.mode, configurationDigest, owner: config.owner, scope, scopePolicy: "declared-complete-dependencies-within-sequence-environment", sourceRefs, excludedRefs: [...excluded], procedureRefs, operations, probeCalls, queryCalls, visibleBytes, nativeCalls, nativeWork, nativeWorkIsLowerBound: queries.some((q) => object(q).work === null), invalidatedRefs: [...invalidated], queries, probes, outcomes, dirty }); },
+    evidence() { return json({ version: MEMORY_ADAPTER_VERSION, mode: config.mode, configurationDigest, owner: config.owner, scope, scopePolicy: "declared-dependencies-with-persistent-mutation-fencing", sourceRefs, excludedRefs: [...excluded], procedureRefs, operations, probeCalls, queryCalls, visibleBytes, nativeCalls, nativeWork, nativeWorkIsLowerBound: queries.some((q) => object(q).work === null), initialInvalidatedRefs: restoredInvalidated, invalidatedRefs: [...invalidated], initialMutationSeen, mutationSeen, queries, probes, outcomes, dirty }); },
   };
 }

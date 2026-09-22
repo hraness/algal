@@ -21,6 +21,22 @@ const code = (p: JsonValue, env: JsonObject = {}) => {
 };
 
 describe("expr eval", () => {
+  test("WASM enforces intermediate bounds before amplification and preserves exact rounding", () => {
+    for (const input of [0.49999999999999994, 4503599627370497, -4503599627370497, -2.5, 2.5]) {
+      expect(ok(["round", input]).value).toBe(Math.round(input));
+    }
+    const grow: JsonValue = ["fold", ["get", "items"], 0, "acc", "item", ["list", ["get", "acc"], ["get", "acc"]]];
+    const result = evalIn(["let", "large", grow, true], { items: Array(32).fill(0) });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.err).toMatchObject({ code: "EXPR_BOUNDS", what: "value-bytes" });
+    expect(result.fuel).toBeLessThan(1000);
+    for (const fuel of [-1, 0.5, 1000001]) {
+      const invalid = evalIn(true, {}, fuel);
+      expect(invalid.ok).toBe(false);
+      if (!invalid.ok) expect(invalid.err.code).toBe("EXPR_BOUNDS");
+      expect(invalid.fuel).toBe(0);
+    }
+  });
   test("values and fuel burns are deterministic", () => {
     const p: JsonValue = [
       "map",

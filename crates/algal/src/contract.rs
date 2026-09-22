@@ -121,15 +121,16 @@ fn schema_depth(value: &Value, depth: usize) -> Result<()> {
 // Unknown vocabulary remains provider hints, still subject to depth/byte bounds.
 fn schema_declaration(value: &Value) -> Result<()> {
     let schema = object(value)?;
-    if let Some(kind) = schema.get("type")
-        && ![
-            "object", "array", "string", "number", "integer", "boolean", "null",
-        ]
-        .contains(&text(kind, 16)?)
-    {
-        return Err(Error::invalid(
-            "schema type must name a supported JSON type",
-        ));
+    if let Some(kind) = schema.get("type") {
+        let types: Vec<&Value> = match kind.as_array() { Some(items) => items.iter().collect(), None => vec![kind] };
+        let mut seen = BTreeSet::new();
+        if types.is_empty() || types.len() > 7 { return Err(Error::invalid("schema type union bound")); }
+        for entry in types {
+            let name = text(entry, 16)?;
+            if !["object", "array", "string", "number", "integer", "boolean", "null"].contains(&name) || !seen.insert(name) {
+                return Err(Error::invalid("schema type must name supported unique JSON types"));
+            }
+        }
     }
     if let Some(required) = schema.get("required") {
         for key in required
@@ -317,9 +318,6 @@ fn normalize_cell(value: &Value) -> Result<Value> {
                 return Err(Error::invalid("expr.program is required"));
             }
             output_contract(&v["output"])?;
-            if v["output"]["kind"] == "json" && v["output"].get("schema").is_none() {
-                v["output"]["schema"] = json!({});
-            }
             if v["output"].get("onMiss").is_some() {
                 return Err(Error::invalid(
                     "expr output onMiss is meaningless — programs return exact values",
@@ -376,9 +374,6 @@ fn normalize_cell(value: &Value) -> Result<Value> {
             normalize_inputs(&mut v)?;
             text(&v["prompt"], 8192)?;
             output_contract(&v["output"])?;
-            if v["output"]["kind"] == "json" && v["output"].get("schema").is_none() {
-                v["output"]["schema"] = json!({});
-            }
             if kind != "agent" && v["output"]["kind"] != "choice" {
                 return Err(Error::invalid("classifier/gate requires choice"));
             }
@@ -767,8 +762,11 @@ impl Manifest {
 }
 
 pub fn check_schema(schema: &Value, value: &Value) -> Result<()> {
-    let kind = schema["type"].as_str().unwrap_or("object");
-    let matches = match kind {
+    let types: Vec<&str> = match schema["type"].as_array() {
+        Some(items) => items.iter().map(|v| v.as_str().unwrap_or("")).collect(),
+        None => vec![schema["type"].as_str().unwrap_or("object")],
+    };
+    let matches = types.iter().any(|kind| match *kind {
         "string" => value.is_string(),
         "number" => value.is_number(),
         "integer" => value.as_f64().is_some_and(|n| n.fract() == 0.0),
@@ -777,9 +775,9 @@ pub fn check_schema(schema: &Value, value: &Value) -> Result<()> {
         "object" => value.is_object(),
         "null" => value.is_null(),
         _ => false,
-    };
+    });
     if !matches {
-        return Err(Error::new("TYPE_MISMATCH", format!("expected {kind}")));
+        return Err(Error::new("TYPE_MISMATCH", format!("expected {}", types.join("|"))));
     }
     if let Some(required) = schema["required"].as_array() {
         for key in required {

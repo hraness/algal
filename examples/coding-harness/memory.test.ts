@@ -162,12 +162,30 @@ nativeTest("repeated exhausted operations never return null or unknown and never
   expect(object(memory.evidence()).visibleBytes as number).toBeLessThanOrEqual(256); expect(f.calls()).toBe(0);
 });
 
-nativeTest("same-task restart retains terminal invalidations and fresh task scope may re-admit history", async () => {
+nativeTest("restart and a task rename cannot erase terminal invalidations", async () => {
   const f = await fixture(); let memory = await createHarnessMemory(f.config); await memory.execute(probe(), f.terminal);
   memory.invalidate(); await memory.settle();
   memory = await createHarnessMemory(f.config); expect(resultObject(await memory.execute(query(), f.terminal)).status).toBe("stale"); expect(f.calls()).toBe(1);
   const next = structuredClone(f.config); next.scope.taskId = "fresh-task";
-  memory = await createHarnessMemory(next); expect(resultObject(await memory.execute(query(), f.terminal)).status).toBe("supported"); expect(f.calls()).toBe(1);
+  memory = await createHarnessMemory(next); expect(resultObject(await memory.execute(query(), f.terminal)).status).toBe("stale"); expect(f.calls()).toBe(1);
+  await memory.execute(probe(), f.terminal);
+  expect(resultObject(await memory.execute(query(), f.terminal)).status).toBe("supported");
+});
+
+nativeTest("post-mutation observations with empty dependencies stay bound to their task", async () => {
+  const f = await fixture();
+  const config = { ...f.config, procedures: [{ ...f.config.procedures[0]!, dependencies: [] }] };
+  let memory = await createHarnessMemory(config);
+  memory.invalidate();
+  await writeFile(join(f.root, "sandbox/config.json"), '{"factor":9}');
+  await memory.execute(probe(), f.terminal);
+  memory = await createHarnessMemory(config);
+  await memory.execute(probe(), f.terminal);
+  await writeFile(join(f.root, "sandbox/config.json"), '{"factor":3}');
+  const next = structuredClone(config); next.scope.taskId = "next";
+  memory = await createHarnessMemory(next);
+  expect(resultObject(await memory.execute(query(), f.terminal)).status).toBe("stale");
+  expect(f.calls()).toBe(2);
 });
 
 nativeTest("five prerequisite dependencies finish within eight rounds; six are rejected at admission", async () => {

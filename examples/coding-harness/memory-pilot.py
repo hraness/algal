@@ -402,6 +402,7 @@ def observation(store: Path, ref: str) -> dict[str, Any]:
 def applicable(row: dict[str, Any], scope: dict[str, Any]) -> bool:
     old = row["source"]["scope"]
     return (old["sequenceId"] == scope["sequenceId"] and old["environmentId"] == scope["environmentId"] and
+            (row["source"].get("reuse", "task") == "dependencies" or old["taskId"] == scope["taskId"]) and
             all(old["dependencies"].get(name) == scope["dependencies"].get(name) for name in row["procedure"]["dependencies"]))
 
 
@@ -439,7 +440,8 @@ def verify_visible_witness(shown: dict[str, Any], full: dict[str, Any]) -> None:
         raise ValueError("Model-visible witness result metadata differs")
 
 
-def audit_episode(row: dict[str, Any], inherited: dict[str, Any], repeat_identities: set[str]) -> dict[str, Any]:
+def audit_episode(row: dict[str, Any], inherited: dict[str, Any], repeat_identities: set[str],
+                  inherited_invalidated: set[str] | None = None, inherited_mutation: bool = False) -> dict[str, Any]:
     """Independent data audit; native verification is separately required by the adapter.
 
     Only typed memory answers are admissions. Arbitrary terminal text is never
@@ -451,7 +453,11 @@ def audit_episode(row: dict[str, Any], inherited: dict[str, Any], repeat_identit
         raise ValueError("Missing memory owner/trace evidence")
     store, scope = Path(row["storeDir"]), row["scope"]
     current = {} if row["arm"] == "none" else dict(inherited)
-    invalidated: set[str] = set()
+    invalidated = set(inherited_invalidated or ())
+    mutation_seen = inherited_mutation
+    if (set(evidence.get("initialInvalidatedRefs", [])) != invalidated or
+            evidence.get("initialMutationSeen", False) is not mutation_seen):
+        raise ValueError("Episode discarded inherited mutation or invalidation evidence")
     repeated, terminal_calls, failed_repeats, admissions, stale, query_calls = 0, 0, 0, 0, 0, 0
     failed_commands: set[str] = set()
     probes, query_index, probe_index, latest_probe_terminal = evidence.get("probes", []), 0, 0, None
@@ -462,6 +468,7 @@ def audit_episode(row: dict[str, Any], inherited: dict[str, Any], repeat_identit
             if event.get("source") == "memory.probe":
                 latest_probe_terminal = event
             else:
+                mutation_seen = True
                 invalidated.update(current)
                 command = event["command"]
                 failed_repeats += command in failed_commands
@@ -476,6 +483,7 @@ def audit_episode(row: dict[str, Any], inherited: dict[str, Any], repeat_identit
             probe = probes[probe_index]
             probe_index += 1
             if probe["status"] == "error":
+                latest_probe_terminal = None
                 continue
             observed = observation(store, probe["sourceRef"])
             if ((output.get("status") != "exhausted" and probe["sourceRef"] != output.get("sourceRef")) or observed["source"]["owner"] != row["owner"] or
@@ -487,6 +495,8 @@ def audit_episode(row: dict[str, Any], inherited: dict[str, Any], repeat_identit
             scope = probe["scope"]
             if any(scope[key] != row["scope"][key] for key in ("sequenceId", "taskId", "environmentId")):
                 raise ValueError("Probe changed scope authority")
+            if observed["source"].get("reuse") != ("task" if mutation_seen else "dependencies"):
+                raise ValueError("Observation reuse escaped its mutation scope")
             identity = probe_identity(observed)
             repeated += identity in repeat_identities
             repeat_identities.add(identity)
@@ -547,7 +557,10 @@ def audit_episode(row: dict[str, Any], inherited: dict[str, Any], repeat_identit
         raise ValueError("Unmatched memory events or unauthorized historical sources")
     if terminal_calls != row["controller"]["terminalCalls"] or len(probes) != evidence.get("probeCalls"):
         raise ValueError("Terminal/probe accounting mismatch")
-    return {"sources": current, "repeatedProbes": repeated, "terminalCalls": terminal_calls,
+    if set(evidence.get("invalidatedRefs", [])) != invalidated or evidence.get("mutationSeen", False) is not mutation_seen:
+        raise ValueError("Final mutation evidence differs from the terminal trace")
+    return {"sources": current, "invalidated": invalidated, "mutationSeen": mutation_seen,
+            "repeatedProbes": repeated, "terminalCalls": terminal_calls,
             "queryCalls": query_calls, "failedCommandRepeats": failed_repeats, "admissions": admissions, "staleUnsupportedAdmissions": stale}
 
 
@@ -566,6 +579,8 @@ def summarize(plan: dict[str, Any], episodes: list[dict[str, Any]], seeds: list[
             errors.append({"job": seed["jobName"], "error": str(exc)})
     histories: dict[str, dict[str, Any]] = {}
     identities: dict[str, set[str]] = {}
+    invalidations: dict[str, set[str]] = {}
+    mutations: dict[str, bool] = {}
     for spec in plan["matrix"]:
         row = actual_rows.get(spec["jobName"])
         if row is None:
@@ -577,9 +592,11 @@ def summarize(plan: dict[str, Any], episodes: list[dict[str, Any]], seeds: list[
             initial = {} if row["arm"] == "none" else seed_sources[row["family"]]
             history = histories.get(owner, initial)
             repeat = identities.setdefault(owner, {probe_identity(source) for source in initial.values()})
-            audit = audit_episode(row, history, repeat)
-            audits[row["jobName"]] = {key: value for key, value in audit.items() if key != "sources"}
+            audit = audit_episode(row, history, repeat, invalidations.get(owner), mutations.get(owner, False))
+            audits[row["jobName"]] = {key: value for key, value in audit.items() if key not in ("sources", "invalidated", "mutationSeen")}
             histories[owner] = audit["sources"]
+            invalidations[owner] = audit["invalidated"]
+            mutations[owner] = audit["mutationSeen"]
         except (ValueError, KeyError, IndexError, TypeError, OSError) as exc:
             errors.append({"job": row["jobName"], "error": str(exc)})
     for arm in ARMS:

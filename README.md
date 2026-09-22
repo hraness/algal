@@ -18,6 +18,7 @@ Bun runtime share the program, receipt, and durable process contracts.
 | Give another reviewer a verifiable execution history | One portable evidence file that replays without your store, credentials, or model | [Offline evidence](docs/vm.md#verify-a-process-away-from-its-original-host) |
 | Route support requests and reuse a draft helper over a bounded inbox | Explicit context, selected branches, child program identities, and recorded results | [Readable programs](#read-the-program-see-its-structure) and [reuse](#write-a-program-once-call-it-or-use-it-for-each-item) |
 | Observe a PR until checks settle, without spending model calls on polling | Exact Git revision and policy evidence, bounded waits, and a review or repair packet | [Read-only PR shepherd](docs/pr-shepherd.md) |
+| Retain observations, investigate changed premises, and activate an evaluated procedure revision | Expected-head application state, scope-bound derivations, durable intents, and captured views | [Adaptive inventory](docs/adaptive-inventory.md) and [application contract](spec/v1/application.md) |
 
 The [use-case guide](docs/use-cases.md) connects each job to runnable commands,
 expected artifacts, and the work your host still owns. Start with the packaged

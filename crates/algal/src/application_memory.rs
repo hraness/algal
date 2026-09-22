@@ -864,6 +864,7 @@ pub fn engine_identity(executable_sha256: &str, timeout_ms: usize) -> Result<Str
 /// In-process native engine used by the native CLI; the TypeScript runtime's
 /// `NativeMemoryQueryEngine` drives this same evaluator as a subprocess, so
 /// both sides derive identical rows and proofs.
+#[derive(Clone)]
 pub struct NativeEngine {
     identity: String,
 }
@@ -1564,6 +1565,51 @@ mod tests {
                 &json!({"application":"parity","scope":fixture.scope,"procedure":fixture.procedure,"raw":raw,"receipt":receipt,"decoder":fixture.decoder}),
             )
             .unwrap()
+    }
+
+    #[test]
+    fn policy_frontier_advances_without_revoking_retained_observations() {
+        use crate::application_host::PolicyHost;
+        use crate::application::Dispatcher;
+        let tmp = tempdir().unwrap();
+        let mut store = Store::open(tmp.path(), true).unwrap();
+        let (mut fixture, frontier) = seed(&mut store);
+        let engine = NativeEngine::new(&"0".repeat(64), 10_000).unwrap();
+        let policy = json!({"contract":"algal.application-host.v1","application":"parity","frontier":frontier,
+            "hostProfile":digest(&json!("profile")).unwrap(),"episodeAccess":"observe","routes":[],"attestation":"algal.test-attestation.v1",
+            "decoders":[{"decoder":fixture.decoder,"rawContract":"algal.test-raw.v1","receiptContract":"algal.test-receipt.v1","receiptBinding":"names-raw"}]});
+        let host = PolicyHost::new(&policy, tmp.path()).unwrap();
+        let service = MemoryService { engine: &engine, admission: &host };
+        let old_observation = observed(&mut store, &service, &fixture, "tool-a");
+        let memory = service.snapshot(&mut store, &json!({"application":"parity","schema":fixture.schema,"previous":null,
+            "scope":fixture.scope,"observations":[old_observation],"hypotheses":[],"withdrawn":[]})).unwrap();
+        let state = revision_and_state(&mut store, &fixture, &memory);
+        assert_eq!(service.query(&mut store, &state, &fixture.query).unwrap().1.status, "supported");
+        let mutation = put(&mut store, json!({"contract":"algal.test-mutation.v1"}));
+        let next_frontier = put(&mut store, json!({"contract":"algal.application-memory-frontier.v1","application":"parity",
+            "previous":frontier,"sequence":1,"mutation":mutation,"status":"settled"}));
+        let mut next_policy = policy.clone(); next_policy["frontier"] = json!(next_frontier);
+        let next_host = PolicyHost::new(&next_policy, tmp.path()).unwrap();
+        assert_eq!(host.identity(), next_host.identity());
+        assert_ne!(host.configuration_digest(), next_host.configuration_digest());
+        let next_service = MemoryService { engine: &engine, admission: &next_host };
+        assert_eq!(next_service.query(&mut store, &state, &fixture.query).unwrap().1.status, "stale");
+        let mut scope = get_record(&store, &fixture.scope).unwrap(); scope["frontier"] = json!(next_frontier);
+        fixture.scope = put(&mut store, scope);
+        let fresh = observed(&mut store, &next_service, &fixture, "tool-a");
+        let mut observations = vec![old_observation, fresh]; observations.sort();
+        let next_memory = next_service.snapshot(&mut store, &json!({"application":"parity","schema":fixture.schema,"previous":memory,
+            "scope":fixture.scope,"observations":observations,"hypotheses":[],"withdrawn":[]})).unwrap();
+        let next_state = revision_and_state(&mut store, &fixture, &next_memory);
+        assert_eq!(next_service.query(&mut store, &next_state, &fixture.query).unwrap().1.status, "supported");
+        for field in ["attestation", "decoders"] {
+            let mut changed = next_policy.clone();
+            if field == "attestation" { changed[field] = json!("algal.other-attestation.v1"); }
+            else { changed[field][0]["rawContract"] = json!("algal.other-raw.v1"); }
+            let changed_host = PolicyHost::new(&changed, tmp.path()).unwrap();
+            assert_ne!(changed_host.identity(), next_host.identity());
+            assert!(MemoryService { engine: &engine, admission: &changed_host }.query(&mut store, &next_state, &fixture.query).is_err());
+        }
     }
 
     #[test]

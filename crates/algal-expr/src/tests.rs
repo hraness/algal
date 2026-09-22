@@ -90,6 +90,83 @@ fn arithmetic_errors() {
     assert_eq!(err_eval(json!(["mul", 1e308, 10]), &e).code, "EXPR_NUM");
 }
 
+#[test]
+fn rounding_avoids_an_intermediate_floating_point_round() {
+    for (input, expected) in [
+        (0.499_999_999_999_999_94, 0.0),
+        (4_503_599_627_370_497.0, 4_503_599_627_370_497.0),
+        (-4_503_599_627_370_497.0, -4_503_599_627_370_497.0),
+        (-2.5, -2.0),
+        (2.5, 3.0),
+    ] {
+        assert_eq!(
+            ok_eval(json!(["round", input]), &Map::new()).as_f64(),
+            Some(expected)
+        );
+    }
+}
+
+#[test]
+fn fold_amplification_is_rejected_before_materializing_the_final_value() {
+    let program = json!([
+        "fold",
+        ["get", "items"],
+        0,
+        "acc",
+        "item",
+        ["list", ["get", "acc"], ["get", "acc"]]
+    ]);
+    let (error, fuel) = run(&program, &env(&[("items", json!(vec![0; 32]))]), 10_000).unwrap_err();
+    assert_eq!(error.code, "EXPR_BOUNDS");
+    assert_eq!(error.details["what"], "value-bytes");
+    assert!(fuel < 1_000);
+    // Bound intermediates even when the final answer would discard them.
+    let discard = json!(["let", "large", program, true]);
+    assert_eq!(
+        err_eval(discard, &env(&[("items", json!(vec![0; 32]))])).code,
+        "EXPR_BOUNDS"
+    );
+}
+
+#[test]
+fn map_growth_and_environment_shapes_obey_value_bounds() {
+    let environment = env(&[
+        ("items", json!(vec![0; 1024])),
+        ("payload", json!("x".repeat(16_384))),
+    ]);
+    let program = json!(["map", ["get", "items"], "item", ["get", "payload"]]);
+    let (error, fuel) = run(&program, &environment, 100_000).unwrap_err();
+    assert_eq!(error.details["what"], "value-bytes");
+    assert!(fuel < 1_000);
+    assert_eq!(
+        err_eval(
+            json!(["get", "items"]),
+            &env(&[("items", json!(vec![0; 1025]))])
+        )
+        .code,
+        "EXPR_BOUNDS"
+    );
+}
+
+#[test]
+fn invalid_boundary_fuel_never_defaults_to_a_larger_budget() {
+    for fuel in [
+        json!(-1),
+        json!(0.5),
+        json!("10"),
+        json!(null),
+        json!(1_000_001),
+    ] {
+        let output: Value = serde_json::from_str(&eval_json(
+            &serde_json::to_vec(&json!({"program":true,"env":{},"fuel":fuel})).unwrap(),
+        ))
+        .unwrap();
+        assert_eq!(output["ok"], false);
+        assert_eq!(output["err"]["code"], "EXPR_BOUNDS");
+        assert_eq!(output["fuel"], 0);
+    }
+}
+
 // ------------------------------------------------------------ comparison ---
 
 #[test]
@@ -368,6 +445,16 @@ fn strings() {
         ok_eval(json!(["trim", "\u{feff}x\u{feff}"]), &e),
         json!("\u{feff}x\u{feff}")
     );
+}
+
+#[test]
+fn join_checks_amplified_bytes_before_allocating_the_result() {
+    let mut env = Map::new();
+    env.insert("items".into(), json!(vec![""; MAX_LIST_LEN]));
+    env.insert("separator".into(), json!("x".repeat(MAX_STRING_BYTES)));
+    let program = json!(["join", ["get", "items"], ["get", "separator"]]);
+    assert_eq!(err_eval(program, &env).code, "EXPR_BOUNDS");
+    assert_eq!(ok_eval(json!(["join", ["quote", []], "ignored"]), &Map::new()), json!(""));
 }
 
 // ------------------------------------------------------------- predicates ---

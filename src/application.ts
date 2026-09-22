@@ -34,8 +34,14 @@ export type ApplicationDispatch = {
   sourceState: Digest; configurationDigest: Digest; identity: Digest; plan: ApplicationDispatchPlan;
   status: "started" | "settled" | "blocked" | "uncertain"; result: Digest | null; reason: string | null;
 };
+/** A failed admission grants no plan or effect authority and leaves the intent pending. */
+export type ApplicationAdmissionDenial = {
+  contract: "algal.application-admission-denied.v1"; application: string; intent: Digest;
+  sourceState: Digest; currentState: Digest; status: "denied"; reason: string;
+};
+export type ApplicationDispatchAttempt = ApplicationDispatch | ApplicationAdmissionDenial;
 export type ApplicationDispatchContext = {current: ApplicationSnapshot; snapshot: ApplicationSnapshot; intent: WorkIntent; dispatch: ApplicationDispatch};
-export type ApplicationDispatchResult = {kind: "episode"; binding: Digest; process: string} | {kind: "delivery"; message: Digest; idempotencyKey: Digest};
+export type ApplicationDispatchResult = {kind: "episode"; binding: Digest; process: string; outcome?: Digest} | {kind: "delivery"; message: Digest; idempotencyKey: Digest};
 export type ApplicationDispatchOutcome = {status: "settled"; result: ApplicationDispatchResult} | {status: "blocked" | "uncertain"; reason: string};
 export interface ApplicationDispatcher {
   configurationDigest: Digest;
@@ -124,11 +130,12 @@ function parseDispatch(raw: unknown): ApplicationDispatch {
 function parseDispatchResult(raw: unknown, record: ApplicationDispatch, work: WorkIntent): ApplicationDispatchResult {
   if (record.plan.kind === "episode") {
     if (work.kind !== "start-episode") fail("Episode settlement does not bind a start intent");
-    const value = applicationObject(raw, ["kind", "binding", "process"]);
+    const hasOutcome = !!raw && typeof raw === "object" && Object.hasOwn(raw, "outcome");
+    const value = applicationObject(raw, hasOutcome ? ["kind", "binding", "process", "outcome"] : ["kind", "binding", "process"]);
     applicationTag(value.kind, "episode");
     const binding = applicationRef(value.binding), process = applicationId(value.process);
     if (binding !== hash(record.plan.binding) || process !== record.plan.binding.process) fail("Episode settlement changed its binding");
-    return {kind: "episode", binding, process};
+    return {kind: "episode", binding, process, ...(hasOutcome ? {outcome: applicationRef(value.outcome)} : {})};
   }
   const value = applicationObject(raw, ["kind", "message", "idempotencyKey"]);
   applicationTag(value.kind, "delivery");
@@ -156,11 +163,13 @@ export class ApplicationService {
     this.dir = resolve(dir); this.store = new FileStore(this.dir);
   }
   private path(application: string): string { return join(this.dir, "applications", applicationId(application)); }
-  private async prepare(application: string): Promise<string> {
+  private async custody<T>(application: string, creating: boolean, action: () => Promise<T>): Promise<T> {
     const root = join(this.dir, "applications");
     await hostDirectory(root);
-    // Reservation alone is not application creation. Failed reservations remain counted.
-    await hostLease(join(root, ".creation"), "application-creation", async () => {
+    // A first commit owns the supervisor custody until publication. Do not
+    // reserve an application directory (or its retained owner database) before
+    // admission succeeds. Existing applications keep their independent mutex.
+    const selected = await hostLease(join(root, ".creation"), "application-creation", async (): Promise<{existing: true} | {result: T}> => {
       let count = 0, exists = false, scanned = 0;
       for await (const entry of await opendir(root)) {
         if (++scanned > APPLICATION_SERVICE_LIMITS.applications + 2) throw new Error("Application directory bound exceeded");
@@ -168,10 +177,12 @@ export class ApplicationService {
         if (!entry.isDirectory() || entry.isSymbolicLink()) throw new Error("Invalid application directory");
         applicationId(entry.name); count++; exists ||= entry.name === application;
       }
-      if (!exists && count >= APPLICATION_SERVICE_LIMITS.applications) throw new Error("Application count exhausted");
-      await hostDirectory(this.path(application));
+      if (exists) return {existing: true};
+      if (creating && count >= APPLICATION_SERVICE_LIMITS.applications) throw new Error("Application count exhausted");
+      return {result: await action()};
     });
-    return this.path(application);
+    if ("result" in selected) return selected.result;
+    return hostLease(this.path(application), "application-" + application, action);
   }
   private async value(ref: Digest): Promise<JsonValue> { return getApplicationRecord(this.store, ref, json); }
   private async snapshot(ref: Digest): Promise<ApplicationSnapshot> {
@@ -297,8 +308,8 @@ export class ApplicationService {
   }
   async commit(input: unknown): Promise<ApplicationSnapshot> {
     const command = parseApplicationCommand(input); // snapshots before the first await
-    const path = await this.prepare(command.application);
-    return hostLease(path, "application-" + command.application, async () => {
+    const path = this.path(command.application);
+    return this.custody(command.application, true, async () => {
       const history = await this.history(command.application), current = history.at(-1) ?? null;
       const request = hash(command), operationPath = join(path, "operations", command.operation.slice(7) + ".json");
       const raw = await hostRead(operationPath, 2048);
@@ -373,7 +384,7 @@ export class ApplicationService {
     const plan = parsePlan(await this.admission.admitDispatch({current: structuredClone(current), snapshot: structuredClone(snapshot), intent: structuredClone(work), previousDispatch: structuredClone(previousDispatch), store: this.store}));
     await this.validatePlan(snapshot, work, ref, plan);
     if (previousDispatch && !same(plan, previousDispatch.plan)) fail("Reconciliation cannot change the admitted dispatch plan");
-    if (plan.kind === "episode" && plan.binding.access === "external-write" && snapshot.digest !== current.digest) throw new Error("Stale episode cannot acquire an external writer");
+    if (!previousDispatch && plan.kind === "episode" && plan.binding.access === "external-write" && snapshot.digest !== current.digest) throw new Error("Stale episode cannot acquire an external writer");
     return plan;
   }
   private async execute(current: ApplicationSnapshot, snapshot: ApplicationSnapshot, work: WorkIntent, record: ApplicationDispatch, dispatcher: ApplicationDispatcher, reconciliation: boolean): Promise<ApplicationDispatch> {
@@ -395,19 +406,28 @@ export class ApplicationService {
     await this.options.fault?.("dispatch-settled");
     return updated;
   }
-  async dispatchPending(application: unknown, dispatcher: ApplicationDispatcher, max: unknown = 32): Promise<ApplicationDispatch[]> {
+  async dispatchPending(application: unknown, dispatcher: ApplicationDispatcher, max: unknown = 32): Promise<ApplicationDispatchAttempt[]> {
     const name = applicationId(application), limit = applicationInt(max, 1, APPLICATION_SERVICE_LIMITS.dispatchBatch), configurationDigest = applicationRef(dispatcher.configurationDigest);
     const bound: ApplicationDispatcher = {configurationDigest, dispatch: dispatcher.dispatch.bind(dispatcher)};
-    await this.prepare(name);
-    return hostLease(this.path(name), "application-" + name, async () => {
-      const history = await this.history(name), pending = await this.pending(history), results: ApplicationDispatch[] = [];
-      for (const row of pending.slice(0, limit)) {
+    return this.custody(name, false, async () => {
+      const history = await this.history(name), pending = await this.pending(history), results: ApplicationDispatchAttempt[] = [];
+      let dispatched = 0;
+      for (const row of pending) {
         if (row.dispatch) { results.push(row.dispatch); continue; } // Never automatically repeat an uncertain or blocked admission.
+        if (dispatched >= limit) continue;
         const snapshot = history.find(s => s.digest === row.sourceState)!, current = history.at(-1)!;
-        const plan = await this.admitPlan(current, snapshot, row.work, row.intent, null);
+        let plan: ApplicationDispatchPlan;
+        try { plan = await this.admitPlan(current, snapshot, row.work, row.intent, null); }
+        catch (error) {
+          results.push({ contract: "algal.application-admission-denied.v1", application: name, intent: row.intent,
+            sourceState: snapshot.digest, currentState: current.digest, status: "denied",
+            reason: error instanceof Error && error.message ? error.message.slice(0, 256) : "Trusted host did not admit this intent" });
+          continue;
+        }
         if (plan.kind === "episode") await putApplicationRecord(this.store, plan.binding);
         const record: ApplicationDispatch = {contract: "algal.application-dispatch.v1", application: name, intent: row.intent, sourceState: snapshot.digest, configurationDigest, identity: dispatchIdentity(name, row.intent, plan), plan, status: "started", result: null, reason: null};
         results.push(await this.execute(current, snapshot, row.work, record, bound, false));
+        dispatched++;
       }
       return structuredClone(results);
     });
@@ -415,8 +435,7 @@ export class ApplicationService {
   async reconcileDispatch(application: unknown, intent: unknown, dispatcher: ApplicationDispatcher): Promise<ApplicationDispatch> {
     const name = applicationId(application), ref = applicationRef(intent), config = applicationRef(dispatcher.configurationDigest), reconcile = dispatcher.reconcile?.bind(dispatcher);
     if (!reconcile) throw new Error("Explicit dispatcher reconciliation is required");
-    await this.prepare(name);
-    return hostLease(this.path(name), "application-" + name, async () => {
+    return this.custody(name, false, async () => {
       const history = await this.history(name);
       const row = (await this.pending(history)).find(p => p.intent === ref);
       if (!row) {

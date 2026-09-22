@@ -1,18 +1,13 @@
-> WIP checkpoint: application contracts and design are initial implementation work.
-> The lifecycle, memory services, declarative `algal.application-host.v1`
-> policy, the evaluation/migration producers, the reflection-view projection
-> and the domain episode dispatcher now run on both runtimes —
-> `bun scripts/application-parity.ts` replays one shared case (create →
-> investigate → delivery → observe → evaluate → verify → admit → activate →
-> derive → view → episode binding → migrate-memory → migrate → episode
-> dispatch → reconcile) and requires identical digests and records across 61
-> steps, including the foundry evaluation report, run receipts, the produced
-> migration record, the fenced view projection and the settled episode
-> outcome. Rejection legs pin identical verdicts for stale heads, operation
-> collisions, malformed commands and activation wedged by an unsettled
-> dispatch, plus an exact operation replay past a moved head. Kernel
-> guarantees stay gated on wider shared coverage.
-> The harness memory pilot is paused and unqualified. See the checkpoint section below.
+> Implementation and qualification are tracked separately. The durable application
+> lifecycle, memory services, policy host, evaluation and migration, captured views,
+> and episode dispatcher have reference/native implementations. The shared
+> application and CLI parity drivers gate their common behavior. The
+> [completion review](2026-09-22-review.md) records the design-to-evidence map,
+> adversarial repairs, and remaining research limitations; the
+> [adaptive inventory application](adaptive-inventory.md) exercises a second domain.
+> Live coding/memory qualification resumes only after deterministic gates, under
+> the user's $20 incremental paid-inference cap. No model-quality benefit is
+> inferred from deterministic fixtures or the earlier cancelled pilot.
 
 # ALGAL: programmable organisms
 
@@ -45,11 +40,11 @@ native positive Datalog queries and witnesses, foundry evaluation/search, named
 durable processes, checkpoints, conservative journals, mailboxes, durable host
 events, and passive evidence workbenches. These mechanisms are the substrate.
 
-The missing abstraction is a coherent application lifecycle joining these
-objects. Existing process definitions are immutable. Existing mutable slots do
-not provide compare-and-swap activation. Foundry chooses a best candidate even
-when every candidate fails; winning is therefore insufficient for activation.
-The existing first-witness query proof is not a complete truth-maintenance graph.
+The application lifecycle joins these objects through one expected-head commit.
+Process definitions stay immutable; activation selects a new revision for future
+work. Foundry ranking alone is insufficient: the application host replays bound
+evaluation evidence and rejects failed or regressing candidates. The existing
+first-witness query proof is not a complete truth-maintenance graph.
 
 ## Architectural shape
 
@@ -189,10 +184,12 @@ generation, and most evaluation logic should themselves be ALGAL programs.
 
 ## Checkpoint retained from the harness spike
 
-The harness JSON-action/budget/context repairs pass 31 focused tests. The native
-memory adapter passed 18 focused tests before the direction change. Its runner
-and the post-terminal cross-task observation scope repair remain unfinished;
-they must not be treated as a qualified evaluation pipeline.
+The continuation repaired the runner and persisted mutation/observation scope
+across terminal boundaries, task changes, and reconstruction. Deterministic
+regressions now cover those boundaries, proposal/receipt binding, storage
+corruption, and probe/frontier changes. Final validation and any subsequent live
+measurements belong in the completion review; earlier focused counts describe
+the checkpoint, not the current tree.
 
 At the user's pause, one calibration trial was cancelled and retained as invalid,
 without retry. Seven backend calls completed, with zero incremental paid API
@@ -208,5 +205,5 @@ Self-adjusting computation motivates explicit dependency tracking and updating
 affected computations ([Acar](https://www.umut-acar.org/self-adjusting-computation)).
 Proof-tree inspection offers a concrete model for explanation tied to derivation
 ([Souffle provenance](https://souffle-lang.github.io/provenance)). These are design
-inputs; the application lifecycle and proposed integration remain ALGAL work to
-implement and test.
+inputs, not proof that ALGAL inherits their formal guarantees. The implemented
+contracts and tested claims are described in the completion review.

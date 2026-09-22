@@ -17,7 +17,7 @@ use crate::application_memory::{
 use crate::canonical::{canonical, digest};
 use crate::contract::{Manifest, object};
 use crate::effects::Host;
-use crate::graph::Transports;
+use crate::graph::{Transports, compile, interface_signature};
 use crate::scorer::check_scorer;
 use crate::store::Store;
 use crate::{Error, Result, foundry};
@@ -296,6 +296,7 @@ fn entrypoint<'a>(
 }
 
 fn check_compatibility_loaded(
+    store: &Store,
     previous: &LoadedRevision,
     candidate: &LoadedRevision,
 ) -> Result<Value> {
@@ -357,9 +358,15 @@ fn check_compatibility_loaded(
     }
     for name in &old_names {
         let old_entry = entrypoint(&previous.revision, name)?;
-        let new_entry = entrypoint(&candidate.revision, name)?;
+        let Some(new_entry) = candidate.revision.entrypoints.iter().find(|entry| entry.name == *name) else { continue; };
         if old_entry.max_generations != new_entry.max_generations {
             reasons.push(format!("changed-{name}-budget"));
+        }
+        if new_entry.capabilities.iter().any(|cap| !old_entry.capabilities.contains(cap)) {
+            reasons.push(format!("changed-{name}-capabilities"));
+        }
+        if new_entry.applicability != old_entry.applicability || new_entry.queries != old_entry.queries {
+            reasons.push(format!("changed-{name}-memory-view"));
         }
         let old_manifest = previous.manifests.get(*name);
         let new_manifest = candidate.manifests.get(*name);
@@ -372,6 +379,14 @@ fn check_compatibility_loaded(
         };
         if !same_interface {
             reasons.push(format!("changed-{name}-interface"));
+        } else if let (Some(old), Some(new)) = (old_manifest, new_manifest)
+            && old.value.get("interface").is_some() && new.value.get("interface").is_some() {
+            let mut overlay = store.overlay();
+            let old = interface_signature(&compile(old.clone(), &mut overlay, &Default::default(), &Transports::new(), 0)?)?;
+            let new = interface_signature(&compile(new.clone(), &mut overlay, &Default::default(), &Transports::new(), 0)?)?;
+            if old.inputs != new.inputs || old.outputs != new.outputs {
+                reasons.push(format!("changed-{name}-interface-types"));
+            }
         }
     }
     Ok(json!({
@@ -393,7 +408,7 @@ pub fn check_application_compatibility(
     let candidate_ref = json!(candidate_revision);
     let previous = load_revision(store, app_ref(&previous_ref)?)?;
     let candidate = load_revision(store, app_ref(&candidate_ref)?)?;
-    check_compatibility_loaded(&previous, &candidate)
+    check_compatibility_loaded(store, &previous, &candidate)
 }
 
 /// Every reported case must bind a frozen case, and every frozen case must
@@ -768,7 +783,7 @@ pub async fn evaluate_application_revision(
         &candidate,
         &incumbent,
     )?;
-    let compatibility = check_compatibility_loaded(&incumbent, &candidate)?;
+    let compatibility = check_compatibility_loaded(store, &incumbent, &candidate)?;
     let compatibility_ref = put_record(store, &compatibility)?;
     let foundry_report_ref = put_record(store, &report)?;
     let verdict = acceptance(
@@ -862,7 +877,7 @@ pub async fn verify_application_evaluation(
         &candidate,
         &incumbent,
     )?;
-    let compatibility = check_compatibility_loaded(&incumbent, &candidate)?;
+    let compatibility = check_compatibility_loaded(store, &incumbent, &candidate)?;
     let stored = get_record(store, evaluation["compatibility"].as_str().unwrap_or(""))?;
     if !same(&stored, &compatibility)? {
         return Err(fail("Stored compatibility evidence changed"));
@@ -935,7 +950,7 @@ mod tests {
                 {"id": "src", "kind": "input", "outputs": {"value": "json"}},
                 {"id": "out", "kind": "expr", "inputs": {"value": "json"},
                     "expr": {"contract": "algal.expr.v1", "program": program},
-                    "output": {"kind": "json", "schema": {}}},
+                    "output": {"kind": "json", "schema": {"type": "string"}}},
             ],
             "edges": [{"from": {"cell": "src", "port": "value"}, "to": {"cell": "out", "port": "value"}}],
         })
@@ -1066,7 +1081,7 @@ mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(evaluation["verdict"]["status"], json!("accepted"));
+        assert_eq!(evaluation["verdict"]["status"], json!("accepted"), "{}", evaluation["verdict"]);
         assert_eq!(
             evaluation["verdict"]["selectedManifest"],
             json!(fixture.candidate)

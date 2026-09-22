@@ -1,7 +1,8 @@
 /** Pure, bounded projection of one captured application state. The renderer
  * receives data and fenced actions; it never probes, dispatches, or resolves a
  * mutable latest pointer. */
-import { applicationId, applicationInt, applicationJson, applicationList, applicationObject, applicationRef, applicationTag } from "./application-contract";
+import { APPLICATION_LIMITS, applicationId, applicationInt, applicationJson, applicationList, applicationObject, applicationRef, applicationTag } from "./application-contract";
+import type { MemoryStatus } from "./application-memory";
 import type { ApplicationSnapshot } from "./application";
 import type { Digest } from "./digest";
 import type { Store } from "./store";
@@ -9,6 +10,7 @@ import { canonicalize } from "./values";
 
 export const APPLICATION_VIEW_WIDGETS = ["procedures", "memory", "history", "investigations"] as const;
 export type ApplicationViewWidget = (typeof APPLICATION_VIEW_WIDGETS)[number];
+export const APPLICATION_APPLICABILITY_STATUSES = ["unknown", "supported", "stale", "opposed", "conflicted", "exhausted", "failed", "cancelled"] as const;
 export type ApplicationViewSpec = {
   contract: "algal.application-view-spec.v1";
   title: string;
@@ -36,7 +38,7 @@ export type ApplicationView = {
   memory: Digest;
   title: string;
   widgets: ApplicationViewWidget[];
-  procedures: { name: string; manifest: Digest; applicability: "unknown" | "supported" | "stale" | "opposed" | "conflicted" }[];
+  procedures: { name: string; manifest: Digest; applicability: MemoryStatus }[];
   history: { state: Digest; sequence: number; revision: Digest; memory: Digest }[];
   investigations: { intent: Digest; expectedState: Digest }[];
   actions: ApplicationViewAction[];
@@ -75,7 +77,7 @@ export function projectApplicationView(input: {
 }): ApplicationView {
   const { snapshot, spec } = input;
   const history = input.history ?? [snapshot];
-  if (history.length > 128) throw new Error("View history bound exceeded");
+  if (history.length > APPLICATION_LIMITS.states) throw new Error("View history bound exceeded");
   if (!history.length || history[history.length - 1]!.digest !== snapshot.digest) throw new Error("View history must terminate at the captured state");
   for (let i = 0; i < history.length; i++) {
     if (history[i]!.state.application !== snapshot.state.application) throw new Error("View history crosses application boundaries");
@@ -103,7 +105,7 @@ export function projectApplicationView(input: {
     investigations, actions, truncated: history.length > 128,
   };
   if (Buffer.byteLength(canonicalize(applicationJson(view))) > 262_144) throw new Error("Application view byte bound exceeded");
-  return structuredClone(view);
+  return parseApplicationView(view);
 }
 
 export async function loadApplicationViewSpec(store: Store, ref: Digest): Promise<ApplicationViewSpec> {
@@ -123,9 +125,10 @@ export function parseApplicationView(input: unknown): ApplicationView {
   const application = applicationId(v.application), state = applicationRef(v.state), revision = applicationRef(v.revision), memory = applicationRef(v.memory);
   const procedures = applicationList(v.procedures, 32, raw => {
     const p = applicationObject(raw, ["name", "manifest", "applicability"]);
-    if (!["unknown", "supported", "stale", "opposed", "conflicted"].includes(String(p.applicability))) throw new Error("Invalid view applicability");
+    if (!(APPLICATION_APPLICABILITY_STATUSES as readonly string[]).includes(String(p.applicability))) throw new Error("Invalid view applicability");
     return {name: applicationId(p.name), manifest: applicationRef(p.manifest), applicability: p.applicability as ApplicationView["procedures"][number]["applicability"]};
   });
+  if (new Set(procedures.map(p => p.name)).size !== procedures.length) throw new Error("Duplicate view procedure");
   const history = applicationList(v.history, 128, raw => {
     const h = applicationObject(raw, ["state", "sequence", "revision", "memory"]);
     return {state: applicationRef(h.state), sequence: applicationInt(h.sequence, 0, 4095), revision: applicationRef(h.revision), memory: applicationRef(h.memory)};
@@ -141,11 +144,11 @@ export function parseApplicationView(input: unknown): ApplicationView {
     const a = applicationJson(raw);
     if (!a || typeof a !== "object" || Array.isArray(a)) throw new Error("Invalid view action");
     if (a.kind === "investigate") {
-      const i = applicationObject(a, ["kind", "expectedState", "intent"]); const expectedState = applicationRef(i.expectedState); if (expectedState !== state) throw new Error("Investigation action is not fenced to the captured state"); return {kind: "investigate" as const, expectedState, intent: applicationRef(i.intent)};
+      const i = applicationObject(a, ["kind", "expectedState", "intent"]); const expectedState = applicationRef(i.expectedState), intent = applicationRef(i.intent); if (expectedState !== state || !investigations.some(item => item.intent === intent)) throw new Error("Investigation action is not fenced to the captured state"); return {kind: "investigate" as const, expectedState, intent};
     }
     const e = applicationObject(a, ["kind", "expectedState", "procedure", "queryResult"]); applicationTag(e.kind, "execute-procedure");
     const expectedState = applicationRef(e.expectedState), procedure = applicationRef(e.procedure);
-    if (expectedState !== state || !procedures.some(item => item.manifest === procedure)) throw new Error("Procedure action is not fenced to the captured state");
+    if (expectedState !== state || !procedures.some(item => item.manifest === procedure && item.applicability === "supported")) throw new Error("Procedure action is not fenced to supported applicability at the captured state");
     return {kind: "execute-procedure" as const, expectedState, procedure, queryResult: applicationRef(e.queryResult)};
   });
   applicationId(v.application); applicationRef(v.state); applicationRef(v.revision); applicationRef(v.memory); text(v.title, 256); widgets(v.widgets);

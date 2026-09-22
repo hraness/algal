@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ApplicationService, applicationProcessName, type ApplicationAdmission, type ApplicationDispatchContext } from "./application";
 import { digestCanonical, type Digest } from "./digest";
 import { capabilityHandle } from "./capabilities";
 import { parseOrganismManifest } from "./contract";
+import type { JsonValue } from "./values";
 
 const dirs: string[] = [];
 type DispatchAdmissionContext = Parameters<NonNullable<ApplicationAdmission["admitDispatch"]>>[0];
@@ -35,6 +36,43 @@ async function fixture(options: {fault?: (point: "prepared" | "head-published" |
 afterEach(async () => { for (const dir of dirs.splice(0)) await rm(dir, {recursive: true, force: true}); });
 
 describe("experimental application lifecycle", () => {
+  test("rejected first commits and unknown dispatches do not reserve application capacity", async () => {
+    const {service, revisionRef, memory} = await fixture();
+    const base = {application: "fixture", operation: ref("valid-create"), kind: "create", expectedHead: null, revision: revisionRef, memory, intents: [], evidence: [], causedBy: null};
+    for (let i = 0; i < 40; i++) {
+      await expect(service.create({...base, application: `rejected-${i}`, revision: ref("missing")})).rejects.toThrow();
+      expect(await service.dispatchPending(`unknown-${i}`, {configurationDigest: ref("unused"), async dispatch() { throw new Error("must not dispatch"); }})).toEqual([]);
+    }
+    const rejecting = new ApplicationService(service.dir, {async admitCommit() { throw new Error("host denied genesis"); }});
+    await expect(rejecting.create(base)).rejects.toThrow("host denied genesis");
+    expect(await readdir(join(service.dir, "applications"))).toEqual([".creation"]);
+    expect((await service.create(base)).state.sequence).toBe(0);
+  });
+
+  test("first publication retains creation custody and the admitted application bound", async () => {
+    const {service, revisionRef, memory} = await fixture();
+    const base = {application: "fixture", operation: ref("concurrent-create"), kind: "create", expectedHead: null, revision: revisionRef, memory, intents: [], evidence: [], causedBy: null};
+    let release!: () => void, entered!: () => void;
+    const waiting = new Promise<void>(resolve => { release = resolve; });
+    const admitted = new Promise<void>(resolve => { entered = resolve; });
+    const paused = new ApplicationService(service.dir, {async admitCommit() { entered(); await waiting; }});
+    const first = paused.create(base);
+    await admitted;
+    try {
+      expect(await readdir(join(service.dir, "applications"))).toEqual([".creation"]);
+      await expect(service.create(base)).rejects.toThrow("held by another live operation");
+    } finally { release(); }
+    const initial = await first;
+    expect((await service.create(base)).digest).toBe(initial.digest);
+    const revision = await service.store.getValue(revisionRef) as Record<string, JsonValue>;
+    for (let i = 1; i < 32; i++) {
+      const application = `admitted-${i}`, selected = await service.store.putValue({...revision, application});
+      await service.create({...base, application, revision: selected, operation: ref(application)});
+    }
+    await expect(service.create({...base, application: "overflow"})).rejects.toThrow("Application count exhausted");
+    expect((await service.inspect("fixture"))!.digest).toBe(initial.digest);
+  });
+
   test("publishes a genesis state and makes the exact operation idempotent", async () => {
     const {service, revisionRef, memory} = await fixture();
     const command = {application: "fixture", operation: ref("create-1"), kind: "create", expectedHead: null, revision: revisionRef, memory, intents: [], evidence: [], causedBy: null};
@@ -145,6 +183,75 @@ describe("experimental application lifecycle", () => {
       },
     });
     // This service has a fresh admission object but the same durable state; the binding is intentionally stale.
-    await expect(admitting.dispatchPending("fixture", dispatcher)).rejects.toThrow("Stale episode cannot acquire");
+    expect((await admitting.dispatchPending("fixture", dispatcher))[0]).toMatchObject({ status: "denied", reason: "Stale episode cannot acquire an external writer" });
+  });
+
+  test("an admitted writer reconciles its exact old effect after memory advances", async () => {
+    const {service, revisionRef, memory} = await fixture();
+    const input = await service.store.putValue("writer-input");
+    let changePlan = false, dispatches = 0, reconciliations = 0;
+    const admitted = new ApplicationService(service.dir, {
+      async admitCommit() {},
+      async admitDispatch(context) {
+        if (context.previousDispatch) {
+          const plan = context.previousDispatch.plan;
+          return changePlan && plan.kind === "episode" ? { ...plan, binding: { ...plan.binding, hostProfile: ref("changed-host") } } : plan;
+        }
+        const intent = ref(context.intent), entry = context.snapshot.revision.entrypoints[0]!;
+        return {kind: "episode", binding: {contract: "algal.application-episode.v1", application: "fixture", intent,
+          sourceState: context.snapshot.digest, revision: revisionRef, memory, epoch: 0, entrypoint: "run", manifest: entry.manifest,
+          arguments: input, process: applicationProcessName("fixture", intent), maxGenerations: 1, hostProfile: ref("profile"), access: "external-write"}};
+      },
+    });
+    const head = await admitted.create({application: "fixture", operation: ref("writer-create"), kind: "create", expectedHead: null,
+      revision: revisionRef, memory, intents: [{kind: "start-episode", entrypoint: "run", input}], evidence: [], causedBy: null});
+    const dispatcher = {
+      configurationDigest: ref("writer-dispatcher"),
+      async dispatch() { dispatches++; return {status: "uncertain", reason: "lost acknowledgement"}; },
+      async reconcile(context: ApplicationDispatchContext) {
+        reconciliations++;
+        if (context.dispatch.plan.kind !== "episode") throw new Error("wrong plan");
+        return {status: "settled", result: {kind: "episode", binding: ref(context.dispatch.plan.binding), process: context.dispatch.plan.binding.process}};
+      },
+    };
+    const [started] = await admitted.dispatchPending("fixture", dispatcher);
+    if (!started || started.status === "denied") throw new Error("writer not admitted");
+    await admitted.commit({application: "fixture", operation: ref("writer-memory"), kind: "memory", expectedHead: head.digest, revision: revisionRef,
+      memory: await service.store.putValue("new-memory"), intents: [], evidence: [], causedBy: null});
+    changePlan = true;
+    await expect(admitted.reconcileDispatch("fixture", started.intent, dispatcher)).rejects.toThrow("cannot change");
+    expect(reconciliations).toBe(0);
+    changePlan = false;
+    const settled = await admitted.reconcileDispatch("fixture", started.intent, dispatcher);
+    expect(settled.status).toBe("settled");
+    expect(settled.identity).toBe(started.identity);
+    expect(dispatches).toBe(1);
+    expect(reconciliations).toBe(1);
+  });
+
+  test("denied and retained blocked work cannot starve a later delivery at max one", async () => {
+    const {service, revisionRef, memory} = await fixture();
+    const message = await service.store.putValue("fairness");
+    const admitting = new ApplicationService(service.dir, {
+      async admitCommit() {},
+      async admitDispatch({intent}) {
+        if (intent.kind !== "deliver" || intent.route === "denied") throw new Error("Route denied by fixture");
+        return {kind: "delivery", recipient: capabilityHandle("mailbox-send", {fixture: true}), hostProfile: ref("profile")};
+      },
+    });
+    await admitting.create({application: "fixture", operation: ref("fairness"), kind: "create", expectedHead: null, revision: revisionRef, memory,
+      intents: ["denied", "blocked", "eligible"].map(route => ({kind: "deliver", route, message})), evidence: [], causedBy: null});
+    const calls: string[] = [];
+    const dispatcher = {configurationDigest: ref("fairness-dispatcher"), async dispatch(context: ApplicationDispatchContext) {
+      if (context.intent.kind !== "deliver") throw new Error("Unexpected work");
+      calls.push(context.intent.route);
+      return context.intent.route === "blocked" ? {status: "blocked", reason: "Needs explicit reconciliation"}
+        : {status: "settled", result: {kind: "delivery", message, idempotencyKey: context.dispatch.identity}};
+    }};
+    expect((await admitting.dispatchPending("fixture", dispatcher, 1)).map(row => row.status)).toEqual(["denied", "blocked"]);
+    expect((await admitting.dispatchPending("fixture", dispatcher, 1)).map(row => row.status)).toEqual(["denied", "blocked", "settled"]);
+    expect(calls).toEqual(["blocked", "eligible"]);
+    expect((await admitting.dispatchPending("fixture", dispatcher, 1)).map(row => row.status)).toEqual(["denied", "blocked"]);
+    expect(calls).toEqual(["blocked", "eligible"]);
   });
 });

@@ -328,6 +328,7 @@ export type {
   ApplicationCommand,
   ApplicationDispatcher,
   ApplicationDispatch,
+  ApplicationDispatchAttempt,
   ApplicationDispatchContext,
   ApplicationDispatchOutcome,
   ApplicationDispatchResult,

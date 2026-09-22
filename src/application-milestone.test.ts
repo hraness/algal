@@ -200,7 +200,7 @@ describe("integrated application milestone", () => {
     const runInput = await f.store.putValue({ contract: "algal.run-input.v1", task: "task-1" });
     const s3 = await service.commit({ application: "workspace", operation: ref("op-execute-1"), kind: "investigate", expectedHead: s2.snapshot.digest, revision: s2.snapshot.state.revision, memory: s2.snapshot.state.memory, intents: [{ kind: "start-episode", entrypoint: "run", input: runInput }], evidence: [q1.ref], causedBy: null });
     const [d2] = await service.dispatchPending("workspace", f.dispatcher);
-    if (!d2 || d2.plan.kind !== "episode") throw new Error("expected episode dispatch");
+    if (!d2 || d2.status === "denied" || d2.plan.kind !== "episode") throw new Error("expected episode dispatch");
     expect(d2.status).toBe("settled");
     expect(d2.plan.binding).toMatchObject({ entrypoint: "run", sourceState: s3.digest, epoch: 0 });
 

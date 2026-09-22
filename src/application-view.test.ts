@@ -12,6 +12,29 @@ const snapshot = (): ApplicationSnapshot => {
 };
 
 describe("application reflection", () => {
+  test("preserves exhausted, failed and cancelled applicability without actions", () => {
+    const current = snapshot();
+    const spec = parseApplicationViewSpec({contract: "algal.application-view-spec.v1", title: "Demo", widgets: ["procedures"]});
+    for (const status of ["exhausted", "failed", "cancelled"] as const) {
+      const view = projectApplicationView({snapshot: current, spec, applicability: {discover: {status}}});
+      expect(view.procedures[0]!.applicability).toBe(status);
+      expect(view.actions).toEqual([]);
+      expect(() => parseApplicationView({...view, actions: [{kind: "execute-procedure", expectedState: current.digest, procedure: current.revision.entrypoints[0]!.manifest, queryResult: ref("unsupported")}]})).toThrow("supported applicability");
+    }
+  });
+  test("long histories retain the captured tail and explicitly report truncation", () => {
+    const history = Array.from({length: 130}, (_, sequence) => {
+      const item = snapshot();
+      item.state.sequence = sequence;
+      item.digest = ref(item.state);
+      return item;
+    });
+    const view = projectApplicationView({snapshot: history[129]!, history, spec: {contract: "algal.application-view-spec.v1", title: "History", widgets: ["history"]}});
+    expect(view.truncated).toBe(true);
+    expect(view.history.length).toBe(128);
+    expect(view.history[0]!.sequence).toBe(2);
+    expect(view.history[127]!.state).toBe(history[129]!.digest);
+  });
   test("parses only fixed widgets and runtime policy", () => {
     expect(parseApplicationViewSpec({contract: "algal.application-view-spec.v1", title: "Demo", widgets: ["history", "procedures"]}).widgets).toEqual(["history", "procedures"]);
     expect(() => parseApplicationViewSpec({contract: "algal.application-view-spec.v1", title: "Demo", widgets: ["html"]})).toThrow();

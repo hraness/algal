@@ -16,7 +16,7 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { ApplicationService, type ApplicationDispatch, type ApplicationSnapshot } from "../src/application";
+import { ApplicationService, type ApplicationDispatch, type ApplicationDispatchAttempt, type ApplicationSnapshot } from "../src/application";
 import { applicationJson } from "../src/application-contract";
 import {
   admitApplicationActivation, checkApplicationCompatibility, evaluateApplicationRevision, verifyApplicationEvaluation,
@@ -52,7 +52,7 @@ const LIMITS = { maxWork: 50_000, maxRounds: 32, maxDerived: 128, maxBindings: 1
 const evalInterface = { inputs: { q: { cell: "src", port: "value" } }, outputs: { answer: { cell: "out", port: "out" } } };
 const evalCells = (program: JsonValue) => [
   { id: "src", kind: "input", outputs: { value: "json" } },
-  { id: "out", kind: "expr", inputs: { value: "json" }, expr: { contract: "algal.expr.v1", program }, output: { kind: "json", schema: {} } },
+  { id: "out", kind: "expr", inputs: { value: "json" }, expr: { contract: "algal.expr.v1", program }, output: { kind: "json", schema: { type: "string" } } },
 ];
 const evalEdges = [{ from: { cell: "src", port: "value" }, to: { cell: "out", port: "value" } }];
 const manifestValue = manifestToJson(parseOrganismManifest({
@@ -73,7 +73,7 @@ const values = {
   attestation: { contract: "algal.parity-attestation.v1" },
   hostProfile: { contract: "algal.parity-host-profile.v1" },
   views: { contract: "algal.application-view-spec.v1", title: "Parity", widgets: ["investigations", "memory", "procedures"] },
-  runtimeProfile: { contract: "algal.application-runtime-profile.v1", runtime: "parity", policy: "pure-case-evaluation.v1" },
+  runtimeProfile: { contract: "algal.application-runtime-profile.v1", runtime: "bun-native-memory", policy: "pure-case-evaluation.v1" },
   evaluationPolicy: { contract: "algal.application-evaluation-policy.v1", maxCases: 8, maxWork: 1_000_000, maxModelCalls: 0, requireHoldoutPass: true, strictValidationImprovement: true },
   program: { contract: "algal.query.v1", rules: [], query: { relation: "available", terms: [{ var: "x" }, { var: "polarity" }] }, limits: LIMITS },
   frontier: { contract: "algal.application-memory-frontier.v1", application: APP, previous: null, sequence: 0, mutation: null, status: "settled" },
@@ -135,8 +135,7 @@ const procedure2Ref = digestCanonical(procedure2);
 const scope2 = { contract: "algal.application-memory-scope.v1", application: APP, environment: "fixture", task: "task-1", frontier: digests.frontier, bindings: [], completeFor: [procedure2Ref], attestation: digests.attestation };
 const scope2Ref = digestCanonical(scope2);
 // The schema-2 revision carries a schema-2 query bundle so the memory view
-// stays coherent — commit does not enforce it, but `loadRevision` does when
-// the revision is ever evaluated.
+// stays coherent. The policy host checks this at commit admission.
 const program2 = { contract: "algal.query.v1", rules: [], query: { relation: "supported-tool", terms: [{ var: "x" }, { var: "polarity" }] }, limits: LIMITS };
 const program2Ref = digestCanonical(program2);
 const query2 = { contract: "algal.application-memory-query.v1", id: "supported", schema: schema2Ref, program: program2Ref, procedures: [procedure2Ref], polarityColumn: 1, conflict: "single-value" };
@@ -146,7 +145,8 @@ const queries2Ref = digestCanonical(queries2);
 const evalEntrypoints = [{ name: "run", manifest: manifestEvalRef, applicability: queryRef, maxGenerations: 1, capabilities: [], queries: [queryRef] }];
 const revision2 = { ...revision, parent: revisionRef, entrypoints: evalEntrypoints };
 const revision2Ref = digestCanonical(revision2);
-const revision3 = { ...revision2, parent: revision2Ref, schema: schema2Ref, queries: queries2Ref };
+const revision3 = { ...revision2, parent: revision2Ref, schema: schema2Ref, queries: queries2Ref,
+  entrypoints: evalEntrypoints.map(entry => ({ ...entry, applicability: query2Ref, queries: [query2Ref] })) };
 const revision3Ref = digestCanonical(revision3);
 const mailbox = capabilityHandle("mailbox-send", { fixture: "parity" });
 const policy = {
@@ -162,7 +162,8 @@ const policy = {
 // The published memory chain is deterministic: the host identity derives from
 // the policy, so the stored observation and successor snapshot digests are
 // computable before either leg runs.
-const hostIdentity = digestCanonical({ contract: "algal.host-admission.v1", policy: digestCanonical(policy) });
+const { frontier: _frontier, ...policyAuthority } = policy;
+const hostIdentity = digestCanonical({ contract: "algal.host-admission.v2", policy: digestCanonical(policyAuthority) });
 const genesisMemoryRef = digestCanonical({ contract: "algal.application-memory.v1", ...genesisMemory });
 const observation1Record = { contract: "algal.application-memory-observation.v1", ...observationInput, admission: hostIdentity, claims: raw.claims };
 const observation1Ref = digestCanonical(observation1Record);
@@ -197,8 +198,8 @@ const inspectShape = (s: ApplicationSnapshot | null) =>
 
 const tsDir = join(temporary, "ts");
 const nativeDir = join(temporary, "native");
-const host = createApplicationPolicyHost(policy, { channelsDir: join(tsDir, "channels") });
 const engine = new NativeMemoryQueryEngine({ executable: binary, expectedSha256: binaryHex });
+const host = createApplicationPolicyHost(policy, { channelsDir: join(tsDir, "channels"), memoryEngine: engine });
 const service = new ApplicationService(tsDir, host);
 const memory = new ApplicationMemoryService({ store: service.store, engine, admission: host });
 // The composed domain dispatcher: policy routes for deliveries, real episode
@@ -399,6 +400,21 @@ steps.push(
       return app("commit", await dynamic("migrate", migrateCommand));
     },
   },
+  { name: "dispatch-obsolete-episode", ts: async () => ({ dispatches: await service.dispatchPending(APP, dispatcher) }), native: async () => app("dispatch", APP) },
+  {
+    name: "query-migrated-supported",
+    ts: async () => { const r = await memory.query(head, query2Ref); derivationRef = r.ref; return { derivation: r.ref, status: r.derivation.status }; },
+    native: async () => app("query", head, query2Ref),
+  },
+  {
+    name: "execute-current-revision",
+    ts: async () => {
+      const s = await requestExecution(service, { application: APP, operation: op("execute-current"), expectedHead: head, expectedMemory: memoryRef, entrypoint: "run", input: digests.episodeArgs, derivation: derivationRef });
+      head = s.digest;
+      return { state: s.digest };
+    },
+    native: async () => app("execute", await dynamic("execute-current", { application: APP, operation: op("execute-current"), expectedHead: head, expectedMemory: memoryRef, entrypoint: "run", input: digests.episodeArgs, derivation: derivationRef })),
+  },
   { name: "dispatch-episode", ts: async () => ({ dispatches: await service.dispatchPending(APP, dispatcher) }), native: async () => app("dispatch", APP) },
   {
     name: "reconcile-episode",
@@ -432,13 +448,18 @@ steps.push(
   // manufacture a settlement (the host returns no outcome), so the dispatch
   // becomes `uncertain` and the wedge stands.
   {
+    name: "query-before-wedge",
+    ts: async () => { const r = await memory.query(head, query2Ref); derivationRef = r.ref; return { derivation: r.ref, status: r.derivation.status }; },
+    native: async () => app("query", head, query2Ref),
+  },
+  {
     name: "commit-wedge-episode",
     ts: async () => {
-      const s = await service.commit({ application: APP, operation: op("wedge-episode"), kind: "investigate", expectedHead: head, revision: revision3Ref, memory: memoryRef, intents: [{ kind: "start-episode", entrypoint: "run", input: digests.episodeArgs }], evidence: [], causedBy: null });
+      const s = await service.commit({ application: APP, operation: op("wedge-episode"), kind: "investigate", expectedHead: head, revision: revision3Ref, memory: memoryRef, intents: [{ kind: "start-episode", entrypoint: "run", input: digests.episodeArgs }], evidence: [derivationRef], causedBy: null });
       head = s.digest;
       return { state: s.digest, transition: s.state.transition, revision: s.state.revision, memory: s.state.memory };
     },
-    native: async () => app("commit", await dynamic("wedge", { application: APP, operation: op("wedge-episode"), kind: "investigate", expectedHead: head, revision: revision3Ref, memory: memoryRef, intents: [{ kind: "start-episode", entrypoint: "run", input: digests.episodeArgs }], evidence: [], causedBy: null })),
+    native: async () => app("commit", await dynamic("wedge", { application: APP, operation: op("wedge-episode"), kind: "investigate", expectedHead: head, revision: revision3Ref, memory: memoryRef, intents: [{ kind: "start-episode", entrypoint: "run", input: digests.episodeArgs }], evidence: [derivationRef], causedBy: null })),
   },
   {
     name: "dispatch-blocked",
@@ -505,13 +526,17 @@ try {
       console.error(`  native: ${canonicalize(nativeOut as JsonValue)}`);
       process.exit(1);
     }
+    if (step.name === "dispatch-obsolete-episode") {
+      const attempts = (tsOut as { dispatches: ApplicationDispatchAttempt[] }).dispatches;
+      if (attempts.length !== 1 || attempts[0]?.status !== "denied") throw new Error("obsolete episode was not denied before execution");
+    }
     if (step.name === "dispatch-episode") {
-      const episode = (tsOut as { dispatches: ApplicationDispatch[] }).dispatches.find(d => d.plan.kind === "episode");
+      const episode = (tsOut as { dispatches: ApplicationDispatchAttempt[] }).dispatches.find(d => d.status !== "denied" && d.plan.kind === "episode");
       if (!episode) throw new Error("no episode dispatch to reconcile");
       reconcileIntent = episode.intent;
     }
     if (step.name === "dispatch-blocked") {
-      const episode = (tsOut as { dispatches: ApplicationDispatch[] }).dispatches.find(d => d.plan.kind === "episode");
+      const episode = (tsOut as { dispatches: ApplicationDispatchAttempt[] }).dispatches.find(d => d.status !== "denied" && d.plan.kind === "episode");
       if (!episode || episode.status !== "blocked") throw new Error("no blocked episode dispatch");
       wedgeIntent = episode.intent;
     }

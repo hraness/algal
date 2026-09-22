@@ -119,6 +119,11 @@ interfaces may delegate them without widening their class. The handle is an
 opaque local identifier, not a provider credential: the host must still hold
 an active admission record and may revoke it independently.
 
+JSON-shaped dynamic composition cannot introduce a capability-typed edge:
+`spawn` rejects capability ports on its child interface, and `each.over` cannot
+name a capability input. Use typed `organism` delegation, or a typed pass-through
+input on `each`. Capability and ref lists cannot feed scalar ports.
+
 ### agent / classifier / gate fields
 
 ```json
@@ -166,7 +171,8 @@ an active admission record and may revoke it independently.
   JSON output may be an object, array, string, number, integer, boolean, or
   null when the schema declares that type. An omitted `type` defaults to
   `object`. Known keywords are validated during manifest admission, before any
-  effect: `type` must name one supported type; `required` must be an array of
+  effect: `type` must name one supported type or a nonempty array of at most
+  seven distinct supported types (a union); `required` must be an array of
   strings of at most 64 UTF-16 code units; `properties` must map names to object
   schemas. Null/scalar child schemas and misspelled declared types are rejected.
   The VM checks `required` and declared `properties` recursively
@@ -411,7 +417,10 @@ re-evaluation.
 - `carry` maps interface output name → interface input name. After each round
   the named outputs feed the next round's inputs. A carried input port is
   optional on the repeat cell (round 0 may run without it); edge-fed values
-  supply round 0, carried values override them in later rounds.
+  supply round 0, carried values override them in later rounds. Admission
+  checks each carry's producer/consumer type compatibility, including exact
+  capability class. Carry assigns a whole value and never wraps a scalar in
+  a list as edge fan-in does.
 - `until` is an early-exit condition: stop after a round whose interface
   output `until.output` equals `until.equals` (canonical equality; if the
   output is `choice`, `equals` must be a declared label). With
@@ -677,6 +686,12 @@ step, depth and work limits.
   [Suspension and resume](#suspension-and-resume)).
 
 ## Work ledger
+
+Expression guards run once in manifest edge order after every incoming producer
+has resolved. A guard error ends the run with `GUARD_INVALID`, preserves the
+committed prefix, and names the receiving cell in the run failure; that cell has
+not activated. Guard fuel counts toward `maxWork` even when the edge is false,
+and exhaustion is checked before another guard or activation executes.
 
 Modeled units, not wall time: 100 per activation, plus the fn signature's
 `cost`, plus 500 + context bytes + output bytes per effect. Bounded by

@@ -176,7 +176,49 @@ type RunContext = {
   journalFailure?: { error: unknown };
 };
 
+function checkRunArgs(args: unknown): void {
+  const root = asObject(args, "run arguments");
+  let bytes = 0;
+  const add = (n: number): void => {
+    bytes += n;
+    if (bytes > BOUNDS.maxArgsBytes) throw new AlgalError("BUDGET_EXHAUSTED", "run argument bytes");
+  };
+  const string = (value: string): void => {
+    if (value.length > BOUNDS.maxArgsBytes - bytes) {
+      throw new AlgalError("BUDGET_EXHAUSTED", "run argument bytes");
+    }
+    add(Buffer.byteLength(JSON.stringify(value), "utf8"));
+  };
+  const visit = (value: unknown, depth: number): void => {
+    if (depth > 64) throw new AlgalError("BUDGET_EXHAUSTED", "JSON depth exceeds 64");
+    if (value === null) { add(4); return; }
+    if (typeof value === "string") { string(value); return; }
+    if (typeof value === "boolean") { add(value ? 4 : 5); return; }
+    if (typeof value === "number" && Number.isFinite(value)) { add(JSON.stringify(value).length); return; }
+    if (Array.isArray(value)) {
+      add(2 + Math.max(0, value.length - 1));
+      for (const item of value) visit(item, depth + 1);
+      return;
+    }
+    if (typeof value !== "object" || (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)) {
+      throw new AlgalError("PARSE_FAILED", "run arguments must contain JSON values");
+    }
+    add(2);
+    let first = true;
+    for (const key in value) {
+      if (!Object.hasOwn(value, key)) continue;
+      add(first ? 1 : 2);
+      first = false;
+      string(key);
+      visit((value as Record<string, unknown>)[key], depth + 1);
+    }
+  };
+  visit(root, 0);
+  for (const value of Object.values(root)) asObject(value, "input cell arguments");
+}
+
 export async function runOrganism(opts: RunOptions): Promise<RunReceipt> {
+  checkRunArgs(opts.args ?? {});
   if (opts.processName !== undefined) asSafeId(opts.processName, "process name");
   opts.journal?.assertHealthy();
   const manifestDigest = digestCanonical(manifestToJson(opts.manifest));
@@ -268,6 +310,7 @@ async function runInto(
   };
 
   const resolveEdge = (i: number) => {
+    if (edgeState[i] !== "pending") return;
     const e = manifest.edges[i]!;
     const src = e.from.cell;
     const st = state.get(src);
@@ -347,8 +390,23 @@ async function runInto(
       const sig = ports.get(cell.id)!;
       const inputNames = Object.keys(sig.inputs);
 
-      // resolve all edges targeting this cell's inputs
-      for (const { edge } of inbound.get(cell.id) ?? []) resolveEdge(edge);
+      // Evaluate guards exactly once, in manifest edge order, after all
+      // producers resolve. A guard is runtime computation and its failure
+      // must retain the execution prefix as a failed receipt.
+      const incoming = inbound.get(cell.id) ?? [];
+      if (incoming.some(({ edge }) => state.get(manifest.edges[edge]!.from.cell) === "pending")) continue;
+      try {
+        for (const { edge } of incoming) {
+          resolveEdge(edge);
+          if (ctx.work.units > budgets.maxWork) {
+            throw new AlgalError("BUDGET_EXHAUSTED", "maxWork exhausted");
+          }
+        }
+      } catch (error) {
+        const report = errorReport(error);
+        fail(ctx, cellPath(cell.id), report.code, report.message);
+        break;
+      }
 
       const resolved = inputNames.every((p) =>
         (inbound.get(cell.id) ?? [])
@@ -864,6 +922,16 @@ async function activate(
         ctx.opts.transports,
         ctx.opts.tools,
       );
+      // Dynamic interfaces have json args/results and cannot preserve a
+      // capability's type. Typed delegation uses an organism cell instead.
+      for (const target of [
+        ...Object.values(subManifest.interface?.inputs ?? {}),
+        ...Object.values(subManifest.interface?.outputs ?? {}),
+      ]) {
+        if (subCompiled.ports.get(target.cell)?.outputs[target.port]?.type === "cap") {
+          throw new AlgalError("TYPE_MISMATCH", "spawn cannot expose capability ports through json; use a typed organism cell");
+        }
+      }
       const rawArgs = inputs.args ?? {};
       if (
         rawArgs === null ||
@@ -1212,7 +1280,11 @@ async function activate(
           ctx.effects.push(eff);
           if (eff.error) throw new AlgalError(eff.error.code, eff.error.message);
           const raw = eff.output!;
-          ctx.work.units += canonicalBytes(raw) * WORK.perOutputByte;
+          const outputBytes = canonicalBytes(raw);
+          if (outputBytes > maxOut) {
+            throw new AlgalError("BUDGET_EXHAUSTED", `effect output ${outputBytes}B exceeds maxOutputBytes ${maxOut}B`);
+          }
+          ctx.work.units += outputBytes * WORK.perOutputByte;
           const bound = bindOutput(
             compactReq.output,
             raw,
@@ -1381,6 +1453,11 @@ async function activate(
         const external = ctx.opts.tools?.get(call.fn);
         const signature = fn?.signature ?? external?.signature;
         if (!signature) throw new AlgalError("TOOL_UNKNOWN", `tool "${call.fn}" is not configured`);
+        for (const name of Object.keys(call.inputs as Record<string, JsonValue>)) {
+          if (!Object.hasOwn(signature.inputs, name)) {
+            throw new AlgalError("TYPE_MISMATCH", `tool ${call.fn} received undeclared input ${name}`);
+          }
+        }
         for (const [p, decl] of Object.entries(signature.inputs)) {
           const v = (call.inputs as Record<string, JsonValue>)[p];
           if (v === undefined) {

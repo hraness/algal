@@ -182,6 +182,17 @@ export function cellSignature(
             `repeat cell "${cell.id}" carry target "${inName}" is not an interface input of "${sub.manifest.key}"`,
           );
         }
+        // Carry is an implicit edge across rounds and must preserve the same
+        // type/cardinality boundary as a declared edge. It is a direct value
+        // assignment, so unlike edge fan-in it cannot wrap a scalar in a list.
+        const source = sig.outputs[outName]!;
+        const target = sig.inputs[inName]!;
+        if (!portCompatible(source, target) || (target.many === true && source.many !== true)) {
+          throw new AlgalError(
+            "TYPE_MISMATCH",
+            `repeat cell "${cell.id}" carry "${outName}" (${describePort(source)}) cannot feed "${inName}" (${describePort(target)})`,
+          );
+        }
         sig.inputs[inName] = { ...sig.inputs[inName]!, optional: true };
       }
       if (cell.until) {
@@ -229,6 +240,12 @@ export function cellSignature(
           `each cell "${cell.id}" over "${cell.over}" is not an interface input of "${sub.manifest.key}"`,
         );
       }
+      if (sig.inputs[cell.over]!.type === "cap") {
+        throw new AlgalError(
+          "TYPE_MISMATCH",
+          `each cell "${cell.id}" cannot convert a json list into capability inputs; delegate capabilities through a typed pass-through input`,
+        );
+      }
       // the over port receives the whole list as a single json value
       sig.inputs[cell.over] = { type: "json" };
       // every interface output becomes a list of per-item results
@@ -243,7 +260,7 @@ export function cellSignature(
 /** Ports a digest-embedded sub-manifest exposes: interface inputs resolve to
  * the targeted input cell's port types; interface outputs to the targeted
  * cells' output port types. */
-function interfaceSignature(
+export function interfaceSignature(
   cellId: string,
   sub: CompiledOrganism,
 ): CellPorts {
@@ -294,12 +311,13 @@ function mustCell(m: OrganismManifest, id: string): Cell {
 export function agentOutputPortType(o: {
   kind: "text" | "json" | "choice";
   labels?: string[];
+  schema?: import("./values").JsonObject;
 }): PortType {
   switch (o.kind) {
     case "text":
       return { type: "text" };
     case "json":
-      return { type: "json" };
+      return { type: "json", ...(o.schema !== undefined ? { schema: o.schema } : {}) };
     case "choice": {
       const out: { type: "choice"; labels?: string[] } = { type: "choice" };
       if (o.labels !== undefined) out.labels = o.labels;
@@ -312,6 +330,9 @@ export function agentOutputPortType(o: {
  * it feeds a `many` consumer element-wise (the edge flattens) or a `json`
  * consumer as a whole list value; scalar non-json consumers reject it. */
 export function portCompatible(producer: PortType, consumer: PortType): boolean {
+  if (producer.many && !consumer.many && consumer.type !== "json") {
+    return false;
+  }
   if (producer.type === "cap" || consumer.type === "cap") {
     return producer.type === "cap" &&
       consumer.type === "cap" &&
@@ -320,9 +341,6 @@ export function portCompatible(producer: PortType, consumer: PortType): boolean 
   // a ref token is not the payload — only ref ports can carry it
   if (producer.type === "ref" || consumer.type === "ref") {
     return producer.type === "ref" && consumer.type === "ref";
-  }
-  if (producer.many && !consumer.many && consumer.type !== "json") {
-    return false;
   }
   if (consumer.type === "json") return true;
   if (producer.type === consumer.type) {
@@ -466,8 +484,8 @@ async function compileWithBudget(
       }
     }
     for (const [name, t] of Object.entries(manifest.interface.outputs)) {
-      const sig = ports.get(t.cell)!;
-      if (!sig.outputs[t.port]) {
+      const sig = ports.get(t.cell);
+      if (!sig?.outputs[t.port]) {
         throw new AlgalError(
           "INTERFACE_MISMATCH",
           `interface output "${name}" targets missing port "${t.cell}.${t.port}"`,
