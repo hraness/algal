@@ -82,7 +82,7 @@ function load(): EvalExports {
   if (exports_) return exports_;
   const url = new URL("./algal_expr.wasm", import.meta.url);
   const bytes = filesystem().readFileSync(url);
-  const module = new WebAssembly.Module(bytes);
+  const module = new WebAssembly.Module(bytes.slice().buffer);
   const instance = new WebAssembly.Instance(module, {});
   exports_ = instance.exports as unknown as EvalExports;
   return exports_;
