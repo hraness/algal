@@ -25,7 +25,7 @@ import {
 } from "../src/application-adaptation";
 import { createApplicationDomainDispatcher, createApplicationPolicyHost } from "../src/application-host";
 import { scheduleInvestigations, requestExecution } from "../src/application-investigation";
-import { parseApplicationViewSpec, projectApplicationView } from "../src/application-view";
+import { collectApplicationViewEvidence, parseApplicationView, parseApplicationViewSpec, projectApplicationView, type ApplicationApplicability, type ApplicationView } from "../src/application-view";
 import { migrateApplicationMemory } from "../src/application-migration";
 import { appendObservation } from "../src/application-observation";
 import { ApplicationMemoryService } from "../src/application-memory";
@@ -218,6 +218,8 @@ let head = "" as Digest;
 let genesisHead = "" as Digest;
 let memoryRef = "" as Digest;
 let derivationRef = "" as Digest;
+let initialDerivationRef = "" as Digest;
+let finalEvidenceView: ApplicationView | undefined;
 let reconcileIntent = "" as Digest;
 let wedgeIntent = "" as Digest;
 let evaluationRef = "" as Digest;
@@ -251,6 +253,13 @@ const dynamic = async (name: string, value: JsonValue) => {
   return path;
 };
 const app = (...args: string[]) => ["application", "--policy", fixturePath.get("policy")!, ...args];
+const evidenceView = async (derivations: Digest[] = [], applicability?: Record<string, ApplicationApplicability>): Promise<ApplicationView> => {
+  const history = await service.history(APP);
+  return projectApplicationView({
+    snapshot: history[history.length - 1]!, spec: parseApplicationViewSpec(values.views), history,
+    evidence: await collectApplicationViewEvidence(service, history, derivations), ...(applicability ? { applicability } : {}),
+  });
+};
 
 steps.push(
   {
@@ -276,7 +285,7 @@ steps.push(
   { name: "inspect", ts: async () => inspectShape(await service.inspect(APP)), native: async () => app("inspect", APP) },
   {
     name: "query-applicability",
-    ts: async () => { const r = await memory.query(head, queryRef); derivationRef = r.ref; return { derivation: r.ref, status: r.derivation.status }; },
+    ts: async () => { const r = await memory.query(head, queryRef); derivationRef = r.ref; initialDerivationRef = r.ref; return { derivation: r.ref, status: r.derivation.status }; },
     native: async () => app("query", head, queryRef),
   },
   {
@@ -287,6 +296,24 @@ steps.push(
       return { snapshot: r.snapshot?.digest ?? null, derivations: r.derivations, requests: r.requests };
     },
     native: async () => app("schedule", await dynamic("schedule", { application: APP, operation: op("schedule"), expectedHead: head, expectedMemory: memoryRef, route: "investigate" })),
+  },
+  {
+    name: "query-unknown-captured-head",
+    ts: async () => { const r = await memory.query(head, queryRef); derivationRef = r.ref; return { derivation: r.ref, status: r.derivation.status }; },
+    native: async () => app("query", head, queryRef),
+  },
+  {
+    name: "view-evidence-unknown-investigation",
+    ts: async () => {
+      const view = await evidenceView([derivationRef]), evidence = view.evidence!;
+      if (evidence.queries.length !== 1 || evidence.queries[0]!.status !== "unknown" || evidence.queries[0]!.derivation !== derivationRef ||
+          evidence.probes.length !== 1 || evidence.probes[0]!.procedure !== procedureRef || evidence.sources.length !== 0 ||
+          evidence.work.length !== 1 || evidence.work[0]!.status !== "pending" || evidence.work[0]!.request === null || evidence.work[0]!.query !== queryRef) {
+        throw new Error("Unknown evidence view lost its current query, bounded probe, or retained investigation");
+      }
+      return view;
+    },
+    native: async () => app("view", await dynamic("view-unknown-evidence", { application: APP, spec: digests.views, evidence: true, derivations: [derivationRef] })),
   },
   { name: "dispatch", ts: async () => ({ dispatches: await service.dispatchPending(APP, dispatcher) }), native: async () => app("dispatch", APP) },
   { name: "pending", ts: pendingRows, native: async () => app("pending", APP) },
@@ -368,6 +395,21 @@ steps.push(
       application: APP, spec: digests.views,
       applicability: { run: { status: "supported", queryResult: { digest: derivationRef, state: head, procedure: manifestEvalRef } } },
     })),
+  },
+  {
+    name: "view-evidence-supported-activation",
+    ts: async () => {
+      const view = await evidenceView([derivationRef]), evidence = view.evidence!;
+      const query = evidence.queries.find(row => row.query === queryRef);
+      if (query?.status !== "supported" || !query.claimedVerified || query.result === null || query.facts === null || !query.sourceRefs.includes(observation1Ref) ||
+          !evidence.sources.some(row => row.observation === observation1Ref && row.raw === rawRef && row.admission === hostIdentity) ||
+          !evidence.revisions.some(row => row.kind === "activate" && row.revision === revision2Ref && row.evidence.includes(evaluationRef)) ||
+          !evidence.work.some(row => row.request !== null && row.status === "settled")) {
+        throw new Error("Supported evidence view lost proof/source references or accepted revision history");
+      }
+      return view;
+    },
+    native: async () => app("view", await dynamic("view-supported-evidence", { application: APP, spec: digests.views, evidence: true, derivations: [derivationRef] })),
   },
   {
     name: "execute",
@@ -491,6 +533,25 @@ steps.push(
     native: async () => app("commit", await dynamic("migrate", migrateCommand)),
   },
   { name: "inspect-final", ts: async () => inspectShape(await service.inspect(APP)), native: async () => app("inspect", APP) },
+  {
+    name: "query-final-evidence",
+    ts: async () => { const r = await memory.query(head, query2Ref); derivationRef = r.ref; return { derivation: r.ref, status: r.derivation.status }; },
+    native: async () => app("query", head, query2Ref),
+  },
+  {
+    name: "view-evidence-original-work-bindings",
+    ts: async () => {
+      const view = await evidenceView([derivationRef]), evidence = view.evidence!;
+      if (!evidence.work.some(row => row.intent === wedgeIntent && row.status === "uncertain" && row.revision === revision3Ref && row.memory === migratedSnapshotRef) ||
+          !evidence.work.some(row => row.intent === reconcileIntent && row.status === "settled" && row.process !== null && row.binding !== null && row.result !== null) ||
+          !evidence.work.some(row => row.kind === "start-episode" && row.revision === revision2Ref && row.memory === publishedMemoryRef && row.status === "pending")) {
+        throw new Error("Evidence view lost uncertainty, settled process reachability, or an obsolete work item's original bindings");
+      }
+      finalEvidenceView = view;
+      return view;
+    },
+    native: async () => app("view", await dynamic("view-final-evidence", { application: APP, spec: digests.views, evidence: true, derivations: [derivationRef] })),
+  },
 );
 
 const runNativeAttempt = async (args: string[], directory = nativeDir) => {
@@ -511,6 +572,118 @@ const runNative = async (args: string[], directory = nativeDir) => {
 
 const same = (a: unknown, b: unknown) => canonicalize(a as JsonValue) === canonicalize(b as JsonValue);
 let checked = 0;
+
+/** Evidence capture is a read-only, store-backed display boundary. Compare
+ * closed report parsers as well as derivation admission so the two runtimes
+ * cannot quietly render differently fenced or fabricated records. */
+async function checkEvidenceParity(): Promise<void> {
+  const view = finalEvidenceView;
+  if (!view?.evidence) throw new Error("Missing final evidence fixture");
+  const evidence = view.evidence;
+  const legacy = { ...view };
+  delete legacy.evidence;
+  const parsedLegacy = parseApplicationView(legacy);
+  if (Object.hasOwn(parsedLegacy, "evidence") || !same(parsedLegacy, legacy)) throw new Error("Legacy evidence absence changed canonical identity");
+  const legacyReport = await runNativeAttempt(app("report", await dynamic("legacy-report", legacy as unknown as JsonValue)));
+  if (legacyReport.code !== 0) throw new Error(`Legacy report rejected: ${legacyReport.stderr}`);
+  checked++;
+  const report = await runNativeAttempt(app("report", await dynamic("evidence-report", view as unknown as JsonValue)));
+  if (report.code !== 0) throw new Error(`Captured evidence report rejected: ${report.stderr}`);
+  checked++;
+  const rejectReport = async (name: string, value: unknown) => {
+    let rejected = false;
+    try { parseApplicationView(value); } catch { rejected = true; }
+    const native = await runNativeAttempt(app("report", await dynamic(`evidence-report-${name}`, value as JsonValue)));
+    if (!rejected || native.code !== 2) throw new Error(`Evidence report rejection mismatch: ${name}; TS rejected ${rejected}, native exit ${native.code}`);
+    checked++;
+  };
+  const withEvidence = (partial: Record<string, unknown>) => ({ ...view, evidence: { ...evidence, ...partial } });
+  await rejectReport("unknown-field", withEvidence({ extra: true }));
+  await rejectReport("state-fence", withEvidence({ state: genesisHead }));
+  await rejectReport("memory-fence", withEvidence({ memory: genesisMemoryRef }));
+  await rejectReport("truncation-closed", withEvidence({ truncated: { ...evidence.truncated, extra: false } }));
+  await rejectReport("truncation-type", withEvidence({ truncated: { ...evidence.truncated, work: "false" } }));
+  await rejectReport("query-digest", withEvidence({ queries: [{ ...evidence.queries[0]!, query: "sha256:bad" }] }));
+  await rejectReport("query-status", withEvidence({ queries: [{ ...evidence.queries[0]!, status: "complete" }] }));
+  await rejectReport("query-unproduced-success", withEvidence({ queries: [{ ...evidence.queries[0]!, derivation: null }] }));
+  await rejectReport("action-derivation", { ...view, actions: [{ kind: "execute-procedure", expectedState: view.state, procedure: manifestEvalRef, queryResult: initialDerivationRef }] });
+  await rejectReport("query-unknown-field", withEvidence({ queries: [{ ...evidence.queries[0]!, extra: true }] }));
+  await rejectReport("query-reason-bytes", withEvidence({ queries: [{ ...evidence.queries[0]!, reason: "é".repeat(129) }] }));
+  await rejectReport("probe-budgets", withEvidence({ probes: [{ ...evidence.probes[0]!, budgets: { ...evidence.probes[0]!.budgets, maxWork: -1 } }] }));
+  await rejectReport("source-unknown-field", withEvidence({ sources: [{ ...evidence.sources[0]!, extra: true }] }));
+  await rejectReport("revision-kind", withEvidence({ revisions: [{ ...evidence.revisions[0]!, kind: "unknown" }] }));
+  await rejectReport("work-status", withEvidence({ work: [{ ...evidence.work[0]!, status: "complete" }] }));
+  for (const key of ["queries", "probes", "sources", "revisions", "work"] as const) {
+    if (!evidence[key].length) throw new Error(`Missing evidence ${key} parser fixture`);
+    await rejectReport(`${key}-count`, withEvidence({ [key]: Array.from({ length: 33 }, () => evidence[key][0]) }));
+  }
+  const rejectCapture = async (name: string, derivations: Digest[]) => {
+    const rejected = await evidenceView(derivations).then(() => false, () => true);
+    const native = await runNativeAttempt(app("view", await dynamic(`evidence-capture-${name}`, { application: APP, spec: digests.views, evidence: true, derivations })));
+    if (!rejected || native.code !== 2) throw new Error(`Evidence capture rejection mismatch: ${name}; TS rejected ${rejected}, native exit ${native.code}`);
+    checked++;
+  };
+  await rejectCapture("stale-state", [initialDerivationRef]);
+  await rejectCapture("duplicate-ref", [derivationRef, derivationRef]);
+  await rejectCapture("missing-record", [op("missing-view-derivation")]);
+  const original = await service.store.getValue(derivationRef);
+  if (!original || typeof original !== "object" || Array.isArray(original)) throw new Error("Missing derivation fixture");
+  const nativeStore = new FileStore(nativeDir);
+  for (const [name, replacement] of Object.entries({ application: { application: "foreign" }, memory: { memory: genesisMemoryRef }, query: { query: queryRef }, program: { program: digests.program }, source: { sourceRefs: [observation1Ref] } })) {
+    const changed = applicationJson({ ...original, ...replacement });
+    const ref = await service.store.putValue(changed);
+    if (await nativeStore.putValue(changed) !== ref) throw new Error("Derivation fixture identity differs");
+    await rejectCapture(name, [ref]);
+  }
+  const duplicate = { ...original, reason: "same query, another retained derivation" };
+  const duplicateRef = await service.store.putValue(duplicate);
+  await nativeStore.putValue(duplicate);
+  await rejectCapture("duplicate-query", [derivationRef, duplicateRef].sort());
+  const validApplicability = { run: { status: "supported" as const, queryResult: { digest: derivationRef, state: head, procedure: manifestEvalRef } } };
+  const validActionView = await evidenceView([derivationRef], validApplicability);
+  const nativeActionView = await runNative(app("view", await dynamic("evidence-action-valid", { application: APP, spec: digests.views, evidence: true, derivations: [derivationRef], applicability: validApplicability })));
+  if (!same(validActionView, nativeActionView) || validActionView.actions.length !== 1) throw new Error("Evidence-backed explicit action parity failed");
+  checked++;
+  for (const [name, applicability] of Object.entries({
+    "status-disagrees": { run: { status: "unknown" as const } },
+    "derivation-disagrees": { run: { status: "supported" as const, queryResult: { digest: initialDerivationRef, state: head, procedure: manifestEvalRef } } },
+  })) {
+    const rejected = await evidenceView([derivationRef], applicability).then(() => false, () => true);
+    const native = await runNativeAttempt(app("view", await dynamic(`evidence-${name}`, applicationJson({ application: APP, spec: digests.views, evidence: true, derivations: [derivationRef], applicability }))));
+    if (!rejected || native.code !== 2) throw new Error(`Evidence applicability rejection mismatch: ${name}`);
+    checked++;
+  }
+  // Unsettled records have no result that could accidentally catch a changed
+  // episode binding. Recompute the envelope identity to isolate the required
+  // comparison against the original committed intent and source snapshot.
+  const outboxPaths = [tsDir, nativeDir].map(directory => join(directory, "applications", APP, "outbox", wedgeIntent.slice(7) + ".json"));
+  const outboxOriginals = await Promise.all(outboxPaths.map(path => readFile(path, "utf8")));
+  for (const [name, replacement] of Object.entries({
+    "stale-episode-binding": { revision: revision2Ref, memory: publishedMemoryRef },
+    "changed-episode-process": { process: "foreign-process" },
+    "changed-episode-input": { arguments: rawRef },
+  })) {
+    try {
+      for (const [index, path] of outboxPaths.entries()) {
+        const record = JSON.parse(outboxOriginals[index]!) as ApplicationDispatch;
+        if (record.plan.kind !== "episode" || record.status !== "uncertain" || record.result !== null) throw new Error("Invalid unsettled binding fixture");
+        record.plan.binding = { ...record.plan.binding, ...replacement };
+        record.identity = digestCanonical({ contract: "algal.application-dispatch-identity.v1", application: APP, intent: wedgeIntent, plan: record.plan });
+        await writeFile(path, canonicalize(record));
+      }
+      await rejectCapture(name, [derivationRef]);
+    } finally {
+      for (const [index, path] of outboxPaths.entries()) await writeFile(path, outboxOriginals[index]!);
+    }
+  }
+  // Change bytes at an already addressed filename only after all successful
+  // captures. A structural parse must not replace CAS digest verification.
+  for (const directory of [tsDir, nativeDir]) await writeFile(join(directory, "values", derivationRef.slice(7) + ".json"), canonicalize({ ...original, reason: "tampered" }));
+  try { await rejectCapture("changed-digest", [derivationRef]); }
+  finally {
+    for (const directory of [tsDir, nativeDir]) await writeFile(join(directory, "values", derivationRef.slice(7) + ".json"), canonicalize(original));
+  }
+}
 
 /** Exercise admission boundaries on fresh namespaces with shared immutable
  * fixtures. Synthetic quota charges stand for retained reservations; no large
@@ -583,6 +756,22 @@ async function checkGoalAndQuotaParity(): Promise<void> {
       }
     }
   }
+  const hostProbe = await pair("evidence-host-probe");
+  const hostProbeRef = await hostProbe.put({ contract: "algal.fixture-host-probe.v1", name: "host-read" });
+  const hostProcedureRef = await hostProbe.put({ ...procedure, manifest: hostProbeRef });
+  const hostQueryRef = await hostProbe.put({ ...query, procedures: [hostProcedureRef] });
+  const hostQueriesRef = await hostProbe.put({ ...queries, queries: [hostQueryRef] });
+  const hostRevisionRef = await hostProbe.put({ ...revision, queries: hostQueriesRef, entrypoints: revision.entrypoints.map(entry => ({ ...entry, applicability: hostQueryRef, queries: [hostQueryRef] })) });
+  const hostSnapshot = await create(hostProbe, hostRevisionRef, "evidence-host-probe-create");
+  const hostHistory = await hostProbe.lifecycle.history(APP);
+  const hostView = projectApplicationView({ snapshot: hostSnapshot, spec: parseApplicationViewSpec(values.views), history: hostHistory,
+    evidence: await collectApplicationViewEvidence(hostProbe.lifecycle, hostHistory) });
+  if (hostView.evidence?.probes[0]?.budgets !== null || hostView.evidence.probes[0].manifest !== hostProbeRef || hostView.actions.length) throw new Error("Host-backed probe invented VM budgets or authority");
+  equal("host-backed probe null budgets", hostView, await runNative(app("view", await dynamic("evidence-host-probe-view", { application: APP, spec: digests.views, evidence: true })), hostProbe.native));
+  const hostReport = await runNativeAttempt(app("report", await dynamic("evidence-host-probe-report", hostView as unknown as JsonValue)), hostProbe.native);
+  if (hostReport.code !== 0) throw new Error(`Host-backed probe report rejected: ${hostReport.stderr}`);
+  checked++;
+
   const malformed = await pair("goals-malformed");
   for (const [name, body] of Object.entries({
     application: { ...goal, application: "foreign" }, query: { ...goal, query: query2Ref }, entrypoint: { ...goal, entrypoint: "missing" },
@@ -697,6 +886,7 @@ try {
     }
     checked++;
   }
+  await checkEvidenceParity();
   await checkGoalAndQuotaParity();
 } finally {
   await rm(temporary, { recursive: true, force: true });

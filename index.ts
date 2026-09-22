@@ -429,6 +429,8 @@ export {
   parseApplicationView,
   parseApplicationViewSpec,
   projectApplicationView,
+  collectApplicationViewEvidence,
+  parseApplicationViewEvidence,
 } from "./src/application-view";
 export type {
   ApplicationRuntimeProfile,
@@ -436,6 +438,7 @@ export type {
   ApplicationViewAction,
   ApplicationViewSpec,
   ApplicationViewWidget,
+  ApplicationViewEvidence,
 } from "./src/application-view";
 export type {
   AdaptationRuntime,

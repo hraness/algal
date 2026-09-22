@@ -16,8 +16,8 @@ bun examples/adaptive-inventory/run.ts /tmp/algal-inventory-example
 ```
 
 `ALGAL_MEMORY_NATIVE` is required and its executable is pinned by SHA-256 for the
-run. `ALGAL_BIN` optionally renders the final captured view using `application
-report`. Existing output directories are rejected. All fixture mutations and
+run. `ALGAL_BIN` optionally renders the initial unresolved and final captured views
+using `application report`. Existing output directories are rejected. All fixture mutations and
 retained application state live beneath the supplied new directory.
 
 Three inhabitants have separate manifest budgets and authority declarations:
@@ -47,7 +47,9 @@ an application service. The native query executable is pinned across every
 invocation. This demonstrates actual exit/reopen continuity, not abrupt
 termination at every filesystem publication boundary.
 
-The first host commits an investigation and exits. Its successor observes
+The first host commits an investigation, captures a fresh query at that exact
+head, and exits. Its view retains the unresolved query, declared host probes
+and their dependencies, and pending investigation request. Its successor observes
 `inventory.json` and `toolchain.json`, joins the two admitted observations in a
 native query, and executes the incumbent planner. Its selected fixture tool at
 `tools/inventory-a` is run and checked. The fixture then moves that executable
@@ -69,8 +71,22 @@ redelivered. There are four observation probes and two planner episodes.
 
 Inspect `evidence.json` for counts, process identities, and content identities;
 `phase-*.json` for each exited host's evidence; `tool-*.json` for the selected
-fixture tool checks; `view.json` for the captured application view; and optional
-`report.html` for its passive rendering.
+fixture tool checks; `view-unknown.json` for the initial unresolved capture;
+`view.json` for the final supported capture; and optional `report-unknown.html`
+and `report.html` for their passive renderings. `evidence.json` retains both
+view identities and the corresponding report paths.
+
+The final drilldown links current observations to their scopes, raw records,
+receipts, decoders, and admission identities; it retains query facts/result/source
+references, declared probes, accepted revision evaluation references,
+and episode bindings and settlement. Organism probes display their VM budgets;
+these host-backed inventory probes display a null VM budget. Each evidence category is capped at 32
+rows with its own truncation flag. Immutable state references are captured
+together, while work statuses are separately observed dispatch records. The
+rendered report does not query, replay, authenticate observations, or dispatch.
+Its unknown and supported labels describe the selected evidence, not external
+inventory completion.
+
 The application store retains observations, receipts, evaluation evidence and
 revision history. The fixture proves these deterministic mechanisms; it does
 not establish commercial inventory accuracy, model learning or general coding

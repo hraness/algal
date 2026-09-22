@@ -291,6 +291,19 @@ export class ApplicationService {
     if (record.result !== null) parseDispatchResult(await this.value(record.result), record, work);
     return record;
   }
+  /** Read one validated retained dispatch for a historical intent. This does
+   * not acquire dispatch authority or claim atomicity with a captured head. */
+  async readDispatch(application: string, intent: Digest, work: WorkIntent, snapshot: ApplicationSnapshot): Promise<ApplicationDispatch | null> {
+    const name = applicationId(application), ref = applicationRef(intent), parsed = parseWorkIntent(work);
+    if (parsed.application !== name || hash(parsed) !== ref) fail("Dispatch inspection intent mismatch");
+    const record = await this.dispatchRecord(name, ref, parsed);
+    if (snapshot.state.application !== name || !snapshot.transition.intents.includes(ref)) fail("Dispatch inspection source mismatch");
+    if (record) {
+      if (record.sourceState !== snapshot.digest) fail("Dispatch inspection state mismatch");
+      await this.validatePlan(snapshot, parsed, ref, record.plan);
+    }
+    return record;
+  }
   private async pending(history: ApplicationSnapshot[]): Promise<ApplicationPending[]> {
     const pending: ApplicationPending[] = [];
     let total = 0;

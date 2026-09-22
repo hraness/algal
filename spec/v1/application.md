@@ -8,7 +8,7 @@ or independently authenticated source of observations.
 The executable record definitions are the closed parsers in
 `src/application-contract.ts`, `application-memory.ts`,
 `application-adaptation.ts`, `application-migration.ts`, and
-`application-view.ts`, with corresponding native application modules. Unknown
+`application-view.ts` and its evidence collector, with corresponding native application modules. Unknown
 fields are rejected. Required nullable fields are explicit `null`. Records use
 canonical JSON and SHA-256 identities, with no wall-clock timestamps.
 
@@ -60,6 +60,7 @@ advance sequence while retaining epoch. Previous states are retained.
 | `algal.application-evaluation.v1` | Frozen evaluation request, foundry evidence, compatibility, and reproducible acceptance verdict |
 | `algal.application-migration.v1` | Source snapshot, both revisions, pure migration program, producing receipt, and emitted claims |
 | `algal.application-view.v1` | Bounded historical projection and state-fenced proposed actions |
+| `algal.application-view-evidence.v1` | Optional captured query, probe, source, revision, and separately observed work summaries |
 
 A digest establishes content identity. It does not grant authority or prove
 that an external observation is true. Merely storing an evaluation record does
@@ -235,11 +236,71 @@ procedure, and query result. The receiving host must revalidate their evidence
 and current state; a view record grants no authority.
 
 History shows at most the latest 128 entries and explicitly marks truncation.
-Truncation never replaces source history. The native
-`algal application report <view.json>` command renders a standalone passive HTML
-workbench on stdout. It validates the supplied view's structure, escapes all
-data, and performs no dispatch, provider call, or proof replay. Its labels do
-not claim verification of the truth of observations.
+Truncation never replaces source history. A legacy view that omits `evidence`
+keeps that absence and its canonical representation.
+
+### Captured evidence drilldown
+
+`application view` accepts optional `evidence: true` and a sorted, unique
+`derivations` list of at most 32 already-produced derivation references.
+`derivations` requires `evidence: true`. Evidence collection
+loads the captured state's retained records. It does not run a query, replay a
+proof, probe a resource, or dispatch work. TypeScript hosts use
+`collectApplicationViewEvidence(service, history, derivations)` and pass the
+result into `projectApplicationView`.
+
+The optional closed `algal.application-view-evidence.v1` record names the view's
+exact `state` and `memory`, and has five arrays:
+
+| Array | Captured content |
+| --- | --- |
+| `queries` | Selected query and program, status and reason, nullable derivation/result/facts references, source references, declared procedures, and the producer's `claimedVerified` flag |
+| `probes` | Declared procedure, manifest, decoder, dependency keys, nullable prerequisite, and nullable manifest step/work/model-call/output-byte budgets |
+| `sources` | Observation, scope, procedure, raw record, receipt, decoder, and admission identity |
+| `revisions` | Historical state, revision and parent, transition kind, and retained transition evidence such as the accepted evaluation |
+| `work` | Intent and original source state/revision/memory, kind, observed dispatch status, investigation request/query/procedures or episode process/binding/result references, and nullable reason |
+
+An organism probe resolves its retained manifest and displays its VM budgets.
+A host-backed probe instead resolves its addressed host record and displays
+`budgets: null`; collection does not invent VM limits for a host operation.
+Declared probe metadata still grants no execution authority.
+
+Every array contains at most 32 rows. Its corresponding Boolean in the required
+`truncated` object says whether rows were omitted. A query retains at most 128
+source references and 16 declared procedure references; nested records retain
+their original contract bounds. Query reasons are at most 256 UTF-8 bytes;
+work reasons are at most 1,024. Queries, probes, and sources are ordered by their
+content references. Probes and sources keep the first 32; revision rows keep
+the latest 32 states, and work keeps the latest 32 intents in state/ordinal
+order. The complete view remains subject to its 262,144-byte record bound. A clipped display is not a replacement for the
+retained source records.
+
+Supplied derivations must belong to a selected query at the exact captured
+application state and memory. A query without supplied evidence displays
+`unknown`, not a fabricated success. With evidence present, omitted procedure
+applicability is derived from its selected query. Explicit applicability and
+query-result references must agree with that evidence; evidence alone creates
+no executable action. An unresolved query, its producer's reason,
+and its declared probes explain the available investigation path; they are not
+a complete logical explanation of every absent premise. Declared probe metadata
+does not itself authorize a future effect. Source/proof references and
+`claimedVerified` report retained producer data; display construction and HTML
+rendering do not independently authenticate observations or replay proofs.
+
+Historical investigation requests retain the state that triggered them, which
+may precede the transition publishing the delivery. Existing work retains its
+original revision and memory after activation or migration. Dispatch records
+are validated and observed separately while collecting a view: immutable state
+capture does not make the mutable outbox a globally atomic snapshot. Work status
+preserves `pending`, `started`, `settled`, `blocked`, and `uncertain`; rendering
+cannot turn missing settlement into successful completion or authorize a retry.
+
+The native `algal application report <view.json>` command validates the closed
+view structure and renders a standalone passive HTML workbench on stdout. It
+escapes all data, provides local drilldown links for included evidence rows,
+and leaves uncaptured content references as text. Its HTML output is bounded to
+4 MiB. It performs no dispatch, provider call, or proof replay. Its labels do not claim verification of the truth
+of observations.
 
 ## Bounds and evidence
 
@@ -256,6 +317,7 @@ not claim verification of the truth of observations.
 | Memory observations / hypotheses | 128 / 64 |
 | Evaluation cases / work / model calls | 32 / 1,000,000 / 16 |
 | View history / action records | 128 / 32 |
+| Evidence queries / probes / sources / revisions / work | 32 rows per array, with separate truncation flags |
 | Named application namespace / aggregate allocation | 256 MiB per application / 1 GiB aggregate |
 | Quota scan | 10,000 entries per application or coordination directory; 300,000 total; depth 4 |
 

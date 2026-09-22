@@ -75,11 +75,13 @@ pub fn parse_runtime_profile(input: &Value) -> Result<Value> {
 /// Caller-supplied applicability evidence for one entrypoint. A `supported`
 /// result is only actionable when its producer records the exact captured
 /// state and procedure it queried.
+#[derive(Clone)]
 pub struct Applicability {
     pub status: String,
     pub query_result: Option<QueryResult>,
 }
 
+#[derive(Clone)]
 pub struct QueryResult {
     pub digest: String,
     pub state: String,
@@ -130,6 +132,53 @@ pub fn project_view_with_goals(
     applicability: &BTreeMap<String, Applicability>,
     goals: Option<&Value>,
 ) -> Result<Value> {
+    project_view_with_evidence(snapshot, spec, history, applicability, goals, None)
+}
+
+pub fn project_view_with_evidence(
+    snapshot: &Snapshot,
+    spec: &ViewSpec,
+    history: Option<&[Snapshot]>,
+    applicability: &BTreeMap<String, Applicability>,
+    goals: Option<&Value>,
+    evidence: Option<&Value>,
+) -> Result<Value> {
+    let mut captured_applicability = applicability.clone();
+    if let Some(evidence) = evidence {
+        let evidence = crate::application_view_evidence::parse(
+            evidence,
+            &snapshot.digest,
+            &snapshot.state.memory,
+        )?;
+        for entry in &snapshot.revision.entrypoints {
+            let query = evidence["queries"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|q| q["query"] == entry.applicability)
+                .ok_or_else(|| fail("View evidence omits selected applicability query"))?;
+            let status = query["status"].as_str().unwrap();
+            if let Some(explicit) = applicability.get(&entry.name) {
+                if explicit.status != status
+                    || explicit
+                        .query_result
+                        .as_ref()
+                        .is_some_and(|q| query["derivation"] != q.digest)
+                {
+                    return Err(fail("Applicability conflicts with captured query evidence"));
+                }
+            } else {
+                captured_applicability.insert(
+                    entry.name.clone(),
+                    Applicability {
+                        status: status.into(),
+                        query_result: None,
+                    },
+                );
+            }
+        }
+    }
+    let applicability = &captured_applicability;
     let captured_goals = if snapshot.revision.goals.is_some() || goals.is_some() {
         Some(crate::application_goal::bind_captures(
             snapshot,
@@ -222,6 +271,9 @@ pub fn project_view_with_goals(
     if let Some(goals) = captured_goals {
         view["goals"] = goals;
     }
+    if let Some(evidence) = evidence {
+        view["evidence"] = evidence.clone();
+    }
     if canonical(&view)?.len() > 262_144 {
         return Err(fail("Application view byte bound exceeded"));
     }
@@ -252,7 +304,7 @@ pub fn parse_view(input: &Value) -> Result<Value> {
             "actions",
             "truncated",
         ],
-        &["goals"],
+        &["goals", "evidence"],
     )?;
     app_tag(&v["contract"], VIEW)?;
     let application = app_id(&v["application"])?.to_owned();
@@ -404,6 +456,34 @@ pub fn parse_view(input: &Value) -> Result<Value> {
     if let Some(goals) = goals {
         output["goals"] = goals;
     }
+    if let Some(evidence) = v.get("evidence") {
+        output["evidence"] = crate::application_view_evidence::parse(evidence, &state, &memory)?;
+        if evidence["revisions"].as_array().unwrap().last().unwrap()["revision"] != revision {
+            return Err(fail("Evidence revision differs from captured view"));
+        }
+        for row in evidence["work"].as_array().unwrap() {
+            if let Some(source) = output["history"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|h| h["state"] == row["sourceState"])
+                && (source["revision"] != row["revision"] || source["memory"] != row["memory"])
+            {
+                return Err(fail("Work evidence differs from captured history"));
+            }
+        }
+        for action in output["actions"].as_array().unwrap() {
+            if action["kind"] == "execute-procedure"
+                && !evidence["queries"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|q| q["status"] == "supported" && q["derivation"] == action["queryResult"])
+            {
+                return Err(fail("View action lacks matching captured query evidence"));
+            }
+        }
+    }
     Ok(output)
 }
 
@@ -415,7 +495,12 @@ pub fn view(service: &Service, input: &Value) -> Result<Value> {
     let v = app_object_opt(
         input,
         &["application", "spec"],
-        &["applicability", "goalDerivations"],
+        &[
+            "applicability",
+            "goalDerivations",
+            "evidence",
+            "derivations",
+        ],
     )?;
     let application = app_id(&v["application"])?;
     let spec_ref = app_ref(&v["spec"])?;
@@ -427,10 +512,10 @@ pub fn view(service: &Service, input: &Value) -> Result<Value> {
             applicability.insert(name.clone(), parse_applicability(row)?);
         }
     }
-    let snapshot = service
-        .inspect(application)?
-        .ok_or_else(|| fail("Missing application state"))?;
     let history = service.history(application)?;
+    let snapshot = history
+        .last()
+        .ok_or_else(|| fail("Missing application state"))?;
     let spec = load_view_spec(service, spec_ref)?;
     let mut evidence = BTreeMap::new();
     if let Some(raw) = v.get("goalDerivations") {
@@ -441,13 +526,31 @@ pub fn view(service: &Service, input: &Value) -> Result<Value> {
             );
         }
     }
-    let goals = crate::application_goal::capture_goals(&service.store, &snapshot, &evidence)?;
-    project_view_with_goals(
-        &snapshot,
+    let goals = crate::application_goal::capture_goals(&service.store, snapshot, &evidence)?;
+    let mut captured_evidence = None;
+    if let Some(requested) = v.get("evidence") {
+        if requested != &json!(true) {
+            return Err(fail("Evidence capture requires literal true"));
+        }
+        let derivations = match v.get("derivations") {
+            Some(refs) => crate::application_memory::app_refs(refs, 32)?,
+            None => vec![],
+        };
+        captured_evidence = Some(crate::application_view_evidence::collect(
+            service,
+            &history,
+            &derivations,
+        )?);
+    } else if v.contains_key("derivations") {
+        return Err(fail("Derivations require evidence capture"));
+    }
+    project_view_with_evidence(
+        snapshot,
         &spec,
         Some(&history),
         &applicability,
         snapshot.revision.goals.as_ref().map(|_| &goals),
+        captured_evidence.as_ref(),
     )
 }
 

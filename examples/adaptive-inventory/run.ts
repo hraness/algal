@@ -6,6 +6,7 @@ import {
   parseRunReceipt, projectApplicationView, putApplicationRecord, verifyReceipt,
   type ApplicationAdmission, type ApplicationSnapshot,
 } from "../../index";
+import { collectApplicationViewEvidence } from "../../src/application-view";
 import { evaluateApplicationGoals } from "../../src/application-goal";
 import { ApplicationMemoryService } from "../../src/application-memory";
 import { NativeMemoryQueryEngine } from "../../src/application-native-memory";
@@ -51,20 +52,20 @@ export type InventoryEvidence = {
   contract: "algal.adaptive-inventory-demo.v1";
   goal: {reference: Digest; statuses: string[]};
   root: string; nativeSha256: string; state: Digest; revision: Digest; evaluation: Digest;
-  proposal: Digest; view: Digest; decision: string; observations: number; probeEffects: number;
+  proposal: Digest; view: Digest; unknownView: Digest; decision: string; observations: number; probeEffects: number;
   episodeEffects: number; restartRedeliveries: number; contenders: { accepted: number; rejected: number };
   hostInvocations: { phase: Phase; pid: number; exitCode: number; evidence: Digest }[];
   toolDiscovery: { before: string; after: string; executions: number };
   evaluationCases: { train: number; validation: number; holdout: number; executions: number };
   inhabitants: { name: string; manifest: Digest; capabilities: string[]; maxWork: number; maxAgentCalls: number }[];
   qualification: { proposal: "authored-deterministic"; inference: "native-replay-verified"; modelCalls: 0; paidApiSpendUsd: 0 };
-  report: string | null;
+  report: string | null; unknownReport: string | null;
 };
 type PhaseEvidence = {
   goal?: Digest; goalStatuses?: string[];
   phase: Phase; pid: number; state: Digest; observations: number; probeEffects: number; episodeEffects: number;
   toolExecutions: number; proposal?: Digest; candidate?: Digest; evaluation?: Digest; evaluationExecutions?: number;
-  accepted?: number; restartRedeliveries?: number; view?: Digest; inhabitants?: InventoryEvidence["inhabitants"];
+  accepted?: number; restartRedeliveries?: number; view?: Digest; unknownView?: Digest; inhabitants?: InventoryEvidence["inhabitants"];
 };
 
 /** Every application operation happens in a fresh host process. The parent only
@@ -85,20 +86,23 @@ export async function runInventoryScenario(root: string, executable: string, rep
     hostInvocations.push({ phase, pid: result.pid, exitCode: 0, evidence: identity(retained) }); final = result;
   }
   ensure(new Set(hostInvocations.map(p => p.pid)).size === phases.length, "Host phases did not use distinct processes");
-  ensure(final?.candidate && final.evaluation && final.proposal && final.view && final.inhabitants && final.goal && final.goalStatuses && final.evaluationExecutions === 12 && final.accepted === 1, "Final phase evidence is incomplete");
-  let report: string | null = null;
+  ensure(final?.candidate && final.evaluation && final.proposal && final.view && final.unknownView && final.inhabitants && final.goal && final.goalStatuses && final.evaluationExecutions === 12 && final.accepted === 1, "Final phase evidence is incomplete");
+  let report: string | null = null, unknownReport: string | null = null;
   if (reportExecutable) {
-    const output = await childOutput([reportExecutable, "--dir", join(root, "report-store"), "application", "report", join(root, "view.json")], root, 10000);
-    report = join(root, "report.html"); await writeFile(report, output, { flag: "wx" });
+    for (const suffix of ["-unknown", ""]) {
+      const output = await childOutput([reportExecutable, "--dir", join(root, "report-store"), "application", "report", join(root, `view${suffix}.json`)], root, 10000);
+      const path = join(root, `report${suffix}.html`); await writeFile(path, output, { flag: "wx" });
+      if (suffix) unknownReport = path; else report = path;
+    }
   }
   const evidence: InventoryEvidence = {
     contract: "algal.adaptive-inventory-demo.v1", goal: {reference: final.goal, statuses: final.goalStatuses}, root, nativeSha256, state: final.state, revision: final.candidate,
-    evaluation: final.evaluation, proposal: final.proposal, view: final.view, decision: "restock", observations: final.observations,
+    evaluation: final.evaluation, proposal: final.proposal, view: final.view, unknownView: final.unknownView, decision: "restock", observations: final.observations,
     probeEffects: final.probeEffects, episodeEffects: final.episodeEffects, restartRedeliveries: final.restartRedeliveries!,
     contenders: { accepted: final.accepted, rejected: 1 }, hostInvocations,
     toolDiscovery: { before: toolA, after: toolB, executions: final.toolExecutions },
     evaluationCases: { train: 2, validation: 3, holdout: 2, executions: final.evaluationExecutions },
-    inhabitants: final.inhabitants, qualification: { proposal: "authored-deterministic", inference: "native-replay-verified", modelCalls: 0, paidApiSpendUsd: 0 }, report,
+    inhabitants: final.inhabitants, qualification: { proposal: "authored-deterministic", inference: "native-replay-verified", modelCalls: 0, paidApiSpendUsd: 0 }, report, unknownReport,
   };
   await writeFile(join(root, "evidence.json"), canonicalize(json(evidence)), { flag: "wx" });
   return evidence;
@@ -197,6 +201,16 @@ async function runPhase(root: string, executable: string, phase: Phase): Promise
     evidence.goal = captured.goal; evidence.goalStatuses = [...(evidence.goalStatuses ?? []), captured.status];
     return captured;
   };
+  const captureView = async (head: ApplicationSnapshot, objective: Awaited<ReturnType<typeof captureGoal>>, filename: string) => {
+    ensure(objective.derivation, "Captured goal has no derivation evidence");
+    const entry = head.revision.entrypoints.find(e => e.name === objective.definition.entrypoint)!;
+    const history = await service.history("inventory");
+    const diagnostics = await collectApplicationViewEvidence(service, history, [objective.derivation]);
+    const view = projectApplicationView({snapshot: head, spec: {...viewSpec, widgets: [...viewSpec.widgets]}, history, goals: [objective], evidence: diagnostics,
+      applicability: {[entry.name]: {status: objective.status, queryResult: {digest: objective.derivation, state: head.digest, procedure: entry.manifest}}}});
+    await writeFile(join(root, filename), canonicalize(json(view)), {flag: "wx"});
+    return identity(view);
+  };
   const schedule = async (head: ApplicationSnapshot, operation: string) => {
     const objective = await captureGoal(head);
     ensure(objective.status === "unknown" || objective.status === "stale", "Investigation must be driven by an unresolved retained goal");
@@ -249,6 +263,9 @@ async function runPhase(root: string, executable: string, phase: Phase): Promise
       const genesis = await service.create({ application: "inventory", operation: identity("inventory-genesis"), kind: "create", expectedHead: null, revision, memory: genesisMemory, intents: [], evidence: [], causedBy: null });
       ensure((await memory.query(genesis.digest, query)).derivation.status === "unknown", "Genesis should have no observations");
       await schedule(genesis, "observe-stock");
+      const pending = await inspect(), unknown = (await evaluateApplicationGoals(memory, pending))[0];
+      ensure(unknown?.status === "unknown", "Initial diagnostic view must retain the unresolved goal");
+      evidence.unknownView = await captureView(pending, unknown, "view-unknown.json");
     } else if (phase === "observe") {
       await observe(); await execution(await inspect(), "execute-incumbent"); await settleEpisode(toolA, "hold");
       await rename(join(workspace, toolA), join(workspace, toolB));
@@ -293,10 +310,8 @@ async function runPhase(root: string, executable: string, phase: Phase): Promise
     } else {
       evidence.restartRedeliveries = (await service.dispatchPending("inventory", dispatcher)).length;
       ensure(evidence.restartRedeliveries === 0, "Host restart repeated a settled delivery");
-      const head = await inspect(), objective = await captureGoal(head), entry = head.revision.entrypoints.find(e => e.name === objective.definition.entrypoint)!;
-      ensure(objective.derivation, "Final goal has no captured evidence");
-      const view = projectApplicationView({ snapshot: head, spec: { ...viewSpec, widgets: [...viewSpec.widgets] }, history: await service.history("inventory"), goals: [objective], applicability: { [entry.name]: { status: objective.status, queryResult: { digest: objective.derivation, state: head.digest, procedure: entry.manifest } } } });
-      await writeFile(join(root, "view.json"), canonicalize(json(view)), { flag: "wx" }); evidence.view = identity(view);
+      const head = await inspect(), objective = await captureGoal(head);
+      evidence.view = await captureView(head, objective, "view.json");
       evidence.inhabitants = await Promise.all(head.revision.entrypoints.map(async entry => { const manifest = await store.getManifest(entry.manifest); ensure(manifest, "Inhabitant manifest missing"); return { name: entry.name, manifest: entry.manifest, capabilities: entry.capabilities, maxWork: manifest.budgets.maxWork, maxAgentCalls: manifest.budgets.maxAgentCalls }; }));
     }
     evidence.state = (await inspect()).digest;

@@ -1296,7 +1296,7 @@ impl<'a> Service<'a> {
         Ok(rows)
     }
 
-    fn dispatch_record(
+    pub(crate) fn dispatch_record(
         &self,
         application: &str,
         intent: &str,
@@ -1586,7 +1586,7 @@ impl<'a> Service<'a> {
         Ok(next)
     }
 
-    fn validate_plan(
+    pub(crate) fn validate_plan(
         &self,
         snapshot: &Snapshot,
         work: &Intent,

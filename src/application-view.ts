@@ -3,6 +3,9 @@
  * mutable latest pointer. */
 import { APPLICATION_LIMITS, applicationId, applicationInt, applicationJson, applicationList, applicationObject, applicationRef, applicationTag } from "./application-contract";
 import { bindApplicationGoalCaptures, parseApplicationGoalCapture, type ApplicationGoalCapture } from "./application-goal";
+import { parseApplicationViewEvidence, type ApplicationViewEvidence } from "./application-view-evidence";
+export { collectApplicationViewEvidence, parseApplicationViewEvidence } from "./application-view-evidence";
+export type { ApplicationViewEvidence } from "./application-view-evidence";
 import type { MemoryStatus } from "./application-memory";
 import type { ApplicationSnapshot } from "./application";
 import type { Digest } from "./digest";
@@ -40,6 +43,7 @@ export type ApplicationView = {
   title: string;
   widgets: ApplicationViewWidget[];
   goals?: ApplicationGoalCapture[];
+  evidence?: ApplicationViewEvidence;
   procedures: { name: string; manifest: Digest; applicability: MemoryStatus }[];
   history: { state: Digest; sequence: number; revision: Digest; memory: Digest }[];
   investigations: { intent: Digest; expectedState: Digest }[];
@@ -77,6 +81,7 @@ export function projectApplicationView(input: {
   history?: ApplicationSnapshot[];
   applicability?: Record<string, ApplicationApplicability>;
   goals?: ApplicationGoalCapture[];
+  evidence?: ApplicationViewEvidence;
 }): ApplicationView {
   const { snapshot, spec } = input;
   const history = input.history ?? [snapshot];
@@ -87,16 +92,25 @@ export function projectApplicationView(input: {
     if (i > 0 && history[i]!.state.sequence <= history[i - 1]!.state.sequence) throw new Error("View history sequences must increase");
   }
   const applicability = input.applicability ?? {};
+  const evidence = input.evidence === undefined ? undefined : parseApplicationViewEvidence(input.evidence, snapshot.digest, snapshot.state.memory);
+  const selectedApplicability = (name: string): ApplicationApplicability | undefined => {
+    const selected = Object.hasOwn(applicability, name) ? applicability[name] : undefined;
+    if (!evidence) return selected;
+    const entry = snapshot.revision.entrypoints.find(item => item.name === name)!, query = evidence.queries.find(item => item.query === entry.applicability);
+    if (!query) throw new Error("View evidence omits the entrypoint applicability query");
+    if (selected && (selected.status !== query.status || (selected.queryResult && selected.queryResult.digest !== query.derivation))) throw new Error("Applicability conflicts with captured evidence");
+    return selected ?? {status: query.status};
+  };
   const procedures = snapshot.revision.entrypoints.map(entry => ({
     name: entry.name,
     manifest: entry.manifest,
-    applicability: applicability[entry.name]?.status ?? "unknown",
+    applicability: selectedApplicability(entry.name)?.status ?? "unknown",
   }));
   const goals = snapshot.revision.goals !== undefined || input.goals !== undefined ? bindApplicationGoalCaptures(snapshot, input.goals ?? []) : undefined;
   const actions: ApplicationViewAction[] = [];
   for (const entry of snapshot.revision.entrypoints) {
-    const result = applicability[entry.name]?.queryResult;
-    if (result && applicability[entry.name]?.status === "supported") {
+    const result = selectedApplicability(entry.name)?.queryResult;
+    if (result && selectedApplicability(entry.name)?.status === "supported") {
       if (result.state !== snapshot.digest || result.procedure !== entry.manifest) throw new Error("Applicability result is not bound to the captured application state");
       actions.push({kind: "execute-procedure", expectedState: snapshot.digest, procedure: entry.manifest, queryResult: result.digest});
     }
@@ -106,6 +120,7 @@ export function projectApplicationView(input: {
     contract: "algal.application-view.v1", application: snapshot.state.application, state: snapshot.digest,
     revision: snapshot.state.revision, memory: snapshot.state.memory, title: spec.title, widgets: spec.widgets,
     ...(goals !== undefined ? {goals} : {}),
+    ...(evidence !== undefined ? {evidence} : {}),
     procedures, history: history.slice(-128).map(item => ({state: item.digest, sequence: item.state.sequence, revision: item.state.revision, memory: item.state.memory})),
     investigations, actions, truncated: history.length > 128,
   };
@@ -126,7 +141,8 @@ export async function loadApplicationRuntimeProfile(store: Store, ref: Digest): 
 
 export function parseApplicationView(input: unknown): ApplicationView {
   const hasGoals = !!input && typeof input === "object" && Object.hasOwn(input, "goals");
-  const v = applicationObject(input, ["contract", "application", "state", "revision", "memory", "title", "widgets", "procedures", "history", "investigations", "actions", "truncated", ...(hasGoals ? ["goals"] : [])]);
+  const hasEvidence = !!input && typeof input === "object" && Object.hasOwn(input, "evidence");
+  const v = applicationObject(input, ["contract", "application", "state", "revision", "memory", "title", "widgets", "procedures", "history", "investigations", "actions", "truncated", ...(hasGoals ? ["goals"] : []), ...(hasEvidence ? ["evidence"] : [])]);
   applicationTag(v.contract, "algal.application-view.v1");
   const application = applicationId(v.application), state = applicationRef(v.state), revision = applicationRef(v.revision), memory = applicationRef(v.memory);
   const procedures = applicationList(v.procedures, 32, raw => {
@@ -161,5 +177,9 @@ export function parseApplicationView(input: unknown): ApplicationView {
   });
   applicationId(v.application); applicationRef(v.state); applicationRef(v.revision); applicationRef(v.memory); text(v.title, 256); widgets(v.widgets);
   if (typeof v.truncated !== "boolean") throw new Error("Invalid view truncation marker");
-  return {contract: "algal.application-view.v1", application, state, revision, memory, title: text(v.title, 256), widgets: widgets(v.widgets), ...(goals !== undefined ? {goals} : {}), procedures, history, investigations, actions, truncated: v.truncated};
+  const evidence = hasEvidence ? parseApplicationViewEvidence(v.evidence, state, memory) : undefined;
+  if (evidence?.revisions.at(-1)!.revision !== undefined && evidence.revisions.at(-1)!.revision !== revision) throw new Error("Evidence revision differs from captured view revision");
+  if (evidence?.work.some(work => history.some(row => row.state === work.sourceState && (row.revision !== work.revision || row.memory !== work.memory)))) throw new Error("Evidence work binding differs from captured history");
+  if (evidence && actions.some(action => action.kind === "execute-procedure" && !evidence.queries.some(query => query.derivation === action.queryResult && query.status === "supported"))) throw new Error("View action conflicts with captured query evidence");
+  return {contract: "algal.application-view.v1", application, state, revision, memory, title: text(v.title, 256), widgets: widgets(v.widgets), ...(goals !== undefined ? {goals} : {}), ...(evidence !== undefined ? {evidence} : {}), procedures, history, investigations, actions, truncated: v.truncated};
 }

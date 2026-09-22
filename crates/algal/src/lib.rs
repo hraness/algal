@@ -9,6 +9,7 @@ pub mod application_migration;
 mod application_quota;
 pub mod application_report;
 pub mod application_view;
+pub mod application_view_evidence;
 pub mod bench;
 pub mod build_info;
 pub mod canonical;
