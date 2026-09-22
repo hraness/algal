@@ -286,34 +286,6 @@ pub fn validate(value: &Value) -> Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-    fn receipt() -> Value {
-        let reference = format!("sha256:{}", "a".repeat(64));
-        json!({"contract":"algal.run.v1","runtime":{"name":"algal","version":"0.1.0"},"manifestDigest":reference,"manifestKey":"organism:test","args":{},"outcome":"complete","cells":{},"effects":[],"events":[],"work":{"steps":0,"agentCalls":0,"units":0},"digest":reference})
-    }
-    #[test]
-    fn foreign_receipts_are_closed_and_typed_before_replay() {
-        let original = receipt();
-        assert!(validate(&original).is_ok());
-        for mutation in [
-            json!({"extra":true}),
-            json!({"runtime":{"name":"other","version":"0.1.0"}}),
-            json!({"work":{"steps":0,"agentCalls":0}}),
-            json!({"cells":{"a":{"status":"committed","work":0,"extra":true}}}),
-            json!({"effects":[{"requestDigest":original["digest"],"executor":"test","output":1,"error":{"code":"INTERNAL","message":"bad"}}]}),
-        ] {
-            let mut changed = original.clone();
-            for (key, value) in mutation.as_object().unwrap() {
-                changed[key] = value.clone();
-            }
-            assert!(validate(&changed).is_err(), "accepted {mutation}");
-        }
-    }
-}
-
 fn canon_eq(a: Option<&Value>, b: Option<&Value>) -> bool {
     let empty = Value::Null;
     canonical(a.unwrap_or(&empty)).unwrap_or_default()
@@ -484,4 +456,32 @@ pub fn diff(a: &Value, b: &Value) -> Vec<String> {
         out.push("receipt records differ".into());
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    fn receipt() -> Value {
+        let reference = format!("sha256:{}", "a".repeat(64));
+        json!({"contract":"algal.run.v1","runtime":{"name":"algal","version":"0.1.0"},"manifestDigest":reference,"manifestKey":"organism:test","args":{},"outcome":"complete","cells":{},"effects":[],"events":[],"work":{"steps":0,"agentCalls":0,"units":0},"digest":reference})
+    }
+    #[test]
+    fn foreign_receipts_are_closed_and_typed_before_replay() {
+        let original = receipt();
+        assert!(validate(&original).is_ok());
+        for mutation in [
+            json!({"extra":true}),
+            json!({"runtime":{"name":"other","version":"0.1.0"}}),
+            json!({"work":{"steps":0,"agentCalls":0}}),
+            json!({"cells":{"a":{"status":"committed","work":0,"extra":true}}}),
+            json!({"effects":[{"requestDigest":original["digest"],"executor":"test","output":1,"error":{"code":"INTERNAL","message":"bad"}}]}),
+        ] {
+            let mut changed = original.clone();
+            for (key, value) in mutation.as_object().unwrap() {
+                changed[key] = value.clone();
+            }
+            assert!(validate(&changed).is_err(), "accepted {mutation}");
+        }
+    }
 }
