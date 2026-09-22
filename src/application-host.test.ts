@@ -15,7 +15,7 @@ import { NativeMemoryQueryEngine } from "./application-native-memory";
 import { requestExecution } from "./application-investigation";
 import { evaluateApplicationRevision } from "./application-adaptation";
 import { parseOrganismManifest } from "./contract";
-import { parseWorkIntent } from "./application-contract";
+import { parseWorkIntent, type EpisodeBinding } from "./application-contract";
 import { capabilityHandle } from "./capabilities";
 import { digestCanonical } from "./digest";
 import { builtinRegistry } from "./registry";
@@ -126,7 +126,7 @@ test("equal delivery payloads preserve separate dispatch identities and reject l
 async function episodeFixture() {
   const f = await fixture(), snapshot = await f.service.create(f.command);
   const input = await f.put({ src: { value: "probe" } }), intent = hash("episode-intent");
-  const binding = { contract: "algal.application-episode.v1", application: "fixture", intent, sourceState: snapshot.digest,
+  const binding: EpisodeBinding = { contract: "algal.application-episode.v1", application: "fixture", intent, sourceState: snapshot.digest,
     revision: snapshot.state.revision, memory: snapshot.state.memory, epoch: 0, entrypoint: "run", manifest: f.body.entrypoints[0]!.manifest,
     arguments: input, process: applicationProcessName("fixture", intent), maxGenerations: 1, hostProfile: hash("profile"), access: "observe" };
   const context = { dispatch: { plan: { kind: "episode", binding } } } as ApplicationDispatchContext;
@@ -146,7 +146,7 @@ test("episode settlement makes its actual receipt and process reachable without 
   expect(receipt.outcome).toBe("complete");
   const process = await processes.inspect(binding.process);
   expect(process.process.maxGenerations).toBe(binding.maxGenerations);
-  expect(process.digest).toBe(evidence.processState);
+  expect(evidence.processState).toBe(process.digest);
   expect(process.process.generation).toBe(1);
   expect(await reconcileApplicationEpisode(context, { store: f.store })).toEqual(result);
   expect(await dispatchApplicationEpisode(context, { store: f.store })).toEqual(result);
