@@ -17,7 +17,7 @@ const mark = (
 
 const card = createSocialImageCard({
   description:
-    "A language and application VM for bounded agent programs. Durable review, retained work, and portable execution evidence.",
+    "A programming language and virtual machine where programs are organisms: typed, bounded, content-addressed — and every run leaves a verifiable fossil.",
   domain: "algal.computer",
   eyebrow: "ALGAL",
   mark,
@@ -27,7 +27,7 @@ const card = createSocialImageCard({
     foreground: "#1c1a18",
     muted: "#6b675f",
   },
-  title: "Agent work that survives a pause.",
+  title: "The language for living programs.",
 });
 
 const svg = await satori(card.element, {

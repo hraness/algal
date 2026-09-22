@@ -366,45 +366,48 @@ export function renderMermaid(view: ProgramDiagram): string {
 
 type PositionedNode = { node: DiagramNode; x: number; y: number; width: number; height: number; lines: string[] };
 
-function nodeLabel(node: DiagramNode): string {
-  return node.source ? `${node.category.toUpperCase()} · ${node.source.operation.replaceAll("-", " ")}` : node.label;
-}
+/** Serializable geometry for a diagram: positioned node boxes (with their
+ * rendered text lines) and routed edge paths. Shared by the SVG renderer and
+ * by interactive viewers so every presentation draws the same graph. */
+export type DiagramNodeLayout = {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  category: DiagramCategory;
+  status?: DiagramNode["status"];
+  /** Node face fill. */
+  fill: string;
+  /** Category accent used for the side bar and kind label. */
+  accent: string;
+  /** Recorded-status-aware border color. */
+  stroke: string;
+  label: string;
+  title: string;
+  lines: string[];
+};
+export type DiagramEdgeLayout = {
+  id: string;
+  kind: DiagramEdge["kind"];
+  path: string;
+  labelX: number;
+  labelY: number;
+  label: string;
+};
+export type DiagramLayout = {
+  width: number;
+  height: number;
+  margin: number;
+  headerHeight: number;
+  contentWidth: number;
+  nodes: DiagramNodeLayout[];
+  edges: DiagramEdgeLayout[];
+};
 
-function sourceLocation(node: DiagramNode): string {
-  if (!node.source) return "";
-  const { start, end } = node.source.span;
-  return start.line === end.line ? `Source line ${start.line}` : `Source lines ${start.line}–${end.line}`;
-}
-
-function visibleDetails(node: DiagramNode, compact: boolean): string[] {
-  let rows = node.source ? [node.source.summary, ...node.source.details].filter(Boolean)
-    : node.details.map(detail => detail.startsWith("sha256:") ? `Child ${detail.slice(0, 19)}…` : detail);
-  if (compact && node.source) {
-    if (node.source.operation === "input" || node.source.operation === "generate") rows = node.source.details;
-    if (node.source.operation === "decision-check") rows = ["Validate choice and probability metadata."];
-    if (node.source.operation === "branch-merge") rows = ["Exactly one selected arm supplies the result."];
-  }
-  const limit = node.source ? (compact ? 5 : 8) : node.kind === "repeat" ? 8 : compact ? 2 : 5;
-  const lines = rows.slice(0, limit);
-  if (rows.length > limit) lines.push(`+ ${rows.length - limit} details in diagram JSON`);
-  if (node.source) lines.push(`ID ${node.id} · ${sourceLocation(node)}`);
-  for (const p of node.inputs.filter(p => p.type?.type === "cap")) lines.push(`Authority: ${p.name} · ${describeDiagramPort(p.type)}`);
-  if (!compact) {
-    if (node.inputs.length) lines.push(`in  ${node.inputs.map(p => `${p.name}: ${describeDiagramPort(p.type)}`).join(", ")}`);
-    if (node.outputs.length) lines.push(`out  ${node.outputs.map(p => `${p.name}: ${describeDiagramPort(p.type)}`).join(", ")}`);
-  }
-  lines.push(...node.interfaceInputs.map(p => `INPUT ${p}`), ...node.interfaceOutputs.map(p => `OUTPUT ${p}`));
-  if (node.evidence?.rounds !== undefined) lines.push(`Recorded rounds: ${node.evidence.rounds}`);
-  if (node.evidence?.items !== undefined) lines.push(`Recorded items: ${node.evidence.items}`);
-  if (node.evidence?.failure) lines.push(`Failure: ${node.evidence.failure.code}`);
-  if (node.status) lines.push(`RECORDED ${node.status.toUpperCase()}`);
-  return lines;
-}
-
-/** Portable SVG: no scripts, foreignObject, network assets, or graph runtime.
- * Full labels live in title elements; exact ports/guards remain in the view.
- * JSON view is the accessible unabridged companion for very dense programs. */
-export function renderSvg(view: ProgramDiagram, options: SvgDiagramOptions = {}): string {
+/** Compute the layered layout used by `renderSvg`. Ranks are layout only;
+ * they do not promise parallel or timed execution. */
+export function layoutDiagram(view: ProgramDiagram, options: SvgDiagramOptions = {}): DiagramLayout {
   const compact = options.compact ?? false;
   const header = options.header ?? true;
   const nodeWidth = 336;
@@ -449,24 +452,7 @@ export function renderSvg(view: ProgramDiagram, options: SvgDiagramOptions = {})
   }
   const height = Math.max(headerHeight + 48, y - (levelGaps.at(-1) ?? gapY) + 50);
   const byId = new Map(placed.map(n => [n.node.id, n]));
-  const prefix = `algal-${view.manifestDigest.slice(7, 19)}${view.scope ? `-${digestCanonical({ root: view.scope.rootManifestDigest, path: view.scope.invocationPath }).slice(7, 19)}` : ""}`;
-  const out = [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="${prefix}-title ${prefix}-desc">`,
-    `<title id="${prefix}-title">${xml(view.name)} — Algal program</title>`,
-    `<desc id="${prefix}-desc">Exact data dependencies of ${xml(view.key)}. ${view.nodes.length} cells and ${view.edges.length} edges. Arrows carry named values; layout does not imply time or parallel execution. Dashed arrows carry failure records. ${view.receipt ? "Statuses are from a digest-bound root receipt, not replay-verified here. Missing statuses are unobserved." : "No execution status is implied."}${scopeLines.length ? ` ${xml(scopeLines.join(". "))}` : ""}</desc>`,
-    `<defs><marker id="${prefix}-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/></marker></defs>`,
-    `<rect width="${width}" height="${height}" rx="16" fill="#ffffff"/>`,
-    `<g font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" fill="#0f172a">`,
-  ];
-  if (header) {
-    out.push(`<text x="${margin}" y="34" font-size="20" font-weight="700"><title>${xml(view.name)}</title>${xml(clip(view.name, Math.floor((width - margin * 2) / 12)))}</text>`);
-    out.push(`<text x="${margin}" y="56" font-size="11" fill="#475569">${xml(clip(`Exact manifest · ${view.manifestDigest}`, Math.floor((width - margin * 2) / 6)))}</text>`);
-    out.push(`<text x="${margin}" y="78" font-size="12" fill="#475569">${xml(clip(`Limits: ${view.budgets.maxAgentCalls} executor calls · ${view.budgets.maxSteps} steps · depth ${view.budgets.maxDepth}`, Math.floor((width - margin * 2) / 6.3)))}</text>`);
-    out.push(`<text x="${margin}" y="98" font-size="11" fill="#475569">Arrows are data dependencies; dashed = failure.</text>`);
-    if (view.receipt) out.push(`<text x="${margin}" y="119" font-size="11" fill="#475569">${xml(clip(`Recorded ${view.scope ? "root " : ""}${view.receipt.outcome} · digest-bound, not replay-verified`, Math.floor((width - margin * 2) / 6)))}</text>`);
-  }
-  scopeLines.forEach((line, index) => out.push(`<text x="${margin}" y="${mainHeaderHeight + index * 19}" font-size="11" fill="#475569"><title>${xml(line)}</title>${xml(clip(line, Math.floor((width - margin * 2) / 6)))}</text>`));
-  view.edges.forEach(edge => {
+  const edgeLayouts = view.edges.map(edge => {
     const from = byId.get(edge.from.cell)!;
     const to = byId.get(edge.to.cell)!;
     const outgoing = view.edges.filter(e => e.from.cell === edge.from.cell);
@@ -484,7 +470,6 @@ export function renderSvg(view: ProgramDiagram, options: SvgDiagramOptions = {})
       const laneX = margin + contentWidth + 26 + (longIndex % 8) * 12;
       path = `M ${x1} ${y1} V ${midY} H ${laneX} V ${y2 - 16} H ${x2} V ${y2}`;
     } else path = `M ${x1} ${y1} V ${midY} H ${x2} V ${y2}`;
-    out.push(`<path d="${path}" fill="none" stroke="${edge.kind === "failure" ? "#b45309" : "#94a3b8"}" stroke-width="1.6"${edge.kind === "failure" ? ' stroke-dasharray="5 4"' : ""} marker-end="url(#${prefix}-arrow)"><title>${xml(edge.label)}</title></path>`);
     // Put the guard first: clipping must never hide which branch is selected.
     const shownLabel = edge.guard && "equals" in edge.guard
       ? `when ${edge.guard.field ? `${edge.guard.field} = ` : ""}${JSON.stringify(edge.guard.equals)} · ${edge.from.port} → ${edge.to.port}`
@@ -493,19 +478,108 @@ export function renderSvg(view: ProgramDiagram, options: SvgDiagramOptions = {})
     const labelWidth = Math.min(contentWidth, [...label].length * 5.8 + 12);
     const centerX = longIndex >= 0 ? x1 : (x1 + x2) / 2;
     const labelX = Math.max(margin + labelWidth / 2, Math.min(width - margin - labelWidth / 2, centerX));
-    out.push(`<rect x="${labelX - labelWidth / 2}" y="${midY - 9}" width="${labelWidth}" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>`);
-    out.push(`<text x="${labelX}" y="${midY + 2}" font-size="10" text-anchor="middle" fill="${edge.kind === "failure" ? "#92400e" : "#475569"}"><title>${xml(edge.label)}</title>${xml(label)}</text>`);
+    return { id: edge.id, kind: edge.kind, path, labelX, labelY: midY, label };
   });
-  for (const box of placed) {
-    const { node, x, y: top, width: w, height: h, lines } = box;
-    const colors = palette[node.category];
-    const statusColor = node.status === "failed" ? "#dc2626" : node.status === "suspended" ? "#d97706" : node.status === "committed" ? "#16a34a" : colors.stroke;
+  return {
+    width, height, margin, headerHeight, contentWidth,
+    nodes: placed.map(box => {
+      const colors = palette[box.node.category];
+      const statusStroke = box.node.status === "failed" ? "#dc2626" : box.node.status === "suspended" ? "#d97706" : box.node.status === "committed" ? "#16a34a" : colors.stroke;
+      return {
+        id: box.node.id, x: box.x, y: box.y, width: box.width, height: box.height,
+        category: box.node.category,
+        ...(box.node.status ? { status: box.node.status } : {}),
+        fill: colors.fill, accent: colors.stroke, stroke: statusStroke,
+        label: clip(nodeLabel(box.node), 45),
+        title: clip(box.node.source?.title ?? box.node.id, 31),
+        lines: box.lines,
+      };
+    }),
+    edges: edgeLayouts,
+  };
+}
+
+function nodeLabel(node: DiagramNode): string {
+  return node.source ? `${node.category.toUpperCase()} · ${node.source.operation.replaceAll("-", " ")}` : node.label;
+}
+
+function sourceLocation(node: DiagramNode): string {
+  if (!node.source) return "";
+  const { start, end } = node.source.span;
+  return start.line === end.line ? `Source line ${start.line}` : `Source lines ${start.line}–${end.line}`;
+}
+
+function visibleDetails(node: DiagramNode, compact: boolean): string[] {
+  let rows = node.source ? [node.source.summary, ...node.source.details].filter(Boolean)
+    : node.details.map(detail => detail.startsWith("sha256:") ? `Child ${detail.slice(0, 19)}…` : detail);
+  if (compact && node.source) {
+    if (node.source.operation === "input" || node.source.operation === "generate") rows = node.source.details;
+    if (node.source.operation === "decision-check") rows = ["Validate choice and probability metadata."];
+    if (node.source.operation === "branch-merge") rows = ["Exactly one selected arm supplies the result."];
+  }
+  const limit = node.source ? (compact ? 5 : 8) : node.kind === "repeat" ? 8 : compact ? 2 : 5;
+  const lines = rows.slice(0, limit);
+  if (rows.length > limit) lines.push(`+ ${rows.length - limit} details in diagram JSON`);
+  if (node.source) lines.push(`ID ${node.id} · ${sourceLocation(node)}`);
+  for (const p of node.inputs.filter(p => p.type?.type === "cap")) lines.push(`Authority: ${p.name} · ${describeDiagramPort(p.type)}`);
+  if (!compact) {
+    if (node.inputs.length) lines.push(`in  ${node.inputs.map(p => `${p.name}: ${describeDiagramPort(p.type)}`).join(", ")}`);
+    if (node.outputs.length) lines.push(`out  ${node.outputs.map(p => `${p.name}: ${describeDiagramPort(p.type)}`).join(", ")}`);
+  }
+  lines.push(...node.interfaceInputs.map(p => `INPUT ${p}`), ...node.interfaceOutputs.map(p => `OUTPUT ${p}`));
+  if (node.evidence?.rounds !== undefined) lines.push(`Recorded rounds: ${node.evidence.rounds}`);
+  if (node.evidence?.items !== undefined) lines.push(`Recorded items: ${node.evidence.items}`);
+  if (node.evidence?.failure) lines.push(`Failure: ${node.evidence.failure.code}`);
+  if (node.status) lines.push(`RECORDED ${node.status.toUpperCase()}`);
+  return lines;
+}
+
+/** Portable SVG: no scripts, foreignObject, network assets, or graph runtime.
+ * Full labels live in title elements; exact ports/guards remain in the view.
+ * JSON view is the accessible unabridged companion for very dense programs. */
+export function renderSvg(view: ProgramDiagram, options: SvgDiagramOptions = {}): string {
+  const header = options.header ?? true;
+  const layout = layoutDiagram(view, options);
+  const margin = layout.margin;
+  const width = layout.width;
+  const height = layout.height;
+  const mainHeaderHeight = header ? (view.receipt ? 154 : 132) : 20;
+  const scopeLines = scopeDetails(view);
+  const nodesById = new Map(view.nodes.map(node => [node.id, node]));
+  const edgesById = new Map(view.edges.map(edge => [edge.id, edge]));
+  const prefix = `algal-${view.manifestDigest.slice(7, 19)}${view.scope ? `-${digestCanonical({ root: view.scope.rootManifestDigest, path: view.scope.invocationPath }).slice(7, 19)}` : ""}`;
+  const out = [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="${prefix}-title ${prefix}-desc">`,
+    `<title id="${prefix}-title">${xml(view.name)} — Algal program</title>`,
+    `<desc id="${prefix}-desc">Exact data dependencies of ${xml(view.key)}. ${view.nodes.length} cells and ${view.edges.length} edges. Arrows carry named values; layout does not imply time or parallel execution. Dashed arrows carry failure records. ${view.receipt ? "Statuses are from a digest-bound root receipt, not replay-verified here. Missing statuses are unobserved." : "No execution status is implied."}${scopeLines.length ? ` ${xml(scopeLines.join(". "))}` : ""}</desc>`,
+    `<defs><marker id="${prefix}-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/></marker></defs>`,
+    `<rect width="${width}" height="${height}" rx="16" fill="#ffffff"/>`,
+    `<g font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" fill="#0f172a">`,
+  ];
+  if (header) {
+    out.push(`<text x="${margin}" y="34" font-size="20" font-weight="700"><title>${xml(view.name)}</title>${xml(clip(view.name, Math.floor((width - margin * 2) / 12)))}</text>`);
+    out.push(`<text x="${margin}" y="56" font-size="11" fill="#475569">${xml(clip(`Exact manifest · ${view.manifestDigest}`, Math.floor((width - margin * 2) / 6)))}</text>`);
+    out.push(`<text x="${margin}" y="78" font-size="12" fill="#475569">${xml(clip(`Limits: ${view.budgets.maxAgentCalls} executor calls · ${view.budgets.maxSteps} steps · depth ${view.budgets.maxDepth}`, Math.floor((width - margin * 2) / 6.3)))}</text>`);
+    out.push(`<text x="${margin}" y="98" font-size="11" fill="#475569">Arrows are data dependencies; dashed = failure.</text>`);
+    if (view.receipt) out.push(`<text x="${margin}" y="119" font-size="11" fill="#475569">${xml(clip(`Recorded ${view.scope ? "root " : ""}${view.receipt.outcome} · digest-bound, not replay-verified`, Math.floor((width - margin * 2) / 6)))}</text>`);
+  }
+  scopeLines.forEach((line, index) => out.push(`<text x="${margin}" y="${mainHeaderHeight + index * 19}" font-size="11" fill="#475569"><title>${xml(line)}</title>${xml(clip(line, Math.floor((width - margin * 2) / 6)))}</text>`));
+  for (const edge of layout.edges) {
+    const source = edgesById.get(edge.id)!;
+    const labelWidth = Math.min(layout.contentWidth, [...edge.label].length * 5.8 + 12);
+    out.push(`<path d="${edge.path}" fill="none" stroke="${edge.kind === "failure" ? "#b45309" : "#94a3b8"}" stroke-width="1.6"${edge.kind === "failure" ? ' stroke-dasharray="5 4"' : ""} marker-end="url(#${prefix}-arrow)"><title>${xml(source.label)}</title></path>`);
+    out.push(`<rect x="${edge.labelX - labelWidth / 2}" y="${edge.labelY - 9}" width="${labelWidth}" height="16" rx="4" fill="#ffffff" fill-opacity="0.96"/>`);
+    out.push(`<text x="${edge.labelX}" y="${edge.labelY + 2}" font-size="10" text-anchor="middle" fill="${edge.kind === "failure" ? "#92400e" : "#475569"}"><title>${xml(source.label)}</title>${xml(edge.label)}</text>`);
+  }
+  for (const box of layout.nodes) {
+    const node = nodesById.get(box.id)!;
+    const { x, y: top, width: w, height: h, lines } = box;
     out.push(`<g><title>${xml([node.label, node.id, ...(node.source ? [node.source.title, node.source.summary, ...node.source.details, sourceLocation(node)] : []), ...node.details, ...node.inputs.map(p => `in ${p.name}: ${describeDiagramPort(p.type)}`), ...node.outputs.map(p => `out ${p.name}: ${describeDiagramPort(p.type)}`), ...lines].join("; "))}</title>`);
-    out.push(`<rect x="${x}" y="${top}" width="${w}" height="${h}" rx="10" fill="${colors.fill}" stroke="${statusColor}" stroke-width="1.4"${node.status === "skipped" ? ' stroke-dasharray="5 4"' : ""}/>`);
-    out.push(`<rect x="${x}" y="${top + 12}" width="4" height="${h - 24}" rx="2" fill="${colors.stroke}"/>`);
-    out.push(`<text x="${x + 17}" y="${top + 23}" font-size="10" letter-spacing="0.5" font-weight="700" fill="${colors.stroke}">${xml(clip(nodeLabel(node), 45))}</text>`);
-    out.push(`<text x="${x + 17}" y="${top + 46}" font-size="16" font-weight="650">${xml(clip(node.source?.title ?? node.id, 31))}</text>`);
-    lines.forEach((line, i) => out.push(`<text x="${x + 17}" y="${top + 66 + i * 17}" font-size="11" fill="${line.startsWith("RECORDED ") ? statusColor : "#475569"}"><title>${xml(line)}</title>${xml(clip(line, 47))}</text>`));
+    out.push(`<rect x="${x}" y="${top}" width="${w}" height="${h}" rx="10" fill="${box.fill}" stroke="${box.stroke}" stroke-width="1.4"${node.status === "skipped" ? ' stroke-dasharray="5 4"' : ""}/>`);
+    out.push(`<rect x="${x}" y="${top + 12}" width="4" height="${h - 24}" rx="2" fill="${box.accent}"/>`);
+    out.push(`<text x="${x + 17}" y="${top + 23}" font-size="10" letter-spacing="0.5" font-weight="700" fill="${box.accent}">${xml(box.label)}</text>`);
+    out.push(`<text x="${x + 17}" y="${top + 46}" font-size="16" font-weight="650">${xml(box.title)}</text>`);
+    lines.forEach((line, i) => out.push(`<text x="${x + 17}" y="${top + 66 + i * 17}" font-size="11" fill="${line.startsWith("RECORDED ") ? box.stroke : "#475569"}"><title>${xml(line)}</title>${xml(clip(line, 47))}</text>`));
     out.push("</g>");
   }
   out.push("</g></svg>");

@@ -1,199 +1,49 @@
 # ALGAL
 
-> Agent work that survives a pause—and comes back with evidence. ALGAL is a
-> language and application VM for bounded agent programs with durable human
-> review, explicit effects, reusable program artifacts, and portable evidence.
+ALGAL is a programming language and application VM for bounded agent programs. Programs ("organisms") are typed, content-addressed data: they wait without dying, remember across runs, propose their own successors, and leave a verifiable fossil of every execution. Model judgment is a declared, budgeted effect; everything around it is pure dataflow. A native Rust kernel and a TypeScript/Bun reference runtime execute the same manifest, and a saved run can hand off between them.
 
-## Start with a practical job
+## Pages
 
-Native prerelease packages are available for Apple silicon macOS and
-Linux x86_64. Follow the release guide to verify and install. The native demo
-needs no Bun, Cargo, checkout, credentials, or web server:
+- [The language for living programs](https://algal.computer/): vision, organism anatomy, the habitat machine, fossils, reproduction and selection
+- [Inside a living program — tour](https://algal.computer/tour/): executable walkthrough with recorded runs, replayable interactive diagrams, diagnostics, and composition examples
+- [Put living programs to work](https://algal.computer/use-cases/): durable review, checked coding repair, portable execution evidence, reusable routing, and the adoption boundary
 
-```sh
-algal doctor
-algal demo start ./my-review
-algal demo inspect ./my-review
-algal demo prove ./crash-laboratory
-```
+## Downloadable evidence
 
-Open my-review/report.html. The exact approve/deny command binds the proposal
-and local action. The first invocation exits while waiting; a later invocation
-reuses the retained decision. Default decisions are deterministic fixtures.
-The crash laboratory kills its own child at a journal barrier, verifies that a
-read recovery reuses a completed prefix write, and blocks an uncertain write.
-These are real local execution/recovery checks, not live model quality claims.
+- [Reply program source](https://algal.computer/examples/reply.algal)
+- [Reply compiled manifest](https://algal.computer/examples/reply.algal.json)
+- [Reply recorded receipt](https://algal.computer/receipts/reply.receipt.json)
+- [Reply diagram JSON](https://algal.computer/diagrams/reply.json)
+- [Reply interactive view](https://algal.computer/diagrams/reply-run.view.json): `algal.diagram-view.v1` — diagram + layout + recorded event order
+- [Routing program source](https://algal.computer/examples/route.algal)
+- [Routing manifest](https://algal.computer/examples/route.algal.json)
+- [Recorded support receipt](https://algal.computer/receipts/route-help.receipt.json)
+- [Recorded sales receipt](https://algal.computer/receipts/route-sales.receipt.json)
+- [Recorded human-review receipt](https://algal.computer/receipts/route-other.receipt.json)
+- [Reusable inbox caller](https://algal.computer/examples/projects/inbox/inbox.algal)
+- [Reusable inbox helper](https://algal.computer/examples/projects/inbox/draft.algal)
+- [Inbox compiled manifest](https://algal.computer/examples/projects/inbox/inbox.algal.json)
+- [Inbox portable bundle](https://algal.computer/examples/projects/inbox/inbox.bundle.json)
+- [Inbox recorded receipt](https://algal.computer/receipts/inbox.receipt.json)
+- [Empty-list inbox receipt](https://algal.computer/receipts/inbox-empty.receipt.json)
+- [Source diagnostics report](https://algal.computer/receipts/ratios.diagnostics.json)
+- [Ratios failure receipt](https://algal.computer/receipts/ratios.receipt.json)
+- [Ratios reproduction bundle](https://algal.computer/examples/projects/ratios/ratios.bundle.json)
 
-Practical paths:
-- Human-reviewed change briefs: retained evidence, proposal and exact local
-  publication. The optional private brief uses one real on-device Apple model
-  request, a compatible separate bridge, Python harness, and a new root. A
-  later approval continues without a model executor; errors are not retried.
-- Checked coding repairs: Bun host fixes the source revision and acceptance
-  commands, retains a proposed patch, and validates it before creating a review
-  packet. Uncertain provider work keeps custody and is not automatically relaunched.
-  The bundled reproducible demo uses a deterministic adapter; live provider
-  configuration and qualification are separate.
-- Detached evidence: export a bounded process history and replay it without the
-  original store, credentials or model. Verification checks recorded execution;
-  it does not authenticate an author, attest a provider, or establish prose truth.
-- Reusable support workflows: typed routing, only selected branches execute,
-  and a named helper runs over a bounded inbox with ordered results.
-- PR observation: the Bun read-only shepherd collects revision-bound GitHub
-  evidence and suspends while CI is pending. Waiting requires no model calls.
+## Documentation
 
-These are host-owned application workflows. There is no OS sandbox,
-multi-tenant service, distributed custody, global store quota or retention
-service. Native packages remain unsigned and unnotarized prereleases. External
-effects need adapter-specific idempotency and reconciliation; the VM does not
-promise exactly-once arbitrary writes or measured cost savings over other engines.
+- [Repository](https://github.com/hraness/algal)
+- [Native VM and release artifacts](https://github.com/hraness/algal/blob/main/docs/native-release.md)
+- [VM demo and crash laboratory](https://github.com/hraness/algal/blob/main/docs/vm.md)
+- [Readable source language](https://github.com/hraness/algal/blob/main/docs/source-language.md)
+- [Use cases and adoption boundary](https://github.com/hraness/algal/blob/main/docs/use-cases.md)
+- [Habitats and self-reproduction](https://github.com/hraness/algal/blob/main/docs/habitats.md)
+- [Civilization loop](https://github.com/hraness/algal/blob/main/docs/civilization.md)
+- [What distinguishes ALGAL](https://github.com/hraness/algal/blob/main/docs/why-unique.md)
+- [Organism manifest spec](https://github.com/hraness/algal/blob/main/spec/v1/organism.md)
 
-The public package is @hraness/algal. Executable manifests use the
-algal.organism.v1 contract. Source authoring uses .algal files; the deterministic
-Bun compiler emits the existing .algal.json format plus an optional source map.
-Both Bun and Rust runtimes execute the compiled manifest. Native source parsing
-is not part of this first source-language release.
+## Honesty notes
 
-## Readable source and diagrams
-
-The first source-language subset includes typed program inputs, immutable let
-bindings, literal values, typed decide operations, generate with explicit
-context, deterministic if and exhaustive match, conditional model effects, local
-imports, named call, bounded each, and return. Advanced repeat, tool, wait, and
-evolution operations remain available through manifests.
-
-`bun cli.ts check program.algal` also returns source analysis: entry module,
-source-file count, inferred maximum executor attempts (`maxAgentCalls`), and
-required child nesting levels (`requiredDepth`). These are structural bounds,
-not price, latency, or model-quality forecasts. The inbox project has two
-source files, a maximum of four attempts, and one child nesting level.
-
-Compiler and source-loading failures use JSON by default, preserving error and
-message and adding a structured diagnostic. The Bun CLI accepts
-`--diagnostic-format text|json` wherever it loads source. Readable errors show
-the file, a bounded source excerpt, and import origins when available. These
-flags affect SourceError presentation; other errors retain JSON output. These
-are authoring errors before execution; `diagnose` separately explains recorded
-runtime failures. The https://algal.computer/#authoring-error demonstration compiles
-an intentionally invalid helper containing `emial` instead of `email` and
-publishes the real structured compiler report. The site build checks that
-correcting the binding makes the example compile. No program or model executes
-for this demonstration.
-
-`algal diagnose receipt.json --source program.algal` maps a recorded terminal
-failure or suspension to source locations and callers. `algal diagram
-program.algal --receipt receipt.json --focus child/i1` inspects one recorded
-child invocation, preserving the original root receipt binding. These are
-read-only frontend views; neither runs a model nor substitutes for replay
-verification. Source text is recompiled and matched before annotations apply.
-The live page includes separate inbox-item graphs and a replay-verified pure
-failure at https://algal.computer/#source-failure.
-
-The site reads examples/source/reply.algal during its build and renders diagrams
-from the compiled reply manifest and existing executable examples. Graphs show
-data dependencies, not an implicit promise of parallel wall-clock execution.
-The SVG, Mermaid, and JSON diagram formats share one manifest-derived view.
-Source-generated diagrams recompile the original source and match the manifest
-digest before showing readable binding names, choice arms, and explicit context.
-Exact cell IDs, edges, skipped cells, and runtime boundaries remain visible.
-
-The "Only the chosen branch runs" demo executes examples/source/route.algal
-three times during the site build using committed scripted response fixtures.
-Support and sales each take two executor attempts; human review takes one and
-returns fixed text. Inactive generation branches are checked as skipped. Every
-run is replay-verified before publication. Source, manifest, source map, args,
-scripted responses, receipts, and receipt-overlaid diagrams are downloadable.
-The browser selector switches recorded evidence; it performs no model calls.
-These fixtures demonstrate orchestration, not live provider quality.
-
-Local source projects add relative .algal imports, named child calls, and bounded
-ordered each. The loader admits a directory-rooted source closure without
-network imports, symlink traversal, or cycles. The compiler infers transitive
-executor-attempt and nesting-depth requirements. An each bound multiplies the
-child's inferred effect bound; the runtime root budget is shared across nested
-work, not reset per child. Current each execution is sequential.
-
-The inbox project reuses one draft helper for one preview and up to three emails.
-The site build loads its child closure, generates its exact graph, packs a
-portable algal.bundle.v1 bundle, and runs/replay-verifies three-item and empty
-fixtures. The three-item run uses four executor attempts; the empty run uses
-one for the separate preview, returns [] replies, and executes no each child.
-Source, bundle, inputs, scripted answers, and receipts are downloadable. A root
-manifest alone references its children by digest and does not embed them.
-
-Run from the repository root with Bun 1.3 or newer:
-
-```sh
-bun install --frozen-lockfile
-bun cli.ts compile examples/source/reply.algal --out reply.algal.json --source-map reply.source-map.json
-bun cli.ts check examples/source/reply.algal
-bun cli.ts diagram examples/source/reply.algal --format svg --out reply.svg
-```
-
-## Source and examples
-
-- Repository: https://github.com/hraness/algal
-- Native releases and checksums: https://github.com/hraness/algal/releases
-- Verify and install: https://github.com/hraness/algal/blob/main/docs/native-release.md
-- Practical use cases: https://github.com/hraness/algal/blob/main/docs/use-cases.md
-- Native workbench: https://github.com/hraness/algal/blob/main/docs/native-workbench.md
-- On-device private brief: https://github.com/hraness/algal/blob/main/docs/apple-brief.md
-- Durable coding repairs: https://github.com/hraness/algal/blob/main/docs/repair.md
-- Read-only PR shepherd: https://github.com/hraness/algal/blob/main/docs/pr-shepherd.md
-- Readable example: https://algal.computer/examples/reply.algal
-- Compiled example: https://algal.computer/examples/reply.algal.json
-- Generated diagram: https://algal.computer/diagrams/reply.svg
-- Conditional program: https://algal.computer/examples/route.algal
-- Support receipt: https://algal.computer/receipts/route-help.receipt.json
-- Sales receipt: https://algal.computer/receipts/route-sales.receipt.json
-- Human-review receipt: https://algal.computer/receipts/route-other.receipt.json
-- Reusable inbox project: https://algal.computer/examples/projects/inbox/inbox.algal
-- Draft helper: https://algal.computer/examples/projects/inbox/draft.algal
-- Portable inbox bundle: https://algal.computer/examples/projects/inbox/inbox.bundle.json
-- Inbox receipt: https://algal.computer/receipts/inbox.receipt.json
-- Empty-inbox receipt: https://algal.computer/receipts/inbox-empty.receipt.json
-- Authoring error report: https://algal.computer/examples/errors/unknown-binding/diagnostic.json
-- Intentionally invalid project: https://algal.computer/examples/errors/unknown-binding/main.algal
-- Helper with the typo: https://algal.computer/examples/errors/unknown-binding/helpers/draft.algal
-- Manifest contract: https://github.com/hraness/algal/blob/main/spec/v1/organism.md
-- Durable process demonstration: https://github.com/hraness/algal/blob/main/docs/vm.md
-- Selection and populations: https://github.com/hraness/algal/blob/main/docs/civilization.md
-- Measured case studies: https://github.com/hraness/algal/blob/main/docs/when-algal-wins.md
-- Agent integration: https://github.com/hraness/algal/blob/main/docs/agent-tool.md
-
-## Product boundaries
-
-Manifests are data, not host code. Host registries own functions, tools,
-providers, and admission. A manifest grants no OS isolation. Model effects see
-explicit declared context. Source compiler defaults are versioned and visible
-in the emitted artifact; max_agent_calls uses the runtime's executor-attempt
-counter, which is broader than a model-only inference count.
-
-Receipts are content-addressed execution evidence. Offline replay fixes recorded
-external answers and checks deterministic orchestration. It does not establish
-that an answer is true, an external operation happened, or a provider was
-authenticated. Fresh live runs may legitimately differ.
-
-A bounded repeat returns its last outputs when its round limit is exhausted;
-exhaustion is not convergence. The refinement example explicitly routes a final
-revise verdict to hold. The approval example waits on a host-supplied message,
-checks its release identifier and decision, and publishes only to a local
-mailbox. The fan-out example bounds child applications to eight questions;
-independent graph branches are not a promise of parallel speed.
-
-Programs are values. A designer can propose a child manifest, a spawn operation
-can admit and run it, and a slot can retain its digest. Evaluation, selection,
-and host-controlled promotion are separate operations. The site's habitat
-program diagram is a proposal-and-recording example; the selection lifecycle
-is conceptual, not a recorded winning run or a guarantee of improvement.
-
-## Runtime and integration
-
-The TypeScript runtime and native Rust kernel implement the shared manifest
-contract. The native kernel also includes ACP integration, relational memory,
-compaction, provider adapters, and an Apple Foundation Models bridge. Consult
-the repository for current platform qualification and measured evidence.
-
-xcb (https://github.com/hraness/xcb) owns subscription custody and settled
-provider switching. ACP is a client/agent protocol, not authentication or OS
-isolation. ALGAL keeps provider-owned transcripts separate from derived memory.
+- Site demos use scripted executor answers; every published run is a real replay-verified receipt.
+- Receipts prove execution consistency, not model truth or provider attestation.
+- Organisms can propose successor manifests as data; admission, measurement, and selection stay host-owned.
