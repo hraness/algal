@@ -213,7 +213,7 @@ async function checkCompatibilityLoaded(store: Store, previous: { revision: Appl
     else if (oldManifest.interface && newManifest.interface) {
       const oldCompiled = await compileOrganism(oldManifest, builtinRegistry(), store);
       const newCompiled = await compileOrganism(newManifest, builtinRegistry(), store);
-      if (!same(interfaceSignature(name, oldCompiled), interfaceSignature(name, newCompiled))) reasons.push(`changed-${name}-interface-types`);
+      if (!same(interfaceSignature(oldCompiled), interfaceSignature(newCompiled))) reasons.push(`changed-${name}-interface-types`);
     }
   }
   return { contract: "algal.application-compatibility.v1", previousRevision: digestCanonical(applicationJson(previous.revision)), candidateRevision: digestCanonical(applicationJson(candidate.revision)), status: reasons.length ? "incompatible" : "compatible", reasons };
