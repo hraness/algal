@@ -41,7 +41,9 @@ function intent(executable: string): CodingJobIntent {
     prompt: "literal `command` $(not-a-shell)\nnew line",
     adapter: { executable, account: "literal-account", model: "literal-model" },
     limits: {
-      maxRuntimeMs: 1000,
+      // Protocol assertions must survive cold executable startup on the host.
+      // The timeout/cancellation case below keeps its explicit 20 ms deadline.
+      maxRuntimeMs: 10_000,
       maxOutputBytes: 8192,
       maxPatchBytes: 8192,
       maxChangedFiles: 4,

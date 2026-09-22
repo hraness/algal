@@ -39,7 +39,8 @@ const unknown = (reason: "missing" | "expired" | "unavailable" | "unresolved", r
 const adapter = (argvPrefix: string[] = []): CodingOperationAdapter => ({
   protocol: CODING_OPERATION_PROTOCOL, authorityId: binding.authorityId, executable: process.execPath, argvPrefix,
 });
-const request = () => ({ binding, signal: new AbortController().signal, timeoutMs: 1000, maxOutputBytes: 8192 });
+// Protocol fixtures allow bounded cold startup; timeout cases override this.
+const request = () => ({ binding, signal: new AbortController().signal, timeoutMs: 10_000, maxOutputBytes: 8192 });
 async function fixture(source: string): Promise<{ path: string; directory: string; record: string }> {
   const directory = await mkdtemp(join(tmpdir(), "algal-operation-protocol-"));
   dirs.push(directory);

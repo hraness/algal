@@ -68,9 +68,12 @@ test("SIGTERM during capability startup joins XCB and removes controller listene
   });
   try {
     child.stdin.write(`${JSON.stringify({ instruction: "task", mode: "baseline", policy: BASELINE_POLICY,
-      artifactDir: dir, xcb: { executable, account: "fixture", model: "fixture", timeoutMs: 1000 } })}\n`);
+      artifactDir: dir, xcb: { executable, account: "fixture", model: "fixture", timeoutMs: 10_000 } })}\n`);
     let started = false;
-    for (let n = 0; n < 100; n++) {
+    // Observe real startup before cancellation; cold script launch may take
+    // several seconds. Cancellation and joined-child assertions stay exact.
+    const startupDeadline = performance.now() + 8000;
+    while (performance.now() < startupDeadline) {
       try { await access(ready); started = true; break; } catch { await Bun.sleep(10); }
     }
     expect(started).toBe(true);
