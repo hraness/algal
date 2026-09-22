@@ -1,7 +1,9 @@
-/** Process parity: replays one durable process lifecycle through the
- * TypeScript `ProcessSupervisor` and the native `algal process` CLI, requiring
- * every emitted record and digest to be identical. The recovery legs plant an
- * interrupted creation marker — written by the reference runtime — into both
+/** Process parity: replays durable process lifecycles through the TypeScript
+ * `ProcessSupervisor` and the native `algal process` CLI, requiring every
+ * emitted record and digest to be identical. The suspension suite shares one
+ * mailbox capability set across both stores so the wake handles — and every
+ * digest that covers them — stay comparable; the recovery legs plant an
+ * interrupted creation marker written by the reference runtime into both
  * stores, so the native leg proves it accepts the reference-computed record
  * digest rather than a coincidental encoding.
  *
@@ -10,12 +12,13 @@
  *
  * Exit 0 = identical outputs on every step; nonzero prints the first
  * divergence. */
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { ProcessSupervisor, parseProcessRecord } from "../src/process";
 import { manifestToJson, parseOrganismManifest } from "../src/contract";
 import { digestCanonical } from "../src/digest";
+import { FileMailboxService } from "../src/mailbox";
 import { canonicalize, type JsonValue } from "../src/values";
 
 const root = resolve(import.meta.dir, "..");
@@ -43,8 +46,8 @@ const manifestFile = join(temporary, "manifest.json");
 await writeFile(manifestFile, canonicalize(manifestToJson(manifest)));
 
 const service = new ProcessSupervisor(tsDir);
-const runNativeAttempt = async (args: string[]) => {
-  const proc = Bun.spawn([binary, "--dir", nativeDir, ...args], {
+const runNativeAttempt = async (args: string[], dir = nativeDir) => {
+  const proc = Bun.spawn([binary, "--dir", dir, ...args], {
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -55,14 +58,68 @@ const runNativeAttempt = async (args: string[]) => {
   ]);
   return { stdout, stderr, code };
 };
-const runNative = async (args: string[]) => {
-  const { stdout, stderr, code } = await runNativeAttempt(args);
+const runNative = async (args: string[], dir = nativeDir) => {
+  const { stdout, stderr, code } = await runNativeAttempt(args, dir);
   if (code !== 0)
     throw new Error(
       `native ${args.join(" ")} failed (${code}): ${stderr.trim()}`,
     );
   return JSON.parse(stdout) as unknown;
 };
+
+/* Suspension/wake coverage runs in a second store pair. Mailbox capability
+ * nonces are minted randomly, so the reference runtime creates the mailbox once
+ * and its durable `capabilities/` + `mailboxes/` state is copied into the
+ * native store — both runtimes then resolve identical handles and every record
+ * digest stays comparable (this also proves native `resolve` accepts
+ * reference-written capability records). */
+const tsMb = join(temporary, "ts-mb");
+const nativeMb = join(temporary, "native-mb");
+await mkdir(tsMb, { recursive: true });
+await mkdir(nativeMb, { recursive: true });
+const mailboxes = new FileMailboxService(tsMb);
+const box = await mailboxes.create("inbox");
+for (const sub of ["capabilities", "mailboxes"]) {
+  await cp(join(tsMb, sub), join(nativeMb, sub), { recursive: true });
+}
+const sleeperService = new ProcessSupervisor(tsMb);
+
+const sleeper = parseOrganismManifest({
+  contract: "algal.organism.v1",
+  key: "organism:process-parity-sleeper",
+  name: "process parity sleeper",
+  cells: [
+    {
+      id: "src",
+      kind: "input",
+      outputs: { inbox: { type: "cap", capability: "mailbox-receive" } },
+    },
+    { id: "wait", kind: "tool", tool: "mailbox.receive.v1" },
+  ],
+  edges: [
+    {
+      from: { cell: "src", port: "inbox" },
+      to: { cell: "wait", port: "mailbox" },
+    },
+  ],
+});
+const sleeperFile = join(temporary, "sleeper.json");
+await writeFile(sleeperFile, canonicalize(manifestToJson(sleeper)));
+const sleeperArgsFile = join(temporary, "sleeper-args.json");
+await writeFile(
+  sleeperArgsFile,
+  canonicalize({ src: { inbox: box.receive } } as JsonValue),
+);
+const sendFile = join(temporary, "send.json");
+await writeFile(sendFile, canonicalize({ approve: true } as JsonValue));
+const wakeKey = digestCanonical({
+  contract: "algal.process-parity-send.v1",
+  seq: 1,
+} as JsonValue);
+const wrongKey = digestCanonical({
+  contract: "algal.process-parity-send.v1",
+  seq: 2,
+} as JsonValue);
 
 /** Fabricate an interrupted creation exactly as `create` would have left it. */
 const interrupted = async (
@@ -108,6 +165,7 @@ const steps: {
   name: string;
   ts: () => Promise<unknown>;
   native: () => Promise<string[]> | string[];
+  dir?: string;
   fails?: boolean;
   before?: () => Promise<void>;
 }[] = [
@@ -157,6 +215,118 @@ const steps: {
     name: "schedule-idle",
     ts: async () => service.schedule(),
     native: () => ["process", "schedule"],
+  },
+  /* Mailbox suspension/wake lifecycle on the shared-capability store pair:
+   * create → tick suspends on the empty mailbox → scheduler stays idle → a
+   * manual tick re-suspends → send → scheduler wakes with the receive handle
+   * as cause → verify replays all three generations offline. */
+  {
+    name: "create-sleeper",
+    dir: nativeMb,
+    ts: async () =>
+      sleeperService.create("sleeper", sleeper, {
+        src: { inbox: box.receive },
+      }),
+    native: () => [
+      "process",
+      "create",
+      "sleeper",
+      sleeperFile,
+      "--args",
+      sleeperArgsFile,
+    ],
+  },
+  {
+    name: "tick-suspends",
+    dir: nativeMb,
+    ts: async () => sleeperService.tick("sleeper"),
+    native: () => ["process", "tick", "sleeper"],
+  },
+  {
+    name: "inspect-suspended",
+    dir: nativeMb,
+    ts: async () => sleeperService.inspect("sleeper"),
+    native: () => ["process", "inspect", "sleeper"],
+  },
+  {
+    name: "schedule-suspended-idle",
+    dir: nativeMb,
+    ts: async () => sleeperService.schedule(),
+    native: () => ["process", "schedule"],
+  },
+  {
+    // A manual tick is a legal wake cause on a suspended process: it re-runs
+    // the manifest and re-suspends on the still-empty mailbox.
+    name: "tick-manual-resuspends",
+    dir: nativeMb,
+    ts: async () => sleeperService.tick("sleeper"),
+    native: () => ["process", "tick", "sleeper"],
+  },
+  {
+    name: "mailbox-send",
+    dir: nativeMb,
+    ts: async () => mailboxes.send(box.send, { approve: true }, wakeKey),
+    native: () => [
+      "mailbox",
+      "send",
+      box.send,
+      sendFile,
+      "--idempotency-key",
+      wakeKey,
+    ],
+  },
+  {
+    name: "mailbox-send-idempotent",
+    dir: nativeMb,
+    ts: async () => mailboxes.send(box.send, { approve: true }, wakeKey),
+    native: () => [
+      "mailbox",
+      "send",
+      box.send,
+      sendFile,
+      "--idempotency-key",
+      wakeKey,
+    ],
+  },
+  {
+    // The send capability class is closed: a receive handle cannot send.
+    name: "mailbox-send-wrong-capability",
+    dir: nativeMb,
+    ts: async () => mailboxes.send(box.receive, { approve: true }, wrongKey),
+    native: () => [
+      "mailbox",
+      "send",
+      box.receive,
+      sendFile,
+      "--idempotency-key",
+      wrongKey,
+    ],
+    fails: true,
+  },
+  {
+    name: "schedule-wakes",
+    dir: nativeMb,
+    ts: async () => sleeperService.schedule(),
+    native: () => ["process", "schedule"],
+  },
+  {
+    name: "inspect-complete",
+    dir: nativeMb,
+    ts: async () => sleeperService.inspect("sleeper"),
+    native: () => ["process", "inspect", "sleeper"],
+  },
+  {
+    name: "verify-sleeper",
+    dir: nativeMb,
+    ts: async () => sleeperService.verify("sleeper"),
+    native: () => ["process", "verify", "sleeper"],
+  },
+  {
+    name: "mailbox-receive-empty",
+    dir: nativeMb,
+    ts: async () => mailboxes.receive(box.receive),
+    native: () => ["mailbox", "receive", box.receive],
+    fails: true,
   },
   {
     name: "create-duplicate",
@@ -225,7 +395,7 @@ try {
         () => false,
         () => true,
       );
-      const { code } = await runNativeAttempt(args);
+      const { code } = await runNativeAttempt(args, step.dir);
       if (!tsRejected || code === 0) {
         console.error(
           `PARITY DIVERGENCE at "${step.name}": expected rejection — ts ${
@@ -238,7 +408,7 @@ try {
       continue;
     }
     const tsOut = await step.ts();
-    const nativeOut = await runNative(args);
+    const nativeOut = await runNative(args, step.dir);
     if (!same(tsOut, nativeOut)) {
       console.error(`PARITY DIVERGENCE at "${step.name}"`);
       console.error(`  ts:     ${canonicalize(tsOut as JsonValue)}`);
