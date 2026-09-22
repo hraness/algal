@@ -155,7 +155,7 @@ export function cellSignature(
           `organism cell "${cell.id}" requires a sub-manifest with an interface`,
         );
       }
-      return interfaceSignature(cell.id, sub);
+      return interfaceSignature(sub);
     }
     case "repeat": {
       const sub = children.get(cell.id);
@@ -165,7 +165,7 @@ export function cellSignature(
           `repeat cell "${cell.id}" requires a sub-manifest with an interface`,
         );
       }
-      const sig = interfaceSignature(cell.id, sub);
+      const sig = interfaceSignature(sub);
       const iface = sub.manifest.interface;
       // carry: interface output name → interface input name; a carried input
       // is optional on the repeat cell since round 0 may run without it
@@ -222,7 +222,7 @@ export function cellSignature(
         );
       }
       const iface = sub.manifest.interface;
-      const sig = interfaceSignature(cell.id, sub);
+      const sig = interfaceSignature(sub);
       if (!iface.inputs[cell.over]) {
         throw new AlgalError(
           "INTERFACE_MISMATCH",
@@ -243,10 +243,7 @@ export function cellSignature(
 /** Ports a digest-embedded sub-manifest exposes: interface inputs resolve to
  * the targeted input cell's port types; interface outputs to the targeted
  * cells' output port types. */
-function interfaceSignature(
-  cellId: string,
-  sub: CompiledOrganism,
-): CellPorts {
+function interfaceSignature(sub: CompiledOrganism): CellPorts {
   const iface = sub.manifest.interface!;
   const inputs: PortMap = {};
   for (const [name, target] of Object.entries(iface.inputs)) {
