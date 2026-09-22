@@ -581,6 +581,30 @@ nav a[aria-current="page"] { color: var(--ink); }
 .dg-field dt { font: 550 .7rem var(--sans); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding-top: .1rem; }
 .dg-field dd { margin: 0; font-size: .8rem; overflow-wrap: anywhere; }
 .dg-caption { margin: 0; padding: .5rem .9rem; font: .72rem var(--sans); color: var(--muted); border-top: 1px solid var(--line); background: var(--secondary); }
+.dg-timeline-wrap { background: var(--white); }
+.dg-timeline { margin: 0; padding: .3rem 0; list-style: none; }
+.dg-timeline li { border-bottom: 1px solid var(--line); }
+.dg-timeline li:last-child { border-bottom: 0; }
+.dg-step { display: flex; align-items: center; gap: .7rem; width: 100%; text-align: left; background: none; border: 0; padding: .6rem .9rem; min-height: 2.75rem; font: inherit; color: var(--ink); cursor: pointer; }
+.dg-step:hover { background: var(--surface-hover); }
+.dg-step-seq { font: .68rem var(--mono); color: var(--muted); width: 1.5rem; text-align: right; flex-shrink: 0; }
+.dg-step-dot { width: .55rem; height: .55rem; border-radius: 50%; flex-shrink: 0; background: var(--muted); }
+.dg-dot-committed { background: #16a34a; }
+.dg-dot-effect { background: #7c3aed; }
+.dg-dot-skipped { background: #94a3b8; }
+.dg-dot-failed { background: #dc2626; }
+.dg-dot-suspended { background: #d97706; }
+.dg-dot-cell { background: var(--muted); }
+.dg-step-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: .1rem; }
+.dg-step-main strong { font-size: .85rem; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dg-step-main > span { font: .66rem var(--mono); color: var(--muted); letter-spacing: .03em; }
+.dg-step-event { font: .68rem var(--mono); color: var(--muted); flex-shrink: 0; }
+.dg-timeline li.is-live .dg-step { background: color-mix(in oklch, var(--primary) 9%, transparent); }
+.dg-timeline li.is-live .dg-step-event { color: var(--primary); }
+.dg-step-detail { padding: 0 .9rem .9rem 3.1rem; font-size: .8rem; }
+.dg-step-detail .dg-field { grid-template-columns: 5.4rem 1fr; }
+.dg-graph-link { font: .75rem var(--sans); color: var(--primary); text-decoration: none; padding: .4rem .55rem; border-radius: 6px; white-space: nowrap; }
+.dg-graph-link:hover { background: var(--surface-hover); }
 @media (max-width: 1000px) {
   .hero-grid, .habitat-grid { grid-template-columns: 1fr; gap: 2rem; }
   .life-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

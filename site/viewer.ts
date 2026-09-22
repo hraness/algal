@@ -14,6 +14,7 @@ interface DiagramViewDocument {
 
 const NS = "http://www.w3.org/2000/svg";
 const REDUCED = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+const COARSE = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 
 function svgEl<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, string | number> = {}): SVGElementTagNameMap[K] {
   const el = document.createElementNS(NS, tag);
@@ -114,10 +115,10 @@ async function initDiagramFrame(frame: HTMLElement): Promise<void> {
   card.className = "dg-card";
   card.hidden = true;
 
-  const showCard = (nodeId: string) => {
+  const fieldsDl = (nodeId: string): string => {
     const node = nodesById.get(nodeId);
     const box = layoutById.get(nodeId);
-    if (!node || !box) return;
+    if (!node || !box) return "";
     const rows: string[] = [];
     const field = (label: string, value: string) => rows.push(`<div class="dg-field"><dt>${escapeText(label)}</dt><dd>${escapeText(value)}</dd></div>`);
     field("cell", node.id);
@@ -130,10 +131,115 @@ async function initDiagramFrame(frame: HTMLElement): Promise<void> {
       field("source", `${node.source.title} — ${node.source.summary}`);
       if (node.source.span) field("at", `${node.source.source}:${node.source.span.start.line}:${node.source.span.start.col}`);
     }
-    card.innerHTML = `<div class="dg-card-head"><strong>${escapeText(box.title)}</strong><button type="button" class="dg-card-close" aria-label="Close cell details">×</button></div><dl class="dg-fields">${rows.join("")}</dl>`;
+    return `<dl class="dg-fields">${rows.join("")}</dl>`;
+  };
+
+  const showCard = (nodeId: string) => {
+    const box = layoutById.get(nodeId);
+    if (!box) return;
+    card.innerHTML = `<div class="dg-card-head"><strong>${escapeText(box.title)}</strong><button type="button" class="dg-card-close" aria-label="Close cell details">×</button></div>${fieldsDl(nodeId)}`;
     card.hidden = false;
     card.querySelector(".dg-card-close")!.addEventListener("click", () => { card.hidden = true; });
   };
+
+  // Frames inside hidden tab panels measure zero width; wait for a real
+  // measurement so the mode decision reflects the rendered column.
+  if (frame.clientWidth === 0) {
+    await new Promise<void>(resolve => {
+      const observer = new ResizeObserver(() => {
+        if (frame.clientWidth > 0) { observer.disconnect(); resolve(); }
+      });
+      observer.observe(frame);
+    });
+  }
+
+  // Narrow frames and graphs far wider than their container get the fossil
+  // record itself: the receipt's event order as a tappable list. Cheaper than
+  // squeezing a dense graph, and closer to what a receipt actually is.
+  const narrow = frame.clientWidth < 420 || layout.width > frame.clientWidth * 1.8;
+  if (narrow) {
+    const EVENT_LABEL: Record<string, string> = { "cell.commit": "committed", "cell.skip": "skipped", "cell.fail": "failed", "cell.suspend": "suspended", effect: "effect", cell: "cell" };
+    const steps = run && run.steps.length ? run.steps : layout.nodes.map(node => ({ event: "cell", node: node.id }));
+    const list = document.createElement("ol");
+    list.className = "dg-timeline";
+    list.setAttribute("aria-label", run ? `Recorded ${run.outcome} run of ${diagram.name}` : `Cells of ${diagram.name}`);
+    const rows: HTMLLIElement[] = [];
+    steps.forEach((step, index) => {
+      const box = layoutById.get(step.node);
+      const statusName = step.event === "cell.commit" ? "committed" : step.event === "cell.skip" ? "skipped" : step.event === "cell.fail" ? "failed" : step.event === "cell.suspend" ? "suspended" : step.event;
+      const li = document.createElement("li");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "dg-step";
+      button.setAttribute("aria-expanded", "false");
+      button.innerHTML = `<span class="dg-step-seq">${index + 1}</span><span class="dg-step-dot dg-dot-${statusName}"></span><span class="dg-step-main"><strong>${escapeText(box?.title ?? step.node)}</strong><span>${escapeText(box?.label ?? "")}</span></span><span class="dg-step-event">${escapeText(EVENT_LABEL[step.event] ?? step.event)}</span>`;
+      const detail = document.createElement("div");
+      detail.className = "dg-step-detail";
+      detail.hidden = true;
+      button.addEventListener("click", () => {
+        detail.hidden = !detail.hidden;
+        button.setAttribute("aria-expanded", String(!detail.hidden));
+        if (!detail.hidden && !detail.innerHTML) detail.innerHTML = fieldsDl(step.node);
+      });
+      li.append(button, detail);
+      list.appendChild(li);
+      rows.push(li);
+    });
+
+    let playing = false;
+    const replaySteps = async () => {
+      if (playing || !run) return;
+      playing = true;
+      rows.forEach(row => row.classList.remove("is-live"));
+      for (const [index] of run.steps.entries()) {
+        const row = rows[index]!;
+        row.classList.add("is-live");
+        row.scrollIntoView({ block: "nearest", behavior: REDUCED ? "auto" : "smooth" });
+        status.textContent = `${index + 1}/${run.steps.length} · ${run.steps[index]!.event} ${run.steps[index]!.node}`;
+        if (!REDUCED) await new Promise(r => window.setTimeout(r, 340));
+      }
+      status.textContent = `run.end · ${run.outcome} · ${run.receipt.slice(0, 19)}…`;
+      playing = false;
+    };
+
+    const controlButton = (label: string, action: () => void, name: string) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "dg-button";
+      button.title = label;
+      button.setAttribute("aria-label", label);
+      button.innerHTML = `<svg class="site-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#${name}"></use></svg>`;
+      button.addEventListener("click", action);
+      controls.appendChild(button);
+    };
+    if (run && run.steps.length) controlButton("Replay the recorded run", () => { void replaySteps(); }, "replay");
+    const graphLink = document.createElement("a");
+    graphLink.className = "dg-graph-link";
+    graphLink.href = src.replace(/\.view\.json$/, ".svg");
+    graphLink.textContent = "Full graph (SVG)";
+    controls.appendChild(graphLink);
+
+    shell.appendChild(toolbar);
+    const wrap = document.createElement("div");
+    wrap.className = "dg-timeline-wrap";
+    wrap.appendChild(list);
+    shell.appendChild(wrap);
+    const caption = document.createElement("p");
+    caption.className = "dg-caption";
+    caption.textContent = run ? "The receipt's own event order — evidence, not a simulation. Tap a step for its cell's contract." : "Cells in layout order — tap one for its contract.";
+    shell.appendChild(caption);
+    frame.replaceChildren(shell);
+    if (frame.hasAttribute("data-diagram-autoplay") && !REDUCED && !COARSE) {
+      const observer = new IntersectionObserver(entries => {
+        if (entries.some(entry => entry.isIntersecting)) {
+          observer.disconnect();
+          window.setTimeout(() => { void replaySteps(); }, 400);
+        }
+      }, { threshold: 0.3 });
+      observer.observe(list);
+    }
+    return;
+  }
 
   const neighborsOf = (id: string) => {
     const near = new Set<string>([id]);
@@ -319,13 +425,13 @@ async function initDiagramFrame(frame: HTMLElement): Promise<void> {
     };
     const pulse = (id: string) => {
       const el = nodeEls.get(id);
-      if (!el || REDUCED) return;
+      if (!el || REDUCED || COARSE) return;
       el.classList.remove("dg-pulse");
       void el.getBoundingClientRect();
       el.classList.add("dg-pulse");
     };
     const sendPackets = (nodeId: string) => {
-      if (REDUCED) return Promise.resolve();
+      if (REDUCED || COARSE) return Promise.resolve();
       const jobs: Promise<void>[] = [];
       for (const edge of diagram.edges) {
         if (edge.to.cell !== nodeId) continue;
@@ -388,7 +494,7 @@ async function initDiagramFrame(frame: HTMLElement): Promise<void> {
     };
 
     control("Replay the recorded run", () => { void replay(); }, "replay");
-    if (frame.hasAttribute("data-diagram-autoplay") && !REDUCED) {
+    if (frame.hasAttribute("data-diagram-autoplay") && !REDUCED && !COARSE) {
       const observer = new IntersectionObserver(entries => {
         if (entries.some(entry => entry.isIntersecting)) {
           observer.disconnect();
