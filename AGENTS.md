@@ -74,7 +74,8 @@
   identical digests, and `bun scripts/process-parity.ts` for the durable
   process lifecycle (create/inspect/list/tick/verify/schedule, the mailbox
   suspension/wake chain with shared capability records, uncertain-intent
-  recovery through `recover`/`journal`, and the `.creating.json`
+  recovery through `recover`/`journal`, journaled dispatch,
+  `export`/`verify-evidence` portable bundles, and the `.creating.json`
   interrupted-creation recovery contract).
 - The Foundation Models bridge comes from the pinned `apple-foundation`
   crate (`hraness/apple-foundation`); `sh scripts/build-apple.sh` emits its

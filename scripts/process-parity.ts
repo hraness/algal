@@ -5,7 +5,10 @@
  * digest that covers them — stay comparable; the recovery legs plant an
  * interrupted creation marker written by the reference runtime into both
  * stores, so the native leg proves it accepts the reference-computed record
- * digest rather than a coincidental encoding.
+ * digest rather than a coincidental encoding. The evidence legs export a
+ * portable bundle per runtime and verify it store-free — the native
+ * `verify-evidence` CLI takes no `--dir`, so `bare` steps spawn it without
+ * host flags.
  *
  *   bun scripts/process-parity.ts            # target/debug/algal
  *   ALGAL_BIN=/path/to/algal bun scripts/process-parity.ts
@@ -20,6 +23,10 @@ import { ProcessJournal } from "../src/process-journal";
 import { manifestToJson, parseOrganismManifest } from "../src/contract";
 import { digestCanonical, type Digest } from "../src/digest";
 import { FileMailboxService } from "../src/mailbox";
+import {
+  exportProcessEvidence,
+  verifyProcessEvidence,
+} from "../src/process-evidence";
 import { canonicalize, type JsonValue } from "../src/values";
 
 const root = resolve(import.meta.dir, "..");
@@ -47,11 +54,20 @@ const manifestFile = join(temporary, "manifest.json");
 await writeFile(manifestFile, canonicalize(manifestToJson(manifest)));
 
 const service = new ProcessSupervisor(tsDir);
-const runNativeAttempt = async (args: string[], dir = nativeDir) => {
-  const proc = Bun.spawn([binary, "--dir", dir, ...args], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+const runNativeAttempt = async (
+  args: string[],
+  dir = nativeDir,
+  bare = false,
+) => {
+  // `verify-evidence` is store-free: the native CLI rejects every flag,
+  // including --dir, so bare steps spawn without it.
+  const proc = Bun.spawn(
+    bare ? [binary, ...args] : [binary, "--dir", dir, ...args],
+    {
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
   const [stdout, stderr, code] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
@@ -59,8 +75,8 @@ const runNativeAttempt = async (args: string[], dir = nativeDir) => {
   ]);
   return { stdout, stderr, code };
 };
-const runNative = async (args: string[], dir = nativeDir) => {
-  const { stdout, stderr, code } = await runNativeAttempt(args, dir);
+const runNative = async (args: string[], dir = nativeDir, bare = false) => {
+  const { stdout, stderr, code } = await runNativeAttempt(args, dir, bare);
   if (code !== 0)
     throw new Error(
       `native ${args.join(" ")} failed (${code}): ${stderr.trim()}`,
@@ -264,11 +280,21 @@ const wrongIntent = digestCanonical({
   contract: "algal.process-parity-intent.v1",
 } as JsonValue);
 
+/* Portable evidence legs: each runtime exports the same process history to a
+   canonical bundle, then verifies it store-free — the native verify-evidence
+   CLI rejects every flag, so `bare` steps spawn it without --dir. */
+let workerEvidence: JsonValue | undefined;
+let forwarderEvidence: JsonValue | undefined;
+const workerEvidenceFile = join(temporary, "worker-evidence.json");
+const forwarderEvidenceFile = join(temporary, "forwarder-evidence.json");
+const tamperedEvidenceFile = join(temporary, "tampered-evidence.json");
+
 const steps: {
   name: string;
   ts: () => Promise<unknown>;
   native: () => Promise<string[]> | string[];
   dir?: string;
+  bare?: boolean;
   fails?: boolean;
   before?: () => Promise<void>;
 }[] = [
@@ -594,6 +620,61 @@ const steps: {
     fails: true,
   },
   {
+    name: "export-worker",
+    ts: async () => {
+      workerEvidence = (await exportProcessEvidence(
+        await service.inspect("worker"),
+        service.store,
+        service.evidenceTools(),
+      )) as unknown as JsonValue;
+      return workerEvidence;
+    },
+    native: () => ["process", "export", "worker"],
+  },
+  {
+    name: "verify-evidence-worker",
+    bare: true,
+    before: async () =>
+      writeFile(workerEvidenceFile, canonicalize(workerEvidence!)),
+    ts: async () => verifyProcessEvidence(workerEvidence),
+    native: () => ["process", "verify-evidence", workerEvidenceFile],
+  },
+  {
+    name: "export-forwarder",
+    dir: nativeMb,
+    ts: async () => {
+      forwarderEvidence = (await exportProcessEvidence(
+        await sleeperService.inspect("forwarder"),
+        sleeperService.store,
+        sleeperService.evidenceTools(),
+      )) as unknown as JsonValue;
+      return forwarderEvidence;
+    },
+    native: () => ["process", "export", "forwarder"],
+  },
+  {
+    name: "verify-evidence-forwarder",
+    bare: true,
+    before: async () =>
+      writeFile(forwarderEvidenceFile, canonicalize(forwarderEvidence!)),
+    ts: async () => verifyProcessEvidence(forwarderEvidence),
+    native: () => ["process", "verify-evidence", forwarderEvidenceFile],
+  },
+  {
+    // A foreign field fails the closed evidence parser on both runtimes.
+    name: "verify-evidence-tampered",
+    bare: true,
+    fails: true,
+    before: async () =>
+      writeFile(
+        tamperedEvidenceFile,
+        canonicalize({ ...(workerEvidence as object), injected: 1 }),
+      ),
+    ts: async () =>
+      verifyProcessEvidence({ ...(workerEvidence as object), injected: 1 }),
+    native: () => ["process", "verify-evidence", tamperedEvidenceFile],
+  },
+  {
     name: "create-duplicate",
     ts: async () => service.create("worker", manifest),
     native: () => ["process", "create", "worker", manifestFile],
@@ -661,7 +742,7 @@ try {
           () => false,
           () => true,
         );
-        const { code } = await runNativeAttempt(args, step.dir);
+        const { code } = await runNativeAttempt(args, step.dir, step.bare);
         if (!tsRejected || code === 0) {
           console.error(
             `PARITY DIVERGENCE at "${step.name}": expected rejection — ts ${
@@ -674,7 +755,7 @@ try {
         continue;
       }
       const tsOut = await step.ts();
-      const nativeOut = await runNative(args, step.dir);
+      const nativeOut = await runNative(args, step.dir, step.bare);
       if (!same(tsOut, nativeOut)) {
         console.error(`PARITY DIVERGENCE at "${step.name}"`);
         console.error(`  ts:     ${canonicalize(tsOut as JsonValue)}`);
