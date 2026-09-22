@@ -316,8 +316,7 @@ export type { CodingOperationAdapter, CodingOperationBinding, CodingOperationOut
 export { PROCESS_EVIDENCE_CONTRACT, PROCESS_EVIDENCE_BOUNDS, parseProcessEvidence, exportProcessEvidence, verifyProcessEvidence } from "./src/process-evidence";
 export type { ProcessEvidence, ProcessEvidenceReport } from "./src/process-evidence";
 
-// Experimental programmable-application host surface. Native application
-// parity and automatic interrupted-process creation recovery are not claimed.
+// Programmable-application records, lifecycle, and captured evidence.
 export {
   ApplicationService,
   applicationProcessName,
@@ -392,6 +391,16 @@ export { createApplicationDomainDispatcher, createApplicationPolicyHost, parseAp
 export type { ApplicationHostPolicy } from "./src/application-host";
 export { dispatchApplicationEpisode, reconcileApplicationEpisode } from "./src/application-episode";
 export type { EpisodeExecutors } from "./src/application-episode";
+export {
+  parseApplicationGoal,
+  parseApplicationGoalCapture,
+  validateApplicationGoals,
+  bindApplicationGoalCaptures,
+  captureApplicationGoals,
+  evaluateApplicationGoals,
+} from "./src/application-goal";
+export type { ApplicationGoal, ApplicationGoalCapture } from "./src/application-goal";
+export { APPLICATION_QUOTA_LIMITS } from "./src/application-quota";
 export { NativeMemoryQueryEngine } from "./src/application-native-memory";
 export { appendObservation } from "./src/application-observation";
 export type { AppendObservationInput, AppendedObservation } from "./src/application-observation";

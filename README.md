@@ -87,6 +87,8 @@ distributed custody, global storage quota, or retention service. Unknown writes
 require reconciliation, and a verifying receipt proves execution consistency,
 not factual truth or exactly-once arbitrary external effects. See the
 [operating boundary](docs/use-cases.md#choose-the-right-boundary) before deployment.
+The application lifecycle does enforce conservative [namespace byte limits](spec/v1/application.md#conservative-namespace-quota);
+these do not attribute shared content-addressed objects to applications.
 
 ## Read the program. See its structure.
 

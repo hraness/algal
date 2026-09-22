@@ -33,6 +33,14 @@ has a zero model-call budget. These are independent program identities and
 durable deliveries within one application, not separate operating-system
 sandboxes or a claim of measured multi-agent performance.
 
+The active revision retains a goal to establish current stock and discover the
+current tool before selecting a recommendation. Its typed query joins both
+observations. Unknown and stale goal statuses drive investigation; a supported
+goal selects the planner entrypoint. The evidence records the sequence
+`unknown → supported → stale → supported → supported`, and the final view
+retains the exact goal definition, state, memory, and derivation reference.
+Support establishes current evidence, not that inventory was replenished.
+
 Eight separate Bun host processes execute the scenario. The parent waits for
 each host to exit successfully before starting its successor; it does not own
 an application service. The native query executable is pinned across every

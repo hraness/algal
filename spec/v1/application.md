@@ -186,6 +186,47 @@ bounded evaluation can occur outside custody, but their results must pass the
 expected-head check before selection. Parallel model calls by themselves do
 not establish useful concurrency or improved performance.
 
+## Retained goals
+
+A revision may attach `goals`, a sorted unique array of at most eight CAS
+references. Legacy revisions omit this field; normalization does not insert it.
+An explicit empty array remains explicit. Each reference resolves to this closed
+record:
+
+```json
+{"contract":"algal.application-goal.v1","application":"inventory","id":"discover-inventory","description":"Establish current stock and discover the current tool.","query":"sha256:...","entrypoint":"planner"}
+```
+
+The reference shown above abbreviates a complete digest. The application and IDs
+use the existing identifier grammar. Description is 1–2,048 UTF-8 bytes with no
+NUL. Goal IDs are unique within a revision. The named entrypoint must exist;
+the query must occur in both that entrypoint's memory view and the revision's
+query bundle, and its typed memory-query record must use the revision's schema.
+Lifecycle admission resolves and checks this closure before publication.
+
+A goal names a query objective and the procedure selected when its prerequisite
+is established. `supported` means the goal's query is supported by admitted
+memory at the captured state. It does not establish successful execution,
+real-world task completion, or authority to perform an effect. The host's
+explicit policy can use unresolved goals to request investigation and supported
+goals to select a procedure; existing applicability and capability admission
+still apply. General autonomous goal planning is outside this contract.
+
+Goal evaluation invokes the admitted memory service. A captured goal contains
+its full immutable definition and digest, captured state and memory, exact
+memory-derivation reference, and the unchanged memory status vocabulary.
+Without derivation evidence its status must be `unknown`. Goal projections
+reject wrong-kind, cross-application, cross-query, or stale state/memory
+derivations. Loading or rendering a captured derivation is structural checking,
+not replay or observation authentication. Fresh evaluation rederives the query.
+
+Views optionally contain the revision's complete ordered goal captures. The
+`goals` widget displays descriptions, query statuses, and selected entrypoints.
+Native `application view` accepts optional `goalDerivations`, mapping goal IDs
+to already-produced derivation references. Omitted evidence displays `unknown`;
+view construction performs no query or effect. Legacy views without goals keep
+their previous canonical representation.
+
 ## Views and workbench
 
 A view captures one state and preserves the status vocabulary above. Executable
@@ -215,6 +256,48 @@ not claim verification of the truth of observations.
 | Memory observations / hypotheses | 128 / 64 |
 | Evaluation cases / work / model calls | 32 / 1,000,000 / 16 |
 | View history / action records | 128 / 32 |
+| Named application namespace / aggregate allocation | 256 MiB per application / 1 GiB aggregate |
+| Quota scan | 10,000 entries per application or coordination directory; 300,000 total; depth 4 |
+
+### Conservative namespace quota
+
+The initial lifecycle uses the design's conservative named-namespace fallback.
+It measures every regular file beneath `applications/ID`, including preparation
+indexes, outbox records, orphaned temporaries, and retained recovery evidence.
+It also accounts for the supervisor and quota coordination directories.
+Symlinks, special files, invalid application directory names, and excessive
+scan depth or entries reject allocation. Shared `values`, `manifests`, `runs`,
+and `effects` CAS objects are **not** attributed by this fallback. This is not
+a complete application-owned CAS quota or a general whole-store quota.
+
+Before lifecycle publication, the service acquires shared retained SQLite
+custody at `.application-quota` and records a server-derived reservation in
+`ledger.json`. Its closed `algal.application-quota.v1` record contains an
+`applications` array of at most 32 unique `{application, bytes}` rows, emitted
+in name order. Each application's charge is the greater of its previous charge
+and measured namespace bytes plus 2 MiB of coordination headroom, then adds
+twice the canonical byte size of the values being published. Counting both
+temporary and final copies covers a crash during immutable publication. The
+aggregate includes measured shared coordination bytes, a further 2 MiB for
+each of the supervisor and quota owners, and 16 KiB for ledger publication.
+Per-owner headroom covers 256 recovery records of at most 4,096 bytes, four
+SQLite files of at most 65,536 bytes, and the live ownership marker.
+
+The ledger is published durably before the reserved operation/head or outbox
+writes. A failed or interrupted publication retains its charge; retrying may
+consume more capacity. Deleted files never automatically refund a retained
+application charge. The short shared quota custody covers reservation and
+publication, and is released before live dispatch. Independent application
+writers therefore cannot oversubscribe aggregate allocation. An outbox
+settlement that cannot allocate leaves the prior started record available for
+explicit reconciliation; it does not authorize repeating the effect.
+
+Exhaustion preserves history and evidence. Inspection and readback of an
+already committed operation or settled dispatch allocate nothing and remain
+available. New publications, including reconciliation that requires a new
+record, may be refused. There is no automatic reclamation, quota reset, caller
+estimate, or configurable override. Precise shared-CAS ownership accounting
+and explicit reclamation require a separate protocol.
 
 The shared lifecycle driver, admission regressions, crash/restart tests, and
 CLI command comparisons are executable evidence for these boundaries. They do

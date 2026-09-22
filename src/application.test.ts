@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdtemp, open, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ApplicationService, applicationProcessName, type ApplicationAdmission, type ApplicationDispatchContext } from "./application";
 import { digestCanonical, type Digest } from "./digest";
 import { capabilityHandle } from "./capabilities";
 import { parseOrganismManifest } from "./contract";
+import { hostRead, hostWrite } from "./host-state";
 import type { JsonValue } from "./values";
 
 const dirs: string[] = [];
@@ -36,6 +37,42 @@ async function fixture(options: {fault?: (point: "prepared" | "head-published" |
 afterEach(async () => { for (const dir of dirs.splice(0)) await rm(dir, {recursive: true, force: true}); });
 
 describe("experimental application lifecycle", () => {
+  test("quota denial of genesis does not reserve an application name", async () => {
+    const {service, revisionRef, memory} = await fixture();
+    await hostWrite(join(service.dir, ".application-quota", "ledger.json"), {contract: "algal.application-quota.v1", applications: [{application: "fixture", bytes: 256 * 1024 * 1024}]}, 8192);
+    await expect(service.create({application: "fixture", operation: ref("quota-denied-create"), kind: "create", expectedHead: null, revision: revisionRef, memory, intents: [], evidence: [], causedBy: null})).rejects.toThrow("per-application");
+    expect(await readdir(join(service.dir, "applications"))).toEqual([".creation"]);
+    expect(await service.inspect("fixture")).toBeNull();
+  });
+
+  test("quota exhaustion after live dispatch preserves started evidence and never automatically repeats", async () => {
+    const {service, revisionRef, memory} = await fixture(), message = await service.store.putValue({payload: true});
+    const initial = await service.create({application: "fixture", operation: ref("quota-live"), kind: "create", expectedHead: null, revision: revisionRef, memory, intents: [{kind: "deliver", route: "inbox", message}], evidence: [], causedBy: null});
+    let calls = 0;
+    const dispatcher = {configurationDigest: ref("quota-dispatcher"), async dispatch(context: ApplicationDispatchContext) {
+      calls++;
+      await hostWrite(join(service.dir, ".application-quota", "ledger.json"), {contract: "algal.application-quota.v1", applications: [{application: "fixture", bytes: 256 * 1024 * 1024}]}, 8192, false);
+      return {status: "settled", result: {kind: "delivery", message, idempotencyKey: context.dispatch.identity}};
+    }};
+    await expect(service.dispatchPending("fixture", dispatcher)).rejects.toThrow("per-application");
+    const retained = await hostRead(join(service.dir, "applications", "fixture", "outbox", initial.transition.intents[0]!.slice(7) + ".json"), 262144);
+    expect((retained as Record<string, JsonValue>).status).toBe("started");
+    expect((await service.dispatchPending("fixture", dispatcher))[0]!.status).toBe("started");
+    expect(calls).toBe(1);
+    expect((await service.inspect("fixture"))!.digest).toBe(initial.digest);
+  });
+
+  test("namespace quota rejects new publication while preserving inspection and committed idempotence", async () => {
+    const {service, revisionRef, memory} = await fixture();
+    const command = {application: "fixture", operation: ref("quota-create"), kind: "create", expectedHead: null, revision: revisionRef, memory, intents: [], evidence: [], causedBy: null};
+    const initial = await service.create(command);
+    const file = await open(join(service.dir, "applications", "fixture", "orphan"), "w");
+    try { await file.truncate(256 * 1024 * 1024); } finally { await file.close(); }
+    await expect(service.commit({...command, kind: "memory", expectedHead: initial.digest, operation: ref("quota-next")})).rejects.toThrow("per-application");
+    expect((await service.inspect("fixture"))!.digest).toBe(initial.digest);
+    expect((await service.create(command)).digest).toBe(initial.digest);
+    expect((await service.history("fixture")).length).toBe(1);
+  });
   test("rejected first commits and unknown dispatches do not reserve application capacity", async () => {
     const {service, revisionRef, memory} = await fixture();
     const base = {application: "fixture", operation: ref("valid-create"), kind: "create", expectedHead: null, revision: revisionRef, memory, intents: [], evidence: [], causedBy: null};

@@ -18,12 +18,13 @@ async function invoke(native: boolean, args: string[], expected: number, input?:
   const child = Bun.spawn(native ? [binary, ...args, "--dir", stores[1]!] : [process.execPath, join(root, "cli.ts"), ...args, "--dir", stores[0]!], {
     cwd: root, stdout: "pipe", stderr: "pipe", stdin: input === undefined ? "ignore" : new TextEncoder().encode(input),
   });
-  const timeout = setTimeout(() => child.kill(), 60_000);
+  let timedOut = false;
+  const timeout = setTimeout(() => { timedOut = true; child.kill(); }, 60_000);
   try {
     const [stdout, stderr, code] = await Promise.all([
       new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited,
     ]);
-    if (code !== expected) throw new Error(`${native ? "native" : "reference"} ${args.slice(0, 2).join(" ")}: exit ${code}, expected ${expected}: ${(stderr || stdout).slice(-4000)}`);
+    if (timedOut || child.signalCode !== null || code !== expected) throw new Error(`${native ? "native" : "reference"} ${args.slice(0, 2).join(" ")}: exit ${code}, signal ${child.signalCode}, timeout ${timedOut}, expected ${expected}: ${(stderr || stdout).slice(-4000)}`);
     return JSON.parse(stdout) as JsonValue;
   } finally { clearTimeout(timeout); }
 }
@@ -41,10 +42,11 @@ async function fixture(name: string, value: JsonValue): Promise<string> {
 async function reject(name: string, args: string[]): Promise<void> {
   for (const native of [false, true]) {
     const child = Bun.spawn(native ? [binary, ...args, "--dir", stores[1]!] : [process.execPath, join(root, "cli.ts"), ...args, "--dir", stores[0]!], {cwd: root, stdout: "pipe", stderr: "pipe"});
-    const timeout = setTimeout(() => child.kill(), 60_000);
+    let timedOut = false;
+    const timeout = setTimeout(() => { timedOut = true; child.kill(); }, 60_000);
     try {
       const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
-      if (code === 0) throw new Error(`${name}: ${native ? "native" : "reference"} accepted malformed data: ${stdout || stderr}`);
+      if (timedOut || child.signalCode !== null || code !== 2) throw new Error(`${name}: ${native ? "native" : "reference"} expected rejection exit 2; got ${code}, signal ${child.signalCode}, timeout ${timedOut}: ${(stdout || stderr).slice(-4000)}`);
     } finally { clearTimeout(timeout); }
   }
   checked++;
@@ -136,5 +138,5 @@ try {
   await writeFile(join(badExamples, "hello.algal.json"), await readFile(join(root, "examples/hello.algal.json")));
   await writeFile(join(badExamples, "hello.responses.json"), "{malformed");
   await reject("suite-corrupt-optional-evidence", ["suite", "--examples", badExamples]);
-  console.log(`CLI parity: ${checked} command results identical across TypeScript and native`);
+  console.log(`CLI parity: ${checked} cases passed (canonical results and rejection statuses)`);
 } finally { await rm(temp, { recursive: true, force: true }); }

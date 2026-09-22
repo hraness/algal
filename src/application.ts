@@ -1,5 +1,5 @@
-/** Experimental Bun host lifecycle. Process execution remains the existing VM's.
- * No native application parity or automatic interrupted process creation is claimed. */
+/** Durable application lifecycle, shared with the native implementation.
+ * Process execution and uncertain-effect custody remain the existing VM's. */
 import { lstat, opendir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
@@ -11,6 +11,8 @@ import {
   type EpisodeBinding, type WorkIntent,
 } from "./application-contract";
 import { parseApplicationMigration, type ApplicationMigration } from "./application-migration";
+import { validateApplicationGoals } from "./application-goal";
+import { withApplicationQuota } from "./application-quota";
 import { parseMemoryObservation, parseMemorySnapshot } from "./application-memory";
 import { parseCapabilityHandle } from "./capabilities";
 import { digestCanonical, type Digest } from "./digest";
@@ -327,6 +329,7 @@ export class ApplicationService {
       if (history.length >= APPLICATION_LIMITS.states) throw new Error("Application state bound exhausted");
       const revision = await getApplicationRecord(this.store, command.revision, parseApplicationRevision);
       if (revision.application !== command.application) fail("Revision belongs to another application");
+      await validateApplicationGoals(this.store, revision);
       for (const ref of [command.memory, revision.schema, revision.queries, revision.views, revision.runtimeProfile, revision.evaluationPolicy, ...command.evidence, ...(command.causedBy ? [command.causedBy] : []), ...revision.entrypoints.map(e => e.applicability)]) await this.value(ref);
       // An inhabitant's declared capabilities must be a subset of what the
       // revision admits, and its applicability query must be inside its own
@@ -357,18 +360,24 @@ export class ApplicationService {
       if (prepared && !same(prepared, operation)) fail("Prepared operation changed");
       // Copies keep trusted admission from accidentally mutating the prepared commit.
       await this.admission.admitCommit({command: parseApplicationCommand(command), current: structuredClone(current), revision: structuredClone(revision), previousRevision: structuredClone(current?.revision ?? null), pending: structuredClone(pending), store: this.store});
-      const operations = await hostNames(join(path, "operations"), APPLICATION_LIMITS.states, /^[a-f0-9]{64}\.json$/);
+      const operationsPath = join(path, "operations");
+      let operations: string[] = [];
+      try { await lstat(operationsPath); operations = await hostNames(operationsPath, APPLICATION_LIMITS.states, /^[a-f0-9]{64}\.json$/); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
       if (!prepared && operations.length >= APPLICATION_LIMITS.states) throw new Error("Application operation bound exhausted");
-      for (const intent of intents) await putApplicationRecord(this.store, intent);
-      await putApplicationRecord(this.store, transition); await putApplicationRecord(this.store, state);
-      await hostWrite(operationPath, json(operation), 2048);
-      await this.options.fault?.("prepared");
-      try {
-        await hostWrite(join(path, "head.json"), json({contract: "algal.application-head.v1", application: command.application, state: next.digest}), 512, false);
-        await this.options.fault?.("head-published");
-      } catch {
-        throw new AlgalError("IO_FAILED", "Application commit acknowledgment uncertain; inspect the exact operation", {operation: command.operation}, {uncertain: true});
-      }
+      const head = json({contract: "algal.application-head.v1", application: command.application, state: next.digest});
+      await withApplicationQuota(this.dir, command.application, [json(operation), head], async () => {
+        for (const intent of intents) await putApplicationRecord(this.store, intent);
+        await putApplicationRecord(this.store, transition); await putApplicationRecord(this.store, state);
+        await hostWrite(operationPath, json(operation), 2048);
+        await this.options.fault?.("prepared");
+        try {
+          await hostWrite(join(path, "head.json"), head, 512, false);
+          await this.options.fault?.("head-published");
+        } catch {
+          throw new AlgalError("IO_FAILED", "Application commit acknowledgment uncertain; inspect the exact operation", {operation: command.operation}, {uncertain: true});
+        }
+      });
       return structuredClone(next);
     });
   }
@@ -391,7 +400,7 @@ export class ApplicationService {
     if (record.configurationDigest !== dispatcher.configurationDigest) fail("Dispatcher configuration changed");
     const path = join(this.path(record.application), "outbox", record.intent.slice(7) + ".json");
     if (!reconciliation) {
-      await hostWrite(path, json(record), APPLICATION_LIMITS.recordBytes);
+      await withApplicationQuota(this.dir, record.application, [json(record)], () => hostWrite(path, json(record), APPLICATION_LIMITS.recordBytes));
       await this.options.fault?.("dispatch-started");
     }
     let outcome: ApplicationDispatchOutcome;
@@ -402,7 +411,7 @@ export class ApplicationService {
       outcome = {status: "uncertain", reason: "Dispatcher did not establish settlement; explicit reconciliation required"};
     }
     const updated: ApplicationDispatch = {...record, status: outcome.status, result: outcome.status === "settled" ? await putApplicationRecord(this.store, outcome.result) : null, reason: outcome.status === "settled" ? null : outcome.reason};
-    await hostWrite(path, json(updated), APPLICATION_LIMITS.recordBytes, false);
+    await withApplicationQuota(this.dir, record.application, [json(updated)], () => hostWrite(path, json(updated), APPLICATION_LIMITS.recordBytes, false));
     await this.options.fault?.("dispatch-settled");
     return updated;
   }

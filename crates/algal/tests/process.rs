@@ -398,7 +398,7 @@ async fn audit_counts_identical_checkpoints_and_rejects_rewritten_prefix_evidenc
 }
 
 #[tokio::test]
-async fn exception_after_a_live_write_leaves_durable_uncertain_intent() {
+async fn deterministic_guard_failure_after_a_live_write_settles_with_evidence() {
     let directory = tempfile::tempdir().unwrap();
     let mailboxes = MailboxService::open(directory.path());
     let inbox = mailboxes.create("inbox", 4, 1024).unwrap();
@@ -417,17 +417,29 @@ async fn exception_after_a_live_write_leaves_durable_uncertain_intent() {
             &Transports::new(),
         )
         .unwrap();
-    assert!(
-        service
-            .tick("exception", None, &mut host, &Transports::new())
-            .await
-            .is_err()
+    let failed = service
+        .tick("exception", None, &mut host, &Transports::new())
+        .await
+        .unwrap();
+    assert_eq!(failed.process.status, "failed");
+    let receipt = service
+        .store
+        .get("runs", failed.process.receipt.as_ref().unwrap())
+        .unwrap()
+        .unwrap();
+    assert_eq!(receipt["failure"]["code"], "GUARD_INVALID");
+    assert_eq!(receipt["effects"].as_array().unwrap().len(), 1);
+    assert_eq!(receipt["cells"]["b-send"]["status"], "committed");
+    assert_eq!(
+        service.verify("exception", &host).await.unwrap()["receipts"],
+        1
     );
     assert!(mailboxes.has_pending(&outbox.receive).unwrap());
+    mailboxes.receive(&outbox.receive).unwrap();
     let mut restarted = ProcessService::open(directory.path()).unwrap();
     assert_eq!(
         restarted.inspect("exception").unwrap().process.status,
-        "uncertain"
+        "failed"
     );
     assert_eq!(
         restarted
@@ -442,6 +454,65 @@ async fn exception_after_a_live_write_leaves_durable_uncertain_intent() {
             .await
             .is_err()
     );
+    assert!(!mailboxes.has_pending(&outbox.receive).unwrap());
+}
+
+#[tokio::test]
+async fn receipt_publication_failure_after_a_live_write_leaves_durable_uncertain_intent() {
+    let directory = tempfile::tempdir().unwrap();
+    let mailboxes = MailboxService::open(directory.path());
+    let inbox = mailboxes.create("inbox", 4, 1024).unwrap();
+    let outbox = mailboxes.create("outbox", 4, 1024).unwrap();
+    let mut host = host(&mailboxes);
+    let mut service = ProcessService::open(directory.path()).unwrap();
+    service
+        .create(
+            "exception",
+            receiver(),
+            json!({"a-source":{"inbox":inbox.receive,"outbox":outbox.send,"payload":true}}),
+            4,
+            &host,
+            &Transports::new(),
+        )
+        .unwrap();
+    // A real filesystem fault is discovered only when the receipt is published,
+    // after the live mailbox send has completed. A deterministic cell failure
+    // is receipted and no longer provides this exceptional exit path.
+    let obstruction = directory.path().join("runs");
+    fs::write(&obstruction, b"receipt namespace unavailable").unwrap();
+    assert!(
+        service
+            .tick("exception", None, &mut host, &Transports::new())
+            .await
+            .is_err()
+    );
+    assert!(mailboxes.has_pending(&outbox.receive).unwrap());
+    mailboxes.receive(&outbox.receive).unwrap();
+    fs::remove_file(obstruction).unwrap();
+    drop(service);
+    let mut restarted = ProcessService::open(directory.path()).unwrap();
+    let uncertain = restarted.inspect("exception").unwrap();
+    assert_eq!(uncertain.process.status, "uncertain");
+    assert!(uncertain.process.receipt.is_none());
+    assert_eq!(
+        restarted
+            .schedule(16, &mut host, &Transports::new())
+            .await
+            .unwrap()["ticks"],
+        0
+    );
+    assert!(
+        restarted
+            .tick("exception", None, &mut host, &Transports::new())
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        restarted.inspect("exception").unwrap().digest,
+        uncertain.digest
+    );
+    assert!(!mailboxes.has_pending(&outbox.receive).unwrap());
+    assert!(!directory.path().join("runs").exists());
 }
 
 #[test]

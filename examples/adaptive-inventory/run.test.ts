@@ -14,6 +14,7 @@ nativeTest("inventory inhabitants retain evidence through restart, contention an
   const root = join(parent, "scenario");
   const evidence = await runInventoryScenario(root, native!);
   expect(evidence.decision).toBe("restock");
+  expect(evidence.goal.statuses).toEqual(["unknown", "supported", "stale", "supported", "supported"]);
   expect(evidence.observations).toBe(4);
   expect(evidence.probeEffects).toBe(4);
   expect(evidence.episodeEffects).toBe(2);
@@ -29,6 +30,10 @@ nativeTest("inventory inhabitants retain evidence through restart, contention an
   expect(evidence.qualification).toEqual({ proposal: "authored-deterministic", inference: "native-replay-verified", modelCalls: 0, paidApiSpendUsd: 0 });
   const view = JSON.parse(await readFile(join(root, "view.json"), "utf8"));
   expect(view.state).toBe(evidence.state);
+  expect(view.goals[0].goal).toBe(evidence.goal.reference);
+  expect(view.goals[0].state).toBe(evidence.state);
+  expect(view.goals[0].status).toBe("supported");
+  expect(view.goals[0].definition.entrypoint).toBe("planner");
   expect(view.procedures.find((p: { name: string }) => p.name === "planner").applicability).toBe("supported");
   await expect(runInventoryScenario(root, native!)).rejects.toThrow();
 }, 60000);

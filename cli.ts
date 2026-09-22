@@ -331,6 +331,17 @@ async function readJson(path: string): Promise<JsonValue> {
   }
 }
 
+async function readOptionalJson(path: string): Promise<JsonValue | undefined> {
+  let source: string;
+  try { source = await readFile(path, "utf8"); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
+  try { return asJsonValue(JSON.parse(source), path); }
+  catch (error) { throw new AlgalError("PARSE_FAILED", `${path}: ${error instanceof Error ? error.message : String(error)}`); }
+}
+
 async function readJsonBounded(
   path: string,
   maxBytes: number,
@@ -2177,22 +2188,16 @@ async function main(): Promise<number> {
       }
       for (const [id, { raw: manifestRaw, manifest }] of parsed) {
         let responses: Record<string, JsonValue> = {};
-        try {
-          responses = asRecord(
-            asJsonValue(JSON.parse(await readFile(join(examplesDir, `${id}.responses.json`), "utf8")), "responses"),
-            "responses",
-          ) as Record<string, JsonValue>;
-        } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+        const responseValue = await readOptionalJson(join(examplesDir, `${id}.responses.json`));
+        if (responseValue !== undefined) responses = asRecord(responseValue, "responses");
         const args: Record<string, Record<string, JsonValue>> = {};
-        try {
-          const raw = asRecord(
-            asJsonValue(JSON.parse(await readFile(join(examplesDir, `${id}.args.json`), "utf8")), "args"),
-            "args",
-          );
+        const argsValue = await readOptionalJson(join(examplesDir, `${id}.args.json`));
+        if (argsValue !== undefined) {
+          const raw = asRecord(argsValue, "args");
           for (const [k, v] of Object.entries(raw)) {
             args[k] = asRecord(v, `args.${k}`) as Record<string, JsonValue>;
           }
-        } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+        }
         let transports: Record<string, Transport> | undefined;
         try {
           await readFile(join(examplesDir, `${id}.transports.json`), "utf8");

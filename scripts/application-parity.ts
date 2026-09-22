@@ -13,11 +13,13 @@
  * Exit 0 = identical outputs on every step; nonzero prints the first
  * divergence. */
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { ApplicationService, type ApplicationDispatch, type ApplicationDispatchAttempt, type ApplicationSnapshot } from "../src/application";
-import { applicationJson } from "../src/application-contract";
+import { applicationJson, parseApplicationRevision } from "../src/application-contract";
+import { captureApplicationGoals } from "../src/application-goal";
+import { APPLICATION_QUOTA_LIMITS } from "../src/application-quota";
 import {
   admitApplicationActivation, checkApplicationCompatibility, evaluateApplicationRevision, verifyApplicationEvaluation,
 } from "../src/application-adaptation";
@@ -32,6 +34,7 @@ import { capabilityHandle } from "../src/capabilities";
 import { builtinRegistry } from "../src/registry";
 import { manifestToJson, parseOrganismManifest } from "../src/contract";
 import { digestCanonical, type Digest } from "../src/digest";
+import { FileStore } from "../src/store";
 import { canonicalize, canonicalBytes, type JsonValue } from "../src/values";
 
 const root = resolve(import.meta.dir, "..");
@@ -490,19 +493,171 @@ steps.push(
   { name: "inspect-final", ts: async () => inspectShape(await service.inspect(APP)), native: async () => app("inspect", APP) },
 );
 
-const runNativeAttempt = async (args: string[]) => {
-  const proc = Bun.spawn([binary, "--dir", nativeDir, ...args], { stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
-  return { stdout, stderr, code };
+const runNativeAttempt = async (args: string[], directory = nativeDir) => {
+  const proc = Bun.spawn([binary, "--dir", directory, ...args], { stdout: "pipe", stderr: "pipe" });
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; proc.kill("SIGKILL"); }, 30_000);
+  try {
+    const [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
+    if (timedOut || proc.signalCode !== null) throw new Error(`Native parity process did not exit normally: timeout ${timedOut}, signal ${proc.signalCode}`);
+    return { stdout, stderr, code };
+  } finally { clearTimeout(timer); }
 };
-const runNative = async (args: string[]) => {
-  const { stdout, stderr, code } = await runNativeAttempt(args);
+const runNative = async (args: string[], directory = nativeDir) => {
+  const { stdout, stderr, code } = await runNativeAttempt(args, directory);
   if (code !== 0) throw new Error(`native ${args.join(" ")} failed (${code}): ${stderr.trim()}`);
   return JSON.parse(stdout) as unknown;
 };
 
 const same = (a: unknown, b: unknown) => canonicalize(a as JsonValue) === canonicalize(b as JsonValue);
 let checked = 0;
+
+/** Exercise admission boundaries on fresh namespaces with shared immutable
+ * fixtures. Synthetic quota charges stand for retained reservations; no large
+ * files, live effects, or adjustments to production limits are needed. */
+async function checkGoalAndQuotaParity(): Promise<void> {
+  const equal = (name: string, left: unknown, right: unknown): void => {
+    if (!same(left, right)) throw new Error(`Application boundary parity diverged: ${name}`);
+    checked++;
+  };
+  const pair = async (name: string) => {
+    const directories = [join(temporary, name, "ts"), join(temporary, name, "native")];
+    for (const directory of directories) {
+      await mkdir(directory, { recursive: true });
+      for (const kind of ["values", "manifests", "runs"]) {
+        await cp(join(tsDir, kind), join(directory, kind), { recursive: true });
+      }
+    }
+    const [typescript, native] = directories as [string, string];
+    const admission = createApplicationPolicyHost(policy, { channelsDir: join(typescript, "channels"), memoryEngine: engine });
+    const lifecycle = new ApplicationService(typescript, admission);
+    const nativeStore = new FileStore(native);
+    const put = async (value: JsonValue) => {
+      const ref = await lifecycle.store.putValue(value);
+      if (await nativeStore.putValue(value) !== ref) throw new Error("Fixture storage identity differs");
+      return ref;
+    };
+    return { typescript, native, lifecycle, nativeStore, admission, put };
+  };
+  type Pair = Awaited<ReturnType<typeof pair>>;
+  const command = (revision: Digest, name: string) => ({ application: APP, operation: op(name), kind: "create", expectedHead: null, revision, memory: genesisMemoryRef, intents: [], evidence: [], causedBy: null });
+  const shape = (snapshot: ApplicationSnapshot) => ({ state: snapshot.digest, transition: snapshot.state.transition, revision: snapshot.state.revision, memory: snapshot.state.memory });
+  const create = async (p: Pair, revision: Digest, name: string) => {
+    const input = command(revision, name);
+    const actual = await p.lifecycle.create(input);
+    equal(name, shape(actual), await runNative(app("create", await dynamic(name, input)), p.native));
+    return actual;
+  };
+  const reject = async (p: Pair, revision: JsonValue, name: string) => {
+    const ref = await p.put(revision), input = command(ref, name);
+    const refused = await p.lifecycle.create(input).then(() => false, () => true);
+    const native = await runNativeAttempt(app("create", await dynamic(name, input)), p.native);
+    if (!refused || native.code !== 2) throw new Error(`Goal admission failed its rejection contract: ${name}; TS rejected ${refused}, native exit ${native.code}`);
+    equal(`${name} leaves no head`, await p.lifecycle.inspect(APP), await runNative(app("inspect", APP), p.native));
+    checked++;
+  };
+  // An admitted identifier may match an inherited Object property: missing
+  // evidence must remain unknown, and an own supplied digest must still work.
+  const goal = { contract: "algal.application-goal.v1", application: APP, id: "constructor", description: "Find an available tool", query: queryRef, entrypoint: "run" };
+  equal("legacy revision absence preserves identity", digestCanonical(parseApplicationRevision(revision)), revisionRef);
+  for (const selection of ["absent", "empty", "defined", "max-description"] as const) {
+    const p = await pair(`goals-${selection}`), goalRef = await p.put(selection === "max-description" ? { ...goal, description: "é".repeat(1024) } : goal);
+    const body = selection === "absent" ? revision : { ...revision, goals: selection === "empty" ? [] : [goalRef] };
+    const snapshot = await create(p, await p.put(body), `goals-${selection}`);
+    const projection = async (evidence: Record<string, Digest> = {}) => projectApplicationView({ snapshot, spec: parseApplicationViewSpec(values.views), history: await p.lifecycle.history(APP),
+      ...(Object.hasOwn(snapshot.revision, "goals") ? { goals: await captureApplicationGoals(p.lifecycle.store, snapshot, evidence) } : {}) });
+    equal(`goals-${selection} view`, await projection(), await runNative(app("view", await dynamic(`goals-${selection}-view`, { application: APP, spec: digests.views })), p.native));
+    const view = await projection();
+    if (Object.hasOwn(view, "goals") !== (selection !== "absent")) throw new Error("Goal absence and explicit selection were conflated");
+    if (selection === "defined") {
+      const memory = new ApplicationMemoryService({ store: p.lifecycle.store, engine, admission: p.admission });
+      const derived = await memory.query(snapshot.digest, queryRef);
+      equal("goal derivation", { derivation: derived.ref, status: derived.derivation.status }, await runNative(app("query", snapshot.digest, queryRef), p.native));
+      const evidence = { [goal.id]: derived.ref };
+      equal("goal captured derivation view", await projection(evidence), await runNative(app("view", await dynamic("goals-evidence-view", { application: APP, spec: digests.views, goalDerivations: evidence })), p.native));
+      for (const [name, invalid] of [["unknown-goal", { foreign: derived.ref }], ["foreign-state", { [goal.id]: derivationRef }]] as const) {
+        const refused = await projection(invalid).then(() => false, () => true);
+        const native = await runNativeAttempt(app("view", await dynamic(`goals-${name}-view`, { application: APP, spec: digests.views, goalDerivations: invalid })), p.native);
+        if (!refused || native.code !== 2) throw new Error(`Goal capture failed its rejection contract: ${name}`);
+        checked++;
+      }
+    }
+  }
+  const malformed = await pair("goals-malformed");
+  for (const [name, body] of Object.entries({
+    application: { ...goal, application: "foreign" }, query: { ...goal, query: query2Ref }, entrypoint: { ...goal, entrypoint: "missing" },
+    "empty-description": { ...goal, description: "" }, "description-bytes": { ...goal, description: "é".repeat(1025) },
+    "nul-description": { ...goal, description: "bad\0goal" }, "unknown-field": { ...goal, extra: true }, "malformed-digest": { ...goal, query: "sha256:bad" },
+  })) await reject(malformed, { ...revision, goals: [await malformed.put(body)] }, `goal-reject-${name}`);
+  const goalRef = await malformed.put(goal), alternate = await malformed.put({ ...goal, description: "Another description" });
+  await reject(malformed, { ...revision, goals: [goalRef, alternate].sort() }, "goal-reject-duplicate-id");
+  await reject(malformed, { ...revision, goals: [goalRef, goalRef] }, "goal-reject-duplicate-ref");
+  await reject(malformed, { ...revision, goals: [goalRef, alternate].sort().reverse() }, "goal-reject-unsorted-refs");
+  const tooMany: Digest[] = [];
+  for (let i = 0; i < 9; i++) tooMany.push(await malformed.put({ ...goal, id: `goal-${i}` }));
+  await reject(malformed, { ...revision, goals: tooMany.sort() }, "goal-reject-count-bound");
+  await reject(malformed, { ...revision, goals: [op("missing-goal")] }, "goal-reject-missing-record");
+  // Keep the addressed filename while changing its bytes: parser acceptance of
+  // the new body must never substitute for checking the requested CAS identity.
+  for (const directory of [malformed.typescript, malformed.native]) await writeFile(join(directory, "values", goalRef.slice(7) + ".json"), canonicalize({ ...goal, description: "tampered" }));
+  await reject(malformed, { ...revision, goals: [goalRef] }, "goal-reject-changed-digest");
+
+  const ledgerPath = (directory: string) => join(directory, ".application-quota", "ledger.json");
+  const ledger = async (directory: string) => JSON.parse(await readFile(ledgerPath(directory), "utf8")) as { contract: string; applications: { application: string; bytes: number }[] };
+  const seedLedger = async (p: Pair, applications: { application: string; bytes: number }[]) => {
+    for (const directory of [p.typescript, p.native]) {
+      await mkdir(join(directory, ".application-quota"), { recursive: true });
+      await writeFile(ledgerPath(directory), canonicalize({ contract: "algal.application-quota.v1", applications }));
+    }
+  };
+  const rejectQuota = async (p: Pair, input: JsonValue, name: string, verb = "commit") => {
+    const tsError: unknown = await p.lifecycle.commit(input).then(() => null, error => error);
+    const native = await runNativeAttempt(app(verb, await dynamic(name, input)), p.native);
+    const nativeError = native.code === 2 ? (JSON.parse(native.stderr) as { error?: { code?: string; message?: string } }).error : undefined;
+    if (!(tsError instanceof Error) || !("code" in tsError) || tsError.code !== "BUDGET_EXHAUSTED" || !tsError.message.startsWith("Application namespace quota:") ||
+        nativeError?.code !== "BUDGET_EXHAUSTED" || !nativeError.message?.startsWith("Application namespace quota:")) {
+      throw new Error(`Quota fixture failed its quota-specific rejection contract: ${name}; TS ${String(tsError)}, native exit ${native.code}: ${native.stderr.slice(-1000)}`);
+    }
+    checked++;
+  };
+  const quota = await pair("quota-measure");
+  const initial = await create(quota, revisionRef, "quota-create");
+  equal("quota initial persistent ledger", await ledger(quota.typescript), await ledger(quota.native));
+  const charge = (await ledger(quota.typescript)).applications.find(row => row.application === APP)!.bytes;
+  const reservation = charge - APPLICATION_QUOTA_LIMITS.ownerHeadroom;
+  if (reservation <= 0) throw new Error("Creation omitted its quota reservation");
+  // Cross-runtime handoff on the very same files, not two separately created
+  // lookalikes: native commits the TS-created namespace, then TS reads/advances.
+  const handoff = { ...command(revisionRef, "quota-native-handoff"), kind: "memory", expectedHead: initial.digest };
+  await runNative(app("commit", await dynamic("quota-native-handoff", handoff)), quota.typescript);
+  const nativeHead = (await quota.lifecycle.inspect(APP))!;
+  const beforeTs = (await ledger(quota.typescript)).applications[0]!.bytes;
+  const tsHead = await quota.lifecycle.commit({ ...handoff, operation: op("quota-ts-handoff"), expectedHead: nativeHead.digest });
+  equal("quota native reads TS handoff", inspectShape(tsHead), await runNative(app("inspect", APP), quota.typescript));
+  if ((await ledger(quota.typescript)).applications[0]!.bytes <= beforeTs) throw new Error("Cross-runtime quota charge did not advance");
+
+  const exact = await pair("quota-exact");
+  await seedLedger(exact, [{ application: APP, bytes: APPLICATION_QUOTA_LIMITS.applicationBytes - reservation }]);
+  const full = await create(exact, revisionRef, "quota-create");
+  equal("quota exact limit TS/native ledger", await ledger(exact.typescript), await ledger(exact.native));
+  if ((await ledger(exact.typescript)).applications[0]!.bytes !== APPLICATION_QUOTA_LIMITS.applicationBytes) throw new Error("Exact byte boundary was not respected");
+  const before = await ledger(exact.typescript);
+  const overflow = { ...command(revisionRef, "quota-overflow"), kind: "memory", expectedHead: full.digest };
+  await rejectQuota(exact, overflow, "quota-overflow");
+  equal("quota rejected TS publication keeps ledger", await ledger(exact.typescript), before);
+  equal("quota rejected native publication keeps ledger", await ledger(exact.native), before);
+  equal("quota rejected publication keeps head", inspectShape(await exact.lifecycle.inspect(APP)), await runNative(app("inspect", APP), exact.native));
+  await create(exact, revisionRef, "quota-create");
+  equal("quota exact replay does not charge", await ledger(exact.typescript), before);
+  equal("quota exact native replay does not charge", await ledger(exact.native), before);
+
+  const aggregate = await pair("quota-aggregate");
+  await seedLedger(aggregate, ["a", "b", "c", "d"].map(application => ({ application, bytes: APPLICATION_QUOTA_LIMITS.applicationBytes })));
+  const aggregateBefore = await ledger(aggregate.typescript), denied = command(revisionRef, "quota-aggregate-denied");
+  await rejectQuota(aggregate, denied, "quota-aggregate-denied", "create");
+  equal("quota aggregate rejection preserves TS ledger", await ledger(aggregate.typescript), aggregateBefore);
+  equal("quota aggregate rejection preserves native ledger", await ledger(aggregate.native), aggregateBefore);
+}
 try {
   for (const step of steps) {
     // Native arguments are functions of the pre-step state; build them before
@@ -511,7 +666,7 @@ try {
     if (step.fails) {
       const tsRejected = await step.ts().then(() => false, () => true);
       const { code } = await runNativeAttempt(args);
-      if (!tsRejected || code === 0) {
+      if (!tsRejected || code !== 2) {
         console.error(`PARITY DIVERGENCE at "${step.name}": expected rejection — ts ${tsRejected ? "rejected" : "accepted"}, native exit ${code}`);
         process.exit(1);
       }
@@ -542,6 +697,7 @@ try {
     }
     checked++;
   }
+  await checkGoalAndQuotaParity();
 } finally {
   await rm(temporary, { recursive: true, force: true });
 }

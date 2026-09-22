@@ -42,6 +42,18 @@ pub fn render(input: &Value) -> Result<String> {
         label(&view["memory"])
     );
     let widgets = view["widgets"].as_array().unwrap();
+    if widgets.iter().any(|v| v == "goals") {
+        html.push_str("<h2>Goals and captured evidence</h2><table><thead><tr><th>Goal</th><th>Query status</th><th>Selected procedure</th></tr></thead><tbody>");
+        for row in view["goals"].as_array().into_iter().flatten() {
+            html.push_str(&format!(
+                "<tr><td>{}</td><td>{}</td><td>{}</td></tr>",
+                label(&row["definition"]["description"]),
+                label(&row["status"]),
+                label(&row["definition"]["entrypoint"])
+            ));
+        }
+        html.push_str("</tbody></table>");
+    }
     if widgets.iter().any(|v| v == "procedures") {
         html.push_str("<h2>Procedures and applicability</h2><table><thead><tr><th>Procedure</th><th>Reported state</th><th>Manifest</th></tr></thead><tbody>");
         for row in view["procedures"].as_array().unwrap() {

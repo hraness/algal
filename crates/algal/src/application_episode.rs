@@ -283,6 +283,7 @@ mod tests {
                 runtime_profile: hashed(&json!({"d":4})),
                 evaluation_policy: hashed(&json!({"p":5})),
                 capability_requirements: vec![],
+                goals: None,
                 entrypoints: vec![],
                 value: Value::Null,
             },

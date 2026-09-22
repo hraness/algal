@@ -6,6 +6,7 @@ import {
   parseRunReceipt, projectApplicationView, putApplicationRecord, verifyReceipt,
   type ApplicationAdmission, type ApplicationSnapshot,
 } from "../../index";
+import { evaluateApplicationGoals } from "../../src/application-goal";
 import { ApplicationMemoryService } from "../../src/application-memory";
 import { NativeMemoryQueryEngine } from "../../src/application-native-memory";
 import { requestExecution, scheduleInvestigations } from "../../src/application-investigation";
@@ -48,6 +49,7 @@ function authored(name: string, output: string, value: JsonValue, maxWork: numbe
 
 export type InventoryEvidence = {
   contract: "algal.adaptive-inventory-demo.v1";
+  goal: {reference: Digest; statuses: string[]};
   root: string; nativeSha256: string; state: Digest; revision: Digest; evaluation: Digest;
   proposal: Digest; view: Digest; decision: string; observations: number; probeEffects: number;
   episodeEffects: number; restartRedeliveries: number; contenders: { accepted: number; rejected: number };
@@ -59,6 +61,7 @@ export type InventoryEvidence = {
   report: string | null;
 };
 type PhaseEvidence = {
+  goal?: Digest; goalStatuses?: string[];
   phase: Phase; pid: number; state: Digest; observations: number; probeEffects: number; episodeEffects: number;
   toolExecutions: number; proposal?: Digest; candidate?: Digest; evaluation?: Digest; evaluationExecutions?: number;
   accepted?: number; restartRedeliveries?: number; view?: Digest; inhabitants?: InventoryEvidence["inhabitants"];
@@ -82,14 +85,14 @@ export async function runInventoryScenario(root: string, executable: string, rep
     hostInvocations.push({ phase, pid: result.pid, exitCode: 0, evidence: identity(retained) }); final = result;
   }
   ensure(new Set(hostInvocations.map(p => p.pid)).size === phases.length, "Host phases did not use distinct processes");
-  ensure(final?.candidate && final.evaluation && final.proposal && final.view && final.inhabitants && final.evaluationExecutions === 12 && final.accepted === 1, "Final phase evidence is incomplete");
+  ensure(final?.candidate && final.evaluation && final.proposal && final.view && final.inhabitants && final.goal && final.goalStatuses && final.evaluationExecutions === 12 && final.accepted === 1, "Final phase evidence is incomplete");
   let report: string | null = null;
   if (reportExecutable) {
     const output = await childOutput([reportExecutable, "--dir", join(root, "report-store"), "application", "report", join(root, "view.json")], root, 10000);
     report = join(root, "report.html"); await writeFile(report, output, { flag: "wx" });
   }
   const evidence: InventoryEvidence = {
-    contract: "algal.adaptive-inventory-demo.v1", root, nativeSha256, state: final.state, revision: final.candidate,
+    contract: "algal.adaptive-inventory-demo.v1", goal: {reference: final.goal, statuses: final.goalStatuses}, root, nativeSha256, state: final.state, revision: final.candidate,
     evaluation: final.evaluation, proposal: final.proposal, view: final.view, decision: "restock", observations: final.observations,
     probeEffects: final.probeEffects, episodeEffects: final.episodeEffects, restartRedeliveries: final.restartRedeliveries!,
     contenders: { accepted: final.accepted, rejected: 1 }, hostInvocations,
@@ -161,7 +164,8 @@ async function runPhase(root: string, executable: string, phase: Phase): Promise
   ] }], query: { relation: "inventory", terms: [{ var: "tool" }, { var: "units" }, { var: "polarity" }] }, limits: { maxWork: 10000, maxRounds: 8, maxDerived: 32, maxBindings: 32, maxRows: 8, maxOutputBytes: 262144 } });
   const query = await store.putValue({ contract: "algal.application-memory-query.v1", id: "stock", schema, program, procedures: [domain.procedureRefs.stock!, domain.procedureRefs.tool!].sort(), polarityColumn: 2, conflict: "single-value" });
   const queries = await store.putValue({ contract: "algal.application-memory-queries.v1", queries: [query] });
-  const viewSpec = { contract: "algal.application-view-spec.v1" as const, title: "Adaptive inventory", widgets: ["history", "investigations", "memory", "procedures"] as const };
+  const goal = await putApplicationRecord(store, {contract: "algal.application-goal.v1", application: "inventory", id: "discover-inventory", description: "Establish current stock and discover the current inventory tool before selecting a replenishment recommendation.", query, entrypoint: "planner"});
+  const viewSpec = { contract: "algal.application-view-spec.v1" as const, title: "Adaptive inventory", widgets: ["goals", "history", "investigations", "memory", "procedures"] as const };
   const views = await store.putValue(json(viewSpec));
   const runtimeProfile = await store.putValue({ contract: "algal.application-runtime-profile.v1", runtime: "bun-native-memory", policy: "pure-case-evaluation.v1" });
   const evaluationPolicy = await store.putValue({ contract: "algal.application-evaluation-policy.v1", maxCases: 8, maxWork: 100000, maxModelCalls: 0, requireHoldoutPass: true, strictValidationImprovement: true });
@@ -169,7 +173,7 @@ async function runPhase(root: string, executable: string, phase: Phase): Promise
   const investigator = await store.putManifest(authored("investigator", "probes", { procedures: ["stock", "tool"] }, 2000));
   const proposer = await store.putManifest(authored("proposer", "proposed", manifestToJson(improved), 3000));
   const revision = await putApplicationRecord(store, {
-    contract: "algal.application-revision.v1", application: "inventory", parent: null, schema, queries, views, runtimeProfile, evaluationPolicy,
+    contract: "algal.application-revision.v1", application: "inventory", parent: null, schema, queries, views, runtimeProfile, evaluationPolicy, goals: [goal],
     capabilityRequirements: ["inventory-propose", "inventory-read"], entrypoints: [
       { name: "investigator", manifest: investigator, applicability: query, maxGenerations: 1, capabilities: ["inventory-read"], queries: [query] },
       { name: "planner", manifest: incumbent, applicability: query, maxGenerations: 1, capabilities: [], queries: [query] },
@@ -187,7 +191,17 @@ async function runPhase(root: string, executable: string, phase: Phase): Promise
     return inner.dispatch(context);
   } };
   const inspect = async (): Promise<ApplicationSnapshot> => { const value = await service.inspect("inventory"); ensure(value, "Inventory head missing"); return value; };
-  const schedule = async (head: ApplicationSnapshot, operation: string) => scheduleInvestigations(service, memory!, { application: "inventory", operation: identity(operation), expectedHead: head.digest, expectedMemory: head.state.memory, route: "probes", entrypoints: ["planner"] });
+  const captureGoal = async (head: ApplicationSnapshot) => {
+    const captured = (await evaluateApplicationGoals(memory!, head))[0];
+    ensure(captured?.goal === goal, "Inventory revision lost its retained goal");
+    evidence.goal = captured.goal; evidence.goalStatuses = [...(evidence.goalStatuses ?? []), captured.status];
+    return captured;
+  };
+  const schedule = async (head: ApplicationSnapshot, operation: string) => {
+    const objective = await captureGoal(head);
+    ensure(objective.status === "unknown" || objective.status === "stale", "Investigation must be driven by an unresolved retained goal");
+    return scheduleInvestigations(service, memory!, { application: "inventory", operation: identity(operation), expectedHead: head.digest, expectedMemory: head.state.memory, route: "probes", entrypoints: [objective.definition.entrypoint] });
+  };
   const observe = async () => {
     const delivered = await service.dispatchPending("inventory", dispatcher);
     ensure(delivered.length === 1 && delivered[0]!.status === "settled", "Investigation delivery did not settle");
@@ -196,14 +210,16 @@ async function runPhase(root: string, executable: string, phase: Phase): Promise
     ensure((await drainProbes(domain, service, memory!)).committed.length === 0, "Observation replay duplicated a transition");
   };
   const execution = async (head: ApplicationSnapshot, operation: string, contend = false) => {
-    const applicable = await memory!.query(head.digest, query);
+    const objective = await captureGoal(head);
+    ensure(objective.status === "supported" && objective.derivation, "Retained goal is not supported at the execution state");
+    const applicable = await memory!.query(head.digest, objective.definition.query);
     ensure(applicable.derivation.status === "supported" && applicable.derivation.result, `Planner lacks verified inventory evidence: ${applicable.derivation.status} (${applicable.derivation.reason ?? "no complete supporting result"})`);
     const rows = object(await store.getValue(applicable.derivation.result)).rows;
     ensure(Array.isArray(rows) && rows.length === 1, "Inventory query has no unique result");
     const tuple = object(rows[0]).tuple;
     ensure(Array.isArray(tuple) && typeof tuple[0] === "string" && typeof tuple[1] === "number", "Inventory result has wrong types");
     const input = await store.putValue({ stock: { value: { tool: tuple[0], units: tuple[1] } } });
-    const submit = (name: string) => requestExecution(service, { application: "inventory", operation: identity(name), expectedHead: head.digest, expectedMemory: head.state.memory, entrypoint: "planner", input, derivation: applicable.ref });
+    const submit = (name: string) => requestExecution(service, { application: "inventory", operation: identity(name), expectedHead: head.digest, expectedMemory: head.state.memory, entrypoint: objective.definition.entrypoint, input, derivation: applicable.ref });
     if (!contend) { await submit(operation); return; }
     const results = await Promise.allSettled([submit(operation + "-a"), submit(operation + "-b")]);
     evidence.accepted = results.filter(r => r.status === "fulfilled").length;
@@ -277,8 +293,9 @@ async function runPhase(root: string, executable: string, phase: Phase): Promise
     } else {
       evidence.restartRedeliveries = (await service.dispatchPending("inventory", dispatcher)).length;
       ensure(evidence.restartRedeliveries === 0, "Host restart repeated a settled delivery");
-      const head = await inspect(), derived = await memory.query(head.digest, query), entry = head.revision.entrypoints.find(e => e.name === "planner")!;
-      const view = projectApplicationView({ snapshot: head, spec: { ...viewSpec, widgets: [...viewSpec.widgets] }, history: await service.history("inventory"), applicability: { planner: { status: derived.derivation.status, queryResult: { digest: derived.ref, state: head.digest, procedure: entry.manifest } } } });
+      const head = await inspect(), objective = await captureGoal(head), entry = head.revision.entrypoints.find(e => e.name === objective.definition.entrypoint)!;
+      ensure(objective.derivation, "Final goal has no captured evidence");
+      const view = projectApplicationView({ snapshot: head, spec: { ...viewSpec, widgets: [...viewSpec.widgets] }, history: await service.history("inventory"), goals: [objective], applicability: { [entry.name]: { status: objective.status, queryResult: { digest: objective.derivation, state: head.digest, procedure: entry.manifest } } } });
       await writeFile(join(root, "view.json"), canonicalize(json(view)), { flag: "wx" }); evidence.view = identity(view);
       evidence.inhabitants = await Promise.all(head.revision.entrypoints.map(async entry => { const manifest = await store.getManifest(entry.manifest); ensure(manifest, "Inhabitant manifest missing"); return { name: entry.name, manifest: entry.manifest, capabilities: entry.capabilities, maxWork: manifest.budgets.maxWork, maxAgentCalls: manifest.budgets.maxAgentCalls }; }));
     }

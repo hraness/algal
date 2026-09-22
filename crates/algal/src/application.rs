@@ -73,12 +73,13 @@ pub struct Revision {
     pub runtime_profile: String,
     pub evaluation_policy: String,
     pub capability_requirements: Vec<String>,
+    pub goals: Option<Vec<String>>,
     pub entrypoints: Vec<Entrypoint>,
     pub value: Value,
 }
 
 pub fn parse_revision(input: &Value) -> Result<Revision> {
-    let v = app_object(
+    let v = app_object_opt(
         input,
         &[
             "contract",
@@ -92,6 +93,7 @@ pub fn parse_revision(input: &Value) -> Result<Revision> {
             "capabilityRequirements",
             "entrypoints",
         ],
+        &["goals"],
     )?;
     app_tag(&v["contract"], "algal.application-revision.v1")?;
     let mut capabilities = Vec::new();
@@ -158,6 +160,7 @@ pub fn parse_revision(input: &Value) -> Result<Revision> {
         runtime_profile: app_ref(&v["runtimeProfile"])?.to_owned(),
         evaluation_policy: app_ref(&v["evaluationPolicy"])?.to_owned(),
         capability_requirements: capabilities,
+        goals: v.get("goals").map(|value| app_refs(value, 8)).transpose()?,
         entrypoints,
         value: input.clone(),
     })
@@ -1401,6 +1404,7 @@ impl<'a> Service<'a> {
         if revision.application != command.application {
             return Err(fail("Revision belongs to another application"));
         }
+        crate::application_goal::validate_goals(&self.store, &revision)?;
         let mut needed = vec![
             command.memory.clone(),
             revision.schema.clone(),
@@ -1541,13 +1545,24 @@ impl<'a> Service<'a> {
                 store: &self.store,
             })
             .await?;
-        let operations = lease::names(&path.join("operations"), STATES)?
-            .into_iter()
-            .filter(|n| operation_name(n))
-            .count();
+        let operations_path = path.join("operations");
+        let operations = match std::fs::symlink_metadata(&operations_path) {
+            Ok(_) => lease::names(&operations_path, STATES)?
+                .into_iter()
+                .filter(|n| operation_name(n))
+                .count(),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => 0,
+            Err(error) => return Err(error.into()),
+        };
         if prepared.is_none() && operations >= STATES {
             return Err(Error::limit("Application operation bound exhausted"));
         }
+        let head = json!({"contract": "algal.application-head.v1", "application": command.application, "state": next.digest});
+        let _quota = crate::application_quota::reserve(
+            &self.dir,
+            &command.application,
+            &[&operation.value, &head],
+        )?;
         for intent in &intents {
             put_record(&mut self.store, &intent.value)?;
         }
@@ -1555,16 +1570,9 @@ impl<'a> Service<'a> {
         put_record(&mut self.store, &next.state.value)?;
         lease::write(&operation_path, &operation.value, false)?;
         self.fault("prepared")?;
-        if lease::write(
-            &path.join("head.json"),
-            &json!({
-                "contract": "algal.application-head.v1",
-                "application": command.application, "state": next.digest,
-            }),
-            true,
-        )
-        .and_then(|()| self.fault("head-published"))
-        .is_err()
+        if lease::write(&path.join("head.json"), &head, true)
+            .and_then(|()| self.fault("head-published"))
+            .is_err()
         {
             return Err(Error::new(
                 "IO_FAILED",
@@ -1678,6 +1686,11 @@ impl<'a> Service<'a> {
             .join("outbox")
             .join(format!("{}.json", &record.intent[7..]));
         if !reconciliation {
+            let _quota = crate::application_quota::reserve(
+                &self.dir,
+                &record.application,
+                &[&record.value],
+            )?;
             lease::write(&path, &record.value, false)?;
             self.fault("dispatch-started")?;
         }
@@ -1720,7 +1733,14 @@ impl<'a> Service<'a> {
             "plan": record.plan.value(), "status": status,
             "result": result_ref, "reason": why,
         }))?;
-        lease::write(&path, &updated.value, true)?;
+        {
+            let _quota = crate::application_quota::reserve(
+                &self.dir,
+                &record.application,
+                &[&updated.value],
+            )?;
+            lease::write(&path, &updated.value, true)?;
+        }
         self.fault("dispatch-settled")?;
         Ok(updated)
     }
@@ -2272,6 +2292,87 @@ mod tests {
 
     fn ops(name: &str) -> String {
         hashed(&json!({"contract":"algal.test-op.v1","name":name}))
+    }
+
+    #[tokio::test]
+    async fn quota_denied_genesis_does_not_reserve_an_application_name() {
+        let tmp = tempdir().unwrap();
+        let (revision, memory, _, _) = seed(tmp.path());
+        let allow = Allow;
+        let mut service = Service::new(tmp.path(), &allow).unwrap();
+        lease::write(&tmp.path().join(".application-quota/ledger.json"), &json!({"contract":"algal.application-quota.v1","applications":[{"application":"parity","bytes":crate::application_quota::APPLICATION_BYTES}]}), false).unwrap();
+        let create = command(
+            "parity",
+            &ops("quota-denied-create"),
+            "create",
+            None,
+            &revision,
+            &memory,
+            vec![],
+        );
+        assert!(
+            service
+                .create(&create)
+                .await
+                .unwrap_err()
+                .message
+                .contains("per-application")
+        );
+        assert_eq!(
+            std::fs::read_dir(tmp.path().join("applications"))
+                .unwrap()
+                .count(),
+            1
+        );
+        assert!(service.inspect("parity").unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn namespace_quota_preserves_inspection_and_committed_idempotence() {
+        let tmp = tempdir().unwrap();
+        let (revision, memory, _, _) = seed(tmp.path());
+        let allow = Allow;
+        let mut service = Service::new(tmp.path(), &allow).unwrap();
+        let create = command(
+            "parity",
+            &ops("quota-create"),
+            "create",
+            None,
+            &revision,
+            &memory,
+            vec![],
+        );
+        let initial = service.create(&create).await.unwrap();
+        std::fs::File::create(service.path("parity").join("orphan"))
+            .unwrap()
+            .set_len(crate::application_quota::APPLICATION_BYTES)
+            .unwrap();
+        let next = command(
+            "parity",
+            &ops("quota-next"),
+            "memory",
+            Some(&initial.digest),
+            &revision,
+            &memory,
+            vec![],
+        );
+        assert!(
+            service
+                .commit(&next)
+                .await
+                .unwrap_err()
+                .message
+                .contains("per-application")
+        );
+        assert_eq!(
+            service.inspect("parity").unwrap().unwrap().digest,
+            initial.digest
+        );
+        assert_eq!(
+            service.create(&create).await.unwrap().digest,
+            initial.digest
+        );
+        assert_eq!(service.history("parity").unwrap().len(), 1);
     }
 
     #[tokio::test]

@@ -20,7 +20,7 @@ fn fail(message: &str) -> Error {
 const VIEW_SPEC: &str = "algal.application-view-spec.v1";
 const VIEW: &str = "algal.application-view.v1";
 const PROFILE: &str = "algal.application-runtime-profile.v1";
-const WIDGETS: [&str; 4] = ["procedures", "memory", "history", "investigations"];
+const WIDGETS: [&str; 5] = ["procedures", "memory", "history", "investigations", "goals"];
 const STATUSES: [&str; 8] = [
     "unknown",
     "supported",
@@ -39,7 +39,7 @@ pub struct ViewSpec {
 
 fn widgets(value: &Value) -> Result<Vec<String>> {
     let mut out = Vec::new();
-    for item in list(value, 4)? {
+    for item in list(value, 5)? {
         let name = item
             .as_str()
             .filter(|s| WIDGETS.contains(s))
@@ -120,6 +120,24 @@ pub fn project_view(
     history: Option<&[Snapshot]>,
     applicability: &BTreeMap<String, Applicability>,
 ) -> Result<Value> {
+    project_view_with_goals(snapshot, spec, history, applicability, None)
+}
+
+pub fn project_view_with_goals(
+    snapshot: &Snapshot,
+    spec: &ViewSpec,
+    history: Option<&[Snapshot]>,
+    applicability: &BTreeMap<String, Applicability>,
+    goals: Option<&Value>,
+) -> Result<Value> {
+    let captured_goals = if snapshot.revision.goals.is_some() || goals.is_some() {
+        Some(crate::application_goal::bind_captures(
+            snapshot,
+            goals.unwrap_or(&json!([])),
+        )?)
+    } else {
+        None
+    };
     let empty;
     let history = match history {
         Some(h) => h,
@@ -182,7 +200,7 @@ pub fn project_view(
         .iter()
         .map(|intent| json!({"intent": intent, "expectedState": snapshot.digest}))
         .collect();
-    let view = json!({
+    let mut view = json!({
         "contract": VIEW,
         "application": snapshot.state.application,
         "state": snapshot.digest,
@@ -201,6 +219,9 @@ pub fn project_view(
         "actions": actions,
         "truncated": history.len() > 128,
     });
+    if let Some(goals) = captured_goals {
+        view["goals"] = goals;
+    }
     if canonical(&view)?.len() > 262_144 {
         return Err(fail("Application view byte bound exceeded"));
     }
@@ -215,7 +236,7 @@ pub fn load_view_spec(service: &Service, reference: &str) -> Result<ViewSpec> {
 /// `parseApplicationView`: every record is checked against its own fences, so
 /// views crossing states, applications, or unlisted procedures are rejected.
 pub fn parse_view(input: &Value) -> Result<Value> {
-    let v = app_object(
+    let v = app_object_opt(
         input,
         &[
             "contract",
@@ -231,6 +252,7 @@ pub fn parse_view(input: &Value) -> Result<Value> {
             "actions",
             "truncated",
         ],
+        &["goals"],
     )?;
     app_tag(&v["contract"], VIEW)?;
     let application = app_id(&v["application"])?.to_owned();
@@ -254,6 +276,30 @@ pub fn parse_view(input: &Value) -> Result<Value> {
             "applicability": applicability,
         }));
     }
+    let goals = if let Some(raw) = v.get("goals") {
+        let mut refs = Vec::new();
+        let mut ids = std::collections::BTreeSet::new();
+        for row in list(raw, 8)? {
+            let row = crate::application_goal::parse_capture(row)?;
+            let goal = crate::application_goal::parse_goal(&row["definition"])?;
+            let reference = app_ref(&row["goal"])?;
+            if row["state"] != state
+                || row["memory"] != memory
+                || goal.application != application
+                || !ids.insert(goal.id)
+                || !procedures.iter().any(|p| p["name"] == goal.entrypoint)
+                || refs
+                    .last()
+                    .is_some_and(|last: &String| last.as_str() >= reference)
+            {
+                return Err(fail("Goal capture crosses the captured application state"));
+            }
+            refs.push(reference.to_owned());
+        }
+        Some(raw.clone())
+    } else {
+        None
+    };
     let mut history = Vec::new();
     for raw in list(&v["history"], 128)? {
         let h = app_object(raw, &["state", "sequence", "revision", "memory"])?;
@@ -341,7 +387,7 @@ pub fn parse_view(input: &Value) -> Result<Value> {
     let truncated = v["truncated"]
         .as_bool()
         .ok_or_else(|| fail("Invalid view truncation marker"))?;
-    Ok(json!({
+    let mut output = json!({
         "contract": VIEW,
         "application": application,
         "state": state,
@@ -354,7 +400,11 @@ pub fn parse_view(input: &Value) -> Result<Value> {
         "investigations": investigations,
         "actions": actions,
         "truncated": truncated,
-    }))
+    });
+    if let Some(goals) = goals {
+        output["goals"] = goals;
+    }
+    Ok(output)
 }
 
 /// `algal application view <input>` — resolves the current head, projects the
@@ -362,7 +412,11 @@ pub fn parse_view(input: &Value) -> Result<Value> {
 /// `{application, spec: <spec digest>, applicability?: {name: {status,
 /// queryResult?}}}`.
 pub fn view(service: &Service, input: &Value) -> Result<Value> {
-    let v = app_object_opt(input, &["application", "spec"], &["applicability"])?;
+    let v = app_object_opt(
+        input,
+        &["application", "spec"],
+        &["applicability", "goalDerivations"],
+    )?;
     let application = app_id(&v["application"])?;
     let spec_ref = app_ref(&v["spec"])?;
     let mut applicability = BTreeMap::new();
@@ -378,7 +432,23 @@ pub fn view(service: &Service, input: &Value) -> Result<Value> {
         .ok_or_else(|| fail("Missing application state"))?;
     let history = service.history(application)?;
     let spec = load_view_spec(service, spec_ref)?;
-    project_view(&snapshot, &spec, Some(&history), &applicability)
+    let mut evidence = BTreeMap::new();
+    if let Some(raw) = v.get("goalDerivations") {
+        for (id, reference) in crate::contract::object(raw)? {
+            evidence.insert(
+                app_id(&json!(id))?.to_owned(),
+                app_ref(reference)?.to_owned(),
+            );
+        }
+    }
+    let goals = crate::application_goal::capture_goals(&service.store, &snapshot, &evidence)?;
+    project_view_with_goals(
+        &snapshot,
+        &spec,
+        Some(&history),
+        &applicability,
+        snapshot.revision.goals.as_ref().map(|_| &goals),
+    )
 }
 
 #[cfg(test)]
@@ -429,6 +499,7 @@ mod tests {
                 views: hashed(&json!({"v": 1})),
                 runtime_profile: hashed(&json!({"p": 1})),
                 evaluation_policy: hashed(&json!({"e": 1})),
+                goals: None,
                 capability_requirements: vec![],
                 entrypoints: vec![Entrypoint {
                     name: "run".to_owned(),

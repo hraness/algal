@@ -1,4 +1,4 @@
-/** Experimental application host records. Native application parity is not yet claimed. */
+/** Closed, bounded application records shared with the native implementation. */
 import { asDigest, digestCanonical, type Digest } from "./digest";
 import type { Store } from "./store";
 import { asJsonValue, canonicalize, type JsonValue } from "./values";
@@ -13,6 +13,8 @@ export type ApplicationRevision = {
   runtimeProfile: Digest;
   evaluationPolicy: Digest;
   capabilityRequirements: string[];
+  /** Addressed goals are optional for existing revisions; absence is preserved. */
+  goals?: Digest[];
   /** An inhabitant: `capabilities` names the subset of the revision's
    * capability requirements it may exercise, `queries` the subset of the
    * revision's memory queries it may consult (its memory view). Both are
@@ -112,7 +114,8 @@ export async function getApplicationRecord<T>(store: Store, ref: Digest, parse: 
 }
 
 export function parseApplicationRevision(input: unknown): ApplicationRevision {
-  const v = applicationObject(input, ["contract", "application", "parent", "schema", "queries", "views", "runtimeProfile", "evaluationPolicy", "capabilityRequirements", "entrypoints"]);
+  const hasGoals = !!input && typeof input === "object" && Object.hasOwn(input, "goals");
+  const v = applicationObject(input, ["contract", "application", "parent", "schema", "queries", "views", "runtimeProfile", "evaluationPolicy", "capabilityRequirements", "entrypoints", ...(hasGoals ? ["goals"] : [])]);
   applicationTag(v.contract, "algal.application-revision.v1");
   const capabilities = applicationList(v.capabilityRequirements, 32, applicationId);
   if (new Set(capabilities).size !== capabilities.length || capabilities.some((s, i) => i > 0 && s < capabilities[i - 1]!)) throw new Error("Capabilities must be sorted and unique");
@@ -123,7 +126,7 @@ export function parseApplicationRevision(input: unknown): ApplicationRevision {
     return {name: applicationId(e.name), manifest: applicationRef(e.manifest), applicability: applicationRef(e.applicability), maxGenerations: applicationInt(e.maxGenerations, 1, 64), capabilities: caps, queries: applicationRefs(e.queries, 32)};
   });
   if (!entrypoints.length || new Set(entrypoints.map(e => e.name)).size !== entrypoints.length || entrypoints.some((e, i) => i > 0 && e.name < entrypoints[i - 1]!.name)) throw new Error("Entrypoints must be nonempty, sorted, unique");
-  return {contract: "algal.application-revision.v1", application: applicationId(v.application), parent: nullableApplicationRef(v.parent), schema: applicationRef(v.schema), queries: applicationRef(v.queries), views: applicationRef(v.views), runtimeProfile: applicationRef(v.runtimeProfile), evaluationPolicy: applicationRef(v.evaluationPolicy), capabilityRequirements: capabilities, entrypoints};
+  return {contract: "algal.application-revision.v1", application: applicationId(v.application), parent: nullableApplicationRef(v.parent), schema: applicationRef(v.schema), queries: applicationRef(v.queries), views: applicationRef(v.views), runtimeProfile: applicationRef(v.runtimeProfile), evaluationPolicy: applicationRef(v.evaluationPolicy), capabilityRequirements: capabilities, entrypoints, ...(hasGoals ? {goals: applicationRefs(v.goals, 8)} : {})};
 }
 export function parseApplicationState(input: unknown): ApplicationState {
   const v = applicationObject(input, ["contract", "application", "sequence", "epoch", "revision", "memory", "previous", "transition"]);

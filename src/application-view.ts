@@ -2,13 +2,14 @@
  * receives data and fenced actions; it never probes, dispatches, or resolves a
  * mutable latest pointer. */
 import { APPLICATION_LIMITS, applicationId, applicationInt, applicationJson, applicationList, applicationObject, applicationRef, applicationTag } from "./application-contract";
+import { bindApplicationGoalCaptures, parseApplicationGoalCapture, type ApplicationGoalCapture } from "./application-goal";
 import type { MemoryStatus } from "./application-memory";
 import type { ApplicationSnapshot } from "./application";
 import type { Digest } from "./digest";
 import type { Store } from "./store";
 import { canonicalize } from "./values";
 
-export const APPLICATION_VIEW_WIDGETS = ["procedures", "memory", "history", "investigations"] as const;
+export const APPLICATION_VIEW_WIDGETS = ["procedures", "memory", "history", "investigations", "goals"] as const;
 export type ApplicationViewWidget = (typeof APPLICATION_VIEW_WIDGETS)[number];
 export const APPLICATION_APPLICABILITY_STATUSES = ["unknown", "supported", "stale", "opposed", "conflicted", "exhausted", "failed", "cancelled"] as const;
 export type ApplicationViewSpec = {
@@ -38,6 +39,7 @@ export type ApplicationView = {
   memory: Digest;
   title: string;
   widgets: ApplicationViewWidget[];
+  goals?: ApplicationGoalCapture[];
   procedures: { name: string; manifest: Digest; applicability: MemoryStatus }[];
   history: { state: Digest; sequence: number; revision: Digest; memory: Digest }[];
   investigations: { intent: Digest; expectedState: Digest }[];
@@ -50,7 +52,7 @@ const text = (value: unknown, max: number): string => {
   return value;
 };
 const widgets = (value: unknown): ApplicationViewWidget[] => {
-  const list = applicationList(value, 4, item => {
+  const list = applicationList(value, 5, item => {
     if (typeof item !== "string" || !(APPLICATION_VIEW_WIDGETS as readonly string[]).includes(item)) throw new Error("Unknown view widget");
     return item as ApplicationViewWidget;
   });
@@ -74,6 +76,7 @@ export function projectApplicationView(input: {
   spec: ApplicationViewSpec;
   history?: ApplicationSnapshot[];
   applicability?: Record<string, ApplicationApplicability>;
+  goals?: ApplicationGoalCapture[];
 }): ApplicationView {
   const { snapshot, spec } = input;
   const history = input.history ?? [snapshot];
@@ -89,6 +92,7 @@ export function projectApplicationView(input: {
     manifest: entry.manifest,
     applicability: applicability[entry.name]?.status ?? "unknown",
   }));
+  const goals = snapshot.revision.goals !== undefined || input.goals !== undefined ? bindApplicationGoalCaptures(snapshot, input.goals ?? []) : undefined;
   const actions: ApplicationViewAction[] = [];
   for (const entry of snapshot.revision.entrypoints) {
     const result = applicability[entry.name]?.queryResult;
@@ -101,6 +105,7 @@ export function projectApplicationView(input: {
   const view: ApplicationView = {
     contract: "algal.application-view.v1", application: snapshot.state.application, state: snapshot.digest,
     revision: snapshot.state.revision, memory: snapshot.state.memory, title: spec.title, widgets: spec.widgets,
+    ...(goals !== undefined ? {goals} : {}),
     procedures, history: history.slice(-128).map(item => ({state: item.digest, sequence: item.state.sequence, revision: item.state.revision, memory: item.state.memory})),
     investigations, actions, truncated: history.length > 128,
   };
@@ -120,7 +125,8 @@ export async function loadApplicationRuntimeProfile(store: Store, ref: Digest): 
 }
 
 export function parseApplicationView(input: unknown): ApplicationView {
-  const v = applicationObject(input, ["contract", "application", "state", "revision", "memory", "title", "widgets", "procedures", "history", "investigations", "actions", "truncated"]);
+  const hasGoals = !!input && typeof input === "object" && Object.hasOwn(input, "goals");
+  const v = applicationObject(input, ["contract", "application", "state", "revision", "memory", "title", "widgets", "procedures", "history", "investigations", "actions", "truncated", ...(hasGoals ? ["goals"] : [])]);
   applicationTag(v.contract, "algal.application-view.v1");
   const application = applicationId(v.application), state = applicationRef(v.state), revision = applicationRef(v.revision), memory = applicationRef(v.memory);
   const procedures = applicationList(v.procedures, 32, raw => {
@@ -129,6 +135,8 @@ export function parseApplicationView(input: unknown): ApplicationView {
     return {name: applicationId(p.name), manifest: applicationRef(p.manifest), applicability: p.applicability as ApplicationView["procedures"][number]["applicability"]};
   });
   if (new Set(procedures.map(p => p.name)).size !== procedures.length) throw new Error("Duplicate view procedure");
+  const goals = hasGoals ? applicationList(v.goals, 8, parseApplicationGoalCapture) : undefined;
+  if (goals && (new Set(goals.map(g => g.goal)).size !== goals.length || new Set(goals.map(g => g.definition.id)).size !== goals.length || goals.some((g, i) => (i > 0 && g.goal < goals[i - 1]!.goal) || g.state !== state || g.memory !== memory || g.definition.application !== application || !procedures.some(p => p.name === g.definition.entrypoint)))) throw new Error("Goal capture crosses the captured application state");
   const history = applicationList(v.history, 128, raw => {
     const h = applicationObject(raw, ["state", "sequence", "revision", "memory"]);
     return {state: applicationRef(h.state), sequence: applicationInt(h.sequence, 0, 4095), revision: applicationRef(h.revision), memory: applicationRef(h.memory)};
@@ -153,5 +161,5 @@ export function parseApplicationView(input: unknown): ApplicationView {
   });
   applicationId(v.application); applicationRef(v.state); applicationRef(v.revision); applicationRef(v.memory); text(v.title, 256); widgets(v.widgets);
   if (typeof v.truncated !== "boolean") throw new Error("Invalid view truncation marker");
-  return {contract: "algal.application-view.v1", application, state, revision, memory, title: text(v.title, 256), widgets: widgets(v.widgets), procedures, history, investigations, actions, truncated: v.truncated};
+  return {contract: "algal.application-view.v1", application, state, revision, memory, title: text(v.title, 256), widgets: widgets(v.widgets), ...(goals !== undefined ? {goals} : {}), procedures, history, investigations, actions, truncated: v.truncated};
 }

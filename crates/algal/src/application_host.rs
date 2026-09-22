@@ -847,6 +847,7 @@ mod tests {
             runtime_profile: refn(13),
             evaluation_policy: refn(14),
             capability_requirements: vec![],
+            goals: None,
             entrypoints: vec![crate::application::Entrypoint {
                 name: "run".to_owned(),
                 manifest: refn(15),
