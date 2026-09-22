@@ -8,7 +8,9 @@
  * digest rather than a coincidental encoding. The evidence legs export a
  * portable bundle per runtime and verify it store-free — the native
  * `verify-evidence` CLI takes no `--dir`, so `bare` steps spawn it without
- * host flags.
+ * host flags. The agent suite drives a shared command executor through the
+ * EX_TEMPFAIL suspend contract, so suspended and resumed generations carry
+ * identical `cmd:` executor identities and configuration digests.
  *
  *   bun scripts/process-parity.ts            # target/debug/algal
  *   ALGAL_BIN=/path/to/algal bun scripts/process-parity.ts
@@ -18,6 +20,7 @@
 import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { commandExecutor } from "../src/effects";
 import { ProcessSupervisor, parseProcessRecord } from "../src/process";
 import { ProcessJournal } from "../src/process-journal";
 import { manifestToJson, parseOrganismManifest } from "../src/contract";
@@ -279,6 +282,32 @@ const plantUncertainRunner = async () => {
 const wrongIntent = digestCanonical({
   contract: "algal.process-parity-intent.v1",
 } as JsonValue);
+
+/* An agent cell whose executor suspends: exit 75 (EX_TEMPFAIL) is the shared
+   "answer not ready" contract on both runtimes. A single counter file — the
+   same absolute path embedded in one shared command string — suspends the
+   first two calls (the TypeScript and native suspend legs run back to back)
+   and answers the two resume legs. Keeping the command byte-identical keeps
+   the `cmd:<digest>` executor identity identical across runtimes. */
+const tsAgent = join(temporary, "ts-agent");
+const nativeAgent = join(temporary, "native-agent");
+await mkdir(tsAgent, { recursive: true });
+await mkdir(nativeAgent, { recursive: true });
+const GATE_CMD = `cat >/dev/null; n=$(cat "${join(temporary, "gate")}" 2>/dev/null || echo 0); echo $((n + 1)) > "${join(temporary, "gate")}"; if [ "$n" -lt 2 ]; then exit 75; fi; printf '"done"'`;
+const agentService = new ProcessSupervisor(tsAgent, {
+  executors: [commandExecutor(GATE_CMD)],
+});
+const agent = parseOrganismManifest({
+  contract: "algal.organism.v1",
+  key: "organism:process-parity-agent",
+  name: "process parity agent",
+  cells: [
+    { id: "worker", kind: "agent", prompt: "work", output: { kind: "text" } },
+  ],
+  edges: [],
+});
+const agentFile = join(temporary, "agent.json");
+await writeFile(agentFile, canonicalize(manifestToJson(agent)));
 
 /* Portable evidence legs: each runtime exports the same process history to a
    canonical bundle, then verifies it store-free — the native verify-evidence
@@ -673,6 +702,45 @@ const steps: {
     ts: async () =>
       verifyProcessEvidence({ ...(workerEvidence as object), injected: 1 }),
     native: () => ["process", "verify-evidence", tamperedEvidenceFile],
+  },
+  {
+    name: "create-agent",
+    dir: nativeAgent,
+    ts: async () => agentService.create("agent", agent),
+    native: () => ["process", "create", "agent", agentFile],
+  },
+  {
+    // The executor exits 75 on its first call — a durable agent suspension.
+    name: "tick-agent-suspends",
+    dir: nativeAgent,
+    ts: async () => agentService.tick("agent"),
+    native: () => ["process", "tick", "agent", "--executor-cmd", GATE_CMD],
+  },
+  {
+    name: "inspect-agent-suspended",
+    dir: nativeAgent,
+    ts: async () => agentService.inspect("agent"),
+    native: () => ["process", "inspect", "agent"],
+  },
+  {
+    // Executor suspension carries no wake capabilities — nothing can
+    // schedule it; only a manual tick resumes the checkpoint.
+    name: "schedule-agent-idle",
+    dir: nativeAgent,
+    ts: async () => agentService.schedule(),
+    native: () => ["process", "schedule"],
+  },
+  {
+    name: "tick-agent-resumes",
+    dir: nativeAgent,
+    ts: async () => agentService.tick("agent"),
+    native: () => ["process", "tick", "agent", "--executor-cmd", GATE_CMD],
+  },
+  {
+    name: "verify-agent",
+    dir: nativeAgent,
+    ts: async () => agentService.verify("agent"),
+    native: () => ["process", "verify", "agent"],
   },
   {
     name: "create-duplicate",
