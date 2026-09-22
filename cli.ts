@@ -159,6 +159,7 @@ usage:
       --args <file>                           input-cell values (JSON)
       --responses <file>                      scripted agent outputs (JSON map)
       --executor-cmd <shell command>          live executor: request on stdin, output on stdout
+      --executor-timeout-ms <ms>              command-executor effect timeout (default 120000, max 600000)
       --gateway-model <provider/model>        Vercel AI Gateway structured-output executor
       --jev [model]                           TypeSafe Jev decision executor — serves
                                                 decide and classifier cells (never gates:
@@ -607,7 +608,11 @@ async function resolveExecutors(
     executors.push(scriptedExecutor(map as Record<string, JsonValue>));
   }
   if (flags["executor-cmd"] !== undefined) {
-    executors.push(commandExecutor(String(flags["executor-cmd"])));
+    const tms = flags["executor-timeout-ms"];
+    executors.push(commandExecutor(String(flags["executor-cmd"]),
+      tms !== undefined
+        ? { timeoutMs: asInt(Number(tms), "executor-timeout-ms", 1, 600_000) }
+        : {}));
   }
   if (flags["gateway-model"] !== undefined) {
     executors.push(vercelGatewayExecutor({ model: String(flags["gateway-model"]) }));
