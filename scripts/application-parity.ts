@@ -17,6 +17,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { ApplicationService, type ApplicationDispatch, type ApplicationSnapshot } from "../src/application";
+import { applicationJson } from "../src/application-contract";
 import {
   admitApplicationActivation, checkApplicationCompatibility, evaluateApplicationRevision, verifyApplicationEvaluation,
 } from "../src/application-adaptation";
@@ -242,6 +243,11 @@ const dynamic = async (name: string, value: JsonValue) => {
 const app = (...args: string[]) => ["application", "--policy", fixturePath.get("policy")!, ...args];
 
 steps.push(
+  {
+    name: "put-application-value",
+    ts: async () => ({ digest: await service.store.putValue(applicationJson({ contract: "algal.application-parity-put.v1", n: 1 })) }),
+    native: async () => app("put", await dynamic("appValue", { contract: "algal.application-parity-put.v1", n: 1 })),
+  },
   { name: "scope", ts: async () => ({ scope: await memory.putScope(scope) }), native: async () => app("scope", fixturePath.get("scope")!) },
   {
     name: "snapshot",

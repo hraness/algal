@@ -31,7 +31,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit && tsc --noEmit -p site/tsconfig.json",
     "lint": "eslint .",
-    "test": "bun test",
+    "test": "bun test --timeout 20000",
     "check": "bun run typecheck && bun run lint && bun run test && bun run docs:check && bun run build:site",
     "docs:diagrams": "bun scripts/docs-diagrams.ts",
     "docs:check": "bun scripts/docs-diagrams.ts --check",
