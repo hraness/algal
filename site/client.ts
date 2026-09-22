@@ -3,6 +3,26 @@ import { attachFoil } from "@hraness/design-kit/browser";
 const header = document.querySelector<HTMLElement>(".site-header");
 if (header) attachFoil(header);
 
+// Preserve anchors published on the old single-page site. Fragments never
+// reach the server, so the homepage forwards them to their new sections.
+if (location.pathname === "/" && location.hash) {
+  const moved: Record<string, string> = {
+    "#branch-demo": "/tour/#branches",
+    "#reuse": "/tour/#reuse",
+    "#inspect-children": "/tour/#inspect-children",
+    "#authoring-error": "/tour/#authoring-error",
+    "#source-failure": "/tour/#source-failure",
+    "#grow": "/tour/#grow",
+    "#use-cases": "/use-cases/",
+    "#adopt": "/use-cases/#adopt",
+    "#try": "/#install",
+    "#source": "/#language",
+    "#evolution": "/#evolution",
+  };
+  const target = moved[location.hash];
+  if (target) location.replace(target);
+}
+
 // Progressive recorded-run tabs. Without JavaScript every retained panel stays
 // visible; enhancement changes presentation only and never starts a VM run.
 document.querySelectorAll<HTMLElement>("[data-tabset]").forEach(tablist => {

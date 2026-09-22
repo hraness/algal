@@ -1,7 +1,9 @@
 # Contents
 
-- `index.html`, `styles.css`, and `build.ts` own the static ALGAL website and its executable example projections.
-- `algal-mark.svg`, `BRAND_ASSETS.md`, and `client.ts` bind the existing product identity to the released metallic treatment.
+- `chrome.ts`, `pages/`, `styles.css`, and `build.ts` own the static ALGAL website and its executable example projections. `pages/` holds the home, tour, and use-cases fragments composed into `chrome.ts`'s shared shell.
+- `viewer.ts` is the browser-side interactive diagram runtime: pan/zoom, cell inspection, and recorded-run replay driven by `algal.diagram-view.v1` documents emitted by `build.ts`. It shares layout geometry with `src/diagram.ts`'s `layoutDiagram` and degrades to the static SVG fallback without JavaScript.
+- `icons.ts` holds the Hugeicons sprite map; icon references are root-relative `/icons.svg#name`.
+- `algal-mark.svg`, `BRAND_ASSETS.md`, `client.ts`, and `appearance.ts` bind the existing product identity to the released metallic treatment.
 
 # Guidelines
 

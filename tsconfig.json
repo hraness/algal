@@ -16,5 +16,5 @@
     "types": ["bun"]
   },
   "include": ["**/*.ts"],
-  "exclude": ["node_modules", "site/dist", "site/appearance.ts", "site/client.ts", "dist", ".algal"]
+  "exclude": ["node_modules", "site/dist", "site/appearance.ts", "site/client.ts", "site/viewer.ts", "dist", ".algal"]
 }

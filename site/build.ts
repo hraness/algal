@@ -1,10 +1,12 @@
 // Static site build. Program source, limits, and diagrams come from executable
 // examples so the public demonstration cannot drift into illustrative syntax.
+// Interactive diagram viewers consume algal.diagram-view.v1 documents emitted
+// alongside each SVG — the same layout pass drives both.
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { manifestToJson, parseOrganismManifest, type OrganismManifest } from "../src/contract";
-import { createProgramDiagram, renderSvg } from "../src/diagram";
+import { createProgramDiagram, layoutDiagram, renderSvg, type ProgramDiagram } from "../src/diagram";
 import { compileSource, SourceError } from "../src/source";
 import { loadSourceProject } from "../src/source-project";
 import { diagnoseSource, renderSourceDiagnostics } from "../src/source-diagnostics";
@@ -13,12 +15,13 @@ import { packOrganism } from "../src/bundle";
 import { compileOrganism } from "../src/graph";
 import { scriptedExecutor } from "../src/effects";
 import { builtinRegistry } from "../src/registry";
-import { canonicalizeReceipt, runOrganism } from "../src/run";
+import { canonicalizeReceipt, runOrganism, type RunReceipt } from "../src/run";
 import { MemoryStore } from "../src/store";
 import { asJsonValue, asObject, canonicalize, type JsonObject } from "../src/values";
 import { verifyReceipt } from "../src/verify";
 import { renderIconSprite, siteIcon } from "./icons";
 import { buildSiteStyles } from "./assets";
+import { pageDocument, type SitePageMeta } from "./chrome";
 
 const SITE = dirname(fileURLToPath(import.meta.url));
 const ROOT = dirname(SITE);
@@ -45,6 +48,53 @@ function highlightSource(source: string): string {
   return result + escapeHtml(source.slice(cursor));
 }
 
+let verifiedRuns = 0;
+
+/** The recorded lifecycle the interactive viewer animates: ordered cell and
+ * effect events from the receipt, mapped onto this diagram's node ids. */
+function runSteps(receipt: RunReceipt, diagram: ProgramDiagram) {
+  const prefix = diagram.scope?.invocationPath ?? "";
+  const nodeIds = new Set(diagram.nodes.map(node => node.id));
+  const steps: { event: string; node: string }[] = [];
+  for (const event of receipt.events) {
+    if (event.kind === "run.start" || event.kind === "run.end" || event.path === undefined) continue;
+    const node = prefix
+      ? (event.path.startsWith(`${prefix}/`) ? event.path.slice(prefix.length + 1) : undefined)
+      : event.path;
+    if (node === undefined || !nodeIds.has(node)) continue;
+    steps.push({ event: event.kind, node });
+  }
+  return { receipt: receipt.digest, outcome: receipt.outcome, steps };
+}
+
+/** Write the static SVG, the exact diagram JSON, and the interactive view
+ * document (diagram + shared layout + recorded run order). */
+async function emitDiagram(name: string, diagram: ProgramDiagram, options: { header?: boolean; receipt?: RunReceipt } = {}) {
+  const svgOptions = { compact: true, header: options.header ?? false };
+  await writeFile(join(DIST, "diagrams", `${name}.svg`), renderSvg(diagram, svgOptions));
+  await writeFile(join(DIST, "diagrams", `${name}.json`), `${JSON.stringify(diagram, null, 2)}\n`);
+  const layout = layoutDiagram(diagram, { compact: true, header: false });
+  const view = {
+    contract: "algal.diagram-view.v1",
+    diagram,
+    layout,
+    ...(options.receipt ? { run: runSteps(options.receipt, diagram) } : {}),
+  };
+  await writeFile(join(DIST, "diagrams", `${name}.view.json`), `${JSON.stringify(view)}\n`);
+}
+
+async function runFixture(manifest: OrganismManifest, args: JsonObject, responses: JsonObject, store = new MemoryStore()): Promise<RunReceipt> {
+  const parsedArgs = Object.fromEntries(Object.entries(args).map(([cell, values]) => [cell, asObject(values, `args.${cell}`)]));
+  const receipt = await runOrganism({
+    manifest, args: parsedArgs, store, fns: builtinRegistry(),
+    executors: [scriptedExecutor(responses)],
+  });
+  const verification = await verifyReceipt(asJsonValue(receipt, "receipt"), manifestToJson(manifest), store, builtinRegistry());
+  if (!verification.ok) throw new Error("Fixture receipt failed replay verification");
+  verifiedRuns += 1;
+  return receipt;
+}
+
 const replySource = await readFile(join(ROOT, "examples/source/reply.algal"), "utf8");
 const reply = compileSource(replySource);
 const manifests = new Map<string, OrganismManifest>([["reply", reply.manifest]]);
@@ -65,14 +115,30 @@ const swarm = manifests.get("swarm")?.cells.find(cell => cell.kind === "each");
 if (refine?.kind !== "repeat" || swarm?.kind !== "each") {
   throw new Error("Site examples no longer contain their documented composition cells");
 }
-// These runs use repository-owned scripted responses exclusively. Retain the
-// runtime's actual receipts and verify them before displaying their results.
-const routeSource = await readFile(join(ROOT, "examples/source/route.algal"), "utf8");
-const route = compileSource(routeSource);
+
 const readFixture = async (file: string): Promise<JsonObject> => {
   const value: unknown = JSON.parse(await readFile(join(ROOT, "examples/source", file), "utf8"));
   return asObject(asJsonValue(value, file), file);
 };
+const readExampleFixture = async (file: string): Promise<JsonObject> => {
+  const value: unknown = JSON.parse(await readFile(join(ROOT, "examples", file), "utf8"));
+  return asObject(asJsonValue(value, file), file);
+};
+
+// The hero organism: run reply.algal with the repository's scripted answers,
+// verify the receipt, and publish the recorded run for in-browser replay.
+const replyArgs = await readFixture("reply.args.json");
+const replyResponses = await readFixture("reply.responses.json");
+const replyReceipt = await runFixture(reply.manifest, replyArgs, replyResponses);
+if (replyReceipt.outcome !== "complete" || replyReceipt.work.agentCalls !== reply.manifest.budgets.maxAgentCalls) {
+  throw new Error(`Reply demo: expected a complete run within ${reply.manifest.budgets.maxAgentCalls} executor attempts`);
+}
+const replyRunDiagram = createProgramDiagram(reply.manifest, { source: replySource, receipt: replyReceipt });
+
+// These runs use repository-owned scripted responses exclusively. Retain the
+// runtime's actual receipts and verify them before displaying their results.
+const routeSource = await readFile(join(ROOT, "examples/source/route.algal"), "utf8");
+const route = compileSource(routeSource);
 const rawArgs = await readFixture("route.args.json");
 const routeArgs = Object.fromEntries(Object.entries(rawArgs).map(([cell, values]) => [cell, asObject(values, `route.args.${cell}`)]));
 const routeGenerators = route.manifest.cells.filter(cell => cell.kind === "agent");
@@ -111,6 +177,7 @@ for (const scenario of [
   }
   const verification = await verifyReceipt(asJsonValue(receipt, "route receipt"), manifestToJson(route.manifest), store, builtinRegistry());
   if (!verification.ok) throw new Error(`Routing ${scenario.choice}: receipt failed replay verification`);
+  verifiedRuns += 1;
   const diagram = createProgramDiagram(route.manifest, { source: routeSource, receipt });
   routeRuns.push({ ...scenario, result, receipt, diagram, skipped: skipped.length, responses });
 }
@@ -122,10 +189,10 @@ const routePanels = routeRuns.map(run => `
           <dl class="route-work"><dt>Executor attempts</dt><dd>${run.receipt.work.agentCalls}<span>of ${route.manifest.budgets.maxAgentCalls} allowed</span></dd><dt>Inactive draft branches skipped</dt><dd class="route-skipped-count">${run.skipped}</dd></dl>
         </div>
         <figure class="route-figure">
-          <figcaption><span class="run-state">Committed</span><span class="run-state skipped">Skipped</span><a href="diagrams/route-${run.choice}.svg" target="_blank" rel="noopener">Expand all cells ${siteIcon("arrow-up-right")}</a></figcaption>
-          <div class="route-diagram-scroll" tabindex="0" role="region" aria-label="${run.title} execution graph, scroll horizontally on small screens"><img src="diagrams/route-${run.choice}.svg" alt="Source-derived routing graph for the recorded ${run.choice} decision. ${run.receipt.work.agentCalls} executor attempts completed; ${run.skipped} inactive draft ${run.skipped === 1 ? "branch was" : "branches were"} skipped. All exact cells remain visible." width="1200" height="1050" loading="lazy"></div>
+          <figcaption><span class="run-state">Committed</span><span class="run-state skipped">Skipped</span><a href="/diagrams/route-${run.choice}.svg" target="_blank" rel="noopener">Expand all cells ${siteIcon("arrow-up-right")}</a></figcaption>
+          <div class="diagram-frame" data-diagram-view="/diagrams/route-${run.choice}.view.json"><div class="route-diagram-scroll" tabindex="0" role="region" aria-label="${run.title} execution graph, scroll horizontally on small screens"><img src="/diagrams/route-${run.choice}.svg" alt="Source-derived routing graph for the recorded ${run.choice} decision. ${run.receipt.work.agentCalls} executor attempts completed; ${run.skipped} inactive draft ${run.skipped === 1 ? "branch was" : "branches were"} skipped. All exact cells remain visible." width="1200" height="1050" loading="lazy"></div></div>
         </figure>
-        <div class="route-receipt"><span>Receipt ${escapeHtml(run.receipt.digest)}</span><a href="receipts/route-${run.choice}.receipt.json" download>Download receipt ${siteIcon("download")}</a><a href="examples/route.responses.${run.choice}.json" download>Scripted answers ${siteIcon("download")}</a></div>
+        <div class="route-receipt"><span>Receipt ${escapeHtml(run.receipt.digest)}</span><a href="/receipts/route-${run.choice}.receipt.json" download>Download receipt ${siteIcon("download")}</a><a href="/examples/route.responses.${run.choice}.json" download>Scripted answers ${siteIcon("download")}</a></div>
       </article>`).join("\n");
 
 // Load the two-file example as a real local source project, retaining its
@@ -168,6 +235,7 @@ for (const variant of ["full", "empty"] as const) {
   }
   const verification = await verifyReceipt(asJsonValue(receipt, "inbox receipt"), manifestToJson(inbox.manifest), store, builtinRegistry());
   if (!verification.ok) throw new Error(`Inbox ${variant}: receipt failed replay verification`);
+  verifiedRuns += 1;
   inboxRuns.push({ variant, prefix, result, receipt, args, responses });
 }
 const fullInbox = inboxRuns.find(run => run.variant === "full")!;
@@ -188,7 +256,7 @@ const childViews = inboxReplies.map((reply, index) => {
   return { index, focus, reply, diagram };
 });
 const childTabs = childViews.map(({ index }) => `<button type="button" role="tab" id="tab-inbox-item-${index}" aria-controls="inbox-item-${index}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}">Email ${index + 1}</button>`).join("");
-const childPanels = childViews.map(({ index, focus, reply }) => `<article class="child-panel" id="inbox-item-${index}" aria-labelledby="inbox-item-${index}-title"><h3 id="inbox-item-${index}-title">Email ${index + 1} · one recorded invocation</h3><p class="child-reply">${escapeHtml(reply)}</p><p class="child-path">${escapeHtml(focus)} · draft.algal</p><div class="child-graph-scroll" tabindex="0" role="region" aria-label="Email ${index + 1} child graph, scroll horizontally on small screens"><img src="diagrams/inbox-item-${index}.svg" alt="Exact draft helper graph and recorded cell states for email ${index + 1}, bound to the original inbox receipt." loading="lazy"></div><a href="diagrams/inbox-item-${index}.svg" target="_blank" rel="noopener">Expand child graph ${siteIcon("arrow-up-right")}</a></article>`).join("");
+const childPanels = childViews.map(({ index, focus, reply }) => `<article class="child-panel" id="inbox-item-${index}" aria-labelledby="inbox-item-${index}-title"><h3 id="inbox-item-${index}-title">Email ${index + 1} · one recorded invocation</h3><p class="child-reply">${escapeHtml(reply)}</p><p class="child-path">${escapeHtml(focus)} · draft.algal</p><div class="diagram-frame" data-diagram-view="/diagrams/inbox-item-${index}.view.json"><div class="child-graph-scroll" tabindex="0" role="region" aria-label="Email ${index + 1} child graph, scroll horizontally on small screens"><img src="/diagrams/inbox-item-${index}.svg" alt="Exact draft helper graph and recorded cell states for email ${index + 1}, bound to the original inbox receipt." loading="lazy"></div></div><a href="/diagrams/inbox-item-${index}.svg" target="_blank" rel="noopener">Expand child graph ${siteIcon("arrow-up-right")}</a></article>`).join("");
 
 const ratios = await loadSourceProject(join(ROOT, "examples/source/projects/ratios/ratios.algal"));
 const ratioStore = new MemoryStore();
@@ -202,6 +270,7 @@ if (ratioReceipt.outcome !== "failed" || ratioReport.issues[0]?.path !== "result
 }
 const ratioVerification = await verifyReceipt(asJsonValue(ratioReceipt, "ratio receipt"), manifestToJson(ratios.manifest), ratioStore, builtinRegistry());
 if (!ratioVerification.ok) throw new Error("Ratio failure receipt did not replay");
+verifiedRuns += 1;
 const ratioDiagram = createProgramDiagram(ratios.manifest, { source: ratios.source, sourceOptions: ratios.compilerOptions, receipt: ratioReceipt, focus: "result-each/i1" });
 if (ratioDiagram.nodes.find(node => node.id === "b1-fraction")?.status !== "failed") throw new Error("Ratio focused view lost the failed expression");
 
@@ -232,8 +301,29 @@ if (repairedAuthoring.analysis.maxAgentCalls !== 1 || repairedAuthoring.analysis
   throw new Error("The advertised one-word repair no longer restores the expected program bounds");
 }
 
+// Composition examples with committed scripted fixtures run for real at build
+// time, so their interactive diagrams can replay recorded execution evidence.
+// Like `algal suite`, preload every bundled example so digest-addressed
+// children resolve in the store.
+const exampleStore = new MemoryStore();
+const { readdir } = await import("node:fs/promises");
+for (const file of (await readdir(join(ROOT, "examples"))).filter(f => f.endsWith(".algal.json")).sort()) {
+  const value: unknown = JSON.parse(await readFile(join(ROOT, "examples", file), "utf8"));
+  await exampleStore.putManifest(parseOrganismManifest(value));
+}
+const evolutionRuns = new Map<string, RunReceipt>();
+for (const name of ["refine", "swarm", "habitat"] as const) {
+  const args = await readExampleFixture(`${name}.args.json`);
+  const responses = await readExampleFixture(`${name}.responses.json`);
+  const receipt = await runFixture(manifests.get(name)!, args, responses, exampleStore);
+  if (receipt.outcome !== "complete") throw new Error(`${name} fixture run did not complete`);
+  evolutionRuns.set(name, receipt);
+}
+
 const replacements: Record<string, string> = {
   REPLY_SOURCE: highlightSource(replySource.trimEnd()),
+  REPLY_MAX_AGENT_CALLS: String(reply.manifest.budgets.maxAgentCalls),
+  REPLY_RECEIPT_SHORT: escapeHtml(replyReceipt.digest.slice(0, 23)),
   INBOX_SOURCE: highlightSource(inbox.source.trimEnd()),
   DRAFT_SOURCE: highlightSource(draftSource.trimEnd()),
   INBOX_MAX_ITEMS: String(inboxEach.maxItems),
@@ -250,17 +340,42 @@ const replacements: Record<string, string> = {
   AUTHORING_ERROR: escapeHtml(renderSourceError(authoringReport)),
   ROUTE_SOURCE: highlightSource(routeSource.trimEnd()),
   ROUTE_PANELS: routePanels,
-  REPLY_MAX_AGENT_CALLS: String(reply.manifest.budgets.maxAgentCalls),
   REFINE_ROUNDS: String(refine.maxRounds),
   SWARM_ITEMS: String(swarm.maxItems),
 };
-let html = await readFile(join(SITE, "index.html"), "utf8");
-for (const [key, value] of Object.entries(replacements)) {
-  const placeholder = `{{${key}}}`;
-  if (!html.includes(placeholder)) throw new Error(`Missing site placeholder: ${key}`);
-  html = html.replaceAll(placeholder, value);
-}
-if (/\{\{[A-Z_]+\}\}/.test(html)) throw new Error("Unresolved site build placeholder");
+
+const pages: { file: string; out: string; meta: SitePageMeta }[] = [
+  {
+    file: "pages/home.html", out: "index.html",
+    meta: {
+      page: "home", path: "/",
+      title: "ALGAL — the language for living programs",
+      description: "A programming language and virtual machine where programs are organisms: typed, bounded, content-addressed. They wait, remember, reproduce, and leave a verifiable fossil of every run.",
+      ogTitle: "ALGAL — the language for living programs",
+      ogAlt: "ALGAL — the language for living programs",
+    },
+  },
+  {
+    file: "pages/tour.html", out: "tour/index.html",
+    meta: {
+      page: "tour", path: "/tour/",
+      title: "Inside a living program — ALGAL tour",
+      description: "A guided tour of ALGAL organisms: real compiled source, recorded executions, replayable receipts, and generated diagrams — all produced and verified during the site build.",
+      ogTitle: "Inside a living program — ALGAL tour",
+      ogAlt: "Inside a living program — the ALGAL tour",
+    },
+  },
+  {
+    file: "pages/use-cases.html", out: "use-cases/index.html",
+    meta: {
+      page: "use-cases", path: "/use-cases/",
+      title: "Put living programs to work — ALGAL use cases",
+      description: "Use ALGAL when the work around a model matters: durable human review, checked coding repairs, portable execution evidence, and reusable routing programs.",
+      ogTitle: "Put living programs to work — ALGAL",
+      ogAlt: "Put living programs to work — ALGAL use cases",
+    },
+  },
+];
 
 await rm(DIST, { recursive: true, force: true });
 await mkdir(join(DIST, "diagrams"), { recursive: true });
@@ -273,7 +388,7 @@ for (const f of ["robots.txt", "sitemap.xml", "llms.txt", "og.png", "favicon.svg
 // shipped site has self-hosted fonts/assets; the CLI gains no browser runtime.
 const styles = await buildSiteStyles(DIST);
 const browserScripts = await Bun.build({
-  entrypoints: [join(SITE, "appearance.ts"), join(SITE, "client.ts")], outdir: DIST,
+  entrypoints: [join(SITE, "appearance.ts"), join(SITE, "client.ts"), join(SITE, "viewer.ts")], outdir: DIST,
   target: "browser", format: "iife", minify: true,
   naming: { entry: "[name].js", asset: "assets/[name]-[hash].[ext]" },
 });
@@ -292,24 +407,30 @@ for (const [source, target] of [
   ["@hraness/design-kit/src/fonts/instrument-serif/OFL.txt", "instrument-serif-OFL.txt"],
   ["@hraness/design-kit/src/fonts/instrument-serif/UPSTREAM.md", "instrument-serif-provenance.md"],
 ] as const) await cp(join(ROOT, "node_modules", source), join(DIST, "licenses", target));
-await writeFile(join(DIST, "index.html"), html);
+
 await writeFile(join(DIST, "examples/reply.algal"), replySource);
 await writeFile(join(DIST, "examples/reply.source-map.json"), `${JSON.stringify(reply.sourceMap, null, 2)}\n`);
+await writeFile(join(DIST, "examples/reply.args.json"), `${JSON.stringify(replyArgs, null, 2)}\n`);
+await writeFile(join(DIST, "examples/reply.responses.json"), `${JSON.stringify(replyResponses, null, 2)}\n`);
+await writeFile(join(DIST, "receipts/reply.receipt.json"), `${canonicalizeReceipt(replyReceipt)}\n`);
 
 for (const [name, manifest] of manifests) {
-  const diagram = createProgramDiagram(manifest, name === "reply" ? { source: replySource } : {});
-  await writeFile(join(DIST, "diagrams", `${name}.svg`), renderSvg(diagram, { compact: true, header: false }));
-  await writeFile(join(DIST, "diagrams", `${name}.json`), `${JSON.stringify(diagram, null, 2)}\n`);
+  const diagram = name === "reply"
+    ? createProgramDiagram(manifest, { source: replySource })
+    : createProgramDiagram(manifest);
+  const run = evolutionRuns.get(name);
+  await emitDiagram(name, diagram, run ? { receipt: run } : {});
   await writeFile(join(DIST, "examples", `${name}.algal.json`), `${JSON.stringify(manifestToJson(manifest), null, 2)}\n`);
 }
+// The hero artifact shows one recorded run of the reply organism.
+await emitDiagram("reply-run", replyRunDiagram, { receipt: replyReceipt });
 
 await writeFile(join(DIST, "examples/route.algal"), routeSource);
 await writeFile(join(DIST, "examples/route.algal.json"), `${JSON.stringify(manifestToJson(route.manifest), null, 2)}\n`);
 await writeFile(join(DIST, "examples/route.source-map.json"), `${JSON.stringify(route.sourceMap, null, 2)}\n`);
 await writeFile(join(DIST, "examples/route.args.json"), `${JSON.stringify(routeArgs, null, 2)}\n`);
 for (const run of routeRuns) {
-  await writeFile(join(DIST, "diagrams", `route-${run.choice}.svg`), renderSvg(run.diagram, { compact: true, header: false }));
-  await writeFile(join(DIST, "diagrams", `route-${run.choice}.json`), `${JSON.stringify(run.diagram, null, 2)}\n`);
+  await emitDiagram(`route-${run.choice}`, run.diagram, { receipt: run.receipt });
   await writeFile(join(DIST, "receipts", `route-${run.choice}.receipt.json`), `${canonicalizeReceipt(run.receipt)}\n`);
   await writeFile(join(DIST, "examples", `route.responses.${run.choice}.json`), `${JSON.stringify(run.responses, null, 2)}\n`);
 }
@@ -324,8 +445,7 @@ for (const [file, source] of Object.entries(inbox.sources)) {
 await writeFile(join(inboxDirectory, "inbox.algal.json"), `${JSON.stringify(manifestToJson(inbox.manifest), null, 2)}\n`);
 await writeFile(join(inboxDirectory, "inbox.bundle.json"), `${JSON.stringify(inboxBundle, null, 2)}\n`);
 await writeFile(join(inboxDirectory, "inbox.source-map.json"), `${JSON.stringify(inbox.sourceMap, null, 2)}\n`);
-await writeFile(join(DIST, "diagrams/inbox.svg"), renderSvg(inboxDiagram, { compact: true, header: false }));
-await writeFile(join(DIST, "diagrams/inbox.json"), `${JSON.stringify(inboxDiagram, null, 2)}\n`);
+await emitDiagram("inbox", inboxDiagram);
 for (const run of inboxRuns) {
   const name = run.variant === "empty" ? "inbox-empty" : "inbox";
   await writeFile(join(DIST, "receipts", `${name}.receipt.json`), `${canonicalizeReceipt(run.receipt)}\n`);
@@ -333,8 +453,7 @@ for (const run of inboxRuns) {
   await writeFile(join(inboxDirectory, `${run.prefix}.responses.json`), `${JSON.stringify(run.responses, null, 2)}\n`);
 }
 for (const child of childViews) {
-  await writeFile(join(DIST, "diagrams", `inbox-item-${child.index}.svg`), renderSvg(child.diagram, { compact: true }));
-  await writeFile(join(DIST, "diagrams", `inbox-item-${child.index}.json`), `${JSON.stringify(child.diagram, null, 2)}\n`);
+  await emitDiagram(`inbox-item-${child.index}`, child.diagram, { header: true, receipt: fullInbox.receipt });
 }
 const ratiosDirectory = join(DIST, "examples/projects/ratios");
 await mkdir(ratiosDirectory, { recursive: true });
@@ -344,8 +463,7 @@ await writeFile(join(ratiosDirectory, "ratios.algal.json"), `${JSON.stringify(ma
 await writeFile(join(ratiosDirectory, "ratios.bundle.json"), `${JSON.stringify(await packOrganism(ratios.manifest, ratioStore), null, 2)}\n`);
 await writeFile(join(DIST, "receipts/ratios.receipt.json"), `${canonicalizeReceipt(ratioReceipt)}\n`);
 await writeFile(join(DIST, "receipts/ratios.diagnostics.json"), `${JSON.stringify(ratioReport, null, 2)}\n`);
-await writeFile(join(DIST, "diagrams/ratio-failure.svg"), renderSvg(ratioDiagram, { compact: true }));
-await writeFile(join(DIST, "diagrams/ratio-failure.json"), `${JSON.stringify(ratioDiagram, null, 2)}\n`);
+await emitDiagram("ratio-failure", ratioDiagram, { header: true, receipt: ratioReceipt });
 
 const authoringDownloadDirectory = join(DIST, "examples/errors/unknown-binding");
 await mkdir(join(authoringDownloadDirectory, "helpers"), { recursive: true });
@@ -353,4 +471,18 @@ await writeFile(join(authoringDownloadDirectory, "main.algal"), authoringSource)
 await writeFile(join(authoringDownloadDirectory, "helpers/draft.algal"), authoringHelper);
 await writeFile(join(authoringDownloadDirectory, "diagnostic.json"), `${JSON.stringify(authoringReport, null, 2)}\n`);
 
-console.log(`site built → ${DIST} (${manifests.size + 1} structural diagrams, ${childViews.length + 1} focused views, ${routeRuns.length + inboxRuns.length + 1} replay-checked executions, 1 checked authoring error)`);
+// Render each page fragment inside the shared document, then apply the
+// measured placeholders across the whole emitted document.
+replacements.BUILD_STATS = `${verifiedRuns} recorded runs replay-verified in this build`;
+for (const { file, out, meta } of pages) {
+  let document = pageDocument(meta, await readFile(join(SITE, file), "utf8"));
+  for (const [key, value] of Object.entries(replacements)) {
+    document = document.replaceAll(`{{${key}}}`, value);
+  }
+  if (/\{\{[A-Z_]+\}\}/.test(document)) throw new Error(`Unresolved site build placeholder in ${file}`);
+  const target = join(DIST, out);
+  await mkdir(dirname(target), { recursive: true });
+  await writeFile(target, document);
+}
+
+console.log(`site built → ${DIST} (${manifests.size + 1} structural diagrams, ${childViews.length + 1} focused views, ${verifiedRuns} replay-checked executions, 1 checked authoring error, ${pages.length} pages)`);
