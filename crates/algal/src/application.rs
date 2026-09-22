@@ -23,7 +23,9 @@ use crate::{
 };
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
+use std::future::Future;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 
 pub const APPLICATIONS: usize = 32;
 pub const PENDING: usize = 128;
@@ -899,10 +901,15 @@ pub struct DispatchAdmission<'a> {
 
 /// Host dispatch authority: executes or settles one admitted work item. The
 /// outcome JSON is validated against the dispatch record before it is
-/// trusted — arbitrary success output never settles.
+/// trusted — arbitrary success output never settles. Dispatch is async —
+/// domain dispatchers run real episodes through the VM — mirroring the
+/// Promise-returning TypeScript `ApplicationDispatcher`.
 pub trait Dispatcher {
     fn configuration_digest(&self) -> &str;
-    fn dispatch(&self, context: &DispatchContext) -> Result<Value>;
+    fn dispatch<'a>(
+        &'a self,
+        context: &'a DispatchContext<'a>,
+    ) -> Pin<Box<dyn Future<Output = Result<Value>> + 'a>>;
     /// Whether `reconcile` is implemented — mirrors TypeScript's optional
     /// method: `reconcile_dispatch` refuses early when it is absent.
     fn can_reconcile(&self) -> bool {
@@ -911,8 +918,11 @@ pub trait Dispatcher {
     /// `None` means settlement could not be established — the dispatch is
     /// recorded `uncertain`, matching a TypeScript `reconcile` that returns
     /// `undefined` or throws.
-    fn reconcile(&self, _context: &DispatchContext) -> Option<Result<Value>> {
-        None
+    fn reconcile<'a>(
+        &'a self,
+        _context: &'a DispatchContext<'a>,
+    ) -> Pin<Box<dyn Future<Output = Option<Result<Value>>> + 'a>> {
+        Box::pin(async { None })
     }
 }
 
@@ -1573,7 +1583,7 @@ impl<'a> Service<'a> {
         Ok(plan)
     }
 
-    fn execute(
+    async fn execute(
         &mut self,
         current: &Snapshot,
         snapshot: &Snapshot,
@@ -1599,14 +1609,14 @@ impl<'a> Service<'a> {
             dispatch: record,
         };
         let raw = if reconciliation {
-            match dispatcher.reconcile(&context) {
+            match dispatcher.reconcile(&context).await {
                 Some(raw) => raw,
                 None => Err(Error::invalid(
                     "Dispatcher did not establish settlement; explicit reconciliation required",
                 )),
             }
         } else {
-            dispatcher.dispatch(&context)
+            dispatcher.dispatch(&context).await
         };
         let outcome = match raw.and_then(|v| parse_outcome(&v, record, work)) {
             Ok(outcome) => outcome,
@@ -1635,7 +1645,7 @@ impl<'a> Service<'a> {
         Ok(updated)
     }
 
-    pub fn dispatch_pending(
+    pub async fn dispatch_pending(
         &mut self,
         application: &str,
         dispatcher: &dyn Dispatcher,
@@ -1675,12 +1685,15 @@ impl<'a> Service<'a> {
                 "identity": dispatch_identity(&name, &row.intent, &plan)?,
                 "plan": plan.value(), "status": "started", "result": null, "reason": null,
             }))?;
-            results.push(self.execute(current, snapshot, &row.work, &record, dispatcher, false)?);
+            results.push(
+                self.execute(current, snapshot, &row.work, &record, dispatcher, false)
+                    .await?,
+            );
         }
         Ok(results)
     }
 
-    pub fn reconcile_dispatch(
+    pub async fn reconcile_dispatch(
         &mut self,
         application: &str,
         intent: &str,
@@ -1742,6 +1755,7 @@ impl<'a> Service<'a> {
         }
         self.admit_plan(current, snapshot, &row.work, &intent_ref, Some(&prior))?;
         self.execute(current, snapshot, &row.work, &prior, dispatcher, true)
+            .await
     }
 }
 
@@ -2043,21 +2057,35 @@ mod tests {
         fn configuration_digest(&self) -> &str {
             &self.config
         }
-        fn dispatch(&self, context: &DispatchContext) -> Result<Value> {
-            match &context.intent.work {
-                WorkIntent::Deliver { message, .. } if self.delivery => Ok(json!({
-                    "status": "settled",
-                    "result": {"kind": "delivery", "message": message,
-                        "idempotencyKey": context.dispatch.identity},
-                })),
-                _ => Err(Error::invalid("sink unset")),
-            }
+        fn dispatch<'a>(
+            &'a self,
+            context: &'a DispatchContext<'a>,
+        ) -> Pin<Box<dyn Future<Output = Result<Value>> + 'a>> {
+            Box::pin(async move {
+                match &context.intent.work {
+                    WorkIntent::Deliver { message, .. } if self.delivery => Ok(json!({
+                        "status": "settled",
+                        "result": {"kind": "delivery", "message": message,
+                            "idempotencyKey": context.dispatch.identity},
+                    })),
+                    _ => Err(Error::invalid("sink unset")),
+                }
+            })
         }
         fn can_reconcile(&self) -> bool {
             true
         }
-        fn reconcile(&self, context: &DispatchContext) -> Option<Result<Value>> {
-            self.delivery.then(|| self.dispatch(context))
+        fn reconcile<'a>(
+            &'a self,
+            context: &'a DispatchContext<'a>,
+        ) -> Pin<Box<dyn Future<Output = Option<Result<Value>>> + 'a>> {
+            Box::pin(async move {
+                if self.delivery {
+                    Some(self.dispatch(context).await)
+                } else {
+                    None
+                }
+            })
         }
     }
 
@@ -2190,8 +2218,8 @@ mod tests {
         assert_eq!(service.commit(&stale).unwrap_err().code, "RECEIPT_MISMATCH");
     }
 
-    #[test]
-    fn deliver_intents_settle_through_the_durable_outbox() {
+    #[tokio::test]
+    async fn deliver_intents_settle_through_the_durable_outbox() {
         let tmp = tempdir().unwrap();
         let (revision, memory, message, _manifest) = seed(tmp.path());
         let allow = Allow;
@@ -2224,7 +2252,7 @@ mod tests {
             config: hashed(&json!({"contract":"algal.test-sink.v1"})),
             delivery: true,
         };
-        let dispatched = service.dispatch_pending("parity", &sink, 32).unwrap();
+        let dispatched = service.dispatch_pending("parity", &sink, 32).await.unwrap();
         assert_eq!(dispatched.len(), 1);
         assert_eq!(dispatched[0].status, "settled");
         let history = service.history("parity").unwrap();
@@ -2232,13 +2260,14 @@ mod tests {
         // Settlement is durable: reconcile returns the recorded dispatch.
         let reconciled = service
             .reconcile_dispatch("parity", &pending[0].intent, &sink)
+            .await
             .unwrap();
         assert_eq!(reconciled.status, "settled");
         assert_eq!(next.state.previous.as_deref(), Some(head.digest.as_str()));
     }
 
-    #[test]
-    fn uncertain_dispatches_are_never_replayed_and_reconcile_explicitly() {
+    #[tokio::test]
+    async fn uncertain_dispatches_are_never_replayed_and_reconcile_explicitly() {
         let tmp = tempdir().unwrap();
         let (revision, memory, message, _manifest) = seed(tmp.path());
         let allow = Allow;
@@ -2270,10 +2299,10 @@ mod tests {
             config: hashed(&json!({"contract":"algal.test-sink.v1"})),
             delivery: false,
         };
-        let dispatched = service.dispatch_pending("parity", &sink, 32).unwrap();
+        let dispatched = service.dispatch_pending("parity", &sink, 32).await.unwrap();
         assert_eq!(dispatched[0].status, "uncertain");
         // The uncertain admission is returned, never retried implicitly.
-        let again = service.dispatch_pending("parity", &sink, 32).unwrap();
+        let again = service.dispatch_pending("parity", &sink, 32).await.unwrap();
         assert_eq!(again[0].status, "uncertain");
         assert_eq!(again[0].value, dispatched[0].value);
         // Explicit reconcile settles it.
@@ -2283,6 +2312,7 @@ mod tests {
         };
         let reconciled = service
             .reconcile_dispatch("parity", &dispatched[0].intent, &settled_sink)
+            .await
             .unwrap();
         assert_eq!(reconciled.status, "settled");
         let history = service.history("parity").unwrap();

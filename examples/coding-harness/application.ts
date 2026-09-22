@@ -13,6 +13,7 @@ import { open } from "node:fs/promises";
 import { join } from "node:path";
 import {
   appendObservation, applicationProcessName, builtinRegistry, capabilityHandle,
+  dispatchApplicationEpisode,
   getApplicationRecord, manifestToJson, parseApplicationMigration, parseApplicationRevision,
   parseApplicationState, parseMemoryFrontier, parseMemoryProcedure, parseMemoryScope,
   parseMemorySnapshot, parseOrganismManifest, putApplicationRecord, runOrganism,
@@ -26,7 +27,7 @@ import { parseInvestigationRequest } from "../../src/application-investigation";
 import { decodeProbe, probeCommand } from "./memory";
 import { json, keys, object, parseProcedure, parseScope, sha256 } from "./memory-records";
 import type { MemoryProcedure, MemoryScope, MemoryTerminal } from "./memory-contract";
-import { canonicalize, type JsonValue } from "../../src/values";
+import { canonicalize } from "../../src/values";
 import { digestCanonical } from "../../src/digest";
 
 const ref = (value: unknown): Digest => digestCanonical(json(value));
@@ -390,20 +391,9 @@ export function createHarnessDispatcher(domain: HarnessDomain, store: Applicatio
         try { await file.writeFile(canonicalize(json({ contract: "algal.probe-channel.v1", request: work.message, outcomes: merged }))); } finally { await file.close(); }
         return { status: "settled" as const, result: { kind: "delivery" as const, message: work.message, idempotencyKey: context.dispatch.identity } };
       }
-      const plan = context.dispatch.plan;
-      if (plan.kind !== "episode") throw new Error("expected episode plan");
-      const binding = plan.binding;
-      const manifest = await store.getManifest(binding.manifest);
-      if (!manifest) throw new Error("Episode manifest missing from the store");
       // The worker inhabitant exercises only the capabilities its entrypoint
       // declares on the binding's revision.
-      const episodeRevision = await getApplicationRecord(store, binding.revision, parseApplicationRevision);
-      const workerEntry = episodeRevision.entrypoints.find(e => e.name === binding.entrypoint);
-      const args = object(await store.getValue(binding.arguments));
-      const receipt = await runOrganism({ manifest, fns: builtinRegistry(), store, executors: workerEntry ? inhabitantExecutors(workerEntry) : [], args: args as Record<string, Record<string, JsonValue>>, processName: binding.process });
-      const bindingRef = await putApplicationRecord(store, binding);
-      await putApplicationRecord(store, { contract: "algal.episode-outcome.v1", binding: bindingRef, receipt });
-      return { status: "settled" as const, result: { kind: "episode" as const, binding: bindingRef, process: binding.process } };
+      return dispatchApplicationEpisode(context, { store, executors: inhabitantExecutors });
     },
   };
 }

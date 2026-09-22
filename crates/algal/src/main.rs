@@ -1,6 +1,6 @@
 use algal::{
     Error, Result, application, application_adaptation,
-    application_host::PolicyHost,
+    application_host::{DomainDispatcher, PolicyHost},
     application_memory::{self as app_memory, MemoryService, NativeEngine},
     application_migration,
     canonical::{MAX_DOCUMENT_BYTES, canonical, digest_bytes, read_json},
@@ -2203,7 +2203,8 @@ async fn execute(cli: Cli) -> Result<bool> {
                     let host = host
                         .as_ref()
                         .ok_or_else(|| Error::invalid("application dispatch requires --policy"))?;
-                    let results = service.dispatch_pending(&name, host, max)?;
+                    let dispatcher = DomainDispatcher::new(host, &cli.dir)?;
+                    let results = service.dispatch_pending(&name, &dispatcher, max).await?;
                     emit(&json!({
                         "dispatches": results.iter().map(|d| d.value.clone()).collect::<Vec<_>>(),
                     }))?;
@@ -2215,7 +2216,10 @@ async fn execute(cli: Cli) -> Result<bool> {
                     let host = host
                         .as_ref()
                         .ok_or_else(|| Error::invalid("application reconcile requires --policy"))?;
-                    let result = service.reconcile_dispatch(&name, &intent, host)?;
+                    let dispatcher = DomainDispatcher::new(host, &cli.dir)?;
+                    let result = service
+                        .reconcile_dispatch(&name, &intent, &dispatcher)
+                        .await?;
                     emit(&result.value)?;
                 }
                 ApplicationCommand::Schedule { input } => {

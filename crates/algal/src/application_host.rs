@@ -24,7 +24,9 @@ use crate::{
 };
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
+use std::future::Future;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 
 #[derive(Clone, Debug)]
 pub struct RoutePolicy {
@@ -335,34 +337,98 @@ impl Dispatcher for PolicyHost {
     fn configuration_digest(&self) -> &str {
         &self.configuration_digest
     }
-    fn dispatch(&self, context: &DispatchContext) -> Result<Value> {
-        match &context.intent.work {
-            WorkIntent::Deliver { route, message } => {
-                self.settle_delivery(route, message, &context.dispatch.identity)
+    fn dispatch<'a>(
+        &'a self,
+        context: &'a DispatchContext<'a>,
+    ) -> Pin<Box<dyn Future<Output = Result<Value>> + 'a>> {
+        Box::pin(async move {
+            match &context.intent.work {
+                WorkIntent::Deliver { route, message } => {
+                    self.settle_delivery(route, message, &context.dispatch.identity)
+                }
+                WorkIntent::StartEpisode { .. } => Ok(json!({
+                    "status": "blocked",
+                    "reason": "Episode execution requires a domain dispatcher",
+                })),
             }
-            WorkIntent::StartEpisode { .. } => Ok(json!({
-                "status": "blocked",
-                "reason": "Episode execution requires a domain dispatcher",
-            })),
-        }
+        })
     }
     fn can_reconcile(&self) -> bool {
         true
     }
-    fn reconcile(&self, context: &DispatchContext) -> Option<Result<Value>> {
-        match &context.intent.work {
-            WorkIntent::Deliver { route, message } => {
-                match read_channel(&self.channels_dir, route) {
-                    Ok(outcomes) if outcomes.contains(message) => Some(Ok(json!({
-                        "status": "settled",
-                        "result": {"kind":"delivery","message":message,"idempotencyKey":context.dispatch.identity},
-                    }))),
-                    Ok(_) => None,
-                    Err(e) => Some(Err(e)),
+    fn reconcile<'a>(
+        &'a self,
+        context: &'a DispatchContext<'a>,
+    ) -> Pin<Box<dyn Future<Output = Option<Result<Value>>> + 'a>> {
+        Box::pin(async move {
+            match &context.intent.work {
+                WorkIntent::Deliver { route, message } => {
+                    match read_channel(&self.channels_dir, route) {
+                        Ok(outcomes) if outcomes.contains(message) => Some(Ok(json!({
+                            "status": "settled",
+                            "result": {"kind":"delivery","message":message,"idempotencyKey":context.dispatch.identity},
+                        }))),
+                        Ok(_) => None,
+                        Err(e) => Some(Err(e)),
+                    }
                 }
+                WorkIntent::StartEpisode { .. } => None,
             }
-            WorkIntent::StartEpisode { .. } => None,
+        })
+    }
+}
+
+/// The composed application dispatcher — `createApplicationDomainDispatcher`
+/// parity. Deliveries settle through the policy host's durable channels;
+/// `start-episode` intents run the admitted binding through the VM via
+/// `dispatch_episode`. Its configuration digest binds the admitted policy
+/// record, so the durable dispatch identifies exactly which dispatcher
+/// contract executed it.
+pub struct DomainDispatcher<'a> {
+    host: &'a PolicyHost,
+    dir: PathBuf,
+    configuration_digest: String,
+}
+
+impl<'a> DomainDispatcher<'a> {
+    pub fn new(host: &'a PolicyHost, dir: &Path) -> Result<Self> {
+        Ok(Self {
+            host,
+            dir: dir.to_path_buf(),
+            configuration_digest: digest(&app_json(&json!({
+                "contract": "algal.application-dispatcher.v1",
+                "policy": host.policy.reference,
+            }))?)?,
+        })
+    }
+}
+
+impl Dispatcher for DomainDispatcher<'_> {
+    fn configuration_digest(&self) -> &str {
+        &self.configuration_digest
+    }
+    fn dispatch<'a>(
+        &'a self,
+        context: &'a DispatchContext<'a>,
+    ) -> Pin<Box<dyn Future<Output = Result<Value>> + 'a>> {
+        match &context.dispatch.plan {
+            crate::application::DispatchPlan::Episode { .. } => Box::pin(
+                crate::application_episode::dispatch_episode(context, &self.dir),
+            ),
+            crate::application::DispatchPlan::Delivery { .. } => self.host.dispatch(context),
         }
+    }
+    fn can_reconcile(&self) -> bool {
+        self.host.can_reconcile()
+    }
+    fn reconcile<'a>(
+        &'a self,
+        context: &'a DispatchContext<'a>,
+    ) -> Pin<Box<dyn Future<Output = Option<Result<Value>>> + 'a>> {
+        // Episodes never silently retry: an uncertain episode is an uncertain
+        // external write, so reconcile falls through to the policy host's
+        // `None` and the dispatch stays uncertain until the caller settles it.
+        self.host.reconcile(context)
     }
 }
 
@@ -691,8 +757,8 @@ mod tests {
         assert!(MemoryAdmission::decode_observation(&host, &admission(wrong_contract)).is_err());
     }
 
-    #[test]
-    fn delivery_appends_to_the_channel_idempotently() {
+    #[tokio::test]
+    async fn delivery_appends_to_the_channel_idempotently() {
         let tmp = tempdir().unwrap();
         let host = PolicyHost::new(&policy_value(), tmp.path()).unwrap();
         let current = snapshot();
@@ -725,9 +791,9 @@ mod tests {
             intent: &intent,
             dispatch: &record,
         };
-        let first = Dispatcher::dispatch(&host, &context).unwrap();
+        let first = Dispatcher::dispatch(&host, &context).await.unwrap();
         assert_eq!(first["status"], json!("settled"));
-        let second = Dispatcher::dispatch(&host, &context).unwrap();
+        let second = Dispatcher::dispatch(&host, &context).await.unwrap();
         assert_eq!(first, second);
         let channel: Value = serde_json::from_str(
             &std::fs::read_to_string(tmp.path().join("investigate.json")).unwrap(),
@@ -736,7 +802,11 @@ mod tests {
         assert_eq!(channel["outcomes"], json!([message]));
         // Reconcile settles a recorded delivery; an absent one stays open.
         assert!(
-            Dispatcher::reconcile(&host, &context).unwrap().unwrap()["status"] == json!("settled")
+            Dispatcher::reconcile(&host, &context)
+                .await
+                .unwrap()
+                .unwrap()["status"]
+                == json!("settled")
         );
         let other_intent = deliver_intent(&refn(43));
         let other = DispatchContext {
@@ -745,6 +815,6 @@ mod tests {
             intent: &other_intent,
             dispatch: &record,
         };
-        assert!(Dispatcher::reconcile(&host, &other).is_none());
+        assert!(Dispatcher::reconcile(&host, &other).await.is_none());
     }
 }

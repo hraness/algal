@@ -387,8 +387,10 @@ export type {
   MemoryScope,
   MemorySnapshot,
 } from "./src/application-memory";
-export { createApplicationPolicyHost, parseApplicationHostPolicy } from "./src/application-host";
+export { createApplicationDomainDispatcher, createApplicationPolicyHost, parseApplicationHostPolicy } from "./src/application-host";
 export type { ApplicationHostPolicy } from "./src/application-host";
+export { dispatchApplicationEpisode } from "./src/application-episode";
+export type { EpisodeExecutors } from "./src/application-episode";
 export { NativeMemoryQueryEngine } from "./src/application-native-memory";
 export { appendObservation } from "./src/application-observation";
 export type { AppendObservationInput, AppendedObservation } from "./src/application-observation";

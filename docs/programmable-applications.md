@@ -1,13 +1,14 @@
 > WIP checkpoint: application contracts and design are initial implementation work.
 > The lifecycle, memory services, declarative `algal.application-host.v1`
-> policy and the evaluation/migration producers now run on both runtimes —
-> `bun scripts/application-parity.ts` replays one shared case (create →
-> investigate → delivery → observe → evaluate → verify → admit → activate →
-> derive → episode binding → migrate-memory → migrate → reconcile) and
-> requires identical digests and records across 52 steps, including the
-> foundry evaluation report, run receipts and produced migration record. The
-> domain dispatcher for episodes remains reference-only, and kernel
-> guarantees stay gated on wider shared coverage.
+> policy, the evaluation/migration producers and the domain episode
+> dispatcher now run on both runtimes — `bun scripts/application-parity.ts`
+> replays one shared case (create → investigate → delivery → observe →
+> evaluate → verify → admit → activate → derive → episode binding →
+> migrate-memory → migrate → episode dispatch → reconcile) and requires
+> identical digests and records across 52 steps, including the foundry
+> evaluation report, run receipts, the produced migration record and the
+> settled episode outcome. Kernel guarantees stay gated on wider shared
+> coverage.
 > The harness memory pilot is paused and unqualified. See the checkpoint section below.
 
 # ALGAL: programmable organisms

@@ -12,10 +12,13 @@ import { join } from "node:path";
 import { applicationId, applicationJson, applicationList, applicationObject, applicationRef, applicationTag } from "./application-contract";
 import type { ApplicationAdmission, ApplicationDispatchContext, ApplicationDispatcher } from "./application";
 import { applicationProcessName } from "./application";
+import type { EpisodeExecutors } from "./application-episode";
+import { dispatchApplicationEpisode } from "./application-episode";
 import type { MemoryAdmissionHost, MemoryClaim } from "./application-memory";
 import { parseMemoryClaim } from "./application-memory";
 import { parseCapabilityHandle } from "./capabilities";
 import { digestCanonical, type Digest } from "./digest";
+import type { Store } from "./store";
 import { asObject, canonicalize, type JsonValue } from "./values";
 
 const json = applicationJson;
@@ -159,5 +162,27 @@ export function createApplicationPolicyHost(input: unknown, options: { channelsD
       if (!outcomes.includes(work.message)) return undefined;
       return { status: "settled" as const, result: { kind: "delivery" as const, message: work.message, idempotencyKey: context.dispatch.identity } };
     },
+  };
+}
+
+/** The composed application dispatcher — `DomainDispatcher` parity.
+ * Deliveries settle through the policy host's durable channels;
+ * `start-episode` intents run the admitted binding through the VM via
+ * `dispatchApplicationEpisode`. The configuration digest binds the admitted
+ * policy record, so a durable dispatch identifies exactly which dispatcher
+ * contract executed it. Episodes never silently retry: reconciliation of an
+ * uncertain episode stays open until the caller settles it explicitly. */
+export function createApplicationDomainDispatcher(input: unknown, options: {
+  channelsDir: string; store: Store; executors?: EpisodeExecutors;
+}): ApplicationDispatcher {
+  const policy = parseApplicationHostPolicy(input);
+  const host = createApplicationPolicyHost(input, { channelsDir: options.channelsDir });
+  return {
+    configurationDigest: ref({ contract: "algal.application-dispatcher.v1", policy: ref(policy.value) }),
+    dispatch: (context) =>
+      context.dispatch.plan.kind === "episode"
+        ? dispatchApplicationEpisode(context, options.executors ? { store: options.store, executors: options.executors } : { store: options.store })
+        : host.dispatch(context),
+    reconcile: async (context) => await host.reconcile?.(context),
   };
 }

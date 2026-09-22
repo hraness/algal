@@ -20,7 +20,7 @@ import { ApplicationService, type ApplicationDispatch, type ApplicationSnapshot 
 import {
   admitApplicationActivation, checkApplicationCompatibility, evaluateApplicationRevision, verifyApplicationEvaluation,
 } from "../src/application-adaptation";
-import { createApplicationPolicyHost } from "../src/application-host";
+import { createApplicationDomainDispatcher, createApplicationPolicyHost } from "../src/application-host";
 import { scheduleInvestigations, requestExecution } from "../src/application-investigation";
 import { migrateApplicationMemory } from "../src/application-migration";
 import { appendObservation } from "../src/application-observation";
@@ -75,7 +75,7 @@ const values = {
   evaluationPolicy: { contract: "algal.application-evaluation-policy.v1", maxCases: 8, maxWork: 1_000_000, maxModelCalls: 0, requireHoldoutPass: true, strictValidationImprovement: true },
   program: { contract: "algal.query.v1", rules: [], query: { relation: "available", terms: [{ var: "x" }, { var: "polarity" }] }, limits: LIMITS },
   frontier: { contract: "algal.application-memory-frontier.v1", application: APP, previous: null, sequence: 0, mutation: null, status: "settled" },
-  episodeArgs: { contract: "algal.parity-episode-args.v1", q: "probe" },
+  episodeArgs: { src: { value: "probe" } },
   evalCases: {
     contract: "algal.application-evaluation-cases.v1",
     cases: [
@@ -199,6 +199,9 @@ const host = createApplicationPolicyHost(policy, { channelsDir: join(tsDir, "cha
 const engine = new NativeMemoryQueryEngine({ executable: binary, expectedSha256: binaryHex });
 const service = new ApplicationService(tsDir, host);
 const memory = new ApplicationMemoryService({ store: service.store, engine, admission: host });
+// The composed domain dispatcher: policy routes for deliveries, real episode
+// execution through the VM — the same contract the native `dispatch` arm runs.
+const dispatcher = createApplicationDomainDispatcher(policy, { channelsDir: join(tsDir, "channels"), store: service.store });
 const pendingRows = async () => {
   const history = await service.history(APP);
   const rows = await (service as unknown as { pending(h: unknown): Promise<{ intent: string; sourceState: string; dispatch: ApplicationDispatch | null }[]> }).pending(history);
@@ -265,7 +268,7 @@ steps.push(
     },
     native: async () => app("schedule", await dynamic("schedule", { application: APP, operation: op("schedule"), expectedHead: head, expectedMemory: memoryRef, route: "investigate" })),
   },
-  { name: "dispatch", ts: async () => ({ dispatches: await service.dispatchPending(APP, host) }), native: async () => app("dispatch", APP) },
+  { name: "dispatch", ts: async () => ({ dispatches: await service.dispatchPending(APP, dispatcher) }), native: async () => app("dispatch", APP) },
   { name: "pending", ts: pendingRows, native: async () => app("pending", APP) },
   { name: "observe", ts: async () => ({ observation: await memory.observe(observationInput) }), native: async () => app("observe", fixturePath.get("observation")!) },
   {
@@ -277,8 +280,8 @@ steps.push(
     },
     native: async () => app("publish", await dynamic("publish", { application: APP, operation: op("publish"), expectedHead: head, expectedMemory: memoryRef, observation: observationInput })),
   },
-  // A blocked episode dispatch would stay pending forever under the policy
-  // host, so activation must land before the episode intent is dispatched.
+  // An admitted-but-unsettled dispatch wedges activating transitions, so
+  // activation and migration land before the episode intent is dispatched.
   {
     name: "scope-migrated",
     ts: async () => ({ scope: await memory.putScope(scope2) }),
@@ -361,10 +364,10 @@ steps.push(
     },
     native: async () => app("commit", await dynamic("migrate", { application: APP, operation: op("migrate"), kind: "migrate", expectedHead: head, revision: revision3Ref, memory: migratedSnapshotRef, intents: [], evidence: [migrationRef], causedBy: null })),
   },
-  { name: "dispatch-episode", ts: async () => ({ dispatches: await service.dispatchPending(APP, host) }), native: async () => app("dispatch", APP) },
+  { name: "dispatch-episode", ts: async () => ({ dispatches: await service.dispatchPending(APP, dispatcher) }), native: async () => app("dispatch", APP) },
   {
     name: "reconcile-episode",
-    ts: async () => await service.reconcileDispatch(APP, reconcileIntent, host),
+    ts: async () => await service.reconcileDispatch(APP, reconcileIntent, dispatcher),
     native: async () => app("reconcile", APP, reconcileIntent),
   },
   { name: "inspect-final", ts: async () => inspectShape(await service.inspect(APP)), native: async () => app("inspect", APP) },
@@ -393,9 +396,9 @@ try {
       process.exit(1);
     }
     if (step.name === "dispatch-episode") {
-      const blocked = (tsOut as { dispatches: ApplicationDispatch[] }).dispatches.find(d => d.status === "blocked");
-      if (!blocked) throw new Error("no blocked dispatch to reconcile");
-      reconcileIntent = blocked.intent;
+      const episode = (tsOut as { dispatches: ApplicationDispatch[] }).dispatches.find(d => d.plan.kind === "episode");
+      if (!episode) throw new Error("no episode dispatch to reconcile");
+      reconcileIntent = episode.intent;
     }
     checked++;
   }
