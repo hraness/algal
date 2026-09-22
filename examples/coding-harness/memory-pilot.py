@@ -610,6 +610,8 @@ def summarize(plan: dict[str, Any], episodes: list[dict[str, Any]], seeds: list[
                        "invalid": sum(row["status"] == "invalid" for row in rows), "memoryStatuses": statuses,
                        **{key: sum((row.get("memoryEvidence") or {}).get(key, 0) for row in rows)
                           for key in ("probeCalls", "operations", "visibleBytes", "nativeCalls", "nativeWork")},
+                       "nativeWorkIsLowerBound": any((row.get("memoryEvidence") or {}).get("nativeWorkIsLowerBound", False)
+                                                    for row in rows),
                        **{key: sum(audits.get(row["jobName"], {}).get(key, 0) for row in rows)
                           for key in ("repeatedProbes", "terminalCalls", "failedCommandRepeats", "admissions", "staleUnsupportedAdmissions", "queryCalls")},
                        "durationMs": sum(row["durationMs"] for row in rows),

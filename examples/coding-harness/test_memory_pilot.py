@@ -2,6 +2,7 @@
 import copy
 import importlib.util
 from pathlib import Path
+import tempfile
 import unittest
 
 spec = importlib.util.spec_from_file_location("memory_pilot", Path(__file__).with_name("memory-pilot.py"))
@@ -50,6 +51,56 @@ class MemoryPilotAuditTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "applicability"):
             memory_pilot.audit_episode(row, {"retained": self.source("dependencies")}, set(), {"retained"}, True)
 
+    def test_summary_preserves_unknown_native_work_in_complete_comparison(self):
+        families = [{"id": f"family-{index}"} for index in range(4)]
+        freeze_id = "frozen-test-plan"
+
+        def row(arm, family, episode):
+            owner = f"{arm}-{family}"
+            return {"jobName": f"{owner}-{episode}", "owner": owner, "arm": arm,
+                    "family": family, "episode": episode, "freezeId": freeze_id,
+                    "status": "failure", "durationMs": 0, "accounting": {"modelCalls": 1},
+                    "storeDir": "/unused", "scope": self.scope(), "trace": [],
+                    "controller": {"terminalCalls": 0}, "memoryEvidence": {
+                        "owner": owner, "sourceRefs": [], "probes": [], "queries": [],
+                        "probeCalls": 0, "nativeWork": 0, "nativeWorkIsLowerBound": False}}
+
+        episodes = [row(arm, family["id"], episode) for family in families
+                    for episode in (1, 2) for arm in memory_pilot.ARMS]
+        seeds = [row("seed", family["id"], 0) for family in families]
+        plan = {"freezeId": freeze_id, "manifest": {"families": families},
+                "matrix": [{key: value[key] for key in ("jobName", "owner", "arm", "family", "episode")}
+                           for value in episodes]}
+        with tempfile.TemporaryDirectory() as directory:
+            store = Path(directory)
+            (store / "records").mkdir()
+
+            def put(value):
+                ref = memory_pilot.pilot.digest(value)
+                (store / "records" / (ref[7:] + ".json")).write_bytes(memory_pilot.pilot.canonical(value))
+                return ref
+
+            snapshot = put({"contract": "algal.memory.v1", "facts": []})
+            program = put({"contract": "algal.query.v1", "rules": [],
+                           "query": {"relation": "answer", "terms": []}, "limits": {"maxWork": 1}})
+            exhausted = next(value for value in episodes if value["arm"] == "logical")
+            exhausted["storeDir"] = str(store)
+            exhausted["trace"] = [{"kind": "memory", "action": {"type": "memory.query", "procedure": "factor"},
+                                   "result": {"status": "exhausted", "snapshotRef": snapshot,
+                                              "programRef": program, "reason": "native-query"}}]
+            exhausted["memoryEvidence"].update({"nativeCalls": 1, "nativeWorkIsLowerBound": True,
+                "queries": [{"procedure": "factor", "scope": self.scope(), "sourceRefs": [],
+                             "snapshotRef": snapshot, "programRef": program, "status": "exhausted",
+                             "verified": False, "work": None}],
+                "outcomes": [{"status": "exhausted"}]})
+            report = memory_pilot.summarize(plan, episodes, seeds)
+
+        self.assertTrue(report["complete"])
+        self.assertTrue(report["provenanceAudit"]["complete"])
+        self.assertEqual(report["scores"]["logical"]["nativeWork"], 0)
+        self.assertTrue(report["scores"]["logical"]["nativeWorkIsLowerBound"])
+        for arm in ("none", "episodic"):
+            self.assertFalse(report["scores"][arm]["nativeWorkIsLowerBound"])
 
 if __name__ == "__main__":
     unittest.main()
