@@ -49,7 +49,7 @@ async function measure(path: string, budget: {entries: number}, maximumEntries: 
 export async function withApplicationQuota<T>(root: string, application: string, writes: JsonValue[], action: () => Promise<T>): Promise<T> {
   application = applicationId(application);
   if (!writes.length || writes.length > 64) fail("invalid publication count");
-  const reservation = writes.reduce((sum, value) => sum + 2 * Buffer.byteLength(canonicalize(value)), 0);
+  const reservation = writes.reduce<number>((sum, value) => sum + 2 * Buffer.byteLength(canonicalize(value)), 0);
   const quota = join(root, ".application-quota");
   return hostLease(quota, "application-quota", async () => {
     const ledgerPath = join(quota, "ledger.json"), raw = await hostRead(ledgerPath, 8192);
