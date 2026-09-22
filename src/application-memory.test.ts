@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { accessSync, constants } from "node:fs";
 import { digestCanonical } from "./digest";
 import { parseMemoryFrontier, parseMemoryProcedure, parseMemoryResourceVersion, parseMemorySchema } from "./application-memory";
 import { NativeMemoryQueryEngine } from "./application-native-memory";
@@ -9,7 +9,10 @@ const ref = (value: unknown) => digestCanonical(value as never);
 const pinnedExecutable = "/Users/benguo/Documents/Codex/2026-09-20/i-w/work/native-memory-target/debug/algal";
 const configuredExecutable = process.env.ALGAL_MEMORY_NATIVE;
 const nativeExecutable = configuredExecutable ?? pinnedExecutable;
-const nativeTest = existsSync(nativeExecutable) ? test : test.skip;
+const nativeExecutableUsable = (() => {
+  try { accessSync(nativeExecutable, constants.R_OK | constants.X_OK); return true; } catch { return false; }
+})();
+const nativeTest = nativeExecutableUsable ? test : test.skip;
 
 describe("application memory records", () => {
   test("keeps resource versions and frontiers closed", () => {

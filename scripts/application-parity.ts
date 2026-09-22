@@ -29,6 +29,7 @@ import { collectApplicationViewEvidence, parseApplicationView, parseApplicationV
 import { migrateApplicationMemory } from "../src/application-migration";
 import { appendObservation } from "../src/application-observation";
 import { restoreApplicationRevision, type ApplicationRestorationPolicy } from "../src/application-restoration";
+import { produceApplicationComparison, verifyApplicationComparison } from "../src/application-comparison";
 import { rolloverApplicationMemory } from "../src/application-rollover";
 import { ApplicationMemoryService, parseMemorySnapshot } from "../src/application-memory";
 import { NativeMemoryQueryEngine } from "../src/application-native-memory";
@@ -225,6 +226,7 @@ let finalEvidenceView: ApplicationView | undefined;
 let reconcileIntent = "" as Digest;
 let wedgeIntent = "" as Digest;
 let evaluationRef = "" as Digest;
+let comparisonRef = "" as Digest;
 let migrationRef = "" as Digest;
 let migratedSnapshotRef = "" as Digest;
 let migrateCommand: { [key: string]: JsonValue } = {};
@@ -348,12 +350,12 @@ steps.push(
   {
     name: "evaluate",
     ts: async () => {
-      const request = { contract: "algal.application-evaluation-request.v1", parentState: head, candidateRevision: revision2Ref, entrypoint: "run", cases: digests.evalCases, scorer: digests.evalScorer, policy: digests.evaluationPolicy };
+      const request = { contract: "algal.application-evaluation-request.v1", parentState: head, candidateRevision: revision2Ref, entrypoint: "run", cases: digests.evalCases, scorer: digests.evalScorer, policy: digests.evaluationPolicy, environment: "parity-harness" };
       const r = await evaluateApplicationRevision(service.store, request, { fns: builtinRegistry() });
       evaluationRef = r.evaluationRef;
       return { evaluation: r.evaluationRef, verdict: r.evaluation.verdict };
     },
-    native: async () => app("evaluate", await dynamic("eval-request", { contract: "algal.application-evaluation-request.v1", parentState: head, candidateRevision: revision2Ref, entrypoint: "run", cases: digests.evalCases, scorer: digests.evalScorer, policy: digests.evaluationPolicy })),
+    native: async () => app("evaluate", await dynamic("eval-request", { contract: "algal.application-evaluation-request.v1", parentState: head, candidateRevision: revision2Ref, entrypoint: "run", cases: digests.evalCases, scorer: digests.evalScorer, policy: digests.evaluationPolicy, environment: "parity-harness" })),
   },
   {
     name: "verify-evaluation",
@@ -363,6 +365,26 @@ steps.push(
     },
     native: async () => app("verify-evaluation", await dynamic("verify-eval", { evaluation: evaluationRef, expectedState: head })),
   },
+  // Environment-attributed comparison: the evaluated alternative is joined
+  // into a retained comparison record, re-verified, and cited as activation
+  // evidence so the host checks its application/parent-state binding.
+  {
+    name: "compare",
+    ts: async () => {
+      const r = await produceApplicationComparison(service.store, { application: APP, parentState: head, entrypoint: "run", environment: "parity-harness", evaluations: [evaluationRef], selected: manifestEvalRef }, { fns: builtinRegistry() });
+      comparisonRef = r.comparisonRef;
+      return { comparison: r.comparisonRef, selected: r.comparison.selected };
+    },
+    native: async () => app("compare", await dynamic("compare", { application: APP, parentState: head, entrypoint: "run", environment: "parity-harness", evaluations: [evaluationRef], selected: manifestEvalRef })),
+  },
+  {
+    name: "verify-comparison",
+    ts: async () => {
+      const r = await verifyApplicationComparison(service.store, comparisonRef, head, { fns: builtinRegistry() });
+      return { ok: true, selected: r.selected };
+    },
+    native: async () => app("verify-comparison", await dynamic("verify-comparison", { comparison: comparisonRef, expectedState: head })),
+  },
   {
     name: "admit-activation",
     ts: async () => admitApplicationActivation(service.store, { evaluation: evaluationRef, expectedState: head, revision: revision2Ref }, { fns: builtinRegistry() }),
@@ -371,11 +393,11 @@ steps.push(
   {
     name: "activate",
     ts: async () => {
-      const s = await service.commit({ application: APP, operation: op("activate"), kind: "activate", expectedHead: head, revision: revision2Ref, memory: memoryRef, intents: [], evidence: [evaluationRef], causedBy: null });
+      const s = await service.commit({ application: APP, operation: op("activate"), kind: "activate", expectedHead: head, revision: revision2Ref, memory: memoryRef, intents: [], evidence: [evaluationRef, comparisonRef].sort(), causedBy: null });
       head = s.digest;
       return { state: s.digest, transition: s.state.transition, revision: s.state.revision, memory: s.state.memory };
     },
-    native: async () => app("commit", await dynamic("activate", { application: APP, operation: op("activate"), kind: "activate", expectedHead: head, revision: revision2Ref, memory: memoryRef, intents: [], evidence: [evaluationRef], causedBy: null })),
+    native: async () => app("commit", await dynamic("activate", { application: APP, operation: op("activate"), kind: "activate", expectedHead: head, revision: revision2Ref, memory: memoryRef, intents: [], evidence: [evaluationRef, comparisonRef].sort(), causedBy: null })),
   },
   {
     name: "query-supported",

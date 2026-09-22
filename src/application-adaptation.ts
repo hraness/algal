@@ -55,6 +55,9 @@ export type ApplicationEvaluationRequest = {
   cases: Digest;
   scorer: Digest;
   policy: Digest;
+  /** Optional environment label attributing the evidence to a deployment
+   * context; absent on older records and preserved when absent. */
+  environment?: string;
 };
 
 export type CompatibilityResult = {
@@ -135,9 +138,10 @@ export function parseEvaluationScorer(input: unknown): EvaluationScorer {
   return { contract: "algal.application-evaluation-scorer.v1", scorer: v.scorer === null ? null : parseExprScorer(v.scorer, "evaluation scorer") };
 }
 export function parseApplicationEvaluationRequest(input: unknown): ApplicationEvaluationRequest {
-  const v = applicationObject(input, ["contract", "parentState", "candidateRevision", "entrypoint", "cases", "scorer", "policy"]);
+  const hasEnvironment = !!input && typeof input === "object" && Object.hasOwn(input, "environment");
+  const v = applicationObject(input, ["contract", "parentState", "candidateRevision", "entrypoint", "cases", "scorer", "policy", ...(hasEnvironment ? ["environment"] : [])]);
   applicationTag(v.contract, "algal.application-evaluation-request.v1");
-  return { contract: "algal.application-evaluation-request.v1", parentState: digest(v.parentState, "request.parentState"), candidateRevision: digest(v.candidateRevision, "request.candidateRevision"), entrypoint: applicationId(v.entrypoint), cases: digest(v.cases, "request.cases"), scorer: digest(v.scorer, "request.scorer"), policy: digest(v.policy, "request.policy") };
+  return { contract: "algal.application-evaluation-request.v1", parentState: digest(v.parentState, "request.parentState"), candidateRevision: digest(v.candidateRevision, "request.candidateRevision"), entrypoint: applicationId(v.entrypoint), cases: digest(v.cases, "request.cases"), scorer: digest(v.scorer, "request.scorer"), policy: digest(v.policy, "request.policy"), ...(hasEnvironment ? { environment: applicationId(v.environment) } : {}) };
 }
 function parseCompatibility(input: unknown): CompatibilityResult {
   const v = applicationObject(input, ["contract", "previousRevision", "candidateRevision", "status", "reasons"]);
