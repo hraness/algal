@@ -5,10 +5,13 @@
 > `bun scripts/application-parity.ts` replays one shared case (create →
 > investigate → delivery → observe → evaluate → verify → admit → activate →
 > derive → view → episode binding → migrate-memory → migrate → episode
-> dispatch → reconcile) and requires identical digests and records across 53
+> dispatch → reconcile) and requires identical digests and records across 61
 > steps, including the foundry evaluation report, run receipts, the produced
 > migration record, the fenced view projection and the settled episode
-> outcome. Kernel guarantees stay gated on wider shared coverage.
+> outcome. Rejection legs pin identical verdicts for stale heads, operation
+> collisions, malformed commands and activation wedged by an unsettled
+> dispatch, plus an exact operation replay past a moved head. Kernel
+> guarantees stay gated on wider shared coverage.
 > The harness memory pilot is paused and unqualified. See the checkpoint section below.
 
 # ALGAL: programmable organisms

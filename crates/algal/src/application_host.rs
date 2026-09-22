@@ -817,4 +817,56 @@ mod tests {
         };
         assert!(Dispatcher::reconcile(&host, &other).await.is_none());
     }
+
+    #[tokio::test]
+    async fn episode_dispatch_is_blocked_and_stays_open() {
+        let tmp = tempdir().unwrap();
+        let host = PolicyHost::new(&policy_value(), tmp.path()).unwrap();
+        let current = snapshot();
+        let intent = crate::application::parse_intent(&json!({
+            "contract": "algal.application-intent.v1", "application": "parity",
+            "operation": refn(50), "ordinal": 0,
+            "kind": "start-episode", "entrypoint": "run", "input": refn(51),
+        }))
+        .unwrap();
+        let binding = crate::application::parse_episode_binding(&json!({
+            "contract": "algal.application-episode.v1", "application": "parity",
+            "intent": hashed(intent.value.clone()), "sourceState": current.digest,
+            "revision": refn(52), "memory": refn(53), "epoch": 0,
+            "entrypoint": "run", "manifest": refn(54), "arguments": refn(55),
+            "process": "a-episode-parity", "maxGenerations": 4,
+            "hostProfile": refn(56), "access": "observe",
+        }))
+        .unwrap();
+        let plan = crate::application::DispatchPlan::Episode {
+            binding: Box::new(binding),
+        };
+        let record = crate::application::Dispatch {
+            application: "parity".to_owned(),
+            intent: hashed(intent.value.clone()),
+            source_state: current.digest.clone(),
+            configuration_digest: refn(57),
+            identity: refn(58),
+            plan: plan.clone(),
+            status: "started".to_owned(),
+            result: None,
+            reason: None,
+            value: json!({
+                "contract": "algal.application-dispatch.v1", "application": "parity",
+                "intent": hashed(intent.value.clone()), "sourceState": current.digest,
+                "configurationDigest": refn(57), "identity": refn(58),
+                "plan": plan.value(), "status": "started", "result": null, "reason": null,
+            }),
+        };
+        let context = DispatchContext {
+            current: &current,
+            snapshot: &current,
+            intent: &intent,
+            dispatch: &record,
+        };
+        let outcome = Dispatcher::dispatch(&host, &context).await.unwrap();
+        assert_eq!(outcome["status"], json!("blocked"));
+        // Episodes are never silently retried or settled by reconciliation.
+        assert!(Dispatcher::reconcile(&host, &context).await.is_none());
+    }
 }

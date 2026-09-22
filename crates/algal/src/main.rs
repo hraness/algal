@@ -653,9 +653,18 @@ enum ApplicationCommand {
         application: String,
         #[arg(long, default_value_t = 32)]
         max: usize,
+        /// Dispatch through the bare `algal.application-host.v1` host rather
+        /// than the domain dispatcher — episodes are blocked honestly.
+        #[arg(long)]
+        host_only: bool,
     },
     /// Explicitly reconcile one uncertain dispatch.
-    Reconcile { application: String, intent: String },
+    Reconcile {
+        application: String,
+        intent: String,
+        #[arg(long)]
+        host_only: bool,
+    },
     /// `schedule_investigations`: derivation → investigation requests → commit.
     Schedule { input: PathBuf },
     /// `request_execution`: verified support → start-episode commit.
@@ -2202,12 +2211,17 @@ async fn execute(cli: Cli) -> Result<bool> {
                 ApplicationCommand::Dispatch {
                     application: name,
                     max,
+                    host_only,
                 } => {
                     let host = host
                         .as_ref()
                         .ok_or_else(|| Error::invalid("application dispatch requires --policy"))?;
-                    let dispatcher = DomainDispatcher::new(host, &cli.dir)?;
-                    let results = service.dispatch_pending(&name, &dispatcher, max).await?;
+                    let results = if host_only {
+                        service.dispatch_pending(&name, host, max).await?
+                    } else {
+                        let dispatcher = DomainDispatcher::new(host, &cli.dir)?;
+                        service.dispatch_pending(&name, &dispatcher, max).await?
+                    };
                     emit(&json!({
                         "dispatches": results.iter().map(|d| d.value.clone()).collect::<Vec<_>>(),
                     }))?;
@@ -2215,14 +2229,19 @@ async fn execute(cli: Cli) -> Result<bool> {
                 ApplicationCommand::Reconcile {
                     application: name,
                     intent,
+                    host_only,
                 } => {
                     let host = host
                         .as_ref()
                         .ok_or_else(|| Error::invalid("application reconcile requires --policy"))?;
-                    let dispatcher = DomainDispatcher::new(host, &cli.dir)?;
-                    let result = service
-                        .reconcile_dispatch(&name, &intent, &dispatcher)
-                        .await?;
+                    let result = if host_only {
+                        service.reconcile_dispatch(&name, &intent, host).await?
+                    } else {
+                        let dispatcher = DomainDispatcher::new(host, &cli.dir)?;
+                        service
+                            .reconcile_dispatch(&name, &intent, &dispatcher)
+                            .await?
+                    };
                     emit(&result.value)?;
                 }
                 ApplicationCommand::Schedule { input } => {

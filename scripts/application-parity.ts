@@ -210,14 +210,17 @@ const pendingRows = async () => {
 };
 
 let head = "" as Digest;
+let genesisHead = "" as Digest;
 let memoryRef = "" as Digest;
 let derivationRef = "" as Digest;
 let reconcileIntent = "" as Digest;
+let wedgeIntent = "" as Digest;
 let evaluationRef = "" as Digest;
 let migrationRef = "" as Digest;
 let migratedSnapshotRef = "" as Digest;
+let migrateCommand: { [key: string]: JsonValue } = {};
 
-type Step = { name: string; ts: () => Promise<unknown>; native: () => Promise<string[]> };
+type Step = { name: string; ts: () => Promise<unknown>; native: () => Promise<string[]>; fails?: boolean };
 const steps: Step[] = [];
 const putStep = (name: string, value: JsonValue, kind: "values" | "manifests" = "values") =>
   steps.push({
@@ -249,7 +252,7 @@ steps.push(
     name: "create",
     ts: async () => {
       const s = await service.create({ application: APP, operation: op("create"), kind: "create", expectedHead: null, revision: revisionRef, memory: memoryRef, intents: [], evidence: [], causedBy: null });
-      head = s.digest;
+      head = s.digest; genesisHead = s.digest;
       return { state: s.digest, transition: s.state.transition, revision: s.state.revision, memory: s.state.memory };
     },
     native: async () => app("create", await dynamic("create", { application: APP, operation: op("create"), kind: "create", expectedHead: null, revision: revisionRef, memory: memoryRef, intents: [], evidence: [], causedBy: null })),
@@ -375,11 +378,14 @@ steps.push(
   {
     name: "migrate",
     ts: async () => {
-      const s = await service.commit({ application: APP, operation: op("migrate"), kind: "migrate", expectedHead: head, revision: revision3Ref, memory: migratedSnapshotRef, intents: [], evidence: [migrationRef], causedBy: null });
+      const s = await service.commit(migrateCommand);
       head = s.digest; memoryRef = s.state.memory;
       return { state: s.digest, transition: s.state.transition, revision: s.state.revision, memory: s.state.memory };
     },
-    native: async () => app("commit", await dynamic("migrate", { application: APP, operation: op("migrate"), kind: "migrate", expectedHead: head, revision: revision3Ref, memory: migratedSnapshotRef, intents: [], evidence: [migrationRef], causedBy: null })),
+    native: async () => {
+      migrateCommand = { application: APP, operation: op("migrate"), kind: "migrate", expectedHead: head, revision: revision3Ref, memory: migratedSnapshotRef, intents: [], evidence: [migrationRef], causedBy: null };
+      return app("commit", await dynamic("migrate", migrateCommand));
+    },
   },
   { name: "dispatch-episode", ts: async () => ({ dispatches: await service.dispatchPending(APP, dispatcher) }), native: async () => app("dispatch", APP) },
   {
@@ -387,12 +393,77 @@ steps.push(
     ts: async () => await service.reconcileDispatch(APP, reconcileIntent, dispatcher),
     native: async () => app("reconcile", APP, reconcileIntent),
   },
+  // Rejection parity: closed parsers, head fencing, and the unsettled-dispatch
+  // wedge must fail identically on both runtimes. `fails` legs compare the
+  // verdict only — error text is not part of the contract.
+  {
+    name: "stale-head",
+    fails: true,
+    ts: async () => service.commit({ application: APP, operation: op("stale"), kind: "investigate", expectedHead: genesisHead, revision: revision3Ref, memory: memoryRef, intents: [], evidence: [], causedBy: null }),
+    native: async () => app("commit", await dynamic("stale", { application: APP, operation: op("stale"), kind: "investigate", expectedHead: genesisHead, revision: revision3Ref, memory: memoryRef, intents: [], evidence: [], causedBy: null })),
+  },
+  {
+    name: "operation-collision",
+    fails: true,
+    ts: async () => service.commit({ ...migrateCommand, kind: "investigate" }),
+    native: async () => app("commit", await dynamic("collision", { ...migrateCommand, kind: "investigate" })),
+  },
+  {
+    name: "malformed-commit",
+    fails: true,
+    ts: async () => service.commit({ ...migrateCommand, operation: op("malformed"), kind: "investigate", expectedHead: head, bogus: true }),
+    native: async () => app("commit", await dynamic("malformed", { ...migrateCommand, operation: op("malformed"), kind: "investigate", expectedHead: head, bogus: true })),
+  },
+  // The wedge leg: an episode dispatched through the bare policy host is
+  // recorded `blocked` — an admitted-but-unsettled dispatch — which blocks
+  // activating transitions until explicit settlement. Reconciliation cannot
+  // manufacture a settlement (the host returns no outcome), so the dispatch
+  // becomes `uncertain` and the wedge stands.
+  {
+    name: "commit-wedge-episode",
+    ts: async () => {
+      const s = await service.commit({ application: APP, operation: op("wedge-episode"), kind: "investigate", expectedHead: head, revision: revision3Ref, memory: memoryRef, intents: [{ kind: "start-episode", entrypoint: "run", input: digests.episodeArgs }], evidence: [], causedBy: null });
+      head = s.digest;
+      return { state: s.digest, transition: s.state.transition, revision: s.state.revision, memory: s.state.memory };
+    },
+    native: async () => app("commit", await dynamic("wedge", { application: APP, operation: op("wedge-episode"), kind: "investigate", expectedHead: head, revision: revision3Ref, memory: memoryRef, intents: [{ kind: "start-episode", entrypoint: "run", input: digests.episodeArgs }], evidence: [], causedBy: null })),
+  },
+  {
+    name: "dispatch-blocked",
+    ts: async () => ({ dispatches: await service.dispatchPending(APP, host) }),
+    native: async () => app("dispatch", APP, "--host-only"),
+  },
+  {
+    name: "activate-wedged",
+    fails: true,
+    ts: async () => service.commit({ application: APP, operation: op("wedged"), kind: "activate", expectedHead: head, revision: revision3Ref, memory: memoryRef, intents: [], evidence: [], causedBy: null }),
+    native: async () => app("commit", await dynamic("wedged", { application: APP, operation: op("wedged"), kind: "activate", expectedHead: head, revision: revision3Ref, memory: memoryRef, intents: [], evidence: [], causedBy: null })),
+  },
+  {
+    name: "reconcile-blocked",
+    ts: async () => await service.reconcileDispatch(APP, wedgeIntent, host),
+    native: async () => app("reconcile", APP, wedgeIntent, "--host-only"),
+  },
+  // An exact operation replay returns the committed snapshot even after the
+  // head has moved — idempotency short-circuits before the stale-head check.
+  {
+    name: "idempotent-migrate",
+    ts: async () => {
+      const s = await service.commit(migrateCommand);
+      return { state: s.digest, transition: s.state.transition, revision: s.state.revision, memory: s.state.memory };
+    },
+    native: async () => app("commit", await dynamic("migrate", migrateCommand)),
+  },
   { name: "inspect-final", ts: async () => inspectShape(await service.inspect(APP)), native: async () => app("inspect", APP) },
 );
 
-const runNative = async (args: string[]) => {
+const runNativeAttempt = async (args: string[]) => {
   const proc = Bun.spawn([binary, "--dir", nativeDir, ...args], { stdout: "pipe", stderr: "pipe" });
   const [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
+  return { stdout, stderr, code };
+};
+const runNative = async (args: string[]) => {
+  const { stdout, stderr, code } = await runNativeAttempt(args);
   if (code !== 0) throw new Error(`native ${args.join(" ")} failed (${code}): ${stderr.trim()}`);
   return JSON.parse(stdout) as unknown;
 };
@@ -404,6 +475,16 @@ try {
     // Native arguments are functions of the pre-step state; build them before
     // the TypeScript leg mutates head/memoryRef.
     const args = await step.native();
+    if (step.fails) {
+      const tsRejected = await step.ts().then(() => false, () => true);
+      const { code } = await runNativeAttempt(args);
+      if (!tsRejected || code === 0) {
+        console.error(`PARITY DIVERGENCE at "${step.name}": expected rejection — ts ${tsRejected ? "rejected" : "accepted"}, native exit ${code}`);
+        process.exit(1);
+      }
+      checked++;
+      continue;
+    }
     const tsOut = await step.ts();
     const nativeOut = await runNative(args);
     if (!same(tsOut, nativeOut)) {
@@ -416,6 +497,11 @@ try {
       const episode = (tsOut as { dispatches: ApplicationDispatch[] }).dispatches.find(d => d.plan.kind === "episode");
       if (!episode) throw new Error("no episode dispatch to reconcile");
       reconcileIntent = episode.intent;
+    }
+    if (step.name === "dispatch-blocked") {
+      const episode = (tsOut as { dispatches: ApplicationDispatch[] }).dispatches.find(d => d.plan.kind === "episode");
+      if (!episode || episode.status !== "blocked") throw new Error("no blocked episode dispatch");
+      wedgeIntent = episode.intent;
     }
     checked++;
   }
