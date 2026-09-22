@@ -52,10 +52,21 @@ Its storage digest includes the intrinsic receipt `digest` field, so the
 storage reference and intrinsic execution digest are distinct identities.
 
 Process names have lifetime uniqueness within a retained store. Creation
-fails when the name's directory already exists, even after completion or an
-interrupted initial creation. There is no reset, replacement, or delete
-command in this contract. Retaining a process name also retains its effect
-idempotency namespace.
+writes a `.creating.json` marker as the first entry of the process
+directory, naming the `algal.process-creation.v1` contract, the process
+name, and the digest of the intended initial process record. A completed
+creation removes the marker after the head publishes. When the directory
+already exists, creation fails with one exception: a directory containing
+no `head.json`, a marker exactly matching the requested name and intended
+record digest, and only recognised creation scratch — the marker itself,
+the `.owner.sqlite` lease database and its journal siblings, the owner
+`.lock` marker and `owners/` archive, and publication temporaries —
+resumes the pending publication instead of failing. A bare, legacy,
+foreign, malformed, or mismatched directory remains fail-closed and
+retains the name, as does a crash between directory creation and marker
+publication. There is no reset, replacement, or delete command in this
+contract. Retaining a process name also retains its effect idempotency
+namespace.
 
 ## Bounds
 

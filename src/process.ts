@@ -8,6 +8,7 @@ import {
   mkdir,
   open,
   opendir,
+  readdir,
   rename,
   unlink,
 } from "node:fs/promises";
@@ -665,10 +666,69 @@ export class ProcessSupervisor {
       if ((await this.names()).length >= PROCESS_BOUNDS.maxProcesses)
         throw new AlgalError("BUDGET_EXHAUSTED", "process count exhausted");
       const path = await this.paths(name);
-      await mkdir(path, { mode: 0o700 }); // Never replace an existing identity, even if initial creation was interrupted.
-      await syncDirectory(base);
+      const expected = digestCanonical(json(parseProcessRecord(record)));
+      const markerPath = join(path, ".creating.json");
+      let exists = false;
+      try {
+        await lstat(path);
+        exists = true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+      if (exists) {
+        // A retained name's directory is only recoverable when its creation
+        // marker proves this exact intended record was interrupted before the
+        // head published. Legacy and foreign directories stay fail-closed.
+        const entries = await readdir(path);
+        if (entries.includes("head.json"))
+          throw new AlgalError("IO_FAILED", "process name already exists");
+        const marker = await readBounded(markerPath, 2048);
+        const claimed =
+          marker !== null &&
+          typeof marker === "object" &&
+          !Array.isArray(marker) &&
+          Object.keys(marker).length === 3 &&
+          marker.contract === "algal.process-creation.v1" &&
+          marker.name === name &&
+          marker.record === expected;
+        if (!claimed)
+          throw new AlgalError(
+            "IO_FAILED",
+            "process name is retained by a completed or interrupted creation",
+          );
+        for (const entry of entries) {
+          const scratch =
+            entry === ".creating.json" ||
+            entry === ".lock" ||
+            entry === ".owner.sqlite" ||
+            entry === ".owner.sqlite-journal" ||
+            entry === ".owner.sqlite-wal" ||
+            entry === ".owner.sqlite-shm" ||
+            entry.startsWith(".tmp-") ||
+            entry.startsWith(".head-") ||
+            entry.endsWith(".tmp") ||
+            (entry === "owners" &&
+              (await lstat(join(path, entry))).isDirectory());
+          if (!scratch)
+            throw new AlgalError(
+              "IO_FAILED",
+              "interrupted process creation contains foreign entries",
+            );
+        }
+      } else {
+        await mkdir(path, { mode: 0o700 });
+        await syncDirectory(base);
+        await replace(markerPath, {
+          contract: "algal.process-creation.v1",
+          name,
+          record: expected,
+        });
+      }
       await this.publish("manifests", manifestToJson(manifest));
-      return this.save(record);
+      const snapshot = await this.save(record);
+      await unlink(markerPath);
+      await syncDirectory(path);
+      return snapshot;
     });
   }
   async inspect(name: string): Promise<ProcessSnapshot> {

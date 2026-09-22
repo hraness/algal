@@ -48,7 +48,10 @@ process:NAME,nonce:64_lowercase_hex}`. After acquiring the SQLite transaction,
 a matching abandoned marker is archived under `owners/NONCE.json` (maximum
 256) before replacement. Unknown or old lock formats require operator
 reconciliation. No PID, clock age, or failed heartbeat authorizes takeover.
-Process creation still uses the older fail-closed `processes/.lock` interlock.
+Process creation still uses the older fail-closed `processes/.lock` interlock;
+the `.creating.json` marker described in [process.md](process.md) is the only
+admitted proof that an interrupted initial creation belongs to the retrying
+caller.
 
 ## Ordered effects
 

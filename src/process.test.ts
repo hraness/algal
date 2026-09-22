@@ -343,3 +343,176 @@ test("process verification never fetches missing modules through a transport", a
   await expect(verifier.verify("offline")).rejects.toThrow();
   expect(calls).toBe(0);
 });
+
+function fixtureManifest(): OrganismManifest {
+  return parseOrganismManifest({
+    contract: "algal.organism.v1",
+    key: "organism:create-recovery",
+    name: "Create recovery",
+    cells: [
+      {
+        id: "out",
+        kind: "const",
+        outputs: { value: { type: "json", value: "ok" } },
+      },
+    ],
+    edges: [],
+  });
+}
+function intendedRecord(
+  name: string,
+  manifest: OrganismManifest,
+  args: unknown = {},
+  maxGenerations = 16,
+) {
+  return parseProcessRecord({
+    contract: "algal.process.v1",
+    name,
+    manifestDigest: digestCanonical(manifestToJson(manifest)),
+    args,
+    maxGenerations,
+    generation: 0,
+    status: "ready",
+    wake: [],
+  });
+}
+function creationMarker(name: string, digest: string): string {
+  return JSON.stringify({
+    contract: "algal.process-creation.v1",
+    name,
+    record: digest,
+  });
+}
+function recordDigest(record: ReturnType<typeof parseProcessRecord>): string {
+  return digestCanonical(JSON.parse(JSON.stringify(record)));
+}
+
+test("an interrupted creation resumes when its marker matches the request", async () => {
+  const dir = await directory();
+  const manifest = fixtureManifest();
+  const path = join(dir, "processes", "ghost");
+  await mkdir(path, { recursive: true });
+  await writeFile(
+    join(path, ".creating.json"),
+    creationMarker("ghost", recordDigest(intendedRecord("ghost", manifest))),
+  );
+  const vm = new ProcessSupervisor(dir);
+  const snapshot = await vm.create("ghost", manifest);
+  expect(snapshot.process.status).toBe("ready");
+  expect((await vm.inspect("ghost")).digest).toBe(snapshot.digest);
+  // The marker is removed once the head publishes.
+  await expect(readFile(join(path, ".creating.json"), "utf8")).rejects
+    .toMatchObject({ code: "ENOENT" });
+});
+
+test("an interrupted creation resumes over retained owner lease scratch", async () => {
+  const dir = await directory();
+  const manifest = fixtureManifest();
+  const path = join(dir, "processes", "leased");
+  await mkdir(join(path, "owners"), { recursive: true });
+  await writeFile(
+    join(path, ".creating.json"),
+    creationMarker("leased", recordDigest(intendedRecord("leased", manifest))),
+  );
+  await writeFile(join(path, ".owner.sqlite"), "");
+  await writeFile(
+    join(path, ".lock"),
+    JSON.stringify({
+      contract: "algal.process-owner.v2",
+      process: "leased",
+      nonce: "a".repeat(64),
+    }),
+  );
+  const vm = new ProcessSupervisor(dir);
+  const snapshot = await vm.create("leased", manifest);
+  expect(snapshot.process.status).toBe("ready");
+});
+
+test("a bare interrupted directory stays fail-closed", async () => {
+  const dir = await directory();
+  await mkdir(join(dir, "processes", "bare"), { recursive: true });
+  await expect(
+    new ProcessSupervisor(dir).create("bare", fixtureManifest()),
+  ).rejects.toMatchObject({ code: "IO_FAILED" });
+});
+
+test("a completed process name still rejects creation", async () => {
+  const dir = await directory();
+  const vm = new ProcessSupervisor(dir);
+  await vm.create("settled", fixtureManifest());
+  await expect(vm.create("settled", fixtureManifest())).rejects.toMatchObject({
+    code: "IO_FAILED",
+  });
+});
+
+test("a mismatched creation marker stays fail-closed", async () => {
+  const dir = await directory();
+  const manifest = fixtureManifest();
+  const path = join(dir, "processes", "other");
+  await mkdir(path, { recursive: true });
+  const different = parseOrganismManifest({
+    contract: "algal.organism.v1",
+    key: "organism:create-recovery-other",
+    name: "Other",
+    cells: [
+      {
+        id: "out",
+        kind: "const",
+        outputs: { value: { type: "json", value: "different" } },
+      },
+    ],
+    edges: [],
+  });
+  await writeFile(
+    join(path, ".creating.json"),
+    creationMarker("other", recordDigest(intendedRecord("other", different))),
+  );
+  await expect(
+    new ProcessSupervisor(dir).create("other", manifest),
+  ).rejects.toMatchObject({ code: "IO_FAILED" });
+});
+
+test("a malformed creation marker stays fail-closed", async () => {
+  const dir = await directory();
+  const path = join(dir, "processes", "malformed");
+  await mkdir(path, { recursive: true });
+  await writeFile(
+    join(path, ".creating.json"),
+    JSON.stringify({ contract: "algal.process-creation.v1" }),
+  );
+  await expect(
+    new ProcessSupervisor(dir).create("malformed", fixtureManifest()),
+  ).rejects.toMatchObject({ code: "IO_FAILED" });
+});
+
+test("a foreign entry in an interrupted directory stays fail-closed", async () => {
+  const dir = await directory();
+  const manifest = fixtureManifest();
+  const path = join(dir, "processes", "foreign");
+  await mkdir(path, { recursive: true });
+  await writeFile(
+    join(path, ".creating.json"),
+    creationMarker("foreign", recordDigest(intendedRecord("foreign", manifest))),
+  );
+  await writeFile(join(path, "foreign.txt"), "not ours");
+  await expect(
+    new ProcessSupervisor(dir).create("foreign", manifest),
+  ).rejects.toMatchObject({ code: "IO_FAILED" });
+});
+
+test("a retained name with a marker for different arguments stays closed", async () => {
+  const dir = await directory();
+  const manifest = fixtureManifest();
+  const path = join(dir, "processes", "argv");
+  await mkdir(path, { recursive: true });
+  await writeFile(
+    join(path, ".creating.json"),
+    creationMarker(
+      "argv",
+      recordDigest(intendedRecord("argv", manifest, {}, 8)),
+    ),
+  );
+  await expect(
+    new ProcessSupervisor(dir).create("argv", manifest, {}, 16),
+  ).rejects.toMatchObject({ code: "IO_FAILED" });
+});
