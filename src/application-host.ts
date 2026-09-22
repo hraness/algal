@@ -18,6 +18,7 @@ import { ApplicationMemoryService, parseMemoryClaim } from "./application-memory
 import { admitApplicationActivation, parseApplicationEvaluationRequest, parseEvaluationPolicy } from "./application-adaptation";
 import { parseApplicationRuntimeProfile, parseApplicationViewSpec } from "./application-view";
 import { parseApplicationMigration, verifyApplicationMigration } from "./application-migration";
+import { parseApplicationRestorationPolicy, verifyApplicationRestoration, type ApplicationRestorationPolicy } from "./application-restoration";
 import { builtinRegistry } from "./registry";
 import { compileOrganism } from "./graph";
 import { hostDirectory, hostLease, hostRead, hostWrite } from "./host-state";
@@ -107,8 +108,10 @@ const admissionOnlyEngine: MemoryQueryEngine = {
 
 /** Admission pins every policy field except the mutable frontier selection;
  * execution configuration still binds the complete policy record. */
-export function createApplicationPolicyHost(input: unknown, options: { channelsDir: string; memoryEngine?: MemoryQueryEngine }): ApplicationAdmission & MemoryAdmissionHost & ApplicationDispatcher {
+export function createApplicationPolicyHost(input: unknown, options: { channelsDir: string; memoryEngine?: MemoryQueryEngine; restorationPolicy?: ApplicationRestorationPolicy }): ApplicationAdmission & MemoryAdmissionHost & ApplicationDispatcher {
   const policy = parseApplicationHostPolicy(input);
+  const restorationPolicy = options.restorationPolicy === undefined ? null : parseApplicationRestorationPolicy(options.restorationPolicy);
+  if (restorationPolicy && restorationPolicy.application !== policy.application) throw new Error("Restoration policy belongs to another application");
   const { frontier: _frontier, ...authority } = asObject(policy.value, "host policy");
   const identity = ref({ contract: "algal.host-admission.v2", policy: ref(authority) });
   const configurationDigest = ref({ contract: "algal.host-dispatcher.v1", policy: ref(policy.value) });
@@ -137,6 +140,11 @@ export function createApplicationPolicyHost(input: unknown, options: { channelsD
         const queries = new ApplicationMemoryService({ store: replayStore(store), engine: options.memoryEngine, admission: host });
         const derived = await queries.query(current.digest, entry.applicability);
         if (derived.derivation.status !== "supported" || !derived.derivation.verified || !command.evidence.includes(derived.ref)) throw new Error("Execution requires reproduced supported applicability evidence");
+      }
+      if (command.kind === "restore") {
+        if (!current || !restorationPolicy) throw new Error("Host policy denies restoration");
+        const checked = await verifyApplicationRestoration(store, { application: command.application, parentState: current.digest, candidateRevision: command.revision, evidence: command.evidence });
+        if (checked.policy !== ref(restorationPolicy)) throw new Error("Restoration requires the explicit host policy");
       }
       if (command.kind === "activate" || command.kind === "migrate") {
         if (!current) throw new Error("Revision change requires an incumbent");

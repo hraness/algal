@@ -458,3 +458,6 @@ export type {
   EvaluationPolicy,
   EvaluationScorer,
 } from "./src/application-adaptation";
+
+export { restoreApplicationRevision, parseApplicationRestoration, parseApplicationRestorationPolicy, verifyApplicationRestoration } from "./src/application-restoration";
+export type { ApplicationRestoration, ApplicationRestorationPolicy, RestoreApplicationRevisionInput, RestoredApplicationRevision } from "./src/application-restoration";

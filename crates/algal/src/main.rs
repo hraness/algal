@@ -283,6 +283,9 @@ enum Commands {
         /// operations that admit work.
         #[arg(long)]
         policy: Option<PathBuf>,
+        /// Explicit retained-pure-strategy restoration authority.
+        #[arg(long)]
+        restoration_policy: Option<PathBuf>,
         /// Channel directory for the policy dispatcher
         /// (default `<dir>/channels`).
         #[arg(long)]
@@ -676,6 +679,8 @@ enum ApplicationCommand {
     Publish { input: PathBuf },
     /// Archive an active memory selection and commit on the exact expected head.
     RolloverMemory { input: PathBuf },
+    /// Restore retained pure strategy manifests as a forward child revision.
+    Restore { input: PathBuf },
     /// `evaluateApplicationRevision`: foundry over incumbent/candidate
     /// entrypoints; emits the stored evaluation digest and verdict.
     Evaluate { request: PathBuf },
@@ -2071,6 +2076,7 @@ async fn execute(cli: Cli) -> Result<bool> {
         }
         Commands::Application {
             policy,
+            restoration_policy,
             channels,
             command,
         } => {
@@ -2079,6 +2085,13 @@ async fn execute(cli: Cli) -> Result<bool> {
                 Some(path) => Some(PolicyHost::new(&load(path, 262_144)?, &channels_dir)?),
                 None => None,
             };
+            if let Some(path) = restoration_policy {
+                host.as_mut()
+                    .ok_or_else(|| {
+                        Error::invalid("Restoration authority requires an application host policy")
+                    })?
+                    .set_restoration_policy(&load(&path, 262_144)?)?;
+            }
             let denied = NoAdmission;
             let engine_sha = digest_bytes(&std::fs::read(std::env::current_exe()?)?);
             let engine = NativeEngine::new(engine_sha.trim_start_matches("sha256:"), 10_000)?;
@@ -2225,6 +2238,15 @@ async fn execute(cli: Cli) -> Result<bool> {
                     )
                     .await?;
                     emit(&result)?;
+                }
+                ApplicationCommand::Restore { input } => {
+                    emit(
+                        &algal::application_restoration::restore_revision(
+                            &mut service,
+                            &load(&input, 262_144)?,
+                        )
+                        .await?,
+                    )?;
                 }
                 ApplicationCommand::RolloverMemory { input } => {
                     let result = application::rollover_memory(

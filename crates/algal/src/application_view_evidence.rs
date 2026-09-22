@@ -190,7 +190,14 @@ pub fn parse(input: &Value, state: &str, memory: &str) -> Result<Value> {
         opt_ref(&r["parent"])?;
         choice(
             &r["kind"],
-            &["create", "memory", "investigate", "activate", "migrate"],
+            &[
+                "create",
+                "memory",
+                "investigate",
+                "activate",
+                "migrate",
+                "restore",
+            ],
         )?;
         app_refs(&r["evidence"], 16)?;
     }
