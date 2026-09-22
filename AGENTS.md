@@ -71,7 +71,9 @@
   lifecycle (create/commit including activate and migrate transitions,
   dispatch/reconcile, memory scope/observe/snapshot/query, and the
   `algal.application-host.v1` policy host) through both runtimes with
-  identical digests.
+  identical digests, and `bun scripts/process-parity.ts` for the durable
+  process lifecycle (create/inspect/list/tick/verify/schedule plus the
+  `.creating.json` interrupted-creation recovery contract).
 - The Foundation Models bridge comes from the pinned `apple-foundation`
   crate (`hraness/apple-foundation`); `sh scripts/build-apple.sh` emits its
   embedded source and builds it with Xcode 26 on Apple Silicon, and the
