@@ -6,10 +6,26 @@
     }
   },
   {
-    "name": "array-type",
+    "name": "empty-type-union",
+    "schema": {
+      "type": []
+    }
+  },
+  {
+    "name": "duplicate-type-union",
     "schema": {
       "type": [
+        "object",
         "object"
+      ]
+    }
+  },
+  {
+    "name": "unknown-union-member",
+    "schema": {
+      "type": [
+        "object",
+        "strnig"
       ]
     }
   },

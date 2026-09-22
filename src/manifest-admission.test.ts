@@ -27,6 +27,13 @@ function padded(bytes: number, padding = "") {
 }
 
 describe("manifest admission before effect dispatch", () => {
+  test("finite supported type unions are admitted at every schema boundary", () => {
+    for (const type of [["object"], ["null", "string"], ["object", "array", "string", "number", "integer", "boolean", "null"]]) {
+      for (const where of ["agent", "input-port", "output-port"]) {
+        expect(() => parseOrganismManifest(manifest({ type }, where))).not.toThrow();
+      }
+    }
+  });
   for (const { name, schema } of invalidSchemas) {
     test(`${name} is refused at all schema boundaries`, () => {
       for (const where of ["agent", "input-port", "output-port"]) {
