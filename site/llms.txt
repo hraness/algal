@@ -74,7 +74,7 @@ message and adding a structured diagnostic. The Bun CLI accepts
 the file, a bounded source excerpt, and import origins when available. These
 flags affect SourceError presentation; other errors retain JSON output. These
 are authoring errors before execution; `diagnose` separately explains recorded
-runtime failures. The https://algal.dev/#authoring-error demonstration compiles
+runtime failures. The https://algal.computer/#authoring-error demonstration compiles
 an intentionally invalid helper containing `emial` instead of `email` and
 publishes the real structured compiler report. The site build checks that
 correcting the binding makes the example compile. No program or model executes
@@ -87,7 +87,7 @@ child invocation, preserving the original root receipt binding. These are
 read-only frontend views; neither runs a model nor substitutes for replay
 verification. Source text is recompiled and matched before annotations apply.
 The live page includes separate inbox-item graphs and a replay-verified pure
-failure at https://algal.dev/#source-failure.
+failure at https://algal.computer/#source-failure.
 
 The site reads examples/source/reply.algal during its build and renders diagrams
 from the compiled reply manifest and existing executable examples. Graphs show
@@ -140,21 +140,21 @@ bun cli.ts diagram examples/source/reply.algal --format svg --out reply.svg
 - On-device private brief: https://github.com/hraness/algal/blob/main/docs/apple-brief.md
 - Durable coding repairs: https://github.com/hraness/algal/blob/main/docs/repair.md
 - Read-only PR shepherd: https://github.com/hraness/algal/blob/main/docs/pr-shepherd.md
-- Readable example: https://algal.dev/examples/reply.algal
-- Compiled example: https://algal.dev/examples/reply.algal.json
-- Generated diagram: https://algal.dev/diagrams/reply.svg
-- Conditional program: https://algal.dev/examples/route.algal
-- Support receipt: https://algal.dev/receipts/route-help.receipt.json
-- Sales receipt: https://algal.dev/receipts/route-sales.receipt.json
-- Human-review receipt: https://algal.dev/receipts/route-other.receipt.json
-- Reusable inbox project: https://algal.dev/examples/projects/inbox/inbox.algal
-- Draft helper: https://algal.dev/examples/projects/inbox/draft.algal
-- Portable inbox bundle: https://algal.dev/examples/projects/inbox/inbox.bundle.json
-- Inbox receipt: https://algal.dev/receipts/inbox.receipt.json
-- Empty-inbox receipt: https://algal.dev/receipts/inbox-empty.receipt.json
-- Authoring error report: https://algal.dev/examples/errors/unknown-binding/diagnostic.json
-- Intentionally invalid project: https://algal.dev/examples/errors/unknown-binding/main.algal
-- Helper with the typo: https://algal.dev/examples/errors/unknown-binding/helpers/draft.algal
+- Readable example: https://algal.computer/examples/reply.algal
+- Compiled example: https://algal.computer/examples/reply.algal.json
+- Generated diagram: https://algal.computer/diagrams/reply.svg
+- Conditional program: https://algal.computer/examples/route.algal
+- Support receipt: https://algal.computer/receipts/route-help.receipt.json
+- Sales receipt: https://algal.computer/receipts/route-sales.receipt.json
+- Human-review receipt: https://algal.computer/receipts/route-other.receipt.json
+- Reusable inbox project: https://algal.computer/examples/projects/inbox/inbox.algal
+- Draft helper: https://algal.computer/examples/projects/inbox/draft.algal
+- Portable inbox bundle: https://algal.computer/examples/projects/inbox/inbox.bundle.json
+- Inbox receipt: https://algal.computer/receipts/inbox.receipt.json
+- Empty-inbox receipt: https://algal.computer/receipts/inbox-empty.receipt.json
+- Authoring error report: https://algal.computer/examples/errors/unknown-binding/diagnostic.json
+- Intentionally invalid project: https://algal.computer/examples/errors/unknown-binding/main.algal
+- Helper with the typo: https://algal.computer/examples/errors/unknown-binding/helpers/draft.algal
 - Manifest contract: https://github.com/hraness/algal/blob/main/spec/v1/organism.md
 - Durable process demonstration: https://github.com/hraness/algal/blob/main/docs/vm.md
 - Selection and populations: https://github.com/hraness/algal/blob/main/docs/civilization.md

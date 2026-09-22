@@ -4,7 +4,14 @@
 // determinism, strictness, bounds, and the quote-array footgun included.
 
 import { describe, expect, test } from "bun:test";
-import { checkProgram, evalProgram, EXPR_DEFAULT_FUEL } from "./expr";
+import { readFileSync } from "node:fs";
+import {
+  checkProgram,
+  evalProgram,
+  EXPR_DEFAULT_FUEL,
+  setExprExports,
+  type EvalExports,
+} from "./expr";
 import type { JsonObject, JsonValue } from "./values";
 
 const evalIn = (p: JsonValue, env: JsonObject = {}, fuel = EXPR_DEFAULT_FUEL) =>
@@ -124,6 +131,34 @@ describe("expr eval", () => {
     // the failed run still reports the fuel it actually burned
     expect(tight.fuel).toBeGreaterThan(0);
     expect(tight.fuel).toBeLessThanOrEqual(5);
+  });
+
+  test("setExprExports: an injected evaluator is used and can be restored", () => {
+    // A stub whose alloc fails proves the injected object handled the call —
+    // the fs loader path cannot produce this exact failure.
+    setExprExports({
+      memory: new WebAssembly.Memory({ initial: 1 }),
+      algal_alloc: () => 0,
+      algal_dealloc: () => {},
+      algal_eval: () => 0n,
+      algal_check: () => 0n,
+    });
+    try {
+      expect(() => evalIn(["get", "x"], { x: 1 })).toThrow(
+        /allocation failed/,
+      );
+    } finally {
+      // Restore the real evaluator for the rest of this file's tests.
+      const bytes = readFileSync(
+        new URL("./algal_expr.wasm", import.meta.url),
+      );
+      const instance = new WebAssembly.Instance(
+        new WebAssembly.Module(bytes),
+        {},
+      );
+      setExprExports(instance.exports as unknown as EvalExports);
+    }
+    expect(ok(["get", "x"], { x: 7 }).value).toBe(7);
   });
 
   test("bounds: oversized output and list caps fail closed", () => {

@@ -7,7 +7,6 @@
 //
 // Boundary: JSON string in, JSON string out, over wasm linear memory.
 
-import { readFileSync } from "node:fs";
 import { AlgalError } from "./errors";
 import { canonicalize, type JsonObject, type JsonValue } from "./values";
 
@@ -38,7 +37,7 @@ export const EXPR_BOUNDS = {
 } as const;
 export const EXPR_DEFAULT_FUEL = 10_000;
 
-type EvalExports = {
+export type EvalExports = {
   memory: WebAssembly.Memory;
   algal_alloc(len: number): number;
   algal_dealloc(ptr: number, len: number): void;
@@ -48,10 +47,41 @@ type EvalExports = {
 
 let exports_: EvalExports | null = null;
 
+/** Hosts that cannot read the committed wasm artifact from disk inject the
+ * shared evaluator once — a workerd bundle hands over the same
+ * WebAssembly.Module through its wasm import rule. Same artifact,
+ * different delivery path: values, error codes, and fuel burns are
+ * identical by construction. Keeps node:fs out of this module's import
+ * graph so the contract parse chain stays bundle-safe. */
+export function setExprExports(exports: EvalExports): void {
+  exports_ = exports;
+}
+
+type FsLike = { readFileSync(path: URL): Uint8Array };
+
+function filesystem(): FsLike {
+  const require_ = (
+    import.meta as { require?: (id: string) => FsLike }
+  ).require;
+  if (require_ !== undefined) return require_("node:fs");
+  const getBuiltinModule = (
+    globalThis as {
+      process?: { getBuiltinModule?: (id: string) => FsLike };
+    }
+  ).process?.getBuiltinModule;
+  if (getBuiltinModule !== undefined) {
+    return getBuiltinModule.call(globalThis.process, "node:fs");
+  }
+  throw new AlgalError(
+    "EXPR_FAILED",
+    "no filesystem evaluator loader on this host — call setExprExports with the algal_expr.wasm instance",
+  );
+}
+
 function load(): EvalExports {
   if (exports_) return exports_;
   const url = new URL("./algal_expr.wasm", import.meta.url);
-  const bytes = readFileSync(url);
+  const bytes = filesystem().readFileSync(url);
   const module = new WebAssembly.Module(bytes);
   const instance = new WebAssembly.Instance(module, {});
   exports_ = instance.exports as unknown as EvalExports;

@@ -166,7 +166,7 @@ bun cli.ts check examples/source/errors/unknown-binding/main.algal \
 ```
 
 JSON is the default error format; `--diagnostic-format json` makes that choice
-explicit for tools. [Inspect the generated authoring error](https://algal.dev/#authoring-error).
+explicit for tools. [Inspect the generated authoring error](https://algal.computer/#authoring-error).
 
 ### Run only the selected branch
 
@@ -192,7 +192,7 @@ return match intent.value {
 The budget covers the largest selected path: two executor attempts, rather
 than adding the costs of mutually exclusive arms. Nested `if` and `match`
 work the same way. Source diagrams show binding names and operation summaries
-while retaining every exact cell ID. [Inspect the recorded paths on the site](https://algal.dev/#branch-demo).
+while retaining every exact cell ID. [Inspect the recorded paths on the site](https://algal.computer/#branch-demo).
 
 ### Write a program once. Call it or use it for each item.
 
@@ -228,7 +228,7 @@ empty batch; its child runs are currently sequential. Child budgets are
 checked during compilation, and the root budget limits the entire execution.
 Local imports resolve to content-addressed child manifests. The diagram
 shows those actual call boundaries; the receipt records the nested execution.
-[Inspect the executable example](https://algal.dev/#reuse).
+[Inspect the executable example](https://algal.computer/#reuse).
 
 Compile the whole project into one portable bundle:
 
@@ -280,7 +280,7 @@ on its second item. The report locates the division in `ratio.algal:4` and
 shows the caller in `ratios.algal`. Original source is recompiled and checked
 against the receipt before any location is displayed. Diagnosis inspects
 recorded evidence; `verify` separately replays it.
-[Explore child calls and a failed execution on the site](https://algal.dev/#inspect-children).
+[Explore child calls and a failed execution on the site](https://algal.computer/#inspect-children).
 
 ## More than a chain of prompts
 

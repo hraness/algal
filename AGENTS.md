@@ -28,7 +28,7 @@
   `spec/v1/search.md`, `spec/v1/bench.md`, `spec/v1/process.md`,
   `spec/v1/application.md` — authoritative
   contract prose, including the bounded durable process filesystem ABI.
-- `site/` — the static algal.dev source; `build.ts` writes `site/dist`.
+- `site/` — the static algal.computer source; `build.ts` writes `site/dist`.
 - `README.md`, `CONTRIBUTING.md`, `SECURITY.md` — the public contract.
 
 # Guidelines

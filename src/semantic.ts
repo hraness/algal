@@ -201,7 +201,7 @@ export async function indexStore(
     const insert = db.prepare(
       "INSERT OR REPLACE INTO chunks(id, model, source, seq, text_digest, bytes, text, vec) VALUES(?,?,?,?,?,?,?,?)",
     );
-    const pending: { chunk: Omit<Chunk, "vec">; text: string }[] = [];
+    const pending: { chunk: Omit<Chunk, "vec"> }[] = [];
     const seen = new Set<string>();
     let sourcesSeen = 0;
     let chunks = 0;
@@ -222,7 +222,6 @@ export async function indexStore(
         }
         pending.push({
           chunk: { id, ref, seq, text: piece, textDigest },
-          text: piece,
         });
       }
     }
@@ -236,7 +235,7 @@ export async function indexStore(
     for (let i = 0; i < pending.length; i += BATCH) {
       const slice = pending.slice(i, i + BATCH);
       const vectors = await embedder.embed(
-        slice.map((s) => s.text),
+        slice.map((s) => s.chunk.text),
         options.signal,
       );
       if (vectors.length !== slice.length) {

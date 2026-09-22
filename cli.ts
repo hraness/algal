@@ -4,7 +4,7 @@
 // failure, 2 usage or parse error.
 
 import { open, readFile, realpath, stat, writeFile } from "node:fs/promises";
-import { constants } from "node:fs";
+import { constants, writeSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BOUNDS, manifestToJson, parseOrganismManifest, type OrganismManifest } from "./src/contract";
@@ -160,6 +160,7 @@ usage:
       --args <file>                           input-cell values (JSON)
       --responses <file>                      scripted agent outputs (JSON map)
       --executor-cmd <shell command>          live executor: request on stdin, output on stdout
+      --executor-timeout-ms <ms>              command-executor effect timeout (default 120000, max 600000)
       --gateway-model <provider/model>        Vercel AI Gateway structured-output executor
       --jev [model]                           TypeSafe Jev decision executor — serves
                                                 decide and classifier cells (never gates:
@@ -424,7 +425,18 @@ async function readJsonStdin(): Promise<JsonValue> {
 }
 
 function out(v: JsonValue | JsonObject | RunReceipt): void {
-  process.stdout.write(canonicalize(v as JsonValue) + "\n");
+  const line = canonicalize(v as JsonValue) + "\n";
+  try {
+    // Drain fully before the process can exit: async process.stdout.write
+    // drops data past the OS pipe buffer (~64KiB) when a large receipt is
+    // the last thing printed, and a single writeSync may short-write on
+    // a non-blocking fd.
+    const buf = Buffer.from(line);
+    let off = 0;
+    while (off < buf.length) off += writeSync(1, buf, off, buf.length - off);
+  } catch {
+    process.stdout.write(line);
+  }
 }
 
 function diag(msg: string): void {
@@ -597,7 +609,11 @@ async function resolveExecutors(
     executors.push(scriptedExecutor(map as Record<string, JsonValue>));
   }
   if (flags["executor-cmd"] !== undefined) {
-    executors.push(commandExecutor(String(flags["executor-cmd"])));
+    const tms = flags["executor-timeout-ms"];
+    executors.push(commandExecutor(String(flags["executor-cmd"]),
+      tms !== undefined
+        ? { timeoutMs: asInt(Number(tms), "executor-timeout-ms", 1, 600_000) }
+        : {}));
   }
   if (flags["gateway-model"] !== undefined) {
     executors.push(vercelGatewayExecutor({ model: String(flags["gateway-model"]) }));

@@ -109,6 +109,72 @@ describe("foundry", () => {
     expect(verified.checkedReceipts).toBeGreaterThan(0);
   });
 
+  test("search verify honours a custom scorer across generations", async () => {
+    const generator = parseOrganismManifest({
+      contract: "algal.organism.v1",
+      key: "organism:scored-evolving-generator",
+      name: "Scored evolving generator",
+      interface: {
+        inputs: { feedback: { cell: "src", port: "feedback" } },
+        outputs: { candidates: { cell: "writer", port: "out" } },
+      },
+      cells: [
+        { id: "src", kind: "input", outputs: { feedback: "json" } },
+        {
+          id: "writer",
+          kind: "agent",
+          inputs: { feedback: "json" },
+          prompt: "Improve the candidate population from validation evidence.",
+          view: { inputs: ["feedback"] },
+          output: {
+            kind: "json",
+            schema: {
+              type: "object",
+              required: ["candidates"],
+              properties: { candidates: { type: "array" } },
+            },
+          },
+        },
+      ],
+      edges: [
+        { from: { cell: "src", port: "feedback" }, to: { cell: "writer", port: "feedback" } },
+      ],
+    });
+    let calls = 0;
+    const store = new MemoryStore();
+    const scorer = {
+      contract: "algal.expr.v1" as const,
+      program: ["eq", ["get", "outputs", "answer"], ["get", "args", "q"]],
+    };
+    const result = await runFoundrySearch({
+      generator,
+      generatorArgs: {},
+      feedbackInput: "feedback",
+      output: "candidates",
+      field: "candidates",
+      cases: [
+        // expect is a declared-output placeholder; the scorer derives the
+        // verdict from args, so exact-match would mark every pass invalid.
+        { id: "train-a", split: "train", args: { q: "a" }, expect: { answer: "" } },
+        { id: "validation-b", split: "validation", args: { q: "b" }, expect: { answer: "" } },
+        { id: "holdout-c", split: "holdout", args: { q: "c" }, expect: { answer: "" } },
+      ],
+      scorer,
+      maxGenerations: 2,
+      fns: builtinRegistry(),
+      store,
+      executors: [{
+        id: "evolver",
+        async execute() {
+          return { candidates: [manifestToJson(calls++ === 0 ? constant : echo)] };
+        },
+      }],
+    });
+    const verified = await verifySearchReport(result, store, builtinRegistry());
+    expect(verified.mismatches).toEqual([]);
+    expect(verified.ok).toBe(true);
+  });
+
   test("runs an organism that emits candidate manifests and records its lineage", async () => {
     const generator = parseOrganismManifest({
       contract: "algal.organism.v1",

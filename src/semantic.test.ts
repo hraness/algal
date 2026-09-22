@@ -13,6 +13,8 @@ import {
   openIndex,
   recallExecutor,
   recallOutputSchema,
+  searchIndex,
+  SEMANTIC_BOUNDS,
 } from "./semantic";
 import { FileStore } from "./store";
 import type { JsonObject } from "./values";
@@ -110,6 +112,27 @@ describe("recall effects", () => {
       expect(hits[0]?.ref).toBe(ref);
       expect(hits[0]?.text).toContain("coral");
       expect(ex.cacheable).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("hits carry the bounded chunk text, not the whole source", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "algal-recall-chunk-"));
+    try {
+      const docs = join(dir, "docs");
+      await mkdir(docs);
+      const first = "alpha ".repeat(7000), second = "beta ".repeat(7000);
+      await writeFile(join(docs, "long.txt"), `${first}\n\n${second}`, "utf8");
+      const embedder = localEmbedder();
+      const indexed = await indexStore(join(dir, "index"), embedder, { docs });
+      const hits = await searchIndex(join(dir, "index"), embedder, "beta", 5);
+      expect(indexed.chunks).toBe(2);
+      expect(hits).toHaveLength(2);
+      expect(
+        hits.every((h) => Buffer.byteLength(h.text, "utf8") <= SEMANTIC_BOUNDS.maxTextBytes),
+      ).toBe(true);
+      expect(new Set(hits.map((h) => h.text)).size).toBe(2);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
