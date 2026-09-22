@@ -73,8 +73,9 @@
   `algal.application-host.v1` policy host) through both runtimes with
   identical digests, and `bun scripts/process-parity.ts` for the durable
   process lifecycle (create/inspect/list/tick/verify/schedule, the mailbox
-  suspension/wake chain with shared capability records, and the
-  `.creating.json` interrupted-creation recovery contract).
+  suspension/wake chain with shared capability records, uncertain-intent
+  recovery through `recover`/`journal`, and the `.creating.json`
+  interrupted-creation recovery contract).
 - The Foundation Models bridge comes from the pinned `apple-foundation`
   crate (`hraness/apple-foundation`); `sh scripts/build-apple.sh` emits its
   embedded source and builds it with Xcode 26 on Apple Silicon, and the

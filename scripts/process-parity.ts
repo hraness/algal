@@ -16,8 +16,9 @@ import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { ProcessSupervisor, parseProcessRecord } from "../src/process";
+import { ProcessJournal } from "../src/process-journal";
 import { manifestToJson, parseOrganismManifest } from "../src/contract";
-import { digestCanonical } from "../src/digest";
+import { digestCanonical, type Digest } from "../src/digest";
 import { FileMailboxService } from "../src/mailbox";
 import { canonicalize, type JsonValue } from "../src/values";
 
@@ -160,6 +161,51 @@ const intendedRecordDigest = (name: string) =>
       ),
     ) as JsonValue,
   );
+
+/* Uncertain-intent recovery reuses the shared-capability stores. The fixture
+ * plants exactly what `tick` publishes before a host crash — the generation-1
+ * intent record in CAS, a head naming it, and a dispatch journal bound to the
+ * intent — so `recover` re-dispatches the identical intent on both runtimes. */
+let runnerIntent: Digest = "sha256:" as Digest;
+const runnerManifestDigest = digestCanonical(manifestToJson(manifest));
+const plantUncertainRunner = async () => {
+  const intent = JSON.parse(
+    JSON.stringify(
+      parseProcessRecord({
+        contract: "algal.process.v1",
+        name: "runner",
+        manifestDigest: runnerManifestDigest,
+        args: {},
+        maxGenerations: 16,
+        generation: 1,
+        status: "uncertain",
+        wake: [],
+        previous: intendedRecordDigest("runner"),
+        cause: "start",
+      }),
+    ),
+  ) as JsonValue;
+  const intentDigest = digestCanonical(intent);
+  for (const dir of [tsMb, nativeMb]) {
+    await writeFile(
+      join(dir, "values", `${intentDigest.slice(7)}.json`),
+      canonicalize(intent),
+    );
+    await writeFile(
+      join(dir, "processes", "runner", "head.json"),
+      canonicalize({
+        contract: "algal.process-head.v1",
+        name: "runner",
+        record: intentDigest,
+      } as JsonValue),
+    );
+    await ProcessJournal.create(dir, "runner", intentDigest, runnerManifestDigest);
+  }
+  runnerIntent = intentDigest;
+};
+const wrongIntent = digestCanonical({
+  contract: "algal.process-parity-intent.v1",
+} as JsonValue);
 
 const steps: {
   name: string;
@@ -327,6 +373,98 @@ const steps: {
     ts: async () => mailboxes.receive(box.receive),
     native: () => ["mailbox", "receive", box.receive],
     fails: true,
+  },
+  /* Uncertain-intent recovery: `create-runner` leaves a ready generation, then
+   * the before hook publishes the exact uncertain intent and journal a crashed
+   * dispatch would have left. `recover` must bind that intent digest exactly —
+   * a settled sibling, a wrong digest, tick and schedule all reject. */
+  {
+    name: "create-runner",
+    dir: nativeMb,
+    ts: async () => sleeperService.create("runner", manifest),
+    native: () => ["process", "create", "runner", manifestFile],
+  },
+  {
+    name: "tick-uncertain-blocked",
+    dir: nativeMb,
+    before: plantUncertainRunner,
+    ts: async () => sleeperService.tick("runner"),
+    native: () => ["process", "tick", "runner"],
+    fails: true,
+  },
+  {
+    // The scheduler skips an uncertain process entirely: it needs explicit
+    // recovery, never an automatic retry, and never blocks other candidates.
+    name: "schedule-uncertain-skipped",
+    dir: nativeMb,
+    ts: async () => sleeperService.schedule(),
+    native: () => ["process", "schedule"],
+  },
+  {
+    name: "journal-uncertain",
+    dir: nativeMb,
+    ts: async () => sleeperService.journal("runner"),
+    native: () => ["process", "journal", "runner"],
+  },
+  {
+    // Recovery cannot attach to a settled sibling's head.
+    name: "recover-settled-blocked",
+    dir: nativeMb,
+    ts: async () => sleeperService.recover("sleeper", runnerIntent),
+    native: () => [
+      "process",
+      "recover",
+      "sleeper",
+      "--expected-intent",
+      runnerIntent,
+    ],
+    fails: true,
+  },
+  {
+    name: "recover-wrong-intent",
+    dir: nativeMb,
+    ts: async () => sleeperService.recover("runner", wrongIntent),
+    native: () => [
+      "process",
+      "recover",
+      "runner",
+      "--expected-intent",
+      wrongIntent,
+    ],
+    fails: true,
+  },
+  {
+    name: "recover-runner",
+    dir: nativeMb,
+    ts: async () => sleeperService.recover("runner", runnerIntent),
+    native: () => [
+      "process",
+      "recover",
+      "runner",
+      "--expected-intent",
+      runnerIntent,
+    ],
+  },
+  {
+    name: "inspect-recovered",
+    dir: nativeMb,
+    ts: async () => sleeperService.inspect("runner"),
+    native: () => ["process", "inspect", "runner"],
+  },
+  {
+    name: "verify-runner",
+    dir: nativeMb,
+    ts: async () => sleeperService.verify("runner"),
+    native: () => ["process", "verify", "runner"],
+  },
+  {
+    // The settled record's `previous` names the intent digest, so the intent
+    // stays reachable in the chain and `journal` describes its completed
+    // effect records after recovery.
+    name: "journal-settled",
+    dir: nativeMb,
+    ts: async () => sleeperService.journal("runner"),
+    native: () => ["process", "journal", "runner"],
   },
   {
     name: "create-duplicate",
