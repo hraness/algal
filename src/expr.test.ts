@@ -28,6 +28,22 @@ const code = (p: JsonValue, env: JsonObject = {}) => {
 };
 
 describe("expr eval", () => {
+  test("nth errors preserve canonical indices beyond either target's pointer width", () => {
+    const cases: [number, string][] = [
+      [-0, "0"], [1024, "1024"], [4294967295, "4294967295"],
+      [4294967296, "4294967296"], [9007199254740992, "9007199254740992"],
+      [18446744073709552000, "18446744073709552000"], [1e308, "1e+308"],
+    ];
+    for (const [index, rendered] of cases) {
+      expect(evalIn(["nth", ["quote", []], index])).toEqual({
+        ok: false, fuel: 4,
+        err: { code: "EXPR_PATH", op: "nth", what: `index ${rendered} out of range 0` },
+      });
+    }
+    expect(ok(["nth", ["quote", ["first", "last"]], -0]).value).toBe("first");
+    expect(ok(["nth", ["quote", ["first", "last"]], 1]).value).toBe("last");
+  });
+
   test("WASM enforces intermediate bounds before amplification and preserves exact rounding", () => {
     for (const input of [0.49999999999999994, 4503599627370497, -4503599627370497, -2.5, 2.5]) {
       expect(ok(["round", input]).value).toBe(Math.round(input));

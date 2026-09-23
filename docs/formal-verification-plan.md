@@ -1,6 +1,6 @@
 # ALGAL formal-verification and system-confidence plan
 
-Status: execution authorized on 2026-09-23; Phase 00 is Complete and Phase 01 is In progress. Later phases remain Not started until their dependencies and acceptance criteria are met. Completion of infrastructure does not complete any production proof obligation.
+Status: execution authorized on 2026-09-23; Phases 00 and 01 are Complete. Later phases remain Not started until their dependencies and acceptance criteria are met. Completion of infrastructure does not complete any production proof obligation.
 
 Basis: [2026-09-23 audit](formal-verification-audit-2026-09-23.md), ALGAL tree f19f7381f80ee7745f0faa0e9e3e8eb0d43a8bfe at a86327f76f6e632fe7fceda17b738a749a341ab6. Rebase the evidence against the exact integration candidate before execution.
 
@@ -141,7 +141,7 @@ TLC does not establish that a proposed symmetry is valid, and its documentation 
 
 ## Phase 01: close known boundary counterexamples
 
-- **Status:** In progress
+- **Status:** Complete
 - **Depends on:** 00.
 - **Objective:** Restore basic admission invariants before proving them.
 - **Scope:** src/graph.ts and related foreign-key lookups; application-adaptation in both runtimes; shared storage decoding and native effect-cache retained-winner behavior; width-sensitive expression error formatting; narrowly affected tests and parity vectors. The integrator owns regeneration of src/algal_expr.wasm whenever its Rust source changes; Phase 03 subsequently establishes the pinned reproducibility gate.

@@ -3,8 +3,9 @@ import { Database } from "bun:sqlite";
 import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { hostLease } from "./host-state";
+import { hostLease, hostRead, hostWrite } from "./host-state";
 import { boundedBytes } from "./io";
+import { asJsonValue } from "./values";
 
 const directories: string[] = [];
 const children: Bun.Subprocess[] = [];
@@ -40,6 +41,45 @@ async function ready(stream: ReadableStream<Uint8Array>): Promise<void> {
     reader.releaseLock();
   }
 }
+
+test("host JSON rejects malformed UTF-8 before immutable or mutable publication", async () => {
+  const dir = await directory();
+  const path = join(dir, "record.json");
+  for (const bytes of [
+    Buffer.from([0x22, 0xff, 0x22]),
+    Buffer.from([0x7b, 0x22, 0xff, 0x22, 0x3a, 0x31, 0x7d]),
+    Buffer.concat([Buffer.from('{"x":"'), Buffer.from([0xed, 0xa0, 0x80]), Buffer.from('","x":1}')]),
+  ]) {
+    const value = asJsonValue(JSON.parse(bytes.toString("utf8")), "lossy fixture");
+    await writeFile(path, bytes);
+    await expect(hostRead(path, 4096)).rejects.toThrow();
+    await expect(hostWrite(path, value, 4096)).rejects.toThrow();
+    await expect(hostWrite(path, value, 4096, false)).rejects.toThrow();
+    expect(await readFile(path)).toEqual(bytes);
+    expect(await readdir(dir)).toEqual(["record.json"]);
+  }
+});
+
+test("host JSON preserves normalization, valid U+FFFD and escaped lone surrogates but rejects BOM", async () => {
+  const dir = await directory();
+  const path = join(dir, "record.json");
+  for (const raw of [
+    ' \n{"x":0,"x":1e0,"replacement":"�"}\t',
+    '"\\ud800"',
+    '{"\\ud800":"\\udfff","x":"\\ud800","x":1}',
+  ]) {
+    const value = asJsonValue(JSON.parse(raw), "JSON fixture");
+    await writeFile(path, raw);
+    expect(await hostRead(path, 4096)).toEqual(value);
+    await hostWrite(path, value, 4096);
+    expect(await readFile(path, "utf8")).toBe(raw);
+  }
+  const bom = Buffer.from('\ufeff"bom"');
+  await writeFile(path, bom);
+  await expect(hostRead(path, 4096)).rejects.toThrow();
+  await expect(hostWrite(path, "bom", 4096, false)).rejects.toThrow();
+  expect(await readFile(path)).toEqual(bom);
+});
 
 test("real SIGKILL releases SQLite ownership; the next owner retains and reconciles the exact old marker", async () => {
   const dir = await directory();

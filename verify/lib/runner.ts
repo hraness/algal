@@ -94,13 +94,16 @@ export async function runCommand(command: string[], cwd: string, options: { time
       const cleanupObserved = stopping && stdoutEnded && stderrEnded && exitCode === null && signal === "SIGKILL";
       if (failure !== undefined) { reject(failure); return; }
       if (!cleanupObserved || !timedOut && !outputExceeded && completion === undefined) { reject(new Error("command supervisor cleanup/completion was not observed")); return; }
-      resolve({ command, exitCode: completion?.exitCode ?? null, signal: completion?.signal ?? null, timedOut, outputExceeded, cleanupObserved, stdout: Buffer.concat(stdout).toString("utf8"), stderr: Buffer.concat(stderr).toString("utf8") });
+      try {
+        const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+        resolve({ command, exitCode: completion?.exitCode ?? null, signal: completion?.signal ?? null, timedOut, outputExceeded, cleanupObserved, stdout: decoder.decode(Buffer.concat(stdout)), stderr: decoder.decode(Buffer.concat(stderr)) });
+      } catch { reject(new Error("command output contains invalid UTF-8")); }
     });
   });
 }
 
 export function requireSuccess(result: CommandResult): void {
-  requireThat(result.exitCode === 0 && result.signal === null && result.cleanupObserved && !result.timedOut && !result.outputExceeded, `command failed: exit=${result.exitCode}, signal=${result.signal}, timeout=${result.timedOut}, outputExceeded=${result.outputExceeded}, cleanupObserved=${result.cleanupObserved}`);
+  requireThat(result.exitCode === 0 && result.signal === null && result.cleanupObserved && !result.timedOut && !result.outputExceeded, `command failed: exit=${result.exitCode}, signal=${result.signal}, timeout=${result.timedOut}, outputExceeded=${result.outputExceeded}, cleanupObserved=${result.cleanupObserved}; diagnostic tails=${JSON.stringify({ stdout: result.stdout.slice(-8192), stderr: result.stderr.slice(-8192) })}`);
 }
 
 export type RunBinding = {
@@ -194,6 +197,19 @@ async function executeSuite(root: string, suite: string): Promise<unknown> {
     const command = [process.execPath, "test", "--timeout", "20000", "verify/tests"];
     const result = await runCommand(command, root);
     return { tests: admitSelftestOutput(result), commandResult: result, syntheticProofFixtures: true };
+  }
+  if (suite === "boundary") {
+    const command = [process.execPath, "test", "--timeout", "20000", "src/graph-admission.test.ts", "src/registry.test.ts", "src/effects-own-keys.test.ts", "src/decisions.test.ts", "src/foundry.test.ts", "src/bench.test.ts", "src/application-adaptation.test.ts", "src/store.test.ts", "src/host-state.test.ts", "src/values.test.ts", "src/expr.test.ts"];
+    const result = await runCommand(command, root);
+    const tests = admitSelftestOutput(result);
+    // The outer supervisor also bounds synchronous WASM compilation/evaluation.
+    const targetResult = await runCommand([process.execPath, "verify/boundary/run.ts"], root);
+    requireSuccess(targetResult);
+    const { admitBoundarySummary } = await import("../boundary/run");
+    const targets: unknown = JSON.parse(targetResult.stdout);
+    admitBoundarySummary(targets);
+    return { tests, commandResult: result, targets, targetCommandResult: targetResult,
+      scope: "Focused production regression tests and sampled target agreement; no exhaustive property or implementation proof. Native graph/store/adaptation tests remain required Cargo gates." };
   }
   throw new Error(`${suite}: no execution adapter (Not started)`);
 }

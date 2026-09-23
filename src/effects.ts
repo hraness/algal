@@ -168,8 +168,9 @@ export function scriptedExecutor(
     cacheIdentity: digestCanonical({ kind: "scripted", id, responses }),
     async execute(request) {
       const digest = effectRequestDigest(request);
-      if (responses[digest] !== undefined) return responses[digest];
-      let hit = responses[request.cellId];
+      const exact = Object.hasOwn(responses, digest) ? responses[digest] : undefined;
+      if (exact !== undefined) return exact;
+      let hit = Object.hasOwn(responses, request.cellId) ? responses[request.cellId] : undefined;
       if (Array.isArray(hit)) {
         let q = queues.get(request.cellId);
         if (!q) {

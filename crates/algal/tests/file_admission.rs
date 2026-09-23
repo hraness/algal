@@ -20,6 +20,52 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[test]
+fn store_json_rejects_malformed_utf8_and_bom_without_replacing_artifacts() {
+    let directory = tempfile::tempdir().unwrap();
+    let values = directory.path().join("values");
+    fs::create_dir(&values).unwrap();
+    for bytes in [
+        vec![0x22, 0xff, 0x22],
+        vec![0x22, 0xc0, 0xaf, 0x22],
+        vec![0x22, 0xe2, 0x82, 0x22],
+        vec![0x22, 0xed, 0xa0, 0x80, 0x22],
+        vec![0x7b, 0x22, 0xff, 0x22, 0x3a, 0x31, 0x7d],
+        [b"{\"x\":\"".as_slice(), &[0xff], b"\",\"x\":1}"].concat(),
+        b"\xef\xbb\xbf\"bom\"".to_vec(),
+    ] {
+        let lossy = String::from_utf8_lossy(&bytes);
+        let value: Value = serde_json::from_str(lossy.trim_start_matches('\u{feff}')).unwrap();
+        let key = digest(&value).unwrap();
+        let path = values.join(format!("{}.json", &key[7..]));
+        fs::write(&path, &bytes).unwrap();
+        let mut store = Store::open(directory.path(), true).unwrap();
+        assert!(store.get("values", &key).is_err(), "read {bytes:?}");
+        assert!(store.put("values", &value).is_err(), "publish {bytes:?}");
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+    }
+}
+
+#[test]
+fn store_json_retains_scalar_unicode_duplicate_and_numeric_normalization() {
+    let directory = tempfile::tempdir().unwrap();
+    let values = directory.path().join("values");
+    fs::create_dir(&values).unwrap();
+    for raw in [
+        " \n{\"x\":0,\"x\":1e0,\"replacement\":\"�\"}\t",
+        r#""\ud83d\ude00""#,
+    ] {
+        let value: Value = serde_json::from_str(raw).unwrap();
+        let key = digest(&value).unwrap();
+        let path = values.join(format!("{}.json", &key[7..]));
+        fs::write(&path, raw).unwrap();
+        let mut store = Store::open(directory.path(), true).unwrap();
+        assert_eq!(store.get("values", &key).unwrap(), Some(value.clone()));
+        assert_eq!(store.put("values", &value).unwrap(), key);
+        assert_eq!(fs::read_to_string(path).unwrap(), raw);
+    }
+}
+
 fn write(path: &Path, value: &Value) {
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     fs::write(path, canonical(value).unwrap()).unwrap();

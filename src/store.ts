@@ -211,7 +211,14 @@ export class FileStore implements Store {
         }
         chunks.push(chunk.subarray(0, bytesRead));
       }
-      const value: unknown = JSON.parse(Buffer.concat(chunks, size).toString("utf8"));
+      let text: string;
+      try {
+        // Keep a leading BOM visible to JSON.parse, which rejects it.
+        text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(Buffer.concat(chunks, size));
+      } catch {
+        throw new AlgalError("PARSE_FAILED", "store file contains invalid UTF-8");
+      }
+      const value: unknown = JSON.parse(text);
       return storeJson(value);
     } catch (error) {
       if (error instanceof AlgalError) throw error;

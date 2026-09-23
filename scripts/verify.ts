@@ -15,7 +15,7 @@ async function main(): Promise<void> {
   const result = await runSuite(await repositoryRoot(import.meta.path), args[1]);
   if (args[2] === "--json") console.log(JSON.stringify(result, null, 2));
   else {
-    console.log(`${result.suite}: passed (infrastructure only; 0 formal claims)`);
+    console.log(`${result.suite}: passed (0 admitted formal claims)`);
     console.log(`Inputs: ${result.binding.inputDigest}; Bun ${result.binding.runtime.version} ${result.binding.runtime.sha256}`);
     console.log(JSON.stringify(result.details, null, 2));
   }

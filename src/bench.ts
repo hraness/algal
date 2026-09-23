@@ -157,6 +157,26 @@ function fail(message: string): never {
   throw new AlgalError("PARSE_FAILED", message);
 }
 
+function ownEntry<T>(map: Record<string, T> | undefined, key: string): T | undefined {
+  return map !== undefined && Object.hasOwn(map, key) ? map[key] : undefined;
+}
+
+/** Producer and imported-report verification use the same case admission. */
+export function benchCaseAdmissionError(manifest: OrganismManifest, c: BenchCase): string | undefined {
+  if (!manifest.interface) return `system ${manifest.key} must declare an interface`;
+  const { inputs, outputs } = manifest.interface;
+  for (const name of Object.keys(c.args)) {
+    if (!Object.hasOwn(inputs, name)) return `case ${c.id}: unknown system input "${name}"`;
+  }
+  for (const name of Object.keys(outputs)) {
+    if (!Object.hasOwn(c.expect, name)) return `case ${c.id}: missing expected output "${name}"`;
+  }
+  for (const name of Object.keys(c.expect)) {
+    if (!Object.hasOwn(outputs, name)) return `case ${c.id}: unknown expected output "${name}"`;
+  }
+  return undefined;
+}
+
 function validate(opts: BenchOptions): void {
   if (opts.scorer !== undefined) {
     const c = checkProgram(opts.scorer.program, ["args", "expect", "outputs"]);
@@ -213,18 +233,9 @@ function validate(opts: BenchOptions): void {
     if (!system.manifest.interface) {
       fail(`bench system "${system.id}" manifest must declare an interface`);
     }
-    const inputs = new Set(Object.keys(system.manifest.interface.inputs));
-    const outputs = new Set(Object.keys(system.manifest.interface.outputs));
     for (const c of opts.cases) {
-      for (const name of Object.keys(c.args)) {
-        if (!inputs.has(name)) fail(`case ${c.id}: unknown system input "${name}"`);
-      }
-      for (const name of outputs) {
-        if (!(name in c.expect)) fail(`case ${c.id}: missing expected output "${name}"`);
-      }
-      for (const name of Object.keys(c.expect)) {
-        if (!outputs.has(name)) fail(`case ${c.id}: unknown expected output "${name}"`);
-      }
+      const error = benchCaseAdmissionError(system.manifest, c);
+      if (error) fail(error);
     }
   }
 }
@@ -234,7 +245,9 @@ function caseArgs(
   c: BenchCase,
 ): Record<string, Record<string, JsonValue>> {
   const args: Record<string, Record<string, JsonValue>> = Object.create(null) as Record<string, Record<string, JsonValue>>;
-  for (const [name, value] of Object.entries(c.args)) {
+  // Admitted names are ASCII; canonical key order resolves aliased targets.
+  for (const name of Object.keys(c.args).sort()) {
+    const value = c.args[name]!;
     const target = manifest.interface!.inputs[name]!;
     (args[target.cell] ??= Object.create(null) as Record<string, JsonValue>)[target.port] = value;
   }
@@ -272,7 +285,7 @@ function attribute(
     const tokensOut = effect.usage?.tokensOut ?? 0;
     entry.tokensIn += tokensIn;
     entry.tokensOut += tokensOut;
-    const extraCost = costFor(prices?.[key], tokensIn, tokensOut);
+    const extraCost = costFor(ownEntry(prices, key), tokensIn, tokensOut);
     entry.cost += extraCost;
     usage.tokensIn += tokensIn;
     usage.tokensOut += tokensOut;
@@ -311,7 +324,7 @@ async function evaluateCase(
   const receiptDigest = await opts.store.putReceipt(receipt as unknown as JsonValue);
   const outputs: Record<string, JsonValue> = Object.create(null) as Record<string, JsonValue>;
   for (const [name, source] of Object.entries(system.manifest.interface!.outputs)) {
-    const value = receipt.cells[source.cell]?.outputs?.[source.port];
+    const value = ownEntry(ownEntry(receipt.cells, source.cell)?.outputs, source.port);
     if (value !== undefined) outputs[name] = value;
   }
   const { usage, attribution } = attribute(receipt.effects, opts.prices);

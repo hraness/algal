@@ -77,4 +77,9 @@ describe("bounded child execution", () => {
   test("missing executable fails, rather than creating a successful empty result", async () => {
     await expect(runCommand(["/algal-verification-missing-tool"], process.cwd())).rejects.toThrow();
   });
+  test("malformed command output cannot normalize into successful UTF-8 evidence", async () => {
+    for (const stream of ["stdout", "stderr"]) {
+      await expect(runCommand([process.execPath, "-e", `process.${stream}.write(Buffer.from([255]))`], process.cwd())).rejects.toThrow("invalid UTF-8");
+    }
+  });
 });

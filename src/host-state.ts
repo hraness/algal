@@ -36,7 +36,14 @@ export async function hostRead(path: string, maxBytes: number): Promise<JsonValu
       count += result.bytesRead;
     }
     if (count > maxBytes || count !== stat.size) throw new AlgalError("IO_FAILED", "host state changed while reading");
-    const value: unknown = JSON.parse(bytes.subarray(0, count).toString("utf8"));
+    let text: string;
+    try {
+      // Keep a leading BOM visible to JSON.parse, which rejects it.
+      text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes.subarray(0, count));
+    } catch {
+      throw new AlgalError("PARSE_FAILED", "host state contains invalid UTF-8");
+    }
+    const value: unknown = JSON.parse(text);
     let nodes = 0;
     const visit = (v: unknown, depth: number): void => {
       if (++nodes > 100_000 || depth > 64) throw new AlgalError("BUDGET_EXHAUSTED", "host state structure bound exceeded");

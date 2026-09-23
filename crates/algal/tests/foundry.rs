@@ -12,6 +12,184 @@ fn responses(file: &str) -> serde_json::Value {
 }
 
 #[tokio::test]
+async fn imported_cases_reject_interface_and_receipt_argument_bypasses() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut store = Store::open(directory.path(), true).unwrap();
+    let config = foundry::load_config(&repo().join("examples/foundry.config.json"), false).unwrap();
+    let scorer = json!({"contract":"algal.expr.v1","program":["eq",1,1]});
+    let report = foundry::run(
+        &config.candidates,
+        &config.cases,
+        Some(&scorer),
+        None,
+        &mut store,
+        &mut Host::default(),
+        &Transports::new(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        foundry::verify(&report, &store, &Host::default())
+            .await
+            .unwrap()["ok"],
+        true
+    );
+
+    let mut accepted = Vec::new();
+    for mutation in [
+        "missing-expect",
+        "extra-expect",
+        "unknown-input",
+        "changed-input",
+        "omitted-input",
+        "holdout-missing-expect",
+    ] {
+        let mut forged = report.clone();
+        match mutation {
+            "missing-expect" => forged["candidates"][0]["cases"][0]["expect"] = json!({}),
+            "extra-expect" => {
+                forged["candidates"][0]["cases"][0]["expect"]["constructor"] = json!("undeclared")
+            }
+            "unknown-input" => {
+                forged["candidates"][0]["cases"][0]["args"]["constructor"] = json!("undeclared")
+            }
+            "changed-input" => forged["candidates"][0]["cases"][0]["args"]["q"] = json!("changed"),
+            "omitted-input" => forged["candidates"][0]["cases"][0]["args"] = json!({}),
+            "holdout-missing-expect" => forged["holdout"]["cases"][0]["expect"] = json!({}),
+            _ => unreachable!(),
+        }
+        forged.as_object_mut().unwrap().remove("digest");
+        forged["digest"] = json!(algal::canonical::digest(&forged).unwrap());
+        let verified = foundry::verify(&forged, &store, &Host::default())
+            .await
+            .unwrap();
+        if verified["ok"] == true {
+            accepted.push(mutation);
+        }
+    }
+    assert!(
+        accepted.is_empty(),
+        "admitted forged cases with unchanged real receipts: {accepted:?}"
+    );
+}
+
+#[tokio::test]
+async fn declared_constructor_cases_preserve_proto_json_data() {
+    let mut store = Store::default();
+    let manifest = algal::contract::Manifest::parse(&json!({
+        "contract":"algal.organism.v1","key":"organism:foundry-constructor","name":"Declared constructor",
+        "cells":[{"id":"constructor","kind":"input","outputs":{"constructor":"json"}}],
+        "edges":[],
+        "interface":{"inputs":{"constructor":{"cell":"constructor","port":"constructor"}},"outputs":{"constructor":{"cell":"constructor","port":"constructor"}}}
+    })).unwrap();
+    let data = json!({"__proto__":{"kept":true},"constructor":"own data"});
+    let cases = ["train", "validation", "holdout"].map(|split| foundry::FoundryCase {
+        id: split.to_owned(),
+        split: split.to_owned(),
+        args: json!({"constructor":data}),
+        expect: json!({"constructor":data}),
+    });
+    let report = foundry::run(
+        std::slice::from_ref(&manifest),
+        &cases,
+        None,
+        None,
+        &mut store,
+        &mut Host::default(),
+        &Transports::new(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        report["holdout"]["cases"][0]["outputs"]["constructor"],
+        data
+    );
+    assert_eq!(
+        foundry::verify(&report, &store, &Host::default())
+            .await
+            .unwrap()["ok"],
+        true
+    );
+    let mut invalid = cases;
+    invalid[0].expect = json!({});
+    let error = foundry::run(
+        &[manifest],
+        &invalid,
+        None,
+        None,
+        &mut store,
+        &mut Host::default(),
+        &Transports::new(),
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        error
+            .message
+            .contains("missing expected output \"constructor\""),
+        "{error}"
+    );
+}
+
+#[tokio::test]
+async fn aliased_case_and_generator_inputs_use_canonical_name_order() {
+    let mut store = Store::default();
+    let candidate = algal::contract::Manifest::parse(&json!({
+        "contract":"algal.organism.v1","key":"organism:alias-order","name":"Alias order",
+        "cells":[{"id":"source","kind":"input","outputs":{"value":"json"}}],"edges":[],
+        "interface":{"inputs":{"z":{"cell":"source","port":"value"},"a":{"cell":"source","port":"value"}},"outputs":{"answer":{"cell":"source","port":"value"}}}
+    })).unwrap();
+    let generator = algal::contract::Manifest::parse(&json!({
+        "contract":"algal.organism.v1","key":"organism:generator-alias","name":"Aliased generator",
+        "cells":[{"id":"source","kind":"input","outputs":{"value":"json"}}],"edges":[],
+        "interface":{"inputs":{"z":{"cell":"source","port":"value"},"a":{"cell":"source","port":"value"}},"outputs":{"candidates":{"cell":"source","port":"value"}}}
+    })).unwrap();
+    let generator_args =
+        serde_json::from_str::<Value>(&format!("{{\"z\":[{}],\"a\":[]}}", candidate.value))
+            .unwrap();
+    let (generator_digest, receipt_digest, candidates) = foundry::generate(
+        &generator,
+        &generator_args,
+        "candidates",
+        None,
+        &mut store,
+        &mut Host::default(),
+        &Transports::new(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].digest().unwrap(), candidate.digest().unwrap());
+    let cases = ["train", "validation", "holdout"].map(|split| foundry::FoundryCase {
+        id: split.to_owned(),
+        split: split.to_owned(),
+        args: serde_json::from_str(r#"{"z":"z","a":"a"}"#).unwrap(),
+        expect: json!({"answer":"z"}),
+    });
+    let report = foundry::run(
+        &candidates,
+        &cases,
+        None,
+        Some((generator_digest, receipt_digest)),
+        &mut store,
+        &mut Host::default(),
+        &Transports::new(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        report["holdout"]["cases"][0]["outputs"],
+        json!({"answer":"z"})
+    );
+    let roundtrip = serde_json::from_str(&algal::canonical::canonical(&report).unwrap()).unwrap();
+    let verified = foundry::verify(&roundtrip, &store, &Host::default())
+        .await
+        .unwrap();
+    assert_eq!(verified["ok"], true, "{verified}");
+    assert_eq!(verified["checkedReceipts"], 4);
+}
+
+#[tokio::test]
 async fn bundled_foundry_selects_and_verifies_offline() {
     let directory = tempfile::tempdir().unwrap();
     let mut store = Store::open(directory.path(), true).unwrap();

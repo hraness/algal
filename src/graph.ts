@@ -21,6 +21,12 @@ import { canonicalBytes, type JsonValue } from "./values";
 
 export type CellPorts = { inputs: PortMap; outputs: PortMap };
 
+// Declared names are dictionary keys; Object.prototype never declares a port,
+// interface input, transport, or argument ("constructor" is a valid identifier).
+function ownEntry<T>(map: Record<string, T> | undefined, key: string): T | undefined {
+  return map !== undefined && Object.hasOwn(map, key) ? map[key] : undefined;
+}
+
 export type CompiledOrganism = {
   manifest: OrganismManifest;
   ports: Map<string, CellPorts>;
@@ -37,7 +43,7 @@ export function outputPortType(
   port: string,
   sigs: { inputs: PortMap; outputs: PortMap },
 ): PortType {
-  const t = sigs.outputs[port];
+  const t = ownEntry(sigs.outputs, port);
   if (!t) {
     throw new AlgalError(
       "MANIFEST_INVALID",
@@ -170,13 +176,13 @@ export function cellSignature(
       // carry: interface output name → interface input name; a carried input
       // is optional on the repeat cell since round 0 may run without it
       for (const [outName, inName] of Object.entries(cell.carry ?? {})) {
-        if (!iface.outputs[outName]) {
+        if (!Object.hasOwn(iface.outputs, outName)) {
           throw new AlgalError(
             "INTERFACE_MISMATCH",
             `repeat cell "${cell.id}" carry key "${outName}" is not an interface output of "${sub.manifest.key}"`,
           );
         }
-        if (!iface.inputs[inName]) {
+        if (!Object.hasOwn(iface.inputs, inName)) {
           throw new AlgalError(
             "INTERFACE_MISMATCH",
             `repeat cell "${cell.id}" carry target "${inName}" is not an interface input of "${sub.manifest.key}"`,
@@ -196,7 +202,7 @@ export function cellSignature(
         sig.inputs[inName] = { ...sig.inputs[inName]!, optional: true };
       }
       if (cell.until) {
-        const target = iface.outputs[cell.until.output];
+        const target = ownEntry(iface.outputs, cell.until.output);
         if (!target) {
           throw new AlgalError(
             "INTERFACE_MISMATCH",
@@ -234,7 +240,7 @@ export function cellSignature(
       }
       const iface = sub.manifest.interface;
       const sig = interfaceSignature(sub);
-      if (!iface.inputs[cell.over]) {
+      if (!Object.hasOwn(iface.inputs, cell.over)) {
         throw new AlgalError(
           "INTERFACE_MISMATCH",
           `each cell "${cell.id}" over "${cell.over}" is not an interface input of "${sub.manifest.key}"`,
@@ -271,7 +277,7 @@ export function interfaceSignature(sub: CompiledOrganism): CellPorts {
         `interface input "${name}" of "${sub.manifest.key}" must target an input cell`,
       );
     }
-    const pt = inner.outputs[target.port];
+    const pt = ownEntry(inner.outputs, target.port);
     if (!pt) {
       throw new AlgalError(
         "INTERFACE_MISMATCH",
@@ -282,7 +288,7 @@ export function interfaceSignature(sub: CompiledOrganism): CellPorts {
   }
   const outputs: PortMap = {};
   for (const [name, target] of Object.entries(iface.outputs)) {
-    const pt = sub.ports.get(target.cell)?.outputs[target.port];
+    const pt = ownEntry(sub.ports.get(target.cell)?.outputs, target.port);
     if (!pt) {
       throw new AlgalError(
         "INTERFACE_MISMATCH",
@@ -427,7 +433,7 @@ async function compileWithBudget(
     const digest = asDigest(cell.manifest, `cell "${cell.id}".manifest`);
     let sub = await store.getManifest(digest);
     if (!sub && cell.via) {
-      const t = transports?.[cell.via];
+      const t = ownEntry(transports, cell.via);
       if (!t) {
         throw new AlgalError(
           "STORE_MISS",
@@ -473,7 +479,7 @@ async function compileWithBudget(
           `interface input "${name}" must target an input cell`,
         );
       }
-      if (!c.outputs[t.port]) {
+      if (!Object.hasOwn(c.outputs, t.port)) {
         throw new AlgalError(
           "INTERFACE_MISMATCH",
           `interface input "${name}" targets missing port "${t.cell}.${t.port}"`,
@@ -482,7 +488,7 @@ async function compileWithBudget(
     }
     for (const [name, t] of Object.entries(manifest.interface.outputs)) {
       const sig = ports.get(t.cell);
-      if (!sig?.outputs[t.port]) {
+      if (!ownEntry(sig?.outputs, t.port)) {
         throw new AlgalError(
           "INTERFACE_MISMATCH",
           `interface output "${name}" targets missing port "${t.cell}.${t.port}"`,
@@ -509,7 +515,7 @@ async function compileWithBudget(
       );
     }
     const pt = outputPortType(from, e.from.port, ports.get(from.id)!);
-    const ct = ports.get(to.id)!.inputs[e.to.port];
+    const ct = ownEntry(ports.get(to.id)!.inputs, e.to.port);
     if (!ct) {
       throw new AlgalError(
         "MANIFEST_INVALID",
@@ -612,7 +618,7 @@ async function compileWithBudget(
       continue;
     if (cell.view.inputs !== "*") {
       for (const name of cell.view.inputs) {
-        if (!ports.get(cell.id)!.inputs[name]) {
+        if (!Object.hasOwn(ports.get(cell.id)!.inputs, name)) {
           throw new AlgalError(
             "MANIFEST_INVALID",
             `cell "${cell.id}" view.inputs references undeclared input "${name}"`,
@@ -642,7 +648,7 @@ async function compileWithBudget(
           );
         }
         for (const p of cv.ports ?? []) {
-          if (!ports.get(cv.cell)!.outputs[p]) {
+          if (!Object.hasOwn(ports.get(cv.cell)!.outputs, p)) {
             throw new AlgalError(
               "MANIFEST_INVALID",
               `cell "${cell.id}" view.cells names port "${cv.cell}.${p}", which is not an output port`,
@@ -712,10 +718,12 @@ export function argsForSubOrganism(
 ): Record<string, Record<string, JsonValue>> {
   const args: Record<string, Record<string, JsonValue>> = {};
   const iface = ifaceOrEmpty(sub.interface);
-  for (const [name, target] of Object.entries(iface.inputs)) {
-    const v = outerInputs[name];
+  // Admitted names are ASCII; canonical key order resolves aliased targets.
+  for (const name of Object.keys(iface.inputs).sort()) {
+    const target = iface.inputs[name]!;
+    const v = ownEntry(outerInputs, name);
     if (v === undefined) continue;
-    args[target.cell] = { ...(args[target.cell] ?? {}), [target.port]: v };
+    args[target.cell] = { ...(ownEntry(args, target.cell) ?? {}), [target.port]: v };
   }
   return args;
 }

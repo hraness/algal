@@ -31,8 +31,24 @@ A report contains:
 
 Each case records its split, interface args, expected and actual interface outputs, outcome, pass claim, work, aggregate input/output token usage, and stored run-receipt digest. Candidate records aggregate work and usage across selection cases. Candidate manifests, generator manifests, and all referenced run receipts live in the host store.
 
+Case admission requires every argument name to be an own declared interface
+input and the expectation's own key set to equal the declared output key
+set. An inherited JavaScript member never supplies a declaration or an
+expectation. Producer and imported-report verifier apply the same predicate.
+Interface arguments are mapped in canonical name order; if multiple names
+target one input port, the last present name in that order supplies its value.
+Generator arguments use the same ordering. Object insertion order is not part
+of the case semantics.
+
 ## Verification
 
 Verification rejects unknown fields and malformed bounds, recomputes the report digest, scores, pass claims, and deterministic promotion, resolves every referenced manifest and receipt, compares recorded outputs, outcome, work, and token usage with each receipt, and replays every run offline. Bundle export is permitted only after successful verification and packs the promoted organism's content-addressed closure.
+
+For scored cases, verification also re-admits the case/interface binding and
+compares mapped case arguments with the receipt's actual arguments. Generator
+lineage receipts are replayed as generator executions; they are not scored
+candidate cases. Historical reports whose conflicting input aliases relied on
+insertion order may fail current verification; their bytes are preserved and
+the original implementation is needed to reproduce that historical mapping.
 
 A verified report proves that the recorded evidence and selection are internally consistent. It does not prove that cases represent deployment, expectations are correct, the model was truthful, or the promoted organism will receive the same effects on a future live run.

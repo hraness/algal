@@ -3,6 +3,8 @@ import { digestCanonical, type Digest } from "./digest";
 import { AlgalError } from "./errors";
 import {
   evalScorer,
+  foundryCaseAdmissionError,
+  foundryCaseArgs,
   FOUNDRY_BOUNDS,
   FOUNDRY_CONTRACT,
   selectFoundryCandidate,
@@ -17,6 +19,10 @@ import type { Store } from "./store";
 import type { ToolRegistry } from "./tools";
 import { verifyReceipt } from "./verify";
 import { canonicalize, type JsonObject, type JsonValue } from "./values";
+
+function ownEntry<T>(map: Record<string, T> | undefined, key: string): T | undefined {
+  return map !== undefined && Object.hasOwn(map, key) ? map[key] : undefined;
+}
 
 function object(value: unknown, at: string): JsonObject {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -268,6 +274,13 @@ export async function verifyFoundryReport(
       return;
     }
     for (const c of cases) {
+      if (verifyClaims) {
+        const admissionError = foundryCaseAdmissionError(manifest, c);
+        if (admissionError) {
+          mismatches.push(admissionError);
+          continue;
+        }
+      }
       const stored = await store.getReceipt(c.receiptDigest);
       if (!stored) {
         mismatches.push(`receipt ${c.receiptDigest} missing`);
@@ -279,9 +292,12 @@ export async function verifyFoundryReport(
         continue;
       }
       if (verifyClaims) {
+        if (canonicalize(receipt.args as unknown as JsonValue) !== canonicalize(foundryCaseArgs(manifest, c) as unknown as JsonValue)) {
+          mismatches.push(`case ${c.id}: receipt args differ from the case`);
+        }
         const outputs: Record<string, JsonValue> = {};
         for (const [name, source] of Object.entries(manifest.interface?.outputs ?? {})) {
-          const output = receipt.cells[source.cell]?.outputs?.[source.port];
+          const output = ownEntry(ownEntry(receipt.cells, source.cell)?.outputs, source.port);
           if (output !== undefined) outputs[name] = output;
         }
         if (receipt.outcome !== c.outcome) mismatches.push(`case ${c.id}: outcome differs from receipt`);

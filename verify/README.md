@@ -9,10 +9,11 @@ Run from the repository root with the pinned Bun version:
 ```sh
 bun scripts/verify.ts --suite claims
 bun scripts/verify.ts --suite runner-selftest
+bun scripts/verify.ts --suite boundary
 bun scripts/verify.ts --suite all-required
 ```
 
-`claims` admits the closed metadata schema, unique property identities, complete governed file inventory and current dependency hashes. `runner-selftest` exercises rejection of invalid, empty, skipped, timed-out, stale and vacuous result/configuration metadata. `all-required` runs infrastructure and every activated required suite. A future suite cannot silently become successful merely because its name appears in the ledger. Infrastructure self-tests use synthetic tool output where stated; they do not establish production semantics.
+`claims` admits the closed metadata schema, unique property identities, complete governed file inventory and current dependency hashes. `runner-selftest` exercises rejection of invalid, empty, skipped, timed-out, stale and vacuous result/configuration metadata. `boundary` runs focused production regressions and native/WASM raw-byte comparisons; first build its native test driver using the [boundary instructions](boundary/README.md). `all-required` runs the implemented infrastructure/regression suites and every activated required suite. A future suite cannot silently become successful merely because its name appears in the ledger. Infrastructure self-tests use synthetic tool output where stated; they do not establish production semantics. Result envelopes still license zero formal claims; regression observations do not upgrade a universal ledger obligation.
 
 No runtime dependency on Lean, Java, TLC or another verifier is introduced. Formal tools are development/CI tools. Their immutable distributions, checksums and compatibility smoke evidence are recorded in `toolchains.json` and the toolchain-smoke report. Missing required tools fail their gate.
 

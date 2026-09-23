@@ -138,6 +138,51 @@ fn publish(path: &Path, bytes: &[u8], replace: bool) -> Result<bool> {
     Ok(fresh)
 }
 
+/// Apply the reference file store's JSON node/depth bounds before admitting
+/// the closed effect receipt and its bounded canonical publication encoding.
+fn admit_effect_receipt(value: &Value) -> Result<String> {
+    let mut pending = vec![(value, 0usize)];
+    let mut nodes = 0usize;
+    while let Some((value, depth)) = pending.pop() {
+        nodes += 1;
+        if nodes > 1_000_000 || depth > 64 {
+            return Err(Error::limit("effect receipt structural bounds"));
+        }
+        match value {
+            Value::Array(values) => {
+                if values.len() + pending.len() > 1_000_000 {
+                    return Err(Error::limit("effect receipt node bound"));
+                }
+                pending.extend(values.iter().map(|value| (value, depth + 1)));
+            }
+            Value::Object(values) => {
+                if values.len() + pending.len() > 1_000_000 {
+                    return Err(Error::limit("effect receipt node bound"));
+                }
+                pending.extend(values.values().map(|value| (value, depth + 1)));
+            }
+            _ => {}
+        }
+    }
+    crate::receipt::validate_effect(value)?;
+    canonical(value)
+}
+
+fn read_effect_receipt(path: &Path, request_digest: &str) -> Result<Option<Value>> {
+    let Some(file) = open_regular_file(path, MAX_DOCUMENT_BYTES)? else {
+        return Ok(None);
+    };
+    let value = read_json(file, MAX_DOCUMENT_BYTES)?;
+    admit_effect_receipt(&value)?;
+    if value["requestDigest"].as_str() != Some(request_digest) {
+        return Err(Error::new(
+            "DIGEST_MISMATCH",
+            format!("effect file claims a different request than {request_digest}"),
+        ));
+    }
+    Ok(Some(value))
+}
+
 impl Store {
     pub fn open(root: &Path, writable: bool) -> Result<Self> {
         no_link(root)?;
@@ -148,6 +193,8 @@ impl Store {
         })
     }
 
+    /// Keep the backing store readable while applying writes only to this
+    /// copy's memory layer, as with a store opened with `writable = false`.
     pub fn overlay(&self) -> Self {
         Self {
             writable: false,
@@ -464,29 +511,15 @@ impl Store {
         let Some(path) = self.effect_path(&key)? else {
             return Ok(None);
         };
-        let Some(file) = open_regular_file(&path, MAX_DOCUMENT_BYTES)? else {
-            return Ok(None);
-        };
-        let value = read_json(file, MAX_DOCUMENT_BYTES)?;
-        if value["requestDigest"].as_str() != Some(request_digest) {
-            return Err(Error::new(
-                "DIGEST_MISMATCH",
-                format!("effect file claims a different request than {request_digest}"),
-            ));
-        }
-        if value["executor"].as_str().is_none() {
-            return Err(Error::invalid("effect record needs an executor"));
-        }
-        if value.get("output").is_none() && value.get("error").is_none() {
-            return Err(Error::invalid("effect record needs an output or error"));
-        }
-        Ok(Some(value))
+        read_effect_receipt(&path, request_digest)
     }
 
-    /// Record an effect response for later runs. First write wins — a
-    /// later differing response for the same request can never overwrite
-    /// the memo.
+    /// Record an effect response for later runs. Writable file stores cache
+    /// the retained disk winner. Nonpersistent stores and overlays retain the
+    /// first response in their memory layer, which may shadow a backing file
+    /// without changing it.
     pub fn put_effect(&mut self, receipt: &Value, executor: &str) -> Result<String> {
+        let text = admit_effect_receipt(receipt)?;
         let request_digest = receipt["requestDigest"]
             .as_str()
             .ok_or_else(|| Error::invalid("effect receipt needs requestDigest"))?
@@ -495,9 +528,19 @@ impl Store {
         if self.writable
             && let Some(path) = self.effect_path(&key)?
         {
-            publish(&path, canonical(receipt)?.as_bytes(), false)?;
+            let retained = if publish(&path, text.as_bytes(), false)? {
+                receipt.clone()
+            } else {
+                // Read the actual immutable winner, bypassing the memory map.
+                // Never memoize a proposal that lost publication or hide a
+                // malformed retained record behind the proposed receipt.
+                read_effect_receipt(&path, &request_digest)?
+                    .ok_or_else(|| Error::new("IO_FAILED", "retained effect receipt disappeared"))?
+            };
+            self.effects.insert(key, retained);
+        } else {
+            self.effects.entry(key).or_insert_with(|| receipt.clone());
         }
-        self.effects.entry(key).or_insert_with(|| receipt.clone());
         Ok(request_digest)
     }
 

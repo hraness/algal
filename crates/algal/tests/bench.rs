@@ -7,6 +7,229 @@ fn repo() -> PathBuf {
 }
 
 #[tokio::test]
+async fn imported_cases_reject_interface_expectation_bypasses() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut store = Store::open(directory.path(), true).unwrap();
+    let mut config = bench::load_config(&repo().join("examples/bench.config.json"), None).unwrap();
+    config.scorer = Some(json!({"contract":"algal.expr.v1","program":["eq",1,1]}));
+    let report = bench::run(&config, &mut store, &Host::default(), &Transports::new())
+        .await
+        .unwrap();
+    assert_eq!(
+        bench::verify(&report, &store, &Host::default())
+            .await
+            .unwrap()["ok"],
+        true
+    );
+
+    let mut accepted = Vec::new();
+    for mutation in ["missing-expect", "extra-expect"] {
+        let mut forged = report.clone();
+        let expected = if mutation == "missing-expect" {
+            json!({})
+        } else {
+            let mut expected = forged["cases"][0]["expect"].clone();
+            expected["constructor"] = json!("undeclared");
+            expected
+        };
+        forged["cases"][0]["expect"] = expected.clone();
+        for system in forged["systems"].as_array_mut().unwrap() {
+            system["cases"][0]["expect"] = expected.clone();
+        }
+        forged["workload"] = json!(algal::canonical::digest(&forged["cases"]).unwrap());
+        forged.as_object_mut().unwrap().remove("digest");
+        forged["digest"] = json!(algal::canonical::digest(&forged).unwrap());
+        let verified = bench::verify(&forged, &store, &Host::default())
+            .await
+            .unwrap();
+        if verified["ok"] == true {
+            accepted.push(mutation);
+        }
+    }
+    assert!(
+        accepted.is_empty(),
+        "admitted forged cases with unchanged real receipts: {accepted:?}"
+    );
+}
+
+#[tokio::test]
+async fn programmatic_cases_preserve_declared_constructor_and_validate_expectations() {
+    let mut store = Store::default();
+    let manifest = algal::contract::Manifest::parse(&json!({
+        "contract":"algal.organism.v1","key":"organism:bench-constructor","name":"Declared constructor",
+        "cells":[{"id":"constructor","kind":"input","outputs":{"constructor":"json"}}],
+        "edges":[],
+        "interface":{"inputs":{"constructor":{"cell":"constructor","port":"constructor"}},"outputs":{"constructor":{"cell":"constructor","port":"constructor"}}}
+    })).unwrap();
+    let data = json!({"__proto__":{"kept":true},"constructor":"own data"});
+    let mut config = bench::BenchConfig {
+        cases: vec![bench::BenchCase {
+            id: "case".to_owned(),
+            args: json!({"constructor":data}),
+            expect: json!({"constructor":data}),
+        }],
+        systems: vec![bench::BenchSystem {
+            id: "system".to_owned(),
+            manifest,
+            executors: vec![],
+        }],
+        prices: None,
+        scorer: None,
+        axes: None,
+    };
+    let report = bench::run(&config, &mut store, &Host::default(), &Transports::new())
+        .await
+        .unwrap();
+    assert_eq!(
+        report["systems"][0]["cases"][0]["outputs"]["constructor"],
+        data
+    );
+    assert_eq!(
+        bench::verify(&report, &store, &Host::default())
+            .await
+            .unwrap()["ok"],
+        true
+    );
+    for (expectation, message) in [
+        (json!({}), "missing expected output"),
+        (
+            json!({"constructor":data,"extra":null}),
+            "unknown expected output",
+        ),
+    ] {
+        config.cases[0].expect = expectation;
+        let error = bench::run(&config, &mut store, &Host::default(), &Transports::new())
+            .await
+            .unwrap_err();
+        assert!(error.message.contains(message), "{error}");
+    }
+    config.cases[0].expect = json!({"constructor":data});
+    config.cases[0].args["extra"] = json!(null);
+    let error = bench::run(&config, &mut store, &Host::default(), &Transports::new())
+        .await
+        .unwrap_err();
+    assert!(error.message.contains("unknown system input"), "{error}");
+}
+
+#[tokio::test]
+async fn aliased_case_inputs_use_canonical_name_order() {
+    let mut store = Store::default();
+    let manifest = algal::contract::Manifest::parse(&json!({
+        "contract":"algal.organism.v1","key":"organism:bench-alias-order","name":"Bench alias order",
+        "cells":[{"id":"source","kind":"input","outputs":{"value":"json"}}],"edges":[],
+        "interface":{"inputs":{"z":{"cell":"source","port":"value"},"a":{"cell":"source","port":"value"}},"outputs":{"answer":{"cell":"source","port":"value"}}}
+    })).unwrap();
+    let config = bench::BenchConfig {
+        cases: vec![bench::BenchCase {
+            id: "case".to_owned(),
+            args: serde_json::from_str(r#"{"z":"z","a":"a"}"#).unwrap(),
+            expect: json!({"answer":"z"}),
+        }],
+        systems: vec![bench::BenchSystem {
+            id: "test".to_owned(),
+            manifest,
+            executors: vec![],
+        }],
+        prices: None,
+        scorer: None,
+        axes: None,
+    };
+    let report = bench::run(&config, &mut store, &Host::default(), &Transports::new())
+        .await
+        .unwrap();
+    assert_eq!(
+        report["systems"][0]["cases"][0]["outputs"],
+        json!({"answer":"z"})
+    );
+    // Independently produced by Bun from the identical alias fixture.
+    assert_eq!(
+        report["digest"],
+        "sha256:6e443cc8309db86594d91a8f8ec6966b79896e5645ee045e8beb7d9eb0365e0a"
+    );
+    let roundtrip = serde_json::from_str(&algal::canonical::canonical(&report).unwrap()).unwrap();
+    let verified = bench::verify(&roundtrip, &store, &Host::default())
+        .await
+        .unwrap();
+    assert_eq!(verified["ok"], true, "{verified}");
+}
+
+#[tokio::test]
+async fn result_cases_cover_the_workload_once_in_either_order() {
+    let mut store = Store::default();
+    let manifest = algal::contract::Manifest::parse(&json!({
+        "contract":"algal.organism.v1","key":"organism:bench-multiplicity","name":"Workload coverage",
+        "cells":[{"id":"source","kind":"input","outputs":{"value":"json"}}],"edges":[],
+        "interface":{"inputs":{"q":{"cell":"source","port":"value"}},"outputs":{"answer":{"cell":"source","port":"value"}}}
+    })).unwrap();
+    let config = bench::BenchConfig {
+        cases: vec![
+            bench::BenchCase {
+                id: "one".to_owned(),
+                args: json!({"q":"a"}),
+                expect: json!({"answer":"a"}),
+            },
+            bench::BenchCase {
+                id: "two".to_owned(),
+                args: json!({"q":"b"}),
+                expect: json!({"answer":"b"}),
+            },
+        ],
+        systems: vec![bench::BenchSystem {
+            id: "system".to_owned(),
+            manifest,
+            executors: vec![],
+        }],
+        prices: None,
+        scorer: None,
+        axes: None,
+    };
+    let report = bench::run(&config, &mut store, &Host::default(), &Transports::new())
+        .await
+        .unwrap();
+    assert_eq!(
+        bench::verify(&report, &store, &Host::default())
+            .await
+            .unwrap()["ok"],
+        true
+    );
+    let mut reordered = report.clone();
+    reordered["systems"][0]["cases"]
+        .as_array_mut()
+        .unwrap()
+        .reverse();
+    reordered.as_object_mut().unwrap().remove("digest");
+    reordered["digest"] = json!(algal::canonical::digest(&reordered).unwrap());
+    let verified = bench::verify(&reordered, &store, &Host::default())
+        .await
+        .unwrap();
+    assert_eq!(verified["ok"], true, "{verified}");
+
+    let mut forged = report;
+    forged["systems"][0]["cases"][1] = forged["systems"][0]["cases"][0].clone();
+    forged.as_object_mut().unwrap().remove("digest");
+    forged["digest"] = json!(algal::canonical::digest(&forged).unwrap());
+    let rejected = bench::verify(&forged, &store, &Host::default())
+        .await
+        .unwrap();
+    assert_eq!(
+        rejected["ok"], false,
+        "accepted duplicate result row with one workload case omitted: {rejected}"
+    );
+    assert_eq!(rejected["checkedReceipts"], 2);
+    assert!(
+        rejected["mismatches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|message| message
+                .as_str()
+                .unwrap_or("")
+                .contains("duplicate result case id \"one\"")),
+        "{rejected}"
+    );
+}
+
+#[tokio::test]
 async fn bundled_bench_runs_and_verifies_offline() {
     let directory = tempfile::tempdir().unwrap();
     let mut store = Store::open(directory.path(), true).unwrap();

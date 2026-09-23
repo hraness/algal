@@ -125,6 +125,13 @@ pub fn parse_evaluation_cases(input: &Value) -> Result<Vec<foundry::FoundryCase>
     Ok(cases)
 }
 
+fn check_evaluation_case_bound(cases: &[foundry::FoundryCase], policy: &Value) -> Result<()> {
+    if cases.len() as u64 > policy["maxCases"].as_u64().unwrap_or(0) {
+        return Err(fail("Evaluation case set exceeds policy bound"));
+    }
+    Ok(())
+}
+
 /// Returns the `algal.expr.v1` scorer envelope, or `None` for a null scorer.
 pub fn parse_evaluation_scorer(input: &Value) -> Result<Option<Value>> {
     let v = app_object(input, &["contract", "scorer"])?;
@@ -555,7 +562,11 @@ fn report_cases(
             .map_err(|_| fail("Foundry candidate manifest interface missing"))?;
         let mut args = Map::new();
         let id = result_case["id"].as_str().unwrap_or("");
-        for (name, value) in object(&frozen[id].args)? {
+        let supplied = object(&frozen[id].args)?;
+        let mut names: Vec<_> = supplied.keys().collect();
+        names.sort();
+        for name in names {
+            let value = &supplied[name];
             let target = object(&inputs[name.as_str()]).map_err(|_| {
                 fail(&format!(
                     "Frozen case input {name} is not in candidate interface"
@@ -772,10 +783,8 @@ pub async fn evaluate_application_revision(
     }
     let policy = parse_evaluation_policy(&get_record(store, &request.policy)?)?;
     let cases = parse_evaluation_cases(&get_record(store, &request.cases)?)?;
+    check_evaluation_case_bound(&cases, &policy)?;
     let scorer = parse_evaluation_scorer(&get_record(store, &request.scorer)?)?;
-    if cases.len() as u64 > policy["maxCases"].as_u64().unwrap_or(0) {
-        return Err(fail("Evaluation case set exceeds policy bound"));
-    }
     let old = entrypoint(&incumbent.revision, &request.entrypoint)?;
     let next = entrypoint(&candidate.revision, &request.entrypoint)?;
     let old_manifest = incumbent
@@ -881,7 +890,9 @@ pub async fn verify_application_evaluation(
     if request.policy != candidate.revision.evaluation_policy {
         return Err(fail("Evaluation policy is not bound to candidate revision"));
     }
+    let policy = parse_evaluation_policy(&get_record(store, &request.policy)?)?;
     let cases = parse_evaluation_cases(&get_record(store, &request.cases)?)?;
+    check_evaluation_case_bound(&cases, &policy)?;
     let scorer = parse_evaluation_scorer(&get_record(store, &request.scorer)?)?;
     let report = get_record(store, evaluation["foundryReport"].as_str().unwrap_or(""))?;
     let verified = foundry::verify(&report, store, host).await?;
@@ -921,7 +932,6 @@ pub async fn verify_application_evaluation(
     if !same(&stored, &compatibility)? {
         return Err(fail("Stored compatibility evidence changed"));
     }
-    let policy = parse_evaluation_policy(&get_record(store, &request.policy)?)?;
     let old = entrypoint(&incumbent.revision, &request.entrypoint)?;
     let next = entrypoint(&candidate.revision, &request.entrypoint)?;
     let verdict = acceptance(
@@ -1007,6 +1017,10 @@ mod tests {
     }
 
     fn seed(store: &mut Store, candidate_program: Value) -> Fixture {
+        seed_with_max_cases(store, candidate_program, 8)
+    }
+
+    fn seed_with_max_cases(store: &mut Store, candidate_program: Value, max_cases: u64) -> Fixture {
         let incumbent = store
             .put(
                 "manifests",
@@ -1043,7 +1057,7 @@ mod tests {
         let runtime = put(store, json!({"contract":"algal.test-runtime.v1"}));
         let policy = put(
             store,
-            json!({"contract":"algal.application-evaluation-policy.v1","maxCases":8,"maxWork":1000000,"maxModelCalls":0,"requireHoldoutPass":true,"strictValidationImprovement":true}),
+            json!({"contract":"algal.application-evaluation-policy.v1","maxCases":max_cases,"maxWork":1000000,"maxModelCalls":0,"requireHoldoutPass":true,"strictValidationImprovement":true}),
         );
         let entrypoint = |manifest: &str| json!({"name":"run","manifest":manifest,"applicability":query,"maxGenerations":1,"capabilities":[],"queries":[query]});
         let revision1 = put(
@@ -1090,6 +1104,193 @@ mod tests {
             "entrypoint": "run", "cases": fixture.cases,
             "scorer": fixture.scorer, "policy": fixture.policy,
         })
+    }
+
+    async fn imported_evaluation(store: &mut Store, max_cases: u64) -> (Fixture, String) {
+        let fixture = seed_with_max_cases(
+            store,
+            json!([
+                "if",
+                ["eq", ["get", "value"], "v2"],
+                "v2-ok",
+                ["if", ["eq", ["get", "value"], "h1"], "h1-ok", "ok"]
+            ]),
+            max_cases,
+        );
+        let cases = parse_evaluation_cases(&get_record(store, &fixture.cases).unwrap()).unwrap();
+        assert_eq!(cases.len(), 4);
+        let incumbent = load_revision(store, &fixture.revision1).unwrap();
+        let candidate = load_revision(store, &fixture.revision2).unwrap();
+        // Real foundry receipts can arrive without passing through the
+        // application producer's policy admission.
+        let report = foundry::run(
+            &[
+                incumbent.manifests["run"].clone(),
+                candidate.manifests["run"].clone(),
+            ],
+            &cases,
+            None,
+            None,
+            store,
+            &mut Host::default(),
+            &Transports::new(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            foundry::verify(&report, store, &Host::default())
+                .await
+                .unwrap()["ok"],
+            true
+        );
+        assert_eq!(report["promoted"], fixture.candidate);
+        assert_eq!(report["holdout"]["total"], 1);
+        assert_eq!(report["holdout"]["passed"], report["holdout"]["total"]);
+        let compatibility =
+            check_application_compatibility(store, &fixture.revision1, &fixture.revision2).unwrap();
+        assert_eq!(compatibility["status"], "compatible");
+        let request_ref = put(store, request(&fixture));
+        let report_ref = put(store, report);
+        let compatibility_ref = put(store, compatibility);
+        let evaluation_ref = put(
+            store,
+            json!({
+                "contract": "algal.application-evaluation.v1", "request": request_ref,
+                "parentState": fixture.state, "candidateRevision": fixture.revision2,
+                "cases": fixture.cases, "scorer": fixture.scorer, "policy": fixture.policy,
+                "foundryReport": report_ref, "compatibility": compatibility_ref,
+                "verdict": {"status": "accepted", "selectedManifest": fixture.candidate},
+            }),
+        );
+        (fixture, evaluation_ref)
+    }
+
+    #[tokio::test]
+    async fn imported_evaluation_enforces_policy_case_bound() {
+        let tmp = tempdir().unwrap();
+        let mut store = Store::open(tmp.path(), true).unwrap();
+        let (fixture, evaluation_ref) = imported_evaluation(&mut store, 3).await;
+        let error = evaluate_application_revision(
+            &mut store,
+            &request(&fixture),
+            &mut Host::default(),
+            &Transports::new(),
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("Evaluation case set exceeds policy bound")
+        );
+        let verified = verify_application_evaluation(
+            &store,
+            &evaluation_ref,
+            &fixture.state,
+            &Host::default(),
+        )
+        .await;
+        let admitted = admit_application_activation(
+            &store,
+            &json!({"evaluation": evaluation_ref, "expectedState": fixture.state, "revision": fixture.revision2}),
+            &Host::default(),
+        )
+        .await;
+        assert_eq!((verified.is_err(), admitted.is_err()), (true, true));
+        for error in [verified.unwrap_err(), admitted.unwrap_err()] {
+            assert!(
+                error
+                    .to_string()
+                    .contains("Evaluation case set exceeds policy bound")
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn imported_evaluation_accepts_exact_policy_case_bound() {
+        let tmp = tempdir().unwrap();
+        let mut store = Store::open(tmp.path(), true).unwrap();
+        let (fixture, evaluation_ref) = imported_evaluation(&mut store, 4).await;
+        let (_, produced) = evaluate_application_revision(
+            &mut store,
+            &request(&fixture),
+            &mut Host::default(),
+            &Transports::new(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(produced["verdict"]["status"], "accepted");
+        let checked = verify_application_evaluation(
+            &store,
+            &evaluation_ref,
+            &fixture.state,
+            &Host::default(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(checked["verdict"]["status"], "accepted");
+        let admitted = admit_application_activation(
+            &store,
+            &json!({"evaluation": evaluation_ref, "expectedState": fixture.state, "revision": fixture.revision2}),
+            &Host::default(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(admitted["revision"], fixture.revision2);
+    }
+
+    #[tokio::test]
+    async fn evaluation_alias_inputs_bind_the_canonical_last_name() {
+        let mut store = Store::default();
+        let mut fixture = seed(
+            &mut store,
+            json!([
+                "if",
+                ["eq", ["get", "value"], "v2"],
+                "v2-ok",
+                ["if", ["eq", ["get", "value"], "h1"], "h1-ok", "ok"]
+            ]),
+        );
+        for reference in [&mut fixture.incumbent, &mut fixture.candidate] {
+            let mut manifest = store.get("manifests", reference).unwrap().unwrap();
+            manifest["interface"]["inputs"] = serde_json::from_str(
+                r#"{"z":{"cell":"src","port":"value"},"a":{"cell":"src","port":"value"}}"#,
+            )
+            .unwrap();
+            *reference = store.admit(&Manifest::parse(&manifest).unwrap()).unwrap();
+        }
+        let mut revision1 = get_record(&store, &fixture.revision1).unwrap();
+        revision1["entrypoints"][0]["manifest"] = json!(fixture.incumbent);
+        fixture.revision1 = put(&mut store, revision1);
+        let mut revision2 = get_record(&store, &fixture.revision2).unwrap();
+        revision2["parent"] = json!(fixture.revision1);
+        revision2["entrypoints"][0]["manifest"] = json!(fixture.candidate);
+        fixture.revision2 = put(&mut store, revision2);
+        let mut state = get_record(&store, &fixture.state).unwrap();
+        state["revision"] = json!(fixture.revision1);
+        fixture.state = put(&mut store, state);
+        let mut cases = get_record(&store, &fixture.cases).unwrap();
+        for case in cases["cases"].as_array_mut().unwrap() {
+            let value = case["args"]["q"].clone();
+            case["args"] =
+                serde_json::from_str(&format!(r#"{{"z":{value},"a":"shadow"}}"#)).unwrap();
+        }
+        fixture.cases = put(&mut store, cases);
+        let (reference, evaluation) = evaluate_application_revision(
+            &mut store,
+            &request(&fixture),
+            &mut Host::default(),
+            &Transports::new(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(evaluation["verdict"]["status"], "accepted");
+        let verified =
+            verify_application_evaluation(&store, &reference, &fixture.state, &Host::default())
+                .await
+                .unwrap();
+        assert_eq!(verified["verdict"], evaluation["verdict"]);
+        assert!(admit_application_activation(&store, &json!({"evaluation":reference,"expectedState":fixture.state,"revision":fixture.revision2}), &Host::default()).await.is_ok());
     }
 
     #[tokio::test]

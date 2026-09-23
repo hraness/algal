@@ -80,6 +80,11 @@ const WORK = {
   perOutputByte: 1,
 } as const;
 
+/** Missing dictionary values must not resolve through Object.prototype. */
+function ownEntry<T>(map: Record<string, T> | undefined, key: string): T | undefined {
+  return map !== undefined && Object.hasOwn(map, key) ? map[key] : undefined;
+}
+
 export type RunEvent = {
   seq: number;
   kind:
@@ -372,7 +377,7 @@ async function runInto(
             : typeof v === "object" &&
               v !== null &&
               !Array.isArray(v) &&
-              v[e.guard.field] === e.guard.equals;
+              ownEntry(v, e.guard.field) === e.guard.equals;
       }
       if (!hit) {
         edgeState[i] = "dead";
@@ -475,7 +480,7 @@ async function runInto(
         // delivered value that violates a declared schema fails this cell
         // (routable via on:"fail"), never silently enters activation
         for (const p of inputNames) {
-          const v = inputs[p];
+          const v = ownEntry(inputs, p);
           if (v !== undefined) checkValue(v, sig.inputs[p]!, `${cell.id}.${p}`);
         }
         const act = await activate(cell, inputs, args, compiled, ctx, cellPath(cell.id), depth);
@@ -494,7 +499,7 @@ async function runInto(
         if (act.items !== undefined) rec.items = act.items;
         const via =
           compiled.resolvedVia.get(cell.id) ??
-          ctx.opts.replayVia?.[cellPath(cell.id)];
+          ownEntry(ctx.opts.replayVia, cellPath(cell.id));
         if (via) rec.via = via;
         if (cell.kind === "slot") rec.slot = { name: cell.name, mode: cell.mode };
         ctx.cells[cellPath(cell.id)] = rec;
@@ -821,10 +826,10 @@ async function activate(
   assertJournal(ctx);
   switch (cell.kind) {
     case "input": {
-      const supplied = args[cell.id] ?? {};
+      const supplied = ownEntry(args, cell.id) ?? {};
       const out: Record<string, JsonValue> = {};
       for (const [port, decl] of Object.entries(cell.outputs)) {
-        const v = supplied[port];
+        const v = ownEntry(supplied, port);
         if (v === undefined) continue;
         checkValue(v, decl, `${cell.id}.${port}`);
         await checkRefsResolve(ctx, decl, v, `${cell.id}.${port}`);
@@ -892,7 +897,7 @@ async function activate(
       }
       // read: replay serves the recorded outcome — a live slot may have
       // been overwritten since the run being verified
-      const rep = ctx.opts.replaySlots?.[path];
+      const rep = ownEntry(ctx.opts.replaySlots, path);
       if (rep !== undefined) {
         if (rep.missing) {
           throw new AlgalError(
@@ -932,7 +937,7 @@ async function activate(
         ...Object.values(subManifest.interface?.inputs ?? {}),
         ...Object.values(subManifest.interface?.outputs ?? {}),
       ]) {
-        if (subCompiled.ports.get(target.cell)?.outputs[target.port]?.type === "cap") {
+        if (ownEntry(subCompiled.ports.get(target.cell)?.outputs, target.port)?.type === "cap") {
           throw new AlgalError("TYPE_MISMATCH", "spawn cannot expose capability ports through json; use a typed organism cell");
         }
       }
@@ -961,8 +966,8 @@ async function activate(
       const data: Record<string, JsonValue> = {};
       const iface = subManifest.interface ?? { inputs: {}, outputs: {} };
       for (const [name, target] of Object.entries(iface.outputs)) {
-        const rec = ctx.cells[`${path}/${target.cell}`];
-        const v = rec?.outputs?.[target.port];
+        const rec = ownEntry(ctx.cells, `${path}/${target.cell}`);
+        const v = ownEntry(rec?.outputs, target.port);
         if (v !== undefined) data[name] = v;
       }
       return { outputs: { data, digest: subDigest } };
@@ -971,7 +976,7 @@ async function activate(
       const entry = ctx.opts.fns.get(cell.fn)!;
       ctx.work.units += entry.signature.cost;
       for (const [p, decl] of Object.entries(entry.signature.inputs)) {
-        const v = inputs[p];
+        const v = ownEntry(inputs, p);
         if (v !== undefined) checkValue(v, decl, `${cell.id}.${p}`);
       }
       return { outputs: entry.fn(inputs) };
@@ -1195,7 +1200,7 @@ async function activate(
       const cellView: JsonObject | undefined = cell.view.cells?.length
         ? Object.fromEntries(
             cell.view.cells.map((cv) => {
-              const rec = ctx.cells[scope ? `${scope}/${cv.cell}` : cv.cell];
+              const rec = ownEntry(ctx.cells, scope ? `${scope}/${cv.cell}` : cv.cell);
               let outputs = rec?.outputs;
               if (outputs && cv.ports) {
                 outputs = Object.fromEntries(
@@ -1463,7 +1468,7 @@ async function activate(
           }
         }
         for (const [p, decl] of Object.entries(signature.inputs)) {
-          const v = (call.inputs as Record<string, JsonValue>)[p];
+          const v = ownEntry(call.inputs as Record<string, JsonValue>, p);
           if (v === undefined) {
             if (!decl.optional) {
               throw new AlgalError(
@@ -1532,8 +1537,8 @@ async function activate(
       const out: Record<string, JsonValue> = {};
       const iface = subCompiled.manifest.interface ?? { inputs: {}, outputs: {} };
       for (const [name, target] of Object.entries(iface.outputs)) {
-        const rec = ctx.cells[`${path}/${target.cell}`];
-        const v = rec?.outputs?.[target.port];
+        const rec = ownEntry(ctx.cells, `${path}/${target.cell}`);
+        const v = ownEntry(rec?.outputs, target.port);
         if (v !== undefined) out[name] = v;
       }
       return { outputs: out };
@@ -1573,16 +1578,16 @@ async function activate(
         }
         out = {};
         for (const [name, target] of Object.entries(iface.outputs)) {
-          const rec = ctx.cells[`${roundPath}/${target.cell}`];
-          const v = rec?.outputs?.[target.port];
+          const rec = ownEntry(ctx.cells, `${roundPath}/${target.cell}`);
+          const v = ownEntry(rec?.outputs, target.port);
           if (v !== undefined) out[name] = v;
         }
         for (const [outName, inName] of Object.entries(cell.carry ?? {})) {
-          const v = out[outName];
+          const v = ownEntry(out, outName);
           if (v !== undefined) carried[inName] = v;
         }
         if (cell.until) {
-          const v = out[cell.until.output];
+          const v = ownEntry(out, cell.until.output);
           const hit =
             v !== undefined &&
             (cell.until.field === undefined
@@ -1590,7 +1595,7 @@ async function activate(
               : typeof v === "object" &&
                 v !== null &&
                 !Array.isArray(v) &&
-                v[cell.until.field] === cell.until.equals);
+                ownEntry(v, cell.until.field) === cell.until.equals);
           if (hit) break;
         }
       }
@@ -1601,7 +1606,7 @@ async function activate(
     case "each": {
       const subCompiled = compiled.children.get(cell.id)!;
       const iface = subCompiled.manifest.interface ?? { inputs: {}, outputs: {} };
-      const list = inputs[cell.over];
+      const list = ownEntry(inputs, cell.over);
       if (!Array.isArray(list)) {
         throw new AlgalError(
           "TYPE_MISMATCH",
@@ -1615,9 +1620,9 @@ async function activate(
         );
       }
       // element type check against the inner input port's declared type
-      const overTarget = iface.inputs[cell.over]!;
+      const overTarget = ownEntry(iface.inputs, cell.over)!;
       const elDecl =
-        subCompiled.ports.get(overTarget.cell)?.outputs[overTarget.port];
+        ownEntry(subCompiled.ports.get(overTarget.cell)?.outputs, overTarget.port);
       const out: Record<string, JsonValue> = {};
       for (const name of Object.keys(iface.outputs)) out[name] = [];
       for (let i = 0; i < list.length; i++) {
@@ -1644,8 +1649,8 @@ async function activate(
           );
         }
         for (const [name, target] of Object.entries(iface.outputs)) {
-          const rec = ctx.cells[`${itemPath}/${target.cell}`];
-          const v = rec?.outputs?.[target.port];
+          const rec = ownEntry(ctx.cells, `${itemPath}/${target.cell}`);
+          const v = ownEntry(rec?.outputs, target.port);
           if (v !== undefined) (out[name] as JsonValue[]).push(v);
         }
       }
@@ -1781,12 +1786,12 @@ function checkOutputs(
   produced: Record<string, JsonValue>,
 ): void {
   for (const [port, decl] of Object.entries(outputs)) {
-    const v = produced[port];
+    const v = ownEntry(produced, port);
     if (v === undefined) continue;
     checkValue(v, decl, `${cell.id}.${port}`);
   }
   for (const port of Object.keys(produced)) {
-    if (!outputs[port]) {
+    if (!Object.hasOwn(outputs, port)) {
       throw new AlgalError(
         "TYPE_MISMATCH",
         `${cell.id}: produced undeclared output "${port}"`,

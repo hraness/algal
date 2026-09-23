@@ -86,7 +86,33 @@ integer range 1–600,000 milliseconds). Native transports currently accept
 file directories. Both reject invalid UTF-8 and a leading BOM. These limits
 bound ingestion; the bundle's digest checks still establish its identity.
 
+JSON files admitted by the content-addressed store and durable host-state
+reader also reject malformed UTF-8 and a leading BOM; rejected bytes are
+left untouched. UTF-8 decoding does not replace invalid byte sequences
+with U+FFFD. A genuine, correctly encoded U+FFFD remains valid data.
+
+Portable JSON strings are sequences of Unicode scalar values, including
+strings in object keys and in members later overwritten by a duplicate
+key. Both runtimes use the last duplicate member, but the native parser
+rejects an escaped lone surrogate even in an overwritten member. The Bun
+runtime retains its existing acceptance of escaped lone surrogates in
+stored JSON and receipts: those records remain readable and replayable
+there, but are outside the portable native/shared-expression domain.
+Decoding does not change duplicate-key resolution, whitespace admission,
+or numeric normalization. This compatibility boundary is not a claim that
+every JSON text accepted by either host is portable to the other.
+
 ### Port types
+
+Declarations, interface names and delivered arguments use own dictionary
+members; inherited JavaScript properties do not declare ports or supply
+values. `constructor` remains a valid declared identifier under the existing
+grammar. When mapping interface inputs into child arguments, process names
+in canonical key order. If multiple supplied interface names alias the same
+child input port, the last name in that order supplies the value. Reordering
+object insertion must not change execution. Historical executions relying on
+conflicting alias insertion order may need their original implementation to
+reproduce their receipt; retained receipt bytes are never rewritten.
 
 Every port declares one of:
 
