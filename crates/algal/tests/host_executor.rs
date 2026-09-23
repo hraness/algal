@@ -130,9 +130,10 @@ async fn capture_suspend_supply_resume_and_offline_replay() {
         resumed["effects"][0]["requestDigest"],
         suspended["effects"][0]["requestDigest"]
     );
-    let captured = executor.requests.lock().unwrap();
-    assert_eq!(captured[0], captured[1]);
-    drop(captured);
+    {
+        let captured = executor.requests.lock().unwrap();
+        assert_eq!(captured[0], captured[1]);
+    }
     assert_eq!(
         runtime::verify(&resumed, manifest(), &store, &Host::default())
             .await
