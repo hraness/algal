@@ -57,6 +57,34 @@ test("controller rejects mixed fixture/live backend before any inference", async
   expect(stderr).toContain("exactly one");
 });
 
+test("controller configured local backend retains shared reservation accounting and verifiable actions", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "algal-controller-local-"));
+  let calls = 0;
+  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch() {
+    calls++;
+    return Response.json({ choices: [{ message: { content: JSON.stringify({ value: JSON.stringify({ type: "finish", summary: "local result" }) }) } }],
+      usage: { prompt_tokens: 20, completion_tokens: 10 } });
+  } });
+  const child = Bun.spawn([process.execPath, join(import.meta.dir, "cli.ts")], { stdin: "pipe", stdout: "pipe", stderr: "pipe" });
+  try {
+    child.stdin.write(`${JSON.stringify({ instruction: "A bounded local controller task", mode: "algal", policy: BASELINE_POLICY,
+      artifactDir: dir, backend: { provider: "local", baseUrl: `http://127.0.0.1:${server.port}/v1`, model: "fixture",
+        ledgerPath: join(dir, "ledger"), maxCalls: 1, maxRequestBytes: 32768, maxOutputBytes: 16384 } })}\n`);
+    child.stdin.end();
+    const stdout = new Response(child.stdout).text();
+    const stderr = await new Response(child.stderr).text();
+    expect(await child.exited, stderr).toBe(0);
+    const result = JSON.parse((await stdout).trim());
+    expect(result.result.termination).toBe("finished");
+    expect(result.result.verification).toMatchObject({ ok: true });
+    expect(result.result.accounting).toMatchObject({ calls: 1, completedCalls: 1, inputTokens: 20, outputTokens: 10 });
+    expect(calls).toBe(1);
+  } finally {
+    if (child.exitCode === null) { child.kill("SIGTERM"); await child.exited; }
+    server.stop(true); await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("SIGTERM during capability startup joins XCB and removes controller listeners", async () => {
   const dir = await mkdtemp(join(tmpdir(), "algal-startup-cancel-"));
   const executable = join(dir, "fake-xcb");

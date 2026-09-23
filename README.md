@@ -1010,10 +1010,23 @@ bun run cli run ticket.algal.json --responses ticket.responses.json
 bun run cli run ticket.algal.json \
   --gateway-model alibaba/qwen3.5-flash --write
 
+# Local OpenAI-compatible server; choose a model installed on that server.
+bun run cli run ticket.algal.json \
+  --base-url http://127.0.0.1:11434/v1 --model qwen3:8b --write
+
+# Apple Intelligence through the native CLI on a compatible Mac.
+algal run ticket.algal.json --apple --write
+
 # any command that reads JSON on stdin and writes JSON on stdout
 bun run cli run ticket.algal.json \
   --executor-cmd "python -m my_provider_agent"
 ```
+
+Both CLIs support Gateway and OpenAI-compatible endpoints. Hosted endpoints may
+use `--credential-env MY_PROVIDER_KEY`; local endpoints need no credential by
+default. The library exports `openAICompatibleExecutor({ baseUrl, model })`.
+See [executors](docs/executors.md) for structured-output modes, provider bounds,
+and the native Apple adapter. xcb remains the separate delegated coding path.
 
 ### External tools
 

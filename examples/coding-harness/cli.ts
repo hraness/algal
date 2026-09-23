@@ -3,6 +3,7 @@ import { isAbsolute, join } from "node:path";
 import { runHarness, type HarnessModel, type HarnessOptions, type HarnessTerminalResult } from "./harness";
 import { parseHarnessPolicy } from "./protocol";
 import { createXcbModel, type XcbConfig } from "./xcb";
+import { createHarnessModel } from "./model";
 import { createHarnessMemory } from "./memory";
 import type { HarnessMemory } from "./memory-contract";
 
@@ -52,14 +53,14 @@ export async function main(): Promise<void> {
   const input = lines();
   const first = await input.next();
   if (first.done) throw new Error("Initial controller configuration required");
-  const config = closed(first.value, ["instruction", "mode", "policy", "xcb", "scriptedResponses", "artifactDir",
+  const config = closed(first.value, ["instruction", "mode", "policy", "xcb", "backend", "scriptedResponses", "artifactDir",
     "maxModelAttempts", "maxTerminalOutputBytes", "terminalTimeoutMs", "modelTimeoutMs", "memory"]);
   if (typeof config.instruction !== "string" || (config.mode !== "baseline" && config.mode !== "algal") ||
       typeof config.artifactDir !== "string" || !isAbsolute(config.artifactDir)) {
     throw new Error("Instruction, mode, and absolute host artifactDir are required");
   }
-  if ((config.xcb === undefined) === (config.scriptedResponses === undefined)) {
-    throw new Error("Choose exactly one XCB backend or explicitly scripted fixture backend");
+  if ([config.xcb, config.backend, config.scriptedResponses].filter(value => value !== undefined).length !== 1) {
+    throw new Error("Choose exactly one XCB, configured backend, or explicitly scripted fixture backend");
   }
   const controller = new AbortController();
   const abort = () => controller.abort();
@@ -91,6 +92,12 @@ export async function main(): Promise<void> {
       };
       modelId = "scripted-fixture";
       accounting = { billing: "scripted-fixture", costUsd: 0, inputTokens: 0, outputTokens: 0 };
+    } else if (config.backend !== undefined) {
+      const backend = await createHarnessModel(config.backend, controller.signal);
+      model = backend.model;
+      modelId = backend.modelId;
+      accounting = backend.accounting;
+      settle = backend.settle;
     } else {
       const xcb = xcbConfig(config.xcb);
       const backend = await createXcbModel(xcb, controller.signal);

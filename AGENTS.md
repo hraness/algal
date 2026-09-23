@@ -2,7 +2,8 @@
 
 - `src/` — the contract (`contract.ts`, `graph.ts`), the scheduler (`run.ts`),
   the effect seam (`effects.ts`), the store (`store.ts`), verification
-  (`verify.ts`), Vercel AI Gateway execution (`gateway.ts`), typed external
+  (`verify.ts`), Vercel AI Gateway execution (`gateway.ts`) and portable
+  Chat Completions execution (`openai-compatible.ts`, `chat-completions.ts`), typed external
   tools (`tools.ts`), opaque capability handles (`capabilities.ts`) and the
   bounded durable mailbox driver (`mailbox.ts`), the named durable process
   supervisor (`process.ts`), the provider-neutral
@@ -88,6 +89,9 @@
   service layer, since those commands live only in the CLIs. Run
   `bun scripts/cli-parity.ts` for public check/explain/inspect/diff,
   bundle calls, suspension/resume, and installed-example suite parity.
+  `bun scripts/inference-parity.ts` compares all three Chat Completions
+  formats against a loopback fixture, including exact receipt and offline
+  replay parity; it does not qualify a real local language model.
 - The Foundation Models bridge comes from the pinned `apple-foundation`
   crate (`hraness/apple-foundation`); `sh scripts/build-apple.sh` emits its
   embedded source and builds it with Xcode 26 on Apple Silicon, and the

@@ -192,8 +192,14 @@ existing backend and the standing $20 incremental paid-inference cap.
    observation claim — so the derivation flips between `unknown` and
    `supported` with no inference anywhere. It demonstrates that the join
    distinguishes fact presence; it claims nothing about fitness or efficacy.
-   Model-driven proposal, explicit non-regression criteria, and any
-   Datalog-specific benefit attribution remain open.
+   The [controlled application research study](application-research.md) adds
+   model-driven selection of a bounded pure strategy, evaluator-sealed
+   non-regression admission, and a same-source comparison of structured facts
+   with and without native Datalog-derived answers. Its proposal is frozen
+   before evaluation, and a tie cannot activate a revision. This is a small
+   synthetic routing study hosted by Bun with native memory verification;
+   it does not establish a general coding or Datalog quality benefit. The
+   earlier Harbor calibration remains closed at its recorded failed gate.
 4. **Schema and interface evolution:** declarative migration programs evaluated
    against retained snapshots; compatible activation of code, schema, queries,
    views, and memory. Explicit drain of undispatched work now exists:

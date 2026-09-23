@@ -21,6 +21,94 @@ The initial compatibility pilot pins Harbor **0.23.0**, commit
 leaderboard submission or a statistically meaningful performance study. The
 Harbor Python adapter invokes `examples/coding-harness/cli.ts` for each episode.
 
+## Choosing an inference backend
+
+The JSONL controller accepts exactly one of `xcb`, `backend`, or
+`scriptedResponses` in its initial configuration. Existing XCB qualification,
+subscription custody, and executable pinning are unchanged. The frozen Harbor
+Python pilots still use their original subscription-only protocol. A new backend
+configuration does not reopen an old experiment or replace its failed trials.
+
+Use `backend` for direct Vercel AI Gateway or a loopback OpenAI-compatible server
+such as Ollama or LM Studio. The same backend also works with the one-call policy
+proposer:
+
+```sh
+bun examples/coding-harness/propose.ts /absolute/development-evidence.json \
+  /absolute/new-proposal.json --backend-config /absolute/backend.json
+```
+
+A Gateway `backend.json` contains no credential:
+
+```json
+{
+  "provider": "gateway",
+  "model": "anthropic/claude-haiku-4.5",
+  "gatewayProvider": "anthropic",
+  "ledgerPath": "/absolute/new-study/inference",
+  "maxCalls": 12,
+  "maxCostMicrousd": 2000000,
+  "maxInputTokens": 65536,
+  "maxOutputTokens": 4096,
+  "inputMicrousdPerToken": 2,
+  "outputMicrousdPerToken": 6,
+  "maxRequestBytes": 49152,
+  "maxOutputBytes": 16384,
+  "timeoutMs": 120000
+}
+```
+
+Provide `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` through the process environment.
+The example price ceilings are conservative host configuration, not a pricing
+service: verify the selected route's current input, cache-write, output, and
+regional charges before a live run. One microusd is one millionth of a US dollar.
+Use a provider-side spending cap as well. The configured Gateway provider is a
+hard [`only` allowlist](https://vercel.com/docs/ai-gateway/models-and-providers/provider-options);
+the adapter supplies no fallback model, thinking option, tools, or automatic
+retry. Hosted inference and terminal execution remain separate boundaries.
+
+[`model.ts`](../examples/coding-harness/model.ts) exports `createGatewayInference`
+for other examples that need a budgeted `Executor`. The shared
+[`inference-budget.ts`](../examples/coding-harness/inference-budget.ts) ledger
+serializes calls across processes, freezes the configuration, and fsyncs a full
+reservation before dispatch. This example reserves 155,648 microusd per call;
+completed calls do not refund reservations. Input admission counts the complete
+serialized request's UTF-8 bytes plus 4,096 tokens for framing/schema overhead;
+output admission sets `max_tokens`. Actual reported tokens must fit both frozen
+ceilings. Tokens and request/output digests are retained; actual billed dollars
+remain unknown. The configured ledger controls admitted requests, not future
+provider pricing or billing behavior.
+
+A failed, timed-out, or interrupted call consumes its reservation and stops that
+ledger. Reopening it cannot retry the call, increase its budget, or silently
+select another provider. A deadline closes admission even if a custom executor
+ignores cancellation; `settle()` still joins the actual work. Do not delete a
+ledger or choose a new directory to retry an uncertain experiment. Review its
+retained evidence and authorize a separately designed study when appropriate.
+
+For local inference use an explicit unauthenticated loopback endpoint:
+
+```json
+{
+  "provider": "local",
+  "model": "your-installed-model",
+  "baseUrl": "http://127.0.0.1:11434/v1",
+  "responseFormat": "json_object",
+  "ledgerPath": "/absolute/new-local-study/inference",
+  "maxCalls": 12,
+  "maxRequestBytes": 49152,
+  "maxOutputBytes": 16384,
+  "timeoutMs": 120000
+}
+```
+
+Local calls retain the same durable call limits and uncertainty rules, with zero
+reserved paid API spend; machine costs are not measured. The controller sends no
+cloud credentials to local servers. Apple Foundation Models remain available
+through the native runtime's `--apple` executor and shared `apple-foundation`
+bridge; they are not an implicit fallback for the coding-harness controller.
+See [executors](executors.md) for native Apple and general hosted endpoint usage.
+
 ## The comparison
 
 The conventional baseline and ALGAL harness expose the same model input, terminal

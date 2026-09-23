@@ -1,0 +1,1909 @@
+{
+  "provenance": "deterministic-native-fixture-not-model-quality-evidence",
+  "executableSha256": "3eba45d8c1df69a783fc182f1a7b8065c8a1840a832d500615f875bfaf128bda",
+  "rows": [
+    {
+      "caseId": "dev-chain",
+      "snapshot": {
+        "contract": "algal.memory.v1",
+        "facts": [
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:90e9825147edf1e167b1d6763d6619cc60bf3041100f6f8f514752542582008b"
+            ],
+            "tuple": [
+              "dock",
+              "a"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:90e9825147edf1e167b1d6763d6619cc60bf3041100f6f8f514752542582008b"
+            ],
+            "tuple": [
+              "a",
+              "b"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:90e9825147edf1e167b1d6763d6619cc60bf3041100f6f8f514752542582008b"
+            ],
+            "tuple": [
+              "b",
+              "c"
+            ]
+          }
+        ]
+      },
+      "program": {
+        "contract": "algal.query.v1",
+        "limits": {
+          "maxBindings": 128,
+          "maxDerived": 128,
+          "maxOutputBytes": 262144,
+          "maxRounds": 32,
+          "maxRows": 16,
+          "maxWork": 50000
+        },
+        "query": {
+          "relation": "reachable",
+          "terms": [
+            "dock",
+            {
+              "var": "target"
+            }
+          ]
+        },
+        "rules": [
+          {
+            "body": [
+              {
+                "relation": "edge",
+                "terms": [
+                  {
+                    "var": "x"
+                  },
+                  {
+                    "var": "y"
+                  }
+                ]
+              }
+            ],
+            "head": {
+              "relation": "reachable",
+              "terms": [
+                {
+                  "var": "x"
+                },
+                {
+                  "var": "y"
+                }
+              ]
+            },
+            "id": "direct"
+          },
+          {
+            "body": [
+              {
+                "relation": "reachable",
+                "terms": [
+                  {
+                    "var": "x"
+                  },
+                  {
+                    "var": "y"
+                  }
+                ]
+              },
+              {
+                "relation": "edge",
+                "terms": [
+                  {
+                    "var": "y"
+                  },
+                  {
+                    "var": "z"
+                  }
+                ]
+              }
+            ],
+            "head": {
+              "relation": "reachable",
+              "terms": [
+                {
+                  "var": "x"
+                },
+                {
+                  "var": "z"
+                }
+              ]
+            },
+            "id": "transitive"
+          }
+        ]
+      },
+      "result": {
+        "baseFacts": 3,
+        "complete": true,
+        "contract": "algal.query-result.v1",
+        "derivedFacts": 6,
+        "program": "sha256:2617140b0ec54e39d8add4068a3ef97bcae0be059a2d00de868dd74712ae04ac",
+        "proofs": {
+          "sha256:297e977c159c98f802a6bd87e464d324b2c3bb7eb51f81f656d1b8ad337b059c": {
+            "kind": "rule",
+            "premises": [
+              "sha256:b7e3f27fe4648014d47093ab855f85caf63bdd5273007f85ed11f393baf481f4",
+              "sha256:43ce1e355794920b7b49edde76bb019af9caa01efc972dab6b93051d6da94b0f"
+            ],
+            "rule": "sha256:0d227bcfefe711fcfe8ee9a9986eca2c839429c585b770321632db358ff2bd23"
+          },
+          "sha256:43ce1e355794920b7b49edde76bb019af9caa01efc972dab6b93051d6da94b0f": {
+            "fact": "sha256:9a34b04483dd04e5d65b9c58d2f9cb793ad4895ba7343cb4b66f1fcbba421b04",
+            "kind": "fact",
+            "sources": [
+              "sha256:90e9825147edf1e167b1d6763d6619cc60bf3041100f6f8f514752542582008b"
+            ]
+          },
+          "sha256:6607527d9c826f2f6f1a8c23c7e5ec8f10cdd512f1f040ba2be7107464627a0c": {
+            "kind": "rule",
+            "premises": [
+              "sha256:297e977c159c98f802a6bd87e464d324b2c3bb7eb51f81f656d1b8ad337b059c",
+              "sha256:e4c8d58229c7ce68f4f947264edf4c7d677b9a42e3c7f771668ad46261d19777"
+            ],
+            "rule": "sha256:0d227bcfefe711fcfe8ee9a9986eca2c839429c585b770321632db358ff2bd23"
+          },
+          "sha256:b7e3f27fe4648014d47093ab855f85caf63bdd5273007f85ed11f393baf481f4": {
+            "kind": "rule",
+            "premises": [
+              "sha256:d8af8875fb3174cfaf7dd2ae847d63715cc1df3826270220c2122db2d57efe18"
+            ],
+            "rule": "sha256:978081c6c9873a5bc8db52d766813111b5ba4b67e233080700f121b9b5f3846f"
+          },
+          "sha256:d8af8875fb3174cfaf7dd2ae847d63715cc1df3826270220c2122db2d57efe18": {
+            "fact": "sha256:086da64d2ad019ad36be12be53fe34244644653ddc37e40aecb04f8b21922616",
+            "kind": "fact",
+            "sources": [
+              "sha256:90e9825147edf1e167b1d6763d6619cc60bf3041100f6f8f514752542582008b"
+            ]
+          },
+          "sha256:e4c8d58229c7ce68f4f947264edf4c7d677b9a42e3c7f771668ad46261d19777": {
+            "fact": "sha256:2218418cf73758c4e5ed26f543740f9ebcd039e685914dead2babbecebf70ad1",
+            "kind": "fact",
+            "sources": [
+              "sha256:90e9825147edf1e167b1d6763d6619cc60bf3041100f6f8f514752542582008b"
+            ]
+          }
+        },
+        "rounds": 4,
+        "rows": [
+          {
+            "proof": "sha256:b7e3f27fe4648014d47093ab855f85caf63bdd5273007f85ed11f393baf481f4",
+            "tuple": [
+              "dock",
+              "a"
+            ]
+          },
+          {
+            "proof": "sha256:297e977c159c98f802a6bd87e464d324b2c3bb7eb51f81f656d1b8ad337b059c",
+            "tuple": [
+              "dock",
+              "b"
+            ]
+          },
+          {
+            "proof": "sha256:6607527d9c826f2f6f1a8c23c7e5ec8f10cdd512f1f040ba2be7107464627a0c",
+            "tuple": [
+              "dock",
+              "c"
+            ]
+          }
+        ],
+        "snapshot": "sha256:bc105896e5cf089e14e02f64241d8829e5adc5e56965d69742c25a77e4db5825",
+        "witnessPolicy": "first-canonical-derivation",
+        "work": 69
+      }
+    },
+    {
+      "caseId": "dev-branch",
+      "snapshot": {
+        "contract": "algal.memory.v1",
+        "facts": [
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:3178ead6d04dca299be36a442baec610a0a4a50c6eec85e1648ecd0ebb844049"
+            ],
+            "tuple": [
+              "dock",
+              "a"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:3178ead6d04dca299be36a442baec610a0a4a50c6eec85e1648ecd0ebb844049"
+            ],
+            "tuple": [
+              "dock",
+              "b"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:3178ead6d04dca299be36a442baec610a0a4a50c6eec85e1648ecd0ebb844049"
+            ],
+            "tuple": [
+              "a",
+              "c"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:3178ead6d04dca299be36a442baec610a0a4a50c6eec85e1648ecd0ebb844049"
+            ],
+            "tuple": [
+              "b",
+              "c"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:3178ead6d04dca299be36a442baec610a0a4a50c6eec85e1648ecd0ebb844049"
+            ],
+            "tuple": [
+              "isolated",
+              "d"
+            ]
+          }
+        ]
+      },
+      "program": {
+        "contract": "algal.query.v1",
+        "limits": {
+          "maxBindings": 128,
+          "maxDerived": 128,
+          "maxOutputBytes": 262144,
+          "maxRounds": 32,
+          "maxRows": 16,
+          "maxWork": 50000
+        },
+        "query": {
+          "relation": "reachable",
+          "terms": [
+            "dock",
+            {
+              "var": "target"
+            }
+          ]
+        },
+        "rules": [
+          {
+            "body": [
+              {
+                "relation": "edge",
+                "terms": [
+                  {
+                    "var": "x"
+                  },
+                  {
+                    "var": "y"
+                  }
+                ]
+              }
+            ],
+            "head": {
+              "relation": "reachable",
+              "terms": [
+                {
+                  "var": "x"
+                },
+                {
+                  "var": "y"
+                }
+              ]
+            },
+            "id": "direct"
+          },
+          {
+            "body": [
+              {
+                "relation": "reachable",
+                "terms": [
+                  {
+                    "var": "x"
+                  },
+                  {
+                    "var": "y"
+                  }
+                ]
+              },
+              {
+                "relation": "edge",
+                "terms": [
+                  {
+                    "var": "y"
+                  },
+                  {
+                    "var": "z"
+                  }
+                ]
+              }
+            ],
+            "head": {
+              "relation": "reachable",
+              "terms": [
+                {
+                  "var": "x"
+                },
+                {
+                  "var": "z"
+                }
+              ]
+            },
+            "id": "transitive"
+          }
+        ]
+      },
+      "result": {
+        "baseFacts": 5,
+        "complete": true,
+        "contract": "algal.query-result.v1",
+        "derivedFacts": 6,
+        "program": "sha256:2617140b0ec54e39d8add4068a3ef97bcae0be059a2d00de868dd74712ae04ac",
+        "proofs": {
+          "sha256:031ccc338e76575507e3442d709e4773f5831f449cc5668783b7a9abd4bc60cd": {
+            "kind": "rule",
+            "premises": [
+              "sha256:39b93e4cdd2a89bdd85f708f45693dc2d8d2cf9a44e4f06c203fb23c3d13738e",
+              "sha256:72b488c3a01d31eba6103808419ed006d703fa31ddc14a4bf4836f212fe98cf3"
+            ],
+            "rule": "sha256:0d227bcfefe711fcfe8ee9a9986eca2c839429c585b770321632db358ff2bd23"
+          },
+          "sha256:32ebef84545a662007c2687ea8b1bdaedd227fa11f7c848e032093c8a82d9035": {
+            "fact": "sha256:5a24a998d5d0230fbac52124114faa805a84cc9576a685022d0b7e6b4a547ec3",
+            "kind": "fact",
+            "sources": [
+              "sha256:3178ead6d04dca299be36a442baec610a0a4a50c6eec85e1648ecd0ebb844049"
+            ]
+          },
+          "sha256:39b93e4cdd2a89bdd85f708f45693dc2d8d2cf9a44e4f06c203fb23c3d13738e": {
+            "kind": "rule",
+            "premises": [
+              "sha256:80b421fb2a064bad9624ea7585009a53163a1b9d133b60f34dd33762d19fb13e"
+            ],
+            "rule": "sha256:978081c6c9873a5bc8db52d766813111b5ba4b67e233080700f121b9b5f3846f"
+          },
+          "sha256:72b488c3a01d31eba6103808419ed006d703fa31ddc14a4bf4836f212fe98cf3": {
+            "fact": "sha256:185c5aa6560106185b91be6cb771dff9cd8adab335b4c96ee2bf2c28aff7a0ed",
+            "kind": "fact",
+            "sources": [
+              "sha256:3178ead6d04dca299be36a442baec610a0a4a50c6eec85e1648ecd0ebb844049"
+            ]
+          },
+          "sha256:80b421fb2a064bad9624ea7585009a53163a1b9d133b60f34dd33762d19fb13e": {
+            "fact": "sha256:de2cc6bf8217f877a4a0d36fd0b52600ad9bafaedb7842732cb5b098c1357daa",
+            "kind": "fact",
+            "sources": [
+              "sha256:3178ead6d04dca299be36a442baec610a0a4a50c6eec85e1648ecd0ebb844049"
+            ]
+          },
+          "sha256:ca1da96a3bb9dd851cce4b0b9f49a88d7f6677ef63ba7ddf7a0373ab9218e0b3": {
+            "kind": "rule",
+            "premises": [
+              "sha256:32ebef84545a662007c2687ea8b1bdaedd227fa11f7c848e032093c8a82d9035"
+            ],
+            "rule": "sha256:978081c6c9873a5bc8db52d766813111b5ba4b67e233080700f121b9b5f3846f"
+          }
+        },
+        "rounds": 3,
+        "rows": [
+          {
+            "proof": "sha256:39b93e4cdd2a89bdd85f708f45693dc2d8d2cf9a44e4f06c203fb23c3d13738e",
+            "tuple": [
+              "dock",
+              "a"
+            ]
+          },
+          {
+            "proof": "sha256:ca1da96a3bb9dd851cce4b0b9f49a88d7f6677ef63ba7ddf7a0373ab9218e0b3",
+            "tuple": [
+              "dock",
+              "b"
+            ]
+          },
+          {
+            "proof": "sha256:031ccc338e76575507e3442d709e4773f5831f449cc5668783b7a9abd4bc60cd",
+            "tuple": [
+              "dock",
+              "c"
+            ]
+          }
+        ],
+        "snapshot": "sha256:082fb746bfbd3613a0fccdc623cc2a2c715e8fd37dbb253c9901089aa587b1bb",
+        "witnessPolicy": "first-canonical-derivation",
+        "work": 65
+      }
+    },
+    {
+      "caseId": "dev-cycle",
+      "snapshot": {
+        "contract": "algal.memory.v1",
+        "facts": [
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:fe399bbca5edc27dcf27635003d6544dc8265661fb6b138625122b693b7fe4b4"
+            ],
+            "tuple": [
+              "dock",
+              "a"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:fe399bbca5edc27dcf27635003d6544dc8265661fb6b138625122b693b7fe4b4"
+            ],
+            "tuple": [
+              "a",
+              "b"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:fe399bbca5edc27dcf27635003d6544dc8265661fb6b138625122b693b7fe4b4"
+            ],
+            "tuple": [
+              "b",
+              "dock"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:fe399bbca5edc27dcf27635003d6544dc8265661fb6b138625122b693b7fe4b4"
+            ],
+            "tuple": [
+              "b",
+              "c"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:fe399bbca5edc27dcf27635003d6544dc8265661fb6b138625122b693b7fe4b4"
+            ],
+            "tuple": [
+              "reverse",
+              "dock"
+            ]
+          }
+        ]
+      },
+      "program": {
+        "contract": "algal.query.v1",
+        "limits": {
+          "maxBindings": 128,
+          "maxDerived": 128,
+          "maxOutputBytes": 262144,
+          "maxRounds": 32,
+          "maxRows": 16,
+          "maxWork": 50000
+        },
+        "query": {
+          "relation": "reachable",
+          "terms": [
+            "dock",
+            {
+              "var": "target"
+            }
+          ]
+        },
+        "rules": [
+          {
+            "body": [
+              {
+                "relation": "edge",
+                "terms": [
+                  {
+                    "var": "x"
+                  },
+                  {
+                    "var": "y"
+                  }
+                ]
+              }
+            ],
+            "head": {
+              "relation": "reachable",
+              "terms": [
+                {
+                  "var": "x"
+                },
+                {
+                  "var": "y"
+                }
+              ]
+            },
+            "id": "direct"
+          },
+          {
+            "body": [
+              {
+                "relation": "reachable",
+                "terms": [
+                  {
+                    "var": "x"
+                  },
+                  {
+                    "var": "y"
+                  }
+                ]
+              },
+              {
+                "relation": "edge",
+                "terms": [
+                  {
+                    "var": "y"
+                  },
+                  {
+                    "var": "z"
+                  }
+                ]
+              }
+            ],
+            "head": {
+              "relation": "reachable",
+              "terms": [
+                {
+                  "var": "x"
+                },
+                {
+                  "var": "z"
+                }
+              ]
+            },
+            "id": "transitive"
+          }
+        ]
+      },
+      "result": {
+        "baseFacts": 5,
+        "complete": true,
+        "contract": "algal.query-result.v1",
+        "derivedFacts": 16,
+        "program": "sha256:2617140b0ec54e39d8add4068a3ef97bcae0be059a2d00de868dd74712ae04ac",
+        "proofs": {
+          "sha256:23ac9e909e15b17da4c27e59c8f1f935b16fe4d784085e774de2b34854c3bebd": {
+            "kind": "rule",
+            "premises": [
+              "sha256:b83715cb2b32db61916869a6582e580a7cc4e771a9032a84336a117770a067b4"
+            ],
+            "rule": "sha256:978081c6c9873a5bc8db52d766813111b5ba4b67e233080700f121b9b5f3846f"
+          },
+          "sha256:512401f31c86dedb4b7ad09f3159223540d1b63a822343f2d3c94bacf36a8cf0": {
+            "kind": "rule",
+            "premises": [
+              "sha256:7a893f7dc9a7d45dd1564d1e61df0ee150f71f3d5a087fa89ee4c77a8144060a",
+              "sha256:dd40d2af1a05bd50efebf8441930de96c56b3e16d77ca29a28510a08443071a8"
+            ],
+            "rule": "sha256:0d227bcfefe711fcfe8ee9a9986eca2c839429c585b770321632db358ff2bd23"
+          },
+          "sha256:72e00707ef34653ec967eec67ac732face147d55b2e08de4901ce933351ec309": {
+            "kind": "rule",
+            "premises": [
+              "sha256:7a893f7dc9a7d45dd1564d1e61df0ee150f71f3d5a087fa89ee4c77a8144060a",
+              "sha256:aba5a287172ac655011358ea096eb9e1eb2746faa07db9bb46e6642f8c61d19a"
+            ],
+            "rule": "sha256:0d227bcfefe711fcfe8ee9a9986eca2c839429c585b770321632db358ff2bd23"
+          },
+          "sha256:7a893f7dc9a7d45dd1564d1e61df0ee150f71f3d5a087fa89ee4c77a8144060a": {
+            "kind": "rule",
+            "premises": [
+              "sha256:23ac9e909e15b17da4c27e59c8f1f935b16fe4d784085e774de2b34854c3bebd",
+              "sha256:e2f07cdbf0ae0ee77aa7ab9cc6f0d1a4544d514a83e45734ba5a3ab2d3925967"
+            ],
+            "rule": "sha256:0d227bcfefe711fcfe8ee9a9986eca2c839429c585b770321632db358ff2bd23"
+          },
+          "sha256:aba5a287172ac655011358ea096eb9e1eb2746faa07db9bb46e6642f8c61d19a": {
+            "fact": "sha256:afc980463db9b5594eb9fe860d023fc6ef4278e1feeb60e0afff882dbf62049f",
+            "kind": "fact",
+            "sources": [
+              "sha256:fe399bbca5edc27dcf27635003d6544dc8265661fb6b138625122b693b7fe4b4"
+            ]
+          },
+          "sha256:b83715cb2b32db61916869a6582e580a7cc4e771a9032a84336a117770a067b4": {
+            "fact": "sha256:e00aaceeedc6ae6adfbdd72fe896f96e063704f7da95091b728a110d6befa7fa",
+            "kind": "fact",
+            "sources": [
+              "sha256:fe399bbca5edc27dcf27635003d6544dc8265661fb6b138625122b693b7fe4b4"
+            ]
+          },
+          "sha256:dd40d2af1a05bd50efebf8441930de96c56b3e16d77ca29a28510a08443071a8": {
+            "fact": "sha256:21c5a80df8118b90d907c03dc5e472261cf1233a3abbe97627ccb544da4bab07",
+            "kind": "fact",
+            "sources": [
+              "sha256:fe399bbca5edc27dcf27635003d6544dc8265661fb6b138625122b693b7fe4b4"
+            ]
+          },
+          "sha256:e2f07cdbf0ae0ee77aa7ab9cc6f0d1a4544d514a83e45734ba5a3ab2d3925967": {
+            "fact": "sha256:182a0b691422af30535085f1225c5bb3d7efd01a264fdc173ea75ca648367524",
+            "kind": "fact",
+            "sources": [
+              "sha256:fe399bbca5edc27dcf27635003d6544dc8265661fb6b138625122b693b7fe4b4"
+            ]
+          }
+        },
+        "rounds": 5,
+        "rows": [
+          {
+            "proof": "sha256:23ac9e909e15b17da4c27e59c8f1f935b16fe4d784085e774de2b34854c3bebd",
+            "tuple": [
+              "dock",
+              "a"
+            ]
+          },
+          {
+            "proof": "sha256:7a893f7dc9a7d45dd1564d1e61df0ee150f71f3d5a087fa89ee4c77a8144060a",
+            "tuple": [
+              "dock",
+              "b"
+            ]
+          },
+          {
+            "proof": "sha256:72e00707ef34653ec967eec67ac732face147d55b2e08de4901ce933351ec309",
+            "tuple": [
+              "dock",
+              "c"
+            ]
+          },
+          {
+            "proof": "sha256:512401f31c86dedb4b7ad09f3159223540d1b63a822343f2d3c94bacf36a8cf0",
+            "tuple": [
+              "dock",
+              "dock"
+            ]
+          }
+        ],
+        "snapshot": "sha256:8765f8e3330d67effc1f2eeeee1c24a105c34d55bfa67abed04f0d8f98c40353",
+        "witnessPolicy": "first-canonical-derivation",
+        "work": 226
+      }
+    },
+    {
+      "caseId": "dev-direction",
+      "snapshot": {
+        "contract": "algal.memory.v1",
+        "facts": [
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:b00ff8b4d8c3428e4b0fd0e777bce12d0de468afa8acbb74add93ea3a339e80d"
+            ],
+            "tuple": [
+              "a",
+              "dock"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:b00ff8b4d8c3428e4b0fd0e777bce12d0de468afa8acbb74add93ea3a339e80d"
+            ],
+            "tuple": [
+              "dock",
+              "b"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:b00ff8b4d8c3428e4b0fd0e777bce12d0de468afa8acbb74add93ea3a339e80d"
+            ],
+            "tuple": [
+              "b",
+              "c"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:b00ff8b4d8c3428e4b0fd0e777bce12d0de468afa8acbb74add93ea3a339e80d"
+            ],
+            "tuple": [
+              "c",
+              "d"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:b00ff8b4d8c3428e4b0fd0e777bce12d0de468afa8acbb74add93ea3a339e80d"
+            ],
+            "tuple": [
+              "e",
+              "d"
+            ]
+          }
+        ]
+      },
+      "program": {
+        "contract": "algal.query.v1",
+        "limits": {
+          "maxBindings": 128,
+          "maxDerived": 128,
+          "maxOutputBytes": 262144,
+          "maxRounds": 32,
+          "maxRows": 16,
+          "maxWork": 50000
+        },
+        "query": {
+          "relation": "reachable",
+          "terms": [
+            "dock",
+            {
+              "var": "target"
+            }
+          ]
+        },
+        "rules": [
+          {
+            "body": [
+              {
+                "relation": "edge",
+                "terms": [
+                  {
+                    "var": "x"
+                  },
+                  {
+                    "var": "y"
+                  }
+                ]
+              }
+            ],
+            "head": {
+              "relation": "reachable",
+              "terms": [
+                {
+                  "var": "x"
+                },
+                {
+                  "var": "y"
+                }
+              ]
+            },
+            "id": "direct"
+          },
+          {
+            "body": [
+              {
+                "relation": "reachable",
+                "terms": [
+                  {
+                    "var": "x"
+                  },
+                  {
+                    "var": "y"
+                  }
+                ]
+              },
+              {
+                "relation": "edge",
+                "terms": [
+                  {
+                    "var": "y"
+                  },
+                  {
+                    "var": "z"
+                  }
+                ]
+              }
+            ],
+            "head": {
+              "relation": "reachable",
+              "terms": [
+                {
+                  "var": "x"
+                },
+                {
+                  "var": "z"
+                }
+              ]
+            },
+            "id": "transitive"
+          }
+        ]
+      },
+      "result": {
+        "baseFacts": 5,
+        "complete": true,
+        "contract": "algal.query-result.v1",
+        "derivedFacts": 11,
+        "program": "sha256:2617140b0ec54e39d8add4068a3ef97bcae0be059a2d00de868dd74712ae04ac",
+        "proofs": {
+          "sha256:38618f6413ef484256a896bf9d22eeb8fb231413baae3b2bcc485af3b9495fcf": {
+            "kind": "rule",
+            "premises": [
+              "sha256:cc37191c905946f4a4e1982add0c6a86e796ee8d5634c051ee73eddfa64e1615",
+              "sha256:ef6cc47dd8800d174ed8306be0686b6ef2bc06fb8e4a23c3ec6e89c2ae387671"
+            ],
+            "rule": "sha256:0d227bcfefe711fcfe8ee9a9986eca2c839429c585b770321632db358ff2bd23"
+          },
+          "sha256:63f17cd37384e5474f3bd7471c50317139d1d0347408cbe4d60963bcedd83f30": {
+            "kind": "rule",
+            "premises": [
+              "sha256:99ab6a95fc85db284c610fe719f28533e26b106f6c125f4b77b0b61b8e0e6fc9"
+            ],
+            "rule": "sha256:978081c6c9873a5bc8db52d766813111b5ba4b67e233080700f121b9b5f3846f"
+          },
+          "sha256:99ab6a95fc85db284c610fe719f28533e26b106f6c125f4b77b0b61b8e0e6fc9": {
+            "fact": "sha256:1edfbc3707fd018564e6ed838a0b7c78cdf9db5b10d47ec31a23ab97bf077d12",
+            "kind": "fact",
+            "sources": [
+              "sha256:b00ff8b4d8c3428e4b0fd0e777bce12d0de468afa8acbb74add93ea3a339e80d"
+            ]
+          },
+          "sha256:cc37191c905946f4a4e1982add0c6a86e796ee8d5634c051ee73eddfa64e1615": {
+            "kind": "rule",
+            "premises": [
+              "sha256:63f17cd37384e5474f3bd7471c50317139d1d0347408cbe4d60963bcedd83f30",
+              "sha256:f3947c7d05155b6aa30fac2a0bccdfc2ef1753bc869083c65b8f1c928eae6984"
+            ],
+            "rule": "sha256:0d227bcfefe711fcfe8ee9a9986eca2c839429c585b770321632db358ff2bd23"
+          },
+          "sha256:ef6cc47dd8800d174ed8306be0686b6ef2bc06fb8e4a23c3ec6e89c2ae387671": {
+            "fact": "sha256:e07cb5c1eff073c5153f79c0a74953f54cd395c26b0b4b81bc28f3b8259f791d",
+            "kind": "fact",
+            "sources": [
+              "sha256:b00ff8b4d8c3428e4b0fd0e777bce12d0de468afa8acbb74add93ea3a339e80d"
+            ]
+          },
+          "sha256:f3947c7d05155b6aa30fac2a0bccdfc2ef1753bc869083c65b8f1c928eae6984": {
+            "fact": "sha256:e7494f59c6bca9ae0e51d80928df8a932c87914a9cb037d9e553259687d1ed24",
+            "kind": "fact",
+            "sources": [
+              "sha256:b00ff8b4d8c3428e4b0fd0e777bce12d0de468afa8acbb74add93ea3a339e80d"
+            ]
+          }
+        },
+        "rounds": 5,
+        "rows": [
+          {
+            "proof": "sha256:63f17cd37384e5474f3bd7471c50317139d1d0347408cbe4d60963bcedd83f30",
+            "tuple": [
+              "dock",
+              "b"
+            ]
+          },
+          {
+            "proof": "sha256:cc37191c905946f4a4e1982add0c6a86e796ee8d5634c051ee73eddfa64e1615",
+            "tuple": [
+              "dock",
+              "c"
+            ]
+          },
+          {
+            "proof": "sha256:38618f6413ef484256a896bf9d22eeb8fb231413baae3b2bcc485af3b9495fcf",
+            "tuple": [
+              "dock",
+              "d"
+            ]
+          }
+        ],
+        "snapshot": "sha256:fee4372474458c39862a4939d73cfc66cb5d19909fe7893a055a4b278c0651c6",
+        "witnessPolicy": "first-canonical-derivation",
+        "work": 155
+      }
+    },
+    {
+      "caseId": "holdout-merge",
+      "snapshot": {
+        "contract": "algal.memory.v1",
+        "facts": [
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:e8ddcf2578b36e211bfaa12c05a5826c4a2030d280d8d3063b433421bc53995a"
+            ],
+            "tuple": [
+              "hub",
+              "p"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:e8ddcf2578b36e211bfaa12c05a5826c4a2030d280d8d3063b433421bc53995a"
+            ],
+            "tuple": [
+              "hub",
+              "q"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:e8ddcf2578b36e211bfaa12c05a5826c4a2030d280d8d3063b433421bc53995a"
+            ],
+            "tuple": [
+              "p",
+              "r"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:e8ddcf2578b36e211bfaa12c05a5826c4a2030d280d8d3063b433421bc53995a"
+            ],
+            "tuple": [
+              "q",
+              "r"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:e8ddcf2578b36e211bfaa12c05a5826c4a2030d280d8d3063b433421bc53995a"
+            ],
+            "tuple": [
+              "r",
+              "s"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:e8ddcf2578b36e211bfaa12c05a5826c4a2030d280d8d3063b433421bc53995a"
+            ],
+            "tuple": [
+              "s",
+              "t"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:e8ddcf2578b36e211bfaa12c05a5826c4a2030d280d8d3063b433421bc53995a"
+            ],
+            "tuple": [
+              "remote",
+              "q"
+            ]
+          }
+        ]
+      },
+      "program": {
+        "contract": "algal.query.v1",
+        "limits": {
+          "maxBindings": 128,
+          "maxDerived": 128,
+          "maxOutputBytes": 262144,
+          "maxRounds": 32,
+          "maxRows": 16,
+          "maxWork": 50000
+        },
+        "query": {
+          "relation": "reachable",
+          "terms": [
+            "hub",
+            {
+              "var": "target"
+            }
+          ]
+        },
+        "rules": [
+          {
+            "body": [
+              {
+                "relation": "edge",
+                "terms": [
+                  {
+                    "var": "x"
+                  },
+                  {
+                    "var": "y"
+                  }
+                ]
+              }
+            ],
+            "head": {
+              "relation": "reachable",
+              "terms": [
+                {
+                  "var": "x"
+                },
+                {
+                  "var": "y"
+                }
+              ]
+            },
+            "id": "direct"
+          },
+          {
+            "body": [
+              {
+                "relation": "reachable",
+                "terms": [
+                  {
+                    "var": "x"
+                  },
+                  {
+                    "var": "y"
+                  }
+                ]
+              },
+              {
+                "relation": "edge",
+                "terms": [
+                  {
+                    "var": "y"
+                  },
+                  {
+                    "var": "z"
+                  }
+                ]
+              }
+            ],
+            "head": {
+              "relation": "reachable",
+              "terms": [
+                {
+                  "var": "x"
+                },
+                {
+                  "var": "z"
+                }
+              ]
+            },
+            "id": "transitive"
+          }
+        ]
+      },
+      "result": {
+        "baseFacts": 7,
+        "complete": true,
+        "contract": "algal.query-result.v1",
+        "derivedFacts": 18,
+        "program": "sha256:632bc51c50502598fab5cbf9a4b873ae934360410c3c4429f873100243d9c170",
+        "proofs": {
+          "sha256:167c14937001f4e89a7aba00095d5b605f86aab0c4e84d13b490509c4e08998f": {
+            "kind": "rule",
+            "premises": [
+              "sha256:3b19c40fd0e63feae745904ea413f5f3a4fef81ce5ca782deb510304d86a7822"
+            ],
+            "rule": "sha256:978081c6c9873a5bc8db52d766813111b5ba4b67e233080700f121b9b5f3846f"
+          },
+          "sha256:2e6f0f5ea3444fc987b742ce1afccfc1c8b2cb96824c062e8d855c2a13707041": {
+            "fact": "sha256:dbd21d34883c8c86187924b3f72568bd7cf3fb6167253ca97cc64700d81842d5",
+            "kind": "fact",
+            "sources": [
+              "sha256:e8ddcf2578b36e211bfaa12c05a5826c4a2030d280d8d3063b433421bc53995a"
+            ]
+          },
+          "sha256:349652bb80946a33a2ddc2c93515a252d85118eaeab95b9afe9d40f29fbb91d8": {
+            "fact": "sha256:a418d8a3c0138f945c9821f257b764bfb5af001a0f6f8df27c8775a8504e7ca5",
+            "kind": "fact",
+            "sources": [
+              "sha256:e8ddcf2578b36e211bfaa12c05a5826c4a2030d280d8d3063b433421bc53995a"
+            ]
+          },
+          "sha256:3b19c40fd0e63feae745904ea413f5f3a4fef81ce5ca782deb510304d86a7822": {
+            "fact": "sha256:ea40eb9ba1ed7e37cd737f407ff35b54a2ab6a47ed3db8b8513bfaeb78305394",
+            "kind": "fact",
+            "sources": [
+              "sha256:e8ddcf2578b36e211bfaa12c05a5826c4a2030d280d8d3063b433421bc53995a"
+            ]
+          },
+          "sha256:41ff55a6aea95479490d0b1c3373d83cef9ebe67b96b91896e34708c9461fb4d": {
+            "kind": "rule",
+            "premises": [
+              "sha256:be97f4bee99d78c453b94f38942f61370bfc6edf61fbfd81c814cb3519f7203b",
+              "sha256:349652bb80946a33a2ddc2c93515a252d85118eaeab95b9afe9d40f29fbb91d8"
+            ],
+            "rule": "sha256:0d227bcfefe711fcfe8ee9a9986eca2c839429c585b770321632db358ff2bd23"
+          },
+          "sha256:4593a6662e8699774ba02ccabff9d2835690e618c370243885cedfc7353d135e": {
+            "kind": "rule",
+            "premises": [
+              "sha256:af974533b9313816e8c4774e720bb0941c4260d071055ce5c94f77cbc22d45ef"
+            ],
+            "rule": "sha256:978081c6c9873a5bc8db52d766813111b5ba4b67e233080700f121b9b5f3846f"
+          },
+          "sha256:9366d3c0db5dcad49930c1abc793e518ae96601d880b8281c1bf2ece6c6c583d": {
+            "fact": "sha256:e60ff2e37e58b5c21c0045b7c28ac337f615d1948b80fca7e8bbacc6f9f9edcc",
+            "kind": "fact",
+            "sources": [
+              "sha256:e8ddcf2578b36e211bfaa12c05a5826c4a2030d280d8d3063b433421bc53995a"
+            ]
+          },
+          "sha256:af974533b9313816e8c4774e720bb0941c4260d071055ce5c94f77cbc22d45ef": {
+            "fact": "sha256:73f7b135fa2a952691be2b6a3487722634fecc96cec9a6083134780c258ac99c",
+            "kind": "fact",
+            "sources": [
+              "sha256:e8ddcf2578b36e211bfaa12c05a5826c4a2030d280d8d3063b433421bc53995a"
+            ]
+          },
+          "sha256:be97f4bee99d78c453b94f38942f61370bfc6edf61fbfd81c814cb3519f7203b": {
+            "kind": "rule",
+            "premises": [
+              "sha256:4593a6662e8699774ba02ccabff9d2835690e618c370243885cedfc7353d135e",
+              "sha256:2e6f0f5ea3444fc987b742ce1afccfc1c8b2cb96824c062e8d855c2a13707041"
+            ],
+            "rule": "sha256:0d227bcfefe711fcfe8ee9a9986eca2c839429c585b770321632db358ff2bd23"
+          },
+          "sha256:f5001f9aace398d9bd2442092a2010043e85bd01f8f550d8aed5299559d774e1": {
+            "kind": "rule",
+            "premises": [
+              "sha256:41ff55a6aea95479490d0b1c3373d83cef9ebe67b96b91896e34708c9461fb4d",
+              "sha256:9366d3c0db5dcad49930c1abc793e518ae96601d880b8281c1bf2ece6c6c583d"
+            ],
+            "rule": "sha256:0d227bcfefe711fcfe8ee9a9986eca2c839429c585b770321632db358ff2bd23"
+          }
+        },
+        "rounds": 5,
+        "rows": [
+          {
+            "proof": "sha256:4593a6662e8699774ba02ccabff9d2835690e618c370243885cedfc7353d135e",
+            "tuple": [
+              "hub",
+              "p"
+            ]
+          },
+          {
+            "proof": "sha256:167c14937001f4e89a7aba00095d5b605f86aab0c4e84d13b490509c4e08998f",
+            "tuple": [
+              "hub",
+              "q"
+            ]
+          },
+          {
+            "proof": "sha256:be97f4bee99d78c453b94f38942f61370bfc6edf61fbfd81c814cb3519f7203b",
+            "tuple": [
+              "hub",
+              "r"
+            ]
+          },
+          {
+            "proof": "sha256:41ff55a6aea95479490d0b1c3373d83cef9ebe67b96b91896e34708c9461fb4d",
+            "tuple": [
+              "hub",
+              "s"
+            ]
+          },
+          {
+            "proof": "sha256:f5001f9aace398d9bd2442092a2010043e85bd01f8f550d8aed5299559d774e1",
+            "tuple": [
+              "hub",
+              "t"
+            ]
+          }
+        ],
+        "snapshot": "sha256:bfbe5574ff0b52f8be3045ec406273a4e1d2ab442dbf93c4b4c604281a63b166",
+        "witnessPolicy": "first-canonical-derivation",
+        "work": 249
+      }
+    },
+    {
+      "caseId": "holdout-loop",
+      "snapshot": {
+        "contract": "algal.memory.v1",
+        "facts": [
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:4c3c080d3f85a0942a326ea4f5e950ca499327a1fa44873c9ffc07bda80d2566"
+            ],
+            "tuple": [
+              "hub",
+              "p"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:4c3c080d3f85a0942a326ea4f5e950ca499327a1fa44873c9ffc07bda80d2566"
+            ],
+            "tuple": [
+              "p",
+              "q"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:4c3c080d3f85a0942a326ea4f5e950ca499327a1fa44873c9ffc07bda80d2566"
+            ],
+            "tuple": [
+              "q",
+              "p"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:4c3c080d3f85a0942a326ea4f5e950ca499327a1fa44873c9ffc07bda80d2566"
+            ],
+            "tuple": [
+              "q",
+              "r"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:4c3c080d3f85a0942a326ea4f5e950ca499327a1fa44873c9ffc07bda80d2566"
+            ],
+            "tuple": [
+              "r",
+              "s"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:4c3c080d3f85a0942a326ea4f5e950ca499327a1fa44873c9ffc07bda80d2566"
+            ],
+            "tuple": [
+              "s",
+              "hub"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:4c3c080d3f85a0942a326ea4f5e950ca499327a1fa44873c9ffc07bda80d2566"
+            ],
+            "tuple": [
+              "remote",
+              "s"
+            ]
+          }
+        ]
+      },
+      "program": {
+        "contract": "algal.query.v1",
+        "limits": {
+          "maxBindings": 128,
+          "maxDerived": 128,
+          "maxOutputBytes": 262144,
+          "maxRounds": 32,
+          "maxRows": 16,
+          "maxWork": 50000
+        },
+        "query": {
+          "relation": "reachable",
+          "terms": [
+            "hub",
+            {
+              "var": "target"
+            }
+          ]
+        },
+        "rules": [
+          {
+            "body": [
+              {
+                "relation": "edge",
+                "terms": [
+                  {
+                    "var": "x"
+                  },
+                  {
+                    "var": "y"
+                  }
+                ]
+              }
+            ],
+            "head": {
+              "relation": "reachable",
+              "terms": [
+                {
+                  "var": "x"
+                },
+                {
+                  "var": "y"
+                }
+              ]
+            },
+            "id": "direct"
+          },
+          {
+            "body": [
+              {
+                "relation": "reachable",
+                "terms": [
+                  {
+                    "var": "x"
+                  },
+                  {
+                    "var": "y"
+                  }
+                ]
+              },
+              {
+                "relation": "edge",
+                "terms": [
+                  {
+                    "var": "y"
+                  },
+                  {
+                    "var": "z"
+                  }
+                ]
+              }
+            ],
+            "head": {
+              "relation": "reachable",
+              "terms": [
+                {
+                  "var": "x"
+                },
+                {
+                  "var": "z"
+                }
+              ]
+            },
+            "id": "transitive"
+          }
+        ]
+      },
+      "result": {
+        "baseFacts": 7,
+        "complete": true,
+        "contract": "algal.query-result.v1",
+        "derivedFacts": 30,
+        "program": "sha256:632bc51c50502598fab5cbf9a4b873ae934360410c3c4429f873100243d9c170",
+        "proofs": {
+          "sha256:0898c6a714a3ed5cdc9df4e37c254da4f2f4cff31dc74b18bbdb5ae4ac4c57af": {
+            "kind": "rule",
+            "premises": [
+              "sha256:eb736bc26d770956ef4b803b66c9954ad7932edac1f2debb0ba2ba02affed256",
+              "sha256:0db40e214b06ef72e490d992b50a22de4e657a9b90fa7bb6234548d081589448"
+            ],
+            "rule": "sha256:0d227bcfefe711fcfe8ee9a9986eca2c839429c585b770321632db358ff2bd23"
+          },
+          "sha256:0db40e214b06ef72e490d992b50a22de4e657a9b90fa7bb6234548d081589448": {
+            "fact": "sha256:5fc509f5fda8ef76c6d31e3a3df9377390dc9c038666ee9fc93758c4db86de9d",
+            "kind": "fact",
+            "sources": [
+              "sha256:4c3c080d3f85a0942a326ea4f5e950ca499327a1fa44873c9ffc07bda80d2566"
+            ]
+          },
+          "sha256:1cd7c225fb6d56ad9b611230f7a93aaa78b40f2c7e6691d639c31573313a7c71": {
+            "fact": "sha256:1979014693e280390e065688ea464e394f9e898b8920489ee204ec7abe5a0466",
+            "kind": "fact",
+            "sources": [
+              "sha256:4c3c080d3f85a0942a326ea4f5e950ca499327a1fa44873c9ffc07bda80d2566"
+            ]
+          },
+          "sha256:3a6fab59f0328799211bd0c8741a80cbb8d46e7b880c31bcb50e5a0e9071a117": {
+            "fact": "sha256:2059627e8b5f0433a67928b2f7093d988ad36fe4f30d2ca29a5819788247caee",
+            "kind": "fact",
+            "sources": [
+              "sha256:4c3c080d3f85a0942a326ea4f5e950ca499327a1fa44873c9ffc07bda80d2566"
+            ]
+          },
+          "sha256:7725493788bc335ebd6fef4426cec2af0636c6c0516e6e7e926f7c0a986988c9": {
+            "kind": "rule",
+            "premises": [
+              "sha256:95f8bc76fe4dab6081c9722e5b94e6c4111995af5e54f863771fc04019a7d240",
+              "sha256:1cd7c225fb6d56ad9b611230f7a93aaa78b40f2c7e6691d639c31573313a7c71"
+            ],
+            "rule": "sha256:0d227bcfefe711fcfe8ee9a9986eca2c839429c585b770321632db358ff2bd23"
+          },
+          "sha256:95f8bc76fe4dab6081c9722e5b94e6c4111995af5e54f863771fc04019a7d240": {
+            "kind": "rule",
+            "premises": [
+              "sha256:b1808126dbe12acbb5485a4498fd32e7c1e179b8c4701e51eb3d35e3a42d1704"
+            ],
+            "rule": "sha256:978081c6c9873a5bc8db52d766813111b5ba4b67e233080700f121b9b5f3846f"
+          },
+          "sha256:9c9a77aea6abe6309c131ff12dc6feed1c2ce7bcb6962d89bbe7dd77ad751a1a": {
+            "kind": "rule",
+            "premises": [
+              "sha256:0898c6a714a3ed5cdc9df4e37c254da4f2f4cff31dc74b18bbdb5ae4ac4c57af",
+              "sha256:3a6fab59f0328799211bd0c8741a80cbb8d46e7b880c31bcb50e5a0e9071a117"
+            ],
+            "rule": "sha256:0d227bcfefe711fcfe8ee9a9986eca2c839429c585b770321632db358ff2bd23"
+          },
+          "sha256:b1808126dbe12acbb5485a4498fd32e7c1e179b8c4701e51eb3d35e3a42d1704": {
+            "fact": "sha256:5e18d17c7a0c6dcc1998dd43a5bf1510516bb5881b4fd0c1d270368fc49ef795",
+            "kind": "fact",
+            "sources": [
+              "sha256:4c3c080d3f85a0942a326ea4f5e950ca499327a1fa44873c9ffc07bda80d2566"
+            ]
+          },
+          "sha256:cf9b6c87561361cc9b9c79c5cdf37231aee94a367d16b7c904b883c149c53871": {
+            "fact": "sha256:36279e24ee43fcb9e3a41775e9cf9861a4d0bff08c1a4a1ae7c45b81c4152990",
+            "kind": "fact",
+            "sources": [
+              "sha256:4c3c080d3f85a0942a326ea4f5e950ca499327a1fa44873c9ffc07bda80d2566"
+            ]
+          },
+          "sha256:eb736bc26d770956ef4b803b66c9954ad7932edac1f2debb0ba2ba02affed256": {
+            "kind": "rule",
+            "premises": [
+              "sha256:7725493788bc335ebd6fef4426cec2af0636c6c0516e6e7e926f7c0a986988c9",
+              "sha256:cf9b6c87561361cc9b9c79c5cdf37231aee94a367d16b7c904b883c149c53871"
+            ],
+            "rule": "sha256:0d227bcfefe711fcfe8ee9a9986eca2c839429c585b770321632db358ff2bd23"
+          }
+        },
+        "rounds": 6,
+        "rows": [
+          {
+            "proof": "sha256:9c9a77aea6abe6309c131ff12dc6feed1c2ce7bcb6962d89bbe7dd77ad751a1a",
+            "tuple": [
+              "hub",
+              "hub"
+            ]
+          },
+          {
+            "proof": "sha256:95f8bc76fe4dab6081c9722e5b94e6c4111995af5e54f863771fc04019a7d240",
+            "tuple": [
+              "hub",
+              "p"
+            ]
+          },
+          {
+            "proof": "sha256:7725493788bc335ebd6fef4426cec2af0636c6c0516e6e7e926f7c0a986988c9",
+            "tuple": [
+              "hub",
+              "q"
+            ]
+          },
+          {
+            "proof": "sha256:eb736bc26d770956ef4b803b66c9954ad7932edac1f2debb0ba2ba02affed256",
+            "tuple": [
+              "hub",
+              "r"
+            ]
+          },
+          {
+            "proof": "sha256:0898c6a714a3ed5cdc9df4e37c254da4f2f4cff31dc74b18bbdb5ae4ac4c57af",
+            "tuple": [
+              "hub",
+              "s"
+            ]
+          }
+        ],
+        "snapshot": "sha256:6bb800b0c264e03d8954a328f66d30e1b0e566cfc9ba3a88f1e79826ade7fc30",
+        "witnessPolicy": "first-canonical-derivation",
+        "work": 486
+      }
+    },
+    {
+      "caseId": "holdout-disconnected",
+      "snapshot": {
+        "contract": "algal.memory.v1",
+        "facts": [
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:cfb20d522be297b422793d2c8bc8742bd28cbfde66250cec9ad185f82995461b"
+            ],
+            "tuple": [
+              "hub",
+              "p"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:cfb20d522be297b422793d2c8bc8742bd28cbfde66250cec9ad185f82995461b"
+            ],
+            "tuple": [
+              "p",
+              "q"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:cfb20d522be297b422793d2c8bc8742bd28cbfde66250cec9ad185f82995461b"
+            ],
+            "tuple": [
+              "q",
+              "r"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:cfb20d522be297b422793d2c8bc8742bd28cbfde66250cec9ad185f82995461b"
+            ],
+            "tuple": [
+              "r",
+              "s"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:cfb20d522be297b422793d2c8bc8742bd28cbfde66250cec9ad185f82995461b"
+            ],
+            "tuple": [
+              "remote",
+              "t"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:cfb20d522be297b422793d2c8bc8742bd28cbfde66250cec9ad185f82995461b"
+            ],
+            "tuple": [
+              "t",
+              "u"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:cfb20d522be297b422793d2c8bc8742bd28cbfde66250cec9ad185f82995461b"
+            ],
+            "tuple": [
+              "u",
+              "remote"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:cfb20d522be297b422793d2c8bc8742bd28cbfde66250cec9ad185f82995461b"
+            ],
+            "tuple": [
+              "v",
+              "hub"
+            ]
+          }
+        ]
+      },
+      "program": {
+        "contract": "algal.query.v1",
+        "limits": {
+          "maxBindings": 128,
+          "maxDerived": 128,
+          "maxOutputBytes": 262144,
+          "maxRounds": 32,
+          "maxRows": 16,
+          "maxWork": 50000
+        },
+        "query": {
+          "relation": "reachable",
+          "terms": [
+            "hub",
+            {
+              "var": "target"
+            }
+          ]
+        },
+        "rules": [
+          {
+            "body": [
+              {
+                "relation": "edge",
+                "terms": [
+                  {
+                    "var": "x"
+                  },
+                  {
+                    "var": "y"
+                  }
+                ]
+              }
+            ],
+            "head": {
+              "relation": "reachable",
+              "terms": [
+                {
+                  "var": "x"
+                },
+                {
+                  "var": "y"
+                }
+              ]
+            },
+            "id": "direct"
+          },
+          {
+            "body": [
+              {
+                "relation": "reachable",
+                "terms": [
+                  {
+                    "var": "x"
+                  },
+                  {
+                    "var": "y"
+                  }
+                ]
+              },
+              {
+                "relation": "edge",
+                "terms": [
+                  {
+                    "var": "y"
+                  },
+                  {
+                    "var": "z"
+                  }
+                ]
+              }
+            ],
+            "head": {
+              "relation": "reachable",
+              "terms": [
+                {
+                  "var": "x"
+                },
+                {
+                  "var": "z"
+                }
+              ]
+            },
+            "id": "transitive"
+          }
+        ]
+      },
+      "result": {
+        "baseFacts": 8,
+        "complete": true,
+        "contract": "algal.query-result.v1",
+        "derivedFacts": 24,
+        "program": "sha256:632bc51c50502598fab5cbf9a4b873ae934360410c3c4429f873100243d9c170",
+        "proofs": {
+          "sha256:41bd42a8bd5f04fd49695151da43586c7a74f5fd1f2df0440d636197f08cf7a1": {
+            "fact": "sha256:b4ce3715422d4d2ee27c49850a19f8d4a5c9d9602b2f76aa1f49fadde141dc2d",
+            "kind": "fact",
+            "sources": [
+              "sha256:cfb20d522be297b422793d2c8bc8742bd28cbfde66250cec9ad185f82995461b"
+            ]
+          },
+          "sha256:457f03f73b65ce6c8b858757767f7d7f2daa4778dbf8bdbb5e9fe2154a6cbc15": {
+            "kind": "rule",
+            "premises": [
+              "sha256:bbc1b4a883c1b555673f20aff920c828d4fc68cdc40b9cd917614007079dfda7",
+              "sha256:41bd42a8bd5f04fd49695151da43586c7a74f5fd1f2df0440d636197f08cf7a1"
+            ],
+            "rule": "sha256:0d227bcfefe711fcfe8ee9a9986eca2c839429c585b770321632db358ff2bd23"
+          },
+          "sha256:812e9b7012d7c4d19591f26253be1fae3a46a7036a489666e3642289d4564c1f": {
+            "fact": "sha256:05ff4d14cf9e72fd0331669f55511c12f3dd97e0e91738220a6e4952db410730",
+            "kind": "fact",
+            "sources": [
+              "sha256:cfb20d522be297b422793d2c8bc8742bd28cbfde66250cec9ad185f82995461b"
+            ]
+          },
+          "sha256:83c2f0c768489dc1943b0618388f9aad997a531348a4fb3a1b8bd2298b074994": {
+            "fact": "sha256:4af4940aa0732b33e755b8090990b8c107084cfd01434294eb24537b1d2ba90b",
+            "kind": "fact",
+            "sources": [
+              "sha256:cfb20d522be297b422793d2c8bc8742bd28cbfde66250cec9ad185f82995461b"
+            ]
+          },
+          "sha256:909b806f7d03e036c6a62c7007bc4096fc1b4cb751f358534a0debdaee675167": {
+            "fact": "sha256:80aee1957cebd61055f825a14e7b3a781f5c55f0a77175e097713f43487450ca",
+            "kind": "fact",
+            "sources": [
+              "sha256:cfb20d522be297b422793d2c8bc8742bd28cbfde66250cec9ad185f82995461b"
+            ]
+          },
+          "sha256:a0ea3f09307c6ce910a666f9359bf036b2136665d8db35ba2ba42832e158f2fd": {
+            "kind": "rule",
+            "premises": [
+              "sha256:909b806f7d03e036c6a62c7007bc4096fc1b4cb751f358534a0debdaee675167"
+            ],
+            "rule": "sha256:978081c6c9873a5bc8db52d766813111b5ba4b67e233080700f121b9b5f3846f"
+          },
+          "sha256:bbc1b4a883c1b555673f20aff920c828d4fc68cdc40b9cd917614007079dfda7": {
+            "kind": "rule",
+            "premises": [
+              "sha256:a0ea3f09307c6ce910a666f9359bf036b2136665d8db35ba2ba42832e158f2fd",
+              "sha256:83c2f0c768489dc1943b0618388f9aad997a531348a4fb3a1b8bd2298b074994"
+            ],
+            "rule": "sha256:0d227bcfefe711fcfe8ee9a9986eca2c839429c585b770321632db358ff2bd23"
+          },
+          "sha256:e850143463828215fcf82875e8cb7f9f75f7951392543fbbd22e41a9d9192e1f": {
+            "kind": "rule",
+            "premises": [
+              "sha256:457f03f73b65ce6c8b858757767f7d7f2daa4778dbf8bdbb5e9fe2154a6cbc15",
+              "sha256:812e9b7012d7c4d19591f26253be1fae3a46a7036a489666e3642289d4564c1f"
+            ],
+            "rule": "sha256:0d227bcfefe711fcfe8ee9a9986eca2c839429c585b770321632db358ff2bd23"
+          }
+        },
+        "rounds": 6,
+        "rows": [
+          {
+            "proof": "sha256:a0ea3f09307c6ce910a666f9359bf036b2136665d8db35ba2ba42832e158f2fd",
+            "tuple": [
+              "hub",
+              "p"
+            ]
+          },
+          {
+            "proof": "sha256:bbc1b4a883c1b555673f20aff920c828d4fc68cdc40b9cd917614007079dfda7",
+            "tuple": [
+              "hub",
+              "q"
+            ]
+          },
+          {
+            "proof": "sha256:457f03f73b65ce6c8b858757767f7d7f2daa4778dbf8bdbb5e9fe2154a6cbc15",
+            "tuple": [
+              "hub",
+              "r"
+            ]
+          },
+          {
+            "proof": "sha256:e850143463828215fcf82875e8cb7f9f75f7951392543fbbd22e41a9d9192e1f",
+            "tuple": [
+              "hub",
+              "s"
+            ]
+          }
+        ],
+        "snapshot": "sha256:af91c8050d8bb7706230f6000bd3a9380dbac4bae7f1832d6873c3ee8287ae0d",
+        "witnessPolicy": "first-canonical-derivation",
+        "work": 403
+      }
+    },
+    {
+      "caseId": "holdout-empty",
+      "snapshot": {
+        "contract": "algal.memory.v1",
+        "facts": [
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:36046b1c3894354ac6e16ec56e3b75ff44a833a75620ed3b997962f2d7293e82"
+            ],
+            "tuple": [
+              "p",
+              "hub"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:36046b1c3894354ac6e16ec56e3b75ff44a833a75620ed3b997962f2d7293e82"
+            ],
+            "tuple": [
+              "p",
+              "q"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:36046b1c3894354ac6e16ec56e3b75ff44a833a75620ed3b997962f2d7293e82"
+            ],
+            "tuple": [
+              "q",
+              "r"
+            ]
+          },
+          {
+            "relation": "edge",
+            "sources": [
+              "sha256:36046b1c3894354ac6e16ec56e3b75ff44a833a75620ed3b997962f2d7293e82"
+            ],
+            "tuple": [
+              "r",
+              "p"
+            ]
+          }
+        ]
+      },
+      "program": {
+        "contract": "algal.query.v1",
+        "limits": {
+          "maxBindings": 128,
+          "maxDerived": 128,
+          "maxOutputBytes": 262144,
+          "maxRounds": 32,
+          "maxRows": 16,
+          "maxWork": 50000
+        },
+        "query": {
+          "relation": "reachable",
+          "terms": [
+            "hub",
+            {
+              "var": "target"
+            }
+          ]
+        },
+        "rules": [
+          {
+            "body": [
+              {
+                "relation": "edge",
+                "terms": [
+                  {
+                    "var": "x"
+                  },
+                  {
+                    "var": "y"
+                  }
+                ]
+              }
+            ],
+            "head": {
+              "relation": "reachable",
+              "terms": [
+                {
+                  "var": "x"
+                },
+                {
+                  "var": "y"
+                }
+              ]
+            },
+            "id": "direct"
+          },
+          {
+            "body": [
+              {
+                "relation": "reachable",
+                "terms": [
+                  {
+                    "var": "x"
+                  },
+                  {
+                    "var": "y"
+                  }
+                ]
+              },
+              {
+                "relation": "edge",
+                "terms": [
+                  {
+                    "var": "y"
+                  },
+                  {
+                    "var": "z"
+                  }
+                ]
+              }
+            ],
+            "head": {
+              "relation": "reachable",
+              "terms": [
+                {
+                  "var": "x"
+                },
+                {
+                  "var": "z"
+                }
+              ]
+            },
+            "id": "transitive"
+          }
+        ]
+      },
+      "result": {
+        "baseFacts": 4,
+        "complete": true,
+        "contract": "algal.query-result.v1",
+        "derivedFacts": 12,
+        "program": "sha256:632bc51c50502598fab5cbf9a4b873ae934360410c3c4429f873100243d9c170",
+        "proofs": {},
+        "rounds": 4,
+        "rows": [],
+        "snapshot": "sha256:533f3f90f8726a274ab27107fe9dfca7af8d246d9be4da4f3fd115a9c0bbd398",
+        "witnessPolicy": "first-canonical-derivation",
+        "work": 128
+      }
+    }
+  ]
+}
