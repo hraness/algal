@@ -81,7 +81,9 @@ export async function hostWrite(path: string, value: JsonValue, maxBytes: number
   } finally { await unlink(temporary).catch(error => { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }); }
 }
 
-export async function hostNames(path: string, max: number, pattern: RegExp): Promise<string[]> {
+/** List published record names. Entries must be regular files; a name outside
+ * `pattern` fails when `strict`, and is otherwise skipped as stray residue. */
+export async function hostNames(path: string, max: number, pattern: RegExp, strict = true): Promise<string[]> {
   await hostDirectory(path);
   const names: string[] = [];
   let scanned = 0;
@@ -89,7 +91,7 @@ export async function hostNames(path: string, max: number, pattern: RegExp): Pro
     if (++scanned > max * 2 + 16) throw new AlgalError("BUDGET_EXHAUSTED", "host state directory scan bound exceeded");
     if (!entry.isFile()) throw new AlgalError("IO_FAILED", "unexpected host state entry type");
     if (/^\.tmp-[a-f0-9]{48}$/.test(entry.name)) continue; // Unpublished crash residue is retained, never interpreted.
-    if (!pattern.test(entry.name)) throw new AlgalError("IO_FAILED", "unexpected host state entry");
+    if (!pattern.test(entry.name)) { if (strict) throw new AlgalError("IO_FAILED", "unexpected host state entry"); continue; }
     names.push(entry.name);
     if (names.length > max) throw new AlgalError("BUDGET_EXHAUSTED", "host state entry bound exceeded");
   }
@@ -109,10 +111,17 @@ function ownerTableExists(db: Database): boolean {
   return schema.length === 1;
 }
 
-/** SQLite's process-owned transaction provides a shared Bun/Rust mutex that
- * the OS releases on process death. The database inode is retained forever;
- * no PID, age, or deletable lock pathname is treated as proof of ownership. */
-export async function hostLease<T>(directory: string, processName: string, action: () => Promise<T>): Promise<T> {
+/** Shared coordination leases (`.creation`, `.application-quota`) are held
+ * briefly by every writer; a caller waits this long, polling at this interval,
+ * before reporting live contention. Identical in `crates/algal/src/lease.rs`. */
+export const SHARED_LEASE_RETRY = Object.freeze({ waitMs: 2000, pollMs: 25 });
+export type HostLeaseRetry = { waitMs: number; pollMs: number };
+const CONTENDED = "host lease is held by another live operation";
+type Acquired = { db: Database; lock: string; marker: JsonValue; directory: string };
+
+/** Everything up to the published ownership marker; a thrown error here has
+ * acquired nothing that `release` must undo beyond the open connection. */
+async function acquire(directory: string, processName: string): Promise<Acquired> {
   await hostDirectory(directory);
   directory = await realpath(directory);
   const path = join(directory, ".owner.sqlite");
@@ -122,9 +131,8 @@ export async function hostLease<T>(directory: string, processName: string, actio
       if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 65_536) throw new AlgalError("IO_FAILED", "invalid owner database file");
     } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
   }
-  let db: Database | undefined;
-  let marker: JsonValue | undefined;
   const lock = join(directory, ".lock");
+  let db: Database | undefined;
   try {
     db = new Database(path, sqlite.SQLITE_OPEN_READWRITE | sqlite.SQLITE_OPEN_CREATE | sqlite.SQLITE_OPEN_NOFOLLOW | sqlite.SQLITE_OPEN_PRIVATECACHE);
     db.exec("PRAGMA busy_timeout=0; PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;");
@@ -159,19 +167,35 @@ export async function hostLease<T>(directory: string, processName: string, actio
       await unlink(lock);
       await syncDirectory(directory);
     }
-    marker = {contract: "algal.process-owner.v2", process: processName, nonce: randomBytes(32).toString("hex")};
+    const marker: JsonValue = {contract: "algal.process-owner.v2", process: processName, nonce: randomBytes(32).toString("hex")};
     await hostWrite(lock, marker, 4096);
-    return await action();
+    return {db, lock, marker, directory};
   } catch (error) {
-    if (error instanceof Error && /SQLITE_BUSY|database is locked/.test(error.message)) throw new AlgalError("IO_FAILED", "host lease is held by another live operation");
+    if (db) { try { if (db.inTransaction) db.exec("ROLLBACK;"); } finally { db.close(); } }
+    if (error instanceof Error && /SQLITE_BUSY|database is locked/.test(error.message)) throw new AlgalError("IO_FAILED", CONTENDED);
     throw error;
-  } finally {
-    try {
-      if (marker !== undefined) {
-        await releaseMarker(lock, marker, directory);
-      }
-    } finally {
-      if (db) { try { if (db.inTransaction) db.exec("ROLLBACK;"); } finally { db.close(); } }
+  }
+}
+
+/** SQLite's process-owned transaction provides a shared Bun/Rust mutex that
+ * the OS releases on process death. The database inode is retained forever;
+ * no PID, age, or deletable lock pathname is treated as proof of ownership.
+ * With `retry`, only live contention during acquisition is retried until the
+ * wait elapses; every other failure and the acquired custody are unchanged. */
+export async function hostLease<T>(directory: string, processName: string, action: () => Promise<T>, retry?: HostLeaseRetry): Promise<T> {
+  const deadline = Date.now() + (retry?.waitMs ?? 0);
+  let owned: Acquired;
+  for (;;) {
+    try { owned = await acquire(directory, processName); break; }
+    catch (error) {
+      if (!retry || !(error instanceof AlgalError) || error.code !== "IO_FAILED" || error.message !== CONTENDED || Date.now() >= deadline) throw error;
+      await new Promise(resolve => setTimeout(resolve, retry.pollMs));
     }
+  }
+  try {
+    return await action();
+  } finally {
+    try { await releaseMarker(owned.lock, owned.marker, owned.directory); }
+    finally { try { if (owned.db.inTransaction) owned.db.exec("ROLLBACK;"); } finally { owned.db.close(); } }
   }
 }

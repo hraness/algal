@@ -169,6 +169,15 @@ export function parseMemoryNativeProgram(input: unknown): JsonValue {
   if (Buffer.byteLength(canonicalize(result)) > 65_536) throw new Error("Memory program exceeds byte bound");
   return result;
 }
+/** Tuple arity of an admitted program's query literal; result rows carry exactly these columns. */
+export function memoryQueryLiteralArity(program: JsonValue): number {
+  return (program as { query: { terms: JsonValue[] } }).query.terms.length;
+}
+/** A query's declared polarity column must address a column the program's
+ * query literal actually produces; checked wherever query and program meet. */
+export function checkMemoryQueryPolarity(query: MemoryQuery, program: JsonValue): void {
+  if (query.polarityColumn >= memoryQueryLiteralArity(program)) throw new Error("Query polarity column exceeds its query literal arity");
+}
 export function parseMemoryFrontier(input: unknown): MemoryFrontier {
   const v = applicationObject(input, ["contract", "application", "previous", "sequence", "mutation", "status"]);
   applicationTag(v.contract, "algal.application-memory-frontier.v1");
@@ -376,7 +385,12 @@ export class ApplicationMemoryService {
   }
   /** Admission helper for root-owned lifecycle commits; no hidden native query or effect. */
   async validateForRevision(memoryRef: Digest, input: ApplicationRevision): Promise<MemorySnapshot> {
-    const revision = parseApplicationRevision(input), { memory } = await this.validateSnapshot(await this.value(memoryRef));
+    return (await this.validateRevisionSnapshot(memoryRef, input)).memory;
+  }
+  /** The same admission, keeping the validated scope and admitted observations
+   * so a query need not re-derive them from the identical records. */
+  private async validateRevisionSnapshot(memoryRef: Digest, input: ApplicationRevision): Promise<{ memory: MemorySnapshot; scope: MemoryScope; observations: Map<Digest, Admitted> }> {
+    const revision = parseApplicationRevision(input), validated = await this.validateSnapshot(await this.value(memoryRef)), { memory } = validated;
     if (memory.application !== revision.application || memory.schema !== revision.schema) throw new Error("Memory incompatible with application revision schema");
     const queries = await getApplicationRecord(this.store, revision.queries, parseMemoryQueries);
     for (const entry of revision.entrypoints) {
@@ -385,29 +399,29 @@ export class ApplicationMemoryService {
     for (const ref of queries.queries) {
       const query = await getApplicationRecord(this.store, ref, parseMemoryQuery);
       if (query.schema !== revision.schema) throw new Error("Query schema incompatible with revision");
-      parseMemoryNativeProgram(await this.value(query.program));
+      checkMemoryQueryPolarity(query, parseMemoryNativeProgram(await this.value(query.program)));
       for (const procedure of query.procedures) {
         const p = await getApplicationRecord(this.store, procedure, parseMemoryProcedure);
         if (p.schema !== revision.schema) throw new Error("Procedure schema incompatible with revision");
       }
     }
     if (revision.entrypoints.some(e => !queries.queries.includes(e.applicability))) throw new Error("Entrypoint applicability query missing from revision");
-    return memory;
+    return validated;
   }
   async query(capturedStateRef: Digest, queryRef: Digest, signal?: AbortSignal): Promise<{ ref: Digest; derivation: MemoryDerivation }> {
     const stateRef = applicationRef(capturedStateRef), selectedQuery = applicationRef(queryRef);
     const state = await getApplicationRecord(this.store, stateRef, parseApplicationState);
     const revision = await getApplicationRecord(this.store, state.revision, parseApplicationRevision);
-    await this.validateForRevision(state.memory, revision);
+    const { memory, scope, observations } = await this.validateRevisionSnapshot(state.memory, revision);
     if (state.application !== revision.application) throw new Error("State/revision application mismatch");
     const bundle = await getApplicationRecord(this.store, revision.queries, parseMemoryQueries);
     if (!bundle.queries.includes(selectedQuery)) throw new Error("Query not selected by captured revision");
     const query = await getApplicationRecord(this.store, selectedQuery, parseMemoryQuery);
-    const { memory, scope, observations } = await this.validateSnapshot(await this.value(state.memory));
     const frontierRef = applicationRef(await this.admission.currentFrontier(memory.application));
     const frontier = await getApplicationRecord(this.store, frontierRef, parseMemoryFrontier);
     if (frontier.application !== memory.application) throw new Error("Host supplied cross-application frontier");
     const program = parseMemoryNativeProgram(await this.value(query.program));
+    checkMemoryQueryPolarity(query, program);
     const sources: Digest[] = [], facts: JsonValue[] = []; let stale = false;
     const usableScope = scope.frontier === frontierRef && frontier.status === "settled";
     for (const [ref, row] of observations) {
@@ -440,6 +454,7 @@ export class ApplicationMemoryService {
       if (signal?.aborted) { derivation.status = "cancelled"; derivation.reason = "cancelled"; return save(); }
       const supports: Atom[][] = [], opposes: Atom[][] = [];
       for (const row of rows) {
+        if (query.polarityColumn >= row.length) throw new Error("Query result row lacks the polarity column");
         const polarity = row[query.polarityColumn];
         if (polarity !== "supported" && polarity !== "opposed") throw new Error("Query result lacks declared polarity");
         (polarity === "supported" ? supports : opposes).push(row.filter((_v, i) => i !== query.polarityColumn));

@@ -75,7 +75,12 @@ pub(crate) fn reserve(
         reservation += 2 * canonical(value)?.len() as u64;
     }
     let quota = root.join(".application-quota");
-    let custody = lease::OwnerLease::acquire(&quota, "application-quota")?;
+    let custody = lease::OwnerLease::acquire_shared(
+        &quota,
+        "application-quota",
+        lease::SHARED_LEASE_WAIT,
+        lease::SHARED_LEASE_POLL,
+    )?;
     let ledger_path = quota.join("ledger.json");
     let mut charged = BTreeMap::<String, u64>::new();
     if let Some(raw) = lease::read(&ledger_path, 8192)? {
@@ -105,11 +110,17 @@ pub(crate) fn reserve(
                     return Err(fail("application count exceeded"));
                 }
                 let entry = entry?;
+                let ty = entry.file_type()?;
+                // Stray regular files are shared residue: charged to the
+                // common allocation, never admitted as an application namespace.
+                if ty.is_file() && !ty.is_symlink() {
+                    common += measure(&entry.path(), &mut entries)?;
+                    continue;
+                }
                 let name = entry
                     .file_name()
                     .into_string()
                     .map_err(|_| fail("invalid namespace entry"))?;
-                let ty = entry.file_type()?;
                 if !ty.is_dir() || ty.is_symlink() {
                     return Err(fail("invalid namespace entry"));
                 }

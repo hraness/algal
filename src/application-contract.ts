@@ -1,6 +1,6 @@
 /** Closed, bounded application records shared with the native implementation. */
 import { asDigest, digestCanonical, type Digest } from "./digest";
-import type { Store } from "./store";
+import { FileStore, type Store } from "./store";
 import { asJsonValue, canonicalize, type JsonValue } from "./values";
 
 export type ApplicationRevision = {
@@ -26,7 +26,7 @@ export type ApplicationTransition = {
   application: string;
   operation: Digest;
   request: Digest;
-  kind: "create" | "memory" | "investigate" | "activate" | "migrate" | "restore";
+  kind: "create" | "memory" | "investigate" | "activate" | "migrate" | "restore" | "propose";
   previous: Digest | null;
   revision: Digest;
   memory: Digest;
@@ -109,7 +109,11 @@ export async function putApplicationRecord(store: Store, record: unknown): Promi
 }
 export async function getApplicationRecord<T>(store: Store, ref: Digest, parse: (v: unknown) => T): Promise<T> {
   const value = await store.getValue(applicationRef(ref));
-  if (value === undefined || digestCanonical(applicationJson(value)) !== ref) throw new Error("Missing or changed application record");
+  if (value === undefined) throw new Error("Missing or changed application record");
+  // FileStore.getValue already fails closed (DIGEST_MISMATCH) unless the file
+  // hashes to `ref`; any other store is re-verified here before it is trusted.
+  const record = applicationJson(value);
+  if (!(store instanceof FileStore) && digestCanonical(record) !== ref) throw new Error("Missing or changed application record");
   return parse(value);
 }
 
@@ -139,7 +143,7 @@ export function parseApplicationState(input: unknown): ApplicationState {
 export function parseApplicationTransition(input: unknown): ApplicationTransition {
   const v = applicationObject(input, ["contract", "application", "operation", "request", "kind", "previous", "revision", "memory", "intents", "evidence", "causedBy"]);
   applicationTag(v.contract, "algal.application-transition.v1");
-  if (v.kind !== "create" && v.kind !== "memory" && v.kind !== "investigate" && v.kind !== "activate" && v.kind !== "migrate" && v.kind !== "restore") throw new Error("Invalid application transition kind");
+  if (v.kind !== "create" && v.kind !== "memory" && v.kind !== "investigate" && v.kind !== "activate" && v.kind !== "migrate" && v.kind !== "restore" && v.kind !== "propose") throw new Error("Invalid application transition kind");
   return {contract: "algal.application-transition.v1", application: applicationId(v.application), operation: applicationRef(v.operation), request: applicationRef(v.request), kind: v.kind, previous: nullableApplicationRef(v.previous), revision: applicationRef(v.revision), memory: applicationRef(v.memory), intents: applicationRefs(v.intents, 32), evidence: applicationRefs(v.evidence, 16), causedBy: nullableApplicationRef(v.causedBy)};
 }
 export function parseApplicationHead(input: unknown): ApplicationHead {

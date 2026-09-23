@@ -86,13 +86,12 @@ async fn episode(context: &DispatchContext<'_>, dir: &Path, reconciliation: bool
     }
     let binding_ref = put_record(&mut store, &binding.value)?;
     let mut processes = ProcessService::open(dir)?;
-    let head_path = dir
-        .join("processes")
-        .join(&binding.process)
-        .join("head.json");
-    let mut state = match std::fs::symlink_metadata(head_path) {
-        Ok(_) => processes.inspect(&binding.process)?,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+    // Only a store miss creates the process; any other inspection failure is
+    // reported, never papered over by a fresh creation (as in
+    // `application-episode.ts`).
+    let mut state = match processes.inspect(&binding.process) {
+        Ok(state) => state,
+        Err(error) if error.code == "STORE_MISS" => {
             match processes.create(
                 &binding.process,
                 manifest,
@@ -102,10 +101,13 @@ async fn episode(context: &DispatchContext<'_>, dir: &Path, reconciliation: bool
                 &transports,
             ) {
                 Ok(state) => state,
+                // An acknowledged head may have won a concurrent create or
+                // survived a lost acknowledgement; only its exact immutable
+                // binding may be reused.
                 Err(error) => processes.inspect(&binding.process).map_err(|_| error)?,
             }
         }
-        Err(error) => return Err(error.into()),
+        Err(error) => return Err(error),
     };
     if state.process.name != binding.process
         || state.process.manifest_digest != binding.manifest

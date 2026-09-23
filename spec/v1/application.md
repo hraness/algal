@@ -35,7 +35,9 @@ identity, and `hash(C)` its request digest. Under retained application custody:
 
 `create` establishes sequence and epoch zero. A memory or investigation
 transition retains the program revision. An investigation transition retains
-memory and contains work. `activate` changes the revision under compatible
+memory and contains work. A `propose` transition retains revision, memory,
+and epoch, carries no intents, and records generated candidates as evidence.
+`activate` changes the revision under compatible
 schema and interface rules. `migrate` explicitly names a schema change and its
 producing migration evidence. Revisions advance epoch; ordinary memory updates
 advance sequence while retaining epoch. Previous states are retained.
@@ -59,7 +61,10 @@ advance sequence while retaining epoch. Previous states are retained.
 | `algal.application-memory-archive.v1` | Exact pre-cutover snapshot, application/schema, archive sequence, and previous archive |
 | `algal.application-memory-derivation.v1` | Conditional query result bound to captured state, selected facts, program, engine, frontier, and admission |
 | `algal.application-evaluation.v1` | Frozen evaluation request, foundry evidence, compatibility, and reproducible acceptance verdict |
+| `algal.application-proposal-request.v1` | Frozen generation input: parent state, generator and target entrypoints, arguments, output, and incumbent policy binding |
+| `algal.application-proposal.v1` | Generation evidence: request, receipt, status, bounded reasons, and sorted candidate revision references |
 | `algal.application-comparison.v1` | Environment-attributed join of several reproduced evaluations for one entrypoint, shared measurement set, and accepted-only selection |
+| `algal.application-selection-policy.v1` | Environment-keyed mapping from environment label to a retained comparison and its selected manifest; pure data, no authority |
 | `algal.application-migration.v1` | Source snapshot, both revisions, pure migration program, producing receipt, and emitted claims |
 | `algal.application-view.v1` | Bounded historical projection and state-fenced proposed actions |
 | `algal.application-view-evidence.v1` | Optional captured query, probe, source, revision, and separately observed work summaries |
@@ -378,6 +383,8 @@ of observations.
 | Retained memory archive segments | 128 |
 | Evaluation cases / work / model calls | 32 / 1,000,000 / 16 |
 | Comparison results | 8 |
+| Proposal candidates / reasons | 8 / 16 |
+| Selection policy rows | 16 |
 | View history / action records | 128 / 32 |
 | Evidence queries / probes / sources / revisions / work | 32 rows per array, with separate truncation flags |
 | Named application namespace / aggregate allocation | 256 MiB per application / 1 GiB aggregate |
@@ -508,3 +515,76 @@ input.json` with `{comparison, expectedState}`. This is the beginning of
 environment-attributed procedure retention: several strategies measured under
 the same frozen set can be kept, compared, and cited, while authority stays
 with the ordinary admission checks.
+
+## Generating proposals
+
+`proposeApplicationRevision(lifecycle, input, runtime)` runs a designated
+*generator* entrypoint of the incumbent revision case-pure and commits a
+`propose` transition. The input names `{application, operation, expectedHead,
+generator, target, arguments, output, policy}` plus optional `environment`,
+`evidence`, and `causedBy`. The generator and target must both be entrypoints
+of the incumbent revision; the generator manifest must contain only `input`,
+`const`, builtin `fn` and `expr` cells and must declare an interface whose
+`output` names the cell port carrying the emitted manifest list. `arguments`
+is the digest of a CAS object keyed by the generator's interface input names,
+and `policy` must equal the incumbent revision's `evaluationPolicy`.
+
+The frozen `algal.application-proposal-request.v1` record is stored before
+the run, so the generation input survives independently of its outcome. The
+retained `algal.application-proposal.v1` records the request, the incumbent
+revision, both entrypoints, the generator manifest, and the run receipt under
+`status` `"generated"` or `"failed"`. A generated proposal carries sorted,
+unique candidates — at most 8 — each `{manifest, revision}` where `revision`
+is an ordinary child of the incumbent differing only at the target
+entrypoint's manifest. Because a candidate only swaps one manifest reference,
+it can never widen schema, capabilities, budgets, or authority. A failed
+proposal carries bounded reasons (`generator-<outcome>`, `budget-exhausted`,
+`no-candidates`, `candidate-bound`, `invalid-candidate`, `impure-candidate`,
+`duplicate-candidate`) and an empty candidate list; a bad candidate fails the
+whole proposal — the receipt and reasons are retained evidence, never
+silently dropped.
+
+`verifyApplicationProposal(store, ref, expectedParentState, runtime)`
+re-derives the verdict from the retained receipt: the receipt must replay
+bit-for-bit against the generator manifest and bound arguments, and the
+recomputed record must equal the stored record byte-for-byte. Commit and
+retained-history inspection repeat the structural binding — exactly one
+proposal record naming this application, parent state, and incumbent
+revision — without replay, including under custom trusted hosts. A `propose`
+transition cannot change revision or memory and cannot carry intents, so a
+candidate stays an unselected CAS value until an ordinary `activate` carries
+its reproduced accepted evaluation. The native CLI exposes `application
+propose input.json` and `application verify-proposal input.json` with
+`{proposal, expectedState}`.
+
+## Environment-keyed selection
+
+An `algal.application-selection-policy.v1` record maps an environment label
+to the manifest a retained comparison selected for one entrypoint at one
+parent state. The closed record names `{contract, application, parentState,
+entrypoint, selections}` where `selections` holds 1..16 rows of
+`{environment, comparison, manifest}` sorted unique by environment. The
+policy is pure data: storing it grants no authority, and it can never attach
+to a `migrate` transition.
+
+Authority comes from the host, not the record. `createApplicationPolicyHost`
+accepts `selectionEnvironment` — like `restorationPolicy`, it is host
+authority outside the admitted `algal.application-host.v1` policy record and
+is not part of `algal.host-admission.v2`. Native hosts use
+`set_selection_environment`; the CLI uses `application --policy host.json
+--selection-environment ENV commit input.json`. A host that never names an
+environment denies any commit citing a selection policy.
+
+When an `activate` or `restore` commit cites a selection policy, the policy
+host replays it in full: `verifyApplicationSelectionPolicy` re-verifies every
+cited comparison against the policy's parent state and requires each
+comparison to name the same application and entrypoint, the row's
+environment, and to have selected exactly the row's manifest.
+`selectApplicationStrategy(store, policyRef, environment,
+expectedParentState, runtime)` then resolves the single row for the host's
+environment; a policy with no row for that environment denies the commit.
+Finally, the committed revision's manifest at the policy's entrypoint must
+equal the selected manifest — a policy can only narrow which accepted
+alternative is installed, never substitute for the reproduced accepted
+evaluation coverage checks. The native CLI exposes `application select
+input.json` with `{policy, environment, expectedState}`.

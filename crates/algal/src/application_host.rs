@@ -229,6 +229,7 @@ pub struct PolicyHost {
     channels_dir: PathBuf,
     memory_engine: Option<mem::NativeEngine>,
     restoration_policy: Option<Value>,
+    selection_environment: Option<String>,
 }
 
 impl PolicyHost {
@@ -252,7 +253,17 @@ impl PolicyHost {
             channels_dir: channels_dir.to_path_buf(),
             memory_engine: None,
             restoration_policy: None,
+            selection_environment: None,
         })
+    }
+
+    /// The environment this host deploys into. It is host authority, outside
+    /// the admitted policy record like `restoration_policy`: a stored
+    /// selection policy grants nothing until a host names the environment it
+    /// serves.
+    pub fn set_selection_environment(&mut self, input: &str) -> Result<()> {
+        self.selection_environment = Some(app_id(&json!(input))?.to_owned());
+        Ok(())
     }
 
     pub fn set_restoration_policy(&mut self, input: &Value) -> Result<()> {
@@ -354,6 +365,36 @@ impl Admission for PolicyHost {
                 ));
             }
         }
+        // A cited selection policy is authority-free data, but a migration
+        // can never carry one and a host that never declared an environment
+        // cannot honor one. Replay stays in `verify_commit`.
+        if matches!(
+            context.command.kind,
+            TransitionKind::Activate | TransitionKind::Migrate | TransitionKind::Restore
+        ) {
+            let mut policies = 0usize;
+            for evidence in &context.command.evidence {
+                let record = mem::get_record(context.store, evidence)?;
+                if record["contract"] == "algal.application-selection-policy.v1" {
+                    policies += 1;
+                }
+            }
+            if policies > 0 {
+                if context.command.kind == TransitionKind::Migrate {
+                    return Err(Error::invalid(
+                        "Selection policy cannot attach to a migration",
+                    ));
+                }
+                if self.selection_environment.is_none() {
+                    return Err(Error::invalid("Host policy denies selection policy"));
+                }
+                if policies != 1 {
+                    return Err(Error::invalid(
+                        "Selection requires exactly one selection policy",
+                    ));
+                }
+            }
+        }
         let mut overlay = context.store.overlay();
         for entry in &context.revision.entrypoints {
             graph::compile(
@@ -412,6 +453,30 @@ impl Admission for PolicyHost {
                     }
                 }
             }
+            if context.command.kind == TransitionKind::Propose {
+                let current = context
+                    .current
+                    .ok_or_else(|| Error::invalid("Proposal requires an incumbent"))?;
+                let mut replayed = 0;
+                for evidence in &context.command.evidence {
+                    let record = mem::get_record(context.store, evidence)?;
+                    if record["contract"] == "algal.application-proposal.v1" {
+                        crate::application_proposal::verify_proposal(
+                            context.store,
+                            evidence,
+                            &current.digest,
+                            &Host::default(),
+                        )
+                        .await?;
+                        replayed += 1;
+                    }
+                }
+                if replayed != 1 {
+                    return Err(Error::invalid(
+                        "Proposal requires exactly one proposal record",
+                    ));
+                }
+            }
             if matches!(
                 context.command.kind,
                 TransitionKind::Activate | TransitionKind::Migrate | TransitionKind::Restore
@@ -435,6 +500,52 @@ impl Admission for PolicyHost {
                             &current.digest,
                             Some(context.revision),
                         )?;
+                    }
+                }
+                // Environment-keyed selection: a cited selection policy is
+                // replayed in full and can only narrow the installed strategy
+                // to the one its row for this host's environment selected. It
+                // never substitutes for the accepted-evaluation coverage
+                // checks below.
+                let mut policies: Vec<String> = Vec::new();
+                for evidence in &context.command.evidence {
+                    let record = mem::get_record(context.store, evidence)?;
+                    if record["contract"] == "algal.application-selection-policy.v1" {
+                        policies.push(evidence.clone());
+                    }
+                }
+                if let [policy_ref] = policies.as_slice() {
+                    let environment = self
+                        .selection_environment
+                        .as_deref()
+                        .ok_or_else(|| Error::invalid("Host policy denies selection policy"))?;
+                    let selected = crate::application_selection::select_application_strategy(
+                        context.store,
+                        policy_ref,
+                        environment,
+                        &current.digest,
+                        &Host::default(),
+                    )
+                    .await?;
+                    if selected["policy"]["application"].as_str()
+                        != Some(context.command.application.as_str())
+                    {
+                        return Err(Error::invalid(
+                            "Selection policy belongs to another application",
+                        ));
+                    }
+                    let entrypoint = selected["policy"]["entrypoint"]
+                        .as_str()
+                        .unwrap_or_default();
+                    let entry = context
+                        .revision
+                        .entrypoints
+                        .iter()
+                        .find(|entry| entry.name == entrypoint);
+                    if entry.map(|entry| entry.manifest.as_str()) != selected["manifest"].as_str() {
+                        return Err(Error::invalid(
+                            "Activation does not install the selected strategy",
+                        ));
                     }
                 }
             }

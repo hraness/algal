@@ -67,6 +67,10 @@ import {
 } from "./values";
 
 export const RUN_CONTRACT = "algal.run.v1" as const;
+/** Wire constant stamped into every receipt (`runtime.version`): the shared
+ * `algal.run.v1` semantics version, byte-identical across the reference and
+ * native runtimes (`RUNTIME_STAMP_VERSION` in crates/algal/src/runtime.rs).
+ * It is not the package version — bump it only with a receipt-format change. */
 export const RUNTIME_VERSION = "0.1.0" as const;
 
 const WORK = {

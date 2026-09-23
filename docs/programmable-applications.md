@@ -6,7 +6,7 @@
 > adversarial repairs, and remaining research limitations; the
 > [adaptive inventory application](adaptive-inventory.md) exercises a second domain.
 > Live coding/memory qualification resumes only after deterministic gates, under
-> the user's $20 incremental paid-inference cap. No model-quality benefit is
+> a small, explicitly budgeted paid-inference allowance. No model-quality benefit is
 > inferred from deterministic fixtures or the earlier cancelled pilot.
 
 # ALGAL: programmable organisms
@@ -95,13 +95,11 @@ Do not introduce unrestricted executable host text as a record type.
 | Views and reflection | Pure declarative views of procedures, applicability, proofs, history, proposed actions, running work | A visible explanation and the action's applicability resolve the same captured application state |
 | Harness and experiments | Coding application integration, semantic tests, live calibration, longitudinal comparisons, cost accounting | Reproducible scenarios and honest benefit/regression measurements; no hidden labels enter memory |
 
-Run independent owners concurrently against a root-owned contract. Use all
-available worker slots and launch the next bounded work as slots free. The
-current task supports three simultaneous workers plus the integrator, so the
-seven tracks run in overlapping waves rather than spawning beyond that limit.
-Each writer owns explicit files. Shared exports, CLI wiring, schemas, and final
-validation have one integration owner. Parallel implementation is separate from
-any later runtime parallelism inside ALGAL applications.
+The tracks were built by independent owners against a root-owned contract,
+in overlapping waves bounded by the available workers. Each writer owned
+explicit files; shared exports, CLI wiring, schemas, and final validation had
+one integration owner. That build-time parallelism is separate from any later
+runtime parallelism inside ALGAL applications.
 
 ## First integrated milestone
 
@@ -164,9 +162,16 @@ existing backend and the standing $20 incremental paid-inference cap.
    request, keeps losing or incomplete alternatives as evidence, and allows
    selection only from accepted verdicts. Both runtimes produce and verify the
    record identically, and the default host fences cited comparisons to the
-   committing application and parent state. Still open: expressing the
-   investigation/retrieval procedures themselves as application programs that
-   generate candidate revisions, and environment-keyed selection policies.
+   committing application and parent state. The generation half now exists too:
+   a `propose` transition runs a case-pure generator entrypoint of the incumbent
+   revision and retains `algal.application-proposal.v1` — bounded, replayable
+   evidence whose candidates are ordinary child revisions differing only at the
+   target manifest, so generation can never widen authority. Environment-keyed
+   selection exists as well: `algal.application-selection-policy.v1` maps an
+   environment label to a retained comparison's selected manifest, and the host
+   option `selectionEnvironment` — outside `algal.host-admission.v2` — decides
+   whether a cited policy may narrow activation to that environment's accepted
+   alternative. No model-quality benefit is claimed for generated candidates.
 3. **Evaluated adaptation:** real proposal generation, bounded experiments,
    explicit non-regression criteria, reproducible lineage, and revision promotion.
    Add a structured-facts-without-inference ablation before attributing benefits

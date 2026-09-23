@@ -16,14 +16,8 @@ function parseSnapshot(input: unknown): JsonValue {
   // Rust performs the complete fact/schema validation. No unbounded bytes reach it.
   return value;
 }
-async function binaryDigest(path: string): Promise<string> {
-  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-  try {
-    const stat = await file.stat();
-    if (!stat.isFile() || stat.size > 128 * 1024 * 1024) throw new Error("Native memory executable must be a bounded regular file");
-    return createHash("sha256").update(await file.readFile()).digest("hex");
-  } finally { await file.close(); }
-}
+/** Identity of the inode whose bytes were last hashed; any change forces a rehash. */
+type ExecutableIdentity = { dev: number; ino: number; size: number; mtimeMs: number; ctimeMs: number };
 
 export class NativeMemoryQueryEngine implements MemoryQueryEngine {
   readonly identity: Digest;
@@ -32,6 +26,7 @@ export class NativeMemoryQueryEngine implements MemoryQueryEngine {
   private readonly timeoutMs: number;
   private readonly temporaryRoot: string;
   private readonly pending = new Set<Promise<unknown>>();
+  private verifiedExecutable: ExecutableIdentity | undefined;
   constructor(input: NativeMemoryOptions) {
     const keys = Object.keys(input);
     if (keys.some(k => !["executable", "expectedSha256", "timeoutMs", "temporaryRoot"].includes(k))) throw new Error("Unknown native memory option");
@@ -47,9 +42,25 @@ export class NativeMemoryQueryEngine implements MemoryQueryEngine {
     this.pending.add(operation); void operation.then(() => this.pending.delete(operation), () => this.pending.delete(operation)); return operation;
   }
   async settle(): Promise<void> { await Promise.allSettled([...this.pending]); }
+  /** Hash the executable once per identity: the descriptor is stat'ed and read
+   * together, so a swapped binary (new inode, size, or timestamps) is rehashed
+   * and a pinned digest mismatch still fails closed. */
+  private async verifyExecutable(): Promise<void> {
+    const file = await open(this.executable, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    try {
+      const stat = await file.stat();
+      if (!stat.isFile() || stat.size > 128 * 1024 * 1024) throw new Error("Native memory executable must be a bounded regular file");
+      const identity: ExecutableIdentity = { dev: stat.dev, ino: stat.ino, size: stat.size, mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs };
+      const seen = this.verifiedExecutable;
+      if (seen && seen.dev === identity.dev && seen.ino === identity.ino && seen.size === identity.size && seen.mtimeMs === identity.mtimeMs && seen.ctimeMs === identity.ctimeMs) return;
+      this.verifiedExecutable = undefined;
+      if (createHash("sha256").update(await file.readFile()).digest("hex") !== this.expectedSha256) throw new Error("Pinned native memory executable changed");
+      this.verifiedExecutable = identity;
+    } finally { await file.close(); }
+  }
   private async invoke(command: "query" | "verify", snapshot: JsonValue, program: JsonValue, result: JsonValue | undefined, signal?: AbortSignal): Promise<{ output?: JsonValue; failure?: MemoryEngineResult }> {
     if (signal?.aborted) return { failure: { kind: "incomplete", status: "cancelled", reason: "cancelled-before-dispatch", work: null } };
-    if (await binaryDigest(this.executable) !== this.expectedSha256) throw new Error("Pinned native memory executable changed");
+    await this.verifyExecutable();
     if (signal?.aborted) return { failure: { kind: "incomplete", status: "cancelled", reason: "cancelled-before-dispatch", work: null } };
     const dir = await mkdtemp(join(this.temporaryRoot, "algal-native-memory-"));
     try {

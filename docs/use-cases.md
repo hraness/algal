@@ -8,7 +8,7 @@ Start with the job below that matches your workflow.
 | Job | Ready-to-run path | What you need |
 | --- | --- | --- |
 | Return to a proposal and approve its exact local action | `algal demo start` | [Verified native executable](native-release.md); deterministic default |
-| Generate a private change brief, then review it later | `scripts/apple_brief_demo.py` | Native vm.7+, compatible Mac, separate Apple bridge, Python 3 |
+| Generate a private change brief, then review it later | `scripts/apple_brief_demo.py` | Current native prerelease, compatible Mac, separate Apple bridge, Python 3 |
 | Check a coding patch independently of its author | `scripts/repair-demo.ts` | Checkout, Bun 1.3+, optional native verifier; deterministic adapter by default |
 | Verify history away from the executing host | `algal process verify-evidence` | Native executable and exported capsule |
 | Reuse routing and generation over a bounded inbox | `examples/source/projects/inbox/` | Checkout and Bun 1.3+; scripted answers included |
@@ -180,7 +180,7 @@ run uses scripted answers and sends no email.
 The [routing example](../examples/source/route.algal) adds an explicit choice:
 support and sales select their own draft branch; the other branch returns a fixed
 human-review message. Unselected effect branches are skipped. The website's
-[recorded views](https://algal.computer/#branch-demo) expose actual fixture receipts
+[recorded views](https://algal.computer/tour/#branches) expose actual fixture receipts
 and the model work used by each path.
 
 **Adapting it:** replace the helper's declared task and input shape, select an

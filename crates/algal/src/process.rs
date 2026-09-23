@@ -178,9 +178,9 @@ fn bounded_nodes(value: &Value) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn record(value: Value) -> Result<ProcessRecord> {
-    bounded_nodes(&value)?;
-    if canonical(&value)?.len() > MAX_RECORD_BYTES {
+pub(crate) fn record(value: &Value) -> Result<ProcessRecord> {
+    bounded_nodes(value)?;
+    if canonical(value)?.len() > MAX_RECORD_BYTES {
         return Err(Error::limit("process record bytes"));
     }
     for field in ["previous", "receipt", "cause"] {
@@ -190,7 +190,7 @@ pub(crate) fn record(value: Value) -> Result<ProcessRecord> {
             ));
         }
     }
-    let record: ProcessRecord = serde_json::from_value(value)?;
+    let record: ProcessRecord = ProcessRecord::deserialize(value)?;
     id(&json!(record.name))?;
     check_digest(&record.manifest_digest)?;
     for (name, ports) in object(&record.args)? {
@@ -376,7 +376,7 @@ impl ProcessService {
 
     fn persist(&mut self, process: &ProcessRecord) -> Result<ProcessState> {
         let value = serde_json::to_value(process)?;
-        record(value.clone())?;
+        record(&value)?;
         let key = self.store.put("values", &value)?;
         File::open(self.root.join("values"))?.sync_all()?;
         Ok(ProcessState {
@@ -423,8 +423,9 @@ impl ProcessService {
         no_link(&directory)?;
         let path = directory.join(format!("{}.json", &key[7..]));
         no_link(&path)?;
-        let file = crate::store::open_regular_file(&path, max_bytes)?
-            .ok_or_else(|| Error::from(std::io::Error::from(std::io::ErrorKind::NotFound)))?;
+        let file = crate::store::open_regular_file(&path, max_bytes)?.ok_or_else(|| {
+            Error::new("IO_FAILED", format!("{}: file not found", path.display()))
+        })?;
         let value = read_json(file, max_bytes)?;
         bounded_nodes(&value)?;
         if crate::canonical::digest(&value)? != key {
@@ -437,15 +438,17 @@ impl ProcessService {
         let value = self.cas("values", key, MAX_RECORD_BYTES)?;
         Ok(ProcessState {
             digest: key.to_owned(),
-            process: record(value)?,
+            process: record(&value)?,
         })
     }
 
     fn chain(&self, name: &str) -> Result<Vec<ProcessState>> {
         let path = self.directory(name)?.join("head.json");
         no_link(&path)?;
+        // An absent head is a store miss (as in `process.ts`); every other
+        // failure to read an existing head stays what it is.
         let file = crate::store::open_regular_file(&path, 4096)?
-            .ok_or_else(|| Error::from(std::io::Error::from(std::io::ErrorKind::NotFound)))?;
+            .ok_or_else(|| Error::new("STORE_MISS", "process head missing"))?;
         let head: Head = serde_json::from_value(read_json(file, 4096)?)?;
         if head.contract != "algal.process-head.v1" || head.name != name {
             return Err(Error::invalid("process head contract or name"));
@@ -1044,7 +1047,7 @@ pub fn read_process_history(snapshot: &ProcessState, store: &Store) -> Result<Ve
         if chain.len() >= MAX_CHAIN || !seen.insert(key.clone()) {
             return Err(Error::limit("process chain bound or cycle"));
         }
-        let process = record(stored(store, "values", &key, MAX_RECORD_BYTES)?)?;
+        let process = record(&stored(store, "values", &key, MAX_RECORD_BYTES)?)?;
         if process.name != snapshot.process.name {
             return Err(Error::invalid("process record name mismatch"));
         }

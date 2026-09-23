@@ -1,6 +1,6 @@
 use crate::{
     Error, Result,
-    canonical::{MAX_DOCUMENT_BYTES, canonical, check_digest, digest, read_json},
+    canonical::{MAX_DOCUMENT_BYTES, canonical, check_digest, digest, digest_bytes, read_json},
     contract::{Manifest, id, keys, object},
 };
 use serde_json::{Value, json};
@@ -24,11 +24,19 @@ struct ReadTrace {
     reads: SourceReads,
     bytes: usize,
 }
+/// A content-addressed value admitted through `put`, with the byte length of
+/// its canonical form so bounded reads never re-encode it.
+#[derive(Clone)]
+struct Cached {
+    value: Value,
+    bytes: usize,
+}
 #[derive(Clone, Default)]
 pub struct Store {
     root: Option<PathBuf>,
     writable: bool,
-    data: BTreeMap<(String, String), Value>,
+    data: BTreeMap<(String, String), Cached>,
+    effects: BTreeMap<String, Value>,
     slots: BTreeMap<String, Value>,
     trace: Option<Arc<Mutex<ReadTrace>>>,
     overlay_written: BTreeSet<(String, String)>,
@@ -96,7 +104,9 @@ fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
-fn publish(path: &Path, bytes: &[u8], replace: bool) -> Result<()> {
+/// Install `bytes` at `path`. Returns whether this call installed them: an
+/// immutable entry that already existed is left untouched and yields `false`.
+fn publish(path: &Path, bytes: &[u8], replace: bool) -> Result<bool> {
     let parent = path
         .parent()
         .ok_or_else(|| Error::invalid("store parent"))?;
@@ -115,17 +125,17 @@ fn publish(path: &Path, bytes: &[u8], replace: bool) -> Result<()> {
         fs::hard_link(&temporary, path)
     };
     let cleanup = fs::remove_file(&temporary);
-    match result {
-        Ok(()) => (),
-        Err(e) if !replace && e.kind() == std::io::ErrorKind::AlreadyExists => (),
+    let fresh = match result {
+        Ok(()) => true,
+        Err(e) if !replace && e.kind() == std::io::ErrorKind::AlreadyExists => false,
         Err(e) => return Err(e.into()),
-    }
+    };
     if let Err(e) = cleanup
         && e.kind() != std::io::ErrorKind::NotFound
     {
         return Err(e.into());
     }
-    Ok(())
+    Ok(fresh)
 }
 
 impl Store {
@@ -315,8 +325,8 @@ impl Store {
         }
         let path = self.path(kind, key)?;
         let identity = (kind.to_owned(), key.to_owned());
-        if let Some(value) = self.data.get(&identity) {
-            if canonical(value)?.len() > bound {
+        if let Some(Cached { value, bytes }) = self.data.get(&identity) {
+            if *bytes > bound {
                 return Err(Error::limit("store object bytes"));
             }
             let source = self
@@ -359,17 +369,24 @@ impl Store {
     }
 
     pub fn put(&mut self, kind: &str, value: &Value) -> Result<String> {
-        let key = digest(value)?;
+        // One canonical encoding serves the digest, the published bytes, and
+        // the cached byte length.
+        let text = canonical(value)?;
+        let key = digest_bytes(text.as_bytes());
         if self.trace.is_some() {
             self.overlay_written.insert((kind.to_owned(), key.clone()));
         }
         let path = self.path(kind, &key)?;
         if self.writable
             && let Some(path) = path
+            && !publish(&path, text.as_bytes(), false)?
         {
-            publish(&path, canonical(value)?.as_bytes(), false)?;
-            let file = open_regular_file(&path, MAX_DOCUMENT_BYTES)?
-                .ok_or_else(|| Error::from(std::io::Error::from(std::io::ErrorKind::NotFound)))?;
+            // An entry already existed and was left untouched: it must still
+            // hash to the key, including corruption. A fresh link installed
+            // exactly the synced bytes above, so it needs no read-back.
+            let file = open_regular_file(&path, MAX_DOCUMENT_BYTES)?.ok_or_else(|| {
+                Error::new("IO_FAILED", format!("{}: file not found", path.display()))
+            })?;
             let installed = read_json(file, MAX_DOCUMENT_BYTES)?;
             if digest(&installed)? != key {
                 return Err(Error::new(
@@ -378,8 +395,13 @@ impl Store {
                 ));
             }
         }
-        self.data
-            .insert((kind.to_owned(), key.clone()), value.clone());
+        self.data.insert(
+            (kind.to_owned(), key.clone()),
+            Cached {
+                value: value.clone(),
+                bytes: text.len(),
+            },
+        );
         Ok(key)
     }
 
@@ -436,7 +458,7 @@ impl Store {
         }
 
         let key = Self::effect_key(request_digest, executor)?;
-        if let Some(value) = self.data.get(&("effects".to_owned(), key.clone())) {
+        if let Some(value) = self.effects.get(&key) {
             return Ok(Some(value.clone()));
         }
         let Some(path) = self.effect_path(&key)? else {
@@ -475,9 +497,7 @@ impl Store {
         {
             publish(&path, canonical(receipt)?.as_bytes(), false)?;
         }
-        self.data
-            .entry(("effects".to_owned(), key))
-            .or_insert_with(|| receipt.clone());
+        self.effects.entry(key).or_insert_with(|| receipt.clone());
         Ok(request_digest)
     }
 
@@ -548,7 +568,7 @@ impl Store {
                     return Err(Error::limit("module count"));
                 }
                 let file = open_input_file(&path, 1_048_576)?.ok_or_else(|| {
-                    Error::from(std::io::Error::from(std::io::ErrorKind::NotFound))
+                    Error::new("IO_FAILED", format!("{}: file not found", path.display()))
                 })?;
                 let manifest = Manifest::parse(&read_json(file, 1_048_576)?)?;
                 self.admit(&manifest)?;

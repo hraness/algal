@@ -5,7 +5,7 @@ import { lstat, open, opendir } from "node:fs/promises";
 import { join } from "node:path";
 import { applicationId, applicationInt, applicationList, applicationObject, applicationTag } from "./application-contract";
 import { AlgalError } from "./errors";
-import { hostLease, hostRead, hostWrite } from "./host-state";
+import { SHARED_LEASE_RETRY, hostLease, hostRead, hostWrite } from "./host-state";
 import { canonicalize, type JsonValue } from "./values";
 
 export const APPLICATION_QUOTA_LIMITS = Object.freeze({ applicationBytes: 256 * 1024 * 1024, aggregateBytes: 1024 * 1024 * 1024,
@@ -76,6 +76,9 @@ export async function withApplicationQuota<T>(root: string, application: string,
       let count = 0;
       for await (const entry of await opendir(applications)) {
         if (++count > 33) fail("application count exceeded");
+        // Stray regular files are shared residue: charged to the common
+        // allocation, never admitted as an application namespace.
+        if (entry.isFile() && !entry.isSymbolicLink()) { common += await measure(join(applications, entry.name), budget, APPLICATION_QUOTA_LIMITS.applicationEntries); continue; }
         if (!entry.isDirectory() || entry.isSymbolicLink()) fail("invalid namespace entry");
         const bytes = await measure(join(applications, entry.name), budget, APPLICATION_QUOTA_LIMITS.applicationEntries);
         if (entry.name === ".creation") { common += bytes; continue; }
@@ -90,5 +93,5 @@ export async function withApplicationQuota<T>(root: string, application: string,
     if ([...charged.values()].reduce((sum, bytes) => sum + bytes, common + 2 * APPLICATION_QUOTA_LIMITS.ownerHeadroom + 16_384) > APPLICATION_QUOTA_LIMITS.aggregateBytes) fail("aggregate bytes exhausted");
     await hostWrite(ledgerPath, {contract: "algal.application-quota.v1", applications: [...charged].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([application, bytes]) => ({application, bytes}))}, 8192, false);
     return action();
-  });
+  }, SHARED_LEASE_RETRY);
 }

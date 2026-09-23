@@ -2,7 +2,7 @@ use algal::{
     Error, Result, application, application_adaptation, application_comparison,
     application_host::{DomainDispatcher, PolicyHost},
     application_memory::{self as app_memory, MemoryService, NativeEngine},
-    application_migration, application_view,
+    application_migration, application_proposal, application_selection, application_view,
     canonical::{MAX_DOCUMENT_BYTES, canonical, digest_bytes, read_json},
     context,
     contract::{Manifest, object},
@@ -73,6 +73,7 @@ impl app_memory::MemoryAdmission for NoAdmission {
     about = "Programs that grow. A typed language and harness for bounded agent work."
 )]
 struct Cli {
+    /// Store directory: manifests, receipts, values, slots, and process state.
     #[arg(long, global = true, default_value = ".algal")]
     dir: PathBuf,
     #[command(subcommand)]
@@ -81,97 +82,133 @@ struct Cli {
 
 #[derive(Clone, Args, Default)]
 struct Execution {
+    /// Input-cell values as a JSON file, or `-` to read them from stdin.
     #[arg(long)]
     args: Option<String>,
+    /// Scripted executor: JSON map of cell id (or request digest) to output.
     #[arg(long)]
     responses: Option<PathBuf>,
+    /// `algal.host.v1` executor configuration file (named backends).
     #[arg(long)]
     host: Option<PathBuf>,
     /// Shell executor: bounded request JSON on stdin, response JSON on stdout.
     #[arg(long)]
     executor_cmd: Option<String>,
+    /// Delegated coding agent over ACP: devin, codex, claude, or xcb.
     #[arg(long)]
     agent: Option<String>,
+    /// Working directory handed to the delegated coding agent.
     #[arg(long, default_value = ".")]
     workspace: PathBuf,
+    /// Vercel AI Gateway structured-output executor (`provider/model`).
     #[arg(long)]
     gateway_model: Option<String>,
     /// TypeSafe Jev decision executor; bare `--jev` uses `jev-latest`.
     #[arg(long, num_args = 0..=1, default_missing_value = "jev-latest")]
     jev: Option<String>,
+    /// Derived-index recall executor; embedder is `local` or `gateway[:<model>]`.
     #[arg(long, num_args = 0..=1, default_missing_value = "local")]
     recall: Option<String>,
+    /// OpenAI-compatible Chat Completions endpoint (HTTPS, or explicit loopback).
     #[arg(long, requires = "model")]
     base_url: Option<String>,
+    /// Model name sent to the `--base-url` endpoint.
     #[arg(long, requires = "base_url")]
     model: Option<String>,
+    /// Environment variable holding the `--base-url` endpoint's credential.
     #[arg(long, requires = "base_url")]
     credential_env: Option<String>,
+    /// Structured-output mode for `--base-url`: json_schema or json_object.
     #[arg(long, default_value = "json_schema")]
     response_format: String,
+    /// Route model cells to Apple's on-device Foundation Models bridge.
     #[arg(long)]
     apple: bool,
+    /// Explicit `algal-apple` bridge executable (default: sibling binary).
     #[arg(long, requires = "apple")]
     apple_bridge: Option<PathBuf>,
+    /// Directory of `*.algal.json` manifests loaded into the store for organism cells.
     #[arg(long)]
     modules: Option<PathBuf>,
+    /// JSON map of transport name to bundle directory for `via` cells.
     #[arg(long)]
     transports: Option<PathBuf>,
+    /// Tool registry file: tool name to `{signature, exec}`.
     #[arg(long)]
     tools: Option<PathBuf>,
+    /// Memoize effects: identical request digests reuse the stored response.
     #[arg(long)]
     cache_effects: bool,
+    /// Persist the manifest and receipt under `--dir`.
     #[arg(long)]
     write: bool,
 }
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Run one civilization epoch: propose plans, admit them, measure, and promote.
     Civ {
+        /// Use a live executor for the designer instead of the recorded fixture.
         #[arg(long)]
         live: bool,
+        /// Custom goals file (default: the bundled civilization goals).
         #[arg(long)]
         goals: Option<PathBuf>,
         #[command(flatten)]
         options: Execution,
     },
+    /// Replay and audit a recorded civilization epoch offline.
     CivVerify {
+        /// Population file to verify (default: the one under `--dir`).
         population: Option<PathBuf>,
+        /// Goals file the epoch was measured against.
         #[arg(long)]
         goals: Option<PathBuf>,
     },
+    /// Measure several systems on one workload and report the Pareto set.
     Bench {
         #[command(subcommand)]
         command: Option<BenchCommand>,
         /// `algal.bench.config.v1` file
         config: Option<PathBuf>,
+        /// Write the bench report here as well as to stdout.
         #[arg(long)]
         out: Option<PathBuf>,
+        /// Explicit `algal-apple` bridge executable for Apple-routed systems.
         #[arg(long)]
         apple_bridge: Option<PathBuf>,
+        /// Tool registry file: tool name to `{signature, exec}`.
         #[arg(long)]
         tools: Option<PathBuf>,
+        /// Directory of `*.algal.json` manifests loaded into the store.
         #[arg(long)]
         modules: Option<PathBuf>,
+        /// JSON map of transport name to bundle directory for `via` cells.
         #[arg(long)]
         transports: Option<PathBuf>,
     },
+    /// Generate and evaluate candidate organisms, then promote a winner.
     Foundry {
         #[command(subcommand)]
         command: Option<FoundryCommand>,
         /// `algal.foundry.config.v1` file
         config: Option<PathBuf>,
+        /// Write the foundry report here as well as to stdout.
         #[arg(long)]
         out: Option<PathBuf>,
         #[command(flatten)]
         options: Execution,
     },
+    /// Run a compiled manifest and print its receipt.
     Run {
+        /// Compiled `algal.organism.v1` manifest (JSON).
         manifest: PathBuf,
         #[command(flatten)]
         options: Execution,
     },
+    /// Run a packed organism bundle and print a compact result.
     Call {
+        /// Closure bundle written by `pack`.
         bundle: PathBuf,
         /// Accept named interface arguments and return declared interface outputs.
         #[arg(long)]
@@ -179,36 +216,54 @@ enum Commands {
         #[command(flatten)]
         options: Execution,
     },
+    /// Admit a compiled manifest without running it.
     Check {
+        /// Compiled `algal.organism.v1` manifest (JSON).
         manifest: PathBuf,
         #[command(flatten)]
         options: Execution,
     },
+    /// Print the compiled signature: resolved ports and guards.
     Explain {
+        /// Compiled `algal.organism.v1` manifest (JSON).
         manifest: PathBuf,
         #[command(flatten)]
         options: Execution,
     },
+    /// Print a manifest's canonical digest.
     Digest {
+        /// Compiled `algal.organism.v1` manifest (JSON).
         manifest: PathBuf,
     },
+    /// Summarize a run receipt.
     Inspect {
+        /// Run receipt (JSON).
         receipt: PathBuf,
     },
+    /// Compare two receipts canonically and report divergence.
     Diff {
+        /// First receipt.
         a: PathBuf,
+        /// Second receipt.
         b: PathBuf,
     },
+    /// List receipts stored under `--dir`.
     Runs,
+    /// List manifests stored under `--dir`.
     Manifests,
+    /// Print a stored manifest.
     Manifest {
+        /// Manifest digest (`sha256:…`).
         digest: String,
     },
+    /// List durable slot cells and their current state.
     Slots,
+    /// Read or seed one durable slot directly.
     Slot {
         #[command(subcommand)]
         command: SlotCommand,
     },
+    /// Bounded durable mailboxes: external wakeups for suspended runs.
     Mailbox {
         #[command(subcommand)]
         command: MailboxCommand,
@@ -221,17 +276,24 @@ enum Commands {
         #[command(subcommand)]
         command: DemoCommand,
     },
+    /// Durable, bounded processes: create, tick, recover, and verify.
     Process {
         #[command(subcommand)]
         command: ProcessCommand,
     },
+    /// Print one bundled example manifest.
     Example {
+        /// Example id (the file name without `.algal.json`).
         id: String,
+        /// Examples directory (the repository's `examples/`).
         #[arg(long, default_value = "examples")]
         examples: PathBuf,
     },
+    /// Re-run a receipt with recorded effects fixed and compare bit-for-bit.
     Verify {
+        /// Run receipt (JSON).
         receipt: PathBuf,
+        /// Manifest; resolves from the store when omitted.
         manifest: Option<PathBuf>,
         #[command(flatten)]
         options: Execution,
@@ -239,43 +301,60 @@ enum Commands {
     /// Continue a suspended run: recorded effects replay, the rest routes
     /// to the live executors.
     Resume {
+        /// Suspended run receipt (JSON).
         receipt: PathBuf,
+        /// Manifest; resolves from the store when omitted.
         manifest: Option<PathBuf>,
         #[command(flatten)]
         options: Execution,
     },
+    /// Print a closure bundle: the manifest plus embedded sub-manifests and payloads.
     Pack {
+        /// Compiled `algal.organism.v1` manifest (JSON).
         manifest: PathBuf,
+        /// Directory of `*.algal.json` manifests loaded into the store.
         #[arg(long)]
         modules: Option<PathBuf>,
+        /// Also write `<root-hex>.bundle.json` into this directory.
         #[arg(long)]
         out: Option<PathBuf>,
     },
+    /// Install a bundle into the store with every digest verified.
     Unpack {
+        /// Closure bundle written by `pack`.
         bundle: PathBuf,
     },
+    /// Print a tool definition for the organism's declared interface.
     ToolDef {
+        /// Compiled `algal.organism.v1` manifest (JSON).
         manifest: PathBuf,
+        /// Directory of `*.algal.json` manifests loaded into the store.
         #[arg(long)]
         modules: Option<PathBuf>,
+        /// Definition format: openai or anthropic.
         #[arg(long, default_value = "openai")]
         format: String,
     },
+    /// Run and verify every bundled example with its scripted responses.
     Suite {
+        /// Examples directory (the repository's `examples/`).
         #[arg(long, default_value = "examples")]
         examples: PathBuf,
+        /// Directory of `*.algal.json` manifests loaded into the store.
         #[arg(long)]
         modules: Option<PathBuf>,
     },
+    /// Content-addressed store: put, get, or probe a JSON value.
     Store {
         #[command(subcommand)]
         command: StoreCommand,
     },
+    /// Bounded memory snapshots: query, verify, and remember facts.
     Memory {
         #[command(subcommand)]
         command: MemoryCommand,
     },
-    /// Durable application lifecycle over the content-addressed store.
+    /// Durable application lifecycle over the content-addressed store (experimental).
     /// `--dir` is the application root; host authority comes from the
     /// declarative `algal.application-host.v1` policy record.
     Application {
@@ -286,6 +365,10 @@ enum Commands {
         /// Explicit retained-pure-strategy restoration authority.
         #[arg(long)]
         restoration_policy: Option<PathBuf>,
+        /// Environment label this host deploys into; enables environment-keyed
+        /// selection policy admission. Host authority, outside the policy record.
+        #[arg(long)]
+        selection_environment: Option<String>,
         /// Channel directory for the policy dispatcher
         /// (default `<dir>/channels`).
         #[arg(long)]
@@ -293,11 +376,14 @@ enum Commands {
         #[command(subcommand)]
         command: ApplicationCommand,
     },
+    /// Recorded context compaction: compact, recall, and verify a view.
     Context {
         #[command(subcommand)]
         command: ContextCommand,
     },
+    /// Run one bounded coding task through the built-in agent harness.
     Agent {
+        /// Task text; read from stdin when omitted and stdin is not a terminal.
         #[arg(short, long)]
         prompt: Option<String>,
         #[command(flatten)]
@@ -314,6 +400,7 @@ enum Commands {
     },
     /// Hybrid-rank the semantic index: embedding cosine ⊕ token overlap.
     Search {
+        /// Query text.
         query: String,
         /// Result count (1..=64).
         #[arg(short, long, default_value = "8")]
@@ -322,6 +409,7 @@ enum Commands {
         #[arg(long)]
         embedder: Option<String>,
     },
+    /// Vault a provider credential locally; never echoes the key.
     Auth {
         /// Credential provider (`jev`).
         provider: String,
@@ -335,15 +423,19 @@ enum Commands {
         #[arg(long)]
         clipboard: bool,
     },
+    /// Report runtime, build identity, and provider availability.
     Doctor {
+        /// Probe the Apple Foundation Models bridge.
         #[arg(long)]
         apple: bool,
+        /// Explicit `algal-apple` bridge executable (default: sibling binary).
         #[arg(long)]
         apple_bridge: Option<PathBuf>,
         /// TypeSafe Jev availability: credential status plus a live probe.
         #[arg(long)]
         jev: bool,
     },
+    /// Serve the Agent Client Protocol over stdio with a host-admitted executor.
     Acp {
         #[command(flatten)]
         options: Execution,
@@ -352,63 +444,93 @@ enum Commands {
 
 #[derive(Subcommand)]
 enum BenchCommand {
+    /// Replay every case receipt in a bench report offline.
     Verify {
+        /// Bench report (JSON).
         report: PathBuf,
+        /// Tool registry file: tool name to `{signature, exec}`.
         #[arg(long)]
         tools: Option<PathBuf>,
+        /// Directory of `*.algal.json` manifests loaded into the store.
         #[arg(long)]
         modules: Option<PathBuf>,
     },
+    /// Summarize a bench report's Pareto comparison.
     Inspect {
+        /// Bench report (JSON).
         report: PathBuf,
     },
 }
 
 #[derive(Subcommand)]
 enum FoundryCommand {
+    /// Replay every run in a foundry report offline.
     Verify {
+        /// Foundry report (JSON).
         report: PathBuf,
+        /// Tool registry file: tool name to `{signature, exec}`.
         #[arg(long)]
         tools: Option<PathBuf>,
+        /// Directory of `*.algal.json` manifests loaded into the store.
         #[arg(long)]
         modules: Option<PathBuf>,
     },
+    /// Summarize scores, lineage, and promotion.
     Inspect {
+        /// Foundry report (JSON).
         report: PathBuf,
     },
+    /// Export the promoted organism's verified bundle.
     Pack {
+        /// Foundry report (JSON).
         report: PathBuf,
+        /// Output directory for the bundle.
         #[arg(long)]
         out: PathBuf,
+        /// Tool registry file: tool name to `{signature, exec}`.
         #[arg(long)]
         tools: Option<PathBuf>,
+        /// Directory of `*.algal.json` manifests loaded into the store.
         #[arg(long)]
         modules: Option<PathBuf>,
     },
+    /// Evolve candidates over bounded generations.
     Search {
         /// `algal.foundry.config.v1` file with a `search` block
         config: PathBuf,
+        /// Write the search report here as well as to stdout.
         #[arg(long)]
         out: Option<PathBuf>,
         #[command(flatten)]
         options: Box<Execution>,
     },
+    /// Replay every run in a search report offline.
     SearchVerify {
+        /// Search report (JSON).
         report: PathBuf,
+        /// Tool registry file: tool name to `{signature, exec}`.
         #[arg(long)]
         tools: Option<PathBuf>,
+        /// Directory of `*.algal.json` manifests loaded into the store.
         #[arg(long)]
         modules: Option<PathBuf>,
     },
+    /// Summarize a search report's generations and winner.
     SearchInspect {
+        /// Search report (JSON).
         report: PathBuf,
     },
+    /// Export a verified search winner's bundle.
     SearchPack {
+        /// Search report (JSON).
         report: PathBuf,
+        /// Output directory for the bundle.
         #[arg(long)]
         out: PathBuf,
+        /// Tool registry file: tool name to `{signature, exec}`.
         #[arg(long)]
         tools: Option<PathBuf>,
+        /// Directory of `*.algal.json` manifests loaded into the store.
         #[arg(long)]
         modules: Option<PathBuf>,
     },
@@ -416,19 +538,27 @@ enum FoundryCommand {
 
 #[derive(Subcommand)]
 enum StoreCommand {
+    /// Write a JSON value to the store and print its ref token.
     Put {
+        /// JSON file, or `-` for stdin.
         file: String,
         /// CAS kind; manifests and values are the durable record kinds.
         #[arg(long, default_value = "values", value_parser = ["manifests", "values"])]
         kind: String,
     },
+    /// Print the payload a ref resolves to.
     Get {
+        /// Ref token (`sha256:…`).
         digest: String,
+        /// CAS kind; manifests and values are the durable record kinds.
         #[arg(long, default_value = "values", value_parser = ["manifests", "values"])]
         kind: String,
     },
+    /// Report whether a ref resolves.
     Has {
+        /// Ref token (`sha256:…`).
         digest: String,
+        /// CAS kind; manifests and values are the durable record kinds.
         #[arg(long, default_value = "values", value_parser = ["manifests", "values"])]
         kind: String,
     },
@@ -436,8 +566,18 @@ enum StoreCommand {
 
 #[derive(Subcommand)]
 enum SlotCommand {
-    Get { name: String },
-    Set { name: String, value: PathBuf },
+    /// Print a slot's current value.
+    Get {
+        /// Slot name.
+        name: String,
+    },
+    /// Write a slot directly (seeding).
+    Set {
+        /// Slot name.
+        name: String,
+        /// JSON value file.
+        value: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -533,56 +673,81 @@ enum DemoCommand {
 enum ProcessCommand {
     /// Export bounded execution evidence without executable tool bindings.
     Export {
+        /// Process name.
         name: String,
+        /// Tool registry file: tool name to `{signature, exec}`.
         #[arg(long)]
         tools: Option<PathBuf>,
     },
     /// Verify one portable evidence file in memory, with no host/store setup.
     VerifyEvidence {
+        /// Portable evidence JSON written by `process export`.
         file: PathBuf,
     },
+    /// Admit a durable, bounded process from a compiled manifest.
     Create {
+        /// Process name.
         name: String,
+        /// Compiled `algal.organism.v1` manifest (JSON).
         manifest: PathBuf,
+        /// Maximum generations before the process stops.
         #[arg(long, default_value_t = 16)]
         max_generations: usize,
         #[command(flatten)]
         options: Execution,
     },
+    /// List processes retained under `--dir`.
     List,
+    /// Print a process's retained state.
     Inspect {
+        /// Process name.
         name: String,
     },
+    /// Print a process's ordered effect journal.
     Journal {
+        /// Process name.
         name: String,
     },
+    /// Execute one generation under a lease.
     Tick {
+        /// Process name.
         name: String,
+        /// Journal each effect before dispatch for exact-intent recovery.
         #[arg(long)]
         journal: bool,
+        /// Maximum automatic journal recoveries per tick.
         #[arg(long, default_value_t = 2)]
         max_recoveries: usize,
         #[command(flatten)]
         options: Execution,
     },
+    /// Recover an uncertain journaled effect whose intent you have confirmed.
     Recover {
+        /// Process name.
         name: String,
+        /// Digest of the exact journaled intent being recovered.
         #[arg(long)]
         expected_intent: String,
         #[command(flatten)]
         options: Execution,
     },
+    /// Run ready processes and recorded mailbox wakeups.
     Schedule {
+        /// Journal each effect before dispatch for exact-intent recovery.
         #[arg(long)]
         journal: bool,
+        /// Maximum automatic journal recoveries per tick.
         #[arg(long, default_value_t = 2)]
         max_recoveries: usize,
+        /// Maximum ticks across all processes in this invocation.
         #[arg(long, default_value_t = 16)]
         max_ticks: usize,
         #[command(flatten)]
         options: Execution,
     },
+    /// Replay a process's history offline and compare every receipt.
     Verify {
+        /// Process name.
         name: String,
         #[command(flatten)]
         options: Execution,
@@ -591,43 +756,68 @@ enum ProcessCommand {
 
 #[derive(Subcommand)]
 enum MailboxCommand {
+    /// Create a bounded mailbox and print its send/receive capabilities.
     Create {
+        /// Mailbox name.
         name: String,
+        /// Maximum retained messages.
         #[arg(long, default_value_t = 64)]
         max_messages: usize,
+        /// Maximum bytes per message.
         #[arg(long, default_value_t = 65_536)]
         max_message_bytes: usize,
     },
+    /// List admitted mailboxes and their handles.
     List,
+    /// Enqueue an external wakeup message.
     Send {
+        /// Send capability handle.
         capability: String,
+        /// JSON message file.
         value: PathBuf,
+        /// Idempotency key (`sha256:…`); a repeated key delivers once.
         #[arg(long)]
         idempotency_key: Option<String>,
     },
+    /// Consume one message, or report that the mailbox is empty.
     Receive {
+        /// Receive capability handle.
         capability: String,
     },
+    /// Revoke one mailbox capability.
     Revoke {
+        /// Capability handle to revoke.
         capability: String,
     },
 }
 
 #[derive(Subcommand)]
 enum MemoryCommand {
+    /// Evaluate a bounded query program over a memory snapshot.
     Query {
+        /// Memory snapshot (JSON).
         snapshot: PathBuf,
+        /// Query program (JSON).
         program: PathBuf,
     },
+    /// Re-derive a query result and report whether it matches.
     Verify {
+        /// Memory snapshot (JSON).
         snapshot: PathBuf,
+        /// Query program (JSON).
         program: PathBuf,
+        /// Previously emitted query result (JSON).
         result: PathBuf,
     },
+    /// Admit one sourced fact into a memory snapshot and store the result.
     Remember {
+        /// Source record the fact is attributed to (JSON).
         source: PathBuf,
+        /// Relation name.
         relation: String,
+        /// Tuple as a JSON array.
         tuple: String,
+        /// Existing `algal.memory.v1` snapshot to extend (default: empty).
         #[arg(long)]
         snapshot: Option<PathBuf>,
     },
@@ -656,6 +846,7 @@ enum ApplicationCommand {
     Pending { application: String },
     /// Admit and dispatch pending intents through the policy host.
     Dispatch {
+        /// Application name.
         application: String,
         #[arg(long, default_value_t = 32)]
         max: usize,
@@ -666,7 +857,9 @@ enum ApplicationCommand {
     },
     /// Explicitly reconcile one uncertain dispatch.
     Reconcile {
+        /// Application name.
         application: String,
+        /// Intent digest to reconcile.
         intent: String,
         #[arg(long)]
         host_only: bool,
@@ -699,6 +892,15 @@ enum ApplicationCommand {
     /// `verifyApplicationComparison`: replay a stored comparison's evidence
     /// against an expected parent state.
     VerifyComparison { input: PathBuf },
+    /// `proposeApplicationRevision`: run a generator entrypoint case-pure and
+    /// commit the `propose` transition with the emitted candidate evidence.
+    Propose { input: PathBuf },
+    /// `verifyApplicationProposal`: replay a stored proposal's receipt and
+    /// derived candidates against an expected parent state.
+    VerifyProposal { input: PathBuf },
+    /// `selectApplicationStrategy`: replay a selection policy and resolve the
+    /// manifest its row for one environment selected.
+    Select { input: PathBuf },
     /// `migrateApplicationMemory`: run the migration program and admit its
     /// emitted claims into a fresh memory chain under the new schema.
     MigrateMemory { input: PathBuf },
@@ -711,31 +913,92 @@ enum ApplicationCommand {
 
 #[derive(Subcommand)]
 enum ContextCommand {
+    /// Elide an `algal.context.v1` record to a byte bound and print the view.
     Compact {
+        /// `algal.context.v1` source record (JSON).
         source: PathBuf,
+        /// Byte bound for the compacted view.
         #[arg(long)]
         max_bytes: usize,
+        /// Most recent entries kept verbatim.
         #[arg(long, default_value_t = 4)]
         keep_recent: usize,
     },
+    /// Resolve one elided reference back to its recorded source entry.
     Recall {
+        /// `algal.context.v1` source record (JSON).
         source: PathBuf,
+        /// Reference token from a compacted view.
         reference: String,
     },
+    /// Check that a compacted view derives from its source.
     Verify {
+        /// `algal.context.v1` source record (JSON).
         source: PathBuf,
+        /// Compacted view (JSON).
         view: PathBuf,
     },
 }
 
+/// Read one bounded JSON input; every failure names the path.
 fn load(path: &Path, max: usize) -> Result<Value> {
-    let file = algal::store::open_input_file(path, max)?
-        .ok_or_else(|| Error::from(io::Error::from(io::ErrorKind::NotFound)))?;
-    read_json(file, max)
+    let at = |error: Error| {
+        Error::new(
+            &error.code,
+            format!("{}: {}", path.display(), error.message),
+        )
+    };
+    if path.extension().is_some_and(|ext| ext == "algal") {
+        return Err(Error::invalid(format!(
+            "{}: `.algal` source must be compiled first — run `bun cli.ts compile {} --out <manifest.json>` and pass the compiled manifest (the native CLI does not invoke Bun)",
+            path.display(),
+            path.display()
+        )));
+    }
+    let file = algal::store::open_input_file(path, max)
+        .map_err(at)?
+        .ok_or_else(|| Error::new("IO_FAILED", format!("{}: file not found", path.display())))?;
+    read_json(file, max).map_err(at)
 }
 fn emit(value: &Value) -> Result<()> {
     println!("{}", canonical(value)?);
     Ok(())
+}
+/// Explain an `EFFECT_UNBOUND` run failure on stderr: which cell asked for
+/// which route, and which executors the host admitted. The receipt itself is
+/// shared wire bytes with the reference runtime and stays unchanged.
+fn unbound_hint(receipt: &Value, manifest: &Manifest, host: &Host) {
+    if receipt["failure"]["code"] != "EFFECT_UNBOUND" {
+        return;
+    }
+    let path = receipt["failure"]["path"].as_str().unwrap_or("?");
+    let leaf = path.rsplit('/').next().unwrap_or(path);
+    let route = manifest
+        .cells
+        .iter()
+        .find(|cell| cell["id"] == leaf)
+        .map(|cell| cell["route"].clone())
+        .unwrap_or(Value::Null);
+    let asked = if let Some(provider) = route["provider"].as_str() {
+        format!("route.provider \"{provider}\"")
+    } else if let Some(preset) = route["preset"].as_str() {
+        format!("route.preset \"{preset}\"")
+    } else {
+        "no route".to_string()
+    };
+    let admitted: Vec<String> = host
+        .entries
+        .iter()
+        .map(|(id, _)| format!("\"{id}\""))
+        .collect();
+    let admitted = if admitted.is_empty() {
+        "none".to_string()
+    } else {
+        admitted.join(", ")
+    };
+    eprintln!(
+        "hint: cell \"{path}\" requested {asked}; admitted executors: {admitted}. Routes match an executor by id (--host names backends; --responses serves any route)."
+    );
 }
 fn manifest(path: &Path) -> Result<Manifest> {
     Manifest::parse(&load(path, 1_048_576)?)
@@ -827,6 +1090,16 @@ fn host(options: &Execution, dir: &Path) -> Result<Host> {
                 }
             })
         } else if let Some(model) = &options.gateway_model {
+            if std::env::var_os("AI_GATEWAY_API_KEY").is_none()
+                && std::env::var_os("VERCEL_OIDC_TOKEN").is_none()
+            {
+                return Err(Error::new(
+                    "EFFECT_UNBOUND",
+                    format!(
+                        "--gateway-model {model}: no AI Gateway credential; set AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN before running"
+                    ),
+                ));
+            }
             Some(Backend::Gateway {
                 model: model.clone(),
             })
@@ -1427,6 +1700,7 @@ async fn execute(cli: Cli) -> Result<bool> {
             if options.write {
                 eprintln!("receipt {}", persist(&mut store, &manifest, &receipt)?);
             }
+            unbound_hint(&receipt, &manifest, &host);
             emit(&receipt)?;
             Ok(receipt["outcome"] == "complete")
         }
@@ -1481,6 +1755,7 @@ async fn execute(cli: Cli) -> Result<bool> {
                 None,
             )
             .await?;
+            unbound_hint(&receipt, &manifest, &host);
             let reference = persist(&mut store, &manifest, &receipt)?;
             let ok = receipt["outcome"] == "complete";
             let outputs: serde_json::Map<String, Value> = if interface {
@@ -1946,6 +2221,15 @@ async fn execute(cli: Cli) -> Result<bool> {
             Ok(resumed["outcome"] == "complete")
         }
         Commands::Suite { examples, modules } => {
+            if !examples.is_dir() {
+                return Err(Error::new(
+                    "IO_FAILED",
+                    format!(
+                        "examples directory {} not found; run from the repository checkout or pass --examples <dir>",
+                        examples.display()
+                    ),
+                ));
+            }
             let mut store = Store::open(&cli.dir, true)?;
             if let Some(path) = modules {
                 store.load_modules(&path)?;
@@ -2083,6 +2367,7 @@ async fn execute(cli: Cli) -> Result<bool> {
         Commands::Application {
             policy,
             restoration_policy,
+            selection_environment,
             channels,
             command,
         } => {
@@ -2097,6 +2382,13 @@ async fn execute(cli: Cli) -> Result<bool> {
                         Error::invalid("Restoration authority requires an application host policy")
                     })?
                     .set_restoration_policy(&load(&path, 262_144)?)?;
+            }
+            if let Some(environment) = selection_environment {
+                host.as_mut()
+                    .ok_or_else(|| {
+                        Error::invalid("Selection environment requires an application host policy")
+                    })?
+                    .set_selection_environment(&environment)?;
             }
             let denied = NoAdmission;
             let engine_sha = digest_bytes(&std::fs::read(std::env::current_exe()?)?);
@@ -2339,6 +2631,59 @@ async fn execute(cli: Cli) -> Result<bool> {
                     .await?;
                     emit(&json!({"ok": true, "selected": checked["selected"]}))?;
                 }
+                ApplicationCommand::Propose { input } => {
+                    // Case-pure generation runs without executors or tools:
+                    // the builtin fn registry is the only admitted surface.
+                    let mut run_host = Host::default();
+                    let result = application_proposal::propose_revision(
+                        &mut service,
+                        &load(&input, 262_144)?,
+                        &mut run_host,
+                        &Transports::new(),
+                    )
+                    .await?;
+                    emit(&json!({
+                        "proposal": result["proposal"], "status": result["status"],
+                        "candidates": result["candidates"],
+                    }))?;
+                }
+                ApplicationCommand::VerifyProposal { input } => {
+                    let input = load(&input, 262_144)?;
+                    let v = app_memory::app_object(&input, &["proposal", "expectedState"])?;
+                    let proposal = app_memory::app_ref(&v["proposal"])?.to_owned();
+                    let state = app_memory::app_ref(&v["expectedState"])?.to_owned();
+                    let checked = application_proposal::verify_proposal(
+                        &service.store,
+                        &proposal,
+                        &state,
+                        &Host::default(),
+                    )
+                    .await?;
+                    emit(
+                        &json!({"ok": true, "status": checked["status"], "candidates": checked["candidates"]}),
+                    )?;
+                }
+                ApplicationCommand::Select { input } => {
+                    let input = load(&input, 262_144)?;
+                    let v = app_memory::app_object(
+                        &input,
+                        &["policy", "environment", "expectedState"],
+                    )?;
+                    let policy = app_memory::app_ref(&v["policy"])?.to_owned();
+                    let environment = app_memory::app_id(&v["environment"])?.to_owned();
+                    let state = app_memory::app_ref(&v["expectedState"])?.to_owned();
+                    let selected = application_selection::select_application_strategy(
+                        &service.store,
+                        &policy,
+                        &environment,
+                        &state,
+                        &Host::default(),
+                    )
+                    .await?;
+                    emit(
+                        &json!({"manifest": selected["manifest"], "comparison": selected["comparison"]}),
+                    )?;
+                }
                 ApplicationCommand::MigrateMemory { input } => {
                     let mut run_host = Host::default();
                     let result = application_migration::migrate_memory(
@@ -2500,6 +2845,11 @@ async fn execute(cli: Cli) -> Result<bool> {
             })
             .await
             .map_err(|e| Error::new("IO_FAILED", format!("credential store join: {e}")))??;
+            if source == "file" {
+                eprintln!(
+                    "warning: no OS vault was available; the key is stored as plaintext (mode 0600) at {location}"
+                );
+            }
             emit(&json!({
                 "ok":true,"provider":provider,"stored":source,
                 "location":location,"hint":algal::credentials::redact(&key)
@@ -2569,7 +2919,7 @@ async fn execute(cli: Cli) -> Result<bool> {
                 Ok(result["available"] == true)
             } else {
                 emit(
-                    &json!({"runtime":"algal","version":env!("CARGO_PKG_VERSION"),"native":true,"platform":std::env::consts::OS,"legacyWireContract":"algal.organism.v1","build":algal::build_info::diagnostic()}),
+                    &json!({"runtime":"algal","version":env!("CARGO_PKG_VERSION"),"native":true,"platform":std::env::consts::OS,"wireContract":"algal.organism.v1","build":algal::build_info::diagnostic()}),
                 )?;
                 Ok(true)
             }

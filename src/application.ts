@@ -12,13 +12,14 @@ import {
 } from "./application-contract";
 import { parseApplicationMigration, type ApplicationMigration } from "./application-migration";
 import { verifyApplicationRestoration } from "./application-restoration";
+import { verifyApplicationProposalBinding } from "./application-proposal";
 import { validateApplicationGoals } from "./application-goal";
 import { withApplicationQuota } from "./application-quota";
 import { parseMemoryObservation, parseMemorySnapshot } from "./application-memory";
 import { parseCapabilityHandle } from "./capabilities";
 import { digestCanonical, type Digest } from "./digest";
 import { AlgalError } from "./errors";
-import { hostDirectory, hostLease, hostNames, hostRead, hostWrite } from "./host-state";
+import { SHARED_LEASE_RETRY, hostDirectory, hostLease, hostNames, hostRead, hostWrite } from "./host-state";
 import { FileStore } from "./store";
 import type { JsonValue } from "./values";
 
@@ -72,6 +73,7 @@ export type ApplicationFaultPoint = "prepared" | "head-published" | "dispatch-st
 export type ApplicationOptions = {fault?: (point: ApplicationFaultPoint) => void | Promise<void>};
 
 type Operation = {contract: "algal.application-operation.v1"; application: string; operation: Digest; request: Digest; transition: Digest; state: Digest};
+type IntentRow = {ref: Digest; work: WorkIntent};
 const json = applicationJson;
 const hash = (value: unknown): Digest => digestCanonical(json(value));
 const same = (a: unknown, b: unknown): boolean => hash(a) === hash(b);
@@ -93,7 +95,7 @@ function intentSpec(raw: unknown): ApplicationIntentSpec {
 }
 export function parseApplicationCommand(raw: unknown): ApplicationCommand {
   const v = applicationObject(raw, ["application", "operation", "kind", "expectedHead", "revision", "memory", "intents", "evidence", "causedBy"]);
-  if (v.kind !== "create" && v.kind !== "memory" && v.kind !== "investigate" && v.kind !== "activate" && v.kind !== "migrate" && v.kind !== "restore") throw new Error("Invalid application command kind");
+  if (v.kind !== "create" && v.kind !== "memory" && v.kind !== "investigate" && v.kind !== "activate" && v.kind !== "migrate" && v.kind !== "restore" && v.kind !== "propose") throw new Error("Invalid application command kind");
   return {application: applicationId(v.application), operation: applicationRef(v.operation), kind: v.kind,
     expectedHead: nullableApplicationRef(v.expectedHead), revision: applicationRef(v.revision), memory: applicationRef(v.memory),
     intents: applicationList(v.intents, APPLICATION_LIMITS.intents, intentSpec), evidence: applicationRefs(v.evidence, 16), causedBy: nullableApplicationRef(v.causedBy)};
@@ -169,32 +171,52 @@ export class ApplicationService {
   private async custody<T>(application: string, creating: boolean, action: () => Promise<T>): Promise<T> {
     const root = join(this.dir, "applications");
     await hostDirectory(root);
-    // A first commit owns the supervisor custody until publication. Do not
-    // reserve an application directory (or its retained owner database) before
-    // admission succeeds. Existing applications keep their independent mutex.
-    const selected = await hostLease(join(root, ".creation"), "application-creation", async (): Promise<{existing: true} | {result: T}> => {
-      let count = 0, exists = false, scanned = 0;
+    // The shared creation lease serializes only the namespace scan and the
+    // committed-head check; admission then runs under the application's own
+    // mutex. Until a head exists that mutex is a per-application creation
+    // lease inside `.creation` — coordination residue, never a reserved
+    // namespace — so independent creations and a refused first commit never
+    // queue behind or consume capacity through a trusted host call.
+    const selected = await hostLease(join(root, ".creation"), "application-creation", async (): Promise<{existing: true} | {creating: true} | {result: T}> => {
+      let count = 0, committed = false, scanned = 0;
       for await (const entry of await opendir(root)) {
         if (++scanned > APPLICATION_SERVICE_LIMITS.applications + 2) throw new Error("Application directory bound exceeded");
         if (entry.name === ".creation") continue;
+        // Stray regular files (editor/OS residue such as .DS_Store) are not
+        // applications and never brick custody; symlinks and special files do.
+        if (entry.isFile() && !entry.isSymbolicLink()) continue;
         if (!entry.isDirectory() || entry.isSymbolicLink()) throw new Error("Invalid application directory");
-        applicationId(entry.name); count++; exists ||= entry.name === application;
+        applicationId(entry.name); count++;
+        if (entry.name === application) {
+          try {
+            const head = await lstat(join(root, entry.name, "head.json"));
+            committed = head.isFile() && !head.isSymbolicLink();
+          } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+        }
       }
-      if (exists) return {existing: true};
-      if (creating && count >= APPLICATION_SERVICE_LIMITS.applications) throw new Error("Application count exhausted");
-      return {result: await action()};
-    });
+      if (committed) return {existing: true};
+      if (!creating) return {result: await action()};
+      if (count >= APPLICATION_SERVICE_LIMITS.applications) throw new Error("Application count exhausted");
+      return {creating: true};
+    }, SHARED_LEASE_RETRY);
     if ("result" in selected) return selected.result;
+    if ("creating" in selected) return hostLease(join(root, ".creation", "pending", applicationId(application)), "application-" + application, action);
     return hostLease(this.path(application), "application-" + application, action);
   }
   private async value(ref: Digest): Promise<JsonValue> { return getApplicationRecord(this.store, ref, json); }
-  private async snapshot(ref: Digest): Promise<ApplicationSnapshot> {
+  /** Intent rows validated by the most recent `history()` pass, keyed by state
+   * digest; `pending()` reuses them instead of re-reading the same records. */
+  private readonly validatedIntents = new Map<Digest, IntentRow[]>();
+  /** Records shared across the states of one history: a revision or memory
+   * digest is verified once per `history()` call (content-addressed, immutable). */
+  private async snapshot(ref: Digest, shared: {revisions: Map<Digest, ApplicationRevision>; memories: Set<Digest>}): Promise<ApplicationSnapshot> {
     const state = await getApplicationRecord(this.store, ref, parseApplicationState);
     const transition = await getApplicationRecord(this.store, state.transition, parseApplicationTransition);
-    const revision = await getApplicationRecord(this.store, state.revision, parseApplicationRevision);
+    let revision = shared.revisions.get(state.revision);
+    if (!revision) { revision = await getApplicationRecord(this.store, state.revision, parseApplicationRevision); shared.revisions.set(state.revision, revision); }
     if (state.application !== transition.application || state.application !== revision.application || state.revision !== transition.revision || state.memory !== transition.memory || state.previous !== transition.previous) fail("Application state/transition binding mismatch");
-    await this.value(state.memory);
-    return {digest: ref, state, transition, revision};
+    if (!shared.memories.has(state.memory)) { await this.value(state.memory); shared.memories.add(state.memory); }
+    return {digest: ref, state, transition, revision: structuredClone(revision)};
   }
   private checkStep(prior: ApplicationSnapshot | null, next: ApplicationSnapshot): void {
     const {state, transition, revision} = next;
@@ -212,6 +234,7 @@ export class ApplicationService {
       if (transition.kind === "activate" && revision.schema !== prior.revision.schema) fail("Incompatible application activation");
     } else if (state.revision !== prior.state.revision) fail("Memory/investigation cannot change the revision");
     if (transition.kind === "restore" && (state.memory !== prior.state.memory || transition.intents.length)) fail("Restoration must preserve current memory and create no intents");
+    if (transition.kind === "propose" && (state.memory !== prior.state.memory || transition.intents.length)) fail("Proposal must preserve current memory and create no intents");
     if (transition.kind === "investigate" && (state.memory !== prior.state.memory || !transition.intents.length)) fail("Invalid investigation transition");
   }
   /** A migrate transition must carry migration evidence that binds the prior
@@ -250,12 +273,13 @@ export class ApplicationService {
     if (raw === undefined) return [];
     const head = parseApplicationHead(raw);
     if (head.application !== name) fail("Application head identity mismatch");
-    const history: ApplicationSnapshot[] = [], seen = new Set<Digest>();
+    const history: ApplicationSnapshot[] = [], seen = new Set<Digest>(), shared = {revisions: new Map<Digest, ApplicationRevision>(), memories: new Set<Digest>()};
+    this.validatedIntents.clear();
     let ref: Digest | null = head.state;
     while (ref !== null) {
       if (history.length >= APPLICATION_LIMITS.states || seen.has(ref)) fail("Application history bound/cycle");
       seen.add(ref);
-      const item = await this.snapshot(ref);
+      const item = await this.snapshot(ref, shared);
       if (item.state.application !== name) fail("Application history identity mismatch");
       history.push(item); ref = item.state.previous;
     }
@@ -266,15 +290,16 @@ export class ApplicationService {
       this.checkStep(history[i - 1] ?? null, item);
       if (item.transition.kind === "migrate") await this.checkMigration(history[i - 1]!, item);
       if (item.transition.kind === "restore") await verifyApplicationRestoration(this.store, { application: name, parentState: history[i - 1]!.digest, candidateRevision: item.state.revision, evidence: item.transition.evidence });
+      if (item.transition.kind === "propose") await verifyApplicationProposalBinding(this.store, { application: name, parentState: history[i - 1]!.digest, revision: item.state.revision, evidence: item.transition.evidence });
       if (operations.has(item.transition.operation)) fail("Repeated operation in application history");
       operations.add(item.transition.operation);
-      await this.intents(item);
+      this.validatedIntents.set(item.digest, await this.intents(item));
     }
     return history;
   }
   async inspect(application: unknown): Promise<ApplicationSnapshot | null> { return (await this.history(application)).at(-1) ?? null; }
-  private async intents(snapshot: ApplicationSnapshot): Promise<{ref: Digest; work: WorkIntent}[]> {
-    const rows = [];
+  private async intents(snapshot: ApplicationSnapshot): Promise<IntentRow[]> {
+    const rows: IntentRow[] = [];
     for (const ref of snapshot.transition.intents) {
       const work = await getApplicationRecord(this.store, ref, parseWorkIntent);
       if (work.application !== snapshot.state.application || work.operation !== snapshot.transition.operation) fail("Intent transition mismatch");
@@ -285,6 +310,10 @@ export class ApplicationService {
     const command: ApplicationCommand = {application: snapshot.state.application, operation: snapshot.transition.operation, kind: snapshot.transition.kind, expectedHead: snapshot.state.previous, revision: snapshot.state.revision, memory: snapshot.state.memory, intents: rows.map(({work}) => work.kind === "start-episode" ? {kind: work.kind, entrypoint: work.entrypoint, input: work.input} : {kind: work.kind, route: work.route, message: work.message}), evidence: snapshot.transition.evidence, causedBy: snapshot.transition.causedBy};
     if (hash(command) !== snapshot.transition.request) fail("Transition normalized request mismatch");
     return rows;
+  }
+  /** Rows from the last `history()` pass when it validated this state; otherwise a fresh pass. */
+  private async validatedIntentRows(snapshot: ApplicationSnapshot): Promise<IntentRow[]> {
+    return this.validatedIntents.get(snapshot.digest) ?? this.intents(snapshot);
   }
   private async dispatchRecord(application: string, ref: Digest, work: WorkIntent): Promise<ApplicationDispatch | null> {
     const raw = await hostRead(join(this.path(application), "outbox", ref.slice(7) + ".json"), APPLICATION_LIMITS.recordBytes);
@@ -310,7 +339,7 @@ export class ApplicationService {
   private async pending(history: ApplicationSnapshot[]): Promise<ApplicationPending[]> {
     const pending: ApplicationPending[] = [];
     let total = 0;
-    for (const snapshot of history) for (const {ref, work} of await this.intents(snapshot)) {
+    for (const snapshot of history) for (const {ref, work} of await this.validatedIntentRows(snapshot)) {
       if (++total > APPLICATION_SERVICE_LIMITS.dispatches) throw new Error("Retained application intent bound exceeded");
       const dispatch = await this.dispatchRecord(snapshot.state.application, ref, work);
       if (dispatch && dispatch.sourceState !== snapshot.digest) fail("Dispatch state binding mismatch");
@@ -341,6 +370,9 @@ export class ApplicationService {
           return committed;
         }
       }
+      // History is the authority on committed operations: a removed operation
+      // record must not let the same identity commit a second state.
+      if (history.some(s => s.transition.operation === command.operation)) fail("Operation already committed in application history");
       if ((current?.digest ?? null) !== command.expectedHead) throw new AlgalError("RECEIPT_MISMATCH", "Stale application head");
       if (history.length >= APPLICATION_LIMITS.states) throw new Error("Application state bound exhausted");
       const revision = await getApplicationRecord(this.store, command.revision, parseApplicationRevision);
@@ -373,13 +405,14 @@ export class ApplicationService {
       this.checkStep(current, next);
       if (next.transition.kind === "migrate") await this.checkMigration(current!, next);
       if (next.transition.kind === "restore") await verifyApplicationRestoration(this.store, { application: command.application, parentState: current!.digest, candidateRevision: command.revision, evidence: command.evidence });
+      if (next.transition.kind === "propose") await verifyApplicationProposalBinding(this.store, { application: command.application, parentState: current!.digest, revision: command.revision, evidence: command.evidence });
       const operation: Operation = {contract: "algal.application-operation.v1", application: command.application, operation: command.operation, request, transition: state.transition, state: next.digest};
       if (prepared && !same(prepared, operation)) fail("Prepared operation changed");
       // Copies keep trusted admission from accidentally mutating the prepared commit.
       await this.admission.admitCommit({command: parseApplicationCommand(command), current: structuredClone(current), revision: structuredClone(revision), previousRevision: structuredClone(current?.revision ?? null), pending: structuredClone(pending), store: this.store});
       const operationsPath = join(path, "operations");
       let operations: string[] = [];
-      try { await lstat(operationsPath); operations = await hostNames(operationsPath, APPLICATION_LIMITS.states, /^[a-f0-9]{64}\.json$/); }
+      try { await lstat(operationsPath); operations = await hostNames(operationsPath, APPLICATION_LIMITS.states, /^[a-f0-9]{64}\.json$/, false); }
       catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
       if (!prepared && operations.length >= APPLICATION_LIMITS.states) throw new Error("Application operation bound exhausted");
       const head = json({contract: "algal.application-head.v1", application: command.application, state: next.digest});
@@ -447,7 +480,8 @@ export class ApplicationService {
         catch (error) {
           results.push({ contract: "algal.application-admission-denied.v1", application: name, intent: row.intent,
             sourceState: snapshot.digest, currentState: current.digest, status: "denied",
-            reason: error instanceof Error && error.message ? error.message.slice(0, 256) : "Trusted host did not admit this intent" });
+            // Transient record: the first 256 Unicode scalar values, as native does.
+            reason: error instanceof Error && error.message ? Array.from(error.message).slice(0, 256).join("") : "Trusted host did not admit this intent" });
           continue;
         }
         if (plan.kind === "episode") await putApplicationRecord(this.store, plan.binding);
@@ -466,7 +500,7 @@ export class ApplicationService {
       const row = (await this.pending(history)).find(p => p.intent === ref);
       if (!row) {
         const source = history.find(s => s.transition.intents.includes(ref));
-        const work = source ? (await this.intents(source)).find(item => item.ref === ref)?.work : undefined;
+        const work = source ? (await this.validatedIntentRows(source)).find(item => item.ref === ref)?.work : undefined;
         if (!source || !work) throw new Error("No reachable application intent");
         const settled = await this.dispatchRecord(name, ref, work);
         if (settled?.status === "settled" && history.some(s => s.digest === settled.sourceState && s.transition.intents.includes(ref))) return settled;

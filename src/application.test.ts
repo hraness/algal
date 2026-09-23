@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, open, readdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, open, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ApplicationService, applicationProcessName, type ApplicationAdmission, type ApplicationDispatchContext } from "./application";
 import { digestCanonical, type Digest } from "./digest";
 import { capabilityHandle } from "./capabilities";
 import { parseOrganismManifest } from "./contract";
-import { hostRead, hostWrite } from "./host-state";
+import { hostLease, hostRead, hostWrite } from "./host-state";
 import type { JsonValue } from "./values";
 
 const dirs: string[] = [];
@@ -290,5 +290,70 @@ describe("experimental application lifecycle", () => {
     expect(calls).toEqual(["blocked", "eligible"]);
     expect((await admitting.dispatchPending("fixture", dispatcher, 1)).map(row => row.status)).toEqual(["denied", "blocked"]);
     expect(calls).toEqual(["blocked", "eligible"]);
+  });
+});
+
+describe("application custody robustness", () => {
+  test("stray regular files in applications/ and operations/ never brick custody; symlinks still do", async () => {
+    const {service, revisionRef, memory} = await fixture();
+    const applications = join(service.dir, "applications");
+    await mkdir(applications, {recursive: true});
+    await writeFile(join(applications, ".DS_Store"), "finder residue");
+    await writeFile(join(applications, "stray.txt"), "not an application");
+    const base = {application: "fixture", operation: ref("stray-create"), kind: "create", expectedHead: null, revision: revisionRef, memory, intents: [], evidence: [], causedBy: null};
+    const initial = await service.create(base);
+    await writeFile(join(service.dir, "applications", "fixture", "operations", "README"), "operator note");
+    const message = await service.store.putValue({contract: "algal.message.fixture.v1", value: "stray"});
+    const next = await service.commit({...base, operation: ref("stray-delivery"), kind: "investigate", expectedHead: initial.digest, intents: [{kind: "deliver", route: "inbox", message}]});
+    expect(next.state.sequence).toBe(1);
+    const dispatcher = {configurationDigest: ref("stray-dispatcher"), async dispatch(context: ApplicationDispatchContext) {
+      if (context.intent.kind !== "deliver") throw new Error("expected delivery intent");
+      return {status: "settled", result: {kind: "delivery", message: context.intent.message, idempotencyKey: context.dispatch.identity}};
+    }};
+    expect((await service.dispatchPending("fixture", dispatcher)).map(row => row.status)).toEqual(["settled"]);
+    expect((await service.create(base)).digest).toBe(initial.digest);
+    await symlink(join(service.dir, "values"), join(applications, "linked"));
+    await expect(service.inspect("fixture")).resolves.toBeTruthy(); // inspection scans no siblings
+    await expect(service.commit({...base, operation: ref("after-symlink"), kind: "memory", expectedHead: next.digest})).rejects.toThrow("Invalid application directory");
+  });
+
+  test("a removed operation record cannot let the same operation commit twice", async () => {
+    const {service, revisionRef, memory} = await fixture();
+    const base = {application: "fixture", operation: ref("dup-create"), kind: "create", expectedHead: null, revision: revisionRef, memory, intents: [], evidence: [], causedBy: null};
+    const initial = await service.create(base);
+    const operation = ref("dup-memory"), nextMemory = await service.store.putValue({contract: "algal.memory.fixture.v1", facts: ["dup"]});
+    const advanced = await service.commit({...base, operation, kind: "memory", expectedHead: initial.digest, memory: nextMemory});
+    await rm(join(service.dir, "applications", "fixture", "operations", operation.slice(7) + ".json"));
+    for (const retry of [{...base, operation, kind: "memory", expectedHead: initial.digest, memory: nextMemory}, {...base, operation, kind: "memory", expectedHead: advanced.digest, memory}]) {
+      await expect(service.commit(retry)).rejects.toThrow("Operation already committed in application history");
+    }
+    expect((await service.history("fixture")).map(row => row.transition.operation)).toEqual([base.operation, operation]);
+    expect((await service.inspect("fixture"))!.digest).toBe(advanced.digest);
+  });
+
+  test("shared creation and quota leases wait out a briefly held owner instead of failing", async () => {
+    const {service, revisionRef, memory} = await fixture();
+    const base = {application: "fixture", operation: ref("waited-create"), kind: "create", expectedHead: null, revision: revisionRef, memory, intents: [], evidence: [], causedBy: null};
+    const hold = async (directory: string, name: string) => {
+      let released!: () => void, acquired!: () => void;
+      const held = new Promise<void>(resolve => { released = resolve; });
+      const owned = new Promise<void>(resolve => { acquired = resolve; });
+      const holder = hostLease(directory, name, () => { acquired(); return held; });
+      await owned; // the contender must start against a live owner
+      return {release: released, holder};
+    };
+    const started = Date.now();
+    const creation = await hold(join(service.dir, "applications", ".creation"), "application-creation");
+    const creating = service.create(base);
+    setTimeout(creation.release, 300);
+    const initial = await creating;
+    await creation.holder;
+    expect(initial.state.sequence).toBe(0);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(300);
+    const quota = await hold(join(service.dir, ".application-quota"), "application-quota");
+    const committing = service.commit({...base, operation: ref("waited-memory"), kind: "memory", expectedHead: initial.digest, memory: await service.store.putValue({contract: "algal.memory.fixture.v1", facts: ["waited"]})});
+    setTimeout(quota.release, 300);
+    expect((await committing).state.sequence).toBe(1);
+    await quota.holder;
   });
 });
