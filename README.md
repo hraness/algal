@@ -28,7 +28,9 @@ VM below; author a custom program once the retained workflow is useful to you.
 
 [Download and verify the native prerelease](docs/native-release.md)
 ([published packages](https://github.com/hraness/algal/releases)).
-The workbench needs no Bun, Cargo, checkout, credentials, or web server.
+The workbench needs no Bun, Cargo, credentials, or web server; the archive
+installer script runs from a checkout (see the release guide), or unpack the
+archive by hand.
 Use fresh output directories:
 
 ```sh
@@ -171,7 +173,7 @@ bun cli.ts check examples/source/errors/unknown-binding/main.algal \
 ```
 
 JSON is the default error format; `--diagnostic-format json` makes that choice
-explicit for tools. [Inspect the generated authoring error](https://algal.computer/#authoring-error).
+explicit for tools. [Inspect the generated authoring error](https://algal.computer/tour/#authoring-error).
 
 ### Run only the selected branch
 
@@ -197,7 +199,7 @@ return match intent.value {
 The budget covers the largest selected path: two executor attempts, rather
 than adding the costs of mutually exclusive arms. Nested `if` and `match`
 work the same way. Source diagrams show binding names and operation summaries
-while retaining every exact cell ID. [Inspect the recorded paths on the site](https://algal.computer/#branch-demo).
+while retaining every exact cell ID. [Inspect the recorded paths on the site](https://algal.computer/tour/#branches).
 
 ### Write a program once. Call it or use it for each item.
 
@@ -233,7 +235,7 @@ empty batch; its child runs are currently sequential. Child budgets are
 checked during compilation, and the root budget limits the entire execution.
 Local imports resolve to content-addressed child manifests. The diagram
 shows those actual call boundaries; the receipt records the nested execution.
-[Inspect the executable example](https://algal.computer/#reuse).
+[Inspect the executable example](https://algal.computer/tour/#reuse).
 
 Compile the whole project into one portable bundle:
 
@@ -287,7 +289,7 @@ on its second item. The report locates the division in `ratio.algal:4` and
 shows the caller in `ratios.algal`. Original source is recompiled and checked
 against the receipt before any location is displayed. Diagnosis inspects
 recorded evidence; `verify` separately replays it.
-[Explore child calls and a failed execution on the site](https://algal.computer/#inspect-children).
+[Explore child calls and a failed execution on the site](https://algal.computer/tour/#inspect-children).
 
 ## More than a chain of prompts
 
@@ -316,7 +318,7 @@ Failed or interrupted work cannot silently become a successful review packet.
 For qualified adapters with durable operation identity, explicit
 [operation reconciliation](docs/coding-operations.md) can recover a retained
 terminal result after a lost acknowledgement without launching the job again.
-The current xcb adapter remains conservative when its outcome is unknown.
+The current delegated-coding adapter remains conservative when its outcome is unknown.
 [Native release packages](docs/native-release.md) distribute the process kernel
 for Ubuntu 24.04 x86_64 and macOS 14+ Apple silicon without Bun or Cargo. The
 repair and GitHub integration hosts still require Bun. These are qualified
@@ -601,6 +603,23 @@ checks both runtimes after removing the original store and adapter paths.
 See [the process VM guide](docs/vm.md) for the lifecycle, JSON report, commands,
 and host trust boundary.
 
+### Durable applications (experimental)
+
+The native CLI also exposes the durable application lifecycle from
+[`spec/v1/application.md`](spec/v1/application.md) as `algal application
+<subcommand> --dir <application-root>`: `put`, `scope`, `snapshot`, `observe`,
+`query`, `create`, `commit`, `inspect`, `pending`, `dispatch`, `reconcile`,
+`schedule`, `execute`, `publish`, `rollover-memory`, `restore`, `evaluate`,
+`verify-evaluation`, `admit-activation`, `compatible`, `compare`,
+`verify-comparison`, `migrate-memory`, `view`, and `report`. Host authority
+comes from a declarative `algal.application-host.v1` policy record passed as
+`--policy`. `algal application --help` describes each subcommand. The
+executable example is [`scripts/application-parity.ts`](scripts/application-parity.ts),
+which drives the whole lifecycle through both runtimes and compares digests;
+[the adaptive inventory guide](docs/adaptive-inventory.md) walks through one
+domain. The surface is experimental: the wire records are versioned, the
+command names are not yet frozen.
+
 ## First value
 
 ```sh
@@ -612,7 +631,7 @@ cargo build -p algal
 ./target/debug/algal suite --dir .algal
 ```
 
-`suite` runs every bundled example — `triage` (classifier routing), `pipeline`
+`suite` runs every bundled example, including `triage` (classifier routing), `pipeline`
 (agent plan → classifier review → guarded branches), `inbox` (the triage
 organism embedded as one cell), `lookup` (an agent reading a record through a
 `pick.v1` tool call), `refine` (a `repeat` evaluator-optimizer loop),
@@ -715,8 +734,10 @@ local vectors and hybrid ranking.
 
 Provider keys never enter manifests, receipts, digests, or logs — they resolve
 at the executor boundary only. `auth` vaults them locally cross-platform
-(macOS Keychain, libsecret, Windows DPAPI, or a permission-checked file
-fallback); the provider env var always works as a CI escape hatch.
+(macOS Keychain, libsecret, Windows DPAPI, or — when no vault is available —
+a plaintext file under `~/.algal/credentials` (or `$ALGAL_HOME`) with mode
+0600; both CLIs print a warning when they fall back to it); the provider env var always works as a CI
+escape hatch.
 
 ```sh
 bun run cli auth jev            # vault a TypeSafe Jev key (TYPESAFE_API_KEY)
@@ -838,8 +859,8 @@ with typed signatures and `scripted:<data>` or `cmd:<shell>` executors. The
 billing-dispute case in `examples/invest/bench-invest-live.config.json` uses it
 to compare a Qwen organism with a charge-ledger lookup against a Claude Opus
 call that can only read the ticket. Add a `prices` map to the bench config
-(`examples/invest/bench-invest-priced.config.json`) to put the Pareto in
-aicharts.io-denominated dollars.
+(`examples/invest/bench-invest-priced.config.json`) to express the Pareto in
+dollars at the prices you supply.
 
 `check` admits a manifest without running it: parse, graph validation, and
 interface resolution only. `explain` prints the compiled signature — every
@@ -914,8 +935,8 @@ name → command, so a cell's `route.provider`/`route.preset` picks its model.
   fixed and reports any divergence; `diff` compares two receipts canonically.
 - Manifests and receipts are content-addressed canonical JSON; payloads ride
   the same CAS through `ref` ports. The store is a seam: `MemoryStore` and
-  `FileStore` (`.algal/`) ship now; an Oh-backed store implements the
-  same ten methods. `pack`/`unpack` move a manifest's whole embedding
+  `FileStore` (`.algal/`) ship now; a store backed by another database
+  would implement the same ten methods. `pack`/`unpack` move a manifest's whole embedding
   closure — sub-manifests and `const`-referenced payloads — between stores
   as one verified bundle.
 - `run --cache-effects` memoizes effects across runs through the store's
@@ -952,8 +973,8 @@ use it from a larger system without giving the system ambient authority.
 ### From code
 
 ```ts
-import { builtinRegistry, runOrganism, vercelGatewayExecutor } from "algal";
-import { FileStore } from "algal/store"; // or a custom Store
+import { builtinRegistry, FileStore, runOrganism, vercelGatewayExecutor } from "@hraness/algal";
+// FileStore ships from the package root; any custom Store works too
 
 const receipt = await runOrganism({
   manifest: myManifest,
@@ -1064,6 +1085,15 @@ Receipts are content-addressed canonical JSON; `algal verify` replays them
 offline with the recorded effects fixed. `algal pack` exports a manifest
 closure — sub-manifests, `const` refs, and linked bundles — so one digest fully
 describes a deployable program.
+
+### Exit codes
+
+Both CLIs follow one rule. `0`: the command succeeded. `1`: the command ran and
+reported a negative result — a run that `failed` or `suspended`, a `verify`
+that found divergence, a `suite` with a failing example, a credential that is
+absent. `2`: the command could not run — a usage, parse, admission, I/O, or
+runtime error, printed to stderr as `{"error": <code>, "message": ...}` (the
+native CLI wraps it as `{"ok": false, "error": {...}}`).
 
 ## How claims are checked
 

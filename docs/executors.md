@@ -212,7 +212,7 @@ per-activation.
 Programmatically, a `ToolRegistry` is a `Map<string, { signature, tool }>`:
 
 ```ts
-import type { Tool, ToolRegistry } from "algal";
+import type { Tool, ToolRegistry } from "@hraness/algal";
 
 const tools: ToolRegistry = new Map([[
   "ledger.charges.v1",

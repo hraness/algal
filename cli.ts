@@ -91,8 +91,12 @@ import {
   type JsonObject,
   type JsonValue,
 } from "./src/values";
+import packageJson from "./package.json" with { type: "json" };
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
+/** The npm package version. Receipts stamp `RUNTIME_VERSION` from src/run.ts
+ * instead: that is the shared `algal.run.v1` wire constant, not this release. */
+const PACKAGE_VERSION: string = packageJson.version;
 const EXAMPLES_DIR = join(ROOT, "examples");
 let diagnosticFormat: "json" | "text" = "json";
 
@@ -467,6 +471,26 @@ function diag(msg: string): void {
   process.stderr.write(msg + "\n");
 }
 
+/** Explain an `EFFECT_UNBOUND` run failure on stderr: which cell asked for
+ * which route, and which executors the host actually admitted. The receipt
+ * itself is shared wire bytes with the native runtime and stays unchanged. */
+function unboundHint(
+  receipt: { failure?: { code: string; path?: string } },
+  manifest: { cells: readonly { id: string; route?: { provider?: string; preset?: string } }[] },
+  executors: readonly Executor[],
+): void {
+  if (receipt.failure?.code !== "EFFECT_UNBOUND") return;
+  const path = receipt.failure.path;
+  const cell = path === undefined ? undefined : manifest.cells.find((c) => c.id === path.split("/").at(-1));
+  const route = cell?.route;
+  const asked = route?.provider !== undefined ? `route.provider "${route.provider}"`
+    : route?.preset !== undefined ? `route.preset "${route.preset}"`
+    : "no route";
+  const admitted = executors.filter((e) => e.replay !== true).map((e) => `"${e.id}"`);
+  diag(`hint: cell "${path ?? "?"}" requested ${asked}; admitted executors: ${admitted.length ? admitted.join(", ") : "none"}. `
+    + `Routes match an executor by id (--executors maps names; --responses serves any route).`);
+}
+
 /** Load every *.algal.json under dir into the store so organism cells
  * resolve by digest. */
 async function loadModules(
@@ -495,13 +519,14 @@ async function loadModules(
  * what `pack --out` writes. */
 async function loadTransports(
   file: string,
+  base = process.cwd(),
 ): Promise<Record<string, Transport>> {
   const map = parseTransportsFile(await readJson(resolve(file)));
   const out: Record<string, Transport> = {};
   for (const [name, target] of Object.entries(map)) {
     out[name] = /^https?:\/\//.test(target)
       ? httpTransport(target)
-      : fileTransport(resolve(target), name);
+      : fileTransport(resolve(base, target), name);
   }
   return out;
 }
@@ -640,7 +665,14 @@ async function resolveExecutors(
         : {}));
   }
   if (flags["gateway-model"] !== undefined) {
-    executors.push(vercelGatewayExecutor({ model: String(flags["gateway-model"]) }));
+    const model = String(flags["gateway-model"]);
+    if (process.env.AI_GATEWAY_API_KEY === undefined && process.env.VERCEL_OIDC_TOKEN === undefined) {
+      throw new AlgalError(
+        "EFFECT_UNBOUND",
+        `--gateway-model ${model}: no AI Gateway credential; set AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN before running`,
+      );
+    }
+    executors.push(vercelGatewayExecutor({ model }));
   }
   if (flags.jev !== undefined) {
     executors.push(jevSpecExecutor(typeof flags.jev === "string" ? `jev:${flags.jev}` : "jev")!);
@@ -868,7 +900,7 @@ async function main(): Promise<number> {
 
     case "--version":
     case "version":
-      out({ name: "algal", version: "0.1.0", contract: "algal.organism.v1" });
+      out({ name: "algal", version: PACKAGE_VERSION, contract: "algal.organism.v1" });
       return 0;
 
     case "examples": {
@@ -1044,6 +1076,7 @@ async function main(): Promise<number> {
       } else {
         for (const [id, cell] of Object.entries(receipt.cells)) if (cell.outputs) outputs[id] = cell.outputs as JsonValue;
       }
+      unboundHint(receipt, manifest, executors);
       const rd = await store.putReceipt(receipt as unknown as JsonValue);
       const compact: JsonObject = {
         ok: receipt.outcome === "complete",
@@ -1271,6 +1304,7 @@ async function main(): Promise<number> {
         diag(`manifest ${md}`);
         diag(`receipt  ${rd}`);
       }
+      unboundHint(receipt, manifest, executors);
       out(receipt);
       return receipt.outcome === "complete" ? 0 : 1;
     }
@@ -2228,8 +2262,11 @@ async function main(): Promise<number> {
         let transports: Record<string, Transport> | undefined;
         try {
           await readFile(join(examplesDir, `${id}.transports.json`), "utf8");
+          // bundled transport targets are written relative to the examples
+          // directory's parent (the checkout root), as the native suite reads them
           transports = await loadTransports(
             join(examplesDir, `${id}.transports.json`),
+            dirname(examplesDir),
           );
         } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
         const receipt = await runOrganism({
@@ -2356,6 +2393,9 @@ async function main(): Promise<number> {
         );
       }
       const stored = await storeCredential(provider, key);
+      if (stored.source === "file") {
+        diag(`warning: no OS vault was available; the key is stored as plaintext (mode 0600) at ${stored.location}`);
+      }
       out({
         ok: true,
         provider,
@@ -2401,16 +2441,16 @@ async function main(): Promise<number> {
       }
       out({
         runtime: "algal",
-        version: "0.1.0",
+        version: PACKAGE_VERSION,
         native: false,
         platform: process.platform,
-        legacyWireContract: "algal.organism.v1",
+        wireContract: "algal.organism.v1",
       });
       return 0;
     }
 
     default:
-      process.stderr.write(USAGE);
+      process.stderr.write(`unknown command "${cmd}"; see algal --help\n`);
       return 2;
   }
 }
@@ -2527,5 +2567,7 @@ main()
     process.stderr.write(
       canonicalize({ error: rep.code, message: rep.message }) + "\n",
     );
-    process.exit(rep.code === "PARSE_FAILED" ? 2 : 1);
+    // Exit-code rule shared with the native CLI: 0 the command succeeded,
+    // 1 it ran and reported a negative result, 2 it could not run.
+    process.exit(2);
   });

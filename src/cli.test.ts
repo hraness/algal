@@ -19,7 +19,7 @@ test("ALGAL branding reports the v1 wire identity", async () => {
   const result = await cli("--version");
   expect(result.code).toBe(0);
   expect(JSON.parse(result.stdout)).toEqual({
-    name: "algal", version: "0.1.0", contract: "algal.organism.v1",
+    name: "algal", version: "0.2.0", contract: "algal.organism.v1",
   });
 });
 

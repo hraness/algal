@@ -423,8 +423,9 @@ impl ProcessService {
         no_link(&directory)?;
         let path = directory.join(format!("{}.json", &key[7..]));
         no_link(&path)?;
-        let file = crate::store::open_regular_file(&path, max_bytes)?
-            .ok_or_else(|| Error::from(std::io::Error::from(std::io::ErrorKind::NotFound)))?;
+        let file = crate::store::open_regular_file(&path, max_bytes)?.ok_or_else(|| {
+            Error::new("IO_FAILED", format!("{}: file not found", path.display()))
+        })?;
         let value = read_json(file, max_bytes)?;
         bounded_nodes(&value)?;
         if crate::canonical::digest(&value)? != key {
@@ -444,8 +445,9 @@ impl ProcessService {
     fn chain(&self, name: &str) -> Result<Vec<ProcessState>> {
         let path = self.directory(name)?.join("head.json");
         no_link(&path)?;
-        let file = crate::store::open_regular_file(&path, 4096)?
-            .ok_or_else(|| Error::from(std::io::Error::from(std::io::ErrorKind::NotFound)))?;
+        let file = crate::store::open_regular_file(&path, 4096)?.ok_or_else(|| {
+            Error::new("IO_FAILED", format!("{}: file not found", path.display()))
+        })?;
         let head: Head = serde_json::from_value(read_json(file, 4096)?)?;
         if head.contract != "algal.process-head.v1" || head.name != name {
             return Err(Error::invalid("process head contract or name"));

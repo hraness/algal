@@ -368,8 +368,9 @@ impl Store {
             && let Some(path) = path
         {
             publish(&path, canonical(value)?.as_bytes(), false)?;
-            let file = open_regular_file(&path, MAX_DOCUMENT_BYTES)?
-                .ok_or_else(|| Error::from(std::io::Error::from(std::io::ErrorKind::NotFound)))?;
+            let file = open_regular_file(&path, MAX_DOCUMENT_BYTES)?.ok_or_else(|| {
+                Error::new("IO_FAILED", format!("{}: file not found", path.display()))
+            })?;
             let installed = read_json(file, MAX_DOCUMENT_BYTES)?;
             if digest(&installed)? != key {
                 return Err(Error::new(
@@ -548,7 +549,7 @@ impl Store {
                     return Err(Error::limit("module count"));
                 }
                 let file = open_input_file(&path, 1_048_576)?.ok_or_else(|| {
-                    Error::from(std::io::Error::from(std::io::ErrorKind::NotFound))
+                    Error::new("IO_FAILED", format!("{}: file not found", path.display()))
                 })?;
                 let manifest = Manifest::parse(&read_json(file, 1_048_576)?)?;
                 self.admit(&manifest)?;

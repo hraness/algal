@@ -26,12 +26,14 @@ inputs, build-time source state, compiler, and target in the executable. Packagi
 compares those fields with the admitted checkout before qualification, so an old
 executable cannot inherit the checkout's current commit or source contents.
 
-For example, with a reviewed checkout at the release tag:
+For example, with a reviewed checkout at the release tag (the installer script
+uses the checkout's `scripts/unpack-native.py`; the installed executable itself
+needs no checkout):
 
 ```sh
 sh scripts/install-native.sh "$HOME/.local" \
-  --archive ./algal-v0.2.0-vm.7-aarch64-apple-darwin.tar.gz \
-  --checksum ./algal-v0.2.0-vm.7-aarch64-apple-darwin.tar.gz.sha256
+  --archive ./algal-<tag>-aarch64-apple-darwin.tar.gz \
+  --checksum ./algal-<tag>-aarch64-apple-darwin.tar.gz.sha256
 "$HOME/.local/bin/algal" doctor
 ```
 
