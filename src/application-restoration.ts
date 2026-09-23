@@ -6,11 +6,12 @@ import {
   nullableApplicationRef, parseApplicationRevision, parseApplicationState,
   putApplicationRecord, type ApplicationRevision,
 } from "./application-contract";
-import type { ApplicationService, ApplicationSnapshot } from "./application";
+import type { ApplicationCore, ApplicationSnapshot } from "./application-core";
 import { digestCanonical, type Digest } from "./digest";
 import { compileOrganism, interfaceSignature } from "./graph";
 import { builtinRegistry } from "./registry";
-import { replayStore, type Store } from "./store";
+import { replayStore } from "./store-memory";
+import type { Store } from "./store";
 
 export type ApplicationRestorationPolicy = {
   contract: "algal.application-restoration-policy.v1";
@@ -100,7 +101,7 @@ export async function verifyApplicationRestoration(store: Store, input: {
   return record;
 }
 
-export async function restoreApplicationRevision(lifecycle: ApplicationService, input: RestoreApplicationRevisionInput): Promise<RestoredApplicationRevision> {
+export async function restoreApplicationRevision(lifecycle: ApplicationCore, input: RestoreApplicationRevisionInput): Promise<RestoredApplicationRevision> {
   const optional = ["evidence", "causedBy"].filter(key => Object.hasOwn(input, key));
   const v = applicationObject(input, ["application", "operation", "expectedHead", "targetState", "policy", ...optional]);
   const application = applicationId(v.application), operation = applicationRef(v.operation), expectedHead = applicationRef(v.expectedHead);

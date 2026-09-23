@@ -1,0 +1,83 @@
+/** Actual browser regression for removal of a composing control. Supply an
+ * installed Playwright/Chromium; run through browser-auth scheduler custody. */
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
+import { TriageHost } from "../local-triage/host";
+import { DEFAULT_CONFIG, parseSession } from "../local-triage/contract";
+import { serveTriage } from "./serve";
+
+const [outputArg, playwrightArg, chromiumArg] = process.argv.slice(2);
+if (!outputArg || !playwrightArg || !chromiumArg) throw new Error("Usage: bun composition-qualification.ts FRESH_OUTPUT PLAYWRIGHT_MODULE CHROMIUM_EXECUTABLE");
+const output = resolve(outputArg), directory = join(output, "current"), application = "composition";
+await mkdir(output, { recursive: true });
+const hash = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+const sources = await Promise.all(["page.ts", "session.ts", "serve.ts", "composition-qualification.ts"].map(async path => ({ path, sha256: hash(await readFile(new URL(path, import.meta.url))) })));
+await writeFile(join(output, "declaration.json"), JSON.stringify({ contract: "algal.triage-composition-fixture.v1", sources, method: "Actual production browser renderer; one refresh response selects a separately valid captured schema-v1 fixture to remove the v2 category control. This is a renderer compatibility fixture, not a permitted schema downgrade or lifecycle activation." }, null, 2) + "\n", { flag: "wx" });
+const current = new TriageHost(directory, application), predecessor = new TriageHost(join(output, "predecessor"), application);
+const original = await current.initialize({ schemaVersion: 2, config: DEFAULT_CONFIG, tasks: [] });
+await predecessor.initialize({ schemaVersion: 1, config: DEFAULT_CONFIG, tasks: [] });
+const server = await serveTriage({ directory, application });
+const { chromium } = await import(resolve(playwrightArg));
+const browser = await chromium.launch({ headless: true, executablePath: resolve(chromiumArg), args: ["--disable-background-networking"] });
+const checks: string[] = [], errors: string[] = [];
+let release = () => {};
+try {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 950 } });
+  page.on("pageerror", (error: Error) => errors.push(error.message));
+  await page.goto(server.url);
+  await page.locator("body[data-ready='true']").waitFor({ timeout: 10000 });
+  assert.equal(await page.locator("#category-label").isVisible(), true);
+  await page.locator("#title").fill("Retain my unfinished task");
+  await page.locator("#category").fill("Composing category");
+  let entered = () => {};
+  const requestStarted = new Promise<void>(resolve => { entered = resolve; });
+  const responseReleased = new Promise<void>(resolve => { release = resolve; });
+  await page.route("**/api/capture", async (route: { request(): { postDataJSON(): unknown }; fulfill(options: { status: number; contentType: string; body: string }): Promise<void> }) => {
+    const session = parseSession(route.request().postDataJSON());
+    const removed = await predecessor.capture(session);
+    assert.equal(removed.view.form.fields.some(field => field.name === "category"), false);
+    entered(); await responseReleased;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(removed) });
+  }, { times: 1 });
+  await page.locator("#refresh").click(); await requestStarted;
+  await page.locator("#category").focus();
+  await page.locator("#category").dispatchEvent("compositionstart", { data: "あ" });
+  const received = page.waitForResponse("**/api/capture"); release(); await received;
+  // Let the fulfilled fetch, JSON parsing and potential eager rendering finish.
+  await page.waitForTimeout(150);
+  assert.equal(await page.locator("#category-label").isVisible(), true);
+  assert.equal(await page.locator("#category").inputValue(), "Composing category");
+  assert.equal(await page.locator("#category:focus").count(), 1);
+  assert.equal(await page.locator("#refresh").isDisabled(), true);
+  assert.equal(JSON.parse(await page.locator("#references").textContent()).head, original.head);
+  checks.push("Incoming control removal is deferred during composition, retaining the original head, focused control and draft");
+  await page.locator("#category").dispatchEvent("compositionend", { data: "あ" });
+  await page.locator("#refresh:not([disabled])").waitFor({ timeout: 5000 });
+  assert.equal(await page.locator("#category-label").isVisible(), false);
+  assert.equal(await page.locator("#category:focus").count(), 0);
+  assert.equal(await page.locator("#category").inputValue(), "Composing category");
+  assert.equal(await page.locator("#title").inputValue(), "Retain my unfinished task");
+  assert.equal(await page.locator("#stale").isVisible(), true);
+  assert.equal(await page.locator("#submit").isDisabled(), true);
+  checks.push("Composition end permits semantic removal, clears incompatible focus and requires explicit rebase without losing the draft");
+  const refreshRequest = page.waitForRequest("**/api/capture");
+  await page.locator("#refresh").click();
+  const retained = parseSession((await refreshRequest).postDataJSON());
+  assert.equal(retained.focusedField, null);
+  assert.equal(retained.draft.category, "Composing category");
+  assert.equal(retained.draft.title, "Retain my unfinished task");
+  await page.locator("#refresh:not([disabled])").waitFor({ timeout: 5000 });
+  assert.equal(await page.locator("#category").inputValue(), "Composing category");
+  assert.equal(await page.locator("#category-label").isVisible(), true);
+  assert.equal(await page.locator("#stale").isVisible(), true);
+  checks.push("A subsequent real capture receives the retained draft with cleared focus and keeps explicit rebase required");
+  assert.equal((await current.capture()).head, original.head);
+  assert.deepEqual(errors, []);
+  checks.push("Renderer fixture does not activate a downgrade, mutate task facts or produce browser errors");
+  await page.screenshot({ path: join(output, "composition-removal.png") });
+  const report = { contract: "algal.triage-composition-qualification.v1", ok: true, checks, sources, browser: await browser.version(), inferenceCalls: 0, limitation: "Synthetic composition events exercise the production deferral path; this is not physical IME/device qualification. Removal selects a valid alternate captured fixture, not an admitted schema downgrade." };
+  await writeFile(join(output, "result.json"), JSON.stringify(report, null, 2) + "\n", { flag: "wx" });
+  console.log(JSON.stringify({ ok: true, checks, report: join(output, "result.json") }));
+} finally { release(); await browser.close(); server.stop(); }

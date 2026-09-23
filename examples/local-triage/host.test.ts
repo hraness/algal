@@ -1,0 +1,170 @@
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { TriageHost, hash, verifyTransfer } from "./host";
+import { DEFAULT_SESSION, MAX_TASKS, parseCommand, parseTasks, parseSession, type Task, type Command, type Capture } from "./contract";
+import { evaluateView, makeRevision, updateTasks } from "./programs";
+import { parseMemorySnapshot, parseMemoryObservation } from "../../src/application-memory";
+import { getApplicationRecord, parseApplicationRevision } from "../../src/application-contract";
+import { parseApplicationMigration, verifyApplicationMigration } from "../../src/application-migration";
+
+const directories: string[] = [];
+afterEach(async () => { for (const path of directories.splice(0)) await rm(path, { recursive: true, force: true }); });
+async function fixture(application = "triage") { const directory = await mkdtemp(join(tmpdir(), "algal-triage-test-")); directories.push(directory); return new TriageHost(directory, application); }
+const task = (id = "first", title = "Write a useful test", priority: Task["priority"] = "normal"): Task => ({ id, title, priority, status: "open", category: "inbox" });
+const cmd = (capture: Capture, label: string, action: Command["action"]): Command => ({ contract: "algal.triage-command.v1", expectedHead: capture.head, operation: hash(label), action });
+
+describe("bounded local triage application", () => {
+  test("pure forms, filtering, sorting and actions share facts while session drafts remain separate", () => {
+    const tasks = [task("low", "Zeta", "low"), task("high", "Alpha", "high")], revision = makeRevision();
+    const session = { ...DEFAULT_SESSION, query: "alpha", draft: { taskId: null, title: "Unsubmitted", priority: "low" as const, category: "inbox" }, focusedField: "title" as const };
+    const view = evaluateView(revision, tasks, session);
+    expect(view.groups.flatMap(g => g.tasks.map(r => r.task.id))).toEqual(["high"]);
+    expect(view.form.fields[0]?.value).toBe("Unsubmitted");
+    expect(view.form.submit.enabled).toBe(true);
+    expect(view.groups[0]?.tasks[0]?.actions.find(a => a.kind === "reopen")?.enabled).toBe(false);
+    expect(tasks[0]?.title).toBe("Zeta");
+    expect(evaluateView(revision, tasks, { ...session, draft: { ...session.draft, taskId: "missing" } }).form.submit.enabled).toBe(false);
+    expect(() => parseSession({ ...session, authoritative: true })).toThrow();
+    expect(() => parseTasks([...tasks, tasks[0]])).toThrow("Duplicate");
+  });
+  test("add/edit/complete/reopen are durable, exact-head and duplicate-safe; capture retains a draft", async () => {
+    const host = await fixture(), initial = await host.initialize(), add = cmd(initial, "add", { kind: "add", task: task() });
+    const added = await host.command(add), again = await host.command(add);
+    expect(again.head).toBe(added.head);
+    expect((await host.service.history(host.application)).length).toBe(2);
+    await expect(host.command({ ...add, operation: hash("other") })).rejects.toThrow("Stale");
+    let next = await host.command(cmd(added, "edit", { kind: "edit", taskId: "first", title: "Changed", priority: "high", category: "inbox" }));
+    next = await host.command(cmd(next, "complete", { kind: "complete", taskId: "first" }));
+    expect(next.tasks[0]?.status).toBe("done");
+    next = await host.command(cmd(next, "reopen", { kind: "reopen", taskId: "first" }));
+    expect(next.tasks[0]?.status).toBe("open");
+    expect(next.tasks[0]?.title).toBe("Changed");
+    const session = { ...DEFAULT_SESSION, draft: { ...DEFAULT_SESSION.draft, title: "Retained draft" }, focusedField: "title" as const };
+    const restarted = await new TriageHost(host.directory, host.application).capture(session);
+    expect(restarted.head).toBe(next.head);
+    expect(restarted.session).toEqual(session);
+    expect(restarted.capacity).toEqual({ tasks: 31, states: 123 });
+    expect(restarted.why[0]?.reason).toContain(restarted.memory);
+    await expect(host.command({ ...cmd(next, "reused", { kind: "complete", taskId: "first" }), operation: add.operation })).rejects.toThrow();
+  });
+  test("capacity, workflow and foreign fields fail closed", async () => {
+    const host = await fixture(), full = await host.initialize({ tasks: Array.from({ length: MAX_TASKS }, (_, i) => task(`t-${i}`)) });
+    expect(full.capacity.tasks).toBe(0);
+    await expect(host.command(cmd(full, "overflow", { kind: "add", task: task("overflow") }))).rejects.toThrow("capacity");
+    expect(() => parseCommand({ ...cmd(full, "bad", { kind: "complete", taskId: "t-0" }), extra: true })).toThrow();
+    expect(() => updateTasks([task()], { kind: "reopen", taskId: "first" }, makeRevision({ sort: "created", group: "none", allowReopen: false }))).toThrow("unavailable");
+    await expect(host.command(cmd(full, "category", { kind: "edit", taskId: "t-0", title: "No lost category", priority: "high", category: "work" }))).rejects.toThrow("schema v2");
+  });
+  test("session drafts persist independently with compare-and-set, explicit rebasing and corruption preservation", async () => {
+    const host = await fixture(), initial = await host.initialize({ tasks: [task()] });
+    const session = { ...DEFAULT_SESSION, draft: { ...DEFAULT_SESSION.draft, taskId: "first", title: "Unsubmitted edit" }, focusedField: "title" as const };
+    expect((await host.loadSession("desktop")).status).toBe("missing");
+    const saved = await host.saveSession("desktop", { expectedSession: null, capturedHead: initial.head, session });
+    expect(saved.status).toBe("current");
+    expect((await new TriageHost(host.directory, host.application).loadSession("desktop")).record?.session).toEqual(session);
+    await expect(host.saveSession("desktop", { expectedSession: null, capturedHead: initial.head, session })).rejects.toThrow("Newer session");
+    const changed = await host.command(cmd(initial, "change-with-draft", { kind: "complete", taskId: "first" }));
+    expect((await host.loadSession("desktop")).status).toBe("stale");
+    expect((await host.loadSession("desktop")).record?.session.draft.title).toBe("Unsubmitted edit");
+    await expect(host.saveSession("desktop", { expectedSession: saved.reference, capturedHead: initial.head, session })).rejects.toThrow("Stale");
+    const rebased = await host.saveSession("desktop", { expectedSession: saved.reference, capturedHead: changed.head, session });
+    expect(rebased.status).toBe("current");
+    expect((await host.capture()).tasks[0]?.title).toBe("Write a useful test");
+    const exported = await host.export();
+    expect(JSON.stringify(exported)).not.toContain("Unsubmitted edit");
+    await Bun.write(join(host.directory, "triage-sessions", host.application, "desktop", "session.json"), "invalid retained content");
+    await expect(host.loadSession("desktop")).rejects.toThrow();
+    expect(await Bun.file(join(host.directory, "triage-sessions", host.application, "desktop", "session.json")).text()).toBe("invalid retained content");
+  });
+  test("evaluation guards adoption, and real replayable core schema migration retains facts", async () => {
+    const host = await fixture(), initial = await host.initialize({ tasks: [task("one"), task("two", "Second", "high")] });
+    const noChange = await host.proposeEvaluate({ contract: "algal.triage-proposal.v1", expectedHead: initial.head, config: initial.definition.config, schemaVersion: 1, source: "model", rationale: "I claim this is better" });
+    expect(noChange.evaluation.accepted).toBe(false);
+    await expect(host.adopt(noChange.reference, hash("denied"))).rejects.toThrow("Rejected");
+    const proposal = await host.proposeEvaluate({ contract: "algal.triage-proposal.v1", expectedHead: initial.head, config: { sort: "title", group: "category", allowReopen: false }, schemaVersion: 2, source: "model", rationale: "Group task categories locally" });
+    expect((await host.capture()).head).toBe(initial.head);
+    expect(proposal.evaluation.checks.every(c => c.passed)).toBe(true);
+    const migrated = await host.adopt(proposal.reference, hash("migrate"));
+    expect(migrated.definition.schemaVersion).toBe(2);
+    expect(migrated.tasks).toEqual(initial.tasks);
+    expect((await host.current()).transition.kind).toBe("migrate");
+    const memory = await getApplicationRecord(host.service.store, migrated.memory, parseMemorySnapshot);
+    const observation = await getApplicationRecord(host.service.store, memory.observations[0]!, parseMemoryObservation);
+    const migration = await getApplicationRecord(host.service.store, observation.raw, parseApplicationMigration);
+    await verifyApplicationMigration(host.service.store, migration, memory.scope);
+    expect(migration.from).toBe(initial.memory);
+    expect(memory.previous).toBe(null);
+    const edited = await host.command(cmd(migrated, "category-change", { kind: "edit", taskId: "one", title: "Write a useful test", priority: "normal", category: "work" }));
+    expect(edited.tasks[0]?.category).toBe("work");
+    await expect(host.adopt(proposal.reference, hash("stale-adopt"))).rejects.toThrow("Stale");
+    const exported = await host.export(), verified = await verifyTransfer(exported);
+    expect(verified.states).toBe(3);
+    expect(verified.receipts).toBeGreaterThan(4);
+    const forged = structuredClone(exported); forged.records[0]!.value = "tampered";
+    await expect(verifyTransfer(forged)).rejects.toThrow("Tampered");
+    const extra = structuredClone(exported), manifest = structuredClone(extra.records.find(r => r.kind === "manifest")!.value) as { budgets: { maxAgentCalls: number } };
+    manifest.budgets.maxAgentCalls = 1;
+    extra.records.push({ kind: "manifest", reference: hash(manifest), value: manifest });
+    await expect(verifyTransfer(extra)).rejects.toThrow("effect-capable");
+  });
+  test("authority-free forks preserve divergence; import is idempotent and conflicts require explicit resolution", async () => {
+    const host = await fixture(), base = await host.initialize({ tasks: [task()] }), transfer = await host.export();
+    const forked = await host.fork(transfer, "branch-b"), branch = new TriageHost(host.directory, "branch-b");
+    expect(forked.application).not.toBe(base.application);
+    expect(forked.tasks).toEqual(base.tasks);
+    expect((await branch.current()).transition.intents).toEqual([]);
+    const local = await host.command(cmd(base, "local-edit", { kind: "edit", taskId: "first", title: "Local title", priority: "normal", category: "inbox" }));
+    const remote = await branch.command(cmd(forked, "remote-edit", { kind: "edit", taskId: "first", title: "Incoming title", priority: "high", category: "inbox" }));
+    const remoteTransfer = await branch.export(), imported = await host.import(remoteTransfer), duplicate = await host.import(remoteTransfer);
+    expect(duplicate.reference).toBe(imported.reference);
+    expect(duplicate.duplicate).toBe(true);
+    expect((await host.capture()).head).toBe(local.head);
+    const reviewed = await host.reviewMerge(local.head, imported.reference);
+    expect(reviewed.review.conflicts).toEqual([{ taskId: "first", field: "title", base: "Write a useful test", local: "Local title", incoming: "Incoming title" }]);
+    expect(reviewed.review.tasks[0]?.priority).toBe("high");
+    await expect(host.adoptMerge(reviewed.reference, [], hash("missing-resolution"))).rejects.toThrow("explicit resolution");
+    const merged = await host.adoptMerge(reviewed.reference, [{ taskId: "first", field: "title", value: "Owner resolved title" }], hash("merge"));
+    expect(merged.tasks[0]).toEqual({ ...task(), title: "Owner resolved title", priority: "high" });
+    expect((await branch.capture()).head).toBe(remote.head);
+    expect((await host.adoptMerge(reviewed.reference, [{ taskId: "first", field: "title", value: "Owner resolved title" }], hash("merge"))).head).toBe(merged.head);
+    await expect(host.adoptMerge(reviewed.reference, [{ taskId: "first", field: "title", value: "Owner resolved title" }], hash("stale-merge"))).rejects.toThrow("Stale");
+    const afterRestart = new TriageHost(host.directory, host.application);
+    expect((await afterRestart.capture()).head).toBe(merged.head);
+    expect((await verifyTransfer(await host.export())).ok).toBe(true);
+  }, 60000);
+  test("adoption and capture never recreate missing retained evaluation dependencies", async () => {
+    for (const kind of ["receipt", "candidate-manifest", "candidate-metadata"] as const) {
+      const host = await fixture(), initial = await host.initialize({ tasks: [task()] });
+      const proposal = await host.proposeEvaluate({ contract: "algal.triage-proposal.v1", expectedHead: initial.head, config: { sort: "title", group: "status", allowReopen: false }, schemaVersion: 2, source: "model", rationale: "A retained candidate" });
+      const candidate = await getApplicationRecord(host.service.store, proposal.evaluation.candidateRevision, parseApplicationRevision);
+      const missing = kind === "receipt" ? proposal.evaluation.receipts[0]! : kind === "candidate-manifest" ? candidate.entrypoints.find(e => e.name === "view")!.manifest : candidate.schema;
+      const path = join(host.directory, kind === "receipt" ? "runs" : kind === "candidate-manifest" ? "manifests" : "values", `${missing.slice(7)}.json`);
+      await rm(path);
+      await expect(host.adopt(proposal.reference, hash(`missing-${kind}`))).rejects.toThrow();
+      expect(await Bun.file(path).exists()).toBe(false);
+      expect((await host.current()).digest).toBe(initial.head);
+    }
+    const host = await fixture(), initial = await host.initialize({ tasks: [task()] });
+    await host.capture(); // A prior read must not hide subsequent missing evidence.
+    const revision = await getApplicationRecord(host.service.store, initial.revision, parseApplicationRevision);
+    const path = join(host.directory, "manifests", `${revision.entrypoints.find(e => e.name === "update")!.manifest.slice(7)}.json`);
+    await rm(path);
+    await expect(host.capture()).rejects.toThrow("Missing");
+    expect(await Bun.file(path).exists()).toBe(false);
+  });
+  test("incomplete transfers and duplicate imports cannot heal missing retained records", async () => {
+    const source = await fixture(), initial = await source.initialize({ tasks: [task()] });
+    const revision = await getApplicationRecord(source.service.store, initial.revision, parseApplicationRevision), transfer = await source.export();
+    const update = revision.entrypoints.find(e => e.name === "update")!.manifest;
+    await expect(verifyTransfer({ ...transfer, records: transfer.records.filter(row => row.reference !== update) })).rejects.toThrow("Missing");
+    const target = await fixture("target"); await target.import(transfer);
+    const path = join(target.directory, "manifests", `${update.slice(7)}.json`);
+    await rm(path);
+    await expect(target.import(transfer)).rejects.toThrow("Missing");
+    expect(await Bun.file(path).exists()).toBe(false);
+    expect(await target.service.inspect(target.application)).toBeNull();
+  });
+
+});

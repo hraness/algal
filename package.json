@@ -17,8 +17,23 @@
     ".": "./index.ts",
     "./manifest": "./src/contract.ts",
     "./contract": "./src/contract.ts",
+    "./expr": "./src/expr.ts",
+    "./algal_expr.wasm": "./src/algal_expr.wasm",
     "./capabilities": "./src/capabilities.ts",
-    "./mailbox": "./src/mailbox.ts"
+    "./mailbox": "./src/mailbox.ts",
+    "./application-core": "./src/application-core.ts",
+    "./application-storage": "./src/application-storage.ts",
+    "./marketing-manifests": "./examples/malleable-site/surface-manifests.ts",
+    "./marketing-surface": "./examples/malleable-site/surface.ts",
+    "./application-contract": "./src/application-contract.ts",
+    "./application-adaptation": "./src/application-adaptation.ts",
+    "./application-memory": "./src/application-memory.ts",
+    "./application-restoration": "./src/application-restoration.ts",
+    "./bundle": "./src/bundle.ts",
+    "./registry": "./src/registry.ts",
+    "./run": "./src/run.ts",
+    "./store-memory": "./src/store-memory.ts",
+    "./verify": "./src/verify.ts"
   },
   "bin": {
     "algal": "./cli.ts"
@@ -39,7 +54,9 @@
     "!examples/**/memory-fixtures",
     "docs",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "!examples/**/target",
+    "!examples/**/dist"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit && tsc --noEmit -p site/tsconfig.json",

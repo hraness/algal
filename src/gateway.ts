@@ -1,7 +1,8 @@
 import { chatCompletionsExecutor, type ChatCompletionsFetch } from "./chat-completions";
 import { digestCanonical } from "./digest";
-import type { Executor } from "./effects";
+import { effectRequestDigest, type Executor } from "./effects";
 import { AlgalError } from "./errors";
+import { gatewayGenerationId, parseGatewayGeneration, type GatewayGeneration } from "./gateway-observation";
 
 export const VERCEL_AI_GATEWAY_BASE_URL = "https://ai-gateway.vercel.sh/v1" as const;
 export type GatewayFetch = ChatCompletionsFetch;
@@ -10,6 +11,8 @@ export type GatewayExecutorOptions = {
   credential?: string;
   fetch?: GatewayFetch;
   maxResponseBytes?: number;
+  /** Optional host sidecar. Failure retains uncertainty; never retry inference. */
+  observeGeneration?: (generation: GatewayGeneration) => void | Promise<void>;
 };
 
 export function vercelGatewayExecutor(options: GatewayExecutorOptions): Executor {
@@ -25,6 +28,13 @@ export function vercelGatewayExecutor(options: GatewayExecutorOptions): Executor
     cacheIdentity: digestCanonical({ provider: "vercel", baseUrl: VERCEL_AI_GATEWAY_BASE_URL, model: options.model, responseFormat: "json_schema" }),
     // Preserve the native gateway backend configuration and existing receipts.
     configurationDigest: digestCanonical({ kind: "gateway", model: options.model }),
+    ...(options.observeGeneration === undefined ? {} : { observeResponse: async (request, response, result) => {
+      // Older providers may omit a Gateway ID. Unknown is not fabricated.
+      try { gatewayGenerationId(response.id); } catch { return; }
+      await options.observeGeneration!(parseGatewayGeneration({ contract: "algal.gateway-generation.v1", generationId: response.id,
+        requestDigest: effectRequestDigest(request), outputDigest: digestCanonical(result.output), model: result.metadata?.usage?.model ?? options.model,
+        tokensIn: result.metadata?.usage?.tokensIn ?? null, tokensOut: result.metadata?.usage?.tokensOut ?? null, providerAttestation: false }));
+    } }),
     credential: () => {
       const value = options.credential ?? process.env.AI_GATEWAY_API_KEY ?? process.env.VERCEL_OIDC_TOKEN;
       if (typeof value !== "string" || value.length < 16 || value.length > 8192 || /[\r\n]/.test(value)) {

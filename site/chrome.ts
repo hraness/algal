@@ -2,7 +2,7 @@
 // Per-page fragments supply only their <main> content and metadata.
 import { siteIcon } from "./icons";
 
-export type SitePageId = "home" | "tour" | "use-cases" | "living" | "docs" | "spec" | "blog" | "compare";
+export type SitePageId = "home" | "tour" | "use-cases" | "living" | "workbench" | "docs" | "spec" | "blog" | "compare";
 
 export interface SitePageMeta {
   page: SitePageId;
@@ -58,6 +58,7 @@ export function pageDocument(meta: SitePageMeta, main: string): string {
 <script src="/client.js" defer></script>
 <script src="/viewer.js" defer></script>
 ${meta.page === "living" ? '<link rel="stylesheet" href="/living.css">\n<script src="/living.js" type="module"></script>' : ""}
+${meta.page === "workbench" ? '<link rel="stylesheet" href="/living.css">\n<link rel="stylesheet" href="/workbench.css">\n<script src="/workbench.js" type="module"></script>' : ""}
 </head>
 <body class="algal-site">
 <a class="skip-link" href="#main">Skip to content</a>

@@ -1,0 +1,37 @@
+{
+  "contract": "algal.renderer-performance-budgets.v1",
+  "status": "provisional-local-qualification-not-a-production-SLO",
+  "declaredBeforeMeasurement": true,
+  "scope": "Existing marketing embed on this development Mac; exact macOS arm64 local-triage package. No inference during interaction.",
+  "rationale": {
+    "embedUpdate": "Keep synchronous render work within one 60 Hz frame for the bounded six-node component.",
+    "embedStartup": "Usable static fallback is immediate; interactive readiness has a two-second local cold-load ceiling.",
+    "memory": "Bound retained growth after repeated revisions rather than treating temporary allocations as a leak.",
+    "localHost": "File-backed exact-head commands are explicit actions; a two-second ceiling keeps them separate from local keystrokes.",
+    "native": "Observe actual accessibility-visible readiness and completed task updates, including measurement overhead. Main-process RSS excludes separately managed WebKit processes."
+  },
+  "browser": {
+    "coldSamples": 5,
+    "warmupSwaps": 50,
+    "revisionSwaps": 1000,
+    "mountCycles": 100,
+    "additionalRawBytesMax": 1048576,
+    "additionalGzipBytesMax": 262144,
+    "interactiveReadyP95MsMax": 2000,
+    "updateP95MsMax": 16.7,
+    "retainedJsHeapGrowthBytesMax": 8388608,
+    "retainedDomNodeGrowthMax": 0,
+    "hostInterferenceCountMax": 0
+  },
+  "local": {
+    "samples": 5,
+    "tasks": 32,
+    "hostCaptureP95MsMax": 2000,
+    "terminalStartupP95MsMax": 2500,
+    "processPeakRssBytesMax": 268435456,
+    "desktopReadyMsMax": 5000,
+    "desktopActions": 20,
+    "desktopActionP95MsMax": 2000,
+    "desktopMainRssGrowthBytesMax": 33554432
+  }
+}
