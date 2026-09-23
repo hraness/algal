@@ -1,0 +1,12 @@
+{
+  "probe": {
+    "answers": {
+      "difficulty": { "score": 3.9, "confidence": 0.81, "probabilities": { "3": 0.24, "4": 0.57, "5": 0.19 } },
+      "scope": { "score": 3.8, "confidence": 0.78, "probabilities": { "3": 0.22, "4": 0.56, "5": 0.22 } },
+      "ambiguity": { "score": 2.4, "confidence": 0.7, "probabilities": { "2": 0.52, "3": 0.36, "4": 0.12 } },
+      "stakes": { "score": 2.9, "confidence": 0.66, "probabilities": { "2": 0.3, "3": 0.45, "4": 0.25 } },
+      "kind": { "choice": "refactor", "confidence": 0.84, "probabilities": { "refactor": 0.84, "feature": 0.12, "ops": 0.04 } },
+      "frontier": { "noul": 0.62 }
+    }
+  }
+}

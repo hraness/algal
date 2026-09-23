@@ -1,0 +1,5 @@
+{
+  "src": {
+    "task": "migrate the session store to the new envelope format and update every caller"
+  }
+}
