@@ -1,11 +1,12 @@
 use crate::{
     Error, Result,
-    canonical::{canonical, check_digest, digest},
+    canonical::{canonical, check_digest, digest, digest_bytes},
     contract::{id, keys, list, object, text},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -57,27 +58,44 @@ impl Default for Limits {
 struct Tuple {
     relation: String,
     values: Vec<Value>,
+    /// Canonical text of each atom, computed once when the tuple is admitted,
+    /// so a join key is a sequence of these slices rather than a fresh
+    /// encoding of the probe array for every tuple in every round. `Rc` keeps
+    /// propagating an atom's text into a binding a refcount bump, not an
+    /// allocation.
+    canon: Vec<Rc<str>>,
     proof: String,
+}
+
+#[derive(Clone)]
+struct Bound {
+    value: Value,
+    canon: Rc<str>,
 }
 
 #[derive(Clone, Default)]
 struct Binding {
-    values: BTreeMap<String, Value>,
+    values: BTreeMap<String, Bound>,
     premises: Vec<String>,
 }
+
+/// Tuples grouped by relation, in canonical `[relation, values]` order.
+type ByRelation<'a> = BTreeMap<&'a str, Vec<&'a Tuple>>;
 
 fn variable(term: &Value) -> Option<&str> {
     term.get("var").and_then(Value::as_str)
 }
 
-fn atom(value: &Value) -> Result<()> {
+/// Validate an atom and return its canonical text.
+fn atom(value: &Value) -> Result<String> {
     if value.is_array() || value.is_object() {
         return Err(Error::invalid("memory atoms must be JSON primitives"));
     }
-    if canonical(value)?.len() > 1024 {
+    let text = canonical(value)?;
+    if text.len() > 1024 {
         return Err(Error::limit("memory atom bytes"));
     }
-    Ok(())
+    Ok(text)
 }
 
 fn literal(literal: &Literal, arities: &mut BTreeMap<String, usize>) -> Result<BTreeSet<String>> {
@@ -111,26 +129,30 @@ fn charge(work: &mut usize, limits: &Limits) -> Result<()> {
     Ok(())
 }
 
-fn join(
-    literals: &[Literal],
-    tuples: &BTreeMap<String, Tuple>,
-    work: &mut usize,
-    limits: &Limits,
-) -> Result<Vec<Binding>> {
-    // Group tuples by relation once, so a literal only scans tuples it could
-    // possibly match. Previously every literal scanned the whole set and
-    // charged a work unit per tuple before testing the relation, so a fact no
-    // rule mentions cost real budget on every literal of every round. Results
-    // are unchanged: the map is keyed by canonical [relation, values], so
-    // same-relation tuples are already contiguous and ordered, and collecting
-    // them preserves that order exactly. Only `work` counts fall.
-    let mut by_relation: BTreeMap<&str, Vec<&Tuple>> = BTreeMap::new();
+/// Group tuples by relation, so a literal only scans tuples it could possibly
+/// match. Previously every literal scanned the whole set and charged a work
+/// unit per tuple before testing the relation, so a fact no rule mentions cost
+/// real budget on every literal of every round. Results are unchanged: the map
+/// is keyed by canonical [relation, values], so same-relation tuples are
+/// already contiguous and ordered, and collecting them preserves that order
+/// exactly. Built once per round and shared by every rule's join.
+fn by_relation(tuples: &BTreeMap<String, Tuple>) -> ByRelation<'_> {
+    let mut grouped: ByRelation = BTreeMap::new();
     for tuple in tuples.values() {
-        by_relation
+        grouped
             .entry(tuple.relation.as_str())
             .or_default()
             .push(tuple);
     }
+    grouped
+}
+
+fn join(
+    literals: &[Literal],
+    by_relation: &ByRelation,
+    work: &mut usize,
+    limits: &Limits,
+) -> Result<Vec<Binding>> {
     let empty: Vec<&Tuple> = Vec::new();
     let mut bindings = vec![Binding::default()];
     for literal in literals {
@@ -167,20 +189,37 @@ fn join(
             None => Vec::new(),
         };
 
-        let key_of = |values: &dyn Fn(usize, &str) -> Option<Value>| -> Result<String> {
-            let mut parts = Vec::with_capacity(probe.len());
-            for (at, name) in &probe {
-                parts.push(values(*at, name).unwrap_or(Value::Null));
-            }
-            canonical(&json!(parts))
-        };
+        // A bucket key is the canonical probe array `[v0, v1, ...]`. Every
+        // part is an atom (a JSON primitive, or null for an absent position),
+        // so the sequence of the parts' own canonical texts identifies that
+        // array exactly: two keys agree iff the encoded arrays would. Buckets
+        // are therefore unchanged; only the per-tuple re-encoding is gone.
+        fn tuple_key<'a>(probe: &[(usize, &str)], tuple: &'a Tuple) -> Vec<&'a str> {
+            probe
+                .iter()
+                .map(|(at, _)| tuple.canon.get(*at).map_or("null", |s| &**s))
+                .collect()
+        }
+        fn binding_key<'a>(probe: &[(usize, &str)], binding: &'a Binding) -> Vec<&'a str> {
+            probe
+                .iter()
+                .map(|(_, name)| {
+                    binding
+                        .values
+                        .get(*name)
+                        .map_or("null", |bound| &*bound.canon)
+                })
+                .collect()
+        }
 
-        let mut index: BTreeMap<String, Vec<&Tuple>> = BTreeMap::new();
+        let mut index: BTreeMap<Vec<&str>, Vec<&Tuple>> = BTreeMap::new();
         if !probe.is_empty() {
             for tuple in candidates {
                 charge(work, limits)?;
-                let key = key_of(&|at, _| tuple.values.get(at).cloned())?;
-                index.entry(key).or_default().push(tuple);
+                index
+                    .entry(tuple_key(&probe, tuple))
+                    .or_default()
+                    .push(tuple);
             }
         }
 
@@ -189,22 +228,30 @@ fn join(
             let bucket = if probe.is_empty() {
                 candidates
             } else {
-                let key = key_of(&|_, name| binding.values.get(name).cloned())?;
-                index.get(&key).unwrap_or(&empty)
+                index.get(&binding_key(&probe, binding)).unwrap_or(&empty)
             };
             for tuple in bucket {
                 charge(work, limits)?;
-                let mut candidate = binding.clone();
+                // Test first and clone only on a match. A variable first bound
+                // by this literal is remembered by its position, so a repeated
+                // variable (`depends(x, x)`) is still checked against that
+                // first occurrence exactly as an eager insert would have.
+                let mut fresh: Vec<(&str, usize)> = Vec::new();
                 let mut matched = true;
-                for (term, value) in literal.terms.iter().zip(&tuple.values) {
+                for (at, (term, value)) in literal.terms.iter().zip(&tuple.values).enumerate() {
                     if let Some(name) = variable(term) {
-                        if let Some(bound) = candidate.values.get(name) {
-                            if bound != value {
+                        if let Some(bound) = binding.values.get(name) {
+                            if &bound.value != value {
+                                matched = false;
+                                break;
+                            }
+                        } else if let Some((_, first)) = fresh.iter().find(|(n, _)| *n == name) {
+                            if &tuple.values[*first] != value {
                                 matched = false;
                                 break;
                             }
                         } else {
-                            candidate.values.insert(name.to_owned(), value.clone());
+                            fresh.push((name, at));
                         }
                     } else if term != value {
                         matched = false;
@@ -214,6 +261,16 @@ fn join(
                 if matched {
                     if next.len() >= limits.max_bindings {
                         return Err(Error::limit("Datalog join bindings"));
+                    }
+                    let mut candidate = binding.clone();
+                    for (name, at) in fresh {
+                        candidate.values.insert(
+                            name.to_owned(),
+                            Bound {
+                                value: tuple.values[at].clone(),
+                                canon: tuple.canon[at].clone(),
+                            },
+                        );
                     }
                     candidate.premises.push(tuple.proof.clone());
                     next.push(candidate);
@@ -225,23 +282,38 @@ fn join(
     Ok(bindings)
 }
 
-fn instantiate(literal: &Literal, binding: &Binding) -> Result<Vec<Value>> {
-    literal
-        .terms
-        .iter()
-        .map(|term| match variable(term) {
-            Some(name) => binding
-                .values
-                .get(name)
-                .cloned()
-                .ok_or_else(|| Error::invalid("unbound head variable")),
-            None => Ok(term.clone()),
-        })
-        .collect()
+/// Instantiate a literal under a binding: the values and their canonical texts.
+fn instantiate(literal: &Literal, binding: &Binding) -> Result<(Vec<Value>, Vec<Rc<str>>)> {
+    let mut values = Vec::with_capacity(literal.terms.len());
+    let mut canon = Vec::with_capacity(literal.terms.len());
+    for term in &literal.terms {
+        match variable(term) {
+            Some(name) => {
+                let bound = binding
+                    .values
+                    .get(name)
+                    .ok_or_else(|| Error::invalid("unbound head variable"))?;
+                values.push(bound.value.clone());
+                canon.push(bound.canon.clone());
+            }
+            None => {
+                values.push(term.clone());
+                canon.push(Rc::from(canonical(term)?.as_str()));
+            }
+        }
+    }
+    Ok((values, canon))
 }
 
 pub fn query(snapshot: &Value, program: &Value) -> Result<Value> {
-    if canonical(snapshot)?.len() > 262_144 || canonical(program)?.len() > 65_536 {
+    // Encoded once: the byte bounds here and the identity digests in the
+    // result hash these same texts.
+    let snapshot_text = canonical(snapshot)?;
+    if snapshot_text.len() > 262_144 {
+        return Err(Error::limit("memory/query input bytes"));
+    }
+    let program_text = canonical(program)?;
+    if program_text.len() > 65_536 {
         return Err(Error::limit("memory/query input bytes"));
     }
     keys(snapshot, &["contract", "facts"])?;
@@ -292,9 +364,11 @@ pub fn query(snapshot: &Value, program: &Value) -> Result<Value> {
             },
             &mut arities,
         )?;
-        for value in &fact.tuple {
-            atom(value)?;
-        }
+        let canon = fact
+            .tuple
+            .iter()
+            .map(|v| atom(v).map(|s| Rc::from(s.as_str())))
+            .collect::<Result<Vec<_>>>()?;
         if fact.sources.is_empty() || fact.sources.len() > 16 {
             return Err(Error::invalid("fact requires 1..16 source digests"));
         }
@@ -302,10 +376,10 @@ pub fn query(snapshot: &Value, program: &Value) -> Result<Value> {
             check_digest(source)?;
         }
         let fact_json = serde_json::to_value(&fact)?;
-        ordered_facts.push((digest(&fact_json)?, fact));
+        ordered_facts.push((digest(&fact_json)?, fact, canon));
     }
     ordered_facts.sort_by(|a, b| a.0.cmp(&b.0));
-    for (identity, fact) in ordered_facts {
+    for (identity, fact, canon) in ordered_facts {
         let key = canonical(&json!([fact.relation, fact.tuple]))?;
         if tuples.contains_key(&key) {
             continue;
@@ -318,10 +392,17 @@ pub fn query(snapshot: &Value, program: &Value) -> Result<Value> {
             Tuple {
                 relation: fact.relation,
                 values: fact.tuple,
+                canon,
                 proof: proof_id,
             },
         );
     }
+    // A rule's digest names it in every proof it produces; it never changes
+    // between rounds.
+    let rule_digests = rules
+        .iter()
+        .map(|rule| digest(&serde_json::to_value(rule)?))
+        .collect::<Result<Vec<_>>>()?;
     let base = tuples.len();
     let mut work = 0;
     let mut rounds = 0;
@@ -330,12 +411,12 @@ pub fn query(snapshot: &Value, program: &Value) -> Result<Value> {
             return Err(Error::limit("Datalog rounds exhausted; no complete answer"));
         }
         rounds += 1;
+        let grouped = by_relation(&tuples);
         let mut additions = BTreeMap::new();
-        for rule in &rules {
-            let rule_digest = digest(&serde_json::to_value(rule)?)?;
-            for binding in join(&rule.body, &tuples, &mut work, &limits)? {
+        for (rule, rule_digest) in rules.iter().zip(&rule_digests) {
+            for binding in join(&rule.body, &grouped, &mut work, &limits)? {
                 charge(&mut work, &limits)?;
-                let values = instantiate(&rule.head, &binding)?;
+                let (values, canon) = instantiate(&rule.head, &binding)?;
                 let key = canonical(&json!([rule.head.relation, values]))?;
                 if tuples.contains_key(&key) || additions.contains_key(&key) {
                     continue;
@@ -351,6 +432,7 @@ pub fn query(snapshot: &Value, program: &Value) -> Result<Value> {
                     Tuple {
                         relation: rule.head.relation.clone(),
                         values,
+                        canon,
                         proof: proof_id,
                     },
                 );
@@ -362,8 +444,9 @@ pub fn query(snapshot: &Value, program: &Value) -> Result<Value> {
         tuples.extend(additions);
     }
     let mut rows = BTreeMap::new();
-    for binding in join(std::slice::from_ref(&wanted), &tuples, &mut work, &limits)? {
-        let values = instantiate(&wanted, &binding)?;
+    let grouped = by_relation(&tuples);
+    for binding in join(std::slice::from_ref(&wanted), &grouped, &mut work, &limits)? {
+        let (values, _) = instantiate(&wanted, &binding)?;
         rows.entry(canonical(&json!(values))?)
             .or_insert(json!({"tuple":values,"proof":binding.premises[0]}));
         if rows.len() > limits.max_rows {
@@ -387,7 +470,7 @@ pub fn query(snapshot: &Value, program: &Value) -> Result<Value> {
     }
     proofs.retain(|key, _| needed.contains(key));
     let result = json!({
-        "contract":"algal.query-result.v1", "snapshot":digest(snapshot)?, "program":digest(program)?,
+        "contract":"algal.query-result.v1", "snapshot":digest_bytes(snapshot_text.as_bytes()), "program":digest_bytes(program_text.as_bytes()),
         "complete":true, "witnessPolicy":"first-canonical-derivation", "rows":rows.into_values().collect::<Vec<_>>(),
         "proofs":proofs, "work":work, "rounds":rounds, "baseFacts":base, "derivedFacts":tuples.len()-base,
     });

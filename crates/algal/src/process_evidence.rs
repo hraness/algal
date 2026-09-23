@@ -287,7 +287,7 @@ pub async fn verify_process_evidence(raw: &Value) -> Result<Value> {
     let manifests = positive(&program["manifests"], 512, 1_048_576)?;
     let values = positive(&program["values"], 512, MAX_DOCUMENT_BYTES)?;
     for value in records.values() {
-        record(value.clone())?;
+        record(value)?;
     }
     for value in manifests.values() {
         if Manifest::parse(value)?.value != *value {
@@ -308,8 +308,7 @@ pub async fn verify_process_evidence(raw: &Value) -> Result<Value> {
     let process = record(
         records
             .get(head)
-            .ok_or_else(|| Error::new("STORE_MISS", "process evidence head missing"))?
-            .clone(),
+            .ok_or_else(|| Error::new("STORE_MISS", "process evidence head missing"))?,
     )?;
     if process.manifest_digest != root || !manifests.contains_key(root) {
         return Err(Error::invalid("process evidence root binding"));

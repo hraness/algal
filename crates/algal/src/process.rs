@@ -178,9 +178,9 @@ fn bounded_nodes(value: &Value) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn record(value: Value) -> Result<ProcessRecord> {
-    bounded_nodes(&value)?;
-    if canonical(&value)?.len() > MAX_RECORD_BYTES {
+pub(crate) fn record(value: &Value) -> Result<ProcessRecord> {
+    bounded_nodes(value)?;
+    if canonical(value)?.len() > MAX_RECORD_BYTES {
         return Err(Error::limit("process record bytes"));
     }
     for field in ["previous", "receipt", "cause"] {
@@ -190,7 +190,7 @@ pub(crate) fn record(value: Value) -> Result<ProcessRecord> {
             ));
         }
     }
-    let record: ProcessRecord = serde_json::from_value(value)?;
+    let record: ProcessRecord = ProcessRecord::deserialize(value)?;
     id(&json!(record.name))?;
     check_digest(&record.manifest_digest)?;
     for (name, ports) in object(&record.args)? {
@@ -376,7 +376,7 @@ impl ProcessService {
 
     fn persist(&mut self, process: &ProcessRecord) -> Result<ProcessState> {
         let value = serde_json::to_value(process)?;
-        record(value.clone())?;
+        record(&value)?;
         let key = self.store.put("values", &value)?;
         File::open(self.root.join("values"))?.sync_all()?;
         Ok(ProcessState {
@@ -438,7 +438,7 @@ impl ProcessService {
         let value = self.cas("values", key, MAX_RECORD_BYTES)?;
         Ok(ProcessState {
             digest: key.to_owned(),
-            process: record(value)?,
+            process: record(&value)?,
         })
     }
 
@@ -1047,7 +1047,7 @@ pub fn read_process_history(snapshot: &ProcessState, store: &Store) -> Result<Ve
         if chain.len() >= MAX_CHAIN || !seen.insert(key.clone()) {
             return Err(Error::limit("process chain bound or cycle"));
         }
-        let process = record(stored(store, "values", &key, MAX_RECORD_BYTES)?)?;
+        let process = record(&stored(store, "values", &key, MAX_RECORD_BYTES)?)?;
         if process.name != snapshot.process.name {
             return Err(Error::invalid("process record name mismatch"));
         }
