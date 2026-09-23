@@ -2,6 +2,7 @@ pub mod acp;
 pub mod application;
 pub mod application_adaptation;
 pub mod application_comparison;
+pub mod application_drain;
 pub mod application_episode;
 pub mod application_goal;
 pub mod application_host;

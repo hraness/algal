@@ -904,6 +904,12 @@ enum ApplicationCommand {
     /// `migrateApplicationMemory`: run the migration program and admit its
     /// emitted claims into a fresh memory chain under the new schema.
     MigrateMemory { input: PathBuf },
+    /// `produceApplicationDrain`: record the explicit disposition of every
+    /// undispatched pending intent at a parent state.
+    Drain { input: PathBuf },
+    /// `verifyApplicationDrain`: re-verify a stored drain record against an
+    /// expected parent state.
+    VerifyDrain { input: PathBuf },
     /// `projectApplicationView`: pure bounded projection of the captured
     /// head — fenced procedures, history, investigations and actions.
     View { input: PathBuf },
@@ -2695,6 +2701,21 @@ async fn execute(cli: Cli) -> Result<bool> {
                     )
                     .await?;
                     emit(&result)?;
+                }
+                ApplicationCommand::Drain { input } => {
+                    let drain = algal::application_drain::produce_drain(
+                        &mut service,
+                        &load(&input, 262_144)?,
+                    )?;
+                    emit(&json!({"drain": drain}))?;
+                }
+                ApplicationCommand::VerifyDrain { input } => {
+                    let input = load(&input, 262_144)?;
+                    let v = app_memory::app_object(&input, &["drain", "expectedState"])?;
+                    let drain = app_memory::app_ref(&v["drain"])?.to_owned();
+                    let state = app_memory::app_ref(&v["expectedState"])?.to_owned();
+                    algal::application_drain::verify_drain(&service, &drain, &state)?;
+                    emit(&json!({"verified": true}))?;
                 }
                 ApplicationCommand::View { input } => {
                     emit(&application_view::view(&service, &load(&input, 262_144)?)?)?;

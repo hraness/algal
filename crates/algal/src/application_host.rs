@@ -613,6 +613,12 @@ impl Admission for PolicyHost {
                         &context.command.memory,
                     )?)?;
                     let mut verified = 0;
+                    let undispatched: std::collections::BTreeSet<&str> = context
+                        .pending
+                        .iter()
+                        .filter(|p| p.dispatch.is_none())
+                        .map(|p| p.intent.as_str())
+                        .collect();
                     for evidence in &context.command.evidence {
                         let record = mem::get_record(context.store, evidence)?;
                         if record["contract"] == "algal.application-migration.v1" {
@@ -623,6 +629,19 @@ impl Admission for PolicyHost {
                             )
                             .await?;
                             verified += 1;
+                        }
+                        // Drain evidence is replayed too: the cited record must
+                        // bind this application and parent state and cover
+                        // exactly the undispatched pending set the committing
+                        // core computed under custody.
+                        if record["contract"] == "algal.application-drain.v1" {
+                            let drain = crate::application_drain::parse_drain(&record)?;
+                            crate::application_drain::check_binding(
+                                &drain,
+                                &context.command.application,
+                                &current.digest,
+                            )?;
+                            crate::application_drain::check_coverage(&drain, &undispatched)?;
                         }
                     }
                     if verified == 0 {

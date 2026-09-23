@@ -415,6 +415,8 @@ export { rolloverApplicationMemory } from "./src/application-rollover";
 export type { RolloverApplicationMemoryInput, RolledApplicationMemory } from "./src/application-rollover";
 export { migrateApplicationMemory, parseApplicationMigration } from "./src/application-migration";
 export type { ApplicationMigration, MigrateMemoryInput } from "./src/application-migration";
+export { APPLICATION_DRAIN_LIMITS, checkApplicationDrainBinding, checkApplicationDrainCoverage, parseApplicationDrain, produceApplicationDrain, verifyApplicationDrain } from "./src/application-drain";
+export type { ApplicationDrain, ApplicationDrainDisposition, ApplicationDrainStatus } from "./src/application-drain";
 export { parseInvestigationRequest, requestExecution, scheduleInvestigations } from "./src/application-investigation";
 export type {
   EntrypointDerivation, InvestigationRequest, RequestExecutionInput,

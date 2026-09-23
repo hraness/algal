@@ -27,6 +27,7 @@ import { createApplicationDomainDispatcher, createApplicationPolicyHost } from "
 import { scheduleInvestigations, requestExecution } from "../src/application-investigation";
 import { collectApplicationViewEvidence, parseApplicationView, parseApplicationViewSpec, projectApplicationView, type ApplicationApplicability, type ApplicationView } from "../src/application-view";
 import { migrateApplicationMemory } from "../src/application-migration";
+import { produceApplicationDrain, verifyApplicationDrain } from "../src/application-drain";
 import { appendObservation } from "../src/application-observation";
 import { restoreApplicationRevision, type ApplicationRestorationPolicy } from "../src/application-restoration";
 import { produceApplicationComparison, verifyApplicationComparison } from "../src/application-comparison";
@@ -272,6 +273,10 @@ let comparisonRef = "" as Digest;
 let migrationRef = "" as Digest;
 let migratedSnapshotRef = "" as Digest;
 let migrateCommand: { [key: string]: JsonValue } = {};
+let drainIntentRef = "" as Digest;
+let drainRef = "" as Digest;
+let drainRequest: { [key: string]: JsonValue } = {};
+let undrainedCommand: { [key: string]: JsonValue } = {};
 
 /** `fails` legs compare the verdict; a `reason` additionally pins the exact
  * error message emitted by both runtimes for a shared contract check. */
@@ -484,6 +489,7 @@ steps.push(
     ts: async () => {
       const s = await requestExecution(service, { application: APP, operation: op("execute"), expectedHead: head, expectedMemory: memoryRef, entrypoint: "run", input: digests.episodeArgs, derivation: derivationRef });
       head = s.digest;
+      drainIntentRef = s.transition.intents[0]!;
       return { state: s.digest };
     },
     native: async () => app("execute", await dynamic("execute", { application: APP, operation: op("execute"), expectedHead: head, expectedMemory: memoryRef, entrypoint: "run", input: digests.episodeArgs, derivation: derivationRef })),
@@ -501,6 +507,41 @@ steps.push(
     },
     native: async () => app("migrate-memory", fixturePath.get("migrateRequest")!),
   },
+  // An undispatched episode intent pins the old operation/revision/entrypoint:
+  // a schema migration must drain it explicitly — either carry it forward or
+  // abandon it — rather than letting it ride silently. The migrate without a
+  // drain fails identically on both runtimes, an incomplete drain fails
+  // coverage, and the committed drain carries the intent forward as `migrated`.
+  {
+    name: "migrate-undrained",
+    fails: true,
+    reason: "Pending intents require explicit drain",
+    ts: async () => service.commit(undrainedCommand),
+    native: async () => {
+      undrainedCommand = { application: APP, operation: op("migrate-undrained"), kind: "migrate", expectedHead: head, revision: revision3Ref, memory: migratedSnapshotRef, intents: [], evidence: [migrationRef], causedBy: null };
+      return app("commit", await dynamic("migrate-undrained", undrainedCommand));
+    },
+  },
+  {
+    name: "drain-incomplete",
+    fails: true,
+    reason: "Drain dispositions must match the undispatched pending intents",
+    ts: async () => produceApplicationDrain(service, { application: APP, parentState: head, dispositions: [] }),
+    native: async () => app("drain", await dynamic("drain-incomplete", { application: APP, parentState: head, dispositions: [] })),
+  },
+  {
+    name: "drain",
+    ts: async () => ({ drain: drainRef = await produceApplicationDrain(service, drainRequest) }),
+    native: async () => {
+      drainRequest = { application: APP, parentState: head, dispositions: [{ intent: drainIntentRef, status: "migrated" }] };
+      return app("drain", await dynamic("drain", drainRequest));
+    },
+  },
+  {
+    name: "verify-drain",
+    ts: async () => { await verifyApplicationDrain(service, drainRef, head); return { verified: true }; },
+    native: async () => app("verify-drain", await dynamic("verify-drain", { drain: drainRef, expectedState: head })),
+  },
   {
     name: "migrate",
     ts: async () => {
@@ -509,7 +550,7 @@ steps.push(
       return { state: s.digest, transition: s.state.transition, revision: s.state.revision, memory: s.state.memory };
     },
     native: async () => {
-      migrateCommand = { application: APP, operation: op("migrate"), kind: "migrate", expectedHead: head, revision: revision3Ref, memory: migratedSnapshotRef, intents: [], evidence: [migrationRef], causedBy: null };
+      migrateCommand = { application: APP, operation: op("migrate"), kind: "migrate", expectedHead: head, revision: revision3Ref, memory: migratedSnapshotRef, intents: [], evidence: [migrationRef, drainRef].sort(), causedBy: null };
       return app("commit", await dynamic("migrate", migrateCommand));
     },
   },
@@ -930,6 +971,58 @@ async function checkGoalAndQuotaParity(): Promise<void> {
     equal("append carries archive", { snapshot: appended.snapshot.digest, memory: appended.memory, observation: appended.observation }, await runNative(app("publish", await dynamic("rollover-ordinary-append", appendInput)), p.native));
     if (parseMemorySnapshot(await p.lifecycle.store.getValue(appended.memory)).archive !== rolled.archive) throw new Error("Ordinary append lost rollover provenance");
     equal("rollover retry preserves operation", { snapshot: (await rolloverApplicationMemory(p.lifecycle, memory, input)).snapshot.digest, memory: rolled.memory, archive: rolled.archive }, await runNative(app("rollover-memory", await dynamic("memory-rollover-retry", input)), p.native));
+  }
+  // Explicit drain of undispatched work across a schema migration: one intent
+  // is abandoned forever, the other is carried forward and still settles —
+  // and every step emits identical bytes on both runtimes.
+  {
+    const p = await pair("drain-abandonment");
+    const pendingOf = async (svc: ApplicationService) => {
+      const rows = await (svc as unknown as { pending(h: unknown): Promise<{ intent: string; sourceState: string; dispatch: ApplicationDispatch | null }[]> }).pending(await svc.history(APP));
+      return { pending: rows.map(row => ({ intent: row.intent, sourceState: row.sourceState, dispatch: row.dispatch })) };
+    };
+    // The drain candidate changes schema and query bundle only: keeping the
+    // incumbent manifest means the migrate needs no evaluation evidence, so
+    // the drain is the only new admission surface under test.
+    const revisionDrain = { ...revision, parent: revisionRef, schema: schema2Ref, queries: queries2Ref,
+      entrypoints: revision.entrypoints.map(entry => ({ ...entry, applicability: query2Ref, queries: [query2Ref] })) };
+    const revisionDrainRef = await p.put(revisionDrain);
+    const created = await create(p, revisionRef, "drain-create");
+    const workInput = { application: APP, operation: op("drain-work"), kind: "investigate" as const, expectedHead: created.digest, revision: revisionRef, memory: genesisMemoryRef,
+      intents: [{ kind: "deliver", route: "investigate", message: rawRef }, { kind: "deliver", route: "investigate", message: digestCanonical(receipt) }], evidence: [], causedBy: null };
+    const workState = await p.lifecycle.commit(workInput);
+    equal("drain work commit", shape(workState), await runNative(app("commit", await dynamic("drain-work", workInput)), p.native));
+    const [abandonedIntent, carriedIntent] = workState.transition.intents as [Digest, Digest];
+    const drainMigrationRequest = { application: APP, from: genesisMemoryRef, schema: schema2Ref, scope: scope2Ref, procedure: procedure2Ref, program: manifest2Ref, decoder: decoder2Ref, previousRevision: revisionRef, candidateRevision: revisionDrainRef };
+    const migrated = await migrateApplicationMemory(new ApplicationMemoryService({ store: p.lifecycle.store, engine, admission: p.admission }), drainMigrationRequest, { fns: builtinRegistry() });
+    equal("drain migrate-memory", migrated, await runNative(app("migrate-memory", await dynamic("drain-migrate-request", drainMigrationRequest)), p.native));
+    // A migrate that ignores the undispatched set is refused on both runtimes.
+    const bareMigrate = { application: APP, operation: op("drain-migrate-bare"), kind: "migrate", expectedHead: workState.digest, revision: revisionDrainRef, memory: migrated.snapshot, intents: [], evidence: [migrated.migration], causedBy: null };
+    const bareDenied = await p.lifecycle.commit(bareMigrate).then(() => false, () => true);
+    const bareAttempt = await runNativeAttempt(app("commit", await dynamic("drain-migrate-bare", bareMigrate)), p.native);
+    if (!bareDenied || bareAttempt.code !== 2) throw new Error("Undrained migrate was not refused identically");
+    checked++;
+    const drainInput = { application: APP, parentState: workState.digest,
+      dispositions: [{ intent: abandonedIntent, status: "abandoned" }, { intent: carriedIntent, status: "migrated" }].sort((a, b) => (a.intent < b.intent ? -1 : 1)) };
+    const drain = await produceApplicationDrain(p.lifecycle, drainInput);
+    equal("drain produce", { drain }, await runNative(app("drain", await dynamic("drain-produce", drainInput)), p.native));
+    await verifyApplicationDrain(p.lifecycle, drain, workState.digest);
+    equal("drain verify", { verified: true }, await runNative(app("verify-drain", await dynamic("drain-verify", { drain, expectedState: workState.digest })), p.native));
+    const migrate = { application: APP, operation: op("drain-migrate"), kind: "migrate", expectedHead: workState.digest, revision: revisionDrainRef, memory: migrated.snapshot, intents: [], evidence: [migrated.migration, drain].sort(), causedBy: null };
+    const migratedState = await p.lifecycle.commit(migrate);
+    equal("drained migrate", shape(migratedState), await runNative(app("commit", await dynamic("drain-migrate", migrate)), p.native));
+    // The abandoned intent leaves pending permanently; the carried one stays.
+    const remaining = await pendingOf(p.lifecycle);
+    if (remaining.pending.length !== 1 || remaining.pending[0]!.intent !== carriedIntent) throw new Error("Abandonment did not project out of pending");
+    equal("drained pending", remaining, await runNative(app("pending", APP), p.native));
+    const pairDispatcher = createApplicationDomainDispatcher(policy, { channelsDir: join(p.typescript, "channels"), store: p.lifecycle.store });
+    const dispatched = await p.lifecycle.dispatchPending(APP, pairDispatcher);
+    equal("drained dispatch", { dispatches: dispatched }, await runNative(app("dispatch", APP), p.native));
+    if (dispatched.some(row => row.intent === abandonedIntent) || !dispatched.some(row => row.intent === carriedIntent && row.status === "settled")) throw new Error("Drain dispositions did not hold through dispatch");
+    equal("post-drain pending", await pendingOf(p.lifecycle), await runNative(app("pending", APP), p.native));
+    // Abandonment is CAS evidence: the original intent record is untouched and
+    // byte-identical in both stores.
+    equal("abandoned intent bytes unchanged", await p.lifecycle.store.getValue(abandonedIntent), await p.nativeStore.getValue(abandonedIntent));
   }
   // An admitted identifier may match an inherited Object property: missing
   // evidence must remain unknown, and an own supplied digest must still work.

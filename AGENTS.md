@@ -21,6 +21,7 @@
 - `cli.ts` — the Bun CLI (`run`, `check`, `verify`, `resume`, `inspect`,
   `explain`, `diff`, `foundry`, `bench`, `runs`, `digest`, `store`,
   `manifests`, `manifest`, `slots`, `slot`, `mailbox`, `process`, `pack`, `unpack`,
+  `application` drain/verify-drain,
   `example`, `suite`, `index`, `search`, `auth`, `doctor`).
 - `index.ts` — the package's public surface.
 - `examples/` — bundled manifests and scripted responses used by `suite`.

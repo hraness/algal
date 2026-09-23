@@ -1270,6 +1270,125 @@ impl<'a> Service<'a> {
         Ok(())
     }
 
+    /// Drain records cited by the transition's evidence — other evidence
+    /// kinds stay inert here and keep their own checks.
+    fn transition_drains(
+        &self,
+        transition: &Transition,
+    ) -> Result<Vec<crate::application_drain::Drain>> {
+        let mut drains = Vec::new();
+        for reference in &transition.evidence {
+            let record = get_record(&self.store, reference)?;
+            if record["contract"] == json!("algal.application-drain.v1") {
+                drains.push(crate::application_drain::parse_drain(&record)?);
+            }
+        }
+        Ok(drains)
+    }
+
+    /// Commit-time drain rule: a migrate with undispatched pending intents
+    /// must cite exactly one drain naming the whole set; with none pending,
+    /// any drain is non-applicable evidence. Dispatched intents are never
+    /// drainable — the unsettled barrier already wedges the transition for
+    /// them.
+    fn check_drain(
+        &self,
+        prior: &Snapshot,
+        transition: &Transition,
+        pending: &[Pending],
+    ) -> Result<()> {
+        let drains = self.transition_drains(transition)?;
+        let undispatched: BTreeSet<&str> = pending
+            .iter()
+            .filter(|p| p.dispatch.is_none())
+            .map(|p| p.intent.as_str())
+            .collect();
+        if undispatched.is_empty() {
+            if drains.is_empty() {
+                return Ok(());
+            }
+            return Err(Error::invalid("Drain record is not applicable"));
+        }
+        if drains.len() != 1 {
+            return Err(Error::invalid("Pending intents require explicit drain"));
+        }
+        let drain = &drains[0];
+        crate::application_drain::check_binding(drain, &transition.application, &prior.digest)?;
+        crate::application_drain::check_coverage(drain, &undispatched)
+    }
+
+    /// Retained-history drain replay. Dispatch records written after the
+    /// citing migrate commits are indistinguishable from earlier settlements,
+    /// so the replay enforces the stable subset of completeness: the drain
+    /// binds its transition, every cited intent belongs to the drained prefix
+    /// and was not abandoned earlier, no `abandoned` intent carries a dispatch
+    /// record, and no still-undispatched intent of the prefix was left out.
+    fn check_drain_retained(
+        &self,
+        prefix: &[Snapshot],
+        prior: &Snapshot,
+        transition: &Transition,
+    ) -> Result<()> {
+        let drains = self.transition_drains(transition)?;
+        if drains.is_empty() {
+            return Ok(());
+        }
+        let abandoned = self.abandoned(prefix)?;
+        let mut rows = Vec::new();
+        for snapshot in prefix {
+            rows.extend(self.validated_intent_rows(snapshot)?);
+        }
+        for drain in &drains {
+            crate::application_drain::check_binding(drain, &transition.application, &prior.digest)?;
+            let mut known = BTreeSet::new();
+            for (reference, work) in &rows {
+                known.insert(reference.as_str());
+                if abandoned.contains(reference.as_str()) {
+                    continue;
+                }
+                let dispatch = self.dispatch_record(&transition.application, reference, work)?;
+                let disposition = drain.dispositions.iter().find(|d| &d.intent == reference);
+                if (disposition.map(|d| d.status.as_str()) == Some("abandoned")
+                    && dispatch.is_some())
+                    || (disposition.is_none() && dispatch.is_none())
+                {
+                    return Err(fail(
+                        "Drain dispositions must match the undispatched pending intents",
+                    ));
+                }
+            }
+            if drain.dispositions.iter().any(|d| {
+                !known.contains(d.intent.as_str()) || abandoned.contains(d.intent.as_str())
+            }) {
+                return Err(fail(
+                    "Drain dispositions must match the undispatched pending intents",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Intents abandoned by drains cited through retained migrate
+    /// transitions. Abandonment is a projection rule: the intent records stay
+    /// in history and CAS; only `pending` and `dispatch_pending` stop
+    /// selecting them.
+    fn abandoned(&self, history: &[Snapshot]) -> Result<BTreeSet<String>> {
+        let mut abandoned = BTreeSet::new();
+        for snapshot in history {
+            if snapshot.transition.kind != TransitionKind::Migrate {
+                continue;
+            }
+            for drain in self.transition_drains(&snapshot.transition)? {
+                for disposition in drain.dispositions {
+                    if disposition.status == "abandoned" {
+                        abandoned.insert(disposition.intent);
+                    }
+                }
+            }
+        }
+        Ok(abandoned)
+    }
+
     /// Inspection never reserves a name or bypasses the creation count limit.
     pub fn history(&self, application: &str) -> Result<Vec<Snapshot>> {
         let name = app_id(&json!(application))?.to_owned();
@@ -1319,6 +1438,7 @@ impl<'a> Service<'a> {
             Self::check_step(if i == 0 { None } else { Some(&history[i - 1]) }, item)?;
             if item.transition.kind == TransitionKind::Migrate {
                 self.check_migration(&history[i - 1], item)?;
+                self.check_drain_retained(&history[..i], &history[i - 1], &item.transition)?;
             }
             if item.transition.kind == TransitionKind::Restore {
                 crate::application_restoration::verify_restoration(
@@ -1439,6 +1559,7 @@ impl<'a> Service<'a> {
     }
 
     pub fn pending(&self, history: &[Snapshot]) -> Result<Vec<Pending>> {
+        let abandoned = self.abandoned(history)?;
         let mut pending = Vec::new();
         let mut total = 0usize;
         for snapshot in history {
@@ -1454,7 +1575,9 @@ impl<'a> Service<'a> {
                 {
                     return Err(fail("Dispatch state binding mismatch"));
                 }
-                if dispatch.as_ref().map(|d| d.status.as_str()) != Some("settled") {
+                if dispatch.as_ref().map(|d| d.status.as_str()) != Some("settled")
+                    && !abandoned.contains(&reference)
+                {
                     pending.push(Pending {
                         intent: reference,
                         source_state: snapshot.digest.clone(),
@@ -1468,6 +1591,29 @@ impl<'a> Service<'a> {
             return Err(Error::limit("Pending application intent bound exceeded"));
         }
         Ok(pending)
+    }
+
+    /// The undispatched pending intents at `parent_state` — the exact set a
+    /// drain must cover. Dispatches recorded later do not rewrite a committed
+    /// drain; this projection evaluates the current outbox against retained
+    /// history ending at that state.
+    pub fn undispatched_pending(
+        &self,
+        application: &str,
+        parent_state: &str,
+    ) -> Result<Vec<Pending>> {
+        let name = app_id(&json!(application))?.to_owned();
+        let state = app_ref(&json!(parent_state))?.to_owned();
+        let history = self.history(&name)?;
+        let index = history
+            .iter()
+            .position(|snapshot| snapshot.digest == state)
+            .ok_or_else(|| Error::invalid("Drain parent is not a committed state"))?;
+        Ok(self
+            .pending(&history[..=index])?
+            .into_iter()
+            .filter(|p| p.dispatch.is_none())
+            .collect())
     }
 
     pub async fn create(&mut self, command: &Value) -> Result<Snapshot> {
@@ -1644,10 +1790,9 @@ impl<'a> Service<'a> {
         };
         Self::check_step(current, &next)?;
         if next.transition.kind == TransitionKind::Migrate {
-            self.check_migration(
-                current.ok_or_else(|| fail("Migration requires a prior state"))?,
-                &next,
-            )?;
+            let prior = current.ok_or_else(|| fail("Migration requires a prior state"))?;
+            self.check_migration(prior, &next)?;
+            self.check_drain(prior, &next.transition, &pending)?;
         }
         if next.transition.kind == TransitionKind::Restore {
             crate::application_restoration::verify_restoration(
