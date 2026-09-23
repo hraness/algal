@@ -1,8 +1,9 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runInventoryScenario } from "./run";
+import { sha256 } from "../coding-harness/memory-records";
 
 const roots: string[] = [];
 afterEach(async () => { for (const path of roots.splice(0)) await rm(path, { recursive: true, force: true }); });
@@ -26,6 +27,8 @@ nativeTest("inventory inhabitants retain evidence through restart, contention an
   expect(evidence.toolDiscovery).toEqual({ before: "tools/inventory-a", after: "tools/inventory-b", executions: 2 });
   expect(evidence.evaluationCases).toEqual({ train: 2, validation: 3, holdout: 2, executions: 12 });
   expect(new Set(evidence.inhabitants.map(i => i.maxWork)).size).toBe(3);
+  expect(evidence.inhabitants.map(i => i.maxWork).sort((a, b) => a - b)).toEqual([2000, 3000, 4000]);
+  expect(evidence.inhabitants.every(i => i.maxAgentCalls === 0)).toBe(true);
   expect(evidence.inhabitants.find(i => i.name === "planner")!.capabilities).toEqual([]);
   expect(evidence.qualification).toEqual({ proposal: "authored-deterministic", inference: "native-replay-verified", modelCalls: 0, paidApiSpendUsd: 0 });
   const view = JSON.parse(await readFile(join(root, "view.json"), "utf8"));
@@ -54,6 +57,22 @@ nativeTest("inventory inhabitants retain evidence through restart, contention an
   const report = await readFile(evidence.report!, "utf8");
   expect(report).toContain("Observation provenance");
   expect(report).toContain("Host probe; execution bounds are supplied by the admitted host");
+  for (const path of [evidence.report!, evidence.unknownReport!]) {
+    const html = await readFile(path, "utf8");
+    expect(html).toContain("default-src 'none'");
+    expect(html).not.toContain("<script");
+    expect(html).not.toMatch(/src="http|href="http|fetch\(|XMLHttpRequest|sendBeacon/);
+  }
+  const truncated = view.evidence.truncated as Record<string, unknown>;
+  expect(Object.keys(truncated).sort()).toEqual(["probes", "queries", "revisions", "sources", "work"]);
+  expect(Object.values(truncated).every(v => v === false)).toBe(true);
+  const emitted = new Set(await readdir(root));
+  for (const phase of ["initialize", "observe", "refresh", "propose", "evaluate", "activate", "execute", "inspect"])
+    expect(emitted.has(`phase-${phase}.json`)).toBe(true);
+  for (const name of ["evidence.json", "native-sha256", "view.json", "view-unknown.json", "report.html", "report-unknown.html", "tool-observe.json", "tool-execute.json"])
+    expect(emitted.has(name)).toBe(true);
+  expect(evidence.nativeSha256).toBe(sha256(await readFile(native!)));
+  expect(await readFile(join(root, "native-sha256"), "utf8")).toBe(evidence.nativeSha256);
   expect(view.procedures.find((p: { name: string }) => p.name === "planner").applicability).toBe("supported");
   await expect(runInventoryScenario(root, native!)).rejects.toThrow();
 }, 60000);

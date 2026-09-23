@@ -185,6 +185,20 @@ existing backend and the standing $20 incremental paid-inference cap.
 6. **Broader applications:** package the qualified runtime surfaces and a usable
    workbench, and demonstrate a
    second application with a different memory/effect domain.
+   The packaged surfaces now exist: `@hraness/algal` 0.2.0 ships the Bun CLI,
+   SDK, bundled examples, and specification with test files excluded from the
+   tarball, while the standalone native executable carries the same `algal`
+   commands. The usable workbench exists as the
+   [native workbench](native-workbench.md): `algal demo start` retains a fixture
+   proposal in a durable workbench whose passive `report.html` emits the exact
+   approve/deny commands, and `algal demo prove` exercises approval, denial,
+   detached evidence verification, and two owned crash recoveries. The second
+   application exists as the [adaptive inventory](adaptive-inventory.md)
+   executable example: three inhabitants with distinct budgets and authority,
+   file-probe observations and discovered tool executables rather than coding
+   effects, an evaluated planner revision activated across eight real host
+   processes. Both demonstrations use deterministic fixtures; no commercial
+   inventory accuracy or model-learning benefit is claimed.
 
 Reference/native parity is a gate throughout this program. An exploratory host
 application may initially use Bun and a native query adapter, but it must be
