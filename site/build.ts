@@ -2,7 +2,7 @@
 // examples so the public demonstration cannot drift into illustrative syntax.
 // Interactive diagram viewers consume algal.diagram-view.v1 documents emitted
 // alongside each SVG — the same layout pass drives both.
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { manifestToJson, parseOrganismManifest, type OrganismManifest } from "../src/contract";
@@ -345,7 +345,6 @@ if (repairedAuthoring.analysis.maxAgentCalls !== 1 || repairedAuthoring.analysis
 // Like `algal suite`, preload every bundled example so digest-addressed
 // children resolve in the store.
 const exampleStore = new MemoryStore();
-const { readdir } = await import("node:fs/promises");
 for (const file of (await readdir(join(ROOT, "examples"))).filter(f => f.endsWith(".algal.json")).sort()) {
   const value: unknown = JSON.parse(await readFile(join(ROOT, "examples", file), "utf8"));
   await exampleStore.putManifest(parseOrganismManifest(value));
@@ -643,8 +642,83 @@ await emitDocPage({
   ogTitle: "ALGAL documentation", ogAlt: "The ALGAL documentation",
 }, `<section class="page-intro"><p class="eyebrow">Documentation</p><h1>The reference shelf.</h1><p class="lede">Every page here renders the same markdown maintainers read in the repository — one source, two doors. Working notes and pilot data stay in the repo.</p></section><div class="docs-layout">${docsRail("index", docTitles)}<div class="docs-article docs-index"><div class="docs-index-groups">${indexGroups}${indexSpec}</div></div></div>`);
 
+// --- Authored content: blog posts and comparison pages ---------------------
+// Same renderer as the docs mirror, but these pages are site-native: they
+// live in site/blog and site/compare with a small frontmatter header.
+
+interface ContentMeta { title?: string; date?: string; description?: string; order?: string }
+
+function parseFrontmatter(source: string): { meta: ContentMeta; body: string } {
+  const match = source.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+  if (!match) return { meta: {}, body: source };
+  const meta: Record<string, string> = {};
+  for (const line of match[1]!.split(/\r?\n/)) {
+    const idx = line.indexOf(":");
+    if (idx > 0) meta[line.slice(0, idx).trim()] = line.slice(idx + 1).trim().replace(/^["']|["']$/g, "");
+  }
+  return { meta: meta as ContentMeta, body: source.slice(match[0].length) };
+}
+
+const contentSectionUrls: string[] = [];
+
+async function emitMarkdownSection(options: {
+  dir: "blog" | "compare";
+  page: "blog" | "compare";
+  railTitle: string;
+  indexIntro: { eyebrow: string; heading: string; lede: string };
+  indexMeta: { title: string; description: string; ogTitle: string; ogAlt: string };
+  sortBy: "date" | "order";
+}) {
+  const files = (await readdir(join(SITE, options.dir))).filter(file => file.endsWith(".md")).sort();
+  const entries: { slug: string; meta: ContentMeta; doc: RenderedDoc }[] = [];
+  for (const file of files) {
+    const slug = file.replace(/\.md$/, "");
+    const { meta, body } = parseFrontmatter(await readFile(join(SITE, options.dir, file), "utf8"));
+    entries.push({ slug, meta, doc: renderMarkdown(body, href => href) });
+  }
+  entries.sort((a, b) => options.sortBy === "date"
+    ? (b.meta.date ?? "").localeCompare(a.meta.date ?? "") || (a.meta.order ?? "9").localeCompare(b.meta.order ?? "9")
+    : (a.meta.order ?? "9").localeCompare(b.meta.order ?? "9"));
+
+  const rail = (current: string) =>
+    `<aside class="docs-rail"><nav class="docs-nav" aria-label="${options.railTitle}"><a class="docs-home" href="/${options.dir}/"${current === "index" ? ' aria-current="page"' : ""}>${options.railTitle}</a><ul>${entries.map(entry =>
+      `<li><a href="/${options.dir}/${entry.slug}/"${entry.slug === current ? ' aria-current="page"' : ""}>${escapeHtml(entry.doc.title)}</a></li>`).join("")}</ul></nav></aside>`;
+
+  for (const entry of entries) {
+    const dateBlock = entry.meta.date ? `<p class="post-meta"><time datetime="${entry.meta.date}">${entry.meta.date}</time></p>` : "";
+    await emitDocPage({
+      page: options.page, path: `/${options.dir}/${entry.slug}/`,
+      title: `${entry.doc.title} — ALGAL`,
+      description: entry.meta.description ?? entry.doc.description,
+      ogTitle: entry.doc.title, ogAlt: entry.doc.title,
+      ...(options.dir === "blog" && entry.meta.date ? { article: { published: entry.meta.date } } : {}),
+    }, `<div class="docs-layout">${rail(entry.slug)}<article class="docs-article prose">${dateBlock}${entry.doc.html}</article></div>`);
+    contentSectionUrls.push(`/${options.dir}/${entry.slug}/`);
+  }
+
+  const cards = entries.map(entry =>
+    `<li><a href="/${options.dir}/${entry.slug}/"><strong>${escapeHtml(entry.doc.title)}</strong><span>${escapeHtml(entry.meta.description ?? entry.doc.description)}</span></a></li>`).join("");
+  await emitDocPage({
+    page: options.page, path: `/${options.dir}/`,
+    title: options.indexMeta.title, description: options.indexMeta.description,
+    ogTitle: options.indexMeta.ogTitle, ogAlt: options.indexMeta.ogAlt,
+  }, `<section class="page-intro"><p class="eyebrow">${options.indexIntro.eyebrow}</p><h1>${options.indexIntro.heading}</h1><p class="lede">${options.indexIntro.lede}</p></section><div class="docs-layout">${rail("index")}<div class="docs-article docs-index"><ul class="docs-list docs-list-wide">${cards}</ul></div></div>`);
+  contentSectionUrls.push(`/${options.dir}/`);
+}
+
+await emitMarkdownSection({
+  dir: "compare", page: "compare", railTitle: "Comparisons", sortBy: "order",
+  indexIntro: { eyebrow: "Comparisons", heading: "Same questions, different machinery.", lede: "ALGAL shares surface area with agent frameworks and durable-execution engines — and is a different object underneath. These pages are honest about where the line sits." },
+  indexMeta: { title: "Compare ALGAL — agent frameworks, optimizers, durable execution", description: "How ALGAL — a language and VM where programs are typed, content-addressed data — compares to LangGraph, DSPy, and Temporal.", ogTitle: "Compare ALGAL", ogAlt: "ALGAL comparisons" },
+});
+await emitMarkdownSection({
+  dir: "blog", page: "blog", railTitle: "Posts", sortBy: "date",
+  indexIntro: { eyebrow: "Blog", heading: "Notes on living programs.", lede: "Deep dives into what ALGAL is, the research it sits next to, and why the machinery is shaped the way it is." },
+  indexMeta: { title: "ALGAL blog — notes on living programs", description: "Deep dives into the ALGAL language and VM: self-evolving software, replay-verified receipts, durable waits, and the research landscape around them.", ogTitle: "ALGAL blog", ogAlt: "Notes on living programs" },
+});
+
 // Generated sitemap covers every emitted page.
-const sitemapUrls = ["/", "/tour/", "/use-cases/", "/docs/", ...DOC_SLUGS.map(slug => `/docs/${slug}/`), ...SPEC_SLUGS.map(slug => `/docs/spec/${slug}/`)];
+const sitemapUrls = ["/", "/tour/", "/use-cases/", "/docs/", ...DOC_SLUGS.map(slug => `/docs/${slug}/`), ...SPEC_SLUGS.map(slug => `/docs/spec/${slug}/`), ...contentSectionUrls];
 await writeFile(join(DIST, "sitemap.xml"), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemapUrls.map(url => `  <url><loc>https://algal.computer${url}</loc></url>`).join("\n")}\n</urlset>\n`);
 
-console.log(`site built → ${DIST} (${manifests.size + 1} structural diagrams, ${childViews.length + 1} focused views, ${verifiedRuns} replay-checked executions, 1 checked authoring error, ${pages.length + DOC_SLUGS.length + SPEC_SLUGS.length + 1} pages)`);
+console.log(`site built → ${DIST} (${manifests.size + 1} structural diagrams, ${childViews.length + 1} focused views, ${verifiedRuns} replay-checked executions, 1 checked authoring error, ${pages.length + DOC_SLUGS.length + SPEC_SLUGS.length + contentSectionUrls.length + 1} pages)`);

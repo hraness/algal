@@ -196,8 +196,14 @@ async function initDiagramFrame(frame: HTMLElement): Promise<void> {
 
   // Narrow frames and graphs far wider than their container get the fossil
   // record itself: the receipt's event order as a tappable list. Cheaper than
-  // squeezing a dense graph, and closer to what a receipt actually is.
-  const narrow = frame.clientWidth < 420 || layout.width > frame.clientWidth * 1.8;
+  // squeezing a dense graph, and closer to what a receipt actually is. Tall
+  // portrait organisms also prefer the list whenever the frame is wide enough
+  // to show it comfortably — a sparse centered graph reads worse than the
+  // record; only mid-width frames keep the follow-pan canvas for them.
+  const portrait = layout.height > layout.width * 1.15;
+  const narrow = frame.clientWidth < 420
+    || layout.width > frame.clientWidth * 1.8
+    || (portrait && frame.clientWidth > 560);
   if (narrow) {
     const EVENT_LABEL: Record<string, string> = { "cell.commit": "committed", "cell.skip": "skipped", "cell.fail": "failed", "cell.suspend": "suspended", effect: "effect", cell: "cell" };
     const steps = run && run.steps.length ? run.steps : layout.nodes.map(node => ({ event: "cell", node: node.id }));
