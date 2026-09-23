@@ -1,0 +1,387 @@
+{
+  "claim": "recorded proposal execution; not quality, authorship or provider attestation",
+  "model": "anthropic/claude-haiku-4.5",
+  "gatewayProvider": "anthropic",
+  "priceSource": "https://vercel.com/ai-gateway/models/claude-haiku-4.5",
+  "proposalDigest": "sha256:025f74388735f4c01f53fd1c5e185a8f22bdb4a6c7203e63c4b8704be40ed31a",
+  "attempt": {
+    "accounting": "sha256:0a98d66bbb35651dc88df5c9fe85f57de91e9d489ad8a009df9719386a64b097",
+    "baseRevision": "sha256:1bf08800a67db6ab6dbd60e13e23481c713a8233eab45aa1df01846f5f678cec",
+    "contract": "algal.marketing-model-attempt.v1",
+    "manifest": "sha256:983eb795052458484d838b1959f06908b5cdef7e231cf30bfe65bec2fa4f659e",
+    "parentState": "sha256:3ebb3cb74a3be6083e1b132b30c28710401db6d46dde1f55fff42ed8c51bb072",
+    "providerAttestation": false,
+    "receipt": "sha256:48cd52c737e0a3e59328cbe82f09f3c68c792ca1e9c256a7b81b8534f952ece7"
+  },
+  "accounting": {
+    "billing": "host-reserved",
+    "calls": 1,
+    "completedCalls": 1,
+    "configurationDigest": "sha256:3fbc92370be256a9652e8e52f7d53035ddd40ac711382c769c68eb607d3fe263",
+    "costUsd": null,
+    "inputTokens": 949,
+    "outputTokens": 95,
+    "records": [
+      {
+        "outputDigest": "sha256:b8e8b58f233b6d8cc069d06895020802d56737b275203ebc3b31972c0e87d23c",
+        "requestDigest": "sha256:65c94b312f209c38fb6389bfa23106eb5693c6cd097ab5f8ccc00194161d9b7c",
+        "reservedMicrousd": 38912,
+        "sequence": 1,
+        "status": "completed",
+        "tokensIn": 949,
+        "tokensOut": 95
+      }
+    ],
+    "reservedMicrousd": 38912,
+    "schema": "algal.inference-accounting.v1",
+    "stopped": false
+  },
+  "receipt": {
+    "args": {},
+    "cells": {
+      "context": {
+        "outputs": {
+          "value": {
+            "revision": {
+              "config": {
+                "body": "Build inspectable applications that can change their behavior while keeping their history. Start with one living component.",
+                "ctaLabel": "Explore ALGAL",
+                "headline": "Software that can grow with you.",
+                "layout": "split"
+              },
+              "contract": "algal.marketing-revision.v1",
+              "program": {
+                "children": [
+                  "list",
+                  {
+                    "id": "audience",
+                    "kind": "text",
+                    "role": "eyebrow",
+                    "text": [
+                      "if",
+                      [
+                        "eq",
+                        [
+                          "get",
+                          "signals",
+                          "audience"
+                        ],
+                        "builders"
+                      ],
+                      "For people who build",
+                      "For people who operate"
+                    ]
+                  },
+                  {
+                    "id": "headline",
+                    "kind": "text",
+                    "role": "heading",
+                    "text": "Software that can grow with you."
+                  },
+                  {
+                    "id": "body",
+                    "kind": "text",
+                    "role": "body",
+                    "text": "Build inspectable applications that can change their behavior while keeping their history. Start with one living component."
+                  },
+                  {
+                    "href": "/docs/",
+                    "id": "cta",
+                    "kind": "link",
+                    "label": "Explore ALGAL"
+                  },
+                  {
+                    "id": "release",
+                    "kind": "text",
+                    "role": "status",
+                    "text": [
+                      "if",
+                      [
+                        "eq",
+                        [
+                          "get",
+                          "signals",
+                          "release"
+                        ],
+                        "available"
+                      ],
+                      "Available to explore",
+                      "A living preview"
+                    ]
+                  }
+                ],
+                "id": "surface",
+                "kind": "stack",
+                "layout": "split"
+              }
+            },
+            "signals": {
+              "audience": "builders",
+              "release": "preview"
+            },
+            "signalsMeaning": "simulated demonstration inputs; not verified business facts"
+          }
+        },
+        "status": "committed",
+        "work": 100
+      },
+      "proposal": {
+        "effectDigest": "sha256:65c94b312f209c38fb6389bfa23106eb5693c6cd097ab5f8ccc00194161d9b7c",
+        "outputs": {
+          "out": {
+            "body": "Build applications that inspect their own behavior and evolve safely. ALGAL lets you start small with one component, keep complete history, and grow without losing control.",
+            "ctaLabel": "Explore ALGAL",
+            "headline": "Software that grows with you.",
+            "layout": "split",
+            "rationale": "Emphasizes inspectability and controlled evolution as core strengths while grounding the pitch in concrete, achievable capabilities."
+          }
+        },
+        "status": "committed",
+        "work": 2191
+      }
+    },
+    "contract": "algal.run.v1",
+    "digest": "sha256:259c24f5ad2e60fc4007a73fa9687eda207f119ed694702c221d1e1483c725c2",
+    "effects": [
+      {
+        "configurationDigest": "sha256:3fbc92370be256a9652e8e52f7d53035ddd40ac711382c769c68eb607d3fe263",
+        "executor": "vercel:anthropic/claude-haiku-4.5",
+        "output": {
+          "body": "Build applications that inspect their own behavior and evolve safely. ALGAL lets you start small with one component, keep complete history, and grow without losing control.",
+          "ctaLabel": "Explore ALGAL",
+          "headline": "Software that grows with you.",
+          "layout": "split",
+          "rationale": "Emphasizes inspectability and controlled evolution as core strengths while grounding the pitch in concrete, achievable capabilities."
+        },
+        "requestDigest": "sha256:65c94b312f209c38fb6389bfa23106eb5693c6cd097ab5f8ccc00194161d9b7c",
+        "retryable": false,
+        "usage": {
+          "model": "anthropic/claude-haiku-4.5",
+          "tokensIn": 949,
+          "tokensOut": 95
+        }
+      }
+    ],
+    "events": [
+      {
+        "digest": "sha256:983eb795052458484d838b1959f06908b5cdef7e231cf30bfe65bec2fa4f659e",
+        "kind": "run.start",
+        "seq": 0
+      },
+      {
+        "kind": "cell.commit",
+        "path": "context",
+        "seq": 1
+      },
+      {
+        "digest": "sha256:65c94b312f209c38fb6389bfa23106eb5693c6cd097ab5f8ccc00194161d9b7c",
+        "kind": "effect",
+        "path": "proposal",
+        "seq": 2
+      },
+      {
+        "kind": "cell.commit",
+        "path": "proposal",
+        "seq": 3
+      },
+      {
+        "kind": "run.end",
+        "outcome": "complete",
+        "seq": 4
+      }
+    ],
+    "manifestDigest": "sha256:983eb795052458484d838b1959f06908b5cdef7e231cf30bfe65bec2fa4f659e",
+    "manifestKey": "organism:marketing-proposal",
+    "outcome": "complete",
+    "runtime": {
+      "name": "algal",
+      "version": "0.1.0"
+    },
+    "work": {
+      "agentCalls": 1,
+      "steps": 2,
+      "units": 2291
+    }
+  },
+  "bundle": {
+    "contract": "algal.bundle.v1",
+    "root": "sha256:983eb795052458484d838b1959f06908b5cdef7e231cf30bfe65bec2fa4f659e",
+    "manifests": {
+      "sha256:983eb795052458484d838b1959f06908b5cdef7e231cf30bfe65bec2fa4f659e": {
+        "contract": "algal.organism.v1",
+        "key": "organism:marketing-proposal",
+        "name": "Bounded marketing proposal",
+        "budgets": {
+          "maxAgentCalls": 1,
+          "maxContextBytes": 8192,
+          "maxDepth": 4,
+          "maxOutputBytes": 8192,
+          "maxSteps": 4,
+          "maxWork": 100000
+        },
+        "cells": [
+          {
+            "id": "context",
+            "kind": "const",
+            "outputs": {
+              "value": {
+                "type": "json",
+                "value": {
+                  "revision": {
+                    "config": {
+                      "body": "Build inspectable applications that can change their behavior while keeping their history. Start with one living component.",
+                      "ctaLabel": "Explore ALGAL",
+                      "headline": "Software that can grow with you.",
+                      "layout": "split"
+                    },
+                    "contract": "algal.marketing-revision.v1",
+                    "program": {
+                      "children": [
+                        "list",
+                        {
+                          "id": "audience",
+                          "kind": "text",
+                          "role": "eyebrow",
+                          "text": [
+                            "if",
+                            [
+                              "eq",
+                              [
+                                "get",
+                                "signals",
+                                "audience"
+                              ],
+                              "builders"
+                            ],
+                            "For people who build",
+                            "For people who operate"
+                          ]
+                        },
+                        {
+                          "id": "headline",
+                          "kind": "text",
+                          "role": "heading",
+                          "text": "Software that can grow with you."
+                        },
+                        {
+                          "id": "body",
+                          "kind": "text",
+                          "role": "body",
+                          "text": "Build inspectable applications that can change their behavior while keeping their history. Start with one living component."
+                        },
+                        {
+                          "href": "/docs/",
+                          "id": "cta",
+                          "kind": "link",
+                          "label": "Explore ALGAL"
+                        },
+                        {
+                          "id": "release",
+                          "kind": "text",
+                          "role": "status",
+                          "text": [
+                            "if",
+                            [
+                              "eq",
+                              [
+                                "get",
+                                "signals",
+                                "release"
+                              ],
+                              "available"
+                            ],
+                            "Available to explore",
+                            "A living preview"
+                          ]
+                        }
+                      ],
+                      "id": "surface",
+                      "kind": "stack",
+                      "layout": "split"
+                    }
+                  },
+                  "signals": {
+                    "audience": "builders",
+                    "release": "preview"
+                  },
+                  "signalsMeaning": "simulated demonstration inputs; not verified business facts"
+                }
+              }
+            }
+          },
+          {
+            "id": "proposal",
+            "kind": "agent",
+            "prompt": "Propose a thoughtful, clear marketing component for ALGAL, a language/runtime for bounded, inspectable, evolving software. Return only {headline,body,ctaLabel,layout,rationale}. Preserve factual modesty: no performance, conversion, adoption, cross-platform shipping, or autonomous safety claims. Headline 1–96 characters; body 1–280; ctaLabel 1–32; layout split or stack. Rationale must be one short sentence, at most 200 characters. The destination is fixed /docs/. This is a preview proposal, not an instruction to publish or execute anything.",
+            "view": {
+              "inputs": "*"
+            },
+            "output": {
+              "kind": "json",
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "body": {
+                    "maxLength": 280,
+                    "type": "string"
+                  },
+                  "ctaLabel": {
+                    "maxLength": 32,
+                    "type": "string"
+                  },
+                  "headline": {
+                    "maxLength": 96,
+                    "type": "string"
+                  },
+                  "layout": {
+                    "enum": [
+                      "split",
+                      "stack"
+                    ],
+                    "type": "string"
+                  },
+                  "rationale": {
+                    "maxLength": 200,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "headline",
+                  "body",
+                  "ctaLabel",
+                  "layout",
+                  "rationale"
+                ],
+                "type": "object"
+              }
+            },
+            "inputs": {
+              "context": {
+                "type": "json"
+              }
+            }
+          }
+        ],
+        "edges": [
+          {
+            "from": {
+              "cell": "context",
+              "port": "value"
+            },
+            "to": {
+              "cell": "proposal",
+              "port": "context"
+            }
+          }
+        ]
+      }
+    },
+    "values": {}
+  },
+  "verification": {
+    "ok": true,
+    "outcome": "complete",
+    "digest": "sha256:259c24f5ad2e60fc4007a73fa9687eda207f119ed694702c221d1e1483c725c2",
+    "mismatches": []
+  }
+}
