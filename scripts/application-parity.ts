@@ -17,7 +17,8 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { ApplicationService, type ApplicationDispatch, type ApplicationDispatchAttempt, type ApplicationSnapshot } from "../src/application";
-import { applicationJson, parseApplicationRevision } from "../src/application-contract";
+import { applicationJson, parseApplicationRevision, parseWorkIntent } from "../src/application-contract";
+import { produceApplicationContention, verifyApplicationContention } from "../src/application-contention";
 import { captureApplicationGoals } from "../src/application-goal";
 import { APPLICATION_QUOTA_LIMITS } from "../src/application-quota";
 import {
@@ -25,6 +26,7 @@ import {
 } from "../src/application-adaptation";
 import { createApplicationDomainDispatcher, createApplicationPolicyHost } from "../src/application-host";
 import { scheduleInvestigations, requestExecution } from "../src/application-investigation";
+import { interappMessageRecord, verifyInterappDelivery } from "../src/application-message";
 import { collectApplicationViewEvidence, parseApplicationView, parseApplicationViewSpec, projectApplicationView, type ApplicationApplicability, type ApplicationView } from "../src/application-view";
 import { migrateApplicationMemory } from "../src/application-migration";
 import { produceApplicationDrain, verifyApplicationDrain } from "../src/application-drain";
@@ -278,6 +280,15 @@ let drainIntentRef = "" as Digest;
 let drainRef = "" as Digest;
 let drainRequest: { [key: string]: JsonValue } = {};
 let undrainedCommand: { [key: string]: JsonValue } = {};
+let messageRef = "" as Digest;
+let forgedMessageRef = "" as Digest;
+let forgedRecipientRef = "" as Digest;
+let contentionRef = "" as Digest;
+let forgedContentionRef = "" as Digest;
+/** A plain `memory` command racing the captured head — contention fixtures
+ * pin the current revision/memory so the winner's transition is a no-op
+ * memory step both runtimes admit identically. */
+const raceCommand = (name: string) => ({ application: APP, operation: op(name), kind: "memory" as const, expectedHead: head, revision: revision3Ref, memory: memoryRef, intents: [], evidence: [], causedBy: null });
 
 /** `fails` legs compare the verdict; a `reason` additionally pins the exact
  * error message emitted by both runtimes for a shared contract check. */
@@ -369,8 +380,66 @@ steps.push(
     },
     native: async () => app("view", await dynamic("view-unknown-evidence", { application: APP, spec: digests.views, evidence: true, derivations: [derivationRef] })),
   },
-  { name: "dispatch", ts: async () => ({ dispatches: await service.dispatchPending(APP, dispatcher) }), native: async () => app("dispatch", APP) },
+  // The settled delivery also mints `algal.interapp-message.v1` inside both
+  // runtimes' execute paths. Recompute the record from the retained dispatch
+  // and intent here — its CAS identity must already exist in each store —
+  // and seed forged variants (relabeled body/recipient) for the tamper legs.
+  {
+    name: "dispatch",
+    ts: async () => {
+      const dispatches = await service.dispatchPending(APP, dispatcher);
+      const settled = dispatches.find((d): d is ApplicationDispatch => d.contract === "algal.application-dispatch.v1" && d.status === "settled" && d.plan.kind === "delivery");
+      if (!settled) throw new Error("no settled delivery dispatch to mint message evidence");
+      const work = parseWorkIntent(await service.store.getValue(settled.intent));
+      if (work.kind !== "deliver") throw new Error("settled dispatch intent is not a delivery");
+      const body = await service.store.getValue(work.message);
+      if (body === undefined) throw new Error("settled delivery intent payload is not in CAS");
+      const record = interappMessageRecord(settled, work, body);
+      if (record === null) throw new Error("settled delivery produced no interapp message record");
+      messageRef = digestCanonical(applicationJson(record));
+      const nativeStore = new FileStore(nativeDir);
+      if (await service.store.getValue(messageRef) === null || await nativeStore.getValue(messageRef) === null) {
+        throw new Error("a settled delivery did not retain its interapp message on both runtimes");
+      }
+      const forgedPayload = { ...record, body: { contract: "algal.parity-forged-body.v1" } };
+      const forgedRecipient = { ...record, to: capabilityHandle("mailbox-send", { fixture: "other" }) };
+      forgedMessageRef = await service.store.putValue(applicationJson(forgedPayload));
+      forgedRecipientRef = await service.store.putValue(applicationJson(forgedRecipient));
+      if (await nativeStore.putValue(applicationJson(forgedPayload)) !== forgedMessageRef ||
+          await nativeStore.putValue(applicationJson(forgedRecipient)) !== forgedRecipientRef) {
+        throw new Error("forged message fixture identity differs");
+      }
+      return { dispatches };
+    },
+    native: async () => app("dispatch", APP),
+  },
   { name: "pending", ts: pendingRows, native: async () => app("pending", APP) },
+  // Full delivery verification: CAS bindings, the retained settled dispatch,
+  // history membership, and the durable channel outcome — on both runtimes.
+  {
+    name: "verify-message",
+    ts: async () => {
+      const verified = await verifyInterappDelivery(service, messageRef, { channelsDir: join(tsDir, "channels") });
+      return { ok: true, application: verified.application, operation: verified.operation, intent: verified.intent, route: verified.route, to: verified.to };
+    },
+    native: async () => app("verify-message", await dynamic("verify-message", { message: messageRef })),
+  },
+  {
+    name: "verify-message-forged-payload",
+    fails: true,
+    reason: "Interapp message does not bind its payload",
+    ts: async () => verifyInterappDelivery(service, forgedMessageRef, { channelsDir: join(tsDir, "channels") }),
+    native: async () => app("verify-message", await dynamic("verify-message-forged-payload", { message: forgedMessageRef })),
+  },
+  // Relabeling only the recipient survives the CAS-level bindings but must
+  // fail against the retained delivery plan — on both runtimes, one message.
+  {
+    name: "verify-message-forged-recipient",
+    fails: true,
+    reason: "Interapp message recipient mismatch",
+    ts: async () => verifyInterappDelivery(service, forgedRecipientRef, { channelsDir: join(tsDir, "channels") }),
+    native: async () => app("verify-message", await dynamic("verify-message-forged-recipient", { message: forgedRecipientRef })),
+  },
   { name: "observe", ts: async () => ({ observation: await memory.observe(observationInput) }), native: async () => app("observe", fixturePath.get("observation")!) },
   {
     name: "publish",
@@ -651,6 +720,46 @@ steps.push(
       return { state: s.digest, transition: s.state.transition, revision: s.state.revision, memory: s.state.memory };
     },
     native: async () => app("commit", await dynamic("migrate", migrateCommand)),
+  },
+  // Retained CAS-head race: both runtimes race the same two commands against
+  // the captured head, retain the identical sorted contention record, then
+  // verify it structurally without re-executing. A forged loser reason and a
+  // mismatched-heads race are rejected with the same messages on both legs.
+  {
+    name: "contend",
+    ts: async () => {
+      const produced = await produceApplicationContention(service, { parentState: head, attempts: [raceCommand("contend-a"), raceCommand("contend-b")] });
+      contentionRef = produced.contention;
+      const loser = produced.record.attempts.find(a => a.status === "rejected");
+      if (!loser || produced.record.attempts.length !== 2) throw new Error("the retained race did not record one winner and one loser");
+      const forged = { ...produced.record, attempts: produced.record.attempts.map(a => a === loser ? { ...a, reason: "Operation already committed in application history" } : a) };
+      forgedContentionRef = await service.store.putValue(applicationJson(forged));
+      if (await new FileStore(nativeDir).putValue(applicationJson(forged)) !== forgedContentionRef) throw new Error("forged contention fixture identity differs");
+      head = produced.snapshot.digest;
+      return { contention: produced.contention, winner: produced.record.winner };
+    },
+    native: async () => app("contend", await dynamic("contend", { parentState: head, attempts: [raceCommand("contend-a"), raceCommand("contend-b")] })),
+  },
+  {
+    name: "verify-contention",
+    ts: async () => ({ ok: true, winner: (await verifyApplicationContention(service, contentionRef)).winner }),
+    native: async () => app("verify-contention", await dynamic("verify-contention", { contention: contentionRef })),
+  },
+  {
+    name: "verify-contention-forged-reason",
+    fails: true,
+    reason: "Contention rejection is not reproducible",
+    ts: async () => verifyApplicationContention(service, forgedContentionRef),
+    native: async () => app("verify-contention", await dynamic("verify-contention-forged", { contention: forgedContentionRef })),
+  },
+  // A race whose first attempt names a different expected head aborts before
+  // any commit — head and history stay put on both runtimes.
+  {
+    name: "contend-mismatched-heads",
+    fails: true,
+    reason: "Contention attempt does not race the expected head",
+    ts: async () => produceApplicationContention(service, { parentState: head, attempts: [{ ...raceCommand("contend-mismatch"), expectedHead: genesisHead }] }),
+    native: async () => app("contend", await dynamic("contend-mismatched", { parentState: head, attempts: [{ ...raceCommand("contend-mismatch"), expectedHead: genesisHead }] })),
   },
   { name: "inspect-final", ts: async () => inspectShape(await service.inspect(APP)), native: async () => app("inspect", APP) },
   {
