@@ -66,6 +66,7 @@ advance sequence while retaining epoch. Previous states are retained.
 | `algal.application-comparison.v1` | Environment-attributed join of several reproduced evaluations for one entrypoint, shared measurement set, and accepted-only selection |
 | `algal.application-selection-policy.v1` | Environment-keyed mapping from environment label to a retained comparison and its selected manifest; pure data, no authority |
 | `algal.application-migration.v1` | Source snapshot, both revisions, pure migration program, producing receipt, and emitted claims |
+| `algal.application-drain.v1` | Explicit per-intent disposition of the undispatched pending set at a migrate's parent state |
 | `algal.application-view.v1` | Bounded historical projection and state-fenced proposed actions |
 | `algal.application-view-evidence.v1` | Optional captured query, probe, source, revision, and separately observed work summaries |
 
@@ -113,6 +114,44 @@ projection. Its replay must reproduce the exact arguments and emitted claims.
 Withdrawn observations and hypotheses do not become fresh observations merely
 by being present in a historical snapshot. A changed schema starts a new memory
 chain and retains the old snapshot through explicit migration evidence.
+
+### Explicit drain of undispatched work
+
+An undispatched intent pins the operation, revision, entrypoint, and memory
+of the state that created it; a schema change cannot silently reinterpret
+that pin. A `migrate` transition whose parent retains undispatched pending
+intents must therefore cite exactly one `algal.application-drain.v1` record
+in its evidence. The closed record names `application`, the transition's
+`parentState`, and a sorted, unique `dispositions` array covering the
+complete undispatched set — no missing rows, no extras:
+
+```json
+{"contract":"algal.application-drain.v1","application":"inventory","parentState":"sha256:...","dispositions":[{"intent":"sha256:...","status":"abandoned"},{"intent":"sha256:...","status":"migrated"}]}
+```
+
+Each disposition is explicit. `migrated` keeps the intent pending and
+dispatchable under the new revision; `abandoned` drops it from every future
+`pending` projection and dispatch scan. Abandonment is a projection rule: the
+intent record stays immutable in history and CAS as evidence and is never
+rewritten or deleted, and an abandoned intent can never be re-drained,
+reconciled, or dispatched. A drain cited where the parent has no
+undispatched pending work is non-applicable evidence and is rejected, as are
+drains that name another application or parent, omit an undispatched intent,
+name a dispatched or already abandoned intent, or appear more than once in
+the evidence. Settled work is no longer pending; admitted-but-unsettled
+dispatches remain governed by the activation barrier and can never be
+drained.
+
+`produceApplicationDrain(service, {application, parentState, dispositions})`
+stores the record after checking coverage against the recomputed set;
+`verifyApplicationDrain(service, drain, expectedState)` re-verifies a stored
+record's digest, parent binding, and set equality. The committing core and
+the trusted policy host independently recompute the undispatched set and
+replay the cited record; retained history replays each drain's binding and
+dispositions, so stale or tampered evidence cannot pass inspection.
+`undispatchedPending(application, parentState)` exposes the exact drained
+set to producers. Native `application drain <input.json>` and
+`application verify-drain <input.json>` implement the same surface.
 
 ## Memory and incomplete information
 
@@ -377,6 +416,7 @@ of observations.
 | Revision entrypoints / command intents | 32 each |
 | Transition evidence references | 16 |
 | Pending intents / retained dispatches | 128 / 4,096 |
+| Drain dispositions | 128 |
 | Fresh dispatch batch / pending scan | 32 / 128 |
 | Durable channel outcomes / channel file | 4,096 / 1,048,576 bytes |
 | Active memory observations / hypotheses | 128 / 64 |

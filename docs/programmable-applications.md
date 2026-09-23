@@ -178,7 +178,12 @@ existing backend and the standing $20 incremental paid-inference cap.
    specifically to Datalog.
 4. **Schema and interface evolution:** declarative migration programs evaluated
    against retained snapshots; compatible activation of code, schema, queries,
-   views, and memory. Explicitly migrate or drain pending work.
+   views, and memory. Explicit drain of undispatched work now exists:
+   `algal.application-drain.v1` names every undispatched pending intent at a
+   migrate's parent state with an explicit `migrated`/`abandoned` disposition,
+   replayed identically by both runtimes and the policy host. Abandonment is
+   content-addressed evidence — intent records stay immutable — and a migrate
+   that ignores undispatched pending work commits nothing.
 5. **Multiple inhabitants:** independent components with distinct capabilities,
    budgets, memory views, and durable communication; measure useful concurrency
    and contention rather than assuming more agents imply better outcomes.
