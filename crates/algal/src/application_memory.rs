@@ -328,6 +328,23 @@ pub fn parse_query(input: &Value) -> Result<MemoryQuery> {
     })
 }
 
+/// Tuple arity of an admitted program's query literal; result rows carry
+/// exactly these columns.
+pub fn query_literal_arity(program: &Value) -> usize {
+    program["query"]["terms"].as_array().map_or(0, Vec::len)
+}
+
+/// A query's declared polarity column must address a column the program's
+/// query literal actually produces; checked wherever query and program meet.
+pub fn check_query_polarity(query: &MemoryQuery, program: &Value) -> Result<()> {
+    if query.polarity_column >= query_literal_arity(program) {
+        return Err(Error::invalid(
+            "Query polarity column exceeds its query literal arity",
+        ));
+    }
+    Ok(())
+}
+
 /// `algal.query.v1` structural admission; the evaluator enforces semantics.
 pub fn parse_native_program(input: &Value) -> Result<Value> {
     let v = app_object(input, &["contract", "rules", "query", "limits"])?;
@@ -1364,9 +1381,21 @@ impl MemoryService<'_> {
         memory_ref: &str,
         revision: &crate::application::Revision,
     ) -> Result<Snapshot> {
-        let memory = self
-            .validate_snapshot(store, &get_record(store, memory_ref)?)?
-            .memory;
+        Ok(self
+            .validate_revision_snapshot(store, memory_ref, revision)?
+            .memory)
+    }
+
+    /// The same admission, keeping the validated scope and admitted
+    /// observations so a query need not re-derive them from identical records.
+    fn validate_revision_snapshot(
+        &self,
+        store: &Store,
+        memory_ref: &str,
+        revision: &crate::application::Revision,
+    ) -> Result<ValidatedSnapshot> {
+        let validated = self.validate_snapshot(store, &get_record(store, memory_ref)?)?;
+        let memory = &validated.memory;
         if memory.application != revision.application || memory.schema != revision.schema {
             return Err(Error::invalid(
                 "Memory incompatible with application revision schema",
@@ -1385,7 +1414,10 @@ impl MemoryService<'_> {
             if query.schema != revision.schema {
                 return Err(Error::invalid("Query schema incompatible with revision"));
             }
-            parse_native_program(&get_record(store, &query.program)?)?;
+            check_query_polarity(
+                &query,
+                &parse_native_program(&get_record(store, &query.program)?)?,
+            )?;
             for procedure in &query.procedures {
                 let p = parse_procedure(&get_record(store, procedure)?)?;
                 if p.schema != revision.schema {
@@ -1404,7 +1436,7 @@ impl MemoryService<'_> {
                 "Entrypoint applicability query missing from revision",
             ));
         }
-        Ok(memory)
+        Ok(validated)
     }
 
     /// Run the applicability/query derivation for one captured state.
@@ -1419,7 +1451,11 @@ impl MemoryService<'_> {
         let query_ref = check_digest(query_ref)?.to_owned();
         let state = crate::application::parse_state(&get_record(store, &state_ref)?)?;
         let revision = crate::application::parse_revision(&get_record(store, &state.revision)?)?;
-        self.validate_for_revision(store, &state.memory, &revision)?;
+        let ValidatedSnapshot {
+            memory,
+            scope,
+            observations,
+        } = self.validate_revision_snapshot(store, &state.memory, &revision)?;
         if state.application != revision.application {
             return Err(Error::invalid("State/revision application mismatch"));
         }
@@ -1428,11 +1464,6 @@ impl MemoryService<'_> {
             return Err(Error::invalid("Query not selected by captured revision"));
         }
         let query = parse_query(&get_record(store, &query_ref)?)?;
-        let ValidatedSnapshot {
-            memory,
-            scope,
-            observations,
-        } = self.validate_snapshot(store, &get_record(store, &state.memory)?)?;
         let frontier_ref =
             check_digest(&self.admission.current_frontier(&memory.application)?)?.to_owned();
         let frontier = parse_frontier(&get_record(store, &frontier_ref)?)?;
@@ -1440,6 +1471,7 @@ impl MemoryService<'_> {
             return Err(Error::invalid("Host supplied cross-application frontier"));
         }
         let program = parse_native_program(&get_record(store, &query.program)?)?;
+        check_query_polarity(&query, &program)?;
         let mut sources = Vec::new();
         let mut facts = Vec::new();
         let mut stale = false;
@@ -1587,7 +1619,12 @@ impl MemoryService<'_> {
                 let mut opposes: Vec<Vec<Value>> = Vec::new();
                 let mut failed = false;
                 for row in rows {
-                    let polarity = row[query.polarity_column].clone();
+                    // A row shorter than the declared column is a failed
+                    // derivation, never a panic.
+                    let Some(polarity) = row.get(query.polarity_column).cloned() else {
+                        failed = true;
+                        break;
+                    };
                     if polarity != json!("supported") && polarity != json!("opposed") {
                         failed = true;
                         break;
@@ -2072,6 +2109,55 @@ mod tests {
         let a = engine_identity(&"cd".repeat(32), 10_000).unwrap();
         let b = engine_identity(&"cd".repeat(32), 9_999).unwrap();
         assert_ne!(a, b);
+    }
+
+    #[test]
+    fn polarity_column_beyond_the_query_literal_is_refused_up_front() {
+        let tmp = tempdir().unwrap();
+        let mut store = Store::open(tmp.path(), true).unwrap();
+        let (mut fixture, frontier) = seed(&mut store);
+        let engine = NativeEngine::new(&"0".repeat(64), 10_000).unwrap();
+        let host = Host {
+            frontier,
+            identity: digest(&json!({"contract":"algal.test-admission.v1"})).unwrap(),
+        };
+        let service = MemoryService {
+            engine: &engine,
+            admission: &host,
+        };
+        let observation = observed(&mut store, &service, &fixture, "tool-a");
+        let memory = service
+            .snapshot(
+                &mut store,
+                &json!({"application":"parity","schema":fixture.schema,"previous":null,"scope":fixture.scope,"observations":[observation],"hypotheses":[],"withdrawn":[]}),
+            )
+            .unwrap();
+        // The two-term query literal produces columns 0 and 1 only.
+        let mut query = get_record(&store, &fixture.query).unwrap();
+        query["polarityColumn"] = json!(2);
+        fixture.query = put(&mut store, query);
+        let state = revision_and_state(&mut store, &fixture, &memory);
+        let state_record =
+            crate::application::parse_state(&get_record(&store, &state).unwrap()).unwrap();
+        let revision = crate::application::parse_revision(
+            &get_record(&store, &state_record.revision).unwrap(),
+        )
+        .unwrap();
+        let reason = "Query polarity column exceeds its query literal arity";
+        assert_eq!(
+            service
+                .validate_for_revision(&store, &memory, &revision)
+                .unwrap_err()
+                .message,
+            reason
+        );
+        assert_eq!(
+            service
+                .query(&mut store, &state, &fixture.query)
+                .unwrap_err()
+                .message,
+            reason
+        );
     }
 
     #[test]

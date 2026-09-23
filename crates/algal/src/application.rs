@@ -22,7 +22,7 @@ use crate::{
     store::Store,
 };
 use serde_json::{Value, json};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
@@ -999,6 +999,17 @@ pub struct Service<'a> {
     pub store: Store,
     admission: &'a dyn Admission,
     fault_hook: Option<&'a (dyn Fn(&'static str) -> Result<()> + Send + Sync)>,
+    /// Intent rows validated by the most recent `history` pass, keyed by
+    /// state digest; `pending` reuses them instead of re-reading the records.
+    validated_intents: std::sync::Mutex<BTreeMap<String, Vec<(String, Intent)>>>,
+}
+
+/// Records shared across the states of one history: a revision or memory
+/// digest is verified once per `history` call (content-addressed, immutable).
+#[derive(Default)]
+struct SharedRecords {
+    revisions: BTreeMap<String, Revision>,
+    memories: BTreeSet<String>,
 }
 
 impl<'a> Service<'a> {
@@ -1008,6 +1019,7 @@ impl<'a> Service<'a> {
             store: Store::open(dir, true)?,
             admission,
             fault_hook: None,
+            validated_intents: std::sync::Mutex::new(BTreeMap::new()),
         })
     }
 
@@ -1032,11 +1044,20 @@ impl<'a> Service<'a> {
     fn custody(&self, application: &str, creating: bool) -> Result<lease::OwnerLease> {
         let root = self.dir.join("applications");
         lease::directory(&root)?;
-        // First publication owns supervisor custody without reserving a name
-        // before admission. Existing applications keep their independent mutex.
-        let creation = lease::OwnerLease::acquire(&root.join(".creation"), "application-creation")?;
+        // The shared creation lease serializes only the namespace scan and the
+        // committed-head check; admission then runs under the application's own
+        // mutex. Until a head exists that mutex is a per-application creation
+        // lease inside `.creation` — coordination residue, never a reserved
+        // namespace — so independent creations and a refused first commit never
+        // queue behind or consume capacity through a trusted host call.
+        let creation = lease::OwnerLease::acquire_shared(
+            &root.join(".creation"),
+            "application-creation",
+            lease::SHARED_LEASE_WAIT,
+            lease::SHARED_LEASE_POLL,
+        )?;
         let mut count = 0usize;
-        let mut exists = false;
+        let mut committed = false;
         let mut scanned = 0usize;
         for entry in std::fs::read_dir(&root)? {
             scanned += 1;
@@ -1044,6 +1065,13 @@ impl<'a> Service<'a> {
                 return Err(Error::limit("Application directory bound exceeded"));
             }
             let entry = entry?;
+            let ty = entry.file_type()?;
+            // Stray regular files (editor/OS residue such as .DS_Store) are
+            // not applications and never brick custody; symlinks and special
+            // files do.
+            if ty.is_file() && !ty.is_symlink() {
+                continue;
+            }
             let name = entry
                 .file_name()
                 .into_string()
@@ -1051,31 +1079,55 @@ impl<'a> Service<'a> {
             if name == ".creation" {
                 continue;
             }
-            let ty = entry.file_type()?;
             if !ty.is_dir() || ty.is_symlink() {
                 return Err(Error::new("IO_FAILED", "Invalid application directory"));
             }
             app_id(&json!(name))?;
             count += 1;
-            exists |= name == application;
+            if name == application {
+                committed = match std::fs::symlink_metadata(root.join(&name).join("head.json")) {
+                    Ok(meta) => meta.is_file() && !meta.file_type().is_symlink(),
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+                    Err(error) => return Err(error.into()),
+                };
+            }
         }
-        if !exists && creating && count >= APPLICATIONS {
-            return Err(Error::limit("Application count exhausted"));
+        if committed {
+            drop(creation);
+            return lease::OwnerLease::acquire(
+                &self.path(application),
+                &format!("application-{application}"),
+            );
         }
-        if !exists {
+        if !creating {
             return Ok(creation);
+        }
+        if count >= APPLICATIONS {
+            return Err(Error::limit("Application count exhausted"));
         }
         drop(creation);
         lease::OwnerLease::acquire(
-            &self.path(application),
+            &root
+                .join(".creation")
+                .join("pending")
+                .join(app_id(&json!(application))?),
             &format!("application-{application}"),
         )
     }
 
-    fn snapshot(&self, reference: &str) -> Result<Snapshot> {
+    fn snapshot(&self, reference: &str, shared: &mut SharedRecords) -> Result<Snapshot> {
         let state = parse_state(&get_record(&self.store, reference)?)?;
         let transition = parse_transition(&get_record(&self.store, &state.transition)?)?;
-        let revision = parse_revision(&get_record(&self.store, &state.revision)?)?;
+        let revision = match shared.revisions.get(&state.revision) {
+            Some(revision) => revision.clone(),
+            None => {
+                let revision = parse_revision(&get_record(&self.store, &state.revision)?)?;
+                shared
+                    .revisions
+                    .insert(state.revision.clone(), revision.clone());
+                revision
+            }
+        };
         if state.application != transition.application
             || state.application != revision.application
             || state.revision != transition.revision
@@ -1084,7 +1136,10 @@ impl<'a> Service<'a> {
         {
             return Err(fail("Application state/transition binding mismatch"));
         }
-        get_record(&self.store, &state.memory)?;
+        if !shared.memories.contains(&state.memory) {
+            get_record(&self.store, &state.memory)?;
+            shared.memories.insert(state.memory.clone());
+        }
         Ok(Snapshot {
             digest: reference.to_owned(),
             state,
@@ -1230,12 +1285,17 @@ impl<'a> Service<'a> {
         }
         let mut history = Vec::new();
         let mut seen = BTreeSet::new();
+        let mut shared = SharedRecords::default();
+        self.validated_intents
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clear();
         let mut reference = Some(head.state);
         while let Some(r) = reference {
             if history.len() >= STATES || !seen.insert(r.clone()) {
                 return Err(fail("Application history bound/cycle"));
             }
-            let item = self.snapshot(&r)?;
+            let item = self.snapshot(&r, &mut shared)?;
             if item.state.application != name {
                 return Err(fail("Application history identity mismatch"));
             }
@@ -1262,9 +1322,27 @@ impl<'a> Service<'a> {
             if !operations.insert(item.transition.operation.clone()) {
                 return Err(fail("Repeated operation in application history"));
             }
-            self.intents(item)?;
+            let rows = self.intents(item)?;
+            self.validated_intents
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .insert(item.digest.clone(), rows);
         }
         Ok(history)
+    }
+
+    /// Rows from the last `history` pass when it validated this state;
+    /// otherwise a fresh pass.
+    fn validated_intent_rows(&self, snapshot: &Snapshot) -> Result<Vec<(String, Intent)>> {
+        if let Some(rows) = self
+            .validated_intents
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(&snapshot.digest)
+        {
+            return Ok(rows.clone());
+        }
+        self.intents(snapshot)
     }
 
     pub fn inspect(&self, application: &str) -> Result<Option<Snapshot>> {
@@ -1345,7 +1423,7 @@ impl<'a> Service<'a> {
         let mut pending = Vec::new();
         let mut total = 0usize;
         for snapshot in history {
-            for (reference, work) in self.intents(snapshot)? {
+            for (reference, work) in self.validated_intent_rows(snapshot)? {
                 total += 1;
                 if total > DISPATCHES {
                     return Err(Error::limit("Retained application intent bound exceeded"));
@@ -1412,6 +1490,14 @@ impl<'a> Service<'a> {
                 return Ok(committed.clone());
             }
             prepared = Some(op);
+        }
+        // History is the authority on committed operations: a removed
+        // operation record must not let the same identity commit a second state.
+        if history
+            .iter()
+            .any(|s| s.transition.operation == command.operation)
+        {
+            return Err(fail("Operation already committed in application history"));
         }
         if current.map(|c| c.digest.as_str()) != command.expected_head.as_deref() {
             return Err(Error::new("RECEIPT_MISMATCH", "Stale application head"));
@@ -1577,10 +1663,7 @@ impl<'a> Service<'a> {
             .await?;
         let operations_path = path.join("operations");
         let operations = match std::fs::symlink_metadata(&operations_path) {
-            Ok(_) => lease::names(&operations_path, STATES)?
-                .into_iter()
-                .filter(|n| operation_name(n))
-                .count(),
+            Ok(_) => lease::names_where(&operations_path, STATES, operation_name)?.len(),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => 0,
             Err(error) => return Err(error.into()),
         };
@@ -1815,7 +1898,13 @@ impl<'a> Service<'a> {
                         intent: row.intent.clone(),
                         source_state: snapshot.digest.clone(),
                         current_state: current.digest.clone(),
-                        reason: error.message.chars().take(256).collect(),
+                        // Transient record: the first 256 Unicode scalar
+                        // values, with the TypeScript fallback for an empty message.
+                        reason: if error.message.is_empty() {
+                            "Trusted host did not admit this intent".to_owned()
+                        } else {
+                            error.message.chars().take(256).collect()
+                        },
                     });
                     continue;
                 }
@@ -1864,7 +1953,7 @@ impl<'a> Service<'a> {
                     .find(|s| s.transition.intents.contains(&intent_ref));
                 let work = match source {
                     Some(source) => self
-                        .intents(source)?
+                        .validated_intent_rows(source)?
                         .into_iter()
                         .find(|(r, _)| *r == intent_ref)
                         .map(|(_, w)| w),
@@ -2587,6 +2676,206 @@ mod tests {
             service.inspect("parity").unwrap().unwrap().digest,
             initial.digest
         );
+    }
+
+    #[tokio::test]
+    async fn stray_regular_files_never_brick_custody_but_symlinks_do() {
+        let tmp = tempdir().unwrap();
+        let (revision, memory, message, _) = seed(tmp.path());
+        let allow = Allow;
+        let mut service = Service::new(tmp.path(), &allow).unwrap();
+        let applications = tmp.path().join("applications");
+        std::fs::create_dir_all(&applications).unwrap();
+        std::fs::write(applications.join(".DS_Store"), "finder residue").unwrap();
+        std::fs::write(applications.join("stray.txt"), "not an application").unwrap();
+        let base = command(
+            "parity",
+            &ops("stray-create"),
+            "create",
+            None,
+            &revision,
+            &memory,
+            vec![],
+        );
+        let initial = service.create(&base).await.unwrap();
+        std::fs::write(
+            service.path("parity").join("operations").join("README"),
+            "operator note",
+        )
+        .unwrap();
+        let next = command(
+            "parity",
+            &ops("stray-delivery"),
+            "investigate",
+            Some(&initial.digest),
+            &revision,
+            &memory,
+            vec![json!({"kind":"deliver","route":"inbox","message":message})],
+        );
+        let advanced = service.commit(&next).await.unwrap();
+        assert_eq!(advanced.state.sequence, 1);
+        let sink = Sink {
+            config: hashed(&json!({"contract":"algal.test-sink.v1"})),
+            delivery: true,
+        };
+        let dispatched = service.dispatch_pending("parity", &sink, 32).await.unwrap();
+        assert_eq!(dispatched[0].value()["status"], "settled");
+        assert_eq!(service.create(&base).await.unwrap().digest, initial.digest);
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(tmp.path().join("values"), applications.join("linked"))
+                .unwrap();
+            // Inspection scans no siblings.
+            assert!(service.inspect("parity").unwrap().is_some());
+            let stale = command(
+                "parity",
+                &ops("after-symlink"),
+                "memory",
+                Some(&advanced.digest),
+                &revision,
+                &memory,
+                vec![],
+            );
+            assert_eq!(
+                service.commit(&stale).await.unwrap_err().message,
+                "Invalid application directory"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn a_removed_operation_record_cannot_commit_the_same_operation_twice() {
+        let tmp = tempdir().unwrap();
+        let (revision, memory, _, _) = seed(tmp.path());
+        let allow = Allow;
+        let mut service = Service::new(tmp.path(), &allow).unwrap();
+        let base = command(
+            "parity",
+            &ops("dup-create"),
+            "create",
+            None,
+            &revision,
+            &memory,
+            vec![],
+        );
+        let initial = service.create(&base).await.unwrap();
+        let operation = ops("dup-memory");
+        let next_memory = put_record(
+            &mut service.store,
+            &json!({"contract":"algal.memory.fixture.v1","facts":["dup"]}),
+        )
+        .unwrap();
+        let advanced = service
+            .commit(&command(
+                "parity",
+                &operation,
+                "memory",
+                Some(&initial.digest),
+                &revision,
+                &next_memory,
+                vec![],
+            ))
+            .await
+            .unwrap();
+        std::fs::remove_file(
+            service
+                .path("parity")
+                .join("operations")
+                .join(format!("{}.json", &operation[7..])),
+        )
+        .unwrap();
+        for retry in [
+            command(
+                "parity",
+                &operation,
+                "memory",
+                Some(&initial.digest),
+                &revision,
+                &next_memory,
+                vec![],
+            ),
+            command(
+                "parity",
+                &operation,
+                "memory",
+                Some(&advanced.digest),
+                &revision,
+                &memory,
+                vec![],
+            ),
+        ] {
+            assert_eq!(
+                service.commit(&retry).await.unwrap_err().message,
+                "Operation already committed in application history"
+            );
+        }
+        let committed: Vec<String> = service
+            .history("parity")
+            .unwrap()
+            .iter()
+            .map(|s| s.transition.operation.clone())
+            .collect();
+        assert_eq!(committed, vec![ops("dup-create"), operation]);
+        assert_eq!(
+            service.inspect("parity").unwrap().unwrap().digest,
+            advanced.digest
+        );
+    }
+
+    #[tokio::test]
+    async fn shared_creation_and_quota_leases_wait_for_a_brief_holder() {
+        fn hold(directory: PathBuf, name: &str) -> std::sync::mpsc::Receiver<()> {
+            let lease = lease::OwnerLease::acquire(&directory, name).unwrap();
+            let (done, wait) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(300));
+                drop(lease);
+                let _ = done.send(());
+            });
+            wait
+        }
+        let tmp = tempdir().unwrap();
+        let (revision, memory, _, _) = seed(tmp.path());
+        let allow = Allow;
+        let mut service = Service::new(tmp.path(), &allow).unwrap();
+        let base = command(
+            "parity",
+            &ops("waited-create"),
+            "create",
+            None,
+            &revision,
+            &memory,
+            vec![],
+        );
+        let started = std::time::Instant::now();
+        let creation = hold(
+            tmp.path().join("applications").join(".creation"),
+            "application-creation",
+        );
+        let initial = service.create(&base).await.unwrap();
+        creation.recv().unwrap();
+        assert_eq!(initial.state.sequence, 0);
+        assert!(started.elapsed() >= std::time::Duration::from_millis(300));
+        let quota = hold(tmp.path().join(".application-quota"), "application-quota");
+        let next_memory = put_record(
+            &mut service.store,
+            &json!({"contract":"algal.memory.fixture.v1","facts":["waited"]}),
+        )
+        .unwrap();
+        let next = service
+            .commit(&command(
+                "parity",
+                &ops("waited-memory"),
+                "memory",
+                Some(&initial.digest),
+                &revision,
+                &next_memory,
+                vec![],
+            ))
+            .await
+            .unwrap();
+        quota.recv().unwrap();
+        assert_eq!(next.state.sequence, 1);
     }
 
     #[tokio::test]

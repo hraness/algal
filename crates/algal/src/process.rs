@@ -445,9 +445,10 @@ impl ProcessService {
     fn chain(&self, name: &str) -> Result<Vec<ProcessState>> {
         let path = self.directory(name)?.join("head.json");
         no_link(&path)?;
-        let file = crate::store::open_regular_file(&path, 4096)?.ok_or_else(|| {
-            Error::new("IO_FAILED", format!("{}: file not found", path.display()))
-        })?;
+        // An absent head is a store miss (as in `process.ts`); every other
+        // failure to read an existing head stays what it is.
+        let file = crate::store::open_regular_file(&path, 4096)?
+            .ok_or_else(|| Error::new("STORE_MISS", "process head missing"))?;
         let head: Head = serde_json::from_value(read_json(file, 4096)?)?;
         if head.contract != "algal.process-head.v1" || head.name != name {
             return Err(Error::invalid("process head contract or name"));

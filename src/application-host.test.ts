@@ -16,7 +16,7 @@ import { requestExecution } from "./application-investigation";
 import { evaluateApplicationRevision } from "./application-adaptation";
 import { produceApplicationComparison } from "./application-comparison";
 import { parseOrganismManifest } from "./contract";
-import { parseWorkIntent, type EpisodeBinding } from "./application-contract";
+import { parseApplicationRevision, parseWorkIntent, type EpisodeBinding } from "./application-contract";
 import { capabilityHandle } from "./capabilities";
 import { digestCanonical } from "./digest";
 import { builtinRegistry } from "./registry";
@@ -318,4 +318,20 @@ test("an undispatched episode cannot revive a superseded memory snapshot", async
     contract: "algal.application-intent.v1", application: "fixture", operation: hash("episode"), ordinal: 0,
     kind: "start-episode", entrypoint: "run", input: await f.put({src: {value: "probe"}}),
   }, previousDispatch: null, store: f.store })).rejects.toThrow("no longer selected");
+});
+
+test("a query whose polarity column exceeds its literal arity is refused before any derivation", async () => {
+  const f = await fixture();
+  const program = await f.put({ contract: "algal.query.v1", rules: [], query: { relation: "available", terms: [{ var: "x" }, { var: "polarity" }] }, limits: APPLICATION_MEMORY_NATIVE_LIMITS });
+  const query = await f.put({ contract: "algal.application-memory-query.v1", id: "applicable", schema: f.body.schema, program, procedures: [], polarityColumn: 2, conflict: "single-value" });
+  const queries = await f.put({ contract: "algal.application-memory-queries.v1", queries: [query] });
+  const revision = await f.put({ ...f.body, queries, entrypoints: [{ ...f.body.entrypoints[0]!, applicability: query, queries: [query] }] });
+  const reason = "Query polarity column exceeds its query literal arity";
+  await expect(f.service.create({ ...f.command, revision })).rejects.toThrow(reason);
+  expect(await f.service.inspect("fixture")).toBeNull();
+  const engine = { identity: hash("unused-engine"), async query() { throw new Error("must not run"); }, async verify() { return false; }, async settle() {} };
+  const memory = new ApplicationMemoryService({ store: f.store, engine, admission: f.host });
+  await expect(memory.validateForRevision(f.command.memory, parseApplicationRevision(await f.store.getValue(revision)))).rejects.toThrow(reason);
+  // The in-bound column on the same program is admitted; only the arity check differs.
+  expect(await f.service.create(f.command)).toBeTruthy();
 });
