@@ -304,16 +304,33 @@ pub async fn verify_comparison(
 }
 
 /// `checkComparisonBinding` — the record must name this application and the
-/// commit's parent state; full replay stays in `verify_comparison`.
+/// commit's parent state, and when a committed revision is supplied its
+/// `selected` manifest must be exactly what that revision installs for the
+/// compared entrypoint. Full replay stays in `verify_comparison`, which the
+/// default host runs first.
 pub fn check_comparison_binding(
     stored: &Value,
     application: &str,
     parent_state: &str,
+    revision: Option<&crate::application::Revision>,
 ) -> Result<()> {
     if stored["application"].as_str() != Some(application)
         || stored["parentState"].as_str() != Some(parent_state)
     {
         return Err(fail("Comparison evidence does not bind this transition"));
+    }
+    if let Some(revision) = revision {
+        let entrypoint = stored["entrypoint"].as_str().unwrap_or_default();
+        let entry = revision
+            .entrypoints
+            .iter()
+            .find(|entry| entry.name == entrypoint)
+            .ok_or_else(|| fail("Comparison entrypoint is not in the committed revision"))?;
+        if stored["selected"].as_str() != Some(entry.manifest.as_str()) {
+            return Err(fail(
+                "Comparison selection is not the committed entrypoint manifest",
+            ));
+        }
     }
     Ok(())
 }

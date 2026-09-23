@@ -162,12 +162,26 @@ export async function verifyApplicationComparison(
   return stored;
 }
 
-/** Binding check used by the default host when a transition cites a comparison
- * as evidence: the record must name this application and the commit's parent
- * state. Full evidence replay stays in `verifyApplicationComparison`. */
-export function checkComparisonBinding(stored: ApplicationComparison, application: string, parentState: Digest): void {
+/** Binding check used by the default host when a revision-changing transition
+ * cites a comparison as evidence: the record must name this application and
+ * the commit's parent state, and its `selected` manifest must be exactly what
+ * the committed revision installs for the compared entrypoint. A comparison
+ * that selected nothing, or selected another alternative, cannot attach to a
+ * transition that installs a different strategy. Full evidence replay is
+ * `verifyApplicationComparison`, which the default host runs first. */
+export function checkComparisonBinding(
+  stored: ApplicationComparison,
+  application: string,
+  parentState: Digest,
+  revision?: { entrypoints: readonly { name: string; manifest: Digest }[] },
+): void {
   if (stored.application !== application || stored.parentState !== parentState) {
     throw new Error("Comparison evidence does not bind this transition");
+  }
+  if (revision) {
+    const entry = revision.entrypoints.find(e => e.name === stored.entrypoint);
+    if (!entry) throw new Error("Comparison entrypoint is not in the committed revision");
+    if (stored.selected === null || entry.manifest !== stored.selected) throw new Error("Comparison selection is not the committed entrypoint manifest");
   }
 }
 

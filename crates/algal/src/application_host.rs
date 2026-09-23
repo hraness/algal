@@ -354,25 +354,6 @@ impl Admission for PolicyHost {
                 ));
             }
         }
-        if matches!(
-            context.command.kind,
-            TransitionKind::Activate | TransitionKind::Migrate | TransitionKind::Restore
-        ) {
-            let current = context
-                .current
-                .ok_or_else(|| Error::invalid("Revision change requires an incumbent"))?;
-            for evidence in &context.command.evidence {
-                let record = mem::get_record(context.store, evidence)?;
-                if record["contract"] == "algal.application-comparison.v1" {
-                    let comparison = crate::application_comparison::parse_comparison(&record)?;
-                    crate::application_comparison::check_comparison_binding(
-                        &comparison,
-                        &context.command.application,
-                        &current.digest,
-                    )?;
-                }
-            }
-        }
         let mut overlay = context.store.overlay();
         for entry in &context.revision.entrypoints {
             graph::compile(
@@ -428,6 +409,32 @@ impl Admission for PolicyHost {
                         return Err(Error::invalid(
                             "Execution requires reproduced supported applicability evidence",
                         ));
+                    }
+                }
+            }
+            if matches!(
+                context.command.kind,
+                TransitionKind::Activate | TransitionKind::Migrate | TransitionKind::Restore
+            ) {
+                let current = context
+                    .current
+                    .ok_or_else(|| Error::invalid("Revision change requires an incumbent"))?;
+                for evidence in &context.command.evidence {
+                    let record = mem::get_record(context.store, evidence)?;
+                    if record["contract"] == "algal.application-comparison.v1" {
+                        let stored = crate::application_comparison::verify_comparison(
+                            context.store,
+                            evidence,
+                            &current.digest,
+                            &Host::default(),
+                        )
+                        .await?;
+                        crate::application_comparison::check_comparison_binding(
+                            &stored,
+                            &context.command.application,
+                            &current.digest,
+                            Some(context.revision),
+                        )?;
                     }
                 }
             }

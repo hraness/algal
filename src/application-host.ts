@@ -19,7 +19,7 @@ import { admitApplicationActivation, parseApplicationEvaluationRequest, parseEva
 import { parseApplicationRuntimeProfile, parseApplicationViewSpec } from "./application-view";
 import { parseApplicationMigration, verifyApplicationMigration } from "./application-migration";
 import { parseApplicationRestorationPolicy, verifyApplicationRestoration, type ApplicationRestorationPolicy } from "./application-restoration";
-import { checkComparisonBinding, parseApplicationComparison } from "./application-comparison";
+import { checkComparisonBinding, verifyApplicationComparison } from "./application-comparison";
 import { builtinRegistry } from "./registry";
 import { compileOrganism } from "./graph";
 import { hostDirectory, hostLease, hostRead, hostWrite } from "./host-state";
@@ -152,7 +152,8 @@ export function createApplicationPolicyHost(input: unknown, options: { channelsD
         for (const evidence of command.evidence) {
           const record = await value(evidence);
           if (record && typeof record === "object" && !Array.isArray(record) && record.contract === "algal.application-comparison.v1") {
-            checkComparisonBinding(parseApplicationComparison(record), command.application, current.digest);
+            const stored = await verifyApplicationComparison(store, evidence, current.digest, { fns: builtinRegistry() });
+            checkComparisonBinding(stored, command.application, current.digest, revision);
           }
         }
       }

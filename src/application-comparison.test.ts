@@ -137,6 +137,32 @@ describe("application comparison", () => {
     expect(() => checkComparisonBinding(produced.comparison, "workspace", f.state)).not.toThrow();
     expect(() => checkComparisonBinding(produced.comparison, "other", f.state)).toThrow("bind");
     expect(() => checkComparisonBinding(produced.comparison, "workspace", digestCanonical("elsewhere"))).toThrow("bind");
+    // With a committed revision, the selection must be exactly what that
+    // revision installs for the compared entrypoint.
+    const entry = (manifest: Digest, name = "discover") => ({ entrypoints: [{ name, manifest }] });
+    expect(() => checkComparisonBinding(produced.comparison, "workspace", f.state, entry(f.winningManifest))).not.toThrow();
+    expect(() => checkComparisonBinding(produced.comparison, "workspace", f.state, entry(f.losingManifest))).toThrow("not the committed entrypoint manifest");
+    expect(() => checkComparisonBinding(produced.comparison, "workspace", f.state, entry(f.winningManifest, "other"))).toThrow("not in the committed revision");
+    const unselected = { ...produced.comparison, selected: null };
+    expect(() => checkComparisonBinding(unselected, "workspace", f.state, entry(f.winningManifest))).toThrow("not the committed entrypoint manifest");
+  });
+
+  test("rejects too many, duplicate, foreign, and mis-targeted evaluations", async () => {
+    const f = await fixture();
+    const win = await evaluateApplicationRevision(f.store, f.request(f.winnerRevision), f.runtime);
+    const base = { application: "workspace", parentState: f.state, entrypoint: "discover", environment: "harbor-fixture", selected: null };
+    await expect(produceApplicationComparison(f.store, { ...base, evaluations: [win.evaluationRef, win.evaluationRef] }, f.runtime)).rejects.toThrow("unique");
+    await expect(produceApplicationComparison(f.store, { ...base, evaluations: Array.from({ length: 9 }, (_, i) => digestCanonical(`e${i}`)) }, f.runtime)).rejects.toThrow("bound");
+    await expect(produceApplicationComparison(f.store, { ...base, application: "elsewhere", evaluations: [win.evaluationRef] }, f.runtime)).rejects.toThrow("another application");
+    await expect(produceApplicationComparison(f.store, { ...base, entrypoint: "missing", evaluations: [win.evaluationRef] }, f.runtime)).rejects.toThrow("entrypoint");
+    // Shared measurement fields: a second evaluation under different cases cannot join.
+    const otherCases = await f.store.putValue({ contract: "algal.application-evaluation-cases.v1", cases: [
+      { id: "train-x", split: "train", args: { q: "x" }, expect: { answer: "x" } },
+      { id: "validation-y", split: "validation", args: { q: "y" }, expect: { answer: "y" } },
+      { id: "holdout-z", split: "holdout", args: { q: "z" }, expect: { answer: "z" } },
+    ] });
+    const otherEval = await evaluateApplicationRevision(f.store, { ...f.request(f.loserRevision), cases: otherCases }, f.runtime);
+    await expect(produceApplicationComparison(f.store, { ...base, evaluations: [win.evaluationRef, otherEval.evaluationRef] }, f.runtime)).rejects.toThrow("share cases, scorer, and policy");
   });
 
   test("closes the parser: unknown fields, unsorted results, duplicate manifests, bad verdicts", () => {

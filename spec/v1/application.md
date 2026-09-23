@@ -493,10 +493,18 @@ explicit host restoration policy.
 `verifyApplicationComparison(store, ref, expectedParentState, runtime)`
 replays every cited evaluation and requires the recomputed record to equal the
 stored record byte-for-byte. When an `activate`, `migrate`, or `restore`
-commit cites a comparison as evidence, the default policy host additionally
-requires the record to name the committing application and the commit's parent
-state; a comparison minted elsewhere or against an earlier head cannot
-silently attach to this transition. This is the beginning of environment-
-attributed procedure retention: several strategies measured under the same
-frozen set can be kept, compared, and cited, while authority stays with the
-ordinary admission checks.
+commit cites a comparison as evidence, the default policy host replays it the
+same way against the commit's parent state and additionally requires the
+record to name the committing application and that parent state, the compared
+entrypoint to exist in the committed revision, and `selected` to be exactly the
+manifest the committed revision installs for that entrypoint. A comparison
+minted elsewhere, measured against an earlier head, hand-built without its
+evaluations, or one that selected nothing or another alternative cannot attach
+to a transition that installs a different strategy. The `environment` label is
+an application identifier (`^[a-z][a-z0-9._-]{0,63}$`). The native CLI exposes
+`application compare input.json` with `{application, parentState, entrypoint,
+environment, evaluations, selected}` and `application verify-comparison
+input.json` with `{comparison, expectedState}`. This is the beginning of
+environment-attributed procedure retention: several strategies measured under
+the same frozen set can be kept, compared, and cited, while authority stays
+with the ordinary admission checks.
