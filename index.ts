@@ -487,3 +487,14 @@ export type {
   ApplicationContention, ContentionAttempt, ContentionStatus,
   ProduceContentionInput, ProducedContention,
 } from "./src/application-contention";
+
+export {
+  admitApplicationResearchEvaluation, verifyApplicationResearchEvaluation, admitApplicationResearchActivation,
+  parseApplicationResearchPolicy, parseApplicationResearchCorpus, parseApplicationResearchRequest,
+  parseApplicationResearchReport, parseApplicationResearchEvaluation,
+} from "./src/application-research";
+export type {
+  ApplicationResearchPolicy, ApplicationResearchCorpus, ApplicationResearchRequest, ApplicationResearchAttempt,
+  ApplicationResearchReport, ApplicationResearchVerdict, ApplicationResearchEvaluation,
+  ApplicationResearchVerifier, ApplicationResearchVerifierContext,
+} from "./src/application-research";

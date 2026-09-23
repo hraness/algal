@@ -331,15 +331,22 @@ impl Admission for PolicyHost {
             &context.command.memory,
             context.revision,
         )?;
-        parse_runtime_profile(&mem::get_record(
+        let profile = parse_runtime_profile(&mem::get_record(
             context.store,
             &context.revision.runtime_profile,
         )?)?;
         parse_view_spec(&mem::get_record(context.store, &context.revision.views)?)?;
-        parse_evaluation_policy(&mem::get_record(
+        let evaluation_policy = parse_evaluation_policy(&mem::get_record(
             context.store,
             &context.revision.evaluation_policy,
         )?)?;
+        if profile["policy"] == "sealed-research-evaluation.v1"
+            || evaluation_policy.get("research").is_some()
+        {
+            return Err(Error::invalid(
+                "Native policy host has no admitted research verifier",
+            ));
+        }
         if let Some(current) = context.current
             && context.command.kind != TransitionKind::Migrate
             && context.command.memory != current.state.memory

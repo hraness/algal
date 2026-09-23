@@ -65,6 +65,11 @@ advance sequence while retaining epoch. Previous states are retained.
 | `algal.application-proposal.v1` | Generation evidence: request, receipt, status, bounded reasons, and sorted candidate revision references |
 | `algal.application-comparison.v1` | Environment-attributed join of several reproduced evaluations for one entrypoint, shared measurement set, and accepted-only selection |
 | `algal.application-selection-policy.v1` | Environment-keyed mapping from environment label to a retained comparison and its selected manifest; pure data, no authority |
+| `algal.application-research-policy.v1` | Frozen evaluator, harness, corpus, admitted strategy entrypoints, and per-case attempt bound |
+| `algal.application-research-corpus.v1` | Closed case set with development and holdout splits and retained task/source references |
+| `algal.application-research-request.v1` | Parent state, candidate revision, strategy entrypoint, and policy for one evaluation |
+| `algal.application-research-report.v1` | Attempt journal and per-case role outcomes, pass flags, and work/call accounting with distinct receipts |
+| `algal.application-research-evaluation.v1` | Request, report, seal, pinned verifier identity, and reproducible acceptance verdict |
 | `algal.application-migration.v1` | Source snapshot, both revisions, pure migration program, producing receipt, and emitted claims |
 | `algal.application-drain.v1` | Explicit per-intent disposition of the undispatched pending set at a migrate's parent state |
 | `algal.application-view.v1` | Bounded historical projection and state-fenced proposed actions |
@@ -108,6 +113,29 @@ An evaluation request may carry an optional `environment` label attributing
 the produced evidence to a deployment context. The label is part of the frozen
 request identity, so environment-attributed and unattributed measurements are
 distinct records and can never be silently conflated.
+
+Sealed research evaluation is an opt-in alternative to foundry evidence for
+strategy-only revisions. A revision selects it with the
+`sealed-research-evaluation.v1` runtime profile and an evaluation policy that
+names a frozen `algal.application-research-policy.v1`; either without the
+other is denied, and research mode admits no schema migration. The candidate
+revision may change only the manifest of one strategy entrypoint the policy
+admits, preserving parent, metadata, authority, and every other field
+byte-for-byte; the new manifest must already be retained, stay pure, share
+the incumbent's interface signature, and widen no budget. The host requires
+an explicitly supplied verifier pinned to the policy's evaluator identity;
+verification is bounded local work over the signed report, journal, and
+attempt receipts, never provider execution under custody. Deterministic
+gates recompute acceptance: every frozen case needs an ordered attempt for
+both roles within the policy bound, receipts must be distinct and resolvable,
+any uncertainty rejects, holdout must pass, no previously passing case may
+regress, development must strictly improve, and per-role work and model calls
+stay inside the frozen bounds. Activation replays the same checks against the
+exact expected parent state and only an accepted verdict naming the candidate
+revision commits; pure-case evaluation evidence cannot activate under a
+research profile. The native kernel parses these records but admits no
+research verifier: the native policy host refuses research profiles and
+research policy fields rather than granting implied authority.
 
 Migration is a pure, bounded transformation of the source observation
 projection. Its replay must reproduce the exact arguments and emitted claims.

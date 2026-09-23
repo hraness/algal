@@ -35,6 +35,8 @@ export type EvaluationPolicy = {
   maxModelCalls: number;
   requireHoldoutPass: true;
   strictValidationImprovement: true;
+  /** Optional immutable research admission policy; absence preserves legacy bytes. */
+  research?: Digest;
 };
 
 export type EvaluationCaseSet = {
@@ -116,10 +118,11 @@ function same(a: unknown, b: unknown): boolean {
 }
 
 export function parseEvaluationPolicy(input: unknown): EvaluationPolicy {
-  const v = applicationObject(input, ["contract", "maxCases", "maxWork", "maxModelCalls", "requireHoldoutPass", "strictValidationImprovement"]);
+  const optional = input && typeof input === "object" && Object.hasOwn(input, "research") ? ["research"] : [];
+  const v = applicationObject(input, ["contract", "maxCases", "maxWork", "maxModelCalls", "requireHoldoutPass", "strictValidationImprovement", ...optional]);
   applicationTag(v.contract, "algal.application-evaluation-policy.v1");
   if (v.requireHoldoutPass !== true || v.strictValidationImprovement !== true) throw new Error("Adaptation policy cannot weaken acceptance");
-  return { contract: "algal.application-evaluation-policy.v1", maxCases: applicationInt(v.maxCases, 3, MAX_EVALUATION_CASES), maxWork: applicationInt(v.maxWork, 1, MAX_EVALUATION_WORK), maxModelCalls: applicationInt(v.maxModelCalls, 0, MAX_EVALUATION_MODEL_CALLS), requireHoldoutPass: true, strictValidationImprovement: true };
+  return { contract: "algal.application-evaluation-policy.v1", maxCases: applicationInt(v.maxCases, 3, MAX_EVALUATION_CASES), maxWork: applicationInt(v.maxWork, 1, MAX_EVALUATION_WORK), maxModelCalls: applicationInt(v.maxModelCalls, 0, MAX_EVALUATION_MODEL_CALLS), requireHoldoutPass: true, strictValidationImprovement: true, ...(optional.length ? { research: applicationRef(v.research) } : {}) };
 }
 export function parseEvaluationCases(input: unknown): EvaluationCaseSet {
   const v = applicationObject(input, ["contract", "cases"]); applicationTag(v.contract, "algal.application-evaluation-cases.v1");

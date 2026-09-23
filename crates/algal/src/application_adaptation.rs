@@ -47,7 +47,7 @@ fn int(value: &Value, min: u64, max: u64) -> Result<u64> {
 /// `applicationInt` bounds in src/application-contract.ts parse order:
 /// the field must be an integer inside [min, max].
 pub fn parse_evaluation_policy(input: &Value) -> Result<Value> {
-    let v = app_object(
+    let v = app_object_opt(
         input,
         &[
             "contract",
@@ -57,6 +57,7 @@ pub fn parse_evaluation_policy(input: &Value) -> Result<Value> {
             "requireHoldoutPass",
             "strictValidationImprovement",
         ],
+        &["research"],
     )?;
     app_tag(&v["contract"], "algal.application-evaluation-policy.v1")?;
     if v["requireHoldoutPass"] != true || v["strictValidationImprovement"] != true {
@@ -65,6 +66,9 @@ pub fn parse_evaluation_policy(input: &Value) -> Result<Value> {
     int(&v["maxCases"], 3, MAX_EVALUATION_CASES as u64)?;
     int(&v["maxWork"], 1, MAX_EVALUATION_WORK)?;
     int(&v["maxModelCalls"], 0, MAX_EVALUATION_MODEL_CALLS)?;
+    if let Some(research) = v.get("research") {
+        app_ref(research)?;
+    }
     app_json(input)
 }
 
