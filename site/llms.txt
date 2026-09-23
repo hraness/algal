@@ -8,6 +8,20 @@ ALGAL is a programming language and application VM for bounded agent programs. P
 - [Inside a living program — tour](https://algal.computer/tour/): executable walkthrough with recorded runs, replayable interactive diagrams, diagnostics, and composition examples
 - [Put living programs to work](https://algal.computer/use-cases/): durable review, checked coding repair, portable execution evidence, reusable routing, and the adoption boundary
 - [Documentation index](https://algal.computer/docs/): the repository docs mirrored — install, source language, process VM, habitats, civilization, executors
+- [Blog — notes on living programs](https://algal.computer/blog/): deep dives into the language, the evidence model, and the research landscape
+- [Comparisons](https://algal.computer/compare/): honest positioning against LangGraph, DSPy, and Temporal
+
+## Blog
+
+- [Self-evolving software needs a selection boundary](https://algal.computer/blog/self-evolving-software-selection-boundary/): Darwin-Gödel Machine, Voyager, AlphaEvolve, TextGrad, DSPy — and why ALGAL makes selection a contract
+- [Receipts are the fossil record of an execution](https://algal.computer/blog/receipts-fossil-record/): replay-verified run artifacts versus logs, traces, and server-side history
+- [A program that can wait](https://algal.computer/blog/programs-that-wait/): durable waits as checkpointed capabilities, resumable across processes and runtimes
+
+## Comparisons
+
+- [ALGAL vs LangGraph](https://algal.computer/compare/langgraph/): agent orchestration framework versus a language and VM where the program is data
+- [ALGAL vs DSPy](https://algal.computer/compare/dspy/): prompt-space optimization inside a fixed pipeline versus measured search over program structure
+- [ALGAL vs Temporal](https://algal.computer/compare/temporal/): durable execution service versus portable, verifiable program artifacts
 
 ## Downloadable evidence
 

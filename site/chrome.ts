@@ -2,7 +2,7 @@
 // Per-page fragments supply only their <main> content and metadata.
 import { siteIcon } from "./icons";
 
-export type SitePageId = "home" | "tour" | "use-cases" | "docs" | "spec";
+export type SitePageId = "home" | "tour" | "use-cases" | "docs" | "spec" | "blog" | "compare";
 
 export interface SitePageMeta {
   page: SitePageId;
@@ -12,6 +12,8 @@ export interface SitePageMeta {
   description: string;
   ogTitle: string;
   ogAlt: string;
+  /** Blog posts emit article metadata; everything else stays a website. */
+  article?: { published: string };
 }
 
 const ORIGIN = "https://algal.computer";
@@ -33,7 +35,7 @@ export function pageDocument(meta: SitePageMeta, main: string): string {
 <meta name="description" content="${meta.description}">
 <link rel="canonical" href="${canonical}">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<meta property="og:type" content="website">
+<meta property="og:type" content="${meta.article ? "article" : "website"}">${meta.article ? `\n<meta property="article:published_time" content="${meta.article.published}">` : ""}
 <meta property="og:site_name" content="ALGAL">
 <meta property="og:title" content="${meta.ogTitle}">
 <meta property="og:description" content="${meta.description}">
@@ -66,6 +68,7 @@ export function pageDocument(meta: SitePageMeta, main: string): string {
       ${navLink(meta.page, "use-cases", "/use-cases/", "Use cases")}
       ${navLink(meta.page, "docs", "/docs/", "Docs")}
       ${navLink(meta.page, "spec", "/docs/spec/organism/", "Spec")}
+      ${navLink(meta.page, "blog", "/blog/", "Blog")}
       <a href="${REPO}">GitHub ${siteIcon("arrow-up-right")}</a>
     </nav>
     <div class="site-header-actions">
@@ -86,7 +89,7 @@ export function pageDocument(meta: SitePageMeta, main: string): string {
 
 ${main}
 
-<footer class="site-footer"><a class="wordmark" href="/" aria-label="ALGAL home"><img src="/favicon.svg" width="24" height="24" alt="">algal</a><p>The language for living programs.</p><div><a href="${REPO}">Source</a><a href="/docs/">Documentation</a><a href="/docs/spec/organism/">Spec</a><a href="/llms.txt">llms.txt</a><span>MIT · Early, working software · {{BUILD_STATS}}</span></div></footer>
+<footer class="site-footer"><a class="wordmark" href="/" aria-label="ALGAL home"><img src="/favicon.svg" width="24" height="24" alt="">algal</a><p>The language for living programs.</p><div><a href="${REPO}">Source</a><a href="/docs/">Documentation</a><a href="/blog/">Blog</a><a href="/compare/">Compare</a><a href="/docs/spec/organism/">Spec</a><a href="/llms.txt">llms.txt</a><span>MIT · Early, working software · {{BUILD_STATS}}</span></div></footer>
 
 </body>
 </html>
