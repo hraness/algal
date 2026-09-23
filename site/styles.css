@@ -522,6 +522,37 @@ nav a[aria-current="page"] { color: var(--ink); }
 .organism-live-links { display: inline-flex; gap: .9rem; font-size: .75rem; }
 .organism-live-links a { text-decoration: none; }
 .organism-live-foot { margin: 0; font: .75rem var(--mono); color: var(--muted); border-top: 1px solid var(--line); padding: .7rem 1rem; background: var(--secondary); overflow-wrap: anywhere; }
+
+/* Amoeba field — a decorative culture of cell kinds drifting behind the hero.
+ * Blurred at rest; client.js raises --am-focus with cursor proximity and rare
+ * self-reveal pulses, which sharpens, brightens, and slightly enlarges each
+ * organism. Kinds share the diagram palette, so the field reads as the real
+ * cell taxonomy rather than generic blobs. */
+.hero { position: relative; }
+.hero > *:not(.amoeba-field) { position: relative; z-index: 1; }
+.amoeba-field { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.amoeba { position: absolute; left: 0; top: 0; padding: .8rem 1.05rem; border: 1.5px solid var(--am-edge); background: var(--am-fill); border-radius: 42% 58% 63% 37% / 45% 40% 60% 55%; animation: am-morph var(--am-dur, 9s) ease-in-out infinite alternate; filter: blur(calc((1 - var(--am-focus, 0)) * 6px)); opacity: calc(.52 + var(--am-focus, 0) * .48); will-change: transform, filter; }
+.am-tag { display: flex; flex-direction: column; align-items: center; gap: .14rem; font-family: var(--mono); line-height: 1.25; text-align: center; white-space: nowrap; }
+.am-tag b { font-size: .68rem; font-weight: 650; color: var(--am-ink); letter-spacing: .01em; }
+.am-tag i { font-size: .58rem; font-style: normal; color: var(--am-muted); }
+@keyframes am-morph {
+  0%   { border-radius: 42% 58% 63% 37% / 45% 40% 60% 55%; }
+  33%  { border-radius: 58% 42% 37% 63% / 52% 58% 42% 48%; }
+  66%  { border-radius: 36% 64% 55% 45% / 62% 38% 55% 45%; }
+  100% { border-radius: 42% 58% 63% 37% / 45% 40% 60% 55%; }
+}
+.am-pop { animation: am-pop .55s ease-out, am-morph var(--am-dur, 9s) ease-in-out infinite alternate; }
+@keyframes am-pop { 35% { scale: 1.22; } }
+.am-daughter { animation: am-born .7s cubic-bezier(.2, .8, .3, 1.25), am-morph var(--am-dur, 9s) ease-in-out infinite alternate; }
+@keyframes am-born { from { scale: .08; } }
+.am-model       { --am-fill: rgba(99, 102, 241, .17); --am-edge: rgba(99, 102, 241, .5); --am-ink: #6366f1; --am-muted: rgba(99, 102, 241, .82); }
+.am-pure        { --am-fill: rgba(100, 116, 139, .15); --am-edge: rgba(100, 116, 139, .44); --am-ink: #64748b; --am-muted: rgba(100, 116, 139, .82); }
+.am-composition { --am-fill: rgba(15, 118, 110, .17); --am-edge: rgba(15, 118, 110, .5); --am-ink: #0f766e; --am-muted: rgba(15, 118, 110, .82); }
+.am-state       { --am-fill: rgba(162, 28, 175, .15); --am-edge: rgba(162, 28, 175, .44); --am-ink: #a21caf; --am-muted: rgba(162, 28, 175, .82); }
+.am-input       { --am-fill: rgba(37, 99, 235, .15);  --am-edge: rgba(37, 99, 235, .44);  --am-ink: #2563eb; --am-muted: rgba(37, 99, 235, .82); }
+.am-effect      { --am-fill: rgba(194, 65, 12, .15);  --am-edge: rgba(194, 65, 12, .44);  --am-ink: #c2410c; --am-muted: rgba(194, 65, 12, .82); }
+@media (prefers-reduced-motion: reduce) { .amoeba-field { display: none; } }
+@media (forced-colors: active) { .amoeba-field { display: none; } }
 .life-section { padding-top: var(--hraness-marketing-story-space); }
 .life-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.1rem; margin-top: 2.2rem; }
 .life-card { border-radius: var(--radius-md); padding: 1.6rem; background: var(--white); border: 1px solid var(--line); }
