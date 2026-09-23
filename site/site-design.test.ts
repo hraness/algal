@@ -9,8 +9,8 @@ const pageFiles = readdirSync(join(SITE, "pages")).filter(file => file.endsWith(
 const pages = Object.fromEntries(pageFiles.map(file => [file, readFileSync(join(SITE, "pages", file), "utf8")]));
 const allMarkup = `${chrome}\n${Object.values(pages).join("\n")}`;
 
-test("the site ships home, tour, use-cases, living software, and workbench pages", () => {
-  expect(pageFiles.sort()).toEqual(["home.html", "living.html", "tour.html", "use-cases.html", "workbench.html"]);
+test("the site ships home, tour, use-cases, living software, browser evolution, and workbench pages", () => {
+  expect(pageFiles.sort()).toEqual(["grow.html", "home.html", "living.html", "tour.html", "use-cases.html", "workbench.html"]);
 });
 
 test("every standard icon referenced by static markup is present in the sprite", () => {
