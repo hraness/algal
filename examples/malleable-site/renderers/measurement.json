@@ -1,0 +1,129 @@
+{
+  "kind": "experimental-renderer-feasibility-measurement",
+  "date": "2026-09-23",
+  "platform": {
+    "os": "macOS",
+    "version": "26.5.2",
+    "architecture": "arm64"
+  },
+  "toolchain": {
+    "nativeRust": "1.97.1",
+    "webRust": "1.98.1",
+    "dioxus": "0.7.10",
+    "ratatui": "0.30.2",
+    "crossterm": "0.29.0",
+    "trunk": "0.21.14",
+    "wasmBindgen": "0.2.128",
+    "wasmOpt": "123"
+  },
+  "fixture": {
+    "path": "fixtures/view.json",
+    "bytes": 777,
+    "gzipBytes": 328,
+    "sha256": "cbb6a3330251f548b0e5c4534399fe36ed4cbc6d7af44f4c10bdc11d5f8f10b5"
+  },
+  "lockfileSha256": "83bd4bdb07f3d28995aedf7ccab5d8a8debff4df7708ccc35f1e8a20d54ab803",
+  "checks": {
+    "fixtureMatchesAlgalView": true,
+    "cargoFmt": true,
+    "cargoTest": {
+      "passed": 5,
+      "failed": 0
+    },
+    "cargoClippyAllTargetsDenyWarnings": true,
+    "dioxusWebReleaseBuild": true,
+    "dioxusDesktopDevBuild": true,
+    "ratatuiTestBackendWidths": [
+      36,
+      100
+    ],
+    "ratatuiSnapshotSize": [
+      88,
+      30
+    ]
+  },
+  "artifacts": {
+    "webRelease": [
+      {
+        "path": "dist/index.html",
+        "bytes": 1988,
+        "gzipBytes": 956,
+        "sha256": "3fa448dceab3ad307a234255ba76dd860935154bd5da48ee145ca90dab3cc1ed"
+      },
+      {
+        "path": "dist/snippets/dioxus-interpreter-js-20451f6aefec841d/inline0.js",
+        "bytes": 20855,
+        "gzipBytes": 4391,
+        "sha256": "cd533b7b9f2192fa535f92f4f266d03d47c23105cf500498d0bc8d6cc90dc6cf"
+      },
+      {
+        "path": "dist/snippets/dioxus-interpreter-js-20451f6aefec841d/src/js/hydrate.js",
+        "bytes": 488,
+        "gzipBytes": 195,
+        "sha256": "0659b58e105fbc8e7e97feb8aa123f455520333ae10c326fa37ec0eb4b08e833"
+      },
+      {
+        "path": "dist/snippets/dioxus-interpreter-js-20451f6aefec841d/src/js/patch_console.js",
+        "bytes": 937,
+        "gzipBytes": 278,
+        "sha256": "9ef1d21e8c05e91f5dd9e46c8f47ae574185a64497527b687f8fdb9b98045f83"
+      },
+      {
+        "path": "dist/snippets/dioxus-interpreter-js-20451f6aefec841d/src/js/set_attribute.js",
+        "bytes": 1887,
+        "gzipBytes": 680,
+        "sha256": "5b56995f71fe629934f4ab5eb292d5cfccd9d99037eb9a39ede5078c78db88df"
+      },
+      {
+        "path": "dist/snippets/dioxus-web-eae67878b22d6805/inline0.js",
+        "bytes": 267,
+        "gzipBytes": 173,
+        "sha256": "853d44dbc9d2696e80d66c056e21d69e77b2bf68f9636826becd029f67c884a5"
+      },
+      {
+        "path": "dist/surface-dioxus-b78edf967e89ce7e.js",
+        "bytes": 25243,
+        "gzipBytes": 5377,
+        "sha256": "4e6f2b548c371eb2554f56bc2fc8444c06ddef8ef7d920f3d55e978eec998ec2"
+      },
+      {
+        "path": "dist/surface-dioxus-b78edf967e89ce7e_bg.wasm",
+        "bytes": 311048,
+        "gzipBytes": 136399,
+        "sha256": "8cdd861550948fdda325aaf3191b3d50c5b22532d4d29fc730e08d9688287813"
+      }
+    ],
+    "webReleaseTotalBytes": 362713,
+    "desktopDevBinary": {
+      "path": "target/debug/surface-dioxus",
+      "bytes": 25762848,
+      "gzipBytes": 5812148,
+      "sha256": "3815ef0619a76aab80cd090200cab64841b800165e8d89f51b40d2cd8853bafb"
+    },
+    "tuiDevBinary": {
+      "path": "target/debug/surface-tui",
+      "bytes": 3370480,
+      "gzipBytes": 907268,
+      "sha256": "d2ceddcd1aebc97e190d068535d6d67a27e217132b13fbcebaa04e647dc3aae2"
+    },
+    "terminalSnapshot": {
+      "path": "tui-snapshot.txt",
+      "bytes": 239,
+      "gzipBytes": 190,
+      "sha256": "fa450b6e418239fa8a97df97cf7b17d5eb253f33271662b3ab4e1664f829e0cd",
+      "normalization": "unused trailing empty rows omitted; TestBackend remains 88 by 30"
+    }
+  },
+  "qualification": {
+    "webBrowserRuntime": "not measured by renderer worker; integration owner records browser evidence separately",
+    "desktopWindowRuntime": "not measured by renderer worker; compile only",
+    "terminal": "actual Ratatui TestBackend rendering; interactive terminal UX not qualified"
+  },
+  "limitations": [
+    "No input widgets: IME, draft/focus preservation and general form interaction remain unqualified.",
+    "No mobile, Windows or Linux desktop launch evidence.",
+    "Debug binary sizes are development artifacts, not packaged application sizes.",
+    "Desktop dependency block 0.1.6 emits the upstream uninhabited-static future-incompatibility warning on Rust 1.97.1.",
+    "No full ALGAL browser VM, inference, lifecycle activation or cloud host lives in these adapters."
+  ]
+}
