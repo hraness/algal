@@ -1,0 +1,204 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:model-router",
+  "name": "Model router",
+  "note": "Fast frontier-vs-standard router for first-session task prompts. One expr cell computes deterministic shape features (word count, imperative open, resume/takeover markers, action-verb density); one bounded decide call asks a typed-decision provider (Jev) for difficulty, scope, ambiguity, stakes, kind, and a frontier-worthiness probability; a second expr cell applies the fitted linear head and kind gates. Coefficients were fit on 306 local main-session prompts labeled by the model the operator actually chose (see docs/model-router.md); every feature is task-intrinsic, not operator identity. Route output: frontier | standard.",
+  "budgets": {
+    "maxSteps": 16,
+    "maxAgentCalls": 1,
+    "maxWork": 60000
+  },
+  "interface": {
+    "inputs": {
+      "task": { "cell": "src", "port": "task" }
+    },
+    "outputs": {
+      "result": { "cell": "combine", "port": "out" },
+      "summary": { "cell": "fmt", "port": "out" }
+    }
+  },
+  "cells": [
+    {
+      "id": "src",
+      "kind": "input",
+      "outputs": { "task": "text" }
+    },
+    {
+      "id": "feats",
+      "kind": "expr",
+      "inputs": { "task": "text" },
+      "expr": {
+        "contract": "algal.expr.v1",
+        "program": [
+          "let", "words",
+          ["filter", ["split", ["get", "task"], " "], "w", ["neq", ["get", "w"], ""]],
+          {
+            "words": ["len", ["get", "words"]],
+            "imperative": [
+              "if", ["gt", ["len", ["get", "words"]], 0],
+              ["contains",
+                ["quote", ["run", "create", "fix", "add", "build", "make", "take", "resume", "continue", "check", "review", "audit", "deploy", "merge", "push", "migrate", "refactor", "test", "write", "update", "remove", "delete", "install", "setup", "set", "configure", "read", "search", "find", "analyze", "improve", "change", "edit", "implement", "design", "ship", "launch", "clean", "move", "rename", "upgrade", "inspect", "verify", "publish", "integrate", "combine", "unify", "port", "rewrite", "rework", "overhaul", "assess", "evaluate", "compare", "investigate", "debug", "diagnose", "trace", "profile", "optimize", "benchmark", "scrape", "extract", "sync", "import", "export", "generate"]],
+                ["lower", ["nth", ["get", "words"], 0]]],
+              false
+            ],
+            "resume": [
+              "or",
+              ["contains", ["quote", ["resume", "continue"]],
+                ["if", ["gt", ["len", ["get", "words"]], 0], ["lower", ["nth", ["get", "words"], 0]], ""]],
+              ["scontains", ["lower", ["get", "task"]], "session named"],
+              ["scontains", ["lower", ["get", "task"]], "session called"],
+              ["scontains", ["lower", ["get", "task"]], "take over"],
+              ["scontains", ["lower", ["get", "task"]], "pick up"],
+              ["scontains", ["lower", ["get", "task"]], "continue the work"]
+            ],
+            "verbs_c": [
+              "min",
+              ["len", ["unique",
+                ["filter", ["get", "words"], "w",
+                  ["contains",
+                    ["quote", ["run", "create", "fix", "add", "build", "make", "take", "resume", "continue", "check", "review", "audit", "deploy", "merge", "push", "migrate", "refactor", "test", "write", "update", "remove", "delete", "install", "setup", "set", "configure", "read", "search", "find", "analyze", "improve", "change", "edit", "implement", "design", "ship", "launch", "clean", "move", "rename", "upgrade", "inspect", "verify", "publish", "integrate", "combine", "unify", "port", "rewrite", "rework", "overhaul", "assess", "evaluate", "compare", "investigate", "debug", "diagnose", "trace", "profile", "optimize", "benchmark", "scrape", "extract", "sync", "import", "export", "generate"]],
+                    ["lower", ["get", "w"]]]]]],
+              8
+            ]
+          }
+        ]
+      },
+      "output": {
+        "kind": "json",
+        "schema": {
+          "type": "object",
+          "required": ["words", "imperative", "resume", "verbs_c"],
+          "properties": {
+            "words": { "type": "number" },
+            "imperative": { "type": "boolean" },
+            "resume": { "type": "boolean" },
+            "verbs_c": { "type": "number" }
+          }
+        }
+      }
+    },
+    {
+      "id": "probe",
+      "kind": "decide",
+      "inputs": { "task": "text" },
+      "prompt": "Score this first-session task prompt for model routing.",
+      "questions": {
+        "difficulty": {
+          "type": "score",
+          "instructions": "Rate the intrinsic difficulty of completing this request correctly for a strong coding agent: 1 = trivial lookup or one-line change, 2 = routine small task, 3 = multi-step but standard, 4 = substantial design or debugging effort, 5 = novel/architectural/highest difficulty.",
+          "criteria": ["1", "2", "3", "4", "5"]
+        },
+        "scope": {
+          "type": "score",
+          "instructions": "Rate the expected size of the work implied by the request: 1 = single command or tiny edit, 2 = one file/one function, 3 = several files or a small feature, 4 = a subsystem or cross-repo change, 5 = program/architecture spanning many components or repos.",
+          "criteria": ["1", "2", "3", "4", "5"]
+        },
+        "ambiguity": {
+          "type": "score",
+          "instructions": "Rate how ambiguous or under-specified the request is: 1 = exact and self-contained, 3 = intent clear but details open, 5 = requires substantial interpretation or missing context to even start.",
+          "criteria": ["1", "2", "3", "4", "5"]
+        },
+        "stakes": {
+          "type": "score",
+          "instructions": "Rate the cost of a wrong or sloppy outcome: 1 = throwaway/local and easy to verify, 3 = real work product with reviewable mistakes, 5 = production, money, data loss, or hard-to-reverse consequences.",
+          "criteria": ["1", "2", "3", "4", "5"]
+        },
+        "kind": {
+          "type": "choice",
+          "instructions": "Pick the single dominant kind of this request.",
+          "criteria": {
+            "feature": "build or extend functionality",
+            "bugfix": "fix a defect or broken behavior",
+            "refactor": "restructure code without new behavior",
+            "research": "investigate, analyze, or report; no deliverable artifact required",
+            "ops": "deploy, configure, migrate, or environment/infra work",
+            "writing": "prose, docs, marketing, or editorial output",
+            "question": "answer a question or explain; little or no code",
+            "chore": "mechanical, repetitive, or housekeeping work",
+            "resume": "continue or take over earlier work from a previous session",
+            "probe": "capability test or smoke check of the model itself"
+          }
+        },
+        "frontier": {
+          "type": "noul",
+          "instructions": "Probability that this request warrants a frontier-class model (top-tier capability) rather than a strong standard model. Consider difficulty, scope, ambiguity, and stakes — not prompt politeness or length."
+        }
+      },
+      "view": { "inputs": "*" },
+      "budget": { "maxContextBytes": 32768, "maxOutputBytes": 4096, "maxEffectMs": 30000 }
+    },
+    {
+      "id": "combine",
+      "kind": "expr",
+      "inputs": { "feats": "json", "answers": "json" },
+      "expr": {
+        "contract": "algal.expr.v1",
+        "program": [
+          "let", "z",
+          ["add", -1.8027,
+            ["mul", 0.4530, ["div", ["min", ["get", "feats", "words"], 400], 400]],
+            ["mul", 1.5943, ["if", ["eq", ["get", "feats", "imperative"], true], 1, 0]],
+            ["mul", 0.6881, ["if", ["eq", ["get", "feats", "resume"], true], 1, 0]],
+            ["mul", 0.4405, ["div", ["get", "feats", "verbs_c"], 8]],
+            ["mul", -0.0755, ["div", ["get", "answers", "answers", "difficulty", "score"], 5]],
+            ["mul", 0.8716, ["div", ["get", "answers", "answers", "scope", "score"], 5]],
+            ["mul", -0.1508, ["div", ["get", "answers", "answers", "ambiguity", "score"], 5]],
+            ["mul", -0.4787, ["div", ["get", "answers", "answers", "stakes", "score"], 5]],
+            ["mul", 0.5851, ["get", "answers", "answers", "frontier", "noul"]]],
+          [
+            "if",
+            ["contains", ["quote", ["question", "probe"]],
+              ["get", "answers", "answers", "kind", "choice"]],
+            {
+              "route": "standard",
+              "score": ["round", ["mul", ["get", "z"], 1000]],
+              "kind": ["get", "answers", "answers", "kind", "choice"],
+              "gate": "kind"
+            },
+            {
+              "route": ["if", ["gte", ["get", "z"], -0.619], "frontier", "standard"],
+              "score": ["round", ["mul", ["get", "z"], 1000]],
+              "kind": ["get", "answers", "answers", "kind", "choice"],
+              "gate": "score"
+            }
+          ]
+        ]
+      },
+      "output": {
+        "kind": "json",
+        "schema": {
+          "type": "object",
+          "required": ["route", "score", "kind", "gate"],
+          "properties": {
+            "route": { "type": "string" },
+            "score": { "type": "number" },
+            "kind": { "type": "string" },
+            "gate": { "type": "string" }
+          }
+        }
+      }
+    },
+    {
+      "id": "fmt",
+      "kind": "expr",
+      "inputs": { "result": "json" },
+      "expr": {
+        "contract": "algal.expr.v1",
+        "program": [
+          "sconcat",
+          "route → ", ["get", "result", "route"],
+          " (score ", ["toText", ["get", "result", "score"]],
+          ", kind ", ["get", "result", "kind"], ")"
+        ]
+      },
+      "output": { "kind": "text" }
+    }
+  ],
+  "edges": [
+    { "from": { "cell": "src", "port": "task" }, "to": { "cell": "feats", "port": "task" } },
+    { "from": { "cell": "src", "port": "task" }, "to": { "cell": "probe", "port": "task" } },
+    { "from": { "cell": "feats", "port": "out" }, "to": { "cell": "combine", "port": "feats" } },
+    { "from": { "cell": "probe", "port": "out" }, "to": { "cell": "combine", "port": "answers" } },
+    { "from": { "cell": "combine", "port": "out" }, "to": { "cell": "fmt", "port": "result" } }
+  ]
+}
