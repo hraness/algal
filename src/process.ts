@@ -737,7 +737,9 @@ export class ProcessSupervisor {
       return snapshot;
     });
   }
-  async inspect(name: string): Promise<ProcessSnapshot> {
+  /** The record digest the named head currently publishes — the cheap half of
+   * `inspect`, used to confirm a known snapshot is still current. */
+  private async headDigest(name: string): Promise<Digest> {
     const head = await readBounded(
       join(await this.paths(name), "head.json"),
       4096,
@@ -748,7 +750,10 @@ export class ProcessSupervisor {
     noUnknownKeys(obj, ["contract", "name", "record"], "process head");
     if (obj.contract !== "algal.process-head.v1" || obj.name !== name)
       invalid("process head identity mismatch");
-    const digest = asDigest(obj.record, "process record");
+    return asDigest(obj.record, "process record");
+  }
+  async inspect(name: string): Promise<ProcessSnapshot> {
+    const digest = await this.headDigest(name);
     const record = parseProcessRecord(
       await this.cas("values", digest, PROCESS_BOUNDS.maxRecordBytes),
     );
@@ -862,9 +867,21 @@ export class ProcessSupervisor {
     name: string,
     automatic = false,
   ): Promise<ProcessSnapshot | undefined> {
+    return this.tickLeased(name, automatic);
+  }
+  private async tickLeased(
+    name: string,
+    automatic: boolean,
+    known?: ProcessSnapshot,
+  ): Promise<ProcessSnapshot | undefined> {
     const path = await this.paths(name);
     return this.lease(join(path, ".lock"), async () => {
-      const snapshot = await this.inspect(name);
+      // A snapshot the caller just inspected stands in for a fresh read only
+      // while the leased head still names its digest; otherwise re-inspect.
+      const snapshot =
+        known !== undefined && known.digest === await this.headDigest(name)
+          ? known
+          : await this.inspect(name);
       const record = snapshot.process;
       if (!["ready", "suspended"].includes(record.status)) {
         if (automatic && record.status !== "uncertain") return undefined;
@@ -946,7 +963,7 @@ export class ProcessSupervisor {
       if (processes.length >= maxTicks) break;
       const snapshot = await this.inspect(name);
       if (!["ready", "suspended"].includes(snapshot.process.status)) continue;
-      const next = await this.tick(name, true);
+      const next = await this.tickLeased(name, true, snapshot);
       if (next) processes.push(next);
     }
     return { ticks: processes.length, processes };

@@ -150,13 +150,15 @@ pub fn bounded_text(value: &Value, max: usize) -> Result<String> {
 }
 
 /// Content lookup with the record's digest bound to the stored bytes.
+/// `Store::get` only yields a value whose digest is the requested key: file
+/// reads are checked there (DIGEST_MISMATCH) and the in-memory layer is keyed
+/// by `put`'s own digest, so the record is not hashed a second time here.
+/// `app_json` still enforces the application structure and byte bounds.
 pub fn get_record(store: &Store, reference: &str) -> Result<Value> {
     let value = store
         .get("values", check_digest(reference)?)?
         .ok_or_else(|| Error::invalid("Missing or changed application record"))?;
-    if digest(&app_json(&value)?)? != reference {
-        return Err(Error::invalid("Missing or changed application record"));
-    }
+    app_json(&value)?;
     Ok(value)
 }
 

@@ -8,81 +8,8 @@ import { constants, writeSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BOUNDS, manifestToJson, parseOrganismManifest, type OrganismManifest } from "./src/contract";
-import { loadSourceProject } from "./src/source-project";
-import { SourceError } from "./src/source";
-import { createSourceErrorReport, renderSourceError } from "./src/source-errors";
-import { diagnoseSource, renderSourceDiagnostics } from "./src/source-diagnostics";
-import { createProgramDiagram, renderMermaid, renderSvg } from "./src/diagram";
-import { compileOrganism } from "./src/graph";
 import { asDigest, digestCanonical } from "./src/digest";
-import {
-  cachedExecutor,
-  commandExecutor,
-  scriptedExecutor,
-  type Executor,
-} from "./src/effects";
 import { errorReport, AlgalError } from "./src/errors";
-import { vercelGatewayExecutor } from "./src/gateway";
-import { jevAsker, jevExecutor } from "./src/jev";
-import { resolveEmbedder } from "./src/embeddings";
-import {
-  indexSearcher,
-  indexStore,
-  recallExecutor,
-  searchIndex,
-  snippet,
-} from "./src/semantic";
-import {
-  credentialResolver,
-  credentialStatus,
-  forgetCredential,
-  storeCredential,
-  providerSpec,
-} from "./src/credentials";
-import { commandJson } from "./src/io";
-import {
-  externalWakeKey,
-  FileMailboxService,
-  mailboxToolRegistry,
-  MAILBOX_BOUNDS,
-} from "./src/mailbox";
-import { parseCapabilityHandle } from "./src/capabilities";
-import { builtinRegistry } from "./src/registry";
-import { parseRunReceipt, RECEIPT_BOUNDS, runOrganism, type RunReceipt } from "./src/run";
-import { packOrganism, parseBundle, unpackBundle } from "./src/bundle";
-import { FileStore, MemoryStore, type Store } from "./src/store";
-import { ProcessSupervisor, PROCESS_BOUNDS } from "./src/process";
-import { exportProcessEvidence, verifyProcessEvidence, PROCESS_EVIDENCE_BOUNDS } from "./src/process-evidence";
-import { PullRequestShepherd } from "./src/shepherd";
-import { CodingJobService, type CodingJobOptions, type CodingJobOperationOptions } from "./src/coding-jobs";
-import { RepairWorkflow, type RepairCheck } from "./src/repair";
-import { githubCliTransport } from "./src/github-cli";
-import {
-  fileTransport,
-  httpTransport,
-  parseTransportsFile,
-  type Transport,
-} from "./src/transport";
-import { diffReceipts, resumeRun, verifyReceipt } from "./src/verify";
-import {
-  mergeToolRegistries,
-  parseToolSignature,
-  TOOL_SIGNATURE_BOUNDS,
-  type Tool,
-  type ToolRegistry,
-} from "./src/tools";
-import {
-  generateFoundryCandidates,
-  runFoundry,
-  type FoundryCase,
-  type FoundryScorer,
-} from "./src/foundry";
-import { parseFoundryReport, verifyFoundryReport } from "./src/foundry-verify";
-import { parseExprScorer } from "./src/expr";
-import { runFoundrySearch } from "./src/search";
-import { parseSearchReport, verifySearchReport } from "./src/search-verify";
-import { runBenchmark, type BenchCase, type BenchPrice, type BenchSystem } from "./src/bench";
-import { parseBenchAxes, parseBenchReport, verifyBenchReport } from "./src/bench-verify";
 import {
   asInt,
   asJsonValue,
@@ -92,6 +19,18 @@ import {
   type JsonValue,
 } from "./src/values";
 import packageJson from "./package.json" with { type: "json" };
+// Every other module arrives through `await import()` at the subcommand (or
+// helper) that needs it: `--help`, `store`, and the listing commands never
+// pay for the run graph, executors, or the job/repair/shepherd stack.
+import type { Executor } from "./src/effects";
+import type { FileStore, Store } from "./src/store";
+import type { RunReceipt } from "./src/run";
+import type { Transport } from "./src/transport";
+import type { Tool, ToolRegistry } from "./src/tools";
+import type { FoundryCase, FoundryScorer } from "./src/foundry";
+import type { BenchCase, BenchPrice, BenchSystem } from "./src/bench";
+import type { CodingJobOptions, CodingJobOperationOptions } from "./src/coding-jobs";
+import type { RepairCheck } from "./src/repair";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 /** The npm package version. Receipts stamp `RUNTIME_VERSION` from src/run.ts
@@ -113,8 +52,10 @@ const named = (id: string, inner: Executor): Executor => ({
 /** `jev` / `jev:<model>` executor spec → a Jev decision executor whose
  * credential resolves through the vault chain at call time. Undefined when
  * the spec isn't a Jev spec. */
-function jevSpecExecutor(spec: string): Executor | undefined {
+async function jevSpecExecutor(spec: string): Promise<Executor | undefined> {
   if (spec !== "jev" && !spec.startsWith("jev:")) return undefined;
+  const { jevExecutor } = await import("./src/jev");
+  const { credentialResolver } = await import("./src/credentials");
   const model = spec === "jev" ? undefined : spec.slice(4);
   return jevExecutor({
     credential: credentialResolver("jev"),
@@ -122,12 +63,14 @@ function jevSpecExecutor(spec: string): Executor | undefined {
   });
 }
 
-function recallSpecExecutor(spec: string, dir: string): Executor | undefined {
+async function recallSpecExecutor(spec: string, dir: string): Promise<Executor | undefined> {
   if (spec !== "recall" && !spec.startsWith("recall:")) return undefined;
   const embedderSpec = spec === "recall" ? "local" : spec.slice(7);
   if (embedderSpec.length === 0) {
     throw new AlgalError("PARSE_FAILED", "recall embedder spec must not be empty");
   }
+  const { resolveEmbedder } = await import("./src/embeddings");
+  const { indexSearcher, recallExecutor } = await import("./src/semantic");
   const embedder = resolveEmbedder(embedderSpec);
   return {
     ...recallExecutor(indexSearcher(dir, embedder, embedderSpec)),
@@ -521,6 +464,7 @@ async function loadTransports(
   file: string,
   base = process.cwd(),
 ): Promise<Record<string, Transport>> {
+  const { fileTransport, httpTransport, parseTransportsFile } = await import("./src/transport");
   const map = parseTransportsFile(await readJson(resolve(file)));
   const out: Record<string, Transport> = {};
   for (const [name, target] of Object.entries(map)) {
@@ -537,6 +481,8 @@ async function loadTransports(
  * { inputs, requestDigest, idempotencyKey } on stdin and must print a JSON
  * object of output ports. Both stay behind the signature's bounds. */
 async function loadTools(file: string): Promise<ToolRegistry> {
+  const { commandJson } = await import("./src/io");
+  const { parseToolSignature, TOOL_SIGNATURE_BOUNDS } = await import("./src/tools");
   const resolved = resolve(file);
   const raw = asRecord(await readJson(resolved), "tools");
   const base = dirname(resolved);
@@ -614,6 +560,8 @@ async function loadTools(file: string): Promise<ToolRegistry> {
 
 /** Export only needs declarations: never open scripted data or bind commands. */
 async function evidenceTools(file: string | undefined, dir: string): Promise<ToolRegistry> {
+  const { FileMailboxService, mailboxToolRegistry } = await import("./src/mailbox");
+  const { mergeToolRegistries, parseToolSignature, TOOL_SIGNATURE_BOUNDS } = await import("./src/tools");
   const standard = mailboxToolRegistry(new FileMailboxService(dir));
   if (file === undefined) return standard;
   const entries = asRecord(await readJsonBounded(resolve(file), 1_048_576, "evidence tools"), "tools");
@@ -636,6 +584,8 @@ async function resolveTools(
   flags: Record<string, string | boolean>,
   dir: string,
 ): Promise<ToolRegistry> {
+  const { FileMailboxService, mailboxToolRegistry } = await import("./src/mailbox");
+  const { mergeToolRegistries } = await import("./src/tools");
   const standard = mailboxToolRegistry(new FileMailboxService(dir));
   return flags.tools === undefined
     ? standard
@@ -649,6 +599,7 @@ async function resolveExecutors(
   flags: Record<string, string | boolean>,
   dir: string,
 ): Promise<Executor[]> {
+  const { commandExecutor, scriptedExecutor } = await import("./src/effects");
   const executors: Executor[] = [];
   if (flags.responses !== undefined) {
     const map = asRecord(
@@ -672,14 +623,15 @@ async function resolveExecutors(
         `--gateway-model ${model}: no AI Gateway credential; set AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN before running`,
       );
     }
+    const { vercelGatewayExecutor } = await import("./src/gateway");
     executors.push(vercelGatewayExecutor({ model }));
   }
   if (flags.jev !== undefined) {
-    executors.push(jevSpecExecutor(typeof flags.jev === "string" ? `jev:${flags.jev}` : "jev")!);
+    executors.push((await jevSpecExecutor(typeof flags.jev === "string" ? `jev:${flags.jev}` : "jev"))!);
   }
   if (flags.recall !== undefined) {
     const spec = typeof flags.recall === "string" ? `recall:${flags.recall}` : "recall";
-    executors.push(named("recall", recallSpecExecutor(spec, dir)!));
+    executors.push(named("recall", (await recallSpecExecutor(spec, dir))!));
   }
   if (flags.executors !== undefined) {
     const map = asRecord(
@@ -693,12 +645,12 @@ async function resolveExecutors(
           `executors.${name} must be a shell command string`,
         );
       }
-      const jev = jevSpecExecutor(cmd);
+      const jev = await jevSpecExecutor(cmd);
       if (jev !== undefined) {
         executors.push(named(name, jev));
         continue;
       }
-      const recall = recallSpecExecutor(cmd, dir);
+      const recall = await recallSpecExecutor(cmd, dir);
       if (recall !== undefined) {
         executors.push(named(name, recall));
         continue;
@@ -784,15 +736,18 @@ async function main(): Promise<number> {
   if (cmd === "process" && positional[0] === "verify-evidence") {
     if (positional.length !== 2 || Object.keys(flags).length !== 0)
       usageError("algal process verify-evidence <file> accepts no host flags");
+    const { PROCESS_EVIDENCE_BOUNDS, verifyProcessEvidence } = await import("./src/process-evidence");
     out(await verifyProcessEvidence(await readJsonBounded(resolve(positional[1]!),
       PROCESS_EVIDENCE_BOUNDS.maxBytes, "process evidence")) as unknown as JsonValue);
     return 0;
   }
   const dir = String(flags.dir ?? ".algal");
+  const { FileStore } = await import("./src/store");
   const store = new FileStore(dir);
+  const { builtinRegistry } = await import("./src/registry");
   const fns = builtinRegistry();
   const sourceRoot = artifactFlag(flags, "source-root");
-  const readProject = (path: string) => loadSourceProject(resolve(path),
+  const readProject = async (path: string) => (await import("./src/source-project")).loadSourceProject(resolve(path),
     sourceRoot === undefined ? {} : { root: resolve(sourceRoot) });
   const installSource = async (project: Awaited<ReturnType<typeof readProject>>, target: Store) => {
     for (const module of project.modules) await target.putManifest(module);
@@ -812,6 +767,9 @@ async function main(): Promise<number> {
       for (const key of Object.keys(flags)) {
         if (!["out", "source-map", "bundle-out", "source-root"].includes(key)) usageError(`unknown compile option --${key}`);
       }
+      const { MemoryStore } = await import("./src/store");
+      const { compileOrganism } = await import("./src/graph");
+      const { packOrganism } = await import("./src/bundle");
       const file = positional[0]!;
       const output = artifactFlag(flags, "out");
       const mapPath = artifactFlag(flags, "source-map");
@@ -836,6 +794,9 @@ async function main(): Promise<number> {
         }
         artifactFlag(flags, key);
       }
+      const { createProgramDiagram, renderMermaid, renderSvg } = await import("./src/diagram");
+      const { compileOrganism } = await import("./src/graph");
+      const { parseRunReceipt, RECEIPT_BOUNDS } = await import("./src/run");
       const file = positional[0]!;
       const format = artifactFlag(flags, "format") ?? "mermaid";
       if (!["mermaid", "svg", "json"].includes(format)) usageError("diagram format must be mermaid, svg, or json");
@@ -878,6 +839,8 @@ async function main(): Promise<number> {
         if (!["source", "source-root", "format", "out"].includes(key)) usageError(`unknown diagnose option --${key}`);
         artifactFlag(flags, key);
       }
+      const { RECEIPT_BOUNDS } = await import("./src/run");
+      const { diagnoseSource, renderSourceDiagnostics } = await import("./src/source-diagnostics");
       const sourcePath = artifactFlag(flags, "source");
       if (sourcePath === undefined) usageError("diagnose requires --source <program.algal>");
       const format = artifactFlag(flags, "format") ?? "json";
@@ -984,6 +947,7 @@ async function main(): Promise<number> {
         const n = await loadModules(String(flags.modules), store);
         diag(`loaded ${n} module(s) from ${flags.modules}`);
       }
+      const { packOrganism } = await import("./src/bundle");
       const manifest = await readManifest(resolve(file));
       const bundle = await packOrganism(manifest, store);
       if (flags.out !== undefined) {
@@ -1004,6 +968,7 @@ async function main(): Promise<number> {
     case "unpack": {
       const file = positional[0];
       if (!file) usageError("algal unpack <bundle.json>");
+      const { parseBundle, unpackBundle } = await import("./src/bundle");
       const bundle = parseBundle(await readJson(resolve(file)));
       const res = await unpackBundle(bundle, store);
       out({ ok: true, root: bundle.root, ...res });
@@ -1013,6 +978,9 @@ async function main(): Promise<number> {
     case "call": {
       const file = positional[0];
       if (!file || positional.length !== 1) usageError("algal call <bundle.json> [--interface] [options]");
+      const { parseBundle, unpackBundle } = await import("./src/bundle");
+      const { cachedExecutor } = await import("./src/effects");
+      const { runOrganism } = await import("./src/run");
       if (flags.modules !== undefined) {
         const n = await loadModules(String(flags.modules), store);
         diag(`loaded ${n} module(s) from ${flags.modules}`);
@@ -1096,6 +1064,7 @@ async function main(): Promise<number> {
     case "tool-def": {
       const file = positional[0];
       if (!file) usageError("algal tool-def <manifest.json> [--format openai|anthropic]");
+      const { compileOrganism } = await import("./src/graph");
       if (flags.modules !== undefined) {
         const n = await loadModules(String(flags.modules), store);
         diag(`loaded ${n} module(s) from ${flags.modules}`);
@@ -1167,6 +1136,7 @@ async function main(): Promise<number> {
     case "check": {
       const file = positional[0];
       if (!file) usageError("algal check <program.algal|manifest.json> [--modules <dir>]");
+      const { compileOrganism } = await import("./src/graph");
       if (flags.modules !== undefined) {
         const n = await loadModules(String(flags.modules), store);
         diag(`loaded ${n} module(s) from ${flags.modules}`);
@@ -1202,6 +1172,7 @@ async function main(): Promise<number> {
       if (!file) {
         usageError("algal explain <manifest.json> [--modules <dir>]");
       }
+      const { compileOrganism } = await import("./src/graph");
       if (flags.modules !== undefined) {
         const n = await loadModules(String(flags.modules), store);
         diag(`loaded ${n} module(s) from ${flags.modules}`);
@@ -1263,6 +1234,8 @@ async function main(): Promise<number> {
     case "run": {
       const file = positional[0];
       if (!file) usageError("algal run <manifest.json> [options]");
+      const { cachedExecutor } = await import("./src/effects");
+      const { runOrganism } = await import("./src/run");
       if (flags.modules !== undefined) {
         const n = await loadModules(String(flags.modules), store);
         diag(`loaded ${n} module(s) from ${flags.modules}`);
@@ -1312,6 +1285,13 @@ async function main(): Promise<number> {
     case "foundry": {
       const file = positional[0];
       if (!file) usageError("algal foundry <config.json> | foundry verify|inspect|pack <report.json>");
+      const { packOrganism } = await import("./src/bundle");
+      const { cachedExecutor } = await import("./src/effects");
+      const { parseExprScorer } = await import("./src/expr");
+      const { generateFoundryCandidates, runFoundry } = await import("./src/foundry");
+      const { parseFoundryReport, verifyFoundryReport } = await import("./src/foundry-verify");
+      const { runFoundrySearch } = await import("./src/search");
+      const { parseSearchReport, verifySearchReport } = await import("./src/search-verify");
       if (file === "verify") {
         const reportFile = positional[1];
         if (!reportFile) usageError("algal foundry verify <report.json> [--dir <path>]");
@@ -1601,6 +1581,10 @@ async function main(): Promise<number> {
       if (!file) {
         usageError("algal bench <config.json> | bench verify|inspect <report.json>");
       }
+      const { runBenchmark } = await import("./src/bench");
+      const { parseBenchAxes, parseBenchReport, verifyBenchReport } = await import("./src/bench-verify");
+      const { cachedExecutor, commandExecutor, scriptedExecutor } = await import("./src/effects");
+      const { parseExprScorer } = await import("./src/expr");
       if (file === "verify") {
         const reportFile = positional[1];
         if (!reportFile) usageError("algal bench verify <report.json> [--dir <path>]");
@@ -1674,11 +1658,12 @@ async function main(): Promise<number> {
       });
       const resolveSpec = async (id: string, spec: string): Promise<Executor> => {
         if (spec.startsWith("gateway:")) {
+          const { vercelGatewayExecutor } = await import("./src/gateway");
           return named(id, vercelGatewayExecutor({ model: spec.slice("gateway:".length) }));
         }
-        const jev = jevSpecExecutor(spec);
+        const jev = await jevSpecExecutor(spec);
         if (jev !== undefined) return named(id, jev);
-        const recall = recallSpecExecutor(spec, dir);
+        const recall = await recallSpecExecutor(spec, dir);
         if (recall !== undefined) return named(id, recall);
         if (spec.startsWith("scripted:")) {
           const responses = asRecord(
@@ -1761,6 +1746,7 @@ async function main(): Promise<number> {
       if (!receiptFile) {
         usageError("algal verify <receipt.json> [manifest.json]");
       }
+      const { verifyReceipt } = await import("./src/verify");
       if (flags.modules !== undefined) {
         const n = await loadModules(String(flags.modules), store);
         diag(`loaded ${n} module(s) from ${flags.modules}`);
@@ -1806,6 +1792,8 @@ async function main(): Promise<number> {
       if (!receiptFile) {
         usageError("algal resume <receipt.json> [manifest.json] [executor options]");
       }
+      const { cachedExecutor } = await import("./src/effects");
+      const { resumeRun } = await import("./src/verify");
       if (flags.modules !== undefined) {
         const n = await loadModules(String(flags.modules), store);
         diag(`loaded ${n} module(s) from ${flags.modules}`);
@@ -1862,6 +1850,8 @@ async function main(): Promise<number> {
       if (!aFile || !bFile) {
         usageError("algal diff <receipt-a.json> <receipt-b.json>");
       }
+      const { parseRunReceipt } = await import("./src/run");
+      const { diffReceipts } = await import("./src/verify");
       const a = parseRunReceipt(await readJson(resolve(aFile)));
       const b = parseRunReceipt(await readJson(resolve(bFile)));
       const mismatches = diffReceipts(a, b);
@@ -1882,6 +1872,7 @@ async function main(): Promise<number> {
     case "inspect": {
       const file = positional[0];
       if (!file) usageError("algal inspect <receipt.json>");
+      const { parseRunReceipt } = await import("./src/run");
       const raw = parseRunReceipt(await readJson(resolve(file))) as unknown as JsonObject;
       const cells = (raw.cells ?? {}) as JsonObject;
       const summary: JsonObject = {
@@ -2047,6 +2038,7 @@ async function main(): Promise<number> {
     case "job": {
       const [sub, target] = positional;
       if (!target) usageError("algal job prepare|prepare-operation <config.json> | run|inspect|reconcile <job-digest>");
+      const { CodingJobService } = await import("./src/coding-jobs");
       const jobs = new CodingJobService(dir);
       if (sub === "prepare") {
         const config = await readJsonBounded(resolve(target), 131_072, "coding job config");
@@ -2074,6 +2066,7 @@ async function main(): Promise<number> {
     case "repair": {
       const [sub, name] = positional;
       if (!name) usageError("algal repair start|tick|inspect|verify <name>");
+      const { RepairWorkflow } = await import("./src/repair");
       const repair = new RepairWorkflow(dir);
       if (sub === "start") {
         if (typeof flags.job !== "string" || typeof flags.checks !== "string") usageError("repair start requires --job <digest> --checks <checks.json>");
@@ -2081,6 +2074,7 @@ async function main(): Promise<number> {
         out(await repair.start(name, asDigest(flags.job, "job digest"), checks as unknown as RepairCheck[]) as unknown as JsonValue);
       } else if (sub === "tick") {
         const report = await repair.tick(name);
+        const { CodingJobService } = await import("./src/coding-jobs");
         const uncertainJob = report.process.process.status === "suspended" &&
           (await new CodingJobService(dir).inspect(report.config.jobId)).status === "uncertain";
         out(report as unknown as JsonValue);
@@ -2094,6 +2088,8 @@ async function main(): Promise<number> {
     case "shepherd": {
       const [sub, name] = positional;
       if (!name) usageError("algal shepherd start|tick|watch|inspect|wake|verify|recover <name>");
+      const { githubCliTransport } = await import("./src/github-cli");
+      const { PullRequestShepherd } = await import("./src/shepherd");
       const shepherd = new PullRequestShepherd(dir, githubCliTransport({executable: String(flags.gh ?? "gh")}));
       if (sub === "start") {
         if (typeof flags.repo !== "string" || flags.pr === undefined) usageError("algal shepherd start <name> --repo owner/repo --pr NUMBER");
@@ -2122,10 +2118,13 @@ async function main(): Promise<number> {
     case "process": {
       const sub = positional[0];
       const name = positional[1];
+      const { cachedExecutor } = await import("./src/effects");
+      const { ProcessSupervisor, PROCESS_BOUNDS } = await import("./src/process");
       if (sub === "export") {
         if (positional.length !== 2 || !name || Object.keys(flags).some(key => key !== "dir" && key !== "tools"))
           usageError("algal process export <name> [--dir <path>] [--tools <file>]");
         artifactFlag(flags, "dir");
+        const { exportProcessEvidence } = await import("./src/process-evidence");
         const supervisor = new ProcessSupervisor(dir, {tools: await evidenceTools(artifactFlag(flags, "tools"), dir)});
         const evidence = await exportProcessEvidence(await supervisor.inspect(name), supervisor.store, supervisor.evidenceTools());
         // The complete exported file, including framing, must fit the reader bound.
@@ -2172,6 +2171,8 @@ async function main(): Promise<number> {
     }
 
     case "mailbox": {
+      const { parseCapabilityHandle } = await import("./src/capabilities");
+      const { externalWakeKey, FileMailboxService, MAILBOX_BOUNDS } = await import("./src/mailbox");
       const service = new FileMailboxService(dir);
       const [sub, target, valueFile] = positional;
       if (sub === "create") {
@@ -2230,6 +2231,9 @@ async function main(): Promise<number> {
       // Self-check: run every bundled example with its scripted responses
       // and default args, then verify each receipt offline.
       const { readdir } = await import("node:fs/promises");
+      const { cachedExecutor, scriptedExecutor } = await import("./src/effects");
+      const { runOrganism } = await import("./src/run");
+      const { verifyReceipt } = await import("./src/verify");
       const examplesDir = flags.examples === undefined ? EXAMPLES_DIR : resolve(String(flags.examples));
       const files = (await readdir(examplesDir)).filter((f) =>
         /\.algal\.json$/.test(f),
@@ -2334,6 +2338,8 @@ async function main(): Promise<number> {
     case "index": {
       // rebuild the derived semantic index over the store + optional docs
       const dir = typeof flags.dir === "string" ? flags.dir : ".algal";
+      const { resolveEmbedder } = await import("./src/embeddings");
+      const { indexStore } = await import("./src/semantic");
       const embedder = resolveEmbedder(
         typeof flags.embedder === "string" ? flags.embedder : undefined,
       );
@@ -2348,6 +2354,8 @@ async function main(): Promise<number> {
       const query = positional.join(" ");
       if (query.length === 0) usageError("algal search <query>");
       const dir = typeof flags.dir === "string" ? flags.dir : ".algal";
+      const { resolveEmbedder } = await import("./src/embeddings");
+      const { searchIndex, snippet } = await import("./src/semantic");
       const embedder = resolveEmbedder(
         typeof flags.embedder === "string" ? flags.embedder : undefined,
       );
@@ -2371,6 +2379,7 @@ async function main(): Promise<number> {
     case "auth": {
       const provider = positional[0];
       if (provider !== "jev") usageError("algal auth <jev> [--status|--forget|--stdin|--clipboard]");
+      const { credentialStatus, forgetCredential, providerSpec, storeCredential } = await import("./src/credentials");
       if (flags.status !== undefined) {
         out((await credentialStatus(provider)) as unknown as JsonObject);
         return 0;
@@ -2408,6 +2417,8 @@ async function main(): Promise<number> {
 
     case "doctor": {
       if (flags.jev !== undefined) {
+        const { credentialResolver, credentialStatus, providerSpec } = await import("./src/credentials");
+        const { jevAsker } = await import("./src/jev");
         const status = await credentialStatus("jev");
         const report: JsonObject = {
           provider: "jev",
@@ -2552,9 +2563,11 @@ function usageError(msg: string): never {
 
 main()
   .then((code) => process.exit(code))
-  .catch((e) => {
+  .catch(async (e) => {
     const rep = errorReport(e);
+    const { SourceError } = await import("./src/source");
     if (e instanceof SourceError) {
+      const { createSourceErrorReport, renderSourceError } = await import("./src/source-errors");
       const diagnostic = createSourceErrorReport(e);
       const location = [diagnostic.source, diagnostic.span?.start.line, diagnostic.span?.start.column]
         .filter(value => value !== undefined).join(":");

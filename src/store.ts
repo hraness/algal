@@ -7,7 +7,7 @@ import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
 import { link, lstat, mkdir, open, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { asDigest, digestCanonical, type Digest } from "./digest";
+import { asDigest, digestCanonical, digestText, type Digest } from "./digest";
 import { AlgalError } from "./errors";
 import {
   BOUNDS,
@@ -220,8 +220,10 @@ export class FileStore implements Store {
     } finally { await file.close(); }
   }
 
-  private async publish(path: string, value: JsonValue, mutable = false, max: number = STORE_BOUNDS.maxDocumentBytes): Promise<void> {
-    const bytes = canonicalize(storeJson(value));
+  /** Durably install already-canonical `bytes` at `path`. Resolves `true` when
+   * this call installed them; an existing immutable entry is left untouched
+   * (including corruption) and resolves `false` so the caller re-verifies it. */
+  private async publish(path: string, bytes: string, mutable = false, max: number = STORE_BOUNDS.maxDocumentBytes): Promise<boolean> {
     if (Buffer.byteLength(bytes, "utf8") > max) {
       throw new AlgalError("BUDGET_EXHAUSTED", "store document byte bound exceeded");
     }
@@ -237,12 +239,16 @@ export class FileStore implements Store {
       throw error;
     }
     await file.close();
+    let fresh = true;
     try {
       await this.guard(path);
       if (mutable) await rename(temporary, path);
       else {
         try { await link(temporary, path); }
-        catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+        catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+          fresh = false;
+        }
       }
       await syncDirectory(dirname(path));
       await syncDirectory(this.dir);
@@ -251,6 +257,7 @@ export class FileStore implements Store {
         if (error.code !== "ENOENT") throw error;
       });
     }
+    return fresh;
   }
 
   private async readCas(path: string, digest: Digest, kind: string): Promise<JsonValue | undefined> {
@@ -263,8 +270,10 @@ export class FileStore implements Store {
     return value;
   }
 
-  private async writeCas(path: string, value: JsonValue, digest: Digest, kind: string): Promise<Digest> {
-    await this.publish(path, value);
+  private async writeCas(path: string, text: string, digest: Digest, kind: string): Promise<Digest> {
+    // A fresh link installed exactly the synced canonical bytes that `digest`
+    // names, so only an entry that already existed needs reading back.
+    if (await this.publish(path, text)) return digest;
     // Existing immutable entries are never overwritten, including corruption.
     if (await this.readCas(path, digest, kind) === undefined) {
       throw new AlgalError("IO_FAILED", "published store object is missing");
@@ -283,25 +292,25 @@ export class FileStore implements Store {
     return manifest;
   }
   async putManifest(manifest: OrganismManifest) {
-    const value = storeJson(manifestToJson(manifest));
-    const digest = digestCanonical(value);
-    return this.writeCas(this.manifestPath(digest), value, digest, "manifest");
+    const text = canonicalize(storeJson(manifestToJson(manifest)));
+    const digest = digestText(text);
+    return this.writeCas(this.manifestPath(digest), text, digest, "manifest");
   }
   async getReceipt(digest: Digest) {
     return this.readCas(this.receiptPath(digest), digest, "receipt");
   }
   async putReceipt(receipt: JsonValue) {
-    storeJson(receipt);
-    const digest = digestCanonical(receipt);
-    return this.writeCas(this.receiptPath(digest), receipt, digest, "receipt");
+    const text = canonicalize(storeJson(receipt));
+    const digest = digestText(text);
+    return this.writeCas(this.receiptPath(digest), text, digest, "receipt");
   }
   async getValue(digest: Digest) {
     return this.readCas(this.valuePath(digest), digest, "value");
   }
   async putValue(value: JsonValue) {
-    storeJson(value);
-    const digest = digestCanonical(value);
-    return this.writeCas(this.valuePath(digest), value, digest, "value");
+    const text = canonicalize(storeJson(value));
+    const digest = digestText(text);
+    return this.writeCas(this.valuePath(digest), text, digest, "value");
   }
   async getEffect(requestDigest: Digest, executor?: string) {
     const value = await this.read(this.effectPath(effectKey(requestDigest, executor)));
@@ -314,7 +323,7 @@ export class FileStore implements Store {
   }
   async putEffect(receipt: EffectReceipt, executor?: string) {
     const path = this.effectPath(effectKey(receipt.requestDigest, executor));
-    await this.publish(path, parseEffectReceipt(storeJson(receipt)) as unknown as JsonValue);
+    await this.publish(path, canonicalize(storeJson(parseEffectReceipt(storeJson(receipt)) as unknown as JsonValue)));
     // The memo index remains first-wins, but malformed existing claims fail closed.
     if (await this.getEffect(receipt.requestDigest, executor) === undefined) {
       throw new AlgalError("IO_FAILED", "published effect memo is missing");
@@ -325,6 +334,6 @@ export class FileStore implements Store {
     return this.read(this.slotPath(name), BOUNDS.maxBlobBytes);
   }
   async setSlot(name: string, value: JsonValue) {
-    await this.publish(this.slotPath(name), value, true, BOUNDS.maxBlobBytes);
+    await this.publish(this.slotPath(name), canonicalize(storeJson(value)), true, BOUNDS.maxBlobBytes);
   }
 }
