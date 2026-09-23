@@ -331,6 +331,7 @@ export type {
   ApplicationDispatchContext,
   ApplicationDispatchOutcome,
   ApplicationDispatchResult,
+  ApplicationLineageRow,
   ApplicationOptions,
   ApplicationSnapshot,
 } from "./src/application";
@@ -469,5 +470,7 @@ export { COMPARISON_LIMITS, checkComparisonBinding, comparisonDigest, parseAppli
 export type { ApplicationComparison, ApplicationComparisonResult, ComparisonVerdict, ProduceComparisonInput } from "./src/application-comparison";
 export { PROPOSAL_LIMITS, parseApplicationProposal, parseProposalRequest, produceApplicationProposal, proposeApplicationRevision, verifyApplicationProposal, verifyApplicationProposalBinding } from "./src/application-proposal";
 export type { ApplicationProposal, ApplicationProposalCandidate, ApplicationProposalRequest, ApplicationProposalStatus, ProposeApplicationRevisionInput, ProposedApplicationRevision } from "./src/application-proposal";
-export { SELECTION_LIMITS, parseApplicationSelectionPolicy, selectApplicationStrategy, verifyApplicationSelectionPolicy } from "./src/application-selection";
-export type { ApplicationSelection, ApplicationSelectionPolicy, ApplicationSelectionRow } from "./src/application-selection";
+export { SELECTION_LIMITS, parseApplicationSelectionPolicy, parseApplicationSelectionRecord, produceApplicationSelection, selectApplicationStrategy, verifyApplicationSelection, verifyApplicationSelectionPolicy } from "./src/application-selection";
+export type { ApplicationSelection, ApplicationSelectionPolicy, ApplicationSelectionRecord, ApplicationSelectionRow } from "./src/application-selection";
+export { EXPERIMENT_LIMITS, checkExperimentBinding, experimentDigest, parseApplicationExperiment, produceApplicationExperiment, verifyApplicationExperiment } from "./src/application-experiment";
+export type { ApplicationExperiment, ApplicationExperimentResult, ProduceExperimentInput } from "./src/application-experiment";

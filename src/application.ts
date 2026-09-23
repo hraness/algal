@@ -32,6 +32,17 @@ export type ApplicationCommand = {
   intents: ApplicationIntentSpec[]; evidence: Digest[]; causedBy: Digest | null;
 };
 export type ApplicationSnapshot = {digest: Digest; state: ApplicationState; transition: ApplicationTransition; revision: ApplicationRevision};
+/** One `lineage()` row: a pure projection of a committed state in
+ * genesis→head order. Derived from retained history; stores nothing. */
+export type ApplicationLineageRow = {
+  sequence: number;
+  kind: ApplicationTransition["kind"];
+  operation: Digest;
+  revision: Digest;
+  memory: Digest;
+  evidence: Digest[];
+  causedBy: Digest | null;
+};
 export type ApplicationPending = {intent: Digest; sourceState: Digest; work: WorkIntent; dispatch: ApplicationDispatch | null};
 export type ApplicationDispatchPlan = {kind: "episode"; binding: EpisodeBinding} | {kind: "delivery"; recipient: string; hostProfile: Digest};
 export type ApplicationDispatch = {
@@ -365,6 +376,17 @@ export class ApplicationService {
     return history;
   }
   async inspect(application: unknown): Promise<ApplicationSnapshot | null> { return (await this.history(application)).at(-1) ?? null; }
+  /** Deterministic lineage: the retained history projected to one row per
+   * committed state in genesis→head order. A pure read — no storage, no
+   * admission — so both runtimes emit byte-identical JSON for the same
+   * application files. */
+  async lineage(application: unknown): Promise<ApplicationLineageRow[]> {
+    return (await this.history(application)).map(item => ({
+      sequence: item.state.sequence, kind: item.transition.kind, operation: item.transition.operation,
+      revision: item.state.revision, memory: item.state.memory,
+      evidence: [...item.transition.evidence], causedBy: item.transition.causedBy,
+    }));
+  }
   private async intents(snapshot: ApplicationSnapshot): Promise<IntentRow[]> {
     const rows: IntentRow[] = [];
     for (const ref of snapshot.transition.intents) {

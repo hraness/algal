@@ -7,11 +7,12 @@
  * which accepted alternative may be installed. Every row is replayed through
  * `verifyApplicationComparison`, so a selection is never trusted on its own. */
 import {
-  applicationId, applicationList, applicationObject, applicationRef, applicationTag, getApplicationRecord,
+  applicationId, applicationJson, applicationList, applicationObject, applicationRef, applicationTag, getApplicationRecord, putApplicationRecord,
 } from "./application-contract";
 import type { AdaptationRuntime } from "./application-adaptation";
 import { verifyApplicationComparison, type ApplicationComparison } from "./application-comparison";
 import type { Digest } from "./digest";
+import { canonicalize } from "./values";
 import type { Store } from "./store";
 
 export const SELECTION_LIMITS = Object.freeze({ selections: 16 });
@@ -63,4 +64,71 @@ export async function selectApplicationStrategy(store: Store, policyRef: Digest,
   const row = policy.selections.find(item => item.environment === label);
   if (!row) throw new Error("Selection policy has no row for this environment");
   return { policy, row, comparison: comparisons.get(label)!, manifest: row.manifest };
+}
+
+/** `algal.application-selection.v1` — the retained resolution of one policy
+ * row: under this policy and environment the named comparison selected this
+ * manifest, installed by this candidate revision. Pure evidence like the
+ * policy it cites: it carries no authority and is replayed in full before any
+ * use. */
+export type ApplicationSelectionRecord = {
+  contract: "algal.application-selection.v1";
+  application: string;
+  parentState: Digest;
+  entrypoint: string;
+  environment: string;
+  /** The `algal.application-selection-policy.v1` this resolution names. */
+  policy: Digest;
+  /** The row's comparison, which must have selected `manifest`. */
+  comparison: Digest;
+  manifest: Digest;
+  /** The comparison result row's candidate revision for `manifest`. */
+  revision: Digest;
+};
+
+export function parseApplicationSelectionRecord(input: unknown): ApplicationSelectionRecord {
+  const v = applicationObject(input, ["contract", "application", "parentState", "entrypoint", "environment", "policy", "comparison", "manifest", "revision"]);
+  applicationTag(v.contract, "algal.application-selection.v1");
+  return {
+    contract: "algal.application-selection.v1", application: applicationId(v.application),
+    parentState: applicationRef(v.parentState), entrypoint: applicationId(v.entrypoint), environment: applicationId(v.environment),
+    policy: applicationRef(v.policy), comparison: applicationRef(v.comparison), manifest: applicationRef(v.manifest), revision: applicationRef(v.revision),
+  };
+}
+
+type ProduceSelectionInput = { policy: Digest; environment: string; expectedParentState: Digest };
+
+/** Recomputes the policy's row for `environment` and derives the canonical
+ * selection record: the selected manifest's accepted result row supplies the
+ * winning candidate revision. */
+async function deriveApplicationSelection(store: Store, input: ProduceSelectionInput, runtime: AdaptationRuntime): Promise<ApplicationSelectionRecord> {
+  const policyRef = applicationRef(input.policy);
+  const environment = applicationId(input.environment);
+  const parentState = applicationRef(input.expectedParentState);
+  const { policy, row, comparison } = await selectApplicationStrategy(store, policyRef, environment, parentState, runtime);
+  const result = comparison.results.find(item => item.manifest === row.manifest && item.verdict === "accepted");
+  if (!result) throw new Error("Selection policy does not resolve an accepted candidate");
+  return {
+    contract: "algal.application-selection.v1", application: policy.application, parentState: policy.parentState,
+    entrypoint: policy.entrypoint, environment, policy: policyRef, comparison: row.comparison, manifest: row.manifest, revision: result.revision,
+  };
+}
+
+/** Derives and stores the resolved selection record. */
+export async function produceApplicationSelection(store: Store, input: ProduceSelectionInput, runtime: AdaptationRuntime): Promise<{ selectionRef: Digest; selection: ApplicationSelectionRecord }> {
+  const selection = await deriveApplicationSelection(store, input, runtime);
+  return { selectionRef: await putApplicationRecord(store, selection), selection };
+}
+
+/** Replays a stored selection: the cited policy must verify against the named
+ * parent state and the recomputed record must equal the stored one
+ * byte-for-byte. */
+export async function verifyApplicationSelection(store: Store, selectionRef: Digest, expectedParentState: Digest, runtime: AdaptationRuntime): Promise<ApplicationSelectionRecord> {
+  const stored = await getApplicationRecord(store, selectionRef, parseApplicationSelectionRecord);
+  if (stored.parentState !== applicationRef(expectedParentState)) throw new Error("Selection parent state is stale");
+  const recomputed = await deriveApplicationSelection(store, { policy: stored.policy, environment: stored.environment, expectedParentState: stored.parentState }, runtime);
+  if (canonicalize(applicationJson(recomputed)) !== canonicalize(applicationJson(stored))) {
+    throw new Error("Selection is not reproducible from its evidence");
+  }
+  return stored;
 }

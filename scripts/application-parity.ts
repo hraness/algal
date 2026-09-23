@@ -31,8 +31,9 @@ import { produceApplicationDrain, verifyApplicationDrain } from "../src/applicat
 import { appendObservation } from "../src/application-observation";
 import { restoreApplicationRevision, type ApplicationRestorationPolicy } from "../src/application-restoration";
 import { produceApplicationComparison, verifyApplicationComparison } from "../src/application-comparison";
+import { produceApplicationExperiment, verifyApplicationExperiment, type ProduceExperimentInput } from "../src/application-experiment";
 import { proposeApplicationRevision, verifyApplicationProposal } from "../src/application-proposal";
-import { selectApplicationStrategy } from "../src/application-selection";
+import { produceApplicationSelection, selectApplicationStrategy, verifyApplicationSelection } from "../src/application-selection";
 import { rolloverApplicationMemory } from "../src/application-rollover";
 import { ApplicationMemoryService, parseMemorySnapshot } from "../src/application-memory";
 import { NativeMemoryQueryEngine } from "../src/application-native-memory";
@@ -918,7 +919,66 @@ async function checkGoalAndQuotaParity(): Promise<void> {
     const selectionPolicyRef = await p.put({ contract: "algal.application-selection-policy.v1", application: APP, parentState: proposalHead, entrypoint: "run", selections: [{ environment: "parity-harness", comparison: compared.comparisonRef, manifest: manifestEvalRef }] });
     const selected = await selectApplicationStrategy(p.lifecycle.store, selectionPolicyRef, "parity-harness", proposalHead, { fns: builtinRegistry() });
     equal("select", { manifest: selected.manifest, comparison: selected.comparison }, await runNative(app("select", await dynamic("generation-select", { policy: selectionPolicyRef, environment: "parity-harness", expectedState: proposalHead })), p.native));
-    const activateInput = (name: string) => ({ application: APP, operation: op(name), kind: "activate" as const, expectedHead: proposalHead, revision: winner.revision, memory: created.state.memory, intents: [], evidence: [winnerEval.evaluationRef, compared.comparisonRef, selectionPolicyRef].sort(), causedBy: null });
+    // The resolved row is retained as a bounded `algal.application-selection.v1`
+    // record, replayed byte-for-byte on both runtimes.
+    const selectionRecord = await produceApplicationSelection(p.lifecycle.store, { policy: selectionPolicyRef, environment: "parity-harness", expectedParentState: proposalHead }, { fns: builtinRegistry() });
+    equal("selection record", { selection: selectionRecord.selectionRef, revision: selectionRecord.selection.revision }, await runNative(app("select-record", await dynamic("generation-select-record", { policy: selectionPolicyRef, environment: "parity-harness", expectedParentState: proposalHead })), p.native));
+    if (selectionRecord.selection.revision !== winner.revision) throw new Error("Selection record did not name the winning candidate revision");
+    const verifiedSelection = await verifyApplicationSelection(p.lifecycle.store, selectionRecord.selectionRef, proposalHead, { fns: builtinRegistry() });
+    equal("verify selection record", { ok: true, revision: verifiedSelection.revision }, await runNative(app("verify-selection", await dynamic("generation-verify-selection", { selection: selectionRecord.selectionRef, expectedState: proposalHead })), p.native));
+    // One bounded experiment record joins the whole chain: the proposal that
+    // emitted the candidates, both evaluations, the comparison, the policy,
+    // and the retained selection — replayed in full before minting.
+    const experimentInput = {
+      application: APP, parentState: proposalHead, entrypoint: "run", environment: "parity-harness",
+      proposals: [proposed.proposal], evaluations: [winnerEval.evaluationRef, loserEval.evaluationRef].sort(),
+      comparison: compared.comparisonRef, selectionPolicy: selectionPolicyRef, selection: selectionRecord.selectionRef,
+      result: { promoted: true, revision: winner.revision },
+    };
+    const experiment = await produceApplicationExperiment(p.lifecycle.store, experimentInput, { fns: builtinRegistry() });
+    equal("experiment join", { experiment: experiment.experimentRef, result: experiment.experiment.result }, await runNative(app("experiment", await dynamic("generation-experiment", experimentInput)), p.native));
+    const verifiedExperiment = await verifyApplicationExperiment(p.lifecycle.store, experiment.experimentRef, proposalHead, { fns: builtinRegistry() });
+    equal("verify experiment", { ok: true, result: verifiedExperiment.result }, await runNative(app("verify-experiment", await dynamic("generation-verify-experiment", { experiment: experiment.experimentRef, expectedState: proposalHead })), p.native));
+    // Byte-stable reproduction: minting the identical join yields the same record.
+    const reminted = await produceApplicationExperiment(p.lifecycle.store, experimentInput, { fns: builtinRegistry() });
+    if (reminted.experimentRef !== experiment.experimentRef) throw new Error("Experiment reproduction changed its digest");
+    // Non-promoting experiments remain valid retained evidence.
+    const unpromotedInput = { ...experimentInput, result: { promoted: false, revision: winner.revision } };
+    const unpromoted = await produceApplicationExperiment(p.lifecycle.store, unpromotedInput, { fns: builtinRegistry() });
+    equal("experiment unpromoted selection", { experiment: unpromoted.experimentRef, result: unpromoted.experiment.result }, await runNative(app("experiment", await dynamic("generation-experiment-unpromoted", unpromotedInput)), p.native));
+    const evidenceOnlyInput = { ...experimentInput, proposals: [] as Digest[], evaluations: [winnerEval.evaluationRef], comparison: null, selectionPolicy: null, selection: null, result: { promoted: false, revision: null } };
+    const evidenceOnly = await produceApplicationExperiment(p.lifecycle.store, evidenceOnlyInput, { fns: builtinRegistry() });
+    equal("experiment evidence-only", { experiment: evidenceOnly.experimentRef, result: evidenceOnly.experiment.result }, await runNative(app("experiment", await dynamic("generation-experiment-evidence-only", evidenceOnlyInput)), p.native));
+    // Join rejections must agree on both runtimes: cross-parent and
+    // cross-environment joins, evaluation sets that outgrow the comparison,
+    // and selections outside the cited proposals all refuse identically.
+    for (const [name, bad] of [
+      ["cross-parent", { ...experimentInput, parentState: head }],
+      ["cross-environment", { ...experimentInput, environment: "other-env" }],
+      ["evaluations-outside-comparison", { ...experimentInput, evaluations: [winnerEval.evaluationRef] }],
+      ["selection-outside-proposals", { ...experimentInput, proposals: [] as Digest[] }],
+      ["unselected-result", { ...experimentInput, result: { promoted: false, revision: loser.revision } }],
+    ] as [string, ProduceExperimentInput][]) {
+      const refused = await produceApplicationExperiment(p.lifecycle.store, bad, { fns: builtinRegistry() }).then(() => false, () => true);
+      const attempt = await runNativeAttempt(app("experiment", await dynamic(`experiment-${name}`, bad)), p.native);
+      if (!refused || attempt.code !== 2) throw new Error(`Experiment rejection differs: ${name}`);
+      checked++;
+    }
+    // Closed-record rejections: unknown keys and malformed stored joins.
+    for (const [name, body] of Object.entries({
+      "unknown-key": { ...experiment.experiment, extra: true },
+      "selection-without-policy": { ...experiment.experiment, selectionPolicy: null },
+    })) {
+      const recordRef = await p.put(body as JsonValue);
+      const refused = await verifyApplicationExperiment(p.lifecycle.store, recordRef, proposalHead, { fns: builtinRegistry() }).then(() => false, () => true);
+      const attempt = await runNativeAttempt(app("verify-experiment", await dynamic(`experiment-verify-${name}`, { experiment: recordRef, expectedState: proposalHead })), p.native);
+      if (!refused || attempt.code !== 2) throw new Error(`Experiment record rejection differs: ${name}`);
+      checked++;
+    }
+    // The activation cites the experiment alongside the ordinary evidence;
+    // the host replays the whole joined chain and binds result.revision to
+    // the committed revision.
+    const activateInput = (name: string) => ({ application: APP, operation: op(name), kind: "activate" as const, expectedHead: proposalHead, revision: winner.revision, memory: created.state.memory, intents: [], evidence: [winnerEval.evaluationRef, compared.comparisonRef, selectionPolicyRef, experiment.experimentRef].sort(), causedBy: null });
     const deniedNoEnv = await p.lifecycle.commit(activateInput("selection-no-env")).then(() => false, () => true);
     const deniedNoEnvNative = await runNativeAttempt(app("commit", await dynamic("selection-no-env", activateInput("selection-no-env"))), p.native);
     if (!deniedNoEnv || deniedNoEnvNative.code !== 2) throw new Error("Selection policy on a host without an environment was not denied");
@@ -932,6 +992,37 @@ async function checkGoalAndQuotaParity(): Promise<void> {
     const activated = await envLifecycle.commit(activateInput("selection-activate"));
     equal("selection activate", shape(activated), await runNative(app("--selection-environment", "parity-harness", "commit", await dynamic("selection-activate", activateInput("selection-activate"))), p.native));
     if (activated.state.revision !== winner.revision) throw new Error("Selection activation did not install the selected candidate");
+    // Deterministic lineage: the retained history projects to one row per
+    // committed state in genesis→head order — identical bytes on both
+    // runtimes for the same application files.
+    equal("lineage", await envLifecycle.lineage(APP), await runNative(app("lineage", APP), p.native));
+  }
+  // Structured-facts-only ablation: identical applicability is derived over
+  // two memory chains that differ by exactly one structured fact — the
+  // retained observation claim — so the derivation flips between `unknown`
+  // and `supported` with no inference anywhere. The pair is deterministic
+  // ablation evidence: it shows the join distinguishes fact presence; it
+  // claims nothing about fitness or efficacy.
+  {
+    const p = await pair("structured-ablation");
+    const memory = new ApplicationMemoryService({ store: p.lifecycle.store, engine, admission: p.admission });
+    const created = await create(p, revisionRef, "ablation-create");
+    const ablated = await memory.query(created.digest, queryRef);
+    equal("ablation unknown derivation", { derivation: ablated.ref, status: ablated.derivation.status }, await runNative(app("query", created.digest, queryRef), p.native));
+    if (ablated.derivation.status !== "unknown" || ablated.derivation.sourceRefs.length !== 0) {
+      throw new Error("Ablated arm derived support from a fact it does not have");
+    }
+    const publishInput = { application: APP, operation: op("ablation-publish"), expectedHead: created.digest, expectedMemory: created.state.memory, observation: observationInput };
+    const appended = await appendObservation(p.lifecycle, memory, publishInput);
+    equal("ablation publish", { snapshot: appended.snapshot.digest, memory: appended.memory, observation: appended.observation }, await runNative(app("publish", await dynamic("ablation-publish", publishInput)), p.native));
+    const control = await memory.query(appended.snapshot.digest, queryRef);
+    equal("ablation supported derivation", { derivation: control.ref, status: control.derivation.status }, await runNative(app("query", appended.snapshot.digest, queryRef), p.native));
+    if (control.derivation.status !== "supported" || !control.derivation.sourceRefs.includes(appended.observation)) {
+      throw new Error("Control arm did not derive support from the added structured fact");
+    }
+    // Both derivations are retained records: the only difference between the
+    // arms is the presence of the observation claim in the fact set.
+    equal("ablation lineage", await p.lifecycle.lineage(APP), await runNative(app("lineage", APP), p.native));
   }
   // Active selection rollover preserves the application, history and native
   // applicability while both runtimes reject forgotten archives/resurrection.

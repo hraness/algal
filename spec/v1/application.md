@@ -628,3 +628,78 @@ equal the selected manifest — a policy can only narrow which accepted
 alternative is installed, never substitute for the reproduced accepted
 evaluation coverage checks. The native CLI exposes `application select
 input.json` with `{policy, environment, expectedState}`.
+
+A resolved row can also be retained as an `algal.application-selection.v1`
+record naming `{contract, application, parentState, entrypoint, environment,
+policy, comparison, manifest, revision}` — closed like every application
+record. `produceApplicationSelection(store, {policy, environment,
+expectedParentState}, runtime)` replays the policy's row for `environment`,
+takes the selected manifest's `accepted` comparison result, and stores the
+candidate `revision` that result measured. `verifyApplicationSelection(store,
+ref, expectedParentState, runtime)` re-resolves the row and requires the
+recomputed record to equal the stored one byte-for-byte. The record is pure
+evidence like the policy it cites: it grants no authority and is replayed in
+full before any use. The native CLI exposes `application select-record
+input.json` with `{policy, environment, expectedParentState}` and
+`application verify-selection input.json` with `{selection, expectedState}`.
+
+## Joining promotion evidence
+
+An `algal.application-experiment.v1` record joins the whole promotion
+evidence chain — proposals, evaluations, an optional comparison, an optional
+selection policy, and an optional retained selection — for one application,
+one parent state, one entrypoint, and one environment. The closed record
+names `{contract, application, parentState, entrypoint, environment,
+proposals, evaluations, comparison, selectionPolicy, selection, result}`:
+`proposals` and `evaluations` are sorted-unique reference lists bounded at 8
+each with at least one record total; `comparison`, `selectionPolicy`, and
+`selection` are nullable references; `result` is `{promoted, revision}` where
+`promoted` requires a non-null `revision`, and a `selection` requires a
+`selectionPolicy`.
+
+`produceApplicationExperiment(store, input, runtime)` replays every cited
+record against the exact parent state before minting — nothing is trusted
+from the citation list alone. Each proposal must name this application and
+target entrypoint, target this head's incumbent revision, and be anchored to
+the parent state or — when the `propose` transition committed first — to its
+immediate predecessor; the frozen proposal request must carry the experiment
+environment. Each evaluation must name this parent state, entrypoint, and
+environment; all evaluation requests share one frozen `cases`/`scorer`/
+`policy` set; and when proposals are cited, every measured candidate must be
+one a cited proposal emitted. A cited comparison must bind the same fields
+and join exactly the cited evaluations — nothing more, nothing less. A cited
+selection policy must serve the experiment environment through exactly the
+cited comparison. A cited selection must resolve under the cited policy and
+comparison and must name a candidate the cited proposals emitted.
+`result.revision` names the candidate the evidence selects — the selected
+row's revision when a comparison or selection is cited, otherwise an
+accepted candidate — and `result.promoted` is the producer's claim that an
+activation actually committed it.
+
+Minting an experiment never performs an activation. An experiment that
+selected nothing, or selected a candidate that was not promoted, remains
+valid retained evidence. `verifyApplicationExperiment(store, ref,
+expectedParentState, runtime)` re-verifies the entire chain and requires the
+recomputed record to equal the stored one byte-for-byte. When the default
+policy host is offered an experiment as `activate`/`migrate`/`restore`
+evidence it replays it the same way against the commit's parent state and
+additionally requires the record to name the committing application and
+that parent state, the experiment's entrypoint to exist in the committed
+revision, and `result.revision` to be exactly the committed revision —
+an experiment that selected nothing, or another candidate, cannot attach to
+a transition installing a different strategy. Experiment evidence is
+supplementary: it never substitutes for the reproduced accepted-evaluation
+coverage checks, and it cannot attach to a `propose` transition, which
+still requires exactly one proposal record. The native CLI exposes
+`application experiment input.json` with the join fields and `application
+verify-experiment input.json` with `{experiment, expectedState}`.
+
+## Deterministic lineage
+
+`ApplicationService.lineage(application)` — and `algal application lineage
+<name>` on both CLIs — projects validated retained history to one row per
+committed state in genesis→head order: `{sequence, kind, operation, revision,
+memory, evidence, causedBy}`. The projection is a pure read over the same
+bounded `history()` pass — it stores nothing, acquires no admission
+authority, and emits `[]` for an absent application — so both runtimes emit
+byte-identical JSON for the same application files.
