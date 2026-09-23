@@ -1,0 +1,10 @@
+
+  For people who build
+
+  Software that can grow with you.
+
+  Build inspectable applications that can    Explore ALGAL → /docs/
+  change their behavior while keeping their
+  history. Start with one living component.
+
+  A living preview

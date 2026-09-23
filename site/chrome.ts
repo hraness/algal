@@ -4,7 +4,7 @@ import { OG_IMAGE_ALT, SITE_DESCRIPTION, SITE_TAGLINE } from "./copy";
 import { siteIcon } from "./icons";
 import { escapeHtml } from "./markdown";
 
-export type SitePageId = "home" | "tour" | "use-cases" | "docs" | "spec" | "blog" | "compare";
+export type SitePageId = "home" | "tour" | "use-cases" | "living" | "docs" | "spec" | "blog" | "compare";
 
 export interface SitePageMeta {
   page: SitePageId;
@@ -62,6 +62,7 @@ export function pageDocument(meta: SitePageMeta, main: string): string {
 <link rel="stylesheet" href="/styles.css">
 <script src="/client.js" defer></script>
 <script src="/viewer.js" defer></script>
+${meta.page === "living" ? '<link rel="stylesheet" href="/living.css">\n<script src="/living.js" type="module"></script>' : ""}
 </head>
 <body class="algal-site">
 <a class="skip-link" href="#main">Skip to content</a>
@@ -94,7 +95,7 @@ export function pageDocument(meta: SitePageMeta, main: string): string {
 
 ${main}
 
-<footer class="site-footer"><a class="wordmark" href="/" aria-label="ALGAL home"><img src="/favicon.svg" width="24" height="24" alt="">algal</a><p>${SITE_TAGLINE}</p><div><a href="${REPO}">Source</a><a href="/docs/">Documentation</a><a href="/blog/">Blog</a><a href="/compare/">Compare</a><a href="/docs/spec/organism/">Spec</a><a href="/llms.txt">llms.txt</a><span>MIT · Early, working software · {{BUILD_STATS}}</span></div></footer>
+<footer class="site-footer"><a class="wordmark" href="/" aria-label="ALGAL home"><img src="/favicon.svg" width="24" height="24" alt="">algal</a><p>${SITE_TAGLINE}</p><div><a href="${REPO}">Source</a><a href="/docs/">Documentation</a><a href="/living/">Living software</a><a href="/blog/">Blog</a><a href="/compare/">Compare</a><a href="/docs/spec/organism/">Spec</a><a href="/llms.txt">llms.txt</a><span>MIT · Early, working software · {{BUILD_STATS}}</span></div></footer>
 
 </body>
 </html>

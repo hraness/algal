@@ -1,0 +1,37 @@
+{
+  "kind": "stack",
+  "id": "surface",
+  "layout": "split",
+  "children": [
+    {
+      "kind": "text",
+      "id": "audience",
+      "role": "eyebrow",
+      "text": "For people who build"
+    },
+    {
+      "kind": "text",
+      "id": "headline",
+      "role": "heading",
+      "text": "Software that can grow with you."
+    },
+    {
+      "kind": "text",
+      "id": "body",
+      "role": "body",
+      "text": "Build inspectable applications that can change their behavior while keeping their history. Start with one living component."
+    },
+    {
+      "kind": "link",
+      "id": "cta",
+      "label": "Explore ALGAL",
+      "href": "/docs/"
+    },
+    {
+      "kind": "text",
+      "id": "release",
+      "role": "status",
+      "text": "A living preview"
+    }
+  ]
+}

@@ -64,13 +64,14 @@ function filesystem(): FsLike {
     import.meta as { require?: (id: string) => FsLike }
   ).require;
   if (require_ !== undefined) return require_("node:fs");
-  const getBuiltinModule = (
+  const process_ = (
     globalThis as {
       process?: { getBuiltinModule?: (id: string) => FsLike };
     }
-  ).process?.getBuiltinModule;
+  ).process;
+  const getBuiltinModule = process_?.getBuiltinModule;
   if (getBuiltinModule !== undefined) {
-    return getBuiltinModule.call(globalThis.process, "node:fs");
+    return getBuiltinModule.call(process_, "node:fs");
   }
   throw new AlgalError(
     "EXPR_FAILED",

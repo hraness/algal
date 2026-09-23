@@ -6,7 +6,7 @@
 export const SITE_TAGLINE = "The language for living programs.";
 
 /** The home page description, JSON-LD description, and social card text. */
-export const SITE_DESCRIPTION = "ALGAL is a programming language and VM for AI agent programs that wait for approval and propose new programs. Every run leaves a receipt that replays offline.";
+export const SITE_DESCRIPTION = "ALGAL is a programming language and VM for AI agent programs that can wait for approval and propose new ones. Every run leaves a receipt that replays offline.";
 
 /** Every page shares one social image, so every page shares its alt text. */
 export const OG_IMAGE_ALT = "ALGAL card with the line “The language for living programs.”, a one-line description, and the algal.computer address";

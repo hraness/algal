@@ -5,7 +5,7 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    ignores: ["site/dist/**", "dist/**", "node_modules/**", ".algal/**"],
+    ignores: ["site/dist/**", "dist/**", "**/target/**", "examples/malleable-site/renderers/dist/**", "node_modules/**", ".algal/**"],
   },
   {
     rules: {

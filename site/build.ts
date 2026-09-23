@@ -24,6 +24,9 @@ import { buildSiteStyles } from "./assets";
 import { pageDocument, type SitePageMeta } from "./chrome";
 import { ADOPTION_BOUNDARY, SITE_DESCRIPTION, SITE_TAGLINE } from "./copy";
 import { renderMarkdown, type LinkRewriter, type RenderedDoc } from "./markdown";
+import { buildSurfaceFixture } from "../examples/malleable-site/host";
+import { parseProposal } from "../examples/malleable-site/surface";
+import { renderSurfaceHtml } from "./living-render";
 
 const SITE = dirname(fileURLToPath(import.meta.url));
 const ROOT = dirname(SITE);
@@ -482,7 +485,22 @@ const replacements: Record<string, string> = {
   SWARM_ITEMS: String(swarm.maxItems),
 };
 
+// One executable source drives the static fallback, portable evidence and
+// browser expression preview. This is not a full browser application host.
+const living = await buildSurfaceFixture();
+verifiedRuns += 1;
+replacements.LIVING_SURFACE = renderSurfaceHtml(living.view);
+
 const pages: { file: string; out: string; meta: SitePageMeta }[] = [
+  {
+    file: "pages/living.html", out: "living/index.html",
+    meta: {
+      page: "living", path: "/living/",
+      title: "Software you can reshape · ALGAL",
+      description: "Edit a living marketing component, explore its signals, and preview a new revision. The same ALGAL expression program drives its content in the browser and native runtime.",
+      ogTitle: "Software you can reshape · ALGAL",
+    },
+  },
   {
     file: "pages/home.html", out: "index.html",
     meta: {
@@ -522,7 +540,7 @@ const DOC_GROUPS: { title: string; pages: string[] }[] = [
   { title: "Start here", pages: ["native-release", "native-workbench", "source-language", "vm"] },
   { title: "Concepts", pages: ["why-unique", "algal-design", "design", "agent-loop-and-organism", "programmable-applications", "executors", "diagrams", "repair"] },
   { title: "Life and selection", pages: ["habitats", "civilization"] },
-  { title: "Applications and workflows", pages: ["use-cases", "when-algal-wins", "adaptive-inventory", "agent-tool", "coding-harness", "coding-operations", "pr-shepherd"] },
+  { title: "Applications and workflows", pages: ["use-cases", "when-algal-wins", "malleable-site", "adaptive-inventory", "agent-tool", "coding-harness", "coding-operations", "pr-shepherd"] },
 ];
 const DOC_SLUGS = DOC_GROUPS.flatMap(group => group.pages);
 const SPEC_SLUGS = ["organism", "expr", "foundry", "search", "bench", "mailbox", "process", "process-evidence", "process-journal", "application", "coding-job", "coding-job-v2", "coding-operation"];
@@ -578,6 +596,19 @@ await rm(DIST, { recursive: true, force: true });
 await mkdir(join(DIST, "diagrams"), { recursive: true });
 await mkdir(join(DIST, "examples"), { recursive: true });
 await mkdir(join(DIST, "receipts"), { recursive: true });
+await mkdir(join(DIST, "living"), { recursive: true });
+await cp(join(SITE, "living.css"), join(DIST, "living.css"));
+await cp(join(ROOT, "src/algal_expr.wasm"), join(DIST, "living/algal_expr.wasm"));
+for (const [name, value] of Object.entries({ initial: living.revision, signals: living.signals, view: living.view, manifest: living.manifest, bundle: living.bundle, receipt: living.receipt })) {
+  await writeFile(join(DIST, "living", `${name}.json`), `${JSON.stringify(value, null, 2)}\n`);
+}
+const recordedProposal = Bun.file(join(ROOT, "examples/malleable-site/model-proposal.json"));
+if (await recordedProposal.exists()) {
+  const proposal = parseProposal(await recordedProposal.json());
+  await writeFile(join(DIST, "living/model-proposal.json"), `${JSON.stringify(proposal, null, 2)}\n`);
+}
+const modelEvidencePath = join(ROOT, "examples/malleable-site/model-evidence.json");
+if (await Bun.file(modelEvidencePath).exists()) await cp(modelEvidencePath, join(DIST, "living/model-evidence.json"));
 for (const f of ["robots.txt", "og.png", "favicon.svg", "algal-mark.svg"]) {
   await cp(join(SITE, f), join(DIST, f));
 }
@@ -593,7 +624,12 @@ const browserScripts = await Bun.build({
   target: "browser", format: "iife", minify: true,
   naming: { entry: "[name].js", asset: "assets/[name]-[hash].[ext]" },
 });
-if (!styles.success || !browserScripts.success) throw new AggregateError([...styles.logs, ...browserScripts.logs], "Site asset build failed");
+const surfaceModule = await Bun.build({
+  entrypoints: [join(SITE, "living.ts")], outdir: DIST,
+  target: "browser", format: "esm", minify: true,
+  naming: { entry: "[name].js" },
+});
+if (!styles.success || !browserScripts.success || !surfaceModule.success) throw new AggregateError([...styles.logs, ...browserScripts.logs, ...surfaceModule.logs], "Site asset build failed");
 await writeFile(join(DIST, "icons.svg"), renderIconSprite());
 await mkdir(join(DIST, "licenses"), { recursive: true });
 await cp(join(SITE, "licenses/hugeicons-MIT.txt"), join(DIST, "licenses/hugeicons-MIT.txt"));
@@ -824,7 +860,7 @@ await emitMarkdownSection({
 });
 
 // Generated sitemap covers every emitted page.
-const sitemapUrls = ["/", "/tour/", "/use-cases/", "/docs/", ...DOC_SLUGS.map(slug => `/docs/${slug}/`), ...SPEC_SLUGS.map(slug => `/docs/spec/${slug}/`), ...contentSectionUrls];
+const sitemapUrls = ["/", "/tour/", "/use-cases/", "/living/", "/docs/", ...DOC_SLUGS.map(slug => `/docs/${slug}/`), ...SPEC_SLUGS.map(slug => `/docs/spec/${slug}/`), ...contentSectionUrls];
 await writeFile(join(DIST, "sitemap.xml"), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemapUrls.map(url => `  <url><loc>https://algal.computer${url}</loc></url>`).join("\n")}\n</urlset>\n`);
 
 console.log(`site built → ${DIST} (${manifests.size + 1} structural diagrams, ${childViews.length + 1} focused views, ${verifiedRuns} replay-checked executions, 1 checked authoring error, ${pages.length + DOC_SLUGS.length + SPEC_SLUGS.length + contentSectionUrls.length + 1} pages)`);
