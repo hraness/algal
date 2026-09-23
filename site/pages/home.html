@@ -13,9 +13,14 @@
           <a class="hero-secondary" href="/docs/spec/organism/">Read the spec <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a>
         </div>
         <p class="hero-meta"><code>algal.organism.v1</code> · Rust kernel + TypeScript reference · MIT</p>
-        {{HERO_CHOOSER}}
       </div>
-      {{HERO_STAGE}}
+      <figure class="organism-live hraness-material-panel" aria-label="A recorded run of the reply organism">
+        <figcaption class="organism-live-bar"><span class="file-label"><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#play"></use></svg>An organism, running · reply.algal</span><span class="organism-live-links"><a href="/examples/reply.algal" download>Source</a><a href="/receipts/reply.receipt.json" download>Receipt</a></span></figcaption>
+        <div class="diagram-frame" data-diagram-view="/diagrams/reply-run.view.json" data-diagram-autoplay>
+          <img src="/diagrams/reply-run.svg" alt="Generated graph of the reply organism: an email input flows into a typed decision, a pure check and match, then generation — overlaid with the states of one recorded run." width="480" height="760" fetchpriority="high">
+        </div>
+        <p class="organism-live-foot">One recorded run · receipt <code>{{REPLY_RECEIPT_SHORT}}</code> · replay follows the receipt's own event order</p>
+      </figure>
     </div>
     <p class="under-note">Scripted executor answers drive the recorded demo; the program, receipt, and replay are real and verify offline. Nothing executes in your browser. macOS Apple silicon and Linux x86_64 prereleases.</p>
   </section>

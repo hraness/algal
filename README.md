@@ -611,7 +611,8 @@ The native CLI also exposes the durable application lifecycle from
 `query`, `create`, `commit`, `inspect`, `pending`, `dispatch`, `reconcile`,
 `schedule`, `execute`, `publish`, `rollover-memory`, `restore`, `evaluate`,
 `verify-evaluation`, `admit-activation`, `compatible`, `compare`,
-`verify-comparison`, `migrate-memory`, `view`, and `report`. Host authority
+`verify-comparison`, `propose`, `verify-proposal`, `select`, `migrate-memory`,
+`view`, and `report`. Host authority
 comes from a declarative `algal.application-host.v1` policy record passed as
 `--policy`. `algal application --help` describes each subcommand. The
 executable example is [`scripts/application-parity.ts`](scripts/application-parity.ts),
