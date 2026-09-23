@@ -1,0 +1,21 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 0 and seed 1 with 1 worker on 18 cores with 245MB heap and 64MB offheap memory [pid: 67682] (Mac OS X 26.5.1 aarch64, Eclipse Adoptium 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /private/tmp/algal-verification-tools/results/smoke-01/tlc-good/PublicationSmoke.tla
+Parsing file /private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/TLC.tla
+Parsing file /private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/Naturals.tla
+Parsing file /private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/Sequences.tla
+Parsing file /private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/FiniteSets.tla
+Semantic processing of module Naturals
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module PublicationSmoke
+Starting... (2026-09-23 12:29:03)
+Implied-temporal checking--satisfiability problem has 1 branches.
+Error: TLC threw an unexpected exception.
+This was probably caused by an error in the spec or model.
+See the User Output or TLC Console for clues to what happened.
+The exception was a java.util.concurrent.ExecutionException
+: java.rmi.server.ExportException: Listen failed on port: 0; nested exception is: 
+	java.net.SocketException: Operation not permitted
+Finished in 00s at (2026-09-23 12:29:03)

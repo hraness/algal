@@ -1,0 +1,76 @@
+import { putApplicationRecord } from "/Users/bg/Documents/algal/src/application-contract";
+import { parseApplicationEvaluationRequest, evaluateApplicationRevision, verifyApplicationEvaluation, admitApplicationActivation, checkApplicationCompatibility } from "/Users/bg/Documents/algal/src/application-adaptation";
+import { parseOrganismManifest } from "/Users/bg/Documents/algal/src/contract";
+import { digestCanonical, type Digest } from "/Users/bg/Documents/algal/src/digest";
+import { builtinRegistry } from "/Users/bg/Documents/algal/src/registry";
+import { MemoryStore } from "/Users/bg/Documents/algal/src/store";
+
+const constant = (answer: string, key: string) => parseOrganismManifest({
+  contract: "algal.organism.v1", key: `organism:${key}`, name: key,
+  interface: { inputs: { q: { cell: "src", port: "value" } }, outputs: { answer: { cell: "out", port: "value" } } },
+  cells: [
+    { id: "src", kind: "input", outputs: { value: "json" } },
+    { id: "out", kind: "const", outputs: { value: { type: "json", value: answer } } },
+  ], edges: [],
+});
+const echo = parseOrganismManifest({
+  contract: "algal.organism.v1", key: "organism:echo-adaptation", name: "echo adaptation",
+  interface: { inputs: { q: { cell: "src", port: "value" } }, outputs: { answer: { cell: "out", port: "value" } } },
+  cells: [{ id: "src", kind: "input", outputs: { value: "json" } }, { id: "out", kind: "fn", fn: "echo.v1" }],
+  edges: [{ from: { cell: "src", port: "value" }, to: { cell: "out", port: "value" } }],
+});
+
+async function fixture(candidate = echo, capabilities: string[] = []) {
+  const store = new MemoryStore();
+  const schema = await store.putValue({ contract: "algal.application-memory-schema.v1", relations: [{ name: "available", arity: 2 }] });
+  const program = await store.putValue({ contract: "algal.query.v1", rules: [], query: { relation: "available", terms: [] } });
+  const query = await store.putValue({ contract: "algal.application-memory-query.v1", id: "available-query", schema, program, procedures: [], polarityColumn: 1, conflict: "single-value" });
+  const queries = await store.putValue({ contract: "algal.application-memory-queries.v1", queries: [query] });
+  const view = await store.putValue({ contract: "algal.application-view.v1", widgets: [] });
+  const profile = await store.putValue({ contract: "algal.application-runtime-profile.v1", effects: [] });
+  const policy = await store.putValue({ contract: "algal.application-evaluation-policy.v1", maxCases: 3, maxWork: 1_000_000, maxModelCalls: 0, requireHoldoutPass: true, strictValidationImprovement: true });
+  const incumbentManifest = await store.putManifest(constant("a", "incumbent-adaptation"));
+  const candidateManifest = await store.putManifest(candidate);
+  const revisionBody = (parent: Digest | null, manifest: Digest, caps: string[] = []) => ({ contract: "algal.application-revision.v1", application: "workspace", parent, schema, queries, views: view, runtimeProfile: profile, evaluationPolicy: policy, capabilityRequirements: caps, entrypoints: [{ name: "discover", manifest, applicability: query, maxGenerations: 4, capabilities: [], queries: [query] }] });
+  const incumbentRevision = await putApplicationRecord(store, revisionBody(null, incumbentManifest));
+  const memory = await store.putValue({ contract: "algal.application-memory.v1", application: "workspace", schema, previous: null, scope: schema, observations: [], hypotheses: [], withdrawn: [] });
+  const transition = await store.putValue({ contract: "algal.application-transition.v1", application: "workspace", operation: schema, request: schema, kind: "create", previous: null, revision: incumbentRevision, memory, intents: [], evidence: [], causedBy: null });
+  const state = await putApplicationRecord(store, { contract: "algal.application-state.v1", application: "workspace", sequence: 0, epoch: 0, revision: incumbentRevision, memory, previous: null, transition });
+  const candidateRevision = await putApplicationRecord(store, revisionBody(incumbentRevision, candidateManifest, capabilities));
+  const cases = await store.putValue({ contract: "algal.application-evaluation-cases.v1", cases: [
+    { id: "train-a", split: "train", args: { q: "a" }, expect: { answer: "a" } },
+    { id: "validation-b", split: "validation", args: { q: "b" }, expect: { answer: "b" } },
+    { id: "validation-d", split: "validation", args: { q: "d" }, expect: { answer: "d" } },
+    { id: "holdout-c", split: "holdout", args: { q: "c" }, expect: { answer: "c" } },
+  ] });
+  const scorer = await store.putValue({ contract: "algal.application-evaluation-scorer.v1", scorer: null });
+  const request = { contract: "algal.application-evaluation-request.v1", parentState: state, candidateRevision, entrypoint: "discover", cases, scorer, policy };
+  return { store, state, candidateRevision, request, cases, policy, scorer, incumbentRevision, candidateManifest, schema };
+}
+
+
+const { runFoundry } = await import("/Users/bg/Documents/algal/src/foundry.ts");
+const f = await fixture();
+const runtime = { fns: builtinRegistry(), executors: [] };
+let evaluatorError = "";
+try { await evaluateApplicationRevision(f.store, f.request, runtime); }
+catch (error) { evaluatorError = String(error); }
+const old = await f.store.getValue(f.incumbentRevision) as any;
+const cases = await f.store.getValue(f.cases) as any;
+const report = await runFoundry({ candidates: [
+  (await f.store.getManifest(old.entrypoints[0].manifest))!,
+  (await f.store.getManifest(f.candidateManifest))!,
+], cases: cases.cases, fns: runtime.fns, store: f.store, executors: [] });
+const compatibility = await checkApplicationCompatibility(f.store, f.incumbentRevision, f.candidateRevision);
+const evidence = {
+  contract: "algal.application-evaluation.v1", request: await putApplicationRecord(f.store, f.request),
+  parentState: f.state, candidateRevision: f.candidateRevision, cases: f.cases,
+  scorer: f.scorer, policy: f.policy,
+  foundryReport: await putApplicationRecord(f.store, report as any),
+  compatibility: await putApplicationRecord(f.store, compatibility as any),
+  verdict: {status: "accepted", selectedManifest: f.candidateManifest},
+};
+const evidenceRef = await putApplicationRecord(f.store, evidence);
+const verified = await verifyApplicationEvaluation(f.store, evidenceRef, f.state, runtime);
+const admitted = await admitApplicationActivation(f.store, {evaluation: evidenceRef, expectedState: f.state, revision: f.candidateRevision}, runtime);
+console.log(JSON.stringify({policyMaxCases: 3, actualCases: cases.cases.length, evaluatorError, verifierVerdict: verified.verdict.status, activationAdmitted: admitted.revision === f.candidateRevision}));

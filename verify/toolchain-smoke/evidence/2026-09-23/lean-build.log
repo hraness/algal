@@ -1,0 +1,7 @@
+ℹ [2/3] Built Smoke (2.7s)
+info: Smoke.lean:21:0: 'ToolchainSmoke.admittedSuccessorBound' does not depend on any axioms
+info: Smoke.lean:22:0: 'ToolchainSmoke.fullCapacityRejects' does not depend on any axioms
+info: Smoke.lean:23:0: 'ToolchainSmoke.initialWitness' does not depend on any axioms
+Build completed successfully (3 jobs).
+info: algal_toolchain_smoke: no previous manifest, creating one from scratch
+info: toolchain not updated; already up-to-date
