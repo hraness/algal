@@ -9,7 +9,13 @@ interface DiagramViewDocument {
   contract: string;
   diagram: ProgramDiagram;
   layout: DiagramLayout;
-  run?: { receipt: string; outcome: string; steps: { event: string; node: string }[] };
+  run?: {
+    receipt: string;
+    outcome: string;
+    steps: { event: string; node: string }[];
+    cells?: Record<string, { status?: string; work?: number; args?: unknown; outputs?: unknown; failure?: { code: string; message: string } }>;
+    effects?: Record<string, { executor?: string; output?: unknown; error?: { code: string; message: string } }[]>;
+  };
 }
 
 const NS = "http://www.w3.org/2000/svg";
@@ -30,6 +36,23 @@ function text(parent: SVGElement, x: number, y: number, content: string, attrs: 
 
 function escapeText(value: string): string {
   return value.replace(/[<>&"']/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;" })[c]!);
+}
+
+// Recorded args/outputs render as syntax-tinted JSON — real run values, not
+// type shapes. Long values clip rather than dominate the card.
+function highlightJson(value: unknown): string {
+  const serialized = JSON.stringify(value, null, 2) ?? "null";
+  const source = serialized.length > 2400 ? `${serialized.slice(0, 2400)}\n…` : serialized;
+  const re = /("(?:\\.|[^"\\])*")(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g;
+  let html = "";
+  let last = 0;
+  for (const match of source.matchAll(re)) {
+    html += escapeText(source.slice(last, match.index));
+    const cls = match[1] !== undefined ? (match[2] !== undefined ? "tj-key" : "tj-str") : match[3] !== undefined ? "tj-lit" : "tj-num";
+    html += `<span class="${cls}">${escapeText(match[0])}</span>`;
+    last = match.index + match[0].length;
+  }
+  return html + escapeText(source.slice(last));
 }
 
 async function initDiagramFrame(frame: HTMLElement): Promise<void> {
@@ -119,19 +142,37 @@ async function initDiagramFrame(frame: HTMLElement): Promise<void> {
     const node = nodesById.get(nodeId);
     const box = layoutById.get(nodeId);
     if (!node || !box) return "";
-    const rows: string[] = [];
-    const field = (label: string, value: string) => rows.push(`<div class="dg-field"><dt>${escapeText(label)}</dt><dd>${escapeText(value)}</dd></div>`);
+    const head: string[] = [];
+    const tail: string[] = [];
+    const push = (rows: string[]) => (label: string, value: string) =>
+      rows.push(`<div class="dg-field"><dt>${escapeText(label)}</dt><dd>${escapeText(value)}</dd></div>`);
+    const field = push(head);
+    const fieldTail = push(tail);
     field("cell", node.id);
     field("kind", node.label);
     if (node.status) field("recorded", node.status);
-    for (const line of box.lines) field("detail", line);
-    for (const port of node.inputs) field("in", `${port.name}: ${typeof port.type === "string" ? port.type : JSON.stringify(port.type)}`);
-    for (const port of node.outputs) field("out", `${port.name}: ${typeof port.type === "string" ? port.type : JSON.stringify(port.type)}`);
-    if (node.source) {
-      field("source", `${node.source.title} — ${node.source.summary}`);
-      if (node.source.span) field("at", `${node.source.source}:${node.source.span.start.line}:${node.source.span.start.col}`);
+    // Recorded evidence leads: the values this cell actually received and
+    // produced in the run, ahead of the static contract.
+    const recorded = run?.cells?.[nodeId];
+    if (recorded?.work !== undefined) field("work", `${recorded.work} units`);
+    if (recorded?.failure) field("failure", `${recorded.failure.code}: ${recorded.failure.message}`);
+    let extras = "";
+    const jsonField = (label: string, value: unknown) => {
+      extras += `<div class="dg-json-label">${escapeText(label)}</div><pre class="dg-json">${highlightJson(value)}</pre>`;
+    };
+    if (recorded?.args !== undefined) jsonField("args", recorded.args);
+    if (recorded?.outputs !== undefined) jsonField("outputs", recorded.outputs);
+    for (const effect of run?.effects?.[nodeId] ?? []) {
+      jsonField(`recorded effect · ${effect.executor ?? "executor"}`, effect.output ?? effect.error);
     }
-    return `<dl class="dg-fields">${rows.join("")}</dl>`;
+    for (const line of box.lines) fieldTail("detail", line);
+    for (const port of node.inputs) fieldTail("in", `${port.name}: ${typeof port.type === "string" ? port.type : JSON.stringify(port.type)}`);
+    for (const port of node.outputs) fieldTail("out", `${port.name}: ${typeof port.type === "string" ? port.type : JSON.stringify(port.type)}`);
+    if (node.source) {
+      fieldTail("source", `${node.source.title} — ${node.source.summary}`);
+      if (node.source.span) fieldTail("at", `line ${node.source.span.start.line}, column ${node.source.span.start.column}`);
+    }
+    return `<dl class="dg-fields">${head.join("")}</dl>${extras}${tail.length ? `<dl class="dg-fields dg-fields-contract">${tail.join("")}</dl>` : ""}`;
   };
 
   const showCard = (nodeId: string) => {
@@ -191,10 +232,19 @@ async function initDiagramFrame(frame: HTMLElement): Promise<void> {
       if (playing || !run) return;
       playing = true;
       rows.forEach(row => row.classList.remove("is-live"));
+      const wrap = list.parentElement;
       for (const [index] of run.steps.entries()) {
         const row = rows[index]!;
         row.classList.add("is-live");
-        row.scrollIntoView({ block: "nearest", behavior: REDUCED ? "auto" : "smooth" });
+        // Scroll inside the timeline's own box, never the page — nearest-edge
+        // semantics so short timelines don't move at all.
+        if (wrap) {
+          const rowTop = row.offsetTop;
+          const rowBottom = rowTop + row.offsetHeight;
+          if (rowTop < wrap.scrollTop || rowBottom > wrap.scrollTop + wrap.clientHeight) {
+            wrap.scrollTo({ top: rowTop - (wrap.clientHeight - row.offsetHeight) / 2, behavior: REDUCED ? "auto" : "smooth" });
+          }
+        }
         status.textContent = `${index + 1}/${run.steps.length} · ${run.steps[index]!.event} ${run.steps[index]!.node}`;
         if (!REDUCED) await new Promise(r => window.setTimeout(r, 340));
       }

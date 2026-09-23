@@ -558,7 +558,7 @@ nav a[aria-current="page"] { color: var(--ink); }
 .dg-button { display: inline-flex; align-items: center; justify-content: center; width: 1.9rem; height: 1.9rem; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--ink); cursor: pointer; padding: 0; }
 .dg-button:hover { background: var(--surface-hover); }
 .dg-button .site-icon { width: 1rem; height: 1rem; }
-.dg-canvas { position: relative; flex: 1 1 auto; min-height: 26rem; height: 34rem; overflow: hidden; background: #fff; cursor: grab; touch-action: none; user-select: none; }
+.dg-canvas { position: relative; flex: 1 1 auto; min-height: 26rem; height: 34rem; overflow: hidden; background: #fff; cursor: grab; touch-action: pan-y; user-select: none; }
 .dg-canvas.is-panning { cursor: grabbing; }
 .dg-canvas:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 .dg-svg { display: block; width: 100%; height: 100%; }
@@ -581,7 +581,7 @@ nav a[aria-current="page"] { color: var(--ink); }
 .dg-field dt { font: 550 .7rem var(--sans); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding-top: .1rem; }
 .dg-field dd { margin: 0; font-size: .8rem; overflow-wrap: anywhere; }
 .dg-caption { margin: 0; padding: .5rem .9rem; font: .72rem var(--sans); color: var(--muted); border-top: 1px solid var(--line); background: var(--secondary); }
-.dg-timeline-wrap { background: var(--white); }
+.dg-timeline-wrap { background: var(--white); position: relative; max-height: 28rem; overflow-y: auto; overscroll-behavior: contain; }
 .dg-timeline { margin: 0; padding: .3rem 0; list-style: none; }
 .dg-timeline li { border-bottom: 1px solid var(--line); }
 .dg-timeline li:last-child { border-bottom: 0; }
@@ -605,10 +605,79 @@ nav a[aria-current="page"] { color: var(--ink); }
 .dg-step-detail .dg-field { grid-template-columns: 5.4rem 1fr; }
 .dg-graph-link { font: .75rem var(--sans); color: var(--primary); text-decoration: none; padding: .4rem .55rem; border-radius: 6px; white-space: nowrap; }
 .dg-graph-link:hover { background: var(--surface-hover); }
+
+/* Recorded values — syntax-tinted JSON inside cell detail cards and timeline
+ * step expansions. */
+.dg-json-label { margin: .55rem 0 .25rem; font: 550 .68rem var(--sans); color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.dg-json { margin: 0 0 .5rem; padding: .6rem .7rem; background: var(--secondary); border: 1px solid var(--line); border-radius: var(--radius-sm); font: .72rem/1.55 var(--mono); color: var(--ink); overflow-x: auto; max-height: 14rem; overflow-y: auto; white-space: pre; }
+.dg-card .dg-json, .dg-step-detail .dg-json { font-size: .7rem; }
+.tj-key { color: #7c3aed; }
+.tj-str { color: #047857; }
+.tj-num { color: #b45309; }
+.tj-lit { color: #9f1239; }
+[data-theme="dark"] .tj-key { color: #c4b5fd; }
+[data-theme="dark"] .tj-str { color: #6ee7b7; }
+[data-theme="dark"] .tj-num { color: #fbbf24; }
+[data-theme="dark"] .tj-lit { color: #fda4af; }
+
+/* Flatter hero field — a quiet paper surface instead of the grain/cells
+ * texture. The border-bottom hairline already separates it from the body. */
+.intro-field { background-image: none; }
+
+/* --- Documentation mirror ------------------------------------------------- */
+.docs-layout { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 2.5rem; align-items: start; padding-block: 1.5rem 4rem; }
+.docs-rail { position: sticky; top: 5.5rem; max-height: calc(100vh - 7rem); overflow-y: auto; overscroll-behavior: contain; font-size: .82rem; }
+.docs-nav { border-left: 1px solid var(--line); padding-left: 1rem; display: flex; flex-direction: column; gap: .15rem; }
+.docs-home { font-weight: 600; color: var(--ink); text-decoration: none; margin-bottom: .4rem; }
+.docs-group { margin: 1rem 0 .3rem; font: 600 .66rem var(--sans); color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
+.docs-nav ul { list-style: none; margin: 0; padding: 0; }
+.docs-nav li a { display: block; padding: .24rem 0; color: var(--muted); text-decoration: none; border-left: 2px solid transparent; margin-left: -1.05rem; padding-left: 1rem; }
+.docs-nav li a:hover { color: var(--ink); }
+.docs-nav li a[aria-current="page"] { color: var(--primary); border-left-color: var(--primary); font-weight: 550; }
+.docs-article { min-width: 0; max-width: 46rem; }
+.docs-source { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); font-size: .8rem; color: var(--muted); }
+.docs-index-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2rem 2rem; max-width: none; }
+.docs-index-group h2 { font-size: .95rem; margin: 0 0 .6rem; }
+.docs-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .5rem; }
+.docs-list a { display: block; padding: .7rem .9rem; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--white); text-decoration: none; }
+.docs-list a:hover { border-color: var(--ink-subtle, var(--muted)); }
+.docs-list strong { display: block; font-size: .86rem; font-weight: 550; color: var(--ink); margin-bottom: .15rem; }
+.docs-list span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: .76rem; color: var(--muted); }
+
+/* Mirrored markdown typography — restrained, dense enough for reference. */
+.prose { font-size: .92rem; line-height: 1.68; color: var(--ink); }
+.prose > h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 1rem; letter-spacing: -.02em; }
+.prose > h2 { font-size: 1.25rem; margin: 2.2rem 0 .6rem; letter-spacing: -.01em; }
+.prose > h3 { font-size: 1.02rem; margin: 1.6rem 0 .4rem; }
+.prose > h4, .prose > h5, .prose > h6 { font-size: .92rem; margin: 1.3rem 0 .3rem; }
+.prose p { margin: .7rem 0; }
+.prose a { color: var(--primary); }
+.prose ul, .prose ol { margin: .7rem 0; padding-left: 1.5rem; }
+.prose li { margin: .25rem 0; }
+.prose li > ul, .prose li > ol { margin: .2rem 0; }
+.prose code { font: .85em var(--mono); background: var(--secondary); padding: .12em .35em; border-radius: 4px; }
+.prose hr { border: 0; border-top: 1px solid var(--line); margin: 2rem 0; }
+.prose blockquote { margin: 1rem 0; padding: .2rem 1rem; border-left: 3px solid var(--line); color: var(--muted); }
+.prose blockquote > :first-child { margin-top: 0; }
+.code-block { position: relative; margin: 1rem 0; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--white); }
+.code-block .code-lang { position: absolute; top: 0; right: .7rem; padding: .15rem .5rem; font: 550 .62rem var(--sans); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; background: var(--secondary); border: 1px solid var(--line); border-top: 0; border-radius: 0 0 6px 6px; }
+.code-block pre { margin: 0; padding: .85rem 1rem; overflow-x: auto; font: .78rem/1.6 var(--mono); }
+.code-block pre code { background: none; padding: 0; font-size: inherit; }
+.table-wrap { margin: 1rem 0; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-md); }
+.table-wrap table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+.table-wrap th { text-align: left; font-weight: 600; background: var(--secondary); }
+.table-wrap th, .table-wrap td { padding: .45rem .7rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+.table-wrap tr:last-child td { border-bottom: 0; }
+
 @media (max-width: 1000px) {
   .hero-grid, .habitat-grid { grid-template-columns: 1fr; gap: 2rem; }
   .life-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .page-intro { padding-block: 3rem .8rem; }
+  .docs-layout { grid-template-columns: 1fr; gap: 1.2rem; }
+  .docs-rail { position: static; max-height: none; overflow: visible; }
+  .docs-nav { border-left: 0; padding-left: 0; }
+  .docs-nav li a { margin-left: 0; padding-left: 0; border-left: 0; }
+  .docs-index-groups { grid-template-columns: 1fr; }
 }
 @media (max-width: 760px) {
   .page-intro h1 { font-size: clamp(2.6rem, 9vw, 3.6rem); }

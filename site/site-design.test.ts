@@ -54,3 +54,14 @@ test("every interactive diagram frame keeps a static image fallback", () => {
     expect(imgTags).toBeGreaterThanOrEqual(frameTags);
   }
 });
+
+test("docs links in marketing pages resolve to mirrored pages, not the repository", () => {
+  // Only the unmirrored internal brief stays on GitHub; everything else links
+  // to /docs/ so the site remains self-contained.
+  for (const page of Object.values(pages)) {
+    const blobLinks = page.match(/github\.com\/hraness\/algal\/blob\/main\/(docs|spec\/v1)\/([a-z0-9-]+)\.md/g) ?? [];
+    for (const link of blobLinks) expect(link).toContain("apple-brief");
+  }
+  expect(allMarkup).toContain('href="/docs/"');
+  expect(allMarkup).toContain('href="/docs/spec/organism/"');
+});
