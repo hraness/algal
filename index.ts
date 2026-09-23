@@ -469,3 +469,14 @@ export { PROPOSAL_LIMITS, parseApplicationProposal, parseProposalRequest, produc
 export type { ApplicationProposal, ApplicationProposalCandidate, ApplicationProposalRequest, ApplicationProposalStatus, ProposeApplicationRevisionInput, ProposedApplicationRevision } from "./src/application-proposal";
 export { SELECTION_LIMITS, parseApplicationSelectionPolicy, selectApplicationStrategy, verifyApplicationSelectionPolicy } from "./src/application-selection";
 export type { ApplicationSelection, ApplicationSelectionPolicy, ApplicationSelectionRow } from "./src/application-selection";
+
+export {
+  admitApplicationResearchEvaluation, verifyApplicationResearchEvaluation, admitApplicationResearchActivation,
+  parseApplicationResearchPolicy, parseApplicationResearchCorpus, parseApplicationResearchRequest,
+  parseApplicationResearchReport, parseApplicationResearchEvaluation,
+} from "./src/application-research";
+export type {
+  ApplicationResearchPolicy, ApplicationResearchCorpus, ApplicationResearchRequest, ApplicationResearchAttempt,
+  ApplicationResearchReport, ApplicationResearchVerdict, ApplicationResearchEvaluation,
+  ApplicationResearchVerifier, ApplicationResearchVerifierContext,
+} from "./src/application-research";

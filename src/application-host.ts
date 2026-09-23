@@ -22,6 +22,7 @@ import { parseApplicationRestorationPolicy, verifyApplicationRestoration, type A
 import { checkComparisonBinding, verifyApplicationComparison } from "./application-comparison";
 import { verifyApplicationProposal } from "./application-proposal";
 import { selectApplicationStrategy } from "./application-selection";
+import { admitApplicationResearchActivation, parseApplicationResearchRequest, parseApplicationResearchPolicy, parseApplicationResearchCorpus, type ApplicationResearchVerifier } from "./application-research";
 import { builtinRegistry } from "./registry";
 import { compileOrganism } from "./graph";
 import { hostDirectory, hostLease, hostRead, hostWrite } from "./host-state";
@@ -111,8 +112,9 @@ const admissionOnlyEngine: MemoryQueryEngine = {
 
 /** Admission pins every policy field except the mutable frontier selection;
  * execution configuration still binds the complete policy record. */
-export function createApplicationPolicyHost(input: unknown, options: { channelsDir: string; memoryEngine?: MemoryQueryEngine; restorationPolicy?: ApplicationRestorationPolicy; selectionEnvironment?: string }): ApplicationAdmission & MemoryAdmissionHost & ApplicationDispatcher {
+export function createApplicationPolicyHost(input: unknown, options: { channelsDir: string; memoryEngine?: MemoryQueryEngine; restorationPolicy?: ApplicationRestorationPolicy; selectionEnvironment?: string; researchVerifier?: ApplicationResearchVerifier }): ApplicationAdmission & MemoryAdmissionHost & ApplicationDispatcher {
   const policy = parseApplicationHostPolicy(input);
+  const researchVerifier = options.researchVerifier === undefined ? null : { identity: applicationRef(options.researchVerifier.identity), verify: options.researchVerifier.verify.bind(options.researchVerifier) };
   const restorationPolicy = options.restorationPolicy === undefined ? null : parseApplicationRestorationPolicy(options.restorationPolicy);
   if (restorationPolicy && restorationPolicy.application !== policy.application) throw new Error("Restoration policy belongs to another application");
   // The environment this host deploys into. It is host authority, outside
@@ -131,9 +133,19 @@ export function createApplicationPolicyHost(input: unknown, options: { channelsD
       const memory = new ApplicationMemoryService({ store, engine: admissionOnlyEngine, admission: host });
       const snapshot = await memory.validateForRevision(command.memory, revision);
       const value = (reference: Digest) => getApplicationRecord(store, reference, applicationJson);
-      parseApplicationRuntimeProfile(await value(revision.runtimeProfile));
+      const profile = parseApplicationRuntimeProfile(await value(revision.runtimeProfile));
       parseApplicationViewSpec(await value(revision.views));
-      parseEvaluationPolicy(await value(revision.evaluationPolicy));
+      const evaluationPolicy = parseEvaluationPolicy(await value(revision.evaluationPolicy));
+      const researchMode = profile.policy === "sealed-research-evaluation.v1";
+      if (researchMode) {
+        if (!researchVerifier || !evaluationPolicy.research) throw new Error("Research runtime requires a pinned policy and explicit trusted verifier");
+        const research = await getApplicationRecord(store, evaluationPolicy.research, parseApplicationResearchPolicy);
+        if (research.evaluator !== researchVerifier.identity) throw new Error("Research verifier differs from the pinned evaluator");
+        await value(research.evaluator); await value(research.harness);
+        const corpus = await getApplicationRecord(store, research.corpus, parseApplicationResearchCorpus);
+        if (corpus.cases.length > evaluationPolicy.maxCases || research.strategyEntrypoints.some(name => !revision.entrypoints.some(entry => entry.name === name))) throw new Error("Research policy is outside the admitted revision or case budget");
+        if (command.kind === "migrate") throw new Error("Research runtime does not admit schema migration");
+      } else if (evaluationPolicy.research !== undefined) throw new Error("Research policy requires an explicit sealed research runtime profile");
       if (current && command.kind !== "migrate" && command.memory !== current.state.memory && snapshot.previous !== current.state.memory) throw new Error("Memory update must preserve the current snapshot as its predecessor");
       for (const entry of revision.entrypoints) {
         const manifest = await store.getManifest(entry.manifest);
@@ -203,7 +215,14 @@ export function createApplicationPolicyHost(input: unknown, options: { channelsD
         const accepted = new Set<string>();
         for (const evidence of command.evidence) {
           const record = await value(evidence);
+          if (record && typeof record === "object" && !Array.isArray(record) && record.contract === "algal.application-research-evaluation.v1") {
+            if (!researchMode || !researchVerifier) throw new Error("Host policy denies research evaluation");
+            const checked = await admitApplicationResearchActivation(store, { evaluation: evidence, expectedState: current.digest, revision: command.revision }, { verifier: researchVerifier });
+            const request = await getApplicationRecord(store, checked.evaluation.request, parseApplicationResearchRequest);
+            accepted.add(request.entrypoint);
+          }
           if (record && typeof record === "object" && !Array.isArray(record) && record.contract === "algal.application-evaluation.v1") {
+            if (researchMode) throw new Error("Research activation cannot use pure-case evidence");
             const checked = await admitApplicationActivation(store, { evaluation: evidence, expectedState: current.digest, revision: command.revision }, { fns: builtinRegistry() });
             const request = await getApplicationRecord(store, checked.evaluation.request, parseApplicationEvaluationRequest);
             accepted.add(request.entrypoint);

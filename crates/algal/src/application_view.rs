@@ -65,7 +65,10 @@ pub fn parse_runtime_profile(input: &Value) -> Result<Value> {
     let v = app_object(input, &["contract", "runtime", "policy"])?;
     app_tag(&v["contract"], PROFILE)?;
     if v["runtime"].as_str() != Some("bun-native-memory")
-        || v["policy"].as_str() != Some("pure-case-evaluation.v1")
+        || !matches!(
+            v["policy"].as_str(),
+            Some("pure-case-evaluation.v1" | "sealed-research-evaluation.v1")
+        )
     {
         return Err(fail("Unsupported application runtime profile"));
     }

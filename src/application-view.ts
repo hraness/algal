@@ -23,7 +23,7 @@ export type ApplicationViewSpec = {
 export type ApplicationRuntimeProfile = {
   contract: "algal.application-runtime-profile.v1";
   runtime: "bun-native-memory";
-  policy: "pure-case-evaluation.v1";
+  policy: "pure-case-evaluation.v1" | "sealed-research-evaluation.v1";
 };
 export type ApplicationViewAction =
   | { kind: "investigate"; expectedState: Digest; intent: Digest }
@@ -71,8 +71,8 @@ export function parseApplicationViewSpec(input: unknown): ApplicationViewSpec {
 export function parseApplicationRuntimeProfile(input: unknown): ApplicationRuntimeProfile {
   const v = applicationObject(input, ["contract", "runtime", "policy"]);
   applicationTag(v.contract, "algal.application-runtime-profile.v1");
-  if (v.runtime !== "bun-native-memory" || v.policy !== "pure-case-evaluation.v1") throw new Error("Unsupported application runtime profile");
-  return { contract: "algal.application-runtime-profile.v1", runtime: "bun-native-memory", policy: "pure-case-evaluation.v1" };
+  if (v.runtime !== "bun-native-memory" || (v.policy !== "pure-case-evaluation.v1" && v.policy !== "sealed-research-evaluation.v1")) throw new Error("Unsupported application runtime profile");
+  return { contract: "algal.application-runtime-profile.v1", runtime: "bun-native-memory", policy: v.policy };
 }
 
 export function projectApplicationView(input: {
