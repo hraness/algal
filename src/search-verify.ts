@@ -15,7 +15,7 @@ import {
   type SearchGeneration,
   type SearchReport,
 } from "./search";
-import type { Store } from "./store";
+import type { Store } from "./store-contract";
 import type { ToolRegistry } from "./tools";
 import { verifyReceipt } from "./verify";
 import type { JsonObject, JsonValue } from "./values";

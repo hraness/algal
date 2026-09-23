@@ -2,6 +2,7 @@
 // Every foreign value enters as `unknown` and is parsed through these readers.
 
 import { AlgalError } from "./errors";
+import { utf8Length } from "./utf8";
 
 export type JsonValue =
   | null
@@ -31,7 +32,7 @@ function sortValue(value: JsonValue): JsonValue {
 }
 
 export function canonicalBytes(value: JsonValue): number {
-  return new TextEncoder().encode(canonicalize(value)).byteLength;
+  return utf8Length(canonicalize(value));
 }
 
 export function isJsonValue(u: unknown): u is JsonValue {

@@ -8,7 +8,7 @@
  * (its receipt records the failure). Mirrors
  * `crates/algal/src/application_episode.rs`. */
 import { getApplicationRecord, parseApplicationRevision, putApplicationRecord, type ApplicationRevision } from "./application-contract";
-import type { ApplicationDispatchContext, ApplicationDispatchOutcome } from "./application";
+import type { ApplicationDispatchContext, ApplicationDispatchOutcome } from "./application-core";
 import type { Executor } from "./effects";
 import { AlgalError } from "./errors";
 import { compileOrganism, type CompiledOrganism } from "./graph";

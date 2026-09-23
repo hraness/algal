@@ -23,11 +23,11 @@ import {
   getApplicationRecord, parseWorkIntent, putApplicationRecord,
   type WorkIntent,
 } from "./application-contract";
-import type { ApplicationDispatch } from "./application";
+import type { ApplicationDispatch } from "./application-core";
 import { parseCapabilityHandle } from "./capabilities";
 import { digestCanonical, type Digest } from "./digest";
 import { AlgalError } from "./errors";
-import type { Store } from "./store";
+import type { Store } from "./store-contract";
 import type { JsonValue } from "./values";
 
 export type InterappMessage = {

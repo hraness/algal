@@ -1,6 +1,6 @@
 /** Bounded read-only diagnostic closure. Retained verification flags are
  * producer claims; collection grants no authority and performs no replay. */
-import type { ApplicationService, ApplicationSnapshot, ApplicationDispatch } from "./application";
+import type { ApplicationCore, ApplicationSnapshot, ApplicationDispatch } from "./application-core";
 import { APPLICATION_LIMITS, applicationId, applicationInt, applicationJson, applicationList, applicationObject, applicationRef, applicationRefs, applicationTag, getApplicationRecord, nullableApplicationRef, parseApplicationState, parseApplicationRevision, parseApplicationTransition, parseWorkIntent, type ApplicationTransition, type WorkIntent } from "./application-contract";
 import { parseInvestigationRequest } from "./application-investigation";
 import { parseMemoryDerivation, parseMemoryNativeProgram, parseMemoryObservation, parseMemoryProcedure, parseMemoryQueries, parseMemoryQuery, parseMemoryScope, parseMemorySnapshot, type MemoryDerivation, type MemoryStatus } from "./application-memory";
@@ -69,7 +69,7 @@ export function parseApplicationViewEvidence(input: unknown, state?: Digest, mem
 
 /** The caller supplies one history() read. Immutable evidence is fenced to its
  * last state; mutable work rows are separately observed, never a new head. */
-export async function collectApplicationViewEvidence(service: ApplicationService, history: ApplicationSnapshot[], derivations: Digest[] = []): Promise<ApplicationViewEvidence> {
+export async function collectApplicationViewEvidence(service: ApplicationCore, history: ApplicationSnapshot[], derivations: Digest[] = []): Promise<ApplicationViewEvidence> {
   if (!history.length || history.length > APPLICATION_LIMITS.states) fail("invalid history bound");
   const snapshot = history.at(-1)!, store = service.store, application = snapshot.state.application;
   for (let i = 0; i < history.length; i++) {

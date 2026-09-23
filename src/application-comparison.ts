@@ -18,7 +18,7 @@ import {
 } from "./application-adaptation";
 import { digestCanonical, type Digest } from "./digest";
 import { canonicalize } from "./values";
-import type { Store } from "./store";
+import type { Store } from "./store-contract";
 
 export type ComparisonVerdict = "accepted" | "rejected" | "incomplete";
 export type ApplicationComparisonResult = {

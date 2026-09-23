@@ -6,14 +6,8 @@ import { hostDirectory, hostNames, hostRead, hostWrite } from "./host-state";
 import { asInt, asObject, asSafeId, asString, canonicalBytes, canonicalize, noUnknownKeys, type JsonValue } from "./values";
 
 export const JOURNAL_BOUNDS = { maxEntries: 4096, maxRecordBytes: 1_048_576, maxBytes: 16_777_216, maxRecoveries: 8 } as const;
-export type JournalBinding = { requestDigest: Digest; executor: string; configurationDigest: Digest; idempotencyKey: Digest; recovery: "never" | "read" };
-export type JournalTicket = { token?: Digest; receipt?: EffectReceipt };
-export interface RuntimeJournal {
-  before(binding: JournalBinding): Promise<JournalTicket>;
-  after(token: Digest, receipt: EffectReceipt): Promise<void>;
-  assertHealthy(): void;
-  poison(error: unknown): void;
-}
+import type { JournalBinding, JournalTicket, RuntimeJournal } from "./runtime-journal-contract";
+export type { JournalBinding, JournalTicket, RuntimeJournal } from "./runtime-journal-contract";
 type Header = { contract: "algal.process-journal.v1"; process: string; intent: Digest; manifestDigest: Digest; maxEntries: number; maxRecoveries: number };
 type RecordEntry = JournalBinding & { contract: "algal.process-effect-record.v1"; intent: Digest; ordinal: number; state: "started" | "completed"; attempt: number; previous?: Digest; receipt?: EffectReceipt };
 type Entry = { digest: Digest; value: RecordEntry };

@@ -1,3 +1,4 @@
+import { utf8Length } from "./utf8";
 // Embedding providers — a provider-neutral interface with two
 // implementations: the Vercel AI Gateway `/embeddings` endpoint and a
 // deterministic local fallback (hashed trigram features, FNV-1a 64, L2
@@ -45,7 +46,7 @@ export function checkTexts(texts: string[], at = "embed texts"): string[] {
     if (typeof text !== "string" || text.length === 0) {
       throw new AlgalError("PARSE_FAILED", `${at}[${i}] must be nonempty text`);
     }
-    if (Buffer.byteLength(text, "utf8") > EMBED_BOUNDS.maxTextBytes) {
+    if (utf8Length(text) > EMBED_BOUNDS.maxTextBytes) {
       throw new AlgalError(
         "BUDGET_EXHAUSTED",
         `${at}[${i}] exceeds ${EMBED_BOUNDS.maxTextBytes} bytes`,
@@ -264,7 +265,8 @@ export function gatewayEmbedder(options: GatewayEmbedderOptions): Embedder {
 
 /** Gateway credential env chain — matches the gateway effect backend. */
 export function gatewayCredential(): string | undefined {
-  return process.env.AI_GATEWAY_API_KEY ?? process.env.VERCEL_OIDC_TOKEN;
+  const environment = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
+  return environment?.AI_GATEWAY_API_KEY ?? environment?.VERCEL_OIDC_TOKEN;
 }
 
 /** Validate an embedder spec and return it normalized — `local`, `gateway`,
