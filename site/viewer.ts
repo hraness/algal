@@ -201,9 +201,10 @@ async function initDiagramFrame(frame: HTMLElement): Promise<void> {
   // to show it comfortably — a sparse centered graph reads worse than the
   // record; only mid-width frames keep the follow-pan canvas for them.
   const portrait = layout.height > layout.width * 1.15;
-  const narrow = frame.clientWidth < 420
-    || layout.width > frame.clientWidth * 1.8
-    || (portrait && frame.clientWidth > 560);
+  const narrow = !frame.hasAttribute("data-diagram-canvas")
+    && (frame.clientWidth < 420
+      || layout.width > frame.clientWidth * 1.8
+      || (portrait && frame.clientWidth > 560));
   if (narrow) {
     const EVENT_LABEL: Record<string, string> = { "cell.commit": "committed", "cell.skip": "skipped", "cell.fail": "failed", "cell.suspend": "suspended", effect: "effect", cell: "cell" };
     const steps = run && run.steps.length ? run.steps : layout.nodes.map(node => ({ event: "cell", node: node.id }));
@@ -372,9 +373,17 @@ async function initDiagramFrame(frame: HTMLElement): Promise<void> {
     const contain = Math.min((rect.width - pad) / layout.width, (rect.height - pad) / layout.height);
     // Tall organisms read better fit to width; replay then pans to follow cells.
     const widthFit = (rect.width - pad) / layout.width;
-    scale = layout.height * widthFit > rect.height * 1.5 ? widthFit : contain;
-    tx = (rect.width - layout.width * scale) / 2;
-    ty = layout.height * scale > rect.height ? pad : (rect.height - layout.height * scale) / 2;
+    if (frame.hasAttribute("data-diagram-canvas")) {
+      // Collage cards open as a macro shot — the organism's head cells at a
+      // readable zoom, top-anchored, instead of the whole graph shrunk to fit.
+      scale = Math.min(1.6, Math.max(widthFit * 2.6, 0.9));
+      tx = (rect.width - layout.width * scale) / 2;
+      ty = 12;
+    } else {
+      scale = layout.height * widthFit > rect.height * 1.5 ? widthFit : contain;
+      tx = (rect.width - layout.width * scale) / 2;
+      ty = layout.height * scale > rect.height ? pad : (rect.height - layout.height * scale) / 2;
+    }
     apply();
   };
   const centerOn = (nodeId: string) => {
