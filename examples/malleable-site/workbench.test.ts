@@ -156,9 +156,11 @@ describe("same-head marketing workbench", () => {
   test("journal exhaustion reserves uncertain settlement and reconciliation without pruning", async () => {
     const f = await fixture(), capture = await f.workbench.capture(), p = proposal(capture);
     const policy = await f.host.service.store.putValue({ fixture: "policy" }), evidence = await f.host.service.store.putValue({ fixture: "evidence" });
-    for (let index = 0; index < 125; index++) await f.workbench.recordShadow({ operation: hash({ index }), parentState: capture.head, proposal: p, accepted: false, policy, evidence, reason: "Bounded fixture." });
+    for (let index = 0; index < 124; index++) await f.workbench.recordShadow({ operation: hash({ index }), parentState: capture.head, proposal: p, accepted: false, policy, evidence, reason: "Bounded fixture." });
     const attempt = await f.workbench.beginAttempt({ operation: hash("reserved-final"), expectedHead: capture.head, expectedControls: capture.controlsRef, manifest: f.manifest, backend: "gateway", model: modelEvidence.model });
     await expect(f.workbench.recordShadow({ operation: hash("over-reservation"), parentState: capture.head, proposal: p, accepted: false, policy, evidence, reason: "No capacity." })).rejects.toThrow("reserved");
+    const effect = modelEvidence.receipt.effects[0]!;
+    await f.workbench.recordGeneration(attempt, { contract: "algal.gateway-generation.v1", generationId: "gen_01ARZ3NDEKTSV4RRFFQ69G5FAV", requestDigest: effect.requestDigest as `sha256:${string}`, outputDigest: hash(effect.output), model: modelEvidence.model, tokensIn: effect.usage.tokensIn, tokensOut: effect.usage.tokensOut, providerAttestation: false });
     const uncertain = { ...modelEvidence.accounting, completedCalls: 0, inputTokens: null, outputTokens: null, stopped: true, records: modelEvidence.accounting.records.map(row => ({ ...row, status: "unknown", tokensIn: null, tokensOut: null, outputDigest: null })) };
     const prior = await f.host.service.store.putValue(applicationJson(uncertain));
     await f.workbench.finishAttempt(attempt, { status: "uncertain", proposal: null, receipt: null, accounting: prior, reason: "Unknown completion retains its reconciliation slot." });
@@ -167,7 +169,7 @@ describe("same-head marketing workbench", () => {
     const receipt = await f.host.service.store.putReceipt(applicationJson(modelEvidence.receipt)), accounting = await f.host.service.store.putValue(applicationJson(modelEvidence.accounting));
     await f.workbench.reconcileAttempt(attempt, { status: "completed", proposal: parseProposal(modelProposal), receipt, accounting, reason: null });
     const after = await new MarketingWorkbench(new MarketingHost(f.directory)).capture();
-    expect(after.observation.journalEntries).toBe(128); expect(after.shadows).toHaveLength(125); expect(after.attempts[0]!.settlements).toHaveLength(2);
+    expect(after.observation.journalEntries).toBe(128); expect(after.shadows).toHaveLength(124); expect(after.attempts[0]!.settlements).toHaveLength(2);
     await expect(f.workbench.execute(command(after, { kind: "preview", proposal: p }))).rejects.toThrow("exhausted");
   }, 60_000);
   test("64 retained states remain visible and a 65th is denied without head movement", async () => {

@@ -1,6 +1,7 @@
 /** Browser-safe, closed example protocol. These values describe admitted local
  * commands; they are not authentication credentials or a new VM contract. */
 import type { Digest } from "../../src/digest-type";
+import { gatewayGenerationId, parseGatewayReportedCost, type GatewayReportedCost } from "../../src/gateway-observation";
 import { parseProposal, parseRevision, parseSignalEvent, parseSignals, parseView, type SurfaceProposal, type SurfaceRevision, type SurfaceSignalEvent, type SurfaceSignals, type SurfaceView } from "./surface";
 
 export const WORKBENCH_LIMITS = Object.freeze({ states: 64, streams: 16, journal: 128, recordBytes: 32_768, captureBytes: 2_097_152 });
@@ -21,6 +22,13 @@ export type WorkbenchPreview = { reference: Digest; parentState: Digest; proposa
 export type AttemptAdmission = { operation: Digest; expectedHead: Digest; expectedControls: Digest; manifest: Digest; backend: "gateway" | "local" | "apple"; model: string };
 export type AttemptSettlement = { status: "completed" | "failed" | "uncertain"; proposal: SurfaceProposal | null; receipt: Digest | null; accounting: Digest | null; reason: string | null };
 export type WorkbenchUsage = { accounting: Digest; configuration: Digest; calls: number; completedCalls: number; reservedMicrousd: number; inputTokens: number | null; outputTokens: number | null; billing: "host-reserved" };
+export type GatewayCostView = { attempt: Digest; status: "generation-unavailable" | "receipt-unavailable" | "lookup-pending" | "reported"; generation: Digest | null; generationId: string | null; lookup: Digest | null; cost: GatewayReportedCost | null };
+export function parseGatewayCostView(input: unknown): GatewayCostView {
+  const v = workbenchObject(input, ["attempt", "status", "generation", "generationId", "lookup", "cost"]);
+  const value: GatewayCostView = { attempt: workbenchRef(v.attempt), status: choice(v.status, ["generation-unavailable", "receipt-unavailable", "lookup-pending", "reported"]), generation: v.generation === null ? null : workbenchRef(v.generation), generationId: v.generationId === null ? null : gatewayGenerationId(v.generationId), lookup: v.lookup === null ? null : workbenchRef(v.lookup), cost: v.cost === null ? null : parseGatewayReportedCost(v.cost) };
+  if ((value.status === "generation-unavailable") !== (value.generation === null) || (value.generation === null) !== (value.generationId === null) || (value.status === "reported") !== (value.lookup !== null && value.cost !== null) || (value.status !== "reported" && (value.lookup !== null || value.cost !== null)) || value.cost && value.cost.generationId !== value.generationId) throw new Error("Invalid Gateway cost observation state");
+  return value;
+}
 export type WorkbenchAttempt = { reference: Digest; admission: AttemptAdmission; settlement: AttemptSettlement | null; settlements: { reference: Digest; outcome: AttemptSettlement; reconciled: boolean }[] };
 export type ShadowRecord = { operation: Digest; parentState: Digest; proposal: SurfaceProposal; accepted: boolean; policy: Digest; evidence: Digest; reason: string };
 export type WorkbenchShadow = ShadowRecord & { reference: Digest };
@@ -32,7 +40,7 @@ export type WorkbenchCapture = {
   provenance: { memory: Digest; receipt: Digest; cursors: SignalCursor[]; nodes: NodeExplanation[] };
   controls: WorkbenchControls; controlsRef: Digest; history: WorkbenchHistory[];
   previews: WorkbenchPreview[]; attempts: WorkbenchAttempt[]; shadows: WorkbenchShadow[];
-  observation: { journalEntries: number; pendingAttempts: number; completedAttempts: number; failedAttempts: number; uncertainAttempts: number; actualCostMicrousd: null; usage: WorkbenchUsage[] };
+  observation: { journalEntries: number; pendingAttempts: number; completedAttempts: number; failedAttempts: number; uncertainAttempts: number; actualCostMicrousd: null; usage: WorkbenchUsage[]; gatewayCosts?: GatewayCostView[] };
   actions: WorkbenchAction[]; gaps: string[];
 };
 export type WorkbenchResult = { capture: WorkbenchCapture; preview: WorkbenchPreview | null };
@@ -98,13 +106,13 @@ export function parseWorkbenchCapture(input: unknown): WorkbenchCapture {
   boundWorkbench(input, WORKBENCH_LIMITS.captureBytes);
   const v = workbenchObject(input, ["contract", "application", "head", "sequence", "revision", "revisionDigest", "applicationRevision", "signals", "view", "provenance", "controls", "controlsRef", "history", "previews", "attempts", "shadows", "observation", "actions", "gaps"]);
   if (v.contract !== "algal.marketing-capture.v1" || v.application !== "malleable-marketing") throw new Error("Invalid workbench capture");
-  const p = workbenchObject(v.provenance, ["memory", "receipt", "cursors", "nodes"]), o = workbenchObject(v.observation, ["journalEntries", "pendingAttempts", "completedAttempts", "failedAttempts", "uncertainAttempts", "actualCostMicrousd", "usage"]);
+  const p = workbenchObject(v.provenance, ["memory", "receipt", "cursors", "nodes"]), o = workbenchObject(v.observation, ["journalEntries", "pendingAttempts", "completedAttempts", "failedAttempts", "uncertainAttempts", "actualCostMicrousd", "usage", ...(Object.hasOwn(v.observation as object, "gatewayCosts") ? ["gatewayCosts"] : [])]);
   if (o.actualCostMicrousd !== null) throw new Error("Actual billing is unknown");
   const result: WorkbenchCapture = { contract: v.contract, application: v.application, head: workbenchRef(v.head), sequence: int(v.sequence, 63), revision: parseRevision(v.revision), revisionDigest: workbenchRef(v.revisionDigest), applicationRevision: workbenchRef(v.applicationRevision), signals: parseSignals(v.signals), view: parseView(v.view),
     provenance: { memory: workbenchRef(p.memory), receipt: workbenchRef(p.receipt), cursors: parseSignalCursors(p.cursors), nodes: list(p.nodes, 32, raw => { const n = workbenchObject(raw, ["node", "revision", "signalFields", "configFields", "receipt"]); return { node: workbenchText(n.node, 64), revision: workbenchRef(n.revision), signalFields: list(n.signalFields, 2, x => choice(x, ["audience", "release"])), configFields: list(n.configFields, 4, x => choice(x, ["headline", "body", "ctaLabel", "layout"])), receipt: workbenchRef(n.receipt) }; }) }, controls: parseControls(v.controls), controlsRef: workbenchRef(v.controlsRef),
     history: list(v.history, 64, raw => { const h = workbenchObject(raw, ["head", "sequence", "kind", "applicationRevision", "memory", "evidence"]); return { head: workbenchRef(h.head), sequence: int(h.sequence, 63), kind: choice(h.kind, ["create", "memory", "activate", "restore"]), applicationRevision: workbenchRef(h.applicationRevision), memory: workbenchRef(h.memory), evidence: list(h.evidence, 1, workbenchRef) }; }),
     previews: list(v.previews, 128, parseWorkbenchPreview), attempts: list(v.attempts, 128, raw => { const a = workbenchObject(raw, ["reference", "admission", "settlement", "settlements"]); return { reference: workbenchRef(a.reference), admission: parseAttemptAdmission(a.admission), settlement: a.settlement === null ? null : parseAttemptSettlement(a.settlement), settlements: list(a.settlements, 2, raw => { const e = workbenchObject(raw, ["reference", "outcome", "reconciled"]); return { reference: workbenchRef(e.reference), outcome: parseAttemptSettlement(e.outcome), reconciled: bool(e.reconciled) }; }) }; }), shadows: list(v.shadows, 128, raw => { const s = workbenchObject(raw, ["reference", "operation", "parentState", "proposal", "accepted", "policy", "evidence", "reason"]); const { reference, ...rest } = s; return { reference: workbenchRef(reference), ...parseShadowRecord(rest) }; }),
-    observation: { journalEntries: int(o.journalEntries, 128), pendingAttempts: int(o.pendingAttempts, 128), completedAttempts: int(o.completedAttempts, 128), failedAttempts: int(o.failedAttempts, 128), uncertainAttempts: int(o.uncertainAttempts, 128), actualCostMicrousd: null, usage: list(o.usage, 128, raw => { const u = workbenchObject(raw, ["accounting", "configuration", "calls", "completedCalls", "reservedMicrousd", "inputTokens", "outputTokens", "billing"]); if (u.billing !== "host-reserved") throw new Error("Invalid usage truth class"); return { accounting: workbenchRef(u.accounting), configuration: workbenchRef(u.configuration), calls: int(u.calls, 64), completedCalls: int(u.completedCalls, 64), reservedMicrousd: int(u.reservedMicrousd, 1_000_000_000), inputTokens: u.inputTokens === null ? null : int(u.inputTokens, 64_000_000_000), outputTokens: u.outputTokens === null ? null : int(u.outputTokens, 64_000_000_000), billing: u.billing }; }) },
+    observation: { journalEntries: int(o.journalEntries, 128), pendingAttempts: int(o.pendingAttempts, 128), completedAttempts: int(o.completedAttempts, 128), failedAttempts: int(o.failedAttempts, 128), uncertainAttempts: int(o.uncertainAttempts, 128), actualCostMicrousd: null, gatewayCosts: list(Object.hasOwn(o, "gatewayCosts") ? o.gatewayCosts : [], 128, parseGatewayCostView), usage: list(o.usage, 128, raw => { const u = workbenchObject(raw, ["accounting", "configuration", "calls", "completedCalls", "reservedMicrousd", "inputTokens", "outputTokens", "billing"]); if (u.billing !== "host-reserved") throw new Error("Invalid usage truth class"); return { accounting: workbenchRef(u.accounting), configuration: workbenchRef(u.configuration), calls: int(u.calls, 64), completedCalls: int(u.completedCalls, 64), reservedMicrousd: int(u.reservedMicrousd, 1_000_000_000), inputTokens: u.inputTokens === null ? null : int(u.inputTokens, 64_000_000_000), outputTokens: u.outputTokens === null ? null : int(u.outputTokens, 64_000_000_000), billing: u.billing }; }) },
     actions: list(v.actions, 6, raw => { const a = workbenchObject(raw, ["kind", "allowed", "reason"]); const allowed = bool(a.allowed), reason = a.reason === null ? null : workbenchText(a.reason); if (allowed !== (reason === null)) throw new Error("Action availability reason mismatch"); return { kind: choice(a.kind, ["preview", "activate", "signal", "restore", "set-controls", "infer"]), allowed, reason }; }), gaps: list(v.gaps, 16, x => workbenchText(x)),
   };
   if (result.history.length !== result.sequence + 1 || result.history.at(-1)?.head !== result.head || result.history.some((row, i) => row.sequence !== i)) throw new Error("Capture history/head mismatch");
@@ -119,6 +127,12 @@ export function parseWorkbenchCapture(input: unknown): WorkbenchCapture {
     if (attempt.settlement !== null && JSON.stringify(attempt.settlement) !== JSON.stringify(attempt.settlements.at(-1)!.outcome)) throw new Error("Capture latest settlement mismatch");
   }
   const observed = result.observation;
+  const gatewayCosts = observed.gatewayCosts ?? [];
+  if (new Set(gatewayCosts.map(row => row.attempt)).size !== gatewayCosts.length) throw new Error("Duplicate Gateway cost attempt");
+  for (const row of gatewayCosts) {
+    const attempt = result.attempts.find(attempt => attempt.reference === row.attempt);
+    if (!attempt || attempt.admission.backend !== "gateway" || row.cost && row.cost.model !== attempt.admission.model || (row.status === "reported" || row.status === "lookup-pending") && !attempt.settlement?.receipt) throw new Error("Gateway cost attempt binding mismatch");
+  }
   if (observed.pendingAttempts !== result.attempts.filter(row => row.settlement === null).length || observed.completedAttempts !== result.attempts.filter(row => row.settlement?.status === "completed").length || observed.failedAttempts !== result.attempts.filter(row => row.settlement?.status === "failed").length || observed.uncertainAttempts !== result.attempts.filter(row => row.settlement?.status === "uncertain").length) throw new Error("Capture observed totals mismatch");
   return result;
 }

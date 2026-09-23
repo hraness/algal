@@ -5,16 +5,22 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { applicationJson, getApplicationRecord, parseApplicationState, parseApplicationTransition } from "../../src/application-contract";
 import { digestCanonical, type Digest } from "../../src/digest";
+import { parseGatewayGeneration, parseGatewayReportedCost, type GatewayGeneration, type GatewayReportedCost } from "../../src/gateway-observation";
+import { lookupGatewayGenerationCost } from "../../src/gateway-accounting";
 import { hostLease, hostNames, hostRead, hostWrite, SHARED_LEASE_RETRY } from "../../src/host-state";
 import { APPLICATION, MarketingHost, exportEvidence, signalOperation, verifyEvidence, type SurfaceEvidence } from "./host";
 import { parseProposal, type SurfaceNode } from "./surface";
-import { WORKBENCH_LIMITS, boundWorkbench, parseAttemptAdmission, parseAttemptSettlement, parseShadowRecord, parseWorkbenchCapture, parseWorkbenchCommand, parseWorkbenchPreview, workbenchObject, workbenchRef, type AttemptAdmission, type AttemptSettlement, type NodeExplanation, type ShadowRecord, type WorkbenchAttempt, type WorkbenchCapture, type WorkbenchCommand, type WorkbenchPreview, type WorkbenchResult, type WorkbenchShadow, type WorkbenchUsage } from "./workbench-contract";
+import { WORKBENCH_LIMITS, boundWorkbench, parseAttemptAdmission, parseAttemptSettlement, parseShadowRecord, parseWorkbenchCapture, parseWorkbenchCommand, parseWorkbenchPreview, workbenchObject, workbenchRef, type GatewayCostView, type AttemptAdmission, type AttemptSettlement, type NodeExplanation, type ShadowRecord, type WorkbenchAttempt, type WorkbenchCapture, type WorkbenchCommand, type WorkbenchPreview, type WorkbenchResult, type WorkbenchShadow, type WorkbenchUsage } from "./workbench-contract";
 
 const hash = (value: unknown): Digest => digestCanonical(applicationJson(value));
-type JournalPayload = { kind: "preview"; data: WorkbenchPreview } | { kind: "attempt"; data: AttemptAdmission } | { kind: "settlement" | "reconciliation"; data: { attempt: Digest; settlement: AttemptSettlement } } | { kind: "shadow"; data: ShadowRecord };
+type GenerationRecord = { attempt: Digest; observation: GatewayGeneration };
+type CostRecord = { attempt: Digest; generation: Digest; observation: GatewayReportedCost };
+type JournalPayload = { kind: "generation"; data: GenerationRecord } | { kind: "gateway-cost"; data: CostRecord } | { kind: "preview"; data: WorkbenchPreview } | { kind: "attempt"; data: AttemptAdmission } | { kind: "settlement" | "reconciliation"; data: { attempt: Digest; settlement: AttemptSettlement } } | { kind: "shadow"; data: ShadowRecord };
 type JournalEntry = { contract: "algal.marketing-journal.v1"; sequence: number; previous: Digest | null; payload: JournalPayload };
 function payload(input: unknown): JournalPayload {
   const v = workbenchObject(input, ["kind", "data"]);
+  if (v.kind === "generation") { const d = workbenchObject(v.data, ["attempt", "observation"]); return { kind: v.kind, data: { attempt: workbenchRef(d.attempt), observation: parseGatewayGeneration(d.observation) } }; }
+  if (v.kind === "gateway-cost") { const d = workbenchObject(v.data, ["attempt", "generation", "observation"]); return { kind: v.kind, data: { attempt: workbenchRef(d.attempt), generation: workbenchRef(d.generation), observation: parseGatewayReportedCost(d.observation) } }; }
   if (v.kind === "preview") return { kind: v.kind, data: parseWorkbenchPreview(v.data) };
   if (v.kind === "attempt") return { kind: v.kind, data: parseAttemptAdmission(v.data) };
   if (v.kind === "shadow") return { kind: v.kind, data: parseShadowRecord(v.data) };
@@ -37,24 +43,32 @@ function journalState(input: unknown): JournalState {
   return value;
 }
 type WorkbenchOptions = { fault?: (point: "journal-prepared" | "journal-record-published" | "journal-committed") => void | Promise<void> };
-function projection(entries: JournalEntry[]): { previews: WorkbenchPreview[]; attempts: WorkbenchAttempt[]; shadows: WorkbenchShadow[] } {
-  const previews: WorkbenchPreview[] = [], attempts: WorkbenchAttempt[] = [], shadows: WorkbenchShadow[] = [];
+function projection(entries: JournalEntry[]): { previews: WorkbenchPreview[]; attempts: WorkbenchAttempt[]; shadows: WorkbenchShadow[]; generations: (GenerationRecord & { reference: Digest })[]; costs: (CostRecord & { reference: Digest })[] } {
+  const previews: WorkbenchPreview[] = [], attempts: WorkbenchAttempt[] = [], shadows: WorkbenchShadow[] = [], generations: (GenerationRecord & { reference: Digest })[] = [], costs: (CostRecord & { reference: Digest })[] = [];
   for (const entry of entries) {
     const reference = hash(entry), p = entry.payload;
     if (p.kind === "preview") { if (previews.some(row => row.reference === p.data.reference)) throw new Error("Duplicate journal preview"); previews.push(p.data); }
     else if (p.kind === "attempt") { if (attempts.some(row => row.admission.operation === p.data.operation)) throw new Error("Duplicate inference operation"); attempts.push({ reference, admission: p.data, settlement: null, settlements: [] }); }
     else if (p.kind === "shadow") { if (shadows.some(row => row.operation === p.data.operation)) throw new Error("Duplicate shadow operation"); shadows.push({ ...p.data, reference }); }
-    else {
+    else if (p.kind === "generation") {
+      const attempt = attempts.find(row => row.reference === p.data.attempt);
+      if (!attempt || attempt.admission.backend !== "gateway" || attempt.settlement || generations.some(row => row.attempt === p.data.attempt || row.observation.generationId === p.data.observation.generationId) || attempt.admission.model !== p.data.observation.model) throw new Error("Invalid or conflicting admitted Gateway generation");
+      generations.push({ ...p.data, reference });
+    } else if (p.kind === "gateway-cost") {
+      const generation = generations.find(row => row.reference === p.data.generation && row.attempt === p.data.attempt);
+      if (!generation || !attempts.some(row => row.reference === p.data.attempt && row.settlement?.receipt) || costs.some(row => row.attempt === p.data.attempt) || generation.observation.generationId !== p.data.observation.generationId || generation.observation.model !== p.data.observation.model || generation.observation.tokensIn !== p.data.observation.tokensIn || generation.observation.tokensOut !== p.data.observation.tokensOut) throw new Error("Gateway cost does not bind its exact generation");
+      costs.push({ ...p.data, reference });
+    } else {
       const attempt = attempts.find(row => row.reference === p.data.attempt);
       if (!attempt || (p.kind === "settlement" ? attempt.settlement !== null : attempt.settlement?.status !== "uncertain" || p.data.settlement.status !== "completed")) throw new Error("Settlement must close an admitted attempt or reconcile retained uncertainty");
       attempt.settlement = p.data.settlement;
       attempt.settlements.push({ reference, outcome: p.data.settlement, reconciled: p.kind === "reconciliation" });
     }
   }
-  return { previews, attempts, shadows };
+  return { previews, attempts, shadows, generations, costs };
 }
 function reservedSlots(rows: ReturnType<typeof projection>): number {
-  return rows.attempts.reduce((sum, row) => sum + (row.settlement === null ? 2 : row.settlement.status === "uncertain" ? 1 : 0), 0);
+  return rows.attempts.reduce((sum, row) => sum + (row.settlement === null ? 2 + (row.admission.backend === "gateway" && !rows.generations.some(g => g.attempt === row.reference) ? 1 : 0) : row.settlement.status === "uncertain" ? 1 : 0), 0);
 }
 async function readAccounting(host: MarketingHost, reference: Digest) {
   const raw = await host.service.store.getValue(reference);
@@ -106,6 +120,31 @@ async function validateSettlement(host: MarketingHost, attempt: WorkbenchAttempt
     const sameObservedOutput = before?.status === "completed" && before.outputDigest === row.outputDigest && before.tokensIn === row.tokensIn && before.tokensOut === row.tokensOut;
     if (previous.records.length !== 1 || !before || !(sameObservedOutput || ["reserved", "unknown"].includes(String(before.status)) && before.outputDigest === null) || previous.usage.configuration !== accounting.usage.configuration || before.requestDigest !== row.requestDigest || before.sequence !== row.sequence || before.reservedMicrousd !== row.reservedMicrousd) throw new Error("Reconciliation changes the admitted uncertain execution identity");
   }
+}
+/** A generation sidecar is only a transport observation until an independently
+ * replayable receipt binds its exact request, output and usage. */
+async function gatewayCostViews(host: MarketingHost, rows: ReturnType<typeof projection>): Promise<GatewayCostView[]> {
+  const views: GatewayCostView[] = [];
+  for (const attempt of rows.attempts.filter(row => row.admission.backend === "gateway")) {
+    const generation = rows.generations.find(row => row.attempt === attempt.reference), cost = rows.costs.find(row => row.attempt === attempt.reference);
+    let bound = false;
+    if (generation && attempt.settlement?.receipt) {
+      const { parseRunReceipt } = await import("../../src/run"), { manifestToJson } = await import("../../src/contract"), { verifyReceipt } = await import("../../src/verify");
+      const raw = await host.service.store.getReceipt(attempt.settlement.receipt), manifest = await host.service.store.getManifest(attempt.admission.manifest);
+      if (!raw || !manifest) throw new Error("Missing Gateway generation receipt or manifest");
+      const receipt = parseRunReceipt(raw), observation = generation.observation;
+      if (receipt.manifestDigest !== attempt.admission.manifest || !(await verifyReceipt(applicationJson(receipt), manifestToJson(manifest), host.service.store)).ok) throw new Error("Gateway generation receipt does not replay");
+      const effect = receipt.effects.find(row => row.requestDigest === observation.requestDigest);
+      if (!effect || receipt.effects.length !== 1 || ![ `vercel:${attempt.admission.model}`, ...(effect.error ? [`reserved:vercel:${attempt.admission.model}`] : []) ].includes(effect.executor)) throw new Error("Gateway generation request/executor mismatch");
+      if (effect.output !== undefined) {
+        if (hash(effect.output) !== observation.outputDigest || effect.usage?.model !== observation.model || (effect.usage?.tokensIn ?? null) !== observation.tokensIn || (effect.usage?.tokensOut ?? null) !== observation.tokensOut) throw new Error("Gateway generation output/usage mismatch");
+        bound = true;
+      }
+    }
+    if (cost && !bound) throw new Error("Reported Gateway cost lacks bound execution evidence");
+    views.push({ attempt: attempt.reference, status: !generation ? "generation-unavailable" : !bound ? "receipt-unavailable" : !cost ? "lookup-pending" : "reported", generation: generation?.reference ?? null, generationId: generation?.observation.generationId ?? null, lookup: cost?.reference ?? null, cost: cost?.observation ?? null });
+  }
+  return views;
 }
 export class MarketingWorkbench {
   readonly directory: string;
@@ -217,6 +256,7 @@ export class MarketingWorkbench {
       const { readRetainedShadow } = await import("./shadow"), { report } = await readRetainedShadow(this.host, shadow.evidence);
       if (report.parentState !== shadow.parentState || report.proposal !== hash(shadow.proposal) || report.policy !== shadow.policy || report.outcome !== "pass") throw new Error("Retained shadow binding failed before capture");
     }
+    const gatewayCosts = await gatewayCostViews(this.host, rows);
     const rendered = await this.host.render(snapshot, history);
     for (const attempt of rows.attempts) if (attempt.settlement?.accounting) usage.push((await readAccounting(this.host, attempt.settlement.accounting)).usage);
     const visit = (node: SurfaceNode): void => {
@@ -227,10 +267,10 @@ export class MarketingWorkbench {
     const available = (kind: WorkbenchCapture["actions"][number]["kind"], reason: string | null) => ({ kind, allowed: reason === null, reason });
     const candidate = rows.previews.some(preview => preview.parentState === snapshot.digest && (preview.proposal.source === "owner" || !memory.controls.modelActivationPaused && rows.attempts.some(row => row.admission.expectedHead === snapshot.digest && row.settlement?.status === "completed" && hash(row.settlement.proposal) === hash(preview.proposal)) && rows.shadows.some(row => row.parentState === snapshot.digest && row.accepted && hash(row.proposal) === hash(preview.proposal))));
     return parseWorkbenchCapture({ contract: "algal.marketing-capture.v1", application: APPLICATION, head: snapshot.digest, sequence: snapshot.state.sequence, revision, revisionDigest: rendered.revision, applicationRevision: snapshot.state.revision, signals: rendered.signals, view: rendered.view,
-      provenance: { memory: snapshot.state.memory, receipt: rendered.receipt, cursors: memory.cursors, nodes }, controls: memory.controls, controlsRef: hash(memory.controls), history: history.map(row => ({ head: row.digest, sequence: row.state.sequence, kind: row.transition.kind, applicationRevision: row.state.revision, memory: row.state.memory, evidence: row.transition.evidence })), ...rows,
-      observation: { journalEntries: entries.length, pendingAttempts: rows.attempts.filter(row => row.settlement === null).length, completedAttempts: rows.attempts.filter(row => row.settlement?.status === "completed").length, failedAttempts: rows.attempts.filter(row => row.settlement?.status === "failed").length, uncertainAttempts: rows.attempts.filter(row => row.settlement?.status === "uncertain").length, actualCostMicrousd: null, usage },
-      actions: [available("preview", journalFull ? "Retained journal capacity exhausted" : null), available("activate", full ? "Retained state capacity exhausted" : pinned ? "Surface revision is pinned" : !candidate ? "No eligible exact-head preview with required execution and shadow evidence" : null), available("signal", full ? "Retained state capacity exhausted" : null), available("restore", full ? "Retained state capacity exhausted" : pinned ? "Surface revision is pinned" : null), available("set-controls", full ? "Retained state capacity exhausted" : null), available("infer", rows.attempts.some(row => !row.settlement || row.settlement.status === "uncertain") ? "Pending or uncertain inference requires reconciliation" : memory.controls.inferencePaused ? "New inference is paused; admitted settlement remains allowed" : entries.length + reservedSlots(rows) + 3 > WORKBENCH_LIMITS.journal ? "Journal cannot reserve admission, settlement and reconciliation" : null)],
-      gaps: ["Identity is admitted by this trusted local host; source labels are not authentication credentials.", "Journal and provider observations can advance independently of this immutable application snapshot.", "Actual provider billing and marketing quality are unknown.", "Action hints use this captured state; execution replays candidate evidence and rechecks the authoritative head.", ...(journal.legacy ? ["Legacy journal has no durable deletion checkpoint; the next append seals its retained prefix."] : []), ...(journal.prepared ? ["A prepared journal append remains retained; the next write completes publication without rerunning inference."] : []), ...(memory.legacy ? ["Legacy memory has no ordered signal provenance; the first admitted envelope starts its stream at one."] : []), ...(rows.attempts.some(row => !row.settlement) ? ["Pending attempts may have crossed an external boundary; reconcile evidence, never automatically retry."] : [])],
+      provenance: { memory: snapshot.state.memory, receipt: rendered.receipt, cursors: memory.cursors, nodes }, controls: memory.controls, controlsRef: hash(memory.controls), history: history.map(row => ({ head: row.digest, sequence: row.state.sequence, kind: row.transition.kind, applicationRevision: row.state.revision, memory: row.state.memory, evidence: row.transition.evidence })), previews: rows.previews, attempts: rows.attempts, shadows: rows.shadows,
+      observation: { journalEntries: entries.length, pendingAttempts: rows.attempts.filter(row => row.settlement === null).length, completedAttempts: rows.attempts.filter(row => row.settlement?.status === "completed").length, failedAttempts: rows.attempts.filter(row => row.settlement?.status === "failed").length, uncertainAttempts: rows.attempts.filter(row => row.settlement?.status === "uncertain").length, actualCostMicrousd: null, usage, gatewayCosts },
+      actions: [available("preview", journalFull ? "Retained journal capacity exhausted" : null), available("activate", full ? "Retained state capacity exhausted" : pinned ? "Surface revision is pinned" : !candidate ? "No eligible exact-head preview with required execution and shadow evidence" : null), available("signal", full ? "Retained state capacity exhausted" : null), available("restore", full ? "Retained state capacity exhausted" : pinned ? "Surface revision is pinned" : null), available("set-controls", full ? "Retained state capacity exhausted" : null), available("infer", rows.attempts.some(row => !row.settlement || row.settlement.status === "uncertain") ? "Pending or uncertain inference requires reconciliation" : memory.controls.inferencePaused ? "New inference is paused; admitted settlement remains allowed" : entries.length + reservedSlots(rows) + 4 > WORKBENCH_LIMITS.journal ? "Journal cannot reserve admission, generation, settlement and reconciliation" : null)],
+      gaps: ["Identity is admitted by this trusted local host; source labels are not authentication credentials.", "Journal and provider observations can advance independently of this immutable application snapshot.", "Reported Gateway charges are separate host observations; missing charges, upstream BYOK billing and marketing quality remain unknown.", "Action hints use this captured state; execution replays candidate evidence and rechecks the authoritative head.", ...(journal.legacy ? ["Legacy journal has no durable deletion checkpoint; the next append seals its retained prefix."] : []), ...(journal.prepared ? ["A prepared journal append remains retained; the next write completes publication without rerunning inference."] : []), ...(memory.legacy ? ["Legacy memory has no ordered signal provenance; the first admitted envelope starts its stream at one."] : []), ...(rows.attempts.some(row => !row.settlement) ? ["Pending attempts may have crossed an external boundary; reconcile evidence, never automatically retry."] : [])],
     });
   }
   async execute(input: WorkbenchCommand | unknown): Promise<WorkbenchResult> {
@@ -281,7 +321,7 @@ export class MarketingWorkbench {
       if (rows.attempts.some(row => !row.settlement || row.settlement.status === "uncertain")) throw new Error("Pending or uncertain inference requires reconciliation; new calls are blocked");
       // Reserve both an uncertain settlement and its later reconciliation.
       // Other observations cannot consume those slots (enforced by append).
-      if (entries.length + reservedSlots(rows) + 3 > WORKBENCH_LIMITS.journal) throw new Error("Journal cannot reserve admission, settlement and reconciliation");
+      if (entries.length + reservedSlots(rows) + (admission.backend === "gateway" ? 4 : 3) > WORKBENCH_LIMITS.journal) throw new Error("Journal cannot reserve admission, generation, settlement and reconciliation");
       return this.append(entries, { kind: "attempt", data: admission });
     });
   }
@@ -297,6 +337,35 @@ export class MarketingWorkbench {
       }
       await validateSettlement(this.host, attempt, settlement);
       await this.append(entries, { kind: "settlement", data: { attempt: reference, settlement } });
+    });
+  }
+  /** Called by the trusted transport before returning its observed response. */
+  async recordGeneration(reference: Digest, input: GatewayGeneration): Promise<Digest> {
+    const observation = parseGatewayGeneration(input); workbenchRef(reference);
+    return this.locked(async () => {
+      const entries = await this.journal(), rows = projection(entries), existing = rows.generations.find(row => row.attempt === reference);
+      if (existing) {
+        if (hash(existing.observation) !== hash(observation)) throw new Error("Gateway generation observation conflicts");
+        await this.checkpoint(entries); return existing.reference;
+      }
+      return this.append(entries, { kind: "generation", data: { attempt: reference, observation } });
+    });
+  }
+  /** One bounded, explicit accounting read. It never dispatches inference and
+   * remains available while inference is paused. Unknown is never rewritten. */
+  async lookupGatewayCost(reference: Digest, options: Parameters<typeof lookupGatewayGenerationCost>[1]): Promise<GatewayCostView> {
+    workbenchRef(reference);
+    return this.locked(async () => {
+      const entries = await this.journal(), rows = projection(entries), views = await gatewayCostViews(this.host, rows), view = views.find(row => row.attempt === reference);
+      if (!view) throw new Error("Unknown admitted Gateway attempt");
+      if (view.status === "reported") { await this.checkpoint(entries); return view; }
+      if (view.status !== "lookup-pending" || !view.generation || !view.generationId) throw new Error("Gateway cost lookup requires retained generation and matching execution receipt");
+      if (entries.length + reservedSlots(rows) + 1 > WORKBENCH_LIMITS.journal) throw new Error("Gateway cost journal capacity exhausted before lookup");
+      const observation = await lookupGatewayGenerationCost(view.generationId, options);
+      if (!observation) return view;
+      const data: CostRecord = { attempt: reference, generation: view.generation, observation };
+      const lookup = await this.append(entries, { kind: "gateway-cost", data });
+      return { ...view, status: "reported", lookup, cost: observation };
     });
   }
   async reconcileAttempt(reference: Digest, input: AttemptSettlement): Promise<void> {
@@ -397,6 +466,7 @@ export async function verifyWorkbenchEvidence(input: unknown, expectedHead: Dige
       if (attempt.settlement?.accounting && !seen.has(attempt.settlement.accounting)) throw new Error("Missing attempt accounting");
       for (const [index, row] of attempt.settlements.entries()) await validateSettlement(host, attempt, row.outcome, row.reconciled ? attempt.settlements[index - 1]?.outcome : undefined);
     }
+    await gatewayCostViews(host, projected);
     for (const shadow of projected.shadows) {
       if (!surface.states.includes(shadow.parentState) || !seen.has(shadow.policy) || !seen.has(shadow.evidence)) throw new Error("Missing shadow binding/evidence");
       if (shadow.accepted) {

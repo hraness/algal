@@ -1,5 +1,5 @@
 import { createBudgetedExecutor, type InferenceAccounting } from "./inference-budget";
-import { vercelGatewayExecutor, type GatewayFetch } from "../../src/gateway";
+import { vercelGatewayExecutor, type GatewayFetch, type GatewayExecutorOptions } from "../../src/gateway";
 import { openAICompatibleExecutor } from "../../src/openai-compatible";
 import { asJsonValue, canonicalize } from "../../src/values";
 import { digestCanonical } from "../../src/digest";
@@ -20,6 +20,7 @@ export type LocalInferenceConfig = {
 };
 export type HarnessBackendConfig = ({ provider: "gateway" } & GatewayInferenceConfig) | LocalInferenceConfig;
 type Backend = { executor: Executor; accounting: InferenceAccounting; settle: () => Promise<void> };
+export type HarnessModelObservations = Pick<GatewayExecutorOptions, "observeGeneration">;
 function integer(value: unknown, min: number, max: number, name: string): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < min || value > max) throw new Error(`Invalid backend ${name}`);
   return value;
@@ -62,7 +63,7 @@ export function parseHarnessBackend(raw: unknown): HarnessBackendConfig {
  * deliberately overcounting ordinary text tokenization. Keep a provider-side
  * credit cap too: accounting is not control over a provider's billing changes. */
 export async function createGatewayInference(config: GatewayInferenceConfig,
-  options: { fetch?: GatewayFetch; credential?: string } = {}): Promise<Backend> {
+  options: { fetch?: GatewayFetch; credential?: string } & HarnessModelObservations = {}): Promise<Backend> {
   const parsed = parseHarnessBackend({ ...config, provider: "gateway" });
   if (parsed.provider !== "gateway") throw new Error("Expected Gateway configuration");
   if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(parsed.gatewayProvider)) throw new Error("Invalid Gateway provider selector");
@@ -70,6 +71,7 @@ export async function createGatewayInference(config: GatewayInferenceConfig,
   integer(reserveMicrousdPerCall, 1, 1_000_000_000, "call cost ceiling");
   const fetcher = options.fetch ?? globalThis.fetch;
   const gateway = vercelGatewayExecutor({ model: parsed.model, ...(options.credential === undefined ? {} : { credential: options.credential }),
+    ...(options.observeGeneration === undefined ? {} : { observeGeneration: options.observeGeneration }),
     fetch: async (input, init) => {
       if (typeof init?.body !== "string") throw new Error("Expected Gateway JSON request body");
       const body = JSON.parse(init.body) as Record<string, unknown>;
@@ -87,12 +89,12 @@ export async function createGatewayInference(config: GatewayInferenceConfig,
     providerIdentity: digestCanonical(asJsonValue({ ...parsed, ledgerPath: null }, "Gateway configuration")) });
 }
 
-export async function createHarnessModel(raw: unknown, parentSignal?: AbortSignal): Promise<Backend & { model: HarnessModel; modelId: string }> {
+export async function createHarnessModel(raw: unknown, parentSignal?: AbortSignal, observations: HarnessModelObservations = {}): Promise<Backend & { model: HarnessModel; modelId: string }> {
   const config = parseHarnessBackend(raw);
   let backend: Backend;
   if (config.provider === "gateway") {
     const { provider: _provider, ...gateway } = config;
-    backend = await createGatewayInference(gateway);
+    backend = await createGatewayInference(gateway, observations);
   } else {
     // Local means loopback-only and carries no cloud credential. Remote hosted
     // OpenAI-compatible providers use the SDK's explicit endpoint API instead.

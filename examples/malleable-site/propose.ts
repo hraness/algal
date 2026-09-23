@@ -1,4 +1,4 @@
-import { createHarnessModel, parseHarnessBackend, type HarnessBackendConfig } from "../coding-harness/model";
+import { createHarnessModel, parseHarnessBackend, type HarnessBackendConfig, type HarnessModelObservations } from "../coding-harness/model";
 import { parseOrganismManifest, manifestToJson } from "../../src/contract";
 import { digestCanonical, type Digest } from "../../src/digest";
 import { applicationJson } from "../../src/application-contract";
@@ -12,7 +12,7 @@ import { MarketingWorkbench } from "./workbench";
 /** One explicit call, no retry/fallback. The durable backend ledger reserves
  * before dispatch. A generated proposal grants no activation authority. */
 export async function generateProposal(host: MarketingHost, backendInput: unknown,
-  inferenceFactory: (config: HarnessBackendConfig) => Promise<Pick<Awaited<ReturnType<typeof createHarnessModel>>, "executor" | "accounting" | "settle">> = createHarnessModel) {
+  inferenceFactory: (config: HarnessBackendConfig, observations: HarnessModelObservations) => Promise<Pick<Awaited<ReturnType<typeof createHarnessModel>>, "executor" | "accounting" | "settle">> = (config, observations) => createHarnessModel(config, undefined, observations)) {
   const config = parseHarnessBackend(backendInput);
   if (config.maxCalls !== 1) throw new Error("This demonstration requires a one-call proposal budget");
   const workbench = new MarketingWorkbench(host), capture = await workbench.capture();
@@ -34,7 +34,7 @@ export async function generateProposal(host: MarketingHost, backendInput: unknow
   let backend: Awaited<ReturnType<typeof inferenceFactory>> | undefined;
   let receiptRef: Digest | null = null, accountingRef: Digest | null = null, settlementUnknown = false;
   try {
-    backend = await inferenceFactory(config);
+    backend = await inferenceFactory(config, { observeGeneration: async observation => { await workbench.recordGeneration(journalAttempt, observation); } });
     let receipt: Awaited<ReturnType<typeof runOrganism>> | undefined, executionFailure: { error: unknown } | undefined;
     try {
       receipt = await runOrganism({ manifest, store, fns: builtinRegistry(), executors: [backend.executor] });

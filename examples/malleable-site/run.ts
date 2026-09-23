@@ -37,6 +37,7 @@ const usage = `Usage: bun examples/malleable-site/run.ts COMMAND DIRECTORY [argu
   export output.json                  export bounded lifecycle/pure execution evidence
   verify evidence.json EXPECTED_HEAD   DIRECTORY is unused; externally pin the head
   propose backend.json proposal.json   one budgeted model call; no activation
+  gateway-cost ATTEMPT_DIGEST          read and retain one Gateway charge lookup
   fixture                             print standalone default view fixture`;
 export async function main(args: string[]): Promise<unknown> {
   const [command, directory, ...rest] = args;
@@ -54,6 +55,12 @@ export async function main(args: string[]): Promise<unknown> {
   if (command === "inspect") { count(0); return { snapshot: await host.current(), revision: await host.revision(), signals: await host.signals() }; }
   if (command === "render") { count(0); return host.render(); }
   if (command === "capture") { count(0); return workbench.capture(); }
+  if (command === "gateway-cost") {
+    count(1);
+    const credential = process.env.AI_GATEWAY_API_KEY ?? process.env.VERCEL_OIDC_TOKEN;
+    if (!credential) throw new Error("Gateway accounting credential is not configured");
+    return workbench.lookupGatewayCost(digest(0), { credential });
+  }
   if (command === "command") { count(1); return workbench.execute(await read(rest[0]!)); }
   if (command === "serve") {
     if (rest.length > 1 || (rest[0] !== undefined && (!/^\d+$/.test(rest[0]) || Number(rest[0]) > 65535))) throw new Error(usage);
@@ -85,7 +92,7 @@ export async function main(args: string[]): Promise<unknown> {
     // Reserve the output path before a paid call, so an existing proposal is
     // never overwritten and filesystem failure cannot invite an accidental retry.
     const file = await open(rest[1]!, "wx", 0o600);
-    try { const result = await generateProposal(host, await read(rest[0]!)); await file.writeFile(canonicalize(result.proposal) + "\n"); await file.sync(); return { output: resolve(rest[1]!), attempt: result.attempt, receipt: result.receipt, accounting: result.accounting }; }
+    try { const result = await generateProposal(host, await read(rest[0]!)); await file.writeFile(canonicalize(result.proposal) + "\n"); await file.sync(); return { output: resolve(rest[1]!), attempt: result.attempt, journalAttempt: result.journalAttempt, receipt: result.receipt, accounting: result.accounting }; }
     finally { await file.close(); }
   }
   if (command === "fixture") { count(0); return buildSurfaceFixture(); }

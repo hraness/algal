@@ -99,6 +99,9 @@ export type {
 
 export { VERCEL_AI_GATEWAY_BASE_URL, vercelGatewayExecutor } from "./src/gateway";
 export type { GatewayExecutorOptions, GatewayFetch } from "./src/gateway";
+export { lookupGatewayGenerationCost } from "./src/gateway-accounting";
+export { parseGatewayGeneration, parseGatewayReportedCost } from "./src/gateway-observation";
+export type { GatewayGeneration, GatewayReportedCost } from "./src/gateway-observation";
 export { openAICompatibleExecutor } from "./src/openai-compatible";
 export type { OpenAICompatibleExecutorOptions, ChatCompletionsFetch, ChatCompletionsFormat } from "./src/openai-compatible";
 

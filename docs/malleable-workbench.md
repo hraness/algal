@@ -9,8 +9,13 @@ explanations describe the same captured render.
 The public page is a recorded example. It accepts exported captures for inspection
 but does not carry owner credentials or publish changes. A content digest identifies
 bytes; it is not an author signature. The build creates and replay-verifies the
-example without calling a model. Its inference panel retains the previously
-recorded Gateway call; it does not present a replay as a new model invocation.
+example without calling a model. Its inference panel retains two previously
+recorded Gateway calls; it does not present a replay as a new model invocation.
+The original call's actual charge remains unknown. The
+[second recorded call](/workbench/model-cost-evidence.json) retained 949 input
+and 84 output tokens and a matching Gateway-reported USD 0.001369 debit. Its
+candidate was inconclusive under the independent evaluator, and it did not
+change the active application.
 
 ## Open an owner workspace
 
@@ -81,6 +86,30 @@ so a restart does not hide an unfinished attempt. An unknown completion never
 causes an automatic resend. The underlying ledger's reservation is a host budget
 charge, not actual provider billing. Token usage remains unknown when absent.
 
+New Gateway attempts also retain the bounded generation identity separately from
+the canonical execution receipt. An owner can retrieve its reported charge:
+
+```sh
+bun examples/malleable-site/run.ts gateway-cost ./my-surface ATTEMPT_DIGEST
+```
+
+Use the `journalAttempt` digest printed by `propose`. This uses the configured
+`AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` for one
+read-only lookup. It never sends inference again. The journal joins the response
+to the generation, request, output, model and token counts before displaying the
+reported debit. A missing response stays unknown; earlier attempts without a
+generation identity retain their original unknown cost. Gateway debits, host
+reservations and a provider's invoice are separate observations. For BYOK, the
+reported upstream list price does not establish the provider invoice. See the
+[Gateway generation lookup contract](https://vercel.com/docs/ai-gateway/sdks-and-apis/rest-api#look-up-a-generation).
+
+This first accounting path binds valid structured completions. A malformed
+response, missing generation ID, interrupted transport or failed observation
+write can still incur a charge without enough retained evidence to attribute it.
+Those costs remain unknown, never zero; accounting does not authorize another
+inference call. Accounting for invalid completions needs a separately defined
+response-observation contract.
+
 The independent shadow evaluator renders the incumbent and candidate in four
 audience/release contexts and replays their receipts. It checks stable node IDs,
 the fixed documentation destination, unchanged signal meaning, compatibility,
@@ -103,7 +132,9 @@ it is not a model admission boundary.
 This example retains at most 64 application states, 16 signal streams and 128
 journal entries. It displays remaining capacity and fails closed at its bound;
 it never silently prunes source evidence. Each pending inference reserves room
-for an uncertain terminal record and its eventual reconciliation. This is a bounded demonstration, not indefinite
+for an uncertain terminal record and its eventual reconciliation, plus a
+generation observation for Gateway calls. Charge lookups use only unreserved
+capacity. This is a bounded demonstration, not indefinite
 production retention.
 
 The [roadmap execution record](malleable-roadmap-progress.md) tracks hosted

@@ -623,6 +623,7 @@ if (await recordedProposal.exists()) {
 }
 const modelEvidencePath = join(ROOT, "examples/malleable-site/model-evidence.json");
 if (await Bun.file(modelEvidencePath).exists()) await cp(modelEvidencePath, join(DIST, "living/model-evidence.json"));
+await cp(join(ROOT, "examples/malleable-site/model-cost-evidence.json"), join(DIST, "workbench/model-cost-evidence.json"));
 for (const f of ["robots.txt", "llms.txt", "og.png", "favicon.svg", "algal-mark.svg"]) {
   await cp(join(SITE, f), join(DIST, f));
 }

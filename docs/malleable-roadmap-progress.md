@@ -44,15 +44,25 @@ this document records orchestration state.
 
 ## Stage status
 
-| Stage | Current evidence | Remaining acceptance |
+| Stage | Evidence | Delivery scope |
 | --- | --- | --- |
-| A | Portable application core with filesystem/memory conformance; 19 local-triage native/reference receipts and 38 cross-verifications; shared session fixtures and renderer profiles | Final integration and exact-artifact native interaction checks |
-| B | Previously shipped embed/fallback/independent mounts; owner preview, adoption and forward restoration; current browser flow passes | Current production delivery verification |
-| C | Ordered/deduplicated signals; same-capture explanations; persistent controls, inference journal and history; interrupted publication and restart tests | Final integration delivery |
-| D | Retained real Gateway attempt, independently replayed pass/fail/inconclusive shadows; failure/uncertainty visibility; guarded model adoption | Final public fixture/build and delivery; actual provider billing remains unavailable |
-| E | Shared lifecycle in actual workerd; 11 runtime tests, owner front-door test, 12 recovery tests, 17 recovery-client tests; typed client and owner dashboard | Exact core dependency pin, aggregate gate, isolated hosted A/A/recovery and dashboard qualification |
-| F | Dioxus/Ratatui package; 36 extraction checks; real Apple proposal and revision change under process-tree network denial; persistent facts and drafts | Native rapid-typing/initial-selection repair, final package, and final packaged offline check |
-| G | Second task application; actual v1→v2 migration, workflow changes, typed task widget profile, pure evidence forks and explicit merge conflicts | Final whole-roadmap join; browser-local full kernel is deferred, not a requirement of the browser renderer |
+| A | Qualified portable filesystem/memory lifecycle, 19 native/reference receipts and 38 cross-verifications; same task capture/actions across browser, desktop and TUI; shared session fixtures; actual renderer costs and limitations measured | No missing local exit evidence. Desktop's provisional CUA-inclusive action budget failed; performance remains experimental, with paint latency unisolated |
+| B | Qualified static fallback, independent mounts, keyboard continuity, expected-head rejection, preview/adoption and restoration; actual staging preview and owner browser checks pass | Staging qualification; production acceptance checks the deployed capture against the validated build |
+| C | Qualified ordered/deduplicated signals, same-capture explanations, persistent controls, journal/history and interrupted-publication/restart behavior | Local owner and public read-only captures share the same bounded read model |
+| D | Real Gateway attempts retained; independent pass/fail/inconclusive shadows; guarded adoption; one joined provider-reported USD 0.001369 debit, with the original unknown preserved | Missing/malformed provider billing remains unknown; recorded public fixtures make no inference calls |
+| E | Shared lifecycle in actual workerd, immutable core dependency pin, typed client, owner dashboard, A/A instrumentation, inert recovery and forward restoration | The [cloud delivery record](https://github.com/hraness/algal-cloud/blob/codex/application-roadmap/docs/application-roadmap.md) owns exact integration, isolated hosted qualification and dashboard evidence |
+| F | Final exact-source Dioxus/Ratatui package: 37 extraction checks, 11 packaged offline checks, actual native typing/select/draft interactions; real network-denied Apple revision change and matching packaged provider binaries | Functional exit qualified for macOS arm64; ad-hoc signed, not notarized; broader platforms and desktop performance are not production-qualified |
+| G | Qualified materially different task application, actual v1→v2 migration, workflow changes, typed forms/actions, core lifecycle conformance, pure evidence forks and explicit field conflicts | Full browser-local kernel explicitly deferred, not claimed by the browser renderer |
+
+Core commit `39607174063030eb4793ab65601a41d7d7c918d4` passed the aggregate
+gate (984 tests, 19 conditional native skips), seven CI jobs, CodeQL and Vercel.
+The final package is bound to that clean source inventory. Provider-cost
+evidence and renderer measurements are subsequent source additions; they do not
+change the qualified package binaries. Final source checks, independent review,
+merge and deployment identities are tracked in [core PR #67](https://github.com/hraness/algal/pull/67)
+and [cloud PR #56](https://github.com/hraness/algal-cloud/pull/56). Production
+acceptance compares the published capture with the validated build and checks
+source inspection, phone layout, no-JavaScript fallback and documentation.
 
 ## Tardigrade transfers
 
@@ -80,24 +90,70 @@ The marketing workbench now has ordered signal envelopes, same-snapshot node
 explanations, history, owner controls, bounded inference observations and shadow
 checks. A loopback owner server serves the same page as the public read-only
 capture. Independent review repaired missing-evidence healing in shadow replay.
-Journal/settlement review passed 21 tests and 139 assertions, including a second
+Journal/settlement review passed 23 tests and 147 assertions, including a second
 review of prepared-file durability. The site build, DOM-only TypeScript and
-focused browser-boundary tests have passed. Fourteen real-browser checks passed
+focused browser-boundary tests have passed. Fifteen real-browser checks passed
 for public/owner captures, preview/adoption, controls, stale commands, imports,
-phone dark layout, delayed saves/submissions, composition and session restart.
-Production delivery remains pending.
+phone dark layout, delayed saves/submissions, composition, session restart and
+the distinction between a reported charge and historical unknown billing.
+Four additional [composition-removal checks](../examples/local-triage-web/composition-qualification.json)
+exercise the production browser renderer: removing a composing control waits,
+preserves its draft, clears incompatible focus and requires explicit rebase.
+These use synthetic composition events and an alternate valid captured fixture;
+they do not claim a permitted schema downgrade or physical-IME qualification.
+The qualified Vercel staging preview joined the exact capture and application
+head. Production acceptance repeats the published capture and browser checks.
+
+The second bounded Gateway call retained generation
+`gen_01M384V57X8NE8CXGXFVMT8FPE`, 949 input tokens, 84 output tokens and a
+provider-reported debit of USD 0.001369. Cost identity and replay joins passed;
+its independent shadow remained inconclusive and the application stayed
+unchanged. The sanitized [cost evidence](../examples/malleable-site/model-cost-evidence.json)
+is separate from the original attempt, whose unknown bill remains unknown.
+Missing or malformed provider billing metadata is never replaced with a budget
+reservation or an estimated charge. The measured debit is a provider observation,
+not an independently reconciled account invoice.
 
 The task-triage host is implemented with persistent facts, pure forms/actions,
 schema migration, explicit fork conflict resolution and separate durable sessions.
 Its focused host suite passed 8 tests/81 assertions after independent review
 removed missing-evidence healing and cache masking. Nineteen complete
 native/reference receipts matched with 38 cross-runtime offline verifications.
-The first Dioxus desktop and Ratatui build passed. Browser, desktop and terminal
+The Dioxus desktop and Ratatui builds passed. Browser, desktop and terminal
 share semantic capture/command data; five session-identity fixtures cover adding,
-changing, moving and removing controls while retaining drafts. The first extracted package passed 36 checks. Actual native interaction preserved
-a task and an independent draft across a schema upgrade and explicit rebase.
-It found fast-typing loss and initial dropdown mismatches in Dioxus; those are
-being repaired before the final package and native interaction acceptance.
+changing, moving and removing controls while retaining drafts. Actual native
+interaction preserved a task and independent draft across schema upgrade and
+explicit rebase. It exposed Dioxus fast-typing loss and initial dropdown errors;
+DOM-owned initial field values and explicit draft resets repaired both. Native
+regressions exercise real virtual-DOM mutations, and actual final-package typing,
+first-mount selection, panel remount, save and draft-reset checks passed.
+
+The final macOS arm64 archive passed 37 fresh-extraction checks and 11 checks
+under process-tree network denial. It includes a standalone expression-WASM host,
+Dioxus app and Ratatui executable; no checkout or Bun installation is required.
+The archive SHA-256 is
+`e59b81d33b20af0917da6211510e76d438155af6bc05abaa5f12c3e08707e556`;
+its clean source inventory SHA-256 is
+`847d467faea41b756893e0620f2dcc6f1541469b7ae372bf0f6da8fcefc8dbb0`.
+The offline package qualification checked restart, task retention, owner workflow
+evolution, core migration, export replay and a fresh-identity fork. Domain facts
+and session drafts remain separate, with explicit stale-head rebase and conflicts.
+The profile is bounded to 32 tasks and 128 states; forks copy no mutable custody,
+dispatch ledger or external authority. The package is ad-hoc signed, not notarized.
+
+[Renderer measurements](../examples/local-triage/renderers/performance/README.md)
+use budgets declared before execution. The embed passed nine checks: 95,438 gzip
+bytes, 40.8 ms local cold readiness p95, 0.2 ms synchronous update p95, 772,676
+bytes retained JS growth after 1,000 revision swaps and 100 mount cycles, zero DOM
+growth and no measured host interference. Packaged host capture and TUI snapshot
+p95 were 83.0 ms and 241.7 ms. Desktop readiness was observed within 4,976 ms;
+main-process RSS grew 1,622,016 bytes after twenty verified actions. Its
+CUA-inclusive action p95 of 2,751 ms **failed** the declared 2,000 ms budget.
+A separate host-service action probe measured 916.5 ms p95, but does not isolate
+painting or clear that failure. These measurements establish bounded costs and
+limitations on one development Mac, not production SLOs. The passive Dioxus Web
+spike is not an equivalent interactive comparison; retain the lightweight site
+adapter and the experimentally qualified Dioxus desktop.
 
 A real Apple Foundation Models proposal passed under macOS process-tree
 `deny network*`. A socket probe returned EPERM. The proposal changed grouping
@@ -105,19 +161,29 @@ from status to priority, was independently evaluated and explicitly adopted;
 tasks survived restart, export replay and a new-identity fork. The retained native
 receipt is `sha256:0a4928fe2318b7ff0eb5dffb18ab63e219e49125444c7b534caa19e7dbba62c4`.
 This describes the tested on-device path, not an attestation about the Apple
-service or every local model. Token usage and actual provider billing are unknown.
-Private execution artifacts are retained outside the repository.
+service or every local model. Apple token usage and actual provider billing are
+unknown. Packaged native and Apple bridge hashes match the binaries that produced
+the qualified receipt; the packaged offline smoke made no extra inference call.
+Apple inference requires supported hardware, macOS 26+, enabled Apple Intelligence
+and locally available model assets. Private execution artifacts are retained
+outside the repository.
 
 The cloud branch `codex/application-roadmap` integrates the shared lifecycle
 through Durable Object SQLite, explicit durability boundaries and the existing
 writer queue. Pure owner artifact admission, captured-head delivery, controls,
-A/A assignments/exposures and typed clients are implemented. Its focused actual
-workerd suite passed 11 tests; cloud TypeScript passed. Recovery format extensions
-preserve the old optional egress pair and make the new application pair atomic.
-Recovery passed 12 actual workerd tests and 17 client tests; the owner front-door
-test passed tenant isolation, typed commands and inert recovery. Final dependency
-pinning, the aggregate gate and bounded live qualification remain pending. A local owner dashboard keeps the tenant key out
-of the browser and rejects mismatched capture/assessment heads.
+A/A assignments/exposures and typed clients are implemented. All six dependency
+pins use the qualified core commit above. Recovery format extensions preserve
+the old optional egress pair and make the new application pair atomic. The
+repair aggregate passed 615 Bun tests, 235 application workerd tests, four
+assurance workerd tests, nine TLC probes, nine Lean probes and 96 component
+harness checks, plus types, client guards, claims and four deployment dry runs.
+A memory-only restoration now returns settled conflict without publication;
+the qualification explicitly changes a pure layout before restoring it forward.
+A local owner dashboard keeps the tenant key out of the browser and rejects
+mismatched capture/assessment heads. The companion cloud delivery record retains
+subsequent mainline integration and the isolated worker, synthetic A/A, kill,
+restoration, archive and dashboard outcomes. Historical A/A evidence recovered
+from the interrupted qualification is labelled as replayed from retained backup.
 
 The separate cloud production-assurance program remains separate: this roadmap
 does not enable its public activation switch, financial paths, public SLO or

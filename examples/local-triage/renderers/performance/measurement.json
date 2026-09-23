@@ -1,0 +1,371 @@
+{
+  "contract": "algal.renderer-performance-summary.v1",
+  "measuredDate": "2026-09-23",
+  "status": "bounded-costs-and-limitations-measured",
+  "allBudgetsPassed": false,
+  "environment": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "darwinRelease": "25.5.0",
+    "cpu": "Apple M4 Max",
+    "cores": 16,
+    "memoryBytes": 137438953472,
+    "bun": "1.3.14",
+    "browser": "151.0.7922.34"
+  },
+  "package": {
+    "gitHead": "39607174063030eb4793ab65601a41d7d7c918d4",
+    "sourceSha256": "847d467faea41b756893e0620f2dcc6f1541469b7ae372bf0f6da8fcefc8dbb0",
+    "hostSha256": "4eda351d102ebf006fe1968af76ebe641c3ad5046cbe19effcb52d361a0ed544",
+    "desktopSha256": "34153623560a6018a868c6410c22998b8744cbc03e800dc7d8ffd07399a14064"
+  },
+  "budgetsSha256": "6b765f6cf51e9b8f83d79c9769a56d70d38f260758949c785c88514f5a38c966",
+  "browser": {
+    "checksPassed": 9,
+    "checksTotal": 9,
+    "assets": [
+      {
+        "path": "living.js",
+        "bytes": 20973,
+        "gzipBytes": 7375,
+        "sha256": "5b7dc2cd671440502d429f68a92bd4609fb52dc5ae4fab9c3a2d30730dc38fa5"
+      },
+      {
+        "path": "living.css",
+        "bytes": 13107,
+        "gzipBytes": 2971,
+        "sha256": "80bcfb0ec06b07ccc8dccf2317ac8fd860382d0dcbc3b3b1550feeb34f91f0ec"
+      },
+      {
+        "path": "living/algal_expr.wasm",
+        "bytes": 253073,
+        "gzipBytes": 84602,
+        "sha256": "a55aaf318395b41be9be2f0d2c1bfa2ad1471ebe957a8c776b9799b6072b6b79"
+      },
+      {
+        "path": "living/initial.json",
+        "bytes": 1668,
+        "gzipBytes": 490,
+        "sha256": "ad1bb60c62a3088bee1ff67685ed9bcd3b047e3db45095435b00358d19e23f01"
+      }
+    ],
+    "rawBytes": 288821,
+    "gzipBytes": 95438,
+    "startup": {
+      "count": 5,
+      "min": 18.59999990463257,
+      "median": 24,
+      "p95": 40.799999952316284,
+      "max": 40.799999952316284
+    },
+    "update": {
+      "count": 1000,
+      "min": 0,
+      "median": 0.10000002384185791,
+      "p95": 0.19999992847442627,
+      "max": 2
+    },
+    "memory": {
+      "before": {
+        "usedSize": 1359660,
+        "totalSize": 2162688,
+        "embedderHeapUsedSize": 557488,
+        "backingStorageSize": 29214
+      },
+      "after": {
+        "usedSize": 2132336,
+        "totalSize": 3014656,
+        "embedderHeapUsedSize": 429552,
+        "backingStorageSize": 29518
+      },
+      "jsHeapGrowthBytes": 772676,
+      "domNodeGrowth": 0,
+      "scope": "Chromium post-GC JavaScript heap and DOM nodes; backing storage reported separately; not whole-browser RSS"
+    },
+    "revisionSwaps": 1000,
+    "mountCycles": 100,
+    "outsideMutations": 0,
+    "independentMountAndFocusPreserved": true,
+    "dioxusWeb": {
+      "rawBytes": 362713,
+      "gzipBytes": 148449,
+      "decision": "Keep the qualified lightweight embed and Dioxus desktop. The Dioxus Web spike is passive, so its payload is not an interactive apples-to-apples comparison."
+    }
+  },
+  "local": {
+    "tasks": 32,
+    "capture": {
+      "count": 5,
+      "min": 80.63225,
+      "median": 81.18583400000006,
+      "p95": 83.048,
+      "max": 83.048
+    },
+    "terminalSnapshot": {
+      "count": 5,
+      "min": 218.04829199999995,
+      "median": 218.56183299999998,
+      "p95": 241.71254199999998,
+      "max": 241.71254199999998
+    },
+    "cliTuiPeakRssBytes": 87425024,
+    "desktop": {
+      "service": "authorized cua_repl",
+      "tasks": 32,
+      "startedEpochMs": 1790201120953,
+      "observerStartedEpochMs": 1790201125734,
+      "visibleEpochMs": 1790201125929,
+      "readinessUpperBoundMs": 4976,
+      "actionStartedEpochMs": 1790201169044,
+      "actionsFinishedEpochMs": 1790201210121,
+      "actionsMs": [
+        1629,
+        1260,
+        1604,
+        1670,
+        1746,
+        1833,
+        1733,
+        2031,
+        1674,
+        1679,
+        1665,
+        2119,
+        2082,
+        2487,
+        1863,
+        2751,
+        2601,
+        3500,
+        2600,
+        2548
+      ],
+      "actionP95Ms": 2751,
+      "actionMaxMs": 3500,
+      "verifiedTransitions": 20,
+      "finalSequence": 20,
+      "rssBefore": {
+        "epochMs": 1790201168553,
+        "rssBytes": 116539392
+      },
+      "rssAfter": {
+        "epochMs": 1790201210145,
+        "rssBytes": 118161408
+      },
+      "rssGrowthBytes": 1622016,
+      "mainProcessPeakRssBytes": 118194176,
+      "normalQuit": true
+    },
+    "desktopChecks": [
+      {
+        "name": "Accessibility-visible startup upper bound",
+        "passed": true,
+        "observedMs": 4976,
+        "maximumMs": 5000
+      },
+      {
+        "name": "CUA complete/reopen inclusive latency p95",
+        "passed": false,
+        "observedMs": 2751,
+        "maximumMs": 2000
+      },
+      {
+        "name": "Main-process retained RSS growth after 20 actions",
+        "passed": true,
+        "observedBytes": 1622016,
+        "maximumBytes": 33554432
+      },
+      {
+        "name": "20 captured state changes and normal quit",
+        "passed": true,
+        "observed": {
+          "transitions": 20,
+          "exitCode": 0
+        }
+      }
+    ],
+    "hostAction": {
+      "samples": [
+        {
+          "ms": 435.7132920000001,
+          "operationMs": 33.722916,
+          "commandMs": 401.590375,
+          "sequence": 1
+        },
+        {
+          "ms": 468.57245799999987,
+          "operationMs": 43.155167000000006,
+          "commandMs": 425.0336249999999,
+          "sequence": 2
+        },
+        {
+          "ms": 469.048667,
+          "operationMs": 31.305040999999846,
+          "commandMs": 437.4227920000001,
+          "sequence": 3
+        },
+        {
+          "ms": 520.9453330000001,
+          "operationMs": 37.035709,
+          "commandMs": 483.62750000000005,
+          "sequence": 4
+        },
+        {
+          "ms": 597.087708,
+          "operationMs": 36.83454099999972,
+          "commandMs": 559.9528750000004,
+          "sequence": 5
+        },
+        {
+          "ms": 645.0162919999998,
+          "operationMs": 34.868625000000065,
+          "commandMs": 609.8147079999999,
+          "sequence": 6
+        },
+        {
+          "ms": 655.1237080000001,
+          "operationMs": 36.59904099999994,
+          "commandMs": 618.2482500000001,
+          "sequence": 7
+        },
+        {
+          "ms": 656.1105000000007,
+          "operationMs": 30.92895800000042,
+          "commandMs": 624.8788329999998,
+          "sequence": 8
+        },
+        {
+          "ms": 657.1677919999993,
+          "operationMs": 31.27312499999971,
+          "commandMs": 625.6676660000003,
+          "sequence": 9
+        },
+        {
+          "ms": 652.1427079999994,
+          "operationMs": 31.93029200000001,
+          "commandMs": 619.8609999999999,
+          "sequence": 10
+        },
+        {
+          "ms": 687.917625,
+          "operationMs": 28.077375000000757,
+          "commandMs": 659.5795419999995,
+          "sequence": 11
+        },
+        {
+          "ms": 707.895458,
+          "operationMs": 34.85662499999944,
+          "commandMs": 672.7232090000007,
+          "sequence": 12
+        },
+        {
+          "ms": 701.2625829999997,
+          "operationMs": 25.573709000000235,
+          "commandMs": 675.4587090000005,
+          "sequence": 13
+        },
+        {
+          "ms": 686.2515000000003,
+          "operationMs": 25.04216600000018,
+          "commandMs": 661.0099160000009,
+          "sequence": 14
+        },
+        {
+          "ms": 730.596042000001,
+          "operationMs": 25.77050000000054,
+          "commandMs": 704.5992500000011,
+          "sequence": 15
+        },
+        {
+          "ms": 753.148541999999,
+          "operationMs": 25.33616599999914,
+          "commandMs": 727.578125,
+          "sequence": 16
+        },
+        {
+          "ms": 783.680624999999,
+          "operationMs": 25.200041000000056,
+          "commandMs": 758.2314999999999,
+          "sequence": 17
+        },
+        {
+          "ms": 812.7048749999994,
+          "operationMs": 25.352708999998868,
+          "commandMs": 787.1378750000003,
+          "sequence": 18
+        },
+        {
+          "ms": 916.4944999999989,
+          "operationMs": 25.84654099999898,
+          "commandMs": 890.3714999999993,
+          "sequence": 19
+        },
+        {
+          "ms": 1381.758084000001,
+          "operationMs": 31.32233399999859,
+          "commandMs": 1350.1482919999999,
+          "sequence": 20
+        }
+      ],
+      "p95Ms": 916.4944999999989,
+      "maxMs": 1381.758084000001,
+      "budgetMs": 2000,
+      "passed": true,
+      "scope": "Packaged host service path used by Model.action, without desktop UI or accessibility observation. Does not replace the CUA result and does not isolate paint latency."
+    },
+    "unavailableInitialObserver": {
+      "available": false,
+      "ok": false,
+      "reason": "Inherited accessibility permission unavailable; no permission prompt was requested"
+    }
+  },
+  "evidence": [
+    {
+      "artifact": "renderer-performance-browser-1/declaration.json",
+      "sha256": "8ff444ea6ae181dd38426f4dc408c34467d8260914a760c8c49bf2cadc13c23a"
+    },
+    {
+      "artifact": "renderer-performance-browser-1/result.json",
+      "sha256": "fcfd49d6e37724eba38750618fb8342fd3ce21d8dd1f646dac79b976368dd1f5"
+    },
+    {
+      "artifact": "renderer-performance-native-1/declaration.json",
+      "sha256": "0a37fed18566bd898856bdc550632cd0b190205e156f12db1a00f5db1df84251"
+    },
+    {
+      "artifact": "renderer-performance-native-1/result.json",
+      "sha256": "151cf928193324ab1a22931f9f62fd413d8f80d54f013b8df3edb7f8d327a778"
+    },
+    {
+      "artifact": "renderer-performance-cua-1/declaration.json",
+      "sha256": "a5efbb5ba86ba3a6c7f3d2f18c4321b5fc747f66bc7607914d43da804962269a"
+    },
+    {
+      "artifact": "renderer-performance-cua-1/result.json",
+      "sha256": "2910fe199d7007967f678244efe71b127e99d44b4a0a8c1007cb9624c2a26990"
+    },
+    {
+      "artifact": "renderer-performance-host-actions-1/declaration.json",
+      "sha256": "074533379d6539fc1189b15c80e5ca826b4462b685b12f191f275da0dcb75d06"
+    },
+    {
+      "artifact": "renderer-performance-host-actions-1/result.json",
+      "sha256": "c3264d3ed41a9422df810a8439f9c660bd3009736d41169d12bbfaf09108d285"
+    }
+  ],
+  "limitations": [
+    "Local cold browser contexts and uncompressed loopback transport; no WAN or device-fleet claim",
+    "Startup starts before module import and ends at the first animation frame after both mounts; static fallback precedes import",
+    "Update timings cover synchronous VM evaluation and DOM patching, not complete paint latency",
+    "Heap qualification is post-GC JavaScript retention; it is not a proof of total native/WASM memory behavior",
+    "Measured host interference covers the sentinel, outside draft, route and independent mount in the declared harness",
+    "One startup observation is an upper bound including observer tool dispatch; it does not isolate first paint.",
+    "Action duration includes CUA click, automatic scrolling and accessibility-tree observation; the declared inclusive action budget failed.",
+    "Main process RSS excludes separately managed WebKit processes.",
+    "No inference or provider operation occurred.",
+    "The direct AX helper was unavailable; its original failure result remains retained separately.",
+    "One development Mac, bounded 32-task/128-state application, five cold CLI/TUI samples; not a production SLO or fleet benchmark.",
+    "The separate host action probe passed its fresh declaration but cannot clear the original failed CUA-inclusive desktop budget. Desktop performance remains experimental.",
+    "No model calls, external effects or inference provider operations were performed by these measurements."
+  ]
+}

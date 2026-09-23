@@ -107,9 +107,22 @@ async function start(): Promise<void> {
     if (!capture.previews.length) get("wb-previews").append(el("p", "No retained previews in this capture."));
     get("wb-shadows").replaceChildren(...capture.shadows.map(shadow => card(shadow.accepted ? "Offline guardrails passed" : "Offline guardrails did not pass", shadow.reason)));
     get("wb-inference-count").textContent = `${capture.attempts.length} attempts`;
-    get("wb-attempts").replaceChildren(...capture.attempts.map(attempt => card(`${attempt.admission.backend} · ${attempt.settlement?.status ?? "pending or unknown"}`, `${attempt.admission.model}. ${attempt.settlement?.reason ?? (attempt.settlement ? "Recorded completion; inspect the proposal separately." : "An admitted attempt has no terminal record. It must not be automatically retried.")}`)));
+    const attemptCards = new Map<Digest, HTMLElement>();
+    get("wb-attempts").replaceChildren(...capture.attempts.map(attempt => {
+      const node = card(`${attempt.admission.backend} · ${attempt.settlement?.status ?? "pending or unknown"}`, `${attempt.admission.model}. ${attempt.settlement?.reason ?? (attempt.settlement ? "Recorded completion; inspect the proposal separately." : "An admitted attempt has no terminal record. It must not be automatically retried.")}`);
+      attemptCards.set(attempt.reference, node); return node;
+    }));
     const usage = capture.observation.usage;
-    get("wb-billing").textContent = usage.length ? `${usage.reduce((sum, row) => sum + row.reservedMicrousd, 0)} micro-USD reserved across ${usage.length} retained accounting records. Actual provider billing is unknown.` : "No recorded accounting is available. Actual provider billing is unknown.";
+    get("wb-billing").textContent = usage.length ? `${usage.reduce((sum, row) => sum + row.reservedMicrousd, 0)} micro-USD reserved across ${usage.length} retained accounting records. Reservations are host budget limits. Individual Gateway charges, when available, appear below.` : "No recorded accounting is available. Actual provider billing is unknown.";
+    for (const row of capture.observation.gatewayCosts ?? []) {
+      const cost = row.cost;
+      const detail = cost
+        ? `Gateway reports a USD ${cost.gatewayCostUsd} debit for ${cost.model}, with ${cost.tokensIn} input and ${cost.tokensOut} output tokens. ${cost.isByok ? `Its upstream list-price estimate is USD ${cost.upstreamInferenceCostUsd}; the provider invoice is unknown.` : "This retained response is not a provider attestation or an aggregate invoice."}`
+        : row.status === "generation-unavailable" ? "This attempt has no retained Gateway generation identity. Its actual charge remains unknown."
+        : row.status === "receipt-unavailable" ? "A generation was observed, but the execution receipt is unavailable. No charge is attributed until the identities can be reconciled."
+        : "The generation is retained. Its actual charge remains unknown until an explicit owner lookup supplies a matching response.";
+      attemptCards.get(row.attempt)?.append(el("h4", cost ? "Reported Gateway charge" : "Gateway charge unavailable"), el("p", detail));
+    }
     get("wb-gaps").replaceChildren(...capture.gaps.map(gap => el("li", gap)));
     if (!draftDirty) { get<HTMLTextAreaElement>("wb-headline").value = capture.revision.config.headline; get<HTMLTextAreaElement>("wb-body").value = capture.revision.config.body; get<HTMLInputElement>("wb-cta").value = capture.revision.config.ctaLabel; get<HTMLSelectElement>("wb-layout").value = capture.revision.config.layout; }
     get<HTMLSelectElement>("wb-audience").value = capture.signals.audience; get<HTMLSelectElement>("wb-release").value = capture.signals.release;

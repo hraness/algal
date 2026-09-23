@@ -72,6 +72,7 @@ export function chatCompletionsExecutor(options: {
   responseFormat: ChatCompletionsFormat; timeoutMs: number; maxResponseBytes: number;
   fetch?: ChatCompletionsFetch; id: string; label: string; cacheIdentity: string; configurationDigest: Digest;
   receiptExecutor?: string;
+  observeResponse?: (request: EffectRequest, response: Readonly<Record<string, unknown>>, result: ExecutorResult) => void | Promise<void>;
 }): Executor {
   checkModel(options.model);
   const endpoint = chatCompletionsEndpoint(options.baseUrl).href;
@@ -136,9 +137,12 @@ export function chatCompletionsExecutor(options: {
       const model = typeof raw.model === "string" ? raw.model : options.model;
       try { checkModel(model); }
       catch { throw new AlgalError("EFFECT_UNPARSEABLE", `${label} returned invalid model identity`); }
-      return { output: structured.value as JsonValue, metadata: { ...(options.receiptExecutor !== undefined ? { executor: options.receiptExecutor } : {}), usage: {
+      const result: ExecutorResult = { output: structured.value as JsonValue, metadata: { ...(options.receiptExecutor !== undefined ? { executor: options.receiptExecutor } : {}), usage: {
         model, ...(tokensIn !== undefined ? { tokensIn } : {}), ...(tokensOut !== undefined ? { tokensOut } : {}),
       } } };
+      try { await options.observeResponse?.(request, raw, result); }
+      catch { throw new AlgalError("EFFECT_FAILED", `${label} response observation could not be retained; external completion uncertain`, undefined, { uncertain: true }); }
+      return result;
     } finally { clearTimeout(timer); }
   };
   return {
