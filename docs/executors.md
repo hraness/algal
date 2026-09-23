@@ -89,15 +89,42 @@ even for BYOK, and topping up is a dashboard action.
 
 ## OpenAI-compatible endpoints
 
-The native CLI also speaks to any OpenAI-compatible Chat Completions endpoint
-through `--model`, `--base-url`, and `--credential-env` — OpenRouter and a self-hosted server are presets of the same
-adapter, not new auth. The endpoint is host-configured, never taken from a
-model response; HTTPS is required except for explicit loopback, redirects and
-URL credentials are rejected, and upstream error bodies are not echoed.
+Both the Bun and native CLIs speak to OpenAI-compatible Chat Completions endpoints
+through `--model`, `--base-url`, and optional `--credential-env`. This supports
+hosted services and local servers such as Ollama, LM Studio, or llama.cpp when
+they expose the compatible API. Select a model already installed on your server:
+
+```sh
+# Local server; no API credential is sent unless explicitly configured.
+bun run cli run examples/gateway-smoke.algal.json \
+  --args examples/gateway-smoke.args.json \
+  --base-url http://127.0.0.1:11434/v1 --model qwen3:8b --write
+# The native equivalent starts with `algal run` and uses the same flags.
+```
+
+The endpoint is host-configured, never taken from a model response. HTTPS is
+required except for explicit loopback; redirects, URL credentials, query strings,
+and fragments are rejected, and upstream error bodies are not echoed. Set
+`--credential-env MY_PROVIDER_KEY` when the endpoint requires authentication;
+the adapter reads only that variable and never inherits Gateway credentials.
+Do not combine `--base-url` with another default provider selector.
+
+The default `--response-format json_schema` requests a strict `{ "value": ... }`
+wrapper. Use `json_object` for a server without schema support, or `prompt` when
+it accepts neither structured-output mode. All modes still require the same exact
+wrapper and ALGAL validates the value against the cell's output contract.
+Truncated completions fail; there is no automatic mode fallback. Responses and
+calls are bounded, cancellation remains uncertain after dispatch, and provider
+identity plus reported token usage are recorded for offline replay.
+
+Library hosts use `openAICompatibleExecutor({ baseUrl, model, credentialEnv?,
+responseFormat?, timeoutMs?, maxResponseBytes? })` from `@hraness/algal`.
+`--recall local` selects deterministic trigram embeddings, not a local language
+model; model generation uses the endpoint options above.
 
 ## Apple Intelligence
 
-`algal run --apple` (and `algal civ --live --apple`) routes cells to Apple's
+The native CLI's `algal run --apple` (and `algal civ --live --apple`) routes cells to Apple's
 on-device Foundation Models framework through the shared `apple-foundation`
 bridge (`hraness/apple-foundation`, pinned by tag). `algal doctor --apple`
 checks availability; building the bridge is not proof the model is present.
@@ -107,15 +134,15 @@ explicit `--apple-bridge`/`ALGAL_APPLE_BRIDGE` paths are used as-is.
 The bridge translates a declared `output.schema` into a
 `DynamicGenerationSchema` — strings, numbers, integers, booleans, arrays,
 objects, enums, optional properties, within bounded depth and property counts —
-so generation is schema-constrained rather than free-form. A schema it cannot
-translate falls back to bounded free-text generation and the same contract
-validation (the foundation bridge reports schema errors; the ALGAL adapter
-retries unguided). It enforces context and output byte budgets, rejects `gate`
+so generation is schema-constrained rather than free-form. An unsupported schema
+fails the call. The adapter never retries unguided, and cell retries cannot
+resend the generation. It enforces context and output byte budgets, rejects `gate`
 requests (approval belongs to a human/policy executor, not a model), and never
 falls back to a cloud provider. One persistent bridge process serializes
 generation per configured path — requests queue in-process instead of
 respawning per effect — and inference produces ordinary, offline-verifiable
-receipts.
+receipts. This adapter is native-only; the Bun runtime does not implicitly launch
+the native CLI or select a cloud fallback.
 
 ## Coding agents (ACP and xcb)
 

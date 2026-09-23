@@ -109,6 +109,9 @@ usage:
       --executor-cmd <shell command>          live executor: request on stdin, output on stdout
       --executor-timeout-ms <ms>              command-executor effect timeout (default 120000, max 600000)
       --gateway-model <provider/model>        Vercel AI Gateway structured-output executor
+      --base-url <url> --model <model>         OpenAI-compatible endpoint (HTTPS or loopback HTTP)
+      --credential-env <name>                 endpoint credential environment variable (optional)
+      --response-format <format>              json_schema (default), json_object, or prompt
       --jev [model]                           TypeSafe Jev decision executor — serves
                                                 decide and classifier cells (never gates:
                                                 approvals stay host/policy-routed)
@@ -607,8 +610,30 @@ async function resolveExecutors(
   flags: Record<string, string | boolean>,
   dir: string,
 ): Promise<Executor[]> {
+  for (const key of ["apple", "apple-bridge", "agent", "host"]) {
+    if (flags[key] !== undefined) usageError(`--${key} requires the native ALGAL CLI; it is not supported by the Bun runtime`);
+  }
+  const baseUrl = artifactFlag(flags, "base-url");
+  const endpointModel = artifactFlag(flags, "model");
+  const credentialEnv = artifactFlag(flags, "credential-env");
+  const responseFormat = artifactFlag(flags, "response-format");
+  if ((baseUrl !== undefined) !== (endpointModel !== undefined))
+    usageError("--base-url and --model must be supplied together");
+  if (baseUrl === undefined && (credentialEnv !== undefined || responseFormat !== undefined))
+    usageError("--credential-env and --response-format require --base-url and --model");
+  if (baseUrl !== undefined && ["responses", "executor-cmd", "gateway-model", "jev", "recall"].some(key => flags[key] !== undefined))
+    usageError("choose one default executor; --base-url cannot be combined with another provider");
+  if (responseFormat !== undefined && !["json_schema", "json_object", "prompt"].includes(responseFormat))
+    usageError("--response-format must be json_schema, json_object, or prompt");
   const { commandExecutor, scriptedExecutor } = await import("./src/effects");
   const executors: Executor[] = [];
+  if (baseUrl !== undefined && endpointModel !== undefined) {
+    const { openAICompatibleExecutor } = await import("./src/openai-compatible");
+    executors.push(named("default", openAICompatibleExecutor({ baseUrl, model: endpointModel,
+      ...(credentialEnv !== undefined ? { credentialEnv } : {}),
+      ...(responseFormat !== undefined ? { responseFormat: responseFormat as "json_schema" | "json_object" | "prompt" } : {}),
+    })));
+  }
   if (flags.responses !== undefined) {
     const map = asRecord(
       await readJson(resolve(String(flags.responses))),

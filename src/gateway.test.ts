@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { vercelGatewayExecutor } from "./gateway";
 import type { EffectRequest } from "./effects";
+import { digestCanonical } from "./digest";
 
 const request: EffectRequest = {
   contract: "algal.effect.v1",
@@ -28,6 +29,7 @@ test("Vercel Gateway executor binds structured output and post-call usage", asyn
   });
 
   const result = await executor.executeEffect!(request);
+  expect(await executor.receiptFor!(request)).toEqual({ configurationDigest: digestCanonical({ kind: "gateway", model: "alibaba/qwen3.5-flash" }) });
   expect(executor.capabilities?.effects).toEqual(["agent", "classifier"]);
   expect(result.output).toBe("billing");
   expect(result.metadata?.usage).toEqual({
@@ -46,6 +48,18 @@ test("Vercel Gateway executor binds structured output and post-call usage", asyn
     "billing",
     "other",
   ]);
+});
+
+test("Vercel Gateway rejects truncated or widened outputs", async () => {
+  for (const choice of [
+    { finish_reason: "length", message: { content: '{"value":"billing"}' } },
+    { finish_reason: "stop", message: { content: '{"value":"billing","extra":true}' } },
+  ]) {
+    const executor = vercelGatewayExecutor({ model: "test/model", credential: "test-credential-value",
+      fetch: async () => Response.json({ choices: [choice] }),
+    });
+    await expect(executor.execute(request)).rejects.toMatchObject({ code: "EFFECT_UNPARSEABLE", uncertain: false });
+  }
 });
 
 test("Vercel Gateway executor refuses authority outside model generation", async () => {
