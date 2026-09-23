@@ -358,105 +358,7 @@ for (const name of ["refine", "swarm", "habitat"] as const) {
   evolutionRuns.set(name, receipt);
 }
 
-// --- Hero specimen collage --------------------------------------------------
-// The hero leads with the language itself. A chooser steps through organisms;
-// each selection shows the same three artifacts — the compiled program graph,
-// the source/manifest text, and the recorded run evidence — as overlapping,
-// slightly rotated panels, like specimens pinned to a board.
-const heroReceiptCard = (receipt: RunReceipt) => {
-  const cells = Object.values(receipt.cells);
-  const committed = cells.filter(cell => cell.status === "committed").length;
-  const skipped = cells.filter(cell => cell.status === "skipped").length;
-  return {
-    evidenceLabel: `receipt · ${receipt.digest.slice(0, 19)}…`,
-    evidenceRows: [
-      ["events", `${receipt.events.length}`],
-      ["cells", `${committed} committed${skipped ? ` · ${skipped} skipped` : ""}`],
-      ["effects", `${receipt.effects.length} recorded`],
-      ["outcome", receipt.outcome],
-    ] as [string, string][],
-  };
-};
-
-const habitatManifest = manifests.get("habitat")!;
-const habitatReceipt = evolutionRuns.get("habitat")!;
-const habitatManifestExcerpt = JSON.stringify(manifestToJson(habitatManifest), null, 2).split("\n").slice(0, 20).join("\n");
-
-interface HeroExample {
-  key: string; file: string; blurb: string;
-  graphTitle: string; graphSrc: string; graphAlt: string; objectPosition: string;
-  sourceHref: string; evidenceHref: string;
-  codeName: string; codeHtml: string;
-  evidenceLabel: string; evidenceRows: [string, string][];
-  chip: string;
-}
-
-const heroChip = (receipt: RunReceipt) => `algal.organism.v1 · sha256:${receipt.manifestDigest.slice(7, 19)}…`;
-const routeHelp = routeRuns.find(run => run.choice === "help")!;
-
-const heroExamples: HeroExample[] = [
-  {
-    key: "route", file: "route.algal", blurb: "one decision fans into three replies",
-    graphTitle: "route.algal · recorded run", graphSrc: "/diagrams/route-help.svg", objectPosition: "50% 0%",
-    graphAlt: "Program graph of the route organism: an email input flows into a decide cell, a pure check, then a match with three arms — help, sales, and human review — overlaid with the states of one recorded run.",
-    sourceHref: "/examples/route.algal", evidenceHref: "/receipts/route-help.receipt.json",
-    codeName: "route.algal", codeHtml: highlightSource(routeSource.trimEnd()),
-    ...heroReceiptCard(routeHelp.receipt),
-    chip: heroChip(routeHelp.receipt),
-  },
-  {
-    key: "reply", file: "reply.algal", blurb: "classify the email, then draft",
-    graphTitle: "reply.algal · recorded run", graphSrc: "/diagrams/reply-run.svg", objectPosition: "50% 0%",
-    graphAlt: "Program graph of the reply organism: an email input flows into a typed decide cell, a pure check, then generation — overlaid with the states of one recorded run.",
-    sourceHref: "/examples/reply.algal", evidenceHref: "/receipts/reply.receipt.json",
-    codeName: "reply.algal", codeHtml: highlightSource(replySource.trimEnd()),
-    ...heroReceiptCard(replyReceipt),
-    chip: heroChip(replyReceipt),
-  },
-  {
-    key: "inbox", file: "inbox.algal", blurb: "organisms compose — call and each",
-    graphTitle: "inbox.algal · program graph", graphSrc: "/diagrams/inbox.svg", objectPosition: "0% 0%",
-    graphAlt: "Program graph of the inbox organism: inputs feed a call to the draft organism and an each cell that maps drafts over a list, both merging into the result.",
-    sourceHref: "/examples/projects/inbox/inbox.algal", evidenceHref: "/receipts/inbox.receipt.json",
-    codeName: "inbox.algal", codeHtml: highlightSource(inbox.source.trimEnd()),
-    ...heroReceiptCard(fullInbox.receipt),
-    chip: heroChip(fullInbox.receipt),
-  },
-  {
-    key: "habitat", file: "habitat.algal.json", blurb: "a program emits a program",
-    graphTitle: "habitat · spawn, recorded", graphSrc: "/diagrams/habitat.svg", objectPosition: "50% 0%",
-    graphAlt: "Program graph of the habitat organism: a goal flows into a planner, a spawn cell that admits a child manifest, and the result — overlaid with the states of one recorded run.",
-    sourceHref: "/examples/habitat.algal.json", evidenceHref: "/receipts/habitat.receipt.json",
-    codeName: "habitat.algal.json · the program, as data", codeHtml: escapeHtml(habitatManifestExcerpt),
-    ...heroReceiptCard(habitatReceipt),
-    chip: heroChip(habitatReceipt),
-  },
-];
-
-const HERO_CHOOSER = `<div class="hero-chooser" role="group" aria-label="Choose an organism">${heroExamples.map((example, index) =>
-  `<button type="button" class="hero-choose" data-hero-choose="${example.key}" aria-pressed="${index === 0}"><span class="hc-file">${escapeHtml(example.file)}</span><span class="hc-blurb">${escapeHtml(example.blurb)}</span></button>`).join("")}</div>`;
-
-const playIcon = `<svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#play"></use></svg>`;
-const HERO_STAGE = `<div class="hero-stage" data-hero-stage>${heroExamples.map((example, index) => `
-  <div class="hs-set" data-example-set="${example.key}"${index === 0 ? "" : " hidden"}>
-    <figure class="hs-card hs-graph">
-      <figcaption class="hs-bar"><span class="file-label">${playIcon}${example.graphTitle}</span><span class="hs-links"><a href="${example.sourceHref}" download>Source</a><a href="${example.evidenceHref}" download>Receipt</a></span></figcaption>
-      <div class="hs-viewport"><img src="${example.graphSrc}" alt="${example.graphAlt}" style="object-position:${example.objectPosition}"${index === 0 ? ' fetchpriority="high"' : ' loading="lazy"'}></div>
-    </figure>
-    <figure class="hs-card hs-code">
-      <figcaption class="hs-bar"><span class="file-label">${example.codeName}</span></figcaption>
-      <pre class="hs-pre">${example.codeHtml}</pre>
-    </figure>
-    <figure class="hs-card hs-evidence">
-      <figcaption class="hs-bar"><span class="file-label">${example.evidenceLabel}</span></figcaption>
-      <dl class="hs-dl">${example.evidenceRows.map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join("")}</dl>
-    </figure>
-    <span class="hs-chip">${example.chip}</span>
-  </div>`).join("")}</div>`;
-
 const replacements: Record<string, string> = {
-  HERO_CHOOSER: HERO_CHOOSER,
-  HERO_STAGE: HERO_STAGE,
   REPLY_SOURCE: highlightSource(replySource.trimEnd()),
   REPLY_MAX_AGENT_CALLS: String(reply.manifest.budgets.maxAgentCalls),
   REPLY_RECEIPT_SHORT: escapeHtml(replyReceipt.digest.slice(0, 23)),
@@ -623,7 +525,6 @@ for (const [name, manifest] of manifests) {
 // The hero artifact shows one recorded run of the reply organism.
 await emitDiagram("reply-run", replyRunDiagram, { receipt: replyReceipt });
 
-await writeFile(join(DIST, "receipts/habitat.receipt.json"), `${canonicalizeReceipt(habitatReceipt)}\n`);
 await writeFile(join(DIST, "examples/route.algal"), routeSource);
 await writeFile(join(DIST, "examples/route.algal.json"), `${JSON.stringify(manifestToJson(route.manifest), null, 2)}\n`);
 await writeFile(join(DIST, "examples/route.source-map.json"), `${JSON.stringify(route.sourceMap, null, 2)}\n`);

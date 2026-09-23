@@ -34,7 +34,7 @@ test("shared appearance and generated evidence remain progressively discoverable
   for (const theme of ["light", "dark", "system"]) {
     expect(chrome).toContain(`data-theme-value="${theme}"`);
   }
-  for (const placeholder of ["HERO_CHOOSER", "HERO_STAGE", "REPLY_SOURCE"]) {
+  for (const placeholder of ["REPLY_SOURCE", "REPLY_RECEIPT_SHORT"]) {
     expect(pages["home.html"]).toContain(`{{${placeholder}}}`);
   }
   for (const placeholder of ["ROUTE_PANELS", "INBOX_CHILD_PANELS", "AUTHORING_ERROR", "SOURCE_DIAGNOSTIC"]) {
