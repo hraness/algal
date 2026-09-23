@@ -151,10 +151,8 @@ fn cold_schema_reader_rejection_publishes_no_mailbox_or_authority() {
     let service = MailboxService::open(temp.path());
     let error = service.create("cold", 2, 32).unwrap_err();
     assert_eq!(error.code, "IO_FAILED");
-    assert!(
-        error
-            .message
-            .contains("database schema: database is locked"),
+    assert_eq!(
+        error.message, "host lease is held by another live operation",
         "{error:?}"
     );
     assert!(!temp.path().join("mailboxes").exists());

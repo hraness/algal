@@ -7,9 +7,16 @@ use rusqlite::{Connection, OpenFlags};
 use serde_json::{Value, json};
 use std::{
     fs::{self, File, OpenOptions},
-    io::Write,
+    io::{Read, Write},
     path::{Path, PathBuf},
+    time::{Duration, Instant},
 };
+
+/// Shared coordination leases (`.creation`, `.application-quota`) are held
+/// briefly by every writer; a caller waits this long, polling at this
+/// interval, before reporting live contention. Identical in `host-state.ts`.
+pub(crate) const SHARED_LEASE_WAIT: Duration = Duration::from_millis(2000);
+pub(crate) const SHARED_LEASE_POLL: Duration = Duration::from_millis(25);
 
 pub(crate) fn directory(path: &Path) -> Result<()> {
     match fs::symlink_metadata(path) {
@@ -78,7 +85,14 @@ pub(crate) fn read(path: &Path, max: usize) -> Result<Option<Value>> {
     if !meta.is_file() || meta.len() > max as u64 {
         return Err(Error::limit("host file type/bytes"));
     }
-    let value = read_json(file, max)?;
+    // The bytes actually read must match the opened inode's length: a file
+    // growing or shrinking under the read is never interpreted.
+    let mut bytes = Vec::new();
+    std::io::Read::take(&file, max as u64 + 1).read_to_end(&mut bytes)?;
+    if bytes.len() > max || bytes.len() as u64 != meta.len() {
+        return Err(Error::new("IO_FAILED", "host state changed while reading"));
+    }
+    let value = read_json(std::io::Cursor::new(bytes), max)?;
     nodes(&value)?;
     Ok(Some(value))
 }
@@ -133,6 +147,15 @@ pub(crate) fn write(path: &Path, value: &Value, replace: bool) -> Result<()> {
     result
 }
 pub(crate) fn names(path: &Path, max: usize) -> Result<Vec<String>> {
+    names_where(path, max, |_| true)
+}
+/// List published record names. Entries must be regular files; names the
+/// `keep` predicate rejects are skipped as stray residue before the bound.
+pub(crate) fn names_where(
+    path: &Path,
+    max: usize,
+    keep: impl Fn(&str) -> bool,
+) -> Result<Vec<String>> {
     directory(path)?;
     let mut out = Vec::new();
     for (count, entry) in fs::read_dir(path)?.enumerate() {
@@ -155,6 +178,9 @@ pub(crate) fn names(path: &Path, max: usize) -> Result<Vec<String>> {
         {
             continue;
         }
+        if !keep(&name) {
+            continue;
+        }
         out.push(name);
         if out.len() > max {
             return Err(Error::limit("host directory count"));
@@ -164,8 +190,33 @@ pub(crate) fn names(path: &Path, max: usize) -> Result<Vec<String>> {
     Ok(out)
 }
 
+/// Live contention on the SQLite mutex, reported with the same message as
+/// `host-state.ts` so an exhausted shared wait agrees on the wire.
+const CONTENDED: &str = "host lease is held by another live operation";
+
+fn busy(error: &rusqlite::Error) -> bool {
+    matches!(
+        error,
+        rusqlite::Error::SqliteFailure(code, _)
+            if code.code == rusqlite::ErrorCode::DatabaseBusy
+    )
+}
+
 fn sql(error: rusqlite::Error) -> Error {
+    if busy(&error) {
+        return Error::new("IO_FAILED", CONTENDED);
+    }
     Error::new("IO_FAILED", format!("host lease database: {error}"))
+}
+
+fn phase_sql(phase: &'static str) -> impl Fn(rusqlite::Error) -> Error {
+    move |error| {
+        if busy(&error) {
+            Error::new("IO_FAILED", CONTENDED)
+        } else {
+            Error::new("IO_FAILED", format!("host lease database {phase}: {error}"))
+        }
+    }
 }
 
 // Finish every read before attempting custody. A ready database must not run
@@ -233,6 +284,31 @@ pub(crate) struct OwnerLease {
     marker: Value,
 }
 impl OwnerLease {
+    /// Live contention on the SQLite mutex, as distinct from every other
+    /// custody failure (schema, marker, filesystem), which never retries.
+    fn contended(error: &Error) -> bool {
+        error.code == "IO_FAILED" && error.message == CONTENDED
+    }
+
+    /// Acquire, retrying only live contention until `wait` elapses. Every
+    /// other failure and the acquired custody are exactly `acquire`'s.
+    pub(crate) fn acquire_shared(
+        path: &Path,
+        process: &str,
+        wait: Duration,
+        poll: Duration,
+    ) -> Result<Self> {
+        let deadline = Instant::now() + wait;
+        loop {
+            match Self::acquire(path, process) {
+                Err(error) if Self::contended(&error) && Instant::now() < deadline => {
+                    std::thread::sleep(poll);
+                }
+                result => return result,
+            }
+        }
+    }
+
     pub(crate) fn acquire(path: &Path, process: &str) -> Result<Self> {
         directory(path)?;
         let path = path.canonicalize()?;
@@ -261,17 +337,15 @@ impl OwnerLease {
             ("journal mode", "PRAGMA journal_mode=DELETE;"),
             ("synchronous mode", "PRAGMA synchronous=FULL;"),
         ] {
-            connection.execute_batch(statement).map_err(|error| {
-                Error::new("IO_FAILED", format!("host lease database {phase}: {error}"))
-            })?;
+            connection
+                .execute_batch(statement)
+                .map_err(phase_sql(phase))?;
         }
         let mut state = owner_state(&connection)?;
         if state == OwnerState::Missing {
             connection
                 .execute_batch("CREATE TABLE IF NOT EXISTS algal_owner(contract TEXT PRIMARY KEY);")
-                .map_err(|error| {
-                    Error::new("IO_FAILED", format!("host lease database schema: {error}"))
-                })?;
+                .map_err(phase_sql("schema"))?;
             state = owner_state(&connection)?;
         }
         if state == OwnerState::Empty {
@@ -279,18 +353,11 @@ impl OwnerLease {
                 .execute_batch(
                     "INSERT OR IGNORE INTO algal_owner(contract) VALUES('algal.process-owner.v2');",
                 )
-                .map_err(|error| {
-                    Error::new(
-                        "IO_FAILED",
-                        format!("host lease database contract: {error}"),
-                    )
-                })?;
+                .map_err(phase_sql("contract"))?;
         }
         connection
             .execute_batch("BEGIN IMMEDIATE;")
-            .map_err(|error| {
-                Error::new("IO_FAILED", format!("host lease database custody: {error}"))
-            })?;
+            .map_err(phase_sql("custody"))?;
         if owner_state(&connection)? != OwnerState::Ready {
             return Err(Error::new("IO_FAILED", "unknown host lease contract"));
         }

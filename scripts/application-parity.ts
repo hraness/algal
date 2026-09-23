@@ -154,6 +154,15 @@ const revision2Ref = digestCanonical(revision2);
 const revision3 = { ...revision2, parent: revision2Ref, schema: schema2Ref, queries: queries2Ref,
   entrypoints: evalEntrypoints.map(entry => ({ ...entry, applicability: query2Ref, queries: [query2Ref] })) };
 const revision3Ref = digestCanonical(revision3);
+// A query whose polarity column lies beyond its two-term literal: the shared
+// admission check must refuse the revision identically on both runtimes.
+const queryPolarity = { ...query2, id: "polarity-out-of-range", polarityColumn: 2 };
+const queryPolarityRef = digestCanonical(queryPolarity);
+const queriesPolarity = { contract: "algal.application-memory-queries.v1", queries: [queryPolarityRef] };
+const queriesPolarityRef = digestCanonical(queriesPolarity);
+const revisionPolarity = { ...revision3, parent: revision3Ref, queries: queriesPolarityRef,
+  entrypoints: revision3.entrypoints.map(entry => ({ ...entry, applicability: queryPolarityRef, queries: [queryPolarityRef] })) };
+const revisionPolarityRef = digestCanonical(revisionPolarity);
 const mailbox = capabilityHandle("mailbox-send", { fixture: "parity" });
 const policy = {
   contract: "algal.application-host.v1", application: APP, frontier: digests.frontier,
@@ -189,7 +198,7 @@ const migrateRequest = {
 // Input files shared by both legs.
 const files: Record<string, JsonValue> = {
   ...values, manifestEval: manifestEvalValue, manifest2: manifest2Value, procedure, query, queries, revision, scope, genesisMemory, raw, receipt, policy,
-  schema2, decoder2, procedure2, scope2, program2, query2, queries2, revision2, revision3, migrateRequest,
+  schema2, decoder2, procedure2, scope2, program2, query2, queries2, revision2, revision3, migrateRequest, queryPolarity, queriesPolarity, revisionPolarity,
   observation: observationInput,
 };
 const fixturePath = new Map<string, string>();
@@ -231,7 +240,9 @@ let migrationRef = "" as Digest;
 let migratedSnapshotRef = "" as Digest;
 let migrateCommand: { [key: string]: JsonValue } = {};
 
-type Step = { name: string; ts: () => Promise<unknown>; native: () => Promise<string[]>; fails?: boolean };
+/** `fails` legs compare the verdict; a `reason` additionally pins the exact
+ * error message emitted by both runtimes for a shared contract check. */
+type Step = { name: string; ts: () => Promise<unknown>; native: () => Promise<string[]>; fails?: boolean; reason?: string };
 const steps: Step[] = [];
 const putStep = (name: string, value: JsonValue, kind: "values" | "manifests" = "values") =>
   steps.push({
@@ -249,7 +260,7 @@ putStep("manifest", manifestValue, "manifests");
 putStep("manifestEval", manifestEvalValue, "manifests");
 putStep("manifest2", manifest2Value, "manifests");
 for (const name of ["schema", "decoder", "attestation", "hostProfile", "views", "runtimeProfile", "evaluationPolicy", "program", "frontier", "episodeArgs", "evalCases", "evalScorer"] as const) putStep(name, values[name]);
-for (const [name, value] of Object.entries({ procedure, query, queries, revision, raw, receipt, schema2, decoder2, procedure2, program2, query2, queries2, revision2, revision3 })) putStep(name, value as JsonValue);
+for (const [name, value] of Object.entries({ procedure, query, queries, revision, raw, receipt, schema2, decoder2, procedure2, program2, query2, queries2, revision2, revision3, queryPolarity, queriesPolarity, revisionPolarity })) putStep(name, value as JsonValue);
 
 const dynamic = async (name: string, value: JsonValue) => {
   const path = join(fixtureDir, `${name}.json`);
@@ -510,6 +521,16 @@ steps.push(
     fails: true,
     ts: async () => service.commit({ ...migrateCommand, operation: op("malformed"), kind: "investigate", expectedHead: head, bogus: true }),
     native: async () => app("commit", await dynamic("malformed", { ...migrateCommand, operation: op("malformed"), kind: "investigate", expectedHead: head, bogus: true })),
+  },
+  // A revision selecting a query whose polarity column exceeds its literal's
+  // arity is refused by shared admission with one message on both runtimes,
+  // before any derivation could index a result row out of bounds.
+  {
+    name: "activate-polarity-arity",
+    fails: true,
+    reason: "Query polarity column exceeds its query literal arity",
+    ts: async () => service.commit({ application: APP, operation: op("polarity-arity"), kind: "activate", expectedHead: head, revision: revisionPolarityRef, memory: memoryRef, intents: [], evidence: [], causedBy: null }),
+    native: async () => app("commit", await dynamic("polarity-arity", { application: APP, operation: op("polarity-arity"), kind: "activate", expectedHead: head, revision: revisionPolarityRef, memory: memoryRef, intents: [], evidence: [], causedBy: null })),
   },
   // The wedge leg: an episode dispatched through the bare policy host is
   // recorded `blocked` — an admitted-but-unsettled dispatch — which blocks
@@ -950,11 +971,20 @@ try {
     // the TypeScript leg mutates head/memoryRef.
     const args = await step.native();
     if (step.fails) {
-      const tsRejected = await step.ts().then(() => false, () => true);
-      const { code } = await runNativeAttempt(args);
-      if (!tsRejected || code !== 2) {
-        console.error(`PARITY DIVERGENCE at "${step.name}": expected rejection — ts ${tsRejected ? "rejected" : "accepted"}, native exit ${code}`);
+      const tsError: unknown = await step.ts().then(() => null, error => error ?? new Error("rejected"));
+      const { code, stderr } = await runNativeAttempt(args);
+      if (tsError === null || code !== 2) {
+        console.error(`PARITY DIVERGENCE at "${step.name}": expected rejection — ts ${tsError === null ? "accepted" : "rejected"}, native exit ${code}`);
         process.exit(1);
+      }
+      if (step.reason !== undefined) {
+        const tsMessage = tsError instanceof Error ? tsError.message : String(tsError);
+        let nativeMessage: unknown;
+        try { nativeMessage = (JSON.parse(stderr) as { error?: { message?: unknown } }).error?.message; } catch { nativeMessage = stderr; }
+        if (tsMessage !== step.reason || nativeMessage !== step.reason) {
+          console.error(`PARITY DIVERGENCE at "${step.name}": expected reason ${JSON.stringify(step.reason)}\n  ts:     ${JSON.stringify(tsMessage)}\n  native: ${JSON.stringify(nativeMessage)}`);
+          process.exit(1);
+        }
       }
       checked++;
       continue;

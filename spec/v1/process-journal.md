@@ -46,8 +46,11 @@ zero. Database and sidecar leaves must be regular, non-symlink files at most
 An interlock at `.lock` has exactly `{contract:"algal.process-owner.v2",
 process:NAME,nonce:64_lowercase_hex}`. After acquiring the SQLite transaction,
 a matching abandoned marker is archived under `owners/NONCE.json` (maximum
-256) before replacement. Unknown or old lock formats require operator
-reconciliation. No PID, clock age, or failed heartbeat authorizes takeover.
+256) before replacement. Once the archive is full, an unrecognized abandoned
+marker cannot be admitted: the lease stays closed and requires operator
+reconciliation rather than dropping retained evidence. Unknown or old lock
+formats require operator reconciliation. No PID, clock age, or failed
+heartbeat authorizes takeover.
 Process creation holds the same retained SQLite custody protocol in
 `.process-creation/`, with owner name `process-creation`. While held, it also
 occupies `processes/.lock` with
@@ -55,8 +58,9 @@ occupies `processes/.lock` with
 runtimes cannot bypass creation exclusion. Only after acquiring SQLite custody
 may a recognized abandoned creation marker be archived under
 `.process-creation/creation-owners/NONCE.json` (maximum 256) and replaced.
-Legacy plaintext or unknown markers remain untouched and require operator
-reconciliation. The per-process `.creating.json` marker described in
+The same archive bound applies: a full archive leaves the next unrecognized
+marker blocked for operator reconciliation. Legacy plaintext or unknown
+markers remain untouched and require operator reconciliation. The per-process `.creating.json` marker described in
 [process.md](process.md) separately proves which exact initial record may resume.
 
 ## Ordered effects
