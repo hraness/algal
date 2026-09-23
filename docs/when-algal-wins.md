@@ -25,9 +25,9 @@ checkpoint. Recorded proposals do not repeat; idle scheduling and offline
 verification make zero decision calls. The approved actor publishes once and
 the denied actor publishes zero times.
 
-This is a concrete benefit for release reviews, approval queues, and similar
-work where redoing the reasoning after a pause would waste work or change a
-previously reviewed proposal. The example uses scripted decisions and local
+In this fixture that is a concrete saving; release reviews, approval queues,
+and similar work where redoing the reasoning after a pause would waste work or
+change a previously reviewed proposal are the intended cases, not measured ones. The example uses scripted decisions and local
 mailboxes. It does not measure live model quality, production reliability,
 provider cost, or superiority over another system with durable checkpoints.
 
