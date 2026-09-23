@@ -30,6 +30,8 @@ import { migrateApplicationMemory } from "../src/application-migration";
 import { appendObservation } from "../src/application-observation";
 import { restoreApplicationRevision, type ApplicationRestorationPolicy } from "../src/application-restoration";
 import { produceApplicationComparison, verifyApplicationComparison } from "../src/application-comparison";
+import { proposeApplicationRevision, verifyApplicationProposal } from "../src/application-proposal";
+import { selectApplicationStrategy } from "../src/application-selection";
 import { rolloverApplicationMemory } from "../src/application-rollover";
 import { ApplicationMemoryService, parseMemorySnapshot } from "../src/application-memory";
 import { NativeMemoryQueryEngine } from "../src/application-native-memory";
@@ -136,6 +138,37 @@ const manifest2Value = manifestToJson(parseOrganismManifest({
   ], edges: [],
 }));
 const manifest2Ref = digestCanonical(manifest2Value);
+// Candidate generation fixtures: a case-pure generator entrypoint emits a
+// two-element manifest list — the winner (the evaluated alternative above)
+// and a constant loser. Each becomes an ordinary child revision differing
+// from the incumbent only at the target entrypoint's manifest.
+const manifestLoserValue = manifestToJson(parseOrganismManifest({
+  contract: "algal.organism.v1", key: "organism:parity-loser", name: "parity-loser",
+  interface: { inputs: { q: { cell: "src", port: "value" } }, outputs: { answer: { cell: "out", port: "value" } } },
+  cells: [
+    { id: "src", kind: "input", outputs: { value: "json" } },
+    { id: "out", kind: "const", outputs: { value: { type: "json", value: "loser" } } },
+  ],
+  edges: [],
+}));
+const manifestLoserRef = digestCanonical(manifestLoserValue);
+const manifestGenValue = manifestToJson(parseOrganismManifest({
+  contract: "algal.organism.v1", key: "organism:parity-generate", name: "parity-generate",
+  interface: { inputs: {}, outputs: { candidates: { cell: "out", port: "out" } } },
+  cells: [
+    { id: "out", kind: "expr", inputs: {}, expr: { contract: "algal.expr.v1", program: ["quote", [manifestEvalValue, manifestLoserValue]] }, output: { kind: "json", schema: { type: "array" } } },
+  ],
+  edges: [],
+}));
+const manifestGenRef = digestCanonical(manifestGenValue);
+// The generating revision sorts entrypoint names: "generate" before "run".
+const revisionGen = {
+  ...revision,
+  entrypoints: [
+    { name: "generate", manifest: manifestGenRef, applicability: queryRef, maxGenerations: 1, capabilities: [], queries: [queryRef] },
+    { name: "run", manifest: digests.manifest, applicability: queryRef, maxGenerations: 1, capabilities: [], queries: [queryRef] },
+  ],
+};
 const procedure2 = { contract: "algal.application-memory-procedure.v1", id: "migrate", schema: schema2Ref, manifest: manifest2Ref, decoder: decoder2Ref, dependencies: [], prerequisite: null };
 const procedure2Ref = digestCanonical(procedure2);
 const scope2 = { contract: "algal.application-memory-scope.v1", application: APP, environment: "fixture", task: "task-1", frontier: digests.frontier, bindings: [], completeFor: [procedure2Ref], attestation: digests.attestation };
@@ -807,6 +840,57 @@ async function checkGoalAndQuotaParity(): Promise<void> {
       if (!refused || attempt.code !== 2) throw new Error(`Restoration rejection differs: ${name}`);
       checked++;
     }
+  }
+  // Case-pure candidate generation and environment-keyed selection: the
+  // generator entrypoint emits two candidate manifests, each becomes a child
+  // revision differing only at the target manifest, both are evaluated and
+  // compared, and a selection policy narrows activation to the environment's
+  // accepted alternative. Hosts without a declared environment — or naming
+  // an environment the policy does not serve — deny the same commit.
+  {
+    const p = await pair("generation-selection");
+    for (const manifest of [manifestGenValue, manifestLoserValue]) {
+      const parsed = parseOrganismManifest(manifest);
+      equal("generation manifest storage", await p.lifecycle.store.putManifest(parsed), await p.nativeStore.putManifest(parsed));
+    }
+    const genRevisionRef = await p.put(revisionGen);
+    const argsRef = await p.put({});
+    const created = await create(p, genRevisionRef, "generation-create");
+    const proposeInput = { application: APP, operation: op("propose"), expectedHead: created.digest, generator: "generate", target: "run", arguments: argsRef, output: "candidates", policy: digests.evaluationPolicy, environment: "parity-harness" };
+    const proposed = await proposeApplicationRevision(p.lifecycle, proposeInput, { fns: builtinRegistry() });
+    equal("propose", { proposal: proposed.proposal, status: proposed.status, candidates: proposed.candidates }, await runNative(app("propose", await dynamic("generation-propose", proposeInput)), p.native));
+    if (proposed.status !== "generated" || proposed.candidates.length !== 2) throw new Error("Generation did not emit two candidates");
+    const proposalHead = proposed.snapshot.digest;
+    const verifiedProposal = await verifyApplicationProposal(p.lifecycle.store, proposed.proposal, created.digest, { fns: builtinRegistry() });
+    equal("verify-proposal", { ok: true, status: verifiedProposal.status, candidates: verifiedProposal.candidates }, await runNative(app("verify-proposal", await dynamic("generation-verify-proposal", { proposal: proposed.proposal, expectedState: created.digest })), p.native));
+    const winner = proposed.candidates.find(candidate => candidate.manifest === manifestEvalRef);
+    const loser = proposed.candidates.find(candidate => candidate.manifest === manifestLoserRef);
+    if (!winner || !loser) throw new Error("Proposal candidates are not the emitted manifests");
+    const evalRequest = (candidateRevision: Digest) => ({ contract: "algal.application-evaluation-request.v1", parentState: proposalHead, candidateRevision, entrypoint: "run", cases: digests.evalCases, scorer: digests.evalScorer, policy: digests.evaluationPolicy, environment: "parity-harness" });
+    const winnerEval = await evaluateApplicationRevision(p.lifecycle.store, evalRequest(winner.revision), { fns: builtinRegistry() });
+    equal("evaluate winner candidate", { evaluation: winnerEval.evaluationRef, verdict: winnerEval.evaluation.verdict }, await runNative(app("evaluate", await dynamic("generation-evaluate-winner", evalRequest(winner.revision))), p.native));
+    const loserEval = await evaluateApplicationRevision(p.lifecycle.store, evalRequest(loser.revision), { fns: builtinRegistry() });
+    equal("evaluate loser candidate", { evaluation: loserEval.evaluationRef, verdict: loserEval.evaluation.verdict }, await runNative(app("evaluate", await dynamic("generation-evaluate-loser", evalRequest(loser.revision))), p.native));
+    const compareInput = { application: APP, parentState: proposalHead, entrypoint: "run", environment: "parity-harness", evaluations: [winnerEval.evaluationRef, loserEval.evaluationRef], selected: manifestEvalRef };
+    const compared = await produceApplicationComparison(p.lifecycle.store, compareInput, { fns: builtinRegistry() });
+    equal("compare candidates", { comparison: compared.comparisonRef, selected: compared.comparison.selected }, await runNative(app("compare", await dynamic("generation-compare", compareInput)), p.native));
+    const selectionPolicyRef = await p.put({ contract: "algal.application-selection-policy.v1", application: APP, parentState: proposalHead, entrypoint: "run", selections: [{ environment: "parity-harness", comparison: compared.comparisonRef, manifest: manifestEvalRef }] });
+    const selected = await selectApplicationStrategy(p.lifecycle.store, selectionPolicyRef, "parity-harness", proposalHead, { fns: builtinRegistry() });
+    equal("select", { manifest: selected.manifest, comparison: selected.comparison }, await runNative(app("select", await dynamic("generation-select", { policy: selectionPolicyRef, environment: "parity-harness", expectedState: proposalHead })), p.native));
+    const activateInput = (name: string) => ({ application: APP, operation: op(name), kind: "activate" as const, expectedHead: proposalHead, revision: winner.revision, memory: created.state.memory, intents: [], evidence: [winnerEval.evaluationRef, compared.comparisonRef, selectionPolicyRef].sort(), causedBy: null });
+    const deniedNoEnv = await p.lifecycle.commit(activateInput("selection-no-env")).then(() => false, () => true);
+    const deniedNoEnvNative = await runNativeAttempt(app("commit", await dynamic("selection-no-env", activateInput("selection-no-env"))), p.native);
+    if (!deniedNoEnv || deniedNoEnvNative.code !== 2) throw new Error("Selection policy on a host without an environment was not denied");
+    checked++;
+    const wrongEnvLifecycle = new ApplicationService(p.typescript, createApplicationPolicyHost(policy, { channelsDir: join(p.typescript, "channels"), memoryEngine: engine, selectionEnvironment: "other-env" }));
+    const deniedWrongEnv = await wrongEnvLifecycle.commit(activateInput("selection-wrong-env")).then(() => false, () => true);
+    const deniedWrongEnvNative = await runNativeAttempt(app("--selection-environment", "other-env", "commit", await dynamic("selection-wrong-env", activateInput("selection-wrong-env"))), p.native);
+    if (!deniedWrongEnv || deniedWrongEnvNative.code !== 2) throw new Error("Selection policy under an unserved environment was not denied");
+    checked++;
+    const envLifecycle = new ApplicationService(p.typescript, createApplicationPolicyHost(policy, { channelsDir: join(p.typescript, "channels"), memoryEngine: engine, selectionEnvironment: "parity-harness" }));
+    const activated = await envLifecycle.commit(activateInput("selection-activate"));
+    equal("selection activate", shape(activated), await runNative(app("--selection-environment", "parity-harness", "commit", await dynamic("selection-activate", activateInput("selection-activate"))), p.native));
+    if (activated.state.revision !== winner.revision) throw new Error("Selection activation did not install the selected candidate");
   }
   // Active selection rollover preserves the application, history and native
   // applicability while both runtimes reject forgotten archives/resurrection.

@@ -20,6 +20,8 @@ import { parseApplicationRuntimeProfile, parseApplicationViewSpec } from "./appl
 import { parseApplicationMigration, verifyApplicationMigration } from "./application-migration";
 import { parseApplicationRestorationPolicy, verifyApplicationRestoration, type ApplicationRestorationPolicy } from "./application-restoration";
 import { checkComparisonBinding, verifyApplicationComparison } from "./application-comparison";
+import { verifyApplicationProposal } from "./application-proposal";
+import { selectApplicationStrategy } from "./application-selection";
 import { builtinRegistry } from "./registry";
 import { compileOrganism } from "./graph";
 import { hostDirectory, hostLease, hostRead, hostWrite } from "./host-state";
@@ -109,10 +111,14 @@ const admissionOnlyEngine: MemoryQueryEngine = {
 
 /** Admission pins every policy field except the mutable frontier selection;
  * execution configuration still binds the complete policy record. */
-export function createApplicationPolicyHost(input: unknown, options: { channelsDir: string; memoryEngine?: MemoryQueryEngine; restorationPolicy?: ApplicationRestorationPolicy }): ApplicationAdmission & MemoryAdmissionHost & ApplicationDispatcher {
+export function createApplicationPolicyHost(input: unknown, options: { channelsDir: string; memoryEngine?: MemoryQueryEngine; restorationPolicy?: ApplicationRestorationPolicy; selectionEnvironment?: string }): ApplicationAdmission & MemoryAdmissionHost & ApplicationDispatcher {
   const policy = parseApplicationHostPolicy(input);
   const restorationPolicy = options.restorationPolicy === undefined ? null : parseApplicationRestorationPolicy(options.restorationPolicy);
   if (restorationPolicy && restorationPolicy.application !== policy.application) throw new Error("Restoration policy belongs to another application");
+  // The environment this host deploys into. It is host authority, outside
+  // the admitted policy record like restorationPolicy: a stored selection
+  // policy grants nothing until a host names the environment it serves.
+  const selectionEnvironment = options.selectionEnvironment === undefined ? null : applicationId(options.selectionEnvironment);
   const { frontier: _frontier, ...authority } = asObject(policy.value, "host policy");
   const identity = ref({ contract: "algal.host-admission.v2", policy: ref(authority) });
   const configurationDigest = ref({ contract: "algal.host-dispatcher.v1", policy: ref(policy.value) });
@@ -147,6 +153,18 @@ export function createApplicationPolicyHost(input: unknown, options: { channelsD
         const checked = await verifyApplicationRestoration(store, { application: command.application, parentState: current.digest, candidateRevision: command.revision, evidence: command.evidence });
         if (checked.policy !== ref(restorationPolicy)) throw new Error("Restoration requires the explicit host policy");
       }
+      if (command.kind === "propose") {
+        if (!current) throw new Error("Proposal requires an incumbent");
+        let replayed = 0;
+        for (const evidence of command.evidence) {
+          const record = await value(evidence);
+          if (record && typeof record === "object" && !Array.isArray(record) && record.contract === "algal.application-proposal.v1") {
+            await verifyApplicationProposal(store, evidence, current.digest, { fns: builtinRegistry() });
+            replayed++;
+          }
+        }
+        if (replayed !== 1) throw new Error("Proposal requires exactly one proposal record");
+      }
       if (command.kind === "activate" || command.kind === "migrate" || command.kind === "restore") {
         if (!current) throw new Error("Revision change requires an incumbent");
         for (const evidence of command.evidence) {
@@ -155,6 +173,24 @@ export function createApplicationPolicyHost(input: unknown, options: { channelsD
             const stored = await verifyApplicationComparison(store, evidence, current.digest, { fns: builtinRegistry() });
             checkComparisonBinding(stored, command.application, current.digest, revision);
           }
+        }
+        // Environment-keyed selection: a cited selection policy is replayed
+        // in full and can only narrow the installed strategy to the one its
+        // row for this host's environment selected. It never substitutes
+        // for the accepted-evaluation coverage checks below.
+        const policies: Digest[] = [];
+        for (const evidence of command.evidence) {
+          const record = await value(evidence);
+          if (record && typeof record === "object" && !Array.isArray(record) && record.contract === "algal.application-selection-policy.v1") policies.push(evidence);
+        }
+        if (policies.length) {
+          if (command.kind === "migrate") throw new Error("Selection policy cannot attach to a migration");
+          if (selectionEnvironment === null) throw new Error("Host policy denies selection policy");
+          if (policies.length !== 1) throw new Error("Selection requires exactly one selection policy");
+          const selected = await selectApplicationStrategy(store, policies[0]!, selectionEnvironment, current.digest, { fns: builtinRegistry() });
+          if (selected.policy.application !== command.application) throw new Error("Selection policy belongs to another application");
+          const entry = revision.entrypoints.find(item => item.name === selected.policy.entrypoint);
+          if (!entry || entry.manifest !== selected.manifest) throw new Error("Activation does not install the selected strategy");
         }
       }
       if (command.kind === "activate" || command.kind === "migrate") {

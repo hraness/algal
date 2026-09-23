@@ -174,6 +174,7 @@ pub enum TransitionKind {
     Activate,
     Migrate,
     Restore,
+    Propose,
 }
 
 impl TransitionKind {
@@ -185,6 +186,7 @@ impl TransitionKind {
             Some("activate") => Ok(Self::Activate),
             Some("migrate") => Ok(Self::Migrate),
             Some("restore") => Ok(Self::Restore),
+            Some("propose") => Ok(Self::Propose),
             _ => Err(Error::invalid("Invalid application transition kind")),
         }
     }
@@ -196,6 +198,7 @@ impl TransitionKind {
             Self::Activate => "activate",
             Self::Migrate => "migrate",
             Self::Restore => "restore",
+            Self::Propose => "propose",
         }
     }
 }
@@ -1208,6 +1211,13 @@ impl<'a> Service<'a> {
                         "Restoration must preserve current memory and create no intents",
                     ));
                 }
+                if transition.kind == TransitionKind::Propose
+                    && (state.memory != prior.state.memory || !transition.intents.is_empty())
+                {
+                    return Err(fail(
+                        "Proposal must preserve current memory and create no intents",
+                    ));
+                }
                 if transition.kind == TransitionKind::Investigate
                     && (state.memory != prior.state.memory || transition.intents.is_empty())
                 {
@@ -1312,6 +1322,15 @@ impl<'a> Service<'a> {
             }
             if item.transition.kind == TransitionKind::Restore {
                 crate::application_restoration::verify_restoration(
+                    &self.store,
+                    &name,
+                    &history[i - 1].digest,
+                    &item.state.revision,
+                    &item.transition.evidence,
+                )?;
+            }
+            if item.transition.kind == TransitionKind::Propose {
+                crate::application_proposal::verify_proposal_binding(
                     &self.store,
                     &name,
                     &history[i - 1].digest,
@@ -1636,6 +1655,17 @@ impl<'a> Service<'a> {
                 &command.application,
                 &current
                     .ok_or_else(|| fail("Restoration requires a prior state"))?
+                    .digest,
+                &command.revision,
+                &command.evidence,
+            )?;
+        }
+        if next.transition.kind == TransitionKind::Propose {
+            crate::application_proposal::verify_proposal_binding(
+                &self.store,
+                &command.application,
+                &current
+                    .ok_or_else(|| fail("Proposal requires a prior state"))?
                     .digest,
                 &command.revision,
                 &command.evidence,

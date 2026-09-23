@@ -26,7 +26,7 @@ export type ApplicationTransition = {
   application: string;
   operation: Digest;
   request: Digest;
-  kind: "create" | "memory" | "investigate" | "activate" | "migrate" | "restore";
+  kind: "create" | "memory" | "investigate" | "activate" | "migrate" | "restore" | "propose";
   previous: Digest | null;
   revision: Digest;
   memory: Digest;
@@ -143,7 +143,7 @@ export function parseApplicationState(input: unknown): ApplicationState {
 export function parseApplicationTransition(input: unknown): ApplicationTransition {
   const v = applicationObject(input, ["contract", "application", "operation", "request", "kind", "previous", "revision", "memory", "intents", "evidence", "causedBy"]);
   applicationTag(v.contract, "algal.application-transition.v1");
-  if (v.kind !== "create" && v.kind !== "memory" && v.kind !== "investigate" && v.kind !== "activate" && v.kind !== "migrate" && v.kind !== "restore") throw new Error("Invalid application transition kind");
+  if (v.kind !== "create" && v.kind !== "memory" && v.kind !== "investigate" && v.kind !== "activate" && v.kind !== "migrate" && v.kind !== "restore" && v.kind !== "propose") throw new Error("Invalid application transition kind");
   return {contract: "algal.application-transition.v1", application: applicationId(v.application), operation: applicationRef(v.operation), request: applicationRef(v.request), kind: v.kind, previous: nullableApplicationRef(v.previous), revision: applicationRef(v.revision), memory: applicationRef(v.memory), intents: applicationRefs(v.intents, 32), evidence: applicationRefs(v.evidence, 16), causedBy: nullableApplicationRef(v.causedBy)};
 }
 export function parseApplicationHead(input: unknown): ApplicationHead {

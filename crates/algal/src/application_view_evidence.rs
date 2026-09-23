@@ -197,6 +197,7 @@ pub fn parse(input: &Value, state: &str, memory: &str) -> Result<Value> {
                 "activate",
                 "migrate",
                 "restore",
+                "propose",
             ],
         )?;
         app_refs(&r["evidence"], 16)?;

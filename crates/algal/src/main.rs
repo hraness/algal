@@ -2,7 +2,7 @@ use algal::{
     Error, Result, application, application_adaptation, application_comparison,
     application_host::{DomainDispatcher, PolicyHost},
     application_memory::{self as app_memory, MemoryService, NativeEngine},
-    application_migration, application_view,
+    application_migration, application_proposal, application_selection, application_view,
     canonical::{MAX_DOCUMENT_BYTES, canonical, digest_bytes, read_json},
     context,
     contract::{Manifest, object},
@@ -365,6 +365,10 @@ enum Commands {
         /// Explicit retained-pure-strategy restoration authority.
         #[arg(long)]
         restoration_policy: Option<PathBuf>,
+        /// Environment label this host deploys into; enables environment-keyed
+        /// selection policy admission. Host authority, outside the policy record.
+        #[arg(long)]
+        selection_environment: Option<String>,
         /// Channel directory for the policy dispatcher
         /// (default `<dir>/channels`).
         #[arg(long)]
@@ -888,6 +892,15 @@ enum ApplicationCommand {
     /// `verifyApplicationComparison`: replay a stored comparison's evidence
     /// against an expected parent state.
     VerifyComparison { input: PathBuf },
+    /// `proposeApplicationRevision`: run a generator entrypoint case-pure and
+    /// commit the `propose` transition with the emitted candidate evidence.
+    Propose { input: PathBuf },
+    /// `verifyApplicationProposal`: replay a stored proposal's receipt and
+    /// derived candidates against an expected parent state.
+    VerifyProposal { input: PathBuf },
+    /// `selectApplicationStrategy`: replay a selection policy and resolve the
+    /// manifest its row for one environment selected.
+    Select { input: PathBuf },
     /// `migrateApplicationMemory`: run the migration program and admit its
     /// emitted claims into a fresh memory chain under the new schema.
     MigrateMemory { input: PathBuf },
@@ -2354,6 +2367,7 @@ async fn execute(cli: Cli) -> Result<bool> {
         Commands::Application {
             policy,
             restoration_policy,
+            selection_environment,
             channels,
             command,
         } => {
@@ -2368,6 +2382,13 @@ async fn execute(cli: Cli) -> Result<bool> {
                         Error::invalid("Restoration authority requires an application host policy")
                     })?
                     .set_restoration_policy(&load(&path, 262_144)?)?;
+            }
+            if let Some(environment) = selection_environment {
+                host.as_mut()
+                    .ok_or_else(|| {
+                        Error::invalid("Selection environment requires an application host policy")
+                    })?
+                    .set_selection_environment(&environment)?;
             }
             let denied = NoAdmission;
             let engine_sha = digest_bytes(&std::fs::read(std::env::current_exe()?)?);
@@ -2609,6 +2630,59 @@ async fn execute(cli: Cli) -> Result<bool> {
                     )
                     .await?;
                     emit(&json!({"ok": true, "selected": checked["selected"]}))?;
+                }
+                ApplicationCommand::Propose { input } => {
+                    // Case-pure generation runs without executors or tools:
+                    // the builtin fn registry is the only admitted surface.
+                    let mut run_host = Host::default();
+                    let result = application_proposal::propose_revision(
+                        &mut service,
+                        &load(&input, 262_144)?,
+                        &mut run_host,
+                        &Transports::new(),
+                    )
+                    .await?;
+                    emit(&json!({
+                        "proposal": result["proposal"], "status": result["status"],
+                        "candidates": result["candidates"],
+                    }))?;
+                }
+                ApplicationCommand::VerifyProposal { input } => {
+                    let input = load(&input, 262_144)?;
+                    let v = app_memory::app_object(&input, &["proposal", "expectedState"])?;
+                    let proposal = app_memory::app_ref(&v["proposal"])?.to_owned();
+                    let state = app_memory::app_ref(&v["expectedState"])?.to_owned();
+                    let checked = application_proposal::verify_proposal(
+                        &service.store,
+                        &proposal,
+                        &state,
+                        &Host::default(),
+                    )
+                    .await?;
+                    emit(
+                        &json!({"ok": true, "status": checked["status"], "candidates": checked["candidates"]}),
+                    )?;
+                }
+                ApplicationCommand::Select { input } => {
+                    let input = load(&input, 262_144)?;
+                    let v = app_memory::app_object(
+                        &input,
+                        &["policy", "environment", "expectedState"],
+                    )?;
+                    let policy = app_memory::app_ref(&v["policy"])?.to_owned();
+                    let environment = app_memory::app_id(&v["environment"])?.to_owned();
+                    let state = app_memory::app_ref(&v["expectedState"])?.to_owned();
+                    let selected = application_selection::select_application_strategy(
+                        &service.store,
+                        &policy,
+                        &environment,
+                        &state,
+                        &Host::default(),
+                    )
+                    .await?;
+                    emit(
+                        &json!({"manifest": selected["manifest"], "comparison": selected["comparison"]}),
+                    )?;
                 }
                 ApplicationCommand::MigrateMemory { input } => {
                     let mut run_host = Host::default();

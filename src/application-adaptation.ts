@@ -163,7 +163,7 @@ function parseEvaluation(input: unknown): ApplicationEvaluation {
   return { contract: "algal.application-evaluation.v1", request: digest(v.request, "evaluation.request"), parentState: digest(v.parentState, "evaluation.parentState"), candidateRevision: digest(v.candidateRevision, "evaluation.candidateRevision"), cases: digest(v.cases, "evaluation.cases"), scorer: digest(v.scorer, "evaluation.scorer"), policy: digest(v.policy, "evaluation.policy"), foundryReport: digest(v.foundryReport, "evaluation.foundryReport"), compatibility: digest(v.compatibility, "evaluation.compatibility"), verdict: { status: verdict.status, reasons: applicationList(verdict.reasons, 16, value => text(value, "evaluation reason")) } };
 }
 
-async function loadRevision(store: Store, ref: Digest): Promise<{ revision: ApplicationRevision; manifests: Map<string, OrganismManifest> }> {
+export async function loadRevision(store: Store, ref: Digest): Promise<{ revision: ApplicationRevision; manifests: Map<string, OrganismManifest> }> {
   const revision = await getApplicationRecord(store, ref, parseApplicationRevision);
   const schema = parseMemorySchema(await optionalObject(store, revision.schema));
   const queries = parseMemoryQueries(await optionalObject(store, revision.queries));
@@ -189,7 +189,7 @@ async function loadRevision(store: Store, ref: Digest): Promise<{ revision: Appl
   return { revision, manifests };
 }
 
-function pureManifest(manifest: OrganismManifest, fns: FnRegistry): void {
+export function pureManifest(manifest: OrganismManifest, fns: FnRegistry): void {
   if (!isBuiltinRegistry(fns)) throw new Error("Case-pure evaluation requires the admitted builtin function registry");
   for (const cell of manifest.cells) {
     if (cell.kind !== "input" && cell.kind !== "const" && cell.kind !== "fn" && cell.kind !== "expr") throw new Error(`Case-pure evaluation rejects ${cell.kind} cells`);
