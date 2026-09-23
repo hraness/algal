@@ -1,0 +1,1 @@
+{"commands":[{"action":{"key":0,"kind":"effect-put","value":"red"},"fault":null,"id":0},{"action":{"key":0,"kind":"effect-put","value":"blue"},"fault":null,"id":1}],"contract":"algal.verification-history.v1","seed":1097623393}

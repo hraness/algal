@@ -1,0 +1,8 @@
+name = "algalVerification"
+version = "0.1.0"
+defaultTargets = ["Algal"]
+moreLeanArgs = ["--threads=1", "--memory=1024"]
+
+[[lean_lib]]
+name = "Algal"
+roots = ["Algal"]

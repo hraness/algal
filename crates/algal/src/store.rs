@@ -19,8 +19,9 @@ struct ReadTrace {
     reads: SourceReads,
     bytes: usize,
 }
-/// A content-addressed value admitted through `put`, with the byte length of
-/// its canonical form so bounded reads never re-encode it.
+/// A local memory/overlay value admitted through `put`, with the byte length of
+/// its canonical form so bounded reads never re-encode it. Persistent writes do
+/// not populate this map: subsequent reads must admit the retained file.
 #[derive(Clone)]
 struct Cached {
     value: Value,
@@ -340,7 +341,9 @@ impl Store {
         }
         let path = self.path(kind, key)?;
         let identity = (kind.to_owned(), key.to_owned());
-        if let Some(Cached { value, bytes }) = self.data.get(&identity) {
+        if (!self.writable || self.root.is_none())
+            && let Some(Cached { value, bytes }) = self.data.get(&identity)
+        {
             if *bytes > bound {
                 return Err(Error::limit("store object bytes"));
             }
@@ -411,13 +414,15 @@ impl Store {
             }
             durable_fs::sync_retained(&file, &path)?;
         }
-        self.data.insert(
-            (kind.to_owned(), key.clone()),
-            Cached {
-                value: value.clone(),
-                bytes: text.len(),
-            },
-        );
+        if !self.writable || self.root.is_none() {
+            self.data.insert(
+                (kind.to_owned(), key.clone()),
+                Cached {
+                    value: value.clone(),
+                    bytes: text.len(),
+                },
+            );
+        }
         Ok(key)
     }
 
@@ -474,7 +479,9 @@ impl Store {
         }
 
         let key = Self::effect_key(request_digest, executor)?;
-        if let Some(value) = self.effects.get(&key) {
+        if (!self.writable || self.root.is_none())
+            && let Some(value) = self.effects.get(&key)
+        {
             return Ok(Some(value.clone()));
         }
         let Some(path) = self.effect_path(&key)? else {
@@ -483,8 +490,8 @@ impl Store {
         read_effect_receipt(&path, request_digest, false)
     }
 
-    /// Record an effect response for later runs. Writable file stores cache
-    /// the retained disk winner. Nonpersistent stores and overlays retain the
+    /// Record an effect response for later runs. Writable file stores admit
+    /// the retained disk winner on every read. Nonpersistent stores and overlays retain the
     /// first response in their memory layer, which may shadow a backing file
     /// without changing it.
     pub fn put_effect(&mut self, receipt: &Value, executor: &str) -> Result<String> {
@@ -497,16 +504,14 @@ impl Store {
         if self.writable
             && let Some(path) = self.effect_path(&key)?
         {
-            let retained = if publish(&path, text.as_bytes(), false)? {
-                receipt.clone()
-            } else {
+            if !publish(&path, text.as_bytes(), false)? {
                 // Read the actual immutable winner, bypassing the memory map.
                 // Never memoize a proposal that lost publication or hide a
                 // malformed retained record behind the proposed receipt.
-                read_effect_receipt(&path, &request_digest, true)?
-                    .ok_or_else(|| Error::new("IO_FAILED", "retained effect receipt disappeared"))?
-            };
-            self.effects.insert(key, retained);
+                read_effect_receipt(&path, &request_digest, true)?.ok_or_else(|| {
+                    Error::new("IO_FAILED", "retained effect receipt disappeared")
+                })?;
+            }
         } else {
             self.effects.entry(key).or_insert_with(|| receipt.clone());
         }

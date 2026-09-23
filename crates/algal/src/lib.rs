@@ -47,6 +47,8 @@ pub mod scorer;
 pub mod semantic;
 pub mod store;
 pub mod suite;
+#[cfg(test)]
+mod verification_trace;
 
 pub use error::{Error, Result};
 

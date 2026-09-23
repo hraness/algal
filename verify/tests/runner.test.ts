@@ -11,7 +11,7 @@ function commandResult(): CommandResult { return { command: ["bun", "test"], exi
 describe("runner fail-closed admission", () => {
   test("unknown and planned suites cannot pass through an absent adapter", async () => {
     await expect(runSuite("/unneeded", "made-up")).rejects.toThrow("unknown verification suite");
-    await expect(runSuite("/unneeded", "lean-core")).rejects.toThrow("Not started");
+    await expect(runSuite("/unneeded", "lean-expr")).rejects.toThrow("Not started");
   });
   test("successful output must include nonempty parsed Bun test completion", () => {
     expect(admitSelftestOutput(commandResult())).toBe(27);
@@ -35,6 +35,12 @@ describe("runner fail-closed admission", () => {
 });
 
 describe("bounded child execution", () => {
+  test("long native verification keeps an explicit finite deadline ceiling", async () => {
+    const command = [process.execPath, "-e", "process.exit(0)"];
+    expect((await runCommand(command, process.cwd(), { timeoutMs: 600_000 })).exitCode).toBe(0);
+    for (const timeoutMs of [0, -1, 600_001, Infinity, NaN, 0.5])
+      await expect(runCommand(command, process.cwd(), { timeoutMs })).rejects.toThrow("invalid command deadline");
+  });
   test("records exact argv and bounded raw output; nonzero fails", async () => {
     const command = [process.execPath, "-e", 'console.log("fixture output")'];
     const good = await runCommand(command, process.cwd());

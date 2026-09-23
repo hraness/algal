@@ -3,6 +3,7 @@ dist/
 site/dist/
 .algal/
 /target/
+/verify/lean/.lake/build/
 promoted/
 /civ/
 .env

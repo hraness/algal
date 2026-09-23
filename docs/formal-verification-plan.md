@@ -1,6 +1,6 @@
 # ALGAL formal-verification and system-confidence plan
 
-Status: execution authorized on 2026-09-23; Phases 00–03 are Complete; Phase 09 is In progress. Later phases remain Not started until their dependencies and acceptance criteria are met. Completion of infrastructure does not complete any production proof obligation.
+Status: execution authorized on 2026-09-23; Phases 00–04 are Complete; Phases 05 and 09 are In progress. Later phases remain Not started until their dependencies and acceptance criteria are met. Completion of infrastructure does not complete any production proof obligation.
 
 Basis: [2026-09-23 audit](formal-verification-audit-2026-09-23.md), ALGAL tree f19f7381f80ee7745f0faa0e9e3e8eb0d43a8bfe at a86327f76f6e632fe7fceda17b738a749a341ab6. Rebase the evidence against the exact integration candidate before execution.
 
@@ -186,7 +186,7 @@ TLC does not establish that a proposed symmetry is valid, and its documentation 
 
 ## Phase 04: implementation traces, stateful generators and fault cuts
 
-- **Status:** Not started
+- **Status:** Complete
 - **Depends on:** 02, 03.
 - **Objective:** Turn model transitions into reproducible public-API and real-persistence histories.
 - **Scope:** A test-only versioned trace schema and drivers; Hegel dev-dependencies for native stateful tests; TS command-sequence generator; deterministic barriers and filesystem fault interface.
@@ -202,7 +202,7 @@ TLC does not establish that a proposed symmetry is valid, and its documentation 
 
 ## Phase 05: durable process, journal, mailbox and owner-lease models
 
-- **Status:** Not started
+- **Status:** In progress
 - **Depends on:** 04.
 - **Objective:** Explore ordering, cancellation and recovery while preserving uncertain effects.
 - **Scope:** verify/tla/process, verify/tla/mailbox, owner-lease model, dedicated model/runtime conformance fixtures.

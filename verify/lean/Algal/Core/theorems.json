@@ -1,0 +1,1656 @@
+{
+  "contract": "algal.lean-core-inventory.v1",
+  "rootModule": "Algal.Core.All",
+  "proofScope": "semantic-model-only",
+  "allowedAxioms": [
+    "propext",
+    "Classical.choice",
+    "Quot.sound"
+  ],
+  "domains": [
+    {
+      "id": "binary64",
+      "module": "Algal.Core.Binary64",
+      "scope": "Finite actual UInt64 binary64 patterns; canonical zero quotient only.",
+      "sources": [
+        "src/values.ts",
+        "crates/algal/src/canonical.rs"
+      ],
+      "coveredCriteria": [
+        "Finite admission excludes exponent 2047; \u00b10 normalization is idempotent, preserves finite bits and changes only negative zero; normalized equivalent values are equal."
+      ],
+      "unmetCriteria": [
+        "Decimal conversion/ECMAScript rendering, native integer-to-binary64 conversion, general arithmetic correspondence."
+      ],
+      "admittedWitnesses": [
+        "Algal.Core.Binary64.minimum_subnormal_admitted",
+        "Algal.Core.Binary64.maximum_finite_admitted",
+        "Algal.Core.Binary64.model_addition_witness"
+      ],
+      "rejectedWitnesses": [
+        "Algal.Core.Binary64.positive_infinity_rejected",
+        "Algal.Core.Binary64.negative_infinity_rejected",
+        "Algal.Core.Binary64.nan_rejected"
+      ]
+    },
+    {
+      "id": "text",
+      "module": "Algal.Core.Text",
+      "scope": "Unicode scalar strings, UTF-16 units and JS array-index classification; no NFC.",
+      "sources": [
+        "src/values.ts",
+        "crates/algal/src/canonical.rs"
+      ],
+      "coveredCriteria": [
+        "UTF-16 character and string roundtrip and injectivity; code-unit bounds; sorting preserves the key multiset."
+      ],
+      "unmetCriteria": [
+        "General production raw-parser correspondence and legacy Bun lone-surrogate strings. JsonString proves its authored scalar UTF-8 quoted fragment codec; KeyOrder proves general comparator and key-sorting laws."
+      ],
+      "admittedWitnesses": [
+        "Algal.Core.Text.utf16_supplementary_witness",
+        "Algal.Core.Text.index_maximum_admitted",
+        "Algal.Core.Text.canonical_key_order_witness"
+      ],
+      "rejectedWitnesses": [
+        "Algal.Core.Text.scalar_surrogate_rejected",
+        "Algal.Core.Text.index_overflow_rejected",
+        "Algal.Core.Text.index_leading_zero_rejected",
+        "Algal.Core.Text.index_plus_rejected",
+        "Algal.Core.Text.index_negative_zero_rejected"
+      ]
+    },
+    {
+      "id": "json-string-bytes",
+      "module": "Algal.Core.JsonString",
+      "scope": "All Unicode scalar strings, actual quoted UTF-8 bytes, and a decoder for the emitted string-fragment profile. Prefix framing is stated over scalar-character suffixes; whole-byte roundtrip/injectivity are general over input strings.",
+      "sources": [
+        "src/values.ts",
+        "crates/algal/src/canonical.rs",
+        "Cargo.lock"
+      ],
+      "coveredCriteria": [
+        "The actual authored quote encoder escapes ASCII controls, quotation marks and backslashes and retains other scalars without NFC. Per-scalar and full quoted-string decoding preserve arbitrary suffixes; emitted UTF-8 decodes successfully; whole-input byte decoding round-trips; equal emitted bytes imply equal strings. Malformed-byte, delimiter and escape rejection have explicit witnesses."
+      ],
+      "unmetCriteria": [
+        "This is not a complete parser for noncanonical JSON Unicode/surrogate/solidus spellings, a full JSON container/number codec, a universal malformed-input classification, or an implementation-refinement proof. Shortest binary64 decimal generation/parsing, raw all-token admission and runtime resource bounds remain unproved."
+      ],
+      "admittedWitnesses": [
+        "Algal.Core.JsonString.standard_controls_witness",
+        "Algal.Core.JsonString.supplementary_utf8_witness",
+        "Algal.Core.JsonString.embedded_bom_retained",
+        "Algal.Core.JsonString.escaped_quote_is_content"
+      ],
+      "rejectedWitnesses": [
+        "Algal.Core.JsonString.malformed_utf8_rejected",
+        "Algal.Core.JsonString.overlong_utf8_rejected",
+        "Algal.Core.JsonString.surrogate_utf8_rejected",
+        "Algal.Core.JsonString.leading_bom_rejected",
+        "Algal.Core.JsonString.literal_control_rejected",
+        "Algal.Core.JsonString.trailing_content_rejected",
+        "Algal.Core.JsonString.missing_end_quote_rejected",
+        "Algal.Core.JsonString.invalid_escape_rejected"
+      ]
+    },
+    {
+      "id": "own-map",
+      "module": "Algal.Core.OwnMap",
+      "scope": "Finite own-property association lists, with last-written binding first.",
+      "sources": [
+        "src/values.ts",
+        "src/graph.ts",
+        "src/run.ts",
+        "crates/algal/src/graph.rs"
+      ],
+      "coveredCriteria": [
+        "Lookup uses declared own keys only; duplicate writes overwrite; distinct writes commute extensionally; absence differs from a present optional value."
+      ],
+      "unmetCriteria": [
+        "Canonical sorted-map byte encoding and general production parser correspondence."
+      ],
+      "admittedWitnesses": [
+        "Algal.Core.OwnMap.parsed_duplicate_witness",
+        "Algal.Core.OwnMap.insertion_order_witness",
+        "Algal.Core.OwnMap.proto_name_is_an_own_key"
+      ],
+      "rejectedWitnesses": [
+        "Algal.Core.OwnMap.inherited_name_absent",
+        "Algal.Core.OwnMap.absent_is_not_present_none"
+      ]
+    },
+    {
+      "id": "key-order",
+      "module": "Algal.Core.KeyOrder",
+      "scope": "Unrestricted scalar-string key order and arbitrary finite own-map histories; semantic sorted projection only.",
+      "sources": [
+        "src/values.ts",
+        "crates/algal/src/canonical.rs"
+      ],
+      "coveredCriteria": [
+        "Accepted numeric index spelling is injective via Nat.toDigits; unchanged comparator is total/transitive/antisymmetric; actual key sorting is invariant under every list permutation; sorted finite-map projection equality is equivalent to extensional own lookup equality, with no unique-key premise."
+      ],
+      "unmetCriteria": [
+        "Key ordering and finite-map projection are composed with recursive normalization in Normalize; their relation to the real JSON byte codec and production extraction/refinement remains unproved."
+      ],
+      "admittedWitnesses": [
+        "Algal.Core.KeyOrder.reordered_map_witness"
+      ],
+      "rejectedWitnesses": [
+        "Algal.Core.KeyOrder.changed_duplicate_winner_changes_projection"
+      ]
+    },
+    {
+      "id": "structural-json",
+      "module": "Algal.Core.Json",
+      "scope": "Finite typed JSON trees plus a postfix structural token codec, with ordered duplicate-capable object entries.",
+      "sources": [
+        "src/values.ts",
+        "crates/algal/src/canonical.rs"
+      ],
+      "coveredCriteria": [
+        "Number normalization is recursively idempotent; structural tokens decode every modeled tree; the token encoding is injective; array order remains significant; malformed and nonfinite token streams reject."
+      ],
+      "unmetCriteria": [
+        "Tokens are not JSON bytes; numeric/container/raw-document parsing, full canonical byte roundtrip and injectivity remain unproved; no SHA injectivity. Normalize proves recursive structural composition; JsonString separately proves quoted-string UTF-8 encoding and fragment decoding."
+      ],
+      "admittedWitnesses": [
+        "Algal.Core.Json.nested_structural_witness"
+      ],
+      "rejectedWitnesses": [
+        "Algal.Core.Json.malformed_stack_rejected",
+        "Algal.Core.Json.nonfinite_token_rejected",
+        "Algal.Core.Json.extra_value_rejected"
+      ]
+    },
+    {
+      "id": "recursive-normalization",
+      "module": "Algal.Core.Normalize",
+      "scope": "Existing finite Json.Value trees with finite binary64 patterns and scalar strings; explicit independent observable equivalence identifies signed zeros, compares arrays positionally, and compares objects by recursive own last-wins lookup.",
+      "sources": [
+        "src/values.ts",
+        "crates/algal/src/canonical.rs"
+      ],
+      "coveredCriteria": [
+        "Recursive normalization is sound, idempotent and complete for independently defined observable equivalence. Object outputs have sorted unique own keys; absent and present null remain distinct; array length and order are preserved. Actual structural-token encode/decode round-trips modulo this relation, with encoding equality iff semantic equivalence and injectivity on normalized trees."
+      ],
+      "unmetCriteria": [
+        "Structural tokens remain distinct from full JSON text/UTF-8 bytes; shortest binary64 decimal generation/parsing, container framing, raw all-token/duplicate admission and runtime bounds are not proved. JsonString separately proves quoted-string bytes. No production extraction/refinement or SHA injectivity theorem."
+      ],
+      "admittedWitnesses": [
+        "Algal.Core.Normalize.nested_normalization_witness",
+        "Algal.Core.Normalize.nested_equivalence_witness",
+        "Algal.Core.Normalize.signed_zero_normalization_witness",
+        "Algal.Core.Normalize.overwritten_duplicate_ignored",
+        "Algal.Core.Normalize.reordered_distinct_keys_witness",
+        "Algal.Core.Normalize.inherited_name_stays_absent",
+        "Algal.Core.Normalize.proto_is_retained_own_key"
+      ],
+      "rejectedWitnesses": [
+        "Algal.Core.Normalize.changed_duplicate_winner_rejected",
+        "Algal.Core.Normalize.array_permutation_rejected",
+        "Algal.Core.Normalize.absent_and_present_null_rejected",
+        "Algal.Core.Normalize.unicode_normalization_not_applied"
+      ]
+    },
+    {
+      "id": "ports",
+      "module": "Algal.Core.Ports",
+      "scope": "Routing signatures and finite typed runtime values; explicit schema-check and canonical-byte-size parameters.",
+      "sources": [
+        "src/graph.ts",
+        "src/run.ts",
+        "src/capabilities.ts",
+        "crates/algal/src/graph.rs",
+        "crates/algal/src/contract.rs",
+        "crates/algal/src/runtime.rs"
+      ],
+      "coveredCriteria": [
+        "Exact capability class and ref separation; many/scalar routing restriction; syntactic handle validation; successful checked assignment preserves own declared runtime representations."
+      ],
+      "unmetCriteria": [
+        "Production schema/byte-size correctness, host capability authority, ref resolution, port parser field/count bounds, many-list resource parity and entire scheduler refinement."
+      ],
+      "admittedWitnesses": [
+        "Algal.Core.Ports.capability_syntax_witness",
+        "Algal.Core.Ports.many_to_json_witness"
+      ],
+      "rejectedWitnesses": [
+        "Algal.Core.Ports.capability_wrong_class_rejected",
+        "Algal.Core.Ports.empty_digest_rejected",
+        "Algal.Core.Ports.inherited_port_rejected"
+      ]
+    },
+    {
+      "id": "graph",
+      "module": "Algal.Core.Graph",
+      "scope": "Finite flat graph certificates with explicit rank order, ordinary unlifted child interfaces, normal/failure edge distinction.",
+      "sources": [
+        "src/graph.ts",
+        "crates/algal/src/graph.rs"
+      ],
+      "coveredCriteria": [
+        "Accepted edges/interfaces resolve own declared ports; ranks prove acyclicity; scalar ports have at most one inbound occurrence; normal and failure inputs never mix; normal capability edges preserve class; exposed child ports exactly correspond."
+      ],
+      "unmetCriteria": [
+        "Production compiler-to-certificate extraction/refinement, manifest parser and numeric bounds, map/repeat/loop child transformations, hierarchy occurrence/depth budgets and scheduler liveness."
+      ],
+      "admittedWitnesses": [
+        "Algal.Core.Graph.declared_acyclic_graph_admitted",
+        "Algal.Core.Graph.exact_child_interface_admitted"
+      ],
+      "rejectedWitnesses": [
+        "Algal.Core.Graph.duplicate_scalar_edge_rejected",
+        "Algal.Core.Graph.inherited_endpoint_rejected",
+        "Algal.Core.Graph.self_cycle_rejected",
+        "Algal.Core.Graph.missing_child_port_rejected"
+      ]
+    },
+    {
+      "id": "accounting",
+      "module": "Algal.Core.Accounting",
+      "scope": "Natural-number work at actual pre-increment and post-charge boundaries, with explicit integer callback cost and no-overflow premises.",
+      "sources": [
+        "src/run.ts",
+        "src/registry.ts",
+        "src/tools.ts",
+        "crates/algal/src/runtime.rs",
+        "crates/algal/src/registry.rs"
+      ],
+      "coveredCriteria": [
+        "Steps/calls checked before increment; work can exceed L and has L+delta envelope under bounded charge; failures retain prior charges; direct tool success cost is distinct; uint64 add does not wrap under the bound."
+      ],
+      "unmetCriteria": [
+        "Arbitrary host FnRegistry costs are not admitted by production; fractional/NaN/infinite host values are outside Int cost input domain; no generic JS binary64-addition bridge; full nested activation delta bound, retries, usize32, allocator/time/billing limits."
+      ],
+      "admittedWitnesses": [
+        "Algal.Core.Accounting.zero_callback_cost_admitted",
+        "Algal.Core.Accounting.typical_callback_cost_admitted"
+      ],
+      "rejectedWitnesses": [
+        "Algal.Core.Accounting.negative_callback_cost_rejected",
+        "Algal.Core.Accounting.excessive_callback_cost_rejected",
+        "Algal.Core.Accounting.preIncrement_at_limit_rejected"
+      ]
+    },
+    {
+      "id": "oracle",
+      "module": "Algal.Core.Oracle",
+      "scope": "Ordered occurrence/request/result replay tapes with explicit failure and suspension states.",
+      "sources": [
+        "src/effects.ts",
+        "src/run.ts",
+        "src/verify.ts",
+        "src/process-journal.ts",
+        "crates/algal/src/effects.rs",
+        "crates/algal/src/runtime.rs"
+      ],
+      "coveredCriteria": [
+        "Successful replay binds the exact head occurrence/request/result and consumes exactly one record; fixed tape replay is deterministic; changed occurrence/request rejects."
+      ],
+      "unmetCriteria": [
+        "Production replay/journal trace refinement, full error-code domain and suspension capability admission, provider truth/authority, retry safety, external exactly-once and liveness."
+      ],
+      "admittedWitnesses": [
+        "Algal.Core.Oracle.successful_replay_witness",
+        "Algal.Core.Oracle.external_failure_is_replayable"
+      ],
+      "rejectedWitnesses": [
+        "Algal.Core.Oracle.same_request_different_occurrence_is_not_replay",
+        "Algal.Core.Oracle.reordered_tape_rejected"
+      ]
+    }
+  ],
+  "theorems": [
+    {
+      "name": "Algal.Core.Binary64.admit_number",
+      "module": "Algal.Core.Binary64",
+      "domain": "binary64",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Binary64.normalizeBits_idempotent",
+      "module": "Algal.Core.Binary64",
+      "domain": "binary64",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Binary64.normalizeBits_finite",
+      "module": "Algal.Core.Binary64",
+      "domain": "binary64",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Binary64.normalizeBits_not_negativeZero",
+      "module": "Algal.Core.Binary64",
+      "domain": "binary64",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Binary64.normalize_idempotent",
+      "module": "Algal.Core.Binary64",
+      "domain": "binary64",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Binary64.normalize_eq_self",
+      "module": "Algal.Core.Binary64",
+      "domain": "binary64",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Binary64.equivalent_normalized_iff",
+      "module": "Algal.Core.Binary64",
+      "domain": "binary64",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Binary64.normalizeBits_changes_only_negativeZero",
+      "module": "Algal.Core.Binary64",
+      "domain": "binary64",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Binary64.admit_none_iff",
+      "module": "Algal.Core.Binary64",
+      "domain": "binary64",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Binary64.admitted_bits",
+      "module": "Algal.Core.Binary64",
+      "domain": "binary64",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Binary64.signed_zero_equivalent",
+      "module": "Algal.Core.Binary64",
+      "domain": "binary64",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Binary64.signed_zero_bits_differ",
+      "module": "Algal.Core.Binary64",
+      "domain": "binary64",
+      "role": "counterexample-witness"
+    },
+    {
+      "name": "Algal.Core.Binary64.minimum_subnormal_admitted",
+      "module": "Algal.Core.Binary64",
+      "domain": "binary64",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.Binary64.maximum_finite_admitted",
+      "module": "Algal.Core.Binary64",
+      "domain": "binary64",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.Binary64.positive_infinity_rejected",
+      "module": "Algal.Core.Binary64",
+      "domain": "binary64",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Binary64.negative_infinity_rejected",
+      "module": "Algal.Core.Binary64",
+      "domain": "binary64",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Binary64.nan_rejected",
+      "module": "Algal.Core.Binary64",
+      "domain": "binary64",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Binary64.model_addition_witness",
+      "module": "Algal.Core.Binary64",
+      "domain": "binary64",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.Text.scalar_range",
+      "module": "Algal.Core.Text",
+      "domain": "text",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Text.utf16Char_length",
+      "module": "Algal.Core.Text",
+      "domain": "text",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Text.utf16Char_unit_bound",
+      "module": "Algal.Core.Text",
+      "domain": "text",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Text.decodeChar_utf16Char",
+      "module": "Algal.Core.Text",
+      "domain": "text",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Text.utf16Char_injective",
+      "module": "Algal.Core.Text",
+      "domain": "text",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Text.decodeChars_utf16",
+      "module": "Algal.Core.Text",
+      "domain": "text",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Text.utf16_injective",
+      "module": "Algal.Core.Text",
+      "domain": "text",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Text.insertKey_preserves_keys",
+      "module": "Algal.Core.Text",
+      "domain": "text",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Text.canonicalKeys_preserves_keys",
+      "module": "Algal.Core.Text",
+      "domain": "text",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Text.scalar_surrogate_rejected",
+      "module": "Algal.Core.Text",
+      "domain": "text",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Text.utf16_supplementary_witness",
+      "module": "Algal.Core.Text",
+      "domain": "text",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.Text.no_nfc_identification",
+      "module": "Algal.Core.Text",
+      "domain": "text",
+      "role": "counterexample-witness"
+    },
+    {
+      "name": "Algal.Core.Text.scalar_order_is_not_utf16_order",
+      "module": "Algal.Core.Text",
+      "domain": "text",
+      "role": "counterexample-witness"
+    },
+    {
+      "name": "Algal.Core.Text.index_maximum_admitted",
+      "module": "Algal.Core.Text",
+      "domain": "text",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.Text.index_overflow_rejected",
+      "module": "Algal.Core.Text",
+      "domain": "text",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Text.index_leading_zero_rejected",
+      "module": "Algal.Core.Text",
+      "domain": "text",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Text.index_plus_rejected",
+      "module": "Algal.Core.Text",
+      "domain": "text",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Text.index_negative_zero_rejected",
+      "module": "Algal.Core.Text",
+      "domain": "text",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Text.canonical_key_order_witness",
+      "module": "Algal.Core.Text",
+      "domain": "text",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.JsonString.hexControl_roundtrip",
+      "module": "Algal.Core.JsonString",
+      "domain": "json-string-bytes",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonString.readUnit_escapeChar",
+      "module": "Algal.Core.JsonString",
+      "domain": "json-string-bytes",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonString.escapeChar_head",
+      "module": "Algal.Core.JsonString",
+      "domain": "json-string-bytes",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonString.scan_escapeChar",
+      "module": "Algal.Core.JsonString",
+      "domain": "json-string-bytes",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonString.scan_escapedBody",
+      "module": "Algal.Core.JsonString",
+      "domain": "json-string-bytes",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonString.escapeChar_length",
+      "module": "Algal.Core.JsonString",
+      "domain": "json-string-bytes",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonString.escapedBody_length",
+      "module": "Algal.Core.JsonString",
+      "domain": "json-string-bytes",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonString.readQuoted_quote_suffix",
+      "module": "Algal.Core.JsonString",
+      "domain": "json-string-bytes",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonString.fromUTF8_toUTF8",
+      "module": "Algal.Core.JsonString",
+      "domain": "json-string-bytes",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonString.quoteBytes_utf8",
+      "module": "Algal.Core.JsonString",
+      "domain": "json-string-bytes",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonString.quotedBytes_roundtrip",
+      "module": "Algal.Core.JsonString",
+      "domain": "json-string-bytes",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonString.quotedBytes_injective",
+      "module": "Algal.Core.JsonString",
+      "domain": "json-string-bytes",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonString.decodeBytes_roundtrip",
+      "module": "Algal.Core.JsonString",
+      "domain": "json-string-bytes",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonString.standard_controls_witness",
+      "module": "Algal.Core.JsonString",
+      "domain": "json-string-bytes",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.JsonString.supplementary_utf8_witness",
+      "module": "Algal.Core.JsonString",
+      "domain": "json-string-bytes",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.JsonString.malformed_utf8_rejected",
+      "module": "Algal.Core.JsonString",
+      "domain": "json-string-bytes",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.JsonString.overlong_utf8_rejected",
+      "module": "Algal.Core.JsonString",
+      "domain": "json-string-bytes",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.JsonString.surrogate_utf8_rejected",
+      "module": "Algal.Core.JsonString",
+      "domain": "json-string-bytes",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.JsonString.leading_bom_rejected",
+      "module": "Algal.Core.JsonString",
+      "domain": "json-string-bytes",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.JsonString.embedded_bom_retained",
+      "module": "Algal.Core.JsonString",
+      "domain": "json-string-bytes",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.JsonString.literal_control_rejected",
+      "module": "Algal.Core.JsonString",
+      "domain": "json-string-bytes",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.JsonString.escaped_quote_is_content",
+      "module": "Algal.Core.JsonString",
+      "domain": "json-string-bytes",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.JsonString.trailing_content_rejected",
+      "module": "Algal.Core.JsonString",
+      "domain": "json-string-bytes",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.JsonString.missing_end_quote_rejected",
+      "module": "Algal.Core.JsonString",
+      "domain": "json-string-bytes",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.JsonString.invalid_escape_rejected",
+      "module": "Algal.Core.JsonString",
+      "domain": "json-string-bytes",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.OwnMap.lookup_write_same",
+      "module": "Algal.Core.OwnMap",
+      "domain": "own-map",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.OwnMap.lookup_write_other",
+      "module": "Algal.Core.OwnMap",
+      "domain": "own-map",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.OwnMap.overwrite_last_wins",
+      "module": "Algal.Core.OwnMap",
+      "domain": "own-map",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.OwnMap.distinct_writes_commute",
+      "module": "Algal.Core.OwnMap",
+      "domain": "own-map",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.OwnMap.lookup_defined_only_if_declared",
+      "module": "Algal.Core.OwnMap",
+      "domain": "own-map",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.OwnMap.lookup_absent_if_undeclared",
+      "module": "Algal.Core.OwnMap",
+      "domain": "own-map",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.OwnMap.parsed_duplicate_witness",
+      "module": "Algal.Core.OwnMap",
+      "domain": "own-map",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.OwnMap.insertion_order_witness",
+      "module": "Algal.Core.OwnMap",
+      "domain": "own-map",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.OwnMap.inherited_name_absent",
+      "module": "Algal.Core.OwnMap",
+      "domain": "own-map",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.OwnMap.proto_name_is_an_own_key",
+      "module": "Algal.Core.OwnMap",
+      "domain": "own-map",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.OwnMap.absent_is_not_present_none",
+      "module": "Algal.Core.OwnMap",
+      "domain": "own-map",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Json.normalizeNumbers_idempotent",
+      "module": "Algal.Core.Json",
+      "domain": "structural-json",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Json.normalizeItems_idempotent",
+      "module": "Algal.Core.Json",
+      "domain": "structural-json",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Json.normalizeFields_idempotent",
+      "module": "Algal.Core.Json",
+      "domain": "structural-json",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Json.execute_append",
+      "module": "Algal.Core.Json",
+      "domain": "structural-json",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Json.execute_encode",
+      "module": "Algal.Core.Json",
+      "domain": "structural-json",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Json.execute_encodeItems",
+      "module": "Algal.Core.Json",
+      "domain": "structural-json",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Json.execute_encodeFields",
+      "module": "Algal.Core.Json",
+      "domain": "structural-json",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Json.structural_roundtrip",
+      "module": "Algal.Core.Json",
+      "domain": "structural-json",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Json.structural_encoding_injective",
+      "module": "Algal.Core.Json",
+      "domain": "structural-json",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Json.structural_roundtrip_modulo_number_normalization",
+      "module": "Algal.Core.Json",
+      "domain": "structural-json",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Json.normalized_structural_encoding_eq_iff",
+      "module": "Algal.Core.Json",
+      "domain": "structural-json",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Json.malformed_stack_rejected",
+      "module": "Algal.Core.Json",
+      "domain": "structural-json",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Json.nonfinite_token_rejected",
+      "module": "Algal.Core.Json",
+      "domain": "structural-json",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Json.extra_value_rejected",
+      "module": "Algal.Core.Json",
+      "domain": "structural-json",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Json.array_order_is_significant",
+      "module": "Algal.Core.Json",
+      "domain": "structural-json",
+      "role": "counterexample-witness"
+    },
+    {
+      "name": "Algal.Core.Json.nested_structural_witness",
+      "module": "Algal.Core.Json",
+      "domain": "structural-json",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.Normalize.fieldsToList_ofList",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.fieldsOfList_toList",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.lookup_append",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.lookupFields_cons",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.lookup_map",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.canonicalEntries_lookup",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.canonicalEntries_eq_of_equivalent",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.canonicalEntries_fallback_irrelevant",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.canonicalEntries_keys",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.canonicalEntries_nodup",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.canonicalEntries_sorted",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.lookup_reverse_unique",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.canonicalFields_lookup",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.canonicalFields_eq_of_lookup",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.canonicalFields_nodup",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.canonicalFields_sorted",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.normalizeItems_toList",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.normalizeItems_length",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.normalizeFieldValues_lookup",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.normalize_object_lookup",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.numberEquivalent_iff_normalize",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.equivalent_normalize",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.equivalent_symm",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.equivalent_trans",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.normalize_sound",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.normalizeItems_sound",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.normalizeFieldValues_sound",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.normalize_idempotent",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.equivalent_iff_normalize_eq",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.equivalent_refl",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.canonicalTokens_roundtrip",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.canonicalTokens_eq_iff",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.canonicalTokens_normalize",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.decoded_canonicalTokens_equivalent",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.canonicalTokens_injective_on_normalized",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Normalize.nested_normalization_witness",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.Normalize.nested_equivalence_witness",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.Normalize.signed_zero_normalization_witness",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.Normalize.overwritten_duplicate_ignored",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.Normalize.reordered_distinct_keys_witness",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.Normalize.changed_duplicate_winner_rejected",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Normalize.array_permutation_rejected",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Normalize.absent_and_present_null_rejected",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Normalize.inherited_name_stays_absent",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.Normalize.proto_is_retained_own_key",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.Normalize.unicode_normalization_not_applied",
+      "module": "Algal.Core.Normalize",
+      "domain": "recursive-normalization",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Ports.capability_no_json_widening",
+      "module": "Algal.Core.Ports",
+      "domain": "ports",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Ports.capability_class_preserved",
+      "module": "Algal.Core.Ports",
+      "domain": "ports",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Ports.reference_is_not_payload",
+      "module": "Algal.Core.Ports",
+      "domain": "ports",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Ports.many_to_scalar_nonjson_rejected",
+      "module": "Algal.Core.Ports",
+      "domain": "ports",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Ports.accepted_value_byte_bound",
+      "module": "Algal.Core.Ports",
+      "domain": "ports",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Ports.accepted_scalar_capability_class",
+      "module": "Algal.Core.Ports",
+      "domain": "ports",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Ports.accepted_many_is_array",
+      "module": "Algal.Core.Ports",
+      "domain": "ports",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Ports.checked_assignment_preserves_types",
+      "module": "Algal.Core.Ports",
+      "domain": "ports",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Ports.undeclared_assignment_rejected",
+      "module": "Algal.Core.Ports",
+      "domain": "ports",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Ports.signature_does_not_imply_schema_satisfaction",
+      "module": "Algal.Core.Ports",
+      "domain": "ports",
+      "role": "counterexample-witness"
+    },
+    {
+      "name": "Algal.Core.Ports.open_choice_does_not_imply_label_satisfaction",
+      "module": "Algal.Core.Ports",
+      "domain": "ports",
+      "role": "counterexample-witness"
+    },
+    {
+      "name": "Algal.Core.Ports.many_to_json_witness",
+      "module": "Algal.Core.Ports",
+      "domain": "ports",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.Ports.capability_syntax_witness",
+      "module": "Algal.Core.Ports",
+      "domain": "ports",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.Ports.capability_wrong_class_rejected",
+      "module": "Algal.Core.Ports",
+      "domain": "ports",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Ports.empty_digest_rejected",
+      "module": "Algal.Core.Ports",
+      "domain": "ports",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Ports.inherited_port_rejected",
+      "module": "Algal.Core.Ports",
+      "domain": "ports",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Ports.syntax_does_not_mint_authority",
+      "module": "Algal.Core.Ports",
+      "domain": "ports",
+      "role": "counterexample-witness"
+    },
+    {
+      "name": "Algal.Core.Graph.accepted_edge_resolves_own_ports",
+      "module": "Algal.Core.Graph",
+      "domain": "graph",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Graph.ownOutput_is_declared",
+      "module": "Algal.Core.Graph",
+      "domain": "graph",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Graph.ownInput_is_declared",
+      "module": "Algal.Core.Graph",
+      "domain": "graph",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Graph.interfaceInput_is_declared_input_cell",
+      "module": "Algal.Core.Graph",
+      "domain": "graph",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Graph.accepted_interface_input_resolves",
+      "module": "Algal.Core.Graph",
+      "domain": "graph",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Graph.accepted_interface_output_resolves",
+      "module": "Algal.Core.Graph",
+      "domain": "graph",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Graph.accepted_edge_increases_rank",
+      "module": "Algal.Core.Graph",
+      "domain": "graph",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Graph.accepted_path_increases_rank",
+      "module": "Algal.Core.Graph",
+      "domain": "graph",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Graph.accepted_graph_acyclic",
+      "module": "Algal.Core.Graph",
+      "domain": "graph",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Graph.accepted_scalar_cardinality",
+      "module": "Algal.Core.Graph",
+      "domain": "graph",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Graph.accepted_no_mixed_failure_inputs",
+      "module": "Algal.Core.Graph",
+      "domain": "graph",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Graph.accepted_normal_capability_edge_preserves_class",
+      "module": "Algal.Core.Graph",
+      "domain": "graph",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Graph.accepted_child_output_corresponds",
+      "module": "Algal.Core.Graph",
+      "domain": "graph",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Graph.accepted_child_input_corresponds",
+      "module": "Algal.Core.Graph",
+      "domain": "graph",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Graph.declared_acyclic_graph_admitted",
+      "module": "Algal.Core.Graph",
+      "domain": "graph",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.Graph.duplicate_scalar_edge_rejected",
+      "module": "Algal.Core.Graph",
+      "domain": "graph",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Graph.inherited_endpoint_rejected",
+      "module": "Algal.Core.Graph",
+      "domain": "graph",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Graph.self_cycle_rejected",
+      "module": "Algal.Core.Graph",
+      "domain": "graph",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Graph.missing_child_port_rejected",
+      "module": "Algal.Core.Graph",
+      "domain": "graph",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Graph.exact_child_interface_admitted",
+      "module": "Algal.Core.Graph",
+      "domain": "graph",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.Accounting.preIncrement_success_bound",
+      "module": "Algal.Core.Accounting",
+      "domain": "accounting",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Accounting.preIncrement_at_limit_rejected",
+      "module": "Algal.Core.Accounting",
+      "domain": "accounting",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Accounting.preIncrement_below_limit_admitted",
+      "module": "Algal.Core.Accounting",
+      "domain": "accounting",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Accounting.postCharge_monotone",
+      "module": "Algal.Core.Accounting",
+      "domain": "accounting",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Accounting.postCharge_envelope",
+      "module": "Algal.Core.Accounting",
+      "domain": "accounting",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Accounting.postCharge_success_bound",
+      "module": "Algal.Core.Accounting",
+      "domain": "accounting",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Accounting.postCharge_failure_retains_charge",
+      "module": "Algal.Core.Accounting",
+      "domain": "accounting",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Accounting.strict_limit_is_not_an_invariant",
+      "module": "Algal.Core.Accounting",
+      "domain": "accounting",
+      "role": "counterexample-witness"
+    },
+    {
+      "name": "Algal.Core.Accounting.callback_failure_keeps_cost",
+      "module": "Algal.Core.Accounting",
+      "domain": "accounting",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Accounting.direct_tool_failure_no_success_charge",
+      "module": "Algal.Core.Accounting",
+      "domain": "accounting",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Accounting.effect_attempt_base_bound",
+      "module": "Algal.Core.Accounting",
+      "domain": "accounting",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Accounting.charged_group_envelope",
+      "module": "Algal.Core.Accounting",
+      "domain": "accounting",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Accounting.uint64_add_without_wrap",
+      "module": "Algal.Core.Accounting",
+      "domain": "accounting",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Accounting.exact_integer_envelope_fits_uint64",
+      "module": "Algal.Core.Accounting",
+      "domain": "accounting",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Accounting.admitted_cost_nonnegative",
+      "module": "Algal.Core.Accounting",
+      "domain": "accounting",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Accounting.negative_callback_cost_rejected",
+      "module": "Algal.Core.Accounting",
+      "domain": "accounting",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Accounting.excessive_callback_cost_rejected",
+      "module": "Algal.Core.Accounting",
+      "domain": "accounting",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Accounting.zero_callback_cost_admitted",
+      "module": "Algal.Core.Accounting",
+      "domain": "accounting",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.Accounting.typical_callback_cost_admitted",
+      "module": "Algal.Core.Accounting",
+      "domain": "accounting",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.Oracle.successful_replay_binds_head",
+      "module": "Algal.Core.Oracle",
+      "domain": "oracle",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Oracle.successful_replay_consumes_exactly_one",
+      "module": "Algal.Core.Oracle",
+      "domain": "oracle",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Oracle.changed_occurrence_rejected",
+      "module": "Algal.Core.Oracle",
+      "domain": "oracle",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Oracle.changed_request_rejected",
+      "module": "Algal.Core.Oracle",
+      "domain": "oracle",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Oracle.replay_deterministic",
+      "module": "Algal.Core.Oracle",
+      "domain": "oracle",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.Oracle.successful_replay_witness",
+      "module": "Algal.Core.Oracle",
+      "domain": "oracle",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.Oracle.same_request_different_occurrence_is_not_replay",
+      "module": "Algal.Core.Oracle",
+      "domain": "oracle",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.Oracle.external_failure_is_replayable",
+      "module": "Algal.Core.Oracle",
+      "domain": "oracle",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.Oracle.reordered_tape_rejected",
+      "module": "Algal.Core.Oracle",
+      "domain": "oracle",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.digit_char_rebuild",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.parseDigits_append_repr",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.parseDigits_nonzero_head",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.arrayIndex_digits",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.arrayIndex_injective",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.keyOrder_swap",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.keyLE_trans",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.keyLE_antisymm",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.keyLE_total",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.keyOrder_notGT",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.insertKey_sorted",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.canonicalKeys_sorted",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.canonicalKeys_permutation_invariant",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.canonicalKeys_idempotent",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.lookup_isSome_iff",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.eraseDups_nodup",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.support_permutation_of_equivalent",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.canonicalProjection_eq_of_equivalent",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.lookup_keyed_map",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.canonicalProjection_lookup",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.canonicalProjection_eq_iff",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.canonicalProjection_distinct_writes_commute",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.changed_duplicate_winner_changes_projection",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.reordered_map_witness",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "admitted-witness"
+    }
+  ],
+  "unmetCriteria": [
+    "Phase09 full canonical JSON byte encoding/roundtrip/injectivity is not proved. Normalize composes semantic normalization with structural tokens and JsonString proves actual quoted-string UTF-8 bytes, but container/number composition, shortest binary64 decimal rendering/parsing and full raw-document admission are still required.",
+    "No production implementation is directly proved/refined by these theorems. Independent exact vectors and source/artifact bindings can provide sampled evidence, not a universal implementation theorem.",
+    "SchemaCheck and ByteSize are explicit semantic parameters; host cost sanity and exact integer/machine-width envelopes are explicit preconditions, not established production admission.",
+    "Lean standard-library imports are pinned/trusted compiled inputs; whole-import trust=0 rechecking is unqualified. Every authored theorem must undergo actual transitive axiom collection by the integrator.",
+    "Cryptographic collision resistance, host authority, physical filesystem behavior, external effects and liveness are outside this semantic core."
+  ]
+}

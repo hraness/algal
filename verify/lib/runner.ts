@@ -33,7 +33,10 @@ export async function runCommand(command: string[], cwd: string, options: { time
   const timeoutMs = options.timeoutMs ?? 90_000;
   const maxOutputBytes = options.maxOutputBytes ?? 2_097_152;
   requireThat(command.length > 0 && command.length <= 64 && command.every(argument => typeof argument === "string" && argument.length <= 4096), "invalid command argv");
-  requireThat(Number.isSafeInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 120_000, "invalid command deadline");
+  // The native64 real-I/O stateful suite takes several minutes, including
+  // shrinking controls. Callers still choose a finite explicit deadline; small
+  // proof/model commands retain their own stricter limits.
+  requireThat(Number.isSafeInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 600_000, "invalid command deadline");
   requireThat(Number.isSafeInteger(maxOutputBytes) && maxOutputBytes > 0 && maxOutputBytes <= 8_388_608, "invalid output limit");
   requireThat(process.platform !== "win32", "bounded verification command custody requires a POSIX process group");
   return new Promise((resolve, reject) => {
@@ -241,6 +244,23 @@ export function admitSelftestOutput(result: CommandResult): number {
 
 async function executeSuite(root: string, suite: string): Promise<unknown> {
   if (suite === "claims") return validateClaims(root);
+  if (suite === "lean-core") {
+    const { runLeanCore, recheckLeanCoreEvidence } = await import("../lean/run");
+    const binary = process.env.ALGAL_LEAN_NATIVE_BIN;
+    requireThat(binary !== undefined, "lean-core requires explicit ALGAL_LEAN_NATIVE_BIN");
+    const evidence = await runLeanCore(root, binary);
+    return { admitted: await recheckLeanCoreEvidence(root, evidence), evidence };
+  }
+  if (suite === "traces" || suite === "stateful" || suite === "fault-harness") {
+    const binary = process.env.ALGAL_TRACE_TEST_BIN;
+    requireThat(binary !== undefined, `${suite} requires explicit ALGAL_TRACE_TEST_BIN`);
+    if (suite === "traces") {
+      const { runTraces } = await import("../traces/run");
+      return runTraces(root, binary);
+    }
+    const { runNativeVerification } = await import("../stateful/run");
+    return runNativeVerification(root, suite, binary);
+  }
   if (suite === "artifact") {
     const { runArtifact } = await import("../artifact/run");
     return runArtifact(root);

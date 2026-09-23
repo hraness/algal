@@ -131,3 +131,65 @@ Universal ledger obligations remain unproved and license zero formal claims.
 The final repository aggregate gate and delivery remain required after the
 remaining plan converges. Phase04 is the next dependent implementation lane;
 Phase09 continues independently.
+
+### Phase04 counterexamples and Phase09 checked milestone
+
+Portable stateful traces reproduced persistent native CAS/effect reads returning
+cached values after the backing file was corrupted or removed. The native Store
+now reserves its memory maps for explicit memory/overlay writes, and persistent
+reads admit disk state. Cloned overlays and source tracing do not inherit an
+acknowledged disk write as a stale local snapshot. Focused regressions retain the
+original traces and exercise corruption, absence, wrong digest, foreign effect
+identity and intentional local overlay shadowing.
+
+The same trace work found missing application dependencies returning INTERNAL
+in Bun and PARSE_FAILED in native. Bun now uses PARSE_FAILED for absence and
+DIGEST_MISMATCH for a Store returning a foreign record. Every Store result,
+including an overriding FileStore subclass, is rehashed; parsing receives that
+same admitted copy. Independent review found no intended valid wire-result
+change. The focused application contract/message/experiment check passed 18
+tests/115 assertions. Real AbortController cancellation of a paused Bun host
+admission passed two tests/16 assertions for new and existing applications.
+This is separate from error-injection labels; native also exercises actual
+Tokio task abort/drop before publication and cold reacquisition.
+
+The independent Lean milestone now passes 224 named environment theorem audits,
+an additional complete defining-module audit of 842 theorem constants, seven
+executed negative controls and sampled Bun/native vector correspondence.
+Fresh source was staged with the complete pinned runtime inventory checked
+before and after. Raw evidence re-admission also passed. Exact receipt,
+toolchain, trust assumptions and limits are in
+`formal-verification-evidence/phase09-core.md`. General key permutation,
+extensional finite-map projection, recursive normalization and quoted-string
+UTF-8 round-trip/injectivity are proved in the semantic model. All 56 actual
+quoted-string vectors match both runtimes. Complete JSON number/delimiter
+composition and production refinement remain open. Phase09 remains in progress.
+
+Phase04 is complete within its sampled trace/fault scope. The final source
+snapshot passed all 74 histories and 1,628 commands per runtime, with independent
+re-admission of the 55 MB raw archive. The trace definition is
+`b0a810e4f32e28296afab3b03831e401406ec25fa14432392ff63f539775a67b`.
+The separate supervised native stateful suite passed 64 Hegel histories and the
+concrete shrinking control; its receipt is
+`verify/results/c2f278cb7f4aeb53d060a4ca9c2a44b5df375e7dd5551bd20b49732202fcaff7/stateful.json`.
+Fault/cancellation coverage passed nine native selectors and 19 Bun tests:
+`verify/results/8c90158ccc9985f433d0b3c9ce4ce975006099fa9c4f1468f93082b41a485103/fault.json`.
+Final independent review reproduced forged uncertainty on ordinary rejections
+passing the checker. The repaired oracle and its negative controls now reject
+that case; all affected qualification runs were refreshed. Earlier receipts are
+historical. Exact raw archive/artifact details are in
+`formal-verification-evidence/phase04-traces.md`.
+
+Pinned native CLI `ce85c00402384407d4b726e79a8d86b92bd54d5a0237c520046f77670f2462bc`
+passed application (250), process (58), and Store (15) parity steps.
+The exact evaluator WASM was reproduced after Cargo/runner input refresh.
+These milestones do not license universal implementation correctness or replace
+the final repository aggregate and delivery gates.
+
+Phase05 is now integrating bounded lease, mailbox, effect-journal and process
+models. Independent journal-model review repaired lost recovery-charge
+acknowledgments, concurrent poison during awaited persistence, recorded versus
+new binding drift, retained receipt identity, invocation versus process-generation
+identity, and effects that apply after host death. Its 32 scratch diagnostic
+profiles behaved as expected; repository suite admission and implementation
+conformance remain pending.

@@ -19,7 +19,7 @@
     },
     {
       "path": "Cargo.lock",
-      "sha256": "sha256:f3ecdab66f6c533d19ee10fa42e31975c66ad67e4c81a00062979497a51c1af2"
+      "sha256": "sha256:bd01407d32f2ab942c8ecc1de574a40c3eba44f66ecade96ad66892be568bb88"
     },
     {
       "path": "Cargo.toml",
@@ -51,7 +51,7 @@
     },
     {
       "path": "crates/algal/Cargo.toml",
-      "sha256": "sha256:727fec3383d8d9eed1248feee6fc722137525ef8c00abdf010c52ff927d1bf5e"
+      "sha256": "sha256:15bf1c308c46edd88cdc9b4901fa554e3933eaabb42cc3b418f28c8e4f148de4"
     },
     {
       "path": "crates/algal/build.rs",
@@ -60,6 +60,10 @@
     {
       "path": "crates/algal/examples/emit_bridge_source.rs",
       "sha256": "sha256:9c2312e2c6a8d52d257bd3d49199394a70afb95dd25a4491bdf0068c92a4a8b7"
+    },
+    {
+      "path": "crates/algal/examples/verification_lean_vectors.rs",
+      "sha256": "sha256:58dbb88be965b819f70e898bf78298e7bd4ec816d3a3f8cc41b078dd0358f088"
     },
     {
       "path": "crates/algal/src/acp.rs",
@@ -223,7 +227,7 @@
     },
     {
       "path": "crates/algal/src/lib.rs",
-      "sha256": "sha256:e8bef2f4912df7a2191fd5220fa7819f90fd44296b0b08b74d0d3593515169a9"
+      "sha256": "sha256:e97099a425122852b294015a6a3060a8915326dc803934cc763c5dbf1215a88f"
     },
     {
       "path": "crates/algal/src/mailbox.rs",
@@ -267,11 +271,15 @@
     },
     {
       "path": "crates/algal/src/store.rs",
-      "sha256": "sha256:22e5ee7d7aaf889e24ed015f96f4978a70904fdb12105d106dc374d1b3056efb"
+      "sha256": "sha256:6d9889dd9ffe67dc9aea3e7bbaf5d8c10e76998ff45eded5095ca4bd7fbcf0a3"
     },
     {
       "path": "crates/algal/src/suite.rs",
       "sha256": "sha256:e423ac2c8b7d6a8deb2c3740414ddbb0dd7aa78009fa51895196613b8531d179"
+    },
+    {
+      "path": "crates/algal/src/verification_trace.rs",
+      "sha256": "sha256:8696aaa243b3975060558a8013216e66e806b13f9c68185eccbce7d6c5d3923e"
     },
     {
       "path": "crates/algal/tests/acp.rs",
@@ -302,6 +310,10 @@
       "sha256": "sha256:9bc297534b0953a3b6e6bcb338f6c06d3db6fbd7b21b08a23383f8b116ec0f1c"
     },
     {
+      "path": "crates/algal/tests/cache_read_admission.rs",
+      "sha256": "sha256:fae853b1a79a349edc6911fc04ab46675156ca885eb93d61e601c5f98313b23a"
+    },
+    {
       "path": "crates/algal/tests/decisions.rs",
       "sha256": "sha256:b3e4697be8888e2691139fef40c3b86714ba6dd38e75f1ed1f9197cef17a2bbb"
     },
@@ -320,6 +332,22 @@
     {
       "path": "crates/algal/tests/fixtures/acp_agent.py",
       "sha256": "sha256:e7df0529f12ba9e51e43443aecdd528d14ede7855acba4866bb3c35e5ac24ec6"
+    },
+    {
+      "path": "crates/algal/tests/fixtures/verification_trace/hegel-first-wins-negative.json",
+      "sha256": "sha256:f78e2f13c6262014c0cd60ec2c0bc6006ab00b03e8bfa45e861250b9b149a8e7"
+    },
+    {
+      "path": "crates/algal/tests/fixtures/verification_trace/numeric-unicode-keys.json",
+      "sha256": "sha256:941510298e543d1705813797da4720096ee39b01226df28163a533e2eb8c7464"
+    },
+    {
+      "path": "crates/algal/tests/fixtures/verification_trace/retained-cache-corruption.json",
+      "sha256": "sha256:4c4ec1ff6a04181e10c3e8f3a48f813428451f4ecb8276997e30e9fbacb5dc4c"
+    },
+    {
+      "path": "crates/algal/tests/fixtures/verification_trace/retained-cache-removal.json",
+      "sha256": "sha256:3c04c9d22bf05784eab2aad4a001ec06ec4c22fd28269f3c7cd99bdcb3fa75c1"
     },
     {
       "path": "crates/algal/tests/foundry.rs",
@@ -1443,7 +1471,7 @@
     },
     {
       "path": "src/algal_expr.wasm.json",
-      "sha256": "sha256:359f4ed3c168c24b804e7ad3c794a380f57900ea63f3f4945c845169f0d2972e"
+      "sha256": "sha256:853a40b5e455cda391ed2685d4d7dd54faf3b62f704a2ec12e18fe1f7e9b02fa"
     },
     {
       "path": "src/application-adaptation.test.ts",
@@ -1452,6 +1480,10 @@
     {
       "path": "src/application-adaptation.ts",
       "sha256": "sha256:f515a0a46947a153e81ad6e745c85c2b5f401a364994f8cb35adfc9ebf3dda4e"
+    },
+    {
+      "path": "src/application-cancellation.test.ts",
+      "sha256": "sha256:f3f71540aa6190ef51ef97e8b4dda90e49194e63c2cd59b75591e93778ef9709"
     },
     {
       "path": "src/application-comparison.test.ts",
@@ -1471,11 +1503,11 @@
     },
     {
       "path": "src/application-contract.test.ts",
-      "sha256": "sha256:29535a867409d62be83c99c38a9ff9f7e737be893dc3dd7cac74cfa2e9830aee"
+      "sha256": "sha256:b3179751d5d24fd55f6e5dd59eda40b6ad0a5973abbbdf52a0274b08dec6a1b6"
     },
     {
       "path": "src/application-contract.ts",
-      "sha256": "sha256:bd36fdcde5ede68a3c2eeb20fe4a01e6ca6e79b5b88b7844813bacd1422e3753"
+      "sha256": "sha256:7a74bef117142090aa6cbc20f884d4a2e13e724efc2c33d755560d4d73df0f37"
     },
     {
       "path": "src/application-crash.test.ts",
@@ -5555,7 +5587,7 @@
         },
         {
           "path": "crates/algal/src/store.rs",
-          "sha256": "sha256:22e5ee7d7aaf889e24ed015f96f4978a70904fdb12105d106dc374d1b3056efb",
+          "sha256": "sha256:6d9889dd9ffe67dc9aea3e7bbaf5d8c10e76998ff45eded5095ca4bd7fbcf0a3",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -5677,7 +5709,7 @@
         },
         {
           "path": "crates/algal/src/store.rs",
-          "sha256": "sha256:22e5ee7d7aaf889e24ed015f96f4978a70904fdb12105d106dc374d1b3056efb",
+          "sha256": "sha256:6d9889dd9ffe67dc9aea3e7bbaf5d8c10e76998ff45eded5095ca4bd7fbcf0a3",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -5797,7 +5829,7 @@
         },
         {
           "path": "crates/algal/src/store.rs",
-          "sha256": "sha256:22e5ee7d7aaf889e24ed015f96f4978a70904fdb12105d106dc374d1b3056efb",
+          "sha256": "sha256:6d9889dd9ffe67dc9aea3e7bbaf5d8c10e76998ff45eded5095ca4bd7fbcf0a3",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -5917,7 +5949,7 @@
         },
         {
           "path": "crates/algal/src/store.rs",
-          "sha256": "sha256:22e5ee7d7aaf889e24ed015f96f4978a70904fdb12105d106dc374d1b3056efb",
+          "sha256": "sha256:6d9889dd9ffe67dc9aea3e7bbaf5d8c10e76998ff45eded5095ca4bd7fbcf0a3",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -6039,7 +6071,7 @@
         },
         {
           "path": "crates/algal/src/store.rs",
-          "sha256": "sha256:22e5ee7d7aaf889e24ed015f96f4978a70904fdb12105d106dc374d1b3056efb",
+          "sha256": "sha256:6d9889dd9ffe67dc9aea3e7bbaf5d8c10e76998ff45eded5095ca4bd7fbcf0a3",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8418,7 +8450,7 @@
         },
         {
           "path": "src/application-contract.ts",
-          "sha256": "sha256:bd36fdcde5ede68a3c2eeb20fe4a01e6ca6e79b5b88b7844813bacd1422e3753",
+          "sha256": "sha256:7a74bef117142090aa6cbc20f884d4a2e13e724efc2c33d755560d4d73df0f37",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8572,7 +8604,7 @@
         },
         {
           "path": "src/application-contract.ts",
-          "sha256": "sha256:bd36fdcde5ede68a3c2eeb20fe4a01e6ca6e79b5b88b7844813bacd1422e3753",
+          "sha256": "sha256:7a74bef117142090aa6cbc20f884d4a2e13e724efc2c33d755560d4d73df0f37",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8726,7 +8758,7 @@
         },
         {
           "path": "src/application-contract.ts",
-          "sha256": "sha256:bd36fdcde5ede68a3c2eeb20fe4a01e6ca6e79b5b88b7844813bacd1422e3753",
+          "sha256": "sha256:7a74bef117142090aa6cbc20f884d4a2e13e724efc2c33d755560d4d73df0f37",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8880,7 +8912,7 @@
         },
         {
           "path": "src/application-contract.ts",
-          "sha256": "sha256:bd36fdcde5ede68a3c2eeb20fe4a01e6ca6e79b5b88b7844813bacd1422e3753",
+          "sha256": "sha256:7a74bef117142090aa6cbc20f884d4a2e13e724efc2c33d755560d4d73df0f37",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -9034,7 +9066,7 @@
         },
         {
           "path": "src/application-contract.ts",
-          "sha256": "sha256:bd36fdcde5ede68a3c2eeb20fe4a01e6ca6e79b5b88b7844813bacd1422e3753",
+          "sha256": "sha256:7a74bef117142090aa6cbc20f884d4a2e13e724efc2c33d755560d4d73df0f37",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -9188,7 +9220,7 @@
         },
         {
           "path": "src/application-contract.ts",
-          "sha256": "sha256:bd36fdcde5ede68a3c2eeb20fe4a01e6ca6e79b5b88b7844813bacd1422e3753",
+          "sha256": "sha256:7a74bef117142090aa6cbc20f884d4a2e13e724efc2c33d755560d4d73df0f37",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -9342,7 +9374,7 @@
         },
         {
           "path": "src/application-contract.ts",
-          "sha256": "sha256:bd36fdcde5ede68a3c2eeb20fe4a01e6ca6e79b5b88b7844813bacd1422e3753",
+          "sha256": "sha256:7a74bef117142090aa6cbc20f884d4a2e13e724efc2c33d755560d4d73df0f37",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -13723,7 +13755,7 @@
       "specs": [
         {
           "path": "docs/formal-verification-plan.md",
-          "sha256": "sha256:91c6d6d2eb066fba329d0c35c166d4dca002e7ad7b3baf9036c6444d462e3d1d",
+          "sha256": "sha256:11074078d4bd5a4b38ffa3272d1a1355f39489a8ceb83d6ef0ca29c46e7e3dcb",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -13827,7 +13859,7 @@
       "specs": [
         {
           "path": "docs/formal-verification-plan.md",
-          "sha256": "sha256:91c6d6d2eb066fba329d0c35c166d4dca002e7ad7b3baf9036c6444d462e3d1d",
+          "sha256": "sha256:11074078d4bd5a4b38ffa3272d1a1355f39489a8ceb83d6ef0ca29c46e7e3dcb",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -13931,7 +13963,7 @@
       "specs": [
         {
           "path": "docs/formal-verification-plan.md",
-          "sha256": "sha256:91c6d6d2eb066fba329d0c35c166d4dca002e7ad7b3baf9036c6444d462e3d1d",
+          "sha256": "sha256:11074078d4bd5a4b38ffa3272d1a1355f39489a8ceb83d6ef0ca29c46e7e3dcb",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -14035,7 +14067,7 @@
       "specs": [
         {
           "path": "docs/formal-verification-plan.md",
-          "sha256": "sha256:91c6d6d2eb066fba329d0c35c166d4dca002e7ad7b3baf9036c6444d462e3d1d",
+          "sha256": "sha256:11074078d4bd5a4b38ffa3272d1a1355f39489a8ceb83d6ef0ca29c46e7e3dcb",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -14139,7 +14171,7 @@
       "specs": [
         {
           "path": "docs/formal-verification-plan.md",
-          "sha256": "sha256:91c6d6d2eb066fba329d0c35c166d4dca002e7ad7b3baf9036c6444d462e3d1d",
+          "sha256": "sha256:11074078d4bd5a4b38ffa3272d1a1355f39489a8ceb83d6ef0ca29c46e7e3dcb",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -14244,7 +14276,7 @@
       "specs": [
         {
           "path": "docs/formal-verification-plan.md",
-          "sha256": "sha256:91c6d6d2eb066fba329d0c35c166d4dca002e7ad7b3baf9036c6444d462e3d1d",
+          "sha256": "sha256:11074078d4bd5a4b38ffa3272d1a1355f39489a8ceb83d6ef0ca29c46e7e3dcb",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -14348,7 +14380,7 @@
       "specs": [
         {
           "path": "docs/formal-verification-plan.md",
-          "sha256": "sha256:91c6d6d2eb066fba329d0c35c166d4dca002e7ad7b3baf9036c6444d462e3d1d",
+          "sha256": "sha256:11074078d4bd5a4b38ffa3272d1a1355f39489a8ceb83d6ef0ca29c46e7e3dcb",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]

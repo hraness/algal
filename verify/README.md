@@ -13,6 +13,10 @@ bun scripts/verify.ts --suite boundary
 bun scripts/verify.ts --suite artifact
 bun scripts/verify.ts --suite custody
 bun scripts/verify.ts --suite publication
+bun scripts/verify.ts --suite traces
+bun scripts/verify.ts --suite stateful
+bun scripts/verify.ts --suite fault-harness
+bun scripts/verify.ts --suite lean-core
 bun scripts/verify.ts --suite all-required
 ```
 
@@ -32,6 +36,25 @@ test and provide its absolute path through `ALGAL_CUSTODY_TEST_BIN`. Publication
 adds the Bun syscall/crash-image regressions; the native helper and admission
 tests remain required separately. These are finite checks and sampled runtime
 relations; the broad ledger obligations remain unproved.
+
+The [portable traces](traces/wire.md) replay retained and state-dependent histories
+through both actual runtimes, compare exact results with cold persistence reads,
+and require publication/checkpoint witnesses. `traces`, `stateful`, and
+`fault-harness` require `ALGAL_TRACE_TEST_BIN` pointing to the absolute native
+unit-test executable built from the current source with the pinned locked Rust
+toolchain. Native stateful execution fixes 64 histories and the seed; its
+600-second command budget accommodates real filesystem operations and shrinking.
+The general command default remains 90 seconds. Raw successful and failed output
+is retained under an owned archive. An artifact hash alone is not build provenance.
+
+The [Lean semantic core](lean/Algal/Core/README.md) checks named model theorems and
+every theorem defined by their modules, including generated/private declarations.
+It rejects unreviewed transitive axioms with actual negative controls and compares
+computed vectors with both production runtimes. Build the
+`verification_lean_vectors` native example and set its absolute path in
+`ALGAL_LEAN_NATIVE_BIN`. The current pinned Lean distribution is qualified only
+on macOS arm64. The adjacent [evidence report](../docs/formal-verification-evidence/phase09-core.md)
+states the proof scope, remaining codec/refinement obligations and trusted inputs.
 
 The command runner supports cooperating POSIX process groups. Its live supervisor receives cleanup requests over private IPC and signals its own group. `cleanupObserved` means supervisor SIGKILL termination and parent-side EOF on both relayed standard-output pipes were observed. Successful completion additionally requires the trusted helper's actual target-pipe EOFs, completed forwarding callbacks, and matching per-stream byte counts. The relay applies backpressure and preserves raw bytes. It avoids Bun 1.3.14's observed garbage-collection failure with reused extra pipe descriptors. It does not independently reap every descendant; detached descendants and absent OS progress are outside this contract. A missing cleanup witness fails the command. Wider process-tree qualification belongs to the host assurance phase.
 
