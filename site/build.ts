@@ -22,6 +22,7 @@ import { verifyReceipt } from "../src/verify";
 import { renderIconSprite, siteIcon } from "./icons";
 import { buildSiteStyles } from "./assets";
 import { pageDocument, type SitePageMeta } from "./chrome";
+import { renderMarkdown, type LinkRewriter, type RenderedDoc } from "./markdown";
 
 const SITE = dirname(fileURLToPath(import.meta.url));
 const ROOT = dirname(SITE);
@@ -55,16 +56,54 @@ let verifiedRuns = 0;
 function runSteps(receipt: RunReceipt, diagram: ProgramDiagram) {
   const prefix = diagram.scope?.invocationPath ?? "";
   const nodeIds = new Set(diagram.nodes.map(node => node.id));
+  const toNode = (path: string | undefined): string | undefined => {
+    if (path === undefined) return undefined;
+    const node = prefix
+      ? (path.startsWith(`${prefix}/`) ? path.slice(prefix.length + 1) : undefined)
+      : path;
+    return node !== undefined && nodeIds.has(node) ? node : undefined;
+  };
   const steps: { event: string; node: string }[] = [];
   for (const event of receipt.events) {
-    if (event.kind === "run.start" || event.kind === "run.end" || event.path === undefined) continue;
-    const node = prefix
-      ? (event.path.startsWith(`${prefix}/`) ? event.path.slice(prefix.length + 1) : undefined)
-      : event.path;
-    if (node === undefined || !nodeIds.has(node)) continue;
+    if (event.kind === "run.start" || event.kind === "run.end") continue;
+    const node = toNode(event.path);
+    if (node === undefined) continue;
     steps.push({ event: event.kind, node });
   }
-  return { receipt: receipt.digest, outcome: receipt.outcome, steps };
+  // Recorded cell state: status, work, args, outputs — the values the run
+  // actually saw, so the viewer can show evidence rather than types alone.
+  const cells: Record<string, unknown> = {};
+  for (const [path, rec] of Object.entries(receipt.cells)) {
+    const node = toNode(path);
+    if (node === undefined) continue;
+    cells[node] = {
+      status: rec.status,
+      work: rec.work,
+      ...(rec.outputs !== undefined ? { outputs: rec.outputs } : {}),
+      ...(rec.failure !== undefined ? { failure: rec.failure } : {}),
+    };
+  }
+  for (const [path, values] of Object.entries(receipt.args)) {
+    const node = toNode(path);
+    if (node === undefined) continue;
+    (cells[node] ??= {} as Record<string, unknown>);
+    (cells[node] as Record<string, unknown>).args = values;
+  }
+  // Effect outputs link to their cell through the recorded event order:
+  // `effect` events carry the request digest the receipt's effects key on.
+  const effectPaths = new Map(receipt.events
+    .filter(event => event.kind === "effect" && event.digest !== undefined)
+    .map(event => [event.digest!, toNode(event.path)] as const));
+  const effects: Record<string, unknown[]> = {};
+  for (const effect of receipt.effects) {
+    const node = effectPaths.get(effect.requestDigest);
+    if (node === undefined) continue;
+    const recorded: Record<string, unknown> = { executor: effect.executor };
+    if (effect.output !== undefined) recorded.output = effect.output;
+    if (effect.error !== undefined) recorded.error = effect.error;
+    (effects[node] ??= []).push(recorded);
+  }
+  return { receipt: receipt.digest, outcome: receipt.outcome, steps, cells, effects };
 }
 
 /** Write the static SVG, the exact diagram JSON, and the interactive view
@@ -377,11 +416,73 @@ const pages: { file: string; out: string; meta: SitePageMeta }[] = [
   },
 ];
 
+// --- Documentation mirror -------------------------------------------------
+// The repository's docs/ and spec/v1/ markdown is the single source of truth;
+// the site renders the same files so nothing is maintained twice. Internal
+// working notes (dated reviews, pilot data, improvement ledgers) stay in the
+// repo and are not mirrored.
+
+const DOC_GROUPS: { title: string; pages: string[] }[] = [
+  { title: "Start here", pages: ["native-release", "native-workbench", "source-language", "vm"] },
+  { title: "Concepts", pages: ["why-unique", "algal-design", "design", "agent-loop-and-organism", "programmable-applications", "executors", "diagrams", "repair"] },
+  { title: "Life and selection", pages: ["habitats", "civilization"] },
+  { title: "Applications and workflows", pages: ["use-cases", "when-algal-wins", "adaptive-inventory", "agent-tool", "coding-harness", "coding-operations", "pr-shepherd"] },
+];
+const DOC_SLUGS = DOC_GROUPS.flatMap(group => group.pages);
+const SPEC_SLUGS = ["organism", "expr", "foundry", "search", "bench", "mailbox", "process", "process-evidence", "process-journal", "application", "coding-job", "coding-job-v2", "coding-operation"];
+const GITHUB_BLOB = (path: string) => `https://github.com/hraness/algal/blob/main/${path}`;
+
+/** Resolve a markdown link from a mirrored file to a site URL or the
+ * repository blob for anything the mirror does not carry. */
+function docLinkRewriter(kind: "docs" | "spec"): LinkRewriter {
+  const docSet = new Set(DOC_SLUGS);
+  const specSet = new Set(SPEC_SLUGS);
+  const base = kind === "docs" ? ["docs"] : ["spec", "v1"];
+  return href => {
+    if (/^[a-z]+:/i.test(href) || href.startsWith("#") || href.startsWith("/")) return href;
+    const clean = href.replace(/^\.\//, "");
+    const [target = "", fragment = ""] = clean.split(/(?=#)/, 2);
+    const upCount = (target.match(/\.\.\//g) ?? []).length;
+    const leaf = target.replace(/^(\.\.\/)+/, "");
+    const dir = base.slice(0, Math.max(0, base.length - upCount));
+    const repoPath = dir.length ? `${dir.join("/")}/${leaf}` : leaf;
+    const md = repoPath.match(/^(docs|spec\/v1)\/([a-z0-9-]+)\.md$/i);
+    if (md) {
+      const slug = md[2]!.toLowerCase();
+      if (md[1]!.toLowerCase() === "docs" && docSet.has(slug)) return `/docs/${slug}/${fragment}`;
+      if (md[1]!.toLowerCase() === "spec/v1" && specSet.has(slug)) return `/docs/spec/${slug}/${fragment}`;
+    }
+    return GITHUB_BLOB(repoPath);
+  };
+}
+
+async function renderDocFile(kind: "docs" | "spec", slug: string): Promise<RenderedDoc> {
+  const path = kind === "docs" ? join(ROOT, "docs", `${slug}.md`) : join(ROOT, "spec", "v1", `${slug}.md`);
+  const doc = renderMarkdown(await readFile(path, "utf8"), docLinkRewriter(kind));
+  if (doc.title === "Documentation") {
+    doc.title = slug.split("-").map(word => word[0]!.toUpperCase() + word.slice(1)).join(" ");
+  }
+  return doc;
+}
+
+/** The mirrored shelf — one rail listing every doc group and spec file,
+ * rendered identically on each docs page so navigation never dead-ends. */
+function docsRail(current: string, titles: Map<string, string>): string {
+  const item = (href: string, slug: string, label: string) =>
+    `<li><a href="${href}"${slug === current ? ' aria-current="page"' : ""}>${escapeHtml(label)}</a></li>`;
+  const groups = DOC_GROUPS.map(group =>
+    `<p class="docs-group">${escapeHtml(group.title)}</p><ul>${group.pages.map(slug =>
+      item(`/docs/${slug}/`, slug, titles.get(`docs/${slug}`) ?? slug)).join("")}</ul>`).join("");
+  const spec = `<p class="docs-group">Specification</p><ul>${SPEC_SLUGS.map(slug =>
+    item(`/docs/spec/${slug}/`, `spec/${slug}`, titles.get(`spec/${slug}`) ?? slug)).join("")}</ul>`;
+  return `<aside class="docs-rail"><nav class="docs-nav" aria-label="Documentation"><a class="docs-home" href="/docs/"${current === "index" ? ' aria-current="page"' : ""}>Documentation</a>${groups}${spec}</nav></aside>`;
+}
+
 await rm(DIST, { recursive: true, force: true });
 await mkdir(join(DIST, "diagrams"), { recursive: true });
 await mkdir(join(DIST, "examples"), { recursive: true });
 await mkdir(join(DIST, "receipts"), { recursive: true });
-for (const f of ["robots.txt", "sitemap.xml", "llms.txt", "og.png", "favicon.svg", "algal-mark.svg"]) {
+for (const f of ["robots.txt", "llms.txt", "og.png", "favicon.svg", "algal-mark.svg"]) {
   await cp(join(SITE, f), join(DIST, f));
 }
 // Shared presentation and iconography are build-time dependencies only. The
@@ -485,4 +586,65 @@ for (const { file, out, meta } of pages) {
   await writeFile(target, document);
 }
 
-console.log(`site built → ${DIST} (${manifests.size + 1} structural diagrams, ${childViews.length + 1} focused views, ${verifiedRuns} replay-checked executions, 1 checked authoring error, ${pages.length} pages)`);
+// --- Docs mirror emission --------------------------------------------------
+// Render the curated docs and every spec file into /docs/, with one shared
+// navigation rail. Internal links between mirrored pages stay on the site;
+// everything else resolves to the repository blob.
+const docRenderers = new Map<string, RenderedDoc>();
+const specRenderers = new Map<string, RenderedDoc>();
+for (const slug of DOC_SLUGS) docRenderers.set(slug, await renderDocFile("docs", slug));
+for (const slug of SPEC_SLUGS) specRenderers.set(slug, await renderDocFile("spec", slug));
+const docTitles = new Map<string, string>();
+for (const [slug, doc] of docRenderers) docTitles.set(`docs/${slug}`, doc.title);
+for (const [slug, doc] of specRenderers) docTitles.set(`spec/${slug}`, doc.title);
+
+const emitDocPage = async (meta: SitePageMeta, body: string) => {
+  let document = pageDocument(meta, `<main id="main" class="hraness-marketing-page docs-page">${body}</main>`);
+  for (const [key, value] of Object.entries(replacements)) document = document.replaceAll(`{{${key}}}`, value);
+  if (/\{\{[A-Z_]+\}\}/.test(document)) throw new Error(`Unresolved site build placeholder in ${meta.path}`);
+  const target = join(DIST, meta.path, "index.html");
+  await mkdir(dirname(target), { recursive: true });
+  await writeFile(target, document);
+};
+
+const docsSource = (kind: "docs" | "spec", slug: string) =>
+  `<footer class="docs-source"><p>Mirrored from <a href="${GITHUB_BLOB(kind === "docs" ? `docs/${slug}.md` : `spec/v1/${slug}.md`)}">${kind === "docs" ? `docs/${slug}.md` : `spec/v1/${slug}.md`}</a> — the repository copy is the source of truth.</p></footer>`;
+
+for (const [slug, doc] of docRenderers) {
+  await emitDocPage({
+    page: "docs", path: `/docs/${slug}/`,
+    title: `${doc.title} — ALGAL docs`,
+    description: doc.description || `${doc.title} — ALGAL documentation`,
+    ogTitle: doc.title, ogAlt: `${doc.title} — ALGAL documentation`,
+  }, `<div class="docs-layout">${docsRail(slug, docTitles)}<article class="docs-article prose">${doc.html}${docsSource("docs", slug)}</article></div>`);
+}
+for (const [slug, doc] of specRenderers) {
+  await emitDocPage({
+    page: "spec", path: `/docs/spec/${slug}/`,
+    title: `${doc.title} — ALGAL spec`,
+    description: doc.description || `${doc.title} — ALGAL contract specification`,
+    ogTitle: `${doc.title} — ALGAL spec`, ogAlt: `${doc.title} — ALGAL contract specification`,
+  }, `<div class="docs-layout">${docsRail(`spec/${slug}`, docTitles)}<article class="docs-article prose docs-spec">${doc.html}${docsSource("spec", slug)}</article></div>`);
+}
+
+// Docs index — grouped shelf with each page's first paragraph as its summary.
+const indexGroups = DOC_GROUPS.map(group => `<section class="docs-index-group"><h2>${escapeHtml(group.title)}</h2><ul class="docs-list">${group.pages.map(slug => {
+  const doc = docRenderers.get(slug)!;
+  return `<li><a href="/docs/${slug}/"><strong>${escapeHtml(doc.title)}</strong><span>${escapeHtml(doc.description)}</span></a></li>`;
+}).join("")}</ul></section>`).join("");
+const indexSpec = `<section class="docs-index-group"><h2>Specification</h2><ul class="docs-list">${SPEC_SLUGS.map(slug => {
+  const doc = specRenderers.get(slug)!;
+  return `<li><a href="/docs/spec/${slug}/"><strong>${escapeHtml(doc.title)}</strong><span>${escapeHtml(doc.description)}</span></a></li>`;
+}).join("")}</ul></section>`;
+await emitDocPage({
+  page: "docs", path: "/docs/",
+  title: "ALGAL documentation",
+  description: "The ALGAL documentation, mirrored from the repository: install, the source language, the process VM, habitats, executors, and the v1 contract specification.",
+  ogTitle: "ALGAL documentation", ogAlt: "The ALGAL documentation",
+}, `<section class="page-intro"><p class="eyebrow">Documentation</p><h1>The reference shelf.</h1><p class="lede">Every page here renders the same markdown maintainers read in the repository — one source, two doors. Working notes and pilot data stay in the repo.</p></section><div class="docs-layout">${docsRail("index", docTitles)}<div class="docs-article docs-index"><div class="docs-index-groups">${indexGroups}${indexSpec}</div></div></div>`);
+
+// Generated sitemap covers every emitted page.
+const sitemapUrls = ["/", "/tour/", "/use-cases/", "/docs/", ...DOC_SLUGS.map(slug => `/docs/${slug}/`), ...SPEC_SLUGS.map(slug => `/docs/spec/${slug}/`)];
+await writeFile(join(DIST, "sitemap.xml"), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemapUrls.map(url => `  <url><loc>https://algal.computer${url}</loc></url>`).join("\n")}\n</urlset>\n`);
+
+console.log(`site built → ${DIST} (${manifests.size + 1} structural diagrams, ${childViews.length + 1} focused views, ${verifiedRuns} replay-checked executions, 1 checked authoring error, ${pages.length + DOC_SLUGS.length + SPEC_SLUGS.length + 1} pages)`);

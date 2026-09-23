@@ -7,6 +7,7 @@ ALGAL is a programming language and application VM for bounded agent programs. P
 - [The language for living programs](https://algal.computer/): vision, organism anatomy, the habitat machine, fossils, reproduction and selection
 - [Inside a living program — tour](https://algal.computer/tour/): executable walkthrough with recorded runs, replayable interactive diagrams, diagnostics, and composition examples
 - [Put living programs to work](https://algal.computer/use-cases/): durable review, checked coding repair, portable execution evidence, reusable routing, and the adoption boundary
+- [Documentation index](https://algal.computer/docs/): the repository docs mirrored — install, source language, process VM, habitats, civilization, executors
 
 ## Downloadable evidence
 
@@ -32,15 +33,24 @@ ALGAL is a programming language and application VM for bounded agent programs. P
 
 ## Documentation
 
+All documentation below is mirrored from the repository's `docs/` and `spec/v1/` markdown — the same files, rendered for the web. Working notes and pilot data stay in the repo.
+
 - [Repository](https://github.com/hraness/algal)
-- [Native VM and release artifacts](https://github.com/hraness/algal/blob/main/docs/native-release.md)
-- [VM demo and crash laboratory](https://github.com/hraness/algal/blob/main/docs/vm.md)
-- [Readable source language](https://github.com/hraness/algal/blob/main/docs/source-language.md)
-- [Use cases and adoption boundary](https://github.com/hraness/algal/blob/main/docs/use-cases.md)
-- [Habitats and self-reproduction](https://github.com/hraness/algal/blob/main/docs/habitats.md)
-- [Civilization loop](https://github.com/hraness/algal/blob/main/docs/civilization.md)
-- [What distinguishes ALGAL](https://github.com/hraness/algal/blob/main/docs/why-unique.md)
-- [Organism manifest spec](https://github.com/hraness/algal/blob/main/spec/v1/organism.md)
+- [Native VM and release artifacts](https://algal.computer/docs/native-release/)
+- [Try the native VM](https://algal.computer/docs/native-workbench/)
+- [The ALGAL process VM](https://algal.computer/docs/vm/)
+- [Readable source language](https://algal.computer/docs/source-language/)
+- [What distinguishes ALGAL](https://algal.computer/docs/why-unique/)
+- [Language, harness, habitat](https://algal.computer/docs/algal-design/)
+- [Organisms and agent loops](https://algal.computer/docs/agent-loop-and-organism/)
+- [Executors](https://algal.computer/docs/executors/)
+- [Habitats and self-reproduction](https://algal.computer/docs/habitats/)
+- [Civilization loop](https://algal.computer/docs/civilization/)
+- [Use cases and adoption boundary](https://algal.computer/docs/use-cases/)
+- [Organism manifest spec](https://algal.computer/docs/spec/organism/)
+- [Expression spec](https://algal.computer/docs/spec/expr/)
+- [Foundry spec](https://algal.computer/docs/spec/foundry/)
+- [Process spec](https://algal.computer/docs/spec/process/)
 
 ## Honesty notes
 

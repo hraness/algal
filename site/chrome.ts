@@ -2,7 +2,7 @@
 // Per-page fragments supply only their <main> content and metadata.
 import { siteIcon } from "./icons";
 
-export type SitePageId = "home" | "tour" | "use-cases";
+export type SitePageId = "home" | "tour" | "use-cases" | "docs" | "spec";
 
 export interface SitePageMeta {
   page: SitePageId;
@@ -64,8 +64,8 @@ export function pageDocument(meta: SitePageMeta, main: string): string {
     <nav aria-label="Main navigation">
       ${navLink(meta.page, "tour", "/tour/", "Tour")}
       ${navLink(meta.page, "use-cases", "/use-cases/", "Use cases")}
-      <a href="${REPO}/tree/main/docs">Docs ${siteIcon("arrow-up-right")}</a>
-      <a href="${REPO}/blob/main/spec/v1/organism.md">Spec ${siteIcon("arrow-up-right")}</a>
+      ${navLink(meta.page, "docs", "/docs/", "Docs")}
+      ${navLink(meta.page, "spec", "/docs/spec/organism/", "Spec")}
       <a href="${REPO}">GitHub ${siteIcon("arrow-up-right")}</a>
     </nav>
     <div class="site-header-actions">
@@ -86,7 +86,7 @@ export function pageDocument(meta: SitePageMeta, main: string): string {
 
 ${main}
 
-<footer class="site-footer"><a class="wordmark" href="/" aria-label="ALGAL home"><img src="/favicon.svg" width="24" height="24" alt="">algal</a><p>The language for living programs.</p><div><a href="${REPO}">Source</a><a href="${REPO}/tree/main/docs">Documentation</a><a href="${REPO}/blob/main/spec/v1/organism.md">Spec</a><a href="/llms.txt">llms.txt</a><span>MIT · Early, working software · {{BUILD_STATS}}</span></div></footer>
+<footer class="site-footer"><a class="wordmark" href="/" aria-label="ALGAL home"><img src="/favicon.svg" width="24" height="24" alt="">algal</a><p>The language for living programs.</p><div><a href="${REPO}">Source</a><a href="/docs/">Documentation</a><a href="/docs/spec/organism/">Spec</a><a href="/llms.txt">llms.txt</a><span>MIT · Early, working software · {{BUILD_STATS}}</span></div></footer>
 
 </body>
 </html>
