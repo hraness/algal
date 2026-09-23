@@ -61,6 +61,21 @@ document.querySelectorAll<HTMLElement>("[data-tabset]").forEach(tablist => {
   tablist.hidden = false;
 });
 
+// Hero specimen chooser — swaps which organism's graph/source/evidence set is
+// pinned to the board. Progressive enhancement: the first set is visible
+// without JavaScript.
+document.querySelectorAll<HTMLElement>(".hero-chooser").forEach(chooser => {
+  const stage = chooser.closest(".hero-grid")?.querySelector<HTMLElement>("[data-hero-stage]");
+  const buttons = Array.from(chooser.querySelectorAll<HTMLButtonElement>("[data-hero-choose]"));
+  if (!stage || buttons.length === 0) return;
+  const sets = Array.from(stage.querySelectorAll<HTMLElement>("[data-example-set]"));
+  const selectExample = (key: string) => {
+    for (const set of sets) set.hidden = set.dataset.exampleSet !== key;
+    for (const button of buttons) button.setAttribute("aria-pressed", String(button.dataset.heroChoose === key));
+  };
+  for (const button of buttons) button.addEventListener("click", () => selectExample(button.dataset.heroChoose!));
+});
+
 // --- Amoeba field -------------------------------------------------------------
 // The hero backdrop is a culture of cell kinds. Each amoeba is a blurred,
 // slowly morphing organism carrying its typed signature; organisms drift on
