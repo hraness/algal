@@ -234,7 +234,7 @@ pub struct LoadedRevision {
 /// Load a revision with every record it references — the evaluation contract
 /// rejects revisions whose memory schema, query bundle, entrypoint manifests
 /// or policy cannot be read back intact.
-fn load_revision(store: &Store, reference: &str) -> Result<LoadedRevision> {
+pub(crate) fn load_revision(store: &Store, reference: &str) -> Result<LoadedRevision> {
     let revision = parse_revision(&get_record(store, reference)?)?;
     let schema = parse_schema(&get_record(store, &revision.schema)?)?;
     let queries = parse_queries(&get_record(store, &revision.queries)?)?;
@@ -277,7 +277,7 @@ fn load_revision(store: &Store, reference: &str) -> Result<LoadedRevision> {
 /// Case-pure admission: only input/const/fn/expr cells may run during
 /// evaluation. The native fn registry is the builtin one by construction —
 /// there is no injectable registry to check against.
-fn pure_manifest(manifest: &Manifest) -> Result<()> {
+pub(crate) fn pure_manifest(manifest: &Manifest) -> Result<()> {
     for cell in &manifest.cells {
         match cell["kind"].as_str() {
             Some("input" | "const" | "fn" | "expr") => (),

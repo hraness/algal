@@ -424,10 +424,12 @@ export {
   admitApplicationActivation,
   checkApplicationCompatibility,
   evaluateApplicationRevision,
+  loadRevision,
   parseApplicationEvaluationRequest,
   parseEvaluationCases,
   parseEvaluationPolicy,
   parseEvaluationScorer,
+  pureManifest,
   verifyApplicationEvaluation,
 } from "./src/application-adaptation";
 export {
@@ -463,3 +465,7 @@ export { restoreApplicationRevision, parseApplicationRestoration, parseApplicati
 export type { ApplicationRestoration, ApplicationRestorationPolicy, RestoreApplicationRevisionInput, RestoredApplicationRevision } from "./src/application-restoration";
 export { COMPARISON_LIMITS, checkComparisonBinding, comparisonDigest, parseApplicationComparison, produceApplicationComparison, verifyApplicationComparison } from "./src/application-comparison";
 export type { ApplicationComparison, ApplicationComparisonResult, ComparisonVerdict, ProduceComparisonInput } from "./src/application-comparison";
+export { PROPOSAL_LIMITS, parseApplicationProposal, parseProposalRequest, produceApplicationProposal, proposeApplicationRevision, verifyApplicationProposal, verifyApplicationProposalBinding } from "./src/application-proposal";
+export type { ApplicationProposal, ApplicationProposalCandidate, ApplicationProposalRequest, ApplicationProposalStatus, ProposeApplicationRevisionInput, ProposedApplicationRevision } from "./src/application-proposal";
+export { SELECTION_LIMITS, parseApplicationSelectionPolicy, selectApplicationStrategy, verifyApplicationSelectionPolicy } from "./src/application-selection";
+export type { ApplicationSelection, ApplicationSelectionPolicy, ApplicationSelectionRow } from "./src/application-selection";

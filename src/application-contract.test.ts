@@ -29,6 +29,9 @@ describe("experimental application contract", () => {
       expect(() => parse({...input as object, application: "../../escape"})).toThrow();
     }
     expect(() => parseApplicationHead({contract: "algal.application-head.v1", application: "workspace", state: ref.slice(7)})).toThrow();
+    const transition = {contract: "algal.application-transition.v1", application: "workspace", operation: ref, request: ref, kind: "propose", previous: ref, revision: ref, memory: ref, intents: [], evidence: [ref], causedBy: null};
+    expect(parseApplicationTransition(transition).kind).toBe("propose");
+    expect(() => parseApplicationTransition({...transition, kind: "generate"})).toThrow("transition kind");
   });
   test("bounds records, sequence, epoch, collections, and unique stable names", () => {
     expect(() => applicationJson("x".repeat(262145))).toThrow();

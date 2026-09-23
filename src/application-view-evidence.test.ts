@@ -60,6 +60,8 @@ test("diagnostics retain unresolved request, declared probes and actual budget w
   expect(projectApplicationView({snapshot: next, history, spec, evidence: supported, applicability: inherited}).procedures[0]!.applicability).toBe("supported");
   expect(() => parseApplicationView({...view, evidence: {...supported, state: f.initial.digest}})).toThrow("captured state");
   expect(() => parseApplicationView({...view, evidence: {...supported, revisions: [{...supported.revisions.at(-1)!, revision: hash("foreign")} ]}})).toThrow("revision");
+  expect(parseApplicationViewEvidence({...supported, revisions: [{...supported.revisions.at(-1)!, kind: "propose"}]}).revisions.at(-1)!.kind).toBe("propose");
+  expect(() => parseApplicationViewEvidence({...supported, revisions: [{...supported.revisions.at(-1)!, kind: "generate"}]})).toThrow("transition kind");
 });
 
 test("host-owned probe declarations never acquire invented VM budgets", async () => {

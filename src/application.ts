@@ -12,6 +12,7 @@ import {
 } from "./application-contract";
 import { parseApplicationMigration, type ApplicationMigration } from "./application-migration";
 import { verifyApplicationRestoration } from "./application-restoration";
+import { verifyApplicationProposalBinding } from "./application-proposal";
 import { validateApplicationGoals } from "./application-goal";
 import { withApplicationQuota } from "./application-quota";
 import { parseMemoryObservation, parseMemorySnapshot } from "./application-memory";
@@ -94,7 +95,7 @@ function intentSpec(raw: unknown): ApplicationIntentSpec {
 }
 export function parseApplicationCommand(raw: unknown): ApplicationCommand {
   const v = applicationObject(raw, ["application", "operation", "kind", "expectedHead", "revision", "memory", "intents", "evidence", "causedBy"]);
-  if (v.kind !== "create" && v.kind !== "memory" && v.kind !== "investigate" && v.kind !== "activate" && v.kind !== "migrate" && v.kind !== "restore") throw new Error("Invalid application command kind");
+  if (v.kind !== "create" && v.kind !== "memory" && v.kind !== "investigate" && v.kind !== "activate" && v.kind !== "migrate" && v.kind !== "restore" && v.kind !== "propose") throw new Error("Invalid application command kind");
   return {application: applicationId(v.application), operation: applicationRef(v.operation), kind: v.kind,
     expectedHead: nullableApplicationRef(v.expectedHead), revision: applicationRef(v.revision), memory: applicationRef(v.memory),
     intents: applicationList(v.intents, APPLICATION_LIMITS.intents, intentSpec), evidence: applicationRefs(v.evidence, 16), causedBy: nullableApplicationRef(v.causedBy)};
@@ -233,6 +234,7 @@ export class ApplicationService {
       if (transition.kind === "activate" && revision.schema !== prior.revision.schema) fail("Incompatible application activation");
     } else if (state.revision !== prior.state.revision) fail("Memory/investigation cannot change the revision");
     if (transition.kind === "restore" && (state.memory !== prior.state.memory || transition.intents.length)) fail("Restoration must preserve current memory and create no intents");
+    if (transition.kind === "propose" && (state.memory !== prior.state.memory || transition.intents.length)) fail("Proposal must preserve current memory and create no intents");
     if (transition.kind === "investigate" && (state.memory !== prior.state.memory || !transition.intents.length)) fail("Invalid investigation transition");
   }
   /** A migrate transition must carry migration evidence that binds the prior
@@ -288,6 +290,7 @@ export class ApplicationService {
       this.checkStep(history[i - 1] ?? null, item);
       if (item.transition.kind === "migrate") await this.checkMigration(history[i - 1]!, item);
       if (item.transition.kind === "restore") await verifyApplicationRestoration(this.store, { application: name, parentState: history[i - 1]!.digest, candidateRevision: item.state.revision, evidence: item.transition.evidence });
+      if (item.transition.kind === "propose") await verifyApplicationProposalBinding(this.store, { application: name, parentState: history[i - 1]!.digest, revision: item.state.revision, evidence: item.transition.evidence });
       if (operations.has(item.transition.operation)) fail("Repeated operation in application history");
       operations.add(item.transition.operation);
       this.validatedIntents.set(item.digest, await this.intents(item));
@@ -402,6 +405,7 @@ export class ApplicationService {
       this.checkStep(current, next);
       if (next.transition.kind === "migrate") await this.checkMigration(current!, next);
       if (next.transition.kind === "restore") await verifyApplicationRestoration(this.store, { application: command.application, parentState: current!.digest, candidateRevision: command.revision, evidence: command.evidence });
+      if (next.transition.kind === "propose") await verifyApplicationProposalBinding(this.store, { application: command.application, parentState: current!.digest, revision: command.revision, evidence: command.evidence });
       const operation: Operation = {contract: "algal.application-operation.v1", application: command.application, operation: command.operation, request, transition: state.transition, state: next.digest};
       if (prepared && !same(prepared, operation)) fail("Prepared operation changed");
       // Copies keep trusted admission from accidentally mutating the prepared commit.
