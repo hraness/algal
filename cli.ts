@@ -196,6 +196,8 @@ usage:
   algal manifests [--dir <path>]         list manifests stored under --dir
   algal manifest <sha256:…> [--dir <path>]
                                               print a stored manifest
+  algal application lineage <name> [--dir <path>]
+                                              print retained application history, genesis→head
   algal slot get <name> [--dir <path>]    print a slot's current value
   algal slot set <name> <value.json> [--dir <path>]
                                               write a slot directly (seeding)
@@ -947,9 +949,9 @@ async function main(): Promise<number> {
     }
 
     case "application": {
-      // Drain produce/verify are structural lifecycle operations: they never
-      // invoke trusted admission, so a deny-all host fences them like the
-      // read-only commands.
+      // Drain produce/verify and the lineage projection are structural or
+      // read-only lifecycle operations: they never invoke trusted admission,
+      // so a deny-all host fences them like the read-only commands.
       const { ApplicationService } = await import("./src/application");
       const { produceApplicationDrain, verifyApplicationDrain } = await import("./src/application-drain");
       const { applicationObject } = await import("./src/application-contract");
@@ -971,7 +973,15 @@ async function main(): Promise<number> {
         out({ verified: true });
         return 0;
       }
-      usageError("algal application drain|verify-drain …");
+      if (sub === "lineage") {
+        if (positional.length !== 2) usageError("algal application lineage <name> [--dir <path>]");
+        for (const key of Object.keys(flags)) {
+          if (!["dir"].includes(key)) usageError(`unknown application option --${key}`);
+        }
+        out(await service.lineage(positional[1]!) as unknown as JsonValue);
+        return 0;
+      }
+      usageError("algal application drain|verify-drain|lineage …");
       return 0;
     }
 

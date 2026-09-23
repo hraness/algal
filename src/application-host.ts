@@ -21,6 +21,7 @@ import { parseApplicationMigration, verifyApplicationMigration } from "./applica
 import { checkApplicationDrainBinding, checkApplicationDrainCoverage, parseApplicationDrain } from "./application-drain";
 import { parseApplicationRestorationPolicy, verifyApplicationRestoration, type ApplicationRestorationPolicy } from "./application-restoration";
 import { checkComparisonBinding, verifyApplicationComparison } from "./application-comparison";
+import { checkExperimentBinding, verifyApplicationExperiment } from "./application-experiment";
 import { verifyApplicationProposal } from "./application-proposal";
 import { selectApplicationStrategy } from "./application-selection";
 import { builtinRegistry } from "./registry";
@@ -173,6 +174,16 @@ export function createApplicationPolicyHost(input: unknown, options: { channelsD
           if (record && typeof record === "object" && !Array.isArray(record) && record.contract === "algal.application-comparison.v1") {
             const stored = await verifyApplicationComparison(store, evidence, current.digest, { fns: builtinRegistry() });
             checkComparisonBinding(stored, command.application, current.digest, revision);
+          }
+        }
+        // A cited experiment is replayed like comparison evidence: the whole
+        // joined chain re-verifies against this parent state, and the
+        // experiment's result must name the committed revision.
+        for (const evidence of command.evidence) {
+          const record = await value(evidence);
+          if (record && typeof record === "object" && !Array.isArray(record) && record.contract === "algal.application-experiment.v1") {
+            const stored = await verifyApplicationExperiment(store, evidence, current.digest, { fns: builtinRegistry() });
+            checkExperimentBinding(stored, command.application, current.digest, { digest: command.revision, entrypoints: revision.entrypoints });
           }
         }
         // Environment-keyed selection: a cited selection policy is replayed

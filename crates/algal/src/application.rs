@@ -1488,6 +1488,27 @@ impl<'a> Service<'a> {
         Ok(self.history(application)?.into_iter().last())
     }
 
+    /// `ApplicationService.lineage` — deterministic projection of retained
+    /// history to one row per committed state in genesis→head order. A pure
+    /// read: no storage, no admission — byte-identical to the reference CLI.
+    pub fn lineage(&self, application: &str) -> Result<Vec<Value>> {
+        Ok(self
+            .history(application)?
+            .into_iter()
+            .map(|item| {
+                json!({
+                    "sequence": item.state.sequence,
+                    "kind": item.transition.kind.as_str(),
+                    "operation": item.transition.operation,
+                    "revision": item.state.revision,
+                    "memory": item.state.memory,
+                    "evidence": item.transition.evidence,
+                    "causedBy": item.transition.caused_by.map_or(Value::Null, Value::String),
+                })
+            })
+            .collect())
+    }
+
     fn intents(&self, snapshot: &Snapshot) -> Result<Vec<(String, Intent)>> {
         let mut rows = Vec::new();
         for reference in &snapshot.transition.intents {

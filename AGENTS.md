@@ -71,8 +71,11 @@
   receipts in both directions between TypeScript and Rust, and
   `bun scripts/application-parity.ts` to replay the durable application
   lifecycle (create/commit including activate, propose, select, and migrate
-  transitions, dispatch/reconcile, memory scope/observe/snapshot/query, and
-  the `algal.application-host.v1` policy host) through both runtimes with
+  transitions, dispatch/reconcile, memory scope/observe/snapshot/query, the
+  bounded `algal.application-experiment.v1` promotion-evidence join, the
+  deterministic `application lineage` projection, the structured-facts-only
+  ablation fixture, and the `algal.application-host.v1` policy host) through
+  both runtimes with
   identical digests, and `bun scripts/process-parity.ts` for the durable
   process lifecycle (create/inspect/list/tick/verify/schedule, the mailbox
   suspension/wake chain with shared capability records, uncertain-intent

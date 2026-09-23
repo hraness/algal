@@ -11,8 +11,10 @@
 use serde_json::{Value, json};
 
 use crate::application_comparison::verify_comparison;
-use crate::application_memory::{app_id, app_object, app_ref, app_tag, get_record};
-use crate::canonical::check_digest;
+use crate::application_memory::{
+    app_id, app_json, app_object, app_ref, app_tag, get_record, put_record,
+};
+use crate::canonical::{canonical, check_digest};
 use crate::contract::list;
 use crate::effects::Host;
 use crate::store::Store;
@@ -128,4 +130,116 @@ pub async fn select_application_strategy(
         "comparison": comparisons[&label],
         "manifest": row["manifest"],
     }))
+}
+
+/// `parseApplicationSelectionRecord` — the retained resolution of one policy
+/// row: under this policy and environment the named comparison selected this
+/// manifest, installed by this candidate revision. Pure evidence like the
+/// policy it cites: it carries no authority and is replayed in full before
+/// any use.
+pub fn parse_selection_record(input: &Value) -> Result<Value> {
+    let v = app_object(
+        input,
+        &[
+            "contract",
+            "application",
+            "parentState",
+            "entrypoint",
+            "environment",
+            "policy",
+            "comparison",
+            "manifest",
+            "revision",
+        ],
+    )?;
+    app_tag(&v["contract"], "algal.application-selection.v1")?;
+    app_id(&v["application"])?;
+    app_ref(&v["parentState"])?;
+    app_id(&v["entrypoint"])?;
+    app_id(&v["environment"])?;
+    app_ref(&v["policy"])?;
+    app_ref(&v["comparison"])?;
+    app_ref(&v["manifest"])?;
+    app_ref(&v["revision"])?;
+    Ok(input.clone())
+}
+
+/// Recomputes the policy's row for `environment` and derives the canonical
+/// selection record: the selected manifest's accepted result row supplies
+/// the winning candidate revision.
+async fn derive_selection(
+    store: &Store,
+    policy_ref: &str,
+    environment: &str,
+    expected_parent_state: &str,
+    host: &Host,
+) -> Result<Value> {
+    let selected =
+        select_application_strategy(store, policy_ref, environment, expected_parent_state, host)
+            .await?;
+    let row = &selected["row"];
+    let result = selected["comparison"]["results"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|item| {
+            item["manifest"].as_str() == row["manifest"].as_str()
+                && item["verdict"].as_str() == Some("accepted")
+        })
+        .ok_or_else(|| fail("Selection policy does not resolve an accepted candidate"))?;
+    let policy = &selected["policy"];
+    Ok(json!({
+        "contract": "algal.application-selection.v1",
+        "application": policy["application"],
+        "parentState": policy["parentState"],
+        "entrypoint": policy["entrypoint"],
+        "environment": row["environment"],
+        "policy": policy_ref,
+        "comparison": row["comparison"],
+        "manifest": row["manifest"],
+        "revision": result["revision"],
+    }))
+}
+
+/// `produceApplicationSelection` — derive and store the resolved selection
+/// record. Input: `{"policy": <ref>, "environment": <id>, "expectedParentState": <ref>}`.
+pub async fn produce_selection(
+    store: &mut Store,
+    input: &Value,
+    host: &Host,
+) -> Result<(String, Value)> {
+    let v = app_object(input, &["policy", "environment", "expectedParentState"])?;
+    let policy = app_ref(&v["policy"])?.to_owned();
+    let environment = app_id(&v["environment"])?.to_owned();
+    let parent_state = app_ref(&v["expectedParentState"])?.to_owned();
+    let record = derive_selection(store, &policy, &environment, &parent_state, host).await?;
+    let selection_ref = put_record(store, &record)?;
+    Ok((selection_ref, record))
+}
+
+/// `verifyApplicationSelection` — the cited policy must verify against the
+/// named parent state and the recomputed record must equal the stored one
+/// byte-for-byte.
+pub async fn verify_selection(
+    store: &Store,
+    selection_ref: &str,
+    expected_parent_state: &str,
+    host: &Host,
+) -> Result<Value> {
+    let stored = parse_selection_record(&get_record(store, selection_ref)?)?;
+    if stored["parentState"].as_str() != Some(check_digest(expected_parent_state)?) {
+        return Err(fail("Selection parent state is stale"));
+    }
+    let recomputed = derive_selection(
+        store,
+        app_ref(&stored["policy"])?,
+        stored["environment"].as_str().unwrap_or_default(),
+        stored["parentState"].as_str().unwrap_or_default(),
+        host,
+    )
+    .await?;
+    if canonical(&app_json(&recomputed)?)? != canonical(&app_json(&stored)?)? {
+        return Err(fail("Selection is not reproducible from its evidence"));
+    }
+    Ok(stored)
 }

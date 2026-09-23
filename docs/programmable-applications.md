@@ -174,8 +174,26 @@ existing backend and the standing $20 incremental paid-inference cap.
    alternative. No model-quality benefit is claimed for generated candidates.
 3. **Evaluated adaptation:** real proposal generation, bounded experiments,
    explicit non-regression criteria, reproducible lineage, and revision promotion.
-   Add a structured-facts-without-inference ablation before attributing benefits
-   specifically to Datalog.
+   The bounded-evidence half now exists: `algal.application-experiment.v1`
+   joins the whole promotion chain — proposals, evaluations, comparison,
+   selection policy, and retained selection — for one application, parent
+   state, entrypoint, and environment, replayed in full before minting and
+   again when the default host replays it as supplementary activation
+   evidence. An experiment grants no authority and never substitutes for the
+   accepted-evaluation coverage checks; an experiment that selected nothing,
+   or selected a candidate that was not promoted, remains valid retained
+   evidence. `algal.application-selection.v1` retains one resolved policy row
+   as a closed record, and `application lineage` — `service.lineage` on the
+   reference side — projects validated history to one row per committed state
+   in genesis→head order, byte-identical on both runtimes. The
+   structured-facts-without-inference ablation exists as a deterministic
+   parity fixture: the same applicability query is derived over two memory
+   chains that differ by exactly one structured fact — the retained
+   observation claim — so the derivation flips between `unknown` and
+   `supported` with no inference anywhere. It demonstrates that the join
+   distinguishes fact presence; it claims nothing about fitness or efficacy.
+   Model-driven proposal, explicit non-regression criteria, and any
+   Datalog-specific benefit attribution remain open.
 4. **Schema and interface evolution:** declarative migration programs evaluated
    against retained snapshots; compatible activation of code, schema, queries,
    views, and memory. Explicit drain of undispatched work now exists:

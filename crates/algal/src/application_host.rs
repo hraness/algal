@@ -501,6 +501,25 @@ impl Admission for PolicyHost {
                             Some(context.revision),
                         )?;
                     }
+                    // A cited experiment is replayed like comparison
+                    // evidence: the whole joined chain re-verifies against
+                    // this parent state, and the experiment's result must
+                    // name the committed revision.
+                    if record["contract"] == "algal.application-experiment.v1" {
+                        let stored = crate::application_experiment::verify_experiment(
+                            context.store,
+                            evidence,
+                            &current.digest,
+                            &Host::default(),
+                        )
+                        .await?;
+                        crate::application_experiment::check_experiment_binding(
+                            &stored,
+                            &context.command.application,
+                            &current.digest,
+                            Some((context.command.revision.as_str(), context.revision)),
+                        )?;
+                    }
                 }
                 // Environment-keyed selection: a cited selection policy is
                 // replayed in full and can only narrow the installed strategy
