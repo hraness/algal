@@ -131,7 +131,8 @@ try {
   checks.push("network-denied reload, local evolution, adoption and cached-shell readiness");
   await context.setOffline(false);
 
-  await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); globalThis.scrollTo(0, 0); });
+  await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); globalThis.scrollTo({ top: 0, behavior: "instant" }); });
+  await page.waitForFunction(() => globalThis.scrollY === 0);
   await page.screenshot({ path: join(output, "desktop.png"), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 }); await page.emulateMedia({ colorScheme: "dark" });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "No phone horizontal overflow");
