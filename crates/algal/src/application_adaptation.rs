@@ -11,8 +11,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::application::{Revision, parse_revision, parse_state};
 use crate::application_memory::{
-    app_id, app_json, app_object, app_ref, app_tag, bounded_text, get_record, parse_queries,
-    parse_query, parse_schema, put_record,
+    app_id, app_json, app_object, app_object_opt, app_ref, app_tag, bounded_text, get_record,
+    parse_queries, parse_query, parse_schema, put_record,
 };
 use crate::canonical::{canonical, digest};
 use crate::contract::{Manifest, object};
@@ -139,11 +139,14 @@ pub struct EvaluationRequest {
     pub cases: String,
     pub scorer: String,
     pub policy: String,
+    /// Optional environment label attributing the evidence to a deployment
+    /// context; absent on older records and preserved when absent.
+    pub environment: Option<String>,
     pub value: Value,
 }
 
 pub fn parse_evaluation_request(input: &Value) -> Result<EvaluationRequest> {
-    let v = app_object(
+    let v = app_object_opt(
         input,
         &[
             "contract",
@@ -154,6 +157,7 @@ pub fn parse_evaluation_request(input: &Value) -> Result<EvaluationRequest> {
             "scorer",
             "policy",
         ],
+        &["environment"],
     )?;
     app_tag(&v["contract"], "algal.application-evaluation-request.v1")?;
     Ok(EvaluationRequest {
@@ -163,6 +167,10 @@ pub fn parse_evaluation_request(input: &Value) -> Result<EvaluationRequest> {
         cases: app_ref(&v["cases"])?.to_owned(),
         scorer: app_ref(&v["scorer"])?.to_owned(),
         policy: app_ref(&v["policy"])?.to_owned(),
+        environment: v
+            .get("environment")
+            .map(|value| app_id(value).map(str::to_owned))
+            .transpose()?,
         value: app_json(input)?,
     })
 }

@@ -1,5 +1,5 @@
 use algal::{
-    Error, Result, application, application_adaptation,
+    Error, Result, application, application_adaptation, application_comparison,
     application_host::{DomainDispatcher, PolicyHost},
     application_memory::{self as app_memory, MemoryService, NativeEngine},
     application_migration, application_view,
@@ -693,6 +693,12 @@ enum ApplicationCommand {
     /// `checkApplicationCompatibility` between two stored revisions; input
     /// is `{"previous": <ref>, "candidate": <ref>}`.
     Compatible { input: PathBuf },
+    /// `produceApplicationComparison`: join several evaluated alternatives
+    /// under one environment into a stored comparison record.
+    Compare { input: PathBuf },
+    /// `verifyApplicationComparison`: replay a stored comparison's evidence
+    /// against an expected parent state.
+    VerifyComparison { input: PathBuf },
     /// `migrateApplicationMemory`: run the migration program and admit its
     /// emitted claims into a fresh memory chain under the new schema.
     MigrateMemory { input: PathBuf },
@@ -2307,6 +2313,31 @@ async fn execute(cli: Cli) -> Result<bool> {
                         &candidate,
                     )?;
                     emit(&json!({"compatibility": compatibility}))?;
+                }
+                ApplicationCommand::Compare { input } => {
+                    let (digest, comparison) = application_comparison::produce_comparison(
+                        &mut service.store,
+                        &load(&input, 262_144)?,
+                        &Host::default(),
+                    )
+                    .await?;
+                    emit(&json!({
+                        "comparison": digest, "selected": comparison["selected"],
+                    }))?;
+                }
+                ApplicationCommand::VerifyComparison { input } => {
+                    let input = load(&input, 262_144)?;
+                    let v = app_memory::app_object(&input, &["comparison", "expectedState"])?;
+                    let comparison = app_memory::app_ref(&v["comparison"])?.to_owned();
+                    let state = app_memory::app_ref(&v["expectedState"])?.to_owned();
+                    let checked = application_comparison::verify_comparison(
+                        &service.store,
+                        &comparison,
+                        &state,
+                        &Host::default(),
+                    )
+                    .await?;
+                    emit(&json!({"ok": true, "selected": checked["selected"]}))?;
                 }
                 ApplicationCommand::MigrateMemory { input } => {
                     let mut run_host = Host::default();

@@ -461,3 +461,5 @@ export type {
 
 export { restoreApplicationRevision, parseApplicationRestoration, parseApplicationRestorationPolicy, verifyApplicationRestoration } from "./src/application-restoration";
 export type { ApplicationRestoration, ApplicationRestorationPolicy, RestoreApplicationRevisionInput, RestoredApplicationRevision } from "./src/application-restoration";
+export { COMPARISON_LIMITS, checkComparisonBinding, comparisonDigest, parseApplicationComparison, produceApplicationComparison, verifyApplicationComparison } from "./src/application-comparison";
+export type { ApplicationComparison, ApplicationComparisonResult, ComparisonVerdict, ProduceComparisonInput } from "./src/application-comparison";

@@ -59,6 +59,7 @@ advance sequence while retaining epoch. Previous states are retained.
 | `algal.application-memory-archive.v1` | Exact pre-cutover snapshot, application/schema, archive sequence, and previous archive |
 | `algal.application-memory-derivation.v1` | Conditional query result bound to captured state, selected facts, program, engine, frontier, and admission |
 | `algal.application-evaluation.v1` | Frozen evaluation request, foundry evidence, compatibility, and reproducible acceptance verdict |
+| `algal.application-comparison.v1` | Environment-attributed join of several reproduced evaluations for one entrypoint, shared measurement set, and accepted-only selection |
 | `algal.application-migration.v1` | Source snapshot, both revisions, pure migration program, producing receipt, and emitted claims |
 | `algal.application-view.v1` | Bounded historical projection and state-fenced proposed actions |
 | `algal.application-view-evidence.v1` | Optional captured query, probe, source, revision, and separately observed work summaries |
@@ -96,6 +97,11 @@ Compatibility prevents widening capability requirements, entrypoint memory
 views, or external interfaces. The frozen policy requires strict validation
 improvement, no previously passing validation regression, passing holdout, and
 bounded work. A foundry winner is insufficient when those criteria fail.
+
+An evaluation request may carry an optional `environment` label attributing
+the produced evidence to a deployment context. The label is part of the frozen
+request identity, so environment-attributed and unattributed measurements are
+distinct records and can never be silently conflated.
 
 Migration is a pure, bounded transformation of the source observation
 projection. Its replay must reproduce the exact arguments and emitted claims.
@@ -371,6 +377,7 @@ of observations.
 | Active memory observations / hypotheses | 128 / 64 |
 | Retained memory archive segments | 128 |
 | Evaluation cases / work / model calls | 32 / 1,000,000 / 16 |
+| Comparison results | 8 |
 | View history / action records | 128 / 32 |
 | Evidence queries / probes / sources / revisions / work | 32 rows per array, with separate truncation flags |
 | Named application namespace / aggregate allocation | 256 MiB per application / 1 GiB aggregate |
@@ -460,3 +467,44 @@ restore input.json`. The policy named by the evidence must equal that host
 option. Merely putting a policy into CAS grants no authority. Ordinary pure
 case evaluation and activation remain unchanged; restoration never fabricates
 an improvement verdict. Retained history and namespace bounds still apply.
+
+## Comparing alternatives
+
+`produceApplicationComparison(store, input, runtime)` joins several
+`algal.application-evaluation.v1` records — each produced by the ordinary
+serial incumbent-versus-candidate evaluator — into one retained
+`algal.application-comparison.v1` record. The input names `{application,
+parentState, entrypoint, environment, evaluations, selected}`. Every cited
+evaluation is re-verified against the exact parent state, its request must
+carry the named `environment` label and entrypoint, and all requests must
+share the same `cases`, `scorer`, and `policy` — a comparison never mixes
+measurement sets or environments.
+
+Each result row records the candidate `revision`, the `manifest` that revision
+selects for the entrypoint, the `evaluation` reference, and the reproduced
+`verdict`. Results are sorted by revision digest with unique revisions,
+manifests, and evaluations, bounded at 8. `selected` is either null or the
+manifest of a row whose reproduced verdict is `accepted`: a rejected or
+incomplete alternative is retained evidence, never a selection. The record
+itself grants no authority — activation still requires the reproduced accepted
+evaluation and its coverage checks, and restoration still requires the
+explicit host restoration policy.
+
+`verifyApplicationComparison(store, ref, expectedParentState, runtime)`
+replays every cited evaluation and requires the recomputed record to equal the
+stored record byte-for-byte. When an `activate`, `migrate`, or `restore`
+commit cites a comparison as evidence, the default policy host replays it the
+same way against the commit's parent state and additionally requires the
+record to name the committing application and that parent state, the compared
+entrypoint to exist in the committed revision, and `selected` to be exactly the
+manifest the committed revision installs for that entrypoint. A comparison
+minted elsewhere, measured against an earlier head, hand-built without its
+evaluations, or one that selected nothing or another alternative cannot attach
+to a transition that installs a different strategy. The `environment` label is
+an application identifier (`^[a-z][a-z0-9._-]{0,63}$`). The native CLI exposes
+`application compare input.json` with `{application, parentState, entrypoint,
+environment, evaluations, selected}` and `application verify-comparison
+input.json` with `{comparison, expectedState}`. This is the beginning of
+environment-attributed procedure retention: several strategies measured under
+the same frozen set can be kept, compared, and cited, while authority stays
+with the ordinary admission checks.

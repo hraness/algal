@@ -158,7 +158,15 @@ existing backend and the standing $20 incremental paid-inference cap.
    snapshots, atomic application state, and defining restart/upgrade demonstration.
 2. **Programmable investigation:** express investigation strategy and retrieval
    policy as ordinary ALGAL programs; compare several procedures and retain
-   environment-specific alternatives.
+   environment-specific alternatives. The compare-and-retain half now exists:
+   `algal.application-comparison.v1` joins several reproduced evaluations for
+   one entrypoint under an explicit `environment` label on the evaluation
+   request, keeps losing or incomplete alternatives as evidence, and allows
+   selection only from accepted verdicts. Both runtimes produce and verify the
+   record identically, and the default host fences cited comparisons to the
+   committing application and parent state. Still open: expressing the
+   investigation/retrieval procedures themselves as application programs that
+   generate candidate revisions, and environment-keyed selection policies.
 3. **Evaluated adaptation:** real proposal generation, bounded experiments,
    explicit non-regression criteria, reproducible lineage, and revision promotion.
    Add a structured-facts-without-inference ablation before attributing benefits

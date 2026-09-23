@@ -14,6 +14,7 @@ import { APPLICATION_MEMORY_NATIVE_LIMITS, ApplicationMemoryService } from "./ap
 import { NativeMemoryQueryEngine } from "./application-native-memory";
 import { requestExecution } from "./application-investigation";
 import { evaluateApplicationRevision } from "./application-adaptation";
+import { produceApplicationComparison } from "./application-comparison";
 import { parseOrganismManifest } from "./contract";
 import { parseWorkIntent, type EpisodeBinding } from "./application-contract";
 import { capabilityHandle } from "./capabilities";
@@ -80,6 +81,35 @@ test("direct activation cannot bypass rejected, absent, or forged evaluation", a
   const forged = await f.put({ ...evaluated.evaluation, verdict: { status: "accepted", selectedManifest: manifest } });
   await expect(f.service.commit({ ...command, evidence: [forged] })).rejects.toThrow("not reproducible");
   expect((await f.service.inspect("fixture"))!.digest).toBe(initial.digest);
+});
+
+test("a cited comparison must replay and select the committed entrypoint manifest", async () => {
+  const f = await fixture(), initial = await f.service.create(f.command);
+  const manifest = await f.store.putManifest(f.manifestBody("expected", "candidate"));
+  const candidate = await f.put({ ...f.body, parent: f.command.revision, entrypoints: [{ ...f.body.entrypoints[0]!, manifest }] });
+  const cases = await f.put({ contract: "algal.application-evaluation-cases.v1", cases: ["train", "validation", "holdout"].map(split => ({ id: split, split, args: { q: split }, expect: { answer: "expected" } })) });
+  const scorer = await f.put({ contract: "algal.application-evaluation-scorer.v1", scorer: null });
+  const runtime = { fns: builtinRegistry() };
+  const evaluated = await evaluateApplicationRevision(f.store, { contract: "algal.application-evaluation-request.v1", parentState: initial.digest, candidateRevision: candidate, entrypoint: "run", cases, scorer, policy: f.evaluationPolicy, environment: "fixture-env" }, runtime);
+  expect(evaluated.evaluation.verdict.status).toBe("accepted");
+  const produced = await produceApplicationComparison(f.store, { application: "fixture", parentState: initial.digest, entrypoint: "run", environment: "fixture-env", evaluations: [evaluated.evaluationRef], selected: manifest }, runtime);
+  const command = { ...f.command, operation: hash("activate"), kind: "activate", expectedHead: initial.digest, revision: candidate };
+  // A forged comparison that never happened cannot ride along as evidence.
+  const forged = await f.put({ ...produced.comparison, results: [{ ...produced.comparison.results[0]!, evaluation: hash("never-ran") }] });
+  await expect(f.service.commit({ ...command, evidence: [evaluated.evaluationRef, forged].sort() })).rejects.toThrow();
+  // A tampered selection is not reproducible; a genuine comparison that
+  // selected nothing cannot attach to an activation either.
+  const tampered = await f.put({ ...produced.comparison, environment: "relabelled-env" });
+  await expect(f.service.commit({ ...command, evidence: [evaluated.evaluationRef, tampered].sort() })).rejects.toThrow("parent state and environment");
+  const genuineUnselected = await produceApplicationComparison(f.store, { application: "fixture", parentState: initial.digest, entrypoint: "run", environment: "fixture-env", evaluations: [evaluated.evaluationRef], selected: null }, runtime);
+  await expect(f.service.commit({ ...command, evidence: [evaluated.evaluationRef, genuineUnselected.comparisonRef].sort() })).rejects.toThrow("not the committed entrypoint manifest");
+  // The genuine selecting comparison attaches and the head advances once.
+  const activated = await f.service.commit({ ...command, evidence: [evaluated.evaluationRef, produced.comparisonRef].sort() });
+  expect(activated.state.revision).toBe(candidate);
+  // The same comparison is stale for the next head.
+  const later = await f.put({ ...f.body, parent: candidate, entrypoints: [{ ...f.body.entrypoints[0]!, manifest: await f.store.putManifest(f.manifestBody("expected", "later")) }] });
+  const laterEval = await evaluateApplicationRevision(f.store, { contract: "algal.application-evaluation-request.v1", parentState: activated.digest, candidateRevision: later, entrypoint: "run", cases, scorer, policy: f.evaluationPolicy, environment: "fixture-env" }, runtime);
+  await expect(f.service.commit({ ...command, operation: hash("activate-2"), expectedHead: activated.digest, revision: later, evidence: [laterEval.evaluationRef, produced.comparisonRef].sort() })).rejects.toThrow("stale");
 });
 
 test("durable channels fail closed on symlinks and do not overwrite other files", async () => {
