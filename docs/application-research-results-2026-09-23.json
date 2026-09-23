@@ -1,0 +1,221 @@
+{
+  "study": "synthetic-routes-v1",
+  "date": "2026-09-23",
+  "sourceCommit": "0c59180d79bc4c3b31d56fe3ef084a3d86a06aa6",
+  "model": "anthropic/claude-haiku-4.5",
+  "plan": "sha256:ec8a4a669c48f5f9367d10d8d286742708b70808930f0e850a5fcf6561e80cad",
+  "executorConfiguration": "sha256:0500fa07ad67511478e11fad3e859087eccc086c16ca4f6114bbfb57ff4a00f8",
+  "nativeEngine": "sha256:f59627d4a15962400cc2a27b82e1ac2d9b6d398b1786f4128375ef11fd311538",
+  "evaluator": "sha256:07c5cd79adb53d8e290767fb56537c9b3a9d3d47975012056d86b4d47ce2fa8c",
+  "journal": "sha256:1f0693c375c276913861f4b4ff886cad05e6b8ad0a912baa937dbbda71af795c",
+  "seal": "sha256:10b639cb9b82194126c0711edaeb3a04f309b1ac84f906f9586f08ade6557baf",
+  "proposal": {
+    "requestedMode": "derived-answers",
+    "rationaleCharacters": 985,
+    "maximumRationaleCharacters": 768,
+    "admitted": false
+  },
+  "quality": {
+    "candidate": 5,
+    "cases": 8,
+    "incumbent": 6
+  },
+  "verdict": "proposal-not-admitted",
+  "activated": false,
+  "pendingAnswers": 0,
+  "studyUsage": {
+    "calls": 17,
+    "inputTokens": 7521,
+    "outputTokens": 450,
+    "reservedUsd": 1.323008
+  },
+  "taskUsage": {
+    "gatewayCalls": 18,
+    "providerReportedUsd": 0.010081,
+    "includes": "17 study calls and one independent provider smoke"
+  },
+  "offlineVerified": true,
+  "answers": [
+    {
+      "case": "dev-chain",
+      "arm": "incumbent",
+      "answer": [
+        "a",
+        "b",
+        "c"
+      ],
+      "receipt": "sha256:df46079a1f6e3b1dac0a7fdbbc8479afb4c277a61272f16fb188d2d75aed75d7"
+    },
+    {
+      "case": "dev-chain",
+      "arm": "candidate",
+      "answer": [
+        "a",
+        "b",
+        "c"
+      ],
+      "receipt": "sha256:61f7d3785b8f9880a8285cbacd69e31c12860d196daf38cb800a8eea025c305a"
+    },
+    {
+      "case": "dev-branch",
+      "arm": "incumbent",
+      "answer": [
+        "a",
+        "b",
+        "c"
+      ],
+      "receipt": "sha256:5044cecbf8b2221c0fff34039dc3824bda0dd2e2432742d88b9000dfe6bb14af"
+    },
+    {
+      "case": "dev-branch",
+      "arm": "candidate",
+      "answer": [
+        "a",
+        "b",
+        "c"
+      ],
+      "receipt": "sha256:2d4beb118e19ccaa4a7e6cc7199064853a0bb13f302a4c881824440af073617f"
+    },
+    {
+      "case": "dev-cycle",
+      "arm": "incumbent",
+      "answer": [
+        "a",
+        "b",
+        "c",
+        "dock"
+      ],
+      "receipt": "sha256:44377cc590cf25a3768e376388644c339825812ffec82327ab1867cdbb6bb420"
+    },
+    {
+      "case": "dev-cycle",
+      "arm": "candidate",
+      "answer": [
+        "a",
+        "b",
+        "c",
+        "dock"
+      ],
+      "receipt": "sha256:fd8e2f8e91d67b12367758e955792c3ee17caf2782d481695e724e3dec08b754"
+    },
+    {
+      "case": "dev-direction",
+      "arm": "incumbent",
+      "answer": [
+        "b",
+        "c",
+        "d"
+      ],
+      "receipt": "sha256:60a949eb07366fea0bd158777251c76aff037a15a8335d44ced2a5ff2a791e67"
+    },
+    {
+      "case": "dev-direction",
+      "arm": "candidate",
+      "answer": [
+        "b",
+        "c",
+        "d",
+        "dock"
+      ],
+      "receipt": "sha256:2e18255260a05ee2185999580e9c724144e344201f4eb04b0219d0533d405842"
+    },
+    {
+      "case": "holdout-merge",
+      "arm": "incumbent",
+      "answer": [
+        "p",
+        "q",
+        "r",
+        "s",
+        "t"
+      ],
+      "receipt": "sha256:e8171e5ccdc9c3e24c11d257d2e9f31f453053e80da5d6b0a608edf9afd01019"
+    },
+    {
+      "case": "holdout-merge",
+      "arm": "candidate",
+      "answer": [
+        "p",
+        "q",
+        "r",
+        "s",
+        "t"
+      ],
+      "receipt": "sha256:ee56bdac0f78f611c3df61b3216f7c69737d0881e06cd05854faba6ac7409f4d"
+    },
+    {
+      "case": "holdout-loop",
+      "arm": "incumbent",
+      "answer": [
+        "hub",
+        "p",
+        "q",
+        "r",
+        "s"
+      ],
+      "receipt": "sha256:42b9cfaa26f5b010c1ba158161cb6a1097562ff20e4961b79fb2dc6f9530c389"
+    },
+    {
+      "case": "holdout-loop",
+      "arm": "candidate",
+      "answer": [
+        "p",
+        "q",
+        "r",
+        "s"
+      ],
+      "receipt": "sha256:d487240da2f66453007bc51b583febb860646c218a036d1d7c8b8e1d4346b947"
+    },
+    {
+      "case": "holdout-disconnected",
+      "arm": "incumbent",
+      "answer": [
+        "p",
+        "q",
+        "r",
+        "s",
+        "v"
+      ],
+      "receipt": "sha256:1a9dca3a8d34146d68e8a701d0bbd03c9420ee2b0d2692d4e588022e9071aa6b"
+    },
+    {
+      "case": "holdout-disconnected",
+      "arm": "candidate",
+      "answer": [
+        "p",
+        "q",
+        "r",
+        "s"
+      ],
+      "receipt": "sha256:027e1e1a5d25bedc4b254680c63821e42de2cc07a544a7979ba6f9358382969d"
+    },
+    {
+      "case": "holdout-empty",
+      "arm": "incumbent",
+      "answer": [
+        "hub",
+        "p",
+        "q",
+        "r"
+      ],
+      "receipt": "sha256:414bb7cfedd6045b369799904c81ed82c5f4ac5e645299d99e10e44fac41b088"
+    },
+    {
+      "case": "holdout-empty",
+      "arm": "candidate",
+      "answer": [
+        "hub",
+        "p",
+        "q",
+        "r"
+      ],
+      "receipt": "sha256:d1a41eae2a0d5405282b4109f93d9f7520c8a67efded8f7c87ea5ca6e0cb28fa"
+    }
+  ],
+  "limitations": [
+    "Eight authored cases; one fixed-order attempt per arm; no statistical or general coding-performance claim.",
+    "Proposal exceeded its rationale bound; no research evaluation or promotion was admitted.",
+    "Derived-answer arm had fewer exact answers; no Datalog quality benefit shown.",
+    "Full signed application store and inference ledger retained in local task evidence; this is a compact result summary."
+  ]
+}

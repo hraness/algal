@@ -131,3 +131,31 @@ eight cases. Report that result even when it is negative or inconclusive.
 Token counts, runtime work units, reserved spend, and provider charges are
 different quantities; the evidence does not convert one into another or infer
 cost savings from deterministic byte reduction.
+
+## Live result: 2026-09-23
+
+The first frozen 17-call study completed on commit `0c59180` with
+`anthropic/claude-haiku-4.5`. Structured facts scored **6/8** exact answers;
+the same facts plus verified Datalog answers scored **5/8**. No quality benefit
+was demonstrated. These eight fixed-order synthetic cases support no general
+performance conclusion.
+
+The model selected `derived-answers`, but its rationale exceeded the frozen
+768-character limit. Proposal admission rejected it; the independently frozen
+ablation still completed. No research evaluation or revision activation was
+admitted, and the incumbent application state remained unchanged. Neither the
+proposal nor any answer was retried or tuned after seeing these results.
+
+All 17 calls settled, with 7,521 reported input tokens and 450 output tokens.
+The $1.323008 reservation ceiling remained intact. Gateway reported **$0.010081**
+for the task key, covering this study and one separate classification smoke
+call (18 calls total). Both runtimes verified the smoke receipt; study replay
+verified its signatures, native proofs, all model receipts, scores, and ledger
+without provider calls. Apple Intelligence also completed a separate on-device
+classification whose receipt verified in both runtimes.
+
+The [compact result record](application-research-results-2026-09-23.json)
+retains case outputs, identities, counts, and limitations. Full signed evidence,
+the pinned native executable, and provider accounting remain in the local task
+artifacts; credentials are kept separately. The earlier failed Harbor coding
+calibration remains closed and unchanged.
