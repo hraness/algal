@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="456" height="1102" viewBox="0 0 456 1102" role="img" aria-labelledby="algal-fa60e616cc9c-title algal-fa60e616cc9c-desc">
-<title id="algal-fa60e616cc9c-title">reply — Algal program</title>
+<title id="algal-fa60e616cc9c-title">reply · ALGAL program</title>
 <desc id="algal-fa60e616cc9c-desc">Exact data dependencies of organism:reply. 5 cells and 5 edges. Arrows carry named values; layout does not imply time or parallel execution. Dashed arrows carry failure records. No execution status is implied.</desc>
 <defs><marker id="algal-fa60e616cc9c-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/></marker></defs>
 <rect width="456" height="1102" rx="16" fill="#ffffff"/>

@@ -54,8 +54,43 @@
   bound and a test.
 - Colocate tests with source (`src/*.test.ts`); cover failure modes with a
   deterministic example, not a mock-heavy harness.
-- Keep the public surfaces honest: README claims match what `bun run check`
-  and the tests actually prove; mark proposals as proposals.
+- Keep every public claim true and scoped to what shipped: README claims match
+  what `bun run check` and the tests prove, and proposals are marked as
+  proposals. This is an internal claims rule; it is not wording for public
+  pages.
+
+# Public copy
+
+- Public copy is the website (`site/`), `README.md`, the mirrored `docs/` and
+  `spec/v1/` pages, `site/llms.txt`, CLI help, package metadata, release notes,
+  and the native workbench report. It follows `STYLE.md` and `WRITING.md`.
+- The canonical one-line description of ALGAL is an open owner decision. Until
+  it is made, reuse `SITE_DESCRIPTION` in `site/copy.ts` instead of writing
+  another variant, and do not change the site tagline or home H1 without the
+  owner.
+- Translate this file's internal vocabulary on public pages:
+  - admit, admission: check and accept (a manifest); attach (an executor,
+    tool, or capability)
+  - custody: ownership of a running job or process
+  - settled: finished and confirmed
+  - qualified, qualification: tested on (name the platform or provider)
+  - retained: kept or saved
+  - bounded: limited (name the limit)
+  - authority: permission
+- `organism` is the spec's term for an ALGAL program. Define it at first use on
+  each page. Use at most one biology metaphor (fossil, habitat, living) per
+  section, next to the literal mechanism it stands for.
+- Write the product name as ALGAL in prose and `algal` only for the command.
+  Page titles separate the page and site names with a middle dot and name the
+  brand once. Do not use em dashes in titles, descriptions, alt text, or prose.
+- Title a limits section "Status and limits" or "Limits"; never describe a page
+  or caveat as honest. State each limit once, beside the feature it limits.
+  Text shown on more than one page lives in `site/copy.ts`.
+- Check every command on a page against `--help` for the runtime the page
+  names. The native binary has no `diagnose`; `--apple` needs a Mac with Apple
+  Intelligence and Xcode to build the separate bridge.
+- Never edit `GENERATE_PROMPT` in `src/source.ts` for style or casing. It is a
+  digest-bearing wire constant.
 
 # ALGAL native migration
 
@@ -105,6 +140,13 @@
 - Canonical receipts are execution evidence, not truth or provider attestation.
   Memory query proofs are positive derivations from explicitly selected facts.
   Compaction preserves sources; byte reduction is not a token/billing claim.
+
+<!-- hraness-public-copy:start -->
+- Public copy (websites, READMEs, docs, package and GitHub descriptions, CLI help, `llms.txt`, generated pages) follows `STYLE.md`, synced from hraness/.github. Text a model writes for publication also follows `GENERATION_STYLE.md`.
+- The delivery vocabulary in this file (admission, qualification, custody, receipt, bounded, lane, gate, surface, projection) is internal. Translate it into what the reader gets.
+- Take one-line product and sibling descriptions from the portfolio registry and versions from the release record. Tests pin facts, not prose.
+- Run `bun run check:copy` before handoff when the repository has it.
+<!-- hraness-public-copy:end -->
 
 <!-- oompa-local-efficiency:start -->
 - Treat the user's request to change this repository as standing authorization for routine task-owned commits, pushes, pull requests, merges, releases, deployments, and production verification after the gates applicable to that action pass. Do not ask for duplicate confirmation. Build confidence through relevant automated checks, bounded diagnostics, and independent review, not another human approval. Passing checks does not expand task scope or authority.

@@ -148,7 +148,7 @@ function locationText(location: SourceDiagnosticLocation): string {
 }
 
 export function renderSourceDiagnostics(report: SourceDiagnostics): string {
-  const lines = [`Algal ${report.outcome} · ${report.verification} (not replay verification)`, `Receipt: ${report.receiptDigest}`, `Manifest: ${report.rootManifestDigest}`, `Source: ${report.sourceDigest}`];
+  const lines = [`ALGAL ${report.outcome} · ${report.verification} (not replay verification)`, `Receipt: ${report.receiptDigest}`, `Manifest: ${report.rootManifestDigest}`, `Source: ${report.sourceDigest}`];
   if (!report.issues.length) lines.push("No terminal issue recorded.");
   for (const issue of report.issues.slice(0, SOURCE_DIAGNOSTIC_BOUNDS.maxIssues)) {
     lines.push("", `${issue.kind}${issue.code ? ` · ${issue.code}` : ""}${issue.path !== undefined ? ` · ${clipped(issue.path, SOURCE_TRACE_BOUNDS.maxPathLength) || "(root)"}${issue.pathTruncated ? " (truncated)" : ""}` : ""}`, `${issue.kind === "suspension" ? "State" : "Recorded message"}: ${clipped(issue.message, SOURCE_DIAGNOSTIC_BOUNDS.maxMessageChars)}`);

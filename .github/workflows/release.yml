@@ -174,7 +174,7 @@ jobs:
           if gh release view "$RELEASE_TAG" --json isDraft,isPrerelease > release.json; then
             python3 -c 'import json; r=json.load(open("release.json")); assert r["isDraft"] or r["isPrerelease"], "Refusing to mutate a stable release"'
           else
-            printf '%s\n' "Qualified native process VM prerelease for source $RELEASE_SHA." 'Linux x86_64: Ubuntu 24.04/glibc 2.39+. macOS arm64: macOS 14+, unsigned and not notarized. No Bun or Cargo required to run. Python 3 is used only by the verification/installation helpers.' > notes.txt
+            printf '%s\n' "Native process VM prerelease built from source $RELEASE_SHA. Each archive passed the archive and installer tests on its target before packaging." 'Linux x86_64: Ubuntu 24.04/glibc 2.39+. macOS arm64: macOS 14+, unsigned and not notarized. No Bun or Cargo required to run. Python 3 is used only by the verification/installation helpers.' > notes.txt
             verify_release_tag
             gh release create "$RELEASE_TAG" --verify-tag --prerelease --title "ALGAL $RELEASE_TAG" --notes-file notes.txt
           fi

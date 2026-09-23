@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1320" height="1519" viewBox="0 0 1320 1519" role="img" aria-labelledby="algal-69a990085c0a-title algal-69a990085c0a-desc">
-<title id="algal-69a990085c0a-title">route — Algal program</title>
+<title id="algal-69a990085c0a-title">route · ALGAL program</title>
 <desc id="algal-69a990085c0a-desc">Exact data dependencies of organism:route. 10 cells and 15 edges. Arrows carry named values; layout does not imply time or parallel execution. Dashed arrows carry failure records. No execution status is implied.</desc>
 <defs><marker id="algal-69a990085c0a-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/></marker></defs>
 <rect width="1320" height="1519" rx="16" fill="#ffffff"/>

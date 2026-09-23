@@ -94,7 +94,7 @@ invariant: **manifests are data, authority is host-owned**.
 
 ## Applications as civilizations
 
-In this view, a ALGAL application is a habitat:
+In this view, an ALGAL application is a habitat:
 
 - **Modules** are organisms in the store.
 - **Capabilities** are functions and tools in the registries.
