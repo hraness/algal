@@ -13,7 +13,8 @@ import {
   type RunReceipt,
 } from "./run";
 import { manifestToJson, parseOrganismManifest } from "./contract";
-import { replayStore, type Store } from "./store";
+import { replayStore } from "./store-memory";
+import type { Store } from "./store";
 import type { Transport } from "./transport";
 import type { ToolRegistry } from "./tools";
 import { AlgalError } from "./errors";

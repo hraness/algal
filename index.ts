@@ -1,4 +1,7 @@
 // Algal public surface: contract, compile, run, verify, store, effects.
+export { ApplicationCore } from "./src/application-core";
+export { MemoryApplicationStorage } from "./src/application-storage";
+export type { ApplicationStorage } from "./src/application-storage";
 
 export { compileSource, sourceImports, SourceError, SOURCE_BOUNDS, SOURCE_PROJECT_BOUNDS, SOURCE_PROFILE, SOURCE_VERSION, GENERATE_PROMPT } from "./src/source";
 export type { SourceAnnotation, SourceCallOrigin, SourceCompilation, SourceCompilerOptions, SourceErrorContext, SourceErrorImport, SourceImport, SourceMap, SourcePosition, SourceProjectIndex, SourceSpan } from "./src/source";

@@ -50,7 +50,7 @@ import type { Transport } from "./transport";
 import type { ToolRegistry } from "./tools";
 import { elideToolContext } from "./tool-context";
 import type { JournalBinding, JournalTicket, RuntimeJournal } from "./process-journal";
-import { bindRecallOutput, recallOutputSchema } from "./semantic";
+import { bindRecallOutput, recallOutputSchema } from "./semantic-contract";
 import { asDigest, digestCanonical, type Digest } from "./digest";
 import {
   asArray,

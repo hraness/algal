@@ -17,7 +17,11 @@ import { runOrganism, parseRunReceipt, type RunReceipt } from "../../src/run";
 import { MemoryStore, type Store } from "../../src/store";
 import { verifyReceipt } from "../../src/verify";
 import { canonicalize, type JsonValue } from "../../src/values";
-import { DEFAULT_CONFIG, DEFAULT_SIGNALS, SIGNAL_UPDATE_PROGRAM, evaluateView, makeRevision, parseProposal, parseRevision, parseSignalEvent, parseSignals, updateSignals, type SurfaceConfig, type SurfaceProposal, type SurfaceRevision, type SurfaceSignalEvent, type SurfaceSignals } from "./surface";
+import { DEFAULT_CONTROLS, parseControls, parseSignalCursors, parseSignalEnvelope, type SignalCursor, type SignalEnvelope, type WorkbenchControls } from "./workbench-contract";
+import { DEFAULT_CONFIG, DEFAULT_SIGNALS, evaluateView, makeRevision, parseProposal, parseSignalEvent, parseSignals, updateSignals, type SurfaceConfig, type SurfaceProposal, type SurfaceRevision, type SurfaceSignalEvent, type SurfaceSignals } from "./surface";
+
+import { parseSurfaceManifest, updateManifest, viewManifest } from "./surface-manifests";
+export { parseSurfaceManifest, updateManifest, viewManifest } from "./surface-manifests";
 
 export const APPLICATION = "malleable-marketing";
 const json = applicationJson;
@@ -28,32 +32,12 @@ const POLICY = { contract: "algal.application-evaluation-policy.v1", maxCases: 4
 const SCHEMA = { contract: "algal.application-memory-schema.v1", relations: [{ name: "signal", arity: 2 }] };
 const VIEWS = { contract: "algal.application-view-spec.v1", title: "Malleable marketing", widgets: ["history", "memory"] };
 const RESTORE = { contract: "algal.application-restoration-policy.v1", application: APPLICATION, mode: "retained-pure-strategy-manifests" };
-const BUDGETS = { maxSteps: 8, maxAgentCalls: 0, maxWork: 50_000, maxContextBytes: 8192, maxOutputBytes: 8192, maxDepth: 4 };
-
-function manifest(name: "view" | "update", program: JsonValue, definition?: SurfaceRevision): OrganismManifest {
-  const ports = name === "view" ? ["signals"] : ["signals", "event"];
-  return parseOrganismManifest({ contract: "algal.organism.v1", key: `organism:marketing-${name}`, name: `Marketing ${name}`, budgets: BUDGETS,
-    interface: { inputs: Object.fromEntries(ports.map(port => [port, { cell: "input", port }])), outputs: { value: { cell: "result", port: "out" } } },
-    cells: [{ id: "input", kind: "input", outputs: Object.fromEntries(ports.map(port => [port, "json"])) },
-      ...(definition ? [{ id: "definition", kind: "const", outputs: { value: { type: "json", value: definition } } }] : []),
-      { id: "result", kind: "expr", inputs: Object.fromEntries(ports.map(port => [port, "json"])), expr: { contract: "algal.expr.v1", program }, output: { kind: "json", schema: { type: "object" } } }],
-    edges: ports.map(port => ({ from: { cell: "input", port }, to: { cell: "result", port } })) });
-}
-export function viewManifest(input: SurfaceRevision): OrganismManifest { const revision = parseRevision(input); return manifest("view", revision.program, revision); }
-export function updateManifest(): OrganismManifest { return manifest("update", SIGNAL_UPDATE_PROGRAM); }
 export async function buildSurfaceFixture() {
   const store = new MemoryStore(), revision = makeRevision(DEFAULT_CONFIG), signals = parseSignals(DEFAULT_SIGNALS), m = viewManifest(revision);
   await store.putManifest(m);
   const execution = await run(store, m, { signals }), view = evaluateView(revision, signals);
   await checkRun(store, execution.ref, m, { signals }, view);
   return { revision, signals, view, manifest: manifestToJson(m), bundle: json(await packOrganism(m, store)), receipt: execution.receipt };
-}
-function definition(m: OrganismManifest): SurfaceRevision {
-  const cell = m.cells.find(c => c.id === "definition");
-  if (!cell || cell.kind !== "const") throw new Error("Missing marketing definition");
-  const revision = parseRevision(cell.outputs.value?.value);
-  if (!same(manifestToJson(m), manifestToJson(viewManifest(revision)))) throw new Error("View manifest differs from the known builder");
-  return revision;
 }
 async function run(store: Store, m: OrganismManifest, input: Record<string, JsonValue>): Promise<{ receipt: RunReceipt; ref: Digest }> {
   const receipt = await runOrganism({ manifest: m, args: { input }, fns: builtinRegistry(), store, executors: [] });
@@ -66,11 +50,26 @@ async function checkRun(store: Store, reference: Digest, m: OrganismManifest, in
   const receipt = parseRunReceipt(raw);
   if (!same(receipt.args, { input }) || receipt.outcome !== "complete" || !same(receipt.cells.result?.outputs?.out, output) || !(await verifyReceipt(raw, manifestToJson(m), store)).ok) throw new Error("Surface receipt binding/replay failed");
 }
-type SurfaceMemory = { contract: "algal.marketing-memory.v1"; signals: SurfaceSignals; previous: Digest | null; event: SurfaceSignalEvent | null; receipt: Digest | null };
+type SurfaceMemoryV1 = { contract: "algal.marketing-memory.v1"; signals: SurfaceSignals; previous: Digest | null; event: SurfaceSignalEvent | null; receipt: Digest | null };
+type SurfaceMemoryV2 = { contract: "algal.marketing-memory.v2"; signals: SurfaceSignals; previous: Digest; event: SurfaceSignalEvent | null; receipt: Digest | null; envelope: SignalEnvelope | null; cursors: SignalCursor[]; controls: WorkbenchControls };
+type SurfaceMemory = SurfaceMemoryV1 | SurfaceMemoryV2;
 function memory(input: unknown): SurfaceMemory {
-  const v = applicationObject(input, ["contract", "signals", "previous", "event", "receipt"]);
-  if (v.contract !== "algal.marketing-memory.v1") throw new Error("Invalid marketing memory");
-  return { contract: "algal.marketing-memory.v1", signals: parseSignals(v.signals), previous: v.previous === null ? null : applicationRef(v.previous), event: v.event === null ? null : parseSignalEvent(v.event), receipt: v.receipt === null ? null : applicationRef(v.receipt) };
+  const version = (input as { contract?: unknown } | null)?.contract;
+  const v = applicationObject(input, version === "algal.marketing-memory.v2" ? ["contract", "signals", "previous", "event", "receipt", "envelope", "cursors", "controls"] : ["contract", "signals", "previous", "event", "receipt"]);
+  if (v.contract !== "algal.marketing-memory.v1" && v.contract !== "algal.marketing-memory.v2") throw new Error("Invalid marketing memory");
+  const base = { signals: parseSignals(v.signals), previous: v.previous === null ? null : applicationRef(v.previous), event: v.event === null ? null : parseSignalEvent(v.event), receipt: v.receipt === null ? null : applicationRef(v.receipt) };
+  if (v.contract === "algal.marketing-memory.v1") return { contract: v.contract, ...base };
+  if (base.previous === null) throw new Error("Version two memory must extend retained memory");
+  return { ...base, previous: base.previous, contract: v.contract, envelope: v.envelope === null ? null : parseSignalEnvelope(v.envelope), cursors: parseSignalCursors(v.cursors), controls: parseControls(v.controls) };
+}
+function controlsOf(state: SurfaceMemory): WorkbenchControls { return state.contract === "algal.marketing-memory.v2" ? state.controls : { ...DEFAULT_CONTROLS }; }
+function cursorsOf(state: SurfaceMemory): SignalCursor[] { return state.contract === "algal.marketing-memory.v2" ? state.cursors : []; }
+export function signalOperation(input: SignalEnvelope): Digest { const envelope = parseSignalEnvelope(input); return hash({ contract: "algal.marketing-signal-operation.v1", source: envelope.source, stream: envelope.stream, sequence: envelope.sequence }); }
+function advanceCursors(prior: SurfaceMemory, envelope: SignalEnvelope): SignalCursor[] {
+  const cursors = cursorsOf(prior), cursor = cursors.find(row => row.source === envelope.source && row.stream === envelope.stream);
+  if (envelope.sequence !== (cursor?.sequence ?? 0) + 1) throw new Error("Signal sequence gap, conflict or out-of-order delivery");
+  const next = [...cursors.filter(row => row !== cursor), { source: envelope.source, stream: envelope.stream, sequence: envelope.sequence, envelope: hash(envelope) }];
+  return parseSignalCursors(next.sort((a, b) => `${a.source}/${a.stream}` < `${b.source}/${b.stream}` ? -1 : `${a.source}/${a.stream}` > `${b.source}/${b.stream}` ? 1 : 0));
 }
 type Preview = { contract: "algal.marketing-owner-preview.v1"; parentState: Digest; proposal: Digest; candidateRevision: Digest; compatibility: Digest; receipt: Digest };
 function previewRecord(input: unknown): Preview {
@@ -78,12 +77,17 @@ function previewRecord(input: unknown): Preview {
   if (v.contract !== "algal.marketing-owner-preview.v1") throw new Error("Invalid marketing preview");
   return { contract: "algal.marketing-owner-preview.v1", parentState: applicationRef(v.parentState), proposal: applicationRef(v.proposal), candidateRevision: applicationRef(v.candidateRevision), compatibility: applicationRef(v.compatibility), receipt: applicationRef(v.receipt) };
 }
-async function records(store: Store) {
-  const put = (v: unknown) => store.putValue(json(v));
-  const schema = await put(SCHEMA);
-  const program = await put({ contract: "algal.query.v1", rules: [], query: { relation: "signal", terms: [{ var: "name" }, { var: "value" }, { var: "polarity" }] }, limits: APPLICATION_MEMORY_NATIVE_LIMITS });
-  const query = await put({ contract: "algal.application-memory-query.v1", id: "signals", schema, program, procedures: [], polarityColumn: 2, conflict: "set-of-values" });
-  return { schema, query, queries: await put({ contract: "algal.application-memory-queries.v1", queries: [query] }), views: await put(VIEWS), runtimeProfile: await put(PROFILE), evaluationPolicy: await put(POLICY) };
+async function records(store: Store, install = false) {
+  const values: JsonValue[] = [], value = (input: unknown): Digest => { const record = json(input); values.push(record); return hash(record); };
+  const schema = value(SCHEMA);
+  const program = value({ contract: "algal.query.v1", rules: [], query: { relation: "signal", terms: [{ var: "name" }, { var: "value" }, { var: "polarity" }] }, limits: APPLICATION_MEMORY_NATIVE_LIMITS });
+  const query = value({ contract: "algal.application-memory-query.v1", id: "signals", schema, program, procedures: [], polarityColumn: 2, conflict: "set-of-values" });
+  const result = { schema, query, queries: value({ contract: "algal.application-memory-queries.v1", queries: [query] }), views: value(VIEWS), runtimeProfile: value(PROFILE), evaluationPolicy: value(POLICY) };
+  for (const record of values) {
+    if (install) await store.putValue(record);
+    else if (!same(await getApplicationRecord(store, hash(record), applicationJson), record)) throw new Error("Changed retained surface metadata");
+  }
+  return result;
 }
 async function validateRevision(store: Store, revisionRef: Digest): Promise<SurfaceRevision> {
   const r = await getApplicationRecord(store, revisionRef, parseApplicationRevision), expected = await records(store);
@@ -95,7 +99,7 @@ async function validateRevision(store: Store, revisionRef: Digest): Promise<Surf
     if (entry.name !== name || entry.maxGenerations !== 1 || entry.capabilities.length || entry.applicability !== expected.query || !same(entry.queries, [expected.query])) throw new Error("Unexpected surface entrypoint");
     const m = await store.getManifest(entry.manifest);
     if (!m) throw new Error("Missing surface manifest");
-    if (name === "view") surface = definition(m);
+    if (name === "view") surface = parseSurfaceManifest(m);
     else if (!same(manifestToJson(m), manifestToJson(updateManifest()))) throw new Error("Update manifest differs from the known builder");
     await compileOrganism(m, builtinRegistry(), store);
   }
@@ -122,9 +126,19 @@ export function ownerEditAdmission(): ApplicationAdmission {
       if (command.kind !== "create" || command.evidence.length || next.previous !== null || next.event !== null || next.receipt !== null) throw new Error("Invalid surface genesis");
       return;
     }
+    const prior = await getApplicationRecord(store, current.state.memory, memory), controls = controlsOf(prior);
     if (command.kind === "memory") {
-      if (command.evidence.length !== 1 || next.previous !== current.state.memory || !next.event || !next.receipt || command.evidence[0] !== hash({ contract: "algal.marketing-signal-evidence.v1", receipt: next.receipt })) throw new Error("Signal must extend current memory with its receipt");
-      const prior = await getApplicationRecord(store, current.state.memory, memory);
+      if (next.previous !== current.state.memory || command.evidence.length !== 1) throw new Error("Signal must extend current memory with its receipt");
+      if (next.contract === "algal.marketing-memory.v2" && next.event === null && next.receipt === null && next.envelope === null) {
+        const evidence = await getApplicationRecord(store, command.evidence[0]!, raw => applicationObject(raw, ["contract", "expectedControls", "controls", "actor"]));
+        if (evidence.contract !== "algal.marketing-controls-evidence.v1" || evidence.actor !== "human" || evidence.expectedControls !== hash(controls) || !same(evidence.controls, next.controls) || !same(next.signals, prior.signals) || !same(next.cursors, cursorsOf(prior))) throw new Error("Invalid owner control admission");
+        if (next.controls.pinnedRevision !== null && next.controls.pinnedRevision !== hash(await validateRevision(store, current.state.revision))) throw new Error("Pin must name the current surface revision");
+        return;
+      }
+      if (!next.event || !next.receipt || command.evidence[0] !== hash({ contract: "algal.marketing-signal-evidence.v1", receipt: next.receipt })) throw new Error("Signal must extend current memory with its receipt");
+      if (next.contract === "algal.marketing-memory.v2") {
+        if (!next.envelope || !same(next.event, next.envelope.event) || command.operation !== signalOperation(next.envelope) || !same(next.cursors, advanceCursors(prior, next.envelope)) || !same(next.controls, controls)) throw new Error("Ordered signal admission failed");
+      } else if (prior.contract === "algal.marketing-memory.v2") throw new Error("Ordered memory cannot downgrade to legacy signals");
       const updated = updateSignals(prior.signals, next.event);
       if (!same(next.signals, updated)) throw new Error("Signal memory does not match update");
       await checkRun(store, next.receipt, updateManifest(), { signals: prior.signals, event: next.event }, updated);
@@ -134,9 +148,13 @@ export function ownerEditAdmission(): ApplicationAdmission {
     if (command.kind === "activate") {
       if (command.evidence.length !== 1) throw new Error("Owner activation requires one exact preview");
       await validatePreview(store, command.evidence[0]!, current, command.revision);
+      const preview = await getApplicationRecord(store, command.evidence[0]!, previewRecord), proposal = await getApplicationRecord(store, preview.proposal, parseProposal);
+      if (controls.modelActivationPaused && proposal.source === "model") throw new Error("Model activation is paused");
+      if (controls.pinnedRevision !== null && controls.pinnedRevision !== hash(await validateRevision(store, command.revision))) throw new Error("Surface revision is pinned");
       return;
     }
     if (command.kind === "restore") {
+      if (controls.pinnedRevision !== null && controls.pinnedRevision !== hash(await validateRevision(store, command.revision))) throw new Error("Surface revision is pinned");
       const restoration = await verifyApplicationRestoration(store, { application: APPLICATION, parentState: current.digest, candidateRevision: command.revision, evidence: command.evidence });
       if (restoration.policy !== hash(RESTORE) || command.evidence.length !== 1) throw new Error("Unadmitted restoration policy/evidence");
       return;
@@ -146,25 +164,64 @@ export function ownerEditAdmission(): ApplicationAdmission {
 }
 export class MarketingHost {
   readonly service: ApplicationService;
-  constructor(directory: string) { this.service = new ApplicationService(directory, ownerEditAdmission()); }
+  constructor(readonly directory: string) { this.service = new ApplicationService(directory, ownerEditAdmission()); }
   private put(v: unknown): Promise<Digest> { return this.service.store.putValue(json(v)); }
   async current(): Promise<ApplicationSnapshot> { const s = await this.service.inspect(APPLICATION); if (!s) throw new Error("Initialize this surface first"); return s; }
   async revision(snapshot?: ApplicationSnapshot): Promise<SurfaceRevision> { return validateRevision(this.service.store, (snapshot ?? await this.current()).state.revision); }
   async signals(snapshot?: ApplicationSnapshot): Promise<SurfaceSignals> { return (await getApplicationRecord(this.service.store, (snapshot ?? await this.current()).state.memory, memory)).signals; }
+  async memoryDetails(snapshot?: ApplicationSnapshot): Promise<{ controls: WorkbenchControls; cursors: SignalCursor[]; legacy: boolean }> {
+    const state = await getApplicationRecord(this.service.store, (snapshot ?? await this.current()).state.memory, memory);
+    return { controls: controlsOf(state), cursors: cursorsOf(state), legacy: state.contract === "algal.marketing-memory.v1" };
+  }
+  async setControls(expectedHead: Digest, expectedControls: Digest, input: WorkbenchControls, operation: Digest): Promise<ApplicationSnapshot> {
+    const parent = await this.snapshot(expectedHead), prior = await getApplicationRecord(this.service.store, parent.state.memory, memory), controls = parseControls(input);
+    if (hash(controlsOf(prior)) !== expectedControls) throw new Error("Stale controls");
+    const next = await this.put({ contract: "algal.marketing-memory.v2", signals: prior.signals, previous: parent.state.memory, event: null, receipt: null, envelope: null, cursors: cursorsOf(prior), controls });
+    const evidence = await this.put({ contract: "algal.marketing-controls-evidence.v1", expectedControls, controls, actor: "human" });
+    return this.service.commit({ application: APPLICATION, operation, kind: "memory", expectedHead, revision: parent.state.revision, memory: next, intents: [], evidence: [evidence], causedBy: null });
+  }
+  async signalEnvelope(expectedHead: Digest, input: SignalEnvelope): Promise<ApplicationSnapshot> {
+    const envelope = parseSignalEnvelope(input), operation = signalOperation(envelope), history = await this.service.history(APPLICATION);
+    const duplicate = history.find(row => row.transition.operation === operation);
+    if (duplicate) {
+      const retained = await getApplicationRecord(this.service.store, duplicate.state.memory, memory);
+      if (retained.contract !== "algal.marketing-memory.v2" || !same(retained.envelope, envelope)) throw new Error("Signal identity already binds different content");
+      return duplicate;
+    }
+    const parent = history.find(row => row.digest === expectedHead); if (!parent) throw new Error("Unknown retained surface head");
+    if (history.at(-1)?.digest !== expectedHead) throw new Error("Stale signal head");
+    const prior = await getApplicationRecord(this.service.store, parent.state.memory, memory), cursors = advanceCursors(prior, envelope);
+    const execution = await run(this.service.store, updateManifest(), { signals: prior.signals, event: envelope.event });
+    const next = await this.put({ contract: "algal.marketing-memory.v2", signals: updateSignals(prior.signals, envelope.event), previous: parent.state.memory, event: envelope.event, receipt: execution.ref, envelope, cursors, controls: controlsOf(prior) });
+    const evidence = await this.put({ contract: "algal.marketing-signal-evidence.v1", receipt: execution.ref });
+    return this.service.commit({ application: APPLICATION, operation, kind: "memory", expectedHead, revision: parent.state.revision, memory: next, intents: [], evidence: [evidence], causedBy: null });
+  }
   async initialize(config: SurfaceConfig = DEFAULT_CONFIG, signals: SurfaceSignals = DEFAULT_SIGNALS): Promise<ApplicationSnapshot> {
-    const store = this.service.store, fixed = await records(store), surface = makeRevision(config);
+    const store = this.service.store, fixed = await records(store, true), surface = makeRevision(config);
     const view = await store.putManifest(viewManifest(surface)), update = await store.putManifest(updateManifest());
     const revision = await this.put({ contract: "algal.application-revision.v1", application: APPLICATION, parent: null, schema: fixed.schema, queries: fixed.queries, views: fixed.views, runtimeProfile: fixed.runtimeProfile, evaluationPolicy: fixed.evaluationPolicy, capabilityRequirements: [], entrypoints: [["update", update], ["view", view]].map(([name, manifest]) => ({ name, manifest, applicability: fixed.query, maxGenerations: 1, capabilities: [], queries: [fixed.query] })) });
     const initial = await this.put({ contract: "algal.marketing-memory.v1", signals: parseSignals(signals), previous: null, event: null, receipt: null });
     return this.service.create({ application: APPLICATION, operation: hash({ kind: "initialize", revision, memory: initial }), kind: "create", expectedHead: null, revision, memory: initial, intents: [], evidence: [], causedBy: null });
   }
-  async render(snapshot?: ApplicationSnapshot) {
-    const state = snapshot ?? await this.current(), revision = await this.revision(state), signals = await this.signals(state);
+  async render(snapshot?: ApplicationSnapshot, capturedHistory?: readonly ApplicationSnapshot[]) {
+    const history = capturedHistory ?? await this.service.history(APPLICATION), selected = snapshot?.digest ?? history.at(-1)?.digest;
+    const index = history.findIndex(row => row.digest === selected), state = history[index];
+    if (!state || history.length > 64) throw new Error("Unknown bounded render history");
+    // A fresh render can have the same digest as an earlier adoption receipt.
+    // Check those retained proofs first so inspection cannot heal their loss.
+    for (let at = 1; at <= index; at++) {
+      const row = history[at]!;
+      if (row.transition.kind !== "activate") continue;
+      if (row.transition.evidence.length !== 1) throw new Error("Missing retained activation preview");
+      await validatePreview(this.service.store, row.transition.evidence[0]!, history[at - 1]!, row.state.revision);
+    }
+    const revision = await this.revision(state), signals = await this.signals(state);
     const execution = await run(this.service.store, viewManifest(revision), { signals });
     return { head: state.digest, revision: hash(revision), signals, view: evaluateView(revision, signals), receipt: execution.ref };
   }
   async signal(expectedHead: Digest, eventInput: SurfaceSignalEvent, operation: Digest): Promise<ApplicationSnapshot> {
     const event = parseSignalEvent(eventInput), parent = await this.snapshot(expectedHead), prior = await this.signals(parent);
+    if (!(await this.memoryDetails(parent)).legacy) throw new Error("Use an ordered signal envelope for version two memory");
     const execution = await run(this.service.store, updateManifest(), { signals: prior, event });
     const next = await this.put({ contract: "algal.marketing-memory.v1", signals: updateSignals(prior, event), previous: parent.state.memory, event, receipt: execution.ref });
     const evidence = await this.put({ contract: "algal.marketing-signal-evidence.v1", receipt: execution.ref });
@@ -188,6 +245,14 @@ export class MarketingHost {
     await validatePreview(this.service.store, reference, current, candidateRevision);
     return { reference, record, view: evaluateView(surface, signals) };
   }
+  async previewDetails(reference: Digest): Promise<{ reference: Digest; record: Preview; proposal: SurfaceProposal; view: ReturnType<typeof evaluateView> }> {
+    const record = await getApplicationRecord(this.service.store, reference, previewRecord), parent = await this.snapshot(record.parentState);
+    await validatePreview(this.service.store, reference, parent, record.candidateRevision);
+    const proposal = await getApplicationRecord(this.service.store, record.proposal, parseProposal), revision = await validateRevision(this.service.store, record.candidateRevision);
+    return { reference, record, proposal, view: evaluateView(revision, await this.signals(parent)) };
+  }
+  /** Legacy explicit owner API. Agent-facing and model-qualified workflows use
+   * MarketingWorkbench.execute, which also requires inference/shadow evidence. */
   async activate(reference: Digest, operation: Digest): Promise<ApplicationSnapshot> {
     const p = await getApplicationRecord(this.service.store, reference, previewRecord), parent = await this.snapshot(p.parentState);
     return this.service.commit({ application: APPLICATION, operation, kind: "activate", expectedHead: p.parentState, revision: p.candidateRevision, memory: parent.state.memory, intents: [], evidence: [reference], causedBy: null });

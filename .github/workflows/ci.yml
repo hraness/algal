@@ -41,8 +41,12 @@ jobs:
       - run: python -m unittest discover -s examples/coding-harness -p 'test_*.py'
 
   surface-renderers:
-    name: Surface renderer contract
-    runs-on: ubuntu-24.04
+    name: Surface renderer contract (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14]
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -54,6 +58,10 @@ jobs:
       - run: cargo fmt --manifest-path examples/malleable-site/renderers/Cargo.toml -- --check
       - run: cargo test --manifest-path examples/malleable-site/renderers/Cargo.toml --locked
       - run: cargo clippy --manifest-path examples/malleable-site/renderers/Cargo.toml --locked --all-targets -- -D warnings
+
+      - run: cargo fmt --manifest-path examples/local-triage/renderers/Cargo.toml -- --check
+      - run: cargo test --manifest-path examples/local-triage/renderers/Cargo.toml --locked ${{ matrix.os == 'macos-14' && '--features desktop' || '' }}
+      - run: cargo clippy --manifest-path examples/local-triage/renderers/Cargo.toml --locked --all-targets ${{ matrix.os == 'macos-14' && '--features desktop' || '' }} -- -D warnings
 
   native:
     name: Native VM (${{ matrix.os }})
@@ -86,6 +94,7 @@ jobs:
       - run: bun scripts/cli-parity.ts
       - run: bun scripts/inference-parity.ts
       - run: bun examples/malleable-site/parity.ts
+      - run: bun examples/local-triage/parity.ts
       - run: bun scripts/source-inspection-parity.ts
       - run: bun scripts/schema-parity.ts
       - run: bun scripts/compilation-parity.ts

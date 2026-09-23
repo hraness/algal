@@ -1,6 +1,6 @@
 # ALGAL as a substrate for malleable applications
 
-Research and proposed architecture, 2026-09-23. This records the design before implementation. The [malleable marketing component](malleable-site.md) implements the first bounded slice; the broader stages below remain proposals. The previous research strategy remains inactive.
+Research and proposed architecture, 2026-09-23. This records the design before implementation. See the [roadmap delivery record](malleable-roadmap-progress.md) for current implementations, qualification evidence and remaining gates. The previous research strategy remains inactive.
 
 **Recommendation.** Make an ALGAL application a durable, inspectable combination of behavior, state, knowledge, presentation, and change policy. Give humans and models the same structured ways to propose changes. Keep a small trusted host responsible for executing effects, rendering, and admitting revisions. Use Elm's interaction model, investigate Dioxus as a renderer, and preserve independent terminal and platform-specific renderers.
 

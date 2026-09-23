@@ -1,6 +1,6 @@
 /** Closed, bounded application records shared with the native implementation. */
 import { asDigest, digestCanonical, type Digest } from "./digest";
-import { FileStore, type Store } from "./store";
+import type { Store } from "./store";
 import { asJsonValue, canonicalize, type JsonValue } from "./values";
 
 export type ApplicationRevision = {
@@ -110,10 +110,10 @@ export async function putApplicationRecord(store: Store, record: unknown): Promi
 export async function getApplicationRecord<T>(store: Store, ref: Digest, parse: (v: unknown) => T): Promise<T> {
   const value = await store.getValue(applicationRef(ref));
   if (value === undefined) throw new Error("Missing or changed application record");
-  // FileStore.getValue already fails closed (DIGEST_MISMATCH) unless the file
-  // hashes to `ref`; any other store is re-verified here before it is trusted.
+  // Verify every injected store at the contract boundary. A store's claimed
+  // identity or implementation class is never authority to skip this check.
   const record = applicationJson(value);
-  if (!(store instanceof FileStore) && digestCanonical(record) !== ref) throw new Error("Missing or changed application record");
+  if (digestCanonical(record) !== ref) throw new Error("Missing or changed application record");
   return parse(value);
 }
 

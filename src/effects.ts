@@ -8,7 +8,7 @@ import {
   type CapabilityHandle,
 } from "./capabilities";
 import { AlgalError, ERROR_CODES, type ErrorCode } from "./errors";
-import { commandJson } from "./io";
+import { commandJson } from "./io-runtime";
 import { asDigest, digestCanonical, type Digest } from "./digest";
 import type { AgentOutput, Route } from "./contract";
 import type { Store } from "./store";
