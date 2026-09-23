@@ -931,6 +931,17 @@ enum ApplicationCommand {
     View { input: PathBuf },
     /// Render a captured view as a passive, standalone HTML workbench.
     Report { view: PathBuf },
+    /// `verifyInterappDelivery`: verify a retained `algal.interapp-message.v1`
+    /// record against CAS, history, and the durable channel; input is
+    /// `{"message": <ref>}`.
+    VerifyMessage { input: PathBuf },
+    /// `produceApplicationContention`: race several commands against one
+    /// expected head and retain the `algal.application-contention.v1`
+    /// record; input is `{"parentState": <ref>, "attempts": [<command>…]}`.
+    Contend { input: PathBuf },
+    /// `verifyApplicationContention`: verify a retained contention record
+    /// against the application history; input is `{"contention": <ref>}`.
+    VerifyContention { input: PathBuf },
 }
 
 #[derive(Subcommand)]
@@ -2790,6 +2801,38 @@ async fn execute(cli: Cli) -> Result<bool> {
                         "{}",
                         algal::application_report::render(&load(&view, 262_144)?)?
                     );
+                }
+                ApplicationCommand::VerifyMessage { input } => {
+                    let raw = load(&input, 262_144)?;
+                    let v = app_memory::app_object(&raw, &["message"])?;
+                    let verified = algal::application_message::verify_interapp_delivery(
+                        &service,
+                        app_memory::app_ref(&v["message"])?,
+                        Some(&channels_dir),
+                    )?;
+                    emit(&json!({
+                        "ok": true, "application": verified.application,
+                        "operation": verified.operation, "intent": verified.intent,
+                        "route": verified.route, "to": verified.to,
+                    }))?;
+                }
+                ApplicationCommand::Contend { input } => {
+                    let (contention, record, _) =
+                        algal::application_contention::produce_contention(
+                            &mut service,
+                            &load(&input, 262_144)?,
+                        )
+                        .await?;
+                    emit(&json!({"contention": contention, "winner": record.winner}))?;
+                }
+                ApplicationCommand::VerifyContention { input } => {
+                    let raw = load(&input, 262_144)?;
+                    let v = app_memory::app_object(&raw, &["contention"])?;
+                    let record = algal::application_contention::verify_contention(
+                        &service,
+                        app_memory::app_ref(&v["contention"])?,
+                    )?;
+                    emit(&json!({"ok": true, "winner": record.winner}))?;
                 }
             }
             Ok(true)

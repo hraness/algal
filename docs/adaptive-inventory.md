@@ -63,13 +63,26 @@ winner executes holdout, for twelve retained case executions. The candidate
 must improve validation without regressing an incumbent pass, then pass the
 holdout. Activation occurs in another host invocation against the exact parent.
 
-Two competing writers then attempt to publish an episode against one captured
-state. Exactly one succeeds and a stale retry is rejected. Another host executes
-the pinned planner and verifies its actual retained receipt; the fixture checks
-that its selected tool at B runs. A final host confirms no settled episode is
+Every settled `deliver` dispatch also retains `algal.interapp-message.v1`:
+the sender application, committing operation, exact work intent, route,
+admitted recipient handle, and payload body. Each host recomputes the minted
+record's identity from the retained dispatch and re-verifies the whole
+binding against CAS and validated history before recording its digest in the
+phase evidence.
+
+Three competing writers then attempt to publish an episode against one
+captured state. The head fence admits exactly one; the durable
+`algal.application-contention.v1` record keeps all three command digests
+sorted, the committed winner, and both losers' reproducible
+`Stale application head` reasons, and the host re-verifies the record
+structurally without re-executing. Another host executes the pinned planner
+and verifies its actual retained receipt; the fixture checks that its
+selected tool at B runs. A final host confirms no settled episode is
 redelivered. There are four observation probes and two planner episodes.
 
-Inspect `evidence.json` for counts, process identities, and content identities;
+Inspect `evidence.json` for counts, process identities, and content
+identities — including the verified `algal.interapp-message.v1` digest and
+the contention record digest, winner, and loser reasons;
 `phase-*.json` for each exited host's evidence; `tool-*.json` for the selected
 fixture tool checks; `view-unknown.json` for the initial unresolved capture;
 `view.json` for the final supported capture; and optional `report-unknown.html`
@@ -87,7 +100,8 @@ rendered report does not query, replay, authenticate observations, or dispatch.
 Its unknown and supported labels describe the selected evidence, not external
 inventory completion.
 
-The application store retains observations, receipts, evaluation evidence and
-revision history. The fixture proves these deterministic mechanisms; it does
-not establish commercial inventory accuracy, model learning or general coding
+The application store retains observations, receipts, evaluation evidence,
+message bindings, the measured contention record, and revision history. The
+fixture proves these deterministic mechanisms; it does not establish
+commercial inventory accuracy, model learning or general coding
 improvement.

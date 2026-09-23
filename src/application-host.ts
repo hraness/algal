@@ -78,9 +78,11 @@ export function parseApplicationHostPolicy(input: unknown): ApplicationHostPolic
   };
 }
 
-type ChannelDelivery = { identity: Digest; message: Digest };
-/** V2 binds every durable completion to its exact dispatch identity. */
-async function readChannel(channelsDir: string, route: string): Promise<ChannelDelivery[]> {
+export type ChannelDelivery = { identity: Digest; message: Digest };
+/** V2 binds every durable completion to its exact dispatch identity. The
+ * retained `{identity, message}` rows are also the receiver-side evidence an
+ * `algal.interapp-message.v1` verifier replays. */
+export async function readApplicationChannel(channelsDir: string, route: string): Promise<ChannelDelivery[]> {
   await hostDirectory(channelsDir);
   const raw = await hostRead(join(channelsDir, `${route}.json`), 1_048_576);
   if (raw === undefined) return [];
@@ -308,7 +310,7 @@ export function createApplicationPolicyHost(input: unknown, options: { channelsD
       if (work.application !== policy.application) throw new Error("Host policy belongs to another application");
       if (work.kind !== "deliver") return { status: "blocked" as const, reason: "Episode execution requires a domain dispatcher" };
       await hostLease(join(channelsDir, ".custody", work.route), `channel-${work.route}`, async () => {
-        const outcomes = await readChannel(channelsDir, work.route);
+        const outcomes = await readApplicationChannel(channelsDir, work.route);
         const prior = outcomes.find(outcome => outcome.identity === context.dispatch.identity);
         if (prior && prior.message !== work.message) throw new Error("Channel dispatch identity changed its message");
         if (!prior) {
@@ -323,7 +325,7 @@ export function createApplicationPolicyHost(input: unknown, options: { channelsD
       const work = context.intent;
       if (work.application !== policy.application) throw new Error("Host policy belongs to another application");
       if (work.kind !== "deliver") return undefined;
-      const outcomes = await readChannel(channelsDir, work.route);
+      const outcomes = await readApplicationChannel(channelsDir, work.route);
       const prior = outcomes.find(outcome => outcome.identity === context.dispatch.identity);
       if (!prior) return undefined;
       if (prior.message !== work.message) throw new Error("Channel dispatch identity changed its message");

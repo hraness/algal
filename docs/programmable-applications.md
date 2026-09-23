@@ -205,6 +205,19 @@ existing backend and the standing $20 incremental paid-inference cap.
 5. **Multiple inhabitants:** independent components with distinct capabilities,
    budgets, memory views, and durable communication; measure useful concurrency
    and contention rather than assuming more agents imply better outcomes.
+   The verifiable-delivery half now exists: a settled `deliver` dispatch
+   retains `algal.interapp-message.v1`, binding sender application, committing
+   operation, exact work intent, route, admitted `cap:mailbox-send:` recipient,
+   and payload body; `verifyInterappDelivery` replays those bindings against
+   CAS, validated history, the retained settled dispatch, and the durable
+   channel outcome. The measured-contention half exists too:
+   `algal.application-contention.v1` retains a raced command set against one
+   expected head — every command digest, the single committed winner, and the
+   losers' reproducible stale-head reasons — and
+   `verifyApplicationContention` re-derives the fence's verdict structurally
+   without re-executing. Both records are produced and verified identically
+   on the reference and native runtimes, and the adaptive-inventory example
+   carries them as measured evidence.
 6. **Broader applications:** package the qualified runtime surfaces and a usable
    workbench, and demonstrate a
    second application with a different memory/effect domain.

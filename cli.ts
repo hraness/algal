@@ -949,39 +949,84 @@ async function main(): Promise<number> {
     }
 
     case "application": {
-      // Drain produce/verify and the lineage projection are structural or
-      // read-only lifecycle operations: they never invoke trusted admission,
-      // so a deny-all host fences them like the read-only commands.
-      const { ApplicationService } = await import("./src/application");
-      const { produceApplicationDrain, verifyApplicationDrain } = await import("./src/application-drain");
-      const { applicationObject } = await import("./src/application-contract");
-      const service = new ApplicationService(dir, {
-        async admitCommit() { throw new AlgalError("CAPABILITY_DENIED", "No application admission host"); },
-      });
+      // Durable application lifecycle evidence commands — the same verbs the
+      // native `algal application` CLI serves. `--policy` supplies the
+      // `algal.application-host.v1` record that admits commits; without it a
+      // deny-all host keeps the structural and read-only commands working.
       const sub = positional[0];
-      if (sub === "drain") {
-        if (positional.length !== 2) usageError("algal application drain <input.json>");
-        const input = await readJsonBounded(resolve(positional[1]!), 262_144, "application drain input");
-        out({ drain: await produceApplicationDrain(service, input) });
-        return 0;
+      for (const key of Object.keys(flags)) {
+        if (!["dir", "policy", "channels", "restoration-policy", "selection-environment"].includes(key)) usageError(`unknown application option --${key}`);
       }
-      if (sub === "verify-drain") {
-        if (positional.length !== 2) usageError("algal application verify-drain <input.json>");
-        const input = await readJsonBounded(resolve(positional[1]!), 262_144, "application verify-drain input");
-        const v = applicationObject(input, ["drain", "expectedState"]);
-        await verifyApplicationDrain(service, v.drain, v.expectedState);
-        out({ verified: true });
-        return 0;
+      const { ApplicationService } = await import("./src/application");
+      type ApplicationAdmission = import("./src/application").ApplicationAdmission;
+      const { createApplicationPolicyHost } = await import("./src/application-host");
+      const { produceApplicationDrain, verifyApplicationDrain } = await import("./src/application-drain");
+      const { applicationObject, applicationRef } = await import("./src/application-contract");
+      const channelsDir = resolve(String(flags.channels ?? join(dir, "channels")));
+      let admission: ApplicationAdmission;
+      if (flags.policy === undefined) {
+        admission = {
+          admitCommit() { return Promise.reject(new AlgalError("CAPABILITY_DENIED", "No application admission host")); },
+        };
+      } else {
+        const policy = await readJsonBounded(resolve(String(flags.policy)), 262_144, "application host policy");
+        admission = createApplicationPolicyHost(policy, {
+          channelsDir,
+          ...(flags["restoration-policy"] !== undefined
+            ? { restorationPolicy: (await import("./src/application-restoration")).parseApplicationRestorationPolicy(await readJsonBounded(resolve(String(flags["restoration-policy"])), 262_144, "application restoration policy")) }
+            : {}),
+          ...(flags["selection-environment"] !== undefined
+            ? { selectionEnvironment: String(flags["selection-environment"]) }
+            : {}),
+        });
       }
-      if (sub === "lineage") {
-        if (positional.length !== 2) usageError("algal application lineage <name> [--dir <path>]");
-        for (const key of Object.keys(flags)) {
-          if (!["dir"].includes(key)) usageError(`unknown application option --${key}`);
+      const service = new ApplicationService(dir, admission);
+      switch (sub) {
+        case "drain": {
+          if (positional.length !== 2) usageError("algal application drain <input.json>");
+          const input = await readJsonBounded(resolve(positional[1]!), 262_144, "application drain input");
+          out({ drain: await produceApplicationDrain(service, input) });
+          return 0;
         }
-        out(await service.lineage(positional[1]!) as unknown as JsonValue);
-        return 0;
+        case "verify-drain": {
+          if (positional.length !== 2) usageError("algal application verify-drain <input.json>");
+          const input = await readJsonBounded(resolve(positional[1]!), 262_144, "application verify-drain input");
+          const v = applicationObject(input, ["drain", "expectedState"]);
+          await verifyApplicationDrain(service, v.drain, v.expectedState);
+          out({ verified: true });
+          return 0;
+        }
+        case "lineage": {
+          if (positional.length !== 2) usageError("algal application lineage <name> [--dir <path>]");
+          out(await service.lineage(positional[1]!) as unknown as JsonValue);
+          return 0;
+        }
+        case "verify-message": {
+          if (positional.length !== 2) usageError("algal application [--policy <policy.json>] verify-message <input.json>");
+          const { verifyInterappDelivery } = await import("./src/application-message");
+          const input = applicationObject(await readJsonBounded(resolve(positional[1]!), 262_144, "verify-message input"), ["message"]);
+          const verified = await verifyInterappDelivery(service, applicationRef(input.message), { channelsDir });
+          out({ ok: true, application: verified.application, operation: verified.operation, intent: verified.intent, route: verified.route, to: verified.to });
+          return 0;
+        }
+        case "contend": {
+          if (positional.length !== 2) usageError("algal application [--policy <policy.json>] contend <input.json>");
+          const { produceApplicationContention } = await import("./src/application-contention");
+          const produced = await produceApplicationContention(service, await readJsonBounded(resolve(positional[1]!), 262_144, "contend input") as never);
+          out({ contention: produced.contention, winner: produced.record.winner });
+          return 0;
+        }
+        case "verify-contention": {
+          if (positional.length !== 2) usageError("algal application [--policy <policy.json>] verify-contention <input.json>");
+          const { verifyApplicationContention } = await import("./src/application-contention");
+          const input = applicationObject(await readJsonBounded(resolve(positional[1]!), 262_144, "verify-contention input"), ["contention"]);
+          const record = await verifyApplicationContention(service, applicationRef(input.contention));
+          out({ ok: true, winner: record.winner });
+          return 0;
+        }
+        default:
+          usageError("algal application [--policy <policy.json>] drain|verify-drain|lineage|verify-message|contend|verify-contention …");
       }
-      usageError("algal application drain|verify-drain|lineage …");
       return 0;
     }
 

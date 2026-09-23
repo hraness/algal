@@ -1579,6 +1579,34 @@ impl<'a> Service<'a> {
         Ok(Some(record))
     }
 
+    /// `readDispatch` — read one validated retained dispatch for a
+    /// historical intent. This does not acquire dispatch authority or claim
+    /// atomicity with a captured head.
+    pub fn read_dispatch(
+        &self,
+        application: &str,
+        intent: &str,
+        work: &Intent,
+        snapshot: &Snapshot,
+    ) -> Result<Option<Dispatch>> {
+        let name = app_id(&json!(application))?.to_owned();
+        let reference = app_ref(&json!(intent))?.to_owned();
+        if work.application != name || hash(&work.value)? != reference {
+            return Err(fail("Dispatch inspection intent mismatch"));
+        }
+        let record = self.dispatch_record(&name, &reference, work)?;
+        if snapshot.state.application != name || !snapshot.transition.intents.contains(&reference) {
+            return Err(fail("Dispatch inspection source mismatch"));
+        }
+        if let Some(record) = &record {
+            if record.source_state != snapshot.digest {
+                return Err(fail("Dispatch inspection state mismatch"));
+            }
+            self.validate_plan(snapshot, work, &reference, &record.plan)?;
+        }
+        Ok(record)
+    }
+
     pub fn pending(&self, history: &[Snapshot]) -> Result<Vec<Pending>> {
         let abandoned = self.abandoned(history)?;
         let mut pending = Vec::new();
@@ -2042,6 +2070,11 @@ impl<'a> Service<'a> {
             "plan": record.plan.value(), "status": status,
             "result": result_ref, "reason": why,
         }))?;
+        // A settled delivery retains its verifiable `algal.interapp-message.v1`
+        // record before the outbox acknowledges settlement: a mint failure keeps
+        // the dispatch unacknowledged so reconciliation retries the mint, and an
+        // acknowledged dispatch can never lack the record a verifier expects.
+        crate::application_message::mint_interapp_message(&mut self.store, &updated, work)?;
         {
             let _quota = crate::application_quota::reserve(
                 &self.dir,

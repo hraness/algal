@@ -474,3 +474,16 @@ export { SELECTION_LIMITS, parseApplicationSelectionPolicy, parseApplicationSele
 export type { ApplicationSelection, ApplicationSelectionPolicy, ApplicationSelectionRecord, ApplicationSelectionRow } from "./src/application-selection";
 export { EXPERIMENT_LIMITS, checkExperimentBinding, experimentDigest, parseApplicationExperiment, produceApplicationExperiment, verifyApplicationExperiment } from "./src/application-experiment";
 export type { ApplicationExperiment, ApplicationExperimentResult, ProduceExperimentInput } from "./src/application-experiment";
+export {
+  interappMessageRecord, mintInterappMessage, parseInterappMessage,
+  verifyInterappDelivery, verifyInterappMessage,
+} from "./src/application-message";
+export type { InterappMessage } from "./src/application-message";
+export {
+  CONTENTION_LIMITS, parseApplicationContention,
+  produceApplicationContention, verifyApplicationContention,
+} from "./src/application-contention";
+export type {
+  ApplicationContention, ContentionAttempt, ContentionStatus,
+  ProduceContentionInput, ProducedContention,
+} from "./src/application-contention";

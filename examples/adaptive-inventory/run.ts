@@ -1,10 +1,11 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import {
-  ApplicationService, admitApplicationActivation, builtinRegistry, evaluateApplicationRevision,
-  getApplicationRecord, manifestToJson, parseApplicationRevision, parseOrganismManifest,
-  parseRunReceipt, projectApplicationView, putApplicationRecord, verifyReceipt,
-  type ApplicationAdmission, type ApplicationSnapshot,
+  ApplicationService, admitApplicationActivation, applicationJson, builtinRegistry, evaluateApplicationRevision,
+  getApplicationRecord, interappMessageRecord, manifestToJson, parseApplicationRevision, parseOrganismManifest,
+  parseRunReceipt, parseWorkIntent, produceApplicationContention, projectApplicationView, putApplicationRecord,
+  verifyApplicationContention, verifyInterappDelivery, verifyReceipt,
+  type ApplicationAdmission, type ApplicationDispatch, type ApplicationSnapshot,
 } from "../../index";
 import { collectApplicationViewEvidence } from "../../src/application-view";
 import { evaluateApplicationGoals } from "../../src/application-goal";
@@ -53,7 +54,8 @@ export type InventoryEvidence = {
   goal: {reference: Digest; statuses: string[]};
   root: string; nativeSha256: string; state: Digest; revision: Digest; evaluation: Digest;
   proposal: Digest; view: Digest; unknownView: Digest; decision: string; observations: number; probeEffects: number;
-  episodeEffects: number; restartRedeliveries: number; contenders: { accepted: number; rejected: number };
+  episodeEffects: number; restartRedeliveries: number; message: Digest;
+  contenders: { accepted: number; rejected: number; record: Digest; winner: Digest; loserReasons: string[] };
   hostInvocations: { phase: Phase; pid: number; exitCode: number; evidence: Digest }[];
   toolDiscovery: { before: string; after: string; executions: number };
   evaluationCases: { train: number; validation: number; holdout: number; executions: number };
@@ -66,6 +68,7 @@ type PhaseEvidence = {
   phase: Phase; pid: number; state: Digest; observations: number; probeEffects: number; episodeEffects: number;
   toolExecutions: number; proposal?: Digest; candidate?: Digest; evaluation?: Digest; evaluationExecutions?: number;
   accepted?: number; restartRedeliveries?: number; view?: Digest; unknownView?: Digest; inhabitants?: InventoryEvidence["inhabitants"];
+  message?: Digest; contention?: Digest; contentionWinner?: Digest; contentionLosers?: string[];
 };
 
 /** Every application operation happens in a fresh host process. The parent only
@@ -86,7 +89,7 @@ export async function runInventoryScenario(root: string, executable: string, rep
     hostInvocations.push({ phase, pid: result.pid, exitCode: 0, evidence: identity(retained) }); final = result;
   }
   ensure(new Set(hostInvocations.map(p => p.pid)).size === phases.length, "Host phases did not use distinct processes");
-  ensure(final?.candidate && final.evaluation && final.proposal && final.view && final.unknownView && final.inhabitants && final.goal && final.goalStatuses && final.evaluationExecutions === 12 && final.accepted === 1, "Final phase evidence is incomplete");
+  ensure(final?.candidate && final.evaluation && final.proposal && final.view && final.unknownView && final.inhabitants && final.goal && final.goalStatuses && final.evaluationExecutions === 12 && final.accepted === 1 && final.contention && final.contentionWinner && final.contentionLosers?.length === 2 && final.message, "Final phase evidence is incomplete");
   let report: string | null = null, unknownReport: string | null = null;
   if (reportExecutable) {
     for (const suffix of ["-unknown", ""]) {
@@ -98,8 +101,9 @@ export async function runInventoryScenario(root: string, executable: string, rep
   const evidence: InventoryEvidence = {
     contract: "algal.adaptive-inventory-demo.v1", goal: {reference: final.goal, statuses: final.goalStatuses}, root, nativeSha256, state: final.state, revision: final.candidate,
     evaluation: final.evaluation, proposal: final.proposal, view: final.view, unknownView: final.unknownView, decision: "restock", observations: final.observations,
-    probeEffects: final.probeEffects, episodeEffects: final.episodeEffects, restartRedeliveries: final.restartRedeliveries!,
-    contenders: { accepted: final.accepted, rejected: 1 }, hostInvocations,
+    probeEffects: final.probeEffects, episodeEffects: final.episodeEffects, restartRedeliveries: final.restartRedeliveries!, message: final.message,
+    contenders: { accepted: final.accepted, rejected: final.contentionLosers.length, record: final.contention, winner: final.contentionWinner, loserReasons: final.contentionLosers },
+    hostInvocations,
     toolDiscovery: { before: toolA, after: toolB, executions: final.toolExecutions },
     evaluationCases: { train: 2, validation: 3, holdout: 2, executions: final.evaluationExecutions },
     inhabitants: final.inhabitants, qualification: { proposal: "authored-deterministic", inference: "native-replay-verified", modelCalls: 0, paidApiSpendUsd: 0 }, report, unknownReport,
@@ -216,9 +220,25 @@ async function runPhase(root: string, executable: string, phase: Phase): Promise
     ensure(objective.status === "unknown" || objective.status === "stale", "Investigation must be driven by an unresolved retained goal");
     return scheduleInvestigations(service, memory!, { application: "inventory", operation: identity(operation), expectedHead: head.digest, expectedMemory: head.state.memory, route: "probes", entrypoints: [objective.definition.entrypoint] });
   };
+  /** A settled delivery mints `algal.interapp-message.v1` inside `execute`;
+   * recompute its identity from the retained dispatch and re-verify the whole
+   * binding (CAS, history, settled dispatch) before recording its digest. */
+  const captureMessage = async (dispatch: ApplicationDispatch) => {
+    const work = parseWorkIntent(await store.getValue(dispatch.intent));
+    ensure(work.kind === "deliver", "Settled dispatch is not a delivery");
+    const body = await store.getValue(work.message);
+    ensure(body !== undefined, "Delivered payload is missing from CAS");
+    const record = interappMessageRecord(dispatch, work, body);
+    ensure(record !== null, "Settled delivery produced no interapp message record");
+    const reference = digestCanonical(applicationJson(record));
+    const verified = await verifyInterappDelivery(service, reference);
+    ensure(verified.intent === dispatch.intent && verified.application === "inventory", "Retained message failed delivery verification");
+    evidence.message = reference;
+  };
   const observe = async () => {
     const delivered = await service.dispatchPending("inventory", dispatcher);
     ensure(delivered.length === 1 && delivered[0]!.status === "settled", "Investigation delivery did not settle");
+    await captureMessage(delivered[0] as ApplicationDispatch);
     const drained = await drainProbes(domain, service, memory!);
     ensure(drained.rejected.length === 0 && drained.committed.length === 2, "Observations were not admitted"); evidence.observations += drained.committed.length;
     ensure((await drainProbes(domain, service, memory!)).committed.length === 0, "Observation replay duplicated a transition");
@@ -235,11 +255,23 @@ async function runPhase(root: string, executable: string, phase: Phase): Promise
     const input = await store.putValue({ stock: { value: { tool: tuple[0], units: tuple[1] } } });
     const submit = (name: string) => requestExecution(service, { application: "inventory", operation: identity(name), expectedHead: head.digest, expectedMemory: head.state.memory, entrypoint: objective.definition.entrypoint, input, derivation: applicable.ref });
     if (!contend) { await submit(operation); return; }
-    const results = await Promise.allSettled([submit(operation + "-a"), submit(operation + "-b")]);
-    evidence.accepted = results.filter(r => r.status === "fulfilled").length;
-    ensure(evidence.accepted === 1, "Concurrent writers must publish exactly one episode");
-    let rejected = false; try { await submit("stale-writer-retry"); } catch { rejected = true; }
-    ensure(rejected, "Stale writer retry passed the head fence");
+    // The same commands `submit` would commit, raced serially against the
+    // captured head. The fence admits exactly one; the retained
+    // `algal.application-contention.v1` record keeps every command digest,
+    // its verdict, and the reproducible stale-head rejection reasons.
+    const command = (name: string) => ({
+      application: "inventory", operation: identity(name), kind: "investigate" as const,
+      expectedHead: head.digest, revision: head.state.revision, memory: head.state.memory,
+      intents: [{ kind: "start-episode" as const, entrypoint: objective.definition.entrypoint, input }],
+      evidence: [applicable.ref], causedBy: null,
+    });
+    const produced = await produceApplicationContention(service, { parentState: head.digest, attempts: [command(`${operation}-a`), command(`${operation}-b`), command(`${operation}-c`)] });
+    const verified = await verifyApplicationContention(service, produced.contention);
+    evidence.contention = produced.contention;
+    evidence.contentionWinner = verified.winner;
+    evidence.contentionLosers = verified.attempts.filter(attempt => attempt.status === "rejected").map(attempt => attempt.reason ?? "");
+    evidence.accepted = verified.attempts.filter(attempt => attempt.status === "committed").length;
+    ensure(evidence.accepted === 1 && evidence.contentionLosers.length === 2 && evidence.contentionLosers.every(reason => reason === "Stale application head"), "Concurrent writers must publish exactly one episode");
   };
   const settleEpisode = async (expectedTool: string, expectedDecision: string) => {
     const episodes = await service.dispatchPending("inventory", dispatcher);
@@ -281,7 +313,9 @@ async function runPhase(root: string, executable: string, phase: Phase): Promise
       const request = await store.putValue({ contract: "algal.proposal-request.v1", application: "inventory", entrypoint: "planner", state: head.digest, nonce: "authored-v2" });
       await service.commit({ application: "inventory", operation: identity("propose-policy"), kind: "investigate", expectedHead: head.digest, revision, memory: head.state.memory, intents: [{ kind: "deliver", route: "proposals", message: request }], evidence: [], causedBy: null });
     } else if (phase === "evaluate") {
-      ensure((await service.dispatchPending("inventory", dispatcher))[0]?.status === "settled", "Proposal delivery failed");
+      const proposalDeliveries = await service.dispatchPending("inventory", dispatcher);
+      ensure(proposalDeliveries[0]?.status === "settled", "Proposal delivery failed");
+      await captureMessage(proposalDeliveries[0] as ApplicationDispatch);
       const candidates = await drainProposals(domain, service);
       ensure(candidates.rejected.length === 0 && candidates.proposals.length === 1, "Authored proposal evidence failed verification");
       const proposal = candidates.proposals[0]!, previous = await getApplicationRecord(store, revision, parseApplicationRevision);
