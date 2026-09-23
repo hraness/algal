@@ -1,5 +1,6 @@
 use algal::{
     Error, Result, application, application_adaptation, application_comparison,
+    application_experiment,
     application_host::{DomainDispatcher, PolicyHost},
     application_memory::{self as app_memory, MemoryService, NativeEngine},
     application_migration, application_proposal, application_selection, application_view,
@@ -842,6 +843,9 @@ enum ApplicationCommand {
     Commit { command: PathBuf },
     /// Print the current head snapshot (`null` when absent).
     Inspect { application: String },
+    /// Deterministic lineage: retained history projected to one row per
+    /// committed state in genesis→head order (`[]` when absent).
+    Lineage { application: String },
     /// Print unsettled intents.
     Pending { application: String },
     /// Admit and dispatch pending intents through the policy host.
@@ -901,9 +905,27 @@ enum ApplicationCommand {
     /// `selectApplicationStrategy`: replay a selection policy and resolve the
     /// manifest its row for one environment selected.
     Select { input: PathBuf },
+    /// `produceApplicationSelection`: resolve one policy row into a retained
+    /// `algal.application-selection.v1` record.
+    SelectRecord { input: PathBuf },
+    /// `verifyApplicationSelection`: replay a stored selection record against
+    /// an expected parent state.
+    VerifySelection { input: PathBuf },
+    /// `produceApplicationExperiment`: join proposal/evaluation/comparison/
+    /// selection evidence into one bounded experiment record.
+    Experiment { input: PathBuf },
+    /// `verifyApplicationExperiment`: replay a stored experiment's whole
+    /// evidence chain against an expected parent state.
+    VerifyExperiment { input: PathBuf },
     /// `migrateApplicationMemory`: run the migration program and admit its
     /// emitted claims into a fresh memory chain under the new schema.
     MigrateMemory { input: PathBuf },
+    /// `produceApplicationDrain`: record the explicit disposition of every
+    /// undispatched pending intent at a parent state.
+    Drain { input: PathBuf },
+    /// `verifyApplicationDrain`: re-verify a stored drain record against an
+    /// expected parent state.
+    VerifyDrain { input: PathBuf },
     /// `projectApplicationView`: pure bounded projection of the captured
     /// head — fenced procedures, history, investigations and actions.
     View { input: PathBuf },
@@ -2464,6 +2486,9 @@ async fn execute(cli: Cli) -> Result<bool> {
                         None => emit(&Value::Null)?,
                     }
                 }
+                ApplicationCommand::Lineage { application: name } => {
+                    emit(&Value::Array(service.lineage(&name)?))?;
+                }
                 ApplicationCommand::Pending { application: name } => {
                     let history = service.history(&name)?;
                     let pending = service.pending(&history)?;
@@ -2684,6 +2709,52 @@ async fn execute(cli: Cli) -> Result<bool> {
                         &json!({"manifest": selected["manifest"], "comparison": selected["comparison"]}),
                     )?;
                 }
+                ApplicationCommand::SelectRecord { input } => {
+                    let (digest, record) = application_selection::produce_selection(
+                        &mut service.store,
+                        &load(&input, 262_144)?,
+                        &Host::default(),
+                    )
+                    .await?;
+                    emit(&json!({"selection": digest, "revision": record["revision"]}))?;
+                }
+                ApplicationCommand::VerifySelection { input } => {
+                    let input = load(&input, 262_144)?;
+                    let v = app_memory::app_object(&input, &["selection", "expectedState"])?;
+                    let selection = app_memory::app_ref(&v["selection"])?.to_owned();
+                    let state = app_memory::app_ref(&v["expectedState"])?.to_owned();
+                    let checked = application_selection::verify_selection(
+                        &service.store,
+                        &selection,
+                        &state,
+                        &Host::default(),
+                    )
+                    .await?;
+                    emit(&json!({"ok": true, "revision": checked["revision"]}))?;
+                }
+                ApplicationCommand::Experiment { input } => {
+                    let (digest, record) = application_experiment::produce_experiment(
+                        &mut service.store,
+                        &load(&input, 262_144)?,
+                        &Host::default(),
+                    )
+                    .await?;
+                    emit(&json!({"experiment": digest, "result": record["result"]}))?;
+                }
+                ApplicationCommand::VerifyExperiment { input } => {
+                    let input = load(&input, 262_144)?;
+                    let v = app_memory::app_object(&input, &["experiment", "expectedState"])?;
+                    let experiment = app_memory::app_ref(&v["experiment"])?.to_owned();
+                    let state = app_memory::app_ref(&v["expectedState"])?.to_owned();
+                    let checked = application_experiment::verify_experiment(
+                        &service.store,
+                        &experiment,
+                        &state,
+                        &Host::default(),
+                    )
+                    .await?;
+                    emit(&json!({"ok": true, "result": checked["result"]}))?;
+                }
                 ApplicationCommand::MigrateMemory { input } => {
                     let mut run_host = Host::default();
                     let result = application_migration::migrate_memory(
@@ -2695,6 +2766,21 @@ async fn execute(cli: Cli) -> Result<bool> {
                     )
                     .await?;
                     emit(&result)?;
+                }
+                ApplicationCommand::Drain { input } => {
+                    let drain = algal::application_drain::produce_drain(
+                        &mut service,
+                        &load(&input, 262_144)?,
+                    )?;
+                    emit(&json!({"drain": drain}))?;
+                }
+                ApplicationCommand::VerifyDrain { input } => {
+                    let input = load(&input, 262_144)?;
+                    let v = app_memory::app_object(&input, &["drain", "expectedState"])?;
+                    let drain = app_memory::app_ref(&v["drain"])?.to_owned();
+                    let state = app_memory::app_ref(&v["expectedState"])?.to_owned();
+                    algal::application_drain::verify_drain(&service, &drain, &state)?;
+                    emit(&json!({"verified": true}))?;
                 }
                 ApplicationCommand::View { input } => {
                     emit(&application_view::view(&service, &load(&input, 262_144)?)?)?;

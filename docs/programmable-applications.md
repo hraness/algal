@@ -174,17 +174,54 @@ existing backend and the standing $20 incremental paid-inference cap.
    alternative. No model-quality benefit is claimed for generated candidates.
 3. **Evaluated adaptation:** real proposal generation, bounded experiments,
    explicit non-regression criteria, reproducible lineage, and revision promotion.
-   Add a structured-facts-without-inference ablation before attributing benefits
-   specifically to Datalog.
+   The bounded-evidence half now exists: `algal.application-experiment.v1`
+   joins the whole promotion chain — proposals, evaluations, comparison,
+   selection policy, and retained selection — for one application, parent
+   state, entrypoint, and environment, replayed in full before minting and
+   again when the default host replays it as supplementary activation
+   evidence. An experiment grants no authority and never substitutes for the
+   accepted-evaluation coverage checks; an experiment that selected nothing,
+   or selected a candidate that was not promoted, remains valid retained
+   evidence. `algal.application-selection.v1` retains one resolved policy row
+   as a closed record, and `application lineage` — `service.lineage` on the
+   reference side — projects validated history to one row per committed state
+   in genesis→head order, byte-identical on both runtimes. The
+   structured-facts-without-inference ablation exists as a deterministic
+   parity fixture: the same applicability query is derived over two memory
+   chains that differ by exactly one structured fact — the retained
+   observation claim — so the derivation flips between `unknown` and
+   `supported` with no inference anywhere. It demonstrates that the join
+   distinguishes fact presence; it claims nothing about fitness or efficacy.
+   Model-driven proposal, explicit non-regression criteria, and any
+   Datalog-specific benefit attribution remain open.
 4. **Schema and interface evolution:** declarative migration programs evaluated
    against retained snapshots; compatible activation of code, schema, queries,
-   views, and memory. Explicitly migrate or drain pending work.
+   views, and memory. Explicit drain of undispatched work now exists:
+   `algal.application-drain.v1` names every undispatched pending intent at a
+   migrate's parent state with an explicit `migrated`/`abandoned` disposition,
+   replayed identically by both runtimes and the policy host. Abandonment is
+   content-addressed evidence — intent records stay immutable — and a migrate
+   that ignores undispatched pending work commits nothing.
 5. **Multiple inhabitants:** independent components with distinct capabilities,
    budgets, memory views, and durable communication; measure useful concurrency
    and contention rather than assuming more agents imply better outcomes.
 6. **Broader applications:** package the qualified runtime surfaces and a usable
    workbench, and demonstrate a
    second application with a different memory/effect domain.
+   The packaged surfaces now exist: `@hraness/algal` 0.2.0 ships the Bun CLI,
+   SDK, bundled examples, and specification with test files excluded from the
+   tarball, while the standalone native executable carries the same `algal`
+   commands. The usable workbench exists as the
+   [native workbench](native-workbench.md): `algal demo start` retains a fixture
+   proposal in a durable workbench whose passive `report.html` emits the exact
+   approve/deny commands, and `algal demo prove` exercises approval, denial,
+   detached evidence verification, and two owned crash recoveries. The second
+   application exists as the [adaptive inventory](adaptive-inventory.md)
+   executable example: three inhabitants with distinct budgets and authority,
+   file-probe observations and discovered tool executables rather than coding
+   effects, an evaluated planner revision activated across eight real host
+   processes. Both demonstrations use deterministic fixtures; no commercial
+   inventory accuracy or model-learning benefit is claimed.
 
 Reference/native parity is a gate throughout this program. An exploratory host
 application may initially use Bun and a native query adapter, but it must be

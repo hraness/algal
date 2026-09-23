@@ -508,6 +508,25 @@ impl Admission for PolicyHost {
                             Some(context.revision),
                         )?;
                     }
+                    // A cited experiment is replayed like comparison
+                    // evidence: the whole joined chain re-verifies against
+                    // this parent state, and the experiment's result must
+                    // name the committed revision.
+                    if record["contract"] == "algal.application-experiment.v1" {
+                        let stored = crate::application_experiment::verify_experiment(
+                            context.store,
+                            evidence,
+                            &current.digest,
+                            &Host::default(),
+                        )
+                        .await?;
+                        crate::application_experiment::check_experiment_binding(
+                            &stored,
+                            &context.command.application,
+                            &current.digest,
+                            Some((context.command.revision.as_str(), context.revision)),
+                        )?;
+                    }
                 }
                 // Environment-keyed selection: a cited selection policy is
                 // replayed in full and can only narrow the installed strategy
@@ -620,6 +639,12 @@ impl Admission for PolicyHost {
                         &context.command.memory,
                     )?)?;
                     let mut verified = 0;
+                    let undispatched: std::collections::BTreeSet<&str> = context
+                        .pending
+                        .iter()
+                        .filter(|p| p.dispatch.is_none())
+                        .map(|p| p.intent.as_str())
+                        .collect();
                     for evidence in &context.command.evidence {
                         let record = mem::get_record(context.store, evidence)?;
                         if record["contract"] == "algal.application-migration.v1" {
@@ -630,6 +655,19 @@ impl Admission for PolicyHost {
                             )
                             .await?;
                             verified += 1;
+                        }
+                        // Drain evidence is replayed too: the cited record must
+                        // bind this application and parent state and cover
+                        // exactly the undispatched pending set the committing
+                        // core computed under custody.
+                        if record["contract"] == "algal.application-drain.v1" {
+                            let drain = crate::application_drain::parse_drain(&record)?;
+                            crate::application_drain::check_binding(
+                                &drain,
+                                &context.command.application,
+                                &current.digest,
+                            )?;
+                            crate::application_drain::check_coverage(&drain, &undispatched)?;
                         }
                     }
                     if verified == 0 {

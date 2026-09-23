@@ -71,6 +71,7 @@ advance sequence while retaining epoch. Previous states are retained.
 | `algal.application-research-report.v1` | Attempt journal and per-case role outcomes, pass flags, and work/call accounting with distinct receipts |
 | `algal.application-research-evaluation.v1` | Request, report, seal, pinned verifier identity, and reproducible acceptance verdict |
 | `algal.application-migration.v1` | Source snapshot, both revisions, pure migration program, producing receipt, and emitted claims |
+| `algal.application-drain.v1` | Explicit per-intent disposition of the undispatched pending set at a migrate's parent state |
 | `algal.application-view.v1` | Bounded historical projection and state-fenced proposed actions |
 | `algal.application-view-evidence.v1` | Optional captured query, probe, source, revision, and separately observed work summaries |
 
@@ -141,6 +142,44 @@ projection. Its replay must reproduce the exact arguments and emitted claims.
 Withdrawn observations and hypotheses do not become fresh observations merely
 by being present in a historical snapshot. A changed schema starts a new memory
 chain and retains the old snapshot through explicit migration evidence.
+
+### Explicit drain of undispatched work
+
+An undispatched intent pins the operation, revision, entrypoint, and memory
+of the state that created it; a schema change cannot silently reinterpret
+that pin. A `migrate` transition whose parent retains undispatched pending
+intents must therefore cite exactly one `algal.application-drain.v1` record
+in its evidence. The closed record names `application`, the transition's
+`parentState`, and a sorted, unique `dispositions` array covering the
+complete undispatched set — no missing rows, no extras:
+
+```json
+{"contract":"algal.application-drain.v1","application":"inventory","parentState":"sha256:...","dispositions":[{"intent":"sha256:...","status":"abandoned"},{"intent":"sha256:...","status":"migrated"}]}
+```
+
+Each disposition is explicit. `migrated` keeps the intent pending and
+dispatchable under the new revision; `abandoned` drops it from every future
+`pending` projection and dispatch scan. Abandonment is a projection rule: the
+intent record stays immutable in history and CAS as evidence and is never
+rewritten or deleted, and an abandoned intent can never be re-drained,
+reconciled, or dispatched. A drain cited where the parent has no
+undispatched pending work is non-applicable evidence and is rejected, as are
+drains that name another application or parent, omit an undispatched intent,
+name a dispatched or already abandoned intent, or appear more than once in
+the evidence. Settled work is no longer pending; admitted-but-unsettled
+dispatches remain governed by the activation barrier and can never be
+drained.
+
+`produceApplicationDrain(service, {application, parentState, dispositions})`
+stores the record after checking coverage against the recomputed set;
+`verifyApplicationDrain(service, drain, expectedState)` re-verifies a stored
+record's digest, parent binding, and set equality. The committing core and
+the trusted policy host independently recompute the undispatched set and
+replay the cited record; retained history replays each drain's binding and
+dispositions, so stale or tampered evidence cannot pass inspection.
+`undispatchedPending(application, parentState)` exposes the exact drained
+set to producers. Native `application drain <input.json>` and
+`application verify-drain <input.json>` implement the same surface.
 
 ## Memory and incomplete information
 
@@ -405,6 +444,7 @@ of observations.
 | Revision entrypoints / command intents | 32 each |
 | Transition evidence references | 16 |
 | Pending intents / retained dispatches | 128 / 4,096 |
+| Drain dispositions | 128 |
 | Fresh dispatch batch / pending scan | 32 / 128 |
 | Durable channel outcomes / channel file | 4,096 / 1,048,576 bytes |
 | Active memory observations / hypotheses | 128 / 64 |
@@ -616,3 +656,78 @@ equal the selected manifest — a policy can only narrow which accepted
 alternative is installed, never substitute for the reproduced accepted
 evaluation coverage checks. The native CLI exposes `application select
 input.json` with `{policy, environment, expectedState}`.
+
+A resolved row can also be retained as an `algal.application-selection.v1`
+record naming `{contract, application, parentState, entrypoint, environment,
+policy, comparison, manifest, revision}` — closed like every application
+record. `produceApplicationSelection(store, {policy, environment,
+expectedParentState}, runtime)` replays the policy's row for `environment`,
+takes the selected manifest's `accepted` comparison result, and stores the
+candidate `revision` that result measured. `verifyApplicationSelection(store,
+ref, expectedParentState, runtime)` re-resolves the row and requires the
+recomputed record to equal the stored one byte-for-byte. The record is pure
+evidence like the policy it cites: it grants no authority and is replayed in
+full before any use. The native CLI exposes `application select-record
+input.json` with `{policy, environment, expectedParentState}` and
+`application verify-selection input.json` with `{selection, expectedState}`.
+
+## Joining promotion evidence
+
+An `algal.application-experiment.v1` record joins the whole promotion
+evidence chain — proposals, evaluations, an optional comparison, an optional
+selection policy, and an optional retained selection — for one application,
+one parent state, one entrypoint, and one environment. The closed record
+names `{contract, application, parentState, entrypoint, environment,
+proposals, evaluations, comparison, selectionPolicy, selection, result}`:
+`proposals` and `evaluations` are sorted-unique reference lists bounded at 8
+each with at least one record total; `comparison`, `selectionPolicy`, and
+`selection` are nullable references; `result` is `{promoted, revision}` where
+`promoted` requires a non-null `revision`, and a `selection` requires a
+`selectionPolicy`.
+
+`produceApplicationExperiment(store, input, runtime)` replays every cited
+record against the exact parent state before minting — nothing is trusted
+from the citation list alone. Each proposal must name this application and
+target entrypoint, target this head's incumbent revision, and be anchored to
+the parent state or — when the `propose` transition committed first — to its
+immediate predecessor; the frozen proposal request must carry the experiment
+environment. Each evaluation must name this parent state, entrypoint, and
+environment; all evaluation requests share one frozen `cases`/`scorer`/
+`policy` set; and when proposals are cited, every measured candidate must be
+one a cited proposal emitted. A cited comparison must bind the same fields
+and join exactly the cited evaluations — nothing more, nothing less. A cited
+selection policy must serve the experiment environment through exactly the
+cited comparison. A cited selection must resolve under the cited policy and
+comparison and must name a candidate the cited proposals emitted.
+`result.revision` names the candidate the evidence selects — the selected
+row's revision when a comparison or selection is cited, otherwise an
+accepted candidate — and `result.promoted` is the producer's claim that an
+activation actually committed it.
+
+Minting an experiment never performs an activation. An experiment that
+selected nothing, or selected a candidate that was not promoted, remains
+valid retained evidence. `verifyApplicationExperiment(store, ref,
+expectedParentState, runtime)` re-verifies the entire chain and requires the
+recomputed record to equal the stored one byte-for-byte. When the default
+policy host is offered an experiment as `activate`/`migrate`/`restore`
+evidence it replays it the same way against the commit's parent state and
+additionally requires the record to name the committing application and
+that parent state, the experiment's entrypoint to exist in the committed
+revision, and `result.revision` to be exactly the committed revision —
+an experiment that selected nothing, or another candidate, cannot attach to
+a transition installing a different strategy. Experiment evidence is
+supplementary: it never substitutes for the reproduced accepted-evaluation
+coverage checks, and it cannot attach to a `propose` transition, which
+still requires exactly one proposal record. The native CLI exposes
+`application experiment input.json` with the join fields and `application
+verify-experiment input.json` with `{experiment, expectedState}`.
+
+## Deterministic lineage
+
+`ApplicationService.lineage(application)` — and `algal application lineage
+<name>` on both CLIs — projects validated retained history to one row per
+committed state in genesis→head order: `{sequence, kind, operation, revision,
+memory, evidence, causedBy}`. The projection is a pure read over the same
+bounded `history()` pass — it stores nothing, acquires no admission
+authority, and emits `[]` for an absent application — so both runtimes emit
+byte-identical JSON for the same application files.

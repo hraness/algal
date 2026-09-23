@@ -18,8 +18,10 @@ import { ApplicationMemoryService, parseMemoryClaim } from "./application-memory
 import { admitApplicationActivation, parseApplicationEvaluationRequest, parseEvaluationPolicy } from "./application-adaptation";
 import { parseApplicationRuntimeProfile, parseApplicationViewSpec } from "./application-view";
 import { parseApplicationMigration, verifyApplicationMigration } from "./application-migration";
+import { checkApplicationDrainBinding, checkApplicationDrainCoverage, parseApplicationDrain } from "./application-drain";
 import { parseApplicationRestorationPolicy, verifyApplicationRestoration, type ApplicationRestorationPolicy } from "./application-restoration";
 import { checkComparisonBinding, verifyApplicationComparison } from "./application-comparison";
+import { checkExperimentBinding, verifyApplicationExperiment } from "./application-experiment";
 import { verifyApplicationProposal } from "./application-proposal";
 import { selectApplicationStrategy } from "./application-selection";
 import { admitApplicationResearchActivation, parseApplicationResearchRequest, parseApplicationResearchPolicy, parseApplicationResearchCorpus, type ApplicationResearchVerifier } from "./application-research";
@@ -128,7 +130,7 @@ export function createApplicationPolicyHost(input: unknown, options: { channelsD
   const host: ApplicationAdmission & MemoryAdmissionHost & ApplicationDispatcher = {
     identity,
     configurationDigest,
-    async admitCommit({ command, current, revision, store }) {
+    async admitCommit({ command, current, revision, pending, store }) {
       if (command.application !== policy.application || revision.application !== policy.application) throw new Error("Host policy belongs to another application");
       const memory = new ApplicationMemoryService({ store, engine: admissionOnlyEngine, admission: host });
       const snapshot = await memory.validateForRevision(command.memory, revision);
@@ -186,6 +188,16 @@ export function createApplicationPolicyHost(input: unknown, options: { channelsD
             checkComparisonBinding(stored, command.application, current.digest, revision);
           }
         }
+        // A cited experiment is replayed like comparison evidence: the whole
+        // joined chain re-verifies against this parent state, and the
+        // experiment's result must name the committed revision.
+        for (const evidence of command.evidence) {
+          const record = await value(evidence);
+          if (record && typeof record === "object" && !Array.isArray(record) && record.contract === "algal.application-experiment.v1") {
+            const stored = await verifyApplicationExperiment(store, evidence, current.digest, { fns: builtinRegistry() });
+            checkExperimentBinding(stored, command.application, current.digest, { digest: command.revision, entrypoints: revision.entrypoints });
+          }
+        }
         // Environment-keyed selection: a cited selection policy is replayed
         // in full and can only narrow the installed strategy to the one its
         // row for this host's environment selected. It never substitutes
@@ -232,11 +244,20 @@ export function createApplicationPolicyHost(input: unknown, options: { channelsD
         if (changed.some(entry => !accepted.has(entry.name))) throw new Error("Every changed entrypoint requires accepted evaluation evidence");
         if (command.kind === "migrate") {
           let verified = 0;
+          const undispatched = new Set(pending.filter(row => row.dispatch === null).map(row => row.intent));
           for (const evidence of command.evidence) {
             const record = await value(evidence);
             if (record && typeof record === "object" && !Array.isArray(record) && record.contract === "algal.application-migration.v1") {
               await verifyApplicationMigration(store, parseApplicationMigration(record), snapshot.scope);
               verified++;
+            }
+            // Drain evidence is replayed too: the cited record must bind this
+            // application and parent state and cover exactly the undispatched
+            // pending set the committing core computed under custody.
+            if (record && typeof record === "object" && !Array.isArray(record) && record.contract === "algal.application-drain.v1") {
+              const drain = parseApplicationDrain(record);
+              checkApplicationDrainBinding(drain, command.application, current.digest);
+              checkApplicationDrainCoverage(drain, undispatched);
             }
           }
           if (!verified) throw new Error("Migration requires verified producing evidence");

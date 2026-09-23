@@ -25,6 +25,15 @@ wire constant (`0.1.0`) is independent of these package versions.
 - Docs: SDK imports use `@hraness/algal`, site anchors link `/tour/`,
   SECURITY.md is advisory-only and names executor/tool config as trusted
   input, and this changelog exists.
+- Milestone-6 verification: the adaptive-inventory example's test now asserts
+  the documented evidence counts, host-process identities, per-inhabitant
+  zero model-call budgets, emitted artifact names, passive report markers,
+  evidence truncation flags, and the SHA-256 executable pin; the npm tarball
+  also excludes colocated test files under `examples/`; the README's
+  `algal application` subcommand list now includes `propose`,
+  `verify-proposal`, and `select`; the programmable-applications milestone
+  record marks the packaged surfaces, native workbench, and second
+  application as existing.
 
 ## v0.2.0-vm.9 — 2026-09-20
 

@@ -331,6 +331,7 @@ export type {
   ApplicationDispatchContext,
   ApplicationDispatchOutcome,
   ApplicationDispatchResult,
+  ApplicationLineageRow,
   ApplicationOptions,
   ApplicationSnapshot,
 } from "./src/application";
@@ -415,6 +416,8 @@ export { rolloverApplicationMemory } from "./src/application-rollover";
 export type { RolloverApplicationMemoryInput, RolledApplicationMemory } from "./src/application-rollover";
 export { migrateApplicationMemory, parseApplicationMigration } from "./src/application-migration";
 export type { ApplicationMigration, MigrateMemoryInput } from "./src/application-migration";
+export { APPLICATION_DRAIN_LIMITS, checkApplicationDrainBinding, checkApplicationDrainCoverage, parseApplicationDrain, produceApplicationDrain, verifyApplicationDrain } from "./src/application-drain";
+export type { ApplicationDrain, ApplicationDrainDisposition, ApplicationDrainStatus } from "./src/application-drain";
 export { parseInvestigationRequest, requestExecution, scheduleInvestigations } from "./src/application-investigation";
 export type {
   EntrypointDerivation, InvestigationRequest, RequestExecutionInput,
@@ -467,8 +470,10 @@ export { COMPARISON_LIMITS, checkComparisonBinding, comparisonDigest, parseAppli
 export type { ApplicationComparison, ApplicationComparisonResult, ComparisonVerdict, ProduceComparisonInput } from "./src/application-comparison";
 export { PROPOSAL_LIMITS, parseApplicationProposal, parseProposalRequest, produceApplicationProposal, proposeApplicationRevision, verifyApplicationProposal, verifyApplicationProposalBinding } from "./src/application-proposal";
 export type { ApplicationProposal, ApplicationProposalCandidate, ApplicationProposalRequest, ApplicationProposalStatus, ProposeApplicationRevisionInput, ProposedApplicationRevision } from "./src/application-proposal";
-export { SELECTION_LIMITS, parseApplicationSelectionPolicy, selectApplicationStrategy, verifyApplicationSelectionPolicy } from "./src/application-selection";
-export type { ApplicationSelection, ApplicationSelectionPolicy, ApplicationSelectionRow } from "./src/application-selection";
+export { SELECTION_LIMITS, parseApplicationSelectionPolicy, parseApplicationSelectionRecord, produceApplicationSelection, selectApplicationStrategy, verifyApplicationSelection, verifyApplicationSelectionPolicy } from "./src/application-selection";
+export type { ApplicationSelection, ApplicationSelectionPolicy, ApplicationSelectionRecord, ApplicationSelectionRow } from "./src/application-selection";
+export { EXPERIMENT_LIMITS, checkExperimentBinding, experimentDigest, parseApplicationExperiment, produceApplicationExperiment, verifyApplicationExperiment } from "./src/application-experiment";
+export type { ApplicationExperiment, ApplicationExperimentResult, ProduceExperimentInput } from "./src/application-experiment";
 
 export {
   admitApplicationResearchEvaluation, verifyApplicationResearchEvaluation, admitApplicationResearchActivation,

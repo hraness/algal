@@ -196,6 +196,8 @@ usage:
   algal manifests [--dir <path>]         list manifests stored under --dir
   algal manifest <sha256:…> [--dir <path>]
                                               print a stored manifest
+  algal application lineage <name> [--dir <path>]
+                                              print retained application history, genesis→head
   algal slot get <name> [--dir <path>]    print a slot's current value
   algal slot set <name> <value.json> [--dir <path>]
                                               write a slot directly (seeding)
@@ -206,6 +208,12 @@ usage:
                                               enqueue an external wakeup
   algal mailbox receive <receive-cap>        consume one message or suspend
   algal mailbox revoke <cap>                 revoke one mailbox capability
+  algal application drain <input.json> [--dir <path>]
+                                              produce an algal.application-drain.v1
+                                              record disposing every undispatched
+                                              pending intent at a parent state
+  algal application verify-drain <input.json> [--dir <path>]
+                                              re-verify a drain against a state
   algal pack <manifest.json> [--modules <dir>] [--dir <path>] [--out <dir>]
                                               print a closure bundle: the manifest plus every
                                               embedded sub-manifest and const-ref payload;
@@ -937,6 +945,43 @@ async function main(): Promise<number> {
         default:
           usageError("algal store put|get|has …");
       }
+      return 0;
+    }
+
+    case "application": {
+      // Drain produce/verify and the lineage projection are structural or
+      // read-only lifecycle operations: they never invoke trusted admission,
+      // so a deny-all host fences them like the read-only commands.
+      const { ApplicationService } = await import("./src/application");
+      const { produceApplicationDrain, verifyApplicationDrain } = await import("./src/application-drain");
+      const { applicationObject } = await import("./src/application-contract");
+      const service = new ApplicationService(dir, {
+        async admitCommit() { throw new AlgalError("CAPABILITY_DENIED", "No application admission host"); },
+      });
+      const sub = positional[0];
+      if (sub === "drain") {
+        if (positional.length !== 2) usageError("algal application drain <input.json>");
+        const input = await readJsonBounded(resolve(positional[1]!), 262_144, "application drain input");
+        out({ drain: await produceApplicationDrain(service, input) });
+        return 0;
+      }
+      if (sub === "verify-drain") {
+        if (positional.length !== 2) usageError("algal application verify-drain <input.json>");
+        const input = await readJsonBounded(resolve(positional[1]!), 262_144, "application verify-drain input");
+        const v = applicationObject(input, ["drain", "expectedState"]);
+        await verifyApplicationDrain(service, v.drain, v.expectedState);
+        out({ verified: true });
+        return 0;
+      }
+      if (sub === "lineage") {
+        if (positional.length !== 2) usageError("algal application lineage <name> [--dir <path>]");
+        for (const key of Object.keys(flags)) {
+          if (!["dir"].includes(key)) usageError(`unknown application option --${key}`);
+        }
+        out(await service.lineage(positional[1]!) as unknown as JsonValue);
+        return 0;
+      }
+      usageError("algal application drain|verify-drain|lineage …");
       return 0;
     }
 

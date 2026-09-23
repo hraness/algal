@@ -384,7 +384,7 @@ const habitatManifestExcerpt = JSON.stringify(manifestToJson(habitatManifest), n
 
 interface HeroExample {
   key: string; file: string; blurb: string;
-  graphTitle: string; graphSrc: string; graphAlt: string; objectPosition: string;
+  graphTitle: string; graphSrc: string; graphView: string; graphAlt: string; objectPosition: string;
   sourceHref: string; evidenceHref: string;
   codeName: string; codeHtml: string;
   evidenceLabel: string; evidenceRows: [string, string][];
@@ -397,7 +397,7 @@ const routeHelp = routeRuns.find(run => run.choice === "help")!;
 const heroExamples: HeroExample[] = [
   {
     key: "route", file: "route.algal", blurb: "one decision fans into three replies",
-    graphTitle: "route.algal · recorded run", graphSrc: "/diagrams/route-help.svg", objectPosition: "50% 0%",
+    graphTitle: "route.algal · recorded run", graphSrc: "/diagrams/route-help.svg", graphView: "/diagrams/route-help.view.json", objectPosition: "50% 0%",
     graphAlt: "Program graph of the route organism: an email input flows into a decide cell, a pure check, then a match with three arms — help, sales, and human review — overlaid with the states of one recorded run.",
     sourceHref: "/examples/route.algal", evidenceHref: "/receipts/route-help.receipt.json",
     codeName: "route.algal", codeHtml: highlightSource(routeSource.trimEnd()),
@@ -406,7 +406,7 @@ const heroExamples: HeroExample[] = [
   },
   {
     key: "reply", file: "reply.algal", blurb: "classify the email, then draft",
-    graphTitle: "reply.algal · recorded run", graphSrc: "/diagrams/reply-run.svg", objectPosition: "50% 0%",
+    graphTitle: "reply.algal · recorded run", graphSrc: "/diagrams/reply-run.svg", graphView: "/diagrams/reply-run.view.json", objectPosition: "50% 0%",
     graphAlt: "Program graph of the reply organism: an email input flows into a typed decide cell, a pure check, then generation — overlaid with the states of one recorded run.",
     sourceHref: "/examples/reply.algal", evidenceHref: "/receipts/reply.receipt.json",
     codeName: "reply.algal", codeHtml: highlightSource(replySource.trimEnd()),
@@ -415,7 +415,7 @@ const heroExamples: HeroExample[] = [
   },
   {
     key: "inbox", file: "inbox.algal", blurb: "organisms compose — call and each",
-    graphTitle: "inbox.algal · program graph", graphSrc: "/diagrams/inbox.svg", objectPosition: "0% 0%",
+    graphTitle: "inbox.algal · program graph", graphSrc: "/diagrams/inbox.svg", graphView: "/diagrams/inbox.view.json", objectPosition: "0% 0%",
     graphAlt: "Program graph of the inbox organism: inputs feed a call to the draft organism and an each cell that maps drafts over a list, both merging into the result.",
     sourceHref: "/examples/projects/inbox/inbox.algal", evidenceHref: "/receipts/inbox.receipt.json",
     codeName: "inbox.algal", codeHtml: highlightSource(inbox.source.trimEnd()),
@@ -424,7 +424,7 @@ const heroExamples: HeroExample[] = [
   },
   {
     key: "habitat", file: "habitat.algal.json", blurb: "a program emits a program",
-    graphTitle: "habitat · spawn, recorded", graphSrc: "/diagrams/habitat.svg", objectPosition: "50% 0%",
+    graphTitle: "habitat · spawn, recorded", graphSrc: "/diagrams/habitat.svg", graphView: "/diagrams/habitat.view.json", objectPosition: "50% 0%",
     graphAlt: "Program graph of the habitat organism: a goal flows into a planner, a spawn cell that admits a child manifest, and the result — overlaid with the states of one recorded run.",
     sourceHref: "/examples/habitat.algal.json", evidenceHref: "/receipts/habitat.receipt.json",
     codeName: "habitat.algal.json · the program, as data", codeHtml: escapeHtml(habitatManifestExcerpt),
@@ -441,7 +441,7 @@ const HERO_STAGE = `<div class="hero-stage" data-hero-stage>${heroExamples.map((
   <div class="hs-set" data-example-set="${example.key}"${index === 0 ? "" : " hidden"}>
     <figure class="hs-card hs-graph">
       <figcaption class="hs-bar"><span class="file-label">${playIcon}${example.graphTitle}</span><span class="hs-links"><a href="${example.sourceHref}" download>Source</a><a href="${example.evidenceHref}" download>Receipt</a></span></figcaption>
-      <div class="hs-viewport"><img src="${example.graphSrc}" alt="${example.graphAlt}" style="object-position:${example.objectPosition}"${index === 0 ? ' fetchpriority="high"' : ' loading="lazy"'}></div>
+      <div class="hs-viewport diagram-frame" data-diagram-view="${example.graphView}" data-diagram-canvas><img src="${example.graphSrc}" alt="${example.graphAlt}" style="object-position:${example.objectPosition}"${index === 0 ? ' fetchpriority="high"' : ' loading="lazy"'}></div>
     </figure>
     <figure class="hs-card hs-code">
       <figcaption class="hs-bar"><span class="file-label">${example.codeName}</span></figcaption>

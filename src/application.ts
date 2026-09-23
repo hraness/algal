@@ -11,6 +11,7 @@ import {
   type EpisodeBinding, type WorkIntent,
 } from "./application-contract";
 import { parseApplicationMigration, type ApplicationMigration } from "./application-migration";
+import { checkApplicationDrainBinding, checkApplicationDrainCoverage, parseApplicationDrain, type ApplicationDrain } from "./application-drain";
 import { verifyApplicationRestoration } from "./application-restoration";
 import { verifyApplicationProposalBinding } from "./application-proposal";
 import { validateApplicationGoals } from "./application-goal";
@@ -31,6 +32,17 @@ export type ApplicationCommand = {
   intents: ApplicationIntentSpec[]; evidence: Digest[]; causedBy: Digest | null;
 };
 export type ApplicationSnapshot = {digest: Digest; state: ApplicationState; transition: ApplicationTransition; revision: ApplicationRevision};
+/** One `lineage()` row: a pure projection of a committed state in
+ * genesis→head order. Derived from retained history; stores nothing. */
+export type ApplicationLineageRow = {
+  sequence: number;
+  kind: ApplicationTransition["kind"];
+  operation: Digest;
+  revision: Digest;
+  memory: Digest;
+  evidence: Digest[];
+  causedBy: Digest | null;
+};
 export type ApplicationPending = {intent: Digest; sourceState: Digest; work: WorkIntent; dispatch: ApplicationDispatch | null};
 export type ApplicationDispatchPlan = {kind: "episode"; binding: EpisodeBinding} | {kind: "delivery"; recipient: string; hostProfile: Digest};
 export type ApplicationDispatch = {
@@ -260,6 +272,69 @@ export class ApplicationService {
       if (!consumed) fail("Migration evidence is not consumed by the migrated memory");
     }
   }
+  /** Drain records cited by the transition's evidence — other evidence kinds
+   * stay inert here and keep their own checks. */
+  private async transitionDrains(transition: ApplicationTransition): Promise<ApplicationDrain[]> {
+    const drains: ApplicationDrain[] = [];
+    for (const ref of transition.evidence) {
+      const record = await this.value(ref);
+      if (record !== null && typeof record === "object" && !Array.isArray(record) && (record as { contract?: unknown }).contract === "algal.application-drain.v1") drains.push(parseApplicationDrain(record));
+    }
+    return drains;
+  }
+  /** Commit-time drain rule: a migrate with undispatched pending intents must
+   * cite exactly one drain naming the whole set; with none pending, any drain
+   * is non-applicable evidence. Dispatched intents are never drainable — the
+   * unsettled barrier already wedges the transition for them. */
+  private async checkDrain(prior: ApplicationSnapshot, transition: ApplicationTransition, pending: ApplicationPending[]): Promise<void> {
+    const drains = await this.transitionDrains(transition);
+    const undispatched = new Set(pending.filter(p => p.dispatch === null).map(p => p.intent));
+    if (!undispatched.size) {
+      if (drains.length) throw new Error("Drain record is not applicable");
+      return;
+    }
+    if (drains.length !== 1) throw new Error("Pending intents require explicit drain");
+    checkApplicationDrainBinding(drains[0]!, transition.application, prior.digest);
+    checkApplicationDrainCoverage(drains[0]!, undispatched);
+  }
+  /** Retained-history drain replay. Dispatch records written after the citing
+   * migrate commits are indistinguishable from earlier settlements, so the
+   * replay enforces the stable subset of completeness: the drain binds its
+   * transition, every cited intent belongs to the drained prefix and was not
+   * abandoned earlier, no `abandoned` intent carries a dispatch record, and
+   * no still-undispatched intent of the prefix was left out. */
+  private async checkDrainRetained(prefix: ApplicationSnapshot[], prior: ApplicationSnapshot, transition: ApplicationTransition): Promise<void> {
+    const drains = await this.transitionDrains(transition);
+    if (!drains.length) return;
+    const abandoned = await this.abandoned(prefix);
+    const rows: IntentRow[] = [];
+    for (const snapshot of prefix) rows.push(...await this.validatedIntentRows(snapshot));
+    for (const drain of drains) {
+      checkApplicationDrainBinding(drain, transition.application, prior.digest);
+      const known = new Set<Digest>();
+      for (const { ref, work } of rows) {
+        known.add(ref);
+        if (abandoned.has(ref)) continue;
+        const dispatch = await this.dispatchRecord(transition.application, ref, work);
+        const disposition = drain.dispositions.find(d => d.intent === ref);
+        if ((disposition?.status === "abandoned" && dispatch !== null) || (disposition === undefined && dispatch === null)) fail("Drain dispositions must match the undispatched pending intents");
+      }
+      if (drain.dispositions.some(d => !known.has(d.intent) || abandoned.has(d.intent))) fail("Drain dispositions must match the undispatched pending intents");
+    }
+  }
+  /** Intents abandoned by drains cited through retained migrate transitions.
+   * Abandonment is a projection rule: the intent records stay in history and
+   * CAS; only `pending()` and `dispatchPending` stop selecting them. */
+  private async abandoned(history: ApplicationSnapshot[]): Promise<Set<Digest>> {
+    const abandoned = new Set<Digest>();
+    for (const snapshot of history) {
+      if (snapshot.transition.kind !== "migrate") continue;
+      for (const drain of await this.transitionDrains(snapshot.transition)) {
+        for (const disposition of drain.dispositions) if (disposition.status === "abandoned") abandoned.add(disposition.intent);
+      }
+    }
+    return abandoned;
+  }
   async history(application: unknown): Promise<ApplicationSnapshot[]> {
     const name = applicationId(application);
     // Inspection never reserves a name or bypasses the creation count limit.
@@ -288,7 +363,10 @@ export class ApplicationService {
     for (let i = 0; i < history.length; i++) {
       const item = history[i]!;
       this.checkStep(history[i - 1] ?? null, item);
-      if (item.transition.kind === "migrate") await this.checkMigration(history[i - 1]!, item);
+      if (item.transition.kind === "migrate") {
+        await this.checkMigration(history[i - 1]!, item);
+        await this.checkDrainRetained(history.slice(0, i), history[i - 1]!, item.transition);
+      }
       if (item.transition.kind === "restore") await verifyApplicationRestoration(this.store, { application: name, parentState: history[i - 1]!.digest, candidateRevision: item.state.revision, evidence: item.transition.evidence });
       if (item.transition.kind === "propose") await verifyApplicationProposalBinding(this.store, { application: name, parentState: history[i - 1]!.digest, revision: item.state.revision, evidence: item.transition.evidence });
       if (operations.has(item.transition.operation)) fail("Repeated operation in application history");
@@ -298,6 +376,17 @@ export class ApplicationService {
     return history;
   }
   async inspect(application: unknown): Promise<ApplicationSnapshot | null> { return (await this.history(application)).at(-1) ?? null; }
+  /** Deterministic lineage: the retained history projected to one row per
+   * committed state in genesis→head order. A pure read — no storage, no
+   * admission — so both runtimes emit byte-identical JSON for the same
+   * application files. */
+  async lineage(application: unknown): Promise<ApplicationLineageRow[]> {
+    return (await this.history(application)).map(item => ({
+      sequence: item.state.sequence, kind: item.transition.kind, operation: item.transition.operation,
+      revision: item.state.revision, memory: item.state.memory,
+      evidence: [...item.transition.evidence], causedBy: item.transition.causedBy,
+    }));
+  }
   private async intents(snapshot: ApplicationSnapshot): Promise<IntentRow[]> {
     const rows: IntentRow[] = [];
     for (const ref of snapshot.transition.intents) {
@@ -337,16 +426,28 @@ export class ApplicationService {
     return record;
   }
   private async pending(history: ApplicationSnapshot[]): Promise<ApplicationPending[]> {
+    const abandoned = await this.abandoned(history);
     const pending: ApplicationPending[] = [];
     let total = 0;
     for (const snapshot of history) for (const {ref, work} of await this.validatedIntentRows(snapshot)) {
       if (++total > APPLICATION_SERVICE_LIMITS.dispatches) throw new Error("Retained application intent bound exceeded");
       const dispatch = await this.dispatchRecord(snapshot.state.application, ref, work);
       if (dispatch && dispatch.sourceState !== snapshot.digest) fail("Dispatch state binding mismatch");
-      if (dispatch?.status !== "settled") pending.push({intent: ref, sourceState: snapshot.digest, work, dispatch});
+      if (dispatch?.status !== "settled" && !abandoned.has(ref)) pending.push({intent: ref, sourceState: snapshot.digest, work, dispatch});
     }
     if (pending.length > APPLICATION_SERVICE_LIMITS.pending) throw new Error("Pending application intent bound exceeded");
     return pending;
+  }
+  /** The undispatched pending intents at `parentState` — the exact set a
+   * drain must cover. Dispatches recorded later do not rewrite a committed
+   * drain; this projection evaluates the current outbox against retained
+   * history ending at that state. */
+  async undispatchedPending(application: unknown, parentState: unknown): Promise<ApplicationPending[]> {
+    const name = applicationId(application), state = applicationRef(parentState);
+    const history = await this.history(name);
+    const index = history.findIndex(snapshot => snapshot.digest === state);
+    if (index < 0) throw new Error("Drain parent is not a committed state");
+    return (await this.pending(history.slice(0, index + 1))).filter(p => p.dispatch === null);
   }
   async create(command: unknown): Promise<ApplicationSnapshot> {
     const parsed = parseApplicationCommand(command);
@@ -403,7 +504,10 @@ export class ApplicationService {
       const state = parseApplicationState({contract: "algal.application-state.v1", application: command.application, sequence: history.length, epoch: (current?.state.epoch ?? 0) + Number(command.kind === "activate" || command.kind === "migrate" || command.kind === "restore"), revision: command.revision, memory: command.memory, previous: command.expectedHead, transition: hash(transition)});
       const next = {digest: hash(state), state, transition, revision};
       this.checkStep(current, next);
-      if (next.transition.kind === "migrate") await this.checkMigration(current!, next);
+      if (next.transition.kind === "migrate") {
+        await this.checkMigration(current!, next);
+        await this.checkDrain(current!, next.transition, pending);
+      }
       if (next.transition.kind === "restore") await verifyApplicationRestoration(this.store, { application: command.application, parentState: current!.digest, candidateRevision: command.revision, evidence: command.evidence });
       if (next.transition.kind === "propose") await verifyApplicationProposalBinding(this.store, { application: command.application, parentState: current!.digest, revision: command.revision, evidence: command.evidence });
       const operation: Operation = {contract: "algal.application-operation.v1", application: command.application, operation: command.operation, request, transition: state.transition, state: next.digest};

@@ -27,11 +27,13 @@ import { createApplicationDomainDispatcher, createApplicationPolicyHost } from "
 import { scheduleInvestigations, requestExecution } from "../src/application-investigation";
 import { collectApplicationViewEvidence, parseApplicationView, parseApplicationViewSpec, projectApplicationView, type ApplicationApplicability, type ApplicationView } from "../src/application-view";
 import { migrateApplicationMemory } from "../src/application-migration";
+import { produceApplicationDrain, verifyApplicationDrain } from "../src/application-drain";
 import { appendObservation } from "../src/application-observation";
 import { restoreApplicationRevision, type ApplicationRestorationPolicy } from "../src/application-restoration";
 import { produceApplicationComparison, verifyApplicationComparison } from "../src/application-comparison";
+import { produceApplicationExperiment, verifyApplicationExperiment, type ProduceExperimentInput } from "../src/application-experiment";
 import { proposeApplicationRevision, verifyApplicationProposal } from "../src/application-proposal";
-import { selectApplicationStrategy } from "../src/application-selection";
+import { produceApplicationSelection, selectApplicationStrategy, verifyApplicationSelection } from "../src/application-selection";
 import { rolloverApplicationMemory } from "../src/application-rollover";
 import { ApplicationMemoryService, parseMemorySnapshot } from "../src/application-memory";
 import { NativeMemoryQueryEngine } from "../src/application-native-memory";
@@ -272,6 +274,10 @@ let comparisonRef = "" as Digest;
 let migrationRef = "" as Digest;
 let migratedSnapshotRef = "" as Digest;
 let migrateCommand: { [key: string]: JsonValue } = {};
+let drainIntentRef = "" as Digest;
+let drainRef = "" as Digest;
+let drainRequest: { [key: string]: JsonValue } = {};
+let undrainedCommand: { [key: string]: JsonValue } = {};
 
 /** `fails` legs compare the verdict; a `reason` additionally pins the exact
  * error message emitted by both runtimes for a shared contract check. */
@@ -484,6 +490,7 @@ steps.push(
     ts: async () => {
       const s = await requestExecution(service, { application: APP, operation: op("execute"), expectedHead: head, expectedMemory: memoryRef, entrypoint: "run", input: digests.episodeArgs, derivation: derivationRef });
       head = s.digest;
+      drainIntentRef = s.transition.intents[0]!;
       return { state: s.digest };
     },
     native: async () => app("execute", await dynamic("execute", { application: APP, operation: op("execute"), expectedHead: head, expectedMemory: memoryRef, entrypoint: "run", input: digests.episodeArgs, derivation: derivationRef })),
@@ -501,6 +508,41 @@ steps.push(
     },
     native: async () => app("migrate-memory", fixturePath.get("migrateRequest")!),
   },
+  // An undispatched episode intent pins the old operation/revision/entrypoint:
+  // a schema migration must drain it explicitly — either carry it forward or
+  // abandon it — rather than letting it ride silently. The migrate without a
+  // drain fails identically on both runtimes, an incomplete drain fails
+  // coverage, and the committed drain carries the intent forward as `migrated`.
+  {
+    name: "migrate-undrained",
+    fails: true,
+    reason: "Pending intents require explicit drain",
+    ts: async () => service.commit(undrainedCommand),
+    native: async () => {
+      undrainedCommand = { application: APP, operation: op("migrate-undrained"), kind: "migrate", expectedHead: head, revision: revision3Ref, memory: migratedSnapshotRef, intents: [], evidence: [migrationRef], causedBy: null };
+      return app("commit", await dynamic("migrate-undrained", undrainedCommand));
+    },
+  },
+  {
+    name: "drain-incomplete",
+    fails: true,
+    reason: "Drain dispositions must match the undispatched pending intents",
+    ts: async () => produceApplicationDrain(service, { application: APP, parentState: head, dispositions: [] }),
+    native: async () => app("drain", await dynamic("drain-incomplete", { application: APP, parentState: head, dispositions: [] })),
+  },
+  {
+    name: "drain",
+    ts: async () => ({ drain: drainRef = await produceApplicationDrain(service, drainRequest) }),
+    native: async () => {
+      drainRequest = { application: APP, parentState: head, dispositions: [{ intent: drainIntentRef, status: "migrated" }] };
+      return app("drain", await dynamic("drain", drainRequest));
+    },
+  },
+  {
+    name: "verify-drain",
+    ts: async () => { await verifyApplicationDrain(service, drainRef, head); return { verified: true }; },
+    native: async () => app("verify-drain", await dynamic("verify-drain", { drain: drainRef, expectedState: head })),
+  },
   {
     name: "migrate",
     ts: async () => {
@@ -509,7 +551,7 @@ steps.push(
       return { state: s.digest, transition: s.state.transition, revision: s.state.revision, memory: s.state.memory };
     },
     native: async () => {
-      migrateCommand = { application: APP, operation: op("migrate"), kind: "migrate", expectedHead: head, revision: revision3Ref, memory: migratedSnapshotRef, intents: [], evidence: [migrationRef], causedBy: null };
+      migrateCommand = { application: APP, operation: op("migrate"), kind: "migrate", expectedHead: head, revision: revision3Ref, memory: migratedSnapshotRef, intents: [], evidence: [migrationRef, drainRef].sort(), causedBy: null };
       return app("commit", await dynamic("migrate", migrateCommand));
     },
   },
@@ -877,7 +919,66 @@ async function checkGoalAndQuotaParity(): Promise<void> {
     const selectionPolicyRef = await p.put({ contract: "algal.application-selection-policy.v1", application: APP, parentState: proposalHead, entrypoint: "run", selections: [{ environment: "parity-harness", comparison: compared.comparisonRef, manifest: manifestEvalRef }] });
     const selected = await selectApplicationStrategy(p.lifecycle.store, selectionPolicyRef, "parity-harness", proposalHead, { fns: builtinRegistry() });
     equal("select", { manifest: selected.manifest, comparison: selected.comparison }, await runNative(app("select", await dynamic("generation-select", { policy: selectionPolicyRef, environment: "parity-harness", expectedState: proposalHead })), p.native));
-    const activateInput = (name: string) => ({ application: APP, operation: op(name), kind: "activate" as const, expectedHead: proposalHead, revision: winner.revision, memory: created.state.memory, intents: [], evidence: [winnerEval.evaluationRef, compared.comparisonRef, selectionPolicyRef].sort(), causedBy: null });
+    // The resolved row is retained as a bounded `algal.application-selection.v1`
+    // record, replayed byte-for-byte on both runtimes.
+    const selectionRecord = await produceApplicationSelection(p.lifecycle.store, { policy: selectionPolicyRef, environment: "parity-harness", expectedParentState: proposalHead }, { fns: builtinRegistry() });
+    equal("selection record", { selection: selectionRecord.selectionRef, revision: selectionRecord.selection.revision }, await runNative(app("select-record", await dynamic("generation-select-record", { policy: selectionPolicyRef, environment: "parity-harness", expectedParentState: proposalHead })), p.native));
+    if (selectionRecord.selection.revision !== winner.revision) throw new Error("Selection record did not name the winning candidate revision");
+    const verifiedSelection = await verifyApplicationSelection(p.lifecycle.store, selectionRecord.selectionRef, proposalHead, { fns: builtinRegistry() });
+    equal("verify selection record", { ok: true, revision: verifiedSelection.revision }, await runNative(app("verify-selection", await dynamic("generation-verify-selection", { selection: selectionRecord.selectionRef, expectedState: proposalHead })), p.native));
+    // One bounded experiment record joins the whole chain: the proposal that
+    // emitted the candidates, both evaluations, the comparison, the policy,
+    // and the retained selection — replayed in full before minting.
+    const experimentInput = {
+      application: APP, parentState: proposalHead, entrypoint: "run", environment: "parity-harness",
+      proposals: [proposed.proposal], evaluations: [winnerEval.evaluationRef, loserEval.evaluationRef].sort(),
+      comparison: compared.comparisonRef, selectionPolicy: selectionPolicyRef, selection: selectionRecord.selectionRef,
+      result: { promoted: true, revision: winner.revision },
+    };
+    const experiment = await produceApplicationExperiment(p.lifecycle.store, experimentInput, { fns: builtinRegistry() });
+    equal("experiment join", { experiment: experiment.experimentRef, result: experiment.experiment.result }, await runNative(app("experiment", await dynamic("generation-experiment", experimentInput)), p.native));
+    const verifiedExperiment = await verifyApplicationExperiment(p.lifecycle.store, experiment.experimentRef, proposalHead, { fns: builtinRegistry() });
+    equal("verify experiment", { ok: true, result: verifiedExperiment.result }, await runNative(app("verify-experiment", await dynamic("generation-verify-experiment", { experiment: experiment.experimentRef, expectedState: proposalHead })), p.native));
+    // Byte-stable reproduction: minting the identical join yields the same record.
+    const reminted = await produceApplicationExperiment(p.lifecycle.store, experimentInput, { fns: builtinRegistry() });
+    if (reminted.experimentRef !== experiment.experimentRef) throw new Error("Experiment reproduction changed its digest");
+    // Non-promoting experiments remain valid retained evidence.
+    const unpromotedInput = { ...experimentInput, result: { promoted: false, revision: winner.revision } };
+    const unpromoted = await produceApplicationExperiment(p.lifecycle.store, unpromotedInput, { fns: builtinRegistry() });
+    equal("experiment unpromoted selection", { experiment: unpromoted.experimentRef, result: unpromoted.experiment.result }, await runNative(app("experiment", await dynamic("generation-experiment-unpromoted", unpromotedInput)), p.native));
+    const evidenceOnlyInput = { ...experimentInput, proposals: [] as Digest[], evaluations: [winnerEval.evaluationRef], comparison: null, selectionPolicy: null, selection: null, result: { promoted: false, revision: null } };
+    const evidenceOnly = await produceApplicationExperiment(p.lifecycle.store, evidenceOnlyInput, { fns: builtinRegistry() });
+    equal("experiment evidence-only", { experiment: evidenceOnly.experimentRef, result: evidenceOnly.experiment.result }, await runNative(app("experiment", await dynamic("generation-experiment-evidence-only", evidenceOnlyInput)), p.native));
+    // Join rejections must agree on both runtimes: cross-parent and
+    // cross-environment joins, evaluation sets that outgrow the comparison,
+    // and selections outside the cited proposals all refuse identically.
+    for (const [name, bad] of [
+      ["cross-parent", { ...experimentInput, parentState: head }],
+      ["cross-environment", { ...experimentInput, environment: "other-env" }],
+      ["evaluations-outside-comparison", { ...experimentInput, evaluations: [winnerEval.evaluationRef] }],
+      ["selection-outside-proposals", { ...experimentInput, proposals: [] as Digest[] }],
+      ["unselected-result", { ...experimentInput, result: { promoted: false, revision: loser.revision } }],
+    ] as [string, ProduceExperimentInput][]) {
+      const refused = await produceApplicationExperiment(p.lifecycle.store, bad, { fns: builtinRegistry() }).then(() => false, () => true);
+      const attempt = await runNativeAttempt(app("experiment", await dynamic(`experiment-${name}`, bad)), p.native);
+      if (!refused || attempt.code !== 2) throw new Error(`Experiment rejection differs: ${name}`);
+      checked++;
+    }
+    // Closed-record rejections: unknown keys and malformed stored joins.
+    for (const [name, body] of Object.entries({
+      "unknown-key": { ...experiment.experiment, extra: true },
+      "selection-without-policy": { ...experiment.experiment, selectionPolicy: null },
+    })) {
+      const recordRef = await p.put(body as JsonValue);
+      const refused = await verifyApplicationExperiment(p.lifecycle.store, recordRef, proposalHead, { fns: builtinRegistry() }).then(() => false, () => true);
+      const attempt = await runNativeAttempt(app("verify-experiment", await dynamic(`experiment-verify-${name}`, { experiment: recordRef, expectedState: proposalHead })), p.native);
+      if (!refused || attempt.code !== 2) throw new Error(`Experiment record rejection differs: ${name}`);
+      checked++;
+    }
+    // The activation cites the experiment alongside the ordinary evidence;
+    // the host replays the whole joined chain and binds result.revision to
+    // the committed revision.
+    const activateInput = (name: string) => ({ application: APP, operation: op(name), kind: "activate" as const, expectedHead: proposalHead, revision: winner.revision, memory: created.state.memory, intents: [], evidence: [winnerEval.evaluationRef, compared.comparisonRef, selectionPolicyRef, experiment.experimentRef].sort(), causedBy: null });
     const deniedNoEnv = await p.lifecycle.commit(activateInput("selection-no-env")).then(() => false, () => true);
     const deniedNoEnvNative = await runNativeAttempt(app("commit", await dynamic("selection-no-env", activateInput("selection-no-env"))), p.native);
     if (!deniedNoEnv || deniedNoEnvNative.code !== 2) throw new Error("Selection policy on a host without an environment was not denied");
@@ -891,6 +992,37 @@ async function checkGoalAndQuotaParity(): Promise<void> {
     const activated = await envLifecycle.commit(activateInput("selection-activate"));
     equal("selection activate", shape(activated), await runNative(app("--selection-environment", "parity-harness", "commit", await dynamic("selection-activate", activateInput("selection-activate"))), p.native));
     if (activated.state.revision !== winner.revision) throw new Error("Selection activation did not install the selected candidate");
+    // Deterministic lineage: the retained history projects to one row per
+    // committed state in genesis→head order — identical bytes on both
+    // runtimes for the same application files.
+    equal("lineage", await envLifecycle.lineage(APP), await runNative(app("lineage", APP), p.native));
+  }
+  // Structured-facts-only ablation: identical applicability is derived over
+  // two memory chains that differ by exactly one structured fact — the
+  // retained observation claim — so the derivation flips between `unknown`
+  // and `supported` with no inference anywhere. The pair is deterministic
+  // ablation evidence: it shows the join distinguishes fact presence; it
+  // claims nothing about fitness or efficacy.
+  {
+    const p = await pair("structured-ablation");
+    const memory = new ApplicationMemoryService({ store: p.lifecycle.store, engine, admission: p.admission });
+    const created = await create(p, revisionRef, "ablation-create");
+    const ablated = await memory.query(created.digest, queryRef);
+    equal("ablation unknown derivation", { derivation: ablated.ref, status: ablated.derivation.status }, await runNative(app("query", created.digest, queryRef), p.native));
+    if (ablated.derivation.status !== "unknown" || ablated.derivation.sourceRefs.length !== 0) {
+      throw new Error("Ablated arm derived support from a fact it does not have");
+    }
+    const publishInput = { application: APP, operation: op("ablation-publish"), expectedHead: created.digest, expectedMemory: created.state.memory, observation: observationInput };
+    const appended = await appendObservation(p.lifecycle, memory, publishInput);
+    equal("ablation publish", { snapshot: appended.snapshot.digest, memory: appended.memory, observation: appended.observation }, await runNative(app("publish", await dynamic("ablation-publish", publishInput)), p.native));
+    const control = await memory.query(appended.snapshot.digest, queryRef);
+    equal("ablation supported derivation", { derivation: control.ref, status: control.derivation.status }, await runNative(app("query", appended.snapshot.digest, queryRef), p.native));
+    if (control.derivation.status !== "supported" || !control.derivation.sourceRefs.includes(appended.observation)) {
+      throw new Error("Control arm did not derive support from the added structured fact");
+    }
+    // Both derivations are retained records: the only difference between the
+    // arms is the presence of the observation claim in the fact set.
+    equal("ablation lineage", await p.lifecycle.lineage(APP), await runNative(app("lineage", APP), p.native));
   }
   // Active selection rollover preserves the application, history and native
   // applicability while both runtimes reject forgotten archives/resurrection.
@@ -930,6 +1062,58 @@ async function checkGoalAndQuotaParity(): Promise<void> {
     equal("append carries archive", { snapshot: appended.snapshot.digest, memory: appended.memory, observation: appended.observation }, await runNative(app("publish", await dynamic("rollover-ordinary-append", appendInput)), p.native));
     if (parseMemorySnapshot(await p.lifecycle.store.getValue(appended.memory)).archive !== rolled.archive) throw new Error("Ordinary append lost rollover provenance");
     equal("rollover retry preserves operation", { snapshot: (await rolloverApplicationMemory(p.lifecycle, memory, input)).snapshot.digest, memory: rolled.memory, archive: rolled.archive }, await runNative(app("rollover-memory", await dynamic("memory-rollover-retry", input)), p.native));
+  }
+  // Explicit drain of undispatched work across a schema migration: one intent
+  // is abandoned forever, the other is carried forward and still settles —
+  // and every step emits identical bytes on both runtimes.
+  {
+    const p = await pair("drain-abandonment");
+    const pendingOf = async (svc: ApplicationService) => {
+      const rows = await (svc as unknown as { pending(h: unknown): Promise<{ intent: string; sourceState: string; dispatch: ApplicationDispatch | null }[]> }).pending(await svc.history(APP));
+      return { pending: rows.map(row => ({ intent: row.intent, sourceState: row.sourceState, dispatch: row.dispatch })) };
+    };
+    // The drain candidate changes schema and query bundle only: keeping the
+    // incumbent manifest means the migrate needs no evaluation evidence, so
+    // the drain is the only new admission surface under test.
+    const revisionDrain = { ...revision, parent: revisionRef, schema: schema2Ref, queries: queries2Ref,
+      entrypoints: revision.entrypoints.map(entry => ({ ...entry, applicability: query2Ref, queries: [query2Ref] })) };
+    const revisionDrainRef = await p.put(revisionDrain);
+    const created = await create(p, revisionRef, "drain-create");
+    const workInput = { application: APP, operation: op("drain-work"), kind: "investigate" as const, expectedHead: created.digest, revision: revisionRef, memory: genesisMemoryRef,
+      intents: [{ kind: "deliver", route: "investigate", message: rawRef }, { kind: "deliver", route: "investigate", message: digestCanonical(receipt) }], evidence: [], causedBy: null };
+    const workState = await p.lifecycle.commit(workInput);
+    equal("drain work commit", shape(workState), await runNative(app("commit", await dynamic("drain-work", workInput)), p.native));
+    const [abandonedIntent, carriedIntent] = workState.transition.intents as [Digest, Digest];
+    const drainMigrationRequest = { application: APP, from: genesisMemoryRef, schema: schema2Ref, scope: scope2Ref, procedure: procedure2Ref, program: manifest2Ref, decoder: decoder2Ref, previousRevision: revisionRef, candidateRevision: revisionDrainRef };
+    const migrated = await migrateApplicationMemory(new ApplicationMemoryService({ store: p.lifecycle.store, engine, admission: p.admission }), drainMigrationRequest, { fns: builtinRegistry() });
+    equal("drain migrate-memory", migrated, await runNative(app("migrate-memory", await dynamic("drain-migrate-request", drainMigrationRequest)), p.native));
+    // A migrate that ignores the undispatched set is refused on both runtimes.
+    const bareMigrate = { application: APP, operation: op("drain-migrate-bare"), kind: "migrate", expectedHead: workState.digest, revision: revisionDrainRef, memory: migrated.snapshot, intents: [], evidence: [migrated.migration], causedBy: null };
+    const bareDenied = await p.lifecycle.commit(bareMigrate).then(() => false, () => true);
+    const bareAttempt = await runNativeAttempt(app("commit", await dynamic("drain-migrate-bare", bareMigrate)), p.native);
+    if (!bareDenied || bareAttempt.code !== 2) throw new Error("Undrained migrate was not refused identically");
+    checked++;
+    const drainInput = { application: APP, parentState: workState.digest,
+      dispositions: [{ intent: abandonedIntent, status: "abandoned" }, { intent: carriedIntent, status: "migrated" }].sort((a, b) => (a.intent < b.intent ? -1 : 1)) };
+    const drain = await produceApplicationDrain(p.lifecycle, drainInput);
+    equal("drain produce", { drain }, await runNative(app("drain", await dynamic("drain-produce", drainInput)), p.native));
+    await verifyApplicationDrain(p.lifecycle, drain, workState.digest);
+    equal("drain verify", { verified: true }, await runNative(app("verify-drain", await dynamic("drain-verify", { drain, expectedState: workState.digest })), p.native));
+    const migrate = { application: APP, operation: op("drain-migrate"), kind: "migrate", expectedHead: workState.digest, revision: revisionDrainRef, memory: migrated.snapshot, intents: [], evidence: [migrated.migration, drain].sort(), causedBy: null };
+    const migratedState = await p.lifecycle.commit(migrate);
+    equal("drained migrate", shape(migratedState), await runNative(app("commit", await dynamic("drain-migrate", migrate)), p.native));
+    // The abandoned intent leaves pending permanently; the carried one stays.
+    const remaining = await pendingOf(p.lifecycle);
+    if (remaining.pending.length !== 1 || remaining.pending[0]!.intent !== carriedIntent) throw new Error("Abandonment did not project out of pending");
+    equal("drained pending", remaining, await runNative(app("pending", APP), p.native));
+    const pairDispatcher = createApplicationDomainDispatcher(policy, { channelsDir: join(p.typescript, "channels"), store: p.lifecycle.store });
+    const dispatched = await p.lifecycle.dispatchPending(APP, pairDispatcher);
+    equal("drained dispatch", { dispatches: dispatched }, await runNative(app("dispatch", APP), p.native));
+    if (dispatched.some(row => row.intent === abandonedIntent) || !dispatched.some(row => row.intent === carriedIntent && row.status === "settled")) throw new Error("Drain dispositions did not hold through dispatch");
+    equal("post-drain pending", await pendingOf(p.lifecycle), await runNative(app("pending", APP), p.native));
+    // Abandonment is CAS evidence: the original intent record is untouched and
+    // byte-identical in both stores.
+    equal("abandoned intent bytes unchanged", await p.lifecycle.store.getValue(abandonedIntent), await p.nativeStore.getValue(abandonedIntent));
   }
   // An admitted identifier may match an inherited Object property: missing
   // evidence must remain unknown, and an own supplied digest must still work.

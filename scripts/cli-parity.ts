@@ -184,5 +184,8 @@ try {
   await writeFile(join(badExamples, "hello.algal.json"), await readFile(join(root, "examples/hello.algal.json")));
   await writeFile(join(badExamples, "hello.responses.json"), "{malformed");
   await reject("suite-corrupt-optional-evidence", ["suite", "--examples", badExamples]);
+  // Application lineage is read-only: an absent application emits `[]` on both CLIs.
+  await compare("application-lineage-empty", ["application", "lineage", "missing-app"]);
+  await reject("application-lineage-extra-positional", ["application", "lineage", "a", "b"]);
   console.log(`CLI parity: ${checked} cases passed (canonical results and rejection statuses)`);
 } finally { await rm(temp, { recursive: true, force: true }); }
