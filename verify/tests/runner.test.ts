@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { hashBytes, hashJson } from "../lib/files";
-import { admitInfrastructureResult, admitSelftestOutput, CHILD_ENV, requireSameBinding, requireSuccess, runCommand, runSuite, type CommandResult, type RunBinding } from "../lib/runner";
+import { admitInfrastructureResult, admitSelftestOutput, CHILD_ENV, CommandFailure, requireSameBinding, requireSuccess, runCommand, runSuite, type CommandResult, type RunBinding } from "../lib/runner";
 
 function binding(): RunBinding {
   const inputs = [{ path: "verify/model.tla", sha256: hashBytes("model") }];
@@ -74,12 +74,41 @@ describe("bounded child execution", () => {
     expect(result.timedOut).toBe(false);
     expect(() => requireSuccess(result)).not.toThrow();
   });
+  test("reused command descriptors survive collection while inherited writers remain live", async () => {
+    // Bun 1.3.14's extra-pipe owners closed reused descriptors during GC of
+    // earlier subprocess wrappers. Standard-stream custody must survive it.
+    for (let i = 0; i < 12; i++) {
+      const pending = runCommand(["/bin/sh", "-c", "(/bin/sleep 0.15; printf out; printf err >&2) & exit 0"], process.cwd(), { timeoutMs: 2_000 });
+      const collect = setTimeout(() => Bun.gc(true), 75);
+      try {
+        const result = await pending;
+        expect(() => requireSuccess(result)).not.toThrow();
+        expect(result.stdout).toBe("out");
+        expect(result.stderr).toBe("err");
+      } finally { clearTimeout(collect); }
+    }
+  }, 20000);
+  test("backpressure preserves exact multi-megabyte bytes on both streams", async () => {
+    const result = await runCommand([process.execPath, "-e", "process.stdout.write('a'.repeat(2097152)); process.stderr.write('b'.repeat(2097152))"], process.cwd(), { timeoutMs: 5_000, maxOutputBytes: 5_000_000 });
+    expect(() => requireSuccess(result)).not.toThrow();
+    expect(result.stdout).toBe("a".repeat(2_097_152));
+    expect(result.stderr).toBe("b".repeat(2_097_152));
+  });
   test("missing executable fails, rather than creating a successful empty result", async () => {
     await expect(runCommand(["/algal-verification-missing-tool"], process.cwd())).rejects.toThrow();
   });
   test("malformed command output cannot normalize into successful UTF-8 evidence", async () => {
-    for (const stream of ["stdout", "stderr"]) {
-      await expect(runCommand([process.execPath, "-e", `process.${stream}.write(Buffer.from([255]))`], process.cwd())).rejects.toThrow("invalid UTF-8");
+    for (const stream of ["stdout", "stderr"] as const) {
+      let failure: unknown;
+      try { await runCommand([process.execPath, "-e", `process.${stream}.write(Buffer.from([255]))`], process.cwd()); }
+      catch (error) { failure = error; }
+      expect(failure).toBeInstanceOf(CommandFailure);
+      const captured = failure as CommandFailure;
+      expect(captured.message).toContain("invalid UTF-8");
+      expect([...captured[stream === "stdout" ? "rawStdout" : "rawStderr"]]).toEqual([255]);
+      expect(captured.observation.completion?.exitCode).toBe(0);
+      expect(captured.observation.drained?.[stream === "stdout" ? "stdoutBytes" : "stderrBytes"]).toBe(1);
+      expect(captured.observation.receivedBytes[stream]).toBe(1);
     }
   });
 });

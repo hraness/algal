@@ -3,14 +3,13 @@ use crate::{
     canonical::{MAX_DOCUMENT_BYTES, canonical, check_digest, digest, read_json},
     capabilities::{capability_handle, parse_capability_handle},
     contract::id,
+    durable_fs,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
     fs::{self, File, OpenOptions},
-    io::Write,
     path::{Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
 };
 
 pub const CAPABILITY_CONTRACT: &str = "algal.capability.v1";
@@ -24,8 +23,6 @@ pub const MAILBOX_RECEIVE_TOOL: &str = "mailbox.receive.v1";
 pub const MAX_MAILBOXES: usize = 1_024;
 pub const MAX_MESSAGES: usize = 1_024;
 pub const MAX_MESSAGE_BYTES: usize = 250_000;
-
-static NONCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -126,64 +123,53 @@ fn no_link(path: &Path) -> Result<()> {
 
 fn write_new(path: &Path, value: &Value) -> Result<bool> {
     no_link(path)?;
-    let parent = path
-        .parent()
-        .ok_or_else(|| Error::invalid("mailbox parent"))?;
-    let temporary = parent.join(format!(
-        ".algal-publish-{}-{}",
-        std::process::id(),
-        NONCE.fetch_add(1, Ordering::Relaxed)
-    ));
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
+    let bytes = canonical(value)?;
+    if durable_fs::publish(path, bytes.as_bytes(), false)? {
+        return Ok(true);
     }
-    let mut file = options.open(&temporary)?;
-    let result = (|| -> Result<bool> {
-        file.write_all(canonical(value)?.as_bytes())?;
-        file.sync_all()?;
-        match fs::hard_link(&temporary, path) {
-            Ok(()) => {
-                File::open(parent)?.sync_all()?;
-                Ok(true)
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
-            Err(error) => Err(error.into()),
+    let retained = read_retained(path, |retained| {
+        if canonical(retained)? != bytes {
+            return Err(Error::new(
+                "DIGEST_MISMATCH",
+                "immutable mailbox publication conflicts",
+            ));
         }
-    })();
-    let cleanup = fs::remove_file(&temporary);
-    result.and_then(|published| {
-        cleanup?;
-        Ok(published)
-    })
+        Ok(())
+    })?;
+    if retained.is_none() {
+        return Err(Error::new(
+            "IO_FAILED",
+            "retained mailbox publication disappeared",
+        ));
+    }
+    Ok(false)
 }
 
 struct MailboxLock {
-    path: PathBuf,
+    path: Option<PathBuf>,
     _file: File,
+}
+impl MailboxLock {
+    fn release(mut self) -> Result<()> {
+        // Disarm before unlink: a post-unlink failure must never cause Drop to
+        // delete a later caller's newly created lock at the same pathname.
+        let path = self
+            .path
+            .take()
+            .ok_or_else(|| Error::new("IO_FAILED", "mailbox lock already released"))?;
+        durable_fs::unlink(&path, "unlink-lock")
+    }
 }
 impl Drop for MailboxLock {
     fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
+        if let Some(path) = self.path.take() {
+            let _ = durable_fs::unlink(&path, "unlink-lock");
+        }
     }
 }
 
 fn write_replace(path: &Path, value: &Value) -> Result<()> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| Error::invalid("mailbox path parent"))?;
-    fs::create_dir_all(parent)?;
-    let temporary = parent.join(format!(
-        ".algal-mailbox-{}-{}",
-        std::process::id(),
-        NONCE.fetch_add(1, Ordering::Relaxed)
-    ));
-    write_new(&temporary, value)?;
-    fs::rename(&temporary, path)?;
-    File::open(parent)?.sync_all()?;
+    durable_fs::publish(path, canonical(value)?.as_bytes(), true)?;
     Ok(())
 }
 
@@ -192,6 +178,17 @@ fn read_optional(path: &Path) -> Result<Option<Value>> {
     crate::store::open_regular_file(path, MAX_DOCUMENT_BYTES)?
         .map(|file| read_json(file, MAX_DOCUMENT_BYTES))
         .transpose()
+}
+
+fn read_retained(path: &Path, admit: impl FnOnce(&Value) -> Result<()>) -> Result<Option<Value>> {
+    no_link(path)?;
+    let Some(file) = crate::store::open_regular_file(path, MAX_DOCUMENT_BYTES)? else {
+        return Ok(None);
+    };
+    let value = read_json(&file, MAX_DOCUMENT_BYTES)?;
+    admit(&value)?;
+    durable_fs::sync_retained(&file, path)?;
+    Ok(Some(value))
 }
 
 fn parse_config(value: Value) -> Result<MailboxConfig> {
@@ -352,6 +349,7 @@ impl MailboxService {
             {
                 return Err(Error::invalid("mailbox already has different bounds"));
             }
+            self.retain_config(&existing)?;
             return Ok(existing);
         }
         if self.list()?.len() >= MAX_MAILBOXES {
@@ -368,10 +366,10 @@ impl MailboxService {
             send: send.handle.clone(),
             receive: receive.handle.clone(),
         };
-        fs::create_dir_all(self.messages_dir(name)?)?;
-        fs::create_dir_all(self.pending_dir(name)?)?;
-        fs::create_dir_all(self.consumed_dir(name)?)?;
-        fs::create_dir_all(self.root.join("capabilities"))?;
+        durable_fs::directory(&self.messages_dir(name)?)?;
+        durable_fs::directory(&self.pending_dir(name)?)?;
+        durable_fs::directory(&self.consumed_dir(name)?)?;
+        durable_fs::directory(&self.root.join("capabilities"))?;
         write_new(
             &self.record_path(&send.handle)?,
             &serde_json::to_value(send)?,
@@ -389,9 +387,59 @@ impl MailboxService {
             {
                 return Err(Error::invalid("mailbox already has different bounds"));
             }
+            self.retain_config(&existing)?;
             return Ok(existing);
         }
         Ok(config)
+    }
+
+    fn retain_config(&self, config: &MailboxConfig) -> Result<()> {
+        for handle in [&config.send, &config.receive] {
+            let retained = read_retained(&self.record_path(handle)?, |raw| {
+                let record = parse_record(raw.clone())?;
+                // Revoked authority remains revoked; never mint a replacement.
+                if record.handle != *handle || record.mailbox != config.name {
+                    return Err(Error::new(
+                        "DIGEST_MISMATCH",
+                        "mailbox authority does not match its configuration",
+                    ));
+                }
+                Ok(())
+            })?;
+            if retained.is_none() {
+                return Err(Error::new(
+                    "DIGEST_MISMATCH",
+                    "mailbox configuration has no authority record",
+                ));
+            }
+        }
+        let retained = read_retained(&self.config_path(&config.name)?, |raw| {
+            if parse_config(raw.clone())? != *config {
+                return Err(Error::new(
+                    "DIGEST_MISMATCH",
+                    "mailbox configuration changed during publication",
+                ));
+            }
+            Ok(())
+        })?;
+        if retained.is_none() {
+            return Err(Error::new(
+                "IO_FAILED",
+                "retained mailbox configuration disappeared",
+            ));
+        }
+        for path in [
+            self.messages_dir(&config.name)?,
+            self.pending_dir(&config.name)?,
+            self.consumed_dir(&config.name)?,
+        ] {
+            let metadata = fs::symlink_metadata(&path)?;
+            if !metadata.is_dir() || metadata.file_type().is_symlink() {
+                return Err(Error::new("IO_FAILED", "mailbox directory is not admitted"));
+            }
+            durable_fs::directory(&path)?;
+        }
+        Ok(())
     }
 
     pub fn inspect(&self, name: &str) -> Result<Option<MailboxConfig>> {
@@ -477,6 +525,20 @@ impl MailboxService {
     }
 
     fn lock(&self, name: &str) -> Result<MailboxLock> {
+        for directory in [
+            self.messages_dir(name)?,
+            self.pending_dir(name)?,
+            self.consumed_dir(name)?,
+            self.root.join("capabilities"),
+        ] {
+            let info = fs::symlink_metadata(directory)?;
+            if !info.is_dir() || info.file_type().is_symlink() {
+                return Err(Error::new(
+                    "IO_FAILED",
+                    "admitted mailbox directory is missing or invalid",
+                ));
+            }
+        }
         let config = self.config_path(name)?;
         let path = config
             .parent()
@@ -490,22 +552,36 @@ impl MailboxService {
             use std::os::unix::fs::OpenOptionsExt;
             options.mode(0o600);
         }
-        let file = options.open(&path).map_err(|error| {
-            if error.kind() == std::io::ErrorKind::AlreadyExists {
-                Error::new("IO_FAILED", format!("mailbox \"{name}\" is locked; reconcile the owning operation before retrying"))
-            } else { error.into() }
+        let mut owned = None;
+        durable_fs::step("create-lock", &path, None, || {
+            let file = options.open(&path).map_err(|error| {
+                if error.kind() == std::io::ErrorKind::AlreadyExists {
+                    Error::new("IO_FAILED", format!("mailbox \"{name}\" is locked; reconcile the owning operation before retrying"))
+                } else { error.into() }
+            })?;
+            owned = Some(MailboxLock {
+                path: Some(path.clone()),
+                _file: file,
+            });
+            Ok(())
         })?;
-        Ok(MailboxLock { path, _file: file })
+        owned.ok_or_else(|| Error::new("IO_FAILED", "mailbox lock was not acquired"))
+    }
+
+    fn with_lock<T>(&self, name: &str, action: impl FnOnce() -> Result<T>) -> Result<T> {
+        let lock = self.lock(name)?;
+        let result = action();
+        let released = lock.release();
+        result.and_then(|value| released.map(|()| value))
     }
 
     /// Host readiness observation; it never dequeues a delivery.
     pub fn has_pending(&self, handle: &str) -> Result<bool> {
         let (config, _) = self.resolve(handle, MAILBOX_RECEIVE)?;
-        let _lock = self.lock(&config.name)?;
-        let (config, _) = self.resolve(handle, MAILBOX_RECEIVE)?;
-        Ok(!self
-            .message_files(&config.name, config.max_messages)?
-            .is_empty())
+        self.with_lock(&config.name, || {
+            let (config, _) = self.resolve(handle, MAILBOX_RECEIVE)?;
+            Ok(!self.unambiguous_pending(&config)?.is_empty())
+        })
     }
 
     pub fn revoke(&self, handle: &str) -> Result<()> {
@@ -517,17 +593,21 @@ impl MailboxService {
             ));
         }
         let (config, _) = self.resolve(handle, &parsed.capability)?;
-        let _lock = self.lock(&config.name)?;
-        let (_, mut record) = self.resolve(handle, &parsed.capability)?;
-        record.revoked = true;
-        write_replace(&self.record_path(handle)?, &serde_json::to_value(record)?)
+        self.with_lock(&config.name, || {
+            let (_, mut record) = self.resolve(handle, &parsed.capability)?;
+            record.revoked = true;
+            write_replace(&self.record_path(handle)?, &serde_json::to_value(record)?)
+        })
     }
 
     fn message_files(&self, name: &str, max: usize) -> Result<Vec<PathBuf>> {
         let mut files = Vec::new();
         match fs::read_dir(self.pending_dir(name)?) {
             Ok(entries) => {
-                for entry in entries {
+                for (count, entry) in entries.enumerate() {
+                    if count >= max * 2 + 16 {
+                        return Err(Error::limit("mailbox pending physical entry count"));
+                    }
                     let entry = entry?;
                     let file_type = entry.file_type()?;
                     if file_type.is_symlink() {
@@ -553,7 +633,12 @@ impl MailboxService {
     pub fn send(&self, handle: &str, value: Value, idempotency_key: &str) -> Result<Value> {
         check_digest(idempotency_key)?;
         let (config, _) = self.resolve(handle, MAILBOX_SEND)?;
-        let _lock = self.lock(&config.name)?;
+        self.with_lock(&config.name, || {
+            self.send_locked(handle, value, idempotency_key)
+        })
+    }
+
+    fn send_locked(&self, handle: &str, value: Value, idempotency_key: &str) -> Result<Value> {
         let (config, _) = self.resolve(handle, MAILBOX_SEND)?;
         let bytes = canonical(&value)?.len();
         if bytes > config.max_message_bytes {
@@ -567,8 +652,8 @@ impl MailboxService {
         let message_path = self.messages_dir(&config.name)?.join(&file);
         let pending_path = self.pending_dir(&config.name)?.join(&file);
         let consumed_path = self.consumed_dir(&config.name)?.join(&file);
-        let validate_message = |raw: Value| -> Result<()> {
-            let message = parse_message(raw)?;
+        let validate_message = |raw: &Value| -> Result<()> {
+            let message = parse_message(raw.clone())?;
             if message.id != id
                 || message.idempotency_key != idempotency_key
                 || message.mailbox != config.name
@@ -580,9 +665,7 @@ impl MailboxService {
             }
             Ok(())
         };
-        if let Some(existing) = read_optional(&message_path)? {
-            validate_message(existing)?;
-        } else {
+        if read_retained(&message_path, validate_message)?.is_none() {
             for marker in [&pending_path, &consumed_path] {
                 if read_optional(marker)?.is_some() {
                     return Err(Error::new(
@@ -606,20 +689,27 @@ impl MailboxService {
             };
             if !write_new(&message_path, &serde_json::to_value(message)?)? {
                 validate_message(
-                    read_optional(&message_path)?
+                    &read_optional(&message_path)?
                         .ok_or_else(|| Error::new("IO_FAILED", "mailbox send raced"))?,
                 )?;
             }
         }
-        for marker in [&pending_path, &consumed_path] {
-            let Some(marker) = read_optional(marker)? else {
+        let (pending, consumed) = self.delivery_markers(&config, &file, &id)?;
+        for (path, marker) in [(&pending_path, pending), (&consumed_path, consumed)] {
+            if marker.is_none() {
                 continue;
-            };
-            if parse_delivery(marker)?.id != id {
-                return Err(Error::new(
-                    "DIGEST_MISMATCH",
-                    "mailbox delivery claims another message",
-                ));
+            }
+            let retained = read_retained(path, |raw| {
+                if parse_delivery(raw.clone())?.id != id {
+                    return Err(Error::new(
+                        "DIGEST_MISMATCH",
+                        "mailbox delivery claims another message",
+                    ));
+                }
+                Ok(())
+            })?;
+            if retained.is_none() {
+                return Err(Error::new("IO_FAILED", "mailbox delivery disappeared"));
             }
             return Ok(json!({"id":id}));
         }
@@ -648,10 +738,65 @@ impl MailboxService {
 
     pub fn receive(&self, handle: &str) -> Result<Value> {
         let (config, _) = self.resolve(handle, MAILBOX_RECEIVE)?;
-        let _lock = self.lock(&config.name)?;
+        self.with_lock(&config.name, || self.receive_locked(handle))
+    }
+
+    fn delivery_markers(
+        &self,
+        config: &MailboxConfig,
+        file: &str,
+        id: &str,
+    ) -> Result<(Option<Value>, Option<Value>)> {
+        let pending = read_optional(&self.pending_dir(&config.name)?.join(file))?;
+        let consumed = read_optional(&self.consumed_dir(&config.name)?.join(file))?;
+        for raw in [&pending, &consumed].into_iter().flatten() {
+            if parse_delivery(raw.clone())?.id != id {
+                return Err(Error::new(
+                    "DIGEST_MISMATCH",
+                    "mailbox delivery claims another message",
+                ));
+            }
+        }
+        if pending.is_some() && consumed.is_some() {
+            return Err(Error::new(
+                "IO_FAILED",
+                "mailbox delivery is uncertain; pending and consumed evidence require reconciliation",
+            ));
+        }
+        Ok((pending, consumed))
+    }
+
+    fn unambiguous_pending(&self, config: &MailboxConfig) -> Result<Vec<PathBuf>> {
+        let pending = self.message_files(&config.name, config.max_messages)?;
+        for path in &pending {
+            let file = path
+                .file_name()
+                .and_then(|v| v.to_str())
+                .ok_or_else(|| Error::invalid("mailbox message filename"))?;
+            if read_optional(&self.consumed_dir(&config.name)?.join(file))?.is_none() {
+                continue;
+            }
+            let message = parse_message(
+                read_optional(&self.messages_dir(&config.name)?.join(file))?
+                    .ok_or_else(|| Error::new("DIGEST_MISMATCH", "mailbox message missing"))?,
+            )?;
+            if message.mailbox != config.name
+                || file != format!("{}.json", &message.idempotency_key[7..])
+            {
+                return Err(Error::new(
+                    "DIGEST_MISMATCH",
+                    "mailbox delivery has a foreign message claim",
+                ));
+            }
+            self.delivery_markers(config, file, &message.id)?;
+        }
+        Ok(pending)
+    }
+
+    fn receive_locked(&self, handle: &str) -> Result<Value> {
         let (config, _) = self.resolve(handle, MAILBOX_RECEIVE)?;
         for _ in 0..16 {
-            let files = self.message_files(&config.name, config.max_messages)?;
+            let files = self.unambiguous_pending(&config)?;
             if files.is_empty() {
                 return Err(Error::suspended(
                     format!("mailbox \"{}\" is empty", config.name),
@@ -685,15 +830,27 @@ impl MailboxService {
                         config.max_message_bytes
                     )));
                 }
-                match fs::rename(&source, self.consumed_dir(&config.name)?.join(file)) {
-                    Ok(()) => {
-                        File::open(self.pending_dir(&config.name)?)?.sync_all()?;
-                        File::open(self.consumed_dir(&config.name)?)?.sync_all()?;
-                        return Ok(json!({"id":message.id,"message":message.value}));
+                self.delivery_markers(&config, file, &message.id)?;
+                read_retained(&message_path, |raw| {
+                    let retained = parse_message(raw.clone())?;
+                    if retained.id != message.id
+                        || retained.mailbox != config.name
+                        || retained.idempotency_key != message.idempotency_key
+                    {
+                        return Err(Error::new(
+                            "DIGEST_MISMATCH",
+                            "mailbox message changed during consumption",
+                        ));
                     }
-                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-                    Err(error) => return Err(error.into()),
-                }
+                    Ok(())
+                })?
+                .ok_or_else(|| Error::new("IO_FAILED", "mailbox message disappeared"))?;
+                write_new(
+                    &self.consumed_dir(&config.name)?.join(file),
+                    &json!({"contract":MAILBOX_DELIVERY_CONTRACT,"id":message.id}),
+                )?;
+                durable_fs::unlink(&source, "unlink-pending")?;
+                return Ok(json!({"id":message.id,"message":message.value}));
             }
         }
         Err(Error::suspended(

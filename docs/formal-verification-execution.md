@@ -8,7 +8,7 @@ The audit and plan documents were the only changes carried onto the task branch.
 
 ## Current orchestration step
 
-Phase 01 checkpoint — known admission, policy, decoding, retained-cache and target counterexamples repaired and independently reviewed. Phases 02 and 03 begin after the integrated checkpoint. The integrator owns the property registry, assumptions, tool pins, shared manifests, CI, generated evaluator artifact and this execution record. Workers own disjoint runtime/test scopes, with independent review after convergence.
+Phases 02 and 03 — application custody, durable publication, finite protocol models and reproducible evaluator artifacts. Phase 01 passed its integrated checkpoint and was committed as 82f672d. The integrator owns the property registry, assumptions, tool pins, shared manifests, CI, generated evaluator artifact and this execution record. Workers own disjoint runtime/test scopes, with independent review after convergence.
 
 ## Environment
 
@@ -47,3 +47,87 @@ Independent native and TypeScript reviews approved the final admission/alias/res
 Focused native foundry/benchmark/graph/adaptation checks total 35 passing cases; store/file admission 20 and expression 37 also passed. Focused Bun regressions, strict TypeScript, repository ESLint and source whitespace checks passed. The native CLI was rebuilt with explicit Rustup 1.97.1 compiler paths, then compilation and schema parity passed on the converged runtime source with zero provider calls. Clippy required the absolute Rustup cargo-clippy executable plus RUSTUP_TOOLCHAIN=1.97.1; driver selection from the ordinary cargo subcommand remained incompatible despite RUSTC pinning. The final repository gate is still required after all implementation lanes converge.
 
 Integrated Phase 01 gate: `bun scripts/verify.ts --suite all-required --json` exited 0 on `sha256:bd7f5fb1407f7c90912f80ce45933735cda2b80cc2a6af088aeab4b7aeb39e59`: 518 governed inputs, 31 runner selftests, 138 focused production regressions and 30 raw/target comparisons. The ledger has 105 not-started and seven observed obligations, zero licensed/formal claims. Raw result: `.algal/verification-results/phase01.json`. An earlier attempt correctly rejected stale plan hashes; after refresh, one child exited 1 without retained diagnostic detail. Isolated supervised runner and boundary checks then passed. Bounded diagnostic tails were added without changing acceptance, and the integrated gate passed; the unexplained transient is not treated as a proved runner property.
+
+### Phases 02 and 03 in progress
+
+The first-head custody race was reproduced through deterministic real-service
+barriers in all eight Bun/native caller assignments before repair. Stable
+per-application primary custody plus permanent compatibility custody is now
+implemented in both runtimes. Focused capacity, legacy-owner, prepared-genesis
+and independent-admission controls pass; the mixed-runtime checkpoint is
+awaiting final validation on converged publication helpers.
+
+The publication lane adds explicit ancestor, retained-inode and acknowledgment
+barriers, consumed-before-pending mailbox transfer, and durable pathname-lock
+release. Its real-I/O checkpoints feed modeled crash images reopened by the
+actual readers. Finite TLA+ models and required counterexample mutations are
+being checked separately; no physical power-loss or proved-refinement claim is
+licensed by those modeled images.
+
+The isolated expression build reproduced WASM bytes exactly across two clean
+builds (`sha256:a1c788200feede210cae1b4926c7e2ee5524a814001056d83f2855f77b86eea9`,
+253235 bytes). A subsequent controlled build also produced a fresh native
+driver and passed all 30 full-response boundary comparisons. Compiler/runtime
+closure hashes and raw Cargo output are retained in task-local receipts. The
+adjacent artifact manifest deliberately becomes stale when its builder/runner
+changes; final evidence must be rebuilt after review and convergence.
+
+Longer actual Java runs exposed a runner pipe-lifecycle defect that short
+selftests had missed: target completion could be known while captured EOF was
+not observed. The affected runs failed closed. Root added lossless bounded
+failure diagnostics and separated supervisor-exit observation from captured
+pipe EOF; the focused output-limit counterexample now passes, while repeated
+Java qualification is still in progress. No failed or timed-out run is counted
+as successful formal evidence.
+
+
+### Review and verification infrastructure follow-up
+
+Independent Phase03 review required three corrections: bounded supervised WASM
+compilation (parent admission now only binds bytes), real copied-source stale
+artifact controls including a valid changed module, and separately owned exclusive
+random publication temporaries. A further review required retaining build scratch
+when process cleanup is unobserved; that path now keeps bounded raw diagnostics.
+These source corrections have independent review; renewed build/reproduction
+receipts remain pending the runner correction.
+
+The old extra-descriptor runner was reproduced closing reused capture descriptors
+when Bun 1.3.14 garbage collection finalized a prior subprocess wrapper. The
+24-run denied-listener probe was insufficient qualification. Actual TLC attempts
+failed closed, and those attempts do not establish model-suite success. A standard
+stream relay is being qualified with exact raw output, forced collection,
+inherited writers and actual listener-permitted Java. The 13 model profiles,
+58 action witnesses and 20 deliberate mutations have separately passed direct
+semantic diagnostics, but those diagnostic runs do not replace the owned runner.
+
+Phase09 has begun independently of the remaining Phase02/03 join. Its initial
+scope is explicit finite binary64 normalization, scalar/UTF-16 domains, finite
+maps, ports/graphs and accounting. Full ECMAScript shortest-decimal canonical
+encoding remains an unmet criterion; a structural codec will not silently stand
+in for that claim. The pinned Lean distribution manifest was derived from the
+checksum-verified archive (17,711 files). A diagnostic whole-import trust-zero
+check at 512 MiB failed its memory bound and is not accepted proof evidence.
+
+### Phase02/03 joined checkpoint
+
+Both operational model suites and their fresh raw-log/source/tool re-admission
+passed: 13 finite profiles, 58 action witnesses and 20 intended counterexamples
+across 91 runner-owned calls. The exact receipts and bounds are recorded in
+`formal-verification-evidence/phase02-models.md`. The current rebuilt native CLI
+passed all 250 application parity steps, 62 bundled examples and the mailbox
+admission/custody lifecycle. A freshly rebuilt native custody fixture passed all
+eight mixed-runtime schedules under the repaired runner. The runner/parser/claim
+admission join passed 70 tests and 275 assertions.
+
+The isolated expression build and independent clean check reproduced exactly
+`a1c788200feede210cae1b4926c7e2ee5524a814001056d83f2855f77b86eea9`.
+Each passed all 30 native/WASM comparisons. Real-file stale-artifact and concurrent
+publication controls passed 5 tests/19 assertions; the current shipped WASM passed
+17 expression tests/104 assertions. `formal-verification-evidence/phase03-artifact.md`
+records exact recipe, source/runtime bindings, reviews and limitations.
+
+Phases02 and03 are complete within these conditional finite/model/artifact scopes.
+Universal ledger obligations remain unproved and license zero formal claims.
+The final repository aggregate gate and delivery remain required after the
+remaining plan converges. Phase04 is the next dependent implementation lane;
+Phase09 continues independently.

@@ -1,0 +1,926 @@
+{
+  "contract": "algal.expression-build.v1",
+  "recipe": {
+    "toolchain": "1.97.1",
+    "target": "wasm32-unknown-unknown",
+    "rustCommit": "8bab26f4f68e0e26f0bb7960be334d5b520ea452",
+    "llvm": "22.1.6",
+    "command": [
+      "build",
+      "--offline",
+      "--locked",
+      "-p",
+      "algal-expr",
+      "--lib",
+      "--target",
+      "wasm32-unknown-unknown",
+      "--release",
+      "--message-format=json-render-diagnostics"
+    ],
+    "nativeCommand": [
+      "build",
+      "--offline",
+      "--locked",
+      "-p",
+      "algal-expr",
+      "--example",
+      "verification_boundary",
+      "--message-format=json-render-diagnostics"
+    ],
+    "packages": [
+      {
+        "name": "itoa",
+        "version": "1.0.18",
+        "sha256": "sha256:8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
+      },
+      {
+        "name": "memchr",
+        "version": "2.8.3",
+        "sha256": "sha256:cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
+      },
+      {
+        "name": "ryu-js",
+        "version": "1.0.2",
+        "sha256": "sha256:dd29631678d6fb0903b69223673e122c32e9ae559d0960a38d574695ebc0ea15"
+      },
+      {
+        "name": "serde_core",
+        "version": "1.0.229",
+        "sha256": "sha256:67dca2c9c51e58a4791a4b1ed58308b39c64224d349a935ab5039aa360942a48"
+      },
+      {
+        "name": "serde_json",
+        "version": "1.0.151",
+        "sha256": "sha256:c841b55ecdae098c80dcae9cf767f6f8a0c2cdb3416bbef72181df4d0fe73f14"
+      },
+      {
+        "name": "zmij",
+        "version": "1.0.23",
+        "sha256": "sha256:29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
+      }
+    ],
+    "environment": {
+      "LANG": "C",
+      "LC_ALL": "C",
+      "TZ": "UTC",
+      "CARGO_INCREMENTAL": "0",
+      "SOURCE_DATE_EPOCH": "0"
+    },
+    "remap": {
+      "build": "/algal/build",
+      "toolchain": "/algal/toolchain"
+    },
+    "workspaceProjection": "Original workspace/manifests/lockfile and complete expression crate; empty unbuilt native lib.rs preserves workspace resolution."
+  },
+  "inputs": [
+    {
+      "path": "Cargo.lock",
+      "sha256": "sha256:f3ecdab66f6c533d19ee10fa42e31975c66ad67e4c81a00062979497a51c1af2"
+    },
+    {
+      "path": "Cargo.toml",
+      "sha256": "sha256:3f4c690f408e2a87dddbd78ba8912ee8087a7daf20a1d46a8ebe92dba44c18a9"
+    },
+    {
+      "path": "crates/algal-expr/Cargo.toml",
+      "sha256": "sha256:3c9fca2733b3a771fbbad5b115094aec77998616c1d6fd671e8f4bd3da4e5b39"
+    },
+    {
+      "path": "crates/algal-expr/examples/verification_boundary.rs",
+      "sha256": "sha256:999a28c91e8f788556fb9cb0d52b2078c755b41f89d1d8a9be2e2d0f9b0ac999"
+    },
+    {
+      "path": "crates/algal-expr/src/lib.rs",
+      "sha256": "sha256:840cb242b0994813e0dd477a5152ddb4ff09346951edb54292ac964e0bd1249f"
+    },
+    {
+      "path": "crates/algal-expr/src/tests.rs",
+      "sha256": "sha256:79eeb333941fa8717e575f60d45995fb930a8401e081eee88831529bc54144fd"
+    },
+    {
+      "path": "crates/algal/Cargo.toml",
+      "sha256": "sha256:727fec3383d8d9eed1248feee6fc722137525ef8c00abdf010c52ff927d1bf5e"
+    },
+    {
+      "path": "scripts/build-expr-wasm.sh",
+      "sha256": "sha256:7ddc2d7acb26051c8607ba2d5ce8c1aa832732ab997777a16dcd04f4048ecce2"
+    },
+    {
+      "path": "verify/artifact/run.ts",
+      "sha256": "sha256:5b712e70b4eb908410d42e272bc2f6d311a719a8eb7ee51d846ea2ad774e577e"
+    },
+    {
+      "path": "verify/boundary/run.ts",
+      "sha256": "sha256:357917d7db95de9e7fbb1961ebd64b163fa0adcc1913b10a0993d8cd5757503e"
+    },
+    {
+      "path": "verify/lib/claims.ts",
+      "sha256": "sha256:0859860990b1846b4746d2de0c98e452f1ca84786d2f7a35f9b8d2c2252fb47e"
+    },
+    {
+      "path": "verify/lib/command-supervisor.ts",
+      "sha256": "sha256:ce6cb3bb0ac430f30d659ff6ecc352ee7c2ac3a35b021539a8d171dd0d1a580d"
+    },
+    {
+      "path": "verify/lib/files.ts",
+      "sha256": "sha256:aaffad70367e4a6a6ae95b08b6d137e7a1d12be861d8c753ce52d9a4f274c2ed"
+    },
+    {
+      "path": "verify/lib/runner.ts",
+      "sha256": "sha256:6f012ebcd6f0333816f95b76891ffde12a3d3ab5c110930a8db6c4828ba6ffc2"
+    },
+    {
+      "path": "verify/lib/schema.ts",
+      "sha256": "sha256:144809df3dae3ddea8281537efed082a12d0dea7c5faccd20b0eb0db7e2ccbf9"
+    },
+    {
+      "path": "verify/lib/suites.ts",
+      "sha256": "sha256:14957ab04a038aabbfa412cb05a3c6ec83fa967d57a0ec2cf70a9f20b78e1645"
+    }
+  ],
+  "wasm": {
+    "sha256": "sha256:a1c788200feede210cae1b4926c7e2ee5524a814001056d83f2855f77b86eea9",
+    "size": 253235,
+    "exports": [
+      {
+        "name": "algal_alloc",
+        "kind": "function"
+      },
+      {
+        "name": "algal_check",
+        "kind": "function"
+      },
+      {
+        "name": "algal_dealloc",
+        "kind": "function"
+      },
+      {
+        "name": "algal_eval",
+        "kind": "function"
+      },
+      {
+        "name": "memory",
+        "kind": "memory"
+      }
+    ]
+  },
+  "compiler": {
+    "host": "aarch64-apple-darwin",
+    "version": "rustc 1.97.1 (8bab26f4f 2026-07-14)\nbinary: rustc\ncommit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452\ncommit-date: 2026-07-14\nhost: aarch64-apple-darwin\nrelease: 1.97.1\nLLVM version: 22.1.6\n",
+    "files": [
+      {
+        "path": "bin/cargo",
+        "sha256": "sha256:7672ead309d505577c018fff2cafb3433601f073e38cbe87359ac1f7b944bbf5"
+      },
+      {
+        "path": "bin/rustc",
+        "sha256": "sha256:210df6794001b73ec3d453878707fa1e0bdcb63c427024a6e6574bbe5615a4da"
+      },
+      {
+        "path": "bin/rustdoc",
+        "sha256": "sha256:aa94960b6a477441f6d1a797394daf4cafcc889d837550c8fa462b102e3fa5da"
+      },
+      {
+        "path": "lib/librustc-stable_rt.asan.dylib",
+        "sha256": "sha256:402e01d409af1b40ce6ba0bfca4ed26ea8b95d495509d35deeee5784ecbcf9b9"
+      },
+      {
+        "path": "lib/librustc-stable_rt.lsan.dylib",
+        "sha256": "sha256:0a1917d2a251853508f1a914051568768cb12e0665af04211c466dd231e0123d"
+      },
+      {
+        "path": "lib/librustc-stable_rt.rtsan.dylib",
+        "sha256": "sha256:eb9453986d119d67aa4c26d38a620559d5d934ad45d22edf53e12881c2b9d319"
+      },
+      {
+        "path": "lib/librustc-stable_rt.tsan.dylib",
+        "sha256": "sha256:88e4a344e50cf4d1a775c536c5bfa8ff7f1b6e15f289db072cc9ae8b8306627e"
+      },
+      {
+        "path": "lib/librustc_driver-e03ed1db822dfa4c.dylib",
+        "sha256": "sha256:57f6b5280f218ed25ba6b7e4bc1d74da3ac8e4fd85bee1b8982ad4114d757c11"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/bin/gcc-ld/ld.lld",
+        "sha256": "sha256:0ba311a537cf5a03f7046849a4a6a5c54d8db827e35519d9ebcd8e61a862546b"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/bin/gcc-ld/ld64.lld",
+        "sha256": "sha256:0ba311a537cf5a03f7046849a4a6a5c54d8db827e35519d9ebcd8e61a862546b"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/bin/gcc-ld/lld-link",
+        "sha256": "sha256:0ba311a537cf5a03f7046849a4a6a5c54d8db827e35519d9ebcd8e61a862546b"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/bin/gcc-ld/wasm-ld",
+        "sha256": "sha256:0ba311a537cf5a03f7046849a4a6a5c54d8db827e35519d9ebcd8e61a862546b"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/bin/rust-lld",
+        "sha256": "sha256:8f5fe507df7232eac0a610c12a5d11f3202205235f710eb98c6c78df6d3f548d"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy",
+        "sha256": "sha256:ccee726be447414072f925b06ef85dd36a3f693d48b03f6ed8cc94135751029b"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/bin/wasm-component-ld",
+        "sha256": "sha256:6a36befce420b0484c9cf65e2e979b3e94d5b2960d91899d30a420d888b59cb6"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libaddr2line-3a3056fe7fb9d8c8.rlib",
+        "sha256": "sha256:6ee7fc0c007a5451b55e3a581d5e09491d281ff166b1c4a5e1f7debf67b61e5b"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libaddr2line-3a3056fe7fb9d8c8.rmeta",
+        "sha256": "sha256:40ef7117a3f70dbd15e54776fecca46a174b6fc4de292a230255ab9d211a0313"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libadler2-e301200719ff9954.rlib",
+        "sha256": "sha256:5415f4b09b4389e267814536491740568a9539603117ff2f52f122b57b50f473"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libadler2-e301200719ff9954.rmeta",
+        "sha256": "sha256:c2416beb502f7be30203cc1e98074015eed40a768725a8d7ae9bf927d56adbf9"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/liballoc-4eb19a7bc969a107.rlib",
+        "sha256": "sha256:963cee6d507fb27b513b4f0b4bd6346a59df297d668fa1437af036d5bfe09bea"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/liballoc-4eb19a7bc969a107.rmeta",
+        "sha256": "sha256:49ed63ba4a69032f6e4d44a7b9daee881b44dffe82229b2e36bce1ce3216cc62"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libcfg_if-76fc71a3e7dd9258.rlib",
+        "sha256": "sha256:5447b700fa06f0f7a3986bc6c9445b5ffa145e96a397960b7cd5af4e4c179b02"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libcfg_if-76fc71a3e7dd9258.rmeta",
+        "sha256": "sha256:7087d70c52a3983ded1ee6fd8694a304216af4aaacf6dc04ff81b9a5af9de229"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libcompiler_builtins-bdac9431717ff6fa.rlib",
+        "sha256": "sha256:c4f34f1c81e85ba0bdb9277edec53f6d7b7f296e6ca638fafa5e75e572647c31"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libcompiler_builtins-bdac9431717ff6fa.rmeta",
+        "sha256": "sha256:ddbe9d7ff50e88f7254895075830fa6517654641a1c24d71eaa0d023235842f9"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libcore-df38416008f914c9.rlib",
+        "sha256": "sha256:cafd6a4392187f286668b6390052d284b00431484ae761d3e1a47105548d076e"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libcore-df38416008f914c9.rmeta",
+        "sha256": "sha256:d176f829bc08a8bc63e1042140cb0428240a9b1b14c8f3ad65d08dfa44e762c6"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libgetopts-b2846d61568fe921.rlib",
+        "sha256": "sha256:fb0dfd0659e0ed181350a54aad52161589ff13ae0c9fb2dbaca0fff5a18310d8"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libgetopts-b2846d61568fe921.rmeta",
+        "sha256": "sha256:1f0244d9b0457b4ed7e253771b024433a3cde8fde318037d654ace15f36c638a"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libgimli-a2a8080f78417d10.rlib",
+        "sha256": "sha256:c673e5723284b9d28c08793a04f8d5da1191a7a999fdabfc1a8354d90d186c4f"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libgimli-a2a8080f78417d10.rmeta",
+        "sha256": "sha256:e6587ff9e8fc92b10d1de8daca2f064b70d443efd81068341e7fa66a4f9e9cba"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libhashbrown-3de76a5eb3c6e1f5.rlib",
+        "sha256": "sha256:361cb47ae070a1955fc8e9ad17986e15df582a529a650004c47a1445f61b0885"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libhashbrown-3de76a5eb3c6e1f5.rmeta",
+        "sha256": "sha256:b6628aba49d91be44184df5fcedb076de7335e244d8bd18957afe8be1a8b07ac"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/liblibc-293d73a1e0e75853.rlib",
+        "sha256": "sha256:8f20dbb0f56bf92469f985f987524520e0338419df5bd29a585dffc640677c10"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/liblibc-293d73a1e0e75853.rmeta",
+        "sha256": "sha256:eddcf2acdbe9a705c2b7d3bc474bc1907eaf8a39baacf76c5917bff85f9a47bf"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libmemchr-152d1ba531042646.rlib",
+        "sha256": "sha256:204964dbfbb6d8642027d197e9f4e11738b2daf90ddd4c50e794356ceb3a8baa"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libmemchr-152d1ba531042646.rmeta",
+        "sha256": "sha256:89cebc53f350c6c7d35a4ee95e0783581c5dd35084edaae4e4af3a7b8d0a85ed"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libminiz_oxide-8fcacb3898ca8581.rlib",
+        "sha256": "sha256:27819ef8e38f30d8c4ed28e400b5f35fc9e79ea223d80ef23b1eb158d55b6a30"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libminiz_oxide-8fcacb3898ca8581.rmeta",
+        "sha256": "sha256:4d18e3bcf25505e04ce994cc567b674905c1a69b774a9541a7173fd64ffaaaf7"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libobject-e4e7c834d92d30c0.rlib",
+        "sha256": "sha256:34df276048719802b737113329fd66291757a94011a33a87e09711b3d1f84697"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libobject-e4e7c834d92d30c0.rmeta",
+        "sha256": "sha256:e1fbce8c98810a835d6ed1cea1eb89b65251021895645ef00de54dc7776f33d5"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libpanic_abort-a215be2211b52cc6.rlib",
+        "sha256": "sha256:fc73dc4ac7fc76c6bae335b2faf0d0709606f24cda7533d4a81197e05840e4d6"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libpanic_abort-a215be2211b52cc6.rmeta",
+        "sha256": "sha256:c4b3f6b11b7157a49a977e4ab96e0cc6a2db660d093fc38d20fac60592a8d495"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libpanic_unwind-318bd5df624c647f.rlib",
+        "sha256": "sha256:6ec75d27bb81056e88b804ac93904074dc9f244985aef71ebcb4161b0323b863"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libpanic_unwind-318bd5df624c647f.rmeta",
+        "sha256": "sha256:ebc1d2205e33d42cf0cf66edefad065299c12146c7bc074270414186e62249d3"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libproc_macro-9a36b256e9e437c3.rlib",
+        "sha256": "sha256:c82453cd7578eb8c793e14ffee04b1c4a8c769fb6ee662c241f447a89c128f04"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libproc_macro-9a36b256e9e437c3.rmeta",
+        "sha256": "sha256:15c3883a664f0a619d0d8f711c9cfcadf7041d6934e77544a2971649f20554dc"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libprofiler_builtins-4fb22c271feef7d7.rlib",
+        "sha256": "sha256:2b0227365be1299d5a0baf25bb5cfba7fb3f0001e4eacb24e457ab4ceebe25bd"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libprofiler_builtins-4fb22c271feef7d7.rmeta",
+        "sha256": "sha256:c865662c059d306849b578d479c5ff8e02fbc99fda89bf84103e547341a40267"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/librustc-stable_rt.asan.dylib",
+        "sha256": "sha256:402e01d409af1b40ce6ba0bfca4ed26ea8b95d495509d35deeee5784ecbcf9b9"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/librustc-stable_rt.lsan.dylib",
+        "sha256": "sha256:0a1917d2a251853508f1a914051568768cb12e0665af04211c466dd231e0123d"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/librustc-stable_rt.rtsan.dylib",
+        "sha256": "sha256:eb9453986d119d67aa4c26d38a620559d5d934ad45d22edf53e12881c2b9d319"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/librustc-stable_rt.tsan.dylib",
+        "sha256": "sha256:88e4a344e50cf4d1a775c536c5bfa8ff7f1b6e15f289db072cc9ae8b8306627e"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/librustc_demangle-ebd8fec938ab09d3.rlib",
+        "sha256": "sha256:3b9550adbf6d899e20235ab6c837d513b3b3c676aa07c906e41ad0216178556f"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/librustc_demangle-ebd8fec938ab09d3.rmeta",
+        "sha256": "sha256:f6cf2bef8e34277ab5d537c7312a260c6d6e151b7f486aeaa8ddfb75652e5963"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/librustc_literal_escaper-097ee699e76b749f.rlib",
+        "sha256": "sha256:c37a5c5e0e0d3e536ece8a6a1c5f472390ab81b35e886401f37907eb4bd4d020"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/librustc_literal_escaper-097ee699e76b749f.rmeta",
+        "sha256": "sha256:399290200047f60960975f2980edcb2d3c729b554dbf5e9ab87b4e6298479253"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/librustc_std_workspace_alloc-41e7c80f3999d6d2.rlib",
+        "sha256": "sha256:877618b54a7a562057133d774268685c0d9d78f0d2e7d6b273c989042bd9f256"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/librustc_std_workspace_alloc-41e7c80f3999d6d2.rmeta",
+        "sha256": "sha256:e1941f9b928cf376e6b8ba304ac24addca4e63cdd18cde0f1223bccd07a67ea3"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/librustc_std_workspace_core-33392671269ff5ce.rlib",
+        "sha256": "sha256:5172ec6886b155485bacab91ee63a70f3a3293282c62a14b4ec3f9b446fb1d98"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/librustc_std_workspace_core-33392671269ff5ce.rmeta",
+        "sha256": "sha256:2503ca76a46d29b3353a6d0015e5ef58f1331f93742ed250411fdb074c6eff5c"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/librustc_std_workspace_std-3186540c39ea3633.rlib",
+        "sha256": "sha256:275e8fbb2eb4738e91c073bac872ef7333ab329264d88dac942139963874353e"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/librustc_std_workspace_std-3186540c39ea3633.rmeta",
+        "sha256": "sha256:329a05c969f581fe010a3186d0b9c2e74d1ec8254212ec967ef3730a89971c03"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libstd-4f24f0876fd27385.dylib",
+        "sha256": "sha256:dbc16afd689f0f633f3bc81b9c42a1ad793ce00a8a52412f26de20322338139d"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libstd-4f24f0876fd27385.rlib",
+        "sha256": "sha256:72a7109a61061be9678f8cd64abf4cde56f9a5959347148c1f42af6e5c82375f"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libstd-4f24f0876fd27385.rmeta",
+        "sha256": "sha256:987c49f29b13ebec919627f71552392fd270965de7a4f617192e308289667d8c"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libstd_detect-f1f33e12f7edffd1.rlib",
+        "sha256": "sha256:c0a3e71129338e41ca228990596abec784624ea350ceb70fb0c2196c6509e81b"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libstd_detect-f1f33e12f7edffd1.rmeta",
+        "sha256": "sha256:ba51d938071e9056892a504fd0af78b92ac1b101df1fa6b173f5d31fba8ff5a7"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libsysroot-be92d788bf176424.rlib",
+        "sha256": "sha256:e7285d1977f647918dd3b115459c0f56c40c3aabf06d7cb95759f7012b905b10"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libsysroot-be92d788bf176424.rmeta",
+        "sha256": "sha256:0db8c3a2caf9ec42a0f477580e836b87c5c9d75c23e93265162b759e240c9694"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libtest-dd45b853bb6801d4.rlib",
+        "sha256": "sha256:e1d4f72ec0f1de5bd7718e3f033bf5837f825d515149bceb3f1db59d3bf50a8e"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libtest-dd45b853bb6801d4.rmeta",
+        "sha256": "sha256:34610ec22a7b386ac134b412086e30fdf9dbb3ccf7edeb9619e1a2d36fcff3b0"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libunwind-14811642c31e6d65.rlib",
+        "sha256": "sha256:e90bc121438db0a0d00dc2cdf122b7918673b75cd8ba128fd84bdd103040cbd6"
+      },
+      {
+        "path": "lib/rustlib/aarch64-apple-darwin/lib/libunwind-14811642c31e6d65.rmeta",
+        "sha256": "sha256:3b5e9d88f4d016ce0893c56901c9580ddb8847be1ed1e4ed512f05bd0c2ed0c4"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libaddr2line-209918aaa0b1ca8c.rlib",
+        "sha256": "sha256:15c70eaaac05451bc35b500d412ebdf72561de5cdb266340228d11c793d7352f"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libaddr2line-209918aaa0b1ca8c.rmeta",
+        "sha256": "sha256:85537c36a35dab71e642f6375aae5f298e2cedbd407b8e99b81702fb4dcd840b"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libadler2-65ab9586367906cf.rlib",
+        "sha256": "sha256:d6c346fe36e593a338b7e3a38da82278078e2dc50b3785d954913c1c264a9f3b"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libadler2-65ab9586367906cf.rmeta",
+        "sha256": "sha256:fa38907926e98e01ebf40eb5c2c4f128447cd4744688da1842dc50f53c02ab06"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/liballoc-b7140e3978144e58.rlib",
+        "sha256": "sha256:30641f5c9669d30055131cb90276e61c740aa6b23de10f2c98720ebed7cb60c5"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/liballoc-b7140e3978144e58.rmeta",
+        "sha256": "sha256:2e1dd343d4639815c5ff1dc5a4c3feb2934d8d3b5e6cf89b32f4e03a9a7c5e2d"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libcfg_if-ad191fa0112c1b09.rlib",
+        "sha256": "sha256:a3a964718aefa52cb1b991a579adcd806bc8e382a379198b14dd8057f304b85d"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libcfg_if-ad191fa0112c1b09.rmeta",
+        "sha256": "sha256:71f6d9084b145334d9fd20d51322629eb42718a9a24325de36c8b192ac0f8e26"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libcompiler_builtins-0f081996ed7c8abe.rlib",
+        "sha256": "sha256:29ae493076037b12c6f4e10fb52ee1e836ef5cd0422f4c50867604af1c46b179"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libcompiler_builtins-0f081996ed7c8abe.rmeta",
+        "sha256": "sha256:ca5991f9b34292f6fbe06282ba69e405a846ca9721061d1b82117b660b31a7f2"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libcore-01b7d99809a6084b.rlib",
+        "sha256": "sha256:f65e247727c462608cd37864e9227977fd34ef1debc6cb91f2250fd9fba7a642"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libcore-01b7d99809a6084b.rmeta",
+        "sha256": "sha256:11897382d2b733699e15d9a81f21047dc9456c7aec1bfac7ca0d7cb60f0c2945"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libdlmalloc-cd9549702e03d544.rlib",
+        "sha256": "sha256:1dc44acbbb3e49a60bc410f72180da7fe8c4114c3779a6e12f1f9edcf2718d6b"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libdlmalloc-cd9549702e03d544.rmeta",
+        "sha256": "sha256:3f2638a3ed0eb5249a698bde66e2810df6bb371112aa5ddbe4e016c9927e719b"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libgetopts-aed55dbd965eb07e.rlib",
+        "sha256": "sha256:65aa155db22ec16f121d54557885a3d6adc64379daf2aff0758baa567ae18e92"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libgetopts-aed55dbd965eb07e.rmeta",
+        "sha256": "sha256:536f04d7f963d909d419be56b8b99221ada5027078a5f3aeaf9ff1c69ec044ad"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libgimli-acaad27535d23ab1.rlib",
+        "sha256": "sha256:0a3adb3eba787be41d618cbbb1723562086d2dcdb6500ba047be195c7097645d"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libgimli-acaad27535d23ab1.rmeta",
+        "sha256": "sha256:344603cd1dd8650c5728362d8fb8467eacd822a7a691b4d306690f10f32846bc"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libhashbrown-e4609ab2f84972ea.rlib",
+        "sha256": "sha256:415e3cb39878949a9bf545b074446d84795a9b4e4ad1c56d8444252c4a9c3b96"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libhashbrown-e4609ab2f84972ea.rmeta",
+        "sha256": "sha256:d9ec264349794229689ee5d29a161ef1ddd58ccc83f7b26535eb84f6b6d10830"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/liblibc-f7349fe2f58cce14.rlib",
+        "sha256": "sha256:ed8adf1c748fd462b4344cf85931afbf81441f23d1ac80c3228eb714ac468c29"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/liblibc-f7349fe2f58cce14.rmeta",
+        "sha256": "sha256:89194a5afc50f1607f211d25140a99bffd7e9740769d846a8fb5e1ad02871a5c"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libmemchr-6567e51d42e80f50.rlib",
+        "sha256": "sha256:0d8c9c05cab47df2d909d2aa75fd2b5c362aba26c24f948d87b7c45a236d5a75"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libmemchr-6567e51d42e80f50.rmeta",
+        "sha256": "sha256:88658189795666b4fd0a75f22d2b1762dbd3e910f2c391c1859a4d5d139dce2c"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libminiz_oxide-14e9e951665f5cf7.rlib",
+        "sha256": "sha256:3993686ebfedbdf303cbb5c89e1a1450b0e9dd3791f85110afb9830c2155f348"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libminiz_oxide-14e9e951665f5cf7.rmeta",
+        "sha256": "sha256:62c6fca16d865daace9f6928268e69cc4b41570fca4224ca42b532e619856150"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libobject-cabadb8049a52b30.rlib",
+        "sha256": "sha256:1eca04fe57508525142c4eb409a054ec8e47a4b699aeaa929030731cf4ffd567"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libobject-cabadb8049a52b30.rmeta",
+        "sha256": "sha256:d54edd321de4fec02c5bf337d3b888ae11d5f35ce375d82a8249c56b43d1b4b1"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libpanic_abort-880d17bcb753805a.rlib",
+        "sha256": "sha256:3684df0a0b1a9e86c236a10be13f2a48c1f951674113fac5fafd4b70c220f099"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libpanic_abort-880d17bcb753805a.rmeta",
+        "sha256": "sha256:01ac8a93ebef99fa606a61c5e02eeaacfdd07179d685a5cbdf1966a51b4ac023"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libpanic_unwind-cf802474f48dcf39.rlib",
+        "sha256": "sha256:8f16d58646aad3426644d80bcb8b784370bed99ca187cd9181bd87b3f81be068"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libpanic_unwind-cf802474f48dcf39.rmeta",
+        "sha256": "sha256:462aa8037fa74f34395c9d5cd4b98d79b6c522e1c864045c29ece78f6eccd87b"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libproc_macro-1f9dcc40a0f5ee87.rlib",
+        "sha256": "sha256:3e8b2fa20a9a94071dc33306b5093b997d9b98e7d2d1fe9bcf0fbfc628fa4eaf"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libproc_macro-1f9dcc40a0f5ee87.rmeta",
+        "sha256": "sha256:1021c6c91f8c8f6ecd0196e216ef62377273b9f6158372cc325184c16892ba51"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/librustc_demangle-22abc2ff27c21985.rlib",
+        "sha256": "sha256:8e49ca10f429f836c9852f94421db5e44c91f7d0f1438454685c2d365bbf2462"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/librustc_demangle-22abc2ff27c21985.rmeta",
+        "sha256": "sha256:1e211b212289e7f50d51b9775d2c4786c0ba4b02798b9e7d4f3a03506e08c57c"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/librustc_literal_escaper-8fb9e14d5dc8d2d5.rlib",
+        "sha256": "sha256:f968521050ca44ad99502f36216005cddbf39f7cbfd4233c80985119e325bbd9"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/librustc_literal_escaper-8fb9e14d5dc8d2d5.rmeta",
+        "sha256": "sha256:652342d50e62346bfbeff934030e86c7e8a4fc64e3080fcae8030ee4b8b77388"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/librustc_std_workspace_alloc-a1a639a9655943c4.rlib",
+        "sha256": "sha256:10d961c52eed6b896ab2ce1117ec4618a07c97c69193b59805cb1db24b2f528a"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/librustc_std_workspace_alloc-a1a639a9655943c4.rmeta",
+        "sha256": "sha256:01f392463ab911bd68a15b29930b8381c55484395ef40f6cd7e8cc7b4d77c19f"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/librustc_std_workspace_core-431336e0273d1ce2.rlib",
+        "sha256": "sha256:9d088a916b403b9dd6480296cb0eb2c0bf720c7f788b6665fb9cc5e39525e151"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/librustc_std_workspace_core-431336e0273d1ce2.rmeta",
+        "sha256": "sha256:d453a17be9a961f31a368bfe3bf10f7bcca7209b17bf42a807007be69256cdae"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/librustc_std_workspace_std-bb2ec9cbdc006585.rlib",
+        "sha256": "sha256:76f058e02c2699053ea781abb29aadc0dfc140b4f9dd98894087b3caa23f2b94"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/librustc_std_workspace_std-bb2ec9cbdc006585.rmeta",
+        "sha256": "sha256:71d7b3c195d1a82572c36f56bfe38c373cf3588a04da57daefca9a0dcc5cc479"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libstd-30fc09a4fa755135.rlib",
+        "sha256": "sha256:c3ec3ebfa10dcbd039ada1e1af42bc5352842ff969e44a6d2fec7039854fe2d9"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libstd-30fc09a4fa755135.rmeta",
+        "sha256": "sha256:14a64b6184200b237f2474cf4af1dd1f41e0a458d571d228796aae48c7652ca7"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libstd_detect-4ae08800733bbc53.rlib",
+        "sha256": "sha256:0fc06c9a4c5cda126fe7c4c72e0c785f8416eb2b6495e998191b16078feadd18"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libstd_detect-4ae08800733bbc53.rmeta",
+        "sha256": "sha256:492dbde38b346c901590012fc11b00c0533d928978600394d53ae90ad9302a4e"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libsysroot-05af6002f0ade23d.rlib",
+        "sha256": "sha256:d14e8d02bdb7a5db1d5bb194bcd8b6638744f466a6ed5201686625cc27a5cc49"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libsysroot-05af6002f0ade23d.rmeta",
+        "sha256": "sha256:7e82d4985c23262ee0360147a3221f836f77688b697830ca01c7be17543b9542"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libtest-f0f18cf5e95b77df.rlib",
+        "sha256": "sha256:3440cbd88779278a70f0fd9c2a2efddc4487fb1a0216e28175443319265ea89b"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libtest-f0f18cf5e95b77df.rmeta",
+        "sha256": "sha256:fcb86888eef0da5bac80d3125bd367665e8f813e483db77b5741bb30dea86c2d"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libunwind-a4c6109b753b4339.rlib",
+        "sha256": "sha256:29d9d8ec5377f9a93a62c002bf7dd0c4956ba7946b98e7f5baa6e65d1c80601f"
+      },
+      {
+        "path": "lib/rustlib/wasm32-unknown-unknown/lib/libunwind-a4c6109b753b4339.rmeta",
+        "sha256": "sha256:6060aa6e64fdf79935ac071fac2a2ce423f7af73f7fdb18d6d9efba0228b6402"
+      }
+    ]
+  },
+  "dependencySources": [
+    {
+      "path": "itoa-1.0.18",
+      "sha256": "sha256:a939c764457d390bb857bb7dee060152ad4f5375b9a174248a1a388fc479975d"
+    },
+    {
+      "path": "memchr-2.8.3",
+      "sha256": "sha256:20c74f1805e63e71830466e87d7548f5b949b7990210ee1b476198a382e76892"
+    },
+    {
+      "path": "ryu-js-1.0.2",
+      "sha256": "sha256:b69dcdf8019137503485c71b4dadba50ce1cb8eb60b0954e8a6962bcc99fd441"
+    },
+    {
+      "path": "serde_core-1.0.229",
+      "sha256": "sha256:e0e653b6685d9b4007bedea0926ab4a959ddbd2745caf5c4ee784c2ce1e45626"
+    },
+    {
+      "path": "serde_json-1.0.151",
+      "sha256": "sha256:d2ba6b26d29812f766f8cde90f8b43fb4db4ddcaadd21a1a1be4f42b2827645d"
+    },
+    {
+      "path": "zmij-1.0.23",
+      "sha256": "sha256:5958b34aee6fc3036a8e68b4d90b5e84462164abcd6d89e8cca3792433f27426"
+    }
+  ],
+  "cargoOutput": "{\"reason\":\"compiler-artifact\",\"package_id\":\"registry+https://github.com/rust-lang/crates.io-index#itoa@1.0.18\",\"manifest_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/itoa-1.0.18/Cargo.toml\",\"target\":{\"kind\":[\"lib\"],\"crate_types\":[\"lib\"],\"name\":\"itoa\",\"src_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/itoa-1.0.18/src/lib.rs\",\"edition\":\"2021\",\"doc\":true,\"doctest\":true,\"test\":true},\"profile\":{\"opt_level\":\"3\",\"debuginfo\":0,\"debug_assertions\":false,\"overflow_checks\":false,\"test\":false},\"features\":[],\"filenames\":[\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/wasm32-unknown-unknown/release/deps/libitoa-36723a274a9b8611.rlib\",\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/wasm32-unknown-unknown/release/deps/libitoa-36723a274a9b8611.rmeta\"],\"executable\":null,\"fresh\":false}\n{\"reason\":\"compiler-artifact\",\"package_id\":\"registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.151\",\"manifest_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/Cargo.toml\",\"target\":{\"kind\":[\"custom-build\"],\"crate_types\":[\"bin\"],\"name\":\"build-script-build\",\"src_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/build.rs\",\"edition\":\"2021\",\"doc\":false,\"doctest\":false,\"test\":false},\"profile\":{\"opt_level\":\"0\",\"debuginfo\":0,\"debug_assertions\":false,\"overflow_checks\":false,\"test\":false},\"features\":[\"default\",\"std\"],\"filenames\":[\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/release/build/serde_json-07371ea1f91b159d/build-script-build\"],\"executable\":null,\"fresh\":false}\n{\"reason\":\"compiler-artifact\",\"package_id\":\"registry+https://github.com/rust-lang/crates.io-index#zmij@1.0.23\",\"manifest_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/zmij-1.0.23/Cargo.toml\",\"target\":{\"kind\":[\"custom-build\"],\"crate_types\":[\"bin\"],\"name\":\"build-script-build\",\"src_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/zmij-1.0.23/build.rs\",\"edition\":\"2021\",\"doc\":false,\"doctest\":false,\"test\":false},\"profile\":{\"opt_level\":\"0\",\"debuginfo\":0,\"debug_assertions\":false,\"overflow_checks\":false,\"test\":false},\"features\":[],\"filenames\":[\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/release/build/zmij-d93f3ee857e8385c/build-script-build\"],\"executable\":null,\"fresh\":false}\n{\"reason\":\"compiler-artifact\",\"package_id\":\"registry+https://github.com/rust-lang/crates.io-index#serde_core@1.0.229\",\"manifest_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.229/Cargo.toml\",\"target\":{\"kind\":[\"custom-build\"],\"crate_types\":[\"bin\"],\"name\":\"build-script-build\",\"src_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.229/build.rs\",\"edition\":\"2021\",\"doc\":false,\"doctest\":false,\"test\":false},\"profile\":{\"opt_level\":\"0\",\"debuginfo\":0,\"debug_assertions\":false,\"overflow_checks\":false,\"test\":false},\"features\":[\"std\"],\"filenames\":[\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/release/build/serde_core-a6f2e4bbd0425d21/build-script-build\"],\"executable\":null,\"fresh\":false}\n{\"reason\":\"compiler-artifact\",\"package_id\":\"registry+https://github.com/rust-lang/crates.io-index#ryu-js@1.0.2\",\"manifest_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ryu-js-1.0.2/Cargo.toml\",\"target\":{\"kind\":[\"lib\"],\"crate_types\":[\"lib\"],\"name\":\"ryu_js\",\"src_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ryu-js-1.0.2/src/lib.rs\",\"edition\":\"2018\",\"doc\":true,\"doctest\":true,\"test\":true},\"profile\":{\"opt_level\":\"3\",\"debuginfo\":0,\"debug_assertions\":false,\"overflow_checks\":false,\"test\":false},\"features\":[],\"filenames\":[\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/wasm32-unknown-unknown/release/deps/libryu_js-05a0b4cba4635a82.rlib\",\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/wasm32-unknown-unknown/release/deps/libryu_js-05a0b4cba4635a82.rmeta\"],\"executable\":null,\"fresh\":false}\n{\"reason\":\"compiler-artifact\",\"package_id\":\"registry+https://github.com/rust-lang/crates.io-index#memchr@2.8.3\",\"manifest_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memchr-2.8.3/Cargo.toml\",\"target\":{\"kind\":[\"lib\"],\"crate_types\":[\"lib\"],\"name\":\"memchr\",\"src_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memchr-2.8.3/src/lib.rs\",\"edition\":\"2021\",\"doc\":true,\"doctest\":true,\"test\":true},\"profile\":{\"opt_level\":\"3\",\"debuginfo\":0,\"debug_assertions\":false,\"overflow_checks\":false,\"test\":false},\"features\":[\"alloc\",\"std\"],\"filenames\":[\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/wasm32-unknown-unknown/release/deps/libmemchr-b5c7e95d8ae1d368.rlib\",\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/wasm32-unknown-unknown/release/deps/libmemchr-b5c7e95d8ae1d368.rmeta\"],\"executable\":null,\"fresh\":false}\n{\"reason\":\"build-script-executed\",\"package_id\":\"registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.151\",\"linked_libs\":[],\"linked_paths\":[],\"cfgs\":[\"fast_arithmetic=\\\"64\\\"\"],\"env\":[],\"out_dir\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/wasm32-unknown-unknown/release/build/serde_json-9ec99ae007c207b5/out\"}\n{\"reason\":\"build-script-executed\",\"package_id\":\"registry+https://github.com/rust-lang/crates.io-index#zmij@1.0.23\",\"linked_libs\":[],\"linked_paths\":[],\"cfgs\":[],\"env\":[],\"out_dir\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/wasm32-unknown-unknown/release/build/zmij-18f2d323b1148db6/out\"}\n{\"reason\":\"compiler-artifact\",\"package_id\":\"registry+https://github.com/rust-lang/crates.io-index#zmij@1.0.23\",\"manifest_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/zmij-1.0.23/Cargo.toml\",\"target\":{\"kind\":[\"lib\"],\"crate_types\":[\"lib\"],\"name\":\"zmij\",\"src_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/zmij-1.0.23/src/lib.rs\",\"edition\":\"2021\",\"doc\":true,\"doctest\":true,\"test\":true},\"profile\":{\"opt_level\":\"3\",\"debuginfo\":0,\"debug_assertions\":false,\"overflow_checks\":false,\"test\":false},\"features\":[],\"filenames\":[\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/wasm32-unknown-unknown/release/deps/libzmij-fbced1b59e9f7e95.rlib\",\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/wasm32-unknown-unknown/release/deps/libzmij-fbced1b59e9f7e95.rmeta\"],\"executable\":null,\"fresh\":false}\n{\"reason\":\"build-script-executed\",\"package_id\":\"registry+https://github.com/rust-lang/crates.io-index#serde_core@1.0.229\",\"linked_libs\":[],\"linked_paths\":[],\"cfgs\":[],\"env\":[],\"out_dir\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/wasm32-unknown-unknown/release/build/serde_core-71602d0bfb6d8a58/out\"}\n{\"reason\":\"compiler-artifact\",\"package_id\":\"registry+https://github.com/rust-lang/crates.io-index#serde_core@1.0.229\",\"manifest_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.229/Cargo.toml\",\"target\":{\"kind\":[\"lib\"],\"crate_types\":[\"lib\"],\"name\":\"serde_core\",\"src_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.229/src/lib.rs\",\"edition\":\"2021\",\"doc\":true,\"doctest\":true,\"test\":true},\"profile\":{\"opt_level\":\"3\",\"debuginfo\":0,\"debug_assertions\":false,\"overflow_checks\":false,\"test\":false},\"features\":[\"std\"],\"filenames\":[\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/wasm32-unknown-unknown/release/deps/libserde_core-a7146168419495a1.rlib\",\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/wasm32-unknown-unknown/release/deps/libserde_core-a7146168419495a1.rmeta\"],\"executable\":null,\"fresh\":false}\n{\"reason\":\"compiler-artifact\",\"package_id\":\"registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.151\",\"manifest_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/Cargo.toml\",\"target\":{\"kind\":[\"lib\"],\"crate_types\":[\"lib\"],\"name\":\"serde_json\",\"src_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/lib.rs\",\"edition\":\"2021\",\"doc\":true,\"doctest\":true,\"test\":true},\"profile\":{\"opt_level\":\"3\",\"debuginfo\":0,\"debug_assertions\":false,\"overflow_checks\":false,\"test\":false},\"features\":[\"default\",\"std\"],\"filenames\":[\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/wasm32-unknown-unknown/release/deps/libserde_json-fbc5571beb4b882f.rlib\",\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/wasm32-unknown-unknown/release/deps/libserde_json-fbc5571beb4b882f.rmeta\"],\"executable\":null,\"fresh\":false}\n{\"reason\":\"compiler-artifact\",\"package_id\":\"path+file:///private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/crates/algal-expr#0.2.0\",\"manifest_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/crates/algal-expr/Cargo.toml\",\"target\":{\"kind\":[\"rlib\",\"cdylib\"],\"crate_types\":[\"rlib\",\"cdylib\"],\"name\":\"algal_expr\",\"src_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/crates/algal-expr/src/lib.rs\",\"edition\":\"2024\",\"doc\":true,\"doctest\":true,\"test\":true},\"profile\":{\"opt_level\":\"3\",\"debuginfo\":0,\"debug_assertions\":false,\"overflow_checks\":false,\"test\":false},\"features\":[],\"filenames\":[\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/wasm32-unknown-unknown/release/libalgal_expr.rlib\",\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/wasm32-unknown-unknown/release/algal_expr.wasm\"],\"executable\":null,\"fresh\":false}\n{\"reason\":\"build-finished\",\"success\":true}\n",
+  "cargoOutputSha256": "sha256:e707018a98984f1ed2a378defaf817ecef076ea875d62edc41a02bad5377f55e",
+  "nativeCargoOutput": "{\"reason\":\"compiler-artifact\",\"package_id\":\"registry+https://github.com/rust-lang/crates.io-index#itoa@1.0.18\",\"manifest_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/itoa-1.0.18/Cargo.toml\",\"target\":{\"kind\":[\"lib\"],\"crate_types\":[\"lib\"],\"name\":\"itoa\",\"src_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/itoa-1.0.18/src/lib.rs\",\"edition\":\"2021\",\"doc\":true,\"doctest\":true,\"test\":true},\"profile\":{\"opt_level\":\"0\",\"debuginfo\":2,\"debug_assertions\":true,\"overflow_checks\":true,\"test\":false},\"features\":[],\"filenames\":[\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/debug/deps/libitoa-fc502c5bb5c132c6.rlib\",\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/debug/deps/libitoa-fc502c5bb5c132c6.rmeta\"],\"executable\":null,\"fresh\":false}\n{\"reason\":\"compiler-artifact\",\"package_id\":\"registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.151\",\"manifest_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/Cargo.toml\",\"target\":{\"kind\":[\"custom-build\"],\"crate_types\":[\"bin\"],\"name\":\"build-script-build\",\"src_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/build.rs\",\"edition\":\"2021\",\"doc\":false,\"doctest\":false,\"test\":false},\"profile\":{\"opt_level\":\"0\",\"debuginfo\":0,\"debug_assertions\":true,\"overflow_checks\":true,\"test\":false},\"features\":[\"default\",\"std\"],\"filenames\":[\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/debug/build/serde_json-2f0c873e9e12cbd3/build-script-build\"],\"executable\":null,\"fresh\":false}\n{\"reason\":\"compiler-artifact\",\"package_id\":\"registry+https://github.com/rust-lang/crates.io-index#zmij@1.0.23\",\"manifest_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/zmij-1.0.23/Cargo.toml\",\"target\":{\"kind\":[\"custom-build\"],\"crate_types\":[\"bin\"],\"name\":\"build-script-build\",\"src_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/zmij-1.0.23/build.rs\",\"edition\":\"2021\",\"doc\":false,\"doctest\":false,\"test\":false},\"profile\":{\"opt_level\":\"0\",\"debuginfo\":0,\"debug_assertions\":true,\"overflow_checks\":true,\"test\":false},\"features\":[],\"filenames\":[\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/debug/build/zmij-57ff4cef946ceec1/build-script-build\"],\"executable\":null,\"fresh\":false}\n{\"reason\":\"compiler-artifact\",\"package_id\":\"registry+https://github.com/rust-lang/crates.io-index#ryu-js@1.0.2\",\"manifest_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ryu-js-1.0.2/Cargo.toml\",\"target\":{\"kind\":[\"lib\"],\"crate_types\":[\"lib\"],\"name\":\"ryu_js\",\"src_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ryu-js-1.0.2/src/lib.rs\",\"edition\":\"2018\",\"doc\":true,\"doctest\":true,\"test\":true},\"profile\":{\"opt_level\":\"0\",\"debuginfo\":2,\"debug_assertions\":true,\"overflow_checks\":true,\"test\":false},\"features\":[],\"filenames\":[\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/debug/deps/libryu_js-9da45a16400efd25.rlib\",\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/debug/deps/libryu_js-9da45a16400efd25.rmeta\"],\"executable\":null,\"fresh\":false}\n{\"reason\":\"compiler-artifact\",\"package_id\":\"registry+https://github.com/rust-lang/crates.io-index#serde_core@1.0.229\",\"manifest_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.229/Cargo.toml\",\"target\":{\"kind\":[\"custom-build\"],\"crate_types\":[\"bin\"],\"name\":\"build-script-build\",\"src_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.229/build.rs\",\"edition\":\"2021\",\"doc\":false,\"doctest\":false,\"test\":false},\"profile\":{\"opt_level\":\"0\",\"debuginfo\":0,\"debug_assertions\":true,\"overflow_checks\":true,\"test\":false},\"features\":[\"std\"],\"filenames\":[\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/debug/build/serde_core-913b0913f99d485c/build-script-build\"],\"executable\":null,\"fresh\":false}\n{\"reason\":\"compiler-artifact\",\"package_id\":\"registry+https://github.com/rust-lang/crates.io-index#memchr@2.8.3\",\"manifest_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memchr-2.8.3/Cargo.toml\",\"target\":{\"kind\":[\"lib\"],\"crate_types\":[\"lib\"],\"name\":\"memchr\",\"src_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memchr-2.8.3/src/lib.rs\",\"edition\":\"2021\",\"doc\":true,\"doctest\":true,\"test\":true},\"profile\":{\"opt_level\":\"0\",\"debuginfo\":2,\"debug_assertions\":true,\"overflow_checks\":true,\"test\":false},\"features\":[\"alloc\",\"std\"],\"filenames\":[\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/debug/deps/libmemchr-fee1882e5fbbc18a.rlib\",\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/debug/deps/libmemchr-fee1882e5fbbc18a.rmeta\"],\"executable\":null,\"fresh\":false}\n{\"reason\":\"build-script-executed\",\"package_id\":\"registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.151\",\"linked_libs\":[],\"linked_paths\":[],\"cfgs\":[\"fast_arithmetic=\\\"64\\\"\"],\"env\":[],\"out_dir\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/debug/build/serde_json-0a7a33af853ec0ea/out\"}\n{\"reason\":\"build-script-executed\",\"package_id\":\"registry+https://github.com/rust-lang/crates.io-index#zmij@1.0.23\",\"linked_libs\":[],\"linked_paths\":[],\"cfgs\":[],\"env\":[],\"out_dir\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/debug/build/zmij-54783f5c7c96cc65/out\"}\n{\"reason\":\"compiler-artifact\",\"package_id\":\"registry+https://github.com/rust-lang/crates.io-index#zmij@1.0.23\",\"manifest_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/zmij-1.0.23/Cargo.toml\",\"target\":{\"kind\":[\"lib\"],\"crate_types\":[\"lib\"],\"name\":\"zmij\",\"src_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/zmij-1.0.23/src/lib.rs\",\"edition\":\"2021\",\"doc\":true,\"doctest\":true,\"test\":true},\"profile\":{\"opt_level\":\"0\",\"debuginfo\":2,\"debug_assertions\":true,\"overflow_checks\":true,\"test\":false},\"features\":[],\"filenames\":[\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/debug/deps/libzmij-b5f5eb0e92d898af.rlib\",\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/debug/deps/libzmij-b5f5eb0e92d898af.rmeta\"],\"executable\":null,\"fresh\":false}\n{\"reason\":\"build-script-executed\",\"package_id\":\"registry+https://github.com/rust-lang/crates.io-index#serde_core@1.0.229\",\"linked_libs\":[],\"linked_paths\":[],\"cfgs\":[],\"env\":[],\"out_dir\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/debug/build/serde_core-cc04584823f7d25d/out\"}\n{\"reason\":\"compiler-artifact\",\"package_id\":\"registry+https://github.com/rust-lang/crates.io-index#serde_core@1.0.229\",\"manifest_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.229/Cargo.toml\",\"target\":{\"kind\":[\"lib\"],\"crate_types\":[\"lib\"],\"name\":\"serde_core\",\"src_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.229/src/lib.rs\",\"edition\":\"2021\",\"doc\":true,\"doctest\":true,\"test\":true},\"profile\":{\"opt_level\":\"0\",\"debuginfo\":2,\"debug_assertions\":true,\"overflow_checks\":true,\"test\":false},\"features\":[\"std\"],\"filenames\":[\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/debug/deps/libserde_core-64b421e9401d4279.rlib\",\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/debug/deps/libserde_core-64b421e9401d4279.rmeta\"],\"executable\":null,\"fresh\":false}\n{\"reason\":\"compiler-artifact\",\"package_id\":\"registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.151\",\"manifest_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/Cargo.toml\",\"target\":{\"kind\":[\"lib\"],\"crate_types\":[\"lib\"],\"name\":\"serde_json\",\"src_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/lib.rs\",\"edition\":\"2021\",\"doc\":true,\"doctest\":true,\"test\":true},\"profile\":{\"opt_level\":\"0\",\"debuginfo\":2,\"debug_assertions\":true,\"overflow_checks\":true,\"test\":false},\"features\":[\"default\",\"std\"],\"filenames\":[\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/debug/deps/libserde_json-abdfb79dde631143.rlib\",\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/debug/deps/libserde_json-abdfb79dde631143.rmeta\"],\"executable\":null,\"fresh\":false}\n{\"reason\":\"compiler-artifact\",\"package_id\":\"path+file:///private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/crates/algal-expr#0.2.0\",\"manifest_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/crates/algal-expr/Cargo.toml\",\"target\":{\"kind\":[\"rlib\",\"cdylib\"],\"crate_types\":[\"rlib\",\"cdylib\"],\"name\":\"algal_expr\",\"src_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/crates/algal-expr/src/lib.rs\",\"edition\":\"2024\",\"doc\":true,\"doctest\":true,\"test\":true},\"profile\":{\"opt_level\":\"0\",\"debuginfo\":2,\"debug_assertions\":true,\"overflow_checks\":true,\"test\":false},\"features\":[],\"filenames\":[\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/debug/deps/libalgal_expr.rlib\",\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/debug/deps/libalgal_expr.dylib\"],\"executable\":null,\"fresh\":false}\n{\"reason\":\"compiler-artifact\",\"package_id\":\"path+file:///private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/crates/algal-expr#0.2.0\",\"manifest_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/crates/algal-expr/Cargo.toml\",\"target\":{\"kind\":[\"example\"],\"crate_types\":[\"bin\"],\"name\":\"verification_boundary\",\"src_path\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/crates/algal-expr/examples/verification_boundary.rs\",\"edition\":\"2024\",\"doc\":false,\"doctest\":false,\"test\":false},\"profile\":{\"opt_level\":\"0\",\"debuginfo\":2,\"debug_assertions\":true,\"overflow_checks\":true,\"test\":false},\"features\":[],\"filenames\":[\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/debug/examples/verification_boundary\"],\"executable\":\"/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/debug/examples/verification_boundary\",\"fresh\":false}\n{\"reason\":\"build-finished\",\"success\":true}\n",
+  "nativeCargoOutputSha256": "sha256:76c6165a057d7c1ef46bf91cf57024e9c2a5861507b079424a6e6b21dbf2c6aa",
+  "targets": {
+    "contract": "algal.verification-boundary.v1",
+    "comparisons": 30,
+    "native": {
+      "path": "/private/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-expression-build-zbPoME/target/debug/examples/verification_boundary",
+      "sha256": "sha256:7d5a24f8e50bb2bfa9e570caf0678fe9b0bfb992d2eb6cefe93c602210a88968"
+    },
+    "wasm": {
+      "path": "src/algal_expr.wasm",
+      "sha256": "sha256:a1c788200feede210cae1b4926c7e2ee5524a814001056d83f2855f77b86eea9"
+    },
+    "relation": "sampled byte-entry-point agreement; binary/source provenance is separately gated by artifact suite",
+    "observations": [
+      {
+        "name": "wide-index-0",
+        "mode": "eval",
+        "inputSha256": "sha256:92ea69152c9afc73497bf91b592dd785e4c21fbbaa20b0ea2963aa4dd56ab75e",
+        "output": "{\"err\":{\"code\":\"EXPR_PATH\",\"op\":\"nth\",\"what\":\"index 0 out of range 0\"},\"fuel\":4,\"ok\":false}"
+      },
+      {
+        "name": "wide-index-1024",
+        "mode": "eval",
+        "inputSha256": "sha256:629171014dfdbaf3aab4de98f8510047f10399aef43f47c8e09409006a995a60",
+        "output": "{\"err\":{\"code\":\"EXPR_PATH\",\"op\":\"nth\",\"what\":\"index 1024 out of range 0\"},\"fuel\":4,\"ok\":false}"
+      },
+      {
+        "name": "wide-index-4294967295",
+        "mode": "eval",
+        "inputSha256": "sha256:525e2db5157598d5b062f7dda4cafc554347fbb940958a10a99113524538d6e2",
+        "output": "{\"err\":{\"code\":\"EXPR_PATH\",\"op\":\"nth\",\"what\":\"index 4294967295 out of range 0\"},\"fuel\":4,\"ok\":false}"
+      },
+      {
+        "name": "wide-index-4294967296",
+        "mode": "eval",
+        "inputSha256": "sha256:d2307fccde1417e113a74e648df1bc071940beae5eb334cb74b956c30a4d9e6f",
+        "output": "{\"err\":{\"code\":\"EXPR_PATH\",\"op\":\"nth\",\"what\":\"index 4294967296 out of range 0\"},\"fuel\":4,\"ok\":false}"
+      },
+      {
+        "name": "wide-index-9007199254740992",
+        "mode": "eval",
+        "inputSha256": "sha256:59bffab3e3e29d14cee79563ac4eb6cfe3fd611fa6dbac06d677a3e987c8441d",
+        "output": "{\"err\":{\"code\":\"EXPR_PATH\",\"op\":\"nth\",\"what\":\"index 9007199254740992 out of range 0\"},\"fuel\":4,\"ok\":false}"
+      },
+      {
+        "name": "wide-index-18446744073709552000",
+        "mode": "eval",
+        "inputSha256": "sha256:047b566abf3ceb492b22dc04f395e6f1c4af0cdf690a19ae4f3b045212b62b8e",
+        "output": "{\"err\":{\"code\":\"EXPR_PATH\",\"op\":\"nth\",\"what\":\"index 18446744073709552000 out of range 0\"},\"fuel\":4,\"ok\":false}"
+      },
+      {
+        "name": "wide-index-1e+308",
+        "mode": "eval",
+        "inputSha256": "sha256:765125310b5a1d5edfef9591c9ff51dde0e76b3ce87b38fd3a429580b2f1d90e",
+        "output": "{\"err\":{\"code\":\"EXPR_PATH\",\"op\":\"nth\",\"what\":\"index 1e+308 out of range 0\"},\"fuel\":4,\"ok\":false}"
+      },
+      {
+        "name": "round-0.49999999999999994",
+        "mode": "eval",
+        "inputSha256": "sha256:34779b9106376893154e859507c1e2d44dc4901fd1dbec988d3a491449e59c80",
+        "output": "{\"fuel\":3,\"ok\":true,\"value\":0}"
+      },
+      {
+        "name": "round-4503599627370497",
+        "mode": "eval",
+        "inputSha256": "sha256:0a027b8f35f9bf19c22ce3a7126079bb436a7fb1ae1f26ab7b7ef0bb0afbd1d5",
+        "output": "{\"fuel\":3,\"ok\":true,\"value\":4503599627370497}"
+      },
+      {
+        "name": "round--4503599627370497",
+        "mode": "eval",
+        "inputSha256": "sha256:a2826cd50a072c6c7e558b590f4691e3171f98b54e235f2c91c7d6527411fa00",
+        "output": "{\"fuel\":3,\"ok\":true,\"value\":-4503599627370497}"
+      },
+      {
+        "name": "round--2.5",
+        "mode": "eval",
+        "inputSha256": "sha256:0ba72f1d5e7a18e646aa2236557899537e44ce81b68d75e66bd0f7843cae7a52",
+        "output": "{\"fuel\":3,\"ok\":true,\"value\":-2}"
+      },
+      {
+        "name": "round-2.5",
+        "mode": "eval",
+        "inputSha256": "sha256:1105c11c581177f933851a8f827679939cde0406b77bfaaf0e114260a2b6c72b",
+        "output": "{\"fuel\":3,\"ok\":true,\"value\":3}"
+      },
+      {
+        "name": "scalar-pair",
+        "mode": "eval",
+        "inputSha256": "sha256:4093a503d682086379136a1dab630791178e7668a32a22224dc0871709e6494b",
+        "output": "{\"fuel\":1,\"ok\":true,\"value\":\"😀\"}"
+      },
+      {
+        "name": "replacement-scalar",
+        "mode": "eval",
+        "inputSha256": "sha256:0173267ef577a530f0a9b47bc9fed44838d88e383a0dd92c05bc3bc2044eec14",
+        "output": "{\"fuel\":1,\"ok\":true,\"value\":\"�\"}"
+      },
+      {
+        "name": "invalid-utf8-eval",
+        "mode": "eval",
+        "inputSha256": "sha256:86cfdc10df74d98f2528a0a78fac66afe47bf688b61e6546ab46de7831f5c27f",
+        "output": "{\"err\":{\"code\":\"EXPR_PARSE\",\"what\":\"request is not valid JSON\"},\"fuel\":0,\"ok\":false}"
+      },
+      {
+        "name": "invalid-utf8-check",
+        "mode": "check",
+        "inputSha256": "sha256:86cfdc10df74d98f2528a0a78fac66afe47bf688b61e6546ab46de7831f5c27f",
+        "output": "{\"err\":{\"code\":\"EXPR_PARSE\",\"what\":\"request is not valid JSON\"},\"fuel\":0,\"ok\":false}"
+      },
+      {
+        "name": "truncated-utf8-eval",
+        "mode": "eval",
+        "inputSha256": "sha256:5850a85b16807e29b7cd38c92abd232c58468f1f84d8ef9f465442325164967f",
+        "output": "{\"err\":{\"code\":\"EXPR_PARSE\",\"what\":\"request is not valid JSON\"},\"fuel\":0,\"ok\":false}"
+      },
+      {
+        "name": "truncated-utf8-check",
+        "mode": "check",
+        "inputSha256": "sha256:5850a85b16807e29b7cd38c92abd232c58468f1f84d8ef9f465442325164967f",
+        "output": "{\"err\":{\"code\":\"EXPR_PARSE\",\"what\":\"request is not valid JSON\"},\"fuel\":0,\"ok\":false}"
+      },
+      {
+        "name": "surrogate-utf8-eval",
+        "mode": "eval",
+        "inputSha256": "sha256:69394320b96b706f4f6efcef6694973a7b385dacbe526b84bdb86d0c4926c314",
+        "output": "{\"err\":{\"code\":\"EXPR_PARSE\",\"what\":\"request is not valid JSON\"},\"fuel\":0,\"ok\":false}"
+      },
+      {
+        "name": "surrogate-utf8-check",
+        "mode": "check",
+        "inputSha256": "sha256:69394320b96b706f4f6efcef6694973a7b385dacbe526b84bdb86d0c4926c314",
+        "output": "{\"err\":{\"code\":\"EXPR_PARSE\",\"what\":\"request is not valid JSON\"},\"fuel\":0,\"ok\":false}"
+      },
+      {
+        "name": "bom-eval",
+        "mode": "eval",
+        "inputSha256": "sha256:6bc61efb56cb7fc92a360a446ce1dd8c339cfbaa0fff7e9f9c47a5d5a5f82892",
+        "output": "{\"err\":{\"code\":\"EXPR_PARSE\",\"what\":\"request is not valid JSON\"},\"fuel\":0,\"ok\":false}"
+      },
+      {
+        "name": "bom-check",
+        "mode": "check",
+        "inputSha256": "sha256:6bc61efb56cb7fc92a360a446ce1dd8c339cfbaa0fff7e9f9c47a5d5a5f82892",
+        "output": "{\"err\":{\"code\":\"EXPR_PARSE\",\"what\":\"request is not valid JSON\"},\"fuel\":0,\"ok\":false}"
+      },
+      {
+        "name": "lone-surrogate-eval",
+        "mode": "eval",
+        "inputSha256": "sha256:d1496381e9ed6571f2c70cfe080c91e2d48db96379204f14e7833a280538ebab",
+        "output": "{\"err\":{\"code\":\"EXPR_PARSE\",\"what\":\"request is not valid JSON\"},\"fuel\":0,\"ok\":false}"
+      },
+      {
+        "name": "lone-surrogate-check",
+        "mode": "check",
+        "inputSha256": "sha256:d1496381e9ed6571f2c70cfe080c91e2d48db96379204f14e7833a280538ebab",
+        "output": "{\"err\":{\"code\":\"EXPR_PARSE\",\"what\":\"request is not valid JSON\"},\"fuel\":0,\"ok\":false}"
+      },
+      {
+        "name": "overwritten-lone-surrogate-eval",
+        "mode": "eval",
+        "inputSha256": "sha256:51af38c481e544bcec9c6ff97273b693444b4857ed22cae23f6b658affeaf9f2",
+        "output": "{\"err\":{\"code\":\"EXPR_PARSE\",\"what\":\"request is not valid JSON\"},\"fuel\":0,\"ok\":false}"
+      },
+      {
+        "name": "overwritten-lone-surrogate-check",
+        "mode": "check",
+        "inputSha256": "sha256:51af38c481e544bcec9c6ff97273b693444b4857ed22cae23f6b658affeaf9f2",
+        "output": "{\"err\":{\"code\":\"EXPR_PARSE\",\"what\":\"request is not valid JSON\"},\"fuel\":0,\"ok\":false}"
+      },
+      {
+        "name": "duplicate-last-wins",
+        "mode": "eval",
+        "inputSha256": "sha256:453dcfb0a5958094f1f51a8f597062d82f14fabed92815392cb83fe4a4ed0a15",
+        "output": "{\"fuel\":1,\"ok\":true,\"value\":true}"
+      },
+      {
+        "name": "check-good",
+        "mode": "check",
+        "inputSha256": "sha256:ae8cfcc64e7aff7d7fc8d165650c81116501088beffcc220505421f02035f64d",
+        "output": "{\"ok\":true}"
+      },
+      {
+        "name": "check-unknown-op",
+        "mode": "check",
+        "inputSha256": "sha256:def8ec83513a4c2ed09db253b6ceec1b8ef36bb746307fa6ce844c7d608a0f9b",
+        "output": "{\"err\":{\"code\":\"EXPR_OP\",\"op\":\"not-an-op\"},\"ok\":false}"
+      },
+      {
+        "name": "check-unbound-name",
+        "mode": "check",
+        "inputSha256": "sha256:f9ae8ca18a8d8938f5b39f0caa7fa85516c43949904f130a6f4a0d2e6799a05f",
+        "output": "{\"err\":{\"code\":\"EXPR_PATH\",\"op\":\"get\",\"what\":\"unbound name \\\"missing\\\"\"},\"ok\":false}"
+      }
+    ]
+  },
+  "builderRuntime": {
+    "path": "/Users/bg/.bun/bin/bun",
+    "version": "1.3.14",
+    "sha256": "sha256:e0c90ec15d33363e6b70713d56bc3b2c7585c17f40a0fe0f8fd9305901d4e233",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "mode": "check",
+  "reproducedCommittedBytes": true,
+  "process": {
+    "exitCode": 0,
+    "cleanupObserved": true,
+    "comparisonExitCode": 0,
+    "comparisonCleanupObserved": true
+  },
+  "scope": "Exact-byte build of the specified expression source closure. Compiler, build scripts, system libraries, Cargo archive admission and OS execution are trusted; no semantic compiler-correctness proof."
+}

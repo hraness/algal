@@ -1,27 +1,21 @@
 import { Database, constants as sqlite } from "bun:sqlite";
 import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
-import { link, lstat, mkdir, open, opendir, realpath, rename, unlink } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { lstat, open, opendir, realpath } from "node:fs/promises";
+import { join } from "node:path";
 import { AlgalError } from "./errors";
+import { durableUnlink, ensureDurableDirectory, publishFile, syncRetainedFile } from "./durable-fs";
 import { canonicalize, asJsonValue, type JsonValue } from "./values";
 
 export async function hostDirectory(path: string): Promise<void> {
-  const absolute = resolve(path);
-  try {
-    const stat = await lstat(absolute);
-    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new AlgalError("IO_FAILED", "host state directory must be a real directory");
-    return;
-  } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-  const parent = dirname(absolute);
-  if (parent !== absolute) await hostDirectory(parent);
-  try { await mkdir(absolute, { mode: 0o700 }); await syncDirectory(parent); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
-  const stat = await lstat(absolute);
-  if (!stat.isDirectory() || stat.isSymbolicLink()) throw new AlgalError("IO_FAILED", "host state directory must be a real directory");
+  await ensureDurableDirectory(path);
 }
 
 export async function hostRead(path: string, maxBytes: number): Promise<JsonValue | undefined> {
+  return readHost(path, maxBytes);
+}
+
+async function readHost(path: string, maxBytes: number, retain?: (value: JsonValue) => void): Promise<JsonValue | undefined> {
   let file;
   try { file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); }
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error; }
@@ -50,42 +44,23 @@ export async function hostRead(path: string, maxBytes: number): Promise<JsonValu
       if (v && typeof v === "object") for (const child of Object.values(v)) visit(child, depth + 1);
     };
     visit(value, 0);
-    return asJsonValue(value, "host state");
+    const parsed = asJsonValue(value, "host state");
+    if (retain) { retain(parsed); await syncRetainedFile(file, path); }
+    return parsed;
   } finally { await file.close(); }
-}
-
-async function syncDirectory(path: string): Promise<void> {
-  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-  try { await file.sync(); } finally { await file.close(); }
 }
 
 export async function hostWrite(path: string, value: JsonValue, maxBytes: number, immutable = true): Promise<void> {
   const bytes = canonicalize(value);
   if (Buffer.byteLength(bytes) > maxBytes) throw new AlgalError("BUDGET_EXHAUSTED", "host state byte bound exceeded");
-  const parent = dirname(path);
-  await hostDirectory(parent);
-  const existing = await hostRead(path, maxBytes);
-  if (existing !== undefined && immutable) {
+  const validate = (existing: JsonValue): void => {
     if (canonicalize(existing) !== bytes) throw new AlgalError("DIGEST_MISMATCH", "immutable host state conflicts");
-    return;
+  };
+  const existing = await readHost(path, maxBytes, immutable ? validate : undefined);
+  if (existing !== undefined && immutable) return;
+  if (!await publishFile(path, bytes, !immutable)) {
+    if (await readHost(path, maxBytes, validate) === undefined) throw new AlgalError("IO_FAILED", "host state publication disappeared");
   }
-  const temporary = join(parent, `.tmp-${randomBytes(24).toString("hex")}`);
-  const file = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
-  try { await file.writeFile(bytes); await file.sync(); } finally { await file.close(); }
-  try {
-    if (immutable) {
-      try { await link(temporary, path); }
-      catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-        const winner = await hostRead(path, maxBytes);
-        if (winner === undefined || canonicalize(winner) !== bytes) throw new AlgalError("DIGEST_MISMATCH", "host state publication conflicts");
-      }
-    } else {
-      await hostRead(path, maxBytes);
-      await rename(temporary, path);
-    }
-    await syncDirectory(parent);
-  } finally { await unlink(temporary).catch(error => { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }); }
 }
 
 /** List published record names. Entries must be regular files; a name outside
@@ -105,11 +80,10 @@ export async function hostNames(path: string, max: number, pattern: RegExp, stri
   return names.sort();
 }
 
-async function releaseMarker(lock: string, marker: JsonValue, directory: string): Promise<void> {
+async function releaseMarker(lock: string, marker: JsonValue): Promise<void> {
   const current = await hostRead(lock, 4096);
   if (canonicalize(current ?? null) !== canonicalize(marker)) throw new AlgalError("IO_FAILED", "owner marker changed during operation");
-  await unlink(lock);
-  await syncDirectory(directory);
+  await durableUnlink(lock, "unlink-lock");
 }
 
 function ownerTableExists(db: Database): boolean {
@@ -171,8 +145,7 @@ async function acquire(directory: string, processName: string): Promise<Acquired
       const names = await hostNames(history, 256, /^[a-f0-9]{64}\.json$/);
       if (names.length >= 256 && !names.includes(`${previous.nonce}.json`)) throw new AlgalError("BUDGET_EXHAUSTED", "owner recovery evidence limit exceeded");
       await hostWrite(join(history, `${previous.nonce}.json`), previous, 4096);
-      await unlink(lock);
-      await syncDirectory(directory);
+      await durableUnlink(lock, "unlink-lock");
     }
     const marker: JsonValue = {contract: "algal.process-owner.v2", process: processName, nonce: randomBytes(32).toString("hex")};
     await hostWrite(lock, marker, 4096);
@@ -202,7 +175,7 @@ export async function hostLease<T>(directory: string, processName: string, actio
   try {
     return await action();
   } finally {
-    try { await releaseMarker(owned.lock, owned.marker, owned.directory); }
+    try { await releaseMarker(owned.lock, owned.marker); }
     finally { try { if (owned.db.inTransaction) owned.db.exec("ROLLBACK;"); } finally { owned.db.close(); } }
   }
 }

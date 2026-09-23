@@ -2,20 +2,15 @@ use crate::{
     Error, Result,
     canonical::{MAX_DOCUMENT_BYTES, canonical, check_digest, digest, digest_bytes, read_json},
     contract::{Manifest, id, keys, object},
+    durable_fs,
 };
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{self, File, OpenOptions},
-    io::Write,
     path::{Path, PathBuf},
-    sync::{
-        Arc, Mutex,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::{Arc, Mutex},
 };
-
-static TEMP_ID: AtomicU64 = AtomicU64::new(0);
 
 pub type SourceReads = BTreeMap<(String, String), Option<Value>>;
 #[derive(Default)]
@@ -90,20 +85,6 @@ fn open_json_file(path: &Path, max_bytes: usize, follow_links: bool) -> Result<O
     Ok(Some(file))
 }
 
-fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let mut file = options.open(path)?;
-    file.write_all(bytes)?;
-    file.sync_all()?;
-    Ok(())
-}
-
 /// Install `bytes` at `path`. Returns whether this call installed them: an
 /// immutable entry that already existed is left untouched and yields `false`.
 fn publish(path: &Path, bytes: &[u8], replace: bool) -> Result<bool> {
@@ -111,31 +92,15 @@ fn publish(path: &Path, bytes: &[u8], replace: bool) -> Result<bool> {
         .parent()
         .ok_or_else(|| Error::invalid("store parent"))?;
     no_link(parent)?;
-    fs::create_dir_all(parent)?;
     no_link(path)?;
-    let temporary = parent.join(format!(
-        ".algal-{}-{}",
-        std::process::id(),
-        TEMP_ID.fetch_add(1, Ordering::Relaxed)
-    ));
-    write_new(&temporary, bytes)?;
-    let result = if replace {
-        fs::rename(&temporary, path)
-    } else {
-        fs::hard_link(&temporary, path)
-    };
-    let cleanup = fs::remove_file(&temporary);
-    let fresh = match result {
-        Ok(()) => true,
-        Err(e) if !replace && e.kind() == std::io::ErrorKind::AlreadyExists => false,
-        Err(e) => return Err(e.into()),
-    };
-    if let Err(e) = cleanup
-        && e.kind() != std::io::ErrorKind::NotFound
+    // Keep the Store's established special-file admission error, before the
+    // shared publisher applies its generic target guard. Never replace it.
+    if let Ok(metadata) = fs::symlink_metadata(path)
+        && !metadata.is_file()
     {
-        return Err(e.into());
+        return Err(Error::limit("JSON artifact file type or bytes"));
     }
-    Ok(fresh)
+    durable_fs::publish(path, bytes, replace)
 }
 
 /// Apply the reference file store's JSON node/depth bounds before admitting
@@ -168,17 +133,20 @@ fn admit_effect_receipt(value: &Value) -> Result<String> {
     canonical(value)
 }
 
-fn read_effect_receipt(path: &Path, request_digest: &str) -> Result<Option<Value>> {
+fn read_effect_receipt(path: &Path, request_digest: &str, retain: bool) -> Result<Option<Value>> {
     let Some(file) = open_regular_file(path, MAX_DOCUMENT_BYTES)? else {
         return Ok(None);
     };
-    let value = read_json(file, MAX_DOCUMENT_BYTES)?;
+    let value = read_json(&file, MAX_DOCUMENT_BYTES)?;
     admit_effect_receipt(&value)?;
     if value["requestDigest"].as_str() != Some(request_digest) {
         return Err(Error::new(
             "DIGEST_MISMATCH",
             format!("effect file claims a different request than {request_digest}"),
         ));
+    }
+    if retain {
+        durable_fs::sync_retained(&file, path)?;
     }
     Ok(Some(value))
 }
@@ -434,13 +402,14 @@ impl Store {
             let file = open_regular_file(&path, MAX_DOCUMENT_BYTES)?.ok_or_else(|| {
                 Error::new("IO_FAILED", format!("{}: file not found", path.display()))
             })?;
-            let installed = read_json(file, MAX_DOCUMENT_BYTES)?;
+            let installed = read_json(&file, MAX_DOCUMENT_BYTES)?;
             if digest(&installed)? != key {
                 return Err(Error::new(
                     "DIGEST_MISMATCH",
                     "existing store content is corrupt",
                 ));
             }
+            durable_fs::sync_retained(&file, &path)?;
         }
         self.data.insert(
             (kind.to_owned(), key.clone()),
@@ -511,7 +480,7 @@ impl Store {
         let Some(path) = self.effect_path(&key)? else {
             return Ok(None);
         };
-        read_effect_receipt(&path, request_digest)
+        read_effect_receipt(&path, request_digest, false)
     }
 
     /// Record an effect response for later runs. Writable file stores cache
@@ -534,7 +503,7 @@ impl Store {
                 // Read the actual immutable winner, bypassing the memory map.
                 // Never memoize a proposal that lost publication or hide a
                 // malformed retained record behind the proposed receipt.
-                read_effect_receipt(&path, &request_digest)?
+                read_effect_receipt(&path, &request_digest, true)?
                     .ok_or_else(|| Error::new("IO_FAILED", "retained effect receipt disappeared"))?
             };
             self.effects.insert(key, retained);

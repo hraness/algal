@@ -10,6 +10,9 @@ Run from the repository root with the pinned Bun version:
 bun scripts/verify.ts --suite claims
 bun scripts/verify.ts --suite runner-selftest
 bun scripts/verify.ts --suite boundary
+bun scripts/verify.ts --suite artifact
+bun scripts/verify.ts --suite custody
+bun scripts/verify.ts --suite publication
 bun scripts/verify.ts --suite all-required
 ```
 
@@ -17,7 +20,20 @@ bun scripts/verify.ts --suite all-required
 
 No runtime dependency on Lean, Java, TLC or another verifier is introduced. Formal tools are development/CI tools. Their immutable distributions, checksums and compatibility smoke evidence are recorded in `toolchains.json` and the toolchain-smoke report. Missing required tools fail their gate.
 
-The command runner supports cooperating POSIX process groups. Its live supervisor receives cleanup requests over private IPC and signals its own group. `cleanupObserved` means supervisor termination and EOF on both captured command-output pipes were observed. It does not independently reap every descendant; detached descendants and absent OS progress are outside this contract. A missing cleanup witness fails the command. The registered Git/Bun checks use this bounded contract; wider process-tree qualification belongs to the host assurance phase.
+The [artifact suite](artifact/README.md) checks the adjacent evaluator manifest,
+rebuilds WASM byte-for-byte under the pinned isolated recipe, and compares a
+fresh native evaluator with that build. Populate the locked Cargo cache and
+install the pinned WASM target first; the gate itself stays offline.
+
+The [custody and publication suites](tla/README.md) execute the bounded models,
+reachable action witnesses and intended counterexamples. Custody also requires
+all eight actual Bun/native schedules; build the native `application_custody`
+test and provide its absolute path through `ALGAL_CUSTODY_TEST_BIN`. Publication
+adds the Bun syscall/crash-image regressions; the native helper and admission
+tests remain required separately. These are finite checks and sampled runtime
+relations; the broad ledger obligations remain unproved.
+
+The command runner supports cooperating POSIX process groups. Its live supervisor receives cleanup requests over private IPC and signals its own group. `cleanupObserved` means supervisor SIGKILL termination and parent-side EOF on both relayed standard-output pipes were observed. Successful completion additionally requires the trusted helper's actual target-pipe EOFs, completed forwarding callbacks, and matching per-stream byte counts. The relay applies backpressure and preserves raw bytes. It avoids Bun 1.3.14's observed garbage-collection failure with reused extra pipe descriptors. It does not independently reap every descendant; detached descendants and absent OS progress are outside this contract. A missing cleanup witness fails the command. Wider process-tree qualification belongs to the host assurance phase.
 
 ## Reading a property
 

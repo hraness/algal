@@ -20,6 +20,64 @@ fn write(path: &Path, value: &Value) {
     fs::write(path, canonical(value).unwrap()).unwrap();
 }
 
+#[test]
+fn operations_reject_missing_admitted_directories_without_recreating_them() {
+    let temp = tempfile::tempdir().unwrap();
+    let service = MailboxService::open(temp.path());
+    let config = service.create("incomplete", 2, 64).unwrap();
+    let messages = temp.path().join("mailboxes/incomplete/messages");
+    fs::remove_dir(&messages).unwrap();
+    assert!(
+        service
+            .send(
+                &config.send,
+                json!("message"),
+                &digest(&json!("missing layout")).unwrap()
+            )
+            .is_err()
+    );
+    assert!(!messages.exists());
+}
+
+#[test]
+fn dual_delivery_markers_fail_closed_without_reconciling_evidence() {
+    for operation in ["receive", "pending", "retry"] {
+        let temp = tempfile::tempdir().unwrap();
+        let service = MailboxService::open(temp.path());
+        let config = service.create("uncertain", 2, 64).unwrap();
+        let key = digest(&json!("uncertain delivery")).unwrap();
+        service.send(&config.send, json!("message"), &key).unwrap();
+        let filename = format!("{}.json", &key[7..]);
+        let pending = temp
+            .path()
+            .join("mailboxes/uncertain/pending")
+            .join(&filename);
+        let consumed = temp
+            .path()
+            .join("mailboxes/uncertain/consumed")
+            .join(&filename);
+        fs::copy(&pending, &consumed).unwrap();
+        let before = fs::read(&pending).unwrap();
+        let reopened = MailboxService::open(temp.path());
+        let invoke = || match operation {
+            "receive" => reopened.receive(&config.receive),
+            "pending" => reopened.has_pending(&config.receive).map(|v| json!(v)),
+            _ => reopened.send(&config.send, json!("message"), &key),
+        };
+        assert_eq!(invoke().unwrap_err().code, "IO_FAILED", "{operation}");
+        assert_eq!(fs::read(&pending).unwrap(), before);
+        assert_eq!(fs::read(&consumed).unwrap(), before);
+        write(
+            &consumed,
+            &json!({"contract":MAILBOX_DELIVERY_CONTRACT,"id":digest(&json!("foreign")).unwrap()}),
+        );
+        let conflict = fs::read(&consumed).unwrap();
+        assert_eq!(invoke().unwrap_err().code, "DIGEST_MISMATCH", "{operation}");
+        assert_eq!(fs::read(&pending).unwrap(), before);
+        assert_eq!(fs::read(&consumed).unwrap(), conflict);
+    }
+}
+
 fn conflicting_creators(root: &Path) -> Vec<((usize, usize), algal::Result<MailboxConfig>)> {
     let barrier = Arc::new(Barrier::new(3));
     let threads: Vec<_> = [(1, 32), (64, 1024)]

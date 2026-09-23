@@ -2,19 +2,31 @@ import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { open, realpath } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import type { Readable } from "node:stream";
-import { CHILD_ENV, type SupervisorCompletion } from "./command-supervisor";
+import { CHILD_ENV, type SupervisorCompletion, type SupervisorDrain } from "./command-supervisor";
 import { parseRegistry, parseToolchains, validateClaims } from "./claims";
 import { hashFile, hashJson, inputBindings, readJson, type FileBinding } from "./files";
 import { array, digest, gitHash, natural, record, requireThat, string } from "./schema";
 import { READY_SUITES, SUITES } from "./suites";
 
 export { CHILD_ENV } from "./command-supervisor";
-/** cleanupObserved witnesses supervisor SIGKILL termination and captured-output
- * EOF after the owned-group stop request, not independent reaping of every
- * descendant. This requires cooperating same-group processes and OS progress;
+/** cleanupObserved witnesses supervisor SIGKILL termination and its relayed
+ * output EOF after the owned-group stop request, not independent reaping of every
+ * descendant. Successful completion additionally requires the trusted helper's
+ * actual target EOFs, completed forwarding writes, and matching byte counts.
+ * This requires cooperating same-group processes and OS progress;
  * detached/uninterruptible descendants that close outputs are not qualified. */
 export type CommandResult = { command: string[]; exitCode: number | null; signal: string | null; timedOut: boolean; outputExceeded: boolean; cleanupObserved: boolean; stdout: string; stderr: string };
+
+/** Failed custody is never an admitted result. Preserve bounded raw diagnostics
+ * separately so a tool adapter can retain the failure without inventing UTF-8
+ * or discarding the output that explains it. */
+export class CommandFailure extends Error {
+  constructor(message: string, readonly rawStdout: Uint8Array, readonly rawStderr: Uint8Array,
+    readonly observation: { command: string[]; completion: SupervisorCompletion | undefined; drained: SupervisorDrain | undefined; receivedBytes: { stdout: number; stderr: number }; supervisorExit: { exitCode: number | null; signal: string | null } | undefined; timedOut: boolean; outputExceeded: boolean; stdoutEnded: boolean; stderrEnded: boolean }) {
+    super(message);
+    this.name = "CommandFailure";
+  }
+}
 
 /** Static callers choose argv. Registry text is never executed as a shell command. */
 export async function runCommand(command: string[], cwd: string, options: { timeoutMs?: number; maxOutputBytes?: number } = {}): Promise<CommandResult> {
@@ -26,17 +38,24 @@ export async function runCommand(command: string[], cwd: string, options: { time
   requireThat(process.platform !== "win32", "bounded verification command custody requires a POSIX process group");
   return new Promise((resolve, reject) => {
     const supervisor = fileURLToPath(new URL("./command-supervisor.ts", import.meta.url));
-    const child = spawn(process.execPath, [supervisor, JSON.stringify(command)], { cwd, env: CHILD_ENV, stdio: ["ignore", "ignore", "pipe", "ipc", "pipe", "pipe"], detached: true });
-    // Node's declaration truncates the tuple at fd4; spawn supports extra pipes.
-    const descriptors: readonly unknown[] = child.stdio;
-    const capturedOut = descriptors[4] as Readable;
-    const capturedErr = descriptors[5] as Readable;
+    const child = spawn(process.execPath, [supervisor, JSON.stringify(command)], { cwd, env: CHILD_ENV, stdio: ["ignore", "pipe", "pipe", "ipc"], detached: true });
+    const capturedOut = child.stdout!, capturedErr = child.stderr!;
     const stdout: Buffer[] = [], stderr: Buffer[] = [];
     let bytes = 0, timedOut = false, outputExceeded = false, stopping = false;
     let stdoutEnded = false, stderrEnded = false;
     let completion: SupervisorCompletion | undefined;
+    let drained: SupervisorDrain | undefined;
+    const receivedBytes = { stdout: 0, stderr: 0 };
     let failure: Error | undefined;
     let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
+    let supervisorExit: { exitCode: number | null; signal: string | null } | undefined;
+    let settled = false;
+    const rejectCaptured = (message: string) => {
+      if (settled) return;
+      settled = true;
+      reject(new CommandFailure(message, Buffer.concat(stdout), Buffer.concat(stderr),
+        { command, completion, drained, receivedBytes: { ...receivedBytes }, supervisorExit, timedOut, outputExceeded, stdoutEnded, stderrEnded }));
+    };
     const stop = () => {
       if (stopping) return;
       stopping = true;
@@ -51,36 +70,72 @@ export async function runCommand(command: string[], cwd: string, options: { time
         clearTimeout(timer);
         capturedOut.destroy();
         capturedErr.destroy();
-        child.stderr?.destroy();
         child.unref();
-        reject(new Error("command cleanup was not observed within the 2000ms cleanup bound"));
+        rejectCaptured("command cleanup was not observed within the 2000ms cleanup bound");
       }, 2_000);
     };
-    const maybeComplete = () => { if (completion !== undefined && stdoutEnded && stderrEnded) stop(); };
-    const timer = setTimeout(() => { timedOut = true; stop(); }, timeoutMs);
-    const receive = (chunks: Buffer[]) => (chunk: Buffer) => {
-      bytes += chunk.byteLength;
-      if (bytes > maxOutputBytes) { outputExceeded = true; stop(); return; }
-      chunks.push(chunk);
+    const maybeSettle = () => {
+      // Child exit and each parent-side EOF are independent required witnesses.
+      if (settled || supervisorExit === undefined || !stdoutEnded || !stderrEnded) return;
+      clearTimeout(timer);
+      clearTimeout(cleanupTimer);
+      const { exitCode, signal } = supervisorExit;
+      const cleanupObserved = stopping && exitCode === null && signal === "SIGKILL";
+      if (failure !== undefined) { rejectCaptured(failure.message); return; }
+      if (!cleanupObserved || !timedOut && !outputExceeded && (completion === undefined || drained === undefined)) {
+        rejectCaptured(`command supervisor cleanup/completion was not observed: ${JSON.stringify({ stopping, stdoutEnded, stderrEnded, exitCode, signal, timedOut, outputExceeded, completion, drained })}`); return;
+      }
+      if (!timedOut && !outputExceeded && (drained?.stdoutBytes !== receivedBytes.stdout || drained?.stderrBytes !== receivedBytes.stderr)) {
+        rejectCaptured("command supervisor relay byte counts differ from captured output"); return;
+      }
+      try {
+        const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+        const result = { command, exitCode: completion?.exitCode ?? null, signal: completion?.signal ?? null, timedOut, outputExceeded, cleanupObserved, stdout: decoder.decode(Buffer.concat(stdout)), stderr: decoder.decode(Buffer.concat(stderr)) };
+        settled = true;
+        resolve(result);
+      } catch { rejectCaptured("command output contains invalid UTF-8"); }
     };
-    capturedOut.on("data", receive(stdout));
-    capturedErr.on("data", receive(stderr));
+    const maybeComplete = () => {
+      // The anchor retains its own standard writers until stop. Its drained
+      // message witnesses target EOF and completed forwarding, not parent EOF.
+      if (completion !== undefined && drained !== undefined) stop();
+      maybeSettle();
+    };
+    const timer = setTimeout(() => { timedOut = true; stop(); }, timeoutMs);
+    const receive = (chunks: Buffer[], stream: "stdout" | "stderr") => (chunk: Buffer) => {
+      const available = Math.max(0, maxOutputBytes - bytes);
+      bytes += chunk.byteLength;
+      receivedBytes[stream] += chunk.byteLength;
+      if (available > 0) chunks.push(chunk.subarray(0, available));
+      if (bytes > maxOutputBytes) { outputExceeded = true; stop(); return; }
+    };
+    capturedOut.on("data", receive(stdout, "stdout"));
+    capturedErr.on("data", receive(stderr, "stderr"));
     capturedOut.on("end", () => { stdoutEnded = true; maybeComplete(); });
     capturedErr.on("end", () => { stderrEnded = true; maybeComplete(); });
-    child.stderr!.on("data", (chunk: Buffer) => {
-      failure ??= new Error(`command supervisor diagnostic: ${chunk.toString("utf8", 0, 4096)}`);
-      stop();
-    });
+    for (const stream of [capturedOut, capturedErr]) stream.on("error", error => { failure ??= error; stop(); });
     child.on("message", (value: unknown) => {
       try {
+        const kind = value && typeof value === "object" && "kind" in value ? value.kind : undefined;
+        if (kind === "failed") {
+          const message = record(value, ["kind", "error"], "supervisor failure");
+          failure = new Error(string(message.error, "supervisor error", 4096)); stop(); return;
+        }
+        if (kind === "drained") {
+          requireThat(completion !== undefined && drained === undefined, "out-of-order or duplicate supervisor drain");
+          const message = record(value, ["kind", "stdoutBytes", "stderrBytes"], "supervisor drain");
+          drained = { kind: "drained", stdoutBytes: natural(message.stdoutBytes, "supervisor stdout bytes"), stderrBytes: natural(message.stderrBytes, "supervisor stderr bytes") };
+          requireThat(Number.isSafeInteger(drained.stdoutBytes + drained.stderrBytes), "supervisor combined byte count overflow");
+          maybeComplete(); return;
+        }
         requireThat(completion === undefined, "duplicate command supervisor completion");
         const message = record(value, ["kind", "exitCode", "signal", "error"], "supervisor completion");
         requireThat(message.kind === "completed", "unknown command supervisor message");
         requireThat(message.exitCode === null || typeof message.exitCode === "number" && Number.isSafeInteger(message.exitCode), "invalid target exit code");
         requireThat(message.signal === null || typeof message.signal === "string", "invalid target signal");
-        requireThat(message.error === null || typeof message.error === "string", "invalid target error");
+        requireThat(message.error === null || typeof message.error === "string" && message.error.length <= 4096, "invalid target error");
         completion = message as SupervisorCompletion;
-        if (completion.error !== null) failure = new Error(completion.error);
+        if (completion.error !== null) { failure = new Error(completion.error); stop(); }
         maybeComplete();
       } catch (error) { failure = error instanceof Error ? error : new Error(String(error)); stop(); }
     });
@@ -89,15 +144,8 @@ export async function runCommand(command: string[], cwd: string, options: { time
       if (!stopping) { failure ??= new Error("command supervisor exited unexpectedly"); stop(); }
     });
     child.on("close", (exitCode, signal) => {
-      clearTimeout(timer);
-      clearTimeout(cleanupTimer);
-      const cleanupObserved = stopping && stdoutEnded && stderrEnded && exitCode === null && signal === "SIGKILL";
-      if (failure !== undefined) { reject(failure); return; }
-      if (!cleanupObserved || !timedOut && !outputExceeded && completion === undefined) { reject(new Error("command supervisor cleanup/completion was not observed")); return; }
-      try {
-        const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
-        resolve({ command, exitCode: completion?.exitCode ?? null, signal: completion?.signal ?? null, timedOut, outputExceeded, cleanupObserved, stdout: decoder.decode(Buffer.concat(stdout)), stderr: decoder.decode(Buffer.concat(stderr)) });
-      } catch { reject(new Error("command output contains invalid UTF-8")); }
+      supervisorExit = { exitCode, signal };
+      maybeSettle();
     });
   });
 }
@@ -193,8 +241,25 @@ export function admitSelftestOutput(result: CommandResult): number {
 
 async function executeSuite(root: string, suite: string): Promise<unknown> {
   if (suite === "claims") return validateClaims(root);
+  if (suite === "artifact") {
+    const { runArtifact } = await import("../artifact/run");
+    return runArtifact(root);
+  }
+  if (suite === "custody" || suite === "publication") {
+    const { runTlcSuite, recheckTlcSuiteEvidence } = await import("./tlc");
+    const evidence = await runTlcSuite(root, suite);
+    const model = await recheckTlcSuiteEvidence(root, evidence, suite);
+    if (suite === "custody") {
+      const { runCustodyRuntime } = await import("../custody/runtime");
+      return { model, evidence, runtime: await runCustodyRuntime(root) };
+    }
+    const command = [process.execPath, "test", "--timeout", "20000", "src/durable-fs.test.ts", "src/store.test.ts", "src/host-state.test.ts", "src/mailbox.test.ts"];
+    const result = await runCommand(command, root);
+    return { model, evidence, tests: admitSelftestOutput(result), commandResult: result,
+      scope: "Bounded abstract publication checks plus sampled Bun syscall/crash-image conformance. Pinned native helper, cache, file-admission and mailbox-admission tests remain separately required; no filesystem refinement or physical power-loss claim." };
+  }
   if (suite === "runner-selftest") {
-    const command = [process.execPath, "test", "--timeout", "20000", "verify/tests"];
+    const command = [process.execPath, "test", "--timeout", "20000", "verify/tests", "verify/tla/tlc.test.ts"];
     const result = await runCommand(command, root);
     return { tests: admitSelftestOutput(result), commandResult: result, syntheticProofFixtures: true };
   }

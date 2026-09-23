@@ -42,6 +42,49 @@ schema and interface rules. `migrate` explicitly names a schema change and its
 producing migration evidence. Revisions advance epoch; ordinary memory updates
 advance sequence while retaining epoch. Previous states are retained.
 
+### Retained application custody
+
+Every mutation, including dispatch and reconciliation, acquires the retained
+SQLite owner at `applications/.creation/pending/ID` as its stable primary
+identity. This identity does not change when the first head appears. A short
+shared lease at `applications/.creation` validates the bounded namespace scan;
+it is released before acquiring the per-application owner or calling host
+admission. Independent applications can enter host admission concurrently.
+
+After primary acquisition, the service checks the named directory again. An
+existing `applications/ID` also requires its permanent SQLite owner before
+history, expected-head checks, admission, or dispatch. This secondary owner
+preserves exclusion with older writers and preserves refusal of unrecognized
+legacy ownership markers. Recognized interrupted v2 markers are archived only
+after acquiring the corresponding SQLite transaction. A marker's PID, age, or
+pathname alone does not establish that its owner has stopped.
+
+A new named directory is created only after admission and quota reservation
+succeed, then its permanent owner is acquired before publishing dependencies
+or the head. Both owners remain held through publication; cleanup precedes the
+successful public return. A later owner rereads the selected history before
+checking its expected head. A prepared directory already occupies an
+application slot and may finish at the 32-name limit. Refused admission,
+refused quota reservation, and dispatch to an unknown name do not create a
+named application directory; retained coordination files under `.creation`
+are still subject to the separate conservative scan and allocation bounds.
+
+The repaired exclusion guarantee applies to cooperating upgraded writers
+sharing these retained SQLite identities on the supported local filesystem.
+The two owners also exclude an upgraded writer from an older writer
+holding either original identity. It does not repair the original cutover race
+between two concurrently running older writers; upgrade every mutating host
+before claiming the fleet-wide guarantee. These live-custody checks do not by
+themselves establish power-loss durability or distributed exclusion.
+
+The optional custody-selection diagnostic hook runs after the shared scan is
+released and before primary acquisition. It is separate from the four existing
+durable fault points (`prepared`, `head-published`, `dispatch-started`, and
+`dispatch-settled`), is absent from ordinary hosts and CLIs, and contributes no
+data to canonical application records. The eight Bun/native three-caller
+schedules exercise this gap through the actual services; they are sampled
+implementation evidence, not an exhaustive refinement proof.
+
 ## Records and responsibilities
 
 | Record | Purpose |

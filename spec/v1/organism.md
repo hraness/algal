@@ -502,6 +502,40 @@ re-evaluation.
   wire a read behind a write with an edge to order them, or accept
   schedule order.
 
+### Local filesystem publication
+
+The writable file-backed Store and host-state adapters acknowledge a new
+record only after writing a private temporary, synchronizing its file contents,
+installing it with a same-directory hard link (immutable records) or rename
+(mutable slots/heads), and synchronizing the destination directory. Before
+installation they establish and synchronize the complete physical ancestor
+chain, including already-visible directories. Relative roots are resolved;
+visibility or a prior failed caller is never a durability witness.
+
+An existing immutable record wins without being rewritten. Before an
+idempotent publication acknowledges that winner, the adapter admits its bytes,
+checks its required digest or record identity, and synchronizes that same
+opened inode and its ancestor bindings. Corrupt retained bytes reject and
+remain untouched. The executor cache identity is distinct from the executor
+recorded in an effect receipt. Memory stores and read-only overlays retain
+their local semantics; their writes do not acknowledge disk persistence.
+
+These guarantees assume that successful file/directory syncs persist the
+specified contents/bindings, filesystem roots and mount mappings are already
+durable and stable, and cooperating writers preserve managed namespaces and
+immutable records. They do not provide OS isolation from hostile writers or
+qualify arbitrary filesystems for physical power loss. Publishing a reference
+requires its dependencies to have completed publication or belong to an
+explicitly qualified durable initial state; reading an arbitrary legacy or
+imported record does not retroactively qualify its dependency graph.
+
+A failure after link, rename, unlink or synchronization may leave the new
+state visible or durable. It remains a failed, potentially uncertain call;
+the adapter does not roll back published state or delete another caller's
+temporary. Its own unpublished temporary may remain after a cleanup failure
+or interruption. A process-kill test, a modeled crash image, and a real
+machine/storage power-loss qualification are distinct kinds of evidence.
+
 ### Capability mailboxes and wakeups
 
 Mailboxes are host standard-library tools over the generic `tool` cell — not a
@@ -517,7 +551,8 @@ The host admits two typed drivers:
 
 - `mailbox.send.v1`: inputs `mailbox` (`mailbox-send` cap), `message` (`json`);
   output `id` (`text`). The id is the digest of mailbox, idempotency key, and
-  message. A repeated tool request is one delivery, never a duplicate.
+  message. A clean exact retry retains the same message claim and delivery
+  identity; uncertain transfer evidence rejects instead of redelivering.
 - `mailbox.receive.v1`: input `mailbox` (`mailbox-receive` cap); outputs `id`
   and `message`. Pending messages are selected in deterministic delivery-key
   digest order. Receive mutates the mailbox, so both drivers declare effect
@@ -542,6 +577,26 @@ Its successful effect receipt records the delivered message id and value.
 Immutable message claims and consumed markers are retained as host recovery
 evidence; mailbox storage accounting and garbage collection remain host
 lifecycle responsibilities.
+
+File-backed receive publishes and synchronizes an immutable consumed marker
+before unlinking the pending marker, then synchronizes the pending directory
+before returning a message. It does not depend on cross-directory rename
+being atomic across machine crash. Each mailbox operation also unlinks its
+own lock and synchronizes the lock's directory before reporting success.
+Release is attempted once: failure after unlink must not remove a subsequent
+caller's lock at the reused pathname. An interrupted operation's retained
+lock remains a reconciliation-required interlock, never an age-based lease.
+
+If matching pending and consumed markers coexist, receive, readiness checking,
+and an exact send retry fail with `IO_FAILED` and preserve both markers and
+the immutable claim. Conflicting identities fail with `DIGEST_MISMATCH`;
+malformed records fail admission. There is no automatic winner selection,
+evidence deletion, or transfer reconciliation. Missing admitted mailbox
+directories are not silently recreated by an operation. Clean v1 layouts
+and wire records are unchanged. Pre-acknowledgment receive interruption has
+no operation identity and can remain uncertain; this is not an exactly-once
+delivery or automatic retry guarantee. Legacy claim-only states cannot be
+retroactively distinguished from an old interrupted send or receive.
 
 ### spawn cells
 

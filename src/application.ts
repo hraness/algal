@@ -83,7 +83,11 @@ export interface ApplicationAdmission {
   }): Promise<unknown>;
 }
 export type ApplicationFaultPoint = "prepared" | "head-published" | "dispatch-started" | "dispatch-settled";
-export type ApplicationOptions = {fault?: (point: ApplicationFaultPoint) => void | Promise<void>};
+export type ApplicationOptions = {
+  fault?: (point: ApplicationFaultPoint) => void | Promise<void>;
+  /** Diagnostic selection barrier, outside shared custody; absent by default. */
+  custodySelected?: () => void | Promise<void>;
+};
 
 type Operation = {contract: "algal.application-operation.v1"; application: string; operation: Digest; request: Digest; transition: Digest; state: Digest};
 type IntentRow = {ref: Digest; work: WorkIntent};
@@ -181,17 +185,14 @@ export class ApplicationService {
     this.dir = resolve(dir); this.store = new FileStore(this.dir);
   }
   private path(application: string): string { return join(this.dir, "applications", applicationId(application)); }
-  private async custody<T>(application: string, creating: boolean, action: () => Promise<T>): Promise<T> {
+  private async custody<T>(application: string, creating: boolean, action: (legacyHeld: boolean) => Promise<T>): Promise<T> {
     const root = join(this.dir, "applications");
     await hostDirectory(root);
-    // The shared creation lease serializes only the namespace scan and the
-    // committed-head check; admission then runs under the application's own
-    // mutex. Until a head exists that mutex is a per-application creation
-    // lease inside `.creation` — coordination residue, never a reserved
-    // namespace — so independent creations and a refused first commit never
-    // queue behind or consume capacity through a trusted host call.
-    const selected = await hostLease(join(root, ".creation"), "application-creation", async (): Promise<{existing: true} | {creating: true} | {result: T}> => {
-      let count = 0, committed = false, scanned = 0;
+    // The namespace scan never selects a different mutex after publication.
+    // Pending is retained as the stable per-application identity. Its residue
+    // stays outside the application count, including refused first commits.
+    await hostLease(join(root, ".creation"), "application-creation", async () => {
+      let count = 0, present = false, scanned = 0;
       for await (const entry of await opendir(root)) {
         if (++scanned > APPLICATION_SERVICE_LIMITS.applications + 2) throw new Error("Application directory bound exceeded");
         if (entry.name === ".creation") continue;
@@ -200,21 +201,25 @@ export class ApplicationService {
         if (entry.isFile() && !entry.isSymbolicLink()) continue;
         if (!entry.isDirectory() || entry.isSymbolicLink()) throw new Error("Invalid application directory");
         applicationId(entry.name); count++;
-        if (entry.name === application) {
-          try {
-            const head = await lstat(join(root, entry.name, "head.json"));
-            committed = head.isFile() && !head.isSymbolicLink();
-          } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-        }
+        if (entry.name === application) present = true;
       }
-      if (committed) return {existing: true};
-      if (!creating) return {result: await action()};
-      if (count >= APPLICATION_SERVICE_LIMITS.applications) throw new Error("Application count exhausted");
-      return {creating: true};
+      // A prepared namespace already occupies its slot and may finish at the
+      // count limit. The quota ledger rechecks allocation before publication.
+      if (creating && !present && count >= APPLICATION_SERVICE_LIMITS.applications) throw new Error("Application count exhausted");
     }, SHARED_LEASE_RETRY);
-    if ("result" in selected) return selected.result;
-    if ("creating" in selected) return hostLease(join(root, ".creation", "pending", applicationId(application)), "application-" + application, action);
-    return hostLease(this.path(application), "application-" + application, action);
+    await this.options.custodySelected?.();
+    return hostLease(join(root, ".creation", "pending", applicationId(application)), "application-" + application, async () => {
+      let present = false;
+      try {
+        const entry = await lstat(this.path(application));
+        if (!entry.isDirectory() || entry.isSymbolicLink()) throw new Error("Invalid application directory");
+        present = true;
+      } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+      // Existing stores still take the permanent mutex: live old writers and
+      // unrecognized legacy markers must never be bypassed by the new path.
+      // A genuinely new namespace is delayed until admission and quota pass.
+      return present ? hostLease(this.path(application), "application-" + application, () => action(true)) : action(false);
+    });
   }
   private async value(ref: Digest): Promise<JsonValue> { return getApplicationRecord(this.store, ref, json); }
   /** Intent rows validated by the most recent `history()` pass, keyed by state
@@ -458,7 +463,8 @@ export class ApplicationService {
   async commit(input: unknown): Promise<ApplicationSnapshot> {
     const command = parseApplicationCommand(input); // snapshots before the first await
     const path = this.path(command.application);
-    return this.custody(command.application, true, async () => {
+    let publicationAttempted = false;
+    try { return await this.custody(command.application, true, async legacyHeld => {
       const history = await this.history(command.application), current = history.at(-1) ?? null;
       const request = hash(command), operationPath = join(path, "operations", command.operation.slice(7) + ".json");
       const raw = await hostRead(operationPath, 2048);
@@ -522,19 +528,26 @@ export class ApplicationService {
       if (!prepared && operations.length >= APPLICATION_LIMITS.states) throw new Error("Application operation bound exhausted");
       const head = json({contract: "algal.application-head.v1", application: command.application, state: next.digest});
       await withApplicationQuota(this.dir, command.application, [json(operation), head], async () => {
-        for (const intent of intents) await putApplicationRecord(this.store, intent);
-        await putApplicationRecord(this.store, transition); await putApplicationRecord(this.store, state);
-        await hostWrite(operationPath, json(operation), 2048);
-        await this.options.fault?.("prepared");
-        try {
+        const publish = async () => {
+          for (const intent of intents) await putApplicationRecord(this.store, intent);
+          await putApplicationRecord(this.store, transition); await putApplicationRecord(this.store, state);
+          await hostWrite(operationPath, json(operation), 2048);
+          await this.options.fault?.("prepared");
+          publicationAttempted = true;
           await hostWrite(join(path, "head.json"), head, 512, false);
           await this.options.fault?.("head-published");
-        } catch {
-          throw new AlgalError("IO_FAILED", "Application commit acknowledgment uncertain; inspect the exact operation", {operation: command.operation}, {uncertain: true});
-        }
+        };
+        if (legacyHeld) await publish();
+        else await hostLease(path, "application-" + command.application, publish);
       });
       return structuredClone(next);
-    });
+    }); } catch (error) {
+      // Cleanup can fail after the selected head changed, including either
+      // compatibility or primary lease release. Never turn that into a known
+      // pre-publication failure that a caller could safely repeat blindly.
+      if (publicationAttempted) throw new AlgalError("IO_FAILED", "Application commit acknowledgment uncertain; inspect the exact operation", {operation: command.operation}, {uncertain: true});
+      throw error;
+    }
   }
   private async validatePlan(snapshot: ApplicationSnapshot, work: WorkIntent, ref: Digest, plan: ApplicationDispatchPlan): Promise<void> {
     if (work.kind === "deliver") { if (plan.kind !== "delivery") fail("Delivery requires a delivery plan"); return; }

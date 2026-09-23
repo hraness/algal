@@ -1,6 +1,6 @@
 # ALGAL formal-verification and system-confidence plan
 
-Status: execution authorized on 2026-09-23; Phases 00 and 01 are Complete. Later phases remain Not started until their dependencies and acceptance criteria are met. Completion of infrastructure does not complete any production proof obligation.
+Status: execution authorized on 2026-09-23; Phases 00–03 are Complete; Phase 09 is In progress. Later phases remain Not started until their dependencies and acceptance criteria are met. Completion of infrastructure does not complete any production proof obligation.
 
 Basis: [2026-09-23 audit](formal-verification-audit-2026-09-23.md), ALGAL tree f19f7381f80ee7745f0faa0e9e3e8eb0d43a8bfe at a86327f76f6e632fe7fceda17b738a749a341ab6. Rebase the evidence against the exact integration candidate before execution.
 
@@ -158,7 +158,7 @@ TLC does not establish that a proposed symmetry is valid, and its documentation 
 
 ## Phase 02: custody and filesystem publication correctness
 
-- **Status:** Not started
+- **Status:** Complete
 - **Depends on:** 01.
 - **Objective:** Establish one valid exclusion and durability protocol for acknowledged state.
 - **Scope:** Application custody cutover; native Store publication; Bun mailbox persistence; necessary host-state/lease helpers; verify/tla/custody and verify/tla/publication; dedicated regressions.
@@ -175,7 +175,7 @@ TLC does not establish that a proposed symmetry is valid, and its documentation 
 
 ## Phase 03: expression artifact and target identity
 
-- **Status:** Not started
+- **Status:** Complete
 - **Depends on:** 01.
 - **Objective:** Know which evaluator source and toolchain produced the WASM shipped with the Bun runtime.
 - **Scope:** scripts/build-expr-wasm.sh, expression artifact metadata and target-specific comparison driver; integrator-owned CI changes.
@@ -281,7 +281,7 @@ TLC does not establish that a proposed symmetry is valid, and its documentation 
 
 ## Phase 09: Lean semantic foundations
 
-- **Status:** Not started
+- **Status:** In progress
 - **Depends on:** 00, 01.
 - **Objective:** Define the mathematical domain and prove foundational lemmas that later claims actually need.
 - **Scope:** verify/lean/Algal/Core; Lean project registration/pins owned by integrator.

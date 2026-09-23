@@ -10,6 +10,10 @@
       "sha256": "sha256:8d3fbc115e1c47dbaafc503610969b3d5a354c6b104eebde4993529794d14344"
     },
     {
+      "path": ".github/workflows/expression-artifact.yml",
+      "sha256": "sha256:980636bb26ad8a18f121ef989c968b08affb0abed6682b77ff95a07f36eff0c1"
+    },
+    {
       "path": ".github/workflows/release.yml",
       "sha256": "sha256:b5622b6de0eec62ae4112d35292f49c75b3f7828a4fb94eb35263a87a8bd4d59"
     },
@@ -63,7 +67,7 @@
     },
     {
       "path": "crates/algal/src/application.rs",
-      "sha256": "sha256:49d4ce806290112edeac6b6d0880e492a5255cda41c987c00c0db9930c6053b5"
+      "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8"
     },
     {
       "path": "crates/algal/src/application_adaptation.rs",
@@ -186,6 +190,10 @@
       "sha256": "sha256:1efe678722b7e6609467c34f8a0a8ee7dd5091c255432431d177a3c112d6619c"
     },
     {
+      "path": "crates/algal/src/durable_fs.rs",
+      "sha256": "sha256:c2ba82f46f07eb4f5fc9092e172c6b3df1f63dd3c69921685b405a00b9b52001"
+    },
+    {
       "path": "crates/algal/src/effects.rs",
       "sha256": "sha256:20c6d811259babd7dd13a324a9741a1b2bdaa5141cd83d677fc7c8cd3b37f7a4"
     },
@@ -211,15 +219,15 @@
     },
     {
       "path": "crates/algal/src/lease.rs",
-      "sha256": "sha256:85f195329373bc8ff0ccfeb10bf52b980818580e0cdf7dfdf5973c927980de34"
+      "sha256": "sha256:5972f01053e05f0a797004fbd3fe1bb5491b35abccb7d97de070371554d116df"
     },
     {
       "path": "crates/algal/src/lib.rs",
-      "sha256": "sha256:3f954123000c596e93105e293903841f3495ba8cc352fa88415353bca0245af2"
+      "sha256": "sha256:e8bef2f4912df7a2191fd5220fa7819f90fd44296b0b08b74d0d3593515169a9"
     },
     {
       "path": "crates/algal/src/mailbox.rs",
-      "sha256": "sha256:31189aff32b82294ff014f9d1027e04035fe2d8efff402bf07b39ac6797b87c3"
+      "sha256": "sha256:c039832fea27f5176d50ea0711743d40786c120fc6336c636445f0f0461b53fc"
     },
     {
       "path": "crates/algal/src/main.rs",
@@ -259,7 +267,7 @@
     },
     {
       "path": "crates/algal/src/store.rs",
-      "sha256": "sha256:6885d769e78dca3ef225da00c6c28e36f145179038379208d10d74c7be0f3b0a"
+      "sha256": "sha256:22e5ee7d7aaf889e24ed015f96f4978a70904fdb12105d106dc374d1b3056efb"
     },
     {
       "path": "crates/algal/src/suite.rs",
@@ -280,6 +288,10 @@
     {
       "path": "crates/algal/tests/application_crash.rs",
       "sha256": "sha256:0459e5fc3c8452d7500456dc3e65b66cddf16bf064b13f5c037155bd709782ca"
+    },
+    {
+      "path": "crates/algal/tests/application_custody.rs",
+      "sha256": "sha256:31c2b6d5705cebfa021c3c8448ad842ed119976c8479c28eea691f194a9385ef"
     },
     {
       "path": "crates/algal/tests/bench.rs",
@@ -331,7 +343,7 @@
     },
     {
       "path": "crates/algal/tests/mailbox_admission.rs",
-      "sha256": "sha256:7f42b5d7c62272c359321461fbc56601b3e908b461b7eca61ef1af1dde5756f2"
+      "sha256": "sha256:c15c1a8c584ab6503a47151f90520830c2383e091fc2b1bed8b3bd17cb03d932"
     },
     {
       "path": "crates/algal/tests/process.rs",
@@ -1359,7 +1371,7 @@
     },
     {
       "path": "scripts/build-expr-wasm.sh",
-      "sha256": "sha256:471dcef2aeecb2420aa058a589a2bebaa5cc454630bb65a9ff207bbf560e123a"
+      "sha256": "sha256:7ddc2d7acb26051c8607ba2d5ce8c1aa832732ab997777a16dcd04f4048ecce2"
     },
     {
       "path": "scripts/install-native.sh",
@@ -1375,7 +1387,7 @@
     },
     {
       "path": "spec/v1/application.md",
-      "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab"
+      "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125"
     },
     {
       "path": "spec/v1/bench.md",
@@ -1407,7 +1419,7 @@
     },
     {
       "path": "spec/v1/organism.md",
-      "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471"
+      "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c"
     },
     {
       "path": "spec/v1/process-evidence.md",
@@ -1419,7 +1431,7 @@
     },
     {
       "path": "spec/v1/process.md",
-      "sha256": "sha256:a8120d43215a2a79715c0be66f5393e9d1bacaed9d71647790328c66aa3bd59a"
+      "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe"
     },
     {
       "path": "spec/v1/search.md",
@@ -1427,7 +1439,11 @@
     },
     {
       "path": "src/algal_expr.wasm",
-      "sha256": "sha256:04fd82c3dba660b1a8eaee4541647f75e7b23e348a76f1610e3ad34d2a9f22eb"
+      "sha256": "sha256:a1c788200feede210cae1b4926c7e2ee5524a814001056d83f2855f77b86eea9"
+    },
+    {
+      "path": "src/algal_expr.wasm.json",
+      "sha256": "sha256:359f4ed3c168c24b804e7ad3c794a380f57900ea63f3f4945c845169f0d2972e"
     },
     {
       "path": "src/application-adaptation.test.ts",
@@ -1464,6 +1480,10 @@
     {
       "path": "src/application-crash.test.ts",
       "sha256": "sha256:c1b7b08f33aaead5cf2a4eac1c0b866d2b170dc34a1b1cd08a25f322f60386ec"
+    },
+    {
+      "path": "src/application-custody.test.ts",
+      "sha256": "sha256:71862b2ab75ebffa085765d741d16337b529baa6bed48b7805bffce7f13e99bd"
     },
     {
       "path": "src/application-drain.test.ts",
@@ -1619,7 +1639,7 @@
     },
     {
       "path": "src/application.ts",
-      "sha256": "sha256:7e1c534dabc0172a19fb10c25ad59b4ed4573892ee120d5d3054ae848d80ac4f"
+      "sha256": "sha256:76028c73b15c342cac18af0195407982333a299828798418cbedc92e043988e9"
     },
     {
       "path": "src/audit.test.ts",
@@ -1722,6 +1742,14 @@
       "sha256": "sha256:2b973e4a2991c4ebd2e6e278b4fb5f379718393e802e1038dbd00a3b5fd0f59b"
     },
     {
+      "path": "src/durable-fs.test.ts",
+      "sha256": "sha256:e1d9f25d4367c0644f0f41a2f97baba7d9af8e4f2b5053a283e8e7b6974e9b9f"
+    },
+    {
+      "path": "src/durable-fs.ts",
+      "sha256": "sha256:657515fbc68470a0872b74c09b0c12b7c6530133d4a3b2dd076763a8c58d899f"
+    },
+    {
       "path": "src/effects-own-keys.test.ts",
       "sha256": "sha256:8701252327e82fc2ef560753201b1281a99a975012a8d645b22284926b0a3c40"
     },
@@ -1752,6 +1780,14 @@
     {
       "path": "src/fixtures/application-crash-child.ts",
       "sha256": "sha256:b2c18a7193b247860ba1e963f00e6fa0197777b2d388e0a59044840717656c51"
+    },
+    {
+      "path": "src/fixtures/application-custody-child.ts",
+      "sha256": "sha256:5209d1e815a1febcdd0a78051323d6102e9a5971be4f31ca807ee4fa2665bc25"
+    },
+    {
+      "path": "src/fixtures/application-custody.ts",
+      "sha256": "sha256:3d5d6ef05fd6ac0cbb3afc4ba894ed554c27601b2e20b60e40dfa8b509653caf"
     },
     {
       "path": "src/foundry-verify.ts",
@@ -1811,7 +1847,7 @@
     },
     {
       "path": "src/host-state.ts",
-      "sha256": "sha256:39e7d4af7160161ef66bcb0faf27ba18f157de69fb15c44118c80daebf9fed2f"
+      "sha256": "sha256:6da6d616dff8c553a02328ae0f8d5f006247b44902fe5d45cec47958ecc8fc69"
     },
     {
       "path": "src/io.test.ts",
@@ -1843,11 +1879,11 @@
     },
     {
       "path": "src/mailbox.test.ts",
-      "sha256": "sha256:1cae214d6f25a85241d3ef0daa4f8d5164b5d33588abea02a644bd1b93731252"
+      "sha256": "sha256:21cc25e92cfc570c21580f985b15afd3d934acfbcf26451adf14702d92aade92"
     },
     {
       "path": "src/mailbox.ts",
-      "sha256": "sha256:b09dc9a11745a82a9249380876efbad1506c2b69af41d49d5398b9802f0f8656"
+      "sha256": "sha256:b07ee93aabc22a0884d1b4d2fe5a87bd54c5b866c67e5d76ca25ee822009f844"
     },
     {
       "path": "src/manifest-admission.test.ts",
@@ -2011,7 +2047,7 @@
     },
     {
       "path": "src/store.ts",
-      "sha256": "sha256:5119ef99a54e99dbc56b68ccb70c4ddd1d859a96b4eba438ccee3c9805244247"
+      "sha256": "sha256:c32939216226efbb94ba52f2ddcd289ed72fb65b49fc8ddf88203b8eef99887b"
     },
     {
       "path": "src/tool-context.test.ts",
@@ -2204,7 +2240,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -2303,7 +2339,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -2401,7 +2437,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -2498,14 +2534,14 @@
         },
         {
           "path": "src/store.ts",
-          "sha256": "sha256:5119ef99a54e99dbc56b68ccb70c4ddd1d859a96b4eba438ccee3c9805244247",
+          "sha256": "sha256:c32939216226efbb94ba52f2ddcd289ed72fb65b49fc8ddf88203b8eef99887b",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "src/host-state.ts",
-          "sha256": "sha256:39e7d4af7160161ef66bcb0faf27ba18f157de69fb15c44118c80daebf9fed2f",
+          "sha256": "sha256:6da6d616dff8c553a02328ae0f8d5f006247b44902fe5d45cec47958ecc8fc69",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -2514,7 +2550,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -2601,7 +2637,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -2685,7 +2721,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -2769,7 +2805,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -2853,7 +2889,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -2939,7 +2975,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -3032,7 +3068,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -3124,7 +3160,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -3215,7 +3251,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -3306,7 +3342,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -3397,7 +3433,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -3488,7 +3524,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -3580,7 +3616,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -3672,7 +3708,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -3764,7 +3800,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -3856,7 +3892,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -3950,7 +3986,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -4028,7 +4064,7 @@
         },
         {
           "path": "src/algal_expr.wasm",
-          "sha256": "sha256:04fd82c3dba660b1a8eaee4541647f75e7b23e348a76f1610e3ad34d2a9f22eb",
+          "sha256": "sha256:a1c788200feede210cae1b4926c7e2ee5524a814001056d83f2855f77b86eea9",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -4107,7 +4143,7 @@
         },
         {
           "path": "src/algal_expr.wasm",
-          "sha256": "sha256:04fd82c3dba660b1a8eaee4541647f75e7b23e348a76f1610e3ad34d2a9f22eb",
+          "sha256": "sha256:a1c788200feede210cae1b4926c7e2ee5524a814001056d83f2855f77b86eea9",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -4186,7 +4222,7 @@
         },
         {
           "path": "src/algal_expr.wasm",
-          "sha256": "sha256:04fd82c3dba660b1a8eaee4541647f75e7b23e348a76f1610e3ad34d2a9f22eb",
+          "sha256": "sha256:a1c788200feede210cae1b4926c7e2ee5524a814001056d83f2855f77b86eea9",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -4265,7 +4301,7 @@
         },
         {
           "path": "src/algal_expr.wasm",
-          "sha256": "sha256:04fd82c3dba660b1a8eaee4541647f75e7b23e348a76f1610e3ad34d2a9f22eb",
+          "sha256": "sha256:a1c788200feede210cae1b4926c7e2ee5524a814001056d83f2855f77b86eea9",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -4346,7 +4382,7 @@
         },
         {
           "path": "src/algal_expr.wasm",
-          "sha256": "sha256:04fd82c3dba660b1a8eaee4541647f75e7b23e348a76f1610e3ad34d2a9f22eb",
+          "sha256": "sha256:a1c788200feede210cae1b4926c7e2ee5524a814001056d83f2855f77b86eea9",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -4442,7 +4478,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -4547,7 +4583,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -4652,7 +4688,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -4757,7 +4793,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -4872,7 +4908,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -4980,7 +5016,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -5090,7 +5126,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -5200,7 +5236,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -5325,7 +5361,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -5433,7 +5469,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -5500,49 +5536,63 @@
       ],
       "bounds": {
         "production": "production per-object and listing limits; no whole-CAS quota claim",
-        "harness": "No finite model or proof harness domain admitted yet."
+        "harness": "Publication: one active publisher, two candidate inodes, one dependency, 2/4 ancestor bindings and at most one crash; separate one-key/one-receiver mailbox transfer profiles."
       },
       "sources": [
         {
           "path": "src/store.ts",
-          "sha256": "sha256:5119ef99a54e99dbc56b68ccb70c4ddd1d859a96b4eba438ccee3c9805244247",
+          "sha256": "sha256:c32939216226efbb94ba52f2ddcd289ed72fb65b49fc8ddf88203b8eef99887b",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "src/host-state.ts",
-          "sha256": "sha256:39e7d4af7160161ef66bcb0faf27ba18f157de69fb15c44118c80daebf9fed2f",
+          "sha256": "sha256:6da6d616dff8c553a02328ae0f8d5f006247b44902fe5d45cec47958ecc8fc69",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/store.rs",
-          "sha256": "sha256:6885d769e78dca3ef225da00c6c28e36f145179038379208d10d74c7be0f3b0a",
+          "sha256": "sha256:22e5ee7d7aaf889e24ed015f96f4978a70904fdb12105d106dc374d1b3056efb",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/lease.rs",
-          "sha256": "sha256:85f195329373bc8ff0ccfeb10bf52b980818580e0cdf7dfdf5973c927980de34",
+          "sha256": "sha256:5972f01053e05f0a797004fbd3fe1bb5491b35abccb7d97de070371554d116df",
           "symbols": [
             "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "src/durable-fs.ts",
+          "sha256": "sha256:657515fbc68470a0872b74c09b0c12b7c6530133d4a3b2dd076763a8c58d899f",
+          "symbols": [
+            "publication, retained inode qualification and ancestor barriers"
+          ]
+        },
+        {
+          "path": "crates/algal/src/durable_fs.rs",
+          "sha256": "sha256:c2ba82f46f07eb4f5fc9092e172c6b3df1f63dd3c69921685b405a00b9b52001",
+          "symbols": [
+            "publication, retained inode qualification and ancestor barriers"
           ]
         }
       ],
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "spec/v1/process.md",
-          "sha256": "sha256:a8120d43215a2a79715c0be66f5393e9d1bacaed9d71647790328c66aa3bd59a",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -5566,17 +5616,18 @@
       ],
       "relation": {
         "kind": "unestablished",
-        "description": "Primary whole-module source map plus conservative governed input closure. No checked implementation refinement has been established."
+        "description": "Reviewed source correspondence, bounded TLC profiles and sampled runtime conformance are recorded in docs/formal-verification-evidence/phase02-models.md; no proved implementation refinement or universal property discharge."
       },
       "licensedClaims": [],
       "evidence": {
-        "status": "not-started",
+        "status": "observed",
         "suite": "publication",
         "required": false,
         "results": []
       },
       "unresolved": [
-        "Implement and independently review Phase 02 evidence; establish the exact abstraction/implementation relation before upgrading this obligation."
+        "The universally quantified implementation obligation remains open. Finite model/domain and sampled regression receipts are separately recorded; no licensed claim or implementation refinement follows automatically.",
+        "Filesystem, cooperative exclusion, stable namespace and dependency-composition assumptions remain conditional; exact bounds and exclusions are in the model correspondence guide."
       ]
     },
     {
@@ -5607,49 +5658,63 @@
       ],
       "bounds": {
         "production": "production per-object and listing limits; no whole-CAS quota claim",
-        "harness": "No finite model or proof harness domain admitted yet."
+        "harness": "Publication: one active publisher, two candidate inodes, one dependency, 2/4 ancestor bindings and at most one crash; separate one-key/one-receiver mailbox transfer profiles."
       },
       "sources": [
         {
           "path": "src/store.ts",
-          "sha256": "sha256:5119ef99a54e99dbc56b68ccb70c4ddd1d859a96b4eba438ccee3c9805244247",
+          "sha256": "sha256:c32939216226efbb94ba52f2ddcd289ed72fb65b49fc8ddf88203b8eef99887b",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "src/host-state.ts",
-          "sha256": "sha256:39e7d4af7160161ef66bcb0faf27ba18f157de69fb15c44118c80daebf9fed2f",
+          "sha256": "sha256:6da6d616dff8c553a02328ae0f8d5f006247b44902fe5d45cec47958ecc8fc69",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/store.rs",
-          "sha256": "sha256:6885d769e78dca3ef225da00c6c28e36f145179038379208d10d74c7be0f3b0a",
+          "sha256": "sha256:22e5ee7d7aaf889e24ed015f96f4978a70904fdb12105d106dc374d1b3056efb",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/lease.rs",
-          "sha256": "sha256:85f195329373bc8ff0ccfeb10bf52b980818580e0cdf7dfdf5973c927980de34",
+          "sha256": "sha256:5972f01053e05f0a797004fbd3fe1bb5491b35abccb7d97de070371554d116df",
           "symbols": [
             "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "src/durable-fs.ts",
+          "sha256": "sha256:657515fbc68470a0872b74c09b0c12b7c6530133d4a3b2dd076763a8c58d899f",
+          "symbols": [
+            "publication, retained inode qualification and ancestor barriers"
+          ]
+        },
+        {
+          "path": "crates/algal/src/durable_fs.rs",
+          "sha256": "sha256:c2ba82f46f07eb4f5fc9092e172c6b3df1f63dd3c69921685b405a00b9b52001",
+          "symbols": [
+            "publication, retained inode qualification and ancestor barriers"
           ]
         }
       ],
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "spec/v1/process.md",
-          "sha256": "sha256:a8120d43215a2a79715c0be66f5393e9d1bacaed9d71647790328c66aa3bd59a",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -5673,7 +5738,7 @@
       ],
       "relation": {
         "kind": "unestablished",
-        "description": "Writable native stores now retain and validate the persisted memo winner; local readonly/replay overlays intentionally shadow without disk mutation. Crash publication guarantees remain pending Phase 02."
+        "description": "Reviewed source correspondence, bounded TLC profiles and sampled runtime conformance are recorded in docs/formal-verification-evidence/phase02-models.md; no proved implementation refinement or universal property discharge."
       },
       "licensedClaims": [],
       "evidence": {
@@ -5683,8 +5748,8 @@
         "results": []
       },
       "unresolved": [
-        "Focused regression and independent review are recorded in docs/formal-verification-evidence/phase01-boundaries.md; no production result admission or universal implementation refinement has been established.",
-        "Writable native stores now retain and validate the persisted memo winner; local readonly/replay overlays intentionally shadow without disk mutation. Crash publication guarantees remain pending Phase 02."
+        "The universally quantified implementation obligation remains open. Finite model/domain and sampled regression receipts are separately recorded; no licensed claim or implementation refinement follows automatically.",
+        "Filesystem, cooperative exclusion, stable namespace and dependency-composition assumptions remain conditional; exact bounds and exclusions are in the model correspondence guide."
       ]
     },
     {
@@ -5713,49 +5778,63 @@
       ],
       "bounds": {
         "production": "production per-object and listing limits; no whole-CAS quota claim",
-        "harness": "No finite model or proof harness domain admitted yet."
+        "harness": "Publication: one active publisher, two candidate inodes, one dependency, 2/4 ancestor bindings and at most one crash; separate one-key/one-receiver mailbox transfer profiles."
       },
       "sources": [
         {
           "path": "src/store.ts",
-          "sha256": "sha256:5119ef99a54e99dbc56b68ccb70c4ddd1d859a96b4eba438ccee3c9805244247",
+          "sha256": "sha256:c32939216226efbb94ba52f2ddcd289ed72fb65b49fc8ddf88203b8eef99887b",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "src/host-state.ts",
-          "sha256": "sha256:39e7d4af7160161ef66bcb0faf27ba18f157de69fb15c44118c80daebf9fed2f",
+          "sha256": "sha256:6da6d616dff8c553a02328ae0f8d5f006247b44902fe5d45cec47958ecc8fc69",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/store.rs",
-          "sha256": "sha256:6885d769e78dca3ef225da00c6c28e36f145179038379208d10d74c7be0f3b0a",
+          "sha256": "sha256:22e5ee7d7aaf889e24ed015f96f4978a70904fdb12105d106dc374d1b3056efb",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/lease.rs",
-          "sha256": "sha256:85f195329373bc8ff0ccfeb10bf52b980818580e0cdf7dfdf5973c927980de34",
+          "sha256": "sha256:5972f01053e05f0a797004fbd3fe1bb5491b35abccb7d97de070371554d116df",
           "symbols": [
             "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "src/durable-fs.ts",
+          "sha256": "sha256:657515fbc68470a0872b74c09b0c12b7c6530133d4a3b2dd076763a8c58d899f",
+          "symbols": [
+            "publication, retained inode qualification and ancestor barriers"
+          ]
+        },
+        {
+          "path": "crates/algal/src/durable_fs.rs",
+          "sha256": "sha256:c2ba82f46f07eb4f5fc9092e172c6b3df1f63dd3c69921685b405a00b9b52001",
+          "symbols": [
+            "publication, retained inode qualification and ancestor barriers"
           ]
         }
       ],
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "spec/v1/process.md",
-          "sha256": "sha256:a8120d43215a2a79715c0be66f5393e9d1bacaed9d71647790328c66aa3bd59a",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -5779,17 +5858,18 @@
       ],
       "relation": {
         "kind": "unestablished",
-        "description": "Primary whole-module source map plus conservative governed input closure. No checked implementation refinement has been established."
+        "description": "Reviewed source correspondence, bounded TLC profiles and sampled runtime conformance are recorded in docs/formal-verification-evidence/phase02-models.md; no proved implementation refinement or universal property discharge."
       },
       "licensedClaims": [],
       "evidence": {
-        "status": "not-started",
+        "status": "observed",
         "suite": "publication",
         "required": false,
         "results": []
       },
       "unresolved": [
-        "Implement and independently review Phase 02 evidence; establish the exact abstraction/implementation relation before upgrading this obligation."
+        "The universally quantified implementation obligation remains open. Finite model/domain and sampled regression receipts are separately recorded; no licensed claim or implementation refinement follows automatically.",
+        "Filesystem, cooperative exclusion, stable namespace and dependency-composition assumptions remain conditional; exact bounds and exclusions are in the model correspondence guide."
       ]
     },
     {
@@ -5818,49 +5898,63 @@
       ],
       "bounds": {
         "production": "production per-object and listing limits; no whole-CAS quota claim",
-        "harness": "No finite model or proof harness domain admitted yet."
+        "harness": "Publication: one active publisher, two candidate inodes, one dependency, 2/4 ancestor bindings and at most one crash; separate one-key/one-receiver mailbox transfer profiles."
       },
       "sources": [
         {
           "path": "src/store.ts",
-          "sha256": "sha256:5119ef99a54e99dbc56b68ccb70c4ddd1d859a96b4eba438ccee3c9805244247",
+          "sha256": "sha256:c32939216226efbb94ba52f2ddcd289ed72fb65b49fc8ddf88203b8eef99887b",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "src/host-state.ts",
-          "sha256": "sha256:39e7d4af7160161ef66bcb0faf27ba18f157de69fb15c44118c80daebf9fed2f",
+          "sha256": "sha256:6da6d616dff8c553a02328ae0f8d5f006247b44902fe5d45cec47958ecc8fc69",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/store.rs",
-          "sha256": "sha256:6885d769e78dca3ef225da00c6c28e36f145179038379208d10d74c7be0f3b0a",
+          "sha256": "sha256:22e5ee7d7aaf889e24ed015f96f4978a70904fdb12105d106dc374d1b3056efb",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/lease.rs",
-          "sha256": "sha256:85f195329373bc8ff0ccfeb10bf52b980818580e0cdf7dfdf5973c927980de34",
+          "sha256": "sha256:5972f01053e05f0a797004fbd3fe1bb5491b35abccb7d97de070371554d116df",
           "symbols": [
             "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "src/durable-fs.ts",
+          "sha256": "sha256:657515fbc68470a0872b74c09b0c12b7c6530133d4a3b2dd076763a8c58d899f",
+          "symbols": [
+            "publication, retained inode qualification and ancestor barriers"
+          ]
+        },
+        {
+          "path": "crates/algal/src/durable_fs.rs",
+          "sha256": "sha256:c2ba82f46f07eb4f5fc9092e172c6b3df1f63dd3c69921685b405a00b9b52001",
+          "symbols": [
+            "publication, retained inode qualification and ancestor barriers"
           ]
         }
       ],
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "spec/v1/process.md",
-          "sha256": "sha256:a8120d43215a2a79715c0be66f5393e9d1bacaed9d71647790328c66aa3bd59a",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -5884,17 +5978,18 @@
       ],
       "relation": {
         "kind": "unestablished",
-        "description": "Primary whole-module source map plus conservative governed input closure. No checked implementation refinement has been established."
+        "description": "Reviewed source correspondence, bounded TLC profiles and sampled runtime conformance are recorded in docs/formal-verification-evidence/phase02-models.md; no proved implementation refinement or universal property discharge."
       },
       "licensedClaims": [],
       "evidence": {
-        "status": "not-started",
+        "status": "observed",
         "suite": "publication",
         "required": false,
         "results": []
       },
       "unresolved": [
-        "Implement and independently review Phase 02 evidence; establish the exact abstraction/implementation relation before upgrading this obligation."
+        "The universally quantified implementation obligation remains open. Finite model/domain and sampled regression receipts are separately recorded; no licensed claim or implementation refinement follows automatically.",
+        "Filesystem, cooperative exclusion, stable namespace and dependency-composition assumptions remain conditional; exact bounds and exclusions are in the model correspondence guide."
       ]
     },
     {
@@ -5925,49 +6020,63 @@
       ],
       "bounds": {
         "production": "production per-object and listing limits; no whole-CAS quota claim",
-        "harness": "No finite model or proof harness domain admitted yet."
+        "harness": "Publication: one active publisher, two candidate inodes, one dependency, 2/4 ancestor bindings and at most one crash; separate one-key/one-receiver mailbox transfer profiles."
       },
       "sources": [
         {
           "path": "src/store.ts",
-          "sha256": "sha256:5119ef99a54e99dbc56b68ccb70c4ddd1d859a96b4eba438ccee3c9805244247",
+          "sha256": "sha256:c32939216226efbb94ba52f2ddcd289ed72fb65b49fc8ddf88203b8eef99887b",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "src/host-state.ts",
-          "sha256": "sha256:39e7d4af7160161ef66bcb0faf27ba18f157de69fb15c44118c80daebf9fed2f",
+          "sha256": "sha256:6da6d616dff8c553a02328ae0f8d5f006247b44902fe5d45cec47958ecc8fc69",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/store.rs",
-          "sha256": "sha256:6885d769e78dca3ef225da00c6c28e36f145179038379208d10d74c7be0f3b0a",
+          "sha256": "sha256:22e5ee7d7aaf889e24ed015f96f4978a70904fdb12105d106dc374d1b3056efb",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/lease.rs",
-          "sha256": "sha256:85f195329373bc8ff0ccfeb10bf52b980818580e0cdf7dfdf5973c927980de34",
+          "sha256": "sha256:5972f01053e05f0a797004fbd3fe1bb5491b35abccb7d97de070371554d116df",
           "symbols": [
             "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "src/durable-fs.ts",
+          "sha256": "sha256:657515fbc68470a0872b74c09b0c12b7c6530133d4a3b2dd076763a8c58d899f",
+          "symbols": [
+            "publication, retained inode qualification and ancestor barriers"
+          ]
+        },
+        {
+          "path": "crates/algal/src/durable_fs.rs",
+          "sha256": "sha256:c2ba82f46f07eb4f5fc9092e172c6b3df1f63dd3c69921685b405a00b9b52001",
+          "symbols": [
+            "publication, retained inode qualification and ancestor barriers"
           ]
         }
       ],
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "spec/v1/process.md",
-          "sha256": "sha256:a8120d43215a2a79715c0be66f5393e9d1bacaed9d71647790328c66aa3bd59a",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -5991,17 +6100,18 @@
       ],
       "relation": {
         "kind": "unestablished",
-        "description": "Primary whole-module source map plus conservative governed input closure. No checked implementation refinement has been established."
+        "description": "Reviewed source correspondence, bounded TLC profiles and sampled runtime conformance are recorded in docs/formal-verification-evidence/phase02-models.md; no proved implementation refinement or universal property discharge."
       },
       "licensedClaims": [],
       "evidence": {
-        "status": "not-started",
+        "status": "observed",
         "suite": "publication",
         "required": false,
         "results": []
       },
       "unresolved": [
-        "Implement and independently review Phase 02 evidence; establish the exact abstraction/implementation relation before upgrading this obligation."
+        "The universally quantified implementation obligation remains open. Finite model/domain and sampled regression receipts are separately recorded; no licensed claim or implementation refinement follows automatically.",
+        "Filesystem, cooperative exclusion, stable namespace and dependency-composition assumptions remain conditional; exact bounds and exclusions are in the model correspondence guide."
       ]
     },
     {
@@ -6031,33 +6141,33 @@
       ],
       "bounds": {
         "production": "bounded namespace; model initial actors 3; no distributed or hostile-host claim",
-        "harness": "No finite model or proof harness domain admitted yet."
+        "harness": "Custody: 3 one-shot actors/1 application; separate 2-application, capacity0/1/2, one-legacy-writer and fair-progress profiles. Full production bounds remain separate."
       },
       "sources": [
         {
           "path": "src/host-state.ts",
-          "sha256": "sha256:39e7d4af7160161ef66bcb0faf27ba18f157de69fb15c44118c80daebf9fed2f",
+          "sha256": "sha256:6da6d616dff8c553a02328ae0f8d5f006247b44902fe5d45cec47958ecc8fc69",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "src/application.ts",
-          "sha256": "sha256:7e1c534dabc0172a19fb10c25ad59b4ed4573892ee120d5d3054ae848d80ac4f",
+          "sha256": "sha256:76028c73b15c342cac18af0195407982333a299828798418cbedc92e043988e9",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/lease.rs",
-          "sha256": "sha256:85f195329373bc8ff0ccfeb10bf52b980818580e0cdf7dfdf5973c927980de34",
+          "sha256": "sha256:5972f01053e05f0a797004fbd3fe1bb5491b35abccb7d97de070371554d116df",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/application.rs",
-          "sha256": "sha256:49d4ce806290112edeac6b6d0880e492a5255cda41c987c00c0db9930c6053b5",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -6066,14 +6176,14 @@
       "specs": [
         {
           "path": "spec/v1/process.md",
-          "sha256": "sha256:a8120d43215a2a79715c0be66f5393e9d1bacaed9d71647790328c66aa3bd59a",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -6150,17 +6260,18 @@
       ],
       "relation": {
         "kind": "unestablished",
-        "description": "Primary whole-module source map plus conservative governed input closure. No checked implementation refinement has been established."
+        "description": "Reviewed source correspondence, bounded TLC profiles and sampled runtime conformance are recorded in docs/formal-verification-evidence/phase02-models.md; no proved implementation refinement or universal property discharge."
       },
       "licensedClaims": [],
       "evidence": {
-        "status": "not-started",
+        "status": "observed",
         "suite": "custody",
         "required": false,
         "results": []
       },
       "unresolved": [
-        "Implement and independently review Phase 02 evidence; establish the exact abstraction/implementation relation before upgrading this obligation."
+        "The universally quantified implementation obligation remains open. Finite model/domain and sampled regression receipts are separately recorded; no licensed claim or implementation refinement follows automatically.",
+        "Filesystem, cooperative exclusion, stable namespace and dependency-composition assumptions remain conditional; exact bounds and exclusions are in the model correspondence guide."
       ]
     },
     {
@@ -6190,33 +6301,33 @@
       ],
       "bounds": {
         "production": "bounded namespace; model initial actors 3; no distributed or hostile-host claim",
-        "harness": "No finite model or proof harness domain admitted yet."
+        "harness": "Custody: 3 one-shot actors/1 application; separate 2-application, capacity0/1/2, one-legacy-writer and fair-progress profiles. Full production bounds remain separate."
       },
       "sources": [
         {
           "path": "src/host-state.ts",
-          "sha256": "sha256:39e7d4af7160161ef66bcb0faf27ba18f157de69fb15c44118c80daebf9fed2f",
+          "sha256": "sha256:6da6d616dff8c553a02328ae0f8d5f006247b44902fe5d45cec47958ecc8fc69",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "src/application.ts",
-          "sha256": "sha256:7e1c534dabc0172a19fb10c25ad59b4ed4573892ee120d5d3054ae848d80ac4f",
+          "sha256": "sha256:76028c73b15c342cac18af0195407982333a299828798418cbedc92e043988e9",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/lease.rs",
-          "sha256": "sha256:85f195329373bc8ff0ccfeb10bf52b980818580e0cdf7dfdf5973c927980de34",
+          "sha256": "sha256:5972f01053e05f0a797004fbd3fe1bb5491b35abccb7d97de070371554d116df",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/application.rs",
-          "sha256": "sha256:49d4ce806290112edeac6b6d0880e492a5255cda41c987c00c0db9930c6053b5",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -6225,14 +6336,14 @@
       "specs": [
         {
           "path": "spec/v1/process.md",
-          "sha256": "sha256:a8120d43215a2a79715c0be66f5393e9d1bacaed9d71647790328c66aa3bd59a",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -6309,17 +6420,18 @@
       ],
       "relation": {
         "kind": "unestablished",
-        "description": "Primary whole-module source map plus conservative governed input closure. No checked implementation refinement has been established."
+        "description": "Reviewed source correspondence, bounded TLC profiles and sampled runtime conformance are recorded in docs/formal-verification-evidence/phase02-models.md; no proved implementation refinement or universal property discharge."
       },
       "licensedClaims": [],
       "evidence": {
-        "status": "not-started",
+        "status": "observed",
         "suite": "custody",
         "required": false,
         "results": []
       },
       "unresolved": [
-        "Implement and independently review Phase 02 evidence; establish the exact abstraction/implementation relation before upgrading this obligation."
+        "The universally quantified implementation obligation remains open. Finite model/domain and sampled regression receipts are separately recorded; no licensed claim or implementation refinement follows automatically.",
+        "Filesystem, cooperative exclusion, stable namespace and dependency-composition assumptions remain conditional; exact bounds and exclusions are in the model correspondence guide."
       ]
     },
     {
@@ -6352,28 +6464,28 @@
       "sources": [
         {
           "path": "src/host-state.ts",
-          "sha256": "sha256:39e7d4af7160161ef66bcb0faf27ba18f157de69fb15c44118c80daebf9fed2f",
+          "sha256": "sha256:6da6d616dff8c553a02328ae0f8d5f006247b44902fe5d45cec47958ecc8fc69",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "src/application.ts",
-          "sha256": "sha256:7e1c534dabc0172a19fb10c25ad59b4ed4573892ee120d5d3054ae848d80ac4f",
+          "sha256": "sha256:76028c73b15c342cac18af0195407982333a299828798418cbedc92e043988e9",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/lease.rs",
-          "sha256": "sha256:85f195329373bc8ff0ccfeb10bf52b980818580e0cdf7dfdf5973c927980de34",
+          "sha256": "sha256:5972f01053e05f0a797004fbd3fe1bb5491b35abccb7d97de070371554d116df",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/application.rs",
-          "sha256": "sha256:49d4ce806290112edeac6b6d0880e492a5255cda41c987c00c0db9930c6053b5",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -6382,14 +6494,14 @@
       "specs": [
         {
           "path": "spec/v1/process.md",
-          "sha256": "sha256:a8120d43215a2a79715c0be66f5393e9d1bacaed9d71647790328c66aa3bd59a",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -6509,28 +6621,28 @@
       "sources": [
         {
           "path": "src/host-state.ts",
-          "sha256": "sha256:39e7d4af7160161ef66bcb0faf27ba18f157de69fb15c44118c80daebf9fed2f",
+          "sha256": "sha256:6da6d616dff8c553a02328ae0f8d5f006247b44902fe5d45cec47958ecc8fc69",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "src/application.ts",
-          "sha256": "sha256:7e1c534dabc0172a19fb10c25ad59b4ed4573892ee120d5d3054ae848d80ac4f",
+          "sha256": "sha256:76028c73b15c342cac18af0195407982333a299828798418cbedc92e043988e9",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/lease.rs",
-          "sha256": "sha256:85f195329373bc8ff0ccfeb10bf52b980818580e0cdf7dfdf5973c927980de34",
+          "sha256": "sha256:5972f01053e05f0a797004fbd3fe1bb5491b35abccb7d97de070371554d116df",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/application.rs",
-          "sha256": "sha256:49d4ce806290112edeac6b6d0880e492a5255cda41c987c00c0db9930c6053b5",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -6539,14 +6651,14 @@
       "specs": [
         {
           "path": "spec/v1/process.md",
-          "sha256": "sha256:a8120d43215a2a79715c0be66f5393e9d1bacaed9d71647790328c66aa3bd59a",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -6697,7 +6809,7 @@
       "specs": [
         {
           "path": "spec/v1/process.md",
-          "sha256": "sha256:a8120d43215a2a79715c0be66f5393e9d1bacaed9d71647790328c66aa3bd59a",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -6801,7 +6913,7 @@
       "specs": [
         {
           "path": "spec/v1/process.md",
-          "sha256": "sha256:a8120d43215a2a79715c0be66f5393e9d1bacaed9d71647790328c66aa3bd59a",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -6905,7 +7017,7 @@
       "specs": [
         {
           "path": "spec/v1/process.md",
-          "sha256": "sha256:a8120d43215a2a79715c0be66f5393e9d1bacaed9d71647790328c66aa3bd59a",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -7009,7 +7121,7 @@
       "specs": [
         {
           "path": "spec/v1/process.md",
-          "sha256": "sha256:a8120d43215a2a79715c0be66f5393e9d1bacaed9d71647790328c66aa3bd59a",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -7113,7 +7225,7 @@
       "specs": [
         {
           "path": "spec/v1/process.md",
-          "sha256": "sha256:a8120d43215a2a79715c0be66f5393e9d1bacaed9d71647790328c66aa3bd59a",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -7217,7 +7329,7 @@
       "specs": [
         {
           "path": "spec/v1/process.md",
-          "sha256": "sha256:a8120d43215a2a79715c0be66f5393e9d1bacaed9d71647790328c66aa3bd59a",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -7324,7 +7436,7 @@
       "specs": [
         {
           "path": "spec/v1/process.md",
-          "sha256": "sha256:a8120d43215a2a79715c0be66f5393e9d1bacaed9d71647790328c66aa3bd59a",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -7433,7 +7545,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -7540,7 +7652,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -7647,7 +7759,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -7754,7 +7866,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -7826,14 +7938,14 @@
       "sources": [
         {
           "path": "src/mailbox.ts",
-          "sha256": "sha256:b09dc9a11745a82a9249380876efbad1506c2b69af41d49d5398b9802f0f8656",
+          "sha256": "sha256:b07ee93aabc22a0884d1b4d2fe5a87bd54c5b866c67e5d76ca25ee822009f844",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/mailbox.rs",
-          "sha256": "sha256:31189aff32b82294ff014f9d1027e04035fe2d8efff402bf07b39ac6797b87c3",
+          "sha256": "sha256:c039832fea27f5176d50ea0711743d40786c120fc6336c636445f0f0461b53fc",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -7849,7 +7961,7 @@
         },
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -7922,14 +8034,14 @@
       "sources": [
         {
           "path": "src/mailbox.ts",
-          "sha256": "sha256:b09dc9a11745a82a9249380876efbad1506c2b69af41d49d5398b9802f0f8656",
+          "sha256": "sha256:b07ee93aabc22a0884d1b4d2fe5a87bd54c5b866c67e5d76ca25ee822009f844",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/mailbox.rs",
-          "sha256": "sha256:31189aff32b82294ff014f9d1027e04035fe2d8efff402bf07b39ac6797b87c3",
+          "sha256": "sha256:c039832fea27f5176d50ea0711743d40786c120fc6336c636445f0f0461b53fc",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -7945,7 +8057,7 @@
         },
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8017,14 +8129,14 @@
       "sources": [
         {
           "path": "src/mailbox.ts",
-          "sha256": "sha256:b09dc9a11745a82a9249380876efbad1506c2b69af41d49d5398b9802f0f8656",
+          "sha256": "sha256:b07ee93aabc22a0884d1b4d2fe5a87bd54c5b866c67e5d76ca25ee822009f844",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/mailbox.rs",
-          "sha256": "sha256:31189aff32b82294ff014f9d1027e04035fe2d8efff402bf07b39ac6797b87c3",
+          "sha256": "sha256:c039832fea27f5176d50ea0711743d40786c120fc6336c636445f0f0461b53fc",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8040,7 +8152,7 @@
         },
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8112,14 +8224,14 @@
       "sources": [
         {
           "path": "src/mailbox.ts",
-          "sha256": "sha256:b09dc9a11745a82a9249380876efbad1506c2b69af41d49d5398b9802f0f8656",
+          "sha256": "sha256:b07ee93aabc22a0884d1b4d2fe5a87bd54c5b866c67e5d76ca25ee822009f844",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/mailbox.rs",
-          "sha256": "sha256:31189aff32b82294ff014f9d1027e04035fe2d8efff402bf07b39ac6797b87c3",
+          "sha256": "sha256:c039832fea27f5176d50ea0711743d40786c120fc6336c636445f0f0461b53fc",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8135,7 +8247,7 @@
         },
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8205,14 +8317,14 @@
       "sources": [
         {
           "path": "src/mailbox.ts",
-          "sha256": "sha256:b09dc9a11745a82a9249380876efbad1506c2b69af41d49d5398b9802f0f8656",
+          "sha256": "sha256:b07ee93aabc22a0884d1b4d2fe5a87bd54c5b866c67e5d76ca25ee822009f844",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/mailbox.rs",
-          "sha256": "sha256:31189aff32b82294ff014f9d1027e04035fe2d8efff402bf07b39ac6797b87c3",
+          "sha256": "sha256:c039832fea27f5176d50ea0711743d40786c120fc6336c636445f0f0461b53fc",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8228,7 +8340,7 @@
         },
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8299,7 +8411,7 @@
       "sources": [
         {
           "path": "src/application.ts",
-          "sha256": "sha256:7e1c534dabc0172a19fb10c25ad59b4ed4573892ee120d5d3054ae848d80ac4f",
+          "sha256": "sha256:76028c73b15c342cac18af0195407982333a299828798418cbedc92e043988e9",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8320,7 +8432,7 @@
         },
         {
           "path": "crates/algal/src/application.rs",
-          "sha256": "sha256:49d4ce806290112edeac6b6d0880e492a5255cda41c987c00c0db9930c6053b5",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8336,7 +8448,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8453,7 +8565,7 @@
       "sources": [
         {
           "path": "src/application.ts",
-          "sha256": "sha256:7e1c534dabc0172a19fb10c25ad59b4ed4573892ee120d5d3054ae848d80ac4f",
+          "sha256": "sha256:76028c73b15c342cac18af0195407982333a299828798418cbedc92e043988e9",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8474,7 +8586,7 @@
         },
         {
           "path": "crates/algal/src/application.rs",
-          "sha256": "sha256:49d4ce806290112edeac6b6d0880e492a5255cda41c987c00c0db9930c6053b5",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8490,7 +8602,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8607,7 +8719,7 @@
       "sources": [
         {
           "path": "src/application.ts",
-          "sha256": "sha256:7e1c534dabc0172a19fb10c25ad59b4ed4573892ee120d5d3054ae848d80ac4f",
+          "sha256": "sha256:76028c73b15c342cac18af0195407982333a299828798418cbedc92e043988e9",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8628,7 +8740,7 @@
         },
         {
           "path": "crates/algal/src/application.rs",
-          "sha256": "sha256:49d4ce806290112edeac6b6d0880e492a5255cda41c987c00c0db9930c6053b5",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8644,7 +8756,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8761,7 +8873,7 @@
       "sources": [
         {
           "path": "src/application.ts",
-          "sha256": "sha256:7e1c534dabc0172a19fb10c25ad59b4ed4573892ee120d5d3054ae848d80ac4f",
+          "sha256": "sha256:76028c73b15c342cac18af0195407982333a299828798418cbedc92e043988e9",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8782,7 +8894,7 @@
         },
         {
           "path": "crates/algal/src/application.rs",
-          "sha256": "sha256:49d4ce806290112edeac6b6d0880e492a5255cda41c987c00c0db9930c6053b5",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8798,7 +8910,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8915,7 +9027,7 @@
       "sources": [
         {
           "path": "src/application.ts",
-          "sha256": "sha256:7e1c534dabc0172a19fb10c25ad59b4ed4573892ee120d5d3054ae848d80ac4f",
+          "sha256": "sha256:76028c73b15c342cac18af0195407982333a299828798418cbedc92e043988e9",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8936,7 +9048,7 @@
         },
         {
           "path": "crates/algal/src/application.rs",
-          "sha256": "sha256:49d4ce806290112edeac6b6d0880e492a5255cda41c987c00c0db9930c6053b5",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8952,7 +9064,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -9069,7 +9181,7 @@
       "sources": [
         {
           "path": "src/application.ts",
-          "sha256": "sha256:7e1c534dabc0172a19fb10c25ad59b4ed4573892ee120d5d3054ae848d80ac4f",
+          "sha256": "sha256:76028c73b15c342cac18af0195407982333a299828798418cbedc92e043988e9",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -9090,7 +9202,7 @@
         },
         {
           "path": "crates/algal/src/application.rs",
-          "sha256": "sha256:49d4ce806290112edeac6b6d0880e492a5255cda41c987c00c0db9930c6053b5",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -9106,7 +9218,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -9223,7 +9335,7 @@
       "sources": [
         {
           "path": "src/application.ts",
-          "sha256": "sha256:7e1c534dabc0172a19fb10c25ad59b4ed4573892ee120d5d3054ae848d80ac4f",
+          "sha256": "sha256:76028c73b15c342cac18af0195407982333a299828798418cbedc92e043988e9",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -9244,7 +9356,7 @@
         },
         {
           "path": "crates/algal/src/application.rs",
-          "sha256": "sha256:49d4ce806290112edeac6b6d0880e492a5255cda41c987c00c0db9930c6053b5",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -9260,7 +9372,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -9415,7 +9527,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -9569,7 +9681,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -9725,7 +9837,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -9881,7 +9993,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -10035,7 +10147,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -10189,7 +10301,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -10343,7 +10455,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -10474,7 +10586,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -10553,7 +10665,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -10634,7 +10746,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -10730,7 +10842,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -10822,7 +10934,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -10914,7 +11026,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -11021,7 +11133,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -11195,7 +11307,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -11368,7 +11480,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -11540,7 +11652,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -11712,7 +11824,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -11884,7 +11996,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -12091,7 +12203,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -12256,7 +12368,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -12421,7 +12533,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -12586,7 +12698,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -12751,7 +12863,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -12916,7 +13028,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -13082,7 +13194,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -13167,7 +13279,7 @@
       "sources": [
         {
           "path": "scripts/build-expr-wasm.sh",
-          "sha256": "sha256:471dcef2aeecb2420aa058a589a2bebaa5cc454630bb65a9ff207bbf560e123a",
+          "sha256": "sha256:7ddc2d7acb26051c8607ba2d5ce8c1aa832732ab997777a16dcd04f4048ecce2",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -13254,7 +13366,7 @@
       "sources": [
         {
           "path": "scripts/build-expr-wasm.sh",
-          "sha256": "sha256:471dcef2aeecb2420aa058a589a2bebaa5cc454630bb65a9ff207bbf560e123a",
+          "sha256": "sha256:7ddc2d7acb26051c8607ba2d5ce8c1aa832732ab997777a16dcd04f4048ecce2",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -13339,7 +13451,7 @@
       "sources": [
         {
           "path": "scripts/build-expr-wasm.sh",
-          "sha256": "sha256:471dcef2aeecb2420aa058a589a2bebaa5cc454630bb65a9ff207bbf560e123a",
+          "sha256": "sha256:7ddc2d7acb26051c8607ba2d5ce8c1aa832732ab997777a16dcd04f4048ecce2",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -13424,7 +13536,7 @@
       "sources": [
         {
           "path": "scripts/build-expr-wasm.sh",
-          "sha256": "sha256:471dcef2aeecb2420aa058a589a2bebaa5cc454630bb65a9ff207bbf560e123a",
+          "sha256": "sha256:7ddc2d7acb26051c8607ba2d5ce8c1aa832732ab997777a16dcd04f4048ecce2",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -13511,7 +13623,7 @@
       "sources": [
         {
           "path": "scripts/build-expr-wasm.sh",
-          "sha256": "sha256:471dcef2aeecb2420aa058a589a2bebaa5cc454630bb65a9ff207bbf560e123a",
+          "sha256": "sha256:7ddc2d7acb26051c8607ba2d5ce8c1aa832732ab997777a16dcd04f4048ecce2",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -13595,14 +13707,14 @@
       "sources": [
         {
           "path": "src/application.ts",
-          "sha256": "sha256:7e1c534dabc0172a19fb10c25ad59b4ed4573892ee120d5d3054ae848d80ac4f",
+          "sha256": "sha256:76028c73b15c342cac18af0195407982333a299828798418cbedc92e043988e9",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/application.rs",
-          "sha256": "sha256:49d4ce806290112edeac6b6d0880e492a5255cda41c987c00c0db9930c6053b5",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -13611,7 +13723,7 @@
       "specs": [
         {
           "path": "docs/formal-verification-plan.md",
-          "sha256": "sha256:cf262cf33856f2f0c7b04ced8629e96d8960b931e60491f7660490b7bfdbcb86",
+          "sha256": "sha256:91c6d6d2eb066fba329d0c35c166d4dca002e7ad7b3baf9036c6444d462e3d1d",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -13699,14 +13811,14 @@
       "sources": [
         {
           "path": "src/application.ts",
-          "sha256": "sha256:7e1c534dabc0172a19fb10c25ad59b4ed4573892ee120d5d3054ae848d80ac4f",
+          "sha256": "sha256:76028c73b15c342cac18af0195407982333a299828798418cbedc92e043988e9",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/application.rs",
-          "sha256": "sha256:49d4ce806290112edeac6b6d0880e492a5255cda41c987c00c0db9930c6053b5",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -13715,7 +13827,7 @@
       "specs": [
         {
           "path": "docs/formal-verification-plan.md",
-          "sha256": "sha256:cf262cf33856f2f0c7b04ced8629e96d8960b931e60491f7660490b7bfdbcb86",
+          "sha256": "sha256:91c6d6d2eb066fba329d0c35c166d4dca002e7ad7b3baf9036c6444d462e3d1d",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -13803,14 +13915,14 @@
       "sources": [
         {
           "path": "src/application.ts",
-          "sha256": "sha256:7e1c534dabc0172a19fb10c25ad59b4ed4573892ee120d5d3054ae848d80ac4f",
+          "sha256": "sha256:76028c73b15c342cac18af0195407982333a299828798418cbedc92e043988e9",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/application.rs",
-          "sha256": "sha256:49d4ce806290112edeac6b6d0880e492a5255cda41c987c00c0db9930c6053b5",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -13819,7 +13931,7 @@
       "specs": [
         {
           "path": "docs/formal-verification-plan.md",
-          "sha256": "sha256:cf262cf33856f2f0c7b04ced8629e96d8960b931e60491f7660490b7bfdbcb86",
+          "sha256": "sha256:91c6d6d2eb066fba329d0c35c166d4dca002e7ad7b3baf9036c6444d462e3d1d",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -13907,14 +14019,14 @@
       "sources": [
         {
           "path": "src/application.ts",
-          "sha256": "sha256:7e1c534dabc0172a19fb10c25ad59b4ed4573892ee120d5d3054ae848d80ac4f",
+          "sha256": "sha256:76028c73b15c342cac18af0195407982333a299828798418cbedc92e043988e9",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/application.rs",
-          "sha256": "sha256:49d4ce806290112edeac6b6d0880e492a5255cda41c987c00c0db9930c6053b5",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -13923,7 +14035,7 @@
       "specs": [
         {
           "path": "docs/formal-verification-plan.md",
-          "sha256": "sha256:cf262cf33856f2f0c7b04ced8629e96d8960b931e60491f7660490b7bfdbcb86",
+          "sha256": "sha256:91c6d6d2eb066fba329d0c35c166d4dca002e7ad7b3baf9036c6444d462e3d1d",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -14011,14 +14123,14 @@
       "sources": [
         {
           "path": "src/application.ts",
-          "sha256": "sha256:7e1c534dabc0172a19fb10c25ad59b4ed4573892ee120d5d3054ae848d80ac4f",
+          "sha256": "sha256:76028c73b15c342cac18af0195407982333a299828798418cbedc92e043988e9",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/application.rs",
-          "sha256": "sha256:49d4ce806290112edeac6b6d0880e492a5255cda41c987c00c0db9930c6053b5",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -14027,7 +14139,7 @@
       "specs": [
         {
           "path": "docs/formal-verification-plan.md",
-          "sha256": "sha256:cf262cf33856f2f0c7b04ced8629e96d8960b931e60491f7660490b7bfdbcb86",
+          "sha256": "sha256:91c6d6d2eb066fba329d0c35c166d4dca002e7ad7b3baf9036c6444d462e3d1d",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -14116,14 +14228,14 @@
       "sources": [
         {
           "path": "src/application.ts",
-          "sha256": "sha256:7e1c534dabc0172a19fb10c25ad59b4ed4573892ee120d5d3054ae848d80ac4f",
+          "sha256": "sha256:76028c73b15c342cac18af0195407982333a299828798418cbedc92e043988e9",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/application.rs",
-          "sha256": "sha256:49d4ce806290112edeac6b6d0880e492a5255cda41c987c00c0db9930c6053b5",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -14132,7 +14244,7 @@
       "specs": [
         {
           "path": "docs/formal-verification-plan.md",
-          "sha256": "sha256:cf262cf33856f2f0c7b04ced8629e96d8960b931e60491f7660490b7bfdbcb86",
+          "sha256": "sha256:91c6d6d2eb066fba329d0c35c166d4dca002e7ad7b3baf9036c6444d462e3d1d",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -14220,14 +14332,14 @@
       "sources": [
         {
           "path": "src/application.ts",
-          "sha256": "sha256:7e1c534dabc0172a19fb10c25ad59b4ed4573892ee120d5d3054ae848d80ac4f",
+          "sha256": "sha256:76028c73b15c342cac18af0195407982333a299828798418cbedc92e043988e9",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "crates/algal/src/application.rs",
-          "sha256": "sha256:49d4ce806290112edeac6b6d0880e492a5255cda41c987c00c0db9930c6053b5",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -14236,7 +14348,7 @@
       "specs": [
         {
           "path": "docs/formal-verification-plan.md",
-          "sha256": "sha256:cf262cf33856f2f0c7b04ced8629e96d8960b931e60491f7660490b7bfdbcb86",
+          "sha256": "sha256:91c6d6d2eb066fba329d0c35c166d4dca002e7ad7b3baf9036c6444d462e3d1d",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -14334,7 +14446,7 @@
         },
         {
           "path": "src/application.ts",
-          "sha256": "sha256:7e1c534dabc0172a19fb10c25ad59b4ed4573892ee120d5d3054ae848d80ac4f",
+          "sha256": "sha256:76028c73b15c342cac18af0195407982333a299828798418cbedc92e043988e9",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -14348,7 +14460,7 @@
         },
         {
           "path": "crates/algal/src/application.rs",
-          "sha256": "sha256:49d4ce806290112edeac6b6d0880e492a5255cda41c987c00c0db9930c6053b5",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -14357,7 +14469,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -14481,7 +14593,7 @@
         },
         {
           "path": "src/application.ts",
-          "sha256": "sha256:7e1c534dabc0172a19fb10c25ad59b4ed4573892ee120d5d3054ae848d80ac4f",
+          "sha256": "sha256:76028c73b15c342cac18af0195407982333a299828798418cbedc92e043988e9",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -14495,7 +14607,7 @@
         },
         {
           "path": "crates/algal/src/application.rs",
-          "sha256": "sha256:49d4ce806290112edeac6b6d0880e492a5255cda41c987c00c0db9930c6053b5",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -14504,7 +14616,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -14642,7 +14754,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -14777,7 +14889,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -14923,7 +15035,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:5ab590a353ecef4b46ea8e49f4a2d33ed49ff529766aad4aefb328322e85b6ab",
+          "sha256": "sha256:171424519a041514cc9181ccc662c58f5595c54f7aac6b02e0b11f9d92c66125",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -15103,7 +15215,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -15198,7 +15310,7 @@
         },
         {
           "path": "src/host-state.ts",
-          "sha256": "sha256:39e7d4af7160161ef66bcb0faf27ba18f157de69fb15c44118c80daebf9fed2f",
+          "sha256": "sha256:6da6d616dff8c553a02328ae0f8d5f006247b44902fe5d45cec47958ecc8fc69",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -15207,7 +15319,7 @@
       "specs": [
         {
           "path": "spec/v1/organism.md",
-          "sha256": "sha256:1e8a81d5fc0104015a4b3644f6b3409cda4925ed0f26c57fd8369bf4f8145471",
+          "sha256": "sha256:b4baf91527b5f4600bec66d1ccf77c5640d872dcb089a09418ef9c300d6dea0c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
