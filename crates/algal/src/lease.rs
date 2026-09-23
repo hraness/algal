@@ -388,6 +388,228 @@ impl Drop for OwnerLease {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use std::os::unix::fs::MetadataExt;
+    use std::{cell::Cell, collections::BTreeMap, rc::Rc};
+
+    fn model_marker(n: usize, process: &str) -> Value {
+        json!({"contract":"algal.process-owner.v2","process":process,"nonce":format!("{n:064x}")})
+    }
+
+    fn model_archive_name(n: usize) -> String {
+        format!("{n:064x}.json")
+    }
+
+    fn model_archive_fixture(count: usize) -> (tempfile::TempDir, PathBuf) {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().canonicalize().unwrap();
+        drop(OwnerLease::acquire(&root, "model").unwrap());
+        let owners = root.join("owners");
+        fs::create_dir(&owners).unwrap();
+        // Construct bounded retained state before the observed operation.
+        for n in 0..count {
+            fs::write(
+                owners.join(model_archive_name(n)),
+                canonical(&model_marker(n, "model")).unwrap(),
+            )
+            .unwrap();
+        }
+        (temporary, root)
+    }
+
+    fn model_retained(root: &Path) -> BTreeMap<String, Vec<u8>> {
+        fs::read_dir(root)
+            .unwrap()
+            .map(|entry| {
+                let entry = entry.unwrap();
+                (
+                    entry.file_name().into_string().unwrap(),
+                    fs::read(entry.path()).unwrap(),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn model_owner_archive_admits_256_then_preserves_refused_257th() {
+        let (_temporary, root) = model_archive_fixture(255);
+        let owners = root.join("owners");
+        #[cfg(unix)]
+        let inode = fs::metadata(root.join(".owner.sqlite")).unwrap().ino();
+        let old = canonical(&model_marker(255, "model")).unwrap();
+        fs::write(root.join(".lock"), &old).unwrap();
+        let owner = OwnerLease::acquire(&root, "model").unwrap();
+        assert_eq!(model_retained(&owners).len(), 256);
+        assert_eq!(
+            fs::read_to_string(owners.join(model_archive_name(255))).unwrap(),
+            old
+        );
+        drop(owner);
+        let before = model_retained(&owners);
+        let refused = canonical(&model_marker(256, "model")).unwrap();
+        fs::write(root.join(".lock"), &refused).unwrap();
+        let error = OwnerLease::acquire(&root, "model")
+            .err()
+            .expect("new archive at capacity must fail");
+        assert_eq!(error.code, "BUDGET_EXHAUSTED");
+        assert_eq!(fs::read_to_string(root.join(".lock")).unwrap(), refused);
+        assert_eq!(model_retained(&owners), before);
+        #[cfg(unix)]
+        assert_eq!(
+            fs::metadata(root.join(".owner.sqlite")).unwrap().ino(),
+            inode
+        );
+    }
+
+    #[test]
+    fn model_full_archive_admits_equal_and_preserves_conflicting_winner() {
+        for conflict in [false, true] {
+            let (_temporary, root) = model_archive_fixture(256);
+            let owners = root.join("owners");
+            #[cfg(unix)]
+            let inode = fs::metadata(root.join(".owner.sqlite")).unwrap().ino();
+            if conflict {
+                fs::write(
+                    owners.join(model_archive_name(42)),
+                    canonical(&model_marker(42, "other")).unwrap(),
+                )
+                .unwrap();
+            }
+            let before = model_retained(&owners);
+            let old = canonical(&model_marker(42, "model")).unwrap();
+            fs::write(root.join(".lock"), &old).unwrap();
+            match OwnerLease::acquire(&root, "model") {
+                Ok(owner) => {
+                    assert!(!conflict);
+                    drop(owner);
+                }
+                Err(error) => {
+                    assert!(conflict);
+                    assert_eq!(error.code, "IO_FAILED");
+                    assert_eq!(fs::read_to_string(root.join(".lock")).unwrap(), old);
+                }
+            }
+            assert_eq!(model_retained(&owners), before);
+            #[cfg(unix)]
+            assert_eq!(
+                fs::metadata(root.join(".owner.sqlite")).unwrap().ino(),
+                inode
+            );
+        }
+    }
+
+    #[test]
+    fn model_archive_is_retained_before_old_marker_removal_failure() {
+        let (_temporary, root) = model_archive_fixture(0);
+        let old = canonical(&model_marker(42, "model")).unwrap();
+        fs::write(root.join(".lock"), &old).unwrap();
+        let reached = Rc::new(Cell::new(false));
+        let observed = reached.clone();
+        let probe_root = root.clone();
+        let probe_old = old.clone();
+        let result = durable_fs::with_probe(
+            Rc::new(move |event| {
+                if event.step == "unlink-lock"
+                    && event.phase == "before"
+                    && event.path == probe_root.join(".lock")
+                {
+                    observed.set(true);
+                    assert_eq!(
+                        fs::read_to_string(probe_root.join("owners").join(model_archive_name(42)))
+                            .unwrap(),
+                        probe_old
+                    );
+                    return Err(Error::new("IO_FAILED", "archive-before-clear cut"));
+                }
+                Ok(())
+            }),
+            || OwnerLease::acquire(&root, "model"),
+        );
+        assert!(reached.get());
+        assert_eq!(
+            result
+                .err()
+                .expect("removal cut must reject admission")
+                .message,
+            "archive-before-clear cut"
+        );
+        assert_eq!(fs::read_to_string(root.join(".lock")).unwrap(), old);
+        assert_eq!(model_retained(&root.join("owners")).len(), 1);
+        drop(OwnerLease::acquire(&root, "model").unwrap());
+        assert_eq!(
+            fs::read_to_string(root.join("owners").join(model_archive_name(42))).unwrap(),
+            old
+        );
+    }
+
+    #[test]
+    fn model_native_drop_suppresses_cleanup_error_but_releases_live_custody() {
+        for before_unlink in [true, false] {
+            let (_temporary, root) = model_archive_fixture(0);
+            #[cfg(unix)]
+            let inode = fs::metadata(root.join(".owner.sqlite")).unwrap().ino();
+            let armed = Rc::new(Cell::new(false));
+            let removed = Rc::new(Cell::new(false));
+            let reached = Rc::new(Cell::new(false));
+            let probe_armed = armed.clone();
+            let probe_removed = removed.clone();
+            let probe_reached = reached.clone();
+            let probe_root = root.clone();
+            let (returned, marker) = durable_fs::with_probe(
+                Rc::new(move |event| {
+                    if !probe_armed.get() {
+                        return Ok(());
+                    }
+                    if event.step == "unlink-lock"
+                        && event.phase == "after"
+                        && event.path == probe_root.join(".lock")
+                    {
+                        probe_removed.set(true);
+                    }
+                    let target = if before_unlink {
+                        event.step == "unlink-lock"
+                            && event.phase == "before"
+                            && event.path == probe_root.join(".lock")
+                    } else {
+                        probe_removed.get()
+                            && event.step == "dir-sync"
+                            && event.phase == "before"
+                            && event.path == probe_root
+                    };
+                    if target {
+                        probe_reached.set(true);
+                        return Err(Error::new("IO_FAILED", "native cleanup cut"));
+                    }
+                    Ok(())
+                }),
+                || {
+                    let owner = OwnerLease::acquire(&root, "model").unwrap();
+                    let marker = fs::read(root.join(".lock")).unwrap();
+                    armed.set(true);
+                    drop(owner);
+                    ("callback completed", marker)
+                },
+            );
+            assert_eq!(returned, "callback completed");
+            assert!(armed.get() && reached.get());
+            if before_unlink {
+                assert_eq!(fs::read(root.join(".lock")).unwrap(), marker);
+            } else {
+                assert!(!root.join(".lock").exists());
+            } // Visibility only, not a power-loss guarantee.
+            drop(OwnerLease::acquire(&root, "model").unwrap());
+            let archives = model_retained(&root.join("owners"));
+            assert_eq!(archives.len(), usize::from(before_unlink));
+            if before_unlink {
+                assert_eq!(archives.values().next().unwrap(), &marker);
+            }
+            #[cfg(unix)]
+            assert_eq!(
+                fs::metadata(root.join(".owner.sqlite")).unwrap().ino(),
+                inode
+            );
+        }
+    }
     #[test]
     fn sqlite_excludes_live_owners_and_releases_after_drop() {
         let root = tempfile::tempdir().unwrap();

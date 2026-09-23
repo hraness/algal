@@ -53,3 +53,6 @@ mod verification_trace;
 pub use error::{Error, Result};
 
 pub mod demo_report;
+
+#[cfg(test)]
+mod mailbox_model;

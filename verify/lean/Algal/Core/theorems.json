@@ -17,7 +17,7 @@
         "crates/algal/src/canonical.rs"
       ],
       "coveredCriteria": [
-        "Finite admission excludes exponent 2047; \u00b10 normalization is idempotent, preserves finite bits and changes only negative zero; normalized equivalent values are equal."
+        "Finite admission excludes exponent 2047; ±0 normalization is idempotent, preserves finite bits and changes only negative zero; normalized equivalent values are equal."
       ],
       "unmetCriteria": [
         "Decimal conversion/ECMAScript rendering, native integer-to-binary64 conversion, general arithmetic correspondence."
@@ -31,6 +31,139 @@
         "Algal.Core.Binary64.positive_infinity_rejected",
         "Algal.Core.Binary64.negative_infinity_rejected",
         "Algal.Core.Binary64.nan_rejected"
+      ]
+    },
+    {
+      "id": "binary64-value",
+      "module": "Algal.Core.BinaryValue",
+      "scope": "Exact dyadic/rational value of admitted finite binary64 patterns, tied to the pinned Lean unpack model; no decimal conversion or production arithmetic refinement.",
+      "sources": [
+        "src/values.ts",
+        "crates/algal/src/canonical.rs",
+        "Cargo.lock"
+      ],
+      "coveredCriteria": [
+        "Sign/exponent/fraction decomposition, normal hidden bit and subnormal exponent agree with the pinned Lean binary64 unpack model for every finite Number. Coefficient and exponent bounds, exact rational scaling, signed-zero equivalence and zero-normalization preservation are proved.",
+        "The universal model_nonfinite_rejected theorem rejects every exponent-2047 pattern, covering both infinities and every NaN; concrete admitted denotation witnesses cover signed minimum subnormals, minimum normal, signed one and maximum finite."
+      ],
+      "unmetCriteria": [
+        "The raw-bit exact helper computes an unchecked field formula; only the finite Number wrapper is a semantic admission boundary. NumericInjectivity separately proves the converse from equal finite denotation to normalized-bit equality.",
+        "No complete decimal-to-binary64 nearest-even conversion, signed-zero/overflow/underflow endpoints, raw-integer conversion, shortest output, production NumberCodec instance or Bun/native refinement is supplied. RoundingInterval separately proves conditional sign-bit-zero interior midpoint cells. Pinned standard-library compiled imports remain trusted inputs."
+      ],
+      "admittedWitnesses": [
+        "Algal.Core.BinaryValue.minimum_subnormal_value",
+        "Algal.Core.BinaryValue.negative_minimum_subnormal_value",
+        "Algal.Core.BinaryValue.minimum_normal_value",
+        "Algal.Core.BinaryValue.one_value",
+        "Algal.Core.BinaryValue.negative_one_value",
+        "Algal.Core.BinaryValue.maximum_finite_value"
+      ],
+      "rejectedWitnesses": [
+        "Algal.Core.BinaryValue.model_nonfinite_rejected"
+      ]
+    },
+    {
+      "id": "numeric-injectivity",
+      "module": "Algal.Core.NumericInjectivity",
+      "scope": "Exact dyadic/rational denotation equality for every admitted finite binary64 value is equivalent to independently defined normalized-bit equality, including both signs and the signed-zero quotient.",
+      "sources": [
+        "src/values.ts",
+        "crates/algal/src/canonical.rs",
+        "Cargo.lock"
+      ],
+      "coveredCriteria": [
+        "Unbounded minimum-subnormal integer units strictly order exponent/fraction blocks and recover their fields; sign recovery identifies only the two zero patterns. Equal exact dyadic values are equivalent to equal normalized bits for finite Number inputs.",
+        "Exact rational equality has the same characterization. Denotation is injective on normalized finite numbers; signed zero is admitted as equivalent while distinct one and two are rejected."
+      ],
+      "unmetCriteria": [
+        "The integer unit counts are unbounded mathematical values, not UInt64 accumulators; no machine range, allocation, time or stack refinement follows. Raw-field helpers remain synthetic outside the finite Number domain.",
+        "No decimal parser/printer, rounding selection, shortest rendering, production NumberCodec instance or Bun/native refinement is supplied. Pinned compiled standard-library imports and the Lean audit/kernel/runtime remain trusted."
+      ],
+      "admittedWitnesses": [
+        "Algal.Core.NumericInjectivity.signed_zero_equivalence_admitted"
+      ],
+      "rejectedWitnesses": [
+        "Algal.Core.NumericInjectivity.distinct_one_two_denotation_rejected"
+      ]
+    },
+    {
+      "id": "rounding-interval",
+      "module": "Algal.Core.RoundingInterval",
+      "scope": "Exact rational midpoint cells for finite sign-bit-zero interior values with two actual adjacent finite neighbors. Nonnegative means sign bit zero, including +0 and excluding -0; nearest comparisons quantify only over sign-bit-zero finite candidates.",
+      "sources": [
+        "src/values.ts",
+        "crates/algal/src/canonical.rs",
+        "Cargo.lock"
+      ],
+      "coveredCriteria": [
+        "Actual sign-bit-zero UInt64 code order agrees with exact rational order; consecutive finite codes have no intervening sign-bit-zero finite candidate. Rational midpoint inequalities exactly characterize closer-than and no-farther-than comparisons.",
+        "For an interior cell member, its center is no farther than every sign-bit-zero finite candidate; an odd center is strictly closer than every different such candidate. Cells include midpoint endpoints for even centers and exclude them for odd centers.",
+        "Coefficient parity equals the low bit of the binary64 code and matches the already-classified tie branch of pinned Lean Accuracy.roundToNearestEven. Concrete witnesses cover even/odd lower endpoints, asymmetric neighboring gaps around one, and equal gaps at the subnormal/normal boundary."
+      ],
+      "unmetCriteria": [
+        "No interval theorem over negative candidates or -0, signed-zero center treatment, maximum-finite/overflow endpoints, universal rational-to-center selection or interval-coverage converse is supplied. Positive zero may be a predecessor, but the center must have both actual finite neighbors.",
+        "The tie result does not classify a residual or prove carry normalization/packing. There is no executable decimal-to-binary64 conversion, shortest coefficient/format choice, Ryu table/machine proof, production NumberCodec.Laws instance or Bun/native refinement.",
+        "Mathematical integers/rationals are unbounded. Input admission, digit/exponent bounds and stack/time/allocation/machine-width refinement remain separate. The exact subnormal boundary witness uses local kernel recursion/exponent reduction options without changing global tool resource limits."
+      ],
+      "admittedWitnesses": [
+        "Algal.Core.RoundingInterval.one_left_adjacent",
+        "Algal.Core.RoundingInterval.one_right_adjacent",
+        "Algal.Core.RoundingInterval.after_one_right_adjacent",
+        "Algal.Core.RoundingInterval.one_even",
+        "Algal.Core.RoundingInterval.after_one_odd",
+        "Algal.Core.RoundingInterval.one_actual_value",
+        "Algal.Core.RoundingInterval.one_self_in_cell",
+        "Algal.Core.RoundingInterval.one_lower_midpoint_included",
+        "Algal.Core.RoundingInterval.one_neighbor_gaps_asymmetric",
+        "Algal.Core.RoundingInterval.subnormal_normal_adjacent",
+        "Algal.Core.RoundingInterval.minimum_normal_next_adjacent",
+        "Algal.Core.RoundingInterval.minimum_normal_even",
+        "Algal.Core.RoundingInterval.subnormal_normal_gaps_equal"
+      ],
+      "rejectedWitnesses": [
+        "Algal.Core.RoundingInterval.odd_lower_midpoint_rejected"
+      ]
+    },
+    {
+      "id": "decimal-syntax",
+      "module": "Algal.Core.DecimalSyntax",
+      "scope": "Concrete ASCII JSON numeral tokens retaining their spelling, with exact unbounded rational decimal values; distinct from finite-binary64 admission and canonical shortest rendering.",
+      "sources": [
+        "src/values.ts",
+        "crates/algal/src/canonical.rs",
+        "spec/v1/organism.md",
+        "Cargo.lock"
+      ],
+      "coveredCriteria": [
+        "ASCII digit parsing, nonempty integer/fraction/exponent parts, leading-zero rejection and signed exponent grammar have exact render/parse inverses. The complete-token parser accepts exactly a rendered Numeral; spelling is injective and prefix inverses retain legal delimiter/EOF suffixes.",
+        "Decimal coefficient and exponent placement have exact rational semantics with a positive denominator. Syntax accepts 1e309 independently of finite-binary64 admission. Exact decimal 0.1 is proved different from the corresponding rounded binary64 value."
+      ],
+      "unmetCriteria": [
+        "readPrefix can retain arbitrary suffixes; only readWhole requires complete token consumption. Whitespace/document parsing, UTF-8 numeral composition and production parser correspondence are not supplied. Rational denotation is not injective over preserved numeral spellings.",
+        "Finite-input structural termination does not bound digit count, exponent magnitude, stack, time or allocation. Exact powers of ten must not be evaluated on unbounded foreign input without separate admission.",
+        "No binary64 rounding conversion, shortest coefficient selection or formatting/tie policy, finite/overflow/underflow admission or concrete NumberCodec.Laws instance is proved."
+      ],
+      "admittedWitnesses": [
+        "Algal.Core.DecimalSyntax.tenth_lexeme",
+        "Algal.Core.DecimalSyntax.tenth_parse",
+        "Algal.Core.DecimalSyntax.tenth_exact_value",
+        "Algal.Core.DecimalSyntax.signed_zeros_same_rational",
+        "Algal.Core.DecimalSyntax.enormous_exponent_syntax_admitted",
+        "Algal.Core.DecimalSyntax.negative_exponent_syntax_admitted"
+      ],
+      "rejectedWitnesses": [
+        "Algal.Core.DecimalSyntax.reject_empty",
+        "Algal.Core.DecimalSyntax.reject_leading_plus",
+        "Algal.Core.DecimalSyntax.reject_leading_zero",
+        "Algal.Core.DecimalSyntax.reject_negative_leading_zero",
+        "Algal.Core.DecimalSyntax.reject_empty_fraction",
+        "Algal.Core.DecimalSyntax.reject_empty_exponent",
+        "Algal.Core.DecimalSyntax.reject_empty_signed_exponent",
+        "Algal.Core.DecimalSyntax.reject_nan",
+        "Algal.Core.DecimalSyntax.reject_infinity",
+        "Algal.Core.DecimalSyntax.reject_hexadecimal",
+        "Algal.Core.DecimalSyntax.reject_fullwidth_digits",
+        "Algal.Core.DecimalSyntax.reject_trailing_junk"
       ]
     },
     {
@@ -90,6 +223,27 @@
         "Algal.Core.JsonString.trailing_content_rejected",
         "Algal.Core.JsonString.missing_end_quote_rejected",
         "Algal.Core.JsonString.invalid_escape_rejected"
+      ]
+    },
+    {
+      "id": "byte-framing",
+      "module": "Algal.Core.ByteFraming",
+      "scope": "Scalar quoted strings with valid scalar UTF-8 suffixes; exact authored prefix framing, not arbitrary byte-tail or production parser admission.",
+      "sources": [
+        "src/values.ts",
+        "crates/algal/src/canonical.rs"
+      ],
+      "coveredCriteria": [
+        "Quoted UTF-8 prefixes decode while retaining a valid-string suffix; equality of framed byte sequences implies equality of both the scalar string and suffix."
+      ],
+      "unmetCriteria": [
+        "Arbitrary malformed byte suffixes, general raw JSON parser completeness, numeric/container grammar and production source refinement."
+      ],
+      "admittedWitnesses": [
+        "Algal.Core.ByteFraming.embedded_delimiters_and_suffix"
+      ],
+      "rejectedWitnesses": [
+        "Algal.Core.ByteFraming.distinct_prefix_splice_rejected"
       ]
     },
     {
@@ -190,6 +344,40 @@
         "Algal.Core.Normalize.array_permutation_rejected",
         "Algal.Core.Normalize.absent_and_present_null_rejected",
         "Algal.Core.Normalize.unicode_normalization_not_applied"
+      ]
+    },
+    {
+      "id": "json-layout",
+      "module": "Algal.Core.JsonLayout",
+      "scope": "Actual UTF-8 layout/parser for finite no-number trees; arbitrary-number composition is conditional on explicit uninstantiated codec laws. Raw object histories and canonical last-wins normalization are distinguished.",
+      "sources": [
+        "src/values.ts",
+        "crates/algal/src/canonical.rs",
+        "spec/v1/organism.md",
+        "Cargo.lock"
+      ],
+      "coveredCriteria": [
+        "Recursive punctuation/string parser roundtrip with proved fuel sufficiency from encoded character length; whole-input EOF and delimiter guards; composition into existing structural tokens.",
+        "For every finite NoNumbers tree, actual byte rendering round-trips and is injective without any full-number-law premise; the executable reject-numbers stub is proved to lack such laws.",
+        "After recursive normalization, conditional canonical-byte equality is equivalent to the independent observable equivalence relation. The same canonical roundtrip/equivalence theorem is unconditional on the no-number fragment, with preservation of NoNumbers by normalization proved."
+      ],
+      "unmetCriteria": [
+        "No concrete production number codec satisfies the declared laws yet. LawsOn alone establishes neither JSON numeral grammar nor exact decimal denotation, shortestness, tie policy or ECMAScript/Bun/ryu-js rendering correspondence.",
+        "Decoder recognizes the emitted fragment profile, not all legal whitespace/alternate string escapes. Raw all-token scalar admission, depth/node/byte limits, stack/RSS bounds and arbitrary unknown SDK object admission remain outside these theorems.",
+        "Bun/native extraction or implementation refinement and sampled full-container correspondence remain separate. These are model laws, not a full canonical production JSON codec proof."
+      ],
+      "admittedWitnesses": [
+        "Algal.Core.JsonLayout.nested_number_free_bytes_roundtrip",
+        "Algal.Core.JsonLayout.nested_number_free_canonical_roundtrip"
+      ],
+      "rejectedWitnesses": [
+        "Algal.Core.JsonLayout.numeric_stub_has_no_full_laws",
+        "Algal.Core.JsonLayout.array_trailing_comma_rejected",
+        "Algal.Core.JsonLayout.object_trailing_comma_rejected",
+        "Algal.Core.JsonLayout.mismatched_delimiter_rejected",
+        "Algal.Core.JsonLayout.missing_colon_rejected",
+        "Algal.Core.JsonLayout.extra_root_rejected",
+        "Algal.Core.JsonLayout.number_branch_stub_rejected"
       ]
     },
     {
@@ -407,6 +595,924 @@
       "name": "Algal.Core.Binary64.model_addition_witness",
       "module": "Algal.Core.Binary64",
       "domain": "binary64",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.fraction_lt",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.signBit_lt",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.fields_recompose",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.model_fraction",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.model_exponent",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.model_signBit",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.model_sign",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.model_denotation",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.model_nonfinite_rejected",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.coefficient_lt",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.normal_coefficient_lower",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.power_bounds",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.exact_subnormal",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.exact_normal",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.exact_rational",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.subnormal_rational",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.sign_apply_zero_iff",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.dyadic_zero_iff",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.coefficient_zero_iff",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.zero_fields_iff",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.exact_zero_iff",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.exact_positive_zero",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.exact_negative_zero",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.normalization_preserves_denotation",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.equivalent_denotation",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.minimum_subnormal_value",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.negative_minimum_subnormal_value",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.minimum_normal_value",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.one_value",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.negative_one_value",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.maximum_finite_value",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.BinaryValue.zeros_same_value_distinct_bits",
+      "module": "Algal.Core.BinaryValue",
+      "domain": "binary64-value",
+      "role": "counterexample-witness"
+    },
+    {
+      "name": "Algal.Core.NumericInjectivity.units_same_exponent_lt",
+      "module": "Algal.Core.NumericInjectivity",
+      "domain": "numeric-injectivity",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NumericInjectivity.units_earlier_exponent_lt",
+      "module": "Algal.Core.NumericInjectivity",
+      "domain": "numeric-injectivity",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NumericInjectivity.units_injective",
+      "module": "Algal.Core.NumericInjectivity",
+      "domain": "numeric-injectivity",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NumericInjectivity.bitUnits_coefficient",
+      "module": "Algal.Core.NumericInjectivity",
+      "domain": "numeric-injectivity",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NumericInjectivity.precision_shift",
+      "module": "Algal.Core.NumericInjectivity",
+      "domain": "numeric-injectivity",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NumericInjectivity.signedUnits_shift",
+      "module": "Algal.Core.NumericInjectivity",
+      "domain": "numeric-injectivity",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NumericInjectivity.exact_fixed_precision",
+      "module": "Algal.Core.NumericInjectivity",
+      "domain": "numeric-injectivity",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NumericInjectivity.fixed_precision_injective",
+      "module": "Algal.Core.NumericInjectivity",
+      "domain": "numeric-injectivity",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NumericInjectivity.exact_equal_signedUnits",
+      "module": "Algal.Core.NumericInjectivity",
+      "domain": "numeric-injectivity",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NumericInjectivity.sign_apply_natAbs",
+      "module": "Algal.Core.NumericInjectivity",
+      "domain": "numeric-injectivity",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NumericInjectivity.exact_equal_bitUnits",
+      "module": "Algal.Core.NumericInjectivity",
+      "domain": "numeric-injectivity",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NumericInjectivity.bitUnits_equal_fields",
+      "module": "Algal.Core.NumericInjectivity",
+      "domain": "numeric-injectivity",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NumericInjectivity.sign_equal_signBit",
+      "module": "Algal.Core.NumericInjectivity",
+      "domain": "numeric-injectivity",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NumericInjectivity.bits_equal_of_units_sign",
+      "module": "Algal.Core.NumericInjectivity",
+      "domain": "numeric-injectivity",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NumericInjectivity.zero_units_exact_zero",
+      "module": "Algal.Core.NumericInjectivity",
+      "domain": "numeric-injectivity",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NumericInjectivity.zero_pair_normalizes",
+      "module": "Algal.Core.NumericInjectivity",
+      "domain": "numeric-injectivity",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NumericInjectivity.exact_equal_normalizes",
+      "module": "Algal.Core.NumericInjectivity",
+      "domain": "numeric-injectivity",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NumericInjectivity.denote_equal_iff_equivalent",
+      "module": "Algal.Core.NumericInjectivity",
+      "domain": "numeric-injectivity",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NumericInjectivity.rational_equal_iff_equivalent",
+      "module": "Algal.Core.NumericInjectivity",
+      "domain": "numeric-injectivity",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NumericInjectivity.normalized_denotation_injective",
+      "module": "Algal.Core.NumericInjectivity",
+      "domain": "numeric-injectivity",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NumericInjectivity.signed_zero_equivalence_admitted",
+      "module": "Algal.Core.NumericInjectivity",
+      "domain": "numeric-injectivity",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.NumericInjectivity.distinct_one_two_denotation_rejected",
+      "module": "Algal.Core.NumericInjectivity",
+      "domain": "numeric-injectivity",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.value_fixed_units",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.positive_code_units_lt",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.positive_code_value_lt",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.positive_code_value_le_iff",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.adjacent_values_lt",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.adjacent_no_intermediate",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.midpoint_between",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.midpoint_left_distance",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.midpoint_right_distance",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.midpoint_left_strict",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.midpoint_right_strict",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.midpoint_equal_distances",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.coefficient_parity",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.adjacent_even_toggle",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.model_tie_keeps_even",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.model_tie_moves_odd",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.cell_neighbor_nearest",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.odd_cell_neighbor_strict",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.cell_midpoint_bounds",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.distance_outside_left",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.distance_outside_right",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.cell_global_nearest_nonnegative",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.odd_cell_global_strict_nonnegative",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.center_in_own_cell",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.one_left_adjacent",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.one_right_adjacent",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.after_one_right_adjacent",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.one_even",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.after_one_odd",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.one_actual_value",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.one_self_in_cell",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.one_lower_midpoint_included",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.odd_lower_midpoint_rejected",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.one_neighbor_gaps_asymmetric",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.subnormal_normal_adjacent",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.minimum_normal_next_adjacent",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.minimum_normal_even",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingInterval.subnormal_normal_gaps_equal",
+      "module": "Algal.Core.RoundingInterval",
+      "domain": "rounding-interval",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.readDigit_char",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.char_readDigit",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.takeDigits_stopped",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.takeDigits_render",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.takeDigits_reconstruct",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.takeDigits_remainder_stopped",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.readDigits_render",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.readInteger_render",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.terminal_stopped",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.digit_ne_marker",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.readExponentSign_digit",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.readExponentSign_render",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.readExponentTail_render",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.readExponent_terminal",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.readExponent_render",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.exponentChars_stopped",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.readFraction_exponent",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.readFraction_render",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.fractionChars_stopped",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.readUnsigned_render",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.readPrefix_unsigned",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.readPrefix_render",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.readWhole_render",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.render_injective",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.readDigits_sound",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.readInteger_sound",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.readExponentSign_sound",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.readExponentTail_sound",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.readExponent_sound",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.readFraction_sound",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.readUnsigned_sound",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.readPrefix_sound",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.readWhole_sound",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.readWhole_iff",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.digitsValue_append",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.coefficient_decomposition",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.digitsValue_bound",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.scale_rational",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.denote_rational",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.denominator_positive",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.denote_roundtrip",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.tenth_lexeme",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.tenth_parse",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.tenth_exact_value",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.signed_zeros_same_rational",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.signed_zeros_distinct_syntax",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "counterexample-witness"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.decimal_tenth_not_exact_binary64_tenth",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "counterexample-witness"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.reject_empty",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.reject_leading_plus",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.reject_leading_zero",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.reject_negative_leading_zero",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.reject_empty_fraction",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.reject_empty_exponent",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.reject_empty_signed_exponent",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.reject_nan",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.reject_infinity",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.reject_hexadecimal",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.reject_fullwidth_digits",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.reject_trailing_junk",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.enormous_exponent_syntax_admitted",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.DecimalSyntax.negative_exponent_syntax_admitted",
+      "module": "Algal.Core.DecimalSyntax",
+      "domain": "decimal-syntax",
       "role": "admitted-witness"
     },
     {
@@ -674,6 +1780,36 @@
       "role": "rejected-witness"
     },
     {
+      "name": "Algal.Core.ByteFraming.readBytes_quote_suffix",
+      "module": "Algal.Core.ByteFraming",
+      "domain": "byte-framing",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.ByteFraming.quoted_prefix_framing",
+      "module": "Algal.Core.ByteFraming",
+      "domain": "byte-framing",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.ByteFraming.quoted_prefix_framing_iff",
+      "module": "Algal.Core.ByteFraming",
+      "domain": "byte-framing",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.ByteFraming.embedded_delimiters_and_suffix",
+      "module": "Algal.Core.ByteFraming",
+      "domain": "byte-framing",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.ByteFraming.distinct_prefix_splice_rejected",
+      "module": "Algal.Core.ByteFraming",
+      "domain": "byte-framing",
+      "role": "rejected-witness"
+    },
+    {
       "name": "Algal.Core.OwnMap.lookup_write_same",
       "module": "Algal.Core.OwnMap",
       "domain": "own-map",
@@ -738,6 +1874,150 @@
       "module": "Algal.Core.OwnMap",
       "domain": "own-map",
       "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.digit_char_rebuild",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.parseDigits_append_repr",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.parseDigits_nonzero_head",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.arrayIndex_digits",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.arrayIndex_injective",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.keyOrder_swap",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.keyLE_trans",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.keyLE_antisymm",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.keyLE_total",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.keyOrder_notGT",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.insertKey_sorted",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.canonicalKeys_sorted",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.canonicalKeys_permutation_invariant",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.canonicalKeys_idempotent",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.lookup_isSome_iff",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.eraseDups_nodup",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.support_permutation_of_equivalent",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.canonicalProjection_eq_of_equivalent",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.lookup_keyed_map",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.canonicalProjection_lookup",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.canonicalProjection_eq_iff",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.canonicalProjection_distinct_writes_commute",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.changed_duplicate_winner_changes_projection",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.KeyOrder.reordered_map_witness",
+      "module": "Algal.Core.KeyOrder",
+      "domain": "key-order",
+      "role": "admitted-witness"
     },
     {
       "name": "Algal.Core.Json.normalizeNumbers_idempotent",
@@ -1110,6 +2390,306 @@
       "module": "Algal.Core.Normalize",
       "domain": "recursive-normalization",
       "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.numericHead_not_close",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.render_not_close",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.read_render",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.read_renderItems",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.read_renderFields",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.number_render_nonempty",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.weight_positive",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.weight_le_render",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.weightItems_le_render",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.weightFields_le_render",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.whole_roundtrip",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.bytes_roundtrip",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.bytes_equal_implies_normalized",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.bytes_to_tokens",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.bytes_to_structural_decoder",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.noNumberLaws",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.noNumbers_normalized",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.noNumberItems_normalized",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.noNumberFields_normalized",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.noNumbers_bytes_roundtrip",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.noNumbers_bytes_injective",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.nestedStringTree_no_numbers",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.nested_number_free_bytes_roundtrip",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.numeric_stub_has_no_full_laws",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.bytes_of_chars",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.array_trailing_comma_rejected",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.object_trailing_comma_rejected",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.mismatched_delimiter_rejected",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.missing_colon_rejected",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.extra_root_rejected",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.number_branch_stub_rejected",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.normalizeNumbers_lookup",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.numberNormalization_sound",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.numberNormalizationItems_sound",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.numberNormalizationFields_sound",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.normalize_after_numberNormalization",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.canonicalBytes_roundtrip",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.canonicalBytes_eq_iff",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.canonicalBytes_to_tokens",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.noNumbers_canonicalBytes_roundtrip",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.noNumbers_canonicalBytes_eq_iff",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.noNumberFields_lookup",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.noNumberFields_ofList",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.noNumberFields_canonical",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.noNumbers_normalize",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.noNumberItems_normalize",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.noNumberFields_normalize",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.numberFree_canonical_roundtrip",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.numberFree_canonical_eq_iff",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.JsonLayout.nested_number_free_canonical_roundtrip",
+      "module": "Algal.Core.JsonLayout",
+      "domain": "json-layout",
+      "role": "admitted-witness"
     },
     {
       "name": "Algal.Core.Ports.capability_no_json_widening",
@@ -1500,154 +3080,10 @@
       "module": "Algal.Core.Oracle",
       "domain": "oracle",
       "role": "rejected-witness"
-    },
-    {
-      "name": "Algal.Core.KeyOrder.digit_char_rebuild",
-      "module": "Algal.Core.KeyOrder",
-      "domain": "key-order",
-      "role": "law"
-    },
-    {
-      "name": "Algal.Core.KeyOrder.parseDigits_append_repr",
-      "module": "Algal.Core.KeyOrder",
-      "domain": "key-order",
-      "role": "law"
-    },
-    {
-      "name": "Algal.Core.KeyOrder.parseDigits_nonzero_head",
-      "module": "Algal.Core.KeyOrder",
-      "domain": "key-order",
-      "role": "law"
-    },
-    {
-      "name": "Algal.Core.KeyOrder.arrayIndex_digits",
-      "module": "Algal.Core.KeyOrder",
-      "domain": "key-order",
-      "role": "law"
-    },
-    {
-      "name": "Algal.Core.KeyOrder.arrayIndex_injective",
-      "module": "Algal.Core.KeyOrder",
-      "domain": "key-order",
-      "role": "law"
-    },
-    {
-      "name": "Algal.Core.KeyOrder.keyOrder_swap",
-      "module": "Algal.Core.KeyOrder",
-      "domain": "key-order",
-      "role": "law"
-    },
-    {
-      "name": "Algal.Core.KeyOrder.keyLE_trans",
-      "module": "Algal.Core.KeyOrder",
-      "domain": "key-order",
-      "role": "law"
-    },
-    {
-      "name": "Algal.Core.KeyOrder.keyLE_antisymm",
-      "module": "Algal.Core.KeyOrder",
-      "domain": "key-order",
-      "role": "law"
-    },
-    {
-      "name": "Algal.Core.KeyOrder.keyLE_total",
-      "module": "Algal.Core.KeyOrder",
-      "domain": "key-order",
-      "role": "law"
-    },
-    {
-      "name": "Algal.Core.KeyOrder.keyOrder_notGT",
-      "module": "Algal.Core.KeyOrder",
-      "domain": "key-order",
-      "role": "law"
-    },
-    {
-      "name": "Algal.Core.KeyOrder.insertKey_sorted",
-      "module": "Algal.Core.KeyOrder",
-      "domain": "key-order",
-      "role": "law"
-    },
-    {
-      "name": "Algal.Core.KeyOrder.canonicalKeys_sorted",
-      "module": "Algal.Core.KeyOrder",
-      "domain": "key-order",
-      "role": "law"
-    },
-    {
-      "name": "Algal.Core.KeyOrder.canonicalKeys_permutation_invariant",
-      "module": "Algal.Core.KeyOrder",
-      "domain": "key-order",
-      "role": "law"
-    },
-    {
-      "name": "Algal.Core.KeyOrder.canonicalKeys_idempotent",
-      "module": "Algal.Core.KeyOrder",
-      "domain": "key-order",
-      "role": "law"
-    },
-    {
-      "name": "Algal.Core.KeyOrder.lookup_isSome_iff",
-      "module": "Algal.Core.KeyOrder",
-      "domain": "key-order",
-      "role": "law"
-    },
-    {
-      "name": "Algal.Core.KeyOrder.eraseDups_nodup",
-      "module": "Algal.Core.KeyOrder",
-      "domain": "key-order",
-      "role": "law"
-    },
-    {
-      "name": "Algal.Core.KeyOrder.support_permutation_of_equivalent",
-      "module": "Algal.Core.KeyOrder",
-      "domain": "key-order",
-      "role": "law"
-    },
-    {
-      "name": "Algal.Core.KeyOrder.canonicalProjection_eq_of_equivalent",
-      "module": "Algal.Core.KeyOrder",
-      "domain": "key-order",
-      "role": "law"
-    },
-    {
-      "name": "Algal.Core.KeyOrder.lookup_keyed_map",
-      "module": "Algal.Core.KeyOrder",
-      "domain": "key-order",
-      "role": "law"
-    },
-    {
-      "name": "Algal.Core.KeyOrder.canonicalProjection_lookup",
-      "module": "Algal.Core.KeyOrder",
-      "domain": "key-order",
-      "role": "law"
-    },
-    {
-      "name": "Algal.Core.KeyOrder.canonicalProjection_eq_iff",
-      "module": "Algal.Core.KeyOrder",
-      "domain": "key-order",
-      "role": "law"
-    },
-    {
-      "name": "Algal.Core.KeyOrder.canonicalProjection_distinct_writes_commute",
-      "module": "Algal.Core.KeyOrder",
-      "domain": "key-order",
-      "role": "law"
-    },
-    {
-      "name": "Algal.Core.KeyOrder.changed_duplicate_winner_changes_projection",
-      "module": "Algal.Core.KeyOrder",
-      "domain": "key-order",
-      "role": "rejected-witness"
-    },
-    {
-      "name": "Algal.Core.KeyOrder.reordered_map_witness",
-      "module": "Algal.Core.KeyOrder",
-      "domain": "key-order",
-      "role": "admitted-witness"
     }
   ],
   "unmetCriteria": [
-    "Phase09 full canonical JSON byte encoding/roundtrip/injectivity is not proved. Normalize composes semantic normalization with structural tokens and JsonString proves actual quoted-string UTF-8 bytes, but container/number composition, shortest binary64 decimal rendering/parsing and full raw-document admission are still required.",
+    "Phase09 full canonical JSON byte encoding/roundtrip/injectivity is not proved. JsonLayout proves recursive UTF-8 delimiter composition and unconditional canonical laws for number-free trees; results with numbers require NumberCodec.LawsOn. The numeric modules prove exact binary64/decimal denotations, finite denotation injectivity modulo signed zero, numeral grammar, and sign-bit-zero interior midpoint cells. No complete decimal-to-binary64 conversion or production number-codec instance, shortest rendering, full raw-document admission, or production refinement is supplied.",
     "No production implementation is directly proved/refined by these theorems. Independent exact vectors and source/artifact bindings can provide sampled evidence, not a universal implementation theorem.",
     "SchemaCheck and ByteSize are explicit semantic parameters; host cost sanity and exact integer/machine-width envelopes are explicit preconditions, not established production admission.",
     "Lean standard-library imports are pinned/trusted compiled inputs; whole-import trust=0 rechecking is unqualified. Every authored theorem must undergo actual transitive axiom collection by the integrator.",

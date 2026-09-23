@@ -8,7 +8,7 @@ import { leanRuntime } from "./runtime";
 import { parseModuleAudit, parseTheoremAudit, parseVectorOutput, theoremNames } from "./output";
 import { compareBunStringVectors, compareBunVectors, compareNativeStringVectors, compareNativeVectors } from "./vectors";
 
-const MODULES = ["Binary64", "Text", "JsonString", "OwnMap", "KeyOrder", "Json", "Normalize", "Ports", "Graph", "Accounting", "Oracle"];
+const MODULES = ["Binary64", "BinaryValue", "NumericInjectivity", "RoundingInterval", "DecimalSyntax", "Text", "JsonString", "ByteFraming", "OwnMap", "KeyOrder", "Json", "Normalize", "JsonLayout", "Ports", "Graph", "Accounting", "Oracle"];
 const MODULE_NAMES = MODULES.map(name => `Algal.Core.${name}`);
 const MODULE_AUDIT_SOURCE = `import Algal\naudit_modules ${MODULE_NAMES.join(", ")}\n`;
 const MODULE_CONTROL_SOURCE = "import Algal.Audit\nimport Hidden\naudit_modules Hidden\n";

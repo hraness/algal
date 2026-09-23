@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { replayBun } from "./bun";
 import { checkTrace, TraceMismatch } from "./check";
 import { generateBun, checkGeneratedHistory } from "./generate";
-import { parseHistory, parseTrace, type History } from "./schema";
+import { parseHistory, parseTrace, type Action, type History } from "./schema";
 import { shrinkHistory } from "./shrink";
 import { productDigest, productJson } from "./product";
 import { hashJson, stableJson } from "../lib/files";
@@ -137,6 +137,40 @@ test("ordinary modeled rejections cannot invent API uncertainty", async () => {
   }
   for (const code of ["RECEIPT_MISMATCH", "MAILBOX_FULL", "CAPABILITY_DENIED"]) expect(covered.has(code)).toBe(true);
 });
+
+test("mailbox fault traces bind uncertainty to mutation attempts, including release failures", async () => {
+  for (const operation of ["send", "receive", "revoke", "retry", "pending"] as const) {
+    const actions: Action[] = [{ kind: "mailbox-create", box: 0, capacity: 1 }];
+    if (operation !== "send" && operation !== "revoke") actions.push({ kind: "mailbox-send", box: 0, key: 0, value: "red" });
+    actions.push(operation === "send" || operation === "retry" ? { kind: "mailbox-send", box: 0, key: 0, value: "red" }
+      : operation === "revoke" ? { kind: "mailbox-revoke", box: 0, right: "send" }
+      : { kind: operation === "receive" ? "mailbox-receive" : "mailbox-pending", box: 0 });
+    const baseline = parseHistory({ contract: "algal.verification-history.v1", seed: 0, commands: actions.map((action, id) => ({ id, action, fault: null })) });
+    const original = await replayBun(baseline), id = actions.length - 1;
+    checkTrace(baseline, original);
+    for (const cut of ["admission", "publication", "release"] as const) {
+      if (cut === "publication" && (operation === "retry" || operation === "pending")) continue;
+      const step = cut === "admission" ? "create-lock" : cut === "publication" ? "dir-sync" : "unlink-lock";
+      const path = operation === "revoke" ? "capabilities" : `mailboxes/trace-box-0/${operation === "send" ? "messages" : "consumed"}`;
+      let occurrence = 0, reached = false;
+      for (const event of original.steps[id]!.events) {
+        if (event.kind !== "fs" || event.step !== step || event.phase !== "before") continue;
+        occurrence++;
+        if (cut !== "publication" || event.path === path) { reached = true; break; }
+      }
+      expect(reached).toBe(true);
+      const history = structuredClone(baseline);
+      history.commands[id]!.fault = { site: "fs", step, phase: "before", occurrence, mode: "error" };
+      const trace = await replayBun(history), outcome = trace.steps[id]!.outcome;
+      checkTrace(history, trace);
+      expect(outcome).toMatchObject({ status: "error", code: "IO_FAILED", uncertain: cut !== "admission" && operation !== "retry" && operation !== "pending" });
+      const bad = structuredClone(trace), error = bad.steps[id]!.outcome;
+      if (error.status !== "error") throw new Error("mailbox fault did not reject");
+      error.uncertain = !error.uncertain;
+      expect(() => checkTrace(history, bad)).toThrow("fault-api-uncertainty");
+    }
+  }
+}, 20_000);
 
 test("shrinker preserves semantic failure and rejects tool/parse failures as shrinks", async () => {
   const history = await fixture("store");

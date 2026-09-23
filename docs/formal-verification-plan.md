@@ -202,7 +202,7 @@ TLC does not establish that a proposed symmetry is valid, and its documentation 
 
 ## Phase 05: durable process, journal, mailbox and owner-lease models
 
-- **Status:** In progress
+- **Status:** Complete
 - **Depends on:** 04.
 - **Objective:** Explore ordering, cancellation and recovery while preserving uncertain effects.
 - **Scope:** verify/tla/process, verify/tla/mailbox, owner-lease model, dedicated model/runtime conformance fixtures.
@@ -225,7 +225,7 @@ TLC does not establish that a proposed symmetry is valid, and its documentation 
 
 ## Phase 06: application, outbox, quota and authority models
 
-- **Status:** Not started
+- **Status:** In progress
 - **Depends on:** 04.
 - **Objective:** Establish safe evolution of selected state and retained external work.
 - **Scope:** verify/tla/application plus dedicated generated histories; authority and quota reference models.
@@ -245,7 +245,7 @@ TLC does not establish that a proposed symmetry is valid, and its documentation 
 
 ## Phase 07: scheduler, nested execution and budget model
 
-- **Status:** Not started
+- **Status:** In progress
 - **Depends on:** 04.
 - **Objective:** Define and check the deterministic execution transition system.
 - **Scope:** verify/tla/scheduler and an independent executable small-step oracle.
@@ -262,7 +262,7 @@ TLC does not establish that a proposed symmetry is valid, and its documentation 
 
 ## Phase 08: adversarial corpus, fuzzing and differential verification
 
-- **Status:** Not started
+- **Status:** In progress
 - **Depends on:** 04.
 - **Objective:** Exercise hostile representations and composition boundaries beyond example manifests.
 - **Scope:** verify/corpus, fuzz targets and dedicated comparison drivers. Manifest/lockfile edits belong to the integrator.

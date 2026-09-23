@@ -14,7 +14,7 @@ import {
 } from "./capabilities";
 import { BOUNDS } from "./contract";
 import { asDigest, digestCanonical, type Digest } from "./digest";
-import { AlgalError } from "./errors";
+import { AlgalError, errorReport } from "./errors";
 import { durableStep, durableUnlink, ensureDurableDirectory, publishFile, syncRetainedFile } from "./durable-fs";
 import { hostLease } from "./host-state";
 import type { ToolRegistry } from "./tools";
@@ -700,7 +700,7 @@ export class FileMailboxService implements MailboxService {
     return { config, record };
   }
 
-  private async withMailboxLock<T>(name: string, operation: () => Promise<T>): Promise<T> {
+  private async withMailboxLock<T>(name: string, operation: (markMutation: () => void) => Promise<T>): Promise<T> {
     await this.guard(name);
     for (const directory of [this.messagesDir(name), this.pendingDir(name), this.consumedDir(name), join(this.dir, "capabilities")]) {
       const info = await lstat(directory);
@@ -711,9 +711,10 @@ export class FileMailboxService implements MailboxService {
     let failed = false;
     let failure: unknown;
     let result: T | undefined;
+    let mutationAttempted = false;
     try {
       await durableStep("create-lock", path, async () => { lock = await open(path, "wx", 0o600); });
-      result = await operation();
+      result = await operation(() => { mutationAttempted = true; });
     } catch (error) {
       failed = true;
       failure = !lock && (error as NodeJS.ErrnoException).code === "EEXIST"
@@ -728,7 +729,16 @@ export class FileMailboxService implements MailboxService {
         await durableUnlink(path, "unlink-lock");
       } catch (error) { if (!failed) { failed = true; failure = error; } }
     }
-    if (failed) throw failure;
+    if (failed) {
+      if (mutationAttempted) {
+        // An attempted publication may have taken effect even when it throws,
+        // and a successful transfer is not settled until lock release returns.
+        // Keep the wire error unchanged; this flag only governs host recovery.
+        const report = errorReport(failure);
+        throw new AlgalError(report.code, report.message, failure instanceof AlgalError ? failure.details : undefined, { uncertain: true });
+      }
+      throw failure;
+    }
     return result as T;
   }
 
@@ -743,10 +753,10 @@ export class FileMailboxService implements MailboxService {
   async revoke(handle: CapabilityHandle): Promise<void> {
     const { config } = await this.resolve(handle,
       parseCapabilityHandle(handle).capability === MAILBOX_SEND ? MAILBOX_SEND : MAILBOX_RECEIVE);
-    await this.withMailboxLock(config.name, () => this.revokeLocked(handle));
+    await this.withMailboxLock(config.name, markMutation => this.revokeLocked(handle, markMutation));
   }
 
-  private async revokeLocked(handle: CapabilityHandle): Promise<void> {
+  private async revokeLocked(handle: CapabilityHandle, markMutation: () => void): Promise<void> {
     const { record } = await this.resolve(
       handle,
       parseCapabilityHandle(handle).capability === MAILBOX_SEND
@@ -754,6 +764,7 @@ export class FileMailboxService implements MailboxService {
         : MAILBOX_RECEIVE,
     );
     record.revoked = true;
+    markMutation();
     await writeReplace(this.recordPath(handle), record as unknown as JsonValue);
   }
 
@@ -763,13 +774,14 @@ export class FileMailboxService implements MailboxService {
     idempotencyKey: Digest,
   ): Promise<{ id: Digest }> {
     const { config } = await this.resolve(handle, MAILBOX_SEND);
-    return this.withMailboxLock(config.name, () => this.sendLocked(handle, value, idempotencyKey));
+    return this.withMailboxLock(config.name, markMutation => this.sendLocked(handle, value, idempotencyKey, markMutation));
   }
 
   private async sendLocked(
     handle: CapabilityHandle,
     value: JsonValue,
     idempotencyKey: Digest,
+    markMutation: () => void,
   ): Promise<{ id: Digest }> {
     idempotencyKey = asDigest(idempotencyKey, "mailbox idempotency key");
     value = asJsonValue(value, "mailbox message");
@@ -823,6 +835,7 @@ export class FileMailboxService implements MailboxService {
         idempotencyKey,
         value,
       };
+      markMutation();
       if (!await writeNew(messagePath, message as unknown as JsonValue)) {
         validateMessage(await readJson(messagePath));
       }
@@ -846,6 +859,7 @@ export class FileMailboxService implements MailboxService {
       contract: MAILBOX_DELIVERY_CONTRACT,
       id,
     };
+    markMutation();
     if (!await writeNew(pendingPath, delivery as unknown as JsonValue)) {
       const claimed = parseDelivery(
         await readJson(pendingPath),
@@ -862,7 +876,7 @@ export class FileMailboxService implements MailboxService {
     handle: CapabilityHandle,
   ): Promise<{ id: Digest; message: JsonValue }> {
     const { config } = await this.resolve(handle, MAILBOX_RECEIVE);
-    return this.withMailboxLock(config.name, () => this.receiveLocked(handle));
+    return this.withMailboxLock(config.name, markMutation => this.receiveLocked(handle, markMutation));
   }
 
   private async deliveryMarkers(config: MailboxConfig, file: string, id: Digest): Promise<{pending: unknown; consumed: unknown}> {
@@ -894,6 +908,7 @@ export class FileMailboxService implements MailboxService {
 
   private async receiveLocked(
     handle: CapabilityHandle,
+    markMutation: () => void,
   ): Promise<{ id: Digest; message: JsonValue }> {
     const { config } = await this.resolve(handle, MAILBOX_RECEIVE);
     await this.guard(config.name);
@@ -935,6 +950,7 @@ export class FileMailboxService implements MailboxService {
           }
         });
         if (retained === undefined) throw new AlgalError("IO_FAILED", "mailbox message disappeared");
+        markMutation();
         await writeNew(join(this.consumedDir(config.name), file), delivery as unknown as JsonValue);
         await durableUnlink(source, "unlink-pending");
         return { id: message.id, message: message.value };

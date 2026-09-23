@@ -94,7 +94,7 @@ data. Real power-loss behavior is outside this harness; the Phase02 crash-image
 models remain separately qualified conditional evidence.
 
 Fault checking enforces the exact injected error code/wake, known API uncertainty
-at application checkpoints, untouched named file/config/history observations,
+at application checkpoints and mailbox mutation attempts, untouched named file/config/history observations,
 admitted Store publication candidates, and application head behavior before/after
 publication. Its `partial` state set deliberately retains uncertainty about other
 intermediate filesystem details. It is sampled consistency checking, not a complete
@@ -103,7 +103,14 @@ Ordinary modeled rejections require the actual API uncertainty flag to be false;
 they cannot be relabeled as definite rejection while retaining `uncertain:true`.
 Unexpected host errors outside these modeled outcomes reject admission. The
 separate injected-fault branch retains its checkpoint-specific uncertainty rules,
-including true after application head publication.
+including true after application head publication. For injected filesystem cuts,
+mailbox send/receive/revoke uncertainty begins when a fresh claim, delivery marker
+or revoked authority publication is attempted, and covers subsequent release
+failures. The checker identifies the helper's first parent-directory sync from
+the raw event prefix and independently observed prior claim/marker state; retained
+retry syncs are distinct. Readiness and pre-admission failures stay certain. This
+bounded checkpoint relation does not classify arbitrary unobserved host failures,
+nor does `uncertain:false` mean that an earlier invocation never transferred data.
 
 `run.ts` executes every Bun and native history under the owned process supervisor
 with per-history deadlines, bounded raw output, actual exit and pipe EOF witnesses.

@@ -121,7 +121,7 @@ export function parseTlcOutput(output: string, module: string): ParsedTlcOutput 
     const action = i === 0 ? null : /^([A-Za-z][A-Za-z0-9_]*) line \d+, col \d+ to line \d+, col \d+ of module ([A-Za-z][A-Za-z0-9_]*)$/.exec(match[2]!);
     requireThat(i === 0 ? match[2] === "Initial predicate" : action !== null && action[2] === module, "TLC trace does not begin at Init or has an unknown action");
     const body = lines.join("\n").trimEnd();
-    requireThat(body.startsWith("/\\ ") && body.length > 0 && body.length <= 16_384, "TLC missing or excessive state body");
+    requireThat((body.startsWith("/\\ ") || /^[A-Za-z][A-Za-z0-9_]* = /.test(body)) && body.length > 0 && body.length <= 16_384, "TLC missing or excessive state body");
     return { index: i + 1, action: action?.[1] ?? null, body };
   });
   requireThat(trace.length <= 10_000, "TLC trace state bound");
@@ -136,14 +136,37 @@ export function parseTlcOutput(output: string, module: string): ParsedTlcOutput 
   }
   const successes = messages.filter(message => message.code === 2193);
   requireThat(successes.length <= 1 && !(successes.length && violation), "TLC contradictory success/failure");
-  const temporalStart = messages.filter(message => message.code === 2192 && /^Checking temporal properties for the complete state space with /.test(message.body));
-  const temporalEnd = messages.filter(message => message.code === 2267);
-  const temporalComplete = temporalStart.length === 1 && temporalEnd.length === 1;
-  if (temporalStart.length) {
-    requireThat(temporalStart.length === 1, "TLC duplicate complete temporal check");
-    const total = /^Checking temporal properties for the complete state space with ([\d,]+) total distinct states at .+$/.exec(temporalStart[0]!.body);
-    requireThat(total !== null && numeric(total[1]!, "temporal state space") === distinctStates, "TLC temporal state-space count mismatch");
+  const declarations = messages.filter(message => message.code === 2212);
+  requireThat(declarations.length <= 1, "TLC duplicate temporal branch declaration");
+  const declaration = declarations.length ? /^Implied-temporal checking--satisfiability problem has ([1-9]\d*) branches\.$/.exec(declarations[0]!.body) : null;
+  requireThat(!declarations.length || declaration !== null, "TLC unrecognized temporal branch declaration");
+  const branches = declaration ? numeric(declaration[1]!, "temporal branches") : 0;
+  requireThat(branches <= 16, "TLC temporal branch bound");
+  // TLC LiveCheck.check0 sums the graph sizes across all solution branches.
+  // These registered profiles use full-state, non-tableau branch graphs; other
+  // temporal graph shapes require explicit qualification rather than a looser
+  // count test. Pair intermediate checks before the one complete-space check.
+  let pendingTemporal: "current" | "complete" | null = null, temporalComplete = false;
+  for (const [index, message] of messages.entries()) {
+    if (message.code === 2192) {
+      requireThat(pendingTemporal === null && !temporalComplete, "TLC overlapping or repeated complete temporal check");
+      requireThat(!successes.length || index < messages.indexOf(successes[0]!), "TLC temporal check after success");
+      const start = /^Checking (?:(\d+) branches of )?temporal properties for the (current|complete) state space with ([\d,]+) total distinct states at .+$/.exec(message.body);
+      requireThat(start !== null && branches > 0 && messages.indexOf(declarations[0]!) < index, "TLC missing or malformed temporal start/declaration");
+      requireThat((start[1] === undefined ? 1 : numeric(start[1], "temporal branches")) === branches, "TLC temporal branch count mismatch");
+      requireThat((start[1] === undefined) === (branches === 1), "TLC temporal branch prefix mismatch");
+      const total = numeric(start[3]!, "temporal state space");
+      requireThat(total > 0 && total % branches === 0 && (start[2] === "complete" ? total === branches * distinctStates : total <= branches * distinctStates), "TLC temporal state-space count mismatch");
+      pendingTemporal = start[2] as "current" | "complete";
+    } else if (message.code === 2267) {
+      requireThat(pendingTemporal !== null && /^Finished checking temporal properties in [^\n]{1,64} at [^\n]+$/.test(message.body), "TLC temporal completion without matching start");
+      temporalComplete = pendingTemporal === "complete";
+      pendingTemporal = null;
+    } else if (message.code === 2193) requireThat(pendingTemporal === null, "TLC success before temporal completion");
+    else if (violation?.kind === "liveness" && [2116, 2264, 2217, 2218, 2122].includes(message.code))
+      requireThat(pendingTemporal === "complete", "TLC liveness counterexample outside its complete temporal check");
   }
+  requireThat(pendingTemporal === null, "TLC unfinished temporal check");
   let fingerprintEstimate: number | null = null;
   if (successes.length) {
     const match = /^Model checking completed\. No error has been found\.\n {2}Estimates of the probability that TLC did not check all reachable states\n {2}because two distinct states had the same fingerprint:\n {2}calculated \(optimistic\): {2}val = ([0-9.Ee+-]+)(?:\n {2}based on the actual fingerprints: {2}val = [0-9.Ee+-]+)?$/.exec(successes[0]!.body);
@@ -159,6 +182,22 @@ export function parseTlcOutput(output: string, module: string): ParsedTlcOutput 
 }
 
 type RunPlan = { id: string; profile: ModelProfile; configuration: TlcConfiguration; expected: "success" | "invariant" | "action" | "liveness"; property: string | null; action: string | null };
+/** Profiles are authored code, but overlapping IDs can silently select a
+ * different suite's mutation. Validate the whole joined inventory first. */
+export function validateModelInventory(profiles: ModelProfile[], mutations: ModelMutation[]): void {
+  const ids = [...profiles.map(profile => profile.id), ...mutations.map(mutation => mutation.id)];
+  requireThat(profiles.length > 0 && ids.every(id => /^[a-z][a-z0-9-]{0,95}$/.test(id)) && new Set(ids).size === ids.length, "TLC profile/mutation IDs must be globally unique");
+  for (const profile of profiles) {
+    requireThat(Object.hasOwn(LIVE_SOURCES, profile.suite), "TLC profile has unknown suite");
+    requireThat(new Set(profile.actions.map(item => item.action)).size === profile.actions.length, "TLC duplicate action witness");
+  }
+  for (const mutation of mutations) {
+    const profile = profiles.find(profile => profile.id === mutation.base);
+    requireThat(profile !== undefined, "TLC mutation has missing base profile");
+    requireThat(mutation.kind === "invariant" ? profile.invariants.includes(mutation.property) : profile.properties.length === 1 && profile.properties[0] === mutation.property,
+      "TLC mutation's named property is not enabled by its base profile");
+  }
+}
 function configuration(profile: ModelProfile, overrides: { constants?: Record<string, string>; specification?: string; properties?: string[] } = {}): TlcConfiguration {
   const value = { contract: "algal.verification-tlc-config.v1", mode: "model-check", behavior: "temporal", specification: overrides.specification ?? profile.specification,
     constants: overrides.constants ?? profile.constants, invariants: profile.invariants, properties: overrides.properties ?? profile.properties,
@@ -166,6 +205,7 @@ function configuration(profile: ModelProfile, overrides: { constants?: Record<st
   return admitTlcConfiguration(value, { invariants: profile.invariants, properties: overrides.properties ?? profile.properties, importantActions: profile.actions.map(item => item.action) });
 }
 function plans(suite: TlcSuite): RunPlan[] {
+  validateModelInventory(MODEL_PROFILES, MODEL_MUTATIONS);
   const profiles = MODEL_PROFILES.filter(profile => profile.suite === suite);
   const result: RunPlan[] = [];
   for (const profile of profiles) {
@@ -192,7 +232,7 @@ export function renderTlcConfiguration(config: TlcConfiguration): string {
 
 export type TlcDefinition = { contract: "algal.verification-tlc-definition.v1"; suite: TlcSuite; profiles: ModelProfile[]; mutations: ModelMutation[]; inputs: FileBinding[]; relation: string };
 export async function tlcDefinition(root: string, suite: TlcSuite): Promise<TlcDefinition> {
-  requireThat(suite === "custody" || suite === "publication", "unknown TLC suite");
+  requireThat(Object.hasOwn(LIVE_SOURCES, suite), "unknown TLC suite");
   const profiles = MODEL_PROFILES.filter(profile => profile.suite === suite);
   const mutations = MODEL_MUTATIONS.filter(mutation => profiles.some(profile => profile.id === mutation.base));
   const paths = [...new Set([...ADAPTER_SOURCES, ...LIVE_SOURCES[suite], ...profiles.map(profile => profile.path)])].sort();

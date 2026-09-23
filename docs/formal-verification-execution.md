@@ -193,3 +193,127 @@ new binding drift, retained receipt identity, invocation versus process-generati
 identity, and effects that apply after host death. Its 32 scratch diagnostic
 profiles behaved as expected; repository suite admission and implementation
 conformance remain pending.
+
+### Phase05 uncertainty counterexample and conformance admission
+
+The new real mailbox/supervisor boundary regression reproduced a composition
+defect in both runtimes. After receive published a consumed marker and removed
+pending, a failure returning from lock release was reported as settled. A
+journaled process consequently completed that error entry, dispatched an
+on-fail write, and published a completed process receipt. The retained Bun red
+run is `/private/tmp/algal-mailbox-journal-red.log`; the native red run is
+`/private/tmp/algal-mailbox-journal-native-red.log`. This is executed evidence,
+not just a counterexample in an abstract model.
+
+The repair marks failures after a mutation attempt uncertain while preserving
+their wire error. Readiness and exact retained retries do not acquire uncertainty
+merely by taking the lock. The operation remains non-idempotent receive; no
+automatic retry or retained caller-result identity is added. Source integration,
+native regression completion and refreshed trace/model qualification now pass;
+the admitted receipts are in `formal-verification-evidence/phase05-protocols.md`.
+
+Independent conformance-runner review also reproduced Bun ignoring a missing
+test filename when another file passes. The adapter now hashes each declared
+file explicitly and requires a separate positive supervised test result for
+each. Executed missing-file, empty-file, duplicate and empty-inventory controls
+pass, as do the four new journal correspondence cases. The journal barrier tests
+collect the owned operation in `finally` before removing its state.
+
+### Phase08 preliminary closure counterexample
+
+A bounded five-case probe now reproduces F09's depth-composition gap in Bun:
+an input value nested in 61 or 62 arrays passes run admission and produces a
+`complete` receipt, but that receipt fails `parseRunReceipt` and FileStore
+admission at their depth limit of 64. Values nested 59 or 60 arrays round-trip;
+63 is rejected at run-argument admission. Each receipt is less than a few KiB;
+this is structural amplification rather than a large-data experiment. Raw rows
+are `/private/tmp/algal-phase08-depth-probe.jsonl`, with retained receipts in
+the archive recorded there. The production repair remains pending; this does
+not yet complete any Phase08 acceptance criterion.
+
+The native CLI counterpart accepts depths 59/60 and returns a typed
+`BUDGET_EXHAUSTED` at 61/62/63; its final receipt hashing enforces depth 64.
+Raw command evidence is `/private/tmp/algal-phase08-native-depth-probe.jsonl`
+and `/private/tmp/algal-phase08-native-depth-ISiOyk`. This confirms a Bun/native
+producer mismatch; it does not establish effect preservation after an oversized
+effectful run. The Phase07 40-case byte-budget probe also now includes actual
+native execution and nested children: recall can widen root limits in both
+runtimes, while native ordinary agent cells correctly clamp and Bun does not.
+
+A second six-case corpus probe reproduces a node-count closure failure in both
+runtimes. Four independently admitted input arrays totaling 499,960 scalar
+elements produce receipts accepted by both consumers. At 500,000 and 520,000
+elements, arguments still fit the 1 MiB input limit and individual values fit
+their port limits, but duplication into cell outputs produces a `complete`
+receipt rejected by `parseRunReceipt` and Bun FileStore's million-node bound.
+The native CLI also returns these oversized receipts successfully. Raw commands
+and receipts are retained at `/private/tmp/algal-phase08-node-closure-7E4G0O`,
+with summary `/private/tmp/algal-phase08-node-closure-probe.jsonl`. This extends
+the producer/consumer defect beyond depth and beyond the Bun runtime. Effectful
+closure and a conservative production repair remain open.
+Native `verify` independently accepts the smaller receipt and rejects both
+larger receipts with `PARSE_FAILED`; those exact command results are recorded in
+`/private/tmp/algal-phase08-native-node-consumers.jsonl`.
+
+Independent review found a coupled journal boundary. A real Bun journaled
+process with an admitted write tool returning 100,001 or 130,000 zeroes performs
+one retained scalar write, then fails its tick with the process still uncertain.
+Its journal head nevertheless selects a completed effect record exceeding
+`hostRead`'s 100,000-node limit. Fresh journal open, inspection and recovery then
+reject that record. The 49,900-element control completes and reopens. Original
+heads, records and the scalar counter remain retained; evidence is
+`/private/tmp/algal-receipt-closure-review/journal-readback-evidence.json`.
+A final run-receipt guard alone cannot repair this gap: completed journal
+publication must first guarantee readback, preserving started evidence on
+unrepresentable completion. Native correspondence is under investigation.
+
+### Phase09 numeric meaning and syntax milestone
+
+The fresh complete core gate and separate re-admission now pass 372 named
+theorems across 15 domains, 1,268 defining-module theorem audits, seven rejection
+controls and 31 supervised commands. The new 93 numeric theorems were independently
+reviewed and rebuilt before integration. They establish exact finite binary64
+dyadic/rational values and concrete ASCII numeral syntax with decimal rational
+meaning. Decimal-to-binary rounding, shortest rendering, a production NumberCodec
+instance and implementation refinement remain open. The exact receipt and trust
+limits are recorded in `formal-verification-evidence/phase09-core.md`.
+
+### Phase05 protocol checkpoint and Phase06 continuation
+
+Phase05 is complete within the declared finite-model and sampled-conformance
+scope. Five admitted TLC suites, including the refreshed earlier custody and
+publication suites, passed 76 positive configurations, 229 transition witnesses
+and 60 intended unsafe controls. All saved raw results passed independent
+re-admission. Protocol correspondence passed 69 Bun tests and 23 exact native
+selectors. The refreshed trace gate passed all 74 histories and 1,628 commands
+per runtime; the native Hegel, shrink and fault controls also passed. Current
+receipts and scope are in `formal-verification-evidence/phase05-protocols.md`.
+
+The full native workspace suite passed 347 tests, with three explicit helper
+ignores, and strict workspace clippy passed. Bun's first full run exposed one
+outdated error-identity assertion following the mailbox uncertainty change; it
+now checks preserved wire fields, uncertainty and the unmodified original error.
+Eight sandbox-denied loopback tests passed with local listener access. A later
+concurrent aggregate hit two existing filesystem-test deadlines; both passed
+isolated reruns without changing limits. The complete quiet aggregate then
+passed 1,128 tests with 20 conditional skips, zero failures and 8,450 assertions,
+plus type checking, lint, documentation and site build. Its exact log is
+`/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/system-one-EAh4nx/check.log`.
+A Phase06 review also identified test-cleanup paths
+that can remove owned state before an awaited operation has joined after failure;
+that harness follow-up remains open.
+
+Phase06 has source-mapped quota and outbox candidates under independent review.
+Outbox review identified missing late application of an invoked adapter after
+host death; the candidate is being repaired before registered admission. Selection
+and authority models and real service correspondence remain outstanding.
+
+The subsequent full Lean gate and separate readmission now pass 432 authored
+theorems across 17 domains, all 1,414 defining-module theorems, seven controls
+and 33 supervised commands. The 60 new theorems prove finite denotation
+injectivity modulo signed zero and exact interior rounding intervals. The
+independent review added nine boundary/non-vacuity witnesses and rejected wrong
+precision and parity variants. Negative rounding candidates, zero/overflow
+centers, decimal conversion, shortest rendering and source refinement remain
+open. `formal-verification-evidence/phase09-core.md` identifies the current
+receipt; earlier checkpoints are historical evidence.

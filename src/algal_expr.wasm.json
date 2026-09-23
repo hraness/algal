@@ -127,7 +127,7 @@
     },
     {
       "path": "verify/lib/runner.ts",
-      "sha256": "sha256:dd486830a2f7ef8b35382874b3a2da34c5422ba462a70cd034a7ce9d987268fa"
+      "sha256": "sha256:01450a6b0695be8a014608fe10402de83ddcbf9d2f9b7b7dd09ab3e8a6e3cebc"
     },
     {
       "path": "verify/lib/schema.ts",
@@ -135,7 +135,7 @@
     },
     {
       "path": "verify/lib/suites.ts",
-      "sha256": "sha256:e862b2831e11308a57e59f4a6475e15e83240933b17558f49a59c53d4c9f4733"
+      "sha256": "sha256:07dd9950dddcf13eb85fb607b90d35fd0ea88f21f5a8e131c5a1ea918155dcf1"
     }
   ],
   "wasm": {

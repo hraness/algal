@@ -598,6 +598,20 @@ no operation identity and can remain uncertain; this is not an exactly-once
 delivery or automatic retry guarantee. Legacy claim-only states cannot be
 retroactively distinguished from an old interrupted send or receive.
 
+The file-backed host marks an error `uncertain` once the current call attempts
+publication of a fresh message claim, pending/consumed marker, or revoked
+capability record. This conservative boundary includes failure before a helper's
+first write and failure during lock release after the mutation completed. The
+host-only flag preserves the existing error code/message and is not part of
+canonical mailbox records. It does not assert that the mutation actually happened.
+Known admission rejections, full-mailbox checks before a fresh publication, empty
+receive, readiness checks and exact retained send retries do not acquire this flag
+merely from acquiring/releasing the lock or syncing retained evidence. A fresh
+call rejecting an ambiguous retained transfer does not settle the earlier call.
+Journaled uncertain mailbox writes retain their started entry, prevent fallback
+dispatch and outcome publication, and remain blocked from automatic or explicit
+write replay. Receive has no caller operation identity to reconcile a lost return.
+
 ### spawn cells
 
 ```json

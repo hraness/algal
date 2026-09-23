@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { admitJavaRuntimeFiles, admitTlcCommandOutput, parseTlcOutput, renderTlcConfiguration } from "../lib/tlc";
+import { admitJavaRuntimeFiles, admitTlcCommandOutput, parseTlcOutput, renderTlcConfiguration, validateModelInventory } from "../lib/tlc";
+import { MODEL_PROFILES, MODEL_MUTATIONS } from "./definitions";
 import { admitTlcConfiguration } from "../lib/proof";
 import type { CommandResult } from "../lib/runner";
 import type { FileBinding } from "../lib/files";
@@ -23,6 +24,16 @@ const witness = { kind: "action" as const, property: "NeverAcquirePrimary", acti
 const witnessConfig = { ...config, properties: ["NeverAcquirePrimary"] };
 
 describe("pinned TLC raw output", () => {
+  test("joined inventories reject cross-suite ID collisions and unbound mutation targets", () => {
+    expect(() => validateModelInventory(MODEL_PROFILES, MODEL_MUTATIONS)).not.toThrow();
+    const profile = MODEL_PROFILES[0]!, mutation = MODEL_MUTATIONS[0]!;
+    expect(() => validateModelInventory([...MODEL_PROFILES, { ...profile, suite: "publication" }], MODEL_MUTATIONS)).toThrow("globally unique");
+    expect(() => validateModelInventory(MODEL_PROFILES, [...MODEL_MUTATIONS, { ...mutation, id: profile.id }])).toThrow("globally unique");
+    expect(() => validateModelInventory(MODEL_PROFILES, [{ ...mutation, base: "missing-profile" }])).toThrow("missing base");
+    expect(() => validateModelInventory(MODEL_PROFILES, [{ ...mutation, property: "NotEnabled" }])).toThrow("not enabled");
+    expect(() => validateModelInventory([{ ...profile, actions: [profile.actions[0]!, profile.actions[0]!] }], [])).toThrow("duplicate action");
+  });
+
   test("reads real exhausted safety and reachable action/liveness counterexamples", () => {
     const safe = parseTlcOutput(safety, "Custody");
     expect(safe.success).toBe(true);
@@ -39,6 +50,51 @@ describe("pinned TLC raw output", () => {
     expect(unfair.violation).toEqual({ kind: "liveness", property: null });
     expect(unfair.temporalComplete).toBe(true);
     expect(unfair.loop).toBe("9: Stuttering");
+  });
+
+  test("reads actual single-variable record states and rejects missing assignments", () => {
+    const raw = fixture("one-variable.txt");
+    const parsed = parseTlcOutput(raw, "MailboxProtocol");
+    expect(parsed.violation).toEqual({ kind: "invariant", property: "NoRevival" });
+    expect(parsed.trace.length).toBeGreaterThan(1);
+    expect(parsed.trace[0]!.body.startsWith("s = [")).toBe(true);
+    expect(parsed.trace.at(-1)!.body).not.toBe(parsed.trace.at(-2)!.body);
+    expect(() => parseTlcOutput(raw.replace("s = [", "missing assignment ["), "MailboxProtocol")).toThrow("state body");
+    expect(() => parseTlcOutput(raw.replace("s = [", " = ["), "MailboxProtocol")).toThrow("state body");
+  });
+
+  test("pairs intermediate and complete checks across actual temporal branches", () => {
+    const raw = fixture("branched-temporal.txt"), parsed = parseTlcOutput(raw, "MailboxProtocol");
+    expect(parsed.success).toBe(true);
+    expect(parsed.temporalComplete).toBe(true);
+    expect(parsed.distinctStates).toBe(9280);
+    const temporal = { ...config, invariants: parsed.checkedInvariants, properties: ["SelectedReceiveReturns"] };
+    expect(admitTlcCommandOutput(completed(raw), "MailboxProtocol", temporal, success).temporalComplete).toBe(true);
+    for (const changed of [
+      remove(raw, 2212),
+      raw.replace("has 2 branches", "has 3 branches"),
+      raw.replace("Checking 2 branches", "Checking 1 branches"),
+      raw.replace("18560 total distinct", "18559 total distinct"),
+      raw.replace("10366 total distinct", "18562 total distinct"),
+      raw.replace("10366 total distinct", "1 total distinct"),
+      raw.replace("10366 total distinct", "0 total distinct"),
+      raw.replace("10366 total distinct", "10365 total distinct"),
+      raw.replace("for the complete state", "for the current state"),
+      remove(raw, 2267),
+    ]) expect(() => admitTlcCommandOutput(completed(changed), "MailboxProtocol", temporal, success)).toThrow();
+    const ends = raw.match(/@!@!@STARTMSG 2267:0 @!@!@\n[\s\S]*?@!@!@ENDMSG 2267 @!@!@\n/g)!;
+    expect(ends).toHaveLength(2);
+    expect(() => parseTlcOutput(raw.replace(ends[0]!, ""), "MailboxProtocol")).toThrow("overlapping");
+    expect(() => parseTlcOutput(raw.replace(ends[1]!, ""), "MailboxProtocol")).toThrow("before temporal completion");
+    expect(() => parseTlcOutput(raw.replace(ends[0]!, ends[0]! + ends[0]!), "MailboxProtocol")).toThrow("without matching start");
+    const final = /@!@!@STARTMSG 2192:0 @!@!@\nChecking 2 branches of temporal properties for the complete[^\n]+\n@!@!@ENDMSG 2192 @!@!@\n/.exec(raw)![0];
+    expect(() => parseTlcOutput(raw.replace(final, final + final), "MailboxProtocol")).toThrow("overlapping");
+    const late = raw.replace(final, "").replace(ends[1]!, "").replace("@!@!@STARTMSG 2186", final + ends[1]! + "@!@!@STARTMSG 2186");
+    expect(() => parseTlcOutput(late, "MailboxProtocol")).toThrow("after success");
+    const livenessEnd = liveness.match(/@!@!@STARTMSG 2267:0 @!@!@\n[\s\S]*?@!@!@ENDMSG 2267 @!@!@\n/)![0];
+    const early = liveness.replace(livenessEnd, "").replace("@!@!@STARTMSG 2116", livenessEnd + "@!@!@STARTMSG 2116");
+    expect(() => parseTlcOutput(early, "Custody")).toThrow("outside its complete temporal check");
+    expect(() => parseTlcOutput(liveness.replace("Checking temporal properties", "Checking 1 branches of temporal properties"), "Custody")).toThrow("branch prefix");
   });
 
   test.each([2262, 2186, 2187, 2190, 2193, 2199, 2774])("rejects missing mandatory frame %i", code => {

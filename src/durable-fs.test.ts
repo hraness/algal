@@ -293,7 +293,10 @@ test("a consumed-first interruption preserves dual markers and never silently re
   let reached = false;
   await expect(withDurableFsProbe(event => {
     if (event.step === "unlink-pending" && event.phase === "before") { reached = true; throw fault; }
-  }, () => service.receive(config.receive))).rejects.toBe(fault);
+  }, () => service.receive(config.receive))).rejects.toMatchObject({
+    code: fault.code, message: fault.message, uncertain: true,
+  });
+  expect(fault.uncertain).toBe(false);
   expect(reached).toBe(true);
   await expect(service.hasPending(config.receive)).rejects.toMatchObject({ code: "IO_FAILED" });
   for (const namespace of ["pending", "consumed"]) expect((await readdir(join(root, "mailboxes/uncertain", namespace)))).toContain(`${key.slice(7)}.json`);

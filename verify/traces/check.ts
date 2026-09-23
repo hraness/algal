@@ -236,6 +236,23 @@ function checkEvents(command: Command, row: Step): { mutating: boolean } {
 function unchangedExcept(before: Snapshot, after: Snapshot, allowed: Target[], step: number): void {
   for (const prior of before.files) if (!allowed.some(t => same(t, prior.target))) check(same(prior, file(after, prior.target)), "unrelated-state-preserved", step, `changed ${stableJson(prior.target)}`);
 }
+/** For this bounded filesystem-fault domain, the first parent-directory sync
+ * enters the publication helper after the public operation's mutation marker.
+ * Retained reads may sync too, so distinguish fresh publication from exact retry
+ * using independently observed prior claim/marker state. No raw error flag is an
+ * oracle for whether a message transferred. */
+function mailboxMutationAttempted(action: Action, row: Step, before: Snapshot): boolean {
+  let parent: string | undefined;
+  if (action.kind === "mailbox-revoke") parent = "capabilities";
+  if (action.kind === "mailbox-receive") parent = `mailboxes/${boxName(action.box)}/consumed`;
+  if (action.kind === "mailbox-send") {
+    const box = action.box, key = action.key;
+    if (!file(before, { kind: "mailbox-message", box, key }).exists) parent = `mailboxes/${boxName(box)}/messages`;
+    else if (!file(before, { kind: "mailbox-pending", box, key }).exists && !file(before, { kind: "mailbox-consumed", box, key }).exists)
+      parent = `mailboxes/${boxName(box)}/pending`;
+  }
+  return parent !== undefined && row.events.some(event => event.kind === "fs" && event.step === "dir-sync" && event.phase === "before" && event.path === parent);
+}
 /** Necessary constraints on injected failure histories. These do not enumerate
  * every allowed intermediate filesystem state or prove durable survival. */
 function checkFault(command: Command, row: Step, before: Snapshot, after: Snapshot, trace: Trace): void {
@@ -244,7 +261,7 @@ function checkFault(command: Command, row: Step, before: Snapshot, after: Snapsh
   if (fault.site === "application") {
     check(row.outcome.status === "error" && row.outcome.uncertain === (fault.point === "head-published"), "fault-api-uncertainty", row.id, "application checkpoint uncertainty was rewritten");
   } else if (!(a.kind === "application-create" || a.kind === "application-commit")) {
-    check(row.outcome.status === "error" && !row.outcome.uncertain, "fault-api-uncertainty", row.id, "non-application injected error acquired an invented API uncertainty flag");
+    check(row.outcome.status === "error" && row.outcome.uncertain === mailboxMutationAttempted(a, row, before), "fault-api-uncertainty", row.id, "injected error differs from its modeled mutation-attempt boundary");
   }
   const allowed: Target[] = [], target = targetOf(a);
   if (target && (a.kind === "store-put" || a.kind === "effect-put" || a.kind === "slot-set")) allowed.push(target);

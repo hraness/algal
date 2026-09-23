@@ -1,5 +1,10 @@
+import { PROCESS_PROFILES, PROCESS_MUTATIONS, PROCESS_LIVE_SOURCES } from "./process/profiles";
+import { LEASE_PROFILES, LEASE_MUTATIONS, LEASE_LIVE_SOURCES } from "./lease/profiles";
+import { JOURNAL_PROFILES, JOURNAL_MUTATIONS, JOURNAL_LIVE_SOURCES } from "./process-journal/profiles";
+import { MAILBOX_PROFILES, MAILBOX_MUTATIONS, MAILBOX_LIVE_SOURCES } from "./mailbox/profiles";
+
 /** Reviewed, finite inventories. These values select static models, never shell commands. */
-export type TlcSuite = "custody" | "publication";
+export type TlcSuite = "custody" | "publication" | "lease" | "process" | "mailbox";
 export type ModelProfile = {
   id: string; suite: TlcSuite; module: string; path: string;
   constants: Record<string, string>; specification: "Spec" | "FairSpec";
@@ -37,6 +42,7 @@ const mailbox = (id: string, initial: string, actions: ModelProfile["actions"]):
 });
 
 export const MODEL_PROFILES: ModelProfile[] = [
+  ...LEASE_PROFILES, ...JOURNAL_PROFILES, ...PROCESS_PROFILES, ...MAILBOX_PROFILES,
   custody("custody-stable", { actions: ["Select", "AcquirePrimary", "AcquireLegacy", "Check", "Admit", "Deny", "Reserve", "Publish", "Release", "Ack"] }),
   custody("custody-legacy", { legacy: true, actions: ["AcquireLegacy", "Publish"] }),
   custody("custody-prepared", { prepared: true, actions: ["AcquireLegacy", "Publish"] }),
@@ -53,6 +59,7 @@ export const MODEL_PROFILES: ModelProfile[] = [
 ];
 
 export const MODEL_MUTATIONS: ModelMutation[] = [
+  ...LEASE_MUTATIONS, ...JOURNAL_MUTATIONS, ...PROCESS_MUTATIONS, ...MAILBOX_MUTATIONS,
   { id: "custody-cutover", base: "custody-stable", mutation: "cutover", property: "NoSibling", kind: "invariant" },
   { id: "custody-skip-check", base: "custody-stable", mutation: "skip-check", property: "NoSibling", kind: "invariant" },
   { id: "custody-early-release", base: "custody-stable", mutation: "early-release", property: "CriticalSectionCustody", kind: "invariant" },
@@ -69,6 +76,9 @@ export const MODEL_MUTATIONS: ModelMutation[] = [
 ];
 
 export const LIVE_SOURCES: Record<TlcSuite, string[]> = {
+  lease: [...LEASE_LIVE_SOURCES, "verify/tla/lease/profiles.ts", "verify/tla/lease/SCOPE.md"],
+  process: [...JOURNAL_LIVE_SOURCES, ...PROCESS_LIVE_SOURCES, "verify/tla/process/profiles.ts", "verify/tla/process/SCOPE.md", "verify/tla/process-journal/profiles.ts", "verify/tla/process-journal/SCOPE.md"],
+  mailbox: [...MAILBOX_LIVE_SOURCES, "verify/tla/mailbox/profiles.ts", "verify/tla/mailbox/SCOPE.md"],
   custody: ["src/application.ts", "src/application-quota.ts", "src/host-state.ts", "crates/algal/src/application.rs", "crates/algal/src/application_quota.rs", "crates/algal/src/lease.rs", "spec/v1/application.md", "spec/v1/process.md"],
   publication: ["src/store.ts", "src/host-state.ts", "src/mailbox.ts", "src/durable-fs.ts", "crates/algal/src/store.rs", "crates/algal/src/lease.rs", "crates/algal/src/mailbox.rs", "crates/algal/src/durable_fs.rs", "spec/v1/organism.md", "spec/v1/application.md", "spec/v1/process.md"],
 };

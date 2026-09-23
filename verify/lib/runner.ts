@@ -265,6 +265,19 @@ async function executeSuite(root: string, suite: string): Promise<unknown> {
     const { runArtifact } = await import("../artifact/run");
     return runArtifact(root);
   }
+  if (suite === "process-conformance" || suite === "mailbox-conformance" || suite === "lease-conformance") {
+    const { runProtocolConformance } = await import("../protocols/run");
+    const protocol = suite === "process-conformance" ? "process" : suite === "mailbox-conformance" ? "mailbox" : "lease";
+    const binary = process.env.ALGAL_TRACE_TEST_BIN;
+    requireThat(binary !== undefined, `${suite} requires explicit ALGAL_TRACE_TEST_BIN`);
+    return runProtocolConformance(root, protocol, binary);
+  }
+  if (suite === "process-model" || suite === "mailbox-model" || suite === "lease-model") {
+    const { runTlcSuite, recheckTlcSuiteEvidence } = await import("./tlc");
+    const protocol = suite === "process-model" ? "process" : suite === "mailbox-model" ? "mailbox" : "lease";
+    const evidence = await runTlcSuite(root, protocol);
+    return { model: await recheckTlcSuiteEvidence(root, evidence, protocol), evidence };
+  }
   if (suite === "custody" || suite === "publication") {
     const { runTlcSuite, recheckTlcSuiteEvidence } = await import("./tlc");
     const evidence = await runTlcSuite(root, suite);

@@ -120,6 +120,16 @@ fields; nonjournal receipts record these failures as nonretryable. Deadlines
 also cover compaction calls, and cancellation is rechecked after asynchronous
 metadata admission immediately before dispatch.
 
+The built-in mailbox adapters set this host-only uncertainty marker on errors
+after the current send, receive or revoke attempts its first semantic publication,
+including a lock-release failure after a completed transfer. The public error
+code remains unchanged. In particular, a lost receive return must not become a
+settled error receipt that enables an `on:"fail"` branch: receive is a write with
+no retained caller operation/result identity. Its started entry remains unresolved
+and `recovery:"never"` blocks redispatch. Known pre-publication admission failures
+and empty-mailbox suspension remain settled errors; rejecting retained ambiguous
+evidence on a later call does not resolve the earlier call's completion.
+
 The reconstructed execution must consume the entire recorded prefix with the
 same bindings and settle every new effect. Only then may it publish the normal
 outcome linked to the same intent and generation. A crash before effect intent

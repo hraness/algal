@@ -1,16 +1,19 @@
 # Phase 09 semantic-core milestone
 
-Phase 09 remains in progress. The current milestone checks 224 authored model
-theorems across eleven domains, including recursive normalization and an actual
-quoted-string UTF-8 byte codec. It does not prove the whole production system or
-the complete canonical JSON byte codec correct.
+Phase 09 remains in progress. The admitted checkpoint checks 432 authored model
+theorems across seventeen domains, including recursive normalization, an actual
+quoted-string UTF-8 byte codec, recursive container layout and number-free
+canonical byte laws, exact finite binary64 values and ASCII decimal syntax,
+finite denotation injectivity and interior rounding intervals.
+It does not prove the whole production system or the
+complete canonical JSON byte codec correct.
 
 ## Executed evidence
 
-The [retained raw receipt](../../verify/results/1b11c082365f4ecb9f07f92152386a0640208595bbbed6d7bddd6c7d6fbf3793/core-model.json)
-has SHA256 `1b11c082365f4ecb9f07f92152386a0640208595bbbed6d7bddd6c7d6fbf3793`.
+The [retained raw receipt](../../verify/results/464d330ba5a2543569a11e27b34d76ddb897954ef4ddd10536f34762172863b2/core-model.json)
+has canonical metadata digest `464d330ba5a2543569a11e27b34d76ddb897954ef4ddd10536f34762172863b2`.
 It was independently re-admitted against its exact source and installed runtime
-bindings. It records 27 supervised commands, their actual output, exit status and
+bindings. It records 33 supervised commands, their actual output, exit status and
 observed process-group cleanup. Three intended rejection controls exit 1; they
 are required failures with matching diagnostics, not ignored build failures.
 
@@ -18,9 +21,9 @@ The adapter stages source into a fresh project and home, builds each module
 sequentially with the pinned Lake, then inspects the compiled environment through
 `Algal.Audit`. Every registered export must be a theorem declaration, and every
 transitive axiom must belong to the reviewed standard set. The actual union was
-`propext`, `Classical.choice`, and `Quot.sound`. The 224 declarations, their types
+`propext`, `Classical.choice`, and `Quot.sound`. The 432 declarations, their types
 and individual axiom sets are retained in the raw receipt. A separate environment
-enumeration audits all 842 theorem constants defined by those exact modules,
+enumeration audits all 1,414 theorem constants defined by those exact modules,
 including private and generated declarations. It uses defining-module identity,
 without namespace or internal-name filtering. The claimed inventory must be a
 subset with matching defining modules; these two counts are not interchangeable.
@@ -74,7 +77,7 @@ weakened to repair those resource failures.
 The native example was built with pinned Rust 1.97.1 using
 `cargo build --offline --locked -p algal --example verification_lean_vectors`.
 Its observed binary SHA256 is
-`921483559b5740eac93462b31133722b6381bc7b8f0e3c50eff6e5e534f23180`.
+`635bf386ffcda9f4c0a3f903cbff269577d109b319ae0f0c97f06889d3086490`.
 The caller's source/build correspondence remains a separate obligation; a binary
 hash alone does not establish it.
 
@@ -88,9 +91,27 @@ histories. Recursive normalization is sound, complete and idempotent with respec
 to an independently defined observable equivalence. The structural token codec
 is not complete ECMAScript JSON text. The quoted-string fragment now has a real
 UTF-8 byte inverse; its strict decoder need not accept every alternative legal
-JSON spelling. Full JSON delimiter/number composition, shortest decimal
-rendering/parsing, raw input admission and production refinement remain separate
-work. Schema/byte-size predicates and sane
+JSON spelling. ByteFraming proves prefix consumption over actual UTF-8 bytes.
+JsonLayout composes actual array/object delimiters, quoted keys and scalar
+strings; unconditional round-trip and canonical-equivalence theorems cover all
+number-free trees. The arbitrary-number theorems have an explicit unfulfilled
+NumberCodec law premise. Those laws alone do not establish decimal grammar,
+numeric denotation or shortest spelling. BinaryValue separately proves the exact
+signed dyadic/rational denotation of every admitted finite bit pattern, connected
+to the pinned Lean binary64 unpack model, with nonfinite rejection and signed-zero
+normalization. NumericInjectivity proves the converse for every finite value:
+equal exact dyadic or rational values have exactly equal normalized bits,
+including negative values and both signed zeros. RoundingInterval proves exact
+midpoint-nearest laws for sign-bit-zero interior finite values with two actual
+finite neighbors. Independent review rebuilt both new modules, checked nine
+extra boundary witnesses, and rejected wrong precision and parity variants.
+This interval slice excludes negative candidates, -0 and zero/overflow centers;
+it does not assign every rational a correctly rounded binary64 value.
+DecimalSyntax separately gives an executable ASCII numeral parser,
+spelling-preserving grammar round-trip and exact decimal rational meaning. These
+do not yet connect decimal conversion to binary64 rounding or shortest rendering.
+A production number instance, raw input
+admission and production refinement remain separate work. Schema/byte-size predicates and sane
 host costs remain explicit premises. Hash collision resistance, real host
 authority, physical persistence and external effects are outside this core.
 
@@ -103,6 +124,6 @@ required integration or release gate. Imported standard-library artifacts,
 the Lean kernel and audit extension, the OS and cooperating local checkout/tool
 installation are trusted. Whole-import `--trust=0` qualification is absent.
 
-Earlier 153- and 199-claim receipts remain retained as historical milestones.
+Earlier 153-, 199-, 224-, 279- and 372-claim receipts remain retained as historical milestones.
 Their source bindings were invalidated by later normalization, byte-codec and
 adapter changes; they are not substituted for the current gate.

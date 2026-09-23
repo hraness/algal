@@ -637,4 +637,112 @@ mod tests {
         std::fs::write(path, "{}").unwrap();
         assert!(Journal::open(root.path(), "worker", &key("intent"), &key("manifest")).is_err());
     }
+
+    #[test]
+    fn identical_requests_replay_their_ordinal_and_new_binding_applies_only_to_new_ordinal() {
+        let root = tempfile::tempdir().unwrap();
+        let mut live = journal(root.path());
+        let original = binding("same-request", "read");
+        let receipt = |output: &str| json!({"requestDigest":original.request_digest,"executor":"test","configurationDigest":original.configuration_digest,"output":output});
+        for output in ["first", "second"] {
+            assert!(live.before(original.clone()).unwrap().is_none());
+            live.after(&receipt(output)).unwrap();
+        }
+        live.finish().unwrap();
+        drop(live);
+        let mut restored = reopen(root.path());
+        restored.begin_recovery().unwrap();
+        assert!(restored.finish().is_err());
+        assert_eq!(
+            restored.before(original.clone()).unwrap(),
+            Some(receipt("first"))
+        );
+        assert!(restored.finish().is_err());
+        assert_eq!(
+            restored.before(original.clone()).unwrap(),
+            Some(receipt("second"))
+        );
+        restored.finish().unwrap();
+        let mut fresh = original.clone();
+        fresh.configuration_digest = key("new-unrecorded-configuration");
+        assert!(restored.before(fresh.clone()).unwrap().is_none());
+        let third = json!({"requestDigest":fresh.request_digest,"executor":"test","configurationDigest":fresh.configuration_digest,"output":"third"});
+        restored.after(&third).unwrap();
+        restored.finish().unwrap();
+        drop(restored);
+        let mut replay = reopen(root.path());
+        replay.begin_recovery().unwrap();
+        assert_eq!(
+            replay.before(original.clone()).unwrap(),
+            Some(receipt("first"))
+        );
+        assert_eq!(
+            replay.before(original.clone()).unwrap(),
+            Some(receipt("second"))
+        );
+        assert_eq!(replay.before(fresh).unwrap(), Some(third));
+        replay.finish().unwrap();
+    }
+
+    #[test]
+    fn lost_recovery_charge_return_remains_charged_through_real_maximum() {
+        use std::{cell::Cell, rc::Rc};
+        let root = tempfile::tempdir().unwrap();
+        let mut live =
+            Journal::create(root.path(), "worker", &key("intent"), &key("manifest"), 8).unwrap();
+        live.before(binding("read", "read")).unwrap();
+        drop(live);
+        let mut restored = reopen(root.path());
+        let directory = restored.directory.join("recoveries");
+        let charge = directory.join("000001.json");
+        let published = Rc::new(Cell::new(false));
+        let reached = Rc::new(Cell::new(false));
+        let seen = reached.clone();
+        let observed_directory = directory.clone();
+        let observed_charge = charge.clone();
+        let result = crate::durable_fs::with_probe(
+            Rc::new(move |event| {
+                if event.step == "link"
+                    && event.phase == "after"
+                    && event.target.as_ref() == Some(&observed_charge)
+                {
+                    published.set(true);
+                }
+                if published.get()
+                    && event.step == "dir-sync"
+                    && event.phase == "after"
+                    && event.path == observed_directory
+                {
+                    seen.set(true);
+                    return Err(Error::new("IO_FAILED", "lost recovery-charge return"));
+                }
+                Ok(())
+            }),
+            || restored.begin_recovery(),
+        );
+        assert_eq!(result.unwrap_err().message, "lost recovery-charge return");
+        assert!(reached.get());
+        assert!(!restored.recovering);
+        assert_eq!(
+            lease::read(&charge, 4096).unwrap(),
+            Some(
+                json!({"contract":"algal.process-recovery-attempt.v1","intent":key("intent"),"attempt":1})
+            )
+        );
+        // The process caller abandons this failed instance. No new dispatch
+        // occurs in the remaining admitted-but-abandoned recovery attempts.
+        drop(restored);
+        for attempt in 2..=8 {
+            let mut reopened = reopen(root.path());
+            reopened.begin_recovery().unwrap();
+            assert_eq!(reopened.recovery_count().unwrap(), attempt);
+        }
+        let mut exhausted = reopen(root.path());
+        assert!(exhausted.begin_recovery().is_err());
+        assert_eq!(exhausted.recovery_count().unwrap(), 8);
+        assert_eq!(exhausted.records[0].1.state, "started");
+        assert_eq!(exhausted.records[0].1.attempt, 0);
+        assert_eq!(std::fs::read_dir(directory).unwrap().count(), 8);
+        assert!(Journal::create(root.path(), "other", &key("other"), &key("manifest"), 9).is_err());
+    }
 }

@@ -568,17 +568,29 @@ impl MailboxService {
         owned.ok_or_else(|| Error::new("IO_FAILED", "mailbox lock was not acquired"))
     }
 
-    fn with_lock<T>(&self, name: &str, action: impl FnOnce() -> Result<T>) -> Result<T> {
+    fn with_lock<T>(&self, name: &str, action: impl FnOnce(&mut bool) -> Result<T>) -> Result<T> {
         let lock = self.lock(name)?;
-        let result = action();
+        let mut mutation_attempted = false;
+        let result = action(&mut mutation_attempted);
         let released = lock.release();
-        result.and_then(|value| released.map(|()| value))
+        result
+            .and_then(|value| released.map(|()| value))
+            .map_err(|error| {
+                // Publication may have taken effect before an error is returned;
+                // even a successful transfer still needs the release acknowledgment.
+                // The flag is host-only and leaves the wire code/message unchanged.
+                if mutation_attempted {
+                    error.uncertain()
+                } else {
+                    error
+                }
+            })
     }
 
     /// Host readiness observation; it never dequeues a delivery.
     pub fn has_pending(&self, handle: &str) -> Result<bool> {
         let (config, _) = self.resolve(handle, MAILBOX_RECEIVE)?;
-        self.with_lock(&config.name, || {
+        self.with_lock(&config.name, |_| {
             let (config, _) = self.resolve(handle, MAILBOX_RECEIVE)?;
             Ok(!self.unambiguous_pending(&config)?.is_empty())
         })
@@ -593,9 +605,10 @@ impl MailboxService {
             ));
         }
         let (config, _) = self.resolve(handle, &parsed.capability)?;
-        self.with_lock(&config.name, || {
+        self.with_lock(&config.name, |mutation_attempted| {
             let (_, mut record) = self.resolve(handle, &parsed.capability)?;
             record.revoked = true;
+            *mutation_attempted = true;
             write_replace(&self.record_path(handle)?, &serde_json::to_value(record)?)
         })
     }
@@ -633,12 +646,18 @@ impl MailboxService {
     pub fn send(&self, handle: &str, value: Value, idempotency_key: &str) -> Result<Value> {
         check_digest(idempotency_key)?;
         let (config, _) = self.resolve(handle, MAILBOX_SEND)?;
-        self.with_lock(&config.name, || {
-            self.send_locked(handle, value, idempotency_key)
+        self.with_lock(&config.name, |mutation_attempted| {
+            self.send_locked(handle, value, idempotency_key, mutation_attempted)
         })
     }
 
-    fn send_locked(&self, handle: &str, value: Value, idempotency_key: &str) -> Result<Value> {
+    fn send_locked(
+        &self,
+        handle: &str,
+        value: Value,
+        idempotency_key: &str,
+        mutation_attempted: &mut bool,
+    ) -> Result<Value> {
         let (config, _) = self.resolve(handle, MAILBOX_SEND)?;
         let bytes = canonical(&value)?.len();
         if bytes > config.max_message_bytes {
@@ -687,6 +706,7 @@ impl MailboxService {
                 idempotency_key: idempotency_key.to_owned(),
                 value,
             };
+            *mutation_attempted = true;
             if !write_new(&message_path, &serde_json::to_value(message)?)? {
                 validate_message(
                     &read_optional(&message_path)?
@@ -723,6 +743,7 @@ impl MailboxService {
             contract: MAILBOX_DELIVERY_CONTRACT.to_owned(),
             id: id.clone(),
         };
+        *mutation_attempted = true;
         if !write_new(&pending_path, &serde_json::to_value(delivery)?)? {
             let claimed = read_optional(&pending_path)?
                 .ok_or_else(|| Error::new("IO_FAILED", "mailbox send raced"))?;
@@ -738,7 +759,9 @@ impl MailboxService {
 
     pub fn receive(&self, handle: &str) -> Result<Value> {
         let (config, _) = self.resolve(handle, MAILBOX_RECEIVE)?;
-        self.with_lock(&config.name, || self.receive_locked(handle))
+        self.with_lock(&config.name, |mutation_attempted| {
+            self.receive_locked(handle, mutation_attempted)
+        })
     }
 
     fn delivery_markers(
@@ -793,7 +816,7 @@ impl MailboxService {
         Ok(pending)
     }
 
-    fn receive_locked(&self, handle: &str) -> Result<Value> {
+    fn receive_locked(&self, handle: &str, mutation_attempted: &mut bool) -> Result<Value> {
         let (config, _) = self.resolve(handle, MAILBOX_RECEIVE)?;
         for _ in 0..16 {
             let files = self.unambiguous_pending(&config)?;
@@ -845,6 +868,7 @@ impl MailboxService {
                     Ok(())
                 })?
                 .ok_or_else(|| Error::new("IO_FAILED", "mailbox message disappeared"))?;
+                *mutation_attempted = true;
                 write_new(
                     &self.consumed_dir(&config.name)?.join(file),
                     &json!({"contract":MAILBOX_DELIVERY_CONTRACT,"id":message.id}),

@@ -1,4 +1,4 @@
-# Bounded custody and publication models
+# Bounded durable protocol models
 
 These are finite abstract protocol checks, not implementation proofs. `run.ts`
 executes the pinned TLC 1.7.4 jar (engine 2.19) and task-local pinned Java. No
@@ -9,6 +9,9 @@ bindings and counterexamples are retained in the returned JSON evidence.
 ```sh
 bun verify/tla/run.ts --suite custody > /private/tmp/algal-custody-evidence.json
 bun verify/tla/run.ts --suite publication > /private/tmp/algal-publication-evidence.json
+bun verify/tla/run.ts --suite lease
+bun verify/tla/run.ts --suite process
+bun verify/tla/run.ts --suite mailbox
 bun test verify/tla/tlc.test.ts
 ```
 
@@ -135,3 +138,21 @@ Arbitrary imported/legacy dependency graphs are not retroactively qualified.
 The pinned output grammar is based on the upstream
 [message definitions](https://github.com/tlaplus/tlaplus/blob/v1.7.4/tlatools/org.lamport.tlatools/src/tlc2/output/EC.java)
 and [message formatter](https://github.com/tlaplus/tlaplus/blob/v1.7.4/tlatools/org.lamport.tlatools/src/tlc2/output/MP.java).
+
+## Process, journal, mailbox and retained-owner models
+
+The Phase05 inventories compose through reviewed assumptions, with separate
+[owner-lease scope](lease/SCOPE.md), [journal scope](process-journal/SCOPE.md),
+[process-generation scope](process/SCOPE.md) and [mailbox scope](mailbox/SCOPE.md).
+`process` runs both lifecycle and effect-journal modules. Each profile has its own
+explicit bounds and safety properties; fair progress configurations are separate.
+The joined inventory rejects globally reused profile/mutation IDs and mutations
+whose named property is absent from their base. Single-record and multivariable
+TLC state formats are both admitted under the same bounded framed-output checks.
+
+The corresponding `process-conformance`, `mailbox-conformance` and
+`lease-conformance` suites require an explicit freshly built native libtest
+artifact in `ALGAL_TRACE_TEST_BIN`. They execute named native cases and bounded
+Bun integration tests, retaining raw outcomes and source/artifact identity. These
+are sampled correspondence checks; separate full process/native CLI parity and
+repository gates remain required.
