@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runInventoryScenario } from "./run";
 import { sha256 } from "../coding-harness/memory-records";
+import { parseApplicationContention, parseInterappMessage } from "../../index";
+import { FileStore } from "../../src/store";
 
 const roots: string[] = [];
 afterEach(async () => { for (const path of roots.splice(0)) await rm(path, { recursive: true, force: true }); });
@@ -20,7 +22,22 @@ nativeTest("inventory inhabitants retain evidence through restart, contention an
   expect(evidence.probeEffects).toBe(4);
   expect(evidence.episodeEffects).toBe(2);
   expect(evidence.restartRedeliveries).toBe(0);
-  expect(evidence.contenders).toEqual({ accepted: 1, rejected: 1 });
+  expect(evidence.contenders.accepted).toBe(1);
+  expect(evidence.contenders.rejected).toBe(2);
+  expect(evidence.contenders.loserReasons).toEqual(["Stale application head", "Stale application head"]);
+  expect(evidence.contenders.winner).toMatch(/^sha256:[a-f0-9]{64}$/);
+  expect(evidence.message).toMatch(/^sha256:[a-f0-9]{64}$/);
+  // The retained records verify against the scenario CAS: the race kept all
+  // three attempted commands with exactly the committed winner, and the last
+  // settled delivery kept its sender/operation/route/recipient/payload bind.
+  const cas = new FileStore(join(root, "application"));
+  const contention = parseApplicationContention(await cas.getValue(evidence.contenders.record));
+  expect(contention.winner).toBe(evidence.contenders.winner);
+  expect(contention.attempts).toHaveLength(3);
+  expect(contention.attempts.filter(a => a.status === "committed")).toHaveLength(1);
+  const delivered = parseInterappMessage(await cas.getValue(evidence.message));
+  expect(delivered.application).toBe("inventory");
+  expect(delivered.route).toBe("proposals");
   expect(evidence.hostInvocations).toHaveLength(8);
   expect(new Set(evidence.hostInvocations.map(p => p.pid)).size).toBe(8);
   expect(evidence.hostInvocations.every(p => p.pid !== process.pid && p.exitCode === 0)).toBe(true);

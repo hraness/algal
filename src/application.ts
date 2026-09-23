@@ -10,6 +10,7 @@ import {
   type ApplicationRevision, type ApplicationState, type ApplicationTransition,
   type EpisodeBinding, type WorkIntent,
 } from "./application-contract";
+import { mintInterappMessage } from "./application-message";
 import { parseApplicationMigration, type ApplicationMigration } from "./application-migration";
 import { checkApplicationDrainBinding, checkApplicationDrainCoverage, parseApplicationDrain, type ApplicationDrain } from "./application-drain";
 import { verifyApplicationRestoration } from "./application-restoration";
@@ -565,6 +566,11 @@ export class ApplicationService {
       outcome = {status: "uncertain", reason: "Dispatcher did not establish settlement; explicit reconciliation required"};
     }
     const updated: ApplicationDispatch = {...record, status: outcome.status, result: outcome.status === "settled" ? await putApplicationRecord(this.store, outcome.result) : null, reason: outcome.status === "settled" ? null : outcome.reason};
+    // A settled delivery retains its verifiable `algal.interapp-message.v1`
+    // record before the outbox acknowledges settlement: a mint failure keeps
+    // the dispatch unacknowledged so reconciliation retries the mint, and an
+    // acknowledged dispatch can never lack the record a verifier expects.
+    await mintInterappMessage(this.store, updated, work);
     await withApplicationQuota(this.dir, record.application, [json(updated)], () => hostWrite(path, json(updated), APPLICATION_LIMITS.recordBytes, false));
     await this.options.fault?.("dispatch-settled");
     return updated;

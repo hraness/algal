@@ -161,13 +161,18 @@ pub fn parse_policy(input: &Value) -> Result<Policy> {
     })
 }
 
+/// One retained channel outcome: the settled dispatch identity and the
+/// message digest it carried — the receiver-side half of a delivery that
+/// `algal.interapp-message.v1` verification consults.
 #[derive(Clone, Debug, PartialEq)]
-struct ChannelDelivery {
-    identity: String,
-    message: String,
+pub struct ChannelDelivery {
+    pub identity: String,
+    pub message: String,
 }
 
-fn read_channel(channels_dir: &Path, route: &str) -> Result<Vec<ChannelDelivery>> {
+/// `readApplicationChannel` — load a route's retained `{identity, message}`
+/// outcomes under the channel byte bound; an absent channel reads empty.
+pub fn read_channel(channels_dir: &Path, route: &str) -> Result<Vec<ChannelDelivery>> {
     lease::directory(channels_dir)?;
     let raw = match lease::read(&channels_dir.join(format!("{route}.json")), 1_048_576)? {
         Some(raw) => raw,

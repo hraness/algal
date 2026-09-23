@@ -267,6 +267,34 @@ Legacy `algal.host-channel.v1` files lack sufficient identity evidence and are
 rejected unchanged pending an explicit migration. They are never reset or
 silently treated as receipts for a new dispatch.
 
+### Verifiable inter-application messages
+
+A settled `deliver` dispatch additionally retains `algal.interapp-message.v1`:
+
+```json
+{"contract":"algal.interapp-message.v1","application":"inventory","operation":"sha256:...","intent":"sha256:...","route":"proposals","to":"cap:mailbox-send:...","body":{"contract":"algal.application-investigation-request.v1"}}
+```
+
+The record binds the sender application, the committing operation, the exact
+`algal.application-intent.v1` digest, the declared route, the admitted
+`cap:mailbox-send:` recipient handle, and the payload body the intent's
+`message` reference resolves to. It is minted inside dispatch settlement only
+for a settled delivery whose retained result re-establishes the same message
+and idempotency key from CAS. A bound record that would exceed the
+application record bound mints nothing; the channel outcome still stands and
+verification reports the record absent. Reconciliation remints idempotently.
+
+`verifyInterappMessage` checks the CAS bindings: the named intent must be a
+`deliver` intent of this application, operation, and route, and the embedded
+body must be digest-identical to the intent's payload.
+`verifyInterappDelivery` adds the retained-dispatch bindings: the intent must
+occur in validated application history, its dispatch must be the settled
+delivery naming the recorded recipient, and the recomputed record must
+reproduce the reference. A supplied channel directory must also retain the
+matching `{identity, message}` outcome. The record proves that this exact
+delivery was bound and settled; it does not establish receipt by an external
+party or authority beyond the admitting policy.
+
 Default episode settlement includes an `outcome` digest in its immutable
 result. Following the dispatch's `result` and then `outcome` reaches the actual
 `algal.episode-outcome.v2` record and its `processState` digest. The record's
@@ -290,6 +318,33 @@ One application head serializes state selection. Independent reasoning and
 bounded evaluation can occur outside custody, but their results must pass the
 expected-head check before selection. Parallel model calls by themselves do
 not establish useful concurrency or improved performance.
+
+### Retained CAS-head contention
+
+That single-writer fence also produces durable evidence. A set of commands
+raced against one captured expected head is retained as
+`algal.application-contention.v1`:
+
+```json
+{"contract":"algal.application-contention.v1","parentState":"sha256:...","attempts":[{"command":"sha256:...","status":"committed"},{"command":"sha256:...","status":"rejected","reason":"Stale application head"}],"winner":"sha256:..."}
+```
+
+`produceApplicationContention` stores each command under CAS, then commits the
+attempts in input order against the live lifecycle. Exactly one must commit;
+every loser must take the exact stale-head rejection — any other failure
+aborts production without a record. The retained record carries 1–8 attempts
+sorted unique by command digest, exactly one `committed` attempt, and a
+`winner` naming that attempt's command. Rejection reasons are bounded.
+
+`verifyApplicationContention` re-derives the outcome without executing
+commits: the parent state must occur in history, the winner's committed state
+must be its direct child carrying the winner command's request digest, and
+every recorded rejection must be the failure the lifecycle's own check order
+still derives — a committed operation collides before the head check,
+otherwise the moved head fences the attempt as stale. A fabricated winner or
+an impossible loser fails. The record evidences what the fence decided for
+these exact commands; it does not establish physical simultaneity or
+linearizability across hosts.
 
 ## Retained goals
 
@@ -425,6 +480,7 @@ of observations.
 | Comparison results | 8 |
 | Proposal candidates / reasons | 8 / 16 |
 | Selection policy rows | 16 |
+| Contention attempts / reason bytes | 8 / 1,024 |
 | View history / action records | 128 / 32 |
 | Evidence queries / probes / sources / revisions / work | 32 rows per array, with separate truncation flags |
 | Named application namespace / aggregate allocation | 256 MiB per application / 1 GiB aggregate |
