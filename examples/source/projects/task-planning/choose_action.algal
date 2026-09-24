@@ -1,0 +1,7 @@
+program choose_action(status: text, score: json) -> text {
+  budget { max_agent_calls: 0 }
+
+  return if status == "done" { "archive" } else {
+    if score >= 10 { "work next" } else { "review later" }
+  }
+}

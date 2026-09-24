@@ -61,6 +61,23 @@ for (const variant of ["", ".empty"]) {
   generated.set(name, { manifestPath: projectManifestPath, fixtureBase, bundlePath, modules: inbox.modules,
     argsPath: `${fixtureBase}${variant}.args.json`, responsesPath: `${fixtureBase}${variant}.responses.json` });
 }
+// A larger pure project separates orchestration, domain policy, presentation,
+// and a helper called twice. Its complete closure must run without the source.
+const planner = await loadSourceProject(join(examples, "source/projects/task-planning/main.algal"));
+const plannerStore = new MemoryStore();
+for (const module of planner.modules) await plannerStore.putManifest(module);
+const plannerBundlePath = join(temporary, "source-task-planning.bundle.json");
+const plannerManifestPath = join(temporary, "source-task-planning.algal.json");
+await writeFile(plannerBundlePath, canonicalize(await packOrganism(planner.manifest, plannerStore) as unknown as JsonValue));
+await writeFile(plannerManifestPath, canonicalize(manifestToJson(planner.manifest)));
+const plannerFixtureBase = join(examples, "source/projects/task-planning/main");
+files.push("source-task-planning.algal.json");
+modules.push(planner.manifest);
+generated.set("source-task-planning", {
+  manifestPath: plannerManifestPath, fixtureBase: plannerFixtureBase,
+  bundlePath: plannerBundlePath, modules: planner.modules,
+  argsPath: `${plannerFixtureBase}.args.json`, responsesPath: `${plannerFixtureBase}.responses.json`,
+});
 // Branches around child calls need the same isolation in both runtimes. Cover
 // the generated parameterless wrapper and nested list results through a merge.
 for (const [kind, child, source] of [

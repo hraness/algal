@@ -1,0 +1,8 @@
+// Numeric operators reject non-numeric values. Callers supply ordered bounds.
+program clamp(value: json, minimum: json, maximum: json) -> json {
+  budget { max_agent_calls: 0 }
+
+  return if value < minimum { minimum } else {
+    if value > maximum { maximum } else { value }
+  }
+}

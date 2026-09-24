@@ -128,16 +128,23 @@ boundaries:
 Without these invariants, self-evolution becomes a self-modifying virus
 problem. With them, it becomes a search-and-selection problem.
 
-## What is not here yet
+## Status and limits
 
-- Multi-habitat messaging and consensus.
-- Durable organism lifetimes (organisms are stateless; only slots persist).
-- A governance organism that can promote candidates by itself.
-- Economic or tokenized selection mechanisms.
-- A public name system for organism digests.
+An individual organism is an ALGAL program whose run can complete, fail, or
+suspend. The [process supervisor](../spec/v1/process.md) adds named durable
+execution, restart, and mailbox wakeups. The
+[application lifecycle](../spec/v1/application.md) adds persistent revision and
+memory state, revision-pinned episodes, proposal evaluation, activation, and
+schema migration. Host policy decides which changes it accepts.
 
-These are later layers. The current contract already supports the core loop:
-generate, admit, run, measure, select.
+Applications can exchange verified messages through configured routes. This
+does not provide distributed consensus or an unrestricted network connecting
+independent habitats. A public name system for program digests and automatic
+installation of proposed host functions are also outside the contract.
+
+The [larger-program guide](scaling-programs.md) explains local program reuse,
+dependency identities, application state ownership, and proposed standard
+library layers.
 
 ## Working example: `examples/habitat.algal.json`
 

@@ -9,6 +9,15 @@ wire constant (`0.1.0`) is independent of these package versions.
 
 ## Unreleased
 
+- Application evaluation can opt into `composition: "closed-pure-v1"` to
+  check and run stored pure subprograms in both runtimes. Existing policies
+  keep their flat-program behavior; generated proposals remain flat.
+- Browser Tasks shares verification within unchanged read phases while
+  rereading published records after changes. Adds synthetic performance
+  diagnostics and regressions for missing evidence at an unchanged head.
+- A six-file task planner demonstrates pure code reuse, dependency change
+  propagation, portable bundles, and separate policy/presentation modules.
+  The larger-program guide covers architecture and standard-library design.
 - Docs: `docs/vision.md` links to the Hraness essay “The thread through
   hraness”, which places ALGAL among the other Hraness projects.
 - Docs: `docs/vision.md` states the project thesis (software that
