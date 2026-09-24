@@ -1,0 +1,12 @@
+import score_task from "./score_task.algal"
+import choose_action from "./choose_action.algal"
+import present_task from "./present_task.algal"
+
+program plan_task(task: json, weights: json) -> json {
+  budget { max_agent_calls: 0, max_depth: 2 }
+
+  let score = call score_task using { task: task, weights: weights }
+  let action = call choose_action using { status: task.status, score: score }
+  let view = call present_task using { title: task.title, action: action }
+  return { task: task, score: score, action: action, view: view }
+}

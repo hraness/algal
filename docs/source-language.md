@@ -375,6 +375,17 @@ apply. A reused dependency is compiled once per normalized source path, then the
 manifest closure is deduplicated by content digest. Calling a child multiple
 times still consumes work for each execution.
 
+### Structure a larger project
+
+The [six-file task planner](../examples/source/projects/task-planning/README.md)
+separates orchestration, scoring, action policy, and display data. Its score
+program calls one numeric helper twice. Tests show which dependent program
+digests change when that helper changes, and verify that an earlier bundle
+still runs with its original behavior. It uses no model or tool calls.
+
+See [building larger programs](scaling-programs.md) for module boundaries,
+library design, application evaluation, and the current project limits.
+
 ## Budgets and compiler bounds
 
 `max_agent_calls` must be explicitly declared, including zero for pure work.

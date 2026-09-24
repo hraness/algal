@@ -158,6 +158,42 @@ describe("browser task controller", () => {
     await expect(BrowserTriageController.importBundle(destination, transfer, "task-fork")).rejects.toThrow("fresh");
     expect((await imported.capture()).head).toBe(fork.head);
   });
+  test("each unchanged-head operation rereads receipt aliases instead of reusing earlier proofs", async () => {
+    for (const kind of ["getReceipt", "getValue"] as const) {
+      const f = fixture(), initial = await f.controller.initialize();
+      const transfer = await f.controller.exportBundle(), receipt = transfer.records.find(row => row.kind === "receipt")!.reference;
+      expect((await f.controller.capture()).head).toBe(initial.head);
+      f.hidden.add(`${kind}:${receipt}`);
+      await expect(f.controller.capture()).rejects.toThrow();
+      await expect(f.controller.act(initial.head, { kind: "add", task: task() })).rejects.toThrow();
+      expect(f.forbiddenWrites).toBe(0);
+      expect((await f.storage.readHead(f.controller.application) as { state: Digest }).state).toBe(initial.head);
+    }
+  });
+  test("the result capture rereads published evidence after journal settlement", async () => {
+    const source = new MemoryStore(); let armed = false, hideReceipts = false, forbiddenWrites = 0;
+    const store = new Proxy(source, {
+      get(target, key) {
+        if (key === "getReceipt") return async (ref: Digest) => hideReceipts ? undefined : target.getReceipt(ref);
+        if (key === "setSlot") return async (name: string, value: JsonValue) => {
+          await target.setSlot(name, value);
+          if (armed && name.startsWith("triage-journal-") && (value as { pending?: unknown }).pending === null) { armed = false; hideReceipts = true; }
+        };
+        if (["putValue", "putReceipt", "putManifest"].includes(String(key))) return async (value: never) => {
+          if (hideReceipts) { forbiddenWrites++; throw new Error("Attempted to recreate newly missing evidence"); }
+          return target[key as "putValue"](value);
+        };
+        const value = Reflect.get(target, key); return typeof value === "function" ? value.bind(target) : value;
+      },
+    }) as Store;
+    const storage = new MemoryApplicationStorage(store), controller = new BrowserTriageController(storage), initial = await controller.initialize(); armed = true;
+    await expect(controller.act(initial.head, { kind: "add", task: task() })).rejects.toThrow();
+    expect(forbiddenWrites).toBe(0);
+    expect((await storage.readHead(controller.application) as { state: Digest }).state).not.toBe(initial.head);
+    hideReceipts = false;
+    const recovered = await controller.recover();
+    expect(recovered.tasks).toEqual([task()]); expect(recovered.history).toHaveLength(2); expect(recovered.recovery).toBeNull();
+  });
   test("interrupted fork copying cannot reopen as an empty application", async () => {
     const { controller } = fixture(), initial = await controller.initialize();
     await controller.act(initial.head, { kind: "add", task: task() });

@@ -133,14 +133,14 @@ export class BrowserTriageController {
       } else if (origin.source === null || (await this.core.readTransfer(reference(origin.source))).head !== r.source) throw new Error("Saved fork differs from its source");
     }
   }
-  private checkedJournal(): Promise<CheckedJournal> {
-    if (!this.scope) return this.checkJournal();
-    return this.scope.checked ??= this.checkJournal();
+  private checkedJournal(source: TriageCore = this.core): Promise<CheckedJournal> {
+    if (!this.scope) return this.checkJournal(source);
+    return this.scope.checked ??= this.checkJournal(source);
   }
-  private async checkJournal(): Promise<CheckedJournal> {
+  private async checkJournal(source: TriageCore = this.core): Promise<CheckedJournal> {
     const j = await this.readJournal();
-    await this.core.verifySourceClosure();
-    const history = await this.core.service.history(this.application), publications = new Map<Digest, Prepared>(), evaluations: Digest[] = [];
+    await source.verifySourceClosure();
+    const history = await source.service.history(this.application), publications = new Map<Digest, Prepared>(), evaluations: Digest[] = [];
     for (const ref of j.completed) {
       const p = await this.readPrepared(ref);
       if ((p.request.kind === "create" || p.request.kind === "fork") && !same(p.request, j.initialization)) throw new Error("Saved task initialization changed");
@@ -172,17 +172,20 @@ export class BrowserTriageController {
     for (const ref of j.evaluations) candidates.push(await this.inspectEvaluation(ref));
     return { journal: j, history, candidates };
   }
-  private async exact(expected: Digest): Promise<Journal> {
-    const checked = await this.checkedJournal();
+  private async exact(expected: Digest, source: TriageCore = this.core): Promise<Journal> {
+    const checked = await this.checkedJournal(source);
     if (checked.journal.pending !== null) throw new Error("A saved task operation needs recovery before another change");
     if (checked.history.at(-1)?.digest !== reference(expected)) throw new Error("Stale task head; reload and explicitly rebase your change");
     return checked.journal;
   }
   private async captureOwned(): Promise<BrowserTriageCapture> {
-    const { journal: j, history, candidates } = await this.checkedJournal();
-    const { current, sessionState } = await this.core.withVerifiedSource(async source => {
+    // Journal checking and rendering share one newly read private snapshot.
+    // Publication has invalidated the old journal proof; the simulated target
+    // is never reused as evidence that the live publication succeeded.
+    const { journal: j, history, candidates, current, sessionState } = await this.core.withVerifiedSource(async source => {
+      const checked = await this.checkedJournal(source);
       const sessionState = await source.loadSession(this.sessionId);
-      return { sessionState, current: await source.capture(sessionState.record?.session ?? DEFAULT_SESSION) };
+      return { ...checked, sessionState, current: await source.capture(sessionState.record?.session ?? DEFAULT_SESSION) };
     });
     const recovery = j.pending === null ? null : await this.readPrepared(j.pending);
     return { ...current, sessionState, pending: candidates.filter(c => c.evaluation.expectedHead === current.head).at(-1) ?? null, recovery: recovery ? { reference: j.pending!, kind: recovery.request.kind, expectedHead: recovery.expectedHead } : null, remainingEvaluations: MAX_EVALUATIONS - j.evaluations.length, history: history.map(row => ({ head: row.digest, sequence: row.state.sequence, kind: row.transition.kind })) };
@@ -239,11 +242,13 @@ export class BrowserTriageController {
   act(expectedHead: Digest, input: Action): Promise<BrowserTriageCapture> {
     const value: Request = { kind: "act", expectedHead: reference(expectedHead), action: parseAction(input) };
     return this.owned(async () => {
-      const j = await this.exact(value.expectedHead), session = await this.core.loadSession(this.sessionId);
-      if (["add", "edit"].includes(value.action.kind) && session.status === "stale") throw new Error("Rebase the saved draft explicitly before submission");
-      const target = await this.core.withVerifiedSource(async simulation => {
+      // The unchanged source, saved draft, and simulation use one proof scope.
+      // prepare/recovery still reread and verify the durable source and target.
+      const { j, target } = await this.core.withVerifiedSource(async simulation => {
+        const j = await this.exact(value.expectedHead, simulation), session = await simulation.loadSession(this.sessionId);
+        if (["add", "edit"].includes(value.action.kind) && session.status === "stale") throw new Error("Rebase the saved draft explicitly before submission");
         await simulation.command({ contract: "algal.triage-command.v1", expectedHead: value.expectedHead, operation: this.operation(value), action: value.action });
-        return simulation.export();
+        return { j, target: await simulation.export() };
       });
       await this.prepare(j, value, target, null); await this.recoverOwned(); return this.captureOwned();
     });

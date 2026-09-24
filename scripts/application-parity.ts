@@ -958,6 +958,47 @@ async function checkGoalAndQuotaParity(): Promise<void> {
     equal(`${name} leaves no head`, await p.lifecycle.inspect(APP), await runNative(app("inspect", APP), p.native));
     checked++;
   };
+  // A versioned policy evaluates a locally pinned, entirely pure dependency
+  // closure. Calls, iteration, replay and activation retain identical bytes.
+  {
+    const p = await pair("pure-composition");
+    const storeManifest = async (value: JsonValue) => {
+      const manifest = parseOrganismManifest(value);
+      const ref = await p.lifecycle.store.putManifest(manifest);
+      if (await p.nativeStore.putManifest(manifest) !== ref) throw new Error("Composed manifest storage differs");
+      return ref;
+    };
+    const wrap = async (child: Digest, kind: "organism" | "repeat" | "each") => {
+      const many = kind === "each";
+      return storeManifest({
+        contract: "algal.organism.v1", key: `organism:parity-pure-${kind}`, name: `parity pure ${kind}`, interface: evalInterface,
+        cells: [
+          { id: "src", kind: "input", outputs: { value: "json" } },
+          ...(many ? [{ id: "list", kind: "expr", inputs: { value: "json" }, expr: { contract: "algal.expr.v1", program: ["list", ["get", "value"]] }, output: { kind: "json", schema: { type: "array" } } }] : []),
+          { id: "child", kind, manifest: child, ...(kind === "repeat" ? { maxRounds: 2 } : many ? { over: "q", maxItems: 2 } : {}) },
+          { id: "out", kind: "expr", inputs: { value: "json" }, expr: { contract: "algal.expr.v1", program: many ? ["nth", ["get", "value"], 0] : ["get", "value"] }, output: { kind: "json", schema: { type: "string" } } },
+        ],
+        edges: [
+          ...(many ? [{ from: { cell: "src", port: "value" }, to: { cell: "list", port: "value" } }] : []),
+          { from: { cell: many ? "list" : "src", port: many ? "out" : "value" }, to: { cell: "child", port: "q" } },
+          { from: { cell: "child", port: "answer" }, to: { cell: "out", port: "value" } },
+        ],
+      });
+    };
+    const each = await wrap(manifestEvalRef, "each"), repeat = await wrap(each, "repeat"), composed = await wrap(repeat, "organism");
+    const compositionPolicy = await p.put({ ...values.evaluationPolicy, composition: "closed-pure-v1" });
+    const parentRevision = await p.put({ ...revision, evaluationPolicy: compositionPolicy });
+    const created = await create(p, parentRevision, "composition-create");
+    const candidateRevision = await p.put({ ...revision, parent: parentRevision, evaluationPolicy: compositionPolicy, entrypoints: revision.entrypoints.map(entry => ({ ...entry, manifest: composed })) });
+    const request = { contract: "algal.application-evaluation-request.v1", parentState: created.digest, candidateRevision, entrypoint: "run", cases: digests.evalCases, scorer: digests.evalScorer, policy: compositionPolicy };
+    const evaluated = await evaluateApplicationRevision(p.lifecycle.store, request, { fns: builtinRegistry() });
+    if (evaluated.evaluation.verdict.status !== "accepted") throw new Error("Pure composition did not preserve the improving result");
+    equal("pure composition evaluation", { evaluation: evaluated.evaluationRef, verdict: evaluated.evaluation.verdict }, await runNative(app("evaluate", await dynamic("composition-evaluate", request)), p.native));
+    const verified = await verifyApplicationEvaluation(p.lifecycle.store, evaluated.evaluationRef, created.digest, { fns: builtinRegistry() });
+    equal("pure composition verification", { ok: true, verdict: verified.verdict }, await runNative(app("verify-evaluation", await dynamic("composition-verify", { evaluation: evaluated.evaluationRef, expectedState: created.digest })), p.native));
+    const activation = { application: APP, operation: op("composition-activate"), kind: "activate", expectedHead: created.digest, revision: candidateRevision, memory: created.state.memory, intents: [], evidence: [evaluated.evaluationRef], causedBy: null };
+    equal("pure composition activation", shape(await p.lifecycle.commit(activation)), await runNative(app("commit", await dynamic("composition-activate", activation)), p.native));
+  }
   // Restoration requires explicit host authority, creates a forward child,
   // preserves current memory and replays exactly on both independent stores.
   {

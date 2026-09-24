@@ -114,6 +114,32 @@ the produced evidence to a deployment context. The label is part of the frozen
 request identity, so environment-attributed and unattributed measurements are
 distinct records and can never be silently conflated.
 
+The evaluation policy may opt into static program reuse with
+`composition: "closed-pure-v1"`. Without this field, evaluation retains the
+original rule: each entrypoint contains only `input`, `const`, builtin `fn`
+and `expr` cells. Absent fields remain absent from canonical policy bytes.
+No other composition value is accepted.
+
+With this mode, evaluation also permits `organism`, `each` and `repeat`
+cells whose entire digest-pinned child closure is already in the local store.
+Before running either candidate, both complete graphs are compiled and every
+descendant is checked, including inactive branches. Every leaf must still be
+one of the original pure cell kinds. A transport reference (`via`) is rejected
+even when its child is already local; evaluation performs no module fetches
+and attaches no external tools. TypeScript requires the unchanged builtin
+function registry, and native execution uses its fixed builtin registry.
+Graph compilation retains its expanded-instance, cell, edge, byte and depth
+limits. Child execution shares the root program's work, step and depth
+allowance; a helper does not receive another allowance. Frozen cases,
+compatibility, strict improvement and replay requirements remain unchanged.
+
+This mode applies only to evaluation and verification of evaluation evidence.
+Proposal generation, generated candidate checks, migration and restoration
+keep their existing rules. Generated dependency bundles need a separately
+specified, request-bound provenance mechanism before proposals can introduce
+composed candidates. Reusable helpers can be installed as explicit immutable
+manifests and evaluated under this mode in the meantime.
+
 Sealed research evaluation is an opt-in alternative to foundry evidence for
 strategy-only revisions. A revision selects it with the
 `sealed-research-evaluation.v1` runtime profile and an evaluation policy that

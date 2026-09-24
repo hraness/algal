@@ -1,0 +1,9 @@
+import clamp from "./lib/clamp.algal"
+
+program score_task(task: json, weights: json) -> json {
+  budget { max_agent_calls: 0, max_depth: 1 }
+
+  let urgency = call clamp using { value: task.urgency, minimum: 0, maximum: 5 }
+  let impact = call clamp using { value: task.impact, minimum: 0, maximum: 5 }
+  return urgency * weights.urgency + impact * weights.impact
+}
