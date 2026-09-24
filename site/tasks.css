@@ -1,8 +1,8 @@
 .tasks-page .living-intro h1 { font-size: clamp(3.3rem, 6.2vw, 5.7rem); }
 .tasks-page [hidden] { display: none !important; }
 .tasks-page [data-error] { color: var(--destructive, #a43a34); }
-.tasks-page label { display: grid; gap: .45rem; min-width: 0; font: .68rem/1.6 var(--mono); color: var(--muted); }
-.tasks-page input, .tasks-page select { box-sizing: border-box; width: 100%; min-height: 2.65rem; border: 1px solid var(--line); border-radius: 4px; background: var(--white); color: var(--ink); padding: .55rem .65rem; font: .82rem/1.5 var(--sans); }
+.tasks-page label { display: grid; gap: .45rem; min-width: 0; font: .875rem/1.6 var(--mono); color: var(--muted); }
+.tasks-page input, .tasks-page select { box-sizing: border-box; width: 100%; min-height: 2.75rem; border: 1px solid transparent; border-radius: .65rem; background: var(--white); color: var(--ink); box-shadow: var(--elevation-inset); padding: .6rem .75rem; font: 1rem/1.5 var(--sans); }
 .tasks-page input:focus-visible, .tasks-page select:focus-visible, .tasks-page button:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
 .tasks-page button:disabled { opacity: .48; cursor: default; }
 .tasks-status { margin: 0; padding: 0 1.8rem; }
@@ -16,28 +16,32 @@
 .tasks-filters > label:first-child { flex: 0 0 8.5rem; }
 .tasks-query { flex: 1 1 10rem; }
 .tasks-filters button { min-height: 2.65rem; }
-.tasks-group-heading { margin: 1.5rem 0 .25rem; color: var(--muted); font: .65rem/1.6 var(--mono); text-transform: uppercase; letter-spacing: .09em; overflow-wrap: anywhere; }
+.tasks-group-heading { margin: 1.5rem 0 .25rem; color: var(--muted); font: .8125rem/1.6 var(--mono); text-transform: uppercase; letter-spacing: .09em; overflow-wrap: anywhere; }
 .tasks-row { display: flex; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--line); padding: 1rem 0; min-width: 0; }
 .tasks-row-copy { min-width: 0; }
-.tasks-row h3 { margin: 0; font: .9rem/1.5 var(--sans); color: var(--ink); overflow-wrap: anywhere; }
-.tasks-row p { margin: .25rem 0 0; font: .65rem/1.6 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.tasks-row h3 { margin: 0; font: 1rem/1.5 var(--sans); color: var(--ink); overflow-wrap: anywhere; }
+.tasks-row p { margin: .25rem 0 0; font: .8125rem/1.6 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
 .tasks-row[data-status="done"] h3 { color: var(--muted); text-decoration: line-through; }
 .tasks-row-actions { display: flex; gap: .55rem; flex-wrap: wrap; justify-content: end; align-items: start; flex: 0 0 auto; max-width: 45%; }
 .tasks-row-actions button { min-height: 2rem; }
-.tasks-empty { padding: 1.5rem 0; font-size: .85rem; color: var(--muted); }
-.tasks-stale { margin: 0 1.8rem 1rem; border: 1px solid var(--line); border-left: 3px solid var(--green); padding: 1rem; background: var(--white); font-size: .82rem; }
+.tasks-empty { padding: 1.5rem 0; font-size: 1rem; color: var(--muted); }
+.tasks-stale { margin: 0 1.8rem 1rem; border: 1px solid var(--line); border-left: 3px solid var(--green); padding: 1rem; background: var(--white); font-size: .9375rem; }
 .tasks-stale p { margin: .5rem 0 .9rem; line-height: 1.6; }
-.tasks-stale pre { white-space: pre-wrap; overflow-wrap: anywhere; font: .7rem/1.6 var(--mono); }
+.tasks-stale pre { white-space: pre-wrap; overflow-wrap: anywhere; font: .875rem/1.6 var(--mono); }
 .tasks-workflow { border-top: 1px solid var(--line); padding: 1.8rem; }
-.tasks-section-intro p { max-width: 50rem; font-size: .85rem; line-height: 1.7; color: var(--muted); margin-bottom: 1.25rem; }
+.tasks-section-intro p { max-width: 50rem; font-size: 1rem; line-height: 1.7; color: var(--muted); margin-bottom: 1.25rem; }
 .tasks-workflow-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; align-items: end; }
 .tasks-workflow-fields button { justify-self: start; grid-column: 1 / -1; }
-.tasks-candidate { padding: 1.3rem; margin-top: 1.5rem; background: var(--white); border: 1px solid var(--line); border-radius: 4px; }
+.tasks-candidate { padding: 1.3rem; margin-top: 1.5rem; background: var(--white); border: 1px solid transparent; border-radius: .875rem; box-shadow: var(--elevation-low); }
 .tasks-candidate h3 { margin: 0; font: 1.15rem/1.5 var(--serif); }
-.tasks-candidate > p { font-size: .8rem; line-height: 1.7; color: var(--muted); }
-.tasks-checks { padding-left: 1.2rem; font: .7rem/1.8 var(--mono); margin-block: 1rem; }
+.tasks-candidate > p { font-size: .9375rem; line-height: 1.7; color: var(--muted); }
+.tasks-checks { padding-left: 1.2rem; font: .875rem/1.8 var(--mono); margin-block: 1rem; }
 .tasks-checks [data-passed="false"] { color: var(--destructive, #a43a34); }
 .tasks-page .living-history-copy strong { overflow-wrap: anywhere; }
 @media (max-width: 900px) { .tasks-workflow-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tasks-row { flex-direction: column; } .tasks-row-actions { justify-content: start; max-width: none; } }
 @media (max-width: 760px) { .tasks-workspace { grid-template-columns: 1fr; } .tasks-editor { border-left: 0; border-top: 1px solid var(--line); } .tasks-list-panel, .tasks-editor, .tasks-workflow { padding: 1.2rem; } .tasks-stale { margin-inline: 1.2rem; } .tasks-status { padding-inline: 1.2rem; } .tasks-page .living-intro h1 { font-size: 3.3rem; } }
 @media (max-width: 420px) { .tasks-workflow-fields { grid-template-columns: 1fr; } }
+
+@media (forced-colors: active) {
+  .tasks-page input, .tasks-page select, .tasks-candidate { border-color: CanvasText; box-shadow: none; }
+}
