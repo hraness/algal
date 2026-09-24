@@ -11,7 +11,7 @@ import {
 } from "./contract";
 import { asDigest, digestCanonical, type Digest } from "./digest";
 import { AlgalError } from "./errors";
-import type { Store } from "./store";
+import type { Store } from "./store-contract";
 import { asObject, reqField, type JsonValue } from "./values";
 
 export const BUNDLE_CONTRACT = "algal.bundle.v1" as const;

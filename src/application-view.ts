@@ -1,3 +1,4 @@
+import { utf8Length } from "./utf8";
 /** Pure, bounded projection of one captured application state. The renderer
  * receives data and fenced actions; it never probes, dispatches, or resolves a
  * mutable latest pointer. */
@@ -7,9 +8,9 @@ import { parseApplicationViewEvidence, type ApplicationViewEvidence } from "./ap
 export { collectApplicationViewEvidence, parseApplicationViewEvidence } from "./application-view-evidence";
 export type { ApplicationViewEvidence } from "./application-view-evidence";
 import type { MemoryStatus } from "./application-memory";
-import type { ApplicationSnapshot } from "./application";
+import type { ApplicationSnapshot } from "./application-core";
 import type { Digest } from "./digest";
-import type { Store } from "./store";
+import type { Store } from "./store-contract";
 import { canonicalize } from "./values";
 
 export const APPLICATION_VIEW_WIDGETS = ["procedures", "memory", "history", "investigations", "goals"] as const;
@@ -52,7 +53,7 @@ export type ApplicationView = {
 };
 
 const text = (value: unknown, max: number): string => {
-  if (typeof value !== "string" || value.length === 0 || Buffer.byteLength(value) > max || value.includes("\0")) throw new Error("Invalid view text");
+  if (typeof value !== "string" || value.length === 0 || utf8Length(value) > max || value.includes("\0")) throw new Error("Invalid view text");
   return value;
 };
 const widgets = (value: unknown): ApplicationViewWidget[] => {

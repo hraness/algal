@@ -25,7 +25,7 @@ import {
 } from "./expr";
 import type { FnRegistry } from "./registry";
 import { parseRunReceipt } from "./run";
-import type { Store } from "./store";
+import type { Store } from "./store-contract";
 import type { ToolRegistry } from "./tools";
 import { verifyReceipt } from "./verify";
 import { canonicalize, type JsonObject, type JsonValue } from "./values";

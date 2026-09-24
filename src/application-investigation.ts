@@ -9,7 +9,7 @@ import {
   applicationId, applicationList, applicationObject, applicationRef, applicationRefs, applicationTag,
   getApplicationRecord, parseApplicationRevision, parseApplicationState, putApplicationRecord,
 } from "./application-contract";
-import type { ApplicationService, ApplicationSnapshot } from "./application";
+import type { ApplicationCore, ApplicationSnapshot } from "./application-core";
 import {
   parseMemoryDerivation, parseMemoryQuery,
   type ApplicationMemoryService, type MemoryStatus,
@@ -58,7 +58,7 @@ export type ScheduledInvestigations = {
 };
 
 export async function scheduleInvestigations(
-  lifecycle: ApplicationService,
+  lifecycle: ApplicationCore,
   memory: ApplicationMemoryService,
   input: ScheduleInvestigationsInput,
 ): Promise<ScheduledInvestigations> {
@@ -123,7 +123,7 @@ export type RequestExecutionInput = {
 };
 
 export async function requestExecution(
-  lifecycle: ApplicationService,
+  lifecycle: ApplicationCore,
   input: RequestExecutionInput,
 ): Promise<ApplicationSnapshot> {
   const application = applicationId(input.application);

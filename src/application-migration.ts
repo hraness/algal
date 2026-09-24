@@ -24,7 +24,7 @@ import type { Executor } from "./effects";
 import { builtinRegistry, isBuiltinRegistry, type FnRegistry } from "./registry";
 import { canonicalize, type JsonValue } from "./values";
 import { manifestToJson, type OrganismManifest } from "./contract";
-import type { Store } from "./store";
+import type { Store } from "./store-contract";
 import { verifyReceipt } from "./verify";
 
 export type ApplicationMigration = {

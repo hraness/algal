@@ -6,18 +6,13 @@
 // fails the cell like any other miss.
 
 import { join } from "node:path";
-import { parseBundle, type Bundle } from "./bundle";
+import { parseBundle } from "./bundle";
 import { BOUNDS } from "./contract";
-import type { Digest } from "./digest";
 import { AlgalError } from "./errors";
 import { boundedBytes, boundedFileBytes } from "./io";
 
-export interface Transport {
-  id: string;
-  /** The closure rooted at `root`, or null when the transport doesn't
-   * hold it. Implementations bound their own latency and size. */
-  getBundle(root: Digest): Promise<Bundle | null>;
-}
+import type { Transport } from "./transport-contract";
+export type { Transport } from "./transport-contract";
 
 /** A directory of `<hex>.bundle.json` files — what `pack --out` writes. */
 export function fileTransport(dir: string, id = dir): Transport {

@@ -4,7 +4,7 @@ import { OG_IMAGE_ALT, SITE_DESCRIPTION, SITE_TAGLINE } from "./copy";
 import { siteIcon } from "./icons";
 import { escapeHtml } from "./markdown";
 
-export type SitePageId = "home" | "tour" | "use-cases" | "living" | "workbench" | "docs" | "spec" | "blog" | "compare";
+export type SitePageId = "home" | "tour" | "use-cases" | "living" | "grow" | "workbench" | "docs" | "spec" | "blog" | "compare";
 
 export interface SitePageMeta {
   page: SitePageId;
@@ -63,6 +63,7 @@ export function pageDocument(meta: SitePageMeta, main: string): string {
 <script src="/client.js" defer></script>
 <script src="/viewer.js" defer></script>
 ${meta.page === "living" ? '<link rel="stylesheet" href="/living.css">\n<script src="/living.js" type="module"></script>' : ""}
+${meta.page === "grow" ? '<link rel="stylesheet" href="/living.css">\n<link rel="stylesheet" href="/grow.css">\n<script src="/grow.js" type="module"></script>' : ""}
 ${meta.page === "workbench" ? '<link rel="stylesheet" href="/living.css">\n<link rel="stylesheet" href="/workbench.css">\n<script src="/workbench.js" type="module"></script>' : ""}
 </head>
 <body class="algal-site">

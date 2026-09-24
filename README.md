@@ -1159,6 +1159,7 @@ forged-output detection.
 - `spec/v1/bench.md` — workload comparison, attribution, and the pareto claim.
 - [Malleable workbench](docs/malleable-workbench.md) — captured component state, ordered signals, causal inspection, controls and independently checked proposals.
 - [Local triage](docs/local-triage.md) — persistent tasks across browser, desktop and terminal, on-device workflow proposals, schema migration and explicit forks.
+- [Browser-local evolution](docs/browser-grow.md). Edit a marketing component, save its history in your browser, and reopen it offline. An optional WebGPU model can suggest changes. [Open the workspace](https://algal.computer/grow/).
 - [Coding-harness pilot](docs/coding-harness.md) — matched conventional/ALGAL loops, bounded policy proposals, and independent benchmark grading.
 - [Coding-harness memory spike](docs/coding-harness-memory-spike.md) — scoped observations, inspectable procedures, and native prerequisite proofs in an opt-in memory comparison.
 - `docs/` — design notes as they land.

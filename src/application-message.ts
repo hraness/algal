@@ -1,6 +1,6 @@
 /** Filesystem channel verification; pure inter-application records are portable. */
 import { applicationJson, getApplicationRecord, parseWorkIntent } from "./application-contract";
-import type { ApplicationService } from "./application";
+import type { ApplicationCore } from "./application-core";
 import { readApplicationChannel } from "./application-host";
 import { interappMessageRecord, verifyInterappMessage, type InterappMessage } from "./application-message-contract";
 import { digestCanonical, type Digest } from "./digest";
@@ -15,7 +15,7 @@ function fail(message: string): never { throw new AlgalError("RECEIPT_MISMATCH",
  * also retain the outcome `{identity, message}` the record implies — the
  * receiver-side half of the delivery. */
 export async function verifyInterappDelivery(
-  service: ApplicationService,
+  service: ApplicationCore,
   reference: Digest,
   options: { channelsDir?: string } = {},
 ): Promise<InterappMessage> {

@@ -7,7 +7,7 @@ import { manifestToJson } from "../../src/contract";
 import { builtinRegistry } from "../../src/registry";
 import { parseRunReceipt, runOrganism } from "../../src/run";
 import { verifyReceipt } from "../../src/verify";
-import { MarketingHost, viewManifest } from "./host";
+import { MarketingCore, viewManifest } from "./core";
 import { evaluateView, makeRevision, parseProposal, parseSignals, type SurfaceProposal, type SurfaceSignals } from "./surface";
 import { boundWorkbench, workbenchObject, workbenchRef } from "./workbench-contract";
 
@@ -46,7 +46,7 @@ function parseReport(input: unknown): ShadowReport {
   return { contract: v.contract, parentState: workbenchRef(v.parentState), proposal: workbenchRef(v.proposal), candidateRevision: workbenchRef(v.candidateRevision), policy: workbenchRef(v.policy), compatibility: workbenchRef(v.compatibility), cases, outcome: v.outcome as ShadowReport["outcome"], reasons: v.reasons as string[], promotionAuthority: "none" };
 }
 
-async function evaluate(host: MarketingHost, parentState: Digest, proposal: SurfaceProposal): Promise<ShadowReport> {
+async function evaluate(host: MarketingCore, parentState: Digest, proposal: SurfaceProposal): Promise<ShadowReport> {
   const store = host.service.store, parent = await host.snapshot(parentState), before = await host.revision(parent);
   if (hash(before) !== proposal.baseRevision) throw new Error("Shadow proposal belongs to a different revision");
   const after = makeRevision(proposal.config), candidateManifest = viewManifest(after), manifestRef = await store.putManifest(candidateManifest);
@@ -76,7 +76,7 @@ async function evaluate(host: MarketingHost, parentState: Digest, proposal: Surf
   return { contract: "algal.marketing-shadow-report.v1", parentState, proposal: await store.putValue(applicationJson(proposal)), candidateRevision, policy: await store.putValue(applicationJson(SHADOW_POLICY)), compatibility: await store.putValue(applicationJson(compatibility)), cases, outcome, reasons, promotionAuthority: "none" };
 }
 
-export async function evaluateShadow(host: MarketingHost, expectedHead: Digest, raw: unknown): Promise<{ reference: Digest; report: ShadowReport }> {
+export async function evaluateShadow(host: MarketingCore, expectedHead: Digest, raw: unknown): Promise<{ reference: Digest; report: ShadowReport }> {
   const proposal = parseProposal(raw);
   if ((await host.current()).digest !== expectedHead) throw new Error("Stale shadow evaluation head");
   const report = await evaluate(host, expectedHead, proposal);
@@ -84,7 +84,7 @@ export async function evaluateShadow(host: MarketingHost, expectedHead: Digest, 
 }
 /** Read and replay retained dependencies without evaluating or publishing a
  * new report. Capture uses this before a fresh view could recreate a receipt. */
-export async function readRetainedShadow(host: MarketingHost, reference: Digest): Promise<{ report: ShadowReport; proposal: SurfaceProposal }> {
+export async function readRetainedShadow(host: MarketingCore, reference: Digest): Promise<{ report: ShadowReport; proposal: SurfaceProposal }> {
   const store = host.service.store, report = await getApplicationRecord(store, reference, parseReport);
   if (report.policy !== hash(SHADOW_POLICY)) throw new Error("Unadmitted shadow policy");
   // Verify the retained dependency closure before replay, which writes the
@@ -106,7 +106,7 @@ export async function readRetainedShadow(host: MarketingHost, reference: Digest)
   const proposal = await getApplicationRecord(store, report.proposal, parseProposal);
   return { report, proposal };
 }
-export async function verifyShadow(host: MarketingHost, reference: Digest): Promise<ShadowReport> {
+export async function verifyShadow(host: MarketingCore, reference: Digest): Promise<ShadowReport> {
   const { report, proposal } = await readRetainedShadow(host, reference);
   const replay = await evaluate(host, report.parentState, proposal);
   if (hash(replay) !== reference) throw new Error("Shadow report replay mismatch");

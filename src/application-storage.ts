@@ -4,7 +4,7 @@
 import { APPLICATION_LIMITS, applicationId, applicationJson, applicationRef } from "./application-contract";
 import type { Digest } from "./digest";
 import { AlgalError } from "./errors";
-import type { Store } from "./store";
+import type { Store } from "./store-contract";
 import { MemoryStore } from "./store-memory";
 import { canonicalize, type JsonValue } from "./values";
 
