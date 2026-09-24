@@ -1,122 +1,123 @@
-# A growing application inside the browser
+# Run an evolving component in your browser
 
-The [browser workspace](https://algal.computer/grow/) is the next small step
-toward self-evolving web applications: capture context, propose a bounded change,
-independently check it, adopt it against an exact application head, and preserve
-the history. The first application is a marketing component embedded in the
-existing website.
+**Preview.** Open the [browser workspace](https://algal.computer/grow/) to change
+a marketing component's content and layout, inspect a suggestion, and save the
+version you choose. Its history stays in your browser. You can use it without an
+application server, account, provider key, or cloud inference.
 
-Its application lifecycle runs locally. IndexedDB holds its records, Web Locks
-coordinate writers across tabs, and the existing Rust expression evaluator runs
-as WebAssembly. The renderer mounts a bounded semantic view. No application
-server, account, provider key, or cloud inference is needed for this workflow.
-The surrounding browser, renderer, storage adapter, and evaluation policy remain
-trusted host software; the component cannot rewrite them.
+IndexedDB stores application records, Web Locks coordinate writes across tabs,
+and the Rust expression evaluator runs as WebAssembly. The renderer displays a
+limited set of component elements. The browser, renderer, storage adapter, and
+evaluation policy are trusted host software that the component cannot rewrite.
 
-## Try the loop
+## Try a change
 
-1. Open the workspace and capture an audience or release-stage signal.
-2. Select **Suggest a local change**. The baseline proposer uses local rules.
-3. Inspect its proposed content, declared fit score, and four-context checks.
-4. Select **Use this version** when the candidate passes. The new version becomes
-   visible only after its state is durably published by the browser adapter.
-5. Reload to reopen the same application. Restore an earlier behavior as a new
-   history step, keeping the current signals.
-6. Export the history, or import a verified export into a fresh local workspace.
+1. Open the workspace.
+2. Choose an audience and release stage.
+3. Select **Save context**.
+4. Select **Suggest a local change** to generate a suggestion from local rules.
+5. Inspect the proposed content, fit score, and checks across four contexts.
+6. Select **Use this version** when the suggestion passes. It becomes visible
+   after the browser adapter saves the new application state.
+7. Reload to reopen the same application.
 
-Each workspace has its own URL. **Start a new workspace** creates a separate
-application at its starting revision; earlier records remain intact. Use Back
-or a bookmarked workspace URL to return. This is also the way to begin another
-experiment after reaching the retained history or candidate limit.
+You can restore earlier behavior as a new history step while keeping the current
+signals. Export saves a portable copy of the history; import opens a verified
+copy in a fresh workspace.
 
-An optional automatic mode performs one local-rule attempt after each explicit
-signal capture and adopts only a strictly improving, passing candidate. It
-starts off in every tab. Pausing or pinning the application is part of its
-durable owner controls. There is no background inference loop.
+Each workspace has its own URL. **Create workspace** creates an application
+at its starting version and preserves earlier records. Use Back or a bookmarked
+workspace URL to return. Start another workspace when an experiment reaches its
+history or candidate limit.
 
-The objective is deliberately small: match the declared audience and release
-stage using a fixed, inspectable content/layout policy. Its score is a heuristic
-for that objective. It is not a measurement of conversions, factual correctness,
-accessibility across arbitrary content, or general writing quality. Model
-assertions cannot change the score or waive the independent shadow checks.
+Automatic mode makes one attempt using local rules after you save context.
+It adopts the suggestion only if it passes the checks and strictly improves the
+fit score. The mode starts off in every tab. Pause and pin controls are saved
+with the application. Inference does not run in the background.
 
-## Optional on-device inference
+The fixed content and layout policy scores how well a suggestion matches your
+chosen audience and release stage. This score measures only those criteria;
+conversion, factual accuracy, general writing quality, and accessibility across
+arbitrary content are outside its scope. The model cannot change the score or
+bypass the independent checks across contexts.
 
-**Download & load local AI** explicitly loads a pinned small model in a dedicated
-WebGPU worker. Initial model assets total approximately 203 MiB, excluding
-runtime, transfer, and temporary/cache overhead. The button is unavailable when
-the browser cannot supply the required GPU features. Ordinary application use
-does not download the model.
+## Use on-device inference
 
-The model proposes the same closed content/layout schema used by the rule-based
-proposer. Its output is untrusted. A parseable suggestion may still fail the
-independent guardrails or fail to improve the declared fit score. Stopping or
-timing out an attempt terminates its worker; another attempt requires an
-explicit load. No uncertain attempt is automatically resent.
+**Download & load local AI** loads a pinned model in a dedicated WebGPU worker,
+which runs inference separately from the page. Model files total about 203 MiB,
+plus runtime, transfer, and temporary/cache overhead. The button is unavailable
+when the browser lacks the required GPU features. Ordinary application use does
+not download the model.
 
-See [browser inference](browser-inference.md) for pinned artifact identities,
-current compatibility constraints, sources, and integrity limits. Model caching
-and shader compilation are separate from application persistence.
+The model can suggest the same content and layout fields as the local rules.
+The application checks its output before offering it for adoption. A suggestion
+may parse successfully and still fail the checks or fail to improve the fit
+score. Stop or timeout terminates the worker. Another attempt requires you to
+load it again; uncertain attempts are never retried automatically.
 
-## Persistence and offline reopening
+See [browser inference](browser-inference.md) for model versions, compatibility,
+file-integrity checks, and results from the tested browser and device. Model
+caching and shader compilation are separate from saving application history.
 
-The authoritative application uses IndexedDB, not localStorage. Each CAS record,
-operation preparation, and head publication retains the existing lifecycle's
-separate durability boundary. Web Locks hold custody across asynchronous
-admission and publication. The adapter requests strict transaction durability;
-this is a browser hint, not a promise against device failure. Stale commands and
-conflicting operation identities fail rather than overwriting a newer tab.
+## Save and reopen offline
 
-localStorage remembers only the selected workspace identity. The earlier
-[/living/ editor](https://algal.computer/living/) keeps its separate preview
-storage and is not silently migrated into application history.
+IndexedDB stores the application history. It saves content-addressed records
+(records identified by hash), prepared operations, and the pointer to the current
+state in separate steps. Web Locks keep one writer in control during asynchronous
+checks and writes. The adapter requests strict transaction durability, a browser
+hint that cannot guarantee protection against device failure. Commands based on
+an older state and conflicting operation identities are rejected before they
+can overwrite another tab's work.
 
-A narrowly scoped service worker caches a versioned `/grow/` application shell,
-its evaluator, fonts, and scripts. The build pins the bytes of every shell asset;
-an incomplete or mismatched update cannot replace the installed version.
-**Save for offline use** checks that shell and requests persistent browser
-storage. The interface reports whether the request was granted. Other website
-routes are not promised offline.
+localStorage remembers only the selected workspace. The
+[/living/ editor](https://algal.computer/living/) uses separate preview storage;
+its previews are not migrated into application history.
 
-Shell readiness qualifies the local-rule workflow. AI additionally needs the
-model cache, optional worker asset, GPU support, and sufficient resources. A
-successful download is not itself proof of offline inference. Browser storage
-may be evicted or cleared, and private sessions may be temporary. Keep a portable
-export for data you care about.
+A service worker scoped to `/grow/` caches the application page, evaluator,
+fonts, and scripts. The build pins each file's bytes. An incomplete or mismatched
+update cannot replace the installed version. **Save for offline use** checks
+these files and requests persistent browser storage. The interface reports
+whether the browser granted that request. Other website routes require a
+connection.
 
-## Evidence and recovery
+Offline readiness covers the application and local rules. AI also needs its
+model and optional worker file cached, GPU support, and sufficient resources;
+downloading the model alone does not establish readiness. Browser storage may
+be cleared or evicted, and private sessions may be temporary. Keep an export
+for data you care about.
 
-The application retains content-addressed revisions, memory, execution receipts,
-candidate evaluations and exact-head adoption evidence. Its bounds are 64 states
-and 16 candidate evaluations;
-signals and control changes also consume states. A missing or corrupt retained
-dependency fails closed rather than being regenerated from a later execution.
+## History and recovery
 
-An export is checked against its captured head and replayed before a fresh
-workspace is selected. It conveys content integrity and pure replay, not an
-author signature or permission to perform external effects. Import never
-replaces the current database. Recovery export preserves raw stored records
-when ordinary opening fails; it is diagnostic data, not a verified application
-bundle. Quota errors leave earlier committed state intact and are shown to the
-user.
+The application saves program versions, memory, execution records, candidate
+evaluations, and the evidence linking each adoption to its starting state. A
+workspace holds at most 64 states and 16 candidate evaluations. Signals and
+control changes also consume states. Missing or corrupt dependencies stop the
+operation; later execution cannot silently replace the missing records.
 
-## Development and qualification
+Before an imported workspace is selected, its export is checked against the
+saved current state and replayed. Exports establish content integrity and pure
+replay. They carry no author signature or permission to perform external actions.
+Import creates a fresh database and preserves the current one. If ordinary
+opening fails, recovery export saves raw records for diagnosis. Those records
+have not passed the application-export checks. Storage quota errors appear in
+the interface and leave previously saved state intact.
 
-From the repository, run `bun run check`, then serve `site/dist` on localhost.
-Secure contexts, IndexedDB, and Web Locks are required for mutation. Build-only
-WebLLM dependencies are isolated from the zero-required-dependency ALGAL CLI.
-The browser lifecycle uses the same canonical SHA-256 identities as Bun and the
-native runtime.
+## Development and browser tests
 
-`scripts/browser-grow-qualification.mjs` exercises real IndexedDB and Web Locks,
-interrupted publication, immutable operation identities, corrupt evidence,
-cross-tab contention, import, restoration and network-denied reload/adoption.
-CI installs its pinned Chromium and runs the deterministic local-rule path.
-Set `ALGAL_PLAYWRIGHT_MODULE` and `ALGAL_BROWSER_EXECUTABLE` to installed tools;
-`ALGAL_BROWSER_EVIDENCE` selects its task-owned profile and evidence directory.
-The opt-in `ALGAL_GPU_QUALIFY=1` run additionally downloads the pinned model,
-performs actual inference, then reloads the model with networking disabled.
+For local development, run `bun run check`, then serve `site/dist` on localhost.
+A secure context, IndexedDB, and Web Locks are required to change application
+state. WebLLM is a build dependency; the ALGAL CLI has zero required runtime
+dependencies. Browser records use the same canonical SHA-256 identities as Bun
+and the native runtime.
 
-The delivery record will distinguish automated lifecycle checks, actual browser
-offline/concurrency tests, and real GPU inference. Compilation, mocked model
-answers, and a present `navigator.gpu` are not GPU inference qualification.
+`scripts/browser-grow-qualification.mjs` tests IndexedDB and Web Locks,
+interrupted writes, immutable operation identities, corrupt records, competing
+tabs, import, restoration, and reload/adoption with networking disabled. CI
+installs its pinned Chromium and runs the local-rule workflow. Set
+`ALGAL_PLAYWRIGHT_MODULE` and `ALGAL_BROWSER_EXECUTABLE` to installed tools;
+`ALGAL_BROWSER_EVIDENCE` selects the test profile and results directory.
+`ALGAL_GPU_QUALIFY=1` also downloads the pinned model, generates a suggestion,
+and reloads the cached model with networking disabled.
+
+The [browser inference test record](browser-inference.md#status-and-limits)
+lists the tested device, browser, and offline model results.

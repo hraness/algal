@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { DEFAULT_CONFIG, DEFAULT_SIGNALS } from "../examples/malleable-site/surface";
 import { createLocalModelClient, type LocalModelWorker } from "./browser-inference";
-import { LOCAL_CONFIG_SCHEMA, LOCAL_MODEL, localModelFailure, localModelPrompt, parseInferenceRequest, parseInferenceResponse, parseLocalModelOutput, type InferenceRequest } from "./browser-inference-contract";
+import { LOCAL_CONFIG_SCHEMA, LOCAL_MODEL, LOCAL_PROMPT_VERSION, localModelFailure, localModelPrompt, parseInferenceRequest, parseInferenceResponse, parseLocalModelOutput, type InferenceRequest } from "./browser-inference-contract";
+
+import { GENERATION_STYLE_BLOCK, GENERATION_STYLE_SHA256, GENERATION_STYLE_VERSION } from "./generation-style";
 
 const input = { config: { ...DEFAULT_CONFIG }, signals: { ...DEFAULT_SIGNALS } };
 class TestWorker implements LocalModelWorker {
@@ -114,6 +116,15 @@ describe("optional browser-local inference", () => {
 });
 
 describe("local model data boundary", () => {
+  test("the versioned public-writing instructions match the vendored shared block", async () => {
+    const source = await Bun.file(new URL("../GENERATION_STYLE.md", import.meta.url)).text();
+    const block = source.split("```text\n")[1]!.split("\n```")[0]!;
+    expect(GENERATION_STYLE_BLOCK).toBe(block);
+    expect(new Bun.CryptoHasher("sha256").update(block).digest("hex")).toBe(GENERATION_STYLE_SHA256);
+    expect(LOCAL_PROMPT_VERSION).toContain(GENERATION_STYLE_VERSION);
+    expect(localModelPrompt(input).startsWith(block + "\n\n")).toBe(true);
+  });
+
   test("input and output reject unknown fields, executable proposals, excess bytes and text", () => {
     expect(parseLocalModelOutput(JSON.stringify(DEFAULT_CONFIG))).toEqual(DEFAULT_CONFIG);
     for (const value of [
@@ -139,7 +150,7 @@ describe("local model data boundary", () => {
     expect(localModelPrompt(input)).toContain(JSON.stringify(input));
     expect(localModelPrompt(input)).toContain('whole word "build" in headline, "preview" in body, "preview" in ctaLabel, and layout "split"');
     expect(localModelPrompt({ ...input, signals: { audience: "operators", release: "available" } })).toContain('whole word "operate" in headline, "available" in body, "explore" in ctaLabel, and layout "stack"');
-    expect(localModelPrompt(input).length).toBeLessThan(1500);
+    expect(localModelPrompt(input).length).toBeLessThan(5000);
     expect(LOCAL_MODEL.outputTokens).toBe(256);
     expect(LOCAL_MODEL.estimatedDownloadBytes).toBe(212_824_266);
   });

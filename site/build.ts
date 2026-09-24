@@ -497,9 +497,9 @@ replacements.WORKBENCH_SURFACE = renderSurfaceHtml(workbench.capture.view);
 
 const pages: { file: string; out: string; meta: SitePageMeta }[] = [
   { file: "pages/grow.html", out: "grow/index.html", meta: {
-    page: "grow", path: "/grow/", title: "Small changes. Living software. — ALGAL",
-    description: "A browser-local application that captures signals, checks proposed changes, and preserves a replayable history. Optional on-device AI with WebGPU.",
-    ogTitle: "Small changes. Living software. — ALGAL", ogAlt: "A growing component with local signals and a continuous history",
+    page: "grow", path: "/grow/", title: "Evolve a component in your browser · ALGAL",
+    description: "Change a component’s content and layout with local rules, inspect each proposal, and save its history in your browser. WebGPU AI is optional.",
+    ogTitle: "Evolve a component in your browser · ALGAL",
   } },
   { file: "pages/workbench.html", out: "workbench/index.html", meta: {
     page: "workbench", path: "/workbench/", title: "Why this? · ALGAL workbench",

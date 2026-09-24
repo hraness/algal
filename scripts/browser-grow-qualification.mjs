@@ -31,7 +31,7 @@ const context = await chromium.launchPersistentContext(join(output, "browser-pro
 // /grow/ worker cannot hold the new shell in waiting; preserve every cache,
 // including already-downloaded model artifacts at this exact origin.
 for (const restored of context.pages()) await restored.close();
-const checks = [], errors = [], requests = [], failedRequests = [], badResponses = [], browserLogs = [], networkFailures = [];
+const checks = [], modelSamples = [], errors = [], requests = [], failedRequests = [], badResponses = [], browserLogs = [], networkFailures = [];
 const safeUrl = raw => { const url = new URL(raw); return url.origin + url.pathname; };
 context.on("page", page => page.on("pageerror", error => errors.push(error.message)));
 context.on("page", page => page.on("console", message => { if (message.type() === "error" || message.type() === "warning") browserLogs.push(message.text().slice(0, 1000)); }));
@@ -111,7 +111,7 @@ try {
 
   await page.locator("#grow-auto").check(); await page.locator("#grow-audience").selectOption("operators");
   await page.locator("#grow-signals button").click(); await idle();
-  assert.match(await page.locator("#grow-status").textContent(), /adopted automatically/);
+  assert.match(await page.locator("#grow-status").textContent(), /automatically applied/);
   assert.match(await page.locator("#grow-signal-evidence").textContent(), /operators/);
   await page.locator("#grow-pause").click(); await idle(); assert.equal(await page.locator("#grow-propose").isEnabled(), false);
   await page.reload(); await ready(); assert.match(await page.locator("#grow-control-note").textContent(), /paused/);
@@ -179,7 +179,7 @@ try {
   await page.locator("#grow-offline").locator("xpath=ancestor::details").locator("summary").click();
   await page.locator("#grow-offline").click();
   await page.waitForFunction(() => document.querySelector("#grow-offline-status")?.getAttribute("data-ready") === "true");
-  assert.match(await page.locator("#grow-offline-status").textContent(), /cached for offline reopening/);
+  assert.match(await page.locator("#grow-offline-status").textContent(), /saved.*offline use/i);
   checks.push("network-denied reload, local evolution, adoption and cached-shell readiness");
   await context.setOffline(false);
 
@@ -206,6 +206,7 @@ try {
     await context.setOffline(true);
     await page.locator("#grow-model-propose").click(); await idle();
     assert.equal(await page.locator("#grow-source").textContent(), "Model proposal", await page.locator("#grow-status").textContent());
+    modelSamples.push({ phase: "network-denied", view: await page.locator("#grow-candidate-view").textContent(), result: await page.locator("#grow-fit").textContent() });
     checks.push("real WebGPU model load and network-denied structured proposal with independent checks");
     await page.locator("#grow-model-stop").click();
     await page.reload(); await ready();
@@ -215,6 +216,8 @@ try {
     assert.equal(await page.locator("#grow-model-propose").isEnabled(), true, await page.locator("#grow-status").textContent());
     await page.locator("#grow-model-propose").click(); await idle();
     assert.equal(await page.locator("#grow-source").textContent(), "Model proposal");
+    modelSamples.push({ phase: "offline-reload", view: await page.locator("#grow-candidate-view").textContent(), result: await page.locator("#grow-fit").textContent() });
+    await writeFile(join(output, "model-samples.json"), JSON.stringify(modelSamples, null, 2));
     checks.push("network-denied browser reload, cached model reload and second real WebGPU proposal");
   }
   assert.deepEqual(errors, [], "No uncaught browser errors");

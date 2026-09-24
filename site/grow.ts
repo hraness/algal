@@ -26,7 +26,7 @@ function download(value: unknown, filename: string): void {
   link.href = url; link.download = filename; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }
-function errorText(error: unknown): string { return error instanceof Error ? error.message : "The operation did not complete. Your retained records have not been reset."; }
+function errorText(error: unknown): string { return error instanceof Error ? error.message : "The operation did not complete. Export recovery records if the workspace cannot reopen."; }
 
 async function start(root: HTMLElement): Promise<void> {
   const get = <T extends HTMLElement>(id: string): T => {
@@ -76,10 +76,10 @@ async function start(root: HTMLElement): Promise<void> {
     get("grow-revision").textContent = next.revisionDigest;
     get("grow-signal-evidence").textContent = JSON.stringify(next.signals);
     get("grow-program").textContent = JSON.stringify(next.definition, null, 2);
-    get("grow-history-count").textContent = `${next.history.length} states · ${next.remainingCandidates} proposal slots left`;
+    get("grow-history-count").textContent = `${next.history.length} history steps · ${next.remainingCandidates} proposals left`;
     get("grow-pause").textContent = next.controls.inferencePaused ? "Resume evolution" : "Pause evolution";
     get("grow-pin").textContent = next.controls.pinnedRevision ? "Unpin this version" : "Pin this version";
-    get("grow-control-note").textContent = next.controls.pinnedRevision ? "This version is pinned. Signals can still be captured." : next.controls.inferencePaused ? "Evolution is paused. Your current component keeps running." : "You control whether checked changes are adopted.";
+    get("grow-control-note").textContent = next.controls.pinnedRevision ? "This version is pinned. You can save new context." : next.controls.inferencePaused ? "Evolution is paused. Your current component keeps running." : "You choose when to use a proposal that passes the checks.";
     if (next.controls.inferencePaused || next.controls.pinnedRevision) auto.checked = false;
     get("grow-candidate").hidden = next.pending === null;
     if (next.pending) {
@@ -88,7 +88,7 @@ async function start(root: HTMLElement): Promise<void> {
       else candidateMount.update(definition, next.signals);
       get("grow-source").textContent = pending.source === "rules" ? "Local rules · no AI call" : "Model proposal";
       get("grow-rationale").textContent = pending.proposal.rationale;
-      get("grow-fit").textContent = `Declared fit: ${pending.fit.before} → ${pending.fit.after}. ${pending.accepted ? "Passed independent checks; eligible for adoption." : "Not eligible for adoption."}`;
+      get("grow-fit").textContent = `Fit score: ${pending.fit.before} → ${pending.fit.after} out of 4. ${pending.accepted ? "The proposal passed the checks and can be applied." : "The proposal did not pass all requirements and cannot be applied."}`;
       get("grow-evaluation").textContent = JSON.stringify({ fit: pending.fit, shadow: pending.shadow.report }, null, 2);
       const changes = get("grow-changes"); changes.replaceChildren();
       for (const field of changedFields(next.definition.config, pending.proposal.config)) { const li = document.createElement("li"); li.textContent = field; changes.append(li); }
@@ -108,7 +108,7 @@ async function start(root: HTMLElement): Promise<void> {
         button.addEventListener("click", () => { void action(async () => {
           if (!controller || !capture) return;
           show(await controller.restore(capture.head, row.state));
-          message("Earlier behavior restored as a new step. Current signals are kept.");
+          message("Restored the earlier behavior as a new step and kept the current context.");
         }); }); item.append(button);
       }
       historyList.append(item);
@@ -125,7 +125,7 @@ async function start(root: HTMLElement): Promise<void> {
       const next = await source.capture();
       if (source !== controller || previous !== capture) return;
       if (busy) { refreshPending = true; return; }
-      if (next.head !== capture?.head || next.pending?.reference !== capture?.pending?.reference) { show(next); message("The shared local workspace changed. Its current state is now shown."); }
+      if (next.head !== capture?.head || next.pending?.reference !== capture?.pending?.reference) { show(next); message("Loaded the changes from another tab."); }
     } catch (error) { if (source === controller && previous === capture && !busy) message(errorText(error), true); }
   }
   function connect(): void {
@@ -149,13 +149,13 @@ async function start(root: HTMLElement): Promise<void> {
     if (!controller || !capture) return;
     const candidate = await controller.propose(capture.head, { source: "rules" });
     show(await controller.capture());
-    message(candidate.accepted ? "A local-rule proposal passed the checks. Inspect it before adopting." : "The proposal is retained for inspection. It did not pass the adoption policy.");
+    message(candidate.accepted ? "The local-rule proposal passed the checks. Compare the versions before choosing one." : "Saved the proposal for inspection. It did not pass the requirements for use.");
   }
   get("grow-propose").addEventListener("click", () => { void action(proposeRules); });
   get("grow-adopt").addEventListener("click", () => { void action(async () => {
     if (!controller || !capture?.pending) return;
     show(await controller.adopt(capture.head, capture.pending.reference));
-    message("The checked change is now in use, with its evidence and history retained.");
+    message("Applied the change and saved its checks in the history.");
   }); });
   for (const input of [audience, release]) input.addEventListener("change", () => { signalsDirty = true; });
   get<HTMLFormElement>("grow-signals").addEventListener("submit", event => {
@@ -173,14 +173,14 @@ async function start(root: HTMLElement): Promise<void> {
       // An explicit capture may reaffirm context. It is a new ordered input,
       // allowing one new bounded attempt after an earlier rejected proposal.
       if (!events.length) events.push({ kind: "audience", value: capture.signals.audience });
-      if (events.length > capture.remainingStates) throw new Error("There is not enough retained history capacity for both signals. Export this workspace before continuing.");
+      if (events.length > capture.remainingStates) throw new Error("This workspace has too few history steps left to save both inputs. Export it and create a workspace to continue.");
       for (const input of events) capture = await controller.signal(capture.head, input);
       show(capture, true);
       if (auto.checked && capture.remainingStates > 0 && capture.remainingCandidates > 0 && !capture.controls.inferencePaused && !capture.controls.pinnedRevision) {
         const candidate = await controller.propose(capture.head, { source: "rules" });
-        if (candidate.accepted) { show(await controller.adopt(capture.head, candidate.reference)); message("Signals captured. One local change passed the checks and was adopted automatically."); }
-        else { show(await controller.capture()); message("Signals captured. The one local proposal was retained but not adopted."); }
-      } else message("Signals captured in the application history. The current program now sees this context.");
+        if (candidate.accepted) { show(await controller.adopt(capture.head, candidate.reference)); message("Saved the context and automatically applied one proposal that passed the checks."); }
+        else { show(await controller.capture()); message("Saved the context and proposal. The proposal did not pass the requirements for use."); }
+      } else message("Saved the context in the application history and updated the component.");
     });
   });
   get("grow-pause").addEventListener("click", () => { void action(async () => {
@@ -197,11 +197,11 @@ async function start(root: HTMLElement): Promise<void> {
   get("grow-export").addEventListener("click", () => { void action(async () => {
     if (!controller) return;
     const bundle = await controller.exportBundle(); await BrowserGrowController.verifyBundle(bundle);
-    download(bundle, "algal-growing-application.json"); message("History exported after pure replay and local-policy verification.");
+    download(bundle, "algal-growing-application.json"); message("Exported the history after replaying the execution records and checking the proposals.");
   }); });
   get("grow-raw-export").addEventListener("click", () => { void action(async () => {
     download(await IndexedDbApplicationStorage.exportRaw({ name: database }), "algal-browser-recovery.json");
-    message("Raw recovery records exported. This diagnostic file is not a verified application bundle.");
+    message("Exported raw records for troubleshooting. Use Export verified history for a file you can import here.");
   }); });
   fileInput.addEventListener("change", () => { void action(async () => {
     const file = fileInput.files?.[0]; if (!file) return;
@@ -212,7 +212,7 @@ async function start(root: HTMLElement): Promise<void> {
       const nextController = await BrowserGrowController.importBundle(imported, input);
       const next = await nextController.capture();
       rememberDatabase(name, true); storage?.close(); storage = imported; controller = nextController; database = name; connect();
-      auto.checked = false; show(next, true); message("Verified history imported into a fresh local workspace. The earlier workspace is preserved.");
+      auto.checked = false; show(next, true); message("Imported the history into a separate workspace. Use Back to return to the earlier workspace.");
     } catch (error) { imported.close(); throw error; }
     finally { fileInput.value = ""; }
   }); });
@@ -221,7 +221,7 @@ async function start(root: HTMLElement): Promise<void> {
     try {
       const nextController = new BrowserGrowController(fresh), next = await nextController.initialize();
       rememberDatabase(name, true); storage?.close(); storage = fresh; controller = nextController; database = name; connect();
-      auto.checked = false; show(next, true); message("A fresh workspace is ready. The earlier workspace is preserved; use your browser's Back button to return.");
+      auto.checked = false; show(next, true); message("Created a workspace. Use your browser's Back button to return to the earlier workspace.");
     } catch (error) { fresh.close(); throw error; }
   }); });
   get("grow-model-load").addEventListener("click", () => { void action(async () => {
@@ -234,13 +234,13 @@ async function start(root: HTMLElement): Promise<void> {
   get("grow-model-propose").addEventListener("click", () => { void action(async () => {
     if (!controller || !capture) return;
     const parent = capture, activeController = controller;
-    modelBusy = true; modelAbort = new AbortController(); modelStatus.textContent = "Generating one bounded proposal on this device…"; controls();
+    modelBusy = true; modelAbort = new AbortController(); modelStatus.textContent = "Generating one proposal on this device…"; controls();
     try {
       const config = await suggestConfig({ config: parent.definition.config, signals: parent.signals }, { signal: modelAbort.signal });
       await activeController.propose(parent.head, { source: "model", config, rationale: "A local WebGPU model proposed this content and layout. The fixed host policy independently checks it; the model's suggestion is not evidence of quality." });
-      show(await activeController.capture()); modelStatus.textContent = "One local proposal completed. Inspect its independently computed result.";
-      message(capture?.pending?.accepted ? "The on-device proposal passed the checks. Adoption remains your choice." : "The on-device proposal was retained and did not qualify for adoption.");
-    } catch (error) { unloadLocalModel(); modelReady = false; modelStatus.textContent = "The attempt ended. Load the model explicitly before trying again."; throw error; }
+      show(await activeController.capture()); modelStatus.textContent = "Generated one local proposal. Inspect the results of its checks.";
+      message(capture?.pending?.accepted ? "The on-device proposal passed the checks. Choose Use this version to apply it." : "Saved the on-device proposal for inspection. It did not pass the requirements for use.");
+    } catch (error) { unloadLocalModel(); modelReady = false; modelStatus.textContent = "The attempt ended. Load the model before trying again."; throw error; }
     finally { modelBusy = false; controls(); }
   }); });
   get("grow-model-stop").addEventListener("click", () => {
@@ -256,7 +256,7 @@ async function start(root: HTMLElement): Promise<void> {
   let registration: ServiceWorkerRegistration | undefined;
   async function offlineStatus(cache: boolean): Promise<void> {
     const note = get("grow-offline-status");
-    if (!registration?.active) { note.textContent = "The offline shell is not ready. A connection is required to prepare it."; return; }
+    if (!registration?.active) { note.textContent = "This workspace is not saved for offline use. Connect to the internet and select Save for offline use."; return; }
     const worker = registration.active, ports = new MessageChannel();
     const ready = await new Promise<boolean>(resolve => {
       const timer = setTimeout(() => { ports.port1.close(); resolve(false); }, 40_000);
@@ -266,7 +266,7 @@ async function start(root: HTMLElement): Promise<void> {
     let persisted = false;
     try { persisted = cache ? await navigator.storage.persist() : await navigator.storage.persisted(); } catch { /* Optional persistence request; still report shell state accurately. */ }
     note.textContent = ready
-      ? `Application shell cached for offline reopening with local rules. ${persisted ? "Persistent storage was granted." : "Persistent storage has not been granted; keep an export."}${registration.waiting ? " A new application version will open after its older tabs close." : ""}`
+      ? `Saved this workspace’s code and assets for offline use with local rules. ${persisted ? "The browser granted persistent storage." : "The browser has not granted persistent storage; keep an export."}${registration.waiting ? " A new application version will open after you close its older tabs." : ""}`
       : "Offline preparation is incomplete. Keep this tab open or reconnect and select Save for offline use.";
     note.dataset.ready = String(ready);
   }
@@ -275,16 +275,16 @@ async function start(root: HTMLElement): Promise<void> {
     void navigator.serviceWorker.register("/grow/sw.js", { scope: "/grow/", updateViaCache: "none" }).then(async value => {
       registration = value; await navigator.serviceWorker.ready; await offlineStatus(false);
     }).catch(() => { get("grow-offline-status").textContent = "Offline preparation is unavailable. A connection is needed to reopen this page."; });
-  } else get("grow-offline-status").textContent = "This browser cannot cache the application shell for offline reopening.";
+  } else get("grow-offline-status").textContent = "This browser cannot save the workspace’s code and assets for offline use.";
   void probeLocalModel().then(probe => { gpuAvailable = probe.available; modelStatus.textContent = probe.reason; controls(); }).catch(error => { modelStatus.textContent = errorText(error); });
   try {
     await loadSurfaceEvaluator();
     storage = await IndexedDbApplicationStorage.open({ name: database }); controller = new BrowserGrowController(storage);
     show(await controller.initialize(), true); rememberDatabase(database); connect();
-    message("Your local application is ready. Capture context or suggest its first change.");
+    message("");
   } catch (error) {
     get("grow-runtime").textContent = "Local history could not be opened";
-    message(`${errorText(error)} Existing records are preserved. Export recovery records or import a verified history into a fresh workspace.`, true);
+    message(`${errorText(error)} Export recovery records for troubleshooting, or import a verified history into a separate workspace.`, true);
   } finally { controls(); }
 }
 

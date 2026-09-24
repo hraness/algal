@@ -1,5 +1,8 @@
 /** Closed worker protocol. A model may propose text and layout, never host code. */
+import { GENERATION_STYLE_BLOCK, GENERATION_STYLE_VERSION } from "./generation-style";
 import { parseConfig, parseSignals, type SurfaceConfig, type SurfaceSignals } from "../examples/malleable-site/surface";
+
+export const LOCAL_PROMPT_VERSION = `algal.browser-proposal/v2+${GENERATION_STYLE_VERSION}`;
 
 export const LOCAL_MODEL = Object.freeze({
   id: "SmolLM2-360M-Instruct-q4f16_1-MLC",
@@ -78,7 +81,10 @@ export function localModelPrompt(input: LocalModelInput): string {
   const layout = value.signals.audience === "builders" ? "split" : "stack";
   // Keep application text explicitly inside a data envelope. Grammar constrains
   // syntax; the caller must independently evaluate semantics and adoption.
-  return "Suggest one clearer marketing component for these audience and release signals. " +
+  return GENERATION_STYLE_BLOCK + "\n\n" +
+    "Write the headline, body and button label for a marketing component. Visitors will read these three fields. " +
+    "Use English and address the selected audience using only the supplied product facts. " +
+    "Suggest one component for these audience and release signals. " +
     "Return only a JSON object with headline, body, ctaLabel and layout. " +
     "Keep text concise and factual; do not promise capabilities or availability beyond the supplied data. " +
     `The fixed local fit checks require the whole word "${audienceWord}" in headline, ` +

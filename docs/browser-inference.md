@@ -1,68 +1,96 @@
-# Optional browser-local inference
+# Browser-local inference reference
 
-The browser application runs its deterministic application logic without a model.
-Local AI is an explicit, optional download that proposes a bounded marketing
-configuration. It cannot supply JavaScript, change storage policy, adopt its own
-proposal, or call a remote inference provider. Application evaluation and adoption
-remain independent of the model.
+**Preview.** In the [browser workspace](https://algal.computer/grow/), select
+**Download & load local AI** to generate marketing content and layout suggestions
+on your device. The application also works without a model. It checks each
+suggestion before adoption; the model cannot supply JavaScript, change storage
+policy, adopt its own proposal, or call a remote inference provider.
 
-The site builds `@mlc-ai/web-llm` **0.2.85** into a separate dedicated worker. It is
-a development dependency; the core package retains zero required runtime
-dependencies. Importing the application does not start that worker or download
-weights. The UI must invoke `loadLocalModel()` explicitly. `probeLocalModel()`
-checks for a WebGPU adapter and `shader-f16`; this is availability evidence, not
-proof that model loading or inference will succeed.
+The site bundles `@mlc-ai/web-llm` **0.2.85** into a dedicated worker. WebLLM is a
+development dependency; the core package has zero required runtime dependencies.
+Importing the application starts no worker or model download. `loadLocalModel()`
+starts loading when you request it. `probeLocalModel()` checks for a WebGPU adapter
+and `shader-f16`; loading can still fail if device memory or runtime compatibility
+is insufficient.
 
-The fixed model is `mlc-ai/SmolLM2-360M-Instruct-q4f16_1-MLC`, revision
-`3a622fd89e0216e8bb10c410c007c786baa8a033`. The upstream model is Apache-2.0. It is
-small enough to consider for constrained proposals, but its factual accuracy and
-proposal usefulness require evaluation. [Publisher model card](https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct)
+## Model and download size
 
-Public repository metadata reports 203,614,080 bytes in seven weight shards,
-3,501,624 bytes for the config, one cache manifest and listed tokenizer files,
-and 5,708,562 bytes for the matching model WASM: **212,824,266 bytes (about 203
-MiB)** altogether. This excludes runtime JavaScript, transfer overhead and
-temporary/cache copies. The estimate is not a measured browser download or disk
-reservation. [Pinned model files](https://huggingface.co/mlc-ai/SmolLM2-360M-Instruct-q4f16_1-MLC/tree/3a622fd89e0216e8bb10c410c007c786baa8a033),
+The model is `mlc-ai/SmolLM2-360M-Instruct-q4f16_1-MLC`, pinned to revision
+`3a622fd89e0216e8bb10c410c007c786baa8a033`. The upstream model uses the Apache-2.0
+license. [Publisher model card](https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct)
+
+Repository metadata lists 203,614,080 bytes in seven weight files, 3,501,624 bytes
+for the configuration, one cache manifest, and tokenizer files, and 5,708,562
+bytes for the model's WebAssembly library. The total is **212,824,266 bytes
+(about 203 MiB)**. This metadata estimate excludes runtime JavaScript, transfer
+overhead, and temporary/cache copies; it is not a measured download or reserved
+disk space. [Pinned model files](https://huggingface.co/mlc-ai/SmolLM2-360M-Instruct-q4f16_1-MLC/tree/3a622fd89e0216e8bb10c410c007c786baa8a033),
 [pinned model library](https://github.com/mlc-ai/binary-mlc-llm-libs/blob/025bcaf3780fa8254f5e5efd3bfea0a5397248f4/web-llm-models/v0_2_84/base/SmolLM2-360M-Instruct-q4f16_1_cs1k-webgpu.wasm)
 
-The upstream registry estimates 376.06 MB VRAM at its 4096-token context and
-requires `shader-f16`. This adapter uses a 2048-token context and at most 256
-output tokens; its actual memory use is device-dependent and unmeasured here.
-[Versioned WebLLM registry](https://github.com/mlc-ai/web-llm/blob/v0.2.85/src/config.ts)
+WebLLM's registry estimates 376.06 MB of GPU memory for its 4096-token context
+and requires `shader-f16`. This adapter uses a 2048-token context and allows at
+most 256 output tokens. Its memory use depends on the device and has not been
+measured. [Versioned WebLLM registry](https://github.com/mlc-ai/web-llm/blob/v0.2.85/src/config.ts)
 
-The worker requests JSON-schema-constrained output, then independently parses a
-maximum 4096-byte response. Only `headline` (96 characters), `body` (280),
-`ctaLabel` (32), and `layout` (`split` or `stack`) are accepted. Unknown fields,
-invalid text and incomplete generation fail. Schema compliance is not evidence
-of quality, factual truth or a beneficial application change.
-[WebLLM schema example](https://github.com/mlc-ai/web-llm/blob/v0.2.85/examples/json-schema/src/json_schema.ts)
+## Request limits
 
-Only one load or generation may run at a time. Loading has a five-minute deadline
-and generation a one-minute deadline. Abort, timeout, unload, worker failure or
-invalid output terminates the worker, rejects the pending operation and requires
-an explicit subsequent load. No automatic retries occur, and no partial result
-is offered for adoption. Worker termination bounds cancellation even when a
-runtime operation does not accept an `AbortSignal`.
+The proposal prompt version is
+`algal.browser-proposal/v2+hraness-generation-style/v1`. It includes the shared
+generation-style block from
+[`hraness/.github` at `4ad062fb4c81b85064b17b3d80003570c70e2dcb`](https://github.com/hraness/.github/blob/4ad062fb4c81b85064b17b3d80003570c70e2dcb/GENERATION_STYLE.md).
 
-WebLLM uses the browser Cache API for model artifacts. Loading may still need
-the network if any runtime, tokenizer, model or application asset is absent.
-A successful load does not prove that a later offline reload will succeed.
-Model/library URLs are immutable, and the config has a checked SHA-256 integrity
-value. This adapter does **not** claim SHA-256 verification of every weight shard,
-tokenizer or model WASM. Cached weights are reproducible assets, separate from
-the application's authoritative IndexedDB records. [WebLLM caching and worker
-lifecycle](https://webllm.mlc.ai/docs/user/advanced_usage.html), [integrity scope](https://github.com/mlc-ai/web-llm/blob/v0.2.85/src/integrity.ts)
+The worker requests JSON that follows a schema, then parses a response of at
+most 4096 bytes. It accepts these fields:
 
-Alternatives remain useful. Transformers.js **4.3.0** added an experimental
-structured-output companion for JSON/schema/regex and Safari 26+ WebGPU support;
-it offers a broader pipeline ecosystem. Chrome's Prompt API now ships on the web
-in Chrome 148 and supports schema constraints, but its hardware/storage criteria,
-browser-managed model and lack of worker support make it an optional adapter,
-not the baseline. [Transformers.js 4.3.0](https://github.com/huggingface/transformers.js/releases/tag/4.3.0),
+| Field | Limit |
+| --- | --- |
+| `headline` | 96 characters |
+| `body` | 280 characters |
+| `ctaLabel` | 32 characters |
+| `layout` | `split` or `stack` |
+
+Unknown fields, invalid text, and incomplete generation fail. These checks
+establish the output's shape; factual accuracy, writing quality, and usefulness
+need separate evaluation. [WebLLM schema example](https://github.com/mlc-ai/web-llm/blob/v0.2.85/examples/json-schema/src/json_schema.ts)
+
+Only one load or generation can run at a time. Loading has a five-minute
+deadline; generation has a one-minute deadline. Abort, timeout, unload, worker
+failure, or invalid output terminates the worker and rejects the pending
+operation. Another attempt requires a new load. Nothing retries automatically,
+and partial results cannot be adopted. Termination also cancels runtime work
+that does not accept an `AbortSignal`.
+
+## Caching and integrity
+
+WebLLM stores model files in the browser Cache API. A later load needs the network
+if a runtime, tokenizer, model, or application file is missing. The model and
+library URLs are pinned to immutable versions. The adapter verifies the
+configuration's SHA-256 integrity value; it does not verify SHA-256 hashes for
+every weight file, tokenizer, or model WebAssembly library. Cached weights can be
+downloaded again and are separate from application records in IndexedDB.
+[WebLLM caching and worker lifecycle](https://webllm.mlc.ai/docs/user/advanced_usage.html),
+[integrity scope](https://github.com/mlc-ai/web-llm/blob/v0.2.85/src/integrity.ts)
+
+## Status and limits
+
+On 23 September 2026, the adapter produced two suggestions with networking
+disabled on an arm64 Mac running macOS 26.5.2 and Chromium 151.0.7922.34. An
+offline browser reload and cached-model reload separated the suggestions. The
+cached run made zero remote requests. All 17 browser test groups passed with
+no uncaught errors. These results cover execution and offline reopening on
+that configuration with the earlier prompt. See the
+[browser test record](https://github.com/hraness/algal/pull/69) for the status of
+each prompt version. Suggestion quality and other devices need their own tests.
+
+## Other browser inference APIs
+
+The following alternatives reflect releases and documentation available on
+23 September 2026. Transformers.js **4.3.0** added an experimental structured-output
+companion for JSON, schemas, and regular expressions, plus Safari 26+ WebGPU
+support. It provides pipelines for a wider range of model tasks.
+[Transformers.js 4.3.0](https://github.com/huggingface/transformers.js/releases/tag/4.3.0)
+
+Chrome's Prompt API ships on the web in Chrome 148 and supports schema
+constraints. Its hardware and storage requirements, browser-managed model, and
+lack of worker support would require a separate optional adapter.
 [Chrome Prompt API](https://developer.chrome.com/docs/ai/prompt-api)
-
-Research and artifact metadata were checked on September 23, 2026. These source
-facts and deterministic adapter tests do not qualify actual model inference,
-offline operation or model quality on a browser/device. Record those separately
-when running the built application.
