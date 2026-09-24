@@ -145,6 +145,11 @@ limits. Begin with repository-local programs and demonstrated callers. A
 package server or automatic dependency resolution is not required to establish
 useful reuse.
 
+The task-planning project has two entries today: the batch planner and a
+single-task inspector that reuses the same scoring and clamp programs under
+identical executable digests, with failure examples for bad input. That is a
+demonstrated second caller, not yet a curated library.
+
 ## Scale programs and habitats separately
 
 A habitat is the host environment shared by programs: its store, function and
@@ -193,13 +198,20 @@ executable digest, receipt, and caller path. Diagrams expose branches and child
 calls. A receipt, the recorded result of a run, can be replayed independently;
 source annotations alone do not establish successful execution.
 
-Larger habitats need a dependency summary that can expand into individual
-calls, plus application revision and evaluation links. Such a summary should
-distinguish unique modules from repeated calls and self work from inclusive
-child work. Otherwise shared helpers can disappear from the explanation or
-nested work can be counted twice. Missing or truncated evidence should remain
-visible. This aggregate inspection is proposed; the source guide describes
-the [diagnostics available today](source-language.md#locate-a-recorded-failure).
+The `dependencies` command reports a source project's files, executable
+modules, and every static call with its caller location, so a shared helper
+appears once as a module and once per call as an occurrence. It records each
+module's resolved interface, declared budgets, and the model effects it
+declares directly or through its children, and it can check a bundle against
+the recompiled closure. The report is kept outside executable identity and
+describes possible structure, not observed work. The source guide describes
+[the report](source-language.md#inspect-project-dependencies) and the
+[diagnostics for recorded failures](source-language.md#locate-a-recorded-failure).
+
+Joining that structure with receipts, application revisions, and evaluation
+records remains proposed. Such a view should show self work separately from
+inclusive child work, so nested receipts are not counted twice, and it should
+keep missing or truncated evidence visible.
 
 ## Proposed next steps
 
@@ -207,13 +219,13 @@ the [diagnostics available today](source-language.md#locate-a-recorded-failure).
    shared dependencies and rejected oversized graphs. Measure browser history
    verification separately so raising source limits does not conceal slow
    interaction.
-2. Add a dependency report with source paths, module digests, caller paths,
-   interfaces, unique and expanded counts, and transitive effect requirements.
-   Keep that report outside executable identity and check it against compiled
-   artifacts.
-3. Extract a small pure library from multiple applications. Require a second
-   caller and failure examples before treating a helper as a shared standard.
-   Compare library revisions on pinned cases and unseen cases before activation.
+2. Join the dependency report with receipts and application revisions: self
+   and inclusive work per occurrence, evaluation and activation links, and a
+   bounded estimate of dynamic invocations under branches and item limits.
+3. Extract a small pure library from multiple applications. The task planner
+   now has a second caller with failure examples; a curated index still needs
+   entries from more than one application, plus comparison of library revisions
+   on pinned cases and unseen cases before activation.
 4. Add richer source record and result types for demonstrated application needs.
    Lower them to checks the runtime enforces; new validation semantics need
    versioned specification and cross-runtime tests.

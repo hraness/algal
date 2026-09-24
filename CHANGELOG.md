@@ -9,6 +9,14 @@ wire constant (`0.1.0`) is independent of these package versions.
 
 ## Unreleased
 
+- `algal dependencies` and `createSourceDependencyReport` report a source
+  project's files, executable modules, static call occurrences with caller
+  locations, and direct and transitive model effects, and can check a bundle
+  against the recompiled closure. The report is presentation-only and outside
+  executable identity.
+- The task-planning project gains a second entry, `inspect_task.algal`, that
+  reuses the scoring and clamp programs under identical digests, with runtime
+  failure examples and native parity coverage.
 - Application evaluation can opt into `composition: "closed-pure-v1"` to
   check and run stored pure subprograms in both runtimes. Existing policies
   keep their flat-program behavior; generated proposals remain flat.

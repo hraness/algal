@@ -194,6 +194,9 @@ The [larger-program guide](docs/scaling-programs.md) covers module boundaries,
 dependency versions, library design, and habitat limits. Its
 [six-file task planner](examples/source/projects/task-planning/README.md)
 separates scoring, policy, and display data while reusing a pure helper.
+`dependencies` lists a project's source files, executable modules, and every
+static call with its caller location; the planner reports six modules and
+seven occurrences because its clamp helper is called twice.
 
 `check` also reports the source entry, file count, inferred maximum executor
 attempts, and required nesting depth. For the two-file inbox project these
