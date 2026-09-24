@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { admitJavaRuntimeFiles, admitTlcCommandOutput, parseTlcOutput, renderTlcConfiguration, tlcDefinition, validateModelInventory } from "../lib/tlc";
+import { admitJavaRuntimeFiles, admitTlcCommandOutput, parseTlcOutput, renderTlcConfiguration, TLC_OPTIONS, tlcDefinition, validateModelInventory } from "../lib/tlc";
 import { ADAPTER_SOURCES, LIVE_SOURCES, MODEL_PROFILES, MODEL_MUTATIONS } from "./definitions";
 import { admitTlcConfiguration } from "../lib/proof";
 import type { CommandResult } from "../lib/runner";
@@ -206,5 +206,19 @@ describe("pinned TLC raw output", () => {
     expect(() => admitJavaRuntimeFiles(manifest, manifest.files.filter(file => file.path !== "lib/server/libjvm.dylib"))).toThrow();
     expect(() => admitJavaRuntimeFiles(manifest, [...manifest.files, manifest.files[0]!])).toThrow();
     expect(() => admitJavaRuntimeFiles({ ...manifest, archive: { ...manifest.archive, sha256: `sha256:${"0".repeat(64)}` } }, manifest.files)).toThrow();
+  });
+});
+
+describe("static TLC options", () => {
+  test("check liveness only on the exhausted graph with one worker, a fixed seed and no depth/checkpoint/simulation modes", () => {
+    const value = (flag: string) => { const at = TLC_OPTIONS.indexOf(flag); expect(at).toBeGreaterThan(-1); return TLC_OPTIONS[at + 1]; };
+    expect(TLC_OPTIONS[0]).toBe("-tool");
+    expect(value("-lncheck")).toBe("final");
+    expect(value("-workers")).toBe("1");
+    expect(value("-seed")).toBe("1");
+    expect(value("-fp")).toBe("0");
+    expect(value("-coverage")).toBe("1");
+    expect(new Set(TLC_OPTIONS.filter(option => option.startsWith("-"))).size).toBe(6);
+    for (const flag of ["-checkpoint", "-dfid", "-depth", "-simulate", "-continue", "-recover", "-view", "-deadlock", "-terse"]) expect(TLC_OPTIONS).not.toContain(flag);
   });
 });

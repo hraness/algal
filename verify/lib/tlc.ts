@@ -305,8 +305,13 @@ async function toolIdentity(root: string): Promise<ToolIdentity> {
   admitJavaRuntimeFiles(await readJson(root, "verify/tla/java-runtime.json"), files);
   return { java: { path: javaPath, sha256: javaHash.sha256 }, jar: { path: jarPath, sha256: jarHash.sha256 }, runtime: { root: runtimeRoot, files, sha256: hashJson(files) } };
 }
+/** Static TLC options. `-lncheck final` defers liveness checking until the
+ * reachable graph is exhausted: pinned TLC otherwise also checks the partial
+ * graph about three seconds after start, and admission rejects any liveness
+ * counterexample outside the complete-state-space check. */
+export const TLC_OPTIONS: readonly string[] = ["-tool", "-workers", "1", "-coverage", "1", "-seed", "1", "-fp", "0", "-lncheck", "final"];
 function command(tools: ToolIdentity, directory: string, plan: RunPlan): string[] {
-  return [tools.java.path, "-XX:+UseParallelGC", "-Xmx256m", `-Duser.home=${join(directory, "home")}`, `-Djava.io.tmpdir=${join(directory, "tmp")}`, "-cp", tools.jar.path, "tlc2.TLC", "-tool", "-workers", "1", "-coverage", "1", "-seed", "1", "-fp", "0", "-metadir", join(directory, "states"), "-config", "Model.cfg", plan.profile.module];
+  return [tools.java.path, "-XX:+UseParallelGC", "-Xmx256m", `-Duser.home=${join(directory, "home")}`, `-Djava.io.tmpdir=${join(directory, "tmp")}`, "-cp", tools.jar.path, "tlc2.TLC", ...TLC_OPTIONS, "-metadir", join(directory, "states"), "-config", "Model.cfg", plan.profile.module];
 }
 export type TlcRawRun = { id: string; directory: string; configuration: string; stdoutSha256: string; stderrSha256: string; commandResult: CommandResult };
 export type TlcSuiteEvidence = { contract: "algal.verification-tlc-suite.v1"; suite: TlcSuite; definitionDigest: string; tools: ToolIdentity; runs: TlcRawRun[] };

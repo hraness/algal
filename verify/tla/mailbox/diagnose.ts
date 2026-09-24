@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { hashBytes, stableJson } from "../../lib/files";
-import { admitTlcCommandOutput, renderTlcConfiguration, type TlcExpected } from "../../lib/tlc";
+import { admitTlcCommandOutput, renderTlcConfiguration, TLC_OPTIONS, type TlcExpected } from "../../lib/tlc";
 import { CommandFailure, runCommand } from "../../lib/runner";
 import type { TlcConfiguration } from "../../lib/proof";
 import { MAILBOX_MUTATIONS, MAILBOX_PROFILES } from "./profiles";
@@ -31,7 +31,7 @@ await writeFile(join(directory, "Model.cfg"), cfg);
 const metadata = JSON.parse(await readFile(join(root, "verify/toolchains.json"), "utf8")) as { tools: { id: string; command: string[]; sha256: string }[] };
 const java = metadata.tools.find(tool => tool.id === "java")!, tlc = metadata.tools.find(tool => tool.id === "tlc")!;
 if (hashBytes(await readFile(java.command[0]!)) !== java.sha256 || hashBytes(await readFile(tlc.command[2]!)) !== tlc.sha256) throw new Error("diagnostic executable/JAR pin changed");
-const command = [java.command[0]!, "-XX:+UseParallelGC", "-Xmx256m", `-Duser.home=${join(directory, "home")}`, `-Djava.io.tmpdir=${join(directory, "tmp")}`, "-cp", tlc.command[2]!, "tlc2.TLC", "-tool", "-workers", "1", "-coverage", "1", "-seed", "1", "-fp", "0", "-metadir", join(directory, "states"), "-config", "Model.cfg", profile.module];
+const command = [java.command[0]!, "-XX:+UseParallelGC", "-Xmx256m", `-Duser.home=${join(directory, "home")}`, `-Djava.io.tmpdir=${join(directory, "tmp")}`, "-cp", tlc.command[2]!, "tlc2.TLC", ...TLC_OPTIONS, "-metadir", join(directory, "states"), "-config", "Model.cfg", profile.module];
 try {
   const result = await runCommand(command, directory, { timeoutMs: 30_000, maxOutputBytes: 2_097_152 });
   await writeFile(join(directory, "command.json"), stableJson(result) + "\n");

@@ -58,7 +58,10 @@ an acknowledged state, not merely a crash from Init. Deliberate protocol mutatio
 must violate the intended invariant/property and contain a reachable trace; a
 nonzero exit, parser failure, timeout or wrong property cannot pass a mutation.
 Pinned TLC does not name a failed liveness property, so each liveness configuration
-has exactly one temporal property and its exact configuration is bound.
+has exactly one temporal property and its exact configuration is bound. TLC runs
+with one worker, a fixed seed and `-lncheck final`, so liveness is checked only
+after the reachable graph is exhausted; a counterexample from TLC's periodic
+partial-graph check is rejected rather than admitted.
 
 ## Custody correspondence and limits
 
