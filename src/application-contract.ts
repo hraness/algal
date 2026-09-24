@@ -1,7 +1,8 @@
+import { utf8Length } from "./utf8";
 /** Closed, bounded application records shared with the native implementation. */
 import { asDigest, digestCanonical, type Digest } from "./digest";
 import { AlgalError } from "./errors";
-import type { Store } from "./store";
+import type { Store } from "./store-contract";
 import { asJsonValue, canonicalize, type JsonValue } from "./values";
 
 export type ApplicationRevision = {
@@ -74,7 +75,7 @@ export function applicationJson(input: unknown): JsonValue {
   visit(input, 0);
   const value = asJsonValue(input, "application record");
   const bytes = canonicalize(value);
-  if (Buffer.byteLength(bytes) > APPLICATION_LIMITS.recordBytes) throw new Error("Application byte bound exceeded");
+  if (utf8Length(bytes) > APPLICATION_LIMITS.recordBytes) throw new Error("Application byte bound exceeded");
   return JSON.parse(bytes) as JsonValue;
 }
 export function applicationObject(input: unknown, fields: readonly string[]): Record<string, JsonValue> {

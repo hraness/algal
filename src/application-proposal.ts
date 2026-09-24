@@ -1,3 +1,4 @@
+import { utf8Length } from "./utf8";
 /** Case-pure, bounded, replayable candidate generation for one application
  * entrypoint. A `propose` transition retains `algal.application-proposal.v1`:
  * the evidence that a generator entrypoint of the CURRENT revision was run
@@ -24,7 +25,7 @@ import type { ApplicationCore, ApplicationSnapshot } from "./application-core";
 import { manifestToJson, parseOrganismManifest, type OrganismManifest } from "./contract";
 import { digestCanonical, type Digest } from "./digest";
 import { parseRunReceipt, runOrganism, type RunReceipt } from "./run";
-import type { Store } from "./store";
+import type { Store } from "./store-contract";
 import { canonicalize, type JsonValue } from "./values";
 import { verifyReceipt } from "./verify";
 
@@ -78,7 +79,7 @@ export type ProposedApplicationRevision = { snapshot: ApplicationSnapshot; propo
 
 const hash = (value: unknown): Digest => digestCanonical(applicationJson(value));
 function reason(value: unknown): string {
-  if (typeof value !== "string" || value.length === 0 || Buffer.byteLength(value) > PROPOSAL_LIMITS.reasonBytes || value.includes("\0")) throw new Error("Proposal reason must be bounded text");
+  if (typeof value !== "string" || value.length === 0 || utf8Length(value) > PROPOSAL_LIMITS.reasonBytes || value.includes("\0")) throw new Error("Proposal reason must be bounded text");
   return value;
 }
 

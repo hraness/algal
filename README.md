@@ -1,28 +1,30 @@
 # ALGAL
 
-**Agent work that survives a pause—and comes back with evidence.**
+**Agent work that survives a pause and comes back with evidence.**
 
 ALGAL is a language and application VM for bounded agent programs. Use it when
 an AI-assisted task needs to wait for a person, survive a CLI restart, reuse
 completed work, or explain what happened without calling the model again.
-The host chooses the tools and authority; the program makes decisions, limits,
-and approval points explicit. A native Rust CLI and an independently runnable
-Bun runtime share the program, receipt, and durable process contracts.
+Your host application chooses the tools and permissions; the program declares
+its decisions, limits, and approval points. A native Rust CLI and a Bun runtime
+that runs on its own implement the same specifications for programs, receipts,
+and durable processes.
 
 ## Pick the job you need done
 
-| Your job | What ALGAL retains | Start here |
+| Your job | What ALGAL keeps | Start here |
 | --- | --- | --- |
 | Review a change brief now; approve the exact local report later | Evidence, proposal, human decision, and publication history across separate invocations | [Native workbench](docs/native-workbench.md); optional [on-device Apple brief](docs/apple-brief.md) |
-| Turn a coding attempt into a checked patch | Admitted source revision, proposed patch, host-selected test results, and unresolved operation custody | [Durable repairs](docs/repair.md) |
+| Turn a coding attempt into a checked patch | The pinned source revision, the proposed patch, results of the tests you chose, and a record of which process owns any job whose outcome is still unknown | [Durable repairs](docs/repair.md) |
 | Give another reviewer a verifiable execution history | One portable evidence file that replays without your store, credentials, or model | [Offline evidence](docs/vm.md#verify-a-process-away-from-its-original-host) |
 | Route support requests and reuse a draft helper over a bounded inbox | Explicit context, selected branches, child program identities, and recorded results | [Readable programs](#read-the-program-see-its-structure) and [reuse](#write-a-program-once-call-it-or-use-it-for-each-item) |
-| Observe a PR until checks settle, without spending model calls on polling | Exact Git revision and policy evidence, bounded waits, and a review or repair packet | [Read-only PR shepherd](docs/pr-shepherd.md) |
+| Observe a PR until checks settle, without spending model calls on polling | The exact commit, its CI and policy results, waits with a poll limit, and a review or repair packet | [Read-only PR shepherd](docs/pr-shepherd.md) |
 | Retain observations, investigate changed premises, and activate an evaluated procedure revision | Expected-head application state, scope-bound derivations, durable intents, and captured views | [Adaptive inventory](docs/adaptive-inventory.md) and [application contract](spec/v1/application.md) |
 
 The [use-case guide](docs/use-cases.md) connects each job to runnable commands,
-expected artifacts, and the work your host still owns. Start with the packaged
-VM below; author a custom program once the retained workflow is useful to you.
+the files each one produces, and the work your host application remains
+responsible for. Start with the packaged VM below, and write your own program
+once the workflow proves useful.
 
 ## Try the VM with one executable
 
@@ -62,16 +64,17 @@ executor and reuses the retained result. The generated prose still needs review.
 ### What makes this useful
 
 The unit of work is a saved, typed program plus its recorded execution. A wait
-does not require keeping a model conversation alive. A restart can reuse settled
-effects. A reviewer can check a portable history offline. The same program can
-run in the native kernel or the Bun reference runtime, and the cross-runtime
-demo resumes each runtime's saved work in the other on a shared local store.
+does not require keeping a model conversation alive. A restart can reuse effects
+that already finished. A reviewer can check a portable history offline. The
+same program can run in the native kernel or the Bun reference runtime, and the
+cross-runtime demo resumes each runtime's saved work in the other on a shared
+local store.
 
 Efficiency comes from explicit context, bounded selected paths, retained effects,
 and model-free waiting and verification. The demos measure those operations;
 they do not establish token, cost, or latency savings against other engines.
 
-Admission is bounded as well as execution: recursive compilation shares a
+Compilation has limits as well as execution: recursive compilation shares a
 1,024-manifest, 4,096-cell, 16,384-edge, 64 MiB normalized-input allowance.
 Repeated child occurrences count toward that allowance. Bundle transports
 stream within a 64 MiB byte ceiling; non-regular files are rejected before
@@ -81,19 +84,24 @@ work budget before a recovery effect can run. See the
 
 ### Adoption boundary
 
-This is working **prerelease software for bounded, host-owned workflows**.
-Native packages are unsigned and unnotarized. ALGAL is an application VM, not
-an OS sandbox; host tools retain their host permissions. Coding jobs and the
-PR shepherd currently use the Bun host. There is no multi-tenant service,
-distributed custody, global storage quota, or retention service. Unknown writes
-require reconciliation, and a verifying receipt proves execution consistency,
-not factual truth or exactly-once arbitrary external effects. See the
-[operating boundary](docs/use-cases.md#choose-the-right-boundary) before deployment.
+ALGAL is working **prerelease software for workflows your own host application
+controls**. Native packages are unsigned and not notarized. ALGAL is an
+application VM, not an OS sandbox, so host tools keep their normal permissions.
+Coding jobs and the PR shepherd currently need the Bun host. There is no
+multi-tenant service, distributed custody (moving process ownership between
+machines), store-wide storage quota, or retention service. If a write's outcome
+is unknown, your host must confirm what happened before retrying it. A receipt
+that verifies shows the run was internally consistent; it does not show that
+its outputs are factually true or that an arbitrary external write happened
+exactly once. Read the [operating boundary](docs/use-cases.md#choose-the-right-boundary)
+before you deploy.
+
 The application lifecycle does enforce conservative [namespace byte limits](spec/v1/application.md#conservative-namespace-quota);
-these do not attribute shared content-addressed objects to applications.
+they do not count shared content-addressed objects against any one application.
 Explicit [active-memory rollover](spec/v1/application.md#active-memory-rollover)
-can retire selected observations while retaining source history. It preserves
-run/effect custody and does not reset lifecycle or storage limits.
+can retire selected observations while keeping their source history. Rollover
+keeps the lifecycle history and the ownership records of runs and effects, and
+it does not reset lifecycle or storage limits.
 
 ## Read the program. See its structure.
 
@@ -878,6 +886,30 @@ manifest). ALGAL does not broker provider access; the executor seam is
 where provider auth lives. `--executors <file>` takes a JSON map of
 name → command, so a cell's `route.provider`/`route.preset` picks its model.
 
+Rust embedders can register a synchronous `effects::HostExecutor` with
+`Host::register_executor(name, Arc<dyn HostExecutor>)`. It serves agent cells
+only and returns a raw JSON output or `Error::new("EFFECT_SUSPENDED", ...)`.
+Use this for bounded request capture and lookup of an exact settled result;
+perform external work in the owning supervisor after the run suspends. The
+callback must not block or launch work: it is trusted host code, not a
+preemptible sandbox. ALGAL retains routing, call budgets, output validation,
+ordered journal intent/completion, and receipt authoring. These executors are
+never cached or automatically retried, and offline verification never invokes
+them.
+
+`configuration_digest()` must return a canonical SHA-256 digest binding the
+adapter implementation and all immutable admission/routing settings. The host
+snapshots it during registration and rejects later changes, duplicate names,
+route aliases, and more than 16 total executors. A matching registered name
+must preserve its recorded configuration when resuming. The embedding
+supervisor must also pin the complete admitted executor set across resumptions
+so removing or renaming an executor cannot silently replace its authority.
+Mutable settled-result records are execution state, not configuration. A new
+resume generation uses a new supervisor journal intent; recovery of an old
+intent replays its recorded result, including suspension. See
+[`host_executor.rs`](crates/algal/tests/host_executor.rs) for capture, suspension,
+externally supplied results, resumption, strict replay, and journal recovery.
+
 ## How does it behave?
 
 - The scheduler sweeps cells in declared order. A cell activates when all its
@@ -1139,6 +1171,7 @@ forged-output detection.
 - `spec/v1/bench.md` — workload comparison, attribution, and the pareto claim.
 - [Malleable workbench](docs/malleable-workbench.md) — captured component state, ordered signals, causal inspection, controls and independently checked proposals.
 - [Local triage](docs/local-triage.md) — persistent tasks across browser, desktop and terminal, on-device workflow proposals, schema migration and explicit forks.
+- [Browser-local evolution](docs/browser-grow.md). Edit a marketing component, save its history in your browser, and reopen it offline. An optional WebGPU model can suggest changes. [Open the workspace](https://algal.computer/grow/).
 - [Coding-harness pilot](docs/coding-harness.md) — matched conventional/ALGAL loops, bounded policy proposals, and independent benchmark grading.
 - [Coding-harness memory spike](docs/coding-harness-memory-spike.md) — scoped observations, inspectable procedures, and native prerequisite proofs in an opt-in memory comparison.
 - `docs/` — design notes as they land.

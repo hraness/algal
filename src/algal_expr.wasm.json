@@ -111,11 +111,11 @@
     },
     {
       "path": "verify/boundary/run.ts",
-      "sha256": "sha256:357917d7db95de9e7fbb1961ebd64b163fa0adcc1913b10a0993d8cd5757503e"
+      "sha256": "sha256:a9006806c5f824d234ca3298a9143cc77bb0d9901a89365b088009de17a7be6b"
     },
     {
       "path": "verify/lib/claims.ts",
-      "sha256": "sha256:0b957f70d7d1ca9b423c9999eb87281b82855ffbf5feb01b30286ff82834e127"
+      "sha256": "sha256:aa85dad664196746fa53eb430f668622f7d4059663e6c929aa5c195e32b1641e"
     },
     {
       "path": "verify/lib/command-supervisor.ts",
@@ -123,7 +123,7 @@
     },
     {
       "path": "verify/lib/files.ts",
-      "sha256": "sha256:aaffad70367e4a6a6ae95b08b6d137e7a1d12be861d8c753ce52d9a4f274c2ed"
+      "sha256": "sha256:1fbe703ed4396a8109065dcb9ac1e574f7c24434c2cf583a6f340abbba7e81db"
     },
     {
       "path": "verify/lib/runner.ts",

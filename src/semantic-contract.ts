@@ -1,3 +1,4 @@
+import { truncateUtf8, utf8Length } from "./utf8";
 /** Portable recall contract and executor. Index storage is host-owned. */
 import { AlgalError } from "./errors";
 import type { EffectRequest, Executor } from "./effects";
@@ -38,10 +39,7 @@ export function recallOutputSchema(): JsonObject {
 }
 
 function hitJson(hit: SearchHit): JsonObject {
-  const encoded = Buffer.from(hit.text, "utf8");
-  let end = Math.min(encoded.length, RECALL_HIT_TEXT_BYTES);
-  while (end < encoded.length && end > 0 && (encoded[end]! & 0xc0) === 0x80) end--;
-  const text = encoded.subarray(0, end).toString("utf8");
+  const text = truncateUtf8(hit.text, RECALL_HIT_TEXT_BYTES);
   const out: JsonObject = {
     id: hit.id,
     source: hit.source,
@@ -94,7 +92,7 @@ export function bindRecallOutput(raw: JsonValue, k: number): JsonObject {
       typeof hit.seq !== "number" || !Number.isInteger(hit.seq) ||
         hit.seq < 0 || hit.seq >= SEMANTIC_BOUNDS.maxChunks ||
       typeof hit.score !== "number" || !Number.isFinite(hit.score) ||
-      typeof hit.text !== "string" || Buffer.byteLength(hit.text, "utf8") > RECALL_HIT_TEXT_BYTES ||
+      typeof hit.text !== "string" || utf8Length(hit.text) > RECALL_HIT_TEXT_BYTES ||
       (hit.ref !== undefined &&
         (typeof hit.ref !== "string" || !/^sha256:[0-9a-f]{64}$/.test(hit.ref) ||
           hit.ref !== sourceRef))

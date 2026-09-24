@@ -1,7 +1,19 @@
+import { utf8Length } from "./utf8";
 /** Bounded streams and explicitly selected command execution. Importing this
  * module does not open files, start processes, or require filesystem APIs. */
 import { AlgalError } from "./errors";
 import { asJsonValue, canonicalize, type JsonValue } from "./values";
+
+/** Host-only command capability. Keeping its structural type here lets the
+ * pure runtime bundle/typecheck in browsers without importing Bun globals. */
+type CommandRuntime = {
+  spawn(argv: string[], options: { cwd?: string; stdin: "pipe"; stdout: "pipe"; stderr: "pipe" }): {
+    stdin: { write(text: string): unknown; end(): unknown };
+    stdout: ReadableStream<Uint8Array>; stderr: ReadableStream<Uint8Array>;
+    exited: Promise<number>; signalCode: string | null;
+    kill(signal: "SIGKILL"): unknown;
+  };
+};
 
 export async function boundedBytes(
   stream: ReadableStream<Uint8Array> | null,
@@ -59,10 +71,12 @@ export async function commandJson(
   }
   if (options.signal?.aborted) throw new AlgalError("BUDGET_EXHAUSTED", "command cancelled before launch");
   const payload = canonicalize(value);
-  if (Buffer.byteLength(payload) > 1_048_576) throw new AlgalError("BUDGET_EXHAUSTED", "command input exceeds 1048576 bytes");
+  if (utf8Length(payload) > 1_048_576) throw new AlgalError("BUDGET_EXHAUSTED", "command input exceeds 1048576 bytes");
   const controller = new AbortController();
   const signal = options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal;
-  const child = Bun.spawn(argv, { ...(options.cwd ? { cwd: options.cwd } : {}), stdin: "pipe", stdout: "pipe", stderr: "pipe" });
+  const runtime = (globalThis as { Bun?: CommandRuntime }).Bun;
+  if (!runtime) throw new AlgalError("CAPABILITY_DENIED", "This host does not provide command execution");
+  const child = runtime.spawn(argv, { ...(options.cwd ? { cwd: options.cwd } : {}), stdin: "pipe", stdout: "pipe", stderr: "pipe" });
   const stop = () => { child.kill("SIGKILL"); };
   signal.addEventListener("abort", stop, { once: true });
   const timer = setTimeout(() => controller.abort(), timeoutMs);

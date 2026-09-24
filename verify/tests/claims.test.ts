@@ -17,7 +17,7 @@ async function fixture(): Promise<{ root: string; registry: Registry }> {
   const source = { path: "src/core.ts", sha256: await hashFile(root, "src/core.ts") };
   const spec = { path: "spec/core.md", sha256: await hashFile(root, "spec/core.md") };
   const registry: Registry = {
-    contract: "algal.verification-properties.v1", baseline: { commit: "a".repeat(40), tree: "b".repeat(40) }, dependencies: [spec, source],
+    contract: "algal.verification-properties.v1", baseline: { commit: "a".repeat(40), tree: "b".repeat(40) }, dependencies: await Promise.all((await governedPaths(root)).map(async path => ({ path, sha256: await hashFile(root, path) }))),
     profiles: [{ id: "pure-core", description: "Bounded in-memory execution", assumptions: ["A-SPEC"] }],
     properties: [{ id: "ADM-01", owner: "admission", reviewer: "independent", phase: "01", findings: ["F01"], severity: "high",
       statement: "Admission rejects over-bound input", failure: "Over-bound value is admitted", domain: "Bounded JSON", quantifiers: "Every admitted value", exclusions: ["Arbitrary host code"],
@@ -95,7 +95,24 @@ describe("claim ledger admission", () => {
     const { root } = await fixture();
     for (const directory of ["examples", ".github/workflows", "crates/a/src"]) await mkdir(join(root, directory), { recursive: true });
     for (const path of ["examples/new.algal.json", ".github/workflows/ci.yml", "crates/a/src/lib.rs", "scripts/build-expr-wasm.sh"]) await writeFile(join(root, path), "input");
-    expect(await governedPaths(root)).toEqual([".github/workflows/ci.yml", "crates/a/src/lib.rs", "examples/new.algal.json", "scripts/build-expr-wasm.sh", "spec/core.md", "src/core.ts"]);
+    expect(await governedPaths(root)).toEqual([".github/workflows/ci.yml", "crates/a/src/lib.rs", "examples/new.algal.json", "scripts/build-expr-wasm.sh", "scripts/verify.ts", "spec/core.md", "src/core.ts"]);
+  });
+
+  test("browser workers, qualification scripts and tests invalidate evidence while generated site output does not", async () => {
+    const { root } = await fixture();
+    const sources = ["site/browser-inference-worker.ts", "site/grow-offline.ts", "tests/browser-grow-storage.ts", "scripts/browser-grow-qualification.mjs"];
+    for (const path of [...sources, "site/dist/grow/sw.js"]) {
+      await mkdir(join(root, path.substring(0, path.lastIndexOf("/"))), { recursive: true });
+      await writeFile(join(root, path), "original");
+    }
+    for (const path of sources) {
+      const before = hashJson(await inputBindings(root));
+      await writeFile(join(root, path), "changed");
+      expect(hashJson(await inputBindings(root))).not.toBe(before);
+    }
+    const before = hashJson(await inputBindings(root));
+    await writeFile(join(root, "site/dist/grow/sw.js"), "generated");
+    expect(hashJson(await inputBindings(root))).toBe(before);
   });
 
   test("generated caches are excluded while fixture data and imported Lean source remain inputs", async () => {

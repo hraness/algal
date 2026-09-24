@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { pageDocument } from "./chrome";
+import { ADOPTION_BOUNDARY, SITE_DESCRIPTION } from "./copy";
 import { renderIconSprite, siteIcon, type SiteIconName } from "./icons";
 
 const SITE = new URL(".", import.meta.url).pathname;
@@ -9,8 +11,8 @@ const pageFiles = readdirSync(join(SITE, "pages")).filter(file => file.endsWith(
 const pages = Object.fromEntries(pageFiles.map(file => [file, readFileSync(join(SITE, "pages", file), "utf8")]));
 const allMarkup = `${chrome}\n${Object.values(pages).join("\n")}`;
 
-test("the site ships home, tour, use-cases, living software, and workbench pages", () => {
-  expect(pageFiles.sort()).toEqual(["home.html", "living.html", "tour.html", "use-cases.html", "workbench.html"]);
+test("the site ships home, tour, use-cases, living software, browser evolution, and workbench pages", () => {
+  expect(pageFiles.sort()).toEqual(["grow.html", "home.html", "living.html", "tour.html", "use-cases.html", "workbench.html"]);
 });
 
 test("every standard icon referenced by static markup is present in the sprite", () => {
@@ -64,4 +66,34 @@ test("docs links in marketing pages resolve to mirrored pages, not the repositor
   }
   expect(allMarkup).toContain('href="/docs/"');
   expect(allMarkup).toContain('href="/docs/spec/organism/"');
+});
+
+test("page metadata is escaped, so a quote in a derived description cannot end the attribute", () => {
+  const document = pageDocument({
+    page: "docs", path: "/docs/example/",
+    title: "A \"quoted\" title", description: "Systems such as \"one cheap call\" & <others>.", ogTitle: "Example",
+  }, "<main></main>");
+  expect(document).toContain('<meta name="description" content="Systems such as &quot;one cheap call&quot; &amp; &lt;others&gt;.">');
+  expect(document).toContain("<title>A &quot;quoted&quot; title</title>");
+  expect(document).toContain(JSON.stringify(SITE_DESCRIPTION));
+});
+
+test("the home and use-cases pages both state the prerelease limits from one constant", () => {
+  for (const page of ["home.html", "use-cases.html"]) expect(pages[page]).toContain("{{ADOPTION_BOUNDARY}}");
+  for (const limit of ["prerelease", "unsigned and not notarized", "tool permissions", "OS isolation", "Multi-tenant service use", "store-wide quotas are not built yet"]) {
+    expect(ADOPTION_BOUNDARY).toContain(limit);
+  }
+  expect(pages["home.html"]).toContain("exactly once");
+  expect(pages["use-cases.html"]).toContain("exactly once");
+});
+
+test("llms.txt takes its lead from the site description", () => {
+  const llms = readFileSync(join(SITE, "llms.txt"), "utf8");
+  expect(llms.split("\n\n")[1]).toBe("{{SITE_DESCRIPTION}}");
+});
+
+test("site copy uses no em dashes", () => {
+  const copy = readFileSync(join(SITE, "copy.ts"), "utf8");
+  const llms = readFileSync(join(SITE, "llms.txt"), "utf8");
+  for (const text of [allMarkup, copy, llms]) expect(text).not.toContain("—");
 });

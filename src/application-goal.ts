@@ -1,10 +1,11 @@
+import { utf8Length } from "./utf8";
 /** A retained query objective, not a claim that executing a procedure succeeds.
  * Captures are display data; fresh evaluation uses the admitted memory service. */
 import { applicationId, applicationList, applicationObject, applicationRef, applicationTag, getApplicationRecord, type ApplicationRevision } from "./application-contract";
 import { parseMemoryDerivation, parseMemoryQueries, parseMemoryQuery, type ApplicationMemoryService, type MemoryStatus } from "./application-memory";
-import type { ApplicationSnapshot } from "./application";
+import type { ApplicationSnapshot } from "./application-core";
 import { digestCanonical, type Digest } from "./digest";
-import type { Store } from "./store";
+import type { Store } from "./store-contract";
 
 export type ApplicationGoal = { contract: "algal.application-goal.v1"; application: string; id: string; description: string; query: Digest; entrypoint: string };
 export type ApplicationGoalCapture = { goal: Digest; definition: ApplicationGoal; state: Digest; memory: Digest; status: MemoryStatus; derivation: Digest | null };
@@ -12,7 +13,7 @@ const statuses: readonly string[] = ["supported", "opposed", "conflicted", "unkn
 export function parseApplicationGoal(input: unknown): ApplicationGoal {
   const v = applicationObject(input, ["contract", "application", "id", "description", "query", "entrypoint"]);
   applicationTag(v.contract, "algal.application-goal.v1");
-  if (typeof v.description !== "string" || !v.description.length || Buffer.byteLength(v.description) > 2048 || v.description.includes("\0")) throw new Error("Invalid application goal description");
+  if (typeof v.description !== "string" || !v.description.length || utf8Length(v.description) > 2048 || v.description.includes("\0")) throw new Error("Invalid application goal description");
   return { contract: "algal.application-goal.v1", application: applicationId(v.application), id: applicationId(v.id), description: v.description, query: applicationRef(v.query), entrypoint: applicationId(v.entrypoint) };
 }
 export async function validateApplicationGoals(store: Store, revision: ApplicationRevision): Promise<{ref: Digest; goal: ApplicationGoal}[]> {

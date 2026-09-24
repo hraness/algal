@@ -11,11 +11,11 @@ import type {
   PortType,
 } from "./contract";
 import type { FnRegistry } from "./registry";
-import type { Store } from "./store";
+import type { Store } from "./store-contract";
 import { asDigest } from "./digest";
 import { manifestToJson, parseOrganismManifest } from "./contract";
 import { unpackBundle } from "./bundle";
-import type { Transport } from "./transport";
+import type { Transport } from "./transport-contract";
 import type { ToolRegistry } from "./tools";
 import { canonicalBytes, type JsonValue } from "./values";
 

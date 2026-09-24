@@ -4,7 +4,7 @@ import {
   applicationId, applicationObject, applicationRef, applicationRefs,
   getApplicationRecord, nullableApplicationRef, parseApplicationState,
 } from "./application-contract";
-import type { ApplicationService, ApplicationSnapshot } from "./application";
+import type { ApplicationCore, ApplicationSnapshot } from "./application-core";
 import type { ApplicationMemoryService, MemoryRollover } from "./application-memory";
 import type { Digest } from "./digest";
 
@@ -16,7 +16,7 @@ export type RolloverApplicationMemoryInput = {
 export type RolledApplicationMemory = MemoryRollover & { snapshot: ApplicationSnapshot };
 
 export async function rolloverApplicationMemory(
-  lifecycle: ApplicationService, memory: ApplicationMemoryService, input: RolloverApplicationMemoryInput,
+  lifecycle: ApplicationCore, memory: ApplicationMemoryService, input: RolloverApplicationMemoryInput,
 ): Promise<RolledApplicationMemory> {
   const optional = ["evidence", "causedBy"].filter(key => Object.hasOwn(input, key));
   const v = applicationObject(input, ["application", "operation", "expectedHead", "expectedMemory", "retainObservations", "retainHypotheses", ...optional]);

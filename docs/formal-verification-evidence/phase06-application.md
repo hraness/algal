@@ -1,5 +1,8 @@
 # Phase 06 application protocol checkpoint
 
+The saved evidence below identifies checkpoint `5e334ed` or an earlier snapshot.
+The [upstream integration](upstream-1737.md) requires fresh checks for its changed source.
+
 Phase 06 remains in progress: dedicated generated composition histories still
 need to extend the existing create/memory/inspect grammar. The final integrated
 aggregate and saved-evidence readmission passed all four registered TLC suites:

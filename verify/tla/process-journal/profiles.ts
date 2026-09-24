@@ -86,7 +86,7 @@ export const JOURNAL_MUTATIONS: ModelMutation[] = [
 ];
 
 export const JOURNAL_LIVE_SOURCES = [
-  "src/process-journal.ts", "src/process.ts", "src/run.ts", "src/host-state.ts",
-  "crates/algal/src/journal.rs", "crates/algal/src/process.rs", "crates/algal/src/runtime.rs",
+  "src/process-journal.ts", "src/runtime-journal-contract.ts", "src/process.ts", "src/effects.ts", "src/run.ts", "src/host-state.ts",
+  "crates/algal/src/journal.rs", "crates/algal/src/process.rs", "crates/algal/src/effects.rs", "crates/algal/src/runtime.rs", "crates/algal/tests/host_executor.rs",
   "crates/algal/src/lease.rs", "spec/v1/process.md", "spec/v1/process-journal.md",
 ];

@@ -95,6 +95,8 @@ struct Runtime<'a> {
     work: usize,
     failure: Option<Value>,
     suspended: bool,
+    /// Host admission/publication failed without an effect receipt to replay.
+    effect_failed_without_receipt: bool,
     replay: Option<&'a Value>,
 }
 
@@ -336,9 +338,11 @@ impl Runtime<'_> {
                             self.event("cell.commit", Some(&cell_path), None, None)?;
                         }
                         Err(error) => {
-                            // A poisoned journal cannot authorize guest recovery
+                            // A host failure without a replayable effect receipt,
+                            // or a poisoned journal, cannot authorize guest recovery
                             // or erase host-only uncertainty through serialization.
-                            if self.host.journal_is_poisoned() {
+                            if self.effect_failed_without_receipt || self.host.journal_is_poisoned()
+                            {
                                 return Err(error);
                             }
                             // suspension is not failure: the cell's effect
@@ -831,7 +835,10 @@ impl Runtime<'_> {
             let receipt = self
                 .host
                 .effect(effect.request, effect.timeout, Some(&mut *self.store))
-                .await?;
+                .await
+                .inspect_err(|_| {
+                    self.effect_failed_without_receipt = true;
+                })?;
             self.effects.push(receipt.clone());
             let retryable = receipt["retryable"] != false;
             if let Some(error) = receipt.get("error") {
@@ -1265,7 +1272,10 @@ impl Runtime<'_> {
                 let receipt = self
                     .host
                     .effect(&request, timeout, Some(&mut *self.store))
-                    .await?;
+                    .await
+                    .inspect_err(|_| {
+                        self.effect_failed_without_receipt = true;
+                    })?;
                 self.effects.push(receipt.clone());
                 let retryable = receipt["retryable"] != false;
                 if let Some(error) = receipt.get("error") {
@@ -1411,6 +1421,7 @@ pub async fn run(
         work: 0,
         failure: None,
         suspended: false,
+        effect_failed_without_receipt: false,
         replay,
     };
     runtime.event("run.start", None, Some(&manifest_digest), None)?;
@@ -1492,6 +1503,7 @@ pub async fn resume(
     if verify(checkpoint, manifest.clone(), store, host).await?["ok"] != true {
         return Err(Error::new("VERIFY_FAILED", "checkpoint does not replay"));
     }
+    host.validate_resume_executors(&checkpoint["effects"])?;
     let mut continuable = Vec::new();
     for effect in checkpoint["effects"]
         .as_array()

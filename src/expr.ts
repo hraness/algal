@@ -10,6 +10,7 @@
 
 import { AlgalError } from "./errors";
 import { canonicalize, type JsonObject, type JsonValue } from "./values";
+import { utf8Bytes } from "./utf8";
 
 export type ExprErr = { code: string } & { [k: string]: JsonValue };
 export type ExprResult =
@@ -90,12 +91,11 @@ function load(): EvalExports {
   return exports_;
 }
 
-const enc = new TextEncoder();
 const dec = new TextDecoder();
 
 function call(fn: "algal_eval" | "algal_check", request: JsonObject): string {
   const ex = load();
-  const input = enc.encode(JSON.stringify(request));
+  const input = utf8Bytes(JSON.stringify(request));
   const inPtr = ex.algal_alloc(input.length);
   if (inPtr === 0) {
     throw new AlgalError("EXPR_FAILED", "expr evaluator allocation failed");

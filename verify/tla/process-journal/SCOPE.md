@@ -35,6 +35,36 @@ operation and its host completion boundary are abstracted, not equal internal
 cursor values. Illegal concurrent Bun mutation is a poison event, not a second
 complete effect pipeline.
 
+The integrated native `HostExecutor` boundary in `crates/algal/src/effects.rs`
+adds a reviewed source correspondence, without adding model actions:
+
+- `BindingMatches` corresponds to the registered configuration snapshot, the
+  selected executor identity in `journal_before`, and the journal's existing
+  binding equality check. Resume also compares retained configuration with a
+  matching registered executor in `validate_resume_executors`; the embedding
+  supervisor must separately pin the complete executor set against removal or
+  renaming.
+- `ReturnStarted` precedes invocation of the registered callback (`Dispatch`).
+  The callback is trusted bounded request capture or settled-result lookup;
+  external supervisor work after suspension is outside that callback contract.
+- `KnownResult` and `KnownFailure` correspond to admitted output or a bounded,
+  structurally valid error receipt, including suspension wake capabilities.
+  Malformed known errors are converted to bounded error receipts while retaining
+  any host-only uncertainty. Such receipt-bearing failures still support ordinary
+  guest failure routing and offline replay.
+- Post-invocation configuration drift or uncertain completion leaves the started
+  entry unresolved and poisons the journal (`Poison`/`Fail`). Failed completion
+  publication retains the same conservative boundary. Native runtime failures
+  returned without an effect receipt abort before guest failure routing; they
+  cannot publish an invented replayable outcome. The focused integration tests
+  are in `crates/algal/tests/host_executor.rs`.
+
+`src/effects.ts` and `src/runtime-journal-contract.ts` bind the corresponding Bun
+executor and journal interfaces. These mappings do not prove callback termination,
+preemption, memory allocation bounds, supervisor authority, or source refinement.
+Native callback output is already allocated before output admission; bounded
+host behavior remains a precondition, not a guarantee of the finite model.
+
 ## Persistence, failures and uncertainty
 
 CAS and selected-head publication are separate actions. A crash can leave orphan

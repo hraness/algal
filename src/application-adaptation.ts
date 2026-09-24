@@ -1,3 +1,4 @@
+import { utf8Length } from "./utf8";
 /** Bounded proposal/evaluation/activation admission for application revisions.
  *
  * This module deliberately wraps the existing foundry evaluator. It does not
@@ -23,7 +24,7 @@ import { builtinRegistry, isBuiltinRegistry, type FnRegistry } from "./registry"
 import { compileOrganism, interfaceSignature } from "./graph";
 import { parseRunReceipt } from "./run";
 import type { Executor } from "./effects";
-import type { Store } from "./store";
+import type { Store } from "./store-contract";
 import { canonicalize, type JsonValue } from "./values";
 
 export const APPLICATION_ADAPTATION_CONTRACT = "algal.application-adaptation.v1" as const;
@@ -107,7 +108,7 @@ function keys(value: Record<string, JsonValue>, allowed: string[], at: string): 
 }
 function digest(value: unknown, _at: string): Digest { return applicationRef(value); }
 function text(value: unknown, _at: string): string {
-  if (typeof value !== "string" || value.length === 0 || Buffer.byteLength(value) > 256 || value.includes("\0")) throw new Error(`${_at} must be bounded text`);
+  if (typeof value !== "string" || value.length === 0 || utf8Length(value) > 256 || value.includes("\0")) throw new Error(`${_at} must be bounded text`);
   return value;
 }
 function optionalObject(store: Store, ref: Digest): Promise<JsonValue> {

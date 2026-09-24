@@ -1,3 +1,4 @@
+import { utf8Length } from "./utf8";
 /** Durable application lifecycle, shared with the native implementation.
  * Process execution and uncertain-effect custody remain the existing VM's. */
 import {
@@ -19,7 +20,7 @@ import { parseCapabilityHandle } from "./capabilities";
 import { digestCanonical, type Digest } from "./digest";
 import { AlgalError } from "./errors";
 import type { ApplicationStorage } from "./application-storage";
-import type { Store } from "./store";
+import type { Store } from "./store-contract";
 import type { JsonValue } from "./values";
 
 export const APPLICATION_SERVICE_LIMITS = Object.freeze({ applications: 32, pending: 128, dispatches: 4096, dispatchBatch: 32 });
@@ -89,7 +90,7 @@ const hash = (value: unknown): Digest => digestCanonical(json(value));
 const same = (a: unknown, b: unknown): boolean => hash(a) === hash(b);
 const fail = (message: string): never => { throw new AlgalError("RECEIPT_MISMATCH", message); };
 function reason(value: unknown): string {
-  if (typeof value !== "string" || !value.length || Buffer.byteLength(value) > 1024) throw new Error("Invalid application dispatch reason");
+  if (typeof value !== "string" || !value.length || utf8Length(value) > 1024) throw new Error("Invalid application dispatch reason");
   return value;
 }
 function intentSpec(raw: unknown): ApplicationIntentSpec {

@@ -96,7 +96,7 @@ export async function runBoundary(root: string, binary = join(root, "target/debu
   const nativeMax = 67_108_864, wasmMax = 16_777_216;
   const nativeBytes = await artifactBytes(nativePath, nativeMax), wasmBytes = await artifactBytes(wasmPath, wasmMax);
   const nativeDigest = hashBytes(nativeBytes), wasmDigest = hashBytes(wasmBytes);
-  const wasm = new WebAssembly.Instance(new WebAssembly.Module(wasmBytes), {}).exports as unknown as EvalExports;
+  const wasm = new WebAssembly.Instance(new WebAssembly.Module(new Uint8Array(wasmBytes)), {}).exports as unknown as EvalExports;
   const directory = await mkdtemp(join(tmpdir(), "algal-boundary-"));
   const observations: unknown[] = [];
   try {

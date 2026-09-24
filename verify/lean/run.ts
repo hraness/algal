@@ -1,7 +1,7 @@
 import { copyFile, mkdir, mkdtemp, readdir, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { hashFile, hashJson, readJson, type FileBinding } from "../lib/files";
+import { governedPaths, hashFile, hashJson, readJson, type FileBinding } from "../lib/files";
 import { CommandFailure, requireSuccess, runCommand, type CommandResult } from "../lib/runner";
 import { array, boolean, record, requireThat, string, strings } from "../lib/schema";
 import { leanRuntime } from "./runtime";
@@ -49,7 +49,10 @@ async function projectPaths(root: string): Promise<string[]> {
 /** Source correspondence here is sampled; changing either runtime invalidates it.
  * These bindings deliberately do not license the broader property ledger. */
 export async function leanInputs(root: string): Promise<FileBinding[]> {
-  const paths = [...await projectPaths(root), "verify/tests/lean-output.test.ts", "verify/tests/lean-vectors.test.ts",
+  // Bind the conservative production closure as well as the domain map. A
+  // portable helper or host import can change sampled behavior without changing
+  // a mapped entry point. This broad identity does not expand the proof scope.
+  const paths = [...await governedPaths(root), ...await projectPaths(root), "verify/tests/lean-output.test.ts", "verify/tests/lean-vectors.test.ts",
     "verify/toolchains.json", "verify/toolchain-distributions.json", "verify/lib/runner.ts", "verify/lib/command-supervisor.ts",
     "verify/lib/files.ts", "verify/lib/schema.ts", "verify/lib/proof.ts", "verify/lib/claims.ts", "verify/lib/suites.ts",
     "src/values.ts", "src/errors.ts", "crates/algal/examples/verification_lean_vectors.rs", "crates/algal/src/canonical.rs",

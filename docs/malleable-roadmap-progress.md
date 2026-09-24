@@ -11,6 +11,12 @@ prerequisite to claim a browser renderer. Synthetic experiments cannot establish
 live conversion improvement. Missing provider measurements remain unknown.
 The earlier rejected strategy stays inactive.
 
+The subsequent browser-local continuation now advances the work deferred by
+stage G. Its north star is a self-evolving application that can reopen and work
+entirely inside the browser, with optional WebGPU inference. See
+[the browser workspace](browser-grow.md) for its deliberately bounded first
+application and separate persistence, offline, and inference claims.
+
 ## Dependency and ownership graph
 
 1. **Contract convergence — implemented and reviewed.** Root owns shared contracts, this

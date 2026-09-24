@@ -66,7 +66,6 @@ export async function hashFile(root: string, path: string): Promise<string> {
 }
 
 const ROOT_INPUTS = ["Cargo.toml", "Cargo.lock", "package.json", "bun.lock", "bun.lockb", "tsconfig.json", "index.ts", "cli.ts", "rust-toolchain", "rust-toolchain.toml", ".cargo/config", ".cargo/config.toml"];
-const BUILD_INPUTS = new Set(["scripts/package-native.py", "scripts/install-native.sh", "scripts/unpack-native.py"]);
 const GENERATED_DIRECTORIES = new Set(["__pycache__", ".venv", "node_modules", ".algal", "target"]);
 
 /** Whole source inventory includes untracked additions, never filtering fixture/data extensions.
@@ -81,28 +80,21 @@ export async function governedPaths(root: string): Promise<string[]> {
     for (const entry of entries) {
       requireThat(++visited <= 20_000, "governed file inventory exceeds 20000 entries");
       const child = `${path}/${entry.name}`;
+      // The browser runtime and its tests are inputs; generated site output is
+      // separately qualified and must not mutate source identity during builds.
+      if (child === "site/dist" && entry.isDirectory()) continue;
       if (entry.isDirectory() && (GENERATED_DIRECTORIES.has(entry.name) || entry.name === ".lake")) continue;
       if (entry.isDirectory()) { await walk(child); continue; }
       requireThat(entry.isFile(), `${child}: nonregular governed input`);
       found.add(child);
     }
   }
-  for (const directory of ["src", "crates", "spec", "examples", ".github/workflows"]) await walk(directory);
+  for (const directory of ["src", "crates", "spec", "examples", "site", "tests", "scripts", ".github/workflows"]) await walk(directory);
   for (const path of ROOT_INPUTS) {
     try {
       requireThat((await lstat(join(root, path))).isFile(), `${path}: nonregular governed input`);
       found.add(path);
     } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-  }
-  let scripts: string[] = [];
-  try { scripts = await readdir(join(root, "scripts")); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-  for (const name of scripts) {
-    const path = `scripts/${name}`;
-    if (/^build-.*\.sh$/.test(name) || BUILD_INPUTS.has(path)) {
-      requireThat((await lstat(join(root, path))).isFile(), `${path}: nonregular build input`);
-      found.add(path);
-    }
   }
   return [...found].sort();
 }

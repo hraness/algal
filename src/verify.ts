@@ -14,8 +14,8 @@ import {
 } from "./run";
 import { manifestToJson, parseOrganismManifest } from "./contract";
 import { replayStore } from "./store-memory";
-import type { Store } from "./store";
-import type { Transport } from "./transport";
+import type { Store } from "./store-contract";
+import type { Transport } from "./transport-contract";
 import type { ToolRegistry } from "./tools";
 import { AlgalError } from "./errors";
 import { canonicalize, type JsonValue } from "./values";
@@ -117,7 +117,7 @@ export async function resumeRun(
   fns: FnRegistry = builtinRegistry(),
   transports?: Record<string, Transport>,
   tools?: ToolRegistry,
-  runtime: { journal?: import("./process-journal").RuntimeJournal; processName?: string } = {},
+  runtime: { journal?: import("./runtime-journal-contract").RuntimeJournal; processName?: string } = {},
 ): Promise<RunReceipt> {
   const checkpoint = parseRunReceipt(receiptJson);
   const manifest = parseOrganismManifest(manifestJson);

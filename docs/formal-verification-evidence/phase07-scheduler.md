@@ -1,5 +1,8 @@
 # Phase 07 scheduler checkpoint
 
+The saved evidence below identifies checkpoint `5e334ed` or an earlier snapshot.
+The [upstream integration](upstream-1737.md) requires fresh checks for its changed source.
+
 Phase 07 remains in progress. The registered independent executable oracle covers
 89 ordinary fixtures and 14 foreign-command fixtures. Its 23 model/adapter tests
 passed 443 assertions, including seven semantic mutants and four adapter controls.

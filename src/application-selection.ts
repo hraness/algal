@@ -13,7 +13,7 @@ import type { AdaptationRuntime } from "./application-adaptation";
 import { verifyApplicationComparison, type ApplicationComparison } from "./application-comparison";
 import type { Digest } from "./digest";
 import { canonicalize } from "./values";
-import type { Store } from "./store";
+import type { Store } from "./store-contract";
 
 export const SELECTION_LIMITS = Object.freeze({ selections: 16 });
 

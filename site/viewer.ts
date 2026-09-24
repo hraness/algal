@@ -93,7 +93,7 @@ async function initDiagramFrame(frame: HTMLElement): Promise<void> {
 
   const svg = svgEl("svg", { viewBox: `0 0 ${layout.width} ${layout.height}`, class: "dg-svg", role: "img" });
   const titleEl = svgEl("title");
-  titleEl.textContent = `${diagram.name} — ALGAL program`;
+  titleEl.textContent = `${diagram.name} · ALGAL program`;
   const descEl = svgEl("desc");
   descEl.textContent = `Data dependencies of ${diagram.key}. ${diagram.nodes.length} cells and ${diagram.edges.length} edges. ${run ? `Recorded ${run.outcome} run ${run.receipt}` : "No recorded run attached."}`;
   svg.append(titleEl, descEl);
@@ -169,7 +169,7 @@ async function initDiagramFrame(frame: HTMLElement): Promise<void> {
     for (const port of node.inputs) fieldTail("in", `${port.name}: ${typeof port.type === "string" ? port.type : JSON.stringify(port.type)}`);
     for (const port of node.outputs) fieldTail("out", `${port.name}: ${typeof port.type === "string" ? port.type : JSON.stringify(port.type)}`);
     if (node.source) {
-      fieldTail("source", `${node.source.title} — ${node.source.summary}`);
+      fieldTail("source", `${node.source.title}: ${node.source.summary}`);
       if (node.source.span) fieldTail("at", `line ${node.source.span.start.line}, column ${node.source.span.start.column}`);
     }
     return `<dl class="dg-fields">${head.join("")}</dl>${extras}${tail.length ? `<dl class="dg-fields dg-fields-contract">${tail.join("")}</dl>` : ""}`;
@@ -283,7 +283,7 @@ async function initDiagramFrame(frame: HTMLElement): Promise<void> {
     shell.appendChild(wrap);
     const caption = document.createElement("p");
     caption.className = "dg-caption";
-    caption.textContent = run ? "The receipt's own event order — evidence, not a simulation. Tap a step for its cell's contract." : "Cells in layout order — tap one for its contract.";
+    caption.textContent = run ? "Steps play back in the receipt's recorded event order. Tap a step to see its cell's contract." : "Cells in layout order. Tap one to see its contract.";
     shell.appendChild(caption);
     frame.replaceChildren(shell);
     if (frame.hasAttribute("data-diagram-autoplay") && !REDUCED && !COARSE) {
@@ -328,7 +328,7 @@ async function initDiagramFrame(frame: HTMLElement): Promise<void> {
     const g = svgEl("g", {
       class: `dg-node dg-cat-${box.category}${node.status ? ` dg-status-${node.status}` : ""}`,
       "data-node": box.id, tabindex: 0, role: "button",
-      "aria-label": `${box.title} — ${node.label}${node.status ? `, recorded ${node.status}` : ""}`,
+      "aria-label": `${box.title}: ${node.label}${node.status ? `, recorded ${node.status}` : ""}`,
     });
     const tip = svgEl("title");
     tip.textContent = `${node.label} · ${box.id}${node.source ? ` · ${node.source.title}` : ""}`;
@@ -574,7 +574,7 @@ async function initDiagramFrame(frame: HTMLElement): Promise<void> {
   shell.appendChild(canvas);
   const caption = document.createElement("p");
   caption.className = "dg-caption";
-  caption.textContent = `Interactive view · drag to pan · ctrl/cmd-scroll or pinch to zoom · click a cell for its contract${run ? " · replay is the recorded event order, not a simulation" : ""}`;
+  caption.textContent = `Interactive view · drag to pan · ctrl/cmd-scroll or pinch to zoom · click a cell for its contract${run ? " · replay follows the recorded event order" : ""}`;
   shell.appendChild(caption);
   frame.replaceChildren(shell);
   fit();

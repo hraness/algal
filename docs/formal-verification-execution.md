@@ -2,7 +2,7 @@
 
 ## Integration candidate
 
-Execution was authorized on 2026-09-23. Branch: `feat/formal-verification-foundation`, based on freshly fetched `origin/main` at `353a5cac4ea2b2ae40e00bf9c2805606265a5378`. The historical audit remains an exact account of its older snapshot. Application drain, experiment, research, messaging/contention and inference surfaces were added to the ledger. The working integration now includes upstream `e588f8bc9b0964e5956f4c62e60c14dfbcef171e`; its portable hosts, workbenches, renderer and Gateway sidecar surfaces add four pending obligations (116 total).
+Execution was authorized on 2026-09-23. Branch: `feat/formal-verification-foundation`, based on freshly fetched `origin/main` at `353a5cac4ea2b2ae40e00bf9c2805606265a5378`. The historical audit remains an exact account of its older snapshot. The fully checked checkpoint `5e334ed` was pushed in [PR 70](https://github.com/hraness/algal/pull/70). The working integration includes upstream `1737efe77375ccb35f3ed68fb465473019d2e573`; its browser application, local inference and native host executor add three pending obligations (119 total). Earlier evidence remains bound to its original source. [Upstream integration record](formal-verification-evidence/upstream-1737.md).
 
 The audit and plan documents were the only changes carried onto the task branch. No unrelated working changes were present. The separate `algal-worktrees/platonik-dep` worktree is outside this task.
 
@@ -480,3 +480,21 @@ and [independent review](formal-verification-evidence/integration-review.md) pre
 the local qualification. [Phase 06 acceptance review](formal-verification-evidence/phase06-acceptance-review.md)
 confirms dedicated generated composition histories remain missing. Phases 06–09
 therefore remain in progress. No remote integration is yet claimed.
+
+### Upstream1737 checked checkpoint
+
+The merged working source and repairs passed the repository and native checks,
+20 runtime comparison commands, 15 Chromium checks and independent Node/V8
+portable-helper comparisons. The complete 23-suite formal aggregate returned a
+passing result for 924 file bindings at
+`sha256:cecc01647a3fdfa5451af94f10f37035d7e6c1826c9f8752e41c9da1fc075772`.
+Independent raw rechecking passed all 661 TLC calls, 564 authored Lean theorems
+(1,616 module theorems),seven rejected Lean controls and 206 scheduler comparisons.
+[Checkpoint evidence and limits](formal-verification-evidence/upstream-1737.md)
+include the raw records. The ledger retains 119 obligations, 103 not started and
+16 observed, with zero licensed production proof claims.
+
+Main subsequently advanced through the portable task workspace and site changes
+to `3f81f0ab65961959cbbbf32e6fdc7f908c201483`. Those changes and reviewed
+application-history, spawn, expression-corpus and Lean bracket candidates are the
+next integration batch. Their final aggregate and repository CI are pending.

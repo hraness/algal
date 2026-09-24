@@ -36,6 +36,18 @@ journal and retained-owner lease models through explicit assumed contracts.
    outcome return, no-checkpoint first dispatch, checkpoint/host refusal, stale
    intent refusal and settled-head recovery refusal.
 
+The native registered `HostExecutor` boundary is included in the reviewed source
+inventory through `effects.rs`, `runtime.rs` and `host_executor.rs`; the Bun
+executor and extracted journal interfaces are included through `effects.ts` and
+`runtime-journal-contract.ts`. Registered configuration and matching checkpoint
+identity checks refine the intended host/checkpoint admission boundary only by
+source review. A host failure without an effect receipt aborts runtime entry's
+execution instead of becoming a guest failure; uncertain post-callback identity
+drift retains the unresolved journal. Known admitted error receipts still allow
+ordinary guest failure routing. The detailed Binding/Dispatch/KnownFailure/Poison
+correspondence and trusted callback limits are recorded in the adjacent
+`process-journal/SCOPE.md`; no new model coverage or callback preemption is claimed.
+
 ## Boundaries and remaining limits
 
 - `Dispatch` means entry into the runtime, **not a new external effect**. Recovery

@@ -1,5 +1,8 @@
 # Phase 09 semantic-core milestone
 
+The saved evidence below identifies checkpoint `5e334ed` or an earlier snapshot.
+The [upstream integration](upstream-1737.md) requires fresh checks for its changed source.
+
 Phase 09 remains in progress. The final integrated aggregate checked 564 authored model
 theorems across twenty domains, including recursive normalization, an actual
 quoted-string UTF-8 byte codec, recursive container layout and number-free

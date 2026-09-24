@@ -19,8 +19,8 @@ import {
 } from "./expr";
 import type { FnRegistry } from "./registry";
 import { runOrganism, type RunOutcome } from "./run";
-import type { Store } from "./store";
-import type { Transport } from "./transport";
+import type { Store } from "./store-contract";
+import type { Transport } from "./transport-contract";
 import type { ToolRegistry } from "./tools";
 import { canonicalize, type JsonObject, type JsonValue } from "./values";
 

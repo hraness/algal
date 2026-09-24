@@ -1,8 +1,19 @@
 import { expect, test } from "bun:test";
 import { resolve } from "node:path";
 import { compareBunStringVectors, compareBunVectors, compareNativeStringVectors, compareNativeVectors } from "../lean/vectors";
+import { leanInputs } from "../lean/run";
+import { governedPaths } from "../lib/files";
 
 const fixture = await Bun.file(resolve(import.meta.dir, "../lean/fixtures/core-vectors.json")).json();
+
+test("Lean correspondence binds production helpers and the conservative governed closure", async () => {
+  const root = resolve(import.meta.dir, "../..");
+  const paths = new Set((await leanInputs(root)).map(binding => binding.path));
+  for (const path of ["src/utf8.ts", "src/sha256.ts", "src/store-contract.ts", "src/runtime-journal-contract.ts", "bun.lock"]) {
+    expect(paths.has(path)).toBe(true);
+  }
+  expect((await governedPaths(root)).every(path => paths.has(path))).toBe(true);
+});
 
 test("actual diagnostic Lean vectors match Bun production canonicalization and own-field reads", () => {
   const expected = compareBunVectors(fixture);

@@ -1,3 +1,4 @@
+import { utf8Length } from "./utf8";
 // The scheduler. A run sweeps the organism's cells in declared order;
 // a cell activates when every declared input is resolved (each incoming
 // edge delivered or dead) and the required/emptiness rules hold. Each
@@ -46,11 +47,11 @@ import {
   type ExecutorMetadata,
 } from "./effects";
 import type { FnRegistry } from "./registry";
-import type { Store } from "./store";
-import type { Transport } from "./transport";
+import type { Store } from "./store-contract";
+import type { Transport } from "./transport-contract";
 import type { ToolRegistry } from "./tools";
 import { elideToolContext } from "./tool-context";
-import type { JournalBinding, JournalTicket, RuntimeJournal } from "./process-journal";
+import type { JournalBinding, JournalTicket, RuntimeJournal } from "./runtime-journal-contract";
 import { bindRecallOutput, recallOutputSchema } from "./semantic-contract";
 import { asDigest, digestCanonical, type Digest } from "./digest";
 import {
@@ -197,7 +198,7 @@ function checkRunArgs(args: unknown): void {
     if (value.length > BOUNDS.maxArgsBytes - bytes) {
       throw new AlgalError("BUDGET_EXHAUSTED", "run argument bytes");
     }
-    add(Buffer.byteLength(JSON.stringify(value), "utf8"));
+    add(utf8Length(JSON.stringify(value)));
   };
   const visit = (value: unknown, depth: number): void => {
     if (depth > 64) throw new AlgalError("BUDGET_EXHAUSTED", "JSON depth exceeds 64");
@@ -1037,7 +1038,7 @@ async function activate(
       if (query.length === 0) {
         throw new AlgalError("EXPR_FAILED", `recall cell "${cell.id}" query must not be empty`);
       }
-      if (Buffer.byteLength(query, "utf8") > BOUNDS.maxRecallQueryBytes) {
+      if (utf8Length(query) > BOUNDS.maxRecallQueryBytes) {
         throw new AlgalError(
           "BUDGET_EXHAUSTED",
           `recall cell "${cell.id}" query exceeds maxRecallQueryBytes ${BOUNDS.maxRecallQueryBytes}`,
@@ -1861,7 +1862,7 @@ function checkReceiptResources(u: unknown, code: "PARSE_FAILED" | "BUDGET_EXHAUS
       throw new AlgalError(code, "receipt structural bounds exceeded");
     }
     if (typeof value === "string") {
-      stringBytes += Buffer.byteLength(value, "utf8");
+      stringBytes += utf8Length(value);
       if (stringBytes > RECEIPT_BOUNDS.maxBytes) {
         throw new AlgalError(code, "receipt byte bound exceeded");
       }
@@ -1876,7 +1877,7 @@ function checkReceiptResources(u: unknown, code: "PARSE_FAILED" | "BUDGET_EXHAUS
       }
     } else if (value !== null && typeof value === "object") {
       for (const [key, child] of Object.entries(value)) {
-        stringBytes += Buffer.byteLength(key, "utf8");
+        stringBytes += utf8Length(key);
         pending.push({ value: child, depth: depth + 1 });
         if (pending.length > RECEIPT_BOUNDS.maxNodes) {
           throw new AlgalError(code, "receipt node bound exceeded");

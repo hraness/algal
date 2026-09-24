@@ -1,5 +1,8 @@
 # Phase 08 closure and admission checkpoint
 
+The saved evidence below identifies checkpoint `5e334ed` or an earlier snapshot.
+The [upstream integration](upstream-1737.md) requires fresh checks for its changed source.
+
 Phase 08 remains in progress. Deterministic counterexamples have driven repairs
 in both runtimes; the unified grammar corpus, semantic evidence mutation driver,
 fuzzing/shrinking engine and full obligation matrix remain unimplemented. These
