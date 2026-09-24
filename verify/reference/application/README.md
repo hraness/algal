@@ -1,0 +1,13 @@
+# Generated application history slice
+
+This candidate ports the reviewed finite public-API history oracle and adapters into repository-relative modules. The proposed `application-history-slice` registration is separate and is not enabled in the current shared repository. The draft includes full synthetic archive mutation controls; independent integration review, durable raw retention and qualification of this integrated matrix remain pending. Existing scratch histories are historical evidence, not a passed result for this definition.
+
+`oracle.ts` predicts every observed prefix without importing production lifecycle, dispatch or verification logic. `generate.ts` reconstructs the staged seeded grammar without importing its execution adapter. `generate-runtime.ts` and `bun.ts` drive the real Bun application API; the Rust example `verification_application_history` drives the public native API with the same finite trusted admission/callback/fault fixtures. The native executable must be selected explicitly; no adapter builds or discovers a binary.
+
+`adapter.ts` selects a new empty archive and exact source/tool authority before calling the producer. It discards the producer's return value and uses `readmitCurrent` to reconstruct the complete evidence. `readmitHistorical` is offline and requires externally pinned historical authority. It does not execute recorded commands or follow archive-supplied external paths.
+
+The synthetic test fixture produces a complete archive from the independent projection without executing an application or command. Every archive mutation first admits a valid baseline; semantic mutations recompute affected raw hashes and byte accounting, and an executable canary verifies that recorded argv remains inert. These controls establish reader rejection behavior, not production conformance.
+
+The matrix is four generated histories (delivery/writer, seeds 1/4294967295), each with 24 commands and four fresh-root worker observations: generation, Bun replay and two native replays. Five bounded native projection-mutation shrink controls follow. The producer and reader use fixed ordinal directories, closed metadata, exact command/output identity, input rereads, complete raw evidence manifests and independent oracle/shrink recomputation.
+
+Use an explicitly qualified `ALGAL_APPLICATION_HISTORY_BIN` when root enables the proposed registration. Keep its build/source provenance separate from its executable digest. Retain the small admitted summary and all exact raw artifacts; a temporary archive path alone is not durable qualification evidence. No whole-system proof or Phase06 completion follows from this slice. See `SCOPE.md` for premises and limits.

@@ -1,3 +1,4 @@
+import { commandFailureRecord, retainFailure } from "../../lib/failure";
 /** Qualification adapter. Semantics remain in the production-import-free oracle. */
 import { mkdir, mkdtemp, readdir, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -83,12 +84,11 @@ export async function runSchedulerConformance(root: string, binary = process.env
     try {
       const result = await runCommand(argv, root, { timeoutMs, maxOutputBytes: BOUNDS.outputBytes }); await retain(path, result); return result;
     } catch (error) {
-      if (error instanceof CommandFailure) {
-        await writeFile(join(archive, path + ".stdout.bin"), error.rawStdout, { flag: "wx", mode: 0o600 });
-        await writeFile(join(archive, path + ".stderr.bin"), error.rawStderr, { flag: "wx", mode: 0o600 });
-        await retain(path + ".custody-failure.json", { message: error.message, observation: error.observation });
-      }
-      throw error;
+      return await retainFailure(error, error instanceof CommandFailure ? [
+        () => writeFile(join(archive, path + ".stdout.bin"), error.rawStdout, { flag: "wx", mode: 0o600 }),
+        () => writeFile(join(archive, path + ".stderr.bin"), error.rawStderr, { flag: "wx", mode: 0o600 }),
+        () => retain(path + ".custody-failure.json", commandFailureRecord(error)),
+      ] : []);
     }
   }
   await retain("start.json", { definition: before, artifacts, relation: RELATION, bounds: BOUNDS });
@@ -158,8 +158,8 @@ export async function runSchedulerConformance(root: string, binary = process.env
     const result = { contract: "algal.scheduler-conformance.v1", relation: RELATION, definition: before, artifacts, bounds: BOUNDS, archive, ordinaryFixtures: ordinary.length, foreignFixtures: boundary.length, comparisons: rows.length, rows };
     await retain("result.json", result); return result;
   } catch (error) {
-    await retain("failure.json", { message: error instanceof Error ? error.message : String(error), rows });
-    throw new Error(`scheduler conformance rejected; raw evidence at ${archive}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+    const primary = new Error(`scheduler conformance rejected; raw evidence at ${archive}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+    return await retainFailure(primary, [() => retain("failure.json", { message: error instanceof Error ? error.message : String(error), rows })]);
   }
 }
 
@@ -170,11 +170,11 @@ export async function runSchedulerModel(root: string): Promise<unknown> {
   let result: CommandResult;
   try { result = await runCommand(argv, root, { timeoutMs: 180_000, maxOutputBytes: BOUNDS.outputBytes }); }
   catch (error) {
-    if (error instanceof CommandFailure) {
-      await writeFile(join(archive, "stdout.bin"), error.rawStdout); await writeFile(join(archive, "stderr.bin"), error.rawStderr);
-      await writeFile(join(archive, "failure.json"), stableJson(error.observation) + "\n");
-    }
-    throw error;
+    return await retainFailure(error, error instanceof CommandFailure ? [
+      () => writeFile(join(archive, "stdout.bin"), error.rawStdout),
+      () => writeFile(join(archive, "stderr.bin"), error.rawStderr),
+      () => writeFile(join(archive, "failure.json"), stableJson(commandFailureRecord(error)) + "\n"),
+    ] : []);
   }
   await writeFile(join(archive, "command.json"), stableJson(result) + "\n", { flag: "wx", mode: 0o600 });
   const tests = admitSelftestOutput(result);

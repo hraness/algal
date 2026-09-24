@@ -8,6 +8,16 @@ import { BASE_VALUES } from "./shared";
 import { LIMITS, type Action, type Command, type Fault, type History, type Key, type Name, type Outcome, type Snapshot, type Step, type Trace, type Value } from "./schema";
 
 export class GenerationFailure extends Error {
+  readonly diagnosticFailures: { path: string; cause: unknown }[] = [];
+
+  /** Keep the typed history handoff and direct runtime cause even when one or
+   * more diagnostic destinations fail. Each selected write is independent. */
+  async retain(writers: readonly { path: string; write: () => Promise<unknown> }[]): Promise<never> {
+    for (const writer of writers) {
+      try { await writer.write(); } catch (cause) { this.diagnosticFailures.push({ path: writer.path, cause }); }
+    }
+    throw this;
+  }
   constructor(readonly history: History, readonly directory: string, cause: unknown) { super(`stateful history failed; retained at ${directory}: ${cause instanceof Error ? cause.message : String(cause)}`, { cause }); this.name = "GenerationFailure"; }
 }
 
@@ -120,8 +130,12 @@ export async function generateBun(seed: number, length: number = LIMITS.commands
     return { history, trace, witnesses: admitted.witnesses };
   } catch (error) {
     failed = true;
-    await writeFile(join(root, "failure-history.json"), JSON.stringify(history, null, 2));
-    try { if (runtime) await writeFile(join(root, "failure-trace.json"), JSON.stringify(runtime.finish(history))); } catch { /* keep the original failure and incomplete history */ }
-    throw new GenerationFailure(history, root, error);
+    const failure = new GenerationFailure(history, root, error);
+    const writers = [{ path: join(root, "failure-history.json"), write: () => writeFile(join(root, "failure-history.json"), JSON.stringify(history, null, 2)) }];
+    if (runtime) {
+      const failedRuntime = runtime;
+      writers.push({ path: join(root, "failure-trace.json"), write: () => writeFile(join(root, "failure-trace.json"), JSON.stringify(failedRuntime.finish(history))) });
+    }
+    return await failure.retain(writers);
   } finally { if (!failed && !ownedRoot) await rm(root, { recursive: true, force: true }); }
 }

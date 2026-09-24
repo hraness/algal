@@ -24,4 +24,3 @@ export interface Store {
   getSlot(name: string): Promise<JsonValue | undefined>;
   setSlot(name: string, value: JsonValue): Promise<void>;
 }
-

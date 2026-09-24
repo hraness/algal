@@ -1,3 +1,4 @@
+import { commandFailureRecord, retainFailure } from "../lib/failure";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
@@ -48,7 +49,7 @@ export function admitNativeProgress(name: string, output: string, shrunkHistory:
 
 async function definition(root: string) {
   const trace = await traceDefinition(root);
-  const adapters: FileBinding[] = await Promise.all(["verify/stateful/run.ts", "verify/tests/stateful-output.test.ts", "verify/lib/suites.ts"]
+  const adapters: FileBinding[] = await Promise.all(["verify/stateful/run.ts", "verify/lib/failure.ts", "verify/tests/stateful-output.test.ts", "verify/lib/suites.ts"]
     .map(async path => ({ path, sha256: await hashFile(root, path) })));
   return { trace, adapters };
 }
@@ -69,12 +70,11 @@ export async function runNativeVerification(root: string, suite: "stateful" | "f
       await writeFile(join(directory, "command.json"), stableJson(result) + "\n", { flag: "wx", mode: 0o600 });
       return result;
     } catch (error) {
-      if (error instanceof CommandFailure) {
-        await writeFile(join(directory, "stdout.bin"), error.rawStdout, { flag: "wx", mode: 0o600 });
-        await writeFile(join(directory, "stderr.bin"), error.rawStderr, { flag: "wx", mode: 0o600 });
-        await writeFile(join(directory, "custody-failure.json"), stableJson({ message: error.message, ...error.observation }) + "\n", { flag: "wx", mode: 0o600 });
-      }
-      throw error;
+      return await retainFailure(error, error instanceof CommandFailure ? [
+        () => writeFile(join(directory, "stdout.bin"), error.rawStdout, { flag: "wx", mode: 0o600 }),
+        () => writeFile(join(directory, "stderr.bin"), error.rawStderr, { flag: "wx", mode: 0o600 }),
+        () => writeFile(join(directory, "custody-failure.json"), stableJson(commandFailureRecord(error)) + "\n", { flag: "wx", mode: 0o600 }),
+      ] : []);
     }
   }
   try {
@@ -95,7 +95,7 @@ export async function runNativeVerification(root: string, suite: "stateful" | "f
       scope: "Sampled real filesystem histories and actual cancellation/fault/shrink controls. The built artifact/source correspondence is a separate build obligation; no implementation refinement or physical power-loss proof." };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    await writeFile(join(archive, "failure.json"), stableJson({ message }) + "\n", { flag: "wx", mode: 0o600 });
-    throw new Error(`native verification rejected; raw evidence retained at ${archive}: ${message}`, { cause: error });
+    const primary = new Error(`native verification rejected; raw evidence retained at ${archive}: ${message}`, { cause: error });
+    return await retainFailure(primary, [() => writeFile(join(archive, "failure.json"), stableJson({ message }) + "\n", { flag: "wx", mode: 0o600 })]);
   }
 }

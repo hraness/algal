@@ -18,6 +18,9 @@ its domain, witnesses, source correspondence candidates and unresolved criteria.
 | `SignedRounding` | Actual UInt64 sign reflection preserves finite fields and parity, is involutive, and negates exact rational value. Interior nearest and odd strict-nearest results extend to every finite candidate and reflected negative centers, including signed-zero candidates. |
 | `RoundingEndpoints` | The closed zero cell exactly characterizes nearest zero among finite values. Maximum finite has a separate nearest-finite characterization without an upper bound; its proposed finite rounding cell excludes the overflow tie. Signed dyadic boundary witnesses invoke pinned round/pack and preserve finite admission versus refused infinity. |
 | `NegativeEndpoints` | Exact finite-nearest and bitwise strict-nearest predicates reflect through sign negation. Negative maximum has complete finite-nearest/strict characterizations; its finite cell additionally excludes overflow. Conditional interior midpoint converses and parity characterize all-sign nearest cells. Both distinct zero patterns are nearest at zero and neither is ever strictly nearest. |
+| `FiniteNeighbors` | Every bounded nonnegative bit code constructs a finite value without wrap. Every finite signed magnitude is classified as zero, maximum or an interior center with actual neighbors. These neighbors discharge the existing nearest/parity cell hypotheses. No rational selector, interval coverage or decimal conversion follows. |
+| `IntervalSearch` | Executable binary search on a finite Boolean prefix. Ordered interval bounds, exact partition and uniqueness are proved; a paired result/count follows one descent. Interval length below `2^depth` requires at most `depth` comparisons. No binary64/rational instantiation or machine resource bound is claimed. |
+| `RationalBracket` | Exact finite binary64 bracketing for nonnegative rationals, with an adjacent strict upper value or maximum sentinel. The executable performs at most 63 comparisons. Nearest rounding, ties, overflow acceptance, signed selection and production correspondence remain separate. |
 | `DecimalSyntax` | Concrete ASCII numeral grammar retaining signs, digits, exponent case and spelling. Whole-token parsing accepts exactly a rendered numeral; spelling is injective. Decimal coefficient/exponent placement has exact rational semantics. This is neither finite-binary64 admission nor a shortest renderer. |
 | `Text` | Unicode scalar strings encoded into UTF-16 code units. Character and string decoders round-trip; encoding is injective; every unit is below 65536. The executable JS index classifier and key sorter cover numeric-index-first/UTF-16 order; sorting preserves the multiset of keys. |
 | `OwnMap` | Finite own-property maps. Last writes win, writes to distinct keys commute extensionally, successful lookup implies a declared own key, and absence differs from a present value representing null. No prototype lookup exists. |
@@ -154,6 +157,10 @@ rounding selector or prove complete coverage. Strict competitors have different
 bits: neither signed zero is ever strictly nearest because the other zero has
 the same rational value. Concrete midpoint and overflow witnesses reject the
 stronger claims without asserting general round/pack or decimal correspondence.
+
+`IntervalSearch` supplies the generic search needed for a later rational selector. It requires a downward-closed true prefix and correctly anchored interval. The count theorem uses a strict power-of-two bound: length 16 can take five comparisons. Its paired executable computes the position and count in one descent. Predicate evaluation, arbitrary-Nat arithmetic, allocation and wall time are outside that count. This module alone does not choose a binary64 value or establish rounding-cell coverage.
+
+`RationalBracket` connects this search to exact finite nonnegative binary64 values. It proves that the lower result is the greatest finite value at or below the input, and that any upper result is adjacent and strictly greater. Inputs at or beyond the maximum finite value return a maximum sentinel. This result does not decide overflow acceptance or select a nearest value.
 
 `DecimalSyntax` independently defines the actual ASCII JSON numeral grammar:
 optional minus, a nonempty integer without extra leading zeros, an optional
@@ -324,7 +331,7 @@ These observations are not the release gate: the integrator independently
 inspects theorem constants and collects their transitive axioms from the actual
 environment, checks the inventory, and fails closed on stale or missing evidence.
 
-The source inventory contains 564 authored theorems across 20 domains. The
+The source inventory contains 647 authored theorems across 23 domains. The
 preceding complete 432-theorem gate remains a historical milestone. The
 60-theorem injectivity/interval candidate had fresh source builds,
 independent review, and actual axiom collection over all 146 theorem declarations
@@ -377,3 +384,14 @@ theorem alone prove correspondence to Bun or native string serialization.
 Full Phase09 closure requires the missing codec/composition proofs and appropriate
 production correspondence evidence, or a separately reviewed change to the plan.
 The current inventory keeps those criteria unmet.
+
+## Constructed finite neighbors
+
+`FiniteNeighbors` supplies actual predecessor and successor values for every
+positive interior finite magnitude. A total signed view separates zero and
+maximum, then reflects negative magnitudes and reverses their neighbors. The
+existing nearest/parity equivalences now apply to those constructed interiors.
+The functions operate on exact bit codes; they do not use decimal conversion.
+Zero is special in this magnitude classification, not a claim that zero has no
+negative finite predecessor. Rational selection, complete cell coverage,
+shortest decimal rendering and production refinement remain open.

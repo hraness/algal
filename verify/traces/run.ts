@@ -1,3 +1,4 @@
+import { commandFailureRecord, retainFailure } from "../lib/failure";
 import { mkdir, mkdtemp, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
@@ -17,7 +18,7 @@ const RELATION = "bounded real-API histories and sampled trace conformance; no u
 const REQUIRED_WITNESSES = ["store-put", "store-get", "effect-put", "effect-get", "slot-set", "slot-get", "mailbox-create", "mailbox-send", "mailbox-receive", "mailbox-pending", "mailbox-revoke", "application-create", "application-commit", "application-inspect", "restart", "tamper",
   "error:CAPABILITY_DENIED", "error:DIGEST_MISMATCH", "error:EFFECT_SUSPENDED", "error:IO_FAILED", "error:MAILBOX_FULL", "error:PARSE_FAILED", "error:RECEIPT_MISMATCH",
   "injected-cancel-cut:application", "injected-cancel-cut:fs", "injected-error-cut:application", "injected-error-cut:fs", "cut:application:selected", "cut:application:admitted", "cut:application:prepared", "cut:application:head-published"];
-const ADAPTERS = ["verify/lib/files.ts", "verify/lib/schema.ts", "verify/lib/runner.ts", "verify/lib/command-supervisor.ts"];
+const ADAPTERS = ["verify/lib/files.ts", "verify/lib/schema.ts", "verify/lib/runner.ts", "verify/lib/failure.ts", "verify/lib/command-supervisor.ts"];
 type RawBinding = { path: string; sha256: string };
 type Row = { id: string; source: string | null; seed: number; commands: number; history: RawBinding; bun: RawBinding; bunCommand: RawBinding; native: RawBinding; command: RawBinding; witnesses: string[] };
 export type TraceRun = { contract: "algal.verification-trace-run.v1"; relation: string; generator: string; bounds: typeof LIMITS; definition: { sha256: string; sources: FileBinding[] }; archive: string; runtime: { bun: Artifact; native: Artifact; platform: string; arch: string }; rows: Row[]; histories: number; commands: number; witnesses: string[] };
@@ -75,12 +76,11 @@ export async function runBunHistory(root: string, directory: string, input: Hist
     }
     requireSuccess(result);
   } catch (error) {
-    if (error instanceof CommandFailure) {
-      await writeFile(join(directory, "stdout.bin"), error.rawStdout, { flag: "wx", mode: 0o600 });
-      await writeFile(join(directory, "stderr.bin"), error.rawStderr, { flag: "wx", mode: 0o600 });
-      await writeBound(directory, "custody-failure.json", stableJson({ message: error.message, ...error.observation }) + "\n");
-    }
-    throw error;
+    return await retainFailure(error, error instanceof CommandFailure ? [
+      () => writeFile(join(directory, "stdout.bin"), error.rawStdout, { flag: "wx", mode: 0o600 }),
+      () => writeFile(join(directory, "stderr.bin"), error.rawStderr, { flag: "wx", mode: 0o600 }),
+      () => writeBound(directory, "custody-failure.json", stableJson(commandFailureRecord(error)) + "\n"),
+    ] : []);
   }
   const history = await readHistory(directory, "history.json");
   requireThat(typeof input === "number" ? history.seed === input && history.commands.length === LIMITS.commands : stableJson(history) === stableJson(input), "Bun worker replayed a different history");
@@ -105,16 +105,18 @@ async function pair(root: string, archive: string, id: string, artifact: Artifac
     bunCommand: { path: `${id}/bun/command.json`, sha256: await hashFile(archive, `${id}/bun/command.json`) },
     native: { path: `${id}/native/native.json`, sha256: native.rawSha256 }, command: { path: `${id}/native/command.json`, sha256: await hashFile(archive, `${id}/native/command.json`) }, witnesses };
 }
-async function retainFailure(root: string, archive: string, artifact: Artifact, history: History, error: unknown): Promise<void> {
-  await writeFile(join(archive, "failure.json"), stableJson({ message: error instanceof Error ? error.message : String(error), history, property: error instanceof TraceMismatch ? error.property : null }) + "\n", { flag: "wx", mode: 0o600 });
-  if (!(error instanceof TraceMismatch)) return;
-  let attempt = 0;
-  try {
-    const result = await shrinkHistory(history, async candidate => { await pair(root, archive, `shrink-${attempt++}`, artifact, candidate); }, 64);
-    await writeFile(join(archive, "shrunk.json"), stableJson(result) + "\n", { flag: "wx", mode: 0o600 });
-  } catch (shrinkError) {
-    await writeFile(join(archive, "shrink-failure.json"), stableJson({ message: shrinkError instanceof Error ? shrinkError.message : String(shrinkError) }) + "\n", { flag: "wx", mode: 0o600 });
-  }
+async function retainTraceFailure(root: string, archive: string, artifact: Artifact, history: History, error: unknown, primary: Error): Promise<never> {
+  const writers: (() => Promise<unknown>)[] = [() => writeFile(join(archive, "failure.json"), stableJson({ message: error instanceof Error ? error.message : String(error), history, property: error instanceof TraceMismatch ? error.property : null }) + "\n", { flag: "wx", mode: 0o600 })];
+  if (error instanceof TraceMismatch) writers.push(async () => {
+    let attempt = 0;
+    try {
+      const result = await shrinkHistory(history, async candidate => { await pair(root, archive, `shrink-${attempt++}`, artifact, candidate); }, 64);
+      await writeFile(join(archive, "shrunk.json"), stableJson(result) + "\n", { flag: "wx", mode: 0o600 });
+    } catch (shrinkError) {
+      return await retainFailure(shrinkError, [() => writeFile(join(archive, "shrink-failure.json"), stableJson({ message: shrinkError instanceof Error ? shrinkError.message : String(shrinkError) }) + "\n", { flag: "wx", mode: 0o600 })]);
+    }
+  });
+  return await retainFailure(primary, writers);
 }
 /** One owner executes all bounded histories. Hegel's separate native generator
  * is not rerun here. Output remains inspectable outside the repository. */
@@ -146,8 +148,9 @@ export async function runTraces(root: string, binary: string, outputDirectory?: 
     return result;
   } catch (error) {
     if (!current && currentId) try { current = await readHistory(physical, `${currentId}/bun/history.json`); } catch { /* incomplete generation remains infrastructure failure */ }
-    if (current) await retainFailure(root, physical, runtime.native, current, error);
-    throw new Error(`trace run rejected; raw evidence retained at ${physical}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+    const primary = new Error(`trace run rejected; raw evidence retained at ${physical}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+    if (current) return await retainTraceFailure(root, physical, runtime.native, current, error, primary);
+    throw primary;
   }
 }
 

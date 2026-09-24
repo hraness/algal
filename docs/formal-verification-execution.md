@@ -2,7 +2,7 @@
 
 ## Integration candidate
 
-Execution was authorized on 2026-09-23. Branch: `feat/formal-verification-foundation`, based on freshly fetched `origin/main` at `353a5cac4ea2b2ae40e00bf9c2805606265a5378`. The historical audit remains an exact account of its older snapshot. The fully checked checkpoint `5e334ed` was pushed in [PR 70](https://github.com/hraness/algal/pull/70). The working integration includes upstream `1737efe77375ccb35f3ed68fb465473019d2e573`; its browser application, local inference and native host executor add three pending obligations (119 total). Earlier evidence remains bound to its original source. [Upstream integration record](formal-verification-evidence/upstream-1737.md).
+Execution was authorized on 2026-09-23. Branch: `feat/formal-verification-foundation`, based on freshly fetched `origin/main` at `353a5cac4ea2b2ae40e00bf9c2805606265a5378`. The historical audit remains an exact account of its older snapshot. The fully checked checkpoint `5e334ed` was pushed in [PR 70](https://github.com/hraness/algal/pull/70). The working integration includes the browser/native foundation and the later upstream merge at `3f81f0ab65961959cbbbf32e6fdc7f908c201483`; the ledger now contains 120 obligations, with HST-16 recording reviewed browser/resource qualification controls. Earlier evidence remains bound to its original source. [Upstream integration record](formal-verification-evidence/upstream-1737.md).
 
 The audit and plan documents were the only changes carried onto the task branch. No unrelated working changes were present. The separate `algal-worktrees/platonik-dep` worktree is outside this task.
 

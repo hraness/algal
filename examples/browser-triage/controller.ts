@@ -144,10 +144,18 @@ export class BrowserTriageController {
     for (const ref of j.completed) {
       const p = await this.readPrepared(ref);
       if ((p.request.kind === "create" || p.request.kind === "fork") && !same(p.request, j.initialization)) throw new Error("Saved task initialization changed");
-      // The compact index remains part of the saved request. Read-only checks
-      // never recreate it, even when all application records are present.
-      const index = await getApplicationRecord(this.storage.store, p.transfer, value => object(value, ["contract", "application", "head", "states", "records"]));
-      if (index.contract !== "algal.triage-transfer-index.v1" || index.application !== this.application || index.head !== p.resultHead) throw new Error("Saved task preparation index changed");
+      // Each saved index must still describe its complete, verified history
+      // prefix. A valid live history cannot supply missing saved-index rows.
+      const transfer = await this.core.readTransfer(p.transfer), end = history.findIndex(row => row.digest === p.resultHead);
+      if (transfer.application !== this.application || transfer.head !== p.resultHead || end < 0 || !same(transfer.states, history.slice(0, end + 1).map(row => row.digest))) throw new Error("Saved task preparation index changed");
+      await TriageCore.withVerifiedTransfer(transfer, async source => {
+        // A proposal's candidate is outside the committed history. Check it
+        // against this index's private records, not the wider live store.
+        if (p.request.kind === "propose") {
+          if (p.evaluation === null) throw new Error("Saved workflow preparation mismatch");
+          await source.inspectEvaluation(p.evaluation);
+        }
+      });
       await this.binding(p);
       if (p.request.kind === "propose") evaluations.push(p.evaluation!);
       else {
@@ -184,6 +192,7 @@ export class BrowserTriageController {
       const sessionState = await source.loadSession(this.sessionId);
       return { sessionState, current: await source.capture(sessionState.record?.session ?? DEFAULT_SESSION) };
     });
+    if (current.head !== history.at(-1)?.digest) throw new Error("Task head changed after journal verification");
     const recovery = j.pending === null ? null : await this.readPrepared(j.pending);
     return { ...current, sessionState, pending: candidates.filter(c => c.evaluation.expectedHead === current.head).at(-1) ?? null, recovery: recovery ? { reference: j.pending!, kind: recovery.request.kind, expectedHead: recovery.expectedHead } : null, remainingEvaluations: MAX_EVALUATIONS - j.evaluations.length, history: history.map(row => ({ head: row.digest, sequence: row.state.sequence, kind: row.transition.kind })) };
   }

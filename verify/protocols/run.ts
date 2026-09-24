@@ -1,3 +1,4 @@
+import { commandFailureRecord, retainFailure } from "../lib/failure";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -39,7 +40,7 @@ export const PROTOCOLS: Record<Protocol, { bun: string[]; native: string[] }> = 
 };
 
 async function definition(root: string, protocol: Protocol) {
-  const paths = [...new Set([...await governedPaths(root), ...PROTOCOLS[protocol].bun, "verify/protocols/run.ts", "verify/lib/runner.ts", "verify/lib/command-supervisor.ts", "verify/lib/files.ts", "verify/lib/schema.ts", "verify/lib/suites.ts", "verify/stateful/run.ts", "verify/traces/native.ts"])].sort();
+  const paths = [...new Set([...await governedPaths(root), ...PROTOCOLS[protocol].bun, "verify/protocols/run.ts", "verify/lib/runner.ts", "verify/lib/failure.ts", "verify/lib/command-supervisor.ts", "verify/lib/files.ts", "verify/lib/schema.ts", "verify/lib/suites.ts", "verify/stateful/run.ts", "verify/traces/native.ts"])].sort();
   const sources: FileBinding[] = await Promise.all(paths.map(async path => ({ path, sha256: await hashFile(root, path) })));
   return { protocol, inventory: PROTOCOLS[protocol], sources };
 }
@@ -71,12 +72,11 @@ export async function runProtocolConformance(root: string, protocol: Protocol, b
       await writeFile(join(directory, "command.json"), stableJson(result) + "\n", { flag: "wx", mode: 0o600 });
       commands.push(result); return result;
     } catch (error) {
-      if (error instanceof CommandFailure) {
-        await writeFile(join(directory, "stdout.bin"), error.rawStdout);
-        await writeFile(join(directory, "stderr.bin"), error.rawStderr);
-        await writeFile(join(directory, "custody-failure.json"), stableJson({ message: error.message, ...error.observation }) + "\n");
-      }
-      throw error;
+      return await retainFailure(error, error instanceof CommandFailure ? [
+        () => writeFile(join(directory, "stdout.bin"), error.rawStdout),
+        () => writeFile(join(directory, "stderr.bin"), error.rawStderr),
+        () => writeFile(join(directory, "custody-failure.json"), stableJson(commandFailureRecord(error)) + "\n"),
+      ] : []);
     }
   }
   try {
@@ -94,7 +94,7 @@ export async function runProtocolConformance(root: string, protocol: Protocol, b
       scope: "Executed named production correspondence cases with real local persistence and controlled faults; no proved source refinement or machine power-loss qualification. Native source/build correspondence and separate full runtime/CLI parity remain required gates. Application native cases use the application_model integration-test artifact; other protocols use the library-test artifact." };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    await writeFile(join(archive, "failure.json"), stableJson({ message }) + "\n");
-    throw new Error(`${protocol} conformance rejected; raw evidence retained at ${archive}: ${message}`, { cause: error });
+    const primary = new Error(`${protocol} conformance rejected; raw evidence retained at ${archive}: ${message}`, { cause: error });
+    return await retainFailure(primary, [() => writeFile(join(archive, "failure.json"), stableJson({ message }) + "\n")]);
   }
 }

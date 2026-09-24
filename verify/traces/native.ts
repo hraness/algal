@@ -1,3 +1,4 @@
+import { commandFailureRecord, retainFailure } from "../lib/failure";
 import { constants } from "node:fs";
 import { mkdir, open, realpath, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join } from "node:path";
@@ -51,12 +52,11 @@ export async function replayNative(root: string, artifact: Artifact, history: Hi
     await writeFile(join(directory, "command.json"), stableJson(result) + "\n", { flag: "wx", mode: 0o600 });
     admitNativeCommand(result);
   } catch (error) {
-    if (error instanceof CommandFailure) {
-      await writeFile(join(directory, "stdout.bin"), error.rawStdout, { flag: "wx", mode: 0o600 });
-      await writeFile(join(directory, "stderr.bin"), error.rawStderr, { flag: "wx", mode: 0o600 });
-      await writeFile(join(directory, "custody-failure.json"), stableJson({ message: error.message, ...error.observation }) + "\n", { flag: "wx", mode: 0o600 });
-    }
-    throw error;
+    return await retainFailure(error, error instanceof CommandFailure ? [
+      () => writeFile(join(directory, "stdout.bin"), error.rawStdout, { flag: "wx", mode: 0o600 }),
+      () => writeFile(join(directory, "stderr.bin"), error.rawStderr, { flag: "wx", mode: 0o600 }),
+      () => writeFile(join(directory, "custody-failure.json"), stableJson(commandFailureRecord(error)) + "\n", { flag: "wx", mode: 0o600 }),
+    ] : []);
   }
   requireThat(stableJson(await artifactIdentity(artifact.path)) === stableJson(artifact), "native artifact changed during replay");
   requireThat(hashBytes(await readFileBounded(directory, "history.json", LIMITS.transcriptBytes)) === hashBytes(source), "history input changed during replay");

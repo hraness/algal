@@ -1,3 +1,4 @@
+import { commandFailureRecord, retainFailure } from "../../lib/failure";
 /** Bounded local model diagnosis. Operational evidence uses the shared TLC suite. */
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -39,10 +40,10 @@ try {
   const { trace, ...summary } = admitted;
   console.log(stableJson({ id, requested: requested ?? null, directory, diagnosticOnly: true, sourceSha256: hashBytes(source), configurationSha256: hashBytes(cfg), expected, ...summary, traceStates: trace.length }));
 } catch (error) {
-  if (error instanceof CommandFailure) {
-    await writeFile(join(directory, "stdout.log"), error.rawStdout); await writeFile(join(directory, "stderr.log"), error.rawStderr);
-    await writeFile(join(directory, "failure.json"), stableJson(error.observation) + "\n");
-  }
   console.error(`Retained mailbox diagnostic: ${directory}`);
-  throw error;
+  await retainFailure(error, error instanceof CommandFailure ? [
+    () => writeFile(join(directory, "stdout.log"), error.rawStdout),
+    () => writeFile(join(directory, "stderr.log"), error.rawStderr),
+    () => writeFile(join(directory, "failure.json"), stableJson(commandFailureRecord(error)) + "\n"),
+  ] : []);
 }

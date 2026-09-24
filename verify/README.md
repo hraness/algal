@@ -17,6 +17,9 @@ bun scripts/verify.ts --suite traces
 bun scripts/verify.ts --suite stateful
 bun scripts/verify.ts --suite fault-harness
 bun scripts/verify.ts --suite lean-core
+bun scripts/verify.ts --suite application-history-slice
+bun scripts/verify.ts --suite corpus
+bun scripts/verify.ts --suite spawn-conformance
 bun scripts/verify.ts --suite all-required
 ```
 
@@ -55,6 +58,36 @@ poisoning. Set `ALGAL_SCHEDULER_NATIVE_BIN` to the absolute frozen native CLI bu
 from the current source. These are executable model and sampled correspondence
 checks, not a scheduler refinement proof. See the [scope](reference/scheduler/SCOPE.md)
 and [progress argument](reference/scheduler/PROGRESS.md).
+
+`application-history-slice` generates four fixed histories, compares fresh Bun
+and native executions, and checks five deliberate projection mutations with
+ordered shrinking. Build the `verification_application_history` native example
+and select its absolute path with `ALGAL_APPLICATION_HISTORY_BIN`. Each original
+history has 24 commands; the baseline matrix has 16 workers and 384 command
+observations. [Scope and limits](reference/application/SCOPE.md) distinguish this
+slice from general application correctness and process-crash recovery.
+
+`corpus` compares 115 fixed expression cases across committed WASM, the Bun
+wrapper where applicable, and the native `verification_boundary` example.
+Set `ALGAL_CORPUS_NATIVE_BIN` to that example's absolute path. The independent
+value/error oracle and raw-input cases do not establish full expression
+refinement; see the [corpus scope](corpus/SCOPE.md).
+
+`spawn-conformance` checks 17 fixed dynamic-spawn fixtures, 34 runtime
+comparisons, 68 baseline receipt replays and four expected mutation rejections.
+Select the frozen native CLI with `ALGAL_SPAWN_NATIVE_BIN`, its independently
+checked build manifest with `ALGAL_SPAWN_BUILD_MANIFEST`, and that manifest's
+`sha256:` digest with `ALGAL_SPAWN_BUILD_MANIFEST_SHA256`. The runner verifies
+the selected artifact and build-input hashes; the integration owner must still
+establish their build correspondence. [Spawn scope](reference/spawn/SCOPE.md)
+records the limits of these finite fixtures.
+
+These three suites copy raw evidence into `verify/results`, save a manifest
+bound to the selected authority and recheck the copied bytes before returning
+a small result pointer. Diagnostic copies are separate from passing evidence.
+This is checked local file retention, without a physical power-loss guarantee.
+Runner selftests use separate supervised groups with the same command deadline
+to cover the larger archive-reader controls.
 
 The [portable traces](traces/wire.md) replay retained and state-dependent histories
 through both actual runtimes, compare exact results with cold persistence reads,

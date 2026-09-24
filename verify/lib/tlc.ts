@@ -1,3 +1,4 @@
+import { commandFailureRecord, retainFailure } from "./failure";
 /** Pinned TLC 1.7.4 raw-output adapter. A finite model result is not implementation refinement. */
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
@@ -416,18 +417,17 @@ export async function runTlcSuite(root: string, suite: TlcSuite): Promise<TlcSui
       let result: CommandResult;
       try { result = await runCommand(command(tools, directory, plan), directory, { timeoutMs: 30_000, maxOutputBytes: MAX_LOG }); }
       catch (error) {
-        if (error instanceof CommandFailure) {
-          await writeFile(join(directory, "stdout.log"), error.rawStdout);
-          await writeFile(join(directory, "stderr.log"), error.rawStderr);
-          await writeFile(join(directory, "command-failure.json"), JSON.stringify({ message: error.message, observation: error.observation }));
-        }
-        throw error;
+        return await retainFailure(error, error instanceof CommandFailure ? [
+          () => writeFile(join(directory, "stdout.log"), error.rawStdout),
+          () => writeFile(join(directory, "stderr.log"), error.rawStderr),
+          () => writeFile(join(directory, "command-failure.json"), JSON.stringify(commandFailureRecord(error))),
+        ] : []);
       }
       const raw: TlcRawRun = { id: plan.id, directory, configuration: config, stdoutSha256: hashBytes(result.stdout), stderrSha256: hashBytes(result.stderr), commandResult: result };
       // Retain diagnostic bytes even when the semantic admission fails.
       await writeFile(join(directory, "stdout.log"), result.stdout); await writeFile(join(directory, "stderr.log"), result.stderr);
       try { admitRawRun(raw, plan, tools); }
-      catch (error) { throw new Error(`${plan.id}: ${error instanceof Error ? error.message : String(error)}; raw output retained at ${directory}`); }
+      catch (error) { throw new Error(`${plan.id}: ${error instanceof Error ? error.message : String(error)}; raw output retained at ${directory}`, { cause: error }); }
       requireThat(hashBytes(await readFileBounded(directory, `${plan.profile.module}.tla`, 262_144)) === hashBytes(source) && hashBytes(await readFileBounded(directory, "Model.cfg", 65_536)) === hashBytes(config), "TLC rewrote its checked model/configuration");
       runs.push(raw);
     }
@@ -440,6 +440,6 @@ export async function runTlcSuite(root: string, suite: TlcSuite): Promise<TlcSui
   } catch (error) {
     // Only successful scratch trees are deleted. Failure logs are bounded and
     // contain models/tool diagnostics, not host application data or credentials.
-    throw new Error(`${error instanceof Error ? error.message : String(error)}; TLC scratch ${base}`);
+    throw new Error(`${error instanceof Error ? error.message : String(error)}; TLC scratch ${base}`, { cause: error });
   }
 }

@@ -10,9 +10,9 @@ import { LIMITS, parseHistory, type History, type Trace } from "./schema";
 export function workerSummary(mode: "generate" | "replay", history: History, trace: Trace): string {
   return stableJson({ contract: "algal.verification-trace-worker.v1", mode, historyDigest: hashJson(history), traceDigest: hashBytes(stableJson(trace) + "\n"), commands: history.commands.length });
 }
-if (import.meta.main) {
-  const [mode, input, directory] = process.argv.slice(2);
-  requireThat(process.argv.length === 5 && (mode === "generate" || mode === "replay") && directory !== undefined && isAbsolute(directory), "trace worker expects generate SEED or replay HISTORY under one absolute output directory");
+export async function runTraceWorker(args: readonly string[]): Promise<void> {
+  const [mode, input, directory] = args;
+  requireThat(args.length === 3 && (mode === "generate" || mode === "replay") && directory !== undefined && isAbsolute(directory), "trace worker expects generate SEED or replay HISTORY under one absolute output directory");
   let history: History, trace: Trace;
   try {
     if (mode === "generate") {
@@ -31,9 +31,13 @@ if (import.meta.main) {
     if (error instanceof GenerationFailure) {
       // Preserve the concrete, possibly failing prefix. The parent only calls
       // it a semantic counterexample if independent raw-trace checking agrees.
-      await writeFile(join(directory, "history.json"), stableJson(error.history) + "\n", { flag: "wx", mode: 0o600 });
-      try { await writeFile(join(directory, "trace.json"), await readFileBounded(error.directory, "failure-trace.json", LIMITS.transcriptBytes), { flag: "wx", mode: 0o600 }); } catch { /* incomplete runs remain failures */ }
+      return await error.retain([
+        { path: join(directory, "history.json"), write: () => writeFile(join(directory, "history.json"), stableJson(error.history) + "\n", { flag: "wx", mode: 0o600 }) },
+        { path: join(directory, "trace.json"), write: async () => writeFile(join(directory, "trace.json"), await readFileBounded(error.directory, "failure-trace.json", LIMITS.transcriptBytes), { flag: "wx", mode: 0o600 }) },
+      ]);
     }
     throw error;
   }
 }
+
+if (import.meta.main) await runTraceWorker(process.argv.slice(2));

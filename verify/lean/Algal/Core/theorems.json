@@ -237,6 +237,94 @@
       ]
     },
     {
+      "id": "finite-neighbors",
+      "module": "Algal.Core.FiniteNeighbors",
+      "scope": "Constructive classification of every finite binary64 magnitude into zero, maximum, or actual adjacent finite neighbors; no rational selector, decimal codec or production refinement.",
+      "sources": [
+        "src/values.ts",
+        "crates/algal/src/canonical.rs",
+        "Cargo.lock"
+      ],
+      "coveredCriteria": [
+        "Every natural bit code at most maximum finite constructs an admitted sign-bit-zero Number without UInt64 wrap; every admitted nonnegative Number is recovered from its code.",
+        "Every positive interior finite center has constructed adjacent finite neighbors. Total signed classification uses sign reflection and reverses negative neighbors. The constructed interiors satisfy the prior all-sign nearest/parity cell equivalences.",
+        "Zero and maximum remain special magnitude endpoints; min-subnormal, min-normal, signed-one and endpoint witnesses check exact bit codes."
+      ],
+      "unmetCriteria": [
+        "No total rational rounding selector, cell coverage/uniqueness, decimal-to-binary64 conversion, shortest rendering, production NumberCodec instance or implementation refinement is supplied.",
+        "The absence of a nonnegative predecessor of positive zero does not assert the absence of a negative finite predecessor. Signed-zero policy and overflow remain separate endpoint obligations."
+      ],
+      "admittedWitnesses": [
+        "Algal.Core.FiniteNeighbors.minimum_subnormal_neighbor_codes",
+        "Algal.Core.FiniteNeighbors.minimum_normal_neighbor_codes",
+        "Algal.Core.FiniteNeighbors.one_neighbor_codes",
+        "Algal.Core.FiniteNeighbors.negative_minimum_neighbor_codes",
+        "Algal.Core.FiniteNeighbors.negative_one_neighbor_codes",
+        "Algal.Core.FiniteNeighbors.both_zero_endpoints",
+        "Algal.Core.FiniteNeighbors.both_maximum_endpoints"
+      ],
+      "rejectedWitnesses": [
+        "Algal.Core.FiniteNeighbors.infinity_code_not_in_domain",
+        "Algal.Core.FiniteNeighbors.minimum_constructed_cell_rejects_underflow_tie"
+      ]
+    },
+    {
+      "id": "interval-search",
+      "module": "Algal.Core.IntervalSearch",
+      "scope": "Generic executable finite Boolean-prefix binary search with exact partition and logarithmic comparison bound. No binary64/rational or production instantiation.",
+      "sources": [
+        "verify/lean/Algal/Core/IntervalSearch.lean"
+      ],
+      "coveredCriteria": [
+        "Ordered interval bounds and exact first-false partition under explicit prefix and anchor premises",
+        "Paired executable result/count follows one descent and has a proved power-of-two comparison bound"
+      ],
+      "unmetCriteria": [
+        "No binary64/rational instantiation, decimal conversion or production refinement",
+        "Comparison count excludes predicate evaluation cost, machine Nat arithmetic, allocation, stack and total wall time"
+      ],
+      "admittedWitnesses": [
+        "Algal.Core.IntervalSearch.empty_sentinel",
+        "Algal.Core.IntervalSearch.all_false_start",
+        "Algal.Core.IntervalSearch.all_true_sentinel",
+        "Algal.Core.IntervalSearch.interior_witness",
+        "Algal.Core.IntervalSearch.large_domain_witness",
+        "Algal.Core.IntervalSearch.no_comparison_when_empty",
+        "Algal.Core.IntervalSearch.one_comparison_singleton"
+      ],
+      "rejectedWitnesses": [
+        "Algal.Core.IntervalSearch.singleton_zero_budget_rejected",
+        "Algal.Core.IntervalSearch.nonprefix_partition_rejected"
+      ]
+    },
+    {
+      "id": "rational-bracket",
+      "module": "Algal.Core.RationalBracket",
+      "scope": "Exact nonnegative rational bracketing over finite binary64 values, using a proved binary search. No nearest rounding, overflow admission, signed selection, decimal conversion, shortest rendering or production refinement.",
+      "sources": [
+        "verify/lean/Algal/Core/RationalBracket.lean"
+      ],
+      "coveredCriteria": [
+        "Finite nonnegative binary64 code values instantiate the exact ordered prefix search",
+        "The executable bracket returns the greatest finite nonnegative value at or below a nonnegative rational input and its adjacent strict upper value, or the maximum sentinel",
+        "The paired executable performs at most 63 predicate comparisons"
+      ],
+      "unmetCriteria": [
+        "Nearest and ties-to-even selection, signed rounding and overflow acceptance remain unproved for this executable",
+        "No decimal conversion, shortest rendering or production implementation refinement",
+        "Comparison count excludes rational arithmetic, allocation, stack and wall time"
+      ],
+      "admittedWitnesses": [
+        "Algal.Core.RationalBracket.zero_lower_witness",
+        "Algal.Core.RationalBracket.one_lower_witness",
+        "Algal.Core.RationalBracket.maximum_lower_witness",
+        "Algal.Core.RationalBracket.maximum_has_no_upper_witness"
+      ],
+      "rejectedWitnesses": [
+        "Algal.Core.RationalBracket.negative_input_lower_promise_rejected"
+      ]
+    },
+    {
       "id": "decimal-syntax",
       "module": "Algal.Core.DecimalSyntax",
       "scope": "Concrete ASCII JSON numeral tokens retaining their spelling, with exact unbounded rational decimal values; distinct from finite-binary64 admission and canonical shortest rendering.",
@@ -2051,6 +2139,144 @@
       "name": "Algal.Core.NegativeEndpoints.negative_overflow_boundary_finite_geometry_and_model_refusal",
       "module": "Algal.Core.NegativeEndpoints",
       "domain": "negative-endpoints",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.FiniteNeighbors.finite_of_bounded_code",
+      "module": "Algal.Core.FiniteNeighbors",
+      "domain": "finite-neighbors",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.FiniteNeighbors.fromCode_toNat",
+      "module": "Algal.Core.FiniteNeighbors",
+      "domain": "finite-neighbors",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.FiniteNeighbors.fromCode_nonnegative",
+      "module": "Algal.Core.FiniteNeighbors",
+      "domain": "finite-neighbors",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.FiniteNeighbors.nonnegative_code_bound",
+      "module": "Algal.Core.FiniteNeighbors",
+      "domain": "finite-neighbors",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.FiniteNeighbors.previous_adjacent",
+      "module": "Algal.Core.FiniteNeighbors",
+      "domain": "finite-neighbors",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.FiniteNeighbors.next_adjacent",
+      "module": "Algal.Core.FiniteNeighbors",
+      "domain": "finite-neighbors",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.FiniteNeighbors.positive_classification",
+      "module": "Algal.Core.FiniteNeighbors",
+      "domain": "finite-neighbors",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.FiniteNeighbors.constructed_interior_cell",
+      "module": "Algal.Core.FiniteNeighbors",
+      "domain": "finite-neighbors",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.FiniteNeighbors.constructed_negative_cell",
+      "module": "Algal.Core.FiniteNeighbors",
+      "domain": "finite-neighbors",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.FiniteNeighbors.zero_has_no_nonnegative_predecessor",
+      "module": "Algal.Core.FiniteNeighbors",
+      "domain": "finite-neighbors",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.FiniteNeighbors.maximum_has_no_nonnegative_successor",
+      "module": "Algal.Core.FiniteNeighbors",
+      "domain": "finite-neighbors",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.FiniteNeighbors.fromCode_recovers_nonnegative",
+      "module": "Algal.Core.FiniteNeighbors",
+      "domain": "finite-neighbors",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.FiniteNeighbors.negative_classification",
+      "module": "Algal.Core.FiniteNeighbors",
+      "domain": "finite-neighbors",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.FiniteNeighbors.constructed_neighbors_have_no_positive_gap",
+      "module": "Algal.Core.FiniteNeighbors",
+      "domain": "finite-neighbors",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.FiniteNeighbors.minimum_subnormal_neighbor_codes",
+      "module": "Algal.Core.FiniteNeighbors",
+      "domain": "finite-neighbors",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.FiniteNeighbors.minimum_normal_neighbor_codes",
+      "module": "Algal.Core.FiniteNeighbors",
+      "domain": "finite-neighbors",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.FiniteNeighbors.one_neighbor_codes",
+      "module": "Algal.Core.FiniteNeighbors",
+      "domain": "finite-neighbors",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.FiniteNeighbors.negative_minimum_neighbor_codes",
+      "module": "Algal.Core.FiniteNeighbors",
+      "domain": "finite-neighbors",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.FiniteNeighbors.negative_one_neighbor_codes",
+      "module": "Algal.Core.FiniteNeighbors",
+      "domain": "finite-neighbors",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.FiniteNeighbors.both_zero_endpoints",
+      "module": "Algal.Core.FiniteNeighbors",
+      "domain": "finite-neighbors",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.FiniteNeighbors.both_maximum_endpoints",
+      "module": "Algal.Core.FiniteNeighbors",
+      "domain": "finite-neighbors",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.FiniteNeighbors.infinity_code_not_in_domain",
+      "module": "Algal.Core.FiniteNeighbors",
+      "domain": "finite-neighbors",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.FiniteNeighbors.minimum_constructed_cell_rejects_underflow_tie",
+      "module": "Algal.Core.FiniteNeighbors",
+      "domain": "finite-neighbors",
       "role": "rejected-witness"
     },
     {
@@ -3984,10 +4210,370 @@
       "module": "Algal.Core.Oracle",
       "domain": "oracle",
       "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.IntervalSearch.cut_bounds",
+      "module": "Algal.Core.IntervalSearch",
+      "domain": "interval-search",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.IntervalSearch.cut_partition",
+      "module": "Algal.Core.IntervalSearch",
+      "domain": "interval-search",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.IntervalSearch.recursive_halving",
+      "module": "Algal.Core.IntervalSearch",
+      "domain": "interval-search",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.IntervalSearch.comparisons_le",
+      "module": "Algal.Core.IntervalSearch",
+      "domain": "interval-search",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.IntervalSearch.full_partition",
+      "module": "Algal.Core.IntervalSearch",
+      "domain": "interval-search",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.IntervalSearch.true_iff_before_cut",
+      "module": "Algal.Core.IntervalSearch",
+      "domain": "interval-search",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.IntervalSearch.cut_unique",
+      "module": "Algal.Core.IntervalSearch",
+      "domain": "interval-search",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.IntervalSearch.threshold_prefix",
+      "module": "Algal.Core.IntervalSearch",
+      "domain": "interval-search",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.IntervalSearch.threshold_cut",
+      "module": "Algal.Core.IntervalSearch",
+      "domain": "interval-search",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.IntervalSearch.empty_sentinel",
+      "module": "Algal.Core.IntervalSearch",
+      "domain": "interval-search",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.IntervalSearch.all_false_start",
+      "module": "Algal.Core.IntervalSearch",
+      "domain": "interval-search",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.IntervalSearch.all_true_sentinel",
+      "module": "Algal.Core.IntervalSearch",
+      "domain": "interval-search",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.IntervalSearch.interior_witness",
+      "module": "Algal.Core.IntervalSearch",
+      "domain": "interval-search",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.IntervalSearch.large_domain_witness",
+      "module": "Algal.Core.IntervalSearch",
+      "domain": "interval-search",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.IntervalSearch.large_domain_comparison_bound",
+      "module": "Algal.Core.IntervalSearch",
+      "domain": "interval-search",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.IntervalSearch.no_comparison_when_empty",
+      "module": "Algal.Core.IntervalSearch",
+      "domain": "interval-search",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.IntervalSearch.one_comparison_singleton",
+      "module": "Algal.Core.IntervalSearch",
+      "domain": "interval-search",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.IntervalSearch.power_of_two_needs_extra_comparison",
+      "module": "Algal.Core.IntervalSearch",
+      "domain": "interval-search",
+      "role": "counterexample-witness"
+    },
+    {
+      "name": "Algal.Core.IntervalSearch.below_power_of_two_depth",
+      "module": "Algal.Core.IntervalSearch",
+      "domain": "interval-search",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.IntervalSearch.singleton_zero_budget_rejected",
+      "module": "Algal.Core.IntervalSearch",
+      "domain": "interval-search",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.IntervalSearch.nonprefix_partition_rejected",
+      "module": "Algal.Core.IntervalSearch",
+      "domain": "interval-search",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.IntervalSearch.nonprefix_search_is_not_first_false",
+      "module": "Algal.Core.IntervalSearch",
+      "domain": "interval-search",
+      "role": "counterexample-witness"
+    },
+    {
+      "name": "Algal.Core.IntervalSearch.search_spec",
+      "module": "Algal.Core.IntervalSearch",
+      "domain": "interval-search",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.IntervalSearch.search_comparisons_le",
+      "module": "Algal.Core.IntervalSearch",
+      "domain": "interval-search",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.IntervalSearch.search_correct",
+      "module": "Algal.Core.IntervalSearch",
+      "domain": "interval-search",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.atCode_nonnegative",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.atCode_bits",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.atCode_recovers",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.codeValue_recovers",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.codeValue_order",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.codeValue_strict",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.codeValue_zero",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.atCode_maximum",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.below_prefix",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.first_bound",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.first_partition",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.first_positive",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.lowerCode_bound",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.lower_nonnegative",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.lower_below",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.lower_greatest",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.next_adjacent_to_lower",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.next_above",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.sentinel_is_maximum",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.bracket_lower",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.bracket_upper",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.bracket_comparison_bound",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.bracket_upper_correct",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.bracket_correct",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.first_at_code",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.lower_at_code",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.lower_at_number",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.first_in_gap",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.lower_in_gap",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.sentinel_iff_maximum_below",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.zero_lower_witness",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.one_lower_witness",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.maximum_lower_witness",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.maximum_has_no_upper_witness",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RationalBracket.negative_input_lower_promise_rejected",
+      "module": "Algal.Core.RationalBracket",
+      "domain": "rational-bracket",
+      "role": "rejected-witness"
     }
   ],
   "unmetCriteria": [
-    "Phase09 full canonical JSON byte encoding/roundtrip/injectivity is not proved. JsonLayout proves recursive UTF-8 delimiter composition and unconditional canonical laws for number-free trees; results with numbers require NumberCodec.LawsOn. The numeric modules prove exact binary64/decimal denotations, finite denotation injectivity modulo signed zero, numeral grammar, all-sign interior midpoint minima, signed zero-cell characterization, complete negative-maximum finite-nearest/strict-nearest characterization, conditional all-sign interior midpoint converses, and finite endpoint geometry with concrete round/pack witnesses. Universal rounding selection/packing and complete numeric cell coverage remain open. No complete decimal-to-binary64 conversion or production number-codec instance, shortest rendering, full raw-document admission, or production refinement is supplied.",
+    "Phase09 full canonical JSON byte encoding/roundtrip/injectivity is not proved. JsonLayout proves recursive UTF-8 delimiter composition and unconditional canonical laws for number-free trees; results with numbers require NumberCodec.LawsOn. The numeric modules prove exact binary64/decimal denotations, finite denotation injectivity modulo signed zero, numeral grammar, all-sign interior midpoint minima, signed zero-cell characterization, complete negative-maximum finite-nearest/strict-nearest characterization, conditional all-sign interior midpoint converses, and finite endpoint geometry with concrete round/pack witnesses. FiniteNeighbors now constructs actual interior neighbors for every finite signed magnitude. Universal rounding selection/packing and complete numeric cell coverage remain open. No complete decimal-to-binary64 conversion or production number-codec instance, shortest rendering, full raw-document admission, or production refinement is supplied.",
     "No production implementation is directly proved/refined by these theorems. Independent exact vectors and source/artifact bindings can provide sampled evidence, not a universal implementation theorem.",
     "SchemaCheck and ByteSize are explicit semantic parameters; host cost sanity and exact integer/machine-width envelopes are explicit preconditions, not established production admission.",
     "Lean standard-library imports are pinned/trusted compiled inputs; whole-import trust=0 rechecking is unqualified. Every authored theorem must undergo actual transitive axiom collection by the integrator.",

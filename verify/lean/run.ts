@@ -1,3 +1,4 @@
+import { commandFailureRecord, retainFailure } from "../lib/failure";
 import { copyFile, mkdir, mkdtemp, readdir, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
@@ -8,7 +9,7 @@ import { leanRuntime } from "./runtime";
 import { parseModuleAudit, parseTheoremAudit, parseVectorOutput, theoremNames } from "./output";
 import { compareBunStringVectors, compareBunVectors, compareNativeStringVectors, compareNativeVectors } from "./vectors";
 
-const MODULES = ["Binary64", "BinaryValue", "NumericInjectivity", "RoundingInterval", "SignedRounding", "RoundingEndpoints", "NegativeEndpoints", "DecimalSyntax", "Text", "JsonString", "ByteFraming", "OwnMap", "KeyOrder", "Json", "Normalize", "JsonLayout", "Ports", "Graph", "Accounting", "Oracle"];
+const MODULES = ["Binary64", "BinaryValue", "NumericInjectivity", "RoundingInterval", "SignedRounding", "RoundingEndpoints", "NegativeEndpoints", "FiniteNeighbors", "IntervalSearch", "RationalBracket", "DecimalSyntax", "Text", "JsonString", "ByteFraming", "OwnMap", "KeyOrder", "Json", "Normalize", "JsonLayout", "Ports", "Graph", "Accounting", "Oracle"];
 const MODULE_NAMES = MODULES.map(name => `Algal.Core.${name}`);
 const MODULE_AUDIT_SOURCE = `import Algal\naudit_modules ${MODULE_NAMES.join(", ")}\n`;
 const MODULE_CONTROL_SOURCE = "import Algal.Audit\nimport Hidden\naudit_modules Hidden\n";
@@ -53,7 +54,7 @@ export async function leanInputs(root: string): Promise<FileBinding[]> {
   // portable helper or host import can change sampled behavior without changing
   // a mapped entry point. This broad identity does not expand the proof scope.
   const paths = [...await governedPaths(root), ...await projectPaths(root), "verify/tests/lean-output.test.ts", "verify/tests/lean-vectors.test.ts",
-    "verify/toolchains.json", "verify/toolchain-distributions.json", "verify/lib/runner.ts", "verify/lib/command-supervisor.ts",
+    "verify/toolchains.json", "verify/toolchain-distributions.json", "verify/lib/runner.ts", "verify/lib/failure.ts", "verify/lib/command-supervisor.ts",
     "verify/lib/files.ts", "verify/lib/schema.ts", "verify/lib/proof.ts", "verify/lib/claims.ts", "verify/lib/suites.ts",
     "src/values.ts", "src/errors.ts", "crates/algal/examples/verification_lean_vectors.rs", "crates/algal/src/canonical.rs",
     "crates/algal/src/lib.rs", "crates/algal/src/error.rs", "Cargo.toml", "Cargo.lock", "crates/algal/Cargo.toml"];
@@ -159,12 +160,12 @@ export async function runLeanCore(root: string, nativeExecutable: string): Promi
       unmetCriteria: (inventory as { unmetCriteria: unknown }).unmetCriteria,
       assumptions: ASSUMPTIONS };
   } catch (error) {
-    if (error instanceof CommandFailure) {
-      await Bun.write(join(stage, "custody-failure-stdout.bin"), error.rawStdout);
-      await Bun.write(join(stage, "custody-failure-stderr.bin"), error.rawStderr);
-      await Bun.write(join(stage, "custody-failure.json"), JSON.stringify(error.observation, null, 2));
-    }
-    throw new Error(`Lean qualification failed; diagnostics retained at ${stage}: ${String(error)}`, { cause: error });
+    const primary = new Error(`Lean qualification failed; diagnostics retained at ${stage}: ${String(error)}`, { cause: error });
+    return await retainFailure(primary, error instanceof CommandFailure ? [
+      () => Bun.write(join(stage, "custody-failure-stdout.bin"), error.rawStdout),
+      () => Bun.write(join(stage, "custody-failure-stderr.bin"), error.rawStderr),
+      () => Bun.write(join(stage, "custody-failure.json"), JSON.stringify(commandFailureRecord(error), null, 2)),
+    ] : []);
   } finally {
     if (passed && closed) await rm(stage, { recursive: true });
   }

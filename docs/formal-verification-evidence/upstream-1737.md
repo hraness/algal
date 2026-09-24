@@ -1,6 +1,6 @@
 # Upstream integration after checkpoint 5e334ed
 
-The checked checkpoint `5e334ed` is published in [PR 70](https://github.com/hraness/algal/pull/70). The pending merge includes upstream `1737efe77375ccb35f3ed68fb465473019d2e573`, which adds browser storage and execution, portable hashing and text encoding, and native in-process host executors. Earlier saved results identify their original source and remain historical evidence.
+The checked checkpoint `5e334ed` is published in [PR 70](https://github.com/hraness/algal/pull/70). The integrated candidate now includes the browser/native foundation and the later upstream merge at `3f81f0ab65961959cbbbf32e6fdc7f908c201483`. Earlier saved results identify their original source and remain historical evidence.
 
 Independent source review found two additional runtime defects. A native executor error without a saved effect could become an ordinary cell failure, producing a run that replay could not reproduce. The runtime now propagates that host failure. Configuration changes detected after a callback remain uncertain, unfinished journal intents remain blocked, and suspension handles are checked before settlement. Recorded executor errors still support ordinary failure edges.
 
@@ -20,7 +20,7 @@ The 23-suite formal aggregate returned a passing result on the same source diges
 
 ## New boundaries and remaining work
 
-The ledger adds HST-13 for registered native execution, HST-14 for browser storage/recovery, and HST-15 for local model worker lifecycle. It contains 119 obligations, 103 not started and 16 observed, with zero licensed production correctness claims. VAL mappings include `utf8.ts` and `sha256.ts`; storage/package mappings include the portable interfaces. A-BROWSER records origin, transaction, lock, eviction and worker assumptions separately from filesystem persistence.
+The ledger adds HST-13 for registered native execution, HST-14 for browser storage/recovery, HST-15 for local model worker lifecycle, and HST-16 for reviewed browser/resource qualification controls. It contains 120 obligations, 104 not started and 16 observed, with zero licensed production correctness claims. VAL mappings include `utf8.ts` and `sha256.ts`; storage/package mappings include the portable interfaces. A-BROWSER records origin, transaction, lock, eviction and worker assumptions separately from filesystem persistence.
 
 IndexedDB snapshots limit record counts, but corrupt oversized stored values can allocate memory before recovery validation. Browser heap limits remain open. Registered native callbacks must obey the stated host assumptions; these checks do not establish callback termination, allocation limits or external-effect truth.
 

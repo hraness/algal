@@ -244,6 +244,18 @@ export function admitSelftestOutput(result: CommandResult): number {
 
 async function executeSuite(root: string, suite: string): Promise<unknown> {
   if (suite === "claims") return validateClaims(root);
+  if (suite === "corpus") {
+    const { runCorpus, nativeProfile } = await import("../corpus/adapter");
+    return runCorpus(root, nativeProfile(process.env.ALGAL_CORPUS_NATIVE_BIN));
+  }
+  if (suite === "spawn-conformance") {
+    const { runSpawnConformance } = await import("../reference/spawn/run");
+    return runSpawnConformance(root);
+  }
+  if (suite === "application-history-slice") {
+    const { runApplicationHistorySlice } = await import("../reference/application/adapter");
+    return runApplicationHistorySlice(root, process.env.ALGAL_APPLICATION_HISTORY_BIN);
+  }
   if (suite === "scheduler-model" || suite === "scheduler-conformance") {
     const { runSchedulerModel, runSchedulerConformance } = await import("../reference/scheduler/run");
     return suite === "scheduler-model" ? runSchedulerModel(root) : runSchedulerConformance(root);
@@ -299,7 +311,25 @@ async function executeSuite(root: string, suite: string): Promise<unknown> {
   if (suite === "runner-selftest") {
     const command = [process.execPath, "test", "--timeout", "20000", "verify/tests", "verify/tla/tlc.test.ts"];
     const result = await runCommand(command, root);
-    return { tests: admitSelftestOutput(result), commandResult: result, syntheticProofFixtures: true };
+    const historyGroups = [
+      { name: "bounds-and-callbacks", expectedTests: 12, command: [process.execPath, "test", "--timeout", "20000", "verify/reference/application/schema.test.ts", "verify/reference/application/archive.test.ts", "verify/reference/application/bounded.test.ts", "verify/reference/application/fixture-custody.test.ts"] },
+      { name: "argv-and-authority", expectedTests: 6, command: [process.execPath, "test", "--timeout", "20000", "verify/reference/application/readmit.test.ts", "--test-name-pattern", "^(?:raw command admission |both selected and recorded argv |current-source admission |authority paths reject )"] },
+      { name: "archive-envelopes", expectedTests: 14, command: [process.execPath, "test", "--timeout", "20000", "verify/reference/application/readmit.test.ts", "--test-name-pattern", "^full synthetic archive rejects (?:unknown\\ summary\\ field|summary\\ outcome\\ count|summary\\ byte\\ accounting|definition\\ identity|source\\ inventory\\ mutation\\ with\\ rehashed\\ raw\\ record|forged\\ inert\\ argv|unobserved\\ cleanup|signal\\ status|stdout\\ framing|extra\\ stdout\\ envelope\\ field|generated\\ profile/header\\ mismatch|retained\\ history\\ input\\ differs\\ from\\ generated\\ packet|Bun\\ packet\\ authorized\\ history\\ differs|recomputed\\ positive\\ witness\\ omitted) after admitted baseline$"] },
+      { name: "archive-semantics", expectedTests: 14, command: [process.execPath, "test", "--timeout", "20000", "verify/reference/application/readmit.test.ts", "--test-name-pattern", "^full synthetic archive rejects (?:native\\ output\\ runtime\\ identity|native\\ uncertain\\ acknowledgment\\ cleared|durable\\ started\\ callback\\ evidence\\ removed|callback\\ effect\\ bytes\\ forged|owned\\ physical\\ effect\\ inventory\\ changed|native\\ input\\ header\\ identity|closed\\ raw\\ trace\\ fields|changed\\ shrink\\ property|changed\\ ordered\\ shrink\\ input|real\\ baseline\\ mismatch\\ cannot\\ masquerade\\ as\\ intended\\ projection\\ mutant|unknown\\ raw\\ archive\\ entry|missing\\ raw\\ archive\\ entry|raw\\ symlink\\ cannot\\ stand\\ in\\ for\\ evidence|duplicate\\-key\\ canonical\\ metadata) after admitted baseline$"] },
+    ];
+    const historySelftests = [];
+    for (const group of historyGroups) {
+      const commandResult = await runCommand(group.command, root);
+      const tests = admitSelftestOutput(commandResult);
+      requireThat(tests === group.expectedTests, `application history selftest group ${group.name} incomplete`);
+      historySelftests.push({ name: group.name, tests, commandResult });
+    }
+    const componentSelftests = [];
+    for (const directory of ["verify/corpus", "verify/reference/spawn", "verify/lib"]) {
+      const commandResult = await runCommand([process.execPath, "test", "--timeout", "20000", directory], root);
+      componentSelftests.push({ directory, tests: admitSelftestOutput(commandResult), commandResult });
+    }
+    return { tests: admitSelftestOutput(result) + [...historySelftests, ...componentSelftests].reduce((count, item) => count + item.tests, 0), commandResult: result, historySelftests, componentSelftests, syntheticProofFixtures: true };
   }
   if (suite === "boundary") {
     const command = [process.execPath, "test", "--timeout", "20000", "src/graph-admission.test.ts", "src/registry.test.ts", "src/effects-own-keys.test.ts", "src/decisions.test.ts", "src/foundry.test.ts", "src/bench.test.ts", "src/application-adaptation.test.ts", "src/store.test.ts", "src/host-state.test.ts", "src/values.test.ts", "src/expr.test.ts"];

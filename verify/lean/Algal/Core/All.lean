@@ -5,6 +5,9 @@ import Algal.Core.RoundingInterval
 import Algal.Core.SignedRounding
 import Algal.Core.RoundingEndpoints
 import Algal.Core.NegativeEndpoints
+import Algal.Core.FiniteNeighbors
+import Algal.Core.IntervalSearch
+import Algal.Core.RationalBracket
 import Algal.Core.DecimalSyntax
 import Algal.Core.Text
 import Algal.Core.JsonString

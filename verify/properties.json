@@ -17979,6 +17979,244 @@
       "unresolved": [
         "Qualify abort/deadline/worker failure and stale-result races against exact worker, browser, model and cache artifacts. Upstream device samples do not prove universal termination or model correctness."
       ]
+    },
+    {
+      "id": "HST-16",
+      "owner": "Algal foundation maintainers",
+      "reviewer": "Independent assurance reviewer",
+      "phase": "16",
+      "findings": [],
+      "severity": "high",
+      "statement": "Portable task workflows preserve admitted user facts across exact-request publication, recovery, workflow adoption and schema migration; saved drafts use compare-and-set and isolated verification cannot mutate live state or reuse proofs after its scope.",
+      "failure": "An admitted counterexample violates: Portable task workflows preserve admitted user facts across exact-request publication, recovery, workflow adoption and schema migration; saved drafts use compare-and-set and isolated verification cannot mutate live state or reuse proofs after its scope.",
+      "domain": "Portable TriageCore, filesystem and browser session storage, browser task controller journals, saved transfer indices, pure workflow evidence and isolated proof copies.",
+      "quantifiers": "For every input and transition history in the stated domain satisfying the named assumptions and production bounds; each finite harness must declare its smaller domain separately.",
+      "exclusions": [
+        "Browser eviction, user clearing, hostile same-origin scripts and physical power loss remain outside reload evidence.",
+        "Proof memoization relies on isolated in-memory stores, cryptographic content identity and reviewed callback/host assumptions; no arbitrary host callback or browser heap bound is established."
+      ],
+      "profiles": [
+        "adapter",
+        "local-process"
+      ],
+      "assumptions": [
+        "A-SPEC",
+        "A-TOOLS",
+        "A-HOST",
+        "A-HASH",
+        "A-ARTIFACT",
+        "A-BROWSER",
+        "A-LOCAL",
+        "A-SQLITE"
+      ],
+      "bounds": {
+        "production": "Task/state/transfer/session/evaluation limits in the versioned triage contract and browser controller; verification overhead requires separate measured resource evidence.",
+        "harness": "No finite model or implementation proof is admitted for this full obligation."
+      },
+      "sources": [
+        {
+          "path": "examples/local-triage/core.ts",
+          "sha256": "sha256:4e2e7de3ddbd14925735b5e2048bf5d1aa5137101c3ba605a3c67d72ea5f0c09",
+          "symbols": [
+            "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "examples/local-triage/host.ts",
+          "sha256": "sha256:46859a44fdd112f33dd4e60e0eb1a6a4e9b74dcb4fbc6095bd29a2d03724d83c",
+          "symbols": [
+            "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "examples/local-triage/contract.ts",
+          "sha256": "sha256:7791cd5c461447c9d2619d9c66d4644801bfa2f14764c164e7f80cfcd4e15cea",
+          "symbols": [
+            "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "examples/local-triage/programs.ts",
+          "sha256": "sha256:34baf604ada84f6c7bd2199069b131bb10b252766c1dd3e3ba9b90a8f3c32fa9",
+          "symbols": [
+            "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "examples/local-triage/core.test.ts",
+          "sha256": "sha256:58f7d77f70bf4c1fdf982f77bb8e7ee33f6cd23097394a6ee88c57de83031afe",
+          "symbols": [
+            "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "examples/browser-triage/controller.ts",
+          "sha256": "sha256:cc430bd645b4a1ae74bcd70c785398e06d18f2d3d01415c1ad7dcea4874c63c7",
+          "symbols": [
+            "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "examples/browser-triage/controller.test.ts",
+          "sha256": "sha256:3b0112135068c3e3eaf4501c785dcdd955f6059f48d733369df570919cd79ecc",
+          "symbols": [
+            "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "src/application-core.ts",
+          "sha256": "sha256:b9a2369ffdf011a706efa74e0abb82e8dcc73e8136d3c841df6953564c23f2a1",
+          "symbols": [
+            "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "src/application-storage.ts",
+          "sha256": "sha256:fedd14358bd5900c837967e1a5b66f2726bbac18f7773dc40cdb0143220112b4",
+          "symbols": [
+            "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "src/application-browser-storage.ts",
+          "sha256": "sha256:cb2fc47dd2c9b2a565b43a3254f3f7261ecfd6dad09ca61c3450ef2e4c58101d",
+          "symbols": [
+            "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "src/application-memory.ts",
+          "sha256": "sha256:f22b748220f89e79c65a05d3113f6796b4a34609e96fb4862ee1fca34ab95961",
+          "symbols": [
+            "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "src/application-migration.ts",
+          "sha256": "sha256:65947c21465d8b0b3635554668e520e6c0c27398fd5baa158042b5580e3df048",
+          "symbols": [
+            "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "site/tasks.ts",
+          "sha256": "sha256:a0bdf0738ef096457286d79d72c6e2aa2bd0c249dac06c44712cf5a278dbb26c",
+          "symbols": [
+            "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "site/tasks-render.ts",
+          "sha256": "sha256:8bc9a251f025bc7b6eaf55a6def08472b7386800822c284330f6d09576fcb73e",
+          "symbols": [
+            "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "site/grow-offline.ts",
+          "sha256": "sha256:2326f313b71ceae0a9dd1340ad27250e8a2045d54e0e50182a0fb40e428f4e5a",
+          "symbols": [
+            "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "tests/browser-triage-storage.ts",
+          "sha256": "sha256:7bcd835442d2ed9bbc57a185185c38f48c60a4e73703f5400266ace24995e93b",
+          "symbols": [
+            "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "scripts/browser-triage-qualification.mjs",
+          "sha256": "sha256:0b2dfb22a7a5d8e11fac6f262b431ffaa5dd113d3c6d4766bb3c86bc86946bc8",
+          "symbols": [
+            "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "src/application-filesystem.ts",
+          "sha256": "sha256:f5ffe5f8c5ad97c2e1ed9cbb8f0f4917004dd11606c41097a7bbf4bd4dc2009b",
+          "symbols": [
+            "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "src/host-state.ts",
+          "sha256": "sha256:ae40c39eb62409b6a1dad07d78eef9612994b39ad73ac971bc47fd06a1a81409",
+          "symbols": [
+            "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "src/durable-fs.ts",
+          "sha256": "sha256:657515fbc68470a0872b74c09b0c12b7c6530133d4a3b2dd076763a8c58d899f",
+          "symbols": [
+            "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "package.json",
+          "sha256": "sha256:8e4fbb28c39fab7fca22f4883ad9f0b3c5df9df2a8c34fee442ee8993e676f3e",
+          "symbols": [
+            "exports: ./triage-core, ./triage-contract, ./browser-triage"
+          ]
+        }
+      ],
+      "specs": [
+        {
+          "path": "docs/browser-tasks.md",
+          "sha256": "sha256:be80f48abe6ea67e79c6b3bf1b45c74a6bbcfdce75b9052dc1f42e0033ac7cab",
+          "symbols": [
+            "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "docs/local-triage.md",
+          "sha256": "sha256:2af940af929c255e56b8755fb9e9c04442015e98598fd5ef9513b25807b9c57a",
+          "symbols": [
+            "whole module; narrow symbol refinement pending"
+          ]
+        },
+        {
+          "path": "docs/application-host-adapters.md",
+          "sha256": "sha256:535af12b441e2c63358844306d85d9c9178e28bf2f4af339c5cfcd0123cde59f",
+          "symbols": [
+            "whole module; narrow symbol refinement pending"
+          ]
+        }
+      ],
+      "versions": [
+        "algal.triage-transfer.v1",
+        "algal.triage-session.v1",
+        "algal.triage-session-record.v1",
+        "algal.browser-triage-prepared.v1",
+        "algal.browser-triage-journal.v1",
+        "algal.triage-transfer-index.v1",
+        "algal.browser-triage-operation.v1",
+        "algal.triage-command.v1",
+        "algal.triage-change.v1",
+        "algal.triage-origin.v1",
+        "algal.triage-facts.v1",
+        "algal.triage-proposal.v1",
+        "algal.triage-evaluation.v1",
+        "algal.triage-revision.v1",
+        "algal.application-migration.v1"
+      ],
+      "relation": {
+        "kind": "unestablished",
+        "description": "Primary whole-module source map for the selected upstream triage files plus the reviewed local integration foundations and conservative governed input closure. No checked implementation refinement has been established."
+      },
+      "licensedClaims": [],
+      "evidence": {
+        "status": "not-started",
+        "suite": "host-conformance",
+        "required": false,
+        "results": []
+      },
+      "unresolved": [
+        "Completed transfer indices and mixed snapshots now have independently reviewed rejection controls. Exact integrated-browser validation and measured verification resource bounds remain pending.",
+        "Run exact-browser draft, recovery, stale-head, workflow adoption and schema migration controls after integration. Full controller/storage refinement and general generated failure histories remain pending."
+      ]
     }
   ]
 }

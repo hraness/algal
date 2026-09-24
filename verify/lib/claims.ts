@@ -27,7 +27,7 @@ export type Toolchains = {
   tools: { id: string; version: string; status: "available" | "planned"; command: string[]; sha256: string | null; notes: string }[];
 };
 
-const FAMILY_COUNTS: Record<string, number> = { ADM: 4, VAL: 5, GRF: 5, EXE: 6, EXP: 5, SRC: 4, RCP: 6, STO: 5, CUS: 4, PRO: 7, CAP: 4, MBX: 5, APP: 10, MEM: 7, CTX: 3, RET: 3, EVO: 8, HST: 15, PKG: 6, CLD: 7 };
+const FAMILY_COUNTS: Record<string, number> = { ADM: 4, VAL: 5, GRF: 5, EXE: 6, EXP: 5, SRC: 4, RCP: 6, STO: 5, CUS: 4, PRO: 7, CAP: 4, MBX: 5, APP: 10, MEM: 7, CTX: 3, RET: 3, EVO: 8, HST: 16, PKG: 6, CLD: 7 };
 export const REQUIRED_PROPERTY_IDS = Object.entries(FAMILY_COUNTS).flatMap(([prefix, count]) => Array.from({ length: count }, (_, i) => `${prefix}-${String(i + 1).padStart(2, "0")}`));
 export const REQUIRED_FINDINGS = Array.from({ length: 12 }, (_, i) => `F${String(i + 1).padStart(2, "0")}`);
 
