@@ -92,7 +92,7 @@ export class BrowserTriageController {
   }
   private async writeJournal(value: Journal): Promise<void> {
     try { await this.storage.store.setSlot(this.journalSlot, applicationJson(journal(value))); }
-    finally { if (this.scope) this.scope.checked = undefined; }
+    finally { if (this.scope) delete this.scope.checked; }
   }
   private operation(value: Request): Digest { return hash({ contract: "algal.browser-triage-operation.v1", application: this.application, request: value }); }
   private readPrepared(ref: Digest): Promise<Prepared> { return getApplicationRecord(this.storage.store, ref, prepared); }
