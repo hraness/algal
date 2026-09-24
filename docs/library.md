@@ -19,7 +19,8 @@ later work. That question is the open
 - **Pinned identity.** Its executable digest, a SHA-256 hash of the compiled
   program, and the digest of its resolved interface match a fresh compile of
   its file. Every calling project compiles that file to the same digests, and
-  no other file in a calling project compiles to the same executable digest.
+  no other file reachable from a listed entry point compiles to the same
+  executable digest.
 - **Callers in two projects.** Files in at least two projects call it, and its
   caller list names every file that calls it from the entry points listed
   below.
