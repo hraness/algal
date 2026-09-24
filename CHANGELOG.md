@@ -9,6 +9,12 @@ wire constant (`0.1.0`) is independent of these package versions.
 
 ## Unreleased
 
+- Docs: `docs/vision.md` states the project thesis (software that
+  accumulates competence), the four design properties that make it testable,
+  and the cumulative-skill experiment that would justify it; `docs/lineage.md`
+  places ALGAL among Lisp, Emacs, Smalltalk, Urbit, Engelbart, and the
+  research on evolving programs. The README, site home page, docs shelf,
+  `llms.txt`, and a blog post link to both.
 - Launch polish: the TypeScript package is `@hraness/algal` 0.2.0 and states
   that it is Bun-only; test files and fixtures are excluded from the npm
   tarball; repository, homepage, and bug-tracker metadata added.
