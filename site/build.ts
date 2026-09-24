@@ -655,6 +655,9 @@ const surfaceModule = await Bun.build({
 const inferenceWorker = await Bun.build({
   entrypoints: [join(SITE, "browser-inference-worker.ts")], outdir: join(DIST, "grow"),
   target: "browser", format: "esm", minify: true,
+  // WebLLM's unused Node branches reference __dirname. Do not embed the build
+  // machine's absolute path in the browser worker or its offline cache version.
+  define: { __dirname: JSON.stringify("/") },
   naming: { entry: "[name].js" },
 });
 if (!styles.success || !browserScripts.success || !surfaceModule.success || !inferenceWorker.success) throw new AggregateError([...styles.logs, ...browserScripts.logs, ...surfaceModule.logs, ...inferenceWorker.logs], "Site asset build failed");
