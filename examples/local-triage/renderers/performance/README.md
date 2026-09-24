@@ -55,13 +55,13 @@ declarations and results use exclusive writes. The scripts retain generated
 Run through the installed host scheduler with the full child arguments:
 
 ```sh
-hra-host-run --mode=shared --lane=browser-auth --label=algal-renderer-performance-browser -- \
+host-run --mode=shared --lane=browser-auth --label=algal-renderer-performance-browser -- \
   bun examples/local-triage/renderers/performance/browser.ts \
   SITE_DIST FRESH_BROWSER_OUTPUT PLAYWRIGHT_MODULE CHROMIUM_EXECUTABLE
-hra-host-run --mode=shared --lane=mac-native --label=algal-renderer-performance-native -- \
+host-run --mode=shared --lane=mac-native --label=algal-renderer-performance-native -- \
   bun examples/local-triage/renderers/performance/native.ts \
   PACKAGE_ROOT FRESH_NATIVE_OUTPUT
-hra-host-run --mode=shared --lane=mac-native --label=algal-renderer-performance-host-actions -- \
+host-run --mode=shared --lane=mac-native --label=algal-renderer-performance-host-actions -- \
   bun examples/local-triage/renderers/performance/host-actions.ts \
   PACKAGE_ROOT FRESH_ACTION_OUTPUT
 ```
@@ -74,7 +74,7 @@ service while [cua-lease.ts](cua-lease.ts) held `mac-native` custody, launched t
 exact package with the generated state, and sampled only that process's RSS:
 
 ```sh
-hra-host-run --mode=shared --lane=mac-native --label=algal-renderer-performance-cua -- \
+host-run --mode=shared --lane=mac-native --label=algal-renderer-performance-cua -- \
   bun examples/local-triage/renderers/performance/cua-lease.ts \
   PACKAGE_ROOT INITIALIZED_STATE FRESH_CUA_OUTPUT
 ```
