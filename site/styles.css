@@ -687,6 +687,10 @@ nav a[aria-current="page"] { color: var(--ink); }
 /* --- Documentation mirror ------------------------------------------------- */
 .docs-layout { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 2.5rem; align-items: start; padding-block: 1.5rem 4rem; }
 .docs-rail { position: sticky; top: 5.5rem; max-height: calc(100vh - 7rem); overflow-y: auto; overscroll-behavior: contain; font-size: .82rem; }
+.docs-disclosure { display: none; }
+.docs-disclosure > summary { min-block-size: 2.75rem; padding: .75rem 1rem; cursor: pointer; color: var(--ink); font: 550 .875rem/1.45 var(--sans); }
+.docs-disclosure > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.docs-current { display: block; margin-block-start: .2rem; color: var(--muted); font-weight: 400; overflow-wrap: anywhere; }
 .docs-nav { border-left: 1px solid var(--line); padding-left: 1rem; display: flex; flex-direction: column; gap: .15rem; }
 .docs-home { font-weight: 600; color: var(--ink); text-decoration: none; margin-bottom: .4rem; }
 .docs-group { margin: 1rem 0 .3rem; font: 600 .8125rem/1.5 var(--sans); color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
@@ -756,9 +760,15 @@ nav a[aria-current="page"] { color: var(--ink); }
   .page-intro { padding-block: 3rem .8rem; }
   .docs-layout { grid-template-columns: 1fr; gap: 1.2rem; }
   .docs-rail { position: static; max-height: none; overflow: visible; }
+  .docs-nav-desktop { display: none; }
+  .docs-disclosure { display: block; border: 1px solid transparent; border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--elevation-low); }
+  .docs-disclosure > .docs-nav { max-block-size: min(65vh, 32rem); overflow-y: auto; overscroll-behavior: contain; padding: .25rem 1rem 1rem; }
   .docs-nav { border-left: 0; padding-left: 0; }
   .docs-nav li a { margin-left: 0; padding-left: 0; border-left: 0; }
   .docs-index-groups { grid-template-columns: 1fr; }
+}
+@media (forced-colors: active) {
+  .docs-disclosure { border-color: CanvasText; box-shadow: none; }
 }
 @media (max-width: 760px) {
   .page-intro h1 { font-size: clamp(2.6rem, 9vw, 3.6rem); }
