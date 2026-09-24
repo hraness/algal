@@ -1,3 +1,4 @@
+import { utf8Length } from "./utf8";
 /** Experimental application memory. Source admission is a host trust boundary;
  * a native witness establishes only consequences of the admitted projection. */
 import {
@@ -7,7 +8,7 @@ import {
   putApplicationRecord, type ApplicationRevision,
 } from "./application-contract";
 import { digestCanonical, type Digest } from "./digest";
-import type { Store } from "./store";
+import type { Store } from "./store-contract";
 import { canonicalize, type JsonValue } from "./values";
 
 type Atom = string | number | boolean | null;
@@ -100,12 +101,12 @@ function sortedIds(value: unknown, max: number): string[] {
   return rows;
 }
 function boundedText(value: unknown, max: number): string {
-  if (typeof value !== "string" || value.length === 0 || Buffer.byteLength(value) > max || value.includes("\0")) throw new Error("Invalid memory text");
+  if (typeof value !== "string" || value.length === 0 || utf8Length(value) > max || value.includes("\0")) throw new Error("Invalid memory text");
   return value;
 }
 function parseAtom(value: unknown): Atom {
   if (value !== null && typeof value !== "string" && typeof value !== "boolean" && (typeof value !== "number" || !Number.isFinite(value))) throw new Error("Memory atoms must be primitives");
-  if (Buffer.byteLength(canonicalize(value as JsonValue)) > 1024) throw new Error("Memory atom exceeds bound");
+  if (utf8Length(canonicalize(value as JsonValue)) > 1024) throw new Error("Memory atom exceeds bound");
   return value as Atom;
 }
 export function parseMemoryClaim(input: unknown): MemoryClaim {
@@ -166,7 +167,7 @@ export function parseMemoryNativeProgram(input: unknown): JsonValue {
   const query = literal(v.query), limits = applicationObject(v.limits, Object.keys(APPLICATION_MEMORY_NATIVE_LIMITS));
   for (const [key, max] of Object.entries(APPLICATION_MEMORY_NATIVE_LIMITS)) applicationInt(limits[key], 1, max);
   const result = json({ contract: "algal.query.v1", rules, query, limits });
-  if (Buffer.byteLength(canonicalize(result)) > 65_536) throw new Error("Memory program exceeds byte bound");
+  if (utf8Length(canonicalize(result)) > 65_536) throw new Error("Memory program exceeds byte bound");
   return result;
 }
 /** Tuple arity of an admitted program's query literal; result rows carry exactly these columns. */

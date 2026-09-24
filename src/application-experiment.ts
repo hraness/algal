@@ -29,7 +29,7 @@ import { parseApplicationProposal, parseProposalRequest, verifyApplicationPropos
 import { verifyApplicationSelection, verifyApplicationSelectionPolicy } from "./application-selection";
 import { digestCanonical, type Digest } from "./digest";
 import { canonicalize } from "./values";
-import type { Store } from "./store";
+import type { Store } from "./store-contract";
 
 export const EXPERIMENT_LIMITS = Object.freeze({ proposals: 8, evaluations: 8 });
 

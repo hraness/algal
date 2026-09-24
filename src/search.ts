@@ -14,8 +14,8 @@ import {
   type FoundrySelection,
 } from "./foundry";
 import type { FnRegistry } from "./registry";
-import type { Store } from "./store";
-import type { Transport } from "./transport";
+import type { Store } from "./store-contract";
+import type { Transport } from "./transport-contract";
 import type { ToolRegistry } from "./tools";
 import type { JsonValue } from "./values";
 

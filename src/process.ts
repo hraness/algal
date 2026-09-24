@@ -44,7 +44,7 @@ import {
 } from "./run";
 import { FileStore, type Store } from "./store";
 import type { ToolRegistry } from "./tools";
-import type { Transport } from "./transport";
+import type { Transport } from "./transport-contract";
 import { resumeRun, verifyReceipt } from "./verify";
 import {
   asInt,

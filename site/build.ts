@@ -28,6 +28,7 @@ import { buildSurfaceFixture } from "../examples/malleable-site/host";
 import { buildWorkbenchFixture } from "../examples/malleable-site/workbench-fixture";
 import { parseProposal } from "../examples/malleable-site/surface";
 import { renderSurfaceHtml } from "./living-render";
+import { offlineWorkerSource } from "./grow-offline";
 
 const SITE = dirname(fileURLToPath(import.meta.url));
 const ROOT = dirname(SITE);
@@ -495,6 +496,11 @@ const workbench = await buildWorkbenchFixture();
 replacements.WORKBENCH_SURFACE = renderSurfaceHtml(workbench.capture.view);
 
 const pages: { file: string; out: string; meta: SitePageMeta }[] = [
+  { file: "pages/grow.html", out: "grow/index.html", meta: {
+    page: "grow", path: "/grow/", title: "Evolve a component in your browser · ALGAL",
+    description: "Change a component’s content and layout with local rules, inspect each proposal, and save its history in your browser. WebGPU AI is optional.",
+    ogTitle: "Evolve a component in your browser · ALGAL",
+  } },
   { file: "pages/workbench.html", out: "workbench/index.html", meta: {
     page: "workbench", path: "/workbench/", title: "Why this? · ALGAL workbench",
     description: "Follow a running ALGAL component to its revision, signals, history and execution evidence.",
@@ -548,7 +554,7 @@ const DOC_GROUPS: { title: string; pages: string[] }[] = [
   { title: "Start here", pages: ["native-release", "native-workbench", "source-language", "vm"] },
   { title: "Concepts", pages: ["why-unique", "algal-design", "design", "agent-loop-and-organism", "programmable-applications", "application-host-adapters", "executors", "diagrams", "repair"] },
   { title: "Life and selection", pages: ["habitats", "civilization"] },
-  { title: "Applications and workflows", pages: ["use-cases", "when-algal-wins", "malleable-site", "malleable-workbench", "local-triage", "adaptive-inventory", "agent-tool", "coding-harness", "coding-operations", "pr-shepherd"] },
+  { title: "Applications and workflows", pages: ["use-cases", "when-algal-wins", "browser-grow", "browser-inference", "malleable-site", "malleable-workbench", "local-triage", "adaptive-inventory", "agent-tool", "coding-harness", "coding-operations", "pr-shepherd"] },
 ];
 const DOC_SLUGS = DOC_GROUPS.flatMap(group => group.pages);
 const SPEC_SLUGS = ["organism", "expr", "foundry", "search", "bench", "mailbox", "process", "process-evidence", "process-journal", "application", "coding-job", "coding-job-v2", "coding-operation"];
@@ -605,6 +611,8 @@ await mkdir(join(DIST, "diagrams"), { recursive: true });
 await mkdir(join(DIST, "examples"), { recursive: true });
 await mkdir(join(DIST, "receipts"), { recursive: true });
 await mkdir(join(DIST, "living"), { recursive: true });
+await mkdir(join(DIST, "grow"), { recursive: true });
+await cp(join(SITE, "grow.css"), join(DIST, "grow.css"));
 await mkdir(join(DIST, "workbench"), { recursive: true });
 await cp(join(SITE, "workbench.css"), join(DIST, "workbench.css"));
 await writeFile(join(DIST, "workbench/capture.json"), JSON.stringify(workbench.capture) + "\n");
@@ -638,16 +646,28 @@ const browserScripts = await Bun.build({
   naming: { entry: "[name].js", asset: "assets/[name]-[hash].[ext]" },
 });
 const surfaceModule = await Bun.build({
-  entrypoints: [join(SITE, "living.ts"), join(SITE, "workbench.ts")], outdir: DIST,
+  entrypoints: [join(SITE, "living.ts"), join(SITE, "workbench.ts"), join(SITE, "grow.ts")], outdir: DIST,
   target: "browser", format: "esm", minify: true,
   naming: { entry: "[name].js" },
 });
-if (!styles.success || !browserScripts.success || !surfaceModule.success) throw new AggregateError([...styles.logs, ...browserScripts.logs, ...surfaceModule.logs], "Site asset build failed");
+// A worker's bootstrap URL needs its own match within the /grow/ service-worker
+// scope. Keeping it optional still avoids loading the inference bundle on visit.
+const inferenceWorker = await Bun.build({
+  entrypoints: [join(SITE, "browser-inference-worker.ts")], outdir: join(DIST, "grow"),
+  target: "browser", format: "esm", minify: true,
+  // WebLLM's unused Node branches reference __dirname. Do not embed the build
+  // machine's absolute path in the browser worker or its offline cache version.
+  define: { __dirname: JSON.stringify("/") },
+  naming: { entry: "[name].js" },
+});
+if (!styles.success || !browserScripts.success || !surfaceModule.success || !inferenceWorker.success) throw new AggregateError([...styles.logs, ...browserScripts.logs, ...surfaceModule.logs, ...inferenceWorker.logs], "Site asset build failed");
 await writeFile(join(DIST, "icons.svg"), renderIconSprite());
 await mkdir(join(DIST, "licenses"), { recursive: true });
 await cp(join(SITE, "licenses/hugeicons-MIT.txt"), join(DIST, "licenses/hugeicons-MIT.txt"));
 await cp(join(SITE, "licenses/hugeicons-provenance.md"), join(DIST, "licenses/hugeicons-provenance.md"));
 for (const [source, target] of [
+  ["@mlc-ai/web-llm/LICENSE", "web-llm-Apache-2.0.txt"],
+  ["loglevel/LICENSE-MIT", "loglevel-MIT.txt"],
   ["@hraness/design-kit/LICENSE", "design-kit-MIT.txt"],
   ["@hraness/ui/LICENSE", "ui-MIT.txt"],
   ["@hraness/design-kit/src/fonts/nebula-sans/LICENSE.txt", "nebula-sans-OFL.txt"],
@@ -873,7 +893,21 @@ await emitMarkdownSection({
 });
 
 // Generated sitemap covers every emitted page.
-const sitemapUrls = ["/", "/tour/", "/use-cases/", "/living/", "/workbench/", "/docs/", ...DOC_SLUGS.map(slug => `/docs/${slug}/`), ...SPEC_SLUGS.map(slug => `/docs/spec/${slug}/`), ...contentSectionUrls];
+const sitemapUrls = ["/", "/tour/", "/use-cases/", "/living/", "/grow/", "/workbench/", "/docs/", ...DOC_SLUGS.map(slug => `/docs/${slug}/`), ...SPEC_SLUGS.map(slug => `/docs/spec/${slug}/`), ...contentSectionUrls];
 await writeFile(join(DIST, "sitemap.xml"), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemapUrls.map(url => `  <url><loc>https://algal.computer${url}</loc></url>`).join("\n")}\n</urlset>\n`);
+
+// Scope the worker to /grow/. Required assets qualify the rule-driven app;
+// the optional inference worker is cached only after an explicit model load.
+const offlineAssets = ["styles.css", "living.css", "grow.css", "appearance.js", "client.js", "viewer.js", "grow.js", "icons.svg", "algal-mark.svg", "favicon.svg", "living/algal_expr.wasm"];
+for (const path of await readdir(join(DIST, "assets"), { recursive: true })) {
+  if ((await Bun.file(join(DIST, "assets", path)).exists())) offlineAssets.push(`assets/${path}`);
+}
+const offlineRequired: Record<string, string> = {};
+for (const path of ["grow/index.html", ...offlineAssets]) {
+  offlineRequired[path === "grow/index.html" ? "/grow/" : `/${path}`] = new Bun.CryptoHasher("sha256").update(await Bun.file(join(DIST, path)).arrayBuffer()).digest("hex");
+}
+const inferencePath = "grow/browser-inference-worker.js";
+const offlineOptional = { [`/${inferencePath}`]: new Bun.CryptoHasher("sha256").update(await Bun.file(join(DIST, inferencePath)).arrayBuffer()).digest("hex") };
+await writeFile(join(DIST, "grow/sw.js"), offlineWorkerSource(offlineRequired, offlineOptional));
 
 console.log(`site built → ${DIST} (${manifests.size + 1} structural diagrams, ${childViews.length + 1} focused views, ${verifiedRuns} replay-checked executions, 1 checked authoring error, ${pages.length + DOC_SLUGS.length + SPEC_SLUGS.length + contentSectionUrls.length + 1} pages)`);

@@ -1,3 +1,4 @@
+import { utf8Length } from "./utf8";
 // algal.organism.v1 — the organism manifest contract.
 //
 // A manifest is a finite typed graph: cells with declared ports, edges between
@@ -1483,7 +1484,7 @@ function checkManifestSize(value: unknown): void {
   const stringBytes = (value: string) => {
     // UTF-16 length is a lower bound on serialized UTF-8 bytes.
     if (value.length > BOUNDS.maxManifestBytes - bytes) add(BOUNDS.maxManifestBytes + 1);
-    add(Buffer.byteLength(JSON.stringify(value), "utf8"));
+    add(utf8Length(JSON.stringify(value)));
   };
   const visit = (item: unknown, depth: number): void => {
     visitNode();

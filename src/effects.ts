@@ -1,3 +1,4 @@
+import { compareUtf8 } from "./utf8";
 // Effect requests and receipts: the only seam through which agent,
 // decision, approval, and recall cells reach the world. A request is fully
 // determined by the manifest plus delivered inputs; its digest binds request to receipt.
@@ -11,7 +12,7 @@ import { AlgalError, ERROR_CODES, type ErrorCode } from "./errors";
 import { commandJson } from "./io-runtime";
 import { asDigest, digestCanonical, type Digest } from "./digest";
 import type { AgentOutput, Route } from "./contract";
-import type { Store } from "./store";
+import type { Store } from "./store-contract";
 import {
   asArray,
   asJsonValue,
@@ -422,7 +423,7 @@ export function checkSchema(
   if (values === undefined || props === undefined) return;
   // Native schema validation visits properties in UTF-8 order. Diagnostic choice
   // is receipt data, so use that same order, including non-BMP property names.
-  const keys = Object.keys(props).sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
+  const keys = Object.keys(props).sort(compareUtf8);
   for (const key of keys) {
     if (Object.prototype.hasOwnProperty.call(values, key)) {
       const sub = props[key];

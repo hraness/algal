@@ -11,7 +11,7 @@ import { digestCanonical, type Digest } from "./digest";
 import { compileOrganism, interfaceSignature } from "./graph";
 import { builtinRegistry } from "./registry";
 import { replayStore } from "./store-memory";
-import type { Store } from "./store";
+import type { Store } from "./store-contract";
 
 export type ApplicationRestorationPolicy = {
   contract: "algal.application-restoration-policy.v1";

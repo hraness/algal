@@ -2,7 +2,7 @@
 import { asDigest, digestCanonical, type Digest } from "./digest";
 import { manifestToJson, type OrganismManifest } from "./contract";
 import type { EffectReceipt } from "./effects";
-import type { Store } from "./store";
+import type { Store } from "./store-contract";
 import type { JsonValue } from "./values";
 
 export class MemoryStore implements Store {

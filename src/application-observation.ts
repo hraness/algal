@@ -7,7 +7,7 @@ import {
   applicationId, applicationRef, applicationRefs, getApplicationRecord,
   parseApplicationState,
 } from "./application-contract";
-import type { ApplicationService, ApplicationSnapshot } from "./application";
+import type { ApplicationCore, ApplicationSnapshot } from "./application-core";
 import {
   parseMemorySnapshot,
   type ApplicationMemoryService, type MemoryObservationInput,
@@ -33,7 +33,7 @@ export type AppendedObservation = {
 };
 
 export async function appendObservation(
-  lifecycle: ApplicationService,
+  lifecycle: ApplicationCore,
   memory: ApplicationMemoryService,
   input: AppendObservationInput,
 ): Promise<AppendedObservation> {
