@@ -1,4 +1,4 @@
-/* global process, console, URL, crypto, document, innerWidth, Response, HTMLElement */
+/* global process, console, URL, crypto, document, innerWidth, Response, HTMLElement, Worker, navigator, MessageChannel, setTimeout, clearTimeout */
 // Optional real-browser qualification. Supply an installed playwright-core
 // module and Chromium executable; neither is a required ALGAL dependency.
 import { build, file, serve } from "bun";
@@ -27,6 +27,10 @@ const server = serve({ hostname: "127.0.0.1", port: Number(process.env.ALGAL_BRO
 const origin = `http://127.0.0.1:${server.port}`;
 const { chromium } = await import(pathToFileURL(modulePath).href);
 const context = await chromium.launchPersistentContext(join(output, "browser-profile"), { executablePath, headless: process.env.ALGAL_GPU_QUALIFY !== "1", viewport: { width: 1440, height: 1080 }, acceptDownloads: true });
+// This is the harness-owned profile. Close its restored clients so an older
+// /grow/ worker cannot hold the new shell in waiting; preserve every cache,
+// including already-downloaded model artifacts at this exact origin.
+for (const restored of context.pages()) await restored.close();
 const checks = [], errors = [], requests = [], failedRequests = [], badResponses = [], browserLogs = [], networkFailures = [];
 const safeUrl = raw => { const url = new URL(raw); return url.origin + url.pathname; };
 context.on("page", page => page.on("pageerror", error => errors.push(error.message)));
@@ -42,8 +46,52 @@ context.on("requestfailed", request => failedRequests.push({ url: safeUrl(reques
 context.on("response", response => { if (response.status() >= 400) badResponses.push({ url: safeUrl(response.url()), status: response.status() }); });
 const page = await context.newPage();
 const ready = async () => { await page.locator('#grow-root[data-ready="true"]').waitFor({ timeout: 60_000 }); };
-const idle = async () => { await page.waitForFunction(() => document.querySelector("#grow-root")?.getAttribute("aria-busy") === "false"); };
+const idle = async () => { await page.waitForFunction(() => document.querySelector("#grow-root")?.getAttribute("aria-busy") === "false", undefined, { timeout: 90_000 }); };
+// Bootstrap the actual optional worker without sending Load. The valid Suggest
+// request must reach its unloaded-engine guard: no model assets, GPU device or
+// inference are requested. Unlike fetch(), Worker construction exercises the
+// worker's own service-worker scope selection on an offline restart.
+const workerBootstrap = async () => {
+  const response = await page.evaluate(() => new Promise((resolve, reject) => {
+    const worker = new Worker("/grow/browser-inference-worker.js", { type: "module", name: "algal-offline-bootstrap-check" });
+    const timer = setTimeout(() => { worker.terminate(); reject(new Error("Optional worker bootstrap timed out")); }, 30_000);
+    const finish = () => { clearTimeout(timer); worker.terminate(); };
+    worker.onerror = () => { finish(); reject(new Error("Optional worker entry could not start")); };
+    worker.onmessageerror = () => { finish(); reject(new Error("Optional worker bootstrap response was unreadable")); };
+    worker.onmessage = event => { finish(); resolve(event.data); };
+    worker.postMessage({ id: 1, kind: "suggest", input: {
+      config: { headline: "Build an inspectable application.", body: "Explore this preview.", ctaLabel: "Explore the preview", layout: "split" },
+      signals: { audience: "builders", release: "preview" },
+    } });
+  }));
+  assert.deepEqual(response, { id: 1, kind: "failed", message: "Local AI failed during loading (runtime-error). Nothing was adopted. Load the model explicitly to try again." }, "Real worker reached the unloaded-model guard");
+};
 try {
+  const workerSource = await file(join(repository, "site/dist/grow/sw.js")).text();
+  const versionMatch = /const VERSION = "algal-grow-" \+ "([a-f0-9]{64})";/.exec(workerSource);
+  assert.ok(versionMatch, "Built offline worker exposes its content-derived shell version");
+  const expectedShellVersion = `algal-grow-${versionMatch[1]}`;
+  // Register from outside the controlled scope, with no /grow/ clients open.
+  // Wait for this exact build to activate before visiting the application.
+  await page.goto(`${origin}/test/`);
+  await page.evaluate(async () => {
+    const registration = await navigator.serviceWorker.register("/grow/sw.js", { scope: "/grow/", updateViaCache: "none" });
+    await registration.update();
+  });
+  await page.waitForFunction(async expected => {
+    const registration = await navigator.serviceWorker.getRegistration("/grow/");
+    if (!registration?.active || registration.active.state !== "activated") return false;
+    const active = registration.active;
+    return new Promise(resolve => {
+      const channel = new MessageChannel();
+      const timer = setTimeout(() => { channel.port1.close(); channel.port2.close(); resolve(false); }, 2_000);
+      channel.port1.onmessage = event => {
+        clearTimeout(timer); channel.port1.close(); channel.port2.close();
+        resolve(event.data?.ready === true && event.data?.version === expected);
+      };
+      active.postMessage("offline-status", [channel.port2]);
+    });
+  }, expectedShellVersion, { timeout: 60_000, polling: 250 });
   if (process.env.ALGAL_GPU_ONLY !== "1") {
   const fixturePage = await context.newPage(); await fixturePage.goto(`${origin}/test/`);
   checks.push(...await fixturePage.evaluate(async () => (await import("/test/browser-fixture.js")).storageChecks()));
@@ -118,7 +166,11 @@ try {
   checks.push("UI export replay and fresh-database import preserve the captured head");
 
   await page.waitForFunction(() => document.querySelector("#grow-offline-status")?.getAttribute("data-ready") === "true", undefined, { timeout: 60_000 });
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+  await workerBootstrap();
   await context.setOffline(true); await page.reload(); await ready();
+  await workerBootstrap();
+  checks.push("actual optional worker starts online and after network-denied reload without model load or GPU inference");
   assert.equal(await page.locator("#grow-head").textContent(), exportHead);
   await page.locator("#grow-release").selectOption("available"); await page.locator("#grow-signals button").click(); await idle();
   await page.locator("#grow-propose").click(); await idle();
@@ -172,6 +224,7 @@ try {
   console.log(JSON.stringify({ ok: true, checks, output }));
 } catch (error) {
   await writeFile(join(output, "failure.json"), JSON.stringify({ checks, error: String(error), errors, requests, failedRequests, badResponses, browserLogs, networkFailures }, null, 2));
+  await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); globalThis.scrollTo({ top: 0, behavior: "instant" }); }).catch(() => {});
   await page.screenshot({ path: join(output, "failure.png"), fullPage: true }).catch(() => {});
   throw error;
 } finally { await context.close(); server.stop(true); }

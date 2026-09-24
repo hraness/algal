@@ -644,11 +644,18 @@ const browserScripts = await Bun.build({
   naming: { entry: "[name].js", asset: "assets/[name]-[hash].[ext]" },
 });
 const surfaceModule = await Bun.build({
-  entrypoints: [join(SITE, "living.ts"), join(SITE, "workbench.ts"), join(SITE, "grow.ts"), join(SITE, "browser-inference-worker.ts")], outdir: DIST,
+  entrypoints: [join(SITE, "living.ts"), join(SITE, "workbench.ts"), join(SITE, "grow.ts")], outdir: DIST,
   target: "browser", format: "esm", minify: true,
   naming: { entry: "[name].js" },
 });
-if (!styles.success || !browserScripts.success || !surfaceModule.success) throw new AggregateError([...styles.logs, ...browserScripts.logs, ...surfaceModule.logs], "Site asset build failed");
+// A worker's bootstrap URL needs its own match within the /grow/ service-worker
+// scope. Keeping it optional still avoids loading the inference bundle on visit.
+const inferenceWorker = await Bun.build({
+  entrypoints: [join(SITE, "browser-inference-worker.ts")], outdir: join(DIST, "grow"),
+  target: "browser", format: "esm", minify: true,
+  naming: { entry: "[name].js" },
+});
+if (!styles.success || !browserScripts.success || !surfaceModule.success || !inferenceWorker.success) throw new AggregateError([...styles.logs, ...browserScripts.logs, ...surfaceModule.logs, ...inferenceWorker.logs], "Site asset build failed");
 await writeFile(join(DIST, "icons.svg"), renderIconSprite());
 await mkdir(join(DIST, "licenses"), { recursive: true });
 await cp(join(SITE, "licenses/hugeicons-MIT.txt"), join(DIST, "licenses/hugeicons-MIT.txt"));
@@ -890,7 +897,7 @@ const offlineRequired: Record<string, string> = {};
 for (const path of ["grow/index.html", ...offlineAssets]) {
   offlineRequired[path === "grow/index.html" ? "/grow/" : `/${path}`] = new Bun.CryptoHasher("sha256").update(await Bun.file(join(DIST, path)).arrayBuffer()).digest("hex");
 }
-const inferencePath = "browser-inference-worker.js";
+const inferencePath = "grow/browser-inference-worker.js";
 const offlineOptional = { [`/${inferencePath}`]: new Bun.CryptoHasher("sha256").update(await Bun.file(join(DIST, inferencePath)).arrayBuffer()).digest("hex") };
 await writeFile(join(DIST, "grow/sw.js"), offlineWorkerSource(offlineRequired, offlineOptional));
 

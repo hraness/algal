@@ -134,7 +134,9 @@ export function createLocalModelClient(makeWorker: () => LocalModelWorker) {
 
 // Worker construction is deferred until the owner explicitly chooses Load.
 const client = createLocalModelClient(() => {
-  const actual = new Worker(new URL("./browser-inference-worker.js", import.meta.url), { type: "module", name: "algal-local-model" });
+  // Worker bootstrap requests match their own URL against service-worker
+  // scope, so keep this entrypoint within the offline application's /grow/.
+  const actual = new Worker(new URL("./grow/browser-inference-worker.js", import.meta.url), { type: "module", name: "algal-local-model" });
   const port: LocalModelWorker = {
     postMessage: message => actual.postMessage(message),
     terminate: () => actual.terminate(),

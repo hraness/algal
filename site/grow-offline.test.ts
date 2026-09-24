@@ -5,10 +5,10 @@ import { offlineWorkerSource } from "./grow-offline";
 type Reply = { ready: boolean; version: string };
 type WorkerEvent = { data?: string; ports?: { postMessage(value: Reply): void }[]; waitUntil(promise: Promise<void>): void };
 function fixture() {
-  const bodies = new Map([["/grow/", "<main>local application</main>"], ["/grow.js", "application()"], ["/browser-inference-worker.js", "optional()"]]);
+  const bodies = new Map([["/grow/", "<main>local application</main>"], ["/grow.js", "application()"], ["/grow/browser-inference-worker.js", "optional()"]]);
   const hash = (value: string) => new Bun.CryptoHasher("sha256").update(value).digest("hex");
   const required = { "/grow/": hash(bodies.get("/grow/")!), "/grow.js": hash(bodies.get("/grow.js")!) };
-  const optional = { "/browser-inference-worker.js": hash(bodies.get("/browser-inference-worker.js")!) };
+  const optional = { "/grow/browser-inference-worker.js": hash(bodies.get("/grow/browser-inference-worker.js")!) };
   const stores = new Map<string, Map<string, Response>>();
   const listeners = new Map<string, (event: WorkerEvent) => void>();
   let offline = false, fetches = 0, claimed = false;
@@ -84,5 +84,5 @@ test("activation prunes only retired shell versions and never optional model or 
   expect(f.claimed).toBe(true);
   expect([...f.stores.keys()].sort()).toEqual(["algal-grow-other-data", "webllm/model", "another-application", current!.version].sort());
   expect((await f.dispatch("message", "offline-status"))?.ready).toBe(true);
-  expect(f.stores.get(current!.version)?.has("/browser-inference-worker.js")).toBe(false);
+  expect(f.stores.get(current!.version)?.has("/grow/browser-inference-worker.js")).toBe(false);
 });
