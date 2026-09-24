@@ -1,6 +1,8 @@
 {
   "compilerOptions": {
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022"
+    ],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "target": "ES2022",
@@ -13,8 +15,26 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "types": ["bun"]
+    "types": [
+      "bun"
+    ]
   },
-  "include": ["**/*.ts"],
-  "exclude": ["node_modules", "site/dist", "site/appearance.ts", "site/client.ts", "site/viewer.ts", "site/living.ts", "examples/malleable-site/renderers/target", "examples/malleable-site/renderers/dist", "dist", ".algal"]
+  "include": [
+    "**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "site/dist",
+    "site/appearance.ts",
+    "site/client.ts",
+    "site/viewer.ts",
+    "site/living.ts",
+    "site/workbench.ts",
+    "examples/malleable-site/renderers/target",
+    "examples/malleable-site/renderers/dist",
+    "dist",
+    ".algal",
+    "examples/local-triage/renderers/target",
+    "examples/local-triage/dist"
+  ]
 }

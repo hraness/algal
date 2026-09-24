@@ -9,7 +9,7 @@
 // (src/semantic.ts) and never enter manifests, digests, or receipts.
 
 import { AlgalError } from "./errors";
-import { boundedBytes } from "./io";
+import { boundedBytes } from "./io-runtime";
 import { asArray, asObject, reqField } from "./values";
 
 export const VERCEL_GATEWAY_BASE = "https://ai-gateway.vercel.sh/v1" as const;

@@ -25,6 +25,7 @@ import { pageDocument, type SitePageMeta } from "./chrome";
 import { ADOPTION_BOUNDARY, SITE_DESCRIPTION, SITE_TAGLINE } from "./copy";
 import { renderMarkdown, type LinkRewriter, type RenderedDoc } from "./markdown";
 import { buildSurfaceFixture } from "../examples/malleable-site/host";
+import { buildWorkbenchFixture } from "../examples/malleable-site/workbench-fixture";
 import { parseProposal } from "../examples/malleable-site/surface";
 import { renderSurfaceHtml } from "./living-render";
 
@@ -490,8 +491,15 @@ const replacements: Record<string, string> = {
 const living = await buildSurfaceFixture();
 verifiedRuns += 1;
 replacements.LIVING_SURFACE = renderSurfaceHtml(living.view);
+const workbench = await buildWorkbenchFixture();
+replacements.WORKBENCH_SURFACE = renderSurfaceHtml(workbench.capture.view);
 
 const pages: { file: string; out: string; meta: SitePageMeta }[] = [
+  { file: "pages/workbench.html", out: "workbench/index.html", meta: {
+    page: "workbench", path: "/workbench/", title: "Why this? · ALGAL workbench",
+    description: "Follow a running ALGAL component to its revision, signals, history and execution evidence.",
+    ogTitle: "Why this? · ALGAL workbench",
+  } },
   {
     file: "pages/living.html", out: "living/index.html",
     meta: {
@@ -538,9 +546,9 @@ const pages: { file: string; out: string; meta: SitePageMeta }[] = [
 
 const DOC_GROUPS: { title: string; pages: string[] }[] = [
   { title: "Start here", pages: ["native-release", "native-workbench", "source-language", "vm"] },
-  { title: "Concepts", pages: ["why-unique", "algal-design", "design", "agent-loop-and-organism", "programmable-applications", "executors", "diagrams", "repair"] },
+  { title: "Concepts", pages: ["why-unique", "algal-design", "design", "agent-loop-and-organism", "programmable-applications", "application-host-adapters", "executors", "diagrams", "repair"] },
   { title: "Life and selection", pages: ["habitats", "civilization"] },
-  { title: "Applications and workflows", pages: ["use-cases", "when-algal-wins", "malleable-site", "adaptive-inventory", "agent-tool", "coding-harness", "coding-operations", "pr-shepherd"] },
+  { title: "Applications and workflows", pages: ["use-cases", "when-algal-wins", "malleable-site", "malleable-workbench", "local-triage", "adaptive-inventory", "agent-tool", "coding-harness", "coding-operations", "pr-shepherd"] },
 ];
 const DOC_SLUGS = DOC_GROUPS.flatMap(group => group.pages);
 const SPEC_SLUGS = ["organism", "expr", "foundry", "search", "bench", "mailbox", "process", "process-evidence", "process-journal", "application", "coding-job", "coding-job-v2", "coding-operation"];
@@ -597,6 +605,10 @@ await mkdir(join(DIST, "diagrams"), { recursive: true });
 await mkdir(join(DIST, "examples"), { recursive: true });
 await mkdir(join(DIST, "receipts"), { recursive: true });
 await mkdir(join(DIST, "living"), { recursive: true });
+await mkdir(join(DIST, "workbench"), { recursive: true });
+await cp(join(SITE, "workbench.css"), join(DIST, "workbench.css"));
+await writeFile(join(DIST, "workbench/capture.json"), JSON.stringify(workbench.capture) + "\n");
+await writeFile(join(DIST, "workbench/evidence.json"), JSON.stringify(workbench.evidence) + "\n");
 await cp(join(SITE, "living.css"), join(DIST, "living.css"));
 await cp(join(ROOT, "src/algal_expr.wasm"), join(DIST, "living/algal_expr.wasm"));
 for (const [name, value] of Object.entries({ initial: living.revision, signals: living.signals, view: living.view, manifest: living.manifest, bundle: living.bundle, receipt: living.receipt })) {
@@ -609,6 +621,7 @@ if (await recordedProposal.exists()) {
 }
 const modelEvidencePath = join(ROOT, "examples/malleable-site/model-evidence.json");
 if (await Bun.file(modelEvidencePath).exists()) await cp(modelEvidencePath, join(DIST, "living/model-evidence.json"));
+await cp(join(ROOT, "examples/malleable-site/model-cost-evidence.json"), join(DIST, "workbench/model-cost-evidence.json"));
 for (const f of ["robots.txt", "og.png", "favicon.svg", "algal-mark.svg"]) {
   await cp(join(SITE, f), join(DIST, f));
 }
@@ -625,7 +638,7 @@ const browserScripts = await Bun.build({
   naming: { entry: "[name].js", asset: "assets/[name]-[hash].[ext]" },
 });
 const surfaceModule = await Bun.build({
-  entrypoints: [join(SITE, "living.ts")], outdir: DIST,
+  entrypoints: [join(SITE, "living.ts"), join(SITE, "workbench.ts")], outdir: DIST,
   target: "browser", format: "esm", minify: true,
   naming: { entry: "[name].js" },
 });
@@ -860,7 +873,7 @@ await emitMarkdownSection({
 });
 
 // Generated sitemap covers every emitted page.
-const sitemapUrls = ["/", "/tour/", "/use-cases/", "/living/", "/docs/", ...DOC_SLUGS.map(slug => `/docs/${slug}/`), ...SPEC_SLUGS.map(slug => `/docs/spec/${slug}/`), ...contentSectionUrls];
+const sitemapUrls = ["/", "/tour/", "/use-cases/", "/living/", "/workbench/", "/docs/", ...DOC_SLUGS.map(slug => `/docs/${slug}/`), ...SPEC_SLUGS.map(slug => `/docs/spec/${slug}/`), ...contentSectionUrls];
 await writeFile(join(DIST, "sitemap.xml"), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemapUrls.map(url => `  <url><loc>https://algal.computer${url}</loc></url>`).join("\n")}\n</urlset>\n`);
 
 console.log(`site built → ${DIST} (${manifests.size + 1} structural diagrams, ${childViews.length + 1} focused views, ${verifiedRuns} replay-checked executions, 1 checked authoring error, ${pages.length + DOC_SLUGS.length + SPEC_SLUGS.length + contentSectionUrls.length + 1} pages)`);

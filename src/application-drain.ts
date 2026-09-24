@@ -18,7 +18,7 @@ import {
   applicationId, applicationList, applicationObject, applicationRef,
   applicationTag, getApplicationRecord, putApplicationRecord,
 } from "./application-contract";
-import type { ApplicationService } from "./application";
+import type { ApplicationCore } from "./application-core";
 import type { Digest } from "./digest";
 
 export const APPLICATION_DRAIN_LIMITS = Object.freeze({ dispositions: 128 });
@@ -68,7 +68,7 @@ export function checkApplicationDrainCoverage(drain: ApplicationDrain, undispatc
  * `parentState` and returns the stored drain's digest. The input is the
  * closed `{application, parentState, dispositions}` shape shared with the
  * native `application drain` command. */
-export async function produceApplicationDrain(service: ApplicationService, input: unknown): Promise<Digest> {
+export async function produceApplicationDrain(service: ApplicationCore, input: unknown): Promise<Digest> {
   const v = applicationObject(input, ["application", "parentState", "dispositions"]);
   const record = parseApplicationDrain({
     contract: "algal.application-drain.v1",
@@ -82,7 +82,7 @@ export async function produceApplicationDrain(service: ApplicationService, input
 /** Re-verifies a stored drain against an expected parent state: the record
  * must resolve and re-verify as a drain, name the expected parent, and its
  * dispositions must equal the undispatched pending set at that state. */
-export async function verifyApplicationDrain(service: ApplicationService, drain: unknown, expectedParentState: unknown): Promise<ApplicationDrain> {
+export async function verifyApplicationDrain(service: ApplicationCore, drain: unknown, expectedParentState: unknown): Promise<ApplicationDrain> {
   const reference = applicationRef(drain), expected = applicationRef(expectedParentState);
   const record = await getApplicationRecord(service.store, reference, parseApplicationDrain);
   if (record.parentState !== expected) throw new Error("Drain evidence does not bind this transition");

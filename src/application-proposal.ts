@@ -20,7 +20,7 @@ import {
   type AdaptationRuntime, type EvaluationPolicy,
 } from "./application-adaptation";
 import { COMPARISON_LIMITS } from "./application-comparison";
-import type { ApplicationService, ApplicationSnapshot } from "./application";
+import type { ApplicationCore, ApplicationSnapshot } from "./application-core";
 import { manifestToJson, parseOrganismManifest, type OrganismManifest } from "./contract";
 import { digestCanonical, type Digest } from "./digest";
 import { parseRunReceipt, runOrganism, type RunReceipt } from "./run";
@@ -273,7 +273,7 @@ export async function verifyApplicationProposalBinding(store: Store, input: { ap
 
 /** Produces the proposal and commits the `propose` transition: revision,
  * memory and epoch unchanged, no intents, the proposal as evidence. */
-export async function proposeApplicationRevision(lifecycle: ApplicationService, input: ProposeApplicationRevisionInput, runtime: AdaptationRuntime): Promise<ProposedApplicationRevision> {
+export async function proposeApplicationRevision(lifecycle: ApplicationCore, input: ProposeApplicationRevisionInput, runtime: AdaptationRuntime): Promise<ProposedApplicationRevision> {
   const optional = ["environment", "evidence", "causedBy"].filter(key => Object.hasOwn(input, key));
   const v = applicationObject(input, ["application", "operation", "expectedHead", "generator", "target", "arguments", "output", "policy", ...optional]);
   const application = applicationId(v.application), operation = applicationRef(v.operation), expectedHead = applicationRef(v.expectedHead);
