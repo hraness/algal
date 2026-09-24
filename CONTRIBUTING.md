@@ -28,7 +28,9 @@ editing: `bun test src/run.test.ts`.
   effect receipts.
 - Bound everything: counts, bytes, depth, labels, prompts.
 - Keep model output as data. Nothing an executor returns may become authority.
-- Open a pull request; do not force-push.
+- Open a pull request and enable auto-merge (`gh pr merge --auto --squash`);
+  the `Required` check is the reviewer and merges it when green. No human
+  review or approval step exists. Do not force-push.
 
 ## Bugs and security
 
