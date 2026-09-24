@@ -71,8 +71,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
-    "@hraness/design-kit": "github:hraness/design-kit#b0326108cf58268827ee69007414188ee27e2963",
-    "@hraness/ui": "github:hraness/ui#c6b824c3ebcb95ba804f98076639946d03759a21",
+    "@hraness/design-kit": "github:hraness/design-kit#v0.16.2",
+    "@hraness/ui": "github:hraness/ui#v0.5.18",
     "@hraness/web-discovery": "github:hraness/web-discovery#v0.6.0",
     "@hugeicons/core-free-icons": "4.3.0",
     "@resvg/resvg-js": "2.6.2",
