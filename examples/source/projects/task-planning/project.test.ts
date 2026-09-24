@@ -35,7 +35,7 @@ test("six-module task plan reuses one helper and replays from a portable closure
   expect(receipt.outcome).toBe("complete");
   expect(receipt.work.agentCalls).toBe(0);
   const outputs = receipt.cells.result!.outputs!.out as { task: JsonValue; score: number; action: string; view: { label: string } }[];
-  expect(outputs.map(row => row.task)).toEqual(args.input!.tasks);
+  expect(outputs.map(row => row.task)).toEqual(args.input!.tasks as JsonValue[]);
   expect(outputs.map(row => row.score)).toEqual([13, 4, 15]);
   expect(outputs.map(row => row.action)).toEqual(["work next", "review later", "archive"]);
   expect(outputs[0]!.view.label).toBe("Ship the task workspace: work next");
