@@ -9,6 +9,16 @@ wire constant (`0.1.0`) is independent of these package versions.
 
 ## Unreleased
 
+- Browser Tasks checks saved workflow evaluations in the same history replay
+  that checks its saved operations, instead of giving each evaluation its own
+  replay, while history and evaluations together fit the 1,024-record and
+  8 MiB transfer limits. With 16 tasks and 16 saved evaluations, one
+  instrumented in-memory edit replayed the history 6 times instead of 22, with
+  identical states, captures, transfers, and writes. Each of those checks
+  rereads every saved evaluation, so an operation fails if one disappears or
+  changes after an earlier check in it. Adds
+  `scripts/triage-history-performance.ts`. This reduces verification work; no
+  latency change is claimed.
 - Package subpaths `./decisions`, `./effects`, `./digest`, `./values`, `./errors`
   and `./store-contract` expose the browser-clean decision and effect contract
   modules to consumers that bundle ALGAL for the browser; the root entry still
