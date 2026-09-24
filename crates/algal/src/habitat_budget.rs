@@ -364,6 +364,20 @@ impl Account {
         Ok(())
     }
 
+    /// Release an open reservation when the run ended without a receipt, for
+    /// example when admission of its manifest failed. Nothing is charged and
+    /// the account stays usable, so the record can still be written; the run
+    /// is not listed because it recorded nothing.
+    pub fn release(&mut self) -> Result<()> {
+        if self.pending.take().is_none() {
+            return Err(Error::new(
+                "INTERNAL",
+                "habitat budget: no reservation to release",
+            ));
+        }
+        Ok(())
+    }
+
     /// The closed record: `complete` unless a reservation was refused.
     pub fn record(&self) -> Result<Value> {
         if self.pending.is_some() {

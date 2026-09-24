@@ -251,6 +251,15 @@ export class HabitatAccount {
     this.#charged.runs += 1;
   }
 
+  /** Releases an open reservation when the run ended without a receipt,
+   * for example when admission failed before anything ran. Nothing is
+   * charged and the account stays usable, so the evidence record can still
+   * be written; the run is not listed because it recorded nothing. */
+  release(): void {
+    if (!this.#pending) throw new AlgalError("INTERNAL", "habitat budget: no reservation to release");
+    this.#pending = null;
+  }
+
   /** The closed record: `complete` unless a reservation was refused. */
   record(): HabitatBudget {
     if (this.#pending) throw new AlgalError("INTERNAL", "habitat budget: a reservation is still open");

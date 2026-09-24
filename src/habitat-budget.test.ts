@@ -354,3 +354,34 @@ describe("foundry command", () => {
     }
   });
 });
+
+test("a run that fails before a receipt releases its reservation so the account stays usable", async () => {
+  const broken = parseOrganismManifest({
+    contract: "algal.organism.v1", key: "organism:broken", name: "broken", budgets: { maxWork: 1_000, maxAgentCalls: 0 },
+    interface: { inputs: { q: { cell: "src", port: "value" } }, outputs: { answer: { cell: "child", port: "result" } } },
+    cells: [{ id: "src", kind: "input", outputs: { value: "json" } }, { id: "child", kind: "organism", manifest: `sha256:${"0".repeat(64)}` }],
+    edges: [],
+  });
+  const account = new HabitatAccount("foundry", { work: 10_000, attempts: 0, runs: 8 });
+  const store = new MemoryStore();
+  const error = await refusal(() => runFoundry({ candidates: [constant, broken], cases, fns: builtinRegistry(), store, executors: [], account }));
+  expect(error.code).toBe("STORE_MISS");
+  const record = account.record();
+  expect(record.outcome).toBe("complete");
+  expect(record.runs.length).toBeGreaterThan(0);
+  expect(record.runs.map(run => run.manifest)).not.toContain(digestOf(broken));
+  expect(record.charged.runs).toBe(record.runs.length);
+  expect(account.exhausted).toBe(false);
+});
+
+test("release clears an open reservation without a charge and refuses without one", () => {
+  const account = new HabitatAccount("foundry", { work: 1_000, attempts: 0, runs: 1 });
+  account.reserve(digestOf(constant), constant.budgets);
+  expect(() => account.record()).toThrow(/still open/);
+  account.release();
+  expect(account.record().runs).toEqual([]);
+  expect(() => account.release()).toThrow(/no reservation to release/);
+  account.reserve(digestOf(constant), constant.budgets);
+  account.release();
+  expect(account.record().charged).toEqual({ work: 0, attempts: 0, runs: 0 });
+});

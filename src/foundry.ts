@@ -212,15 +212,23 @@ async function evaluateCase(
   opts: FoundryOptions,
 ): Promise<FoundryCaseResult> {
   opts.account?.reserve(manifestDigest, candidate.budgets);
-  const receipt = await runOrganism({
-    manifest: candidate,
-    args: caseArgs(candidate, c),
-    fns: opts.fns,
-    store: opts.store,
-    executors: opts.executors,
-    ...(opts.transports ? { transports: opts.transports } : {}),
-    ...(opts.tools ? { tools: opts.tools } : {}),
-  });
+  let receipt: Awaited<ReturnType<typeof runOrganism>>;
+  try {
+    receipt = await runOrganism({
+      manifest: candidate,
+      args: caseArgs(candidate, c),
+      fns: opts.fns,
+      store: opts.store,
+      executors: opts.executors,
+      ...(opts.transports ? { transports: opts.transports } : {}),
+      ...(opts.tools ? { tools: opts.tools } : {}),
+    });
+  } catch (error) {
+    // No receipt exists to charge; the reservation is released and the
+    // account stays usable for the record.
+    opts.account?.release();
+    throw error;
+  }
   const receiptDigest = await opts.store.putReceipt(receipt as unknown as JsonValue);
   opts.account?.charge(receiptDigest, receipt);
   const outputs = caseOutputs(candidate, receipt.cells);
@@ -262,15 +270,21 @@ export async function generateFoundryCandidates(
   }
   const generatorDigest = await opts.store.putManifest(opts.generator);
   opts.account?.reserve(generatorDigest, opts.generator.budgets);
-  const receipt = await runOrganism({
-    manifest: opts.generator,
-    args,
-    fns: opts.fns,
-    store: opts.store,
-    executors: opts.executors,
-    ...(opts.transports ? { transports: opts.transports } : {}),
-    ...(opts.tools ? { tools: opts.tools } : {}),
-  });
+  let receipt: Awaited<ReturnType<typeof runOrganism>>;
+  try {
+    receipt = await runOrganism({
+      manifest: opts.generator,
+      args,
+      fns: opts.fns,
+      store: opts.store,
+      executors: opts.executors,
+      ...(opts.transports ? { transports: opts.transports } : {}),
+      ...(opts.tools ? { tools: opts.tools } : {}),
+    });
+  } catch (error) {
+    opts.account?.release();
+    throw error;
+  }
   const receiptDigest = await opts.store.putReceipt(receipt as unknown as JsonValue);
   opts.account?.charge(receiptDigest, receipt);
   if (receipt.outcome !== "complete") {

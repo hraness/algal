@@ -341,18 +341,21 @@ async fn evaluate_case(
     transports: &Transports,
     mut account: Option<&mut Account>,
 ) -> Result<Value> {
+    let args = case_args(manifest, case)?;
     if let Some(account) = account.as_deref_mut() {
         account.reserve(manifest)?;
     }
-    let receipt = runtime::run(
-        manifest.clone(),
-        case_args(manifest, case)?,
-        store,
-        host,
-        transports,
-        None,
-    )
-    .await?;
+    let receipt = match runtime::run(manifest.clone(), args, store, host, transports, None).await {
+        Ok(receipt) => receipt,
+        Err(error) => {
+            // No receipt exists to charge; the reservation is released and
+            // the account stays usable for the record.
+            if let Some(account) = account.as_deref_mut() {
+                account.release()?;
+            }
+            return Err(error);
+        }
+    };
     let reference = store.put("runs", &receipt)?;
     if let Some(account) = account {
         account.charge(&reference, &receipt)?;
@@ -723,7 +726,7 @@ pub async fn generate_in(
     if let Some(account) = account.as_deref_mut() {
         account.reserve(generator)?;
     }
-    let receipt = runtime::run(
+    let receipt = match runtime::run(
         generator.clone(),
         Value::Object(run_args),
         store,
@@ -731,7 +734,16 @@ pub async fn generate_in(
         transports,
         None,
     )
-    .await?;
+    .await
+    {
+        Ok(receipt) => receipt,
+        Err(error) => {
+            if let Some(account) = account.as_deref_mut() {
+                account.release()?;
+            }
+            return Err(error);
+        }
+    };
     let receipt_digest = store.put("runs", &receipt)?;
     if let Some(account) = account {
         account.charge(&receipt_digest, &receipt)?;

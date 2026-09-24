@@ -12,7 +12,7 @@ import {
   type FoundryReport,
 } from "./foundry";
 import { parseExprScorer } from "./expr";
-import { checkHabitatBudgetEvidence, habitatBindingMismatches, parseHabitatBudget } from "./habitat-budget";
+import { checkHabitatBudgetEvidence, HABITAT_BUDGET_BOUNDS, habitatBindingMismatches, parseHabitatBudget } from "./habitat-budget";
 import type { FnRegistry } from "./registry";
 import { parseRunReceipt } from "./run";
 import type { Store } from "./store-contract";
@@ -46,8 +46,9 @@ function digest(value: JsonValue | undefined, at: string): Digest {
 }
 
 function count(value: JsonValue | undefined, at: string): number {
-  if (!Number.isInteger(value) || (value as number) < 0) {
-    throw new AlgalError("PARSE_FAILED", `${at} must be a non-negative integer`);
+  // The same per-run bound the native verifier and the habitat account apply.
+  if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > HABITAT_BUDGET_BOUNDS.maxRunWork) {
+    throw new AlgalError("PARSE_FAILED", `${at} must be an integer from 0 through ${HABITAT_BUDGET_BOUNDS.maxRunWork}`);
   }
   return value as number;
 }

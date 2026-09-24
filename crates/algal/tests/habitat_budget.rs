@@ -577,3 +577,52 @@ fn config_budget_is_bounded_and_refused_by_search() {
             .is_none()
     );
 }
+
+#[tokio::test]
+async fn release_clears_an_open_reservation_without_a_charge() {
+    let mut account = Account::new("foundry", limits(1_000, 0, 1)).unwrap();
+    let echo = echo();
+    account.reserve(&echo).unwrap();
+    assert!(account.record().is_err());
+    account.release().unwrap();
+    let record = account.record().unwrap();
+    assert_eq!(record["runs"], json!([]));
+    assert_eq!(record["charged"], json!({"work":0,"attempts":0,"runs":0}));
+    assert!(account.release().is_err());
+    account.reserve(&echo).unwrap();
+    account.release().unwrap();
+}
+
+#[tokio::test]
+async fn a_run_that_fails_before_a_receipt_releases_its_reservation() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut store = Store::open(directory.path(), true).unwrap();
+    let broken = Manifest::parse(&json!({
+        "contract":"algal.organism.v1","key":"organism:broken","name":"broken",
+        "budgets":{"maxWork":1_000,"maxAgentCalls":0},
+        "interface":{"inputs":{"q":{"cell":"src","port":"value"}},"outputs":{"answer":{"cell":"child","port":"result"}}},
+        "cells":[
+            {"id":"src","kind":"input","outputs":{"value":"json"}},
+            {"id":"child","kind":"organism","manifest":format!("sha256:{}", "0".repeat(64))}
+        ],
+        "edges":[]
+    }))
+    .unwrap();
+    let mut account = Account::new("foundry", limits(10_000, 0, 8)).unwrap();
+    let result = foundry::run_in(
+        &[constant(), broken],
+        &cases(),
+        None,
+        None,
+        &mut store,
+        &mut Host::default(),
+        &Transports::new(),
+        Some(&mut account),
+    )
+    .await;
+    assert!(result.is_err());
+    let record = account.record().unwrap();
+    assert_eq!(record["outcome"], "complete");
+    assert!(record["charged"]["runs"].as_u64().unwrap() > 0);
+    assert!(!account.exhausted());
+}
