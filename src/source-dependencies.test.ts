@@ -8,6 +8,7 @@ import { AlgalError } from "./errors";
 import { loadSourceProject } from "./source-project";
 import { compileSource } from "./source";
 import { MemoryStore } from "./store-memory";
+import { utf8Length } from "./utf8";
 import { canonicalize, type JsonObject, type JsonValue } from "./values";
 import {
   classifySourceDependencyCells, createSourceDependencyReport, renderSourceDependencies,
@@ -151,7 +152,7 @@ test("effects are direct per module, transitive through branches and each, and a
   expect(text).toContain("unused.algal");
   expect(text).toContain("imported but not called");
   expect(text).toContain("Guarded parameterless call (generated) · no source file");
-  expect(text).toContain("branch-1-arm-1/call  ping  ping.algal ← branch-1-arm-1/call [call]");
+  expect(text).toContain("branch-1-arm-1/call  ping  ping.algal ← branch-1-arm-1 (generated) [call]");
 });
 
 test("unclassified reachable cell kinds are rejected instead of defaulting to pure", () => {
@@ -165,9 +166,11 @@ test("unclassified reachable cell kinds are rejected instead of defaulting to pu
   for (const cell of [
     { id: "f", kind: "fn", fn: "identity" }, { id: "t", kind: "tool", tool: "http" }, { id: "r", kind: "repeat", manifest: "sha256:0", maxRounds: 1 },
     { id: "s", kind: "spawn" }, { id: "c", kind: "const", outputs: {} }, { id: "g", kind: "gate", inputs: {}, prompt: "", view: { inputs: "*" }, output: { kind: "choice", labels: ["a"] } },
+    { id: "p1", kind: "constructor" }, { id: "p2", kind: "toString" }, { id: "p3", kind: "__proto__" }, { id: "p4", kind: "hasOwnProperty" },
   ] as unknown as OrganismManifest["cells"]) {
-    const error = failure(() => classifySourceDependencyCells({ ...base, cells: [...base.cells, cell] }));
-    expect((error as unknown as { then: unknown }).then).toBeDefined();
+    expect(() => classifySourceDependencyCells({ ...base, cells: [...base.cells, cell] }), cell.kind).toThrow(/does not classify/);
+    try { classifySourceDependencyCells({ ...base, cells: [cell] }); }
+    catch (error) { expect(error instanceof AlgalError && error.code).toBe("MANIFEST_INVALID"); }
   }
   expect(Object.keys(SOURCE_DEPENDENCY_CELL_KINDS).sort()).toEqual(["agent", "decide", "each", "expr", "input", "organism"]);
   expect(() => classifySourceDependencyCells({ ...base, cells: [{ id: "f", kind: "fn", fn: "identity" }] })).toThrow(/does not classify/);
@@ -205,7 +208,10 @@ test("a bundle is checked against the recompiled closure without repairing missi
   expect(withExtra.modules.map(module => module.manifestDigest)).toEqual(plain.modules.map(module => module.manifestDigest));
   const malformed = json(bundle);
   (malformed.manifests as JsonObject)[extraDigest] = { contract: "algal.organism.v1", key: "organism:broken" };
-  expect(["PARSE_FAILED", "MANIFEST_INVALID", "DIGEST_MISMATCH"]).toContain((await failure(createSourceDependencyReport(source, { sourceOptions: options, bundle: malformed }))).code);
+  expect((await failure(createSourceDependencyReport(source, { sourceOptions: options, bundle: malformed }))).code).toBe("PARSE_FAILED");
+  const misfiled = json(bundle);
+  (misfiled.manifests as JsonObject)[digestCanonical({ unrelated: true })] = manifestToJson(other.manifest);
+  expect((await failure(createSourceDependencyReport(source, { sourceOptions: options, bundle: misfiled }))).code).toBe("DIGEST_MISMATCH");
   const notBundle = await failure(createSourceDependencyReport(source, { sourceOptions: options, bundle: { contract: "algal.bundle.v1", root: bundle.root, manifests: bundle.manifests, values: {}, extra: 1 } }));
   expect(notBundle.code).toBe("PARSE_FAILED");
 });
@@ -232,6 +238,8 @@ test("a small shared DAG expands to counted occurrences until graph admission re
   expect(report.counts).toEqual({ sourceUnits: 6, uniqueModules: 6, dependencyModules: 5, occurrences: 364, compositionEdges: 363, maxDepth: 5 });
   expect(report.modules.map(module => module.occurrences).sort((left, right) => left - right)).toEqual([1, 3, 9, 27, 81, 243]);
   expect(report.occurrences.every(occurrence => !occurrence.generated)).toBe(true);
+  expect(SOURCE_DEPENDENCY_BOUNDS.maxReportBytes).toBe(8_388_608);
+  expect(utf8Length(canonicalize(report as unknown as JsonValue))).toBeLessThan(SOURCE_DEPENDENCY_BOUNDS.maxReportBytes / 16);
   const seven = ladder(7);
   const refused = await failure(createSourceDependencyReport(seven.source, { sourceOptions: { entry: "l1.algal", modules: seven.modules } }));
   expect(refused.code).toBe("BUDGET_EXHAUSTED");
@@ -241,42 +249,69 @@ test("hostile bundle data is refused at the snapshot boundary without invoking a
   const { bundle, source, options } = await plannerBundle();
   const inspect = (value: unknown) => createSourceDependencyReport(source, { sourceOptions: options, bundle: value });
   const code = async (value: unknown) => (await failure(inspect(value))).code;
-  const cyclic: Record<string, unknown> = json(bundle);
+  // Payloads sit under valid digest keys: bundle parsing alone would admit or
+  // canonicalize them, so only the snapshot can be what rejects them.
+  const withValue = (payload: unknown, shape: JsonValue) => ({ ...json(bundle), values: { [digestCanonical(shape)]: payload } });
+  const cyclic: Record<string, unknown> = { a: 1 };
   cyclic.self = cyclic;
-  expect(await code(cyclic)).toBe("PARSE_FAILED");
+  expect(await code(withValue(cyclic, { a: 1 }))).toBe("PARSE_FAILED");
   let nested: unknown = [];
   for (let depth = 0; depth < 130; depth++) nested = [nested];
-  expect(await code(nested)).toBe("BUDGET_EXHAUSTED");
-  expect(await code(Array.from({ length: 17 }, () => new Array<null>(60_000).fill(null)))).toBe("BUDGET_EXHAUSTED");
-  expect(await code(new Array<null>(65_537).fill(null))).toBe("BUDGET_EXHAUSTED");
-  expect(await code(Object.fromEntries(Array.from({ length: 65_537 }, (_, index) => [`k${index}`, 0])))).toBe("BUDGET_EXHAUSTED");
-  expect(await code({ ...json(bundle), values: { note: "x".repeat(1_048_577) } })).toBe("BUDGET_EXHAUSTED");
-  for (const value of [Number.NaN, Number.POSITIVE_INFINITY, undefined, 10n, Symbol("s"), () => 1, new Date(0), new Map(), Object.create({ inherited: 1 })]) {
-    expect(await code({ ...json(bundle), values: { probe: value } })).toBe("PARSE_FAILED");
+  expect(await code(withValue(nested, []))).toBe("BUDGET_EXHAUSTED");
+  expect(await code(withValue(Array.from({ length: 17 }, () => new Array<null>(60_000).fill(null)), []))).toBe("BUDGET_EXHAUSTED");
+  expect(await code(withValue(new Array<null>(65_537).fill(null), []))).toBe("BUDGET_EXHAUSTED");
+  expect(await code(withValue(Object.fromEntries(Array.from({ length: 65_537 }, (_, index) => [`k${index}`, 0])), {}))).toBe("BUDGET_EXHAUSTED");
+  expect(await code(withValue("x".repeat(1_048_577), ""))).toBe("BUDGET_EXHAUSTED");
+  // Escaped bytes are counted without building the escaped text.
+  expect(await code(withValue(String.fromCodePoint(1).repeat(1_100_000), ""))).toBe("BUDGET_EXHAUSTED");
+  // Shared subobjects are charged per occurrence against the cumulative limit.
+  const shared = { text: "y".repeat(1_048_576) };
+  expect(await code(withValue(Array.from({ length: 100 }, () => shared), []))).toBe("BUDGET_EXHAUSTED");
+  const large = new Array<number>(4_000_000).fill(0);
+  const started = performance.now();
+  expect(await code(withValue(large, []))).toBe("BUDGET_EXHAUSTED");
+  expect(await code(withValue(new Uint8Array(4_000_000), {}))).toBe("PARSE_FAILED");
+  expect(performance.now() - started).toBeLessThan(2_000);
+  for (const [payload, shape] of [
+    [{ a: Number.NaN }, { a: null }], [{ a: Number.POSITIVE_INFINITY }, { a: null }], [{ a: 1, b: undefined }, { a: 1 }],
+    [{ a: 10n }, { a: 10 }], [{ a: Symbol("s") }, { a: null }], [{ a: () => 1 }, { a: null }],
+    [{ a: new Date(0) }, { a: "1970-01-01T00:00:00.000Z" }], [{ a: new Map() }, { a: {} }], [Object.create({ inherited: 1 }) as object, {}],
+  ] as const) {
+    expect(await code(withValue(payload, shape as JsonValue)), JSON.stringify(shape)).toBe("PARSE_FAILED");
   }
   const sparse = new Array<number>(3);
   sparse[0] = 1;
   sparse[2] = 3;
-  expect(await code({ ...json(bundle), values: { probe: sparse } })).toBe("PARSE_FAILED");
+  expect(await code(withValue(sparse, [1, null, 3]))).toBe("PARSE_FAILED");
   const decorated: unknown[] = [1, 2];
   (decorated as unknown as Record<string, unknown>).extra = true;
-  expect(await code({ ...json(bundle), values: { probe: decorated } })).toBe("PARSE_FAILED");
-  const hidden = json(bundle);
+  expect(await code(withValue(decorated, [1, 2]))).toBe("PARSE_FAILED");
+  const hidden: Record<string, unknown> = { a: 1 };
   Object.defineProperty(hidden, "shadow", { value: 1, enumerable: false });
-  expect(await code(hidden)).toBe("PARSE_FAILED");
+  expect(await code(withValue(hidden, { a: 1 }))).toBe("PARSE_FAILED");
   let reads = 0;
-  const trapped = { ...json(bundle) };
-  Object.defineProperty(trapped, "root", { get: () => { reads++; return bundle.root; }, enumerable: true });
-  expect(await code(trapped)).toBe("PARSE_FAILED");
+  const trapped: Record<string, unknown> = {};
+  Object.defineProperty(trapped, "a", { get: () => { reads++; return 1; }, enumerable: true });
+  expect(await code(withValue(trapped, { a: 1 }))).toBe("PARSE_FAILED");
   let serialized = 0;
-  const custom = { ...json(bundle), toJSON: () => { serialized++; return json(bundle); } };
-  expect(await code(custom)).toBe("PARSE_FAILED");
+  const custom = { a: 1, toJSON: () => { serialized++; return { a: 1 }; } };
+  expect(await code(withValue(custom, { a: 1 }))).toBe("PARSE_FAILED");
   expect(reads + serialized).toBe(0);
-  // The artifact is captured before the first await, so later mutation is inert.
-  const mutable = json(bundle);
-  const pending = inspect(mutable);
-  for (const key of Object.keys(mutable.manifests as JsonObject)) delete (mutable.manifests as JsonObject)[key];
+  // Every read of the supplied artifact happens before the first await, so
+  // later reads never occur and later mutation cannot change the capture.
+  let traps = 0;
+  const target = json(bundle);
+  const observed = new Proxy(target, {
+    ownKeys: value => { traps++; return Reflect.ownKeys(value); },
+    getOwnPropertyDescriptor: (value, key) => { traps++; return Reflect.getOwnPropertyDescriptor(value, key); },
+    get: (value, key, receiver) => { traps++; return Reflect.get(value, key, receiver); },
+  });
+  const pending = inspect(observed);
+  const synchronous = traps;
+  expect(synchronous).toBeGreaterThan(0);
+  for (const key of Object.keys(target.manifests as JsonObject)) delete (target.manifests as JsonObject)[key];
   expect((await pending).bundle?.reachable).toBe(6);
+  expect(traps).toBe(synchronous);
   const report = await inspect(json(bundle));
   expect(() => renderSourceDependencies(structuredClone(report))).toThrow(/created by createSourceDependencyReport/);
   expect(() => renderSourceDependencies({ ...report })).toThrow();
@@ -356,4 +391,23 @@ test("a second entry shares helper digests and reports three clamp occurrences",
   expect(report.modules.find(module => module.name === "clamp")!.occurrences).toBe(3);
   expect(report.occurrences.filter(occurrence => occurrence.source === "lib/clamp.algal").map(occurrence => occurrence.path.join("/"))).toEqual(["b1-score/b1-urgency", "b1-score/b2-impact", "b2-gap"]);
   expect(report.occurrences.find(occurrence => occurrence.path.join("/") === "b2-gap")!.caller?.origin).toMatchObject({ source: "inspect_task.algal", role: "call" });
+});
+
+test("an imported but uncalled file stays uncalled even when a called file shares its digest", async () => {
+  const helper = "program helper(x: json) -> json { budget { max_agent_calls: 0 } return x }";
+  const source = `import used from "./used.algal"
+import spare from "./spare.algal"
+program main(x: json) -> json { budget { max_agent_calls: 0 } return call used using { x: x } }`;
+  const modules = { "used.algal": helper, "spare.algal": helper };
+  const report = await createSourceDependencyReport(source, { sourceOptions: { modules } });
+  expect(report.counts).toEqual({ sourceUnits: 3, uniqueModules: 2, dependencyModules: 1, occurrences: 2, compositionEdges: 1, maxDepth: 1 });
+  const units = Object.fromEntries(report.sourceUnits.map(unit => [unit.source, unit]));
+  expect(units["used.algal"]!.manifestDigest).toBe(units["spare.algal"]!.manifestDigest);
+  expect(units["used.algal"]!.calledFromEntry).toBe(true);
+  expect(units["spare.algal"]!.calledFromEntry).toBe(false);
+  expect(report.modules.find(module => module.name === "helper")!.sources).toEqual(["used.algal"]);
+  // Building the report changes neither the executable digests nor the source-map digests.
+  const compiled = compileSource(source, { modules });
+  expect(report.rootManifestDigest).toBe(compiled.sourceMap.manifestDigest);
+  expect(report.sourceUnits.map(unit => unit.sourceDigest)).toEqual(Object.keys(compiled.project.units).sort().map(key => compiled.project.units[key]!.sourceDigest));
 });

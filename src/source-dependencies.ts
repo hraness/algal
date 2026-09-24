@@ -32,67 +32,67 @@ export const SOURCE_DEPENDENCY_CELL_KINDS = Object.freeze({
   input: "pure", expr: "pure", agent: "effect", decide: "effect", organism: "composition", each: "composition",
 } as const);
 export type SourceDependencyEffect = "agent" | "decide";
-export type SourceDependencyOrigin = { source: string; cellId: string; role: string; span: SourceSpan };
+export type SourceDependencyOrigin = { readonly source: string; readonly cellId: string; readonly role: string; readonly span: SourceSpan };
 export type SourceDependencyUnit = {
-  source: string;
-  sourceDigest: Digest;
-  manifestDigest: Digest;
+  readonly source: string;
+  readonly sourceDigest: Digest;
+  readonly manifestDigest: Digest;
   /** Reached from the entry through static calls; an imported but uncalled file is false. */
-  calledFromEntry: boolean;
+  readonly calledFromEntry: boolean;
 };
-export type SourceDependencyInterface = { inputs: PortMap; outputs: PortMap };
+export type SourceDependencyInterface = { readonly inputs: PortMap; readonly outputs: PortMap };
 export type SourceDependencyModule = {
-  manifestDigest: Digest;
-  key: string;
-  name: string;
+  readonly manifestDigest: Digest;
+  readonly key: string;
+  readonly name: string;
   /** Compiler-generated control structure with no source file of its own. */
-  generated: boolean;
+  readonly generated: boolean;
   /** Reachable source files that compile to this executable digest. */
-  sources: string[];
-  interface: SourceDependencyInterface;
-  budgets: Budgets;
+  readonly sources: readonly string[];
+  readonly interface: SourceDependencyInterface;
+  readonly budgets: Budgets;
   /** Model-effect kinds declared by this module, and by its whole static subtree. */
-  effects: { direct: SourceDependencyEffect[]; transitive: SourceDependencyEffect[] };
+  readonly effects: { readonly direct: readonly SourceDependencyEffect[]; readonly transitive: readonly SourceDependencyEffect[] };
   /** Expanded static occurrences of this digest in the root's closure. */
-  occurrences: number;
+  readonly occurrences: number;
 };
 export type SourceDependencyCaller = {
   /** Static path of the calling occurrence: composition cell IDs from the root. */
-  path: string[];
-  cellId: string;
-  kind: "call" | "each";
-  maxItems?: number;
-  origin?: SourceDependencyOrigin;
+  readonly path: readonly string[];
+  readonly cellId: string;
+  readonly kind: "call" | "each";
+  readonly maxItems?: number;
+  readonly origin?: SourceDependencyOrigin;
 };
 export type SourceDependencyOccurrence = {
-  path: string[];
-  depth: number;
-  manifestDigest: Digest;
-  generated: boolean;
-  source?: string;
-  caller?: SourceDependencyCaller;
+  readonly path: readonly string[];
+  readonly depth: number;
+  readonly manifestDigest: Digest;
+  readonly generated: boolean;
+  readonly source?: string;
+  readonly caller?: SourceDependencyCaller;
 };
-export type SourceDependencyBundle = { root: Digest; manifests: number; values: number; reachable: number; unreachable: number };
+export type SourceDependencyBundle = { readonly root: Digest; readonly manifests: number; readonly values: number; readonly reachable: number; readonly unreachable: number };
 export type SourceDependencyReport = {
-  contract: typeof SOURCE_DEPENDENCY_CONTRACT;
-  entry: string;
-  sourceDigest: Digest;
-  rootManifestDigest: Digest;
-  compilerVersion: string;
-  profile: string;
-  analysis: { maxAgentCalls: number; requiredDepth: number };
-  counts: {
-    sourceUnits: number;
-    uniqueModules: number;
-    dependencyModules: number;
-    occurrences: number;
-    compositionEdges: number;
-    maxDepth: number;
+  readonly contract: typeof SOURCE_DEPENDENCY_CONTRACT;
+  readonly entry: string;
+  readonly sourceDigest: Digest;
+  readonly rootManifestDigest: Digest;
+  readonly compilerVersion: string;
+  readonly profile: string;
+  readonly analysis: { readonly maxAgentCalls: number; readonly requiredDepth: number };
+  readonly counts: {
+    readonly sourceUnits: number;
+    readonly uniqueModules: number;
+    readonly dependencyModules: number;
+    readonly occurrences: number;
+    readonly compositionEdges: number;
+    readonly maxDepth: number;
   };
-  sourceUnits: SourceDependencyUnit[];
-  modules: SourceDependencyModule[];
-  occurrences: SourceDependencyOccurrence[];
-  bundle?: SourceDependencyBundle;
+  readonly sourceUnits: readonly SourceDependencyUnit[];
+  readonly modules: readonly SourceDependencyModule[];
+  readonly occurrences: readonly SourceDependencyOccurrence[];
+  readonly bundle?: SourceDependencyBundle;
 };
 export type SourceDependencyOptions = { sourceOptions?: SourceCompilerOptions; bundle?: unknown };
 
@@ -107,6 +107,24 @@ function freeze<T>(value: T): T {
 const mismatch = (message: string): never => { throw new AlgalError("DIGEST_MISMATCH", `source dependencies: ${message}`); };
 
 type SnapshotLimits = typeof SOURCE_DEPENDENCY_BOUNDS.bundle;
+/** UTF-8 length of `JSON.stringify(text)`, counted without building the
+ * escaped text: quotes, backslash and C0 escapes, lone surrogates as `\uXXXX`. */
+function jsonStringBytes(text: string): number {
+  let bytes = 2;
+  for (let index = 0; index < text.length; index++) {
+    const unit = text.charCodeAt(index);
+    if (unit === 0x22 || unit === 0x5c) bytes += 2;
+    else if (unit < 0x20) bytes += unit === 8 || unit === 9 || unit === 10 || unit === 12 || unit === 13 ? 2 : 6;
+    else if (unit < 0x80) bytes += 1;
+    else if (unit < 0x800) bytes += 2;
+    else if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = index + 1 < text.length ? text.charCodeAt(index + 1) : 0;
+      if (next >= 0xdc00 && next <= 0xdfff) { bytes += 4; index++; } else bytes += 6;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) bytes += 6;
+    else bytes += 3;
+  }
+  return bytes;
+}
 /** Copy foreign data into fresh JSON under explicit limits before any parsing.
  * Only data properties are read; getters, `toJSON`, prototypes, symbols, and
  * unusual own properties are rejected rather than invoked or dropped. This is a
@@ -128,6 +146,13 @@ function boundedJsonSnapshot(value: unknown, limits: SnapshotLimits, label: stri
     if (!descriptor.enumerable) return invalid(`${what} is not enumerable`);
     return descriptor.value;
   };
+  // Every UTF-16 unit costs at least one escaped byte, so length screens first.
+  const text = (value: string, what: string): number => {
+    if (value.length > limits.maxStringBytes) budget(`${what} exceeds ${limits.maxStringBytes} bytes`);
+    const encoded = jsonStringBytes(value);
+    if (encoded - 2 > limits.maxStringBytes) budget(`${what} exceeds ${limits.maxStringBytes} bytes`);
+    return encoded;
+  };
   const visit = (value: unknown, depth: number): JsonValue => {
     if (++nodes > limits.maxNodes) budget(`exceeds ${limits.maxNodes} JSON nodes`);
     if (value === null) { charge(4); return null; }
@@ -137,22 +162,16 @@ function boundedJsonSnapshot(value: unknown, limits: SnapshotLimits, label: stri
         if (!Number.isFinite(value)) return invalid("numbers must be finite");
         charge(String(value).length);
         return value === 0 ? 0 : value;
-      case "string": {
-        const encoded = utf8Length(JSON.stringify(value));
-        if (encoded - 2 > limits.maxStringBytes) budget(`string exceeds ${limits.maxStringBytes} bytes`);
-        charge(encoded);
-        return value;
-      }
+      case "string": charge(text(value, "string")); return value;
       case "object": break;
       default: return invalid(`unsupported ${typeof value} value`);
     }
     const target = value as object;
     if (depth >= limits.maxDepth) budget(`exceeds nesting depth ${limits.maxDepth}`);
     if (active.has(target)) return invalid("cyclic data");
+    // Prototype and length are checked before any key list exists: listing the
+    // keys of a huge array or typed array would allocate one string per index.
     const prototype = Object.getPrototypeOf(target) as unknown;
-    const keys = Reflect.ownKeys(target);
-    if (keys.some(key => typeof key === "symbol")) return invalid("symbol-keyed properties are not JSON");
-    const names = keys as string[];
     active.add(target);
     try {
       if (Array.isArray(target)) {
@@ -161,7 +180,9 @@ function boundedJsonSnapshot(value: unknown, limits: SnapshotLimits, label: stri
         const length: unknown = lengthDescriptor !== undefined && Object.hasOwn(lengthDescriptor, "value") ? lengthDescriptor.value : undefined;
         if (typeof length !== "number" || !Number.isSafeInteger(length) || length < 0) return invalid("array length is not an integer");
         if (length > limits.maxEntries) budget(`array exceeds ${limits.maxEntries} entries`);
-        if (names.length !== length + 1) return invalid("arrays must be dense without extra properties");
+        const keys = Reflect.ownKeys(target);
+        if (keys.some(key => typeof key === "symbol")) return invalid("symbol-keyed properties are not JSON");
+        if (keys.length !== length + 1) return invalid("arrays must be dense without extra properties");
         charge(2 + Math.max(0, length - 1));
         const out: JsonValue[] = [];
         for (let index = 0; index < length; index++) {
@@ -170,13 +191,14 @@ function boundedJsonSnapshot(value: unknown, limits: SnapshotLimits, label: stri
         return out;
       }
       if (prototype !== Object.prototype && prototype !== null) return invalid("objects must be plain data objects");
-      if (names.length > limits.maxEntries) budget(`object exceeds ${limits.maxEntries} entries`);
+      const keys = Reflect.ownKeys(target);
+      if (keys.length > limits.maxEntries) budget(`object exceeds ${limits.maxEntries} entries`);
+      if (keys.some(key => typeof key === "symbol")) return invalid("symbol-keyed properties are not JSON");
+      const names = keys as string[];
       charge(2 + Math.max(0, names.length - 1));
       const out: JsonObject = {};
       for (const name of names) {
-        const encoded = utf8Length(JSON.stringify(name));
-        if (encoded - 2 > limits.maxStringBytes) budget(`key exceeds ${limits.maxStringBytes} bytes`);
-        charge(encoded + 1);
+        charge(text(name, "key") + 1);
         const copied = visit(dataValue(Object.getOwnPropertyDescriptor(target, name), `property ${JSON.stringify(name)}`), depth + 1);
         // defineProperty keeps a foreign "__proto__" key as ordinary data.
         Object.defineProperty(out, name, { value: copied, enumerable: true, writable: true, configurable: true });
@@ -194,7 +216,8 @@ function boundedJsonSnapshot(value: unknown, limits: SnapshotLimits, label: stri
 export function classifySourceDependencyCells(manifest: OrganismManifest): { effects: SourceDependencyEffect[] } {
   const effects = new Set<SourceDependencyEffect>();
   for (const cell of manifest.cells) {
-    const classification = (SOURCE_DEPENDENCY_CELL_KINDS as Readonly<Record<string, string | undefined>>)[cell.kind];
+    const classification = Object.hasOwn(SOURCE_DEPENDENCY_CELL_KINDS, cell.kind)
+      ? (SOURCE_DEPENDENCY_CELL_KINDS as Readonly<Record<string, string>>)[cell.kind] : undefined;
     if (classification === undefined) {
       throw new AlgalError("MANIFEST_INVALID", `source dependencies: cell "${cell.id}" has kind "${cell.kind}", which this report does not classify`);
     }
@@ -227,9 +250,10 @@ function copyPorts(ports: PortMap): PortMap {
  * missing children are never repaired from source. Returns a frozen report.
  */
 export async function createSourceDependencyReport(source: string, options: SourceDependencyOptions = {}): Promise<SourceDependencyReport> {
-  // Foreign data is captured synchronously, before the first await.
-  const artifact = options.bundle === undefined ? undefined
-    : boundedJsonSnapshot(options.bundle, SOURCE_DEPENDENCY_BOUNDS.bundle, "source dependencies: bundle");
+  // Foreign data is read once and captured synchronously, before the first await.
+  const supplied: unknown = options.bundle;
+  const artifact = supplied === undefined ? undefined
+    : boundedJsonSnapshot(supplied, SOURCE_DEPENDENCY_BOUNDS.bundle, "source dependencies: bundle");
   const { compilation } = createSourceTrace(source, options.sourceOptions ?? {});
   const rootDigest = compilation.sourceMap.manifestDigest;
   const closure = new Set<Digest>([rootDigest, ...compilation.modules.map(module => digestCanonical(manifestToJson(module)))]);
@@ -387,6 +411,10 @@ function portsText(ports: PortMap): string {
 function originText(origin: SourceDependencyOrigin): string {
   return `${origin.source}:${origin.span.start.line}:${origin.span.start.column}`;
 }
+/** Optional fields are read as own data only, so a polluted prototype cannot add lines. */
+function own<T extends object, K extends keyof T>(value: T, key: K): T[K] | undefined {
+  return Object.hasOwn(value, key) ? value[key] : undefined;
+}
 
 /** Render a report this module created. Foreign or modified report objects are
  * refused, so the renderer never presents unverified labels as compiler output.
@@ -402,8 +430,9 @@ export function renderSourceDependencies(report: SourceDependencyReport): string
     `Analysis: at most ${analysis.maxAgentCalls} executor attempts · required depth ${analysis.requiredDepth}`,
     `Counts: ${counts.sourceUnits} source files · ${counts.uniqueModules} modules (${counts.dependencyModules} dependencies) · ${counts.occurrences} occurrences · ${counts.compositionEdges} composition edges · depth ${counts.maxDepth}`,
   ];
-  if (report.bundle !== undefined) {
-    lines.push(`Bundle: root ${report.bundle.root} · ${report.bundle.manifests} manifests (${report.bundle.reachable} reachable, ${report.bundle.unreachable} unreachable) · ${report.bundle.values} values`);
+  const bundle = own(report, "bundle");
+  if (bundle !== undefined) {
+    lines.push(`Bundle: root ${bundle.root} · ${bundle.manifests} manifests (${bundle.reachable} reachable, ${bundle.unreachable} unreachable) · ${bundle.values} values`);
   }
   lines.push("", "Source files");
   for (const unit of report.sourceUnits) lines.push(`  ${unit.source}  ${unit.manifestDigest}  ${unit.calledFromEntry ? "reachable from entry" : "imported but not called"}`);
@@ -415,9 +444,11 @@ export function renderSourceDependencies(report: SourceDependencyReport): string
   }
   lines.push("", "Occurrences");
   for (const occurrence of report.occurrences) {
-    const caller = occurrence.caller;
-    const from = caller === undefined ? "" : ` ← ${caller.origin === undefined ? `${caller.path.join("/") || "(root)"}/${caller.cellId}` : originText(caller.origin)} [${caller.kind}${caller.maxItems === undefined ? "" : ` ≤${caller.maxItems} items`}]`;
-    lines.push(`  ${occurrence.path.join("/") || "(root)"}  ${names.get(occurrence.manifestDigest) ?? occurrence.manifestDigest}  ${occurrence.source ?? "(generated)"}${from}`);
+    const caller = own(occurrence, "caller");
+    const origin = caller === undefined ? undefined : own(caller, "origin");
+    const maxItems = caller === undefined ? undefined : own(caller, "maxItems");
+    const from = caller === undefined ? "" : ` ← ${origin === undefined ? `${caller.path.join("/") || "(root)"} (generated)` : originText(origin)} [${caller.kind}${maxItems === undefined ? "" : ` ≤${maxItems} items`}]`;
+    lines.push(`  ${occurrence.path.join("/") || "(root)"}  ${names.get(occurrence.manifestDigest) ?? occurrence.manifestDigest}  ${own(occurrence, "source") ?? "(generated)"}${from}`);
   }
   return `${printable(lines.join("\n"))}\n`;
 }

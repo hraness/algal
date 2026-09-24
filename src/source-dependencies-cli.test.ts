@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { canonicalize, type JsonObject, type JsonValue } from "./values";
+import { canonicalize, type JsonObject } from "./values";
 
 const root = resolve(import.meta.dir, "..");
 const planner = join(root, "examples/source/projects/task-planning/main.algal");
@@ -117,7 +117,5 @@ program main(x: json) -> json { budget { max_agent_calls: 0 } return call helper
     const rooted = await cli("dependencies", entry, "--source-root", dir);
     expect(rooted.code).toBe(2);
     expect((JSON.parse(rooted.stderr).diagnostic as JsonObject).source).toBe("broken/helper.algal");
-    const value: JsonValue = 1;
-    expect(value).toBe(1);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
