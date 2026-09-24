@@ -106,6 +106,10 @@ usage:
                                               report source files, modules, call paths, and effects;
                                               --bundle checks an artifact against the compiled closure;
                                               --receipt attributes recorded cells and work to each call
+  algal lock <program.algal> [--source-root <dir>] [--out <lock.json>]
+      [--verify <lock.json>] [--format json|text]
+                                              pin a source project to its compiled closure;
+                                              --verify recompiles and reports drift (exit 1)
   algal examples                          list bundled examples
   algal example <id>                      print the example manifest
   algal run <manifest.json> [options]     run an organism, print its receipt
@@ -914,6 +918,31 @@ async function main(): Promise<number> {
       const report = await createSourceDependencyReport(project.source, { sourceOptions: project.compilerOptions, ...(bundle === undefined ? {} : { bundle }), ...(receipt === undefined ? {} : { receipt }) });
       await emitArtifact(format === "text" ? renderSourceDependencies(report) : canonicalize(report as unknown as JsonValue), output);
       return 0;
+    }
+
+    case "lock": {
+      if (positional.length !== 1) usageError("algal lock <program.algal> [--source-root <dir>] [--out <lock.json>] [--verify <lock.json>] [--format json|text]");
+      for (const key of Object.keys(flags)) {
+        if (!["source-root", "out", "verify", "format"].includes(key)) usageError(`unknown lock option --${key}`);
+        artifactFlag(flags, key);
+      }
+      const { createSourceLock, verifySourceLock, renderSourceLockVerification, sourceLockToJson, SOURCE_LOCK_BOUNDS } = await import("./src/source-lock");
+      const format = artifactFlag(flags, "format") ?? "json";
+      if (format !== "json" && format !== "text") usageError("lock format must be json or text");
+      const output = artifactFlag(flags, "out");
+      const verifyPath = artifactFlag(flags, "verify");
+      if (verifyPath === undefined && format === "text") usageError("lock text output is only available with --verify");
+      const project = await readProject(positional[0]!);
+      await distinctArtifactPaths([...project.files, ...(verifyPath === undefined ? [] : [resolve(verifyPath)])], [output]);
+      if (verifyPath === undefined) {
+        await emitArtifact(canonicalize(sourceLockToJson(await createSourceLock(project.source, project.compilerOptions))), output);
+        return 0;
+      }
+      const lockValue = await readJsonBounded(resolve(verifyPath), SOURCE_LOCK_BOUNDS.lock.maxBytes, "source lock");
+      const verification = await verifySourceLock(project.source, project.compilerOptions, lockValue);
+      await emitArtifact(format === "text" ? renderSourceLockVerification(verification) : canonicalize(verification as unknown as JsonValue), output);
+      // Exit-code rule shared with the native CLI: 1 means the check ran and found drift.
+      return verification.ok ? 0 : 1;
     }
 
     case "--help":

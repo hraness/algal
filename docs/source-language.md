@@ -456,6 +456,37 @@ as an inactive branch, stays listed with zero invocations. Recorded paths that
 no occurrence can own are counted as unattributed rather than guessed. This
 join is digest-bound association, not replay; use `verify` for replay.
 
+### Pin a project with a lock
+
+`lock` writes an `algal.source-lock.v1` record that binds the project to the
+exact closure it compiles to, and `--verify` recompiles the project offline
+and reports every difference:
+
+```sh
+bun cli.ts lock examples/source/projects/task-planning/main.algal --out task-plan.lock.json
+bun cli.ts lock examples/source/projects/task-planning/main.algal \
+  --verify task-plan.lock.json --format text
+# Exit 0 when the source still compiles to the locked closure, 1 on drift,
+# 2 when the project no longer compiles or the lock is malformed.
+```
+
+The lock records the entry key, the compiler version and profile, every
+imported file with its source digest and executable digest, the root digest,
+the sorted module closure, the inferred attempt and depth bounds, and a digest
+of each module's resolved interface. It supplies no source or manifests and
+changes no executable identity. Verification lists drift in a fixed order and
+by kind: a formatting-only edit shows as source drift with no executable
+drift, a changed helper shows the file digests and closure digests that moved,
+a renamed parameter shows interface drift for that file, and a different
+compiler version string shows as compiler drift. The drift bound is above the
+largest possible list, so nothing is cut off. File keys are relative to the
+source root, so verify with the same `--source-root` used to write the lock.
+Lock data is copied under its own limits (16 units, 60 modules, 64 KiB) and
+parsed strictly before comparison; the lock digest covers the parsed
+canonical JSON, not the file bytes. The lock does not fetch, install, or
+upgrade anything; remote catalogs and evaluation-suite pinning are not part
+of it.
+
 The same project's second entry, `inspect_task.algal`, reuses the scoring and
 clamp programs. Its report lists 3 source files and 5 occurrences, and its
 `score_task` and `clamp` modules carry the same digests as the planner's, so

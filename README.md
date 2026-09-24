@@ -198,6 +198,8 @@ separates scoring, policy, and display data while reusing a pure helper.
 static call with its caller location; the planner reports six modules and
 seven occurrences because its clamp helper is called twice. Given a receipt,
 it also attributes recorded invocations, cells, and work to each call.
+`lock` pins that closure and `lock --verify` reports source, compiler, and
+closure drift offline.
 
 `check` also reports the source entry, file count, inferred maximum executor
 attempts, and required nesting depth. For the two-file inbox project these

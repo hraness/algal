@@ -15,6 +15,8 @@ export { createSourceTrace, resolveSourcePath, SOURCE_TRACE_BOUNDS } from "./src
 export type { SourceTraceContext, SourcePathResult, SourceTraceLocation, SourceTraceFrame } from "./src/source-trace";
 export { classifySourceDependencyCells, createSourceDependencyReport, renderSourceDependencies, SOURCE_DEPENDENCY_BOUNDS, SOURCE_DEPENDENCY_CELL_KINDS, SOURCE_DEPENDENCY_CONTRACT } from "./src/source-dependencies";
 export type { SourceDependencyBundle, SourceDependencyCaller, SourceDependencyEffect, SourceDependencyExecution, SourceDependencyExecutionOccurrence, SourceDependencyInconsistency, SourceDependencyInterface, SourceDependencyModule, SourceDependencyOccurrence, SourceDependencyOptions, SourceDependencyOrigin, SourceDependencyReport, SourceDependencyUnit } from "./src/source-dependencies";
+export { createSourceLock, parseSourceLock, renderSourceLockVerification, sourceLockToJson, verifySourceLock, SOURCE_LOCK_BOUNDS, SOURCE_LOCK_CONTRACT, SOURCE_LOCK_VERIFICATION_CONTRACT } from "./src/source-lock";
+export type { SourceLock, SourceLockDrift, SourceLockDriftKind, SourceLockUnit, SourceLockVerification } from "./src/source-lock";
 export { createProgramDiagram, renderMermaid, renderSvg } from "./src/diagram";
 export type { ProgramDiagram, DiagramOptions, DiagramNode, DiagramEdge, SvgDiagramOptions } from "./src/diagram";
 
