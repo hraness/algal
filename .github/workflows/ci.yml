@@ -60,11 +60,19 @@ jobs:
           export ALGAL_BROWSER_EXECUTABLE="$(bun -e 'import {chromium} from "playwright-core"; console.log(chromium.executablePath())')"
           export ALGAL_BROWSER_EVIDENCE="$RUNNER_TEMP/algal-browser-evidence"
           bun scripts/browser-grow-qualification.mjs
+      - name: Browser task data, drafts, workflow and schema migration
+        run: |
+          export ALGAL_PLAYWRIGHT_MODULE="$PWD/node_modules/playwright-core/index.mjs"
+          export ALGAL_BROWSER_EXECUTABLE="$(bun -e 'import {chromium} from "playwright-core"; console.log(chromium.executablePath())')"
+          export ALGAL_BROWSER_EVIDENCE="$RUNNER_TEMP/algal-task-evidence"
+          bun scripts/browser-triage-qualification.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: browser-application-evidence
-          path: ${{ runner.temp }}/algal-browser-evidence/*.json
+          path: |
+            ${{ runner.temp }}/algal-browser-evidence/*.json
+            ${{ runner.temp }}/algal-task-evidence/*.json
           if-no-files-found: ignore
 
   surface-renderers:
