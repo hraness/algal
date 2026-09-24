@@ -481,11 +481,59 @@ a renamed parameter shows interface drift for that file, and a different
 compiler version string shows as compiler drift. The drift bound is above the
 largest possible list, so nothing is cut off. File keys are relative to the
 source root, so verify with the same `--source-root` used to write the lock.
-Lock data is copied under its own limits (16 units, 60 modules, 64 KiB) and
+Lock data is copied under its own limits (16 units, 60 modules, 128 KiB) and
 parsed strictly before comparison; the lock digest covers the parsed
 canonical JSON, not the file bytes. The lock does not fetch, install, or
-upgrade anything; remote catalogs and evaluation-suite pinning are not part
-of it.
+upgrade anything.
+
+A lock can also pin evaluation cases: run inputs, with scripted responses
+when the program calls a model, and the results they must keep producing.
+
+```sh
+bun cli.ts lock examples/source/projects/task-planning/main.algal \
+  --evaluation examples/source/projects/task-planning/main.evaluation.json \
+  --out task-plan.lock.json
+bun cli.ts lock examples/source/projects/task-planning/main.algal \
+  --verify task-plan.lock.json --evaluate --format text
+```
+
+The case list is a JSON array. Each case has a `name`, an `args` file in the
+format `run --args` reads, an optional `responses` file in the format
+`run --responses` reads, and an optional expected `outcome`, which defaults
+to `complete`. Case files are named relative to the source root and read like
+source files: no `..` segments or symlinks, regular files only, at most
+64 KiB each. Writing the lock runs each case in memory and records the digest
+of each file's canonical JSON, the run's outcome, and a digest of the
+program's declared outputs, the `outputs` object that `call --interface`
+prints. A case whose run ends with a different outcome than it expects is
+refused, so a failing case is pinned only when it expects `failed`.
+
+`--evaluate` runs every pinned case again against the recompiled program. It
+answers model and decision steps only from the pinned responses, calls no
+tools or network services, and writes nothing to the store. It reports
+`evaluation` drift for each case whose input file, response file, outcome, or
+output digest changed, and for a different runtime version. A case file that
+is missing, unreadable, or malformed stops verification with exit code 2.
+Without `--evaluate`, no case runs and the output marks the cases as not
+replayed. A helper rewrite that keeps every pinned output shows digest drift
+with no evaluation drift; a behavior change also moves the output digest.
+Evaluation drift covers only the pinned inputs and the recorded responses: it
+shows whether the program still turns them into the same results, not how a
+live model or provider would answer.
+
+`--versions labels.json` adds labels for people: a JSON object that maps each
+label to an executable digest in the closure, such as a unit's
+`manifestDigest` in the lock. Digests are what execute. Verification never
+moves a label to a new digest; when a labeled digest leaves the recompiled
+closure, it reports `version` drift, and relabeling means writing a new lock.
+A lock pins at most 16 cases and 16 labels. Case names and labels have at
+most 64 characters: ASCII letters, digits, `.`, `_`, and `-`, starting with a
+letter or digit.
+
+Verification lists drift in this order: entry, compiler, source, unit, root,
+closure, interface, analysis, version, and evaluation. Vendored remote
+catalogs, which would resolve to the same offline verification, are proposed
+and not built.
 
 The same project's second entry, `inspect_task.algal`, reuses the scoring and
 clamp programs. Its report lists 3 source files and 5 occurrences, and its

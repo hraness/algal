@@ -107,9 +107,13 @@ usage:
                                               --bundle checks an artifact against the compiled closure;
                                               --receipt attributes recorded cells and work to each call
   algal lock <program.algal> [--source-root <dir>] [--out <lock.json>]
-      [--verify <lock.json>] [--format json|text]
+      [--evaluation <cases.json>] [--versions <labels.json>]
+      [--verify <lock.json> [--evaluate]] [--format json|text]
                                               pin a source project to its compiled closure;
-                                              --verify recompiles and reports drift (exit 1)
+                                              --evaluation pins fixture cases' outcomes and outputs;
+                                              --versions labels closure digests for people;
+                                              --verify recompiles and reports drift (exit 1);
+                                              --evaluate also replays pinned cases offline
   algal examples                          list bundled examples
   algal example <id>                      print the example manifest
   algal run <manifest.json> [options]     run an organism, print its receipt
@@ -921,25 +925,42 @@ async function main(): Promise<number> {
     }
 
     case "lock": {
-      if (positional.length !== 1) usageError("algal lock <program.algal> [--source-root <dir>] [--out <lock.json>] [--verify <lock.json>] [--format json|text]");
+      if (positional.length !== 1) usageError("algal lock <program.algal> [--source-root <dir>] [--out <lock.json>] [--evaluation <cases.json>] [--versions <labels.json>] [--verify <lock.json> [--evaluate]] [--format json|text]");
       for (const key of Object.keys(flags)) {
-        if (!["source-root", "out", "verify", "format"].includes(key)) usageError(`unknown lock option --${key}`);
-        artifactFlag(flags, key);
+        if (!["source-root", "out", "verify", "format", "evaluation", "versions", "evaluate"].includes(key)) usageError(`unknown lock option --${key}`);
+        if (key !== "evaluate") artifactFlag(flags, key);
       }
-      const { createSourceLock, verifySourceLock, renderSourceLockVerification, sourceLockToJson, SOURCE_LOCK_BOUNDS } = await import("./src/source-lock");
+      if (flags.evaluate !== undefined && flags.evaluate !== true) usageError("--evaluate is a boolean flag without a value");
+      const { createSourceLock, parseSourceLock, parseSourceLockCases, sourceLockFixtureKeys, verifySourceLock, renderSourceLockVerification, sourceLockToJson, SOURCE_LOCK_BOUNDS } = await import("./src/source-lock");
       const format = artifactFlag(flags, "format") ?? "json";
       if (format !== "json" && format !== "text") usageError("lock format must be json or text");
       const output = artifactFlag(flags, "out");
       const verifyPath = artifactFlag(flags, "verify");
+      const casesPath = artifactFlag(flags, "evaluation");
+      const versionsPath = artifactFlag(flags, "versions");
+      const evaluate = flags.evaluate === true;
       if (verifyPath === undefined && format === "text") usageError("lock text output is only available with --verify");
+      if (verifyPath === undefined && evaluate) usageError("--evaluate is only available with --verify");
+      if (verifyPath !== undefined && (casesPath !== undefined || versionsPath !== undefined)) usageError("--evaluation and --versions write a lock; --verify reads them from the lock");
       const project = await readProject(positional[0]!);
-      await distinctArtifactPaths([...project.files, ...(verifyPath === undefined ? [] : [resolve(verifyPath)])], [output]);
-      if (verifyPath === undefined) {
-        await emitArtifact(canonicalize(sourceLockToJson(await createSourceLock(project.source, project.compilerOptions))), output);
+      const inputs = [verifyPath, casesPath, versionsPath].flatMap(path => path === undefined ? [] : [resolve(path)]);
+      const cases = casesPath === undefined ? undefined : parseSourceLockCases(await readJsonBounded(resolve(casesPath), SOURCE_LOCK_BOUNDS.lock.maxBytes, "lock evaluation cases"));
+      const labels = versionsPath === undefined ? undefined : await readJsonBounded(resolve(versionsPath), SOURCE_LOCK_BOUNDS.lock.maxBytes, "lock versions");
+      const lockValue = verifyPath === undefined ? undefined : await readJsonBounded(resolve(verifyPath), SOURCE_LOCK_BOUNDS.lock.maxBytes, "source lock");
+      // Fixtures are read only when named, beneath the source root, with the source loader's guards.
+      const keys = cases !== undefined ? sourceLockFixtureKeys(cases) : evaluate ? sourceLockFixtureKeys(parseSourceLock(lockValue)) : [];
+      await distinctArtifactPaths([...project.files, ...inputs, ...keys.map(key => join(project.root, ...key.split("/")))], [output]);
+      const { loadSourceFixtures } = await import("./src/source-project");
+      const fixtures = keys.length === 0 ? {} : await loadSourceFixtures(project.root, keys, SOURCE_LOCK_BOUNDS.evaluation.maxFixtureBytes);
+      if (lockValue === undefined) {
+        const lock = await createSourceLock(project.source, project.compilerOptions, {
+          ...(cases === undefined ? {} : { evaluation: cases, fixtures }),
+          ...(labels === undefined ? {} : { versions: labels as Record<string, string> }),
+        });
+        await emitArtifact(canonicalize(sourceLockToJson(lock)), output);
         return 0;
       }
-      const lockValue = await readJsonBounded(resolve(verifyPath), SOURCE_LOCK_BOUNDS.lock.maxBytes, "source lock");
-      const verification = await verifySourceLock(project.source, project.compilerOptions, lockValue);
+      const verification = await verifySourceLock(project.source, project.compilerOptions, lockValue, evaluate ? { fixtures } : {});
       await emitArtifact(format === "text" ? renderSourceLockVerification(verification) : canonicalize(verification as unknown as JsonValue), output);
       // Exit-code rule shared with the native CLI: 1 means the check ran and found drift.
       return verification.ok ? 0 : 1;

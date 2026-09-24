@@ -9,6 +9,14 @@ wire constant (`0.1.0`) is independent of these package versions.
 
 ## Unreleased
 
+- `algal lock --evaluation <cases.json>` pins evaluation cases in an optional
+  `evaluation` section of `algal.source-lock.v1`: the digests of each case's
+  argument and scripted-response files, the run outcome, and a digest of the
+  program's declared outputs. `lock --verify --evaluate` runs the cases again
+  in memory with scripted responses only and reports `evaluation` drift.
+  `--versions <labels.json>` adds labels for exact closure digests; a label
+  whose digest leaves the recompiled closure reports `version` drift and is
+  never moved. Both sections are optional, so existing locks keep their digest.
 - Browser Tasks checks saved workflow evaluations in the same history replay
   that checks its saved operations, instead of giving each evaluation its own
   replay, while history and evaluations together fit the 1,024-record and

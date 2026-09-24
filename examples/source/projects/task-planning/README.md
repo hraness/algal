@@ -43,6 +43,25 @@ artifact carries exactly that closure. With `--receipt`, it attributes the
 recorded run to those occurrences: three invocations of each program under the
 planner, self work per occurrence, and inclusive work that adds child calls.
 
+A lock pins this closure and, with `main.evaluation.json`, the planner's
+result for the three-task fixture:
+
+```sh
+bun cli.ts lock examples/source/projects/task-planning/main.algal \
+  --evaluation examples/source/projects/task-planning/main.evaluation.json \
+  --out task-plan.lock.json
+bun cli.ts lock examples/source/projects/task-planning/main.algal \
+  --verify task-plan.lock.json --evaluate --format text
+```
+
+The case list names one case, `three-tasks`, which runs `main.args.json`. The
+lock records that file's digest, the `complete` outcome, and a digest of the
+planner's output. An edit to the clamp helper that changes a score makes
+`--evaluate` report evaluation drift for the case, while a rewrite that keeps
+every score reports only the moved digests. The
+[source guide](../../../../docs/source-language.md#pin-a-project-with-a-lock)
+describes the case format and its limits.
+
 The second entry runs the same way:
 
 ```sh

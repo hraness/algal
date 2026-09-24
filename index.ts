@@ -7,7 +7,7 @@ export { compileSource, sourceImports, SourceError, SOURCE_BOUNDS, SOURCE_PROJEC
 export type { SourceAnnotation, SourceCallOrigin, SourceCompilation, SourceCompilerOptions, SourceErrorContext, SourceErrorImport, SourceImport, SourceMap, SourcePosition, SourceProjectIndex, SourceSpan } from "./src/source";
 export { createSourceErrorReport, renderSourceError, SOURCE_ERROR_BOUNDS } from "./src/source-errors";
 export type { SourceErrorExcerptLine, SourceErrorReport } from "./src/source-errors";
-export { loadSourceProject } from "./src/source-project";
+export { loadSourceFixtures, loadSourceProject } from "./src/source-project";
 export type { SourceProject, SourceProjectOptions } from "./src/source-project";
 export { diagnoseSource, renderSourceDiagnostics, SOURCE_DIAGNOSTIC_BOUNDS } from "./src/source-diagnostics";
 export type { SourceDiagnostics, SourceDiagnosticIssue, SourceDiagnosticLocation, SourceDiagnosticCaller } from "./src/source-diagnostics";
@@ -15,8 +15,8 @@ export { createSourceTrace, resolveSourcePath, SOURCE_TRACE_BOUNDS } from "./src
 export type { SourceTraceContext, SourcePathResult, SourceTraceLocation, SourceTraceFrame } from "./src/source-trace";
 export { classifySourceDependencyCells, createSourceDependencyReport, renderSourceDependencies, SOURCE_DEPENDENCY_BOUNDS, SOURCE_DEPENDENCY_CELL_KINDS, SOURCE_DEPENDENCY_CONTRACT } from "./src/source-dependencies";
 export type { SourceDependencyBundle, SourceDependencyCaller, SourceDependencyEffect, SourceDependencyExecution, SourceDependencyExecutionOccurrence, SourceDependencyInconsistency, SourceDependencyInterface, SourceDependencyModule, SourceDependencyOccurrence, SourceDependencyOptions, SourceDependencyOrigin, SourceDependencyReport, SourceDependencyUnit } from "./src/source-dependencies";
-export { createSourceLock, parseSourceLock, renderSourceLockVerification, sourceLockToJson, verifySourceLock, SOURCE_LOCK_BOUNDS, SOURCE_LOCK_CONTRACT, SOURCE_LOCK_VERIFICATION_CONTRACT } from "./src/source-lock";
-export type { SourceLock, SourceLockDrift, SourceLockDriftKind, SourceLockUnit, SourceLockVerification } from "./src/source-lock";
+export { createSourceLock, parseSourceLock, parseSourceLockCases, renderSourceLockVerification, sourceLockFixtureKeys, sourceLockToJson, verifySourceLock, SOURCE_LOCK_BOUNDS, SOURCE_LOCK_CONTRACT, SOURCE_LOCK_VERIFICATION_CONTRACT } from "./src/source-lock";
+export type { SourceLock, SourceLockCase, SourceLockDrift, SourceLockDriftKind, SourceLockEvaluation, SourceLockEvaluationCase, SourceLockFixture, SourceLockOptions, SourceLockUnit, SourceLockVerification, SourceLockVerifyOptions } from "./src/source-lock";
 export { createProgramDiagram, renderMermaid, renderSvg } from "./src/diagram";
 export type { ProgramDiagram, DiagramOptions, DiagramNode, DiagramEdge, SvgDiagramOptions } from "./src/diagram";
 

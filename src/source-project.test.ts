@@ -2,7 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { loadSourceProject } from "./source-project";
+import { AlgalError } from "./errors";
+import { loadSourceFixtures, loadSourceProject } from "./source-project";
 import { compileSource, SOURCE_BOUNDS, SOURCE_PROJECT_BOUNDS, SourceError } from "./source";
 
 const program = (name = "fixture") => `program ${name}() -> text { budget { max_agent_calls: 0 } return "ok" }`;
@@ -258,5 +259,37 @@ test("source import depth is checked even when a shared dependency was loaded on
     await writeFile(join(directory, `d${SOURCE_PROJECT_BOUNDS.maxImportDepth}.algal`), program());
     await files(directory, { "root.algal": imports(["./d1.algal", "./detour.algal"]), "detour.algal": imports(["./d1.algal"]) });
     await expect(loadSourceProject(join(directory, "root.algal"))).rejects.toThrow(/depth/);
+  });
+});
+
+test("fixtures load beneath the canonical root with the import guards", async () => {
+  await temporary(async directory => {
+    await files(directory, {
+      "entry.algal": program(), "fixtures/a.args.json": '{"input":{}}', "b.json": "{}", "outside/secret.json": "{}",
+      "latin1.json": new Uint8Array([0x7b, 0xe9, 0x7d]), "large.json": `"${"x".repeat(100)}"`, "漢字/😀.json": "[]",
+    });
+    const root = await realpath(directory);
+    expect(await loadSourceFixtures(root, ["fixtures/a.args.json", "b.json", "漢字/😀.json"], 1_024)).toEqual({ "fixtures/a.args.json": '{"input":{}}', "b.json": "{}", "漢字/😀.json": "[]" });
+    const refused = async (keys: string[], limit = 1_024) => {
+      try { await loadSourceFixtures(root, keys, limit); } catch (error) { if (error instanceof AlgalError) return error; throw error; }
+      throw new Error(`accepted ${keys.join(", ")}`);
+    };
+    for (const key of ["../b.json", "/b.json", "fixtures//a.args.json", "./b.json", "a\\b.json", "C:b.json", "", "tab\t.json", `${String.fromCharCode(0xd800)}.json`]) {
+      expect((await refused([key])).message).toContain("normalized project-relative path");
+    }
+    await symlink(join(root, "outside"), join(root, "linked"));
+    expect((await refused(["linked/secret.json"])).message).toContain("symlink traversal");
+    await symlink(join(root, "b.json"), join(root, "alias.json"));
+    expect((await refused(["alias.json"])).message).toContain("symlink traversal");
+    expect((await refused(["fixtures"])).message).toContain("regular file");
+    expect((await refused(["latin1.json"])).message).toContain("not valid UTF-8");
+    expect((await refused(["large.json"], 64)).code).toBe("BUDGET_EXHAUSTED");
+    expect((await refused(["missing.json"])).code).toBe("IO_FAILED");
+    const mkfifo = Bun.which("mkfifo");
+    if (process.platform !== "win32" && mkfifo) {
+      const command = Bun.spawn([mkfifo, join(root, "pipe.json")], { stdout: "ignore", stderr: "pipe" });
+      expect(await command.exited).toBe(0);
+      expect((await refused(["pipe.json"])).message).toContain("regular file");
+    }
   });
 });
