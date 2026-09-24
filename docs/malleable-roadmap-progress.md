@@ -17,6 +17,12 @@ entirely inside the browser, with optional WebGPU inference. See
 [the browser workspace](browser-grow.md) for its deliberately bounded first
 application and separate persistence, offline, and inference claims.
 
+The next browser-local data application ports the existing task model to
+IndexedDB, with saved drafts and evaluated workflow/schema changes. Its
+acceptance test is preservation of user tasks through a category migration,
+reload, and further editing with networking disabled. The implementation and
+test record are tracked alongside [the task workspace guide](browser-tasks.md).
+
 ## Dependency and ownership graph
 
 1. **Contract convergence — implemented and reviewed.** Root owns shared contracts, this
