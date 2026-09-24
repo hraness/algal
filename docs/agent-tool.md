@@ -1,6 +1,6 @@
 # ALGAL as an agent tool
 
-A ALGAL organism is a content-addressed, replayable subroutine. Pack it once and any agent—OpenAI, Anthropic, a coding agent, or a shell script—can call it as a typed tool and receive a compact, verifiable result.
+An ALGAL organism is a content-addressed, replayable subroutine. Pack it once, and any caller can use it as a typed tool: an OpenAI or Anthropic model, a coding agent, or a shell script. The caller gets back a compact result it can verify.
 
 ## Why
 
@@ -90,7 +90,7 @@ output. The mode is explicit; JSON argument shapes are never guessed.
 
 ## Wiring into a coding agent
 
-A coding agent can use a ALGAL tool for any stable, repeatable, inspectable subproblem:
+A coding agent can use an ALGAL tool for any stable, repeatable, inspectable subproblem:
 
 - `summarize-diff` — read a git diff and classify intent (refactor, fix, feature).
 - `test-patch` — run the test command and return `pass`, `fail`, or `escalate`.

@@ -135,7 +135,7 @@ needed for verification.
 
 ```sh
 algal process export review --dir .algal > review.evidence.json
-# Copy just review.evidence.json to another machine with Algal installed:
+# Copy just review.evidence.json to another machine with ALGAL installed:
 algal process verify-evidence review.evidence.json
 
 # Demonstrate this with a crash-recovered repair and both runtimes:

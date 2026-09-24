@@ -1,10 +1,10 @@
 # Recover a retained coding outcome
 
 A provider can finish a repair even when its caller never receives the final response.
-Algal can recover that result only when an admitted adapter durably identifies the
+ALGAL can recover that result only when an admitted adapter durably identifies the
 operation and can retrieve its exact terminal outcome without launching again.
 The versioned coding-operation interface adds that explicit host path. Existing
-xcb jobs keep their original behavior; xcb's current Algal adapter does not
+xcb jobs keep their original behavior; xcb's current ALGAL adapter does not
 implement this protocol, and existing uncertain jobs cannot be adopted into it.
 
 ## Adapter requirements
