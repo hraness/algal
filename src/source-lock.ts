@@ -21,7 +21,7 @@ export const SOURCE_LOCK_BOUNDS = Object.freeze({
   maxDrift: 256,
   maxKeyLength: 512,
   maxTokenLength: 64,
-  /** Own-data snapshot limits for a supplied lock value; the largest legal lock is under 32 KiB. */
+  /** Own-data snapshot limits for a supplied lock value; the largest legal lock measured is under 40 KiB. */
   lock: Object.freeze({ maxBytes: 65_536, maxDepth: 8, maxNodes: 16_384, maxEntries: 2_048, maxStringBytes: 2_048 }),
 });
 export type SourceLockUnit = { readonly source: string; readonly sourceDigest: Digest; readonly manifestDigest: Digest };
@@ -57,10 +57,23 @@ const ABSENT = "(absent)";
 const TOKEN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const DRIFT_ORDER: readonly SourceLockDriftKind[] = ["entry", "compiler", "source", "unit", "root", "closure", "interface", "analysis"];
 
+/** Lone surrogates are not text; they would also cost six JSON bytes each. */
+function wellFormed(text: string): boolean {
+  for (let index = 0; index < text.length; index++) {
+    const unit = text.charCodeAt(index);
+    if (unit >= 0xdc00 && unit <= 0xdfff) return false;
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = text.charCodeAt(index + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
+      index++;
+    }
+  }
+  return true;
+}
 /** The compiler's normalized project-relative key rules, applied to lock data. */
 function sourceKey(value: unknown, what: string): string {
   const key = asString(value, what, SOURCE_LOCK_BOUNDS.maxKeyLength);
-  const invalid = !key.endsWith(".algal") || key.includes("\\") || key.includes(":")
+  const invalid = !key.endsWith(".algal") || key.includes("\\") || key.includes(":") || !wellFormed(key)
     || [...key].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)
     || key.split("/").some(part => !part || part === "." || part === "..");
   if (invalid) throw new AlgalError("PARSE_FAILED", `${what} must be a normalized project-relative .algal path`);
@@ -87,9 +100,12 @@ function lockFromReport(report: SourceDependencyReport): SourceLock {
   });
 }
 
-/** Compile a closed source project and pin its closure. Writes nothing. */
+/** Compile a closed source project and pin its closure. Writes nothing. A
+ * closure beyond the lock's own bound is refused here rather than at verification. */
 export async function createSourceLock(source: string, sourceOptions?: SourceCompilerOptions): Promise<SourceLock> {
-  return lockFromReport(await createSourceDependencyReport(source, sourceOptions === undefined ? {} : { sourceOptions }));
+  const lock = lockFromReport(await createSourceDependencyReport(source, sourceOptions === undefined ? {} : { sourceOptions }));
+  if (lock.modules.length > SOURCE_LOCK_BOUNDS.maxModules) throw new AlgalError("BUDGET_EXHAUSTED", `source lock: closure exceeds ${SOURCE_LOCK_BOUNDS.maxModules} modules`);
+  return lock;
 }
 
 /** Parse foreign lock data strictly: known keys only, bounded lists, key and
@@ -197,7 +213,9 @@ export async function verifySourceLock(source: string, sourceOptions: SourceComp
     const wanted = expectedUnits.get(key);
     const found = actualUnits.get(key);
     if (wanted === undefined || found === undefined || wanted.manifestDigest === found.manifestDigest) continue;
-    note("interface", key, expected.interfaces[wanted.manifestDigest] ?? ABSENT, actual.interfaces[found.manifestDigest] ?? ABSENT);
+    const pinned = Object.hasOwn(expected.interfaces, wanted.manifestDigest) ? expected.interfaces[wanted.manifestDigest]! : ABSENT;
+    const resolved = Object.hasOwn(actual.interfaces, found.manifestDigest) ? actual.interfaces[found.manifestDigest]! : ABSENT;
+    note("interface", key, pinned, resolved);
   }
   for (const digest of [expected.root, ...expected.modules]) {
     if (Object.hasOwn(actual.interfaces, digest)) note("interface", digest, expected.interfaces[digest]!, actual.interfaces[digest]!);

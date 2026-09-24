@@ -173,6 +173,8 @@ test("foreign lock data is rejected before comparison with the failing rule name
   expect(await code({ ...lock, modules: nested })).toBe("BUDGET_EXHAUSTED");
   expect(await code({ ...lock, modules: new Array<null>(70_000).fill(null) })).toBe("BUDGET_EXHAUSTED");
   expect(SOURCE_LOCK_BOUNDS.maxUnits).toBe(16);
+  expect(SOURCE_LOCK_BOUNDS.maxModules).toBe(60);
+  expect(await code({ ...lock, entry: `${String.fromCharCode(0xd800).repeat(3)}.algal` })).toBe("PARSE_FAILED");
   expect(Object.isFrozen(SOURCE_LOCK_BOUNDS.lock)).toBe(true);
   const typed: SourceLock = parseSourceLock(lock);
   expect(typed.units).toHaveLength(6);

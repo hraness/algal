@@ -481,7 +481,7 @@ a renamed parameter shows interface drift for that file, and a different
 compiler version string shows as compiler drift. The drift bound is above the
 largest possible list, so nothing is cut off. File keys are relative to the
 source root, so verify with the same `--source-root` used to write the lock.
-Lock data is copied under its own limits (16 units, 64 modules, 64 KiB) and
+Lock data is copied under its own limits (16 units, 60 modules, 64 KiB) and
 parsed strictly before comparison; the lock digest covers the parsed
 canonical JSON, not the file bytes. The lock does not fetch, install, or
 upgrade anything; remote catalogs and evaluation-suite pinning are not part
