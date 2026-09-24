@@ -1,20 +1,24 @@
 # ALGAL
 
-ALGAL is a programming language and application VM for bounded agent programs. Programs ("organisms") are typed, content-addressed data: they wait without dying, remember across runs, propose their own successors, and leave a verifiable fossil of every execution. Model judgment is a declared, budgeted effect; everything around it is pure dataflow. A native Rust kernel and a TypeScript/Bun reference runtime execute the same manifest, and a saved run can hand off between them.
+{{SITE_DESCRIPTION}}
+
+An ALGAL program, called an organism, is typed, content-addressed data with declared limits. It can wait for an approval and resume in a new process, keep state between runs, propose new programs for the host to test, and leave a receipt that replays offline. Model judgment lives in typed cells that declare their context, output shape, and budget; everything around them is pure dataflow. A native Rust kernel and a TypeScript reference runtime on Bun execute the same manifest, and a saved run can pause in one runtime and resume in the other.
+
+ALGAL is prerelease software. Unsigned native builds for macOS on Apple silicon and Linux x86_64 are published as GitHub prereleases.
 
 ## Pages
 
-- [The language for living programs](https://algal.computer/): vision, organism anatomy, the habitat machine, fossils, reproduction and selection
-- [Inside a living program — tour](https://algal.computer/tour/): executable walkthrough with recorded runs, replayable interactive diagrams, diagnostics, and composition examples
-- [Put living programs to work](https://algal.computer/use-cases/): durable review, checked coding repair, portable execution evidence, reusable routing, and the adoption boundary
-- [Documentation index](https://algal.computer/docs/): the repository docs mirrored — install, source language, process VM, habitats, civilization, executors
-- [Blog — notes on living programs](https://algal.computer/blog/): deep dives into the language, the evidence model, and the research landscape
-- [Comparisons](https://algal.computer/compare/): honest positioning against LangGraph, DSPy, and Temporal
+- [The language for living programs](https://algal.computer/): what an ALGAL program can do, the source language, the habitat it runs in, receipts, and how programs propose new programs
+- [Inside a living program](https://algal.computer/tour/): the guided tour, with recorded runs, interactive diagrams you can replay, source diagnostics, and composition examples
+- [Put living programs to work](https://algal.computer/use-cases/): change review, checked coding repairs, portable run histories, reusable routing, and current limits
+- [Documentation index](https://algal.computer/docs/): the repository docs rendered for the web, covering install, the source language, the process VM, habitats, civilization, and executors
+- [Notes on living programs](https://algal.computer/blog/): longer posts on the language, its receipts, and related research
+- [Comparisons](https://algal.computer/compare/): how ALGAL compares with LangGraph, DSPy, and Temporal
 
 ## Blog
 
-- [Self-evolving software needs a selection boundary](https://algal.computer/blog/self-evolving-software-selection-boundary/): Darwin-Gödel Machine, Voyager, AlphaEvolve, TextGrad, DSPy — and why ALGAL makes selection a contract
-- [Receipts are the fossil record of an execution](https://algal.computer/blog/receipts-fossil-record/): replay-verified run artifacts versus logs, traces, and server-side history
+- [Self-evolving software needs a selection boundary](https://algal.computer/blog/self-evolving-software-selection-boundary/): Darwin Gödel Machine, Voyager, AlphaEvolve, TextGrad, and DSPy, and why ALGAL makes selection part of the program contract
+- [Receipts are the fossil record of an execution](https://algal.computer/blog/receipts-fossil-record/): replay-verified run artifacts compared with logs, traces, and server-side history
 - [A program that can wait](https://algal.computer/blog/programs-that-wait/): durable waits as checkpointed capabilities, resumable across processes and runtimes
 
 ## Comparisons
@@ -23,13 +27,13 @@ ALGAL is a programming language and application VM for bounded agent programs. P
 - [ALGAL vs DSPy](https://algal.computer/compare/dspy/): prompt-space optimization inside a fixed pipeline versus measured search over program structure
 - [ALGAL vs Temporal](https://algal.computer/compare/temporal/): durable execution service versus portable, verifiable program artifacts
 
-## Downloadable evidence
+## Downloadable examples and receipts
 
 - [Reply program source](https://algal.computer/examples/reply.algal)
 - [Reply compiled manifest](https://algal.computer/examples/reply.algal.json)
 - [Reply recorded receipt](https://algal.computer/receipts/reply.receipt.json)
 - [Reply diagram JSON](https://algal.computer/diagrams/reply.json)
-- [Reply interactive view](https://algal.computer/diagrams/reply-run.view.json): `algal.diagram-view.v1` — diagram + layout + recorded event order
+- [Reply interactive view](https://algal.computer/diagrams/reply-run.view.json): an `algal.diagram-view.v1` document with the diagram, its layout, and the recorded event order
 - [Routing program source](https://algal.computer/examples/route.algal)
 - [Routing manifest](https://algal.computer/examples/route.algal.json)
 - [Recorded support receipt](https://algal.computer/receipts/route-help.receipt.json)
@@ -47,7 +51,7 @@ ALGAL is a programming language and application VM for bounded agent programs. P
 
 ## Documentation
 
-All documentation below is mirrored from the repository's `docs/` and `spec/v1/` markdown — the same files, rendered for the web. Working notes and pilot data stay in the repo.
+The documentation below renders the repository's own `docs/` and `spec/v1/` Markdown files. Dated reviews, pilot results, and research notes stay in the repository.
 
 - [Repository](https://github.com/hraness/algal)
 - [Native VM and release artifacts](https://algal.computer/docs/native-release/)
@@ -66,8 +70,8 @@ All documentation below is mirrored from the repository's `docs/` and `spec/v1/`
 - [Foundry spec](https://algal.computer/docs/spec/foundry/)
 - [Process spec](https://algal.computer/docs/spec/process/)
 
-## Honesty notes
+## Limits
 
-- Site demos use scripted executor answers; every published run is a real replay-verified receipt.
-- Receipts prove execution consistency, not model truth or provider attestation.
-- Organisms can propose successor manifests as data; admission, measurement, and selection stay host-owned.
+- Site examples use scripted model answers. Every run published on the site has a receipt that was replay-checked when the site was built.
+- A receipt that verifies shows the run was internally consistent. It does not show that a model's answer is true or that a provider performed an operation.
+- Programs can propose new programs as data. The host decides which ones are checked, measured, and kept.

@@ -174,13 +174,13 @@ checks one witness; it is not a history store.
 The authority must durably bind an operation key to its request before admitting
 work. Repeated submission of that key and binding must not launch another worker;
 a different binding must fail. This is an adapter obligation, independently of
-Algal's stricter submit-once host behavior. Acceptance keys and terminal identity
+ALGAL's stricter submit-once host behavior. Acceptance keys and terminal identity
 must survive restart and payload expiry. An authority that cannot retain them
 must refuse new admissions rather than forget live deduplication keys.
 
 This protocol has no recovery mutation, cancellation command, session search,
 namespace reset, or definitive never-started operation. An ordinary lookup miss
 cannot close a delayed submission. Adapters must not translate `observe` into
-submit, resume, retry, cancel or custody release. Algal cannot enforce these
+submit, resume, retry, cancel or custody release. ALGAL cannot enforce these
 semantics inside an arbitrary executable; adapter qualification and host custody
 remain required before operational use.

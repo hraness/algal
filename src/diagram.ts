@@ -550,7 +550,7 @@ export function renderSvg(view: ProgramDiagram, options: SvgDiagramOptions = {})
   const prefix = `algal-${view.manifestDigest.slice(7, 19)}${view.scope ? `-${digestCanonical({ root: view.scope.rootManifestDigest, path: view.scope.invocationPath }).slice(7, 19)}` : ""}`;
   const out = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="${prefix}-title ${prefix}-desc">`,
-    `<title id="${prefix}-title">${xml(view.name)} — Algal program</title>`,
+    `<title id="${prefix}-title">${xml(view.name)} · ALGAL program</title>`,
     `<desc id="${prefix}-desc">Exact data dependencies of ${xml(view.key)}. ${view.nodes.length} cells and ${view.edges.length} edges. Arrows carry named values; layout does not imply time or parallel execution. Dashed arrows carry failure records. ${view.receipt ? "Statuses are from a digest-bound root receipt, not replay-verified here. Missing statuses are unobserved." : "No execution status is implied."}${scopeLines.length ? ` ${xml(scopeLines.join(". "))}` : ""}</desc>`,
     `<defs><marker id="${prefix}-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/></marker></defs>`,
     `<rect width="${width}" height="${height}" rx="16" fill="#ffffff"/>`,

@@ -22,6 +22,7 @@ import { verifyReceipt } from "../src/verify";
 import { renderIconSprite, siteIcon } from "./icons";
 import { buildSiteStyles } from "./assets";
 import { pageDocument, type SitePageMeta } from "./chrome";
+import { ADOPTION_BOUNDARY, SITE_DESCRIPTION, SITE_TAGLINE } from "./copy";
 import { renderMarkdown, type LinkRewriter, type RenderedDoc } from "./markdown";
 import { buildSurfaceFixture } from "../examples/malleable-site/host";
 import { buildWorkbenchFixture } from "../examples/malleable-site/workbench-fixture";
@@ -234,7 +235,7 @@ const routePanels = routeRuns.map(run => `
         </div>
         <figure class="route-figure">
           <figcaption><span class="run-state">Committed</span><span class="run-state skipped">Skipped</span><a href="/diagrams/route-${run.choice}.svg" target="_blank" rel="noopener">Expand all cells ${siteIcon("arrow-up-right")}</a></figcaption>
-          <div class="diagram-frame" data-diagram-view="/diagrams/route-${run.choice}.view.json"><div class="route-diagram-scroll" tabindex="0" role="region" aria-label="${run.title} execution graph, scroll horizontally on small screens"><img src="/diagrams/route-${run.choice}.svg" alt="Source-derived routing graph for the recorded ${run.choice} decision. ${run.receipt.work.agentCalls} executor attempts completed; ${run.skipped} inactive draft ${run.skipped === 1 ? "branch was" : "branches were"} skipped. All exact cells remain visible." width="1200" height="1050" loading="lazy"></div></div>
+          <div class="diagram-frame" data-diagram-view="/diagrams/route-${run.choice}.view.json"><div class="route-diagram-scroll" tabindex="0" role="region" aria-label="${run.title} execution graph, scroll horizontally on small screens"><img src="/diagrams/route-${run.choice}.svg" alt="Source-derived routing graph for the recorded ${run.choice} decision. ${run.receipt.work.agentCalls} executor ${run.receipt.work.agentCalls === 1 ? "attempt" : "attempts"} completed; ${run.skipped} inactive draft ${run.skipped === 1 ? "branch was" : "branches were"} skipped. All exact cells remain visible." width="1200" height="1050" loading="lazy"></div></div>
         </figure>
         <div class="route-receipt"><span>Receipt ${escapeHtml(run.receipt.digest)}</span><a href="/receipts/route-${run.choice}.receipt.json" download>Download receipt ${siteIcon("download")}</a><a href="/examples/route.responses.${run.choice}.json" download>Scripted answers ${siteIcon("download")}</a></div>
       </article>`).join("\n");
@@ -401,9 +402,9 @@ const routeHelp = routeRuns.find(run => run.choice === "help")!;
 
 const heroExamples: HeroExample[] = [
   {
-    key: "route", file: "route.algal", blurb: "one decision fans into three replies",
+    key: "route", file: "route.algal", blurb: "one decision picks one of three branches",
     graphTitle: "route.algal · recorded run", graphSrc: "/diagrams/route-help.svg", graphView: "/diagrams/route-help.view.json", objectPosition: "50% 0%",
-    graphAlt: "Program graph of the route organism: an email input flows into a decide cell, a pure check, then a match with three arms — help, sales, and human review — overlaid with the states of one recorded run.",
+    graphAlt: "Program graph of the route organism: an email input flows into a decide cell, a pure check, then a match with three arms (help, sales, and human review), overlaid with the states of one recorded run.",
     sourceHref: "/examples/route.algal", evidenceHref: "/receipts/route-help.receipt.json",
     codeName: "route.algal", codeHtml: highlightSource(routeSource.trimEnd()),
     ...heroReceiptCard(routeHelp.receipt),
@@ -412,14 +413,14 @@ const heroExamples: HeroExample[] = [
   {
     key: "reply", file: "reply.algal", blurb: "classify the email, then draft",
     graphTitle: "reply.algal · recorded run", graphSrc: "/diagrams/reply-run.svg", graphView: "/diagrams/reply-run.view.json", objectPosition: "50% 0%",
-    graphAlt: "Program graph of the reply organism: an email input flows into a typed decide cell, a pure check, then generation — overlaid with the states of one recorded run.",
+    graphAlt: "Program graph of the reply organism: an email input flows into a typed decide cell, a pure check, then generation, overlaid with the states of one recorded run.",
     sourceHref: "/examples/reply.algal", evidenceHref: "/receipts/reply.receipt.json",
     codeName: "reply.algal", codeHtml: highlightSource(replySource.trimEnd()),
     ...heroReceiptCard(replyReceipt),
     chip: heroChip(replyReceipt),
   },
   {
-    key: "inbox", file: "inbox.algal", blurb: "organisms compose — call and each",
+    key: "inbox", file: "inbox.algal", blurb: "reuse one helper across an inbox",
     graphTitle: "inbox.algal · program graph", graphSrc: "/diagrams/inbox.svg", graphView: "/diagrams/inbox.view.json", objectPosition: "0% 0%",
     graphAlt: "Program graph of the inbox organism: inputs feed a call to the draft organism and an each cell that maps drafts over a list, both merging into the result.",
     sourceHref: "/examples/projects/inbox/inbox.algal", evidenceHref: "/receipts/inbox.receipt.json",
@@ -430,7 +431,7 @@ const heroExamples: HeroExample[] = [
   {
     key: "habitat", file: "habitat.algal.json", blurb: "a program emits a program",
     graphTitle: "habitat · spawn, recorded", graphSrc: "/diagrams/habitat.svg", graphView: "/diagrams/habitat.view.json", objectPosition: "50% 0%",
-    graphAlt: "Program graph of the habitat organism: a goal flows into a planner, a spawn cell that admits a child manifest, and the result — overlaid with the states of one recorded run.",
+    graphAlt: "Program graph of the habitat organism: a goal flows into a planner, a spawn cell that checks and runs a child manifest, and the result, overlaid with the states of one recorded run.",
     sourceHref: "/examples/habitat.algal.json", evidenceHref: "/receipts/habitat.receipt.json",
     codeName: "habitat.algal.json · the program, as data", codeHtml: escapeHtml(habitatManifestExcerpt),
     ...heroReceiptCard(habitatReceipt),
@@ -481,6 +482,7 @@ const replacements: Record<string, string> = {
   AUTHORING_ERROR: escapeHtml(renderSourceError(authoringReport)),
   ROUTE_SOURCE: highlightSource(routeSource.trimEnd()),
   ROUTE_PANELS: routePanels,
+  ADOPTION_BOUNDARY,
   REFINE_ROUNDS: String(refine.maxRounds),
   SWARM_ITEMS: String(swarm.maxItems),
 };
@@ -500,48 +502,44 @@ const pages: { file: string; out: string; meta: SitePageMeta }[] = [
     ogTitle: "Small changes. Living software. — ALGAL", ogAlt: "A growing component with local signals and a continuous history",
   } },
   { file: "pages/workbench.html", out: "workbench/index.html", meta: {
-    page: "workbench", path: "/workbench/", title: "Why this? — ALGAL workbench",
+    page: "workbench", path: "/workbench/", title: "Why this? · ALGAL workbench",
     description: "Follow a running ALGAL component to its revision, signals, history and execution evidence.",
-    ogTitle: "Why this? — ALGAL workbench", ogAlt: "A component and its captured explanation",
+    ogTitle: "Why this? · ALGAL workbench",
   } },
   {
     file: "pages/living.html", out: "living/index.html",
     meta: {
       page: "living", path: "/living/",
-      title: "Software you can reshape — ALGAL",
+      title: "Software you can reshape · ALGAL",
       description: "Edit a living marketing component, explore its signals, and preview a new revision. The same ALGAL expression program drives its content in the browser and native runtime.",
-      ogTitle: "Software you can reshape — ALGAL",
-      ogAlt: "A living ALGAL component with an inspector and revision history",
+      ogTitle: "Software you can reshape · ALGAL",
     },
   },
   {
     file: "pages/home.html", out: "index.html",
     meta: {
       page: "home", path: "/",
-      title: "ALGAL — the language for living programs",
-      description: "A programming language and virtual machine where programs are organisms: typed, bounded, content-addressed. They wait, remember, reproduce, and leave a verifiable fossil of every run.",
-      ogTitle: "ALGAL — the language for living programs",
-      ogAlt: "ALGAL — the language for living programs",
+      title: `ALGAL · ${SITE_TAGLINE.replace(/\.$/, "")}`,
+      description: SITE_DESCRIPTION,
+      ogTitle: `ALGAL · ${SITE_TAGLINE.replace(/\.$/, "")}`,
     },
   },
   {
     file: "pages/tour.html", out: "tour/index.html",
     meta: {
       page: "tour", path: "/tour/",
-      title: "Inside a living program — ALGAL tour",
-      description: "A guided tour of ALGAL organisms: real compiled source, recorded executions, replayable receipts, and generated diagrams — all produced and verified during the site build.",
-      ogTitle: "Inside a living program — ALGAL tour",
-      ogAlt: "Inside a living program — the ALGAL tour",
+      title: "Inside a living program · ALGAL tour",
+      description: "Explore ALGAL programs from the repository as interactive diagrams, with recorded runs that the site build replay-checked. Their model answers are scripted.",
+      ogTitle: "Inside a living program · ALGAL tour",
     },
   },
   {
     file: "pages/use-cases.html", out: "use-cases/index.html",
     meta: {
       page: "use-cases", path: "/use-cases/",
-      title: "Put living programs to work — ALGAL use cases",
-      description: "Use ALGAL when the work around a model matters: durable human review, checked coding repairs, portable execution evidence, and reusable routing programs.",
-      ogTitle: "Put living programs to work — ALGAL",
-      ogAlt: "Put living programs to work — ALGAL use cases",
+      title: "Put living programs to work · ALGAL use cases",
+      description: "Use ALGAL when a model's work must wait for your approval, survive a restart without redoing finished work, or leave a history others can verify offline.",
+      ogTitle: "Put living programs to work · ALGAL use cases",
     },
   },
 ];
@@ -632,9 +630,13 @@ if (await recordedProposal.exists()) {
 const modelEvidencePath = join(ROOT, "examples/malleable-site/model-evidence.json");
 if (await Bun.file(modelEvidencePath).exists()) await cp(modelEvidencePath, join(DIST, "living/model-evidence.json"));
 await cp(join(ROOT, "examples/malleable-site/model-cost-evidence.json"), join(DIST, "workbench/model-cost-evidence.json"));
-for (const f of ["robots.txt", "llms.txt", "og.png", "favicon.svg", "algal-mark.svg"]) {
+for (const f of ["robots.txt", "og.png", "favicon.svg", "algal-mark.svg"]) {
   await cp(join(SITE, f), join(DIST, f));
 }
+// llms.txt leads with the same description as the home page metadata.
+const llms = (await readFile(join(SITE, "llms.txt"), "utf8")).replaceAll("{{SITE_DESCRIPTION}}", SITE_DESCRIPTION);
+if (/\{\{[A-Z_]+\}\}/.test(llms)) throw new Error("Unresolved site build placeholder in llms.txt");
+await writeFile(join(DIST, "llms.txt"), llms);
 // Shared presentation and iconography are build-time dependencies only. The
 // shipped site has self-hosted fonts/assets; the CLI gains no browser runtime.
 const styles = await buildSiteStyles(DIST);
@@ -773,22 +775,26 @@ const emitDocPage = async (meta: SitePageMeta, body: string) => {
 };
 
 const docsSource = (kind: "docs" | "spec", slug: string) =>
-  `<footer class="docs-source"><p>Mirrored from <a href="${GITHUB_BLOB(kind === "docs" ? `docs/${slug}.md` : `spec/v1/${slug}.md`)}">${kind === "docs" ? `docs/${slug}.md` : `spec/v1/${slug}.md`}</a> — the repository copy is the source of truth.</p></footer>`;
+  `<footer class="docs-source"><p>Mirrored from <a href="${GITHUB_BLOB(kind === "docs" ? `docs/${slug}.md` : `spec/v1/${slug}.md`)}">${kind === "docs" ? `docs/${slug}.md` : `spec/v1/${slug}.md`}</a>. The repository copy is the source of truth.</p></footer>`;
+
+/** Page title for a mirrored file: name the brand once. */
+const mirroredTitle = (title: string, section: "docs" | "spec") =>
+  /\bALGAL\b/.test(title) ? `${title} · ${section === "docs" ? "Docs" : "Spec"}` : `${title} · ALGAL ${section}`;
 
 for (const [slug, doc] of docRenderers) {
   await emitDocPage({
     page: "docs", path: `/docs/${slug}/`,
-    title: `${doc.title} — ALGAL docs`,
-    description: doc.description || `${doc.title} — ALGAL documentation`,
-    ogTitle: doc.title, ogAlt: `${doc.title} — ALGAL documentation`,
+    title: mirroredTitle(doc.title, "docs"),
+    description: doc.description || `${doc.title}, from the ALGAL documentation.`,
+    ogTitle: doc.title,
   }, `<div class="docs-layout">${docsRail(slug, docTitles)}<article class="docs-article prose">${doc.html}${docsSource("docs", slug)}</article></div>`);
 }
 for (const [slug, doc] of specRenderers) {
   await emitDocPage({
     page: "spec", path: `/docs/spec/${slug}/`,
-    title: `${doc.title} — ALGAL spec`,
-    description: doc.description || `${doc.title} — ALGAL contract specification`,
-    ogTitle: `${doc.title} — ALGAL spec`, ogAlt: `${doc.title} — ALGAL contract specification`,
+    title: mirroredTitle(doc.title, "spec"),
+    description: doc.description || `${doc.title}, from the ALGAL contract specification.`,
+    ogTitle: mirroredTitle(doc.title, "spec"),
   }, `<div class="docs-layout">${docsRail(`spec/${slug}`, docTitles)}<article class="docs-article prose docs-spec">${doc.html}${docsSource("spec", slug)}</article></div>`);
 }
 
@@ -804,9 +810,9 @@ const indexSpec = `<section class="docs-index-group"><h2>Specification</h2><ul c
 await emitDocPage({
   page: "docs", path: "/docs/",
   title: "ALGAL documentation",
-  description: "The ALGAL documentation, mirrored from the repository: install, the source language, the process VM, habitats, executors, and the v1 contract specification.",
-  ogTitle: "ALGAL documentation", ogAlt: "The ALGAL documentation",
-}, `<section class="page-intro"><p class="eyebrow">Documentation</p><h1>The reference shelf.</h1><p class="lede">Every page here renders the same markdown maintainers read in the repository — one source, two doors. Working notes and pilot data stay in the repo.</p></section><div class="docs-layout">${docsRail("index", docTitles)}<div class="docs-article docs-index"><div class="docs-index-groups">${indexGroups}${indexSpec}</div></div></div>`);
+  description: "Install and run the ALGAL VM, write programs in .algal source, and read the v1 contract specification. These pages render the repository's own Markdown.",
+  ogTitle: "ALGAL documentation",
+}, `<section class="page-intro"><p class="eyebrow">Documentation</p><h1>The reference shelf.</h1><p class="lede">These pages render the same Markdown files kept in the repository's <code>docs/</code> and <code>spec/v1/</code> folders. Dated reviews, pilot results, and research notes stay in the repository.</p></section><div class="docs-layout">${docsRail("index", docTitles)}<div class="docs-article docs-index"><div class="docs-index-groups">${indexGroups}${indexSpec}</div></div></div>`);
 
 // --- Authored content: blog posts and comparison pages ---------------------
 // Same renderer as the docs mirror, but these pages are site-native: they
@@ -832,7 +838,7 @@ async function emitMarkdownSection(options: {
   page: "blog" | "compare";
   railTitle: string;
   indexIntro: { eyebrow: string; heading: string; lede: string };
-  indexMeta: { title: string; description: string; ogTitle: string; ogAlt: string };
+  indexMeta: { title: string; description: string; ogTitle: string };
   sortBy: "date" | "order";
 }) {
   const files = (await readdir(join(SITE, options.dir))).filter(file => file.endsWith(".md")).sort();
@@ -854,9 +860,9 @@ async function emitMarkdownSection(options: {
     const dateBlock = entry.meta.date ? `<p class="post-meta"><time datetime="${entry.meta.date}">${entry.meta.date}</time></p>` : "";
     await emitDocPage({
       page: options.page, path: `/${options.dir}/${entry.slug}/`,
-      title: `${entry.doc.title} — ALGAL`,
+      title: /\bALGAL\b/.test(entry.doc.title) ? entry.doc.title : `${entry.doc.title} · ALGAL`,
       description: entry.meta.description ?? entry.doc.description,
-      ogTitle: entry.doc.title, ogAlt: entry.doc.title,
+      ogTitle: entry.doc.title,
       ...(options.dir === "blog" && entry.meta.date ? { article: { published: entry.meta.date } } : {}),
     }, `<div class="docs-layout">${rail(entry.slug)}<article class="docs-article prose">${dateBlock}${entry.doc.html}</article></div>`);
     contentSectionUrls.push(`/${options.dir}/${entry.slug}/`);
@@ -867,20 +873,20 @@ async function emitMarkdownSection(options: {
   await emitDocPage({
     page: options.page, path: `/${options.dir}/`,
     title: options.indexMeta.title, description: options.indexMeta.description,
-    ogTitle: options.indexMeta.ogTitle, ogAlt: options.indexMeta.ogAlt,
+    ogTitle: options.indexMeta.ogTitle,
   }, `<section class="page-intro"><p class="eyebrow">${options.indexIntro.eyebrow}</p><h1>${options.indexIntro.heading}</h1><p class="lede">${options.indexIntro.lede}</p></section><div class="docs-layout">${rail("index")}<div class="docs-article docs-index"><ul class="docs-list docs-list-wide">${cards}</ul></div></div>`);
   contentSectionUrls.push(`/${options.dir}/`);
 }
 
 await emitMarkdownSection({
   dir: "compare", page: "compare", railTitle: "Comparisons", sortBy: "order",
-  indexIntro: { eyebrow: "Comparisons", heading: "Same questions, different machinery.", lede: "ALGAL shares surface area with agent frameworks and durable-execution engines — and is a different object underneath. These pages are honest about where the line sits." },
-  indexMeta: { title: "Compare ALGAL — agent frameworks, optimizers, durable execution", description: "How ALGAL — a language and VM where programs are typed, content-addressed data — compares to LangGraph, DSPy, and Temporal.", ogTitle: "Compare ALGAL", ogAlt: "ALGAL comparisons" },
+  indexIntro: { eyebrow: "Comparisons", heading: "Same questions, different machinery.", lede: "LangGraph, DSPy, and Temporal solve problems that overlap with ALGAL's. Each page shows where they differ and when each tool is the better fit." },
+  indexMeta: { title: "Compare ALGAL with agent frameworks, optimizers, and durable execution", description: "How ALGAL, a language and VM whose programs are typed, content-addressed data, compares with LangGraph, DSPy, and Temporal, and when each is the better fit.", ogTitle: "Compare ALGAL" },
 });
 await emitMarkdownSection({
   dir: "blog", page: "blog", railTitle: "Posts", sortBy: "date",
-  indexIntro: { eyebrow: "Blog", heading: "Notes on living programs.", lede: "Deep dives into what ALGAL is, the research it sits next to, and why the machinery is shaped the way it is." },
-  indexMeta: { title: "ALGAL blog — notes on living programs", description: "Deep dives into the ALGAL language and VM: self-evolving software, replay-verified receipts, durable waits, and the research landscape around them.", ogTitle: "ALGAL blog", ogAlt: "Notes on living programs" },
+  indexIntro: { eyebrow: "Blog", heading: "Notes on living programs.", lede: "Longer posts on how ALGAL works, the research it builds on, and the design choices behind it." },
+  indexMeta: { title: "Notes on living programs · ALGAL blog", description: "Posts on how the ALGAL language and VM work: self-evolving software, receipts that replay offline, and programs that wait for a person or an event.", ogTitle: "ALGAL blog" },
 });
 
 // Generated sitemap covers every emitted page.

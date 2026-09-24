@@ -1,4 +1,4 @@
-# Readable Algal source
+# Readable ALGAL source
 
 The Bun CLI and SDK compile `.algal` source into the existing
 `algal.organism.v1` manifest. Compilation makes no model calls, executes no
