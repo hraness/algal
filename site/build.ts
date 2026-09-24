@@ -451,7 +451,7 @@ const HERO_STAGE = `<div class="hero-stage" data-hero-stage>${heroExamples.map((
     </figure>
     <figure class="hs-card hs-code">
       <figcaption class="hs-bar"><span class="file-label">${example.codeName}</span></figcaption>
-      <pre class="hs-pre">${example.codeHtml}</pre>
+      <pre class="hs-pre" aria-hidden="true">${example.codeHtml}</pre>
     </figure>
     <figure class="hs-card hs-evidence">
       <figcaption class="hs-bar"><span class="file-label">${example.evidenceLabel}</span></figcaption>
