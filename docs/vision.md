@@ -256,3 +256,8 @@ concrete comparison with neighboring systems. The
 [habitats](habitats.md), [civilization](civilization.md), and
 [programmable applications](programmable-applications.md) pages describe the
 mechanisms that exist today and what each one has and has not shown.
+
+[The thread through hraness](https://hraness.com/writing/the-thread-through-hraness),
+an essay on hraness.com, places this bet among the other Hraness projects,
+which share the same commitments to owned material, recorded work, and
+explicit permission.

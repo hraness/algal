@@ -9,6 +9,8 @@ wire constant (`0.1.0`) is independent of these package versions.
 
 ## Unreleased
 
+- Docs: `docs/vision.md` links to the Hraness essay “The thread through
+  hraness”, which places ALGAL among the other Hraness projects.
 - Docs: `docs/vision.md` states the project thesis (software that
   accumulates competence), the four design properties that make it testable,
   and the cumulative-skill experiment that would justify it; `docs/lineage.md`
