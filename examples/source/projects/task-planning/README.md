@@ -12,6 +12,7 @@ policies, not measured productivity improvements.
 | `choose_action.algal` | Choose a recommendation from status and score. |
 | `present_task.algal` | Produce display data without reading storage or rendering HTML. |
 | `lib/clamp.algal` | Constrain a numeric value to caller-supplied, ordered numeric bounds. |
+| `inspect_task.algal` | Second entry: explain one task's score against a readiness threshold, reusing the scoring program and the clamp helper directly. |
 
 The score program calls the same clamp helper twice. Compilation includes one
 copy of that helper in the portable dependency set. Both calls still execute
@@ -28,7 +29,31 @@ bun cli.ts run examples/source/projects/task-planning/main.algal \
 bun cli.ts verify task-plan.receipt.json examples/source/projects/task-planning/main.algal
 bun cli.ts compile examples/source/projects/task-planning/main.algal \
   --out task-plan.algal.json --bundle-out task-plan.bundle.json
+bun cli.ts dependencies examples/source/projects/task-planning/main.algal \
+  --bundle task-plan.bundle.json --format text
 ```
+
+The dependency report lists 6 source files, 6 modules (5 dependencies),
+7 occurrences, and 6 composition edges with a maximum depth of 3. Both clamp
+occurrences name `lib/clamp.algal` and the same executable digest under
+distinct caller paths. With `--bundle`, it also checks that the packed
+artifact carries exactly that closure.
+
+The second entry runs the same way:
+
+```sh
+bun cli.ts run examples/source/projects/task-planning/inspect_task.algal \
+  --args examples/source/projects/task-planning/inspect_task.args.json
+bun cli.ts dependencies examples/source/projects/task-planning/inspect_task.algal --format text
+```
+
+Its fixture scores the `polish` task at `4` against a threshold of `10`,
+leaving a gap of `6` and `ready: false`. The report for this entry lists
+3 source files, 3 modules, and 5 occurrences: the clamp helper appears twice
+through scoring and once directly. Both entries pin the same executable
+digests for `score_task.algal` and `lib/clamp.algal`, which is what makes the
+helper a demonstrated shared program rather than a copy. A non-numeric
+threshold or a task without `urgency` fails at runtime; the tests cover both.
 
 The three supplied tasks produce scores `13`, `4`, and `15`, and recommendations
 `work next`, `review later`, and `archive`. The original task records remain in

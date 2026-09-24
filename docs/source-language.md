@@ -386,6 +386,57 @@ still runs with its original behavior. It uses no model or tool calls.
 See [building larger programs](scaling-programs.md) for module boundaries,
 library design, application evaluation, and the current project limits.
 
+### Inspect project dependencies
+
+`dependencies` reports a project's static structure without running it:
+
+```sh
+bun cli.ts dependencies examples/source/projects/task-planning/main.algal --format text
+bun cli.ts compile examples/source/projects/task-planning/main.algal \
+  --bundle-out task-plan.bundle.json
+bun cli.ts dependencies examples/source/projects/task-planning/main.algal \
+  --bundle task-plan.bundle.json
+# Default output is JSON; --out writes an independent report artifact.
+```
+
+The `algal.source-dependencies.v1` report keeps three lists separate. Source
+files are the imported files, each with its source digest, executable digest,
+and whether the entry reaches it through a call. Modules are the distinct
+executable digests in the entry's static closure, including the entry, with
+the resolved interface, declared budgets, and the model-effect kinds each one
+declares directly or through its children. Occurrences are the expanded static
+calls, including the entry, each with a path of composition cell IDs and the
+caller's file, line, and column. A helper called twice is one module and two
+occurrences. An `each` child is one occurrence with its item limit recorded.
+Generated control wrappers appear as modules and occurrences marked generated.
+The task planner reports 6 source files, 6 modules (5 dependencies),
+7 occurrences, 6 composition edges, and a maximum depth of 3.
+
+The report describes possible structure, not observed execution, permission,
+availability, or cost. It contains file names, cell IDs, spans, interface
+names, budgets, and digests. It omits source text, prompts, literals,
+comments, and compiler annotations. With `--bundle`, the artifact must carry
+the recompiled root and every reachable child under matching digests. A
+missing or altered child fails the check instead of being filled in from
+source; valid extra entries are counted as unreachable. A report is limited to
+8 MiB, bundle input to 64 MiB, and the expanded occurrence count to the
+compiler's 1,024-instance limit.
+
+```ts
+const project = await loadSourceProject(entryPath);
+const report = await createSourceDependencyReport(project.source, { sourceOptions: project.compilerOptions });
+console.log(renderSourceDependencies(report));
+```
+
+Only a report built by `createSourceDependencyReport` can be rendered. A
+serialized or edited copy is data, not compiler evidence.
+
+The same project's second entry, `inspect_task.algal`, reuses the scoring and
+clamp programs. Its report lists 3 source files and 5 occurrences, and its
+`score_task` and `clamp` modules carry the same digests as the planner's, so
+reuse across entries is visible as shared executable identity rather than as
+a copied file.
+
 ## Budgets and compiler bounds
 
 `max_agent_calls` must be explicitly declared, including zero for pure work.

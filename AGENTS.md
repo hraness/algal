@@ -20,7 +20,7 @@
   `scripts/build-expr-wasm.sh` rebuilds `src/algal_expr.wasm` (needs a
   rustup toolchain with the wasm target; pins `RUSTC` past Homebrew).
 - `cli.ts` — the Bun CLI (`run`, `check`, `verify`, `resume`, `inspect`,
-  `explain`, `diff`, `foundry`, `bench`, `runs`, `digest`, `store`,
+  `explain`, `dependencies`, `diff`, `foundry`, `bench`, `runs`, `digest`, `store`,
   `manifests`, `manifest`, `slots`, `slot`, `mailbox`, `process`, `pack`, `unpack`,
   `application` drain/verify-drain,
   `example`, `suite`, `index`, `search`, `auth`, `doctor`).

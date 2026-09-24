@@ -78,6 +78,23 @@ generated.set("source-task-planning", {
   bundlePath: plannerBundlePath, modules: planner.modules,
   argsPath: `${plannerFixtureBase}.args.json`, responsesPath: `${plannerFixtureBase}.responses.json`,
 });
+// A second entry in the same project reuses the scoring and clamp programs
+// under identical digests; both runtimes must agree on that closure too.
+const inspector = await loadSourceProject(join(examples, "source/projects/task-planning/inspect_task.algal"));
+const inspectorStore = new MemoryStore();
+for (const module of inspector.modules) await inspectorStore.putManifest(module);
+const inspectorBundlePath = join(temporary, "source-task-inspector.bundle.json");
+const inspectorManifestPath = join(temporary, "source-task-inspector.algal.json");
+await writeFile(inspectorBundlePath, canonicalize(await packOrganism(inspector.manifest, inspectorStore) as unknown as JsonValue));
+await writeFile(inspectorManifestPath, canonicalize(manifestToJson(inspector.manifest)));
+const inspectorFixtureBase = join(examples, "source/projects/task-planning/inspect_task");
+files.push("source-task-inspector.algal.json");
+modules.push(inspector.manifest);
+generated.set("source-task-inspector", {
+  manifestPath: inspectorManifestPath, fixtureBase: inspectorFixtureBase,
+  bundlePath: inspectorBundlePath, modules: inspector.modules,
+  argsPath: `${inspectorFixtureBase}.args.json`, responsesPath: `${inspectorFixtureBase}.responses.json`,
+});
 // Branches around child calls need the same isolation in both runtimes. Cover
 // the generated parameterless wrapper and nested list results through a merge.
 for (const [kind, child, source] of [

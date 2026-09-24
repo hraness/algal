@@ -101,6 +101,10 @@ usage:
   algal diagnose <receipt.json> --source <program.algal>
       [--source-root <dir>] [--format json|text] [--out <file>]
                                               locate a recorded failure in its original source
+  algal dependencies <program.algal> [--source-root <dir>] [--bundle <bundle.json>]
+      [--format json|text] [--out <file>]
+                                              report source files, modules, call paths, and effects;
+                                              --bundle checks an artifact against the compiled closure
   algal examples                          list bundled examples
   algal example <id>                      print the example manifest
   algal run <manifest.json> [options]     run an organism, print its receipt
@@ -885,6 +889,26 @@ async function main(): Promise<number> {
       const receipt = await readJsonBounded(receiptPath, RECEIPT_BOUNDS.maxBytes, "run receipt");
       const report = diagnoseSource(receipt, project.source, project.compilerOptions);
       await emitArtifact(format === "text" ? renderSourceDiagnostics(report) : canonicalize(report as unknown as JsonValue), output);
+      return 0;
+    }
+
+    case "dependencies": {
+      if (positional.length !== 1) usageError("algal dependencies <program.algal> [--source-root <dir>] [--bundle <bundle.json>] [--format json|text] [--out <file>]");
+      for (const key of Object.keys(flags)) {
+        if (!["source-root", "bundle", "format", "out"].includes(key)) usageError(`unknown dependencies option --${key}`);
+        artifactFlag(flags, key);
+      }
+      const { createSourceDependencyReport, renderSourceDependencies } = await import("./src/source-dependencies");
+      const format = artifactFlag(flags, "format") ?? "json";
+      if (format !== "json" && format !== "text") usageError("dependencies format must be json or text");
+      const output = artifactFlag(flags, "out");
+      const bundlePath = artifactFlag(flags, "bundle");
+      const project = await readProject(positional[0]!);
+      await distinctArtifactPaths([...project.files, ...(bundlePath === undefined ? [] : [resolve(bundlePath)])], [output]);
+      // The bundle file is ordinary parsed data; the report still snapshots it under its own limits.
+      const bundle = bundlePath === undefined ? undefined : await readJsonBounded(resolve(bundlePath), BOUNDS.maxBundleBytes, "bundle");
+      const report = await createSourceDependencyReport(project.source, { sourceOptions: project.compilerOptions, ...(bundle === undefined ? {} : { bundle }) });
+      await emitArtifact(format === "text" ? renderSourceDependencies(report) : canonicalize(report as unknown as JsonValue), output);
       return 0;
     }
 
