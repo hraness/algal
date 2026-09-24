@@ -8,7 +8,7 @@
 
 # Guidelines
 
-- Preserve product copy, executable examples, navigation, and the Paper palette and light/dark/system appearance.
+- Preserve product copy, executable examples, navigation, and the Tokyo Night palette and light/dark/system appearance.
 - Keep Design Kit and UI as pinned build-only dependencies; the CLI retains zero required runtime dependencies.
 - Bundle the released marketing stylesheet with its syntax stylesheet and license. Do not fork its foil recipe.
 - The header mark and wordmark share the released recipe. Retain the original image underneath the alpha mask for forced colors and unsupported masks.

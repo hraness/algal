@@ -27,7 +27,7 @@ function navLink(page: SitePageId, id: SitePageId, href: string, label: string):
 export function pageDocument(meta: SitePageMeta, main: string): string {
   const canonical = `${ORIGIN}${meta.path}`;
   return `<!doctype html>
-<html lang="en" data-hraness-theme="paper" data-hraness-marketing-preset="editorial" data-hraness-material="lantern">
+<html lang="en" data-hraness-theme="paper" data-hraness-marketing-preset="editorial" data-hraness-material="lantern" data-palette="tokyo-night" data-hraness-pattern="mesh">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -52,7 +52,8 @@ export function pageDocument(meta: SitePageMeta, main: string): string {
 <script type="application/ld+json">
 {"@context":"https://schema.org","@graph":[{"@type":"WebSite","name":"ALGAL","url":"${ORIGIN}/"},{"@type":"SoftwareApplication","name":"ALGAL","url":"${ORIGIN}/","description":"A programming language and virtual machine where programs are organisms: typed, bounded, content-addressed, and replayable.","applicationCategory":"DeveloperApplication","codeRepository":"${REPO}","license":"https://opensource.org/license/mit","author":{"@id":"https://github.com/hraness#org"}},{"@type":"Organization","@id":"https://github.com/hraness#org","name":"hraness","url":"https://github.com/hraness"}]}
 </script>
-<meta name="theme-color" content="#f8f7f4">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#e1e2e7">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1a1b26">
 <script src="/appearance.js"></script>
 <link rel="stylesheet" href="/styles.css">
 <script src="/client.js" defer></script>
