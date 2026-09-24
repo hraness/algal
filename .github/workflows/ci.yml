@@ -9,50 +9,149 @@ on:
 permissions:
   contents: read
 
+# Pull request runs are superseded by the next push; main runs finish, because
+# release.yml qualifies a tag against the completed main push run.
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  BUN_VERSION: "1.3.14"
+  RUST_TOOLCHAIN: "1.97.1"
+  CARGO_INCREMENTAL: "0"
+  CARGO_TERM_COLOR: always
+  CARGO_NET_RETRY: "10"
+  RUST_BACKTRACE: short
+  RUSTFLAGS: -D warnings
+
 jobs:
+  # Docs-only pull requests (docs/**, root Markdown, site/**, LICENSE, Vercel
+  # config, Dependabot and release workflow files) cannot change the native
+  # or renderer results, so those jobs skip on such pull requests. Pushes to
+  # main always run everything: `code` falls back to true when the filter
+  # step does not run. The Required job accepts a skipped gated job only when
+  # this filter says no code path changed.
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      code: ${{ steps.filter.outputs.code || 'true' }}
+      site: ${{ steps.filter.outputs.site || 'true' }}
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          predicate-quantifier: some-with-excludes
+          filters: |
+            code:
+              - '**'
+              - '!docs/**'
+              - '!*.md'
+              - '!LICENSE'
+              - '!site/**'
+              - '!vercel.json'
+              - '!.vercelignore'
+              - '!.github/dependabot.yml'
+              - '!.github/workflows/release.yml'
+              - '!.github/workflows/dependabot-auto-merge.yml'
+            site:
+              - 'site/**'
+
   check:
-    name: Check (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, macos-14]
+    name: Check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.3.14"
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
       - run: bun install --frozen-lockfile
-      - run: bun run check
+      - run: bun run typecheck
+      - run: bun run lint
+      - run: bun run docs:check
+      - run: bun run build:site
+
+  test:
+    name: Test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - run: bun run test
 
   coding-harness:
     name: Coding harness adapter
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.3.14"
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: examples/coding-harness/requirements-harbor.txt
       - run: bun install --frozen-lockfile
       - run: python -m pip install -r examples/coding-harness/requirements-harbor.txt
       - run: python -m unittest discover -s examples/coding-harness -p 'test_*.py'
 
   browser-grow:
     name: Browser application (Chromium)
+    needs: changes
+    if: needs.changes.outputs.code == 'true' || needs.changes.outputs.site == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.3.14"
+          bun-version: ${{ env.BUN_VERSION }}
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
       - run: bun install --frozen-lockfile
       - run: bun run build:site
+      - name: Resolve installed Playwright version
+        id: playwright
+        run: echo "version=$(bun -p 'require("./node_modules/playwright-core/package.json").version')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
       - run: node node_modules/playwright-core/cli.js install --with-deps chromium
       - name: Real browser persistence, custody and offline lifecycle
         run: |
@@ -76,54 +175,173 @@ jobs:
           if-no-files-found: ignore
 
   surface-renderers:
-    name: Surface renderer contract (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, macos-14]
+    name: Surface renderer contract (ubuntu-24.04)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.3.14"
-      - run: rustup toolchain install 1.97.1 --profile minimal --component clippy,rustfmt
-      - run: rustup default 1.97.1
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: surface-renderers
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          workspaces: |
+            examples/malleable-site/renderers -> target
+            examples/local-triage/renderers -> target
       - run: bun examples/malleable-site/renderers/fixtures/generate.ts --check
       - run: cargo fmt --manifest-path examples/malleable-site/renderers/Cargo.toml -- --check
       - run: cargo test --manifest-path examples/malleable-site/renderers/Cargo.toml --locked
       - run: cargo clippy --manifest-path examples/malleable-site/renderers/Cargo.toml --locked --all-targets -- -D warnings
 
       - run: cargo fmt --manifest-path examples/local-triage/renderers/Cargo.toml -- --check
-      - run: cargo test --manifest-path examples/local-triage/renderers/Cargo.toml --locked ${{ matrix.os == 'macos-14' && '--features desktop' || '' }}
-      - run: cargo clippy --manifest-path examples/local-triage/renderers/Cargo.toml --locked --all-targets ${{ matrix.os == 'macos-14' && '--features desktop' || '' }} -- -D warnings
+      - run: cargo test --manifest-path examples/local-triage/renderers/Cargo.toml --locked
+      - run: cargo clippy --manifest-path examples/local-triage/renderers/Cargo.toml --locked --all-targets -- -D warnings
 
-  native:
-    name: Native VM (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, macos-14]
+  # macOS runs only the desktop feature surface; the generic renderer checks
+  # run once on Linux above.
+  surface-renderers-macos:
+    name: Surface renderer contract (macos-14)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: macos-14
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@master
         with:
-          bun-version: "1.3.14"
-      - uses: actions/setup-python@v5
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
         with:
-          python-version: "3.12"
-      - run: rustup toolchain install 1.97.1 --profile minimal --component clippy,rustfmt
-      - run: rustup default 1.97.1
-      - run: bun install --frozen-lockfile
+          shared-key: surface-renderers-desktop
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          workspaces: examples/local-triage/renderers -> target
+      - run: cargo test --manifest-path examples/local-triage/renderers/Cargo.toml --locked --features desktop
+      - run: cargo clippy --manifest-path examples/local-triage/renderers/Cargo.toml --locked --all-targets --features desktop -- -D warnings
+
+  # One Linux build of the kernel: fmt, clippy, the test suite (which builds
+  # the debug binary) and the debug binary as an artifact that the parity,
+  # application-parity and demo jobs download instead of compiling again.
+  native:
+    name: Native VM (ubuntu-24.04)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: native-debug
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
       - run: cargo build --locked
-      - run: ALGAL_MEMORY_NATIVE="$PWD/target/debug/algal" bun test examples/coding-harness/memory-records.test.ts examples/coding-harness/memory.test.ts
-      - run: ALGAL_MEMORY_NATIVE="$PWD/target/debug/algal" bun test examples/adaptive-inventory/run.test.ts
+      - name: Package the debug binary for the parity jobs
+        run: tar -C target/debug -cf "$RUNNER_TEMP/algal-debug.tar" algal
+      - uses: actions/upload-artifact@v4
+        with:
+          name: algal-debug-linux
+          path: ${{ runner.temp }}/algal-debug.tar
+          if-no-files-found: error
+          retention-days: 1
+
+  # macOS runs the OS-specific kernel surface only: the Apple Foundation
+  # Models bridge tests are `cfg(target_os = "macos")` and clippy covers the
+  # macOS-only code paths. Formatting and the parity scripts are platform
+  # independent and run once on Linux.
+  native-macos:
+    name: Native VM (macos-14)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: native-debug
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+
+  # The release binary is built once per target, in parallel with the debug
+  # build, and qualified in place by the packaging and installer tests. The
+  # explicit target and shared cache key match release.yml so a release run
+  # restores this job's dependency cache.
+  native-release:
+    name: Native release binary (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - os: macos-14
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: native-release-${{ matrix.target }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo build --release --locked -p algal --bin algal
+        env:
+          CARGO_BUILD_TARGET: ${{ matrix.target }}
+      - run: python3 scripts/test_apple_brief_demo.py --native "$PWD/target/${{ matrix.target }}/release/algal" --out "$RUNNER_TEMP/algal-private-brief-fixture"
+      - run: python3 scripts/test-native-release.py --binary "target/${{ matrix.target }}/release/algal" --commit "$GITHUB_SHA" --rustc-version "$(rustc --version)"
+
+  parity:
+    name: Native parity
+    needs: [changes, native]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: algal-debug-linux
+          path: ${{ runner.temp }}
+      - name: Restore the debug binary built by the native job
+        run: mkdir -p target/debug && tar -C target/debug -xf "$RUNNER_TEMP/algal-debug.tar" && target/debug/algal --version
       - run: bun scripts/native-parity.ts
-      - run: bun scripts/application-parity.ts
       - run: bun scripts/process-parity.ts
       - run: bun scripts/store-parity.ts
       - run: bun scripts/cli-parity.ts
@@ -135,11 +353,124 @@ jobs:
       - run: bun scripts/compilation-parity.ts
       - run: bun scripts/work-budget-parity.ts
       - run: bun scripts/mailbox-admission-parity.ts
+
+  application-parity:
+    name: Application parity
+    needs: [changes, native]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: algal-debug-linux
+          path: ${{ runner.temp }}
+      - name: Restore the debug binary built by the native job
+        run: mkdir -p target/debug && tar -C target/debug -xf "$RUNNER_TEMP/algal-debug.tar" && target/debug/algal --version
+      - run: bun scripts/application-parity.ts
+
+  demos:
+    name: Native demos
+    needs: [changes, native]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: algal-debug-linux
+          path: ${{ runner.temp }}
+      - name: Restore the debug binary built by the native job
+        run: mkdir -p target/debug && tar -C target/debug -xf "$RUNNER_TEMP/algal-debug.tar" && target/debug/algal --version
+      - run: ALGAL_MEMORY_NATIVE="$PWD/target/debug/algal" bun test examples/coding-harness/memory-records.test.ts examples/coding-harness/memory.test.ts
+      - run: ALGAL_MEMORY_NATIVE="$PWD/target/debug/algal" bun test examples/adaptive-inventory/run.test.ts
       - run: bun scripts/vm-demo.ts --native ./target/debug/algal
       - run: bun scripts/recovery-demo.ts --native ./target/debug/algal
       - run: bun scripts/repair-demo.ts --native ./target/debug/algal
       - run: bun scripts/coding-recovery-demo.ts --native ./target/debug/algal
       - run: bun scripts/process-evidence-demo.ts --native ./target/debug/algal
-      - run: cargo build --release --locked -p algal --bin algal
-      - run: python3 scripts/test_apple_brief_demo.py --native "$PWD/target/release/algal" --out "$RUNNER_TEMP/algal-private-brief-fixture"
-      - run: python3 scripts/test-native-release.py --binary target/release/algal --commit "$GITHUB_SHA" --rustc-version "$(rustc --version)"
+
+  required:
+    name: Required
+    if: always()
+    needs:
+      - changes
+      - check
+      - test
+      - coding-harness
+      - browser-grow
+      - surface-renderers
+      - surface-renderers-macos
+      - native
+      - native-macos
+      - native-release
+      - parity
+      - application-parity
+      - demos
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every blocking job
+        env:
+          CODE_CHANGED: ${{ needs.changes.outputs.code }}
+          SITE_CHANGED: ${{ needs.changes.outputs.site }}
+          CHANGES: ${{ needs.changes.result }}
+          CHECK: ${{ needs.check.result }}
+          TEST: ${{ needs.test.result }}
+          CODING_HARNESS: ${{ needs.coding-harness.result }}
+          BROWSER_GROW: ${{ needs.browser-grow.result }}
+          SURFACE_RENDERERS: ${{ needs.surface-renderers.result }}
+          SURFACE_RENDERERS_MACOS: ${{ needs.surface-renderers-macos.result }}
+          NATIVE: ${{ needs.native.result }}
+          NATIVE_MACOS: ${{ needs.native-macos.result }}
+          NATIVE_RELEASE: ${{ needs.native-release.result }}
+          PARITY: ${{ needs.parity.result }}
+          APPLICATION_PARITY: ${{ needs.application-parity.result }}
+          DEMOS: ${{ needs.demos.result }}
+        run: |
+          set -euo pipefail
+          failed=0
+          # require NAME RESULT SKIP_OK: success always passes; skipped passes
+          # only when the paths filter deliberately skipped the job.
+          require() {
+            if [[ "$2" == success ]]; then return; fi
+            if [[ "$2" == skipped && "$3" == true ]]; then echo "$1: skipped (no relevant paths changed)"; return; fi
+            echo "::error::$1 finished with result '$2'"
+            failed=1
+          }
+          code_skip=false; [[ "$CODE_CHANGED" == false ]] && code_skip=true
+          browser_skip=false; [[ "$CODE_CHANGED" == false && "$SITE_CHANGED" == false ]] && browser_skip=true
+          require changes "$CHANGES" false
+          require check "$CHECK" false
+          require test "$TEST" false
+          require coding-harness "$CODING_HARNESS" "$code_skip"
+          require browser-grow "$BROWSER_GROW" "$browser_skip"
+          require surface-renderers "$SURFACE_RENDERERS" "$code_skip"
+          require surface-renderers-macos "$SURFACE_RENDERERS_MACOS" "$code_skip"
+          require native "$NATIVE" "$code_skip"
+          require native-macos "$NATIVE_MACOS" "$code_skip"
+          require native-release "$NATIVE_RELEASE" "$code_skip"
+          require parity "$PARITY" "$code_skip"
+          require application-parity "$APPLICATION_PARITY" "$code_skip"
+          require demos "$DEMOS" "$code_skip"
+          exit "$failed"
