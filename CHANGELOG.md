@@ -18,6 +18,11 @@ wire constant (`0.1.0`) is independent of these package versions.
 - A six-file task planner demonstrates pure code reuse, dependency change
   propagation, portable bundles, and separate policy/presentation modules.
   The larger-program guide covers architecture and standard-library design.
+- `examples/model-router.algal.json` ships generation 1 of the fitted head: a
+  prior-anchored update of the September 22 fit on the 84 labeled September
+  2026 first prompts (cross-validated AUC 0.64 against 0.63 for the parent on
+  the same window). `docs/model-router.md` records both generations and why
+  neither a September-only fit nor a full-corpus fit is shipped.
 - Docs: `docs/vision.md` links to the Hraness essay “The thread through
   hraness”, which places ALGAL among the other Hraness projects.
 - Docs: `docs/vision.md` states the project thesis (software that
