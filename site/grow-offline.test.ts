@@ -4,6 +4,17 @@ import { offlineWorkerSource } from "./grow-offline";
 
 type Reply = { ready: boolean; version: string };
 type WorkerEvent = { data?: string; ports?: { postMessage(value: Reply): void }[]; waitUntil(promise: Promise<void>): void };
+
+test("worker bytes and cache versions depend on assets, not filesystem enumeration order", () => {
+  const first = offlineWorkerSource({ "/z.js": "z", "/a.js": "a" }, { "/y.js": "y", "/b.js": "b" });
+  const reordered = offlineWorkerSource({ "/a.js": "a", "/z.js": "z" }, { "/b.js": "b", "/y.js": "y" });
+  expect(reordered).toBe(first);
+  const version = (source: string) => source.match(/const VERSION = .*;/)?.[0];
+  expect(version(first)).toBeDefined();
+  expect(version(offlineWorkerSource({ "/a.js": "changed", "/z.js": "z" }, { "/b.js": "b", "/y.js": "y" }))).not.toBe(version(first));
+  expect(version(offlineWorkerSource({ "/a.js": "a", "/z.js": "z" }, { "/b.js": "b", "/y.js": "changed" }))).not.toBe(version(first));
+});
+
 function fixture() {
   const bodies = new Map([["/grow/", "<main>local application</main>"], ["/grow.js", "application()"], ["/grow/browser-inference-worker.js", "optional()"]]);
   const hash = (value: string) => new Bun.CryptoHasher("sha256").update(value).digest("hex");

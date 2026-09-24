@@ -1,7 +1,10 @@
 /** Static-shell caching is separate from authoritative application records.
  * The build pins every response byte; an incomplete update never takes over. */
 export function offlineWorkerSource(required: Record<string, string>, optional: Record<string, string>): string {
-  const manifest = JSON.stringify({ required, optional });
+  // Filesystem enumeration order varies by host. Version only the asset paths
+  // and bytes, so identical builds produce identical workers on every host.
+  const ordered = (assets: Record<string, string>) => Object.fromEntries(Object.keys(assets).sort().map(path => [path, assets[path]]));
+  const manifest = JSON.stringify({ required: ordered(required), optional: ordered(optional) });
   return `"use strict";
 const manifest = ${manifest};
 const VERSION = "algal-grow-" + ${JSON.stringify(new Bun.CryptoHasher("sha256").update(manifest).digest("hex"))};
