@@ -244,14 +244,18 @@ footer a { text-decoration: none; }
 .adoption-section { display: grid; grid-template-columns: .8fr 1.3fr; gap: 4.5rem; padding: 2.5rem 0 3rem; border-top: 1px solid var(--line); }
 .adoption-section h2 { font-size: 2.5rem; }
 .adoption-copy p { font-size: .83rem; color: var(--muted); line-height: 1.8; }
+.idea-section { display: grid; grid-template-columns: .8fr 1.3fr; gap: 4.5rem; padding: 3.5rem 0 0; }
+.idea-section h2 { font-size: 2.5rem; }
+.idea-copy p { font-size: .83rem; color: var(--muted); line-height: 1.8; }
+.idea-copy p:last-child { display: flex; flex-wrap: wrap; gap: 1.4rem; }
 @media (max-width: 760px) {
-  .vm-lifecycle, .use-case-grid, .adoption-section { grid-template-columns: 1fr; }
+  .vm-lifecycle, .use-case-grid, .adoption-section, .idea-section { grid-template-columns: 1fr; }
   .vm-lifecycle { gap: 1.2rem; padding: 1.2rem; }
   .vm-lifecycle li + li { border-top: 1px solid var(--line); padding-top: 1rem; }
   .vm-preview-command { padding: .9rem 1.2rem; }
   .use-cases-section, .source-section { padding-top: 3rem; }
   .use-case-card { padding: 1.2rem; }
-  .adoption-section { gap: 1.5rem; }
+  .adoption-section, .idea-section { gap: 1.5rem; }
 }
 @media (max-width: 1000px) {
   .site-header, main, footer { padding-left: 2rem; padding-right: 2rem; }
@@ -410,7 +414,7 @@ main.hraness-marketing-page { max-width: 76rem; padding-inline: 3rem; }
 .eyebrow { font: 550 .78rem/1.5 var(--sans); letter-spacing: .055em; }
 .use-cases-section, .source-section, .route-section, .composition-section, .examples-section { padding-top: var(--hraness-marketing-story-space); }
 .section-heading { gap: 3rem; align-items: end; }
-.section-heading h2, .artifact-section h2, .try-section h2, .adoption-section h2, .evolution-section h2 { font-family: var(--serif); font-size: var(--hraness-marketing-h2-size); font-weight: var(--hraness-marketing-display-weight); line-height: var(--hraness-marketing-h2-leading); letter-spacing: var(--hraness-marketing-h2-tracking); }
+.section-heading h2, .artifact-section h2, .try-section h2, .adoption-section h2, .idea-section h2, .evolution-section h2 { font-family: var(--serif); font-size: var(--hraness-marketing-h2-size); font-weight: var(--hraness-marketing-display-weight); line-height: var(--hraness-marketing-h2-leading); letter-spacing: var(--hraness-marketing-h2-tracking); }
 h2 em { font-style: normal; color: inherit; }
 .section-heading > p, .section-intro > p:not(.eyebrow) { font-size: 1rem; line-height: 1.65; }
 .use-case-grid { gap: 1.1rem; margin-top: 2.2rem; }

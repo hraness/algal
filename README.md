@@ -10,6 +10,29 @@ its decisions, limits, and approval points. A native Rust CLI and a Bun runtime
 that runs on its own implement the same specifications for programs, receipts,
 and durable processes.
 
+## The idea
+
+The bet behind ALGAL is that a computer can accumulate tested ways of acting,
+not only produce new answers or new code. A model proposes a bounded,
+executable procedure. The procedure is checked, measured on declared cases,
+kept with its evidence, composed into larger procedures, and revised under
+rules the host sets. Useful work should leave the computer with a more
+capable, reusable way of doing the next piece of work.
+
+Four properties of the design give that bet a testable form: an organism (an
+ALGAL program) has a content-derived identity and a declared interface, so
+successful reasoning can become a reusable component; manifests are data built
+to be generated and checked, so hand-written and model-proposed procedures
+enter through the same admission path; model judgment sits in typed cells with
+declared context and budgets, so ordinary computation supplies the discipline
+around it; and selection is a host decision recorded on the receipt, so
+provenance and permission are part of the mechanism rather than features added
+later. The mechanisms exist today. Whether accumulated procedures make later
+work measurably better than equally resourced alternatives is the open
+question. The [vision](docs/vision.md) states the bet in full and the
+[lineage](docs/lineage.md) places it among Lisp, Emacs, Smalltalk, Urbit,
+Engelbart, and the research on self-improving programs.
+
 ## Pick the job you need done
 
 | Your job | What ALGAL keeps | Start here |
@@ -404,6 +427,8 @@ admit. See [`docs/habitats.md`](docs/habitats.md) for the design sketch,
 deterministic working steel thread, `bun examples/habitat/promote.ts --live`
 for a live model-driven reproduction loop, and [`docs/civilization.md`](docs/civilization.md)
 with `bun scripts/civ.ts --live` for the first runnable civilization loop.
+The [vision](docs/vision.md) describes the cumulative-skill test that would
+show whether retained procedures improve later work.
 
 ## What is this?
 
@@ -1153,6 +1178,8 @@ forged-output detection.
 
 ## Deeper documentation
 
+- [Vision](docs/vision.md) — software that accumulates competence: the bet, the four properties that make it testable, and the evidence that would justify it.
+- [Lineage](docs/lineage.md) — Lisp, Emacs, Smalltalk, Urbit, Engelbart, and the research precedents for evolving programs.
 - `spec/v1/organism.md` — the manifest, run, and receipt contract.
 - `spec/v1/foundry.md` — candidate generation, evidence, promotion, and verification.
 - `spec/v1/search.md` — bounded generations, feedback, survivors, and lineage.

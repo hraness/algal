@@ -32,6 +32,9 @@
   contract prose, including the bounded durable process filesystem ABI.
 - `site/` — the static algal.computer source; `build.ts` writes `site/dist`.
 - `README.md`, `CONTRIBUTING.md`, `SECURITY.md` — the public contract.
+- `docs/vision.md` — the project thesis (software that accumulates
+  competence) and the evidence that would justify it; `docs/lineage.md` —
+  the programmable-environment traditions and research precedents.
 
 # Guidelines
 
@@ -77,6 +80,11 @@
   - retained: kept or saved
   - bounded: limited (name the limit)
   - authority: permission
+- `docs/vision.md` is the one statement of what ALGAL is for. Pages that
+  explain purpose link to it instead of restating the thesis in new words.
+  Keep the thesis a bet and the cumulative-skill test an open experiment;
+  no page may claim that accumulated procedures have been shown to improve
+  later work. Precedents and traditions belong in `docs/lineage.md`.
 - `organism` is the spec's term for an ALGAL program. Define it at first use on
   each page. Use at most one biology metaphor (fossil, habitat, living) per
   section, next to the literal mechanism it stands for.

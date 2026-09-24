@@ -13,6 +13,10 @@ art. ALGAL's claim is narrower: the same small program and evidence contracts
 join program evolution, execution, and offline verification across its
 TypeScript and Rust runtimes.
 
+This page compares mechanisms. The [vision](vision.md) states what the
+combination is for, and the [lineage](lineage.md) places it among the
+programmable-environment traditions and the research on evolving programs.
+
 ## A concrete use
 
 The [process VM demonstration](vm.md) runs an evidence review, records a

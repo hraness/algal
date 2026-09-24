@@ -27,6 +27,8 @@ activate compatible revisions while preserving identity and effect history.
 The intended outcome is accumulated executable competence outside a frozen model.
 Models supply interpretation and proposals; deterministic programs handle routine
 execution, dependency checks, storage, propagation, admission, and accounting.
+The [vision](vision.md) states this thesis for the whole project and the
+cumulative-skill test that would support it.
 
 The shared representation preserves distinct types. An observation differs from
 a hypothesis, a derivation differs from an execution receipt, and a declaration
