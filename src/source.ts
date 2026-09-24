@@ -3,7 +3,7 @@
 import { BOUNDS, manifestToJson, parseOrganismManifest, type AgentOutput, type Budgets, type Cell, type Edge, type OrganismManifest, type PortMap, type PortType } from "./contract";
 import { digestCanonical, digestText, type Digest } from "./digest";
 import { AlgalError } from "./errors";
-import type { JsonObject, JsonValue } from "./values";
+import { canonicalize, type JsonObject, type JsonValue } from "./values";
 
 export const SOURCE_VERSION = "algal.source.v1" as const;
 export const SOURCE_BOUNDS = Object.freeze({
@@ -11,6 +11,8 @@ export const SOURCE_BOUNDS = Object.freeze({
   maxDepth: 16, maxBindings: 24, maxParameters: 16,
   maxNameLength: 40, maxChoiceLabels: 16, maxCollectionItems: 64,
   maxFiles: 16, maxImports: 16, maxProjectBytes: 1_048_576, maxImportDepth: 8,
+  // Record nesting is limited by the lowered schema's core admission depth.
+  maxRecords: 16, maxRecordFields: 32, maxRecordSchemaDepth: BOUNDS.maxSchemaDepth,
 });
 export const SOURCE_PROJECT_BOUNDS = Object.freeze({
   maxFiles: SOURCE_BOUNDS.maxFiles, maxImports: SOURCE_BOUNDS.maxImports,
@@ -18,7 +20,7 @@ export const SOURCE_PROJECT_BOUNDS = Object.freeze({
 });
 /** Changing these defaults or the model-visible envelope changes compilation. */
 export const SOURCE_PROFILE = Object.freeze({
-  id: "algal.source.profile.v1", compilerVersion: "1.3.0",
+  id: "algal.source.profile.v1", compilerVersion: "1.4.0",
   budgets: Object.freeze({ maxSteps: 256, maxAgentCalls: 0, maxWork: 1_000_000,
     maxContextBytes: 65_536, maxOutputBytes: 65_536, maxDepth: 4 }),
   exprFuel: BOUNDS.maxExprFuel,
@@ -99,7 +101,11 @@ type Expr = Span & (
   | { kind: "call"; alias: string; args: Expr }
   | { kind: "each"; alias: string; over: string; items: Expr; args: Expr; maxItems: number }
 );
-type SourceProgram = Span & { name: string; parameters: { name: string; type: "text" | "json"; span: Span }[]; output: "text" | "json"; budgets: Budgets; bindings: { name: string; expr: Expr }[]; result: Expr };
+/** A named record declared after imports; it lowers to a bounded core JSON schema. */
+type SourceRecord = Span & { name: string; fields: SourceField[]; schema: JsonObject };
+type SourceField = Span & { name: string; type: "text" | "number" | "boolean" | "json" | SourceRecord; optional: boolean };
+type SourceType = "text" | "json" | SourceRecord;
+type SourceProgram = Span & { name: string; parameters: { name: string; type: SourceType; span: Span }[]; output: SourceType; budgets: Budgets; bindings: { name: string; expr: Expr }[]; result: Expr };
 const reserved = new Set(["program", "budget", "let", "return", "decide", "generate", "using", "as", "choice", "match", "if", "else", "true", "false", "null", "text", "json", "import", "from", "call", "each", "over", "in", "max_items", "__proto__", "prototype", "constructor"]);
 const operators: Record<string, { precedence: number; op: string }> = {
   "||": { precedence: 1, op: "or" }, "&&": { precedence: 2, op: "and" },
@@ -113,6 +119,7 @@ class Parser {
   readonly tokens: Token[] = [];
   private index = 0;
   private nodes = 0;
+  private readonly records = new Map<string, SourceRecord>();
   constructor(readonly source: string) {
     if (Buffer.byteLength(source) > SOURCE_BOUNDS.maxSourceBytes) this.fail("source exceeds 65536 UTF-8 bytes", { start: 0, end: 0 });
     let i = 0;
@@ -136,7 +143,7 @@ class Parser {
         if (id) { text = id[0]; kind = "id"; }
         else if (number) { text = number[0]; kind = "number"; }
         else {
-          const symbol = /^(?:->|=>|==|!=|<=|>=|&&|\|\||[(){}[\],:;.=+\-*/%!<>])/.exec(rest);
+          const symbol = /^(?:->|=>|==|!=|<=|>=|&&|\|\||[(){}[\],:;.=+\-*/%!<>?])/.exec(rest);
           if (!symbol) this.fail(`unsupported character ${JSON.stringify(rest[0])}`, { start, end: start + 1 });
           text = symbol[0];
         }
@@ -163,7 +170,53 @@ class Parser {
     if (token.text.length > SOURCE_BOUNDS.maxNameLength) this.fail("identifier exceeds 40 characters", token);
     return token;
   }
-  private type(): "text" | "json" { const token = this.take(); if (token.text !== "text" && token.text !== "json") this.fail("source interfaces support only text and json; authority-bearing types are not supported", token); return token.text; }
+  private type(): SourceType {
+    const token = this.take();
+    if (token.text === "text" || token.text === "json") return token.text;
+    if (token.kind === "id" && /^[A-Z]/.test(token.text)) return this.recordType(token);
+    return this.fail("source interfaces support only text, json, and declared record types; authority-bearing types are not supported", token);
+  }
+  private recordType(token: Token): SourceRecord {
+    const record = this.records.get(token.text);
+    if (!record) this.fail(`unknown record type ${token.text}; declare a record before using it`, token);
+    return record;
+  }
+  /** `record Name { field: type, other: type? }`. A field can name only an
+   * earlier record, so declarations cannot refer to themselves or form cycles. */
+  private record(): void {
+    const start = this.expect("record").start;
+    if (this.records.size >= SOURCE_BOUNDS.maxRecords) this.fail(`record limit exceeded; a file declares at most ${SOURCE_BOUNDS.maxRecords} records`, { start, end: this.peek().end });
+    const name = this.name();
+    if (!/^[A-Z][A-Za-z0-9]*$/.test(name.text)) this.fail("record names start with an uppercase letter and use only ASCII letters and digits", name);
+    if (this.records.has(name.text)) this.fail(`duplicate record ${name.text}`, name);
+    this.expect("{");
+    const fields: SourceField[] = [];
+    while (!this.eat("}")) {
+      if (fields.length >= SOURCE_BOUNDS.maxRecordFields) this.fail(`record ${name.text} exceeds ${SOURCE_BOUNDS.maxRecordFields} fields`);
+      const field = this.name();
+      if (fields.some(existing => existing.name === field.text)) this.fail(`duplicate field ${field.text} in record ${name.text}`, field);
+      this.expect(":");
+      const token = this.take();
+      let type: SourceField["type"];
+      if (token.text === "text" || token.text === "number" || token.text === "boolean" || token.text === "json") type = token.text;
+      else if (token.kind === "id" && /^[A-Z]/.test(token.text)) type = this.recordType(token);
+      else return this.fail("record fields use text, number, boolean, json, or a record declared earlier", token);
+      const optional = this.eat("?");
+      fields.push({ name: field.text, type, optional, start: field.start, end: this.tokens[this.index - 1]!.end });
+      if (this.eat("}")) break;
+      this.expect(",");
+    }
+    const end = this.tokens[this.index - 1]!.end;
+    if (!fields.length) this.fail(`record ${name.text} needs at least one field`, { start, end });
+    const schema = recordSchema(fields);
+    if (schemaDepth(schema) > SOURCE_BOUNDS.maxRecordSchemaDepth) {
+      // Only a record-typed field can deepen a schema: the object, its required
+      // list, and its property map add two levels above each field schema.
+      const deep = fields.find(field => typeof field.type === "object" && 2 + schemaDepth(field.type.schema) > SOURCE_BOUNDS.maxRecordSchemaDepth);
+      this.fail(`record ${name.text} nests ${deep && typeof deep.type === "object" ? `${deep.type.name} in field ${deep.name}` : "a record"} beyond the schema depth limit of ${SOURCE_BOUNDS.maxRecordSchemaDepth}; a record used as a field type may contain only json fields`, deep ?? { start, end });
+    }
+    this.records.set(name.text, { name: name.text, fields, schema, start, end });
+  }
   private string(): string { const token = this.take(); if (token.kind !== "string") this.fail("expected a quoted string", token); return JSON.parse(token.text) as string; }
   private list<T>(close: string, item: () => T, max: number): T[] {
     const items: T[] = [];
@@ -188,6 +241,7 @@ class Parser {
     return imports;
   }
   program(): SourceProgram {
+    while (this.peek().text === "record") this.record();
     const start = this.expect("program").start;
     const name = this.name();
     if (!/^[a-z][a-z0-9_]*$/.test(name.text)) this.fail("program names use lowercase letters, digits, and underscores", name);
@@ -287,7 +341,9 @@ class Parser {
   unique(names: string[], what: string, span: Span): void { if (new Set(names).size !== names.length) this.fail(`duplicate ${what}`, span); }
 }
 
-type Type = { kind: "text"; literal?: string } | { kind: "json" | "number" | "boolean" | "null" | "list" } | { kind: "choice" | "decision"; labels: string[] } | { kind: "record"; fields: Map<string, Type> };
+type Type = { kind: "text"; literal?: string } | { kind: "json" | "number" | "boolean" | "null" | "list" } | { kind: "choice" | "decision"; labels: string[] }
+  // A `declared` record value was checked against that record; it may carry undeclared fields.
+  | { kind: "record"; fields: Map<string, Type>; declared?: SourceRecord };
 type Reference = { cell: string; port: string; type: Type };
 type Pure = { program: JsonValue; type: Type; refs: Map<string, Reference> };
 type CompiledUnit = Omit<SourceCompilation, "project"> & { calls: SourceCallOrigin[] };
@@ -301,6 +357,33 @@ function output(type: Type): AgentOutput {
   const schema: JsonObject = { type: type.kind === "json" ? ["null", "boolean", "object", "array", "number", "string"] : type.kind === "record" || type.kind === "decision" ? "object" : type.kind === "list" ? "array" : type.kind };
   return { kind: "json", schema };
 }
+/** Lower a record to the core schema subset: an object, its sorted required
+ * field names, and typed properties. A `json` field is checked for presence only. */
+function recordSchema(fields: readonly SourceField[]): JsonObject {
+  const required = fields.filter(field => !field.optional).map(field => field.name).sort();
+  const properties: JsonObject = {};
+  for (const field of fields) {
+    if (field.type === "json") continue;
+    properties[field.name] = typeof field.type === "object" ? structuredClone(field.type.schema) : { type: field.type === "text" ? "string" : field.type };
+  }
+  return { type: "object", ...(required.length ? { required } : {}), ...(Object.keys(properties).length ? { properties } : {}) };
+}
+/** The nesting measure used by manifest schema admission; scalar values count. */
+function schemaDepth(value: JsonValue): number {
+  if (value === null || typeof value !== "object") return 0;
+  const children = Array.isArray(value) ? value : Object.values(value);
+  return children.length ? 1 + Math.max(...children.map(schemaDepth)) : 0;
+}
+/** Static view of a checked record value. An optional field may be absent and
+ * reads as null, so selecting it yields dynamic JSON. */
+function recordValue(record: SourceRecord): Type {
+  return { kind: "record", declared: record, fields: new Map(record.fields.map((field): [string, Type] => [field.name,
+    field.optional || field.type === "json" ? { kind: "json" } : typeof field.type === "object" ? recordValue(field.type)
+      : field.type === "text" ? { kind: "text" } : { kind: field.type }])) };
+}
+function sourceValue(type: SourceType): Type { return typeof type === "object" ? recordValue(type) : { kind: type }; }
+function typeName(type: SourceType): string { return typeof type === "object" ? type.name : type; }
+function fieldTypeName(field: SourceField): string { return `${typeof field.type === "object" ? field.type.name : field.type}${field.optional ? "?" : ""}`; }
 function field(program: JsonValue, key: JsonValue): JsonValue {
   return Array.isArray(program) && program[0] === "get" ? [...program, key] : ["let", "_source_value", program, ["get", "_source_value", key]];
 }
@@ -394,6 +477,25 @@ class Compiler {
     if (!isText(left) && !isText(right)) return { kind: "json" };
     return this.parser.fail("branches must agree on text versus json output", span);
   }
+  /** Reject a record mismatch the source proves. Dynamic JSON is left to the
+   * schema check at the receiving port, which both runtimes enforce. */
+  private assign(type: Type, record: SourceRecord, span: Span, what: string): void {
+    if (type.kind === "json") return;
+    if (type.kind !== "record") this.parser.fail(`${what} must be record ${record.name}, found ${type.kind}`, span);
+    for (const field of record.fields) {
+      const actual = type.fields.get(field.name);
+      if (actual === undefined) {
+        if (!field.optional) this.parser.fail(`${what} is missing field ${field.name} required by record ${record.name}`, span);
+        continue;
+      }
+      if (actual.kind === "json" || field.type === "json") continue;
+      if (typeof field.type === "object") { this.assign(actual, field.type, span, `${what} field ${field.name}`); continue; }
+      if (field.type === "text" ? !isText(actual) : actual.kind !== field.type) this.parser.fail(`${what} field ${field.name} must be ${field.type}, found ${actual.kind}`, span);
+    }
+    // A literal's fields are exactly known; a declared record value may carry more.
+    const extra = type.declared ? undefined : [...type.fields.keys()].find(name => !record.fields.some(field => field.name === name));
+    if (extra !== undefined) this.parser.fail(`${what} has field ${extra}, which record ${record.name} does not declare`, span);
+  }
   private require(type: Type, kind: "number" | "boolean" | "text", span: Span): void {
     if (type.kind === "json" || type.kind === kind || (kind === "text" && isText(type))) return;
     this.parser.fail(`expected ${kind}, found ${type.kind}`, span);
@@ -463,12 +565,14 @@ class Compiler {
     };
     return { ...visit(expr), refs };
   }
-  private expression(id: string, expr: Expr, role = "expression", title = "expression"): Reference {
-    const pure = this.pure(expr); this.add({ id, kind: "expr", inputs: this.wire(id, pure.refs), expr: { contract: "algal.expr.v1", program: pure.program }, output: output(pure.type) }, expr, role, expressionAnnotation(title, expr, role));
-    return { cell: id, port: "out", type: pure.type };
+  private expression(id: string, expr: Expr, role = "expression", title = "expression", record?: SourceRecord): Reference {
+    const pure = this.pure(expr);
+    if (record) this.assign(pure.type, record, expr, "return value");
+    this.add({ id, kind: "expr", inputs: this.wire(id, pure.refs), expr: { contract: "algal.expr.v1", program: pure.program }, output: record ? { kind: "json", schema: structuredClone(record.schema) } : output(pure.type) }, expr, role, expressionAnnotation(title, expr, role));
+    return { cell: id, port: "out", type: record ? recordValue(record) : pure.type };
   }
   private operand(id: string, expr: Expr, title: string): Reference { if (expr.kind === "name") { const ref = this.env.get(expr.name); if (!ref) this.parser.fail(`unknown name ${expr.name}`, expr); return ref; } return this.expression(id, expr, "effect-input", title); }
-  private branch(id: string, expr: Extract<Expr, { kind: "if" | "match" }>, title: string): Reference {
+  private branch(id: string, expr: Extract<Expr, { kind: "if" | "match" }>, title: string, record?: SourceRecord): Reference {
     const prefix = `branch-${++this.branches}`;
     const value = this.pure(expr.kind === "if" ? expr.condition : expr.value);
     let labels: string[];
@@ -493,6 +597,7 @@ class Compiler {
       this.controls.push({ selector, label });
       const result = this.lower(`${prefix}-arm-${index + 1}`, arm, `${title} · ${label}`);
       this.controls.pop();
+      if (record) this.assign(result.type, record, arm, "return value");
       results.push(result); maximum = Math.max(maximum, this.calls - baseline);
     }
     this.calls = baseline + maximum;
@@ -506,8 +611,26 @@ class Compiler {
     for (const result of results) this.edges.push({ from: { cell: result.cell, port: result.port }, to: { cell: id, port: "selected" } });
     const selected: JsonValue = ["get", "selected"];
     const merge: JsonValue = ["nth", ["if", ["eq", ["len", selected], 1], selected, ["list"]], 0];
-    this.add({ id, kind: "expr", inputs: { selected: { ...port(type), many: true } }, expr: { contract: "algal.expr.v1", program: merge }, output: output(type) }, expr, "branch-merge", expressionAnnotation(title, expr, "branch-merge"));
-    return { cell: id, port: "out", type };
+    this.add({ id, kind: "expr", inputs: { selected: { ...port(type), many: true } }, expr: { contract: "algal.expr.v1", program: merge }, output: record ? { kind: "json", schema: structuredClone(record.schema) } : output(type) }, expr, "branch-merge", expressionAnnotation(title, expr, "branch-merge"));
+    return { cell: id, port: "out", type: record ? recordValue(record) : type };
+  }
+  /** A record result is checked where it is produced: the final expression or
+   * merge cell declares the record schema. A child result with a different
+   * schema passes through an identity cell that declares this one. */
+  private recordResult(expr: Expr, record: SourceRecord): Reference {
+    if ((expr.kind === "if" || expr.kind === "match") && hasEffect(expr)) return this.branch("result", expr, "return", record);
+    if (expr.kind !== "call" && expr.kind !== "each" && expr.kind !== "decide" && expr.kind !== "generate") return this.expression("result", expr, "expression", "return", record);
+    const child = expr.kind === "call" ? this.imports.get(expr.alias)?.program.output : undefined;
+    if (typeof child === "object" && canonicalize(child.schema) === canonicalize(record.schema)) {
+      const result = this.lower("result", expr, "return");
+      this.assign(result.type, record, expr, "return value");
+      return result;
+    }
+    const value = this.lower("result-value", expr, "return · value");
+    this.assign(value.type, record, expr, "return value");
+    this.add({ id: "result", kind: "expr", inputs: this.wire("result", new Map([["value-1", value]])), expr: { contract: "algal.expr.v1", program: ["get", "value-1"] }, output: { kind: "json", schema: structuredClone(record.schema) } },
+      expr, "result-check", annotation("return", "result-check", `Check the result against record ${record.name}.`, record.fields.map(field => `${field.name}: ${fieldTypeName(field)}`)));
+    return { cell: "result", port: "out", type: recordValue(record) };
   }
   private lower(id: string, expr: Expr, title: string): Reference {
     if ((expr.kind === "if" || expr.kind === "match") && hasEffect(expr)) return this.branch(id, expr, title);
@@ -569,10 +692,13 @@ class Compiler {
       const pure = this.pure(arg);
       const over = expr.kind === "each" && param.name === expr.over;
       if (over && pure.type.kind !== "list" && pure.type.kind !== "json") this.parser.fail("each input must be a list or a dynamic JSON value", arg);
+      // The child's interface port carries the record schema; the runtime
+      // checks each delivered argument and each collection item against it.
+      if (!over && typeof param.type === "object") this.assign(pure.type, param.type, arg, `argument ${param.name}`);
       if (!over && param.type === "text" && !isText(pure.type) && pure.type.kind !== "json") this.parser.fail(`argument ${param.name} must be text`, arg);
       // A dynamic JSON argument destined for text needs an explicit runtime
       // assertion before graph admission can claim the text producer type.
-      const type: Type = over ? { kind: "json" } : { kind: param.type };
+      const type: Type = over || typeof param.type === "object" ? { kind: "json" } : { kind: param.type };
       const program = !over && param.type === "text" && !isText(pure.type)
         ? ["sconcat", "", pure.program] : pure.program;
       const argId = `${id}-arg-${index + 1}`;
@@ -616,7 +742,7 @@ class Compiler {
       this.add({ id, kind: "expr", inputs: { items: { type: "json" } }, expr: { contract: "algal.expr.v1", program: ["get", "items"] }, output: { kind: "json", schema: { type: "array" } } }, expr, "each-results", annotation(title, "each-results", "Collect the ordered child results as one JSON list."));
       return { cell: id, port: "out", type: { kind: "list" } };
     }
-    return { cell: id, port: "result", type: { kind: child.program.output } };
+    return { cell: id, port: "result", type: sourceValue(child.program.output) };
   }
   compile(program: SourceProgram): CompiledUnit {
     const inputs: PortMap = {}; const interfaceInputs: Record<string, { cell: string; port: string }> = {};
@@ -627,16 +753,16 @@ class Compiler {
       if (!/^[a-z][a-z0-9-]*$/.test(name) || Object.hasOwn(inputs, name)) {
         this.parser.fail("parameter names must produce distinct lowercase kebab-case interface names", param.span);
       }
-      inputs[name] = { type: param.type };
+      inputs[name] = typeof param.type === "object" ? { type: "json", schema: structuredClone(param.type.schema) } : { type: param.type };
       interfaceInputs[name] = { cell: "input", port: name };
-      this.env.set(param.name, { cell: "input", port: name, type: { kind: param.type } });
+      this.env.set(param.name, { cell: "input", port: name, type: sourceValue(param.type) });
     }
-    if (program.parameters.length) this.add({ id: "input", kind: "input", outputs: inputs }, { start: program.start, end: program.parameters[program.parameters.length - 1]!.span.end }, "input", annotation("parameters", "input", `${program.name} inputs`, program.parameters.map(param => `${param.name}: ${param.type}`)));
+    if (program.parameters.length) this.add({ id: "input", kind: "input", outputs: inputs }, { start: program.start, end: program.parameters[program.parameters.length - 1]!.span.end }, "input", annotation("parameters", "input", `${program.name} inputs`, program.parameters.map(param => `${param.name}: ${typeName(param.type)}`)));
     for (const [i, binding] of program.bindings.entries()) {
       if (this.env.has(binding.name) || this.imports.has(binding.name)) this.parser.fail(`duplicate binding ${binding.name}; values and imports are immutable`, binding.expr);
       const ref = this.lower(`b${i + 1}-${binding.name.toLowerCase().replaceAll("_", "-")}`, binding.expr, binding.name); this.env.set(binding.name, ref);
     }
-    const result = this.lower("result", program.result, "return");
+    const result = typeof program.output === "object" ? this.recordResult(program.result, program.output) : this.lower("result", program.result, "return");
     if (program.output === "text" && !isText(result.type)) this.parser.fail(`program declares text but returns ${result.type.kind}`, program.result);
     if (program.output === "json" && isText(result.type)) this.parser.fail("program declares json but returns text", program.result);
     if (this.calls > program.budgets.maxAgentCalls) this.parser.fail(`${this.calls} explicit effects exceed max_agent_calls ${program.budgets.maxAgentCalls}; the budget counts executor attempts, including retries`, program);

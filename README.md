@@ -394,9 +394,9 @@ show recorded cell states and are bound to the exact manifest and receipt.
 execution consistency; it does not establish that a model answer is true or
 attest to a provider. [Diagram format and lifecycle views](docs/diagrams.md).
 
-The source front end supports immutable values, pure expressions, exhaustive
-choices, decisions, generation, budgets, local imports, named calls, and bounded
-`each`. Tools, waits, advanced loops, and evolution remain available through the
+The source front end supports immutable values, pure expressions, record types,
+exhaustive choices, decisions, generation, budgets, local imports, named calls,
+and bounded `each`. Tools, waits, advanced loops, and evolution remain available through the
 full manifest API. No
 executable statechart syntax is claimed. Existing wire identifiers, manifest
 digests, and receipts remain unchanged.

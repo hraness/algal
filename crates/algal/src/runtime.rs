@@ -748,18 +748,37 @@ impl Runtime<'_> {
             }
             "each" => {
                 let over = cell["over"].as_str().unwrap();
-                let items = inputs[over]
-                    .as_array()
-                    .ok_or_else(|| Error::new("TYPE_MISMATCH", "each requires a list"))?;
-                if items.len() > cell["maxItems"].as_u64().unwrap() as usize {
-                    return Err(Error::limit("each maxItems"));
+                // Failure messages match the reference runtime; they are receipt data.
+                let items = inputs[over].as_array().ok_or_else(|| {
+                    Error::new(
+                        "TYPE_MISMATCH",
+                        format!("each cell \"{name}\" over \"{over}\" expected a list"),
+                    )
+                })?;
+                let max_items = cell["maxItems"].as_u64().unwrap();
+                if items.len() as u64 > max_items {
+                    return Err(Error::limit(format!(
+                        "each cell \"{name}\" got {} items, maxItems {max_items}",
+                        items.len()
+                    )));
                 }
                 let child = &compiled.children[name];
+                // Bind each element to the inner input port's declared type
+                // before that element's run starts, as the reference runtime
+                // does: a mismatch fails this cell and records no item cells.
+                let target = &child.manifest.value["interface"]["inputs"][over];
+                let element = target["cell"]
+                    .as_str()
+                    .zip(target["port"].as_str())
+                    .and_then(|(cell, port)| child.signatures.get(cell)?.outputs.get(port));
                 let mut results = Map::new();
                 for name in object(&child.manifest.value["interface"]["outputs"])?.keys() {
                     results.insert(name.clone(), json!([]));
                 }
                 for (index, item) in items.iter().enumerate() {
+                    if let Some(declaration) = element {
+                        check_value(declaration, item)?;
+                    }
                     let mut args = inputs.clone();
                     args[over] = item.clone();
                     let result = self

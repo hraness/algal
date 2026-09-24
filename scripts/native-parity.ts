@@ -139,12 +139,47 @@ for (const [kind, child, source] of [
       responsesPath: `${fixtureBase}.responses.json` });
   }
 }
+// Record types lower to json ports with schemas. Valid and malformed values
+// must produce identical receipts where each is checked: a root parameter, a
+// list element, a call argument, and a record result.
+const failing = new Set<string>();
+const typedTasks = join(examples, "source/projects/typed-tasks");
+const taskArgs = JSON.parse(await readFile(join(typedTasks, "scores.args.json"), "utf8")) as { input: Record<string, JsonValue> };
+const recordCases: [string, { manifest: OrganismManifest; modules: OrganismManifest[] }, [string, JsonValue][]][] = [
+  ["typed-tasks", await loadSourceProject(join(typedTasks, "scores.algal")), [["valid", taskArgs],
+    ["malformed", JSON.parse(await readFile(join(typedTasks, "scores.malformed.args.json"), "utf8")) as JsonValue],
+    ["malformed-weights", { input: { ...taskArgs.input, weights: { urgency: "high", impact: 1 } } }]]],
+  ["record-call", compileSource('import child from "./child.algal" record S { total: number } program main(value: json) -> S { budget { max_agent_calls: 0 } return call child using { t: value } }',
+    { modules: { "child.algal": "record T { n: number, extra: json? } program child(t: T) -> json { budget { max_agent_calls: 0 } return t.extra }" } }), [
+    ["valid", { input: { value: { n: 1, extra: { total: 3 } } } }],
+    ["malformed-argument", { input: { value: { n: "one" } } }],
+    ["malformed-result", { input: { value: { n: 1, extra: { total: "three" } } } }]]],
+];
+for (const [kind, result, variants] of recordCases) {
+  const store = new MemoryStore();
+  for (const module of result.modules) await store.putManifest(module);
+  const bundlePath = join(temporary, `${kind}.bundle.json`);
+  const manifestPath = join(temporary, `${kind}.algal.json`);
+  await writeFile(bundlePath, canonicalize(await packOrganism(result.manifest, store) as unknown as JsonValue));
+  await writeFile(manifestPath, canonicalize(manifestToJson(result.manifest)));
+  for (const [variant, args] of variants) {
+    const name = `source-${kind}-${variant}`;
+    const fixtureBase = join(temporary, name);
+    await writeFile(`${fixtureBase}.args.json`, canonicalize(args));
+    await writeFile(`${fixtureBase}.responses.json`, "{}");
+    files.push(`${name}.algal.json`);
+    modules.push(result.manifest);
+    generated.set(name, { manifestPath, fixtureBase, bundlePath, modules: result.modules,
+      responsesPath: `${fixtureBase}.responses.json` });
+    if (variant.startsWith("malformed")) failing.add(name);
+  }
+}
 let failed = 0;
 
-async function native(args: string[]) {
+async function native(args: string[], exitCode = 0) {
   const proc = Bun.spawn([binary, ...args], { cwd: root, stdout: "pipe", stderr: "pipe" });
   const [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
-  if (code !== 0) throw new Error(stderr || stdout);
+  if (code !== exitCode) throw new Error(stderr || stdout);
   return JSON.parse(stdout) as Record<string, JsonValue>;
 }
 
@@ -181,10 +216,10 @@ try {
     }
     const reference = await runOrganism({ manifest, args, store, transports, fns: builtinRegistry(), executors: [scriptedExecutor(responses)] });
     try {
-      if (generated.has(name) && reference.outcome !== "complete") throw new Error(`source example did not complete: ${reference.outcome}`);
+      if (generated.has(name) && reference.outcome !== (failing.has(name) ? "failed" : "complete")) throw new Error(`source example outcome: ${reference.outcome}`);
       const bundlePath = generated.get(name)?.bundlePath;
       if (bundlePath !== undefined) await native(["unpack", bundlePath, "--dir", join(temporary, name)]);
-      const result = await native(runArgs);
+      const result = await native(runArgs, failing.has(name) ? 1 : 0);
       const expected = reference as unknown as Record<string, JsonValue>;
       const differences = ["manifestDigest", "manifestKey", "args", "outcome", "cells", "effects", "events", "work", "failure"]
         .filter((field) => canonicalize(result[field] ?? null) !== canonicalize(expected[field] ?? null));
@@ -214,10 +249,13 @@ try {
         const namedArgsPath = join(temporary, `${name}.named-args.json`);
         await writeFile(namedArgsPath, canonicalize(namedArgs));
         const called = await native(["call", bundlePath, "--interface", "--args", namedArgsPath,
-          "--responses", generated.get(name)!.responsesPath!, "--dir", join(temporary, `${name}-offline`)]);
-        const expectedOutputs = Object.fromEntries(Object.entries(manifest.interface!.outputs)
+          "--responses", generated.get(name)!.responsesPath!, "--dir", join(temporary, `${name}-offline`)], failing.has(name) ? 1 : 0);
+        // A rejected input fails the standalone call with the reference failure and no outputs.
+        const expectedOutputs = failing.has(name) ? {} : Object.fromEntries(Object.entries(manifest.interface!.outputs)
           .map(([name, end]) => [name, reference.cells[end.cell]!.outputs![end.port]!]));
-        if (called.ok !== true || canonicalize(called.outputs!) !== canonicalize(expectedOutputs)) {
+        const expectedError = failing.has(name) ? { code: reference.failure!.code, message: reference.failure!.message } : null;
+        if (called.ok !== !failing.has(name) || canonicalize(called.outputs!) !== canonicalize(expectedOutputs)
+          || canonicalize(called.error ?? null) !== canonicalize(expectedError)) {
           throw new Error("standalone source-project bundle call did not match reference outputs");
         }
       }

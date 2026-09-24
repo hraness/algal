@@ -9,6 +9,17 @@ wire constant (`0.1.0`) is independent of these package versions.
 
 ## Unreleased
 
+- Source record types: `record Task { id: text, urgency: number, notes: text? }`
+  declares fields for a parameter or result. A record compiles to a `json` port
+  with a schema in the existing subset, which both runtimes check where a value
+  enters or leaves a program; the compiler also rejects mismatches it can prove.
+  Compiler version 1.4.0; existing programs compile to the same manifests. The
+  `typed-tasks` example scores a task list and rejects a malformed task.
+- Native `each` checks each item against the child's input type before that
+  item's run, and reports a non-list or oversized list with the reference
+  runtime's messages, so a rejected item yields the same receipt in both
+  runtimes. Earlier native receipts that recorded such a failure under
+  `<each>/i<n>/input` need their original binary to replay.
 - A shared program catalog (`docs/library.md`) lists pure programs called from
   more than one project, each with its path, executable and interface digests,
   interface, rejected inputs, limits, callers, compiler, maintainer, and
