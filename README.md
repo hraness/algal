@@ -878,6 +878,30 @@ manifest). ALGAL does not broker provider access; the executor seam is
 where provider auth lives. `--executors <file>` takes a JSON map of
 name → command, so a cell's `route.provider`/`route.preset` picks its model.
 
+Rust embedders can register a synchronous `effects::HostExecutor` with
+`Host::register_executor(name, Arc<dyn HostExecutor>)`. It serves agent cells
+only and returns a raw JSON output or `Error::new("EFFECT_SUSPENDED", ...)`.
+Use this for bounded request capture and lookup of an exact settled result;
+perform external work in the owning supervisor after the run suspends. The
+callback must not block or launch work: it is trusted host code, not a
+preemptible sandbox. ALGAL retains routing, call budgets, output validation,
+ordered journal intent/completion, and receipt authoring. These executors are
+never cached or automatically retried, and offline verification never invokes
+them.
+
+`configuration_digest()` must return a canonical SHA-256 digest binding the
+adapter implementation and all immutable admission/routing settings. The host
+snapshots it during registration and rejects later changes, duplicate names,
+route aliases, and more than 16 total executors. A matching registered name
+must preserve its recorded configuration when resuming. The embedding
+supervisor must also pin the complete admitted executor set across resumptions
+so removing or renaming an executor cannot silently replace its authority.
+Mutable settled-result records are execution state, not configuration. A new
+resume generation uses a new supervisor journal intent; recovery of an old
+intent replays its recorded result, including suspension. See
+[`host_executor.rs`](crates/algal/tests/host_executor.rs) for capture, suspension,
+externally supplied results, resumption, strict replay, and journal recovery.
+
 ## How does it behave?
 
 - The scheduler sweeps cells in declared order. A cell activates when all its
