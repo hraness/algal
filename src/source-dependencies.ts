@@ -7,7 +7,7 @@ import { asDigest, digestCanonical, type Digest } from "./digest";
 import { AlgalError } from "./errors";
 import { COMPILE_BOUNDS, compileOrganism, interfaceSignature, type CompiledOrganism } from "./graph";
 import { builtinRegistry } from "./registry";
-import { parseRunReceipt, receiptDigest, type RunOutcome, type RunReceipt } from "./run";
+import { parseRunReceipt, RECEIPT_BOUNDS, receiptDigest, type RunOutcome, type RunReceipt } from "./run";
 import { parseBundle, unpackBundle } from "./bundle";
 import { MemoryStore } from "./store-memory";
 import type { SourceCallOrigin, SourceCompilerOptions, SourcePosition, SourceSpan } from "./source";
@@ -25,6 +25,11 @@ export const SOURCE_DEPENDENCY_BOUNDS = Object.freeze({
   /** Own-data snapshot limits for a supplied bundle value. */
   bundle: Object.freeze({
     maxBytes: BOUNDS.maxBundleBytes, maxDepth: 128, maxNodes: 1_000_000, maxEntries: 65_536, maxStringBytes: 1_048_576,
+  }),
+  /** Own-data snapshot limits for a supplied receipt; no stricter than the receipt parser. */
+  receipt: Object.freeze({
+    maxBytes: RECEIPT_BOUNDS.maxBytes, maxDepth: RECEIPT_BOUNDS.maxDepth + 1, maxNodes: RECEIPT_BOUNDS.maxNodes,
+    maxEntries: RECEIPT_BOUNDS.maxCells, maxStringBytes: RECEIPT_BOUNDS.maxBytes,
   }),
 });
 /** Cell kinds the source compiler emits today. Any other reachable kind is
@@ -74,13 +79,19 @@ export type SourceDependencyOccurrence = {
   readonly caller?: SourceDependencyCaller;
 };
 export type SourceDependencyBundle = { readonly root: Digest; readonly manifests: number; readonly values: number; readonly reachable: number; readonly unreachable: number };
+export type SourceDependencyInconsistency =
+  | "root-work-mismatch"
+  | "negative-self-work"
+  | "invocation-without-parent-record"
+  | "cell-work-exceeds-runtime-limit";
 export type SourceDependencyExecutionOccurrence = {
   /** Static occurrence path; the list parallels `report.occurrences`. */
   readonly path: readonly string[];
   /** Distinct recorded invocations of this occurrence (one per `each` item). */
   readonly invocations: number;
   readonly cells: { readonly committed: number; readonly skipped: number; readonly failed: number; readonly suspended: number };
-  /** Recorded cells that carried an effect digest (executor attempts). */
+  /** Recorded `agent` and `decide` cells that were not skipped. A retried
+   * effect is still one cell; `work.agentCalls` counts attempts. */
   readonly effectCells: number;
   /** Work of this occurrence's own cells, excluding child occurrences' work. */
   readonly selfWork: number;
@@ -96,6 +107,12 @@ export type SourceDependencyExecution = {
   readonly occurrences: readonly SourceDependencyExecutionOccurrence[];
   /** Recorded cells that no static occurrence owns; nothing is guessed for them. */
   readonly unattributed: { readonly cells: number; readonly work: number };
+  /** True when the root's inclusive work equals `work.units`, no self work is
+   * negative, every child invocation has a non-skipped parent composition
+   * record, and no cell exceeds the runtime work limit. A receipt is
+   * evidence, not truth: an unreconciled join lists what failed. */
+  readonly reconciled: boolean;
+  readonly inconsistencies: readonly SourceDependencyInconsistency[];
 };
 export type SourceDependencyReport = {
   readonly contract: typeof SOURCE_DEPENDENCY_CONTRACT;
@@ -131,7 +148,7 @@ function freeze<T>(value: T): T {
 }
 const mismatch = (message: string): never => { throw new AlgalError("DIGEST_MISMATCH", `source dependencies: ${message}`); };
 
-type SnapshotLimits = typeof SOURCE_DEPENDENCY_BOUNDS.bundle;
+type SnapshotLimits = { readonly maxBytes: number; readonly maxDepth: number; readonly maxNodes: number; readonly maxEntries: number; readonly maxStringBytes: number };
 /** UTF-8 length of `JSON.stringify(text)`, counted without building the
  * escaped text: quotes, backslash and C0 escapes, lone surrogates as `\uXXXX`. */
 function jsonStringBytes(text: string): number {
@@ -270,11 +287,13 @@ function copyPorts(ports: PortMap): PortMap {
   return out;
 }
 
+const EACH_MARKER = /^i(0|[1-9][0-9]*)$/;
 /** Attribute every recorded cell to the static occurrence that owns it by
- * walking the occurrence tree structurally: a composition cell descends, an
- * `each`/`repeat` cell must be followed by a canonical item marker inside its
- * declared bound, and the final segment names the owning cell. Paths that do
- * not resolve are counted as unattributed rather than guessed.
+ * walking the occurrence tree structurally: an `organism` cell descends, an
+ * `each` cell must be followed by a canonical `iN` marker inside its declared
+ * bound, and the final segment names the owning cell. Paths that do not
+ * resolve are counted as unattributed rather than guessed. Source programs
+ * emit no `repeat` cells; classification rejects them before this runs.
  */
 function attributeReceipt(receipt: RunReceipt, occurrences: readonly SourceDependencyOccurrence[], manifests: ReadonlyMap<Digest, OrganismManifest>): SourceDependencyExecution {
   const indexByPath = new Map(occurrences.map((occurrence, index) => [occurrence.path.join("/"), index]));
@@ -283,7 +302,8 @@ function attributeReceipt(receipt: RunReceipt, occurrences: readonly SourceDepen
   const effectCells = occurrences.map(() => 0);
   const inclusive = occurrences.map(() => 0);
   const unattributed = { cells: 0, work: 0 };
-  const resolve = (path: string): { index: number; prefix: string } | undefined => {
+  const inconsistencies = new Set<SourceDependencyInconsistency>();
+  const resolve = (path: string): { index: number; prefix: string; kind: string } | undefined => {
     const segments = path === "" ? [] : path.split("/");
     if (segments.length === 0) return undefined;
     let index = 0;
@@ -294,14 +314,13 @@ function attributeReceipt(receipt: RunReceipt, occurrences: readonly SourceDepen
       const cell = manifest.cells.find(candidate => candidate.id === segment);
       if (cell === undefined) return undefined;
       cursor++;
-      if (cursor === segments.length) return { index, prefix: segments.slice(0, cursor - 1).join("/") };
-      if (cell.kind !== "organism" && cell.kind !== "each" && cell.kind !== "repeat") return undefined;
-      if (cell.kind === "each" || cell.kind === "repeat") {
-        const marker = segments[cursor];
-        const match = marker === undefined ? null : new RegExp(`^${cell.kind === "each" ? "i" : "r"}(0|[1-9][0-9]*)$`).exec(marker);
+      if (cursor === segments.length) return { index, prefix: segments.slice(0, cursor - 1).join("/"), kind: cell.kind };
+      if (cell.kind !== "organism" && cell.kind !== "each") return undefined;
+      if (cell.kind === "each") {
+        const match = EACH_MARKER.exec(segments[cursor] ?? "");
         if (match === null) return undefined;
         const item = Number(match[1]);
-        if (!Number.isSafeInteger(item) || item >= (cell.kind === "each" ? cell.maxItems : cell.maxRounds)) return undefined;
+        if (!Number.isSafeInteger(item) || item >= cell.maxItems) return undefined;
         cursor++;
         if (cursor === segments.length) return undefined;
       }
@@ -311,16 +330,34 @@ function attributeReceipt(receipt: RunReceipt, occurrences: readonly SourceDepen
       manifest = manifests.get(occurrences[index]!.manifestDigest)!;
     }
   };
+  // A child invocation is only evidence when its parent composition cell was
+  // recorded and not skipped; the parent record sits at the invocation prefix
+  // without an item marker.
+  const checkedPrefixes = new Set<string>();
+  const parentRecorded = (index: number, prefix: string): boolean => {
+    const caller = occurrences[index]!.caller;
+    if (caller === undefined) return true;
+    const parentPath = caller.kind === "each" ? prefix.slice(0, prefix.lastIndexOf("/")) : prefix;
+    const parent = Object.hasOwn(receipt.cells, parentPath) ? receipt.cells[parentPath] : undefined;
+    return parent !== undefined && parent.status !== "skipped";
+  };
   for (const [path, record] of Object.entries(receipt.cells)) {
+    if (record.work > BOUNDS.maxWork) inconsistencies.add("cell-work-exceeds-runtime-limit");
     const owner = resolve(path);
     if (owner === undefined) {
       unattributed.cells++;
       unattributed.work += record.work;
       continue;
     }
-    invocations[owner.index]!.add(owner.prefix);
+    if (!invocations[owner.index]!.has(owner.prefix)) {
+      invocations[owner.index]!.add(owner.prefix);
+      if (!checkedPrefixes.has(`${owner.index}:${owner.prefix}`)) {
+        checkedPrefixes.add(`${owner.index}:${owner.prefix}`);
+        if (!parentRecorded(owner.index, owner.prefix)) inconsistencies.add("invocation-without-parent-record");
+      }
+    }
     cells[owner.index]![record.status]++;
-    if (record.effectDigest !== undefined) effectCells[owner.index]!++;
+    if ((owner.kind === "agent" || owner.kind === "decide") && record.status !== "skipped") effectCells[owner.index]!++;
     inclusive[owner.index]! += record.work;
   }
   // A composition cell's recorded work includes its child invocation, so the
@@ -331,6 +368,8 @@ function attributeReceipt(receipt: RunReceipt, occurrences: readonly SourceDepen
     const parent = indexByPath.get(occurrence.caller.path.join("/"));
     if (parent !== undefined) self[parent]! -= inclusive[index]!;
   });
+  if (self.some(work => work < 0)) inconsistencies.add("negative-self-work");
+  if (inclusive[0] !== receipt.work.units) inconsistencies.add("root-work-mismatch");
   return {
     receiptDigest: receipt.digest, outcome: receipt.outcome, verification: "digest-bound",
     work: { steps: receipt.work.steps, agentCalls: receipt.work.agentCalls, units: receipt.work.units },
@@ -339,6 +378,8 @@ function attributeReceipt(receipt: RunReceipt, occurrences: readonly SourceDepen
       effectCells: effectCells[index]!, selfWork: self[index]!, inclusiveWork: inclusive[index]!,
     })),
     unattributed,
+    reconciled: inconsistencies.size === 0,
+    inconsistencies: [...inconsistencies].sort(compareUtf8),
   };
 }
 
@@ -354,7 +395,8 @@ export async function createSourceDependencyReport(source: string, options: Sour
   const artifact = supplied === undefined ? undefined
     : boundedJsonSnapshot(supplied, SOURCE_DEPENDENCY_BOUNDS.bundle, "source dependencies: bundle");
   const suppliedReceipt: unknown = options.receipt;
-  const receipt = suppliedReceipt === undefined ? undefined : parseRunReceipt(suppliedReceipt);
+  const receipt = suppliedReceipt === undefined ? undefined
+    : parseRunReceipt(boundedJsonSnapshot(suppliedReceipt, SOURCE_DEPENDENCY_BOUNDS.receipt, "source dependencies: receipt"));
   if (receipt !== undefined && receiptDigest(receipt) !== receipt.digest) mismatch("receipt digest mismatch");
   const { compilation } = createSourceTrace(source, options.sourceOptions ?? {});
   const rootDigest = compilation.sourceMap.manifestDigest;
@@ -531,8 +573,10 @@ export function renderSourceDependencies(report: SourceDependencyReport): string
   if (!reports.has(report)) throw new AlgalError("PARSE_FAILED", "source dependencies: only reports created by createSourceDependencyReport can be rendered");
   const names = new Map(report.modules.map(module => [module.manifestDigest, module.name]));
   const { counts, analysis } = report;
+  const execution = own(report, "execution");
   const lines = [
-    "ALGAL source dependencies · digest-bound static structure (not observed execution)",
+    execution === undefined ? "ALGAL source dependencies · digest-bound static structure (not observed execution)"
+      : "ALGAL source dependencies · digest-bound static structure with one recorded execution (not replay verification)",
     `Entry: ${report.entry}`, `Root: ${report.rootManifestDigest}`,
     `Source: ${report.sourceDigest} · compiler ${report.compilerVersion} (${report.profile})`,
     `Analysis: at most ${analysis.maxAgentCalls} executor attempts · required depth ${analysis.requiredDepth}`,
@@ -542,9 +586,8 @@ export function renderSourceDependencies(report: SourceDependencyReport): string
   if (bundle !== undefined) {
     lines.push(`Bundle: root ${bundle.root} · ${bundle.manifests} manifests (${bundle.reachable} reachable, ${bundle.unreachable} unreachable) · ${bundle.values} values`);
   }
-  const execution = own(report, "execution");
   if (execution !== undefined) {
-    lines.push(`Execution: ${execution.outcome} · receipt ${execution.receiptDigest} · digest-bound (not replay verification) · ${execution.work.steps} steps · ${execution.work.agentCalls} executor attempts · ${execution.work.units} work units`);
+    lines.push(`Execution: ${execution.outcome} · receipt ${execution.receiptDigest} · digest-bound (not replay verification) · ${execution.work.steps} steps · ${execution.work.agentCalls} executor attempts · ${execution.work.units} work units · ${execution.reconciled ? "reconciled" : `not reconciled: ${execution.inconsistencies.join(", ")}`}`);
   }
   lines.push("", "Source files");
   for (const unit of report.sourceUnits) lines.push(`  ${unit.source}  ${unit.manifestDigest}  ${unit.calledFromEntry ? "reachable from entry" : "imported but not called"}`);
@@ -568,7 +611,7 @@ export function renderSourceDependencies(report: SourceDependencyReport): string
       const counts = [["committed", entry.cells.committed], ["skipped", entry.cells.skipped], ["failed", entry.cells.failed], ["suspended", entry.cells.suspended]] as const;
       lines.push(`  ${entry.path.join("/") || "(root)"}  ${entry.invocations} invocation${entry.invocations === 1 ? "" : "s"} · ${counts.filter(([, count]) => count > 0).map(([label, count]) => `${count} ${label}`).join(", ") || "no recorded cells"}${entry.effectCells ? ` · ${entry.effectCells} effect cell${entry.effectCells === 1 ? "" : "s"}` : ""} · self ${entry.selfWork} · inclusive ${entry.inclusiveWork}`);
     }
-    lines.push(`  Unattributed: ${execution.unattributed.cells} cells · ${execution.unattributed.work} work`);
+    lines.push(`  Unattributed: ${execution.unattributed.cells} cell${execution.unattributed.cells === 1 ? "" : "s"} · ${execution.unattributed.work} work units`);
   }
   return `${printable(lines.join("\n"))}\n`;
 }

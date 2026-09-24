@@ -146,6 +146,12 @@ test("dependencies joins a recorded receipt and rejects aliased or nonregular re
     const directory = await cli("dependencies", planner, "--receipt", dir);
     expect(directory.code).toBe(2);
     expect(JSON.parse(directory.stderr).error).toBe("BUDGET_EXHAUSTED");
+    const deep = join(dir, "deep-receipt.json");
+    await writeFile(deep, `${"[".repeat(120)}${"]".repeat(120)}`);
+    const nested = await cli("dependencies", planner, "--receipt", deep);
+    expect(nested.code).toBe(2);
+    expect(JSON.parse(nested.stderr)).toMatchObject({ error: "BUDGET_EXHAUSTED" });
+    expect(JSON.parse(nested.stderr).message).toContain("nesting depth");
     const inspector = join(root, "examples/source/projects/task-planning/inspect_task.algal");
     const mismatch = await cli("dependencies", inspector, "--receipt", receiptPath);
     expect(mismatch.code).toBe(2);
