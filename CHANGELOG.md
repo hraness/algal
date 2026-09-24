@@ -9,6 +9,10 @@ wire constant (`0.1.0`) is independent of these package versions.
 
 ## Unreleased
 
+- Package subpaths `./decisions`, `./effects`, `./digest`, `./values`, `./errors`
+  and `./store-contract` expose the browser-clean decision and effect contract
+  modules to consumers that bundle ALGAL for the browser; the root entry still
+  targets Bun.
 - Site: `docs/model-router.md` joins the documentation shelf and `llms.txt`, so
   hraness.com/prompting and the README can link the router doc on the site.
 - `algal dependencies` and `createSourceDependencyReport` report a source

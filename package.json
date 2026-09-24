@@ -39,7 +39,13 @@
     "./registry": "./src/registry.ts",
     "./run": "./src/run.ts",
     "./store-memory": "./src/store-memory.ts",
-    "./verify": "./src/verify.ts"
+    "./verify": "./src/verify.ts",
+    "./decisions": "./src/decisions.ts",
+    "./effects": "./src/effects.ts",
+    "./digest": "./src/digest.ts",
+    "./values": "./src/values.ts",
+    "./errors": "./src/errors.ts",
+    "./store-contract": "./src/store-contract.ts"
   },
   "bin": {
     "algal": "./cli.ts"
