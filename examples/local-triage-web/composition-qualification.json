@@ -28,7 +28,7 @@
   "browser": "151.0.7922.34",
   "inferenceCalls": 0,
   "limitation": "Synthetic composition events exercise the production deferral path; this is not physical IME/device qualification. Removal selects a valid alternate captured fixture, not an admitted schema downgrade.",
-  "reproduce": "hra-host-run --mode=shared --lane=browser-auth --label=algal-control-removal-composition -- bun examples/local-triage-web/composition-qualification.ts FRESH_OUTPUT PLAYWRIGHT_MODULE CHROMIUM_EXECUTABLE",
+  "reproduce": "host-run --mode=shared --lane=browser-auth --label=algal-control-removal-composition -- bun examples/local-triage-web/composition-qualification.ts FRESH_OUTPUT PLAYWRIGHT_MODULE CHROMIUM_EXECUTABLE",
   "notes": [
     "Use installed absolute scheduler and tool paths for reviewed host access. No dependencies are downloaded.",
     "Initial harness attempt used a string predicate prohibited by the production CSP. Final harness uses locator conditions, preserving the CSP; initial evidence is retained separately."

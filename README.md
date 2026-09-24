@@ -1208,7 +1208,7 @@ forged-output detection.
 ALGAL is a Hraness project. It shares conventions with `oh`
 (content-addressed canonical records), `platonik` (bounded organisms and
 symbolization), `valhalla` (authority boundaries and witness execution), and
-`oompa` (execution custody and conservative model routing), but it is
+`xcb` (execution custody and model routing), but it is
 standalone: the store and executor seams are where those foundations attach.
 
 ## License
