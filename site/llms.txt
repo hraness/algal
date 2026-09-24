@@ -65,6 +65,7 @@ The documentation below renders the repository's own `docs/` and `spec/v1/` Mark
 - [Language, harness, habitat](https://algal.computer/docs/algal-design/)
 - [Organisms and agent loops](https://algal.computer/docs/agent-loop-and-organism/)
 - [Executors](https://algal.computer/docs/executors/)
+- [Model router](https://algal.computer/docs/model-router/): the fitted frontier-versus-standard router for first-session prompts, its two head generations, and their limits
 - [Habitats and self-reproduction](https://algal.computer/docs/habitats/)
 - [Civilization loop](https://algal.computer/docs/civilization/)
 - [Use cases and adoption boundary](https://algal.computer/docs/use-cases/)
