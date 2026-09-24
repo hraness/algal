@@ -14,6 +14,10 @@ wire constant (`0.1.0`) is independent of these package versions.
   locations, and direct and transitive model effects, and can check a bundle
   against the recompiled closure. The report is presentation-only and outside
   executable identity.
+- `algal dependencies --receipt` attributes a recorded run to the static
+  report: invocations, recorded cells by status, effect cells, and self and
+  inclusive work per occurrence, with unattributable paths counted rather than
+  guessed. The join is digest-bound, not replay.
 - The task-planning project gains a second entry, `inspect_task.algal`, that
   reuses the scoring and clamp programs under identical digests, with runtime
   failure examples and native parity coverage.

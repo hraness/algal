@@ -431,6 +431,28 @@ console.log(renderSourceDependencies(report));
 Only a report built by `createSourceDependencyReport` can be rendered. A
 serialized or edited copy is data, not compiler evidence.
 
+With `--receipt`, the report also attributes a recorded run to its static
+structure:
+
+```sh
+bun cli.ts run examples/source/projects/task-planning/main.algal \
+  --args examples/source/projects/task-planning/main.args.json > task-plan.receipt.json
+bun cli.ts dependencies examples/source/projects/task-planning/main.algal \
+  --receipt task-plan.receipt.json --format text
+```
+
+The receipt's self-digest and root manifest must match the recompiled source.
+Each recorded cell is then attributed to the occurrence that owns it by walking
+the static tree, so an `each` item counts as one invocation of the child
+occurrence. For every occurrence the report gives the number of invocations,
+recorded cells by status, cells that carried an effect, and work in two forms:
+self work covers the occurrence's own cells, and inclusive work adds every child
+occurrence. Self work sums to the receipt's total work, so nested calls are
+never counted twice. An occurrence that never ran, such as an inactive branch,
+stays listed with zero invocations. Recorded paths that no occurrence can own
+are counted as unattributed rather than guessed. This join is digest-bound
+association, not replay; use `verify` for replay.
+
 The same project's second entry, `inspect_task.algal`, reuses the scoring and
 clamp programs. Its report lists 3 source files and 5 occurrences, and its
 `score_task` and `clamp` modules carry the same digests as the planner's, so

@@ -7,6 +7,7 @@ import { asDigest, digestCanonical, type Digest } from "./digest";
 import { AlgalError } from "./errors";
 import { COMPILE_BOUNDS, compileOrganism, interfaceSignature, type CompiledOrganism } from "./graph";
 import { builtinRegistry } from "./registry";
+import { parseRunReceipt, receiptDigest, type RunOutcome, type RunReceipt } from "./run";
 import { parseBundle, unpackBundle } from "./bundle";
 import { MemoryStore } from "./store-memory";
 import type { SourceCallOrigin, SourceCompilerOptions, SourcePosition, SourceSpan } from "./source";
@@ -73,6 +74,29 @@ export type SourceDependencyOccurrence = {
   readonly caller?: SourceDependencyCaller;
 };
 export type SourceDependencyBundle = { readonly root: Digest; readonly manifests: number; readonly values: number; readonly reachable: number; readonly unreachable: number };
+export type SourceDependencyExecutionOccurrence = {
+  /** Static occurrence path; the list parallels `report.occurrences`. */
+  readonly path: readonly string[];
+  /** Distinct recorded invocations of this occurrence (one per `each` item). */
+  readonly invocations: number;
+  readonly cells: { readonly committed: number; readonly skipped: number; readonly failed: number; readonly suspended: number };
+  /** Recorded cells that carried an effect digest (executor attempts). */
+  readonly effectCells: number;
+  /** Work of this occurrence's own cells, excluding child occurrences' work. */
+  readonly selfWork: number;
+  /** Work of this occurrence's own cells including every child occurrence. */
+  readonly inclusiveWork: number;
+};
+export type SourceDependencyExecution = {
+  readonly receiptDigest: Digest;
+  readonly outcome: RunOutcome;
+  /** Association and integrity with the recompiled root, not replay verification. */
+  readonly verification: "digest-bound";
+  readonly work: { readonly steps: number; readonly agentCalls: number; readonly units: number };
+  readonly occurrences: readonly SourceDependencyExecutionOccurrence[];
+  /** Recorded cells that no static occurrence owns; nothing is guessed for them. */
+  readonly unattributed: { readonly cells: number; readonly work: number };
+};
 export type SourceDependencyReport = {
   readonly contract: typeof SOURCE_DEPENDENCY_CONTRACT;
   readonly entry: string;
@@ -93,8 +117,9 @@ export type SourceDependencyReport = {
   readonly modules: readonly SourceDependencyModule[];
   readonly occurrences: readonly SourceDependencyOccurrence[];
   readonly bundle?: SourceDependencyBundle;
+  readonly execution?: SourceDependencyExecution;
 };
-export type SourceDependencyOptions = { sourceOptions?: SourceCompilerOptions; bundle?: unknown };
+export type SourceDependencyOptions = { sourceOptions?: SourceCompilerOptions; bundle?: unknown; receipt?: unknown };
 
 const reports = new WeakSet<SourceDependencyReport>();
 function freeze<T>(value: T): T {
@@ -245,17 +270,97 @@ function copyPorts(ports: PortMap): PortMap {
   return out;
 }
 
+/** Attribute every recorded cell to the static occurrence that owns it by
+ * walking the occurrence tree structurally: a composition cell descends, an
+ * `each`/`repeat` cell must be followed by a canonical item marker inside its
+ * declared bound, and the final segment names the owning cell. Paths that do
+ * not resolve are counted as unattributed rather than guessed.
+ */
+function attributeReceipt(receipt: RunReceipt, occurrences: readonly SourceDependencyOccurrence[], manifests: ReadonlyMap<Digest, OrganismManifest>): SourceDependencyExecution {
+  const indexByPath = new Map(occurrences.map((occurrence, index) => [occurrence.path.join("/"), index]));
+  const invocations = occurrences.map(() => new Set<string>());
+  const cells = occurrences.map(() => ({ committed: 0, skipped: 0, failed: 0, suspended: 0 }));
+  const effectCells = occurrences.map(() => 0);
+  const inclusive = occurrences.map(() => 0);
+  const unattributed = { cells: 0, work: 0 };
+  const resolve = (path: string): { index: number; prefix: string } | undefined => {
+    const segments = path === "" ? [] : path.split("/");
+    if (segments.length === 0) return undefined;
+    let index = 0;
+    let manifest = manifests.get(occurrences[0]!.manifestDigest)!;
+    let cursor = 0;
+    while (true) {
+      const segment = segments[cursor]!;
+      const cell = manifest.cells.find(candidate => candidate.id === segment);
+      if (cell === undefined) return undefined;
+      cursor++;
+      if (cursor === segments.length) return { index, prefix: segments.slice(0, cursor - 1).join("/") };
+      if (cell.kind !== "organism" && cell.kind !== "each" && cell.kind !== "repeat") return undefined;
+      if (cell.kind === "each" || cell.kind === "repeat") {
+        const marker = segments[cursor];
+        const match = marker === undefined ? null : new RegExp(`^${cell.kind === "each" ? "i" : "r"}(0|[1-9][0-9]*)$`).exec(marker);
+        if (match === null) return undefined;
+        const item = Number(match[1]);
+        if (!Number.isSafeInteger(item) || item >= (cell.kind === "each" ? cell.maxItems : cell.maxRounds)) return undefined;
+        cursor++;
+        if (cursor === segments.length) return undefined;
+      }
+      const next = indexByPath.get([...occurrences[index]!.path, cell.id].join("/"));
+      if (next === undefined) return undefined;
+      index = next;
+      manifest = manifests.get(occurrences[index]!.manifestDigest)!;
+    }
+  };
+  for (const [path, record] of Object.entries(receipt.cells)) {
+    const owner = resolve(path);
+    if (owner === undefined) {
+      unattributed.cells++;
+      unattributed.work += record.work;
+      continue;
+    }
+    invocations[owner.index]!.add(owner.prefix);
+    cells[owner.index]![record.status]++;
+    if (record.effectDigest !== undefined) effectCells[owner.index]!++;
+    inclusive[owner.index]! += record.work;
+  }
+  // A composition cell's recorded work includes its child invocation, so the
+  // child's inclusive work is subtracted from the parent's self work.
+  const self = [...inclusive];
+  occurrences.forEach((occurrence, index) => {
+    if (occurrence.caller === undefined) return;
+    const parent = indexByPath.get(occurrence.caller.path.join("/"));
+    if (parent !== undefined) self[parent]! -= inclusive[index]!;
+  });
+  return {
+    receiptDigest: receipt.digest, outcome: receipt.outcome, verification: "digest-bound",
+    work: { steps: receipt.work.steps, agentCalls: receipt.work.agentCalls, units: receipt.work.units },
+    occurrences: occurrences.map((occurrence, index) => ({
+      path: occurrence.path, invocations: invocations[index]!.size, cells: cells[index]!,
+      effectCells: effectCells[index]!, selfWork: self[index]!, inclusiveWork: inclusive[index]!,
+    })),
+    unattributed,
+  };
+}
+
 /** Build the report from original source. With `bundle`, the artifact must
  * carry the recompiled root and every reachable child under matching digests;
- * missing children are never repaired from source. Returns a frozen report.
+ * missing children are never repaired from source. With `receipt`, recorded
+ * cells are attributed to static occurrences after the receipt's identity is
+ * bound to the recompiled root. Returns a frozen report.
  */
 export async function createSourceDependencyReport(source: string, options: SourceDependencyOptions = {}): Promise<SourceDependencyReport> {
   // Foreign data is read once and captured synchronously, before the first await.
   const supplied: unknown = options.bundle;
   const artifact = supplied === undefined ? undefined
     : boundedJsonSnapshot(supplied, SOURCE_DEPENDENCY_BOUNDS.bundle, "source dependencies: bundle");
+  const suppliedReceipt: unknown = options.receipt;
+  const receipt = suppliedReceipt === undefined ? undefined : parseRunReceipt(suppliedReceipt);
+  if (receipt !== undefined && receiptDigest(receipt) !== receipt.digest) mismatch("receipt digest mismatch");
   const { compilation } = createSourceTrace(source, options.sourceOptions ?? {});
   const rootDigest = compilation.sourceMap.manifestDigest;
+  if (receipt !== undefined && (receipt.manifestDigest !== rootDigest || receipt.manifestKey !== compilation.manifest.key)) {
+    mismatch("source does not compile to this receipt's root manifest");
+  }
   const closure = new Set<Digest>([rootDigest, ...compilation.modules.map(module => digestCanonical(manifestToJson(module)))]);
   const store = new MemoryStore();
   let root: OrganismManifest;
@@ -372,6 +477,8 @@ export async function createSourceDependencyReport(source: string, options: Sour
     source: key, sourceDigest: units[key]!.sourceDigest, manifestDigest: units[key]!.manifestDigest, calledFromEntry: calledSources.has(key),
   }));
   occurrences.sort((left, right) => comparePaths(left.path, right.path));
+  const execution = receipt === undefined ? undefined
+    : attributeReceipt(receipt, occurrences, new Map([...nodes.entries()].map(([digest, node]) => [digest, node.manifest])));
   const report: SourceDependencyReport = {
     contract: SOURCE_DEPENDENCY_CONTRACT, entry,
     sourceDigest: compilation.sourceMap.sourceDigest, rootManifestDigest: rootDigest,
@@ -383,6 +490,7 @@ export async function createSourceDependencyReport(source: string, options: Sour
     },
     sourceUnits, modules, occurrences,
     ...(installed === undefined ? {} : { bundle: { root: rootDigest, manifests: installed.manifests, values: installed.values, reachable: modules.length, unreachable: installed.manifests - modules.length } }),
+    ...(execution === undefined ? {} : { execution }),
   };
   if (utf8Length(canonicalize(report as unknown as JsonValue)) > SOURCE_DEPENDENCY_BOUNDS.maxReportBytes) {
     throw new AlgalError("BUDGET_EXHAUSTED", `source dependencies: report exceeds ${SOURCE_DEPENDENCY_BOUNDS.maxReportBytes} bytes`);
@@ -434,6 +542,10 @@ export function renderSourceDependencies(report: SourceDependencyReport): string
   if (bundle !== undefined) {
     lines.push(`Bundle: root ${bundle.root} · ${bundle.manifests} manifests (${bundle.reachable} reachable, ${bundle.unreachable} unreachable) · ${bundle.values} values`);
   }
+  const execution = own(report, "execution");
+  if (execution !== undefined) {
+    lines.push(`Execution: ${execution.outcome} · receipt ${execution.receiptDigest} · digest-bound (not replay verification) · ${execution.work.steps} steps · ${execution.work.agentCalls} executor attempts · ${execution.work.units} work units`);
+  }
   lines.push("", "Source files");
   for (const unit of report.sourceUnits) lines.push(`  ${unit.source}  ${unit.manifestDigest}  ${unit.calledFromEntry ? "reachable from entry" : "imported but not called"}`);
   lines.push("", "Modules");
@@ -449,6 +561,14 @@ export function renderSourceDependencies(report: SourceDependencyReport): string
     const maxItems = caller === undefined ? undefined : own(caller, "maxItems");
     const from = caller === undefined ? "" : ` ← ${origin === undefined ? `${caller.path.join("/") || "(root)"} (generated)` : originText(origin)} [${caller.kind}${maxItems === undefined ? "" : ` ≤${maxItems} items`}]`;
     lines.push(`  ${occurrence.path.join("/") || "(root)"}  ${names.get(occurrence.manifestDigest) ?? occurrence.manifestDigest}  ${own(occurrence, "source") ?? "(generated)"}${from}`);
+  }
+  if (execution !== undefined) {
+    lines.push("", "Recorded execution");
+    for (const entry of execution.occurrences) {
+      const counts = [["committed", entry.cells.committed], ["skipped", entry.cells.skipped], ["failed", entry.cells.failed], ["suspended", entry.cells.suspended]] as const;
+      lines.push(`  ${entry.path.join("/") || "(root)"}  ${entry.invocations} invocation${entry.invocations === 1 ? "" : "s"} · ${counts.filter(([, count]) => count > 0).map(([label, count]) => `${count} ${label}`).join(", ") || "no recorded cells"}${entry.effectCells ? ` · ${entry.effectCells} effect cell${entry.effectCells === 1 ? "" : "s"}` : ""} · self ${entry.selfWork} · inclusive ${entry.inclusiveWork}`);
+    }
+    lines.push(`  Unattributed: ${execution.unattributed.cells} cells · ${execution.unattributed.work} work`);
   }
   return `${printable(lines.join("\n"))}\n`;
 }
