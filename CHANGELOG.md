@@ -9,6 +9,8 @@ wire constant (`0.1.0`) is independent of these package versions.
 
 ## Unreleased
 
+- Site: `docs/model-router.md` joins the documentation shelf and `llms.txt`, so
+  hraness.com/prompting and the README can link the router doc on the site.
 - `algal dependencies` and `createSourceDependencyReport` report a source
   project's files, executable modules, static call occurrences with caller
   locations, and direct and transitive model effects, and can check a bundle
