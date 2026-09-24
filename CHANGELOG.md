@@ -9,6 +9,13 @@ wire constant (`0.1.0`) is independent of these package versions.
 
 ## Unreleased
 
+- A shared program catalog (`docs/library.md`) lists pure programs called from
+  more than one project, each with its path, executable and interface digests,
+  interface, rejected inputs, limits, callers, compiler, maintainer, and
+  status. `src/library-index.test.ts` recompiles every entry and calling
+  project and fails when the page drifts. A separate `support-queue` project
+  reuses the task planner's `score_task.algal` and `lib/clamp.algal` through
+  `--source-root`, with native parity coverage.
 - `algal lock --evaluation <cases.json>` pins evaluation cases in an optional
   `evaluation` section of `algal.source-lock.v1`: the digests of each case's
   argument and scripted-response files, the run outcome, and a digest of the

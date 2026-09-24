@@ -1,0 +1,11 @@
+{
+  "input": {
+    "tickets": [
+      { "id": "T-101", "subject": "Checkout returns an error", "urgency": 5, "impact": 4, "hours_open": 1 },
+      { "id": "T-102", "subject": "Invoice shows the wrong address", "urgency": 2, "impact": 2, "hours_open": 3 },
+      { "id": "T-103", "subject": "Export button is hard to find", "urgency": 1, "impact": 1, "hours_open": 30 }
+    ],
+    "weights": { "urgency": 2, "impact": 1 },
+    "window": 24
+  }
+}

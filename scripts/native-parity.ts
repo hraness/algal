@@ -95,6 +95,23 @@ generated.set("source-task-inspector", {
   bundlePath: inspectorBundlePath, modules: inspector.modules,
   argsPath: `${inspectorFixtureBase}.args.json`, responsesPath: `${inspectorFixtureBase}.responses.json`,
 });
+// A separate project imports the planner's scoring and clamp programs with ../
+// paths, so it loads under the projects directory as its explicit source root.
+const queue = await loadSourceProject(join(examples, "source/projects/support-queue/main.algal"), { root: join(examples, "source/projects") });
+const queueStore = new MemoryStore();
+for (const module of queue.modules) await queueStore.putManifest(module);
+const queueBundlePath = join(temporary, "source-support-queue.bundle.json");
+const queueManifestPath = join(temporary, "source-support-queue.algal.json");
+await writeFile(queueBundlePath, canonicalize(await packOrganism(queue.manifest, queueStore) as unknown as JsonValue));
+await writeFile(queueManifestPath, canonicalize(manifestToJson(queue.manifest)));
+const queueFixtureBase = join(examples, "source/projects/support-queue/main");
+files.push("source-support-queue.algal.json");
+modules.push(queue.manifest);
+generated.set("source-support-queue", {
+  manifestPath: queueManifestPath, fixtureBase: queueFixtureBase,
+  bundlePath: queueBundlePath, modules: queue.modules,
+  argsPath: `${queueFixtureBase}.args.json`, responsesPath: `${queueFixtureBase}.responses.json`,
+});
 // Branches around child calls need the same isolation in both runtimes. Cover
 // the generated parameterless wrapper and nested list results through a merge.
 for (const [kind, child, source] of [
