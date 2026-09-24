@@ -12,6 +12,10 @@ bun verify/tla/run.ts --suite publication > /private/tmp/algal-publication-evide
 bun verify/tla/run.ts --suite lease
 bun verify/tla/run.ts --suite process
 bun verify/tla/run.ts --suite mailbox
+bun verify/tla/run.ts --suite application
+bun verify/tla/run.ts --suite outbox
+bun verify/tla/run.ts --suite quota
+bun verify/tla/run.ts --suite authority
 bun test verify/tla/tlc.test.ts
 ```
 
@@ -20,6 +24,10 @@ failure is a tool failure, never an invariant counterexample. Java/TLC paths and
 executable pins come from `verify/toolchains.json`; only the reviewed static argv
 is executed. Each model/configuration is copied to a fresh temporary directory.
 Sources and tools must match before and after execution and on later admission.
+The source binding conservatively includes the whole governed production, test,
+specification and build inventory, plus every imported profile declaration.
+`LIVE_SOURCES` records reviewed correspondence; it is not treated as a complete
+transitive dependency graph. Binding source bytes does not prove refinement.
 `java-runtime.json` contains all 456 runtime file hashes derived directly from
 the Temurin archive after checking its SHA256
 `3623232f33a9c3baadf304480b2535f9a3cba8a58d42ecbb438ba267315d9998`.
@@ -58,8 +66,12 @@ has exactly one temporal property and its exact configuration is bound.
 the stable per-application primary lease from the permanent compatibility lease,
 expected-head check, host admission, quota reservation, head publication, lease
 release and public acknowledgment. Source correspondence is to
-`ApplicationService.custody`/native `Service::custody`, commit admission/publication and
-`application-quota` in the source files listed by `LIVE_SOURCES`. The selection
+`FileApplicationStorage.custody`/native `Service::custody`,
+`ApplicationCore.commit`, `FileApplicationStorage.publication`, and
+`application-quota` in the source files listed by `LIVE_SOURCES`.
+`ApplicationService` is the filesystem facade; the portable `ApplicationStorage`
+interface states host obligations without enforcing them for an arbitrary adapter.
+The selection
 action represents the released global namespace scan and its later acquisition
 gap. Old/cutover profiles choose their original identity from committed head
 presence; upgraded code rechecks namespace presence under its stable primary.
@@ -156,3 +168,50 @@ artifact in `ALGAL_TRACE_TEST_BIN`. They execute named native cases and bounded
 Bun integration tests, retaining raw outcomes and source/artifact identity. These
 are sampled correspondence checks; separate full process/native CLI parity and
 repository gates remain required.
+
+## Application selection, outbox, quota and authority
+
+Four separate suites retain the per-suite 128-run bound:
+
+| Suite | Positive profiles | Reachability witnesses | Unsafe controls | Runs |
+| --- | ---: | ---: | ---: | ---: |
+| `application` | 32 | 38 | 9 | 79 |
+| `outbox` | 18 | 33 | 10 | 61 |
+| `quota` | 12 | 19 | 6 | 37 |
+| `authority` | 45 | 55 | 19 | 119 |
+
+See [selection scope](application/SCOPE.md), [outbox scope](outbox/SCOPE.md),
+[quota scope](quota/SCOPE.md), and [authority scope](authority/SCOPE.md).
+Selection covers retained request identity, indexed retries, orphan preparation,
+head selection, structural transition checks, and uncertain publication.
+Outbox covers ordered dispatch, late effects after interruption, reconciliation,
+and the activation barrier. Quota covers shared reservation and completed ledger
+publication, including deletion without a refund. Authority separates structural
+validity, current host admission, capability syntax, and active registration.
+Each suite has separate finite safety and fair-progress profiles. Successful
+model checks do not establish unbounded liveness, exactly-once external effects,
+cryptographic injectivity, or source refinement.
+
+Bun selection and outbox transitions execute in `src/application-core.ts`;
+filesystem custody/publication execute in `src/application-filesystem.ts` through
+the `src/application-storage.ts` host contract. The default authority host remains
+in `src/application-host.ts`. Message parsing, minting and CAS verification live
+in `src/application-message-contract.ts`; retained delivery and local-channel
+verification remain in `src/application-message.ts`. These source maps preserve
+the separate algorithm, storage, host-admission, and message-evidence boundaries.
+
+`MemoryApplicationStorage` provides volatile adapter conformance and simulations.
+Replacing a core while retaining the same adapter is not process-exit durability
+evidence. Its tests do not qualify filesystem leases, durable publication or
+quota scanning, and an injected storage implementation must separately establish
+the interface obligations before borrowing their composition assumptions.
+
+`stateful-app` executes the named Bun application, quota, drain, restoration,
+contention, inter-application-message and policy-host cases, and six native
+service regressions. It requires `ALGAL_APPLICATION_TEST_BIN` to name a freshly
+built, frozen `application_model` integration-test executable (from
+`cargo test --locked -p algal --test application_model --no-run`). It does not use
+the library-test executable accepted by the other protocol suites. Each selected
+native name and Bun file must independently execute positive tests. Whole-source
+and artifact hashes are checked before and after execution. Full application
+crash tests and application CLI parity remain separate required checks.

@@ -859,12 +859,11 @@ async fn poisoned_journal_keeps_executor_cause_without_settlement_or_redispatch(
         .tick_journal("cause", None, &mut host, &Transports::new(), true, 2)
         .await
         .unwrap_err();
-    assert_eq!(error.code, "RECOVERY_BLOCKED");
-    assert!(
-        error.message.contains("execution cause EFFECT_FAILED:")
-            && error.message.contains("terminated by a signal")
-            && error.message.contains("cell worker"),
-        "original executor failure must survive the settlement guard: {error:?}"
+    assert_eq!(error.code, "EFFECT_FAILED");
+    assert!(error.uncertain);
+    assert_eq!(
+        error.message,
+        "host executable was terminated by a signal; external completion may be uncertain"
     );
     assert!(error.message.len() <= 1024);
     assert_eq!(fs::read(&marker).unwrap(), b"x");

@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, open, readdir, realpath, rm, writeFile } from "node:fs/
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { parseToolchains } from "./claims";
-import { hashBytes, hashFile, hashJson, readFileBounded, readJson, stableJson, type FileBinding } from "./files";
+import { governedPaths, hashBytes, hashFile, hashJson, readFileBounded, readJson, stableJson, type FileBinding } from "./files";
 import { admitMutation, admitTlcConfiguration, admitTlcResult, type TlcConfiguration } from "./proof";
 import { CommandFailure, runCommand, type CommandResult } from "./runner";
 import { array, digest, record, relativePath, requireThat, string } from "./schema";
@@ -235,7 +235,11 @@ export async function tlcDefinition(root: string, suite: TlcSuite): Promise<TlcD
   requireThat(Object.hasOwn(LIVE_SOURCES, suite), "unknown TLC suite");
   const profiles = MODEL_PROFILES.filter(profile => profile.suite === suite);
   const mutations = MODEL_MUTATIONS.filter(mutation => profiles.some(profile => profile.id === mutation.base));
-  const paths = [...new Set([...ADAPTER_SOURCES, ...LIVE_SOURCES[suite], ...profiles.map(profile => profile.path)])].sort();
+  // LIVE_SOURCES documents the reviewed correspondence, not a complete import
+  // graph. Bind all governed sources conservatively, plus every imported
+  // profile: inventory validation observes other suites' declarations too.
+  const importedProfiles = Object.values(LIVE_SOURCES).flat().filter(path => path.endsWith("/profiles.ts"));
+  const paths = [...new Set([...await governedPaths(root), ...ADAPTER_SOURCES, ...importedProfiles, ...LIVE_SOURCES[suite], ...profiles.map(profile => profile.path)])].sort();
   const inputs: FileBinding[] = [];
   for (const path of paths) inputs.push({ path, sha256: await hashFile(root, path) });
   return { contract: "algal.verification-tlc-definition.v1", suite, profiles, mutations, inputs, relation: RELATION };

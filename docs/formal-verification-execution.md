@@ -2,23 +2,23 @@
 
 ## Integration candidate
 
-Execution was authorized on 2026-09-23. Branch: `feat/formal-verification-foundation`, based on freshly fetched `origin/main` at `353a5cac4ea2b2ae40e00bf9c2805606265a5378`. The historical audit remains an exact account of its older snapshot. New application drain, experiment, research, messaging/contention and inference surfaces are being mapped before the claim ledger is admitted.
+Execution was authorized on 2026-09-23. Branch: `feat/formal-verification-foundation`, based on freshly fetched `origin/main` at `353a5cac4ea2b2ae40e00bf9c2805606265a5378`. The historical audit remains an exact account of its older snapshot. Application drain, experiment, research, messaging/contention and inference surfaces were added to the ledger. The working integration now includes upstream `e588f8bc9b0964e5956f4c62e60c14dfbcef171e`; its portable hosts, workbenches, renderer and Gateway sidecar surfaces add four pending obligations (116 total).
 
 The audit and plan documents were the only changes carried onto the task branch. No unrelated working changes were present. The separate `algal-worktrees/platonik-dep` worktree is outside this task.
 
 ## Current orchestration step
 
-Phases 02 and 03 — application custody, durable publication, finite protocol models and reproducible evaluator artifacts. Phase 01 passed its integrated checkpoint and was committed as 82f672d. The integrator owns the property registry, assumptions, tool pins, shared manifests, CI, generated evaluator artifact and this execution record. Workers own disjoint runtime/test scopes, with independent review after convergence.
+Phases 06–09 — application and scheduler models, adversarial closure tests and Lean semantic foundations. Phase 05's integrated protocol checkpoint and 432-theorem Core milestone were committed as f461dd2. The integrator owns the property registry, assumptions, tool pins, shared manifests, CI, generated evaluator artifact and this execution record. Workers own disjoint runtime/test scopes, with independent review after convergence.
 
 ## Environment
 
-Bun 1.3.14 and Rust 1.97.1 are installed. The initial Java executable is the macOS stub; Lean is not installed on PATH. Formal toolchains will be task-local and checksum pinned after smoke validation. No global configuration change is part of this task.
+Bun 1.3.14 and Rust 1.97.1 are installed. The PATH Java executable is the macOS stub and Lean is not on PATH; qualified, checksum-pinned Java/TLC and Lean distributions are installed in task-local scratch directories. No global configuration change is part of this task.
 
 No installed `oompa-host-run` or `hra-host-run` was found on PATH or in the documented local command directories. Repository policy requires the scheduler when available; repository-native commands are used while it is absent. No denied scheduler invocation is bypassed. Network access for the exact-main Git fetch required configured automatic approval and succeeded.
 
 ## Evidence and delivery
 
-Phase 00 is complete after independent review. No production proof, production model check, release, deployment or merge is claimed by this record. Tool compatibility controls concern toy fixtures only. Per-phase results and exact final delivery evidence will be added as work converges.
+Phases 00–05 are committed after independent review. Later records include source-bound finite protocol models, mathematical model theorems and sampled runtime correspondence. No whole-production proof, checked implementation refinement, remote merge, release or deployment is claimed. Exact final delivery evidence is recorded only after the corresponding gates pass.
 
 ### Phase 00
 
@@ -100,7 +100,7 @@ inherited writers and actual listener-permitted Java. The 13 model profiles,
 58 action witnesses and 20 deliberate mutations have separately passed direct
 semantic diagnostics, but those diagnostic runs do not replace the owned runner.
 
-Phase09 has begun independently of the remaining Phase02/03 join. Its initial
+Phase 09 has begun independently of the remaining Phase02/03 join. Its initial
 scope is explicit finite binary64 normalization, scalar/UTF-16 domains, finite
 maps, ports/graphs and accounting. Full ECMAScript shortest-decimal canonical
 encoding remains an unmet criterion; a structural codec will not silently stand
@@ -130,9 +130,9 @@ Phases02 and03 are complete within these conditional finite/model/artifact scope
 Universal ledger obligations remain unproved and license zero formal claims.
 The final repository aggregate gate and delivery remain required after the
 remaining plan converges. Phase04 is the next dependent implementation lane;
-Phase09 continues independently.
+Phase 09 continues independently.
 
-### Phase04 counterexamples and Phase09 checked milestone
+### Phase04 counterexamples and Phase 09 checked milestone
 
 Portable stateful traces reproduced persistent native CAS/effect reads returning
 cached values after the backing file was corrupted or removed. The native Store
@@ -163,7 +163,7 @@ toolchain, trust assumptions and limits are in
 extensional finite-map projection, recursive normalization and quoted-string
 UTF-8 round-trip/injectivity are proved in the semantic model. All 56 actual
 quoted-string vectors match both runtimes. Complete JSON number/delimiter
-composition and production refinement remain open. Phase09 remains in progress.
+composition and production refinement remain open. Phase 09 remains in progress.
 
 Phase04 is complete within its sampled trace/fault scope. The final source
 snapshot passed all 74 histories and 1,628 commands per runtime, with independent
@@ -186,7 +186,7 @@ The exact evaluator WASM was reproduced after Cargo/runner input refresh.
 These milestones do not license universal implementation correctness or replace
 the final repository aggregate and delivery gates.
 
-Phase05 is now integrating bounded lease, mailbox, effect-journal and process
+Phase 05 is now integrating bounded lease, mailbox, effect-journal and process
 models. Independent journal-model review repaired lost recovery-charge
 acknowledgments, concurrent poison during awaited persistence, recorded versus
 new binding drift, retained receipt identity, invocation versus process-generation
@@ -194,7 +194,7 @@ identity, and effects that apply after host death. Its 32 scratch diagnostic
 profiles behaved as expected; repository suite admission and implementation
 conformance remain pending.
 
-### Phase05 uncertainty counterexample and conformance admission
+### Phase 05 uncertainty counterexample and conformance admission
 
 The new real mailbox/supervisor boundary regression reproduced a composition
 defect in both runtimes. After receive published a consumed marker and removed
@@ -219,7 +219,7 @@ each. Executed missing-file, empty-file, duplicate and empty-inventory controls
 pass, as do the four new journal correspondence cases. The journal barrier tests
 collect the owned operation in `finally` before removing its state.
 
-### Phase08 preliminary closure counterexample
+### Phase 08 preliminary closure counterexample
 
 A bounded five-case probe now reproduces F09's depth-composition gap in Bun:
 an input value nested in 61 or 62 arrays passes run admission and produces a
@@ -229,14 +229,14 @@ admission at their depth limit of 64. Values nested 59 or 60 arrays round-trip;
 this is structural amplification rather than a large-data experiment. Raw rows
 are `/private/tmp/algal-phase08-depth-probe.jsonl`, with retained receipts in
 the archive recorded there. The production repair remains pending; this does
-not yet complete any Phase08 acceptance criterion.
+not yet complete any Phase 08 acceptance criterion.
 
 The native CLI counterpart accepts depths 59/60 and returns a typed
 `BUDGET_EXHAUSTED` at 61/62/63; its final receipt hashing enforces depth 64.
 Raw command evidence is `/private/tmp/algal-phase08-native-depth-probe.jsonl`
 and `/private/tmp/algal-phase08-native-depth-ISiOyk`. This confirms a Bun/native
 producer mismatch; it does not establish effect preservation after an oversized
-effectful run. The Phase07 40-case byte-budget probe also now includes actual
+effectful run. The Phase 07 40-case byte-budget probe also now includes actual
 native execution and nested children: recall can widen root limits in both
 runtimes, while native ordinary agent cells correctly clamp and Bun does not.
 
@@ -265,9 +265,10 @@ heads, records and the scalar counter remain retained; evidence is
 `/private/tmp/algal-receipt-closure-review/journal-readback-evidence.json`.
 A final run-receipt guard alone cannot repair this gap: completed journal
 publication must first guarantee readback, preserving started evidence on
-unrepresentable completion. Native correspondence is under investigation.
+unrepresentable completion. Native correspondence was subsequently reproduced
+with the same three sizes and a real command tool; see the continuation below.
 
-### Phase09 numeric meaning and syntax milestone
+### Phase 09 numeric meaning and syntax milestone
 
 The fresh complete core gate and separate re-admission now pass 372 named
 theorems across 15 domains, 1,268 defining-module theorem audits, seven rejection
@@ -278,9 +279,9 @@ meaning. Decimal-to-binary rounding, shortest rendering, a production NumberCode
 instance and implementation refinement remain open. The exact receipt and trust
 limits are recorded in `formal-verification-evidence/phase09-core.md`.
 
-### Phase05 protocol checkpoint and Phase06 continuation
+### Phase 05 protocol checkpoint and Phase 06 continuation
 
-Phase05 is complete within the declared finite-model and sampled-conformance
+Phase 05 is complete within the declared finite-model and sampled-conformance
 scope. Five admitted TLC suites, including the refreshed earlier custody and
 publication suites, passed 76 positive configurations, 229 transition witnesses
 and 60 intended unsafe controls. All saved raw results passed independent
@@ -299,11 +300,11 @@ isolated reruns without changing limits. The complete quiet aggregate then
 passed 1,128 tests with 20 conditional skips, zero failures and 8,450 assertions,
 plus type checking, lint, documentation and site build. Its exact log is
 `/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/system-one-EAh4nx/check.log`.
-A Phase06 review also identified test-cleanup paths
+A Phase 06 review also identified test-cleanup paths
 that can remove owned state before an awaited operation has joined after failure;
 that harness follow-up remains open.
 
-Phase06 has source-mapped quota and outbox candidates under independent review.
+Phase 06 has source-mapped quota and outbox candidates under independent review.
 Outbox review identified missing late application of an invoked adapter after
 host death; the candidate is being repaired before registered admission. Selection
 and authority models and real service correspondence remain outstanding.
@@ -317,3 +318,165 @@ precision and parity variants. Negative rounding candidates, zero/overflow
 centers, decimal conversion, shortest rendering and source refinement remain
 open. `formal-verification-evidence/phase09-core.md` identifies the current
 receipt; earlier checkpoints are historical evidence.
+
+### Phase 07 byte-budget repair and Phase 08 closure continuation
+
+The root byte limits now clamp agent and recall cell overrides in Bun and
+recall overrides in native. Native ordinary agents already enforced that clamp.
+Focused regressions cover 56 cases per runtime: flat/nested, context/output,
+default/narrow/equal/widened/positive/exact/one-below limits, request identity,
+actual dispatch, ordered effects, charged work and offline receipt replay.
+All 56 Bun cases and the native 56-case matrix passed. The independent scheduler
+oracle then agreed with both actual runtimes on all 72 scratch fixtures,
+including the two formerly failing Bun byte-limit cases. The adapter now requires
+agreement for every case; no expected discrepancy is waived. Exact scratch
+summary: `/private/tmp/algal-phase07-scheduler/oracle-conformance-I16Bfv/summary.json`.
+Its newly built, copied native CLI is
+`/private/tmp/algal-phase07-frozen-artifacts-njcn5w5l/algal`, SHA-256
+`8a150a77c592173d7a265bd54482c0ef6956ce43b8c5b40fb0a24cc1fde7b9ca`.
+This remains diagnostic conformance over a disclosed subset, not the registered
+Phase 07 gate or a refinement proof. Subsequent closure edits require refreshed
+source-bound qualification.
+
+The journal readback defect was independently reproduced in native as well as
+Bun. A real stable-configured write tool increments an owned scalar counter once
+and returns a byte-admitted array. With 100,001 or 130,000 elements, both runtimes
+published completed journal records that their 100,000-node host reader refused.
+Fresh journal inspection and exact-intent recovery could not read the record;
+no second effect or terminal process receipt was produced. The 49,900-element
+control completed and reopened. At 75,000 elements the completed journal remained
+readable, but the stricter aggregate process receipt could not fit. Recovery
+replayed the recorded result without repeating the write. These are separate
+admission boundaries. Exact retained reports are
+`/private/tmp/algal-receipt-closure-review/native-journal-readback-evidence.json`,
+`journal-readback-evidence.json`, `native-journal-intermediate-evidence.json`
+and `journal-intermediate-evidence.json` in the same directory.
+
+The minimum repair is implemented and independently reviewed: validate prospective journal records before
+immutable record/head publication, preserve readable started evidence on refused
+completion, and propagate post-dispatch host uncertainty without routing guest
+fallbacks. Independently, run finalization now applies the reader's complete
+resource and schema profile before hashing/return, including a fixed-length
+digest field. Oversized produced receipts raise BUDGET_EXHAUSTED; foreign
+structural admission retains PARSE_FAILED. Bun regressions cover depth 59/60
+readback and replay, depth 61/62 refusal, duplicated node amplification, exact
+one-million-node admission and the next node's rejection, plus failed/suspended
+receipt roundtrips. The six-file focused Bun runtime suite passed 183 tests and
+1,277 assertions; log:
+`/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/system-one-zGNsAx/check.log`.
+Native closure validation passed the four final-receipt cases, the 56-case root-byte matrix, the real command/journal integration case, and six unique journal/cache/replay/mailbox cases. The combined Bun receipt/journal closure set passed 35 tests and 162 assertions before the final cache-provenance extension. Source review approved both runtimes within the documented scope; aggregate qualification remains required.
+
+Final return admission alone does not reserve receipt capacity before effects,
+preserve every ordinary-run prefix when finalization fails, guarantee process
+settlement, or make every valid receipt/history exportable inside a larger
+bundle. Those stronger capacity-accounting and wrapper obligations remain open;
+no counts, bytes or evidence are silently dropped and no limit is widened.
+
+
+### Phase 06 registration and final cache-boundary repairs
+
+Four registered application models preserve the independently reviewed scratch
+semantics: selection (32 positive / 38 reachability / 9 unsafe controls), outbox
+(18 / 33 / 10), quota (12 / 19 / 6), and authority (45 / 55 / 19). The total is
+296 runs, split into four suites below the existing 128-run bound. Registration
+review checked exact model bytes, every original constant/property/control, the
+additional progress witnesses, and the split duplicate-action witness. Actual
+registered TLC execution is still required. The adapter now conservatively
+binds the whole governed source inventory and every imported profile declaration;
+its new test detects both added transitive sources and changes in another suite's
+imported inventory while excluding generated evidence.
+
+Application source histories now cover retained-index retry after head advancement
+and fresh denial, prepared-orphan resumption versus stale refusal, migration
+without newly granted episode authority, and real channel/result/message
+publication before quota-refused settlement. The initial seven-file Bun set
+passed 58 cases / 331 assertions; the new native integration artifact passed
+four entrypoints, including both orphan branches. Test cleanup releases barriers
+and joins owned work before deleting its namespace; a bounded failed join retains
+that namespace. Additional persisted writer and later contention-identity cases
+are still being joined before the source freeze. Specification corrections
+state the retained-index condition, original migrated source, and the distinction
+between CAS message validity and reachable settled delivery evidence.
+
+Final cache review reproduced two additional Bun defects: a prefetched cache hit
+followed by a live failed miss could hide completion uncertainty, and a returned
+live result whose cache encoding failed could be replaced by a settled INTERNAL
+error. Per-invocation host-only dispatch tracking now distinguishes lookup and
+metadata failures, actual execution, current cached results, and explicit replay.
+Post-result cache encoding/publication failures preserve their original diagnostic
+and uncertainty. No receipt fields were added. The four-file focused regression
+set passed 157 tests / 647 assertions; full log:
+`/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/system-one-9jmgLD/check.log`.
+Independent review is retained at
+`/private/tmp/algal-closure-final-review/REVIEW.md`.
+Root separately reviewed the repair. Arbitrary hostile host getters/proxies or
+false cached declarations remain outside this guarantee.
+
+The scheduler candidate now agrees across the independent oracle, Bun and native
+on 89 cases; actual command-adapter comparisons pass 14 fixtures in both runtimes.
+The registered adapter and independent review subsequently passed; retained model and 206-comparison receipts are described in [Phase 07 evidence](formal-verification-evidence/phase07-scheduler.md). The pre-integration 519-theorem Lean checkpoint audited 1,554 module theorems, 35 supervised commands and seven controls, then passed independent readmission. That receipt remains historical with its original bindings; the fresh integrated Lean checkpoint is recorded below.
+
+
+### Upstream integration and next qualification
+
+The four Phase 06 suites completed 296 registered TLC runs: 107 positive profiles, 145 reachability witnesses and 44 unsafe controls. Each suite passed independent readmission against 575 governed/model/adapter inputs. [Phase 06 evidence](formal-verification-evidence/phase06-application.md) retains all four receipts and 74 Bun/six native application conformance results.
+
+A narrow explicit fetch of main found `e588f8bc9b0964e5956f4c62e60c14dfbcef171e`. All 83 task-owned modified/untracked files were copied with per-file digests and a binary diff to `/private/tmp/algal-before-e588-xfxh4les`; stash `f5e0dd161920b15683146aa5386a43912c745915` remains retained. The merge preserves every saved file; only intended import/message-prose changes differ. Independent source comparison approved 15 foundation files, and the reviewed three-file application port preserves the custody/uncertainty repairs across upstream extraction. No remote integration is yet claimed.
+
+Focused application qualification passed 76 tests/551 assertions. New provider-observation journal tests passed four cases/39 assertions: direct and cached observation failure leave readable started evidence, successful observations cache/replay without a second provider call, and a late callback cannot settle after an effect deadline. These use injected local responses and make no live-provider claim. Test review repairs ensure owned asynchronous bodies and supervised CLI descendants are collected before deleting roots.
+
+Bun bundle unpack/call now use bounded regular-file and fatal UTF-8 admission. Their latest focused ingress gate passed two tests/166 assertions, including exact 64 MiB admission, overbound refusal, regular symlinks, FIFO/device rejection, overwritten duplicate members containing malformed UTF-8, BOM/truncation, no rejected-record publication and no adapter dispatch. Explicit canonical-byte vectors passed for non-BMP, combining, controls/escapes and lone-surrogate strings after upstream switched byte counting to TextEncoder.
+
+The independently reviewed 45-theorem negative-endpoint candidate is integrated under the required `Algal.Core` namespace. Fresh qualification passed for 564 named theorems across 20 modules, the complete 1,616-theorem module environment, 36 supervised commands and seven negative controls. The actual raw receipt was persisted, reloaded and independently readmitted: [Phase 09 evidence](formal-verification-evidence/phase09-core.md), receipt `382155e754e36a00273713d70c6fb5c8c1225edb44d8aaf1696c579e1f36d49a`. Its 81 source bindings have digest `4ffa8ec2ba85460907ff9cd2e4552a4a1309aab5a56a674730dc20235a8a329f`. Lean 4.34.0 binds 17,711 installed files; the freshly built frozen native vector artifact has SHA256 `5e2e3d55a14631cfe2ef3b693358284b95c24d1ec4c7a8e470dc9af76d820d56`. Limits remain one thread, 1024 MiB Lean memory, 120 seconds and 2 MiB output per command. This is a semantic-model checkpoint with sampled Bun/native correspondence, not whole-production refinement. The subsequent directory-allocation scope correction in the bound organism specification makes this 564-theorem receipt historical for the changed tree. The required aggregate gate will rerun Lean after source convergence; no historical hashes are rewritten.
+
+Bundle producer/consumer closure and directory consumer-admission repairs are
+implemented and independently reviewed; [Phase 08 evidence](formal-verification-evidence/phase08-closure.md)
+records the remaining allocation and wrapper obligations. Bun's eager directory
+enumeration remains an explicit open gap, with a separate
+[qualified-primitive decision plan](formal-verification-evidence/directory-enumeration-decision.md).
+
+The native integration gate passed format, clippy with warnings denied, all 376
+workspace tests (three owned child entrypoints are ignored by the ordinary
+harness), and debug/release builds with pinned Rust 1.97.1. The initial sandboxed
+HTTP fixture bind was denied; the approved loopback rerun passed. The real
+release binary then passed 17 package/install checks and 18 deterministic Apple
+fixture cases without inference. The coding-harness Python gate passed 42 tests
+with CPython 3.12 and the repository-pinned Harbor 0.23.0 in a task-local environment.
+Logs: `/private/tmp/algal-native-integrated-gates-loopback.log` and
+`/private/tmp/algal-final-python-gates.log`.
+
+The first full Bun check passed typecheck/lint and 1,386 tests, with 20 optional
+skips and one new module-fixture child deadline failure. Seventeen skipped cases
+require the native memory binary and are covered by the separate CI fixture
+commands; two require live providers and one is Linux-only. The latter three
+remain unqualified by this local Mac run. The
+reviewed test-only repair uses shallow owned temporary roots, bounded parallel
+fixture reads and repeated-content hardlinks; it preserves every physical/logical
+boundary, real CLI/storage call, retained-evidence assertion, and 10-second child
+deadline. All eight directory tests then passed 232 assertions in 11.32 seconds;
+the 511/512/513 cases each took approximately two seconds. The required full Bun
+rerun passed 1,387 tests and 11,163 assertions in 451.73 seconds, retaining those
+20 explicit skips, followed by seven executable diagram checks and the 52-page
+site build. Raw log:
+`/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/system-one-RZRtx2/check.log`.
+Independent integration review found no new source blocker. All 20 parity and
+native-backed fixture commands subsequently passed, including all 62 bundled
+examples, the durable application/process lifecycles and three loopback inference
+formats. The [parity report](formal-verification-evidence/integration-parity.json)
+binds exact commands, outputs, 504 source files and the frozen executable; no
+live-provider qualification is inferred.
+
+The final 23-suite formal aggregate passed and its saved evidence passed independent
+readmission: [retained report](../verify/results/09c0a05c0829a50fd8b0b3b2686070a316f1c78ab32d5ac56cd053b751162ee3/aggregate-readmission.json).
+It binds input digest `f5ac4d4ca8a19fcaed62fd6663913554591e202d48372bf28289f2a649a362cb`
+and 661 TLC runs (183 positive profiles, 374 action witnesses, 104 unsafe controls),
+564 named Lean/1,616 module theorems with seven controls, 206 scheduler comparisons,
+and 100 Bun/six native application conformance tests. The extractor retains all
+suite payloads and embeds the scheduler raw archive; its per-suite readmission
+levels distinguish full raw checks from aggregate-bound retention.
+
+The [integration checkpoint](formal-verification-evidence/integration-checkpoint.json)
+and [independent review](formal-verification-evidence/integration-review.md) preserve
+the local qualification. [Phase 06 acceptance review](formal-verification-evidence/phase06-acceptance-review.md)
+confirms dedicated generated composition histories remain missing. Phases 06–09
+therefore remain in progress. No remote integration is yet claimed.

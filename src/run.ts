@@ -37,6 +37,7 @@ import {
   checkSchema,
   effectRequestDigest,
   executorSupports,
+  invokeExecutorEffect,
   parseEffectReceipt,
   type EffectKind,
   type EffectReceipt,
@@ -50,7 +51,7 @@ import type { Transport } from "./transport";
 import type { ToolRegistry } from "./tools";
 import { elideToolContext } from "./tool-context";
 import type { JournalBinding, JournalTicket, RuntimeJournal } from "./process-journal";
-import { bindRecallOutput, recallOutputSchema } from "./semantic";
+import { bindRecallOutput, recallOutputSchema } from "./semantic-contract";
 import { asDigest, digestCanonical, type Digest } from "./digest";
 import {
   asArray,
@@ -271,7 +272,13 @@ export async function runOrganism(opts: RunOptions): Promise<RunReceipt> {
     work: ctx.work,
     ...(ctx.failure ? { failure: ctx.failure } : {}),
   };
-  return { ...receipt, digest: receiptDigest(receipt as RunReceipt) };
+  // Admit the actual envelope before recursive hashing. A fixed-size digest
+  // placeholder accounts for the field without hashing an unreadable body.
+  const admitted = { ...receipt, digest: `sha256:${"0".repeat(64)}` as Digest };
+  checkReceiptResources(admitted, "BUDGET_EXHAUSTED");
+  parseReceiptFields(admitted);
+  admitted.digest = receiptDigest(admitted);
+  return admitted;
 }
 
 export function receiptDigest(r: Omit<RunReceipt, "digest">): Digest {
@@ -610,9 +617,15 @@ function assertJournal(ctx: RunContext): void {
   if (ctx.journalFailure !== undefined) throw ctx.journalFailure.error;
   ctx.opts.journal?.assertHealthy();
 }
-async function journalStep<T>(ctx: RunContext, operation: () => Promise<T>): Promise<T> {
+async function journalStep<T>(ctx: RunContext, operation: () => Promise<T>, dispatched = false): Promise<T> {
   try { assertJournal(ctx); return await operation(); }
-  catch (error) { ctx.journalFailure = { error }; ctx.opts.journal?.poison(error); throw error; }
+  catch (error) {
+    const report = errorReport(error);
+    const failure = dispatched && !(error instanceof AlgalError && error.uncertain)
+      ? new AlgalError(report.code, report.message, error instanceof AlgalError ? error.details : undefined, { uncertain: true })
+      : error;
+    ctx.journalFailure = { error: failure }; ctx.opts.journal?.poison(failure); throw failure;
+  }
 }
 function processEffectKey(ctx: RunContext, requestDigest: Digest): Digest {
   return ctx.opts.processName === undefined ? requestDigest : digestCanonical({
@@ -685,39 +698,43 @@ async function providerAttempt(
     if (ticket.receipt !== undefined) return ticket.receipt;
   }
   let effect: EffectReceipt;
+  let dispatched = false;
   try {
     const result = await boundedCall(async (signal) => {
       if (!journal) meta = await executor.receiptFor?.(request);
       if (signal?.aborted || (deadline !== undefined && performance.now() >= deadline))
         throw new AlgalError("BUDGET_EXHAUSTED", timeoutMessage);
-      if (executor.executeEffect) {
-        const result = await executor.executeEffect(request, signal);
-        return { output: result.output, metadata: { ...meta, ...result.metadata } };
-      }
-      return { output: await executor.execute(request, signal), metadata: meta };
+      const result = await invokeExecutorEffect(executor, request, signal, value => { dispatched = value; });
+      return { output: result.output, metadata: { ...meta, ...result.metadata } };
     }, remaining(), timeoutMessage);
     meta = result.metadata;
     effect = { requestDigest, output: result.output, executor: meta?.executor ?? executor.id };
   } catch (error) {
     if (journal && error instanceof AlgalError && error.uncertain)
       return journalStep(ctx, async () => { throw error; });
+    // Preflight metadata cannot label a thrown live attempt as a cache hit.
+    // Explicit replay retains its recorded metadata verbatim.
+    if (executor.replay !== true && meta?.cached) meta = { ...meta, cached: false };
     const report = errorReport(error);
     effect = { requestDigest, error: { code: report.code, message: report.message }, executor: meta?.executor ?? executor.id };
     const wake = suspensionWake(error, meta?.wake);
     if (wake.length > 0) effect.wake = wake;
     if (report.code === "EFFECT_SUSPENDED" || (error instanceof AlgalError && error.uncertain)) effect.retryable = false;
   }
-  if (meta?.usage) effect.usage = structuredClone(meta.usage);
-  if (meta?.cached) effect.cached = true;
-  if (meta?.configurationDigest) effect.configurationDigest = meta.configurationDigest;
-  if (retryPolicy && (executor.retryable === false || meta?.retryable === false)) effect.retryable = false;
-  // Compaction has no retry loop, but replay must retain its recorded policy.
-  if (executor.replay === true && meta?.retryable === false) effect.retryable = false;
-  // Adapter-owned output objects must not change while persistence awaits I/O.
-  const terminal = journal ? await journalStep(ctx, async () => structuredClone(effect)) : effect;
-  if (journal && ticket?.token !== undefined)
-    await journalStep(ctx, () => journal.after(ticket.token!, structuredClone(terminal)));
-  return terminal;
+  const complete = async (): Promise<EffectReceipt> => {
+    if (meta?.usage) effect.usage = structuredClone(meta.usage);
+    if (meta?.cached) effect.cached = true;
+    if (meta?.configurationDigest) effect.configurationDigest = meta.configurationDigest;
+    if (retryPolicy && (executor.retryable === false || meta?.retryable === false)) effect.retryable = false;
+    // Compaction has no retry loop, but replay must retain its recorded policy.
+    if (executor.replay === true && meta?.retryable === false) effect.retryable = false;
+    // Adapter-owned output objects must not change while persistence awaits I/O.
+    const terminal = journal ? structuredClone(effect) : effect;
+    if (journal && ticket?.token !== undefined)
+      await journal.after(ticket.token, structuredClone(terminal));
+    return terminal;
+  };
+  return journal ? journalStep(ctx, complete, dispatched) : complete();
 }
 async function toolAttempt(
   ctx: RunContext, name: string, entry: NonNullable<ReturnType<ToolRegistry["get"]>>,
@@ -737,10 +754,14 @@ async function toolAttempt(
     if (ticket.receipt !== undefined) return ticket.receipt;
   }
   let effect: EffectReceipt;
+  let dispatched = false;
   try {
-    const outputs = await boundedCall((signal) => entry.tool(inputs, {
-      requestDigest, idempotencyKey: processEffectKey(ctx, requestDigest), ...(signal ? { signal } : {}),
-    }), timeout, timeoutMessage);
+    const outputs = await boundedCall((signal) => {
+      dispatched = true;
+      return entry.tool(inputs, {
+        requestDigest, idempotencyKey: processEffectKey(ctx, requestDigest), ...(signal ? { signal } : {}),
+      });
+    }, timeout, timeoutMessage);
     effect = { requestDigest, output: outputs as JsonValue, executor: `tool:${name}` };
   } catch (error) {
     if (journal && error instanceof AlgalError && error.uncertain)
@@ -755,9 +776,9 @@ async function toolAttempt(
     };
   }
   // Adapter-owned output objects must not change while persistence awaits I/O.
-  const terminal = journal ? await journalStep(ctx, async () => structuredClone(effect)) : effect;
+  const terminal = journal ? await journalStep(ctx, async () => structuredClone(effect), dispatched) : effect;
   if (journal && ticket?.token !== undefined)
-    await journalStep(ctx, () => journal.after(ticket.token!, structuredClone(terminal)));
+    await journalStep(ctx, () => journal.after(ticket.token!, structuredClone(terminal)), dispatched);
   return terminal;
 }
 
@@ -1022,8 +1043,8 @@ async function activate(
           `recall cell "${cell.id}" query exceeds maxRecallQueryBytes ${BOUNDS.maxRecallQueryBytes}`,
         );
       }
-      const maxCtx = cell.budget?.maxContextBytes ?? ctx.budgets.maxContextBytes;
-      const maxOut = cell.budget?.maxOutputBytes ?? ctx.budgets.maxOutputBytes;
+      const maxCtx = Math.min(cell.budget?.maxContextBytes ?? ctx.budgets.maxContextBytes, ctx.budgets.maxContextBytes);
+      const maxOut = Math.min(cell.budget?.maxOutputBytes ?? ctx.budgets.maxOutputBytes, ctx.budgets.maxOutputBytes);
       const context: JsonObject = { inputs };
       const contextBytes = canonicalBytes(context);
       if (contextBytes > maxCtx) {
@@ -1173,8 +1194,8 @@ async function activate(
     case "gate":
     case "decide": {
       const budgets = ctx.budgets;
-      const maxCtx = cell.budget?.maxContextBytes ?? budgets.maxContextBytes;
-      const maxOut = cell.budget?.maxOutputBytes ?? budgets.maxOutputBytes;
+      const maxCtx = Math.min(cell.budget?.maxContextBytes ?? budgets.maxContextBytes, budgets.maxContextBytes);
+      const maxOut = Math.min(cell.budget?.maxOutputBytes ?? budgets.maxOutputBytes, budgets.maxOutputBytes);
       const tools =
         cell.kind === "gate" || cell.kind === "decide" ? undefined : cell.tools;
       const maxTurns = cell.kind === "decide" ? 1
@@ -1826,35 +1847,55 @@ export const RECEIPT_BOUNDS = {
 /** Validate foreign checkpoints before inspecting or replaying them. Digest
  * consistency is checked by resume; verify still reports tampering as a diff. */
 export function parseRunReceipt(u: unknown): RunReceipt {
+  checkReceiptResources(u, "PARSE_FAILED");
+  return parseReceiptFields(u);
+}
+
+function checkReceiptResources(u: unknown, code: "PARSE_FAILED" | "BUDGET_EXHAUSTED"): void {
   const pending: { value: unknown; depth: number }[] = [{ value: u, depth: 0 }];
   let nodes = 0;
   let stringBytes = 0;
   while (pending.length > 0) {
     const { value, depth } = pending.pop()!;
     if (++nodes > RECEIPT_BOUNDS.maxNodes || depth > RECEIPT_BOUNDS.maxDepth) {
-      throw new AlgalError("PARSE_FAILED", "receipt structural bounds exceeded");
+      throw new AlgalError(code, "receipt structural bounds exceeded");
     }
     if (typeof value === "string") {
       stringBytes += Buffer.byteLength(value, "utf8");
       if (stringBytes > RECEIPT_BOUNDS.maxBytes) {
-        throw new AlgalError("PARSE_FAILED", "receipt byte bound exceeded");
+        throw new AlgalError(code, "receipt byte bound exceeded");
+      }
+    } else if (Array.isArray(value)) {
+      // JSON serialization includes every array position, including holes as
+      // null. Enumerable properties alone do not bound the serialized tree.
+      if (nodes + pending.length + value.length > RECEIPT_BOUNDS.maxNodes) {
+        throw new AlgalError(code, "receipt node bound exceeded");
+      }
+      for (let i = 0; i < value.length; i++) {
+        pending.push({ value: i in value ? value[i] : null, depth: depth + 1 });
       }
     } else if (value !== null && typeof value === "object") {
       for (const [key, child] of Object.entries(value)) {
         stringBytes += Buffer.byteLength(key, "utf8");
         pending.push({ value: child, depth: depth + 1 });
         if (pending.length > RECEIPT_BOUNDS.maxNodes) {
-          throw new AlgalError("PARSE_FAILED", "receipt node bound exceeded");
+          throw new AlgalError(code, "receipt node bound exceeded");
         }
       }
     } else if (value !== null && typeof value !== "boolean" &&
       (typeof value !== "number" || !Number.isFinite(value))) {
-      throw new AlgalError("PARSE_FAILED", "receipt must contain only JSON values");
+      throw new AlgalError(code, "receipt must contain only JSON values");
+    }
+    if (stringBytes > RECEIPT_BOUNDS.maxBytes) {
+      throw new AlgalError(code, "receipt byte bound exceeded");
     }
   }
   if (canonicalBytes(u as JsonValue) > RECEIPT_BOUNDS.maxBytes) {
-    throw new AlgalError("PARSE_FAILED", "receipt byte bound exceeded");
+    throw new AlgalError(code, "receipt byte bound exceeded");
   }
+}
+
+function parseReceiptFields(u: unknown): RunReceipt {
   const r = asObject(u, "receipt");
   noUnknownKeys(r, ["contract", "runtime", "manifestDigest", "manifestKey", "args",
     "outcome", "cells", "effects", "events", "work", "failure", "digest"], "receipt");

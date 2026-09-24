@@ -21,6 +21,8 @@ pub const MAILBOX_RECEIVE: &str = "mailbox-receive";
 pub const MAILBOX_SEND_TOOL: &str = "mailbox.send.v1";
 pub const MAILBOX_RECEIVE_TOOL: &str = "mailbox.receive.v1";
 pub const MAX_MAILBOXES: usize = 1_024;
+// Physical namespace entries, including ignored files and orphan directories.
+pub const MAX_MAILBOX_DIRECTORY_ENTRIES: usize = 2_064;
 pub const MAX_MESSAGES: usize = 1_024;
 pub const MAX_MESSAGE_BYTES: usize = 250_000;
 
@@ -464,8 +466,13 @@ impl MailboxService {
         no_link(&mailboxes)?;
         match fs::read_dir(mailboxes) {
             Ok(entries) => {
-                for entry in entries {
+                for (index, entry) in entries.enumerate() {
                     let entry = entry?;
+                    if index >= MAX_MAILBOX_DIRECTORY_ENTRIES {
+                        return Err(Error::limit(
+                            "mailbox namespace physical entry bound exceeded",
+                        ));
+                    }
                     let file_type = entry.file_type()?;
                     if file_type.is_symlink() {
                         return Err(Error::new("IO_FAILED", "mailbox symlinks are not admitted"));

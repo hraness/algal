@@ -7,8 +7,8 @@ import {
   parseWakeCapabilities,
   type CapabilityHandle,
 } from "./capabilities";
-import { AlgalError, ERROR_CODES, type ErrorCode } from "./errors";
-import { commandJson } from "./io";
+import { AlgalError, ERROR_CODES, errorReport, type ErrorCode } from "./errors";
+import { commandJson } from "./io-runtime";
 import { asDigest, digestCanonical, type Digest } from "./digest";
 import type { AgentOutput, Route } from "./contract";
 import type { Store } from "./store";
@@ -139,6 +139,28 @@ export type Executor = {
     | Promise<ExecutorMetadata>;
 };
 
+// Host-only invocation evidence. A preflight receiptFor cache hit can disappear
+// before execution, so it cannot classify a later result or thrown error.
+type DispatchObserver = (dispatched: boolean) => void;
+type ObservedInvocation = (request: EffectRequest, signal: AbortSignal | undefined, observe: DispatchObserver) => Promise<ExecutorResult>;
+const observedInvocations = new WeakMap<NonNullable<Executor["executeEffect"]>, ObservedInvocation>();
+
+/** Internal scheduler/cache seam; no dispatch evidence enters the wire receipt. */
+export async function invokeExecutorEffect(
+  executor: Executor, request: EffectRequest, signal: AbortSignal | undefined, observe: DispatchObserver,
+): Promise<ExecutorResult> {
+  const invoke = executor.executeEffect && observedInvocations.get(executor.executeEffect);
+  if (invoke) return invoke(request, signal, observe);
+  observe(executor.replay !== true);
+  const result = executor.executeEffect
+    ? await executor.executeEffect(request, signal)
+    : { output: await executor.execute(request, signal) };
+  if (executor.replay === true) return result;
+  const cached = result.metadata?.cached === true;
+  if (cached) observe(false);
+  return { ...result, metadata: { ...result.metadata, cached } };
+}
+
 export function executorSupports(executor: Executor, kind: EffectKind): boolean {
   const effects: readonly EffectKind[] = executor.capabilities?.effects ?? MODEL_EFFECT_KINDS;
   return effects.includes(kind);
@@ -258,7 +280,44 @@ export function cachedExecutor(inner: Executor, store: Store): Executor {
   const identity = inner.cacheIdentity ?? inner.id;
   const lookup = (request: EffectRequest) =>
     store.getEffect(effectRequestDigest(request), identity);
-  return {
+  const invoke = async (request: EffectRequest, signal: AbortSignal | undefined, observe: DispatchObserver): Promise<ExecutorResult> => {
+    let dispatched = false;
+    const observed = (value: boolean) => { dispatched = value; observe(value); };
+    const hit = await lookup(request);
+    if (hit?.output !== undefined) {
+      return {
+        output: hit.output,
+        metadata: { executor: hit.executor, ...(hit.usage ? { usage: hit.usage } : {}), cached: true },
+      };
+    }
+    const metadata = inner.executeEffect ? undefined : await inner.receiptFor?.(request);
+    let result = await invokeExecutorEffect(inner, request, signal, observed);
+    try {
+      result = { ...result, metadata: { ...metadata, ...result.metadata } };
+      // Successful cache wrappers supply current provenance, replacing preflight
+      // metadata. Thrown calls retain the invocation observer's actual phase.
+      result = { ...result, metadata: { ...result.metadata, cached: result.metadata?.cached === true } };
+      if (result.metadata?.cached === true) observed(false);
+      if (result.output !== null && typeof result.output === "object" && !Array.isArray(result.output)
+        && Object.hasOwn(result.output, "tool") && Object.hasOwn(result.output, "inputs")) return result;
+      if (canonicalBytes(result.output) > request.budget.maxOutputBytes) return result;
+      try { bindOutput(request.output, result.output, request.cellId); }
+      catch { return result; }
+      const entry: EffectReceipt = {
+        requestDigest: effectRequestDigest(request), executor: result.metadata?.executor ?? inner.id, output: result.output,
+      };
+      if (result.metadata?.usage) entry.usage = result.metadata.usage;
+      await store.putEffect(entry, identity);
+      return result;
+    } catch (error) {
+      // A returned live result must not become a settled error just because
+      // its cache encoding or publication failed before the caller received it.
+      if (!dispatched || (error instanceof AlgalError && error.uncertain)) throw error;
+      const report = errorReport(error);
+      throw new AlgalError(report.code, report.message, error instanceof AlgalError ? error.details : undefined, { uncertain: true });
+    }
+  };
+  const wrapper: Executor = {
     ...inner,
     id: inner.id,
     async journalConfigurationFor(request) {
@@ -283,42 +342,13 @@ export function cachedExecutor(inner: Executor, store: Store): Executor {
       return (await this.executeEffect!(request, signal)).output;
     },
     async executeEffect(request, signal) {
-      const hit = await lookup(request);
-      if (hit?.output !== undefined) {
-        return {
-          output: hit.output,
-          metadata: {
-            executor: hit.executor,
-            ...(hit.usage ? { usage: hit.usage } : {}),
-            cached: true,
-          },
-        };
-      }
-      let result: ExecutorResult;
-      if (inner.executeEffect) {
-        result = await inner.executeEffect(request, signal);
-      } else {
-        const metadata = await inner.receiptFor?.(request);
-        result = {
-          output: await inner.execute(request, signal),
-          ...(metadata ? { metadata } : {}),
-        };
-      }
-      if (result.output !== null && typeof result.output === "object" && !Array.isArray(result.output)
-        && Object.hasOwn(result.output, "tool") && Object.hasOwn(result.output, "inputs")) return result;
-      if (canonicalBytes(result.output) > request.budget.maxOutputBytes) return result;
-      try { bindOutput(request.output, result.output, request.cellId); }
-      catch { return result; }
-      const entry: EffectReceipt = {
-        requestDigest: effectRequestDigest(request),
-        executor: result.metadata?.executor ?? inner.id,
-        output: result.output,
-      };
-      if (result.metadata?.usage) entry.usage = result.metadata.usage;
-      await store.putEffect(entry, identity);
-      return result;
+      return invoke(request, signal, () => {});
     },
   };
+  // Bind the hook to the actual method: copying the method keeps its evidence,
+  // while replacing it cannot accidentally invoke an obsolete cache wrapper.
+  observedInvocations.set(wrapper.executeEffect!, invoke);
+  return wrapper;
 }
 
 /** Shells out: request JSON on stdin, output JSON on stdout. This is the live

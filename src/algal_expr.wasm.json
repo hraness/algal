@@ -115,7 +115,7 @@
     },
     {
       "path": "verify/lib/claims.ts",
-      "sha256": "sha256:0859860990b1846b4746d2de0c98e452f1ca84786d2f7a35f9b8d2c2252fb47e"
+      "sha256": "sha256:0b957f70d7d1ca9b423c9999eb87281b82855ffbf5feb01b30286ff82834e127"
     },
     {
       "path": "verify/lib/command-supervisor.ts",
@@ -127,7 +127,7 @@
     },
     {
       "path": "verify/lib/runner.ts",
-      "sha256": "sha256:01450a6b0695be8a014608fe10402de83ddcbf9d2f9b7b7dd09ab3e8a6e3cebc"
+      "sha256": "sha256:fc9d9bc8514d9ec3d89c3b477357a710fce038c661f24190db7b4a4bb8828647"
     },
     {
       "path": "verify/lib/schema.ts",
@@ -135,7 +135,7 @@
     },
     {
       "path": "verify/lib/suites.ts",
-      "sha256": "sha256:07dd9950dddcf13eb85fb607b90d35fd0ea88f21f5a8e131c5a1ea918155dcf1"
+      "sha256": "sha256:30b8b34bc9d867155bd5228734cf512a170c4cfbb15f96f3cf9ef0226656eb72"
     }
   ],
   "wasm": {

@@ -937,9 +937,12 @@ name → command, so a cell's `route.provider`/`route.preset` picks its model.
 - Manifests and receipts are content-addressed canonical JSON; payloads ride
   the same CAS through `ref` ports. The store is a seam: `MemoryStore` and
   `FileStore` (`.algal/`) ship now; a store backed by another database
-  would implement the same ten methods. `pack`/`unpack` move a manifest's whole embedding
-  closure — sub-manifests and `const`-referenced payloads — between stores
-  as one verified bundle.
+  would implement the same ten methods. `pack` exports a manifest's static embedding
+  closure — sub-manifests and `const`-referenced payloads — as one bounded bundle.
+  `unpack` checks the supplied records and root before importing; it also accepts
+  partial closures, so import success alone does not establish dependency completeness.
+  The [bundle contract](spec/v1/organism.md#bundles--algalbundlev1) specifies
+  whole-envelope byte, node, depth and distinct-entry limits.
 - `run --cache-effects` memoizes effects across runs through the store's
   effect index: an identical request digest under the same executor cache
   identity serves the earlier recorded response (marked `cached` on the
@@ -951,6 +954,15 @@ name → command, so a cell's `route.provider`/`route.preset` picks its model.
   stored under `--dir`, and `algal manifests` / `manifest <digest>`
   list and print the manifest CAS — including children admitted by
   `spawn`, so a `bred` journal's digests resolve to inspectable programs.
+  Store listings (`runs`, `slots`, `manifests`) admit at most 4,096 yielded entries
+  per namespace; an absent namespace is empty, while scan errors and overbound
+  inventories fail. `--modules` has separate 4,096-entry and 512-module-file
+  limits. Ignored files, orphan directories and retained locks count toward
+  physical limits and are never removed by admission. Direct digest reads remain
+  available when a namespace is too large for a complete listing.
+  Bun 1.3.14 eagerly enumerates directories before yielding: these counters do
+  not bound its initial allocation. See [filesystem enumeration bounds](docs/directory-admission.md)
+  for the remaining runtime and filesystem qualification limits.
 
 ## What not to infer
 
@@ -1125,6 +1137,8 @@ forged-output detection.
 - `spec/v1/foundry.md` — candidate generation, evidence, promotion, and verification.
 - `spec/v1/search.md` — bounded generations, feedback, survivors, and lineage.
 - `spec/v1/bench.md` — workload comparison, attribution, and the pareto claim.
+- [Malleable workbench](docs/malleable-workbench.md) — captured component state, ordered signals, causal inspection, controls and independently checked proposals.
+- [Local triage](docs/local-triage.md) — persistent tasks across browser, desktop and terminal, on-device workflow proposals, schema migration and explicit forks.
 - [Coding-harness pilot](docs/coding-harness.md) — matched conventional/ALGAL loops, bounded policy proposals, and independent benchmark grading.
 - [Coding-harness memory spike](docs/coding-harness-memory-spike.md) — scoped observations, inspectable procedures, and native prerequisite proofs in an opt-in memory comparison.
 - `docs/` — design notes as they land.

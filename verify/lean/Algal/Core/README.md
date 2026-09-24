@@ -15,6 +15,9 @@ its domain, witnesses, source correspondence candidates and unresolved criteria.
 | `BinaryValue` | Exact dyadic and rational denotation of every finite binary64 value, related to the pinned Lean unpack model. Field decomposition, normal/subnormal scaling, coefficient/exponent bounds, nonfinite rejection, signed-zero equality and zero-normalization preservation are proved. No decimal rounding or production arithmetic theorem is supplied. |
 | `NumericInjectivity` | Equal exact dyadic or rational denotation is equivalent to independently defined normalized-bit equality for every finite binary64 value, including negative values. Normalized finite denotation is injective; only the two zero patterns are identified. |
 | `RoundingInterval` | Exact rational midpoint cells for sign-bit-zero interior finite values with two adjacent finite neighbors. Every cell member is nearest to its center among all sign-bit-zero finite candidates; odd centers are strictly nearest. Code order, adjacency, midpoint distances and coefficient parity are proved. This domain includes +0 as a candidate and excludes -0 and negative candidates. |
+| `SignedRounding` | Actual UInt64 sign reflection preserves finite fields and parity, is involutive, and negates exact rational value. Interior nearest and odd strict-nearest results extend to every finite candidate and reflected negative centers, including signed-zero candidates. |
+| `RoundingEndpoints` | The closed zero cell exactly characterizes nearest zero among finite values. Maximum finite has a separate nearest-finite characterization without an upper bound; its proposed finite rounding cell excludes the overflow tie. Signed dyadic boundary witnesses invoke pinned round/pack and preserve finite admission versus refused infinity. |
+| `NegativeEndpoints` | Exact finite-nearest and bitwise strict-nearest predicates reflect through sign negation. Negative maximum has complete finite-nearest/strict characterizations; its finite cell additionally excludes overflow. Conditional interior midpoint converses and parity characterize all-sign nearest cells. Both distinct zero patterns are nearest at zero and neither is ever strictly nearest. |
 | `DecimalSyntax` | Concrete ASCII numeral grammar retaining signs, digits, exponent case and spelling. Whole-token parsing accepts exactly a rendered numeral; spelling is injective. Decimal coefficient/exponent placement has exact rational semantics. This is neither finite-binary64 admission nor a shortest renderer. |
 | `Text` | Unicode scalar strings encoded into UTF-16 code units. Character and string decoders round-trip; encoding is injective; every unit is below 65536. The executable JS index classifier and key sorter cover numeric-index-first/UTF-16 order; sorting preserves the multiset of keys. |
 | `OwnMap` | Finite own-property maps. Last writes win, writes to distinct keys commute extensionally, successful lookup implies a declared own key, and absence differs from a present value representing null. No prototype lookup exists. |
@@ -112,6 +115,46 @@ endpoints, and universal rational-to-center selection remain outside these
 interval results. No interval-coverage converse, executable decimal conversion,
 shortest decimal renderer, or production refinement follows from them.
 
+`SignedRounding` extends the interior comparisons to every finite candidate by
+proving actual sign-bit reflection, exact rational negation and parity
+preservation. Reflection reverses the neighbors, and positive adjacency remains
+an explicit hypothesis. The result covers negative centers and both zero
+encodings as candidates. A concrete rejected witness shows that reflecting the
+nonzero value one does not preserve its bit identity.
+
+`RoundingEndpoints` supplies the separate zero and maximum-finite foundations.
+The symmetric closed zero cell has boundary 2^-1075 and is equivalent to zero
+being no farther than every finite candidate. Both zero bit patterns have the
+same rational distance; `zeroFor` takes an explicit sign rather than inferring
+one from a rational zero. Maximum finite's virtual next value is 2^1024 and is
+not the value of any admitted finite number. Its finite endpoint cell has open
+midpoint bounds, but being nearest among finite candidates requires only the
+lower bound: maximum finite remains nearest even beyond the overflow threshold.
+These are different predicates. Infinity has no finite rational denotation here.
+
+Concrete signed dyadic witnesses call the pinned Lean round and pack definitions
+below, at and above underflow and overflow. They establish signed-zero retention,
+minimum-subnormal results and finite refusal of infinity for those inputs. They
+do not prove a universal executable threshold, complete cell partition, total
+rational selector or decimal conversion. Machine/resource refinement remains
+open.
+
+`NegativeEndpoints` proves negative maximum strictness against every finite
+candidate and characterizes its nearest and strict-nearest half-lines through
+actual sign reflection. Nearest finite is allowed beyond overflow; the finite
+cell additionally requires not being in negative overflow. Its lower midpoint
+has a distinct equally near neighbor and is excluded from strict nearest.
+
+Given two actual adjacent neighbors of a nonnegative interior center, closed
+midpoint bounds are equivalent to global nearest among all finite candidates;
+open bounds are equivalent to strict nearest. Both converses reflect to negative
+centers, and coefficient parity determines whether the cell includes its ties.
+These statements retain their adjacency hypotheses and do not construct a total
+rounding selector or prove complete coverage. Strict competitors have different
+bits: neither signed zero is ever strictly nearest because the other zero has
+the same rational value. Concrete midpoint and overflow witnesses reject the
+stronger claims without asserting general round/pack or decimal correspondence.
+
 `DecimalSyntax` independently defines the actual ASCII JSON numeral grammar:
 optional minus, a nonempty integer without extra leading zeros, an optional
 nonempty fraction, and an optional signed exponent. It retains exponent case,
@@ -208,9 +251,10 @@ distinct statements; duplicate histories can share canonical bytes.
 
 The pinned native renderer is `ryu-js` 1.0.2. `BinaryValue` and `DecimalSyntax`
 provide exact dyadic/decimal meanings and numeral grammar. `NumericInjectivity`
-characterizes equality of all finite values, and `RoundingInterval` handles
-sign-bit-zero interior midpoint cells. The remaining numeric proof must complete
-signed and zero/overflow boundary treatment, prove actual decimal conversion
+characterizes equality of all finite values. `RoundingInterval`, `SignedRounding`
+and `RoundingEndpoints` supply interior and endpoint foundations. The remaining
+numeric proof must complete universal cell selection and round/pack linkage,
+prove actual decimal conversion
 selects the correct cell, and establish shortest coefficient selection, tables,
 machine arithmetic, and the selected formatting and tie policy. Generic ECMAScript conformance alone is
 insufficient to establish one unique byte spelling: the closest/even tie rule is
@@ -280,14 +324,26 @@ These observations are not the release gate: the integrator independently
 inspects theorem constants and collects their transitive axioms from the actual
 environment, checks the inventory, and fails closed on stale or missing evidence.
 
-The preceding complete 372-theorem foundation gate passed before this numeric
-extension. The source inventory now contains 432 authored theorems across 17
-domains. The 60-theorem injectivity/interval candidate had fresh source builds,
+The source inventory contains 564 authored theorems across 20 domains. The
+preceding complete 432-theorem gate remains a historical milestone. The
+60-theorem injectivity/interval candidate had fresh source builds,
 independent review, and actual axiom collection over all 146 theorem declarations
 in its two modules, including private and compiler-generated declarations. Nine
 additional independent boundary witnesses passed; altered precision and reversed
-endpoint-parity controls failed as expected. Namespace integration receives a
-fresh focused build and axiom audit. These focused checks do not replace the
+endpoint-parity controls failed as expected. The signed/endpoint extension adds
+87 named theorems. Independent review rebuilt the original 86-theorem candidate,
+checked 18 additional boundary theorems, and rejected eight false propositions
+with attributable proof failures. Integration adds the explicit sign-reflection
+rejected witness. A complete 519-theorem checkpoint audited all 1,554 module
+theorems and seven admission controls. The negative-endpoint extension adds 45
+named theorems (62 module declarations in the independently reviewed candidate),
+including negative maximum half-line and signed interior nearest-point
+characterizations. Six false boundary controls were rejected and three additional
+independent subnormal/zero witnesses passed. Integration changes only the namespace
+required by the theorem registry; the complete integrated gate must still check
+that module, all vectors, the axiom audit and existing admission controls.
+Any subsequent change to a bound adapter,
+source or scope document requires fresh evidence. Focused checks do not replace the
 integrator's complete gate and independent evidence re-admission for the resulting
 source tree, including vectors and the repository's admission controls.
 

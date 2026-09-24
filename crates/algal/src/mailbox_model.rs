@@ -324,7 +324,9 @@ fn lost_receive_return_keeps_journal_started_and_blocks_fallback_and_recovery() 
     );
     assert!(reached.get());
     let error = result.unwrap_err();
-    assert_eq!(error.code, "RECOVERY_BLOCKED");
+    assert_eq!(error.code, "IO_FAILED");
+    assert_eq!(error.message, "lost dequeue return after lock-release sync");
+    assert!(error.uncertain);
     assert!(!mailboxes.has_pending(&fallback.receive).unwrap());
     let uncertain = service.inspect("actor").unwrap();
     assert_eq!(uncertain.process.status, "uncertain");

@@ -689,6 +689,18 @@ impl Host {
         }
     }
 
+    /// A dispatched result is not durably settled if completion cannot publish.
+    /// Replay/cache-only callers retain the ordinary journal_after path.
+    pub(crate) fn journal_after_dispatch(&self, receipt: &Value) -> Result<()> {
+        self.journal_after(receipt).map_err(Error::uncertain)
+    }
+
+    pub(crate) fn journal_is_poisoned(&self) -> bool {
+        self.journal
+            .as_ref()
+            .is_some_and(|journal| journal.lock().map_or(true, |journal| journal.is_poisoned()))
+    }
+
     pub fn tool_idempotency_key(&self, request_digest: &str) -> Result<String> {
         match &self.process_scope {
             Some(name) => digest(
@@ -1229,7 +1241,10 @@ impl Host {
                         if let Some(usage) = metadata.get("usage") {
                             entry["usage"] = usage.clone();
                         }
-                        store.put_effect(&entry, &identity)?;
+                        store.put_effect(&entry, &identity).map_err(|error| {
+                            self.journal_poison();
+                            error.uncertain()
+                        })?;
                     }
                 }
                 receipt["output"] = output;
@@ -1260,7 +1275,7 @@ impl Host {
                 receipt["error"] = serde_json::to_value(error)?;
             }
         }
-        self.journal_after(&receipt)?;
+        self.journal_after_dispatch(&receipt)?;
         Ok(receipt)
     }
 }
@@ -1393,6 +1408,168 @@ fn apple_error(error: apple_foundation::Error) -> Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn completion_publication_failure_preserves_error_and_distinguishes_dispatch() {
+        use crate::journal::{Binding, Journal};
+        for dispatched in [false, true] {
+            let root = tempfile::tempdir().unwrap();
+            let root = root.path().canonicalize().unwrap();
+            let intent = digest(&json!("closure intent")).unwrap();
+            let manifest = digest(&json!("closure manifest")).unwrap();
+            let request = digest(&json!("closure request")).unwrap();
+            let mut journal = Journal::create(&root, "worker", &intent, &manifest, 2).unwrap();
+            journal
+                .before(Binding {
+                    request_digest: request.clone(),
+                    executor: "fixture".into(),
+                    configuration_digest: digest(&json!("config")).unwrap(),
+                    idempotency_key: request.clone(),
+                    recovery: "never".into(),
+                })
+                .unwrap();
+            let host = Host {
+                journal: Some(std::sync::Arc::new(std::sync::Mutex::new(journal))),
+                ..Host::default()
+            };
+            let mut cut = Error::new("IO_FAILED", "completion publication cut");
+            cut.wake.push("retained host wake".into());
+            let expected = cut.clone();
+            let values = root.join("values");
+            let receipt = json!({"requestDigest":request,"executor":"fixture","output":"done"});
+            let result = crate::durable_fs::with_probe(
+                std::rc::Rc::new(move |event| {
+                    if event.step == "link"
+                        && event.phase == "before"
+                        && event
+                            .target
+                            .as_ref()
+                            .is_some_and(|target| target.starts_with(&values))
+                    {
+                        return Err(cut.clone());
+                    }
+                    Ok(())
+                }),
+                || {
+                    if dispatched {
+                        host.journal_after_dispatch(&receipt)
+                    } else {
+                        host.journal_after(&receipt)
+                    }
+                },
+            );
+            let error = result.unwrap_err();
+            assert_eq!(error.code, expected.code);
+            assert_eq!(error.message, expected.message);
+            assert_eq!(error.wake, expected.wake);
+            assert_eq!(error.uncertain, dispatched);
+            assert!(host.journal_is_poisoned());
+            let mut restored = Journal::open(&root, "worker", &intent, &manifest).unwrap();
+            assert_eq!(
+                restored.describe().unwrap()["effects"][0]["record"]["state"],
+                "started"
+            );
+            assert!(restored.begin_recovery().is_err());
+        }
+    }
+
+    #[test]
+    fn cache_publication_and_cache_hit_completion_have_distinct_uncertainty() {
+        use crate::journal::Journal;
+        for cached in [false, true] {
+            let directory = tempfile::tempdir().unwrap();
+            let root = directory.path().canonicalize().unwrap();
+            let intent = digest(&json!("cache intent")).unwrap();
+            let manifest = digest(&json!("cache manifest")).unwrap();
+            let request = json!({"contract":"algal.effect.v1","cellId":"answer","kind":"agent","prompt":"answer","context":{},"output":{"kind":"text"},"budget":{"maxContextBytes":65536,"maxOutputBytes":65536}});
+            let request_digest = digest(&request).unwrap();
+            let mut host = Host::scripted(json!({"answer":["live"]}));
+            host.cache = true;
+            let mut store = Store::open(&root, true).unwrap();
+            if cached {
+                let identity = host.entries[0].1.cache_identity("scripted").unwrap();
+                store.put_effect(&json!({"requestDigest":request_digest,"executor":"scripted","output":"cached"}), &identity).unwrap();
+            }
+            host.journal = Some(std::sync::Arc::new(std::sync::Mutex::new(
+                Journal::create(&root, "worker", &intent, &manifest, 2).unwrap(),
+            )));
+            let head = root
+                .join("processes/worker/journals")
+                .join(&intent[7..])
+                .join("entries/000000.json");
+            let effects = root.join("effects");
+            let values = root.join("values");
+            let started = std::cell::Cell::new(false);
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            let result = crate::durable_fs::with_probe(
+                std::rc::Rc::new(move |event| {
+                    if event.step == "replace"
+                        && event.phase == "after"
+                        && event.target.as_ref() == Some(&head)
+                    {
+                        started.set(true);
+                    }
+                    if event.step == "link"
+                        && event.phase == "before"
+                        && event.target.as_ref().is_some_and(|target| {
+                            if cached {
+                                started.get() && target.starts_with(&values)
+                            } else {
+                                target.starts_with(&effects)
+                            }
+                        })
+                    {
+                        return Err(Error::new(
+                            "IO_FAILED",
+                            "cache or completion publication cut",
+                        ));
+                    }
+                    Ok(())
+                }),
+                || runtime.block_on(host.effect(&request, 30_000, Some(&mut store))),
+            );
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "IO_FAILED");
+            assert_eq!(error.message, "cache or completion publication cut");
+            assert_eq!(error.uncertain, !cached);
+            assert!(host.journal_is_poisoned());
+            assert_eq!(host.queues.contains_key("scripted/answer"), !cached);
+            let restored = Journal::open(&root, "worker", &intent, &manifest).unwrap();
+            assert_eq!(
+                restored.describe().unwrap()["effects"][0]["record"]["state"],
+                "started"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn explicit_replay_bypasses_a_live_journal_without_cached_metadata() {
+        use crate::journal::Journal;
+        let directory = tempfile::tempdir().unwrap();
+        let request = json!({"contract":"algal.effect.v1","cellId":"answer","kind":"agent","prompt":"answer","context":{},"output":{"kind":"text"},"budget":{"maxContextBytes":65536,"maxOutputBytes":65536}});
+        let receipt = json!({"requestDigest":digest(&request).unwrap(),"executor":"recorded","output":"answer"});
+        let mut host = Host::replay(&json!([receipt.clone()])).unwrap();
+        host.journal = Some(std::sync::Arc::new(std::sync::Mutex::new(
+            Journal::create(
+                directory.path(),
+                "worker",
+                &digest(&json!("intent")).unwrap(),
+                &digest(&json!("manifest")).unwrap(),
+                2,
+            )
+            .unwrap(),
+        )));
+        assert_eq!(host.effect(&request, 30_000, None).await.unwrap(), receipt);
+        assert!(
+            host.journal.unwrap().lock().unwrap().describe().unwrap()["effects"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+    }
 
     fn assert_recovery_rejects_binding_change(root: &Path, original: String, changed: String) {
         use crate::journal::{Binding, Journal};

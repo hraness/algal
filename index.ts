@@ -1,4 +1,7 @@
 // Algal public surface: contract, compile, run, verify, store, effects.
+export { ApplicationCore } from "./src/application-core";
+export { MemoryApplicationStorage } from "./src/application-storage";
+export type { ApplicationStorage } from "./src/application-storage";
 
 export { compileSource, sourceImports, SourceError, SOURCE_BOUNDS, SOURCE_PROJECT_BOUNDS, SOURCE_PROFILE, SOURCE_VERSION, GENERATE_PROMPT } from "./src/source";
 export type { SourceAnnotation, SourceCallOrigin, SourceCompilation, SourceCompilerOptions, SourceErrorContext, SourceErrorImport, SourceImport, SourceMap, SourcePosition, SourceProjectIndex, SourceSpan } from "./src/source";
@@ -96,6 +99,9 @@ export type {
 
 export { VERCEL_AI_GATEWAY_BASE_URL, vercelGatewayExecutor } from "./src/gateway";
 export type { GatewayExecutorOptions, GatewayFetch } from "./src/gateway";
+export { lookupGatewayGenerationCost } from "./src/gateway-accounting";
+export { parseGatewayGeneration, parseGatewayReportedCost } from "./src/gateway-observation";
+export type { GatewayGeneration, GatewayReportedCost } from "./src/gateway-observation";
 export { openAICompatibleExecutor } from "./src/openai-compatible";
 export type { OpenAICompatibleExecutorOptions, ChatCompletionsFetch, ChatCompletionsFormat } from "./src/openai-compatible";
 

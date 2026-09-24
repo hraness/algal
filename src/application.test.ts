@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect } from "bun:test";
+import { applicationTests } from "./fixtures/application-test-scope";
 import { mkdir, mkdtemp, open, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,11 +10,12 @@ import { parseOrganismManifest } from "./contract";
 import { hostLease, hostRead, hostWrite } from "./host-state";
 import type { JsonValue } from "./values";
 
-const dirs: string[] = [];
+const {test, resources} = applicationTests();
 type DispatchAdmissionContext = Parameters<NonNullable<ApplicationAdmission["admitDispatch"]>>[0];
 const ref = (v: unknown) => digestCanonical(v as never);
 async function fixture(options: {fault?: (point: "prepared" | "head-published" | "dispatch-started" | "dispatch-settled") => void} = {}) {
-  const dir = await mkdtemp(join(tmpdir(), "algal-application-")); dirs.push(dir);
+  resources().checkActive();
+  const dir = resources().directory(await mkdtemp(join(tmpdir(), "algal-application-")));
   const service = new ApplicationService(dir, {
     async admitCommit() {},
     async admitDispatch() { return {kind: "delivery" as const, recipient: capabilityHandle("mailbox-send", {fixture: true}), hostProfile: ref("profile")}; },
@@ -34,7 +36,6 @@ async function fixture(options: {fault?: (point: "prepared" | "head-published" |
   const memory = await service.store.putValue({contract: "algal.memory.fixture.v1", facts: []});
   return {service, revisionRef, memory};
 }
-afterEach(async () => { for (const dir of dirs.splice(0)) await rm(dir, {recursive: true, force: true}); });
 
 describe("experimental application lifecycle", () => {
   test("quota denial of genesis does not reserve an application name", async () => {
@@ -89,20 +90,19 @@ describe("experimental application lifecycle", () => {
   test("first publication retains creation custody and the admitted application bound", async () => {
     const {service, revisionRef, memory} = await fixture();
     const base = {application: "fixture", operation: ref("concurrent-create"), kind: "create", expectedHead: null, revision: revisionRef, memory, intents: [], evidence: [], causedBy: null};
-    let release!: () => void, entered!: () => void;
-    const waiting = new Promise<void>(resolve => { release = resolve; });
-    const admitted = new Promise<void>(resolve => { entered = resolve; });
-    const paused = new ApplicationService(service.dir, {async admitCommit() { entered(); await waiting; }});
-    const first = paused.create(base);
-    await admitted;
+    const waiting = resources().barrier(), admitted = resources().barrier();
+    const paused = new ApplicationService(service.dir, {async admitCommit() { admitted.release(); await waiting.wait; }});
+    const first = resources().own(paused.create(base));
     try {
+      await Promise.race([admitted.wait, first]);
       expect(await readdir(join(service.dir, "applications"))).toEqual([".creation"]);
       await expect(service.create(base)).rejects.toThrow("held by another live operation");
-    } finally { release(); }
+    } finally { waiting.release(); await Promise.allSettled([first]); }
     const initial = await first;
     expect((await service.create(base)).digest).toBe(initial.digest);
     const revision = await service.store.getValue(revisionRef) as Record<string, JsonValue>;
     for (let i = 1; i < 32; i++) {
+      resources().checkActive();
       const application = `admitted-${i}`, selected = await service.store.putValue({...revision, application});
       await service.create({...base, application, revision: selected, operation: ref(application)});
     }
@@ -335,23 +335,21 @@ describe("application custody robustness", () => {
     const {service, revisionRef, memory} = await fixture();
     const base = {application: "fixture", operation: ref("waited-create"), kind: "create", expectedHead: null, revision: revisionRef, memory, intents: [], evidence: [], causedBy: null};
     const hold = async (directory: string, name: string) => {
-      let released!: () => void, acquired!: () => void;
-      const held = new Promise<void>(resolve => { released = resolve; });
-      const owned = new Promise<void>(resolve => { acquired = resolve; });
-      const holder = hostLease(directory, name, () => { acquired(); return held; });
-      await owned; // the contender must start against a live owner
-      return {release: released, holder};
+      const held = resources().barrier(), owned = resources().barrier();
+      const holder = resources().own(hostLease(directory, name, () => { owned.release(); return held.wait; }));
+      await Promise.race([owned.wait, holder]); // also propagate an acquisition failure
+      return {release: held.release, holder};
     };
     const started = Date.now();
     const creation = await hold(join(service.dir, "applications", ".creation"), "application-creation");
-    const creating = service.create(base);
+    const creating = resources().own(service.create(base));
     setTimeout(creation.release, 300);
     const initial = await creating;
     await creation.holder;
     expect(initial.state.sequence).toBe(0);
     expect(Date.now() - started).toBeGreaterThanOrEqual(300);
     const quota = await hold(join(service.dir, ".application-quota"), "application-quota");
-    const committing = service.commit({...base, operation: ref("waited-memory"), kind: "memory", expectedHead: initial.digest, memory: await service.store.putValue({contract: "algal.memory.fixture.v1", facts: ["waited"]})});
+    const committing = resources().own(service.commit({...base, operation: ref("waited-memory"), kind: "memory", expectedHead: initial.digest, memory: await service.store.putValue({contract: "algal.memory.fixture.v1", facts: ["waited"]})}));
     setTimeout(quota.release, 300);
     expect((await committing).state.sequence).toBe(1);
     await quota.holder;

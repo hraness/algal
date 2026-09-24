@@ -2,9 +2,13 @@ import { PROCESS_PROFILES, PROCESS_MUTATIONS, PROCESS_LIVE_SOURCES } from "./pro
 import { LEASE_PROFILES, LEASE_MUTATIONS, LEASE_LIVE_SOURCES } from "./lease/profiles";
 import { JOURNAL_PROFILES, JOURNAL_MUTATIONS, JOURNAL_LIVE_SOURCES } from "./process-journal/profiles";
 import { MAILBOX_PROFILES, MAILBOX_MUTATIONS, MAILBOX_LIVE_SOURCES } from "./mailbox/profiles";
+import { APPLICATION_PROFILES, APPLICATION_MUTATIONS } from "./application/profiles";
+import { OUTBOX_PROFILES, OUTBOX_MUTATIONS } from "./outbox/profiles";
+import { QUOTA_PROFILES, QUOTA_MUTATIONS } from "./quota/profiles";
+import { AUTHORITY_PROFILES, AUTHORITY_MUTATIONS } from "./authority/profiles";
 
 /** Reviewed, finite inventories. These values select static models, never shell commands. */
-export type TlcSuite = "custody" | "publication" | "lease" | "process" | "mailbox";
+export type TlcSuite = "custody" | "publication" | "lease" | "process" | "mailbox" | "application" | "outbox" | "quota" | "authority";
 export type ModelProfile = {
   id: string; suite: TlcSuite; module: string; path: string;
   constants: Record<string, string>; specification: "Spec" | "FairSpec";
@@ -42,6 +46,7 @@ const mailbox = (id: string, initial: string, actions: ModelProfile["actions"]):
 });
 
 export const MODEL_PROFILES: ModelProfile[] = [
+  ...APPLICATION_PROFILES, ...OUTBOX_PROFILES, ...QUOTA_PROFILES, ...AUTHORITY_PROFILES,
   ...LEASE_PROFILES, ...JOURNAL_PROFILES, ...PROCESS_PROFILES, ...MAILBOX_PROFILES,
   custody("custody-stable", { actions: ["Select", "AcquirePrimary", "AcquireLegacy", "Check", "Admit", "Deny", "Reserve", "Publish", "Release", "Ack"] }),
   custody("custody-legacy", { legacy: true, actions: ["AcquireLegacy", "Publish"] }),
@@ -59,6 +64,7 @@ export const MODEL_PROFILES: ModelProfile[] = [
 ];
 
 export const MODEL_MUTATIONS: ModelMutation[] = [
+  ...APPLICATION_MUTATIONS, ...OUTBOX_MUTATIONS, ...QUOTA_MUTATIONS, ...AUTHORITY_MUTATIONS,
   ...LEASE_MUTATIONS, ...JOURNAL_MUTATIONS, ...PROCESS_MUTATIONS, ...MAILBOX_MUTATIONS,
   { id: "custody-cutover", base: "custody-stable", mutation: "cutover", property: "NoSibling", kind: "invariant" },
   { id: "custody-skip-check", base: "custody-stable", mutation: "skip-check", property: "NoSibling", kind: "invariant" },
@@ -75,11 +81,18 @@ export const MODEL_MUTATIONS: ModelMutation[] = [
   { id: "mailbox-accept-ambiguous", base: "mailbox-ambiguous", mutation: "accept-ambiguous", property: "AmbiguousNotAck", kind: "invariant" },
 ];
 
+/** Reviewed implementation correspondence, in addition to the whole governed
+ * source closure. application-storage names the host contract; listing its file
+ * does not qualify MemoryApplicationStorage as a durable filesystem adapter. */
 export const LIVE_SOURCES: Record<TlcSuite, string[]> = {
+  application: ["src/application.ts", "src/application-core.ts", "src/application-filesystem.ts", "src/application-storage.ts", "src/application-contract.ts", "src/application-restoration.ts", "src/application-proposal.ts", "src/host-state.ts", "src/store.ts", "crates/algal/src/application.rs", "crates/algal/src/application_memory.rs", "crates/algal/src/application_restoration.rs", "crates/algal/src/application_proposal.rs", "crates/algal/src/lease.rs", "crates/algal/src/store.rs", "spec/v1/application.md", "verify/tla/application/profiles.ts", "verify/tla/application/SCOPE.md"],
+  outbox: ["src/application.ts", "src/application-core.ts", "src/application-filesystem.ts", "src/application-storage.ts", "src/application-host.ts", "src/application-message.ts", "src/application-message-contract.ts", "src/application-quota.ts", "src/host-state.ts", "crates/algal/src/application.rs", "crates/algal/src/application_host.rs", "crates/algal/src/application_message.rs", "crates/algal/src/application_quota.rs", "crates/algal/src/lease.rs", "spec/v1/application.md", "verify/tla/outbox/profiles.ts", "verify/tla/outbox/SCOPE.md"],
+  quota: ["src/application-quota.ts", "src/application-filesystem.ts", "src/application-storage.ts", "src/host-state.ts", "src/durable-fs.ts", "crates/algal/src/application_quota.rs", "crates/algal/src/lease.rs", "crates/algal/src/durable_fs.rs", "spec/v1/application.md", "verify/tla/quota/profiles.ts", "verify/tla/quota/SCOPE.md"],
+  authority: ["src/application.ts", "src/application-core.ts", "src/application-storage.ts", "src/application-host.ts", "src/application-message.ts", "src/application-message-contract.ts", "src/application-contract.ts", "src/capabilities.ts", "src/mailbox.ts", "src/contract.ts", "src/graph.ts", "crates/algal/src/application.rs", "crates/algal/src/application_host.rs", "crates/algal/src/application_message.rs", "crates/algal/src/application_memory.rs", "crates/algal/src/capabilities.rs", "crates/algal/src/mailbox.rs", "crates/algal/src/contract.rs", "crates/algal/src/graph.rs", "spec/v1/application.md", "spec/v1/organism.md", "verify/tla/authority/profiles.ts", "verify/tla/authority/SCOPE.md"],
   lease: [...LEASE_LIVE_SOURCES, "verify/tla/lease/profiles.ts", "verify/tla/lease/SCOPE.md"],
   process: [...JOURNAL_LIVE_SOURCES, ...PROCESS_LIVE_SOURCES, "verify/tla/process/profiles.ts", "verify/tla/process/SCOPE.md", "verify/tla/process-journal/profiles.ts", "verify/tla/process-journal/SCOPE.md"],
   mailbox: [...MAILBOX_LIVE_SOURCES, "verify/tla/mailbox/profiles.ts", "verify/tla/mailbox/SCOPE.md"],
-  custody: ["src/application.ts", "src/application-quota.ts", "src/host-state.ts", "crates/algal/src/application.rs", "crates/algal/src/application_quota.rs", "crates/algal/src/lease.rs", "spec/v1/application.md", "spec/v1/process.md"],
+  custody: ["src/application.ts", "src/application-core.ts", "src/application-filesystem.ts", "src/application-storage.ts", "src/application-quota.ts", "src/host-state.ts", "crates/algal/src/application.rs", "crates/algal/src/application_quota.rs", "crates/algal/src/lease.rs", "spec/v1/application.md", "spec/v1/process.md"],
   publication: ["src/store.ts", "src/host-state.ts", "src/mailbox.ts", "src/durable-fs.ts", "crates/algal/src/store.rs", "crates/algal/src/lease.rs", "crates/algal/src/mailbox.rs", "crates/algal/src/durable_fs.rs", "spec/v1/organism.md", "spec/v1/application.md", "spec/v1/process.md"],
 };
 export const ADAPTER_SOURCES = ["verify/lib/tlc.ts", "verify/tla/definitions.ts", "verify/tla/java-runtime.json", "verify/tla/qualify-java-runtime.py", "verify/tla/README.md", "verify/tla/run.ts", "verify/lib/proof.ts", "verify/lib/claims.ts", "verify/lib/suites.ts", "verify/lib/files.ts", "verify/lib/schema.ts", "verify/lib/runner.ts", "verify/lib/command-supervisor.ts", "verify/toolchains.json", "verify/toolchain-distributions.json", "verify/assumptions.md"];

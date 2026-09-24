@@ -1,10 +1,10 @@
 # ALGAL formal-verification and system-confidence plan
 
-Status: execution authorized on 2026-09-23; Phases 00–04 are Complete; Phases 05 and 09 are In progress. Later phases remain Not started until their dependencies and acceptance criteria are met. Completion of infrastructure does not complete any production proof obligation.
+Status: execution authorized on 2026-09-23; Phases 00–05 are Complete; Phases 06–09 are In progress. Later phases remain Not started until their dependencies and acceptance criteria are met. Completion of infrastructure does not complete any production proof obligation.
 
 Basis: [2026-09-23 audit](formal-verification-audit-2026-09-23.md), ALGAL tree f19f7381f80ee7745f0faa0e9e3e8eb0d43a8bfe at a86327f76f6e632fe7fceda17b738a749a341ab6. Rebase the evidence against the exact integration candidate before execution.
 
-Execution baseline: freshly fetched main `353a5cac4ea2b2ae40e00bf9c2805606265a5378`. The [execution record](formal-verification-execution.md) tracks the implementation and delivery evidence. Application drain, inter-application messaging, retained contention, promotion experiments, evaluator-sealed research and budgeted inference were added after the audit; the ledger extends APP, EVO and HST without renumbering existing obligations. Their implementation claims remain unproved until the relevant phases below establish them.
+Execution baseline: freshly fetched main `353a5cac4ea2b2ae40e00bf9c2805606265a5378`. The working integration now includes upstream `e588f8bc9b0964e5956f4c62e60c14dfbcef171e`; portable storage, Gateway sidecars, application workbenches/renderers and package subpaths are mapped to HST-10–12 and PKG-06 with no inherited proof claim. The [execution record](formal-verification-execution.md) tracks the implementation and delivery evidence. Application drain, inter-application messaging, retained contention, promotion experiments, evaluator-sealed research and budgeted inference were added after the audit; the ledger extends APP, EVO and HST without renumbering existing obligations. Their implementation claims remain unproved until the relevant phases below establish them.
 
 ## Outcome
 

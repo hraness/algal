@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { admitJavaRuntimeFiles, admitTlcCommandOutput, parseTlcOutput, renderTlcConfiguration, validateModelInventory } from "../lib/tlc";
-import { MODEL_PROFILES, MODEL_MUTATIONS } from "./definitions";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { admitJavaRuntimeFiles, admitTlcCommandOutput, parseTlcOutput, renderTlcConfiguration, tlcDefinition, validateModelInventory } from "../lib/tlc";
+import { ADAPTER_SOURCES, LIVE_SOURCES, MODEL_PROFILES, MODEL_MUTATIONS } from "./definitions";
 import { admitTlcConfiguration } from "../lib/proof";
 import type { CommandResult } from "../lib/runner";
 import type { FileBinding } from "../lib/files";
@@ -24,6 +26,28 @@ const witness = { kind: "action" as const, property: "NeverAcquirePrimary", acti
 const witnessConfig = { ...config, properties: ["NeverAcquirePrimary"] };
 
 describe("pinned TLC raw output", () => {
+  test("source identity notices new transitive inputs and foreign imported profiles without hashing results", async () => {
+    const root = await mkdtemp(join(tmpdir(), "algal-tlc-binding-"));
+    const put = async (path: string, body: string) => {
+      await mkdir(dirname(join(root, path)), { recursive: true });
+      await writeFile(join(root, path), body);
+    };
+    try {
+      const paths = new Set([...ADAPTER_SOURCES, ...Object.values(LIVE_SOURCES).flat(), ...MODEL_PROFILES.map(profile => profile.path)]);
+      for (const path of paths) await put(path, "binding fixture\n");
+      const original = await tlcDefinition(root, "application");
+      await put("src/new-transitive-dependency.ts", "export const changed = true;\n");
+      const added = await tlcDefinition(root, "application");
+      expect(added.inputs).not.toEqual(original.inputs);
+      expect(added.inputs.some(input => input.path === "src/new-transitive-dependency.ts")).toBe(true);
+      await put("verify/tla/mailbox/profiles.ts", "changed imported inventory\n");
+      const imported = await tlcDefinition(root, "application");
+      expect(imported.inputs).not.toEqual(added.inputs);
+      await put("verify/results/diagnostic.json", "not a source input\n");
+      expect((await tlcDefinition(root, "application")).inputs).toEqual(imported.inputs);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
   test("joined inventories reject cross-suite ID collisions and unbound mutation targets", () => {
     expect(() => validateModelInventory(MODEL_PROFILES, MODEL_MUTATIONS)).not.toThrow();
     const profile = MODEL_PROFILES[0]!, mutation = MODEL_MUTATIONS[0]!;

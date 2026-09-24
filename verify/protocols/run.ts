@@ -7,8 +7,12 @@ import { requireThat } from "../lib/schema";
 import { admitNativeTest } from "../stateful/run";
 import { artifactIdentity } from "../traces/native";
 
-export type Protocol = "process" | "mailbox" | "lease";
+export type Protocol = "process" | "mailbox" | "lease" | "application";
 export const PROTOCOLS: Record<Protocol, { bun: string[]; native: string[] }> = {
+  application: {
+    bun: ["src/application-core.test.ts", "src/application-storage-boundary.test.ts", "src/application-model.test.ts", "src/application.test.ts", "src/application-quota.test.ts", "src/application-drain.test.ts", "src/application-restoration.test.ts", "src/application-contention.test.ts", "src/application-message.test.ts", "src/application-host.test.ts"],
+    native: ["indexed_retry_survives_head_advance_and_fresh_host_denial", "prepared_orphan_resumes_only_while_its_original_head_remains_selected", "migrated_episode_keeps_its_source_without_default_host_authority", "channel_result_and_message_survive_settlement_quota_failure_without_redispatch", "later_valid_reuse_of_a_losing_operation_invalidates_stale_head_evidence", "persisted_old_writer_reconciles_after_memory_advance_without_replaying_its_effect"],
+  },
   process: {
     bun: ["src/process-journal.test.ts", "src/process-journal-model.test.ts", "src/process-recovery.test.ts", "src/process-creation-crash.test.ts", "src/process.test.ts"],
     native: [
@@ -87,7 +91,7 @@ export async function runProtocolConformance(root: string, protocol: Protocol, b
     requireThat(hashJson(before) === hashJson(await definition(root, protocol)) && hashJson(artifact) === hashJson(await artifactIdentity(binary)), "protocol source/artifact changed during execution");
     return { contract: "algal.protocol-conformance-evidence.v1", protocol, definition: before, artifact, archive,
       nativeTests: inventory.native.length, bunTests, bunFiles, commands,
-      scope: "Executed production journal/lease/mailbox correspondence cases with real local persistence and controlled faults; no proved source refinement or machine power-loss qualification. Native source/build correspondence and separate process/CLI parity remain required gates." };
+      scope: "Executed named production correspondence cases with real local persistence and controlled faults; no proved source refinement or machine power-loss qualification. Native source/build correspondence and separate full runtime/CLI parity remain required gates. Application native cases use the application_model integration-test artifact; other protocols use the library-test artifact." };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await writeFile(join(archive, "failure.json"), stableJson({ message }) + "\n");

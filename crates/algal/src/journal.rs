@@ -409,6 +409,9 @@ impl Journal {
     }
     fn persist(&mut self, record: Record) -> Result<()> {
         let value = serde_json::to_value(&record)?;
+        // Journal CAS records reopen through the stricter host-state reader.
+        // Refuse before installing either the immutable record or its head.
+        lease::nodes(&value)?;
         Record::parse(value.clone(), &self.intent, record.ordinal)?;
         let bytes = canonical(&value)?.len();
         if bytes > MAX_RECORD || self.bytes.saturating_add(bytes) > MAX_BYTES {
@@ -519,6 +522,9 @@ impl Journal {
     pub fn poison(&mut self) {
         self.poisoned = true;
     }
+    pub(crate) fn is_poisoned(&self) -> bool {
+        self.poisoned
+    }
     pub fn finish(&self) -> Result<()> {
         if self.poisoned
             || self.cursor != self.records.len()
@@ -536,6 +542,7 @@ impl Journal {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     fn key(value: &str) -> String {
         digest(&json!(value)).unwrap()
     }
@@ -586,6 +593,83 @@ mod tests {
         let mut journal = reopen(root.path());
         assert!(journal.begin_recovery().is_err());
         assert_eq!(journal.recovery_count().unwrap(), 0);
+    }
+    fn value_nodes(value: &Value) -> usize {
+        1 + match value {
+            Value::Array(values) => values.iter().map(value_nodes).sum::<usize>(),
+            Value::Object(values) => values.values().map(value_nodes).sum::<usize>(),
+            _ => 0,
+        }
+    }
+    #[test]
+    fn completion_admission_counts_the_record_wrapper_before_publication() {
+        for extra in [0, 1] {
+            let root = tempfile::tempdir().unwrap();
+            let mut live = journal(root.path());
+            let binding = binding("write", "never");
+            live.before(binding.clone()).unwrap();
+            let mut record = live.records[0].1.clone();
+            record.state = "completed".into();
+            record.previous = Some(live.records[0].0.clone());
+            record.receipt =
+                Some(json!({"requestDigest":binding.request_digest,"executor":"test","output":[]}));
+            let overhead = value_nodes(&serde_json::to_value(&record).unwrap());
+            record.receipt.as_mut().unwrap()["output"] = json!(vec![0; 100_000 - overhead + extra]);
+            assert_eq!(
+                value_nodes(&serde_json::to_value(&record).unwrap()),
+                100_000 + extra
+            );
+            let head = live.directory.join("entries/000000.json");
+            let before = fs::read(&head).unwrap();
+            let value_count = fs::read_dir(root.path().join("values")).unwrap().count();
+            let receipt = record.receipt.unwrap();
+            if extra == 0 {
+                live.after(&receipt).unwrap();
+                live.finish().unwrap();
+                let mut restored = reopen(root.path());
+                restored.begin_recovery().unwrap();
+                assert_eq!(restored.before(binding).unwrap(), Some(receipt));
+                restored.finish().unwrap();
+            } else {
+                let error = live.after(&receipt).unwrap_err();
+                assert_eq!(error.code, "BUDGET_EXHAUSTED");
+                assert!(live.is_poisoned());
+                assert_eq!(fs::read(&head).unwrap(), before);
+                assert_eq!(
+                    fs::read_dir(root.path().join("values")).unwrap().count(),
+                    value_count
+                );
+                let mut restored = reopen(root.path());
+                assert_eq!(restored.records[0].1.state, "started");
+                assert!(restored.records[0].1.receipt.is_none());
+                assert!(restored.begin_recovery().is_err());
+            }
+        }
+    }
+    #[test]
+    fn completion_admission_counts_full_record_depth() {
+        for depth in [62, 63] {
+            let root = tempfile::tempdir().unwrap();
+            let mut live = journal(root.path());
+            let binding = binding("write", "never");
+            live.before(binding.clone()).unwrap();
+            let mut output = json!(0);
+            for _ in 0..depth {
+                output = json!([output]);
+            }
+            let receipt =
+                json!({"requestDigest":binding.request_digest,"executor":"test","output":output});
+            if depth == 62 {
+                live.after(&receipt).unwrap();
+                let mut restored = reopen(root.path());
+                restored.begin_recovery().unwrap();
+                assert_eq!(restored.before(binding).unwrap(), Some(receipt));
+            } else {
+                assert_eq!(live.after(&receipt).unwrap_err().code, "BUDGET_EXHAUSTED");
+                let restored = reopen(root.path());
+                assert_eq!(restored.records[0].1.state, "started");
+            }
+        }
     }
     #[test]
     fn changed_host_binding_poison_prevents_later_dispatch_and_outcome() {

@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { canonicalize, type JsonValue } from "./values";
 import { AlgalError } from "./errors";
 
-export type Digest = `sha256:${string}`;
+import type { Digest } from "./digest-type";
+export type { Digest } from "./digest-type";
 
 export function digestCanonical(value: JsonValue): Digest {
   return digestText(canonicalize(value));

@@ -1,5 +1,12 @@
 # Bounded audit probe evidence
 
+This page retains the original audit probes. Current repairs, model/proof
+checkpoints and remaining obligations are tracked in the
+[execution record](../formal-verification-execution.md), including the
+[application](phase06-application.md), [scheduler](phase07-scheduler.md),
+[closure/admission](phase08-closure.md) and [semantic core](phase09-core.md)
+evidence. Historical observations below are not claims about the current tree.
+
 These results were observed on 2026-09-23 against ALGAL a86327f76f6e632fe7fceda17b738a749a341ab6, using Bun 1.3.14 and the committed expression WASM. They are counterexamples/observations, not passing formal proofs. Commands below run from the ALGAL repository root. No native counterpart was run, no external effect was dispatched, and no source code was changed.
 
 ## Undeclared inherited output port

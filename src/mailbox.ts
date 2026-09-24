@@ -41,6 +41,8 @@ export const MAILBOX_SEND_TOOL = "mailbox.send.v1" as const;
 export const MAILBOX_RECEIVE_TOOL = "mailbox.receive.v1" as const;
 export const MAILBOX_BOUNDS = {
   maxMailboxes: 1024,
+  // Count every physical entry before filtering files or orphan directories.
+  maxDirectoryEntries: 2064,
   maxMessages: 1024,
   maxMessageBytes: 250_000,
 } as const;
@@ -615,27 +617,34 @@ export class FileMailboxService implements MailboxService {
     const root = join(this.dir, "mailboxes");
     const configs: MailboxConfig[] = [];
     try {
-      const directory = await opendir(root);
-      for await (const entry of directory) {
-        if (entry.isSymbolicLink()) {
-          throw new AlgalError("IO_FAILED", "mailbox symlinks are not admitted");
-        }
-        if (!entry.isDirectory()) continue;
-        await this.guard(entry.name);
-        const raw = await readJson(join(root, entry.name, "config.json"));
-        if (raw === undefined) continue;
-        const config = parseConfig(raw, `mailbox ${entry.name}`);
-        if (config.name !== entry.name) {
-          throw new AlgalError("DIGEST_MISMATCH", "mailbox config is in the wrong directory");
-        }
-        configs.push(config);
-        if (configs.length > MAILBOX_BOUNDS.maxMailboxes) {
-          throw new AlgalError("BUDGET_EXHAUSTED", "mailbox count exhausted");
-        }
-      }
+      // Bun may defer opendir's ENOENT until iteration. Only absence observed
+      // before enumeration is empty; later IO failures must remain failures.
+      await lstat(root);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw error;
+    }
+    const directory = await opendir(root);
+    let scanned = 0;
+    for await (const entry of directory) {
+      if (++scanned > MAILBOX_BOUNDS.maxDirectoryEntries) {
+        throw new AlgalError("BUDGET_EXHAUSTED", "mailbox namespace physical entry bound exceeded");
+      }
+      if (entry.isSymbolicLink()) {
+        throw new AlgalError("IO_FAILED", "mailbox symlinks are not admitted");
+      }
+      if (!entry.isDirectory()) continue;
+      await this.guard(entry.name);
+      const raw = await readJson(join(root, entry.name, "config.json"));
+      if (raw === undefined) continue;
+      const config = parseConfig(raw, `mailbox ${entry.name}`);
+      if (config.name !== entry.name) {
+        throw new AlgalError("DIGEST_MISMATCH", "mailbox config is in the wrong directory");
+      }
+      configs.push(config);
+      if (configs.length > MAILBOX_BOUNDS.maxMailboxes) {
+        throw new AlgalError("BUDGET_EXHAUSTED", "mailbox count exhausted");
+      }
     }
     configs.sort((a, b) => a.name.localeCompare(b.name));
     return configs;

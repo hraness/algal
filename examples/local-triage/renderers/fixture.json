@@ -1,0 +1,327 @@
+{
+  "contract": "algal.triage-capture.v1",
+  "application": "renderer-fixture",
+  "head": "sha256:cf15305a75ef5cad28e63765b682f06d3e13d135aad5fbaf83d2345baa7b5e34",
+  "revision": "sha256:ed0d42f0ab406f310ec7d12cb80c965b559dd362b9202e1376ecf25cc4796049",
+  "memory": "sha256:1abd777e7b687dd8de0235e72fb1f7a0f56374a1a5dfdfc27755e3a9c4d290f2",
+  "sequence": 0,
+  "definition": {
+    "contract": "algal.triage-revision.v1",
+    "schemaVersion": 2,
+    "config": {
+      "sort": "priority",
+      "group": "status",
+      "allowReopen": true
+    },
+    "program": {
+      "tasks": [
+        "map",
+        [
+          "sort",
+          [
+            "map",
+            [
+              "get",
+              "tasks"
+            ],
+            "task",
+            [
+              "list",
+              [
+                "if",
+                [
+                  "eq",
+                  [
+                    "get",
+                    "task",
+                    "priority"
+                  ],
+                  "high"
+                ],
+                0,
+                [
+                  "if",
+                  [
+                    "eq",
+                    [
+                      "get",
+                      "task",
+                      "priority"
+                    ],
+                    "normal"
+                  ],
+                  1,
+                  2
+                ]
+              ],
+              [
+                "get",
+                "task",
+                "id"
+              ],
+              [
+                "get",
+                "task"
+              ]
+            ]
+          ]
+        ],
+        "ranked",
+        [
+          "get",
+          "ranked",
+          2
+        ]
+      ],
+      "group": "status",
+      "allowReopen": true,
+      "ordering": "Ordered by priority; grouped by status. Equal keys use stable task ID order.",
+      "groups": [
+        "unique",
+        [
+          "map",
+          [
+            "map",
+            [
+              "sort",
+              [
+                "map",
+                [
+                  "get",
+                  "tasks"
+                ],
+                "task",
+                [
+                  "list",
+                  [
+                    "if",
+                    [
+                      "eq",
+                      [
+                        "get",
+                        "task",
+                        "priority"
+                      ],
+                      "high"
+                    ],
+                    0,
+                    [
+                      "if",
+                      [
+                        "eq",
+                        [
+                          "get",
+                          "task",
+                          "priority"
+                        ],
+                        "normal"
+                      ],
+                      1,
+                      2
+                    ]
+                  ],
+                  [
+                    "get",
+                    "task",
+                    "id"
+                  ],
+                  [
+                    "get",
+                    "task"
+                  ]
+                ]
+              ]
+            ],
+            "ranked",
+            [
+              "get",
+              "ranked",
+              2
+            ]
+          ],
+          "task",
+          [
+            "get",
+            "task",
+            "status"
+          ]
+        ]
+      ]
+    }
+  },
+  "tasks": [
+    {
+      "id": "review",
+      "title": "Review recorded proposal",
+      "priority": "high",
+      "status": "open",
+      "category": "work"
+    },
+    {
+      "id": "retain",
+      "title": "Keep the original evidence",
+      "priority": "normal",
+      "status": "done",
+      "category": "inbox"
+    }
+  ],
+  "session": {
+    "contract": "algal.triage-session.v1",
+    "filter": "all",
+    "query": "",
+    "draft": {
+      "taskId": null,
+      "title": "",
+      "priority": "normal",
+      "category": "inbox"
+    },
+    "focusedField": null
+  },
+  "view": {
+    "filters": [
+      {
+        "label": "All tasks",
+        "selected": true,
+        "value": "all"
+      },
+      {
+        "label": "Open",
+        "selected": false,
+        "value": "open"
+      },
+      {
+        "label": "Done",
+        "selected": false,
+        "value": "done"
+      }
+    ],
+    "form": {
+      "fields": [
+        {
+          "label": "Task",
+          "maxLength": 120,
+          "name": "title",
+          "options": [],
+          "value": ""
+        },
+        {
+          "label": "Priority",
+          "maxLength": 6,
+          "name": "priority",
+          "options": [
+            "high",
+            "normal",
+            "low"
+          ],
+          "value": "normal"
+        },
+        {
+          "label": "Category",
+          "maxLength": 24,
+          "name": "category",
+          "options": [],
+          "value": "inbox"
+        }
+      ],
+      "id": "task-editor",
+      "kind": "form",
+      "submit": {
+        "enabled": false,
+        "label": "Add task",
+        "reason": null
+      }
+    },
+    "groups": [
+      {
+        "id": "open",
+        "label": "open",
+        "tasks": [
+          {
+            "actions": [
+              {
+                "enabled": true,
+                "kind": "edit",
+                "label": "Edit",
+                "reason": null
+              },
+              {
+                "enabled": true,
+                "kind": "complete",
+                "label": "Complete",
+                "reason": null
+              },
+              {
+                "enabled": false,
+                "kind": "reopen",
+                "label": "Reopen",
+                "reason": "Already open"
+              }
+            ],
+            "task": {
+              "category": "work",
+              "id": "review",
+              "priority": "high",
+              "status": "open",
+              "title": "Review recorded proposal"
+            }
+          }
+        ]
+      },
+      {
+        "id": "done",
+        "label": "done",
+        "tasks": [
+          {
+            "actions": [
+              {
+                "enabled": true,
+                "kind": "edit",
+                "label": "Edit",
+                "reason": null
+              },
+              {
+                "enabled": false,
+                "kind": "complete",
+                "label": "Complete",
+                "reason": "Already complete"
+              },
+              {
+                "enabled": true,
+                "kind": "reopen",
+                "label": "Reopen",
+                "reason": null
+              }
+            ],
+            "task": {
+              "category": "inbox",
+              "id": "retain",
+              "priority": "normal",
+              "status": "done",
+              "title": "Keep the original evidence"
+            }
+          }
+        ]
+      }
+    ],
+    "kind": "triage",
+    "ordering": "Ordered by priority; grouped by status. Equal keys use stable task ID order.",
+    "title": "Local triage"
+  },
+  "capacity": {
+    "tasks": 30,
+    "states": 127
+  },
+  "evidence": [
+    "sha256:c4c446bd7b386903ddc299d069fa4223381651d243313b6840dc33a179e25652"
+  ],
+  "why": [
+    {
+      "taskId": "review",
+      "reason": "Ordered by priority; grouped by status. Equal keys use stable task ID order. Group open, position 1; facts from sha256:1abd777e7b687dd8de0235e72fb1f7a0f56374a1a5dfdfc27755e3a9c4d290f2."
+    },
+    {
+      "taskId": "retain",
+      "reason": "Ordered by priority; grouped by status. Equal keys use stable task ID order. Group done, position 1; facts from sha256:1abd777e7b687dd8de0235e72fb1f7a0f56374a1a5dfdfc27755e3a9c4d290f2."
+    }
+  ]
+}

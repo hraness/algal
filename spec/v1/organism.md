@@ -565,6 +565,17 @@ handle without changing the other. Capability records, immutable message
 claims, and pending/consumed delivery markers live under the host's `--dir`;
 bundles and manifests never contain those admissions.
 
+Mailbox list/create admission accepts at most 2,064 yielded namespace entries,
+separately from the existing 1,024 admitted-mailbox limit. Every entry counts
+before filtering, including ordinary files, orphan directories and retained lock
+residue; these iterators omit `.` and `..`. Exceeding either bound rejects with
+`BUDGET_EXHAUSTED`. Rejection never reclaims recovery records or treats a truncated
+scan as a complete mailbox inventory.
+In Bun 1.3.14, eager runtime enumeration precedes this counter; the counter does
+not bound that initial allocation or work. Native traversal uses Rust `read_dir`,
+whose underlying libc/filesystem behavior is an environmental assumption rather
+than a proved allocation bound. See [filesystem enumeration bounds](../../docs/directory-admission.md).
+
 An empty receive throws `EFFECT_SUSPENDED`. The tool attempt records
 `retryable:false`, the cell/run suspend normally, and the `algal mailbox send`
 command supplies an external wakeup from a send cap and JSON value. A caller
@@ -938,11 +949,28 @@ newly indexed sources; their per-run effect receipt remains replayable.
 A bundle is a portable closure: `{"contract","root","manifests","values"}`.
 `pack` walks the root manifest's embedding graph (`organism`/`repeat`/`each`
 cells) and every payload named by a `const` `ref` port, collecting each into
-a digest-keyed map. `unpack` installs the closure into a store — every entry
-re-hashes against its claimed key (`DIGEST_MISMATCH` on tamper) and the root
-must be among the manifests. A bundle is data with no host code: the
-unpacked organism runs exactly as if its modules had been loaded
-individually.
+a digest-keyed map. Each namespace admits at most 512 distinct entries;
+repeated references share an entry. The complete canonical envelope admits at
+most 67,108,864 bytes, 1,000,000 value nodes and depth 64 with the envelope root
+at depth zero. Object keys consume bytes but are not value nodes. Array positions
+consume nodes even when SDK holes serialize as null. The producer charges
+aggregate resources while collecting dependencies and returns
+`BUDGET_EXHAUSTED` if wrapping individually valid records exceeds these bounds.
+
+`unpack` imports the supplied records into a store. Every entry re-hashes against
+its claimed key (`DIGEST_MISMATCH` on tamper), the root must be supplied, and both
+the supplied and manifest-normalized envelope must meet those resource bounds
+before the first destination write. Import compatibility permits a partial
+closure: successful `unpack` does not establish that every static dependency is
+supplied or that an organism can run without ambient store records. `pack` still
+requires the complete static embedding/ref closure. Runtime-generated spawn
+and arbitrary host dependencies are outside that static closure. A later store
+write failure is not transactional rollback of earlier imported records.
+
+CLI bundle inputs additionally require a regular file under the same raw byte
+ceiling and valid UTF-8 JSON; explicit symlinks may name regular files. A bundle
+is data with no host code: its supplied modules have the same execution semantics
+as those modules loaded individually, subject to the ordinary host admissions.
 
 ## Reserved, not implemented
 

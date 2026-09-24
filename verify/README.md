@@ -37,6 +37,25 @@ adds the Bun syscall/crash-image regressions; the native helper and admission
 tests remain required separately. These are finite checks and sampled runtime
 relations; the broad ledger obligations remain unproved.
 
+The application suites `application-model`, `outbox-model`, `quota-model`, and
+`authority-model` register separate finite selection, outbox, reservation, and
+authority domains. Their [model scope and inventories](tla/README.md) distinguish
+model safety from runtime correspondence. `stateful-app` runs named Bun service
+histories, portable-core/storage-adapter regressions and native histories. Volatile
+memory-adapter owner replacement is distinct from filesystem restart evidence. Set `ALGAL_APPLICATION_TEST_BIN` to the absolute
+frozen `application_model` integration-test executable built from the current
+source using `cargo test --locked -p algal --test application_model --no-run`.
+This is a different artifact from `ALGAL_TRACE_TEST_BIN`. Full application crash
+and CLI parity checks remain required separately.
+
+`scheduler-model` checks the independent bounded transition oracle and its
+negative controls. `scheduler-conformance` compares that declared fixture slice
+with both actual runtimes, including supervised command execution and journal
+poisoning. Set `ALGAL_SCHEDULER_NATIVE_BIN` to the absolute frozen native CLI built
+from the current source. These are executable model and sampled correspondence
+checks, not a scheduler refinement proof. See the [scope](reference/scheduler/SCOPE.md)
+and [progress argument](reference/scheduler/PROGRESS.md).
+
 The [portable traces](traces/wire.md) replay retained and state-dependent histories
 through both actual runtimes, compare exact results with cold persistence reads,
 and require publication/checkpoint witnesses. `traces`, `stateful`, and

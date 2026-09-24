@@ -1,0 +1,85 @@
+{
+  "contract": "algal.integration-checkpoint.v1",
+  "scope": "Local integration evidence, finite models and sampled conformance; zero licensed formal production claims. No remote release/deployment or live provider qualification.",
+  "branch": "feat/formal-verification-foundation",
+  "baseCommit": "f461dd2deb11c11746af38fcb480380b44e2ba29",
+  "mergedUpstream": "e588f8bc9b0964e5956f4c62e60c14dfbcef171e",
+  "formal": {
+    "inputDigest": "sha256:f5ac4d4ca8a19fcaed62fd6663913554591e202d48372bf28289f2a649a362cb",
+    "aggregateFileSha256": "339ee89fccaf27c013425c95c3a62e5f93c93067c9931e2068463a90cd0a8042",
+    "readmission": {
+      "bytes": 555310,
+      "digest": "sha256:09c0a05c0829a50fd8b0b3b2686070a316f1c78ab32d5ac56cd053b751162ee3",
+      "fileSha256": "sha256:c512e490a0e10e9a285d9edd73ff331a693833950a0a0e2d9ea501cb148f6421",
+      "path": "verify/results/09c0a05c0829a50fd8b0b3b2686070a316f1c78ab32d5ac56cd053b751162ee3/aggregate-readmission.json"
+    },
+    "suites": 23,
+    "tlcRuns": 661,
+    "positiveProfiles": 183,
+    "actionWitnesses": 374,
+    "unsafeControls": 104,
+    "leanNamedTheorems": 564,
+    "leanModuleTheorems": 1616,
+    "leanNegativeControls": 7,
+    "schedulerComparisons": 206,
+    "applicationConformance": {
+      "bunTests": 100,
+      "nativeTests": 6
+    }
+  },
+  "bun": {
+    "command": [
+      "bun",
+      "run",
+      "check"
+    ],
+    "status": "passed",
+    "tests": 1387,
+    "assertions": 11163,
+    "skips": {
+      "nativeBinaryRequired": 17,
+      "liveProviderRequired": 2,
+      "linuxOnly": 1
+    },
+    "seconds": 451.73,
+    "log": "/private/tmp/algal-bun-integrated-check-final.log"
+  },
+  "native": {
+    "status": "passed",
+    "tests": 376,
+    "ownedChildFixturesIgnoredInOrdinaryHarness": 3,
+    "gates": [
+      "cargo fmt --all -- --check",
+      "cargo clippy --workspace --all-targets --locked -- -D warnings",
+      "cargo test --workspace --locked",
+      "cargo build --locked",
+      "cargo build --release --locked -p algal --bin algal"
+    ],
+    "toolchain": "1.97.1",
+    "log": "/private/tmp/algal-native-integrated-gates-loopback.log"
+  },
+  "parity": {
+    "commands": 20,
+    "report": "integration-parity.json",
+    "reportSha256": "5eb2f94ddf80bea84ced3e33178c3641ace46c8628596083e0681b8504e9aed8"
+  },
+  "python": {
+    "harnessTests": 42,
+    "appleDeterministicCases": 18,
+    "nativeReleaseInstallChecks": 17,
+    "inferenceAttempted": false,
+    "log": "/private/tmp/algal-final-python-gates.log"
+  },
+  "review": {
+    "status": "source approved pending all final gates; all listed local gates have now passed",
+    "report": "integration-review.md",
+    "inspectedSources": "integration-review-sources.json"
+  },
+  "remaining": [
+    "Phase06 generated composition histories",
+    "Phase07 full scheduler work/termination/refinement obligations",
+    "Phase08 comprehensive corpus/fuzz/mutation coverage and qualified directory primitive",
+    "Phase09 full numeric codec/rounding/production refinement",
+    "Later plan phases10 through19"
+  ]
+}

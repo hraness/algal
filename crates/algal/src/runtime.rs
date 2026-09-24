@@ -336,6 +336,11 @@ impl Runtime<'_> {
                             self.event("cell.commit", Some(&cell_path), None, None)?;
                         }
                         Err(error) => {
+                            // A poisoned journal cannot authorize guest recovery
+                            // or erase host-only uncertainty through serialization.
+                            if self.host.journal_is_poisoned() {
+                                return Err(error);
+                            }
                             // suspension is not failure: the cell's effect
                             // asked the host to pause the process. The attempt
                             // is already on the receipt — record the
@@ -531,7 +536,7 @@ impl Runtime<'_> {
                         receipt
                     }
                 };
-                self.host.journal_after(&receipt)?;
+                self.host.journal_after_dispatch(&receipt)?;
                 receipt
             }
         };
@@ -903,10 +908,12 @@ impl Runtime<'_> {
         }
         let max_context = cell["budget"]["maxContextBytes"]
             .as_u64()
-            .unwrap_or(self.budgets.max_context_bytes as u64) as usize;
+            .unwrap_or(self.budgets.max_context_bytes as u64)
+            .min(self.budgets.max_context_bytes as u64) as usize;
         let max_output = cell["budget"]["maxOutputBytes"]
             .as_u64()
-            .unwrap_or(self.budgets.max_output_bytes as u64) as usize;
+            .unwrap_or(self.budgets.max_output_bytes as u64)
+            .min(self.budgets.max_output_bytes as u64) as usize;
         let context = json!({"inputs":inputs});
         let context_bytes = canonical(&context)?.len();
         if context_bytes > max_context {
@@ -1421,6 +1428,10 @@ pub async fn run(
     if let Some(failure) = runtime.failure {
         receipt["failure"] = failure;
     }
+    // Include the fixed-length digest field in admission before recursive
+    // hashing, so every returned receipt fits the reader's complete envelope.
+    receipt["digest"] = json!(format!("sha256:{}", "0".repeat(64)));
+    crate::receipt::validate_produced(&receipt)?;
     receipt["digest"] = json!(receipt_digest(&receipt)?);
     Ok(receipt)
 }

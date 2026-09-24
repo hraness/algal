@@ -244,6 +244,10 @@ export function admitSelftestOutput(result: CommandResult): number {
 
 async function executeSuite(root: string, suite: string): Promise<unknown> {
   if (suite === "claims") return validateClaims(root);
+  if (suite === "scheduler-model" || suite === "scheduler-conformance") {
+    const { runSchedulerModel, runSchedulerConformance } = await import("../reference/scheduler/run");
+    return suite === "scheduler-model" ? runSchedulerModel(root) : runSchedulerConformance(root);
+  }
   if (suite === "lean-core") {
     const { runLeanCore, recheckLeanCoreEvidence } = await import("../lean/run");
     const binary = process.env.ALGAL_LEAN_NATIVE_BIN;
@@ -265,16 +269,17 @@ async function executeSuite(root: string, suite: string): Promise<unknown> {
     const { runArtifact } = await import("../artifact/run");
     return runArtifact(root);
   }
-  if (suite === "process-conformance" || suite === "mailbox-conformance" || suite === "lease-conformance") {
+  if (suite === "process-conformance" || suite === "mailbox-conformance" || suite === "lease-conformance" || suite === "stateful-app") {
     const { runProtocolConformance } = await import("../protocols/run");
-    const protocol = suite === "process-conformance" ? "process" : suite === "mailbox-conformance" ? "mailbox" : "lease";
-    const binary = process.env.ALGAL_TRACE_TEST_BIN;
-    requireThat(binary !== undefined, `${suite} requires explicit ALGAL_TRACE_TEST_BIN`);
+    const protocol = suite === "process-conformance" ? "process" : suite === "mailbox-conformance" ? "mailbox" : suite === "stateful-app" ? "application" : "lease";
+    const variable = suite === "stateful-app" ? "ALGAL_APPLICATION_TEST_BIN" : "ALGAL_TRACE_TEST_BIN";
+    const binary = process.env[variable];
+    requireThat(binary !== undefined, `${suite} requires explicit ${variable}`);
     return runProtocolConformance(root, protocol, binary);
   }
-  if (suite === "process-model" || suite === "mailbox-model" || suite === "lease-model") {
+  if (suite === "process-model" || suite === "mailbox-model" || suite === "lease-model" || suite === "application-model" || suite === "outbox-model" || suite === "quota-model" || suite === "authority-model") {
     const { runTlcSuite, recheckTlcSuiteEvidence } = await import("./tlc");
-    const protocol = suite === "process-model" ? "process" : suite === "mailbox-model" ? "mailbox" : "lease";
+    const protocol = suite === "process-model" ? "process" : suite === "mailbox-model" ? "mailbox" : suite === "lease-model" ? "lease" : suite === "application-model" ? "application" : suite === "outbox-model" ? "outbox" : suite === "quota-model" ? "quota" : "authority";
     const evidence = await runTlcSuite(root, protocol);
     return { model: await recheckTlcSuiteEvidence(root, evidence, protocol), evidence };
   }

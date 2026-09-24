@@ -88,6 +88,22 @@ describe("algal.application-contention.v1", () => {
     await verifyApplicationContention(f.service, produced.contention);
   });
 
+  test("a later valid commit using the losing operation invalidates its old stale-head evidence", async () => {
+    const f = await fixture(), winner = f.command("winner"), loser = f.command("reused-loser");
+    const produced = await produceApplicationContention(f.service, { parentState: f.genesis.digest, attempts: [winner, loser] });
+    expect((await verifyApplicationContention(f.service, produced.contention)).winner).toBe(produced.record.winner);
+    const retained = await f.store.getValue(produced.contention);
+    const later = await f.service.commit({ ...loser, expectedHead: produced.snapshot.digest });
+    expect(later.transition.operation).toBe(loser.operation);
+    // Verification re-derives rejection against current history. The unchanged
+    // record's former stale-head reason no longer describes this operation.
+    await expect(verifyApplicationContention(f.service, produced.contention)).rejects.toThrow("not reproducible");
+    await expect(f.service.commit(loser)).rejects.toThrow("another request");
+    expect(await f.store.getValue(produced.contention)).toEqual(retained);
+    expect((await f.service.inspect("fixture"))!.digest).toBe(later.digest);
+    expect((await f.service.history("fixture")).map(row => row.transition.operation)).toEqual([f.genesis.transition.operation, winner.operation, loser.operation]);
+  });
+
   test("production rejects malformed races before committing", async () => {
     const f = await fixture();
     const later = await f.service.commit(f.command("advance"));

@@ -846,12 +846,18 @@ impl ProcessService {
         };
         host.process_scope = scope;
         host.journal = previous_journal;
-        if let Some(journal) = journal
-            && let Err(mut blocked) = journal
-                .lock()
-                .map_err(|_| Error::new("RECOVERY_BLOCKED", "journal mutex poisoned"))?
-                .finish()
-        {
+        let completion = journal
+            .map(|journal| {
+                let journal = journal
+                    .lock()
+                    .map_err(|_| Error::new("RECOVERY_BLOCKED", "journal mutex poisoned"))?;
+                Ok::<_, Error>((journal.is_poisoned(), journal.finish()))
+            })
+            .transpose()?;
+        if let Some((poisoned, Err(mut blocked))) = completion {
+            if poisoned && let Err(error) = &result {
+                return Err(error.clone());
+            }
             // The runtime may have caught an uncertain executor error in a
             // failed receipt. Keep the journal's settlement refusal, while
             // preserving a bounded diagnostic from that unpublished result.

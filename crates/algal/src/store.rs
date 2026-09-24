@@ -596,12 +596,88 @@ impl Store {
     }
 }
 
+/// Whole canonical bundle bounds, including wrapper/default amplification.
+/// Count values (not object keys) as nodes, at root depth zero. The collector
+/// charges entries before retaining them, so many individually admitted values
+/// cannot first allocate an unbounded aggregate and only then be rejected.
+#[derive(Default)]
+struct BundleBudget {
+    nodes: usize,
+    bytes: usize,
+}
+
+impl BundleBudget {
+    fn add(&mut self, bytes: usize) -> Result<()> {
+        self.bytes = self.bytes.saturating_add(bytes);
+        if self.bytes > MAX_DOCUMENT_BYTES {
+            return Err(Error::limit("bundle document byte bound exceeded"));
+        }
+        Ok(())
+    }
+
+    fn string(&mut self, value: &str) -> Result<()> {
+        self.add(2)?;
+        self.add(value.len())?;
+        for byte in value.bytes() {
+            match byte {
+                b'"' | b'\\' | b'\x08' | b'\t' | b'\n' | b'\x0c' | b'\r' => self.add(1)?,
+                0..=31 => self.add(5)?,
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    fn member(&mut self, key: &str, value: &Value, depth: usize, first: bool) -> Result<()> {
+        self.add(if first { 1 } else { 2 })?;
+        self.string(key)?;
+        self.visit(value, depth)
+    }
+
+    fn visit(&mut self, value: &Value, depth: usize) -> Result<()> {
+        self.nodes += 1;
+        if self.nodes > 1_000_000 || depth > 64 {
+            return Err(Error::limit("bundle document depth/node bound exceeded"));
+        }
+        match value {
+            Value::Null => self.add(4),
+            Value::Bool(value) => self.add(if *value { 4 } else { 5 }),
+            Value::Number(value) => {
+                let number = value
+                    .as_f64()
+                    .filter(|number| number.is_finite())
+                    .ok_or_else(|| Error::invalid("finite JSON number required"))?;
+                self.add(ryu_js::Buffer::new().format(number).len())
+            }
+            Value::String(value) => self.string(value),
+            Value::Array(values) => {
+                if values.len() > 1_000_000 - self.nodes {
+                    return Err(Error::limit("bundle document node bound exceeded"));
+                }
+                self.add(2 + values.len().saturating_sub(1))?;
+                for value in values {
+                    self.visit(value, depth + 1)?;
+                }
+                Ok(())
+            }
+            Value::Object(values) => {
+                self.add(2)?;
+                for (index, (key, value)) in values.iter().enumerate() {
+                    self.member(key, value, depth + 1, index == 0)?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
 pub fn pack(root: &Manifest, store: &Store) -> Result<Value> {
     fn visit(
         manifest: &Manifest,
         store: &Store,
         manifests: &mut BTreeMap<String, Value>,
         values: &mut BTreeMap<String, Value>,
+        resources: &mut BundleBudget,
     ) -> Result<()> {
         let key = manifest.digest()?;
         if manifests.contains_key(&key) {
@@ -610,6 +686,7 @@ pub fn pack(root: &Manifest, store: &Store) -> Result<Value> {
         if manifests.len() >= 512 {
             return Err(Error::limit("bundle manifest count"));
         }
+        resources.member(&key, &manifest.value, 2, manifests.is_empty())?;
         manifests.insert(key, manifest.value.clone());
         for cell in &manifest.cells {
             if ["organism", "each", "repeat"]
@@ -621,6 +698,7 @@ pub fn pack(root: &Manifest, store: &Store) -> Result<Value> {
                     store,
                     manifests,
                     values,
+                    resources,
                 )?;
             }
             if cell["kind"] == "const" {
@@ -629,13 +707,17 @@ pub fn pack(root: &Manifest, store: &Store) -> Result<Value> {
                         let reference = port["value"]
                             .as_str()
                             .ok_or_else(|| Error::invalid("const reference"))?;
+                        if values.contains_key(reference) {
+                            continue;
+                        }
+                        if values.len() >= 512 {
+                            return Err(Error::limit("bundle value count"));
+                        }
                         let value = store
                             .get("values", reference)?
                             .ok_or_else(|| Error::new("STORE_MISS", "bundle reference missing"))?;
+                        resources.member(reference, &value, 2, values.is_empty())?;
                         values.insert(reference.to_owned(), value);
-                        if values.len() > 512 {
-                            return Err(Error::limit("bundle value count"));
-                        }
                     }
                 }
             }
@@ -644,8 +726,14 @@ pub fn pack(root: &Manifest, store: &Store) -> Result<Value> {
     }
     let mut manifests = BTreeMap::new();
     let mut values = BTreeMap::new();
-    visit(root, store, &mut manifests, &mut values)?;
+    let mut resources = BundleBudget::default();
+    resources.visit(
+        &json!({"contract":"algal.bundle.v1","root":root.digest()?,"manifests":{},"values":{}}),
+        0,
+    )?;
+    visit(root, store, &mut manifests, &mut values, &mut resources)?;
     let bundle = json!({"contract":"algal.bundle.v1","root":root.digest()?,"manifests":manifests,"values":values});
+    BundleBudget::default().visit(&bundle, 0)?;
     canonical(&bundle)?;
     Ok(bundle)
 }
@@ -655,12 +743,12 @@ pub fn unpack(bundle: &Value, store: &mut Store) -> Result<Manifest> {
     if bundle["contract"] != "algal.bundle.v1" {
         return Err(Error::invalid("bundle contract"));
     }
-    canonical(bundle)?;
+    BundleBudget::default().visit(bundle, 0)?;
     let root = bundle["root"]
         .as_str()
         .ok_or_else(|| Error::invalid("bundle root"))?;
     check_digest(root)?;
-    let mut admitted = Vec::new();
+    let mut admitted = json!({"contract":"algal.bundle.v1","root":root,"manifests":{},"values":{}});
     for namespace in ["manifests", "values"] {
         let empty = json!({});
         let values = object(bundle.get(namespace).unwrap_or(&empty))?;
@@ -680,14 +768,20 @@ pub fn unpack(bundle: &Value, store: &mut Store) -> Result<Manifest> {
                     "bundle content does not match digest",
                 ));
             }
-            admitted.push((namespace, value));
+            admitted[namespace][claimed] = value;
         }
     }
     if bundle["manifests"].get(root).is_none() {
         return Err(Error::invalid("bundle root missing"));
     }
-    for (namespace, value) in admitted {
-        store.put(namespace, &value)?;
+    // Manifest defaults can enlarge a supplied representation. Admit the
+    // normalized envelope before writes; partial supplied-record imports stay
+    // compatible and do not claim static dependency completeness.
+    BundleBudget::default().visit(&admitted, 0)?;
+    for namespace in ["manifests", "values"] {
+        for value in object(&admitted[namespace])?.values() {
+            store.put(namespace, value)?;
+        }
     }
     store.manifest(root)
 }

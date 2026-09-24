@@ -17,7 +17,7 @@
         "crates/algal/src/canonical.rs"
       ],
       "coveredCriteria": [
-        "Finite admission excludes exponent 2047; ±0 normalization is idempotent, preserves finite bits and changes only negative zero; normalized equivalent values are equal."
+        "Finite admission excludes exponent 2047; \u00b10 normalization is idempotent, preserves finite bits and changes only negative zero; normalized equivalent values are equal."
       ],
       "unmetCriteria": [
         "Decimal conversion/ECMAScript rendering, native integer-to-binary64 conversion, general arithmetic correspondence."
@@ -122,6 +122,118 @@
       ],
       "rejectedWitnesses": [
         "Algal.Core.RoundingInterval.odd_lower_midpoint_rejected"
+      ]
+    },
+    {
+      "id": "signed-rounding",
+      "module": "Algal.Core.SignedRounding",
+      "scope": "Actual finite UInt64 sign reflection and exact rational symmetry; positive and reflected negative interior midpoint cells are nearest among every admitted finite candidate, including both signed zeros.",
+      "sources": [
+        "src/values.ts",
+        "crates/algal/src/canonical.rs",
+        "Cargo.lock"
+      ],
+      "coveredCriteria": [
+        "Sign toggling preserves finite exponent/fraction and parity, negates exact denotation, is injective and involutive. Signed zero bit patterns swap.",
+        "Interior nearest and odd strict-nearest results quantify all finite candidates; actual negative bit patterns are obtained by sign reflection with reversed neighbors."
+      ],
+      "unmetCriteria": [
+        "Adjacency assumptions remain on the positive interior triple. No all-input selector or partition, decimal conversion, generic residual/carry/packing theorem, shortest renderer or production implementation refinement is provided.",
+        "Natural/rational intermediates are mathematical unbounded values. Machine, allocation and time refinement and trusted standard-library/kernel assumptions remain separate."
+      ],
+      "admittedWitnesses": [
+        "Algal.Core.SignedRounding.signed_zero_negation",
+        "Algal.Core.SignedRounding.negative_one_reflection"
+      ],
+      "rejectedWitnesses": [
+        "Algal.Core.SignedRounding.sign_reflection_identity_rejected"
+      ]
+    },
+    {
+      "id": "rounding-endpoints",
+      "module": "Algal.Core.RoundingEndpoints",
+      "scope": "Exact signed zero/underflow and maximum-finite/overflow geometry over rational inputs and actual finite binary64 values, plus kernel-reduced signed dyadic round/pack witnesses. Infinity is a separate result refused by finite admission.",
+      "sources": [
+        "src/values.ts",
+        "crates/algal/src/canonical.rs",
+        "Cargo.lock"
+      ],
+      "coveredCriteria": [
+        "The closed zero cell is equivalent to zero being globally nearest among finite candidates; both zero patterns have equal distance and the selected zero sign is explicit. Actual minimum-subnormal adjacency and midpoint ties are proved.",
+        "Maximum finite has an actual predecessor and virtual next value 2^1024 excluded from the finite domain. Its proposed open finite cell has strict nearest distance; maximum being nearest among finite values itself has only a lower midpoint condition and remains true past overflow. Negative maximum nearest follows reflection.",
+        "BoundaryResult distinguishes finite values from signed overflow with matching finite admission/refusal. Concrete signed dyadic inputs below/at/above underflow and overflow invoke pinned Lean round and pack; exact rational inequalities establish their positions."
+      ],
+      "unmetCriteria": [
+        "No total rational selector, complete partition or uniqueness theorem, generic all-input round/pack equivalence, decimal conversion or shortest rendering is proved. Endpoint point witnesses do not prove universal executable threshold behavior.",
+        "NegativeEndpoints separately proves negative maximum strictness and complete finite-nearest characterization, plus conditional reflected interior converses. Universal implementation correspondence remains open. A rational zero does not determine its sign; the model takes an explicit Sign.",
+        "Mathematical integer/rational arithmetic is unbounded; local kernel reduction options for large concrete witnesses do not prove machine-width, allocation, stack or time bounds. Standard-library imports and the proof/runtime trust assumptions remain."
+      ],
+      "admittedWitnesses": [
+        "Algal.Core.RoundingEndpoints.zero_minimum_adjacent",
+        "Algal.Core.RoundingEndpoints.maximum_previous_adjacent",
+        "Algal.Core.RoundingEndpoints.zero_in_zero_cell",
+        "Algal.Core.RoundingEndpoints.zero_boundary_included",
+        "Algal.Core.RoundingEndpoints.maximum_in_own_cell",
+        "Algal.Core.RoundingEndpoints.negative_maximum_in_own_cell",
+        "Algal.Core.RoundingEndpoints.underflow_tie_model",
+        "Algal.Core.RoundingEndpoints.underflow_below_tie_model",
+        "Algal.Core.RoundingEndpoints.underflow_above_tie_model",
+        "Algal.Core.RoundingEndpoints.maximum_exact_model",
+        "Algal.Core.RoundingEndpoints.overflow_below_tie_model",
+        "Algal.Core.RoundingEndpoints.negative_overflow_below_tie_model",
+        "Algal.Core.RoundingEndpoints.overflow_tie_model",
+        "Algal.Core.RoundingEndpoints.overflow_above_tie_model",
+        "Algal.Core.RoundingEndpoints.underflow_witness_input_order",
+        "Algal.Core.RoundingEndpoints.overflow_witness_input_order"
+      ],
+      "rejectedWitnesses": [
+        "Algal.Core.RoundingEndpoints.minimum_underflow_tie_excluded",
+        "Algal.Core.RoundingEndpoints.maximum_lower_tie_excluded",
+        "Algal.Core.RoundingEndpoints.overflow_tie_excluded_from_finite_cell",
+        "Algal.Core.RoundingEndpoints.virtual_next_not_finite",
+        "Algal.Core.RoundingEndpoints.overflow_model_refused",
+        "Algal.Core.RoundingEndpoints.negative_overflow_tie_excluded_from_finite_cell",
+        "Algal.Core.RoundingEndpoints.negative_minimum_underflow_tie_excluded"
+      ]
+    },
+    {
+      "id": "negative-endpoints",
+      "module": "Algal.Core.NegativeEndpoints",
+      "scope": "Exact rational nearest and strict-nearest geometry over every admitted finite binary64 candidate, including sign reflection, negative maximum, both signed zeros, and conditional interior midpoint converses. Different bits define strict competitors; the two zero patterns are never strictly nearest.",
+      "sources": [
+        "src/values.ts",
+        "crates/algal/src/canonical.rs",
+        "Cargo.lock"
+      ],
+      "coveredCriteria": [
+        "Actual finite sign reflection preserves global nearest and strict-nearest predicates. Negative maximum is nearest exactly below or at its finite-neighbor midpoint and strictly nearest exactly below it; its finite cell is strict finite nearest combined with not negative overflow. Strictness quantifies over all finite candidates, not only a supplied neighbor.",
+        "For a nonnegative interior center with two supplied actual adjacent finite neighbors, global nearest is equivalent to the closed midpoint interval and strict nearest to the open interval. Both equivalences reflect to negative centers. The existing parity-based cell is equivalent to nearest for an even center and strict nearest for an odd center.",
+        "Concrete center, midpoint, distinct-neighbor, signed-zero and overflow witnesses expose the boundary distinctions. At negative overflow, negative maximum remains strictly closest among finite values, but the finite cell excludes the tie and the existing pinned round/pack witness is refused by finite admission."
+      ],
+      "unmetCriteria": [
+        "Interior equivalences require their actual adjacency hypotheses; this module does not construct neighbors or a total selected center for every finite pattern/rational input, nor prove complete cell coverage or a global unique nearest-even selector. Signed-zero bit identity differs from rational denotation, so bitwise strict nearest is deliberately impossible for either zero.",
+        "Finite-nearest half-lines continue past overflow. Their characterization is not universal round/pack equivalence, decimal conversion, shortest rendering, a production NumberCodec.Laws instance or Bun/native refinement. The round/pack refusal is one concrete dyadic witness, not an all-input threshold theorem.",
+        "Mathematical integer/rational arithmetic is unbounded; machine width, allocation, stack and time bounds remain separate. Pinned compiled standard-library imports and the audit/kernel/runtime remain trusted."
+      ],
+      "admittedWitnesses": [
+        "Algal.Core.NegativeEndpoints.negative_maximum_center_strict_nearest",
+        "Algal.Core.NegativeEndpoints.negative_maximum_lower_tie_nearest",
+        "Algal.Core.NegativeEndpoints.negative_maximum_lower_tie_equal_distance",
+        "Algal.Core.NegativeEndpoints.negative_overflow_tie_strict_nearest",
+        "Algal.Core.NegativeEndpoints.negative_virtual_next_strict_nearest",
+        "Algal.Core.NegativeEndpoints.negative_one_lower_midpoint_nearest",
+        "Algal.Core.NegativeEndpoints.signed_zero_distinct_nearest_at_zero",
+        "Algal.Core.NegativeEndpoints.negative_maximum_lower_tie_has_distinct_competitor"
+      ],
+      "rejectedWitnesses": [
+        "Algal.Core.NegativeEndpoints.negative_maximum_lower_tie_not_strict",
+        "Algal.Core.NegativeEndpoints.negative_maximum_lower_tie_excluded",
+        "Algal.Core.NegativeEndpoints.negative_virtual_next_not_finite",
+        "Algal.Core.NegativeEndpoints.positive_zero_never_strict",
+        "Algal.Core.NegativeEndpoints.negative_zero_never_strict",
+        "Algal.Core.NegativeEndpoints.negative_one_lower_midpoint_not_strict",
+        "Algal.Core.NegativeEndpoints.negative_odd_midpoint_nearest_but_cell_excluded",
+        "Algal.Core.NegativeEndpoints.negative_overflow_boundary_finite_geometry_and_model_refusal"
       ]
     },
     {
@@ -1148,6 +1260,798 @@
       "module": "Algal.Core.RoundingInterval",
       "domain": "rounding-interval",
       "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.SignedRounding.negateBits_toNat",
+      "module": "Algal.Core.SignedRounding",
+      "domain": "signed-rounding",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.SignedRounding.negateBits_fields",
+      "module": "Algal.Core.SignedRounding",
+      "domain": "signed-rounding",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.SignedRounding.negateBits_finite",
+      "module": "Algal.Core.SignedRounding",
+      "domain": "signed-rounding",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.SignedRounding.negate_involution",
+      "module": "Algal.Core.SignedRounding",
+      "domain": "signed-rounding",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.SignedRounding.negate_injective",
+      "module": "Algal.Core.SignedRounding",
+      "domain": "signed-rounding",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.SignedRounding.negate_sign",
+      "module": "Algal.Core.SignedRounding",
+      "domain": "signed-rounding",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.SignedRounding.negate_value",
+      "module": "Algal.Core.SignedRounding",
+      "domain": "signed-rounding",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.SignedRounding.negate_even",
+      "module": "Algal.Core.SignedRounding",
+      "domain": "signed-rounding",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.SignedRounding.negate_nonnegative_iff",
+      "module": "Algal.Core.SignedRounding",
+      "domain": "signed-rounding",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.SignedRounding.value_nonnegative",
+      "module": "Algal.Core.SignedRounding",
+      "domain": "signed-rounding",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.SignedRounding.value_nonpositive",
+      "module": "Algal.Core.SignedRounding",
+      "domain": "signed-rounding",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.SignedRounding.distance_reflection",
+      "module": "Algal.Core.SignedRounding",
+      "domain": "signed-rounding",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.SignedRounding.midpoint_reflection",
+      "module": "Algal.Core.SignedRounding",
+      "domain": "signed-rounding",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.SignedRounding.cell_reflection",
+      "module": "Algal.Core.SignedRounding",
+      "domain": "signed-rounding",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.SignedRounding.signed_zero_negation",
+      "module": "Algal.Core.SignedRounding",
+      "domain": "signed-rounding",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.SignedRounding.negative_one_reflection",
+      "module": "Algal.Core.SignedRounding",
+      "domain": "signed-rounding",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.SignedRounding.cross_sign_zero_nearest",
+      "module": "Algal.Core.SignedRounding",
+      "domain": "signed-rounding",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.SignedRounding.cell_input_positive",
+      "module": "Algal.Core.SignedRounding",
+      "domain": "signed-rounding",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.SignedRounding.cell_global_nearest",
+      "module": "Algal.Core.SignedRounding",
+      "domain": "signed-rounding",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.SignedRounding.odd_cell_global_strict",
+      "module": "Algal.Core.SignedRounding",
+      "domain": "signed-rounding",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.SignedRounding.reflected_cell_global_nearest",
+      "module": "Algal.Core.SignedRounding",
+      "domain": "signed-rounding",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.SignedRounding.reflected_odd_cell_global_strict",
+      "module": "Algal.Core.SignedRounding",
+      "domain": "signed-rounding",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.SignedRounding.reflected_center_in_own_cell",
+      "module": "Algal.Core.SignedRounding",
+      "domain": "signed-rounding",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.SignedRounding.sign_reflection_identity_rejected",
+      "module": "Algal.Core.SignedRounding",
+      "domain": "signed-rounding",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.zero_minimum_adjacent",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.minimum_next_adjacent",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.maximum_previous_adjacent",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.zero_even",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.minimum_odd",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.maximum_odd",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.positive_zero_value",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.negative_zero_value",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.minimum_value_positive",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.underflow_boundary_positive",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.zero_cell_symmetric",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.zero_in_zero_cell",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.zero_boundary_included",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.underflow_tie_equal_distance",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.minimum_underflow_tie_excluded",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.least_positive_candidate",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.zero_cell_nearest_nonnegative",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.zero_cell_global_nearest",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.zero_cell_iff_global_nearest",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.signed_zero_same_cell",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.zeroFor_value",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.zeroFor_sign",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.zeroFor_normalized",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.maximum_code_bound",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.maximum_value_bound",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.below_maximum_previous_bound",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.maximum_gap_and_virtual_value",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.maximum_below_virtual",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.maximum_in_own_cell",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.maximum_lower_tie_excluded",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.overflow_tie_excluded_from_finite_cell",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.overflow_tie_is_overflow",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.overflow_disjoint_maximum",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.maximum_nearest_nonnegative",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.maximum_nearest_all_finite",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.maximum_nearest_iff",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.maximum_cell_strict_all_finite",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.negative_overflow_reflection",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.negative_maximum_cell_nearest",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.negative_maximum_in_own_cell",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.virtual_next_not_finite",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.overflow_tie_virtual_equal_distance",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.overflow_tie_still_nearest_finite",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.boundary_result_admission",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.underflow_tie_model",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.underflow_below_tie_model",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.underflow_above_tie_model",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.underflow_tie_admitted",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.underflow_tie_normalizes",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.maximum_exact_model",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.overflow_below_tie_model",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.negative_overflow_below_tie_model",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.overflow_tie_model",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.overflow_above_tie_model",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.overflow_model_refused",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.underflow_boundary_exact",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.overflow_boundary_exact",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.underflow_witness_input_order",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.overflow_witness_input_order",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.negative_overflow_tie_is_overflow",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.negative_overflow_tie_excluded_from_finite_cell",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.negative_underflow_tie_equal_distance",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RoundingEndpoints.negative_minimum_underflow_tie_excluded",
+      "module": "Algal.Core.RoundingEndpoints",
+      "domain": "rounding-endpoints",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.number_eq_of_bits_eq",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.reflected_bits_differ",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.reflected_distance",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.nearest_reflection",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.strict_nearest_reflection",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.strict_nearest_implies_nearest",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.maximum_strict_nearest_of_lower",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.maximum_strict_nearest_iff",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.negative_maximum_nearest_iff",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.negative_maximum_strict_nearest_iff",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.negative_maximum_cell_bounds",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.negative_maximum_cell_strict_all_finite",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.negative_maximum_center_strict_nearest",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.negative_maximum_lower_tie_nearest",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.negative_maximum_lower_tie_not_strict",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.negative_maximum_lower_tie_excluded",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.negative_maximum_lower_tie_equal_distance",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.maximum_lower_below_overflow",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.negative_overflow_strict_nearest",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.negative_overflow_tie_strict_nearest",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.negative_virtual_next_not_finite",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.negative_virtual_next_strict_nearest",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.negative_overflow_tie_virtual_equal_distance",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.maximum_cell_iff_strict_and_not_overflow",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.negative_maximum_cell_iff_strict_and_not_overflow",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.adjacent_bits_differ",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.closed_interior_nearest",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.interior_nearest_iff",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.open_interior_strict_nearest",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.interior_strict_nearest_iff",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.closed_interior_reflection",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.open_interior_reflection",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.reflected_interior_nearest_iff",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.reflected_interior_strict_nearest_iff",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.interior_cell_iff_nearest_by_parity",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.reflected_cell_iff_nearest_by_parity",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.negative_zero_nearest_iff",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.positive_zero_never_strict",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.negative_zero_never_strict",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.negative_one_lower_midpoint_nearest",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.negative_one_lower_midpoint_not_strict",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.negative_odd_midpoint_nearest_but_cell_excluded",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.negative_maximum_lower_tie_has_distinct_competitor",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.signed_zero_distinct_nearest_at_zero",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.NegativeEndpoints.negative_overflow_boundary_finite_geometry_and_model_refusal",
+      "module": "Algal.Core.NegativeEndpoints",
+      "domain": "negative-endpoints",
+      "role": "rejected-witness"
     },
     {
       "name": "Algal.Core.DecimalSyntax.readDigit_char",
@@ -3083,7 +3987,7 @@
     }
   ],
   "unmetCriteria": [
-    "Phase09 full canonical JSON byte encoding/roundtrip/injectivity is not proved. JsonLayout proves recursive UTF-8 delimiter composition and unconditional canonical laws for number-free trees; results with numbers require NumberCodec.LawsOn. The numeric modules prove exact binary64/decimal denotations, finite denotation injectivity modulo signed zero, numeral grammar, and sign-bit-zero interior midpoint cells. No complete decimal-to-binary64 conversion or production number-codec instance, shortest rendering, full raw-document admission, or production refinement is supplied.",
+    "Phase09 full canonical JSON byte encoding/roundtrip/injectivity is not proved. JsonLayout proves recursive UTF-8 delimiter composition and unconditional canonical laws for number-free trees; results with numbers require NumberCodec.LawsOn. The numeric modules prove exact binary64/decimal denotations, finite denotation injectivity modulo signed zero, numeral grammar, all-sign interior midpoint minima, signed zero-cell characterization, complete negative-maximum finite-nearest/strict-nearest characterization, conditional all-sign interior midpoint converses, and finite endpoint geometry with concrete round/pack witnesses. Universal rounding selection/packing and complete numeric cell coverage remain open. No complete decimal-to-binary64 conversion or production number-codec instance, shortest rendering, full raw-document admission, or production refinement is supplied.",
     "No production implementation is directly proved/refined by these theorems. Independent exact vectors and source/artifact bindings can provide sampled evidence, not a universal implementation theorem.",
     "SchemaCheck and ByteSize are explicit semantic parameters; host cost sanity and exact integer/machine-width envelopes are explicit preconditions, not established production admission.",
     "Lean standard-library imports are pinned/trusted compiled inputs; whole-import trust=0 rechecking is unqualified. Every authored theorem must undergo actual transitive axiom collection by the integrator.",

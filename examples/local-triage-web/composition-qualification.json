@@ -1,0 +1,36 @@
+{
+  "contract": "algal.triage-composition-qualification.v1",
+  "ok": true,
+  "checks": [
+    "Incoming control removal is deferred during composition, retaining the original head, focused control and draft",
+    "Composition end permits semantic removal, clears incompatible focus and requires explicit rebase without losing the draft",
+    "A subsequent real capture receives the retained draft with cleared focus and keeps explicit rebase required",
+    "Renderer fixture does not activate a downgrade, mutate task facts or produce browser errors"
+  ],
+  "sources": [
+    {
+      "path": "page.ts",
+      "sha256": "b3173667f73f516f0f86239bffb4810f4e3e04e99f1a4e02dad535d42bf642ee"
+    },
+    {
+      "path": "session.ts",
+      "sha256": "ab412310c973ac91bd5fc5230f81b9da392a7166a1b2ae6a53ce9c717e30c6d6"
+    },
+    {
+      "path": "serve.ts",
+      "sha256": "8b3e57f27bc645cc63a2b09070cc43021b0787b3abc5dc4af06d712139744992"
+    },
+    {
+      "path": "composition-qualification.ts",
+      "sha256": "a46bb090a1e790edb23385ce04af18676bd52c4b5e5e5251126eac790a435943"
+    }
+  ],
+  "browser": "151.0.7922.34",
+  "inferenceCalls": 0,
+  "limitation": "Synthetic composition events exercise the production deferral path; this is not physical IME/device qualification. Removal selects a valid alternate captured fixture, not an admitted schema downgrade.",
+  "reproduce": "hra-host-run --mode=shared --lane=browser-auth --label=algal-control-removal-composition -- bun examples/local-triage-web/composition-qualification.ts FRESH_OUTPUT PLAYWRIGHT_MODULE CHROMIUM_EXECUTABLE",
+  "notes": [
+    "Use installed absolute scheduler and tool paths for reviewed host access. No dependencies are downloaded.",
+    "Initial harness attempt used a string predicate prohibited by the production CSP. Final harness uses locator conditions, preserving the CSP; initial evidence is retained separately."
+  ]
+}

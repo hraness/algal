@@ -2,6 +2,9 @@ import Algal.Core.Binary64
 import Algal.Core.BinaryValue
 import Algal.Core.NumericInjectivity
 import Algal.Core.RoundingInterval
+import Algal.Core.SignedRounding
+import Algal.Core.RoundingEndpoints
+import Algal.Core.NegativeEndpoints
 import Algal.Core.DecimalSyntax
 import Algal.Core.Text
 import Algal.Core.JsonString

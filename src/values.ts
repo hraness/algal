@@ -31,7 +31,7 @@ function sortValue(value: JsonValue): JsonValue {
 }
 
 export function canonicalBytes(value: JsonValue): number {
-  return Buffer.byteLength(canonicalize(value), "utf8");
+  return new TextEncoder().encode(canonicalize(value)).byteLength;
 }
 
 export function isJsonValue(u: unknown): u is JsonValue {

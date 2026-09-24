@@ -15,6 +15,32 @@ export async function hostRead(path: string, maxBytes: number): Promise<JsonValu
   return readHost(path, maxBytes);
 }
 
+/** Writers and fresh readers admit the same complete host document. */
+export function hostValue(value: unknown): JsonValue {
+  const pending = [{ value, depth: 0 }];
+  let nodes = 0;
+  while (pending.length) {
+    const { value: current, depth } = pending.pop()!;
+    if (++nodes > 100_000 || depth > 64)
+      throw new AlgalError("BUDGET_EXHAUSTED", "host state structure bound exceeded");
+    if (Array.isArray(current)) {
+      // JSON serializes every array slot, including holes as null. Bound the
+      // length before walking so a sparse array cannot bypass admission.
+      if (nodes + pending.length + current.length > 100_000)
+        throw new AlgalError("BUDGET_EXHAUSTED", "host state structure bound exceeded");
+      for (let index = 0; index < current.length; index++)
+        pending.push({ value: index in current ? current[index] : null, depth: depth + 1 });
+    } else if (current !== null && typeof current === "object") {
+      for (const child of Object.values(current)) {
+        if (nodes + pending.length >= 100_000)
+          throw new AlgalError("BUDGET_EXHAUSTED", "host state structure bound exceeded");
+        pending.push({ value: child, depth: depth + 1 });
+      }
+    }
+  }
+  return asJsonValue(value, "host state");
+}
+
 async function readHost(path: string, maxBytes: number, retain?: (value: JsonValue) => void): Promise<JsonValue | undefined> {
   let file;
   try { file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); }
@@ -38,20 +64,14 @@ async function readHost(path: string, maxBytes: number, retain?: (value: JsonVal
       throw new AlgalError("PARSE_FAILED", "host state contains invalid UTF-8");
     }
     const value: unknown = JSON.parse(text);
-    let nodes = 0;
-    const visit = (v: unknown, depth: number): void => {
-      if (++nodes > 100_000 || depth > 64) throw new AlgalError("BUDGET_EXHAUSTED", "host state structure bound exceeded");
-      if (v && typeof v === "object") for (const child of Object.values(v)) visit(child, depth + 1);
-    };
-    visit(value, 0);
-    const parsed = asJsonValue(value, "host state");
+    const parsed = hostValue(value);
     if (retain) { retain(parsed); await syncRetainedFile(file, path); }
     return parsed;
   } finally { await file.close(); }
 }
 
 export async function hostWrite(path: string, value: JsonValue, maxBytes: number, immutable = true): Promise<void> {
-  const bytes = canonicalize(value);
+  const bytes = canonicalize(hostValue(value));
   if (Buffer.byteLength(bytes) > maxBytes) throw new AlgalError("BUDGET_EXHAUSTED", "host state byte bound exceeded");
   const validate = (existing: JsonValue): void => {
     if (canonicalize(existing) !== bytes) throw new AlgalError("DIGEST_MISMATCH", "immutable host state conflicts");

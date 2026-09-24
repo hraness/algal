@@ -1,0 +1,37 @@
+[
+  {
+    "name": "v1-to-v2-adds-category-retains-title-draft",
+    "before": [{ "id": "title", "kind": "text", "parent": "task-editor" }, { "id": "priority", "kind": "select", "parent": "task-editor" }],
+    "after": [{ "id": "title", "kind": "text", "parent": "task-editor" }, { "id": "priority", "kind": "select", "parent": "task-editor" }, { "id": "category", "kind": "text", "parent": "task-editor" }],
+    "focusedField": "title", "headChanged": true,
+    "expected": { "retainDraft": true, "requiresRebase": true, "preserveFocus": true }
+  },
+  {
+    "name": "kind-change-retains-draft-clears-focus",
+    "before": [{ "id": "title", "kind": "text", "parent": "task-editor" }],
+    "after": [{ "id": "title", "kind": "select", "parent": "task-editor" }],
+    "focusedField": "title", "headChanged": true,
+    "expected": { "retainDraft": true, "requiresRebase": true, "preserveFocus": false }
+  },
+  {
+    "name": "parent-change-retains-draft-clears-focus",
+    "before": [{ "id": "title", "kind": "text", "parent": "task-editor" }],
+    "after": [{ "id": "title", "kind": "text", "parent": "alternate-editor" }],
+    "focusedField": "title", "headChanged": true,
+    "expected": { "retainDraft": true, "requiresRebase": true, "preserveFocus": false }
+  },
+  {
+    "name": "removed-field-retains-draft-for-recovery",
+    "before": [{ "id": "category", "kind": "text", "parent": "task-editor" }],
+    "after": [{ "id": "title", "kind": "text", "parent": "task-editor" }],
+    "focusedField": "category", "headChanged": true,
+    "expected": { "retainDraft": true, "requiresRebase": true, "preserveFocus": false }
+  },
+  {
+    "name": "same-control-and-head-retains-session",
+    "before": [{ "id": "title", "kind": "text", "parent": "task-editor" }],
+    "after": [{ "id": "title", "kind": "text", "parent": "task-editor" }],
+    "focusedField": "title", "headChanged": false,
+    "expected": { "retainDraft": true, "requiresRebase": false, "preserveFocus": true }
+  }
+]
