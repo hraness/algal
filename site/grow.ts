@@ -76,7 +76,7 @@ async function start(root: HTMLElement): Promise<void> {
     get("grow-revision").textContent = next.revisionDigest;
     get("grow-signal-evidence").textContent = JSON.stringify(next.signals);
     get("grow-program").textContent = JSON.stringify(next.definition, null, 2);
-    get("grow-history-count").textContent = `${next.history.length} history steps · ${next.remainingCandidates} proposals left`;
+    get("grow-history-count").textContent = `${next.history.length} history ${next.history.length === 1 ? "step" : "steps"} · ${next.remainingCandidates} ${next.remainingCandidates === 1 ? "proposal" : "proposals"} left`;
     get("grow-pause").textContent = next.controls.inferencePaused ? "Resume evolution" : "Pause evolution";
     get("grow-pin").textContent = next.controls.pinnedRevision ? "Unpin this version" : "Pin this version";
     get("grow-control-note").textContent = next.controls.pinnedRevision ? "This version is pinned. You can save new context." : next.controls.inferencePaused ? "Evolution is paused. Your current component keeps running." : "You choose when to use a proposal that passes the checks.";
