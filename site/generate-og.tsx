@@ -6,6 +6,8 @@ import { createSocialImageCard } from "@hraness/web-discovery/social-image/card"
 import { Resvg } from "@resvg/resvg-js";
 import satori from "satori";
 
+import { SITE_DESCRIPTION, SITE_TAGLINE } from "./copy";
+
 const siteDirectory = dirname(fileURLToPath(import.meta.url));
 
 const mark = (
@@ -16,8 +18,7 @@ const mark = (
 );
 
 const card = createSocialImageCard({
-  description:
-    "A programming language and virtual machine where programs are organisms: typed, bounded, content-addressed — and every run leaves a verifiable fossil.",
+  description: SITE_DESCRIPTION,
   domain: "algal.computer",
   eyebrow: "ALGAL",
   mark,
@@ -27,7 +28,7 @@ const card = createSocialImageCard({
     foreground: "#1c1a18",
     muted: "#6b675f",
   },
-  title: "The language for living programs.",
+  title: SITE_TAGLINE,
 });
 
 const svg = await satori(card.element, {

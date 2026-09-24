@@ -1,6 +1,8 @@
 // Shared document chrome: head, header, nav, and footer for every site page.
 // Per-page fragments supply only their <main> content and metadata.
+import { OG_IMAGE_ALT, SITE_DESCRIPTION, SITE_TAGLINE } from "./copy";
 import { siteIcon } from "./icons";
+import { escapeHtml } from "./markdown";
 
 export type SitePageId = "home" | "tour" | "use-cases" | "living" | "workbench" | "docs" | "spec" | "blog" | "compare";
 
@@ -11,7 +13,6 @@ export interface SitePageMeta {
   title: string;
   description: string;
   ogTitle: string;
-  ogAlt: string;
   /** Blog posts emit article metadata; everything else stays a website. */
   article?: { published: string };
 }
@@ -26,31 +27,35 @@ function navLink(page: SitePageId, id: SitePageId, href: string, label: string):
 
 export function pageDocument(meta: SitePageMeta, main: string): string {
   const canonical = `${ORIGIN}${meta.path}`;
+  // Titles and descriptions can come from Markdown, which may contain quotes.
+  const title = escapeHtml(meta.title);
+  const description = escapeHtml(meta.description);
+  const ogTitle = escapeHtml(meta.ogTitle);
   return `<!doctype html>
 <html lang="en" data-hraness-theme="paper" data-hraness-marketing-preset="editorial" data-hraness-material="lantern">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${meta.title}</title>
-<meta name="description" content="${meta.description}">
+<title>${title}</title>
+<meta name="description" content="${description}">
 <link rel="canonical" href="${canonical}">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta property="og:type" content="${meta.article ? "article" : "website"}">${meta.article ? `\n<meta property="article:published_time" content="${meta.article.published}">` : ""}
 <meta property="og:site_name" content="ALGAL">
-<meta property="og:title" content="${meta.ogTitle}">
-<meta property="og:description" content="${meta.description}">
+<meta property="og:title" content="${ogTitle}">
+<meta property="og:description" content="${description}">
 <meta property="og:url" content="${canonical}">
 <meta property="og:image" content="${ORIGIN}/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="${meta.ogAlt}">
+<meta property="og:image:alt" content="${escapeHtml(OG_IMAGE_ALT)}">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="${meta.ogTitle}">
-<meta name="twitter:description" content="${meta.description}">
+<meta name="twitter:title" content="${ogTitle}">
+<meta name="twitter:description" content="${description}">
 <meta name="twitter:image" content="${ORIGIN}/og.png">
 <meta name="robots" content="index, follow">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@graph":[{"@type":"WebSite","name":"ALGAL","url":"${ORIGIN}/"},{"@type":"SoftwareApplication","name":"ALGAL","url":"${ORIGIN}/","description":"A programming language and virtual machine where programs are organisms: typed, bounded, content-addressed, and replayable.","applicationCategory":"DeveloperApplication","codeRepository":"${REPO}","license":"https://opensource.org/license/mit","author":{"@id":"https://github.com/hraness#org"}},{"@type":"Organization","@id":"https://github.com/hraness#org","name":"hraness","url":"https://github.com/hraness"}]}
+{"@context":"https://schema.org","@graph":[{"@type":"WebSite","name":"ALGAL","url":"${ORIGIN}/"},{"@type":"SoftwareApplication","name":"ALGAL","url":"${ORIGIN}/","description":${JSON.stringify(SITE_DESCRIPTION)},"applicationCategory":"DeveloperApplication","codeRepository":"${REPO}","license":"https://opensource.org/license/mit","author":{"@id":"https://github.com/hraness#org"}},{"@type":"Organization","@id":"https://github.com/hraness#org","name":"hraness","url":"https://github.com/hraness"}]}
 </script>
 <meta name="theme-color" content="#f8f7f4">
 <script src="/appearance.js"></script>
@@ -91,7 +96,7 @@ ${meta.page === "workbench" ? '<link rel="stylesheet" href="/living.css">\n<link
 
 ${main}
 
-<footer class="site-footer"><a class="wordmark" href="/" aria-label="ALGAL home"><img src="/favicon.svg" width="24" height="24" alt="">algal</a><p>The language for living programs.</p><div><a href="${REPO}">Source</a><a href="/docs/">Documentation</a><a href="/living/">Living software</a><a href="/blog/">Blog</a><a href="/compare/">Compare</a><a href="/docs/spec/organism/">Spec</a><a href="/llms.txt">llms.txt</a><span>MIT · Early, working software · {{BUILD_STATS}}</span></div></footer>
+<footer class="site-footer"><a class="wordmark" href="/" aria-label="ALGAL home"><img src="/favicon.svg" width="24" height="24" alt="">algal</a><p>${SITE_TAGLINE}</p><div><a href="${REPO}">Source</a><a href="/docs/">Documentation</a><a href="/living/">Living software</a><a href="/blog/">Blog</a><a href="/compare/">Compare</a><a href="/docs/spec/organism/">Spec</a><a href="/llms.txt">llms.txt</a><span>MIT · Early, working software · {{BUILD_STATS}}</span></div></footer>
 
 </body>
 </html>

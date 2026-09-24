@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="400" height="615" viewBox="0 0 400 615" role="img" aria-labelledby="algal-ab0da349152c-title algal-ab0da349152c-desc">
-<title id="algal-ab0da349152c-title">Question swarm — Algal program</title>
+<title id="algal-ab0da349152c-title">Question swarm · ALGAL program</title>
 <desc id="algal-ab0da349152c-desc">Exact data dependencies of organism:swarm. 3 cells and 2 edges. Arrows carry named values; layout does not imply time or parallel execution. Dashed arrows carry failure records. No execution status is implied.</desc>
 <defs><marker id="algal-ab0da349152c-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/></marker></defs>
 <rect width="400" height="615" rx="16" fill="#ffffff"/>

@@ -17,6 +17,39 @@ export function escapeHtml(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 }
 
+/** Longest page description the site derives from a paragraph. */
+export const DESCRIPTION_MAX = 160;
+
+/** Plain text of an inline Markdown run: link labels without their targets,
+ * code and emphasis without their markers. */
+export function plainInline(source: string): string {
+  return source
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/(^|[\s(])[*_]([^*_\s][^*_]*?)[*_](?=[\s).,;:!?]|$)/g, "$1$2")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** A page description from a paragraph: whole sentences up to `max`
+ * characters. Only when the first sentence alone is too long does it cut at a
+ * word boundary and end with an ellipsis. It never ends mid-word. */
+export function describeParagraph(source: string, max = DESCRIPTION_MAX): string {
+  const text = plainInline(source);
+  if (text.length <= max && /[.!?]["”')]?$/.test(text)) return text;
+  let summary = "";
+  for (const sentence of text.split(/(?<=[.!?]["”')]?)\s+(?=["“(]?[A-Z0-9])/)) {
+    if (!/[.!?]["”')]?$/.test(sentence)) break;
+    const next = summary ? `${summary} ${sentence}` : sentence;
+    if (next.length > max) break;
+    summary = next;
+  }
+  if (summary) return summary;
+  const words = text.length < max ? text : text.slice(0, max - 1).replace(/\s+\S*$/, "");
+  return `${words.replace(/[\s,;:(—–-]+$/, "")}…`;
+}
+
 export function slugifyHeading(text: string, used: Map<string, number>): string {
   const base = text.toLowerCase().replace(/<[^>]+>/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "section";
   const seen = used.get(base) ?? 0;
@@ -87,7 +120,7 @@ export function renderMarkdown(markdown: string, rewrite: LinkRewriter = href =>
     if (!paragraphBuffer.length) return;
     const text = paragraphBuffer.join(" ").trim();
     if (text) {
-      if (!description) description = text.replace(/[*`#[\]()]/g, "").slice(0, 220);
+      if (!description) description = describeParagraph(text);
       html.push(`<p>${renderInline(text, rewrite)}</p>`);
     }
     paragraphBuffer.length = 0;

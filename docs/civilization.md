@@ -7,7 +7,7 @@ promoting the ones that work.
 
 This document is the convergence of the parallel spikes: agent tools, Pareto
 benchmarks, live-model execution, habitats, and self-reproduction. It describes
-what a ALGAL civilization is and gives a first runnable host loop.
+what an ALGAL civilization is and gives a first runnable host loop.
 
 ## The four spikes
 
@@ -31,7 +31,7 @@ Each spike explored a different face of the same primitive:
 
 ## What a civilization is
 
-A ALGAL civilization is a long-lived loop:
+An ALGAL civilization is a long-lived loop:
 
 ```
 goals  →  parent organism  →  proposed child  →  spawn  →  promote
@@ -180,7 +180,7 @@ The loop currently uses the host's promote policy. The next layers are:
 
 ## The deeper shape
 
-The trippy part: in a ALGAL civilization, **programming becomes ecology**.
+The trippy part: in an ALGAL civilization, **programming becomes ecology**.
 The source code is not a static artifact. It is a population of organisms under
 selection pressure. The receipts are fossils. The host is the environment. The
 model is mutation. The bench is natural selection.

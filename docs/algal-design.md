@@ -1,6 +1,6 @@
 # ALGAL: language, harness, habitat
 
-ALGAL is the new product name for Algal, with a nod to ALGOL. The useful
+The name ALGAL nods to ALGOL, the algorithmic language. The useful
 unifying object is a **program with bounded authority and retained evidence**.
 An organism is the program; a coding-agent session is one host application;
 a habitat is a host that evaluates and admits a population of programs.
