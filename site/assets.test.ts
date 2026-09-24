@@ -4,6 +4,7 @@ import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildSiteStyles } from "./assets";
+import { normalizeSitePatternResets } from "./style-normalization";
 
 test("site CSS references separate hashed fonts with exact shared font bytes", async () => {
   const directory = await mkdtemp(join(tmpdir(), "algal-site-assets-"));
@@ -11,6 +12,8 @@ test("site CSS references separate hashed fonts with exact shared font bytes", a
     const result = await buildSiteStyles(directory);
     if (!result.success) throw new AggregateError(result.logs, "Site style build failed");
     const css = await readFile(join(directory, "styles.css"), "utf8");
+    expect(normalizeSitePatternResets(css)).toBe(css);
+    expect(css.match(/--hraness-material-wall-images:initial;--hraness-pattern-decoration:initial/g)).toHaveLength(3);
     const faces = css.match(/@font-face\s*\{[^}]*\}/g) ?? [];
     const fontsDirectory = join(import.meta.dir, "../node_modules/@hraness/design-kit/src/fonts");
     const originals = new Set<string>();
