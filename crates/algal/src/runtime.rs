@@ -1481,6 +1481,7 @@ pub async fn resume(
     if verify(checkpoint, manifest.clone(), store, host).await?["ok"] != true {
         return Err(Error::new("VERIFY_FAILED", "checkpoint does not replay"));
     }
+    host.validate_resume_executors(&checkpoint["effects"])?;
     let mut continuable = Vec::new();
     for effect in checkpoint["effects"]
         .as_array()
