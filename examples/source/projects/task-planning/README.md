@@ -31,13 +31,17 @@ bun cli.ts compile examples/source/projects/task-planning/main.algal \
   --out task-plan.algal.json --bundle-out task-plan.bundle.json
 bun cli.ts dependencies examples/source/projects/task-planning/main.algal \
   --bundle task-plan.bundle.json --format text
+bun cli.ts dependencies examples/source/projects/task-planning/main.algal \
+  --receipt task-plan.receipt.json --format text
 ```
 
 The dependency report lists 6 source files, 6 modules (5 dependencies),
 7 occurrences, and 6 composition edges with a maximum depth of 3. Both clamp
 occurrences name `lib/clamp.algal` and the same executable digest under
 distinct caller paths. With `--bundle`, it also checks that the packed
-artifact carries exactly that closure.
+artifact carries exactly that closure. With `--receipt`, it attributes the
+recorded run to those occurrences: three invocations of each program under the
+planner, self work per occurrence, and inclusive work that adds child calls.
 
 The second entry runs the same way:
 

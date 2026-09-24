@@ -208,10 +208,11 @@ describes possible structure, not observed work. The source guide describes
 [the report](source-language.md#inspect-project-dependencies) and the
 [diagnostics for recorded failures](source-language.md#locate-a-recorded-failure).
 
-Joining that structure with receipts, application revisions, and evaluation
-records remains proposed. Such a view should show self work separately from
-inclusive child work, so nested receipts are not counted twice, and it should
-keep missing or truncated evidence visible.
+With `--receipt`, the same command attributes a recorded run to that
+structure: invocations, recorded cells, and work per occurrence, with self work
+kept separate from inclusive child work so nested calls are not counted twice,
+and with never-run occurrences and unattributable paths left visible. Joining
+the report with application revisions and evaluation records remains proposed.
 
 ## Proposed next steps
 
@@ -219,9 +220,9 @@ keep missing or truncated evidence visible.
    shared dependencies and rejected oversized graphs. Measure browser history
    verification separately so raising source limits does not conceal slow
    interaction.
-2. Join the dependency report with receipts and application revisions: self
-   and inclusive work per occurrence, evaluation and activation links, and a
-   bounded estimate of dynamic invocations under branches and item limits.
+2. Join the dependency report with application revisions: evaluation and
+   activation links per occurrence, and a bounded estimate of dynamic
+   invocations under branches and item limits. Receipt attribution is available.
 3. Extract a small pure library from multiple applications. The task planner
    now has a second caller with failure examples; a curated index still needs
    entries from more than one application, plus comparison of library revisions

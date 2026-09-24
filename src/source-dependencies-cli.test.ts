@@ -119,3 +119,42 @@ program main(x: json) -> json { budget { max_agent_calls: 0 } return call helper
     expect((JSON.parse(rooted.stderr).diagnostic as JsonObject).source).toBe("broken/helper.algal");
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+test("dependencies joins a recorded receipt and rejects aliased or nonregular receipt paths", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "algal-dependencies-receipt-"));
+  try {
+    const receiptPath = join(dir, "planner.receipt.json");
+    const ran = await cli("run", planner, "--args", join(root, "examples/source/projects/task-planning/main.args.json"), "--dir", join(dir, "store"));
+    expect(ran.code, ran.stderr).toBe(0);
+    await writeFile(receiptPath, ran.stdout);
+    const joined = await cli("dependencies", planner, "--receipt", receiptPath);
+    expect(joined.code, joined.stderr).toBe(0);
+    const report = JSON.parse(joined.stdout) as JsonObject;
+    const execution = report.execution as JsonObject;
+    expect(execution.outcome).toBe("complete");
+    expect(execution.unattributed).toEqual({ cells: 0, work: 0 });
+    expect((execution.occurrences as JsonObject[]).map(entry => entry.invocations)).toEqual([1, 3, 3, 3, 3, 3, 3]);
+    expect(joined.stdout).toBe(`${canonicalize(report)}\n`);
+    const text = await cli("dependencies", planner, "--receipt", receiptPath, "--format", "text");
+    expect(text.code, text.stderr).toBe(0);
+    expect(text.stdout).toContain("Recorded execution");
+    expect(text.stdout).toContain("Unattributed: 0 cells · 0 work");
+    const aliased = await cli("dependencies", planner, "--receipt", receiptPath, "--out", receiptPath);
+    expect(aliased.code).toBe(2);
+    expect(JSON.parse(aliased.stderr).message).toContain("aliases an input");
+    expect(JSON.parse(await readFile(receiptPath, "utf8")).contract).toBe("algal.run.v1");
+    const directory = await cli("dependencies", planner, "--receipt", dir);
+    expect(directory.code).toBe(2);
+    expect(JSON.parse(directory.stderr).error).toBe("BUDGET_EXHAUSTED");
+    const deep = join(dir, "deep-receipt.json");
+    await writeFile(deep, `${"[".repeat(120)}${"]".repeat(120)}`);
+    const nested = await cli("dependencies", planner, "--receipt", deep);
+    expect(nested.code).toBe(2);
+    expect(JSON.parse(nested.stderr)).toMatchObject({ error: "BUDGET_EXHAUSTED" });
+    expect(JSON.parse(nested.stderr).message).toContain("nesting depth");
+    const inspector = join(root, "examples/source/projects/task-planning/inspect_task.algal");
+    const mismatch = await cli("dependencies", inspector, "--receipt", receiptPath);
+    expect(mismatch.code).toBe(2);
+    expect(JSON.parse(mismatch.stderr).error).toBe("DIGEST_MISMATCH");
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
