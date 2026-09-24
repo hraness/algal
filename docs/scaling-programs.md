@@ -100,6 +100,15 @@ compiler identity, and executable identity answer different questions:
 which text was supplied, which compiler translated it, and which program ran.
 Formatting can change the first without changing the last.
 
+`lock` records those identities for a project: each file's source digest and
+executable digest, the compiler version and profile, the root and module
+digests, and a digest of each module's resolved interface. `lock --verify`
+recompiles offline and reports source, executable, compiler, closure, and
+interface drift separately, with no network access, install scripts, registry
+lookup, or automatic upgrade. Compilation still accepts a closed source map,
+so browser tooling and deterministic evaluation do not depend on a filesystem
+or package server.
+
 The host's function implementations, renderer profile, and effect adapters
 also affect compatibility. A program digest is not an identity for arbitrary
 host code or evidence that a model's answer is correct. Application revisions
@@ -230,10 +239,9 @@ the report with application revisions and evaluation records remains proposed.
 4. Add richer source record and result types for demonstrated application needs.
    Lower them to checks the runtime enforces; new validation semantics need
    versioned specification and cross-runtime tests.
-5. Add local package metadata and lock verification after composition tests
-   cover dependency changes. Bind exact digests and compiler/profile versions;
-   keep compilation offline and free of install scripts. Remote catalogs and
-   dependency discovery can follow that reproducible local path.
+5. Extend the local lock toward package metadata: evaluation-suite pinning,
+   named versions as human labels over exact digests, and vendored remote
+   catalogs that resolve to the same offline verification.
 
 The [cumulative-skill experiment](vision.md#what-would-justify-the-claim)
 measures whether keeping and composing procedures improves later work. More

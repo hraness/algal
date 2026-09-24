@@ -21,6 +21,10 @@ wire constant (`0.1.0`) is independent of these package versions.
   inclusive work per occurrence, with unattributable paths counted rather than
   guessed and a `reconciled` flag naming any failed consistency rule. The join
   is digest-bound, not replay.
+- `algal lock` writes an `algal.source-lock.v1` record pinning a source
+  project's source and executable digests, compiler identity, closure, and
+  interface digests; `lock --verify` recompiles offline and reports drift by
+  kind with exit code 1. No network, install scripts, or upgrades.
 - The task-planning project gains a second entry, `inspect_task.algal`, that
   reuses the scoring and clamp programs under identical digests, with runtime
   failure examples and native parity coverage.

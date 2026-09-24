@@ -139,16 +139,16 @@ export type SourceDependencyReport = {
 export type SourceDependencyOptions = { sourceOptions?: SourceCompilerOptions; bundle?: unknown; receipt?: unknown };
 
 const reports = new WeakSet<SourceDependencyReport>();
-function freeze<T>(value: T): T {
+export function freezeDeep<T>(value: T): T {
   if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
     Object.freeze(value);
-    for (const child of Object.values(value)) freeze(child);
+    for (const child of Object.values(value)) freezeDeep(child);
   }
   return value;
 }
 const mismatch = (message: string): never => { throw new AlgalError("DIGEST_MISMATCH", `source dependencies: ${message}`); };
 
-type SnapshotLimits = { readonly maxBytes: number; readonly maxDepth: number; readonly maxNodes: number; readonly maxEntries: number; readonly maxStringBytes: number };
+export type SnapshotLimits = { readonly maxBytes: number; readonly maxDepth: number; readonly maxNodes: number; readonly maxEntries: number; readonly maxStringBytes: number };
 /** UTF-8 length of `JSON.stringify(text)`, counted without building the
  * escaped text: quotes, backslash and C0 escapes, lone surrogates as `\uXXXX`. */
 function jsonStringBytes(text: string): number {
@@ -172,7 +172,7 @@ function jsonStringBytes(text: string): number {
  * unusual own properties are rejected rather than invoked or dropped. This is a
  * data boundary, not a sandbox: same-realm Proxy traps can still observe reads.
  */
-function boundedJsonSnapshot(value: unknown, limits: SnapshotLimits, label: string): JsonValue {
+export function boundedJsonSnapshot(value: unknown, limits: SnapshotLimits, label: string): JsonValue {
   let nodes = 0;
   let bytes = 0;
   const active = new Set<object>();
@@ -537,12 +537,12 @@ export async function createSourceDependencyReport(source: string, options: Sour
   if (utf8Length(canonicalize(report as unknown as JsonValue)) > SOURCE_DEPENDENCY_BOUNDS.maxReportBytes) {
     throw new AlgalError("BUDGET_EXHAUSTED", `source dependencies: report exceeds ${SOURCE_DEPENDENCY_BOUNDS.maxReportBytes} bytes`);
   }
-  freeze(report);
+  freezeDeep(report);
   reports.add(report);
   return report;
 }
 
-function printable(text: string): string {
+export function printableText(text: string): string {
   return [...text].map(char => {
     const code = char.codePointAt(0)!;
     const control = (code < 32 && char !== "\n") || (code >= 127 && code <= 159);
@@ -613,5 +613,5 @@ export function renderSourceDependencies(report: SourceDependencyReport): string
     }
     lines.push(`  Unattributed: ${execution.unattributed.cells} cell${execution.unattributed.cells === 1 ? "" : "s"} · ${execution.unattributed.work} work units`);
   }
-  return `${printable(lines.join("\n"))}\n`;
+  return `${printableText(lines.join("\n"))}\n`;
 }
