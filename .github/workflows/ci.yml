@@ -335,7 +335,7 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
       - run: bun install --frozen-lockfile
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: algal-debug-linux
           path: ${{ runner.temp }}
@@ -371,7 +371,7 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
       - run: bun install --frozen-lockfile
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: algal-debug-linux
           path: ${{ runner.temp }}
@@ -396,7 +396,7 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
       - run: bun install --frozen-lockfile
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: algal-debug-linux
           path: ${{ runner.temp }}
