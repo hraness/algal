@@ -9,6 +9,7 @@ import type { Store } from "./store-contract";
 import type { Transport } from "./transport-contract";
 import type { ToolRegistry } from "./tools";
 import { checkProgram, evalScorer, type ExprScorer } from "./expr";
+import { habitatBindingMismatches, type HabitatAccount, type HabitatBudget } from "./habitat-budget";
 import { canonicalize, type JsonValue } from "./values";
 
 export const FOUNDRY_CONTRACT = "algal.foundry.v1" as const;
@@ -56,6 +57,9 @@ export type FoundryReport = {
   holdout: { passed: number; total: number; cases: FoundryCaseResult[] };
   scorer?: FoundryScorer;
   lineage?: FoundryLineage;
+  /** The complete `algal.habitat-budget.v1` account every run was admitted
+   * through, when the foundry ran under a habitat budget. */
+  budget?: HabitatBudget;
   digest: Digest;
 };
 
@@ -77,6 +81,12 @@ export type FoundryOptions = {
   tools?: ToolRegistry;
   scorer?: FoundryScorer;
   lineage?: FoundryLineage;
+  /** Habitat account for the whole activity. Each case run reserves its
+   * declared ceiling here before it starts and is charged its recorded work;
+   * a refused reservation stops the foundry with `BUDGET_EXHAUSTED` and leaves
+   * the terminal record on the account. Pass the same account used to run
+   * the generator. */
+  account?: HabitatAccount;
 };
 
 export type GenerateCandidatesOptions = {
@@ -89,6 +99,8 @@ export type GenerateCandidatesOptions = {
   executors: Executor[];
   transports?: Record<string, Transport>;
   tools?: ToolRegistry;
+  /** Habitat account the generator run is admitted through and charged to. */
+  account?: HabitatAccount;
 };
 
 export type GeneratedCandidates = FoundryLineage & {
@@ -195,9 +207,11 @@ export function selectFoundryCandidate(candidates: FoundryCandidateResult[]): Di
 
 async function evaluateCase(
   candidate: OrganismManifest,
+  manifestDigest: Digest,
   c: FoundryCase,
   opts: FoundryOptions,
 ): Promise<FoundryCaseResult> {
+  opts.account?.reserve(manifestDigest, candidate.budgets);
   const receipt = await runOrganism({
     manifest: candidate,
     args: caseArgs(candidate, c),
@@ -208,6 +222,7 @@ async function evaluateCase(
     ...(opts.tools ? { tools: opts.tools } : {}),
   });
   const receiptDigest = await opts.store.putReceipt(receipt as unknown as JsonValue);
+  opts.account?.charge(receiptDigest, receipt);
   const outputs = caseOutputs(candidate, receipt.cells);
   const usage = receipt.effects.reduce(
     (total, effect) => ({
@@ -246,6 +261,7 @@ export async function generateFoundryCandidates(
     (args[target.cell] ??= Object.create(null) as Record<string, JsonValue>)[target.port] = value;
   }
   const generatorDigest = await opts.store.putManifest(opts.generator);
+  opts.account?.reserve(generatorDigest, opts.generator.budgets);
   const receipt = await runOrganism({
     manifest: opts.generator,
     args,
@@ -256,6 +272,7 @@ export async function generateFoundryCandidates(
     ...(opts.tools ? { tools: opts.tools } : {}),
   });
   const receiptDigest = await opts.store.putReceipt(receipt as unknown as JsonValue);
+  opts.account?.charge(receiptDigest, receipt);
   if (receipt.outcome !== "complete") {
     fail(`generator ${opts.generator.key} ended ${receipt.outcome}`);
   }
@@ -282,11 +299,12 @@ export async function generateFoundryCandidates(
 
 async function evaluateCases(
   candidate: OrganismManifest,
+  manifestDigest: Digest,
   cases: FoundryCase[],
   opts: FoundryOptions,
 ): Promise<FoundryCaseResult[]> {
   const results: FoundryCaseResult[] = [];
-  for (const c of cases) results.push(await evaluateCase(candidate, c, opts));
+  for (const c of cases) results.push(await evaluateCase(candidate, manifestDigest, c, opts));
   return results;
 }
 
@@ -303,7 +321,7 @@ export async function evaluateFoundryPopulation(
   const selectionCases = opts.cases.filter((c) => c.split !== "holdout");
   for (const candidate of opts.candidates) {
     const manifestDigest = await opts.store.putManifest(candidate);
-    const cases = await evaluateCases(candidate, selectionCases, opts);
+    const cases = await evaluateCases(candidate, manifestDigest, selectionCases, opts);
     candidates.push({
       manifestDigest,
       manifestKey: candidate.key,
@@ -331,13 +349,31 @@ export async function evaluateFoundryPopulation(
   return { candidates, promoted };
 }
 
+/** The runs a foundry report records, in admission order: the generator
+ * (when lineage is present), each candidate's selection cases in order, then
+ * the promoted candidate's holdout cases. */
+export function foundryReportRuns(
+  report: Pick<FoundryReport, "candidates" | "promoted" | "holdout" | "lineage">,
+): { manifest: Digest; receipt: Digest }[] {
+  return [
+    ...(report.lineage ? [{ manifest: report.lineage.generatorDigest, receipt: report.lineage.receiptDigest }] : []),
+    ...report.candidates.flatMap((candidate) =>
+      candidate.cases.map((c) => ({ manifest: candidate.manifestDigest, receipt: c.receiptDigest }))),
+    ...report.holdout.cases.map((c) => ({ manifest: report.promoted, receipt: c.receiptDigest })),
+  ];
+}
+
 export async function runFoundry(opts: FoundryOptions): Promise<FoundryReport> {
+  if (opts.account && opts.account.activity !== "foundry") {
+    throw new AlgalError("PARSE_FAILED", "a foundry runs under a foundry habitat account");
+  }
   const { candidates, promoted } = await evaluateFoundryPopulation(opts);
   const promotedManifest = opts.candidates.find(
     (candidate) => digestCanonical(manifestToJson(candidate)) === promoted,
   )!;
   const holdoutCases = await evaluateCases(
     promotedManifest,
+    promoted,
     opts.cases.filter((c) => c.split === "holdout"),
     opts,
   );
@@ -350,5 +386,14 @@ export async function runFoundry(opts: FoundryOptions): Promise<FoundryReport> {
     ...(opts.scorer ? { scorer: opts.scorer } : {}),
     ...(opts.lineage ? { lineage: opts.lineage } : {}),
   };
+  if (opts.account) {
+    const budget = opts.account.record();
+    // The account must hold exactly this report's runs; anything else is a
+    // host wiring error, and the report would not verify.
+    const mismatches = habitatBindingMismatches(budget, "foundry", foundryReportRuns(base));
+    if (mismatches.length) throw new AlgalError("INTERNAL", `foundry habitat budget: ${mismatches.join("; ")}`);
+    const budgeted = { ...base, budget };
+    return { ...budgeted, digest: digestCanonical(budgeted as unknown as JsonValue) };
+  }
   return { ...base, digest: digestCanonical(base as unknown as JsonValue) };
 }

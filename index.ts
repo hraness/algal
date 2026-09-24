@@ -235,6 +235,7 @@ export type { VerifyReport } from "./src/verify";
 export {
   FOUNDRY_BOUNDS,
   FOUNDRY_CONTRACT,
+  foundryReportRuns,
   generateFoundryCandidates,
   runFoundry,
   selectFoundryCandidate,
@@ -251,6 +252,29 @@ export type {
 } from "./src/foundry";
 export { parseFoundryReport, verifyFoundryReport } from "./src/foundry-verify";
 export type { FoundryVerifyReport } from "./src/foundry-verify";
+
+export {
+  HABITAT_ACTIVITIES,
+  HABITAT_BUDGET_BOUNDS,
+  HABITAT_BUDGET_CONTRACT,
+  HabitatAccount,
+  checkHabitatBudgetEvidence,
+  habitatBindingMismatches,
+  habitatCeiling,
+  parseHabitatBudget,
+  parseHabitatLimits,
+  verifyHabitatBudget,
+} from "./src/habitat-budget";
+export type {
+  HabitatActivity,
+  HabitatAmount,
+  HabitatBudget,
+  HabitatBudgetVerifyReport,
+  HabitatDimension,
+  HabitatLimits,
+  HabitatRefusal,
+  HabitatRun,
+} from "./src/habitat-budget";
 
 export { SEARCH_BOUNDS, SEARCH_CONTRACT, runFoundrySearch } from "./src/search";
 export type {

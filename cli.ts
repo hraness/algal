@@ -27,7 +27,8 @@ import type { FileStore, Store } from "./src/store";
 import type { RunReceipt } from "./src/run";
 import type { Transport } from "./src/transport";
 import type { Tool, ToolRegistry } from "./src/tools";
-import type { FoundryCase, FoundryScorer } from "./src/foundry";
+import type { FoundryCase, FoundryReport, FoundryScorer } from "./src/foundry";
+import type { HabitatBudget } from "./src/habitat-budget";
 import type { BenchCase, BenchPrice, BenchSystem } from "./src/bench";
 import type { CodingJobOptions, CodingJobOperationOptions } from "./src/coding-jobs";
 import type { RepairCheck } from "./src/repair";
@@ -183,7 +184,7 @@ usage:
       [--cache-effects] [--dir <path>] [--out <report.json>]
                                               generate/evaluate candidates and promote a winner
   algal foundry verify <report.json> [--dir <path>]
-                                              replay every run in a foundry report offline
+                                              replay every run in a foundry report or budget record offline
   algal foundry inspect <report.json>     summarize scores, lineage, and promotion
   algal foundry pack <report.json> --out <dir> [--dir <path>]
                                               export the promoted organism's verified bundle
@@ -1485,15 +1486,16 @@ async function main(): Promise<number> {
       const { parseFoundryReport, verifyFoundryReport } = await import("./src/foundry-verify");
       const { runFoundrySearch } = await import("./src/search");
       const { parseSearchReport, verifySearchReport } = await import("./src/search-verify");
+      const { HABITAT_BUDGET_CONTRACT, HabitatAccount, parseHabitatLimits, verifyHabitatBudget } = await import("./src/habitat-budget");
       if (file === "verify") {
         const reportFile = positional[1];
         if (!reportFile) usageError("algal foundry verify <report.json> [--dir <path>]");
-        const verified = await verifyFoundryReport(
-          await readJson(resolve(reportFile)),
-          store,
-          fns,
-          await resolveTools(flags, dir),
-        );
+        const raw = await readJson(resolve(reportFile));
+        // An exhausted foundry writes its terminal habitat budget record in
+        // place of a report; `verify` accepts whichever the run wrote.
+        const verified = raw !== null && typeof raw === "object" && !Array.isArray(raw) && raw.contract === HABITAT_BUDGET_CONTRACT
+          ? await verifyHabitatBudget(raw, store, fns, await resolveTools(flags, dir))
+          : await verifyFoundryReport(raw, store, fns, await resolveTools(flags, dir));
         out(verified as unknown as JsonObject);
         return verified.ok ? 0 : 1;
       }
@@ -1612,7 +1614,7 @@ async function main(): Promise<number> {
         diag(`loaded ${n} module(s) from ${flags.modules}`);
       }
       const config = asRecord(await readJson(configFile), "foundry config");
-      const unknown = Object.keys(config).filter((k) => !["contract", "candidates", "generator", "cases", "search", "scorer"].includes(k));
+      const unknown = Object.keys(config).filter((k) => !["contract", "candidates", "generator", "cases", "search", "scorer", "budget"].includes(k));
       if (unknown.length > 0) {
         throw new AlgalError("PARSE_FAILED", `foundry config: unknown key "${unknown[0]}"`);
       }
@@ -1622,6 +1624,12 @@ async function main(): Promise<number> {
       if (!searchMode && config.search !== undefined) {
         throw new AlgalError("PARSE_FAILED", "search settings require the foundry search command");
       }
+      // Only a single foundry run admits its runs through a habitat account
+      // today; a search refuses the field rather than ignore it.
+      if (searchMode && config.budget !== undefined) {
+        throw new AlgalError("PARSE_FAILED", "foundry search does not accept a habitat budget");
+      }
+      const budget = config.budget === undefined ? undefined : parseHabitatLimits(config.budget);
       const candidateEntries = config.candidates ?? [];
       if (!Array.isArray(candidateEntries)) {
         throw new AlgalError("PARSE_FAILED", "foundry config.candidates must be a list");
@@ -1731,42 +1739,55 @@ async function main(): Promise<number> {
         out(report as unknown as JsonObject);
         return 0;
       }
-      const generated = generator
-        ? await generateFoundryCandidates({
-            generator: generator.manifest,
-            args: generator.args,
-            output: generator.output,
-            ...(generator.field ? { field: generator.field } : {}),
-            fns,
-            store,
-            executors: activeExecutors,
-            ...(transports ? { transports } : {}),
-            ...(tools ? { tools } : {}),
-          })
-        : undefined;
-      if (generated) candidates.push(...generated.candidates);
-      const report = await runFoundry({
-        candidates,
-        cases,
-        fns,
-        store,
-        executors: activeExecutors,
-        ...(transports ? { transports } : {}),
-        ...(tools ? { tools } : {}),
-        ...(scorer ? { scorer } : {}),
-        ...(generated ? {
-          lineage: {
-            generatorDigest: generated.generatorDigest,
-            receiptDigest: generated.receiptDigest,
-          },
-        } : {}),
-      });
+      // One account admits every run of this activity: the generator, each
+      // selection case, then holdout.
+      const account = budget ? new HabitatAccount("foundry", budget) : undefined;
+      let report: FoundryReport | HabitatBudget;
+      try {
+        const generated = generator
+          ? await generateFoundryCandidates({
+              generator: generator.manifest,
+              args: generator.args,
+              output: generator.output,
+              ...(generator.field ? { field: generator.field } : {}),
+              fns,
+              store,
+              executors: activeExecutors,
+              ...(transports ? { transports } : {}),
+              ...(tools ? { tools } : {}),
+              ...(account ? { account } : {}),
+            })
+          : undefined;
+        if (generated) candidates.push(...generated.candidates);
+        report = await runFoundry({
+          candidates,
+          cases,
+          fns,
+          store,
+          executors: activeExecutors,
+          ...(transports ? { transports } : {}),
+          ...(tools ? { tools } : {}),
+          ...(scorer ? { scorer } : {}),
+          ...(generated ? {
+            lineage: {
+              generatorDigest: generated.generatorDigest,
+              receiptDigest: generated.receiptDigest,
+            },
+          } : {}),
+          ...(account ? { account } : {}),
+        });
+      } catch (error) {
+        if (!account?.exhausted) throw error;
+        // Exhaustion is a terminal outcome, not a partial report: emit the
+        // account record. Completed runs keep their stored receipts.
+        report = account.record();
+      }
       if (flags.out !== undefined) {
         const { writeFile } = await import("node:fs/promises");
         await writeFile(resolve(String(flags.out)), canonicalize(report as unknown as JsonValue));
       }
       out(report as unknown as JsonObject);
-      return 0;
+      return report.contract === HABITAT_BUDGET_CONTRACT ? 1 : 0;
     }
 
     case "bench": {

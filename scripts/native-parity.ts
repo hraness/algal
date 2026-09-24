@@ -12,6 +12,7 @@ import { verifyReceipt } from "../src/verify";
 import { compileSource } from "../src/source";
 import { loadSourceProject } from "../src/source-project";
 import { packOrganism } from "../src/bundle";
+import { habitatBudgetParity } from "./habitat-budget-fixture";
 
 const root = resolve(import.meta.dir, "..");
 const examples = join(root, "examples");
@@ -269,5 +270,9 @@ try {
 } finally {
   await rm(temporary, { recursive: true, force: true });
 }
+// One budgeted foundry activity through both CLIs: complete, exhausted on
+// each limit, and refused configurations.
+const budget = await habitatBudgetParity(binary);
 console.log(JSON.stringify({ examples: files.length, passed: files.length - failed, failed }));
-process.exitCode = failed ? 1 : 0;
+console.log(JSON.stringify({ habitatBudgetCases: budget.cases, failed: budget.failed }));
+process.exitCode = failed || budget.failed ? 1 : 0;

@@ -187,11 +187,16 @@ episodes and deliver messages. Those mechanisms have their own limits on
 generations, pending work, retained records, and storage. An individual pure
 helper does not need a separate durable process.
 
-Foundry and search limit candidates, rounds, and cases, but their individual
-runs have separate work allowances. They do not provide one shared budget for
-an entire habitat's concurrent experiments. Hosts must account for that total
-today. A future habitat scheduler should reserve and charge work across runs,
-including rejected candidates and recovery, before increasing population size.
+Foundry and search limit candidates, rounds, and cases, and each run keeps its
+own work allowance. A foundry config can add a
+[habitat budget](../spec/v1/foundry.md#habitat-budget) that covers all of its
+runs: before each run starts, one account reserves the run's declared ceiling,
+then charges the work and model-call attempts the run records, including
+rejected candidates, failed runs, and retries. When the next run does not fit,
+the foundry stops and writes the account instead of a report. Search,
+application experiments, and concurrent experiments do not share an account
+yet, so hosts track those totals themselves. A habitat scheduler that starts
+runs from several activities against one account is proposed.
 
 Keep code size, expanded execution size, and history size separate when
 measuring capacity:
@@ -256,6 +261,9 @@ the report with application revisions and evaluation records remains proposed.
    and cross-runtime tests.
 5. Extend the local lock with vendored remote catalogs that resolve to the
    same offline verification it applies to local projects.
+6. Charge search and application experiments to the habitat budget, then add
+   a scheduler that starts runs from concurrent activities against one account
+   and resumes an interrupted activity's account before population sizes grow.
 
 The [cumulative-skill experiment](vision.md#what-would-justify-the-claim)
 measures whether keeping and composing procedures improves later work. More

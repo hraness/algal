@@ -18,6 +18,38 @@ A host may supply candidate files or run a generator organism. The generator mus
 
 The generator is an ordinary organism. It may compose `repeat`, `each`, `spawn`, slots, gates, and nested organisms to implement bounded generations, populations, lineage journals, or approval. The foundry grants it no additional functions, executors, capabilities, or budgets.
 
+## Habitat budget
+
+A config may add `"budget": {"work": W, "attempts": A, "runs": R}` to limit the whole activity, separately from each run's own manifest budgets. One `algal.habitat-budget.v1` account then covers every run the foundry starts, in this order: the generator, each candidate's train and validation cases, then the promoted candidate's holdout cases.
+
+Before a run starts, the account reserves the run's declared ceiling: its root manifest's `maxWork` and `maxAgentCalls`, plus one run. Nested children share the root's allowance and need no reservation of their own. The run starts only when every total stays within its limit after the reservation. When the run ends, the account charges the work units and executor attempts its receipt records, whatever the outcome, and releases the rest of the reservation. Losing candidates, failed runs, failure-edge recovery, and retried provider attempts are charged what they recorded.
+
+The first reservation that does not fit ends the activity. No further run starts, and instead of a report the foundry writes the account with `"outcome": "exhausted"` and the refused reservation; both CLIs exit with status `1`. The account makes no score or promotion claim, and completed runs keep their stored receipts. When every run fits, the report carries the account as `budget` with `"outcome": "complete"`. `foundry search` rejects a config with `budget`.
+
+The closed record has these fields:
+
+- `activity`: `foundry`, `search`, or `experiment`. The foundry command is the only built-in producer; a host can drive the same account from TypeScript (`HabitatAccount`) or Rust (`habitat_budget::Account`).
+- `limits`: `{work, attempts, runs}`.
+- `runs`: each started run in order, as `{manifest, receipt, ceiling, charged}`, where `ceiling` and `charged` are `{work, attempts}`.
+- `charged`: `{work, attempts, runs}`, the sums over `runs`.
+- `outcome`: `complete` or `exhausted`.
+- `refused`: `null` for a complete account; otherwise `{manifest, ceiling, reasons}`, where `reasons` lists each limit the ceiling would exceed, from `attempts`, `runs`, and `work`, in that order.
+
+| Field | Bound |
+| --- | --- |
+| `limits.runs` | 1 to 4,096; `runs` holds at most `limits.runs` entries |
+| `limits.work` | 1 to 409,600,000,000 |
+| `limits.attempts` | 0 to 262,144 |
+| `ceiling.work`, `ceiling.attempts` | 1 to 100,000,000 and 0 to 64, the manifest `maxWork` and `maxAgentCalls` limits |
+| `charged.work` of one run | 0 to 4,294,967,295 |
+| `charged.attempts` of one run | 0 to that run's `ceiling.attempts` |
+
+The runtime checks `maxWork` after each activation, so a run's recorded work can exceed its ceiling by the cost of the activation that crossed it. The account charges the recorded amount; `charged.work` can therefore exceed `limits.work` by that amount, and every later reservation is refused. Executor attempts never exceed their ceiling.
+
+Parsing recomputes the arithmetic: each run fit when it started, the totals are the sums of the charges, and `reasons` names exactly the exceeded limits. `foundry verify` accepts either file the command writes. For a report, it also checks that `budget` lists the report's runs in order, that each ceiling matches its manifest, and that each charge matches its receipt. For an exhausted account, it checks the same ceilings and charges and replays every listed run offline. `budget` is an optional addition to `algal.foundry.config.v1` and `algal.foundry.v1`; configs and reports without it keep their bytes and digests.
+
+The account charges receipt quantities only, and it carries no wall-clock values. It is separate from the application namespace quota, `algal.application-quota.v1`, which records filesystem bytes in a mutable host ledger that is not replayed.
+
 ## Report
 
 A report contains:
@@ -27,6 +59,7 @@ A report contains:
 - `holdout` — case evidence for the promoted manifest only;
 - `scorer` — optional `algal.expr.v1` scorer the pass claims were made under;
 - `lineage` — optional generator manifest and run-receipt digests;
+- `budget`: the complete habitat budget account, when the config sets one;
 - `digest` — the canonical digest of every preceding report field.
 
 Each case records its split, interface args, expected and actual interface outputs, outcome, pass claim, work, aggregate input/output token usage, and stored run-receipt digest. Candidate records aggregate work and usage across selection cases. Candidate manifests, generator manifests, and all referenced run receipts live in the host store.
