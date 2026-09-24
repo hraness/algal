@@ -39,7 +39,7 @@ test("changed ancestry, declarations, order, count or adjacency fail closed", ()
     layer(family) + `@media(print){${layer(family)}}`,
     layer(family) + `@layer other{${family}}`,
     layer(family + family.replaceAll("initial", "none")),
-    layer(family + selectors.toReversed().map(selector => `${selector}{--hraness-material-wall-images:initial;--hraness-pattern-decoration:initial}`).join("")),
+    layer(family + [...selectors].reverse().map(selector => `${selector}{--hraness-material-wall-images:initial;--hraness-pattern-decoration:initial}`).join("")),
     layer(family + family + family),
     layer(family + family.replace(selectors[1]!, ".gap{color:red}" + selectors[1]!)),
     layer(family.slice(0, -1)),
