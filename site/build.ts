@@ -29,6 +29,7 @@ import { buildWorkbenchFixture } from "../examples/malleable-site/workbench-fixt
 import { parseProposal } from "../examples/malleable-site/surface";
 import { renderSurfaceHtml } from "./living-render";
 import { offlineWorkerSource } from "./grow-offline";
+import { docsNavigation } from "./docs-navigation";
 
 const SITE = dirname(fileURLToPath(import.meta.url));
 const ROOT = dirname(SITE);
@@ -451,7 +452,7 @@ const HERO_STAGE = `<div class="hero-stage" data-hero-stage>${heroExamples.map((
     </figure>
     <figure class="hs-card hs-code">
       <figcaption class="hs-bar"><span class="file-label">${example.codeName}</span></figcaption>
-      <pre class="hs-pre">${example.codeHtml}</pre>
+      <pre class="hs-pre" aria-hidden="true">${example.codeHtml}</pre>
     </figure>
     <figure class="hs-card hs-evidence">
       <figcaption class="hs-bar"><span class="file-label">${example.evidenceLabel}</span></figcaption>
@@ -609,7 +610,8 @@ function docsRail(current: string, titles: Map<string, string>): string {
       item(`/docs/${slug}/`, slug, titles.get(`docs/${slug}`) ?? slug)).join("")}</ul>`).join("");
   const spec = `<p class="docs-group">Specification</p><ul>${SPEC_SLUGS.map(slug =>
     item(`/docs/spec/${slug}/`, `spec/${slug}`, titles.get(`spec/${slug}`) ?? slug)).join("")}</ul>`;
-  return `<aside class="docs-rail"><nav class="docs-nav" aria-label="Documentation"><a class="docs-home" href="/docs/"${current === "index" ? ' aria-current="page"' : ""}>Documentation</a>${groups}${spec}</nav></aside>`;
+  const title = current === "index" ? "Overview" : titles.get(current.startsWith("spec/") ? current : `docs/${current}`) ?? current;
+  return docsNavigation("Documentation", title, `<a class="docs-home" href="/docs/"${current === "index" ? ' aria-current="page"' : ""}>Documentation</a>${groups}${spec}`);
 }
 
 await rm(DIST, { recursive: true, force: true });
@@ -863,9 +865,10 @@ async function emitMarkdownSection(options: {
     ? (b.meta.date ?? "").localeCompare(a.meta.date ?? "") || (a.meta.order ?? "9").localeCompare(b.meta.order ?? "9")
     : (a.meta.order ?? "9").localeCompare(b.meta.order ?? "9"));
 
-  const rail = (current: string) =>
-    `<aside class="docs-rail"><nav class="docs-nav" aria-label="${options.railTitle}"><a class="docs-home" href="/${options.dir}/"${current === "index" ? ' aria-current="page"' : ""}>${options.railTitle}</a><ul>${entries.map(entry =>
-      `<li><a href="/${options.dir}/${entry.slug}/"${entry.slug === current ? ' aria-current="page"' : ""}>${escapeHtml(entry.doc.title)}</a></li>`).join("")}</ul></nav></aside>`;
+  const rail = (current: string) => docsNavigation(options.railTitle,
+    current === "index" ? "Overview" : entries.find(entry => entry.slug === current)!.doc.title,
+    `<a class="docs-home" href="/${options.dir}/"${current === "index" ? ' aria-current="page"' : ""}>${options.railTitle}</a><ul>${entries.map(entry =>
+      `<li><a href="/${options.dir}/${entry.slug}/"${entry.slug === current ? ' aria-current="page"' : ""}>${escapeHtml(entry.doc.title)}</a></li>`).join("")}</ul>`);
 
   for (const entry of entries) {
     const dateBlock = entry.meta.date ? `<p class="post-meta"><time datetime="${entry.meta.date}">${entry.meta.date}</time></p>` : "";

@@ -30,6 +30,10 @@ test("every standard icon referenced by static markup is present in the sprite",
 
 test("shared appearance and generated evidence remain progressively discoverable", () => {
   expect(chrome).toContain('data-hraness-theme="paper"');
+  expect(chrome).toContain('data-palette="tokyo-night"');
+  expect(chrome).not.toContain('data-theme="light"');
+  expect(chrome).toContain('media="(prefers-color-scheme: light)" content="#e1e2e7"');
+  expect(chrome).toContain('media="(prefers-color-scheme: dark)" content="#1a1b26"');
   expect(chrome).toContain('data-hraness-marketing-preset="editorial"');
   expect(chrome.match(/data-hraness-appearance-menu/g)?.length).toBe(1);
   expect(chrome.indexOf('src="/appearance.js"')).toBeLessThan(chrome.indexOf('href="/styles.css"'));
