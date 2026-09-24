@@ -17,6 +17,7 @@ ALGAL is prerelease software. Unsigned native builds for macOS on Apple silicon 
 
 ## Blog
 
+- [Software that accumulates competence](https://algal.computer/blog/software-that-accumulates-competence/): the thesis behind ALGAL and what evidence would justify it
 - [Self-evolving software needs a selection boundary](https://algal.computer/blog/self-evolving-software-selection-boundary/): Darwin Gödel Machine, Voyager, AlphaEvolve, TextGrad, and DSPy, and why ALGAL makes selection part of the program contract
 - [Receipts are the fossil record of an execution](https://algal.computer/blog/receipts-fossil-record/): replay-verified run artifacts compared with logs, traces, and server-side history
 - [A program that can wait](https://algal.computer/blog/programs-that-wait/): durable waits as checkpointed capabilities, resumable across processes and runtimes
@@ -58,6 +59,8 @@ The documentation below renders the repository's own `docs/` and `spec/v1/` Mark
 - [Try the native VM](https://algal.computer/docs/native-workbench/)
 - [The ALGAL process VM](https://algal.computer/docs/vm/)
 - [Readable source language](https://algal.computer/docs/source-language/)
+- [Software that accumulates competence](https://algal.computer/docs/vision/): the bet behind ALGAL, the four properties that make it testable, and the evidence that would settle it
+- [Where ALGAL comes from](https://algal.computer/docs/lineage/): Lisp, Emacs, Smalltalk, Urbit, Engelbart, and the research precedents for evolving programs
 - [What distinguishes ALGAL](https://algal.computer/docs/why-unique/)
 - [Language, harness, habitat](https://algal.computer/docs/algal-design/)
 - [Organisms and agent loops](https://algal.computer/docs/agent-loop-and-organism/)

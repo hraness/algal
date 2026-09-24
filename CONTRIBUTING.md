@@ -1,7 +1,8 @@
 # Contributing
 
 ALGAL is early and the contract is deliberately small. Contributions are
-welcome; the bar is that the contract stays checkable.
+welcome; the bar is that the contract stays checkable. Read the
+[vision](docs/vision.md) for what the contract is for.
 
 ## Setup
 
