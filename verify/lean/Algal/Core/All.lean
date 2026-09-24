@@ -8,6 +8,7 @@ import Algal.Core.NegativeEndpoints
 import Algal.Core.FiniteNeighbors
 import Algal.Core.IntervalSearch
 import Algal.Core.RationalBracket
+import Algal.Core.RationalSelector
 import Algal.Core.DecimalSyntax
 import Algal.Core.Text
 import Algal.Core.JsonString

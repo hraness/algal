@@ -325,6 +325,40 @@
       ]
     },
     {
+      "id": "rational-selector",
+      "module": "Algal.Core.RationalSelector",
+      "scope": "Constructive nearest-even selection of a finite binary64 value for nonnegative rational magnitudes, with explicit sign reflection and an explicit zero sign. Inputs at or beyond the overflow threshold select the finite maximum. No IEEE overflow admission, infinity selection, decimal conversion, shortest rendering or production refinement.",
+      "sources": [
+        "verify/lean/Algal/Core/RationalSelector.lean"
+      ],
+      "coveredCriteria": [
+        "Every selected value is nearest to its nonnegative rational input among all finite sign-bit-zero candidates, and signed selection is nearest to the signed input",
+        "An odd selected value is strictly nearest, so a distinct-bit competitor at equal distance forces even selection",
+        "Exact rational midpoint ties select the even neighbor, fixed by underflow, subnormal-to-normal, unit and maximum witnesses; both zero signs are explicit",
+        "The paired bracket search performs at most 63 predicate comparisons"
+      ],
+      "unmetCriteria": [
+        "Inputs at or beyond the overflow threshold return the finite maximum; no IEEE finite admission, infinity selection or all-input round/pack correspondence is proved",
+        "No decimal parser or printer, shortest rendering, production number codec or Bun/native refinement",
+        "The comparison bound counts bracket predicate probes only; midpoint and parity comparisons, rational arithmetic, allocation, stack, time and machine widths are unbounded here",
+        "Sign is an explicit argument separate from the nonnegative magnitude; the rational value zero cannot infer a lexical negative zero"
+      ],
+      "admittedWitnesses": [
+        "Algal.Core.RationalSelector.zero_selected",
+        "Algal.Core.RationalSelector.one_selected",
+        "Algal.Core.RationalSelector.underflow_tie_selected",
+        "Algal.Core.RationalSelector.subnormal_normal_tie_selected",
+        "Algal.Core.RationalSelector.before_one_tie_selected",
+        "Algal.Core.RationalSelector.after_one_tie_selected",
+        "Algal.Core.RationalSelector.maximum_lower_tie_selected",
+        "Algal.Core.RationalSelector.overflow_tie_selects_finite_maximum",
+        "Algal.Core.RationalSelector.explicit_signed_zeros"
+      ],
+      "rejectedWitnesses": [
+        "Algal.Core.RationalSelector.finite_selection_does_not_admit_overflow"
+      ]
+    },
+    {
       "id": "decimal-syntax",
       "module": "Algal.Core.DecimalSyntax",
       "scope": "Concrete ASCII JSON numeral tokens retaining their spelling, with exact unbounded rational decimal values; distinct from finite-binary64 admission and canonical shortest rendering.",
@@ -4570,6 +4604,228 @@
       "module": "Algal.Core.RationalBracket",
       "domain": "rational-bracket",
       "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.chooseInterior_lower_of_lt",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.chooseInterior_upper_of_gt",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.chooseInterior_lower_at_even",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.chooseInterior_upper_at_odd",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.selected_nonnegative",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.lower_strict_nearest_of_lt_mid",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.upper_strict_nearest_of_gt_mid",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.maximum_nearest_of_at_le",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.upper_is_maximum_or_below",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.chooseInterior_cases",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.distance_outside_left_closed",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.chooseInterior_nearest",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.select_nearest_nonnegative",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.selectSigned_nearest",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.chooseInterior_midpoint_even",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.bracket_at_adjacent_gap",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.select_at_adjacent_gap",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.select_at_midpoint",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.selected_midpoint_even",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.select_at_number",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.select_at_or_above_maximum",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.zero_selected",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.one_selected",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.underflow_tie_selected",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.subnormal_normal_tie_selected",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.before_one_tie_selected",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.after_one_tie_selected",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.maximum_lower_tie_selected",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.overflow_tie_selects_finite_maximum",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.finite_selection_does_not_admit_overflow",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "rejected-witness"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.explicit_signed_zeros",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "admitted-witness"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.chooseInterior_odd_side",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.upper_strict_nearest",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.select_odd_strict_nearest",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.selectSigned_odd_strict_nearest",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.selectSigned_tie_even",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
+    },
+    {
+      "name": "Algal.Core.RationalSelector.bracket_search_comparison_bound",
+      "module": "Algal.Core.RationalSelector",
+      "domain": "rational-selector",
+      "role": "law"
     }
   ],
   "unmetCriteria": [

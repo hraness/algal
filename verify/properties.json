@@ -7,7 +7,7 @@
   "dependencies": [
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "sha256:090b89d9810a80e33f857a87dac2b307bcd0aca55330d7c155b6f0bed9ab2985"
+      "sha256": "sha256:c556e18ce076f473f6b49e483f4da1abdf2a4227b680afb047ee85ae0242c727"
     },
     {
       "path": ".github/workflows/expression-artifact.yml",
@@ -27,7 +27,7 @@
     },
     {
       "path": "bun.lock",
-      "sha256": "sha256:d8f8e2d2d9533674d9f8864f30603346144c9432c7c6ec4b92966917f4c093b6"
+      "sha256": "sha256:ead77f94e03db3565f13262004de269c3f830333cc31cf0164e389beecae341a"
     },
     {
       "path": "cli.ts",
@@ -62,6 +62,10 @@
       "sha256": "sha256:9c2312e2c6a8d52d257bd3d49199394a70afb95dd25a4491bdf0068c92a4a8b7"
     },
     {
+      "path": "crates/algal/examples/verification_application_history.rs",
+      "sha256": "sha256:9e180499937efa66e5922e12f4170ca4fde4f0e300cfe73058196009f40a485a"
+    },
+    {
       "path": "crates/algal/examples/verification_lean_vectors.rs",
       "sha256": "sha256:58dbb88be965b819f70e898bf78298e7bd4ec816d3a3f8cc41b078dd0358f088"
     },
@@ -75,7 +79,7 @@
     },
     {
       "path": "crates/algal/src/application_adaptation.rs",
-      "sha256": "sha256:f03730392bf5a9e1c01c7b8bbb60bc293cfc6211108fc16ec64043fc7c1faa5d"
+      "sha256": "sha256:3a5788311729995c489371df4230bd66eb8267abd5e2b08214d94ffbf7d8d5dd"
     },
     {
       "path": "crates/algal/src/application_comparison.rs",
@@ -215,7 +219,7 @@
     },
     {
       "path": "crates/algal/src/graph.rs",
-      "sha256": "sha256:97b8bafcf6bed346dbf26b8b71a3d8ab3b8dc8de80604eb9749a17141805afc0"
+      "sha256": "sha256:9274467474acea27e681535b97537bfe9591da8d5c27ec5176ad4c2a3d8f9e84"
     },
     {
       "path": "crates/algal/src/journal.rs",
@@ -616,6 +620,14 @@
     {
       "path": "examples/browser-grow/policy.ts",
       "sha256": "sha256:b080ae99a504dc6af69948f8b869e90b9f4fb83e89a99f397aebc4ff37360f6b"
+    },
+    {
+      "path": "examples/browser-triage/controller.test.ts",
+      "sha256": "sha256:417c26a4f307c2313aec53da62bbcdbc555a1f8bad8568b3d8347c1f491f513b"
+    },
+    {
+      "path": "examples/browser-triage/controller.ts",
+      "sha256": "sha256:90eb0729578493b8de108fbbadf92df7ec15f62026d08aa76ad174ad9fc0ac9c"
     },
     {
       "path": "examples/bundles/94b94c4f1e559cf9c9d9218e9c2dab6deb0ad804d848c3f275f32d1b7a217e6a.bundle.json",
@@ -1098,12 +1110,20 @@
       "sha256": "sha256:7791cd5c461447c9d2619d9c66d4644801bfa2f14764c164e7f80cfcd4e15cea"
     },
     {
+      "path": "examples/local-triage/core.test.ts",
+      "sha256": "sha256:58f7d77f70bf4c1fdf982f77bb8e7ee33f6cd23097394a6ee88c57de83031afe"
+    },
+    {
+      "path": "examples/local-triage/core.ts",
+      "sha256": "sha256:7f999a51e4b48c5ae17dc85c6d7642ed1ea56734b00abb449441e1191ffc3d5e"
+    },
+    {
       "path": "examples/local-triage/host.test.ts",
       "sha256": "sha256:4ce820bcac37a4438c78543bd9d030f64fe5d0dd0b55b98e9ad46c90580a9673"
     },
     {
       "path": "examples/local-triage/host.ts",
-      "sha256": "sha256:8cbdb4322649ecd6ee64ddd03483e9ed164b12209d08b3d7a41bb6e4db3372ba"
+      "sha256": "sha256:46859a44fdd112f33dd4e60e0eb1a6a4e9b74dcb4fbc6095bd29a2d03724d83c"
     },
     {
       "path": "examples/local-triage/package-smoke.ts",
@@ -1379,7 +1399,7 @@
     },
     {
       "path": "examples/model-router.algal.json",
-      "sha256": "sha256:501b5dcb891db0c192ec62baacad2905248aa56f777f518a91418047b290b459"
+      "sha256": "sha256:71117c649a0d2a7fea10a01f0c8c633a6adace36c3d21b6a1d9b0368d44303cf"
     },
     {
       "path": "examples/model-router.args.json",
@@ -1590,6 +1610,46 @@
       "sha256": "sha256:a32cd912b2e4eb8e01b75185127c49ea090e6d198f4acaaca73d7295fff1cfa5"
     },
     {
+      "path": "examples/source/projects/task-planning/README.md",
+      "sha256": "sha256:95a18a70856bc246a9311999e4de35230024e3ec670536f2f4de1a2b7a72f28c"
+    },
+    {
+      "path": "examples/source/projects/task-planning/choose_action.algal",
+      "sha256": "sha256:498414d7583b987a0a538a17f452ddf5f37b6607e323764288e900cbc7f1d61e"
+    },
+    {
+      "path": "examples/source/projects/task-planning/lib/clamp.algal",
+      "sha256": "sha256:16f9dd8f84af7e29549a8c2a42e586b076e8e7cb382f9164811873308759bce3"
+    },
+    {
+      "path": "examples/source/projects/task-planning/main.algal",
+      "sha256": "sha256:3ce8ba7b155be72c1c8d5dfe837afd93b2112791608662c0b91b9f79517be345"
+    },
+    {
+      "path": "examples/source/projects/task-planning/main.args.json",
+      "sha256": "sha256:a80fdc94be25644b9374dafabf66ac14bb39ee93a448f7457371e2d26838c3b0"
+    },
+    {
+      "path": "examples/source/projects/task-planning/main.responses.json",
+      "sha256": "sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    },
+    {
+      "path": "examples/source/projects/task-planning/plan_task.algal",
+      "sha256": "sha256:47159aba28fb9a43804eb3349fb7f634bb9338d5c35784e65149fd40665a2f3b"
+    },
+    {
+      "path": "examples/source/projects/task-planning/present_task.algal",
+      "sha256": "sha256:62be5ff541c301b606c070cbcf9c3dd46301494ed49d58c9c9d182a516fdb2e7"
+    },
+    {
+      "path": "examples/source/projects/task-planning/project.test.ts",
+      "sha256": "sha256:2cefcf8c7361e5831cd20abfd1cad2d819017057e222d134e0c6fce2462e54c5"
+    },
+    {
+      "path": "examples/source/projects/task-planning/score_task.algal",
+      "sha256": "sha256:9400e3efd86aed7b86d52506b459f89c53f8d085e5a487f25e16d3f7ac29ccf9"
+    },
+    {
       "path": "examples/source/quote.algal",
       "sha256": "sha256:4ad4138bcc4760668bcc2819d8c0ffe5e59eb0f78d8e1e7ad1d7d340fb427270"
     },
@@ -1723,7 +1783,7 @@
     },
     {
       "path": "package.json",
-      "sha256": "sha256:d2fe07eddba6b5fc24f4a78d69d7adf4aa279f78814faec0cc417dbc7d9967f7"
+      "sha256": "sha256:8e4fbb28c39fab7fca22f4883ad9f0b3c5df9df2a8c34fee442ee8993e676f3e"
     },
     {
       "path": "scripts/apple_brief_demo.py",
@@ -1735,11 +1795,15 @@
     },
     {
       "path": "scripts/application-parity.ts",
-      "sha256": "sha256:2e6d69faa523d4096158068ea9aaf0c181dd9718b1eca8ea2649fdc22837a74a"
+      "sha256": "sha256:3956f271c19f74fdf30d14b469927c816f8f941c2767eb0c4b8be79550220ef7"
     },
     {
       "path": "scripts/browser-grow-qualification.mjs",
       "sha256": "sha256:15ef77f3d2ef12cf2fb619cf9aed6c4f04c56faeb98efe9c0668605feb35dd29"
+    },
+    {
+      "path": "scripts/browser-triage-qualification.mjs",
+      "sha256": "sha256:0b2dfb22a7a5d8e11fac6f262b431ffaa5dd113d3c6d4766bb3c86bc86946bc8"
     },
     {
       "path": "scripts/build-apple.sh",
@@ -1791,7 +1855,7 @@
     },
     {
       "path": "scripts/native-parity.ts",
-      "sha256": "sha256:4955988ad5bf75fbdc88bcfcf9ed4955f7bfffa1fb2e098d348335ab051990ff"
+      "sha256": "sha256:650e7b4c38297594f651f8605430dc138e74b96b25f32987f0433cbdb32dc2db"
     },
     {
       "path": "scripts/package-native.py",
@@ -1842,6 +1906,10 @@
       "sha256": "sha256:60984704d8196ac4d9ade554bce4172500cd4acd31e048528e014f36810c7f91"
     },
     {
+      "path": "scripts/triage-performance.ts",
+      "sha256": "sha256:01f1612bb492887c70d89564ebbec731d94c1dbac4b5c530aa6268c09ef5ce60"
+    },
+    {
       "path": "scripts/unpack-native.py",
       "sha256": "sha256:72d5417350efe4cb95cdcd6e226c72cd8fcdeeb1cc976a1b7a4aecbe4b8de85f"
     },
@@ -1859,7 +1927,7 @@
     },
     {
       "path": "site/AGENTS.md",
-      "sha256": "sha256:24bcfc1d11d2f5a84e082cbe82bcaf41cc88fcdc57bc9060663d920407a1e24e"
+      "sha256": "sha256:8ecb0b94fbf28b4d8122f312c9396fb14c58d477464dcb4d8aeeea5111852aa7"
     },
     {
       "path": "site/BRAND_ASSETS.md",
@@ -1871,15 +1939,15 @@
     },
     {
       "path": "site/appearance.ts",
-      "sha256": "sha256:0c30944b5cd547306d8908f2bce23edbb65148c7c30e04db59af2d38cccb0f8c"
+      "sha256": "sha256:1cca007f40a4026ed2f9f28b0713dbb479bfdeb7ff8856553f27c71c7a048888"
     },
     {
       "path": "site/assets.test.ts",
-      "sha256": "sha256:02d77cb1167ee3d4a28ae96a5b045183e316b0f5e28e809ffa09fbcdde3f8808"
+      "sha256": "sha256:637fc79000f3df6ebaef939ce75f9202534aae68487823b04d4367d646d88929"
     },
     {
       "path": "site/assets.ts",
-      "sha256": "sha256:9b8f2ad90eaa2e8bdfe5dd23079c730a7c0789af94cc938d13ed5716bc7d3ed5"
+      "sha256": "sha256:d176802d37f07bd566fdf1fe4d74d0f4dd6068fcf2dc889b04400b9029f055c5"
     },
     {
       "path": "site/blog/programs-that-wait.md",
@@ -1892,6 +1960,10 @@
     {
       "path": "site/blog/self-evolving-software-selection-boundary.md",
       "sha256": "sha256:ba451b5b0163d80f874df562f4c8d620528b5f48f94e5b30c6d90baa858721f5"
+    },
+    {
+      "path": "site/blog/software-that-accumulates-competence.md",
+      "sha256": "sha256:bb6dfbc79c0eaa39a68c4e24bdbfc7fbfcc60f8de6e2d6c85e67c4d9427628ad"
     },
     {
       "path": "site/browser-inference-contract.ts",
@@ -1911,15 +1983,15 @@
     },
     {
       "path": "site/build.ts",
-      "sha256": "sha256:e39233ed3abdf0d78b863c3816f6fd1449e72e9f4ef86f80e4d4f849aad39d3e"
+      "sha256": "sha256:a27ff19ca83d3b63011ab43eb9c43a3ad8b2c9903b5147dc4ab36963ca2a0da4"
     },
     {
       "path": "site/chrome.ts",
-      "sha256": "sha256:d4847847f675543c00b56323a6f2b59882aeffa25d2ec655b6cc1d07ab97c73d"
+      "sha256": "sha256:67d4b152ad1b25bd386b31e299ad82d5e158096c1d4bd9f897683fd0805fd21b"
     },
     {
       "path": "site/client.ts",
-      "sha256": "sha256:a3bbe388b360579ba1438dcbfeae868f05a150d785dba275343fad72a0d7cc17"
+      "sha256": "sha256:ff2642cc946004ab82e6fa6c8f9b70aa3cfbb6efbbd9ac77e3ef7eb94378a70d"
     },
     {
       "path": "site/compare/dspy.md",
@@ -1938,6 +2010,14 @@
       "sha256": "sha256:369359cf2e2c30790f395e652bc0c437cc443a32ca71a0ce4685939184aa3f34"
     },
     {
+      "path": "site/docs-navigation.test.ts",
+      "sha256": "sha256:ba2e71a460eb05dabc1fb9068dc592de2db0fce9edf0fe5bf4dcb5c547cf6143"
+    },
+    {
+      "path": "site/docs-navigation.ts",
+      "sha256": "sha256:463eadd9e5ddc2258c27892aaf61341d140e9a99ee2140e8d4f10a27d90f0bde"
+    },
+    {
       "path": "site/favicon.svg",
       "sha256": "sha256:340aad988f525145b7caf7545abf311fa5f52cf46c399f172bc948de437d4a88"
     },
@@ -1951,11 +2031,11 @@
     },
     {
       "path": "site/grow-offline.test.ts",
-      "sha256": "sha256:0de2c1905ebf96207f084067de636175b9f4bb67635dc1a0ca11f6a20ec3ea1b"
+      "sha256": "sha256:3035dcf8d5c84c44773aadbda3d1172051537cf64d98e90e6158a8d280383efb"
     },
     {
       "path": "site/grow-offline.ts",
-      "sha256": "sha256:d47f054e3d70ddd75cc979485855b34556af25d0cf85f2c15e323c7e07382f60"
+      "sha256": "sha256:2326f313b71ceae0a9dd1340ad27250e8a2045d54e0e50182a0fb40e428f4e5a"
     },
     {
       "path": "site/grow.css",
@@ -2011,7 +2091,7 @@
     },
     {
       "path": "site/llms.txt",
-      "sha256": "sha256:68b3ba0a07ce5a818dd2ee770dc9fe36fe2cfe9210608f6108573582db522d31"
+      "sha256": "sha256:8c626a22d8fb4f4ab074c1e845c2c632d5f7f83a1c5e306484eecf39bad6c062"
     },
     {
       "path": "site/markdown.test.ts",
@@ -2031,15 +2111,19 @@
     },
     {
       "path": "site/pages/grow.html",
-      "sha256": "sha256:604b3a3a517dceeaa08edfed8fc775f97b61c666eaf18ad686d1a5259af448cf"
+      "sha256": "sha256:135c3e668a9f111df3e8a84215f634acacda8235a3789d9aef9a3c85efd65bee"
     },
     {
       "path": "site/pages/home.html",
-      "sha256": "sha256:b03f6170e33416e4b205ee4162ae525c2cdcaeec5194957bb8bc032ad2ca3b82"
+      "sha256": "sha256:f497e1208ddecf4a01236cb2e0bbab0cdaeb606d1f952fac0c1848a56e3f817a"
     },
     {
       "path": "site/pages/living.html",
       "sha256": "sha256:b0efdf4936225172f8d9293b9d39e2c6a4e78efcc693e350a395986fe954a636"
+    },
+    {
+      "path": "site/pages/tasks.html",
+      "sha256": "sha256:c11eb8b44d72a52e6c30fa6fc4606406d2a31c700f584e7b56bb1c7018f3d735"
     },
     {
       "path": "site/pages/tour.html",
@@ -2059,11 +2143,35 @@
     },
     {
       "path": "site/site-design.test.ts",
-      "sha256": "sha256:3988517e4e37bdba8cce0024274e57e43d2cd73cae788eaa4b313b8761dc84e3"
+      "sha256": "sha256:a7f4b1eacc7381c585c1c000cbddcf23ccb7d98ded18eba9adaea34c39b66c5b"
+    },
+    {
+      "path": "site/style-normalization.test.ts",
+      "sha256": "sha256:be64f6e8587df107316b71ec2bb99a0a7d40eb9b8f5a6a07870efdaa3c1713f9"
+    },
+    {
+      "path": "site/style-normalization.ts",
+      "sha256": "sha256:b179691561552dd26f537966cba1ad5747a41165f5c7d0cfaeb19b3edf41caa6"
     },
     {
       "path": "site/styles.css",
-      "sha256": "sha256:d25ea3d11a336e660f937ffa7a1aef8a7a7d04c9c8a6d61681003ee98f245f92"
+      "sha256": "sha256:bd5a534b1a67635f6e2c29213df3ab80e9dd432d40a3b54d2d6c77571a57cc23"
+    },
+    {
+      "path": "site/tasks-render.test.ts",
+      "sha256": "sha256:7e5e81e7dc814c6a3fef82aae64ec3a784eece58140e032c18c9e39109478a9d"
+    },
+    {
+      "path": "site/tasks-render.ts",
+      "sha256": "sha256:8bc9a251f025bc7b6eaf55a6def08472b7386800822c284330f6d09576fcb73e"
+    },
+    {
+      "path": "site/tasks.css",
+      "sha256": "sha256:722dae4ad995ae5266374748715eb9ea0adb724214c231bfcc0f886709e5ba61"
+    },
+    {
+      "path": "site/tasks.ts",
+      "sha256": "sha256:a0bdf0738ef096457286d79d72c6e2aa2bd0c249dac06c44712cf5a278dbb26c"
     },
     {
       "path": "site/tsconfig.inference-worker.json",
@@ -2071,7 +2179,7 @@
     },
     {
       "path": "site/tsconfig.json",
-      "sha256": "sha256:f9f7c0bbcee4ac3278983e2c6a72fad7a2a03557803d014b54fb1ea3a964771d"
+      "sha256": "sha256:89256fff49456b45b054dae561475b8cad196878fae3d30af97003e94a15dccd"
     },
     {
       "path": "site/viewer.ts",
@@ -2087,7 +2195,7 @@
     },
     {
       "path": "spec/v1/application.md",
-      "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2"
+      "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af"
     },
     {
       "path": "spec/v1/bench.md",
@@ -2143,15 +2251,15 @@
     },
     {
       "path": "src/algal_expr.wasm.json",
-      "sha256": "sha256:018e5b8261dfc8f3287a8cbaa2f764eab9ea0b36cc0307585e1bcad82de9f6fe"
+      "sha256": "sha256:de072c0861e2da179ea1b36869a13757fdca88484036888b043dafbd68cb57fc"
     },
     {
       "path": "src/application-adaptation.test.ts",
-      "sha256": "sha256:681d116787809789c5e54d5abb8e1b29f51fc5c5440a2d16e3e29f2726dc0406"
+      "sha256": "sha256:e7ed3716f58be6fa58b435951dbeec01a63c8a6d008e460d3fbf3135d75211ce"
     },
     {
       "path": "src/application-adaptation.ts",
-      "sha256": "sha256:da96f4902a32f3779930d2d1a8bc859721012ee11c3581d41eacc79585dc21d1"
+      "sha256": "sha256:84cc73ecf34ba98b70dd9c6228bfce9a78e5e28a6c2426198e85ec0266d90015"
     },
     {
       "path": "src/application-browser-storage.test.ts",
@@ -2867,7 +2975,7 @@
     },
     {
       "path": "src/store-contract.ts",
-      "sha256": "sha256:966f43a53b8ca1e801120b0516766b419bb1c0dfd6d868ba090f2002fbb04540"
+      "sha256": "sha256:979c959d060c130bb4d47ce67f08ed214e877475db64b8cb4ecf0c25927aad6b"
     },
     {
       "path": "src/store-memory.ts",
@@ -2903,7 +3011,7 @@
     },
     {
       "path": "src/transport-contract.ts",
-      "sha256": "sha256:a87b7af4dd27932f76301c01463ea3e724b9f17190eb19563c44a21cabf3301b"
+      "sha256": "sha256:e2a89b016fc1d5eac7241890db8b1be352623e3b7ba42e23b8cee1745d09a23c"
     },
     {
       "path": "src/transport.test.ts",
@@ -2958,8 +3066,12 @@
       "sha256": "sha256:c190ae4c943cd2fd1b7a225c847f65c3c554ca235acaaaa6b76e9fa4a0f0a7ae"
     },
     {
+      "path": "tests/browser-triage-storage.ts",
+      "sha256": "sha256:7bcd835442d2ed9bbc57a185185c38f48c60a4e73703f5400266ace24995e93b"
+    },
+    {
       "path": "tsconfig.json",
-      "sha256": "sha256:2a7b9c014b62176b0bc952aea0b8f7ddb5eae7f2511e2406a27b4531230b23dd"
+      "sha256": "sha256:b27c2ff6eff76cc8e0667ca55f1347fb8ed6fbfbc1300c0a1f17654172d54302"
     }
   ],
   "profiles": [
@@ -4012,7 +4124,7 @@
         },
         {
           "path": "crates/algal/src/graph.rs",
-          "sha256": "sha256:97b8bafcf6bed346dbf26b8b71a3d8ab3b8dc8de80604eb9749a17141805afc0",
+          "sha256": "sha256:9274467474acea27e681535b97537bfe9591da8d5c27ec5176ad4c2a3d8f9e84",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -4104,7 +4216,7 @@
         },
         {
           "path": "crates/algal/src/graph.rs",
-          "sha256": "sha256:97b8bafcf6bed346dbf26b8b71a3d8ab3b8dc8de80604eb9749a17141805afc0",
+          "sha256": "sha256:9274467474acea27e681535b97537bfe9591da8d5c27ec5176ad4c2a3d8f9e84",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -4195,7 +4307,7 @@
         },
         {
           "path": "crates/algal/src/graph.rs",
-          "sha256": "sha256:97b8bafcf6bed346dbf26b8b71a3d8ab3b8dc8de80604eb9749a17141805afc0",
+          "sha256": "sha256:9274467474acea27e681535b97537bfe9591da8d5c27ec5176ad4c2a3d8f9e84",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -4286,7 +4398,7 @@
         },
         {
           "path": "crates/algal/src/graph.rs",
-          "sha256": "sha256:97b8bafcf6bed346dbf26b8b71a3d8ab3b8dc8de80604eb9749a17141805afc0",
+          "sha256": "sha256:9274467474acea27e681535b97537bfe9591da8d5c27ec5176ad4c2a3d8f9e84",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -4377,7 +4489,7 @@
         },
         {
           "path": "crates/algal/src/graph.rs",
-          "sha256": "sha256:97b8bafcf6bed346dbf26b8b71a3d8ab3b8dc8de80604eb9749a17141805afc0",
+          "sha256": "sha256:9274467474acea27e681535b97537bfe9591da8d5c27ec5176ad4c2a3d8f9e84",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -7211,7 +7323,7 @@
         },
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -7392,7 +7504,7 @@
         },
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -7571,7 +7683,7 @@
         },
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -7749,7 +7861,7 @@
         },
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8627,7 +8739,7 @@
         },
         {
           "path": "crates/algal/src/graph.rs",
-          "sha256": "sha256:97b8bafcf6bed346dbf26b8b71a3d8ab3b8dc8de80604eb9749a17141805afc0",
+          "sha256": "sha256:9274467474acea27e681535b97537bfe9591da8d5c27ec5176ad4c2a3d8f9e84",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8734,7 +8846,7 @@
         },
         {
           "path": "crates/algal/src/graph.rs",
-          "sha256": "sha256:97b8bafcf6bed346dbf26b8b71a3d8ab3b8dc8de80604eb9749a17141805afc0",
+          "sha256": "sha256:9274467474acea27e681535b97537bfe9591da8d5c27ec5176ad4c2a3d8f9e84",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8841,7 +8953,7 @@
         },
         {
           "path": "crates/algal/src/graph.rs",
-          "sha256": "sha256:97b8bafcf6bed346dbf26b8b71a3d8ab3b8dc8de80604eb9749a17141805afc0",
+          "sha256": "sha256:9274467474acea27e681535b97537bfe9591da8d5c27ec5176ad4c2a3d8f9e84",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -8948,7 +9060,7 @@
         },
         {
           "path": "crates/algal/src/graph.rs",
-          "sha256": "sha256:97b8bafcf6bed346dbf26b8b71a3d8ab3b8dc8de80604eb9749a17141805afc0",
+          "sha256": "sha256:9274467474acea27e681535b97537bfe9591da8d5c27ec5176ad4c2a3d8f9e84",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -9561,7 +9673,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -9736,7 +9848,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -9911,7 +10023,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -10086,7 +10198,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -10261,7 +10373,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -10436,7 +10548,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -10611,7 +10723,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -10766,7 +10878,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -10920,7 +11032,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -11076,7 +11188,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -11232,7 +11344,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -11386,7 +11498,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -11540,7 +11652,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -11694,7 +11806,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -12349,7 +12461,7 @@
       "sources": [
         {
           "path": "src/application-adaptation.ts",
-          "sha256": "sha256:da96f4902a32f3779930d2d1a8bc859721012ee11c3581d41eacc79585dc21d1",
+          "sha256": "sha256:84cc73ecf34ba98b70dd9c6228bfce9a78e5e28a6c2426198e85ec0266d90015",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -12377,7 +12489,7 @@
         },
         {
           "path": "crates/algal/src/application_adaptation.rs",
-          "sha256": "sha256:f03730392bf5a9e1c01c7b8bbb60bc293cfc6211108fc16ec64043fc7c1faa5d",
+          "sha256": "sha256:3a5788311729995c489371df4230bd66eb8267abd5e2b08214d94ffbf7d8d5dd",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -12393,7 +12505,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -12523,7 +12635,7 @@
       "sources": [
         {
           "path": "src/application-adaptation.ts",
-          "sha256": "sha256:da96f4902a32f3779930d2d1a8bc859721012ee11c3581d41eacc79585dc21d1",
+          "sha256": "sha256:84cc73ecf34ba98b70dd9c6228bfce9a78e5e28a6c2426198e85ec0266d90015",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -12551,7 +12663,7 @@
         },
         {
           "path": "crates/algal/src/application_adaptation.rs",
-          "sha256": "sha256:f03730392bf5a9e1c01c7b8bbb60bc293cfc6211108fc16ec64043fc7c1faa5d",
+          "sha256": "sha256:3a5788311729995c489371df4230bd66eb8267abd5e2b08214d94ffbf7d8d5dd",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -12567,7 +12679,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -12696,7 +12808,7 @@
       "sources": [
         {
           "path": "src/application-adaptation.ts",
-          "sha256": "sha256:da96f4902a32f3779930d2d1a8bc859721012ee11c3581d41eacc79585dc21d1",
+          "sha256": "sha256:84cc73ecf34ba98b70dd9c6228bfce9a78e5e28a6c2426198e85ec0266d90015",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -12724,7 +12836,7 @@
         },
         {
           "path": "crates/algal/src/application_adaptation.rs",
-          "sha256": "sha256:f03730392bf5a9e1c01c7b8bbb60bc293cfc6211108fc16ec64043fc7c1faa5d",
+          "sha256": "sha256:3a5788311729995c489371df4230bd66eb8267abd5e2b08214d94ffbf7d8d5dd",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -12740,7 +12852,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -12868,7 +12980,7 @@
       "sources": [
         {
           "path": "src/application-adaptation.ts",
-          "sha256": "sha256:da96f4902a32f3779930d2d1a8bc859721012ee11c3581d41eacc79585dc21d1",
+          "sha256": "sha256:84cc73ecf34ba98b70dd9c6228bfce9a78e5e28a6c2426198e85ec0266d90015",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -12896,7 +13008,7 @@
         },
         {
           "path": "crates/algal/src/application_adaptation.rs",
-          "sha256": "sha256:f03730392bf5a9e1c01c7b8bbb60bc293cfc6211108fc16ec64043fc7c1faa5d",
+          "sha256": "sha256:3a5788311729995c489371df4230bd66eb8267abd5e2b08214d94ffbf7d8d5dd",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -12912,7 +13024,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -13040,7 +13152,7 @@
       "sources": [
         {
           "path": "src/application-adaptation.ts",
-          "sha256": "sha256:da96f4902a32f3779930d2d1a8bc859721012ee11c3581d41eacc79585dc21d1",
+          "sha256": "sha256:84cc73ecf34ba98b70dd9c6228bfce9a78e5e28a6c2426198e85ec0266d90015",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -13068,7 +13180,7 @@
         },
         {
           "path": "crates/algal/src/application_adaptation.rs",
-          "sha256": "sha256:f03730392bf5a9e1c01c7b8bbb60bc293cfc6211108fc16ec64043fc7c1faa5d",
+          "sha256": "sha256:3a5788311729995c489371df4230bd66eb8267abd5e2b08214d94ffbf7d8d5dd",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -13084,7 +13196,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -13212,7 +13324,7 @@
       "sources": [
         {
           "path": "src/application-adaptation.ts",
-          "sha256": "sha256:da96f4902a32f3779930d2d1a8bc859721012ee11c3581d41eacc79585dc21d1",
+          "sha256": "sha256:84cc73ecf34ba98b70dd9c6228bfce9a78e5e28a6c2426198e85ec0266d90015",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -13240,7 +13352,7 @@
         },
         {
           "path": "crates/algal/src/application_adaptation.rs",
-          "sha256": "sha256:f03730392bf5a9e1c01c7b8bbb60bc293cfc6211108fc16ec64043fc7c1faa5d",
+          "sha256": "sha256:3a5788311729995c489371df4230bd66eb8267abd5e2b08214d94ffbf7d8d5dd",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -13256,7 +13368,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -14693,7 +14805,7 @@
         },
         {
           "path": ".github/workflows/ci.yml",
-          "sha256": "sha256:090b89d9810a80e33f857a87dac2b307bcd0aca55330d7c155b6f0bed9ab2985",
+          "sha256": "sha256:c556e18ce076f473f6b49e483f4da1abdf2a4227b680afb047ee85ae0242c727",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -14780,7 +14892,7 @@
         },
         {
           "path": ".github/workflows/ci.yml",
-          "sha256": "sha256:090b89d9810a80e33f857a87dac2b307bcd0aca55330d7c155b6f0bed9ab2985",
+          "sha256": "sha256:c556e18ce076f473f6b49e483f4da1abdf2a4227b680afb047ee85ae0242c727",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -14865,7 +14977,7 @@
         },
         {
           "path": ".github/workflows/ci.yml",
-          "sha256": "sha256:090b89d9810a80e33f857a87dac2b307bcd0aca55330d7c155b6f0bed9ab2985",
+          "sha256": "sha256:c556e18ce076f473f6b49e483f4da1abdf2a4227b680afb047ee85ae0242c727",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -14950,7 +15062,7 @@
         },
         {
           "path": ".github/workflows/ci.yml",
-          "sha256": "sha256:090b89d9810a80e33f857a87dac2b307bcd0aca55330d7c155b6f0bed9ab2985",
+          "sha256": "sha256:c556e18ce076f473f6b49e483f4da1abdf2a4227b680afb047ee85ae0242c727",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -15037,7 +15149,7 @@
         },
         {
           "path": ".github/workflows/ci.yml",
-          "sha256": "sha256:090b89d9810a80e33f857a87dac2b307bcd0aca55330d7c155b6f0bed9ab2985",
+          "sha256": "sha256:c556e18ce076f473f6b49e483f4da1abdf2a4227b680afb047ee85ae0242c727",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -16044,7 +16156,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -16219,7 +16331,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -16357,7 +16469,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -16492,7 +16604,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -16638,7 +16750,7 @@
       "specs": [
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -17060,7 +17172,7 @@
         },
         {
           "path": "src/store-contract.ts",
-          "sha256": "sha256:966f43a53b8ca1e801120b0516766b419bb1c0dfd6d868ba090f2002fbb04540",
+          "sha256": "sha256:979c959d060c130bb4d47ce67f08ed214e877475db64b8cb4ecf0c25927aad6b",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -17074,7 +17186,7 @@
         },
         {
           "path": "src/transport-contract.ts",
-          "sha256": "sha256:a87b7af4dd27932f76301c01463ea3e724b9f17190eb19563c44a21cabf3301b",
+          "sha256": "sha256:e2a89b016fc1d5eac7241890db8b1be352623e3b7ba42e23b8cee1745d09a23c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -17090,7 +17202,7 @@
         },
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -17289,7 +17401,7 @@
         },
         {
           "path": "examples/local-triage/host.ts",
-          "sha256": "sha256:8cbdb4322649ecd6ee64ddd03483e9ed164b12209d08b3d7a41bb6e4db3372ba",
+          "sha256": "sha256:46859a44fdd112f33dd4e60e0eb1a6a4e9b74dcb4fbc6095bd29a2d03724d83c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -17375,14 +17487,14 @@
         },
         {
           "path": "docs/local-triage.md",
-          "sha256": "sha256:734f51699a469f8ce15a76bcb87c25c318a6a5d4b9109df557488d6c15da2784",
+          "sha256": "sha256:2af940af929c255e56b8755fb9e9c04442015e98598fd5ef9513b25807b9c57a",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "spec/v1/application.md",
-          "sha256": "sha256:64c7486f2b23749002022a76dd9342d8278f3e87006f4906c53f2c7ceb5023e2",
+          "sha256": "sha256:05b83d4b2781cb05879181f6a62738d4d4fb97e13d69881d58339d069c5be9af",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -17440,7 +17552,7 @@
       "sources": [
         {
           "path": "package.json",
-          "sha256": "sha256:d2fe07eddba6b5fc24f4a78d69d7adf4aa279f78814faec0cc417dbc7d9967f7",
+          "sha256": "sha256:8e4fbb28c39fab7fca22f4883ad9f0b3c5df9df2a8c34fee442ee8993e676f3e",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -17482,7 +17594,7 @@
         },
         {
           "path": "src/algal_expr.wasm.json",
-          "sha256": "sha256:018e5b8261dfc8f3287a8cbaa2f764eab9ea0b36cc0307585e1bcad82de9f6fe",
+          "sha256": "sha256:de072c0861e2da179ea1b36869a13757fdca88484036888b043dafbd68cb57fc",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -17510,7 +17622,7 @@
         },
         {
           "path": "src/store-contract.ts",
-          "sha256": "sha256:966f43a53b8ca1e801120b0516766b419bb1c0dfd6d868ba090f2002fbb04540",
+          "sha256": "sha256:979c959d060c130bb4d47ce67f08ed214e877475db64b8cb4ecf0c25927aad6b",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -17524,7 +17636,7 @@
         },
         {
           "path": "src/transport-contract.ts",
-          "sha256": "sha256:a87b7af4dd27932f76301c01463ea3e724b9f17190eb19563c44a21cabf3301b",
+          "sha256": "sha256:e2a89b016fc1d5eac7241890db8b1be352623e3b7ba42e23b8cee1745d09a23c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -17575,7 +17687,7 @@
       "specs": [
         {
           "path": "README.md",
-          "sha256": "sha256:42f9aed06020def8e147240f1d381ec7b60f9dc36472636be236f7588ae37525",
+          "sha256": "sha256:66aed9b00f6e32c993bcade4bc2e1ba4d525dbd4485d141537624f264b8c6dc6",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -17775,14 +17887,14 @@
         },
         {
           "path": "site/grow-offline.ts",
-          "sha256": "sha256:d47f054e3d70ddd75cc979485855b34556af25d0cf85f2c15e323c7e07382f60",
+          "sha256": "sha256:2326f313b71ceae0a9dd1340ad27250e8a2045d54e0e50182a0fb40e428f4e5a",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "site/build.ts",
-          "sha256": "sha256:e39233ed3abdf0d78b863c3816f6fd1449e72e9f4ef86f80e4d4f849aad39d3e",
+          "sha256": "sha256:a27ff19ca83d3b63011ab43eb9c43a3ad8b2c9903b5147dc4ab36963ca2a0da4",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -17897,14 +18009,14 @@
         },
         {
           "path": "site/grow-offline.ts",
-          "sha256": "sha256:d47f054e3d70ddd75cc979485855b34556af25d0cf85f2c15e323c7e07382f60",
+          "sha256": "sha256:2326f313b71ceae0a9dd1340ad27250e8a2045d54e0e50182a0fb40e428f4e5a",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "site/build.ts",
-          "sha256": "sha256:e39233ed3abdf0d78b863c3816f6fd1449e72e9f4ef86f80e4d4f849aad39d3e",
+          "sha256": "sha256:a27ff19ca83d3b63011ab43eb9c43a3ad8b2c9903b5147dc4ab36963ca2a0da4",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -17932,14 +18044,14 @@
         },
         {
           "path": "package.json",
-          "sha256": "sha256:d2fe07eddba6b5fc24f4a78d69d7adf4aa279f78814faec0cc417dbc7d9967f7",
+          "sha256": "sha256:8e4fbb28c39fab7fca22f4883ad9f0b3c5df9df2a8c34fee442ee8993e676f3e",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "bun.lock",
-          "sha256": "sha256:d8f8e2d2d9533674d9f8864f30603346144c9432c7c6ec4b92966917f4c093b6",
+          "sha256": "sha256:ead77f94e03db3565f13262004de269c3f830333cc31cf0164e389beecae341a",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -18016,7 +18128,7 @@
       "sources": [
         {
           "path": "examples/local-triage/core.ts",
-          "sha256": "sha256:4e2e7de3ddbd14925735b5e2048bf5d1aa5137101c3ba605a3c67d72ea5f0c09",
+          "sha256": "sha256:7f999a51e4b48c5ae17dc85c6d7642ed1ea56734b00abb449441e1191ffc3d5e",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -18051,14 +18163,14 @@
         },
         {
           "path": "examples/browser-triage/controller.ts",
-          "sha256": "sha256:cc430bd645b4a1ae74bcd70c785398e06d18f2d3d01415c1ad7dcea4874c63c7",
+          "sha256": "sha256:90eb0729578493b8de108fbbadf92df7ec15f62026d08aa76ad174ad9fc0ac9c",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
         },
         {
           "path": "examples/browser-triage/controller.test.ts",
-          "sha256": "sha256:3b0112135068c3e3eaf4501c785dcdd955f6059f48d733369df570919cd79ecc",
+          "sha256": "sha256:417c26a4f307c2313aec53da62bbcdbc555a1f8bad8568b3d8347c1f491f513b",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
