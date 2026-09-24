@@ -17,7 +17,7 @@ use crate::application_memory::{
 use crate::canonical::{canonical, digest};
 use crate::contract::{Manifest, object};
 use crate::effects::Host;
-use crate::graph::{Transports, compile, interface_signature};
+use crate::graph::{Compiled, Transports, compile, interface_signature};
 use crate::scorer::check_scorer;
 use crate::store::Store;
 use crate::{Error, Result, foundry};
@@ -57,7 +57,7 @@ pub fn parse_evaluation_policy(input: &Value) -> Result<Value> {
             "requireHoldoutPass",
             "strictValidationImprovement",
         ],
-        &["research"],
+        &["research", "composition"],
     )?;
     app_tag(&v["contract"], "algal.application-evaluation-policy.v1")?;
     if v["requireHoldoutPass"] != true || v["strictValidationImprovement"] != true {
@@ -68,6 +68,11 @@ pub fn parse_evaluation_policy(input: &Value) -> Result<Value> {
     int(&v["maxModelCalls"], 0, MAX_EVALUATION_MODEL_CALLS)?;
     if let Some(research) = v.get("research") {
         app_ref(research)?;
+    }
+    if v.get("composition")
+        .is_some_and(|mode| mode.as_str() != Some("closed-pure-v1"))
+    {
+        return Err(fail("Invalid evaluation composition policy"));
     }
     app_json(input)
 }
@@ -299,6 +304,44 @@ pub(crate) fn pure_manifest(manifest: &Manifest) -> Result<()> {
                 )));
             }
         }
+    }
+    Ok(())
+}
+
+/// Only evaluation opts into local static composition. Proposal generation
+/// and old policies keep the original flat rule so their evidence replays.
+/// Compile first with no transports or tools: its occurrence/depth/byte
+/// bounds limit this complete walk, including inactive descendants.
+fn evaluation_manifest(manifest: &Manifest, store: &Store, policy: &Value) -> Result<()> {
+    if policy.get("composition").is_none() {
+        return pure_manifest(manifest);
+    }
+    let compiled = compile(
+        manifest.clone(),
+        &mut store.overlay(),
+        &Default::default(),
+        &Transports::new(),
+        0,
+    )?;
+    let mut pending: Vec<&Compiled> = vec![&compiled];
+    while let Some(current) = pending.pop() {
+        for cell in &current.manifest.cells {
+            match cell["kind"].as_str() {
+                Some("organism" | "each" | "repeat") => {
+                    if cell.get("via").is_some() {
+                        return Err(fail("Case-pure evaluation rejects transport references"));
+                    }
+                }
+                Some("input" | "const" | "fn" | "expr") => (),
+                _ => {
+                    return Err(fail(&format!(
+                        "Case-pure evaluation rejects {} cells",
+                        cell["kind"].as_str().unwrap_or("unknown")
+                    )));
+                }
+            }
+        }
+        pending.extend(current.children.values());
     }
     Ok(())
 }
@@ -725,17 +768,22 @@ fn verify_binding(
     }
     let old_entry = entrypoint(&incumbent.revision, &request.entrypoint)?;
     let new_entry = entrypoint(&candidate.revision, &request.entrypoint)?;
-    pure_manifest(
+    let policy = parse_evaluation_policy(&get_record(store, &request.policy)?)?;
+    evaluation_manifest(
         incumbent
             .manifests
             .get(&request.entrypoint)
             .ok_or_else(|| fail("Entrypoint manifest is missing or wrong-kind"))?,
+        store,
+        &policy,
     )?;
-    pure_manifest(
+    evaluation_manifest(
         candidate
             .manifests
             .get(&request.entrypoint)
             .ok_or_else(|| fail("Entrypoint manifest is missing or wrong-kind"))?,
+        store,
+        &policy,
     )?;
     let candidates = report["candidates"].as_array().cloned().unwrap_or_default();
     if !candidates
@@ -795,8 +843,8 @@ pub async fn evaluate_application_revision(
         .manifests
         .get(&request.entrypoint)
         .ok_or_else(|| fail("Entrypoint manifest is missing or wrong-kind"))?;
-    pure_manifest(old_manifest)?;
-    pure_manifest(next_manifest)?;
+    evaluation_manifest(old_manifest, store, &policy)?;
+    evaluation_manifest(next_manifest, store, &policy)?;
     let report = foundry::run(
         &[old_manifest.clone(), next_manifest.clone()],
         &cases,
@@ -891,6 +939,22 @@ pub async fn verify_application_evaluation(
         return Err(fail("Evaluation policy is not bound to candidate revision"));
     }
     let policy = parse_evaluation_policy(&get_record(store, &request.policy)?)?;
+    evaluation_manifest(
+        incumbent
+            .manifests
+            .get(&request.entrypoint)
+            .ok_or_else(|| fail("Entrypoint manifest is missing or wrong-kind"))?,
+        store,
+        &policy,
+    )?;
+    evaluation_manifest(
+        candidate
+            .manifests
+            .get(&request.entrypoint)
+            .ok_or_else(|| fail("Entrypoint manifest is missing or wrong-kind"))?,
+        store,
+        &policy,
+    )?;
     let cases = parse_evaluation_cases(&get_record(store, &request.cases)?)?;
     check_evaluation_case_bound(&cases, &policy)?;
     let scorer = parse_evaluation_scorer(&get_record(store, &request.scorer)?)?;
@@ -1017,10 +1081,32 @@ mod tests {
     }
 
     fn seed(store: &mut Store, candidate_program: Value) -> Fixture {
-        seed_with_max_cases(store, candidate_program, 8)
+        seed_manifest(
+            store,
+            expr_manifest("organism:candidate", candidate_program),
+            false,
+        )
     }
 
     fn seed_with_max_cases(store: &mut Store, candidate_program: Value, max_cases: u64) -> Fixture {
+        seed_fixture(
+            store,
+            expr_manifest("organism:candidate", candidate_program),
+            false,
+            max_cases,
+        )
+    }
+
+    fn seed_manifest(store: &mut Store, candidate_value: Value, composition: bool) -> Fixture {
+        seed_fixture(store, candidate_value, composition, 8)
+    }
+
+    fn seed_fixture(
+        store: &mut Store,
+        candidate_value: Value,
+        composition: bool,
+        max_cases: u64,
+    ) -> Fixture {
         let incumbent = store
             .put(
                 "manifests",
@@ -1032,9 +1118,7 @@ mod tests {
         let candidate = store
             .put(
                 "manifests",
-                &Manifest::parse(&expr_manifest("organism:candidate", candidate_program))
-                    .unwrap()
-                    .value,
+                &Manifest::parse(&candidate_value).unwrap().value,
             )
             .unwrap();
         let schema = put(
@@ -1055,10 +1139,11 @@ mod tests {
         );
         let views = put(store, json!({"contract":"algal.test-views.v1"}));
         let runtime = put(store, json!({"contract":"algal.test-runtime.v1"}));
-        let policy = put(
-            store,
-            json!({"contract":"algal.application-evaluation-policy.v1","maxCases":max_cases,"maxWork":1000000,"maxModelCalls":0,"requireHoldoutPass":true,"strictValidationImprovement":true}),
-        );
+        let mut policy_value = json!({"contract":"algal.application-evaluation-policy.v1","maxCases":max_cases,"maxWork":1000000,"maxModelCalls":0,"requireHoldoutPass":true,"strictValidationImprovement":true});
+        if composition {
+            policy_value["composition"] = json!("closed-pure-v1");
+        }
+        let policy = put(store, policy_value);
         let entrypoint = |manifest: &str| json!({"name":"run","manifest":manifest,"applicability":query,"maxGenerations":1,"capabilities":[],"queries":[query]});
         let revision1 = put(
             store,
@@ -1291,6 +1376,221 @@ mod tests {
                 .unwrap();
         assert_eq!(verified["verdict"], evaluation["verdict"]);
         assert!(admit_application_activation(&store, &json!({"evaluation":reference,"expectedState":fixture.state,"revision":fixture.revision2}), &Host::default()).await.is_ok());
+    }
+
+    fn composed(store: &mut Store, child: Manifest, kind: &str, key: &str) -> Manifest {
+        let child_ref = store.put("manifests", &child.value).unwrap();
+        let mut cells = vec![json!({"id":"src","kind":"input","outputs":{"value":"json"}})];
+        let mut edges = Vec::new();
+        if kind == "each" {
+            cells.push(json!({"id":"list","kind":"expr","inputs":{"value":"json"},"expr":{"contract":"algal.expr.v1","program":["list",["get","value"]]},"output":{"kind":"json","schema":{"type":"array"}}}));
+            edges.push(
+                json!({"from":{"cell":"src","port":"value"},"to":{"cell":"list","port":"value"}}),
+            );
+        }
+        let mut invocation = json!({"id":"child","kind":kind,"manifest":child_ref});
+        if kind == "each" {
+            invocation["over"] = json!("q");
+            invocation["maxItems"] = json!(2);
+        } else if kind == "repeat" {
+            invocation["maxRounds"] = json!(2);
+            invocation["carry"] = json!({"answer":"q"});
+        }
+        cells.push(invocation);
+        let program = if kind == "each" {
+            json!(["nth", ["get", "value"], 0])
+        } else {
+            json!(["get", "value"])
+        };
+        cells.push(json!({"id":"out","kind":"expr","inputs":{"value":"json"},"expr":{"contract":"algal.expr.v1","program":program},"output":{"kind":"json","schema":{"type":"string"}}}));
+        edges.push(json!({"from":{"cell":if kind == "each" {"list"} else {"src"},"port":if kind == "each" {"out"} else {"value"}},"to":{"cell":"child","port":"q"}}));
+        edges.push(
+            json!({"from":{"cell":"child","port":"answer"},"to":{"cell":"out","port":"value"}}),
+        );
+        Manifest::parse(&json!({"contract":"algal.organism.v1","key":key,"name":key,"interface":{"inputs":{"q":{"cell":"src","port":"value"}},"outputs":{"answer":{"cell":"out","port":"out"}}},"cells":cells,"edges":edges})).unwrap()
+    }
+
+    fn nested(store: &mut Store, leaf: Manifest) -> Manifest {
+        let each = composed(store, leaf, "each", "organism:pure-each");
+        let repeat = composed(store, each, "repeat", "organism:pure-repeat");
+        composed(store, repeat, "organism", "organism:pure-nested")
+    }
+
+    #[test]
+    fn composition_policy_is_exact_and_legacy_bytes_are_unchanged() {
+        let original = json!({"contract":"algal.application-evaluation-policy.v1","maxCases":8,"maxWork":1000000,"maxModelCalls":0,"requireHoldoutPass":true,"strictValidationImprovement":true});
+        assert_eq!(
+            canonical(&parse_evaluation_policy(&original).unwrap()).unwrap(),
+            canonical(&original).unwrap()
+        );
+        let mut policy = original.clone();
+        policy["composition"] = json!("closed-pure-v1");
+        assert_eq!(parse_evaluation_policy(&policy).unwrap(), policy);
+        policy["research"] = json!(hashed(&json!("research")));
+        assert_eq!(parse_evaluation_policy(&policy).unwrap(), policy);
+        for invalid in [
+            Value::Null,
+            json!(false),
+            json!(1),
+            json!(""),
+            json!("closed-pure-v2"),
+            json!({}),
+        ] {
+            policy["composition"] = invalid;
+            assert!(parse_evaluation_policy(&policy).is_err());
+        }
+        policy["composition"] = json!("closed-pure-v1");
+        policy["extra"] = json!(true);
+        assert!(parse_evaluation_policy(&policy).is_err());
+    }
+
+    #[tokio::test]
+    async fn closed_pure_composition_evaluates_replays_and_activates() {
+        let tmp = tempdir().unwrap();
+        let mut store = Store::open(tmp.path(), true).unwrap();
+        let program = json!([
+            "if",
+            ["eq", ["get", "value"], "v2"],
+            "v2-ok",
+            [
+                "if",
+                ["eq", ["get", "value"], "h1"],
+                "h1-ok",
+                ["get", "value"]
+            ]
+        ]);
+        // Repetition preserves the already transformed result. Other cases
+        // normalize to "ok" before reaching this reusable nested program.
+        let leaf = Manifest::parse(&expr_manifest("organism:composed-leaf", program)).unwrap();
+        let candidate = nested(&mut store, leaf);
+        let fixture = seed_manifest(&mut store, candidate.value.clone(), true);
+        let cases = get_record(&store, &fixture.cases).unwrap();
+        let mut cases = cases.clone();
+        cases["cases"][0]["args"]["q"] = json!("ok");
+        cases["cases"][1]["args"]["q"] = json!("ok");
+        let mut input = request(&fixture);
+        input["cases"] = json!(put(&mut store, cases));
+        let (reference, evaluation) = evaluate_application_revision(
+            &mut store,
+            &input,
+            &mut Host::default(),
+            &Transports::new(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(evaluation["verdict"]["status"], "accepted");
+        assert_eq!(
+            verify_application_evaluation(&store, &reference, &fixture.state, &Host::default())
+                .await
+                .unwrap(),
+            evaluation
+        );
+        let admitted = admit_application_activation(&store, &json!({"evaluation":reference,"expectedState":fixture.state,"revision":fixture.revision2}), &Host::default()).await.unwrap();
+        assert_eq!(admitted["revision"], fixture.revision2);
+        assert!(pure_manifest(&candidate).is_err());
+        let legacy = seed_manifest(&mut store, candidate.value, false);
+        assert!(
+            evaluate_application_revision(
+                &mut store,
+                &request(&legacy),
+                &mut Host::default(),
+                &Transports::new()
+            )
+            .await
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn closed_pure_composition_rejects_effects_transports_and_missing_children() {
+        let tmp = tempdir().unwrap();
+        let mut store = Store::open(tmp.path(), true).unwrap();
+        let policy = json!({"composition":"closed-pure-v1"});
+        let leaf =
+            Manifest::parse(&expr_manifest("organism:pure", json!(["get", "value"]))).unwrap();
+        let good = nested(&mut store, leaf.clone());
+        evaluation_manifest(&good, &store, &policy).unwrap();
+        for hidden in [
+            json!({"id":"hidden","kind":"agent","inputs":{"value":"json"},"prompt":"must not execute","view":{"inputs":["value"]},"output":{"kind":"text"}}),
+            json!({"id":"hidden","kind":"slot","name":"private","mode":"read","default":null}),
+            json!({"id":"hidden","kind":"store"}),
+            json!({"id":"hidden","kind":"load"}),
+            json!({"id":"hidden","kind":"spawn"}),
+            json!({"id":"hidden","kind":"tool","tool":"hidden.v1"}),
+            json!({"id":"hidden","kind":"recall","inputs":{"value":"json"},"query":{"contract":"algal.expr.v1","program":"query"}}),
+            json!({"id":"hidden","kind":"fn","fn":"unknown.v1"}),
+        ] {
+            let mut value = leaf.value.clone();
+            if hidden["kind"] == "agent" || hidden["kind"] == "recall" {
+                value["edges"].as_array_mut().unwrap().push(json!({"from":{"cell":"src","port":"value"},"to":{"cell":"hidden","port":"value"},"guard":{"expr":{"contract":"algal.expr.v1","program":false}}}));
+            }
+            value["cells"].as_array_mut().unwrap().push(hidden);
+            let candidate = nested(&mut store, Manifest::parse(&value).unwrap());
+            assert!(evaluation_manifest(&candidate, &store, &policy).is_err());
+        }
+        let mut via = good.value.clone();
+        via["cells"][1]["via"] = json!("local");
+        let via = Manifest::parse(&via).unwrap();
+        assert!(evaluation_manifest(&via, &store, &policy).is_err());
+        let mut missing = good.value;
+        missing["cells"][1]["manifest"] = json!(hashed(&json!("missing")));
+        assert!(evaluation_manifest(&Manifest::parse(&missing).unwrap(), &store, &policy).is_err());
+    }
+
+    #[tokio::test]
+    async fn pure_composition_keeps_root_budgets_and_expanded_compile_limits() {
+        let tmp = tempdir().unwrap();
+        let mut store = Store::open(tmp.path(), true).unwrap();
+        let policy = json!({"composition":"closed-pure-v1"});
+        let leaf =
+            Manifest::parse(&expr_manifest("organism:pure", json!(["get", "value"]))).unwrap();
+        for budgets in [
+            json!({"maxDepth":1}),
+            json!({"maxSteps":4}),
+            json!({"maxWork":100}),
+        ] {
+            let mut candidate = nested(&mut store, leaf.clone()).value;
+            candidate["budgets"] = budgets;
+            let fixture = seed_manifest(&mut store, candidate, true);
+            let (reference, evaluation) = evaluate_application_revision(
+                &mut store,
+                &request(&fixture),
+                &mut Host::default(),
+                &Transports::new(),
+            )
+            .await
+            .unwrap();
+            assert_eq!(evaluation["verdict"]["status"], "rejected");
+            assert_eq!(
+                verify_application_evaluation(&store, &reference, &fixture.state, &Host::default())
+                    .await
+                    .unwrap(),
+                evaluation
+            );
+        }
+        let mut deep = leaf.clone();
+        for i in 0..66 {
+            deep = composed(&mut store, deep, "organism", &format!("organism:depth-{i}"));
+        }
+        assert!(evaluation_manifest(&deep, &store, &policy).is_err());
+        let mut expanded = leaf;
+        for i in 0..11 {
+            let base = composed(
+                &mut store,
+                expanded,
+                "organism",
+                &format!("organism:expanded-{i}"),
+            );
+            let mut value = base.value;
+            let mut second = value["cells"][1].clone();
+            second["id"] = json!("second");
+            value["cells"].as_array_mut().unwrap().push(second);
+            value["edges"].as_array_mut().unwrap().push(
+                json!({"from":{"cell":"src","port":"value"},"to":{"cell":"second","port":"q"}}),
+            );
+            expanded = Manifest::parse(&value).unwrap();
+        }
+        assert!(evaluation_manifest(&expanded, &store, &policy).is_err());
     }
 
     #[tokio::test]

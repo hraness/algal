@@ -1,0 +1,5 @@
+program present_task(title: text, action: text) -> json {
+  budget { max_agent_calls: 0 }
+
+  return { title: title, recommendation: action, label: title + ": " + action }
+}

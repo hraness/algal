@@ -7,7 +7,7 @@ import { utf8Length } from "./utf8";
  * effect executors); lifecycle code can use the final admission as its CAS
  * boundary.
  */
-import { type OrganismManifest } from "./contract";
+import { manifestToJson, parseOrganismManifest, type OrganismManifest } from "./contract";
 import {
   applicationId, applicationInt, applicationJson, applicationList, applicationObject,
   applicationRef, applicationTag, getApplicationRecord, parseApplicationRevision,
@@ -21,7 +21,7 @@ import { runFoundry, type FoundryCase, type FoundryCaseResult, type FoundryRepor
 import { verifyFoundryReport } from "./foundry-verify";
 import { parseExprScorer, type ExprScorer } from "./expr";
 import { builtinRegistry, isBuiltinRegistry, type FnRegistry } from "./registry";
-import { compileOrganism, interfaceSignature } from "./graph";
+import { compileOrganism, interfaceSignature, type CompiledOrganism } from "./graph";
 import { parseRunReceipt } from "./run";
 import type { Executor } from "./effects";
 import type { Store } from "./store-contract";
@@ -38,6 +38,8 @@ export type EvaluationPolicy = {
   strictValidationImprovement: true;
   /** Optional immutable research admission policy; absence preserves legacy bytes. */
   research?: Digest;
+  /** Evaluation only. Absent policies retain the original flat-cell rule. */
+  composition?: "closed-pure-v1";
 };
 
 export type EvaluationCaseSet = {
@@ -123,11 +125,15 @@ function checkEvaluationCaseBound(cases: EvaluationCaseSet, policy: EvaluationPo
 }
 
 export function parseEvaluationPolicy(input: unknown): EvaluationPolicy {
-  const optional = input && typeof input === "object" && Object.hasOwn(input, "research") ? ["research"] : [];
+  const optional = ["research", "composition"].filter(key => input && typeof input === "object" && Object.hasOwn(input, key));
   const v = applicationObject(input, ["contract", "maxCases", "maxWork", "maxModelCalls", "requireHoldoutPass", "strictValidationImprovement", ...optional]);
   applicationTag(v.contract, "algal.application-evaluation-policy.v1");
   if (v.requireHoldoutPass !== true || v.strictValidationImprovement !== true) throw new Error("Adaptation policy cannot weaken acceptance");
-  return { contract: "algal.application-evaluation-policy.v1", maxCases: applicationInt(v.maxCases, 3, MAX_EVALUATION_CASES), maxWork: applicationInt(v.maxWork, 1, MAX_EVALUATION_WORK), maxModelCalls: applicationInt(v.maxModelCalls, 0, MAX_EVALUATION_MODEL_CALLS), requireHoldoutPass: true, strictValidationImprovement: true, ...(optional.length ? { research: applicationRef(v.research) } : {}) };
+  if (optional.includes("composition") && v.composition !== "closed-pure-v1") throw new Error("Invalid evaluation composition policy");
+  return { contract: "algal.application-evaluation-policy.v1", maxCases: applicationInt(v.maxCases, 3, MAX_EVALUATION_CASES), maxWork: applicationInt(v.maxWork, 1, MAX_EVALUATION_WORK), maxModelCalls: applicationInt(v.maxModelCalls, 0, MAX_EVALUATION_MODEL_CALLS), requireHoldoutPass: true, strictValidationImprovement: true,
+    ...(optional.includes("research") ? { research: applicationRef(v.research) } : {}),
+    ...(optional.includes("composition") ? { composition: "closed-pure-v1" as const } : {}),
+  };
 }
 export function parseEvaluationCases(input: unknown): EvaluationCaseSet {
   const v = applicationObject(input, ["contract", "cases"]); applicationTag(v.contract, "algal.application-evaluation-cases.v1");
@@ -202,6 +208,62 @@ export function pureManifest(manifest: OrganismManifest, fns: FnRegistry): void 
   for (const cell of manifest.cells) {
     if (cell.kind !== "input" && cell.kind !== "const" && cell.kind !== "fn" && cell.kind !== "expr") throw new Error(`Case-pure evaluation rejects ${cell.kind} cells`);
   }
+}
+
+/** Keep proposal generation and old evidence on the original flat rule. The
+ * opt-in evaluation rule checks the complete pinned local closure, including
+ * inactive branches, before any candidate executes. Compilation bounds every
+ * expanded occurrence; this walk neither resolves names nor fetches modules. */
+async function evaluationManifest(manifest: OrganismManifest, fns: FnRegistry, store: Store, policy: EvaluationPolicy, expected: Digest): Promise<void> {
+  if (policy.composition === undefined) return pureManifest(manifest, fns);
+  if (!isBuiltinRegistry(fns)) throw new Error("Case-pure evaluation requires the admitted builtin function registry");
+  if (digestCanonical(manifestToJson(manifest)) !== expected) throw new Error("Case-pure evaluation manifest digest mismatch");
+  const pending: CompiledOrganism[] = [await compileOrganism(manifest, fns, store)];
+  while (pending.length) {
+    const compiled = pending.pop()!;
+    for (const cell of compiled.manifest.cells) {
+      if (cell.kind === "organism" || cell.kind === "each" || cell.kind === "repeat") {
+        if (cell.via !== undefined) throw new Error("Case-pure evaluation rejects transport references");
+        if (digestCanonical(manifestToJson(compiled.children.get(cell.id)!.manifest)) !== cell.manifest) throw new Error("Case-pure evaluation child manifest digest mismatch");
+      } else if (cell.kind !== "input" && cell.kind !== "const" && cell.kind !== "fn" && cell.kind !== "expr") {
+        throw new Error(`Case-pure evaluation rejects ${cell.kind} cells`);
+      }
+    }
+    pending.push(...compiled.children.values());
+  }
+}
+
+/** Custom stores must not substitute a different child after preflight. Keep
+ * every later compilation and replay read bound to the same content digest;
+ * parsed copies also prevent mutation of a returned store-owned manifest. */
+function evaluationStore(store: Store, policy: EvaluationPolicy): Store {
+  if (policy.composition === undefined) return store;
+  const record = async (ref: Digest, read: (ref: Digest) => Promise<JsonValue | undefined>): Promise<JsonValue | undefined> => {
+    const value = await read(ref);
+    if (value !== undefined && digestCanonical(value) !== ref) throw new Error("Case-pure evaluation record digest mismatch");
+    return structuredClone(value);
+  };
+  return {
+    getManifest: async ref => {
+      const value = await store.getManifest(ref);
+      if (value === undefined) return undefined;
+      const manifest = parseOrganismManifest(manifestToJson(value));
+      if (digestCanonical(manifestToJson(manifest)) !== ref) throw new Error("Case-pure evaluation manifest digest mismatch");
+      return manifest;
+    },
+    putManifest: manifest => store.putManifest(manifest),
+    getReceipt: ref => record(ref, ref => store.getReceipt(ref)), putReceipt: value => store.putReceipt(value),
+    getValue: ref => record(ref, ref => store.getValue(ref)), putValue: value => store.putValue(value),
+    getEffect: (ref, executor) => store.getEffect(ref, executor), putEffect: (receipt, executor) => store.putEffect(receipt, executor),
+    getSlot: name => store.getSlot(name), setSlot: (name, value) => store.setSlot(name, value),
+  };
+}
+
+async function evaluationPolicy(store: Store, ref: Digest): Promise<EvaluationPolicy> {
+  const value = await optionalObject(store, ref);
+  const policy = parseEvaluationPolicy(value);
+  if (policy.composition !== undefined && digestCanonical(value) !== ref) throw new Error("Case-pure evaluation policy digest mismatch");
+  return policy;
 }
 function entrypoint(revision: ApplicationRevision, name: string): ApplicationRevision["entrypoints"][number] {
   const value = revision.entrypoints.find(item => item.name === name); if (!value) throw new Error(`Unknown application entrypoint ${name}`); return value;
@@ -306,10 +368,10 @@ function acceptance(report: FoundryReport, incumbent: Digest, candidate: Digest,
   return reasons.length ? { status: "rejected", reasons } : { status: "accepted", selectedManifest: candidate };
 }
 
-async function verifyBinding(store: Store, request: ApplicationEvaluationRequest, state: ApplicationState, report: FoundryReport, cases: EvaluationCaseSet, candidate: { revision: ApplicationRevision; manifests: Map<string, OrganismManifest> }, incumbent: { revision: ApplicationRevision; manifests: Map<string, OrganismManifest> }, fns: FnRegistry): Promise<void> {
+async function verifyBinding(store: Store, request: ApplicationEvaluationRequest, state: ApplicationState, report: FoundryReport, cases: EvaluationCaseSet, candidate: { revision: ApplicationRevision; manifests: Map<string, OrganismManifest> }, incumbent: { revision: ApplicationRevision; manifests: Map<string, OrganismManifest> }, fns: FnRegistry, policy: EvaluationPolicy): Promise<void> {
   if (state.application !== candidate.revision.application || candidate.revision.parent !== state.revision) throw new Error("Parent state does not bind candidate revision");
   const oldEntry = entrypoint(incumbent.revision, request.entrypoint), newEntry = entrypoint(candidate.revision, request.entrypoint);
-  pureManifest(incumbent.manifests.get(request.entrypoint)!, fns); pureManifest(candidate.manifests.get(request.entrypoint)!, fns);
+  await evaluationManifest(incumbent.manifests.get(request.entrypoint)!, fns, store, policy, oldEntry.manifest); await evaluationManifest(candidate.manifests.get(request.entrypoint)!, fns, store, policy, newEntry.manifest);
   if (!report.candidates.some(c => c.manifestDigest === oldEntry.manifest) || !report.candidates.some(c => c.manifestDigest === newEntry.manifest)) throw new Error("Foundry report population is not the bound incumbent/candidate");
   await reportCases(report, cases, oldEntry.manifest, newEntry.manifest, store);
 }
@@ -318,18 +380,22 @@ export async function evaluateApplicationRevision(store: Store, input: unknown, 
   const request = parseApplicationEvaluationRequest(input);
   const requestRef = await putApplicationRecord(store, request);
   const state = await getApplicationRecord(store, request.parentState, parseApplicationState);
-  const candidate = await loadRevision(store, request.candidateRevision), incumbent = await loadRevision(store, state.revision);
+  let candidate = await loadRevision(store, request.candidateRevision), incumbent = await loadRevision(store, state.revision);
   if (candidate.revision.parent !== state.revision) throw new Error("Candidate revision parent is not the application state revision");
   if (request.policy !== candidate.revision.evaluationPolicy) throw new Error("Evaluation policy is not bound to candidate revision");
-  const policy = parseEvaluationPolicy(await optionalObject(store, request.policy));
+  const policy = await evaluationPolicy(store, request.policy);
+  store = evaluationStore(store, policy);
+  if (policy.composition !== undefined) {
+    candidate = await loadRevision(store, request.candidateRevision); incumbent = await loadRevision(store, state.revision);
+  }
   const cases = parseEvaluationCases(await optionalObject(store, request.cases));
   checkEvaluationCaseBound(cases, policy);
   const scorerRecord = parseEvaluationScorer(await optionalObject(store, request.scorer));
   const old = entrypoint(incumbent.revision, request.entrypoint), next = entrypoint(candidate.revision, request.entrypoint);
-  pureManifest(incumbent.manifests.get(request.entrypoint)!, runtime.fns); pureManifest(candidate.manifests.get(request.entrypoint)!, runtime.fns);
+  await evaluationManifest(incumbent.manifests.get(request.entrypoint)!, runtime.fns, store, policy, old.manifest); await evaluationManifest(candidate.manifests.get(request.entrypoint)!, runtime.fns, store, policy, next.manifest);
   const report = await runFoundry({ candidates: [incumbent.manifests.get(request.entrypoint)!, candidate.manifests.get(request.entrypoint)!], cases: cases.cases, fns: runtime.fns, store, executors: runtime.executors ?? [], ...(scorerRecord.scorer ? { scorer: scorerRecord.scorer } : {}) });
   const verified = await verifyFoundryReport(report, store, runtime.fns); if (!verified.ok) throw new Error(`Foundry report failed verification: ${verified.mismatches.join("; ")}`);
-  await verifyBinding(store, request, state, report, cases, candidate, incumbent, runtime.fns);
+  await verifyBinding(store, request, state, report, cases, candidate, incumbent, runtime.fns, policy);
   const compatibility = await checkCompatibilityLoaded(store, incumbent, candidate);
   const compatibilityRef = await putApplicationRecord(store, compatibility);
   const foundryReportRef = await putApplicationRecord(store, report);
@@ -352,16 +418,22 @@ export async function verifyApplicationEvaluation(store: Store, evaluationRef: D
   }
   if (request.parentState !== expectedStateRef || evaluation.parentState !== expectedStateRef) throw new Error("Evaluation parent state is stale");
   const state = await getApplicationRecord(store, expectedStateRef, parseApplicationState);
-  const candidate = await loadRevision(store, request.candidateRevision), incumbent = await loadRevision(store, state.revision);
+  let candidate = await loadRevision(store, request.candidateRevision), incumbent = await loadRevision(store, state.revision);
   if (request.policy !== candidate.revision.evaluationPolicy) throw new Error("Evaluation policy is not bound to candidate revision");
-  const policy = parseEvaluationPolicy(await optionalObject(store, request.policy));
+  const policy = await evaluationPolicy(store, request.policy);
+  store = evaluationStore(store, policy);
+  if (policy.composition !== undefined) {
+    candidate = await loadRevision(store, request.candidateRevision); incumbent = await loadRevision(store, state.revision);
+  }
+  await evaluationManifest(incumbent.manifests.get(request.entrypoint)!, runtime.fns, store, policy, entrypoint(incumbent.revision, request.entrypoint).manifest);
+  await evaluationManifest(candidate.manifests.get(request.entrypoint)!, runtime.fns, store, policy, entrypoint(candidate.revision, request.entrypoint).manifest);
   const cases = parseEvaluationCases(await optionalObject(store, request.cases));
   checkEvaluationCaseBound(cases, policy);
   const scorerRecord = parseEvaluationScorer(await optionalObject(store, request.scorer));
   const reportValue = await optionalObject(store, evaluation.foundryReport); const report = reportValue as unknown as FoundryReport;
   const verified = await verifyFoundryReport(report, store, runtime.fns); if (!verified.ok) throw new Error(`Foundry evidence is invalid: ${verified.mismatches.join("; ")}`);
   if (!same(report.scorer ?? null, scorerRecord.scorer)) throw new Error("Foundry scorer is not bound to the evaluation request");
-  await verifyBinding(store, request, state, report, cases, candidate, incumbent, runtime.fns);
+  await verifyBinding(store, request, state, report, cases, candidate, incumbent, runtime.fns, policy);
   const compatibility = await checkCompatibilityLoaded(store, incumbent, candidate);
   const storedCompatibility = await getApplicationRecord(store, evaluation.compatibility, parseCompatibility);
   if (!same(storedCompatibility, compatibility)) throw new Error("Stored compatibility evidence changed");

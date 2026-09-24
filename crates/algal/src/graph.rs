@@ -211,160 +211,173 @@ fn compile_with_budget(
                 )?,
             );
         }
-        let sig = match cell["kind"].as_str().unwrap() {
-            "input" | "const" => {
-                let mut outputs = object(&cell["outputs"])?.clone();
-                for value in outputs.values_mut() {
-                    value.as_object_mut().unwrap().remove("value");
-                }
-                Signature {
-                    outputs: outputs.into_iter().collect(),
-                    ..Signature::default()
-                }
-            }
-            "fn" => registry::signature(cell["fn"].as_str().unwrap())?,
-            "tool" => tools
-                .get(cell["tool"].as_str().unwrap())
-                .cloned()
-                .ok_or_else(|| Error::new("TOOL_UNKNOWN", "tool is not host-admitted"))?,
-            "expr" => {
-                let mut output = json!({"type":cell["output"]["kind"]});
-                if let Some(labels) = cell["output"].get("labels") {
-                    output["labels"] = labels.clone();
-                }
-                if let Some(schema) = cell["output"].get("schema") {
-                    output["schema"] = schema.clone();
-                }
-                Signature {
-                    inputs: ports(cell.get("inputs").unwrap_or(&json!({})), false, false)?,
-                    outputs: port_map(json!({"out":output}))?,
-                    cost: 0,
-                }
-            }
-            "agent" | "classifier" | "gate" => {
-                let mut output = json!({"type":cell["output"]["kind"]});
-                if let Some(labels) = cell["output"].get("labels") {
-                    output["labels"] = labels.clone();
-                }
-                if let Some(schema) = cell["output"].get("schema") {
-                    output["schema"] = schema.clone();
-                }
-                Signature {
-                    inputs: ports(cell.get("inputs").unwrap_or(&json!({})), false, false)?,
-                    outputs: port_map(json!({"out":output}))?,
-                    cost: 0,
-                }
-            }
-            "decide" => Signature {
-                inputs: ports(cell.get("inputs").unwrap_or(&json!({})), false, false)?,
-                outputs: port_map(json!({"out":"json"}))?,
-                cost: 0,
-            },
-            "recall" => Signature {
-                inputs: ports(cell.get("inputs").unwrap_or(&json!({})), false, false)?,
-                outputs: port_map(json!({"out":"json","ref":"ref"}))?,
-                cost: 0,
-            },
-            "store" => Signature {
-                inputs: port_map(json!({"data":"json"}))?,
-                outputs: port_map(json!({"ref":"ref"}))?,
-                cost: 0,
-            },
-            "load" => Signature {
-                inputs: port_map(json!({"ref":"ref"}))?,
-                outputs: port_map(json!({"data":"json"}))?,
-                cost: 0,
-            },
-            "slot" => Signature {
-                inputs: if cell["mode"] == "write" {
-                    port_map(json!({"data":"json"}))?
-                } else {
-                    Ports::new()
-                },
-                outputs: port_map(json!({"data":"json"}))?,
-                cost: 0,
-            },
-            "spawn" => Signature {
-                inputs: port_map(
-                    json!({"manifest":"json","args":{"type":"json","optional":true}}),
-                )?,
-                outputs: port_map(json!({"data":"json","digest":"text"}))?,
-                cost: 0,
-            },
-            "organism" | "repeat" | "each" => {
-                let mut sig = interface_signature(&result.children[name])?;
-                if cell["kind"] == "repeat" {
-                    if let Some(carry) = cell["carry"].as_object() {
-                        for (output, input) in carry {
-                            let input = input.as_str().unwrap();
-                            if !sig.outputs.contains_key(output) || !sig.inputs.contains_key(input)
-                            {
-                                return Err(Error::new(
-                                    "INTERFACE_MISMATCH",
-                                    "carry must name interface ports",
-                                ));
-                            }
-                            let source = &sig.outputs[output];
-                            let target = &sig.inputs[input];
-                            if !compatible(source, target)
-                                || (target["many"] == true && source["many"] != true)
-                            {
-                                return Err(Error::new(
-                                    "TYPE_MISMATCH",
-                                    "repeat carry must preserve interface port types and cardinality",
-                                ));
-                            }
-                            sig.inputs.get_mut(input).unwrap()["optional"] = json!(true);
-                        }
-                    }
-                    if let Some(until) = cell.get("until") {
-                        let port = sig
-                            .outputs
-                            .get(until["output"].as_str().unwrap())
-                            .ok_or_else(|| {
-                                Error::new("INTERFACE_MISMATCH", "until port is missing")
-                            })?;
-                        if until.get("field").is_some() && port["type"] != "json" {
-                            return Err(Error::new("GUARD_INVALID", "until.field requires json"));
-                        }
-                        if until.get("field").is_none()
-                            && port["type"] == "choice"
-                            && port["labels"]
-                                .as_array()
-                                .is_some_and(|ls| !ls.contains(&until["equals"]))
-                        {
-                            return Err(Error::new(
-                                "GUARD_INVALID",
-                                "until must use a declared label",
-                            ));
-                        }
-                    }
-                }
-                if cell["kind"] == "each" {
-                    let over = cell["over"].as_str().unwrap();
-                    if !sig.inputs.contains_key(over) {
-                        return Err(Error::new(
-                            "INTERFACE_MISMATCH",
-                            "each.over must name an interface input",
-                        ));
-                    }
-                    if sig.inputs[over]["type"] == "cap" {
-                        return Err(Error::new(
-                            "TYPE_MISMATCH",
-                            "each cannot convert a json list into capability inputs; use a typed pass-through input",
-                        ));
-                    }
-                    sig.inputs.insert(over.to_owned(), json!({"type":"json"}));
-                    for output in sig.outputs.values_mut() {
-                        output["many"] = json!(true);
-                    }
-                }
-                sig
-            }
-            _ => return Err(invalid("unsupported cell")),
-        };
+        let sig = cell_signature(cell, &result.children, tools)?;
         result.signatures.insert(name.to_owned(), sig);
     }
+    validate_graph(result, tools)
+}
+
+// Keep large signature/validation temporaries off each recursive compilation
+// frame. The supported 64-level closure must fit an ordinary test thread stack,
+// including the depth-limit failure path; validation order is unchanged.
+#[inline(never)]
+fn cell_signature(
+    cell: &Value,
+    children: &BTreeMap<String, Compiled>,
+    tools: &ToolSignatures,
+) -> Result<Signature> {
+    let name = cell["id"].as_str().unwrap();
+    Ok(match cell["kind"].as_str().unwrap() {
+        "input" | "const" => {
+            let mut outputs = object(&cell["outputs"])?.clone();
+            for value in outputs.values_mut() {
+                value.as_object_mut().unwrap().remove("value");
+            }
+            Signature {
+                outputs: outputs.into_iter().collect(),
+                ..Signature::default()
+            }
+        }
+        "fn" => registry::signature(cell["fn"].as_str().unwrap())?,
+        "tool" => tools
+            .get(cell["tool"].as_str().unwrap())
+            .cloned()
+            .ok_or_else(|| Error::new("TOOL_UNKNOWN", "tool is not host-admitted"))?,
+        "expr" => {
+            let mut output = json!({"type":cell["output"]["kind"]});
+            if let Some(labels) = cell["output"].get("labels") {
+                output["labels"] = labels.clone();
+            }
+            if let Some(schema) = cell["output"].get("schema") {
+                output["schema"] = schema.clone();
+            }
+            Signature {
+                inputs: ports(cell.get("inputs").unwrap_or(&json!({})), false, false)?,
+                outputs: port_map(json!({"out":output}))?,
+                cost: 0,
+            }
+        }
+        "agent" | "classifier" | "gate" => {
+            let mut output = json!({"type":cell["output"]["kind"]});
+            if let Some(labels) = cell["output"].get("labels") {
+                output["labels"] = labels.clone();
+            }
+            if let Some(schema) = cell["output"].get("schema") {
+                output["schema"] = schema.clone();
+            }
+            Signature {
+                inputs: ports(cell.get("inputs").unwrap_or(&json!({})), false, false)?,
+                outputs: port_map(json!({"out":output}))?,
+                cost: 0,
+            }
+        }
+        "decide" => Signature {
+            inputs: ports(cell.get("inputs").unwrap_or(&json!({})), false, false)?,
+            outputs: port_map(json!({"out":"json"}))?,
+            cost: 0,
+        },
+        "recall" => Signature {
+            inputs: ports(cell.get("inputs").unwrap_or(&json!({})), false, false)?,
+            outputs: port_map(json!({"out":"json","ref":"ref"}))?,
+            cost: 0,
+        },
+        "store" => Signature {
+            inputs: port_map(json!({"data":"json"}))?,
+            outputs: port_map(json!({"ref":"ref"}))?,
+            cost: 0,
+        },
+        "load" => Signature {
+            inputs: port_map(json!({"ref":"ref"}))?,
+            outputs: port_map(json!({"data":"json"}))?,
+            cost: 0,
+        },
+        "slot" => Signature {
+            inputs: if cell["mode"] == "write" {
+                port_map(json!({"data":"json"}))?
+            } else {
+                Ports::new()
+            },
+            outputs: port_map(json!({"data":"json"}))?,
+            cost: 0,
+        },
+        "spawn" => Signature {
+            inputs: port_map(json!({"manifest":"json","args":{"type":"json","optional":true}}))?,
+            outputs: port_map(json!({"data":"json","digest":"text"}))?,
+            cost: 0,
+        },
+        "organism" | "repeat" | "each" => {
+            let mut sig = interface_signature(&children[name])?;
+            if cell["kind"] == "repeat" {
+                if let Some(carry) = cell["carry"].as_object() {
+                    for (output, input) in carry {
+                        let input = input.as_str().unwrap();
+                        if !sig.outputs.contains_key(output) || !sig.inputs.contains_key(input) {
+                            return Err(Error::new(
+                                "INTERFACE_MISMATCH",
+                                "carry must name interface ports",
+                            ));
+                        }
+                        let source = &sig.outputs[output];
+                        let target = &sig.inputs[input];
+                        if !compatible(source, target)
+                            || (target["many"] == true && source["many"] != true)
+                        {
+                            return Err(Error::new(
+                                "TYPE_MISMATCH",
+                                "repeat carry must preserve interface port types and cardinality",
+                            ));
+                        }
+                        sig.inputs.get_mut(input).unwrap()["optional"] = json!(true);
+                    }
+                }
+                if let Some(until) = cell.get("until") {
+                    let port = sig
+                        .outputs
+                        .get(until["output"].as_str().unwrap())
+                        .ok_or_else(|| Error::new("INTERFACE_MISMATCH", "until port is missing"))?;
+                    if until.get("field").is_some() && port["type"] != "json" {
+                        return Err(Error::new("GUARD_INVALID", "until.field requires json"));
+                    }
+                    if until.get("field").is_none()
+                        && port["type"] == "choice"
+                        && port["labels"]
+                            .as_array()
+                            .is_some_and(|ls| !ls.contains(&until["equals"]))
+                    {
+                        return Err(Error::new(
+                            "GUARD_INVALID",
+                            "until must use a declared label",
+                        ));
+                    }
+                }
+            }
+            if cell["kind"] == "each" {
+                let over = cell["over"].as_str().unwrap();
+                if !sig.inputs.contains_key(over) {
+                    return Err(Error::new(
+                        "INTERFACE_MISMATCH",
+                        "each.over must name an interface input",
+                    ));
+                }
+                if sig.inputs[over]["type"] == "cap" {
+                    return Err(Error::new(
+                        "TYPE_MISMATCH",
+                        "each cannot convert a json list into capability inputs; use a typed pass-through input",
+                    ));
+                }
+                sig.inputs.insert(over.to_owned(), json!({"type":"json"}));
+                for output in sig.outputs.values_mut() {
+                    output["many"] = json!(true);
+                }
+            }
+            sig
+        }
+        _ => return Err(invalid("unsupported cell")),
+    })
+}
+
+#[inline(never)]
+fn validate_graph(mut result: Compiled, tools: &ToolSignatures) -> Result<Compiled> {
     if result.manifest.value.get("interface").is_some() {
         interface_signature(&result)?;
     }
@@ -545,7 +558,8 @@ pub fn interface_args(manifest: &Manifest, inputs: &Value) -> Result<Value> {
 
 #[cfg(test)]
 mod compatibility_tests {
-    use super::compatible;
+    use super::{Transports, compatible, compile};
+    use crate::{contract::Manifest, store::Store};
     use serde_json::json;
 
     #[test]
@@ -559,5 +573,73 @@ mod compatibility_tests {
             assert!(!compatible(&list, &port));
             assert!(compatible(&port, &list));
         }
+    }
+
+    #[test]
+    fn composition_compilation_depth_boundary_fits_the_default_test_stack() {
+        let mut store = Store::default();
+        let mut manifest = Manifest::parse(&json!({
+            "contract":"algal.organism.v1", "key":"organism:depth-leaf", "name":"depth leaf",
+            "interface":{"inputs":{"value":{"cell":"input","port":"value"}},"outputs":{"value":{"cell":"input","port":"value"}}},
+            "cells":[{"id":"input","kind":"input","outputs":{"value":"json"}}],"edges":[],
+        })).unwrap();
+        for depth in 1..=65 {
+            let child = store.admit(&manifest).unwrap();
+            manifest = Manifest::parse(&json!({
+                "contract":"algal.organism.v1", "key":format!("organism:depth-{depth}"), "name":format!("depth {depth}"),
+                "interface":{"inputs":{"value":{"cell":"input","port":"value"}},"outputs":{"value":{"cell":"child","port":"value"}}},
+                "cells":[{"id":"input","kind":"input","outputs":{"value":"json"}},{"id":"child","kind":"organism","manifest":child}],
+                "edges":[{"from":{"cell":"input","port":"value"},"to":{"cell":"child","port":"value"}}],
+            })).unwrap();
+            if depth == 64 {
+                let compiled = compile(
+                    manifest.clone(),
+                    &mut store,
+                    &Default::default(),
+                    &Transports::new(),
+                    0,
+                )
+                .unwrap();
+                let mut current = &compiled;
+                let mut levels = 0;
+                while let Some(child) = current.children.get("child") {
+                    levels += 1;
+                    current = child;
+                }
+                assert_eq!(levels, 64);
+            }
+        }
+        let error = compile(
+            manifest,
+            &mut store,
+            &Default::default(),
+            &Transports::new(),
+            0,
+        )
+        .err()
+        .expect("depth 65 must fail without overflowing the thread stack");
+        assert_eq!(error.code, "DEPTH_EXCEEDED");
+        assert_eq!(error.message, "compile depth exceeds 64");
+    }
+
+    #[test]
+    fn composition_compilation_checks_each_cell_before_resolving_the_next_child() {
+        let mut store = Store::default();
+        let missing = crate::canonical::digest(&json!("missing child")).unwrap();
+        let manifest = Manifest::parse(&json!({
+            "contract":"algal.organism.v1", "key":"organism:compile-order", "name":"compile order",
+            "cells":[{"id":"unknown","kind":"fn","fn":"unknown.v1"},{"id":"child","kind":"organism","manifest":missing}],
+            "edges":[],
+        })).unwrap();
+        let error = compile(
+            manifest,
+            &mut store,
+            &Default::default(),
+            &Transports::new(),
+            0,
+        )
+        .err()
+        .expect("unknown function must fail before the missing child");
+        assert_eq!(error.code, "FN_UNKNOWN");
     }
 }

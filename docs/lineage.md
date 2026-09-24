@@ -10,7 +10,7 @@ disciplined participant.
 This page is a reference for that lineage and for the research results the
 [vision](vision.md) depends on. The resemblances are convergent, not a claim
 that ALGAL's design was derived from each source. Sources were consulted on
-2026-09-23.
+2026-09-23 and 2026-09-24.
 
 ## Four traditions and one addition
 
@@ -179,3 +179,45 @@ and offline verification across its TypeScript and Rust runtimes, and that a
 comparable design could be built on other workflow systems. The
 [comparison page](why-unique.md) gives the concrete differences, and the
 [vision](vision.md) states what evidence would settle the question.
+
+## Composition and durable change
+
+Several language and runtime designs inform how ALGAL could support larger
+programs. These are design references, not required dependencies. The
+[larger-program guide](scaling-programs.md) separates the mechanisms available
+in ALGAL from proposed language and library work.
+
+[Unison](https://www.unison-lang.org/docs/the-big-idea/) identifies definitions
+by their syntax and dependency hashes while keeping human names separately.
+That is a useful reference for readable imports that resolve to immutable
+programs. Its [abilities in function types](https://www.unison-lang.org/docs/language-reference/abilities-in-function-types/)
+also make required effects visible to callers. ALGAL's source names and
+compiler lowering have different identity rules; a binding rename can change
+its executable digest.
+
+[Elm's module guidance](https://guide.elm-lang.org/webapps/modules.html)
+organizes helpers around domain types and exposes a small public interface.
+Its [application architecture](https://guide.elm-lang.org/architecture/)
+separates state, messages, updates, and views. These suggest keeping a task's
+domain rules together while separating rendering and external effects.
+
+The WebAssembly Component Model's
+[WIT worlds](https://component-model.bytecodealliance.org/design/worlds.html)
+describe both provided interfaces and required imports. WIT
+[resources](https://component-model.bytecodealliance.org/design/wit.html)
+distinguish handles to external entities from copied data. Those boundaries
+are useful references for inspecting a program's host requirements and
+preserving ALGAL capability classes during composition.
+
+[Temporal's deployment guidance](https://github.com/temporalio/documentation/blob/main/docs/develop/safe-deployments.mdx)
+uses replay testing and workflow versioning to protect running work from
+incompatible code changes. For ALGAL, the corresponding design concern is
+keeping old program dependencies available and checking a successor before
+activation, with a separate migration when state changes.
+
+[Tardigrade](https://github.com/clavia-labs/tardigrade) composes agent behavior
+from components that consume an immutable event log. Live execution processes
+new events; recovery reconstructs state from the log. Its history also
+supports inspection and forks. This suggests incremental derived views and a
+shared explanation of enabled actions. Its external effects execute at least
+once; ALGAL's uncertain-effect reconciliation remains a separate requirement.

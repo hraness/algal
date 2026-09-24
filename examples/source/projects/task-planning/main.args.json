@@ -1,0 +1,10 @@
+{
+  "input": {
+    "tasks": [
+      { "id": "ship", "title": "Ship the task workspace", "status": "open", "urgency": 4, "impact": 5 },
+      { "id": "polish", "title": "Polish the empty state", "status": "open", "urgency": 1, "impact": 2 },
+      { "id": "backup", "title": "Export a backup", "status": "done", "urgency": 5, "impact": 5 }
+    ],
+    "weights": { "urgency": 2, "impact": 1 }
+  }
+}

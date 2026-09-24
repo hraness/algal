@@ -38,7 +38,7 @@ function fixture() {
 }
 
 describe("browser task controller", () => {
-  test("capture rejects a direct core write after journal verification", async () => {
+  test("capture rejects a head change between journal verification and rendering", async () => {
     const f = fixture(), initial = await f.controller.initialize();
     // The unchanged schedule first returns a coherent, fully checked snapshot.
     const baseline = await f.controller.capture();
@@ -47,9 +47,40 @@ describe("browser task controller", () => {
     const journalKey = `triage-journal-${hash(f.controller.application).slice(7, 39)}`;
     const savedJournal = await f.storage.store.getSlot(journalKey);
     const original = f.controller.core.withVerifiedSource.bind(f.controller.core);
-    let calls = 0, injectedHead: Digest | undefined;
+    let injectedHead: Digest | undefined;
+    // The checked journal and the rendered capture must come from one head.
+    // A copy that advances after its journal check is never reported as that
+    // checked history, and the failure stays read-only on the live store.
+    f.controller.core.withVerifiedSource = async (callback, extra = []) => original(async source => {
+      const loadSession = source.loadSession.bind(source);
+      source.loadSession = async sessionId => {
+        const changed = await source.command({ contract: "algal.triage-command.v1", expectedHead: initial.head, operation: hash("private-copy-writer"), action: { kind: "add", task: task("inside") } });
+        injectedHead = changed.head;
+        return loadSession(sessionId);
+      };
+      return callback(source);
+    }, extra);
+    f.forbidWrites();
+    await expect(f.controller.capture()).rejects.toThrow("Task head changed after journal verification");
+    expect(injectedHead).toBeDefined();
+    expect(injectedHead).not.toBe(initial.head);
+    expect(await f.storage.readHead(f.controller.application)).toEqual({ contract: "algal.application-head.v1", application: f.controller.application, state: initial.head });
+    expect(await f.storage.store.getSlot(journalKey)).toEqual(savedJournal);
+    expect(f.forbiddenWrites).toBe(0);
+  }, 30_000);
+  test("capture rejects an independent public core write without reconstructing the journal", async () => {
+    const f = fixture(), initial = await f.controller.initialize();
+    const baseline = await f.controller.capture();
+    expect(baseline.head).toBe(initial.head);
+    const journalKey = `triage-journal-${hash(f.controller.application).slice(7, 39)}`;
+    const savedJournal = await f.storage.store.getSlot(journalKey);
+    const original = f.controller.core.withVerifiedSource.bind(f.controller.core);
+    let injecting = false, injectedHead: Digest | undefined;
+    // A writer that bypasses the controller lands a history row without any
+    // saved request. The next verified snapshot sees it and stops, read-only.
     f.controller.core.withVerifiedSource = async (callback, extra = []) => {
-      if (++calls === 2) {
+      if (injectedHead === undefined && !injecting) {
+        injecting = true;
         const changed = await f.controller.core.command({ contract: "algal.triage-command.v1", expectedHead: initial.head, operation: hash("independent-public-core-writer"), action: { kind: "add", task: task("outside") } });
         injectedHead = changed.head;
         // All following capture work must remain read-only, including failure.
@@ -57,11 +88,14 @@ describe("browser task controller", () => {
       }
       return original(callback, extra);
     };
-    await expect(f.controller.capture()).rejects.toThrow("Task head changed after journal verification");
+    await expect(f.controller.capture()).rejects.toThrow("Task history lacks its saved request");
     expect(injectedHead).toBeDefined();
     expect(injectedHead).not.toBe(initial.head);
     expect(await f.storage.readHead(f.controller.application)).toEqual({ contract: "algal.application-head.v1", application: f.controller.application, state: injectedHead! });
     expect(await f.storage.store.getSlot(journalKey)).toEqual(savedJournal);
+    expect(f.forbiddenWrites).toBe(0);
+    // A fresh controller reads the same durable evidence and stops the same way.
+    await expect(new BrowserTriageController(f.storage).capture()).rejects.toThrow("Task history lacks its saved request");
     expect(f.forbiddenWrites).toBe(0);
   }, 30_000);
   for (const mutation of ["empty", "empty-records", "missing-state", "missing-receipt", "invalid-kind", "truncated-prefix", "wrong-application", "proposal-evaluation", "proposal-receipt"] as const) {
@@ -224,6 +258,42 @@ describe("browser task controller", () => {
     expect(fork.application).not.toBe(current.application); expect((await controller.capture()).head).toBe(current.head);
     await expect(BrowserTriageController.importBundle(destination, transfer, "task-fork")).rejects.toThrow("fresh");
     expect((await imported.capture()).head).toBe(fork.head);
+  });
+  test("each unchanged-head operation rereads receipt aliases instead of reusing earlier proofs", async () => {
+    for (const kind of ["getReceipt", "getValue"] as const) {
+      const f = fixture(), initial = await f.controller.initialize();
+      const transfer = await f.controller.exportBundle(), receipt = transfer.records.find(row => row.kind === "receipt")!.reference;
+      expect((await f.controller.capture()).head).toBe(initial.head);
+      f.hidden.add(`${kind}:${receipt}`);
+      await expect(f.controller.capture()).rejects.toThrow();
+      await expect(f.controller.act(initial.head, { kind: "add", task: task() })).rejects.toThrow();
+      expect(f.forbiddenWrites).toBe(0);
+      expect((await f.storage.readHead(f.controller.application) as { state: Digest }).state).toBe(initial.head);
+    }
+  });
+  test("the result capture rereads published evidence after journal settlement", async () => {
+    const source = new MemoryStore(); let armed = false, hideReceipts = false, forbiddenWrites = 0;
+    const store = new Proxy(source, {
+      get(target, key) {
+        if (key === "getReceipt") return async (ref: Digest) => hideReceipts ? undefined : target.getReceipt(ref);
+        if (key === "setSlot") return async (name: string, value: JsonValue) => {
+          await target.setSlot(name, value);
+          if (armed && name.startsWith("triage-journal-") && (value as { pending?: unknown }).pending === null) { armed = false; hideReceipts = true; }
+        };
+        if (["putValue", "putReceipt", "putManifest"].includes(String(key))) return async (value: never) => {
+          if (hideReceipts) { forbiddenWrites++; throw new Error("Attempted to recreate newly missing evidence"); }
+          return target[key as "putValue"](value);
+        };
+        const value = Reflect.get(target, key); return typeof value === "function" ? value.bind(target) : value;
+      },
+    }) as Store;
+    const storage = new MemoryApplicationStorage(store), controller = new BrowserTriageController(storage), initial = await controller.initialize(); armed = true;
+    await expect(controller.act(initial.head, { kind: "add", task: task() })).rejects.toThrow();
+    expect(forbiddenWrites).toBe(0);
+    expect((await storage.readHead(controller.application) as { state: Digest }).state).not.toBe(initial.head);
+    hideReceipts = false;
+    const recovered = await controller.recover();
+    expect(recovered.tasks).toEqual([task()]); expect(recovered.history).toHaveLength(2); expect(recovered.recovery).toBeNull();
   });
   test("interrupted fork copying cannot reopen as an empty application", async () => {
     const { controller } = fixture(), initial = await controller.initialize();
