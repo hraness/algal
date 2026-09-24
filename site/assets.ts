@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import type { BunPlugin } from "bun";
+import { normalizeSitePatternResets } from "./style-normalization";
 
 const FONT_EXTENSION = /\.(woff2?|ttf|otf)$/i;
 const CSS_URL = /url\(\s*(?:"([^"]+)"|'([^']+)'|([^\s)]+))\s*\)/g;
@@ -55,10 +56,16 @@ function selfHostedFonts(outdir: string): BunPlugin {
   };
 }
 
-export async function buildSiteStyles(outdir: string): Promise<Bun.BuildOutput> {
-  return Bun.build({
+export async function buildSiteStyles(outdir: string): Promise<Pick<Bun.BuildOutput, "success" | "logs">> {
+  const result = await Bun.build({
     entrypoints: [join(import.meta.dir, "styles.css")], outdir, target: "browser", minify: true,
     naming: { entry: "[name].[ext]", asset: "assets/[name]-[hash].[ext]" },
     plugins: [selfHostedFonts(outdir)],
   });
+  if (result.success) {
+    const stylesheet = join(outdir, "styles.css");
+    const css = await readFile(stylesheet, "utf8");
+    await writeFile(stylesheet, normalizeSitePatternResets(css));
+  }
+  return { success: result.success, logs: result.logs };
 }

@@ -11,8 +11,8 @@ const pageFiles = readdirSync(join(SITE, "pages")).filter(file => file.endsWith(
 const pages = Object.fromEntries(pageFiles.map(file => [file, readFileSync(join(SITE, "pages", file), "utf8")]));
 const allMarkup = `${chrome}\n${Object.values(pages).join("\n")}`;
 
-test("the site ships home, tour, use-cases, living software, browser evolution, and workbench pages", () => {
-  expect(pageFiles.sort()).toEqual(["grow.html", "home.html", "living.html", "tour.html", "use-cases.html", "workbench.html"]);
+test("the site ships home, tour, use-cases, living software, browser applications, and workbench pages", () => {
+  expect(pageFiles.sort()).toEqual(["grow.html", "home.html", "living.html", "tasks.html", "tour.html", "use-cases.html", "workbench.html"]);
 });
 
 test("every standard icon referenced by static markup is present in the sprite", () => {
@@ -30,6 +30,10 @@ test("every standard icon referenced by static markup is present in the sprite",
 
 test("shared appearance and generated evidence remain progressively discoverable", () => {
   expect(chrome).toContain('data-hraness-theme="paper"');
+  expect(chrome).toContain('data-palette="tokyo-night"');
+  expect(chrome).not.toContain('data-theme="light"');
+  expect(chrome).toContain('media="(prefers-color-scheme: light)" content="#e1e2e7"');
+  expect(chrome).toContain('media="(prefers-color-scheme: dark)" content="#1a1b26"');
   expect(chrome).toContain('data-hraness-marketing-preset="editorial"');
   expect(chrome.match(/data-hraness-appearance-menu/g)?.length).toBe(1);
   expect(chrome.indexOf('src="/appearance.js"')).toBeLessThan(chrome.indexOf('href="/styles.css"'));

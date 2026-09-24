@@ -1,13 +1,16 @@
 /** Static-shell caching is separate from authoritative application records.
  * The build pins every response byte; an incomplete update never takes over. */
-export function offlineWorkerSource(required: Record<string, string>, optional: Record<string, string>): string {
+export type OfflineShellScope = { path: string; cachePrefix: string };
+export function offlineWorkerSource(required: Record<string, string>, optional: Record<string, string>, scope: OfflineShellScope = { path: "/grow/", cachePrefix: "algal-grow-" }): string {
+  if (!/^\/[a-z][a-z0-9-]*\/$/.test(scope.path) || !/^[a-z][a-z0-9-]*-$/.test(scope.cachePrefix)) throw new Error("Invalid offline application scope");
   // Filesystem enumeration order varies by host. Version only the asset paths
   // and bytes, so identical builds produce identical workers on every host.
   const ordered = (assets: Record<string, string>) => Object.fromEntries(Object.keys(assets).sort().map(path => [path, assets[path]]));
-  const manifest = JSON.stringify({ required: ordered(required), optional: ordered(optional) });
+  const manifest = JSON.stringify({ required: ordered(required), optional: ordered(optional), root: scope.path });
   return `"use strict";
 const manifest = ${manifest};
-const VERSION = "algal-grow-" + ${JSON.stringify(new Bun.CryptoHasher("sha256").update(manifest).digest("hex"))};
+const VERSION = ${JSON.stringify(scope.cachePrefix)} + ${JSON.stringify(new Bun.CryptoHasher("sha256").update(manifest).digest("hex"))};
+const OWN_CACHE = new RegExp(${JSON.stringify(`^${scope.cachePrefix}[a-f0-9]{64}$`)});
 const assets = {...manifest.required, ...manifest.optional};
 const hex = bytes => Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, "0")).join("");
 async function retain(path) {
@@ -34,14 +37,14 @@ self.addEventListener("activate", event => event.waitUntil((async () => {
   // close. Only our exact versioned shell caches are eligible for pruning;
   // application IndexedDB records and inference caches are never touched.
   const names = await caches.keys();
-  await Promise.all(names.filter(name => /^algal-grow-[a-f0-9]{64}$/.test(name) && name !== VERSION).map(name => caches.delete(name)));
+  await Promise.all(names.filter(name => OWN_CACHE.test(name) && name !== VERSION).map(name => caches.delete(name)));
   await self.clients.claim();
 })()));
 self.addEventListener("fetch", event => {
   const url = new URL(event.request.url);
   if (event.request.method !== "GET" || url.origin !== self.location.origin) return;
-  const path = url.pathname === "/grow/" || url.pathname === "/grow/index.html" ? "/grow/" : url.pathname;
-  if (!Object.hasOwn(assets, path) || (url.search && path !== "/grow/")) return;
+  const path = url.pathname === manifest.root || url.pathname === manifest.root + "index.html" ? manifest.root : url.pathname;
+  if (!Object.hasOwn(assets, path) || (url.search && path !== manifest.root)) return;
   event.respondWith((async () => (await (await caches.open(VERSION)).match(path)) || await retain(path))());
 });
 self.addEventListener("message", event => {

@@ -4,7 +4,9 @@ There is a deeper shape hidden inside ALGAL: not just a workflow runner,
 but a substrate for organisms that live, reproduce, and evolve in a shared
 runtime. This is not yet fully built, but the v1 contract already contains the
 seeds of it. This document teases the idea apart and shows what is possible
-now under the existing safety invariants.
+now under the existing safety invariants. The [vision](vision.md) states the
+bet a habitat serves, and the [lineage](lineage.md) names the programmable
+environments it descends from.
 
 ## What a habitat is
 

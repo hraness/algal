@@ -7,7 +7,9 @@ promoting the ones that work.
 
 This document is the convergence of the parallel spikes: agent tools, Pareto
 benchmarks, live-model execution, habitats, and self-reproduction. It describes
-what an ALGAL civilization is and gives a first runnable host loop.
+what an ALGAL civilization is and gives a first runnable host loop. The
+[vision](vision.md) explains why cumulative construction, not endless
+mutation, is the outcome this loop is meant to produce.
 
 ## The four spikes
 

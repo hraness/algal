@@ -1,7 +1,22 @@
 <main id="main" class="hraness-marketing-page">
   <div class="intro-field hraness-marketing-field">
   <section class="hero hraness-marketing-hero" aria-labelledby="hero-title">
-    <div class="amoeba-field" aria-hidden="true"></div>
+    <div class="amoeba-field" aria-hidden="true" inert>
+      <div class="amoeba am-model" data-hraness-hero-item><span class="am-tag"><b>decide</b><i>text → choice</i></span></div>
+      <div class="amoeba am-pure" data-hraness-hero-item><span class="am-tag"><b>match</b><i>value → branch</i></span></div>
+      <div class="amoeba am-composition" data-hraness-hero-item><span class="am-tag"><b>each</b><i>list → map</i></span></div>
+      <div class="amoeba am-state" data-hraness-hero-item><span class="am-tag"><b>slot.read</b><i>key → value</i></span></div>
+      <div class="amoeba am-input" data-hraness-hero-item><span class="am-tag"><b>in</b><i>param: text</i></span></div>
+      <div class="amoeba am-effect" data-hraness-hero-item><span class="am-tag"><b>tool</b><i>cap → result</i></span></div>
+      <div class="amoeba am-model" data-hraness-hero-item><span class="am-tag"><b>generate</b><i>text → text</i></span></div>
+      <div class="amoeba am-pure" data-hraness-hero-item><span class="am-tag"><b>expr</b><i>fuel · bounded</i></span></div>
+      <div class="amoeba am-composition" data-hraness-hero-item><span class="am-tag"><b>spawn</b><i>manifest → run</i></span></div>
+      <div class="amoeba am-state" data-hraness-hero-item><span class="am-tag"><b>recall</b><i>query → memories</i></span></div>
+      <div class="amoeba am-composition" data-hraness-hero-item><span class="am-tag"><b>call</b><i>args → child</i></span></div>
+      <div class="amoeba am-state" data-hraness-hero-item><span class="am-tag"><b>wait</b><i>event → resume</i></span></div>
+      <div class="amoeba am-effect" data-hraness-hero-item><span class="am-tag"><b>gate</b><i>evidence → admit</i></span></div>
+      <div class="amoeba am-pure" data-hraness-hero-item><span class="am-tag"><b>emit</b><i>value → out</i></span></div>
+    </div>
     <p class="eyebrow"><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#terminal"></use></svg>Programming language and virtual machine</p>
     <h1 id="hero-title" class="hraness-marketing-hero__heading">The language for<br><em>living programs.</em></h1>
     <div class="hero-grid">
@@ -20,6 +35,15 @@
     <p class="under-note">The examples above are runs that the site build executed with scripted model answers and then replay-checked; nothing runs in your browser. Prerelease builds are available for macOS on Apple silicon and Linux x86_64.</p>
   </section>
   </div>
+
+  <section class="idea-section" id="idea" aria-labelledby="idea-title">
+    <div><p class="eyebrow">The idea</p><h2 id="idea-title" class="hraness-marketing-section__heading">Software that<br><em>accumulates competence.</em></h2></div>
+    <div class="idea-copy">
+      <p>The bet behind ALGAL is that a computer can keep tested ways of acting, not only produce new answers or new code. A model proposes a bounded, executable procedure. The procedure is checked, measured on declared cases, kept with its evidence, composed into larger procedures, and revised under rules the host sets. Useful work should leave the computer with a more capable, reusable way of doing the next piece of work.</p>
+      <p>Lisp made code into data. Emacs made the environment programmable from within. Smalltalk made it a medium for thought. ALGAL asks whether an AI can use such an environment to evolve its own methods under evidence, while the result stays understandable and changeable by the person who owns it. The mechanisms exist today; whether accumulated procedures make later work measurably better is the open question the project is organized around.</p>
+      <p><a href="/docs/vision/">Read the vision <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a><a href="/docs/lineage/">Where the idea comes from <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a></p>
+    </div>
+  </section>
 
   <section class="life-section" aria-labelledby="life-title">
     <div class="section-heading"><div><p class="eyebrow">Capabilities</p><h2 id="life-title" class="hraness-marketing-section__heading">Six things<br><em>a program can do.</em></h2></div><p>Each capability below is defined in the v1 specs (<code>algal.organism.v1</code>, <code>algal.process.v1</code>, and <code>algal.foundry.v1</code>). Each is implemented, runs within declared limits, and can be inspected.</p></div>
