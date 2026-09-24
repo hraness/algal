@@ -5,6 +5,10 @@ filtering, grouping, ordering and an editable reopening policy. The same capture
 state and typed commands drive its browser, Dioxus desktop and Ratatui terminal
 presentations. Schema v2 adds task categories through a replayable memory migration.
 
+The [browser task workspace](browser-tasks.md) runs this task model with
+IndexedDB storage and an offline page. The commands below use the filesystem
+host and its separate saved data.
+
 ## Open it
 
 From a source checkout with Bun installed:

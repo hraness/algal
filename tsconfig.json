@@ -31,6 +31,8 @@
     "site/living.ts",
     "site/workbench.ts",
     "site/grow.ts",
+    "site/tasks.ts",
+    "site/tasks-render.ts",
     "site/browser-inference.ts",
     "site/browser-inference-worker.ts",
     "examples/malleable-site/renderers/target",

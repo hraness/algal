@@ -1,0 +1,49 @@
+<main id="main" class="hraness-marketing-page living-page tasks-page">
+  <section class="living-intro" aria-labelledby="tasks-heading">
+    <div><p class="eyebrow">Preview / browser application</p><h1 id="tasks-heading">Tasks</h1></div>
+    <div class="living-intro-copy"><p class="lede">Save tasks in this browser. Preview a different ordering, grouping, or reopening rule before applying it to your list.</p><p class="living-local-note">The application runs on this device without an account or server-side runtime.</p></div>
+  </section>
+
+  <section id="tasks-root" class="living-workbench" aria-label="Local task application" aria-busy="true">
+    <noscript><p class="living-stage-note">Enable JavaScript to open your tasks. Task data stays in this browser; a connection is needed for the first visit.</p></noscript>
+    <div class="living-workbench-bar"><span class="living-file-label">Your task workspace</span><span id="tasks-capacity" class="living-runtime-label">Opening local tasks…</span></div>
+    <p id="tasks-status" class="living-status tasks-status" role="status" aria-live="polite"></p>
+    <div id="tasks-recovery" class="tasks-stale" hidden><strong>A saved operation needs recovery</strong><p>Check the saved operation before making another change. Recovery uses the original operation and does not submit a new task.</p><button id="tasks-recover" class="living-button" type="button">Recover saved operation</button></div>
+    <div id="tasks-content" hidden>
+      <div id="tasks-stale" class="tasks-stale" hidden><strong>Review your draft</strong><p id="tasks-stale-reason">The tasks or workflow changed. Your draft is preserved. Review the current list before using the draft with it.</p><button id="tasks-rebase" class="living-button" type="button">Use draft with current version</button></div>
+      <div id="tasks-draft-conflict" class="tasks-stale" hidden><strong>Another tab saved a draft</strong><p>Your edits are still in this tab. The saved draft is shown below. Replacing your draft discards this tab’s unsaved edits.</p><pre id="tasks-saved-draft"></pre><button id="tasks-load-draft" class="living-button" type="button">Replace with saved draft</button></div>
+      <div class="tasks-workspace">
+        <section class="tasks-list-panel" aria-labelledby="tasks-list-heading">
+          <div class="living-preview-heading"><h2 id="tasks-list-heading">Task list</h2><span id="tasks-sequence" class="living-small-label"></span></div>
+          <div class="tasks-filters"><label for="tasks-filter">Show<select id="tasks-filter"><option value="all">All tasks</option><option value="open">Open</option><option value="done">Done</option></select></label><label class="tasks-query" for="tasks-query">Filter titles<input id="tasks-query" type="search" maxlength="120" autocomplete="off"></label><button id="tasks-refresh" class="living-text-button" type="button">Refresh tasks</button></div>
+          <p id="tasks-ordering" class="living-fine"></p><p id="tasks-edit-note" class="living-fine" hidden>Save or discard your draft before editing another task.</p><div id="tasks-list"></div>
+        </section>
+        <form id="tasks-editor" class="tasks-editor" aria-labelledby="tasks-editor-heading">
+          <h2 id="tasks-editor-heading">New task</h2><div id="tasks-fields"></div>
+          <button id="tasks-submit" class="living-button living-button-primary" type="submit">Add task</button><p id="tasks-submit-reason" class="living-fine"></p>
+          <div class="living-actions"><button id="tasks-save" class="living-text-button" type="button">Save draft</button><button id="tasks-clear" class="living-text-button" type="button">Clear draft</button><button id="tasks-discard" class="living-text-button" type="button">Discard unsaved edits</button></div><p id="tasks-session-status" class="living-fine" role="status">Save your draft before closing.</p>
+        </form>
+      </div>
+
+      <section class="tasks-workflow" aria-labelledby="tasks-workflow-heading">
+        <div class="tasks-section-intro"><h2 id="tasks-workflow-heading">Change the workflow</h2><p>Choose a change, inspect its preview, then apply it. The checks verify that the task data and filters are preserved.</p></div>
+        <form id="tasks-workflow-form" class="tasks-workflow-fields">
+          <label for="tasks-sort">Order<select id="tasks-sort"><option value="priority">Priority</option><option value="title">Title</option><option value="created">Created</option></select></label>
+          <label for="tasks-group">Group<select id="tasks-group"><option value="none">None</option><option value="status">Status</option><option value="priority">Priority</option><option value="category">Category</option></select></label>
+          <label for="tasks-schema">Task fields<select id="tasks-schema"><option value="1">Tasks (v1)</option><option value="2">Tasks and categories (v2)</option></select></label>
+          <label for="tasks-reopen">Reopen completed tasks<select id="tasks-reopen"><option value="true">Allowed</option><option value="false">Disabled</option></select></label>
+          <button id="tasks-evaluate" class="living-button" type="submit">Preview workflow</button>
+        </form>
+        <div class="living-actions"><p id="tasks-workflow-status" class="living-fine" role="status"></p><button id="tasks-discard-workflow" class="living-text-button" type="button" disabled>Discard workflow edits</button></div>
+        <p class="living-fine">Adding categories upgrades saved tasks to v2 with the category <code>inbox</code>. This change cannot be reversed to v1. Your unfinished draft stays separate and needs review after a workflow change.</p>
+        <section id="tasks-preview" class="tasks-candidate" hidden aria-labelledby="tasks-candidate-heading"><div class="living-preview-heading"><h3 id="tasks-candidate-heading">Proposed workflow</h3><span id="tasks-candidate-state" class="living-small-label"></span></div><p id="tasks-candidate-description"></p><div id="tasks-candidate-view"></div><ul id="tasks-checks" class="tasks-checks"></ul><button id="tasks-adopt" class="living-button living-button-primary" type="button">Apply workflow</button></section>
+      </section>
+    </div>
+
+    <div class="living-tools">
+      <details class="living-detail" id="tasks-history-panel"><summary><span>Task and workflow history</span><span id="tasks-history-count" class="living-small-label"></span></summary><div class="living-detail-body"><p id="tasks-limits">Each workspace holds up to 32 tasks and 128 history steps. At the task limit, edits remain available. A full history blocks further task and workflow changes.</p><ol id="tasks-history" class="living-history"></ol></div></details>
+      <details class="living-detail" id="tasks-storage-panel"><summary><span>Offline use and backups</span></summary><div class="living-detail-body living-portability"><p id="tasks-offline-status">Preparing the application for offline use…</p><div class="living-actions"><button id="tasks-offline" class="living-button" type="button">Save for offline use</button><button id="tasks-export" class="living-button" type="button" disabled>Export tasks and history</button><label class="living-button living-file-button" for="tasks-import">Import into a fresh workspace<input id="tasks-import" type="file" accept="application/json,.json" disabled></label><button id="tasks-new" class="living-button" type="button">Create workspace</button><button id="tasks-raw-export" class="living-text-button" type="button">Export recovery records</button></div><p class="living-fine">Tasks, saved drafts, and workflow previews are stored in IndexedDB for this site. An export includes tasks and applied history; it excludes drafts and unapplied proposals. Imports accept files up to 8 MiB and create a separate workspace. Export before clearing browser storage, which browsers can also remove. Recovery records include all stored data and may include drafts.</p><p class="living-fine">Offline saving covers this application and its assets. Each workspace has its own URL; bookmark it or use Back to return. Other site pages need a connection.</p></div></details>
+      <details class="living-detail"><summary><span>Inspect the saved version</span></summary><div class="living-detail-body living-inspector"><dl><div><dt>Current state hash</dt><dd id="tasks-head"></dd></div><div><dt>Workflow version hash</dt><dd id="tasks-revision"></dd></div><div><dt>Task fields</dt><dd id="tasks-schema-status"></dd></div><div><dt>Task data hash</dt><dd id="tasks-memory"></dd></div></dl><p><a href="/docs/local-triage/">How task data and workflow changes work</a> · <a href="/grow/">Try the component editor</a></p></div></details>
+    </div>
+  </section>
+</main>

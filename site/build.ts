@@ -496,6 +496,11 @@ const workbench = await buildWorkbenchFixture();
 replacements.WORKBENCH_SURFACE = renderSurfaceHtml(workbench.capture.view);
 
 const pages: { file: string; out: string; meta: SitePageMeta }[] = [
+  { file: "pages/tasks.html", out: "tasks/index.html", meta: {
+    page: "tasks", path: "/tasks/", title: "Tasks in your browser · ALGAL",
+    description: "Keep tasks and drafts in your browser, change their sorting and grouping, and add categories without losing existing task data.",
+    ogTitle: "Tasks in your browser · ALGAL",
+  } },
   { file: "pages/grow.html", out: "grow/index.html", meta: {
     page: "grow", path: "/grow/", title: "Evolve a component in your browser · ALGAL",
     description: "Change a component’s content and layout with local rules, inspect each proposal, and save its history in your browser. WebGPU AI is optional.",
@@ -554,7 +559,7 @@ const DOC_GROUPS: { title: string; pages: string[] }[] = [
   { title: "Start here", pages: ["native-release", "native-workbench", "source-language", "vm"] },
   { title: "Concepts", pages: ["why-unique", "algal-design", "design", "agent-loop-and-organism", "programmable-applications", "application-host-adapters", "executors", "diagrams", "repair"] },
   { title: "Life and selection", pages: ["habitats", "civilization"] },
-  { title: "Applications and workflows", pages: ["use-cases", "when-algal-wins", "browser-grow", "browser-inference", "malleable-site", "malleable-workbench", "local-triage", "adaptive-inventory", "agent-tool", "coding-harness", "coding-operations", "pr-shepherd"] },
+  { title: "Applications and workflows", pages: ["use-cases", "when-algal-wins", "browser-grow", "browser-tasks", "browser-inference", "malleable-site", "malleable-workbench", "local-triage", "adaptive-inventory", "agent-tool", "coding-harness", "coding-operations", "pr-shepherd"] },
 ];
 const DOC_SLUGS = DOC_GROUPS.flatMap(group => group.pages);
 const SPEC_SLUGS = ["organism", "expr", "foundry", "search", "bench", "mailbox", "process", "process-evidence", "process-journal", "application", "coding-job", "coding-job-v2", "coding-operation"];
@@ -613,6 +618,8 @@ await mkdir(join(DIST, "receipts"), { recursive: true });
 await mkdir(join(DIST, "living"), { recursive: true });
 await mkdir(join(DIST, "grow"), { recursive: true });
 await cp(join(SITE, "grow.css"), join(DIST, "grow.css"));
+await mkdir(join(DIST, "tasks"), { recursive: true });
+await cp(join(SITE, "tasks.css"), join(DIST, "tasks.css"));
 await mkdir(join(DIST, "workbench"), { recursive: true });
 await cp(join(SITE, "workbench.css"), join(DIST, "workbench.css"));
 await writeFile(join(DIST, "workbench/capture.json"), JSON.stringify(workbench.capture) + "\n");
@@ -646,7 +653,7 @@ const browserScripts = await Bun.build({
   naming: { entry: "[name].js", asset: "assets/[name]-[hash].[ext]" },
 });
 const surfaceModule = await Bun.build({
-  entrypoints: [join(SITE, "living.ts"), join(SITE, "workbench.ts"), join(SITE, "grow.ts")], outdir: DIST,
+  entrypoints: [join(SITE, "living.ts"), join(SITE, "workbench.ts"), join(SITE, "grow.ts"), join(SITE, "tasks.ts")], outdir: DIST,
   target: "browser", format: "esm", minify: true,
   naming: { entry: "[name].js" },
 });
@@ -893,21 +900,25 @@ await emitMarkdownSection({
 });
 
 // Generated sitemap covers every emitted page.
-const sitemapUrls = ["/", "/tour/", "/use-cases/", "/living/", "/grow/", "/workbench/", "/docs/", ...DOC_SLUGS.map(slug => `/docs/${slug}/`), ...SPEC_SLUGS.map(slug => `/docs/spec/${slug}/`), ...contentSectionUrls];
+const sitemapUrls = ["/", "/tour/", "/use-cases/", "/living/", "/grow/", "/tasks/", "/workbench/", "/docs/", ...DOC_SLUGS.map(slug => `/docs/${slug}/`), ...SPEC_SLUGS.map(slug => `/docs/spec/${slug}/`), ...contentSectionUrls];
 await writeFile(join(DIST, "sitemap.xml"), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemapUrls.map(url => `  <url><loc>https://algal.computer${url}</loc></url>`).join("\n")}\n</urlset>\n`);
 
-// Scope the worker to /grow/. Required assets qualify the rule-driven app;
-// the optional inference worker is cached only after an explicit model load.
-const offlineAssets = ["styles.css", "living.css", "grow.css", "appearance.js", "client.js", "viewer.js", "grow.js", "icons.svg", "algal-mark.svg", "favicon.svg", "living/algal_expr.wasm"];
+// Each browser application owns a route and cache namespace. Neither worker
+// can prune the other's versions. Only grow offers the optional model bundle.
+const offlineAssets = ["styles.css", "living.css", "appearance.js", "client.js", "viewer.js", "icons.svg", "algal-mark.svg", "favicon.svg", "living/algal_expr.wasm"];
 for (const path of await readdir(join(DIST, "assets"), { recursive: true })) {
   if ((await Bun.file(join(DIST, "assets", path)).exists())) offlineAssets.push(`assets/${path}`);
 }
-const offlineRequired: Record<string, string> = {};
-for (const path of ["grow/index.html", ...offlineAssets]) {
-  offlineRequired[path === "grow/index.html" ? "/grow/" : `/${path}`] = new Bun.CryptoHasher("sha256").update(await Bun.file(join(DIST, path)).arrayBuffer()).digest("hex");
+async function emitOfflineShell(application: "grow" | "tasks", optional: string[] = []): Promise<void> {
+  const required: Record<string, string> = {}, extras: Record<string, string> = {};
+  const hashAsset = async (path: string) => new Bun.CryptoHasher("sha256").update(await Bun.file(join(DIST, path)).arrayBuffer()).digest("hex");
+  for (const path of [`${application}/index.html`, `${application}.css`, `${application}.js`, ...offlineAssets]) {
+    required[path === `${application}/index.html` ? `/${application}/` : `/${path}`] = await hashAsset(path);
+  }
+  for (const path of optional) extras[`/${path}`] = await hashAsset(path);
+  await writeFile(join(DIST, application, "sw.js"), offlineWorkerSource(required, extras, { path: `/${application}/`, cachePrefix: `algal-${application}-` }));
 }
-const inferencePath = "grow/browser-inference-worker.js";
-const offlineOptional = { [`/${inferencePath}`]: new Bun.CryptoHasher("sha256").update(await Bun.file(join(DIST, inferencePath)).arrayBuffer()).digest("hex") };
-await writeFile(join(DIST, "grow/sw.js"), offlineWorkerSource(offlineRequired, offlineOptional));
+await emitOfflineShell("grow", ["grow/browser-inference-worker.js"]);
+await emitOfflineShell("tasks");
 
 console.log(`site built → ${DIST} (${manifests.size + 1} structural diagrams, ${childViews.length + 1} focused views, ${verifiedRuns} replay-checked executions, 1 checked authoring error, ${pages.length + DOC_SLUGS.length + SPEC_SLUGS.length + contentSectionUrls.length + 1} pages)`);
