@@ -74,7 +74,7 @@ export const RUN_CONTRACT = "algal.run.v1" as const;
  * It is not the package version — bump it only with a receipt-format change. */
 export const RUNTIME_VERSION = "0.1.0" as const;
 
-const WORK = {
+export const WORK = {
   activation: 100,
   effectBase: 500,
   perContextByte: 1,
