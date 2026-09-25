@@ -103,6 +103,72 @@ test("record declarations are part of the checked interface", async () => {
   expect(drift.drift.find(item => item.kind === "interface")).toMatchObject({ subject: "score.algal" });
 });
 
+const planEntry = `${import.meta.dir}/plan.algal`;
+
+test("the plan checks a list of nested records with allowed values and bounds before scoring", async () => {
+  const project = await loadSourceProject(planEntry), args = await fixture("plan.args.json");
+  expect(Object.keys(project.project.units)).toEqual(["plan.algal", "score.algal"]);
+  expect(project.analysis).toEqual({ maxAgentCalls: 0, requiredDepth: 1 });
+  const root = project.manifest.cells.find(cell => cell.id === "input");
+  expect(root?.kind === "input" && root.outputs.tasks).toEqual({ type: "json", schemaVersion: 2, schema: { type: "array", items: {
+    type: "object", required: ["id", "impact", "owner", "status", "title", "urgency"],
+    properties: {
+      id: { type: "string" }, title: { type: "string" },
+      urgency: { type: "number", minimum: 0, maximum: 5 }, impact: { type: "number", minimum: 0, maximum: 5 },
+      status: { type: "string", enum: ["blocked", "done", "open"] },
+      owner: { type: "object", required: ["name", "team"], properties: { name: { type: "string" }, team: { type: "string", enum: ["design", "platform", "support"] } } },
+      notes: { type: "string" },
+    },
+  } } });
+  expect(root?.kind === "input" && root.outputs.weights).toEqual({ type: "json", schemaVersion: 2, schema: {
+    type: "object", required: ["impact", "urgency"], properties: { urgency: { type: "number", minimum: 0, maximum: 10 }, impact: { type: "number", minimum: 0, maximum: 10 } } } });
+  // The reused scorer keeps its own digest; only the plan uses schema version 2.
+  const scoreProject = await loadSourceProject(entry);
+  expect(project.project.units["score.algal"]!.manifestDigest).toBe(scoreProject.project.units["score.algal"]!.manifestDigest);
+  const store = await install(project), receipt = await execute(project, args, store);
+  expect(receipt.outcome).toBe("complete");
+  expect(receipt.cells.result!.outputs!.out).toEqual([
+    { id: "ship", title: "Ship the task workspace", total: 13, ready: true },
+    { id: "polish", title: "Polish the empty state", total: 4, ready: false },
+    { id: "backup", title: "Export a backup", total: 15, ready: false },
+  ]);
+  const bundle = await packOrganism(project.manifest, store), portable = new MemoryStore();
+  await unpackBundle(bundle, portable);
+  expect(await execute(project, args, portable)).toEqual(receipt);
+});
+
+test("each malformed plan fails at the root parameter before any task is scored", async () => {
+  const project = await loadSourceProject(planEntry), args = await fixture("plan.args.json");
+  const tasks = args.input!.tasks as JsonValue[] as Record<string, JsonValue>[];
+  const edit = (index: number, fields: Record<string, JsonValue>) => tasks.map((task, i) => i === index ? { ...task, ...fields } : task);
+  const malformed = await execute(project, await fixture("plan.malformed.args.json"));
+  expect(malformed.failure).toEqual({ code: "TYPE_MISMATCH", message: "item 1: number above maximum", path: "input" });
+  for (const [input, message] of [
+    [{ tasks: tasks[0]! }, "expected array"],
+    [{ tasks: [...tasks.slice(0, 2), "backup"] }, "item 2: expected object"],
+    [{ tasks: edit(1, { status: "later" }) }, "item 1: expected an allowed value"],
+    [{ tasks: edit(0, { impact: -1 }) }, "item 0: number below minimum"],
+    [{ tasks: edit(2, { owner: { name: "Sam", team: "sales" } }) }, "item 2: expected an allowed value"],
+    [{ tasks: edit(0, { owner: { team: "platform" } }) }, "item 0: missing required field"],
+    [{ weights: { urgency: 11, impact: 1 } }, "number above maximum"],
+  ] as const) {
+    const receipt = await execute(project, { input: { ...args.input, ...input as Record<string, JsonValue> } });
+    expect(receipt.failure).toEqual({ code: "TYPE_MISMATCH", message, path: "input" });
+    expect(Object.keys(receipt.cells)).toEqual(["input"]);
+  }
+});
+
+test("the plan's allowed values and bounds are part of its checked interface", async () => {
+  const project = await loadSourceProject(planEntry);
+  const modules = project.compilerOptions.modules;
+  const lock = await createSourceLock(project.source, project.compilerOptions);
+  const widened = project.source.replace('"open", "blocked", "done"', '"open", "blocked", "done", "archived"');
+  const drift = await verifySourceLock(widened, { entry: project.entry, modules: { ...modules, [project.entry]: widened } }, lock);
+  expect(drift.ok).toBe(false);
+  expect(drift.drift.find(item => item.kind === "interface")).toMatchObject({ subject: "plan.algal" });
+  expect(drift.drift.some(item => item.subject === "score.algal")).toBe(false);
+});
+
 test("check reports the typed project with the usual source bounds", async () => {
   const dir = await mkdtemp(join(tmpdir(), "algal-typed-tasks-"));
   try {

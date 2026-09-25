@@ -401,9 +401,9 @@ show recorded cell states and are bound to the exact manifest and receipt.
 execution consistency; it does not establish that a model answer is true or
 attest to a provider. [Diagram format and lifecycle views](docs/diagrams.md).
 
-The source front end supports immutable values, pure expressions, record types,
-exhaustive choices, decisions, generation, budgets, local imports, named calls,
-and bounded `each`. Tools, waits, advanced loops, and evolution remain available through the
+The source front end supports immutable values, pure expressions, record types
+with lists, allowed values, and number ranges, exhaustive choices, decisions,
+generation, budgets, local imports, named calls, and bounded `each`. Tools, waits, advanced loops, and evolution remain available through the
 full manifest API. No
 executable statechart syntax is claimed. Existing wire identifiers, manifest
 digests, and receipts remain unchanged.
@@ -573,9 +573,12 @@ Edges connect a producer port to a consumer port. Ports are typed (`text`,
 `json`, `choice`, `ref`, `cap`). A `cap` declares its exact capability class,
 feeds only the same class, and cannot be produced by `const` or widened into
 `json`; authority enters through host args or trusted host drivers and stays
-structural. A `json` port may declare a bounded `schema`
-(`{"type","required","properties"}`, depth ≤ 4) — a delivered record that
-violates it fails the consumer's activation, routable through `on:"fail"`.
+structural. A `json` port may declare a limited `schema`
+(`{"type","required","properties"}`, depth ≤ 4); with `"schemaVersion": 2` it
+also checks `items`, `enum`, `minimum`, and `maximum`, nested up to eight
+levels ([JSON schemas](spec/v1/organism.md#json-schemas)). A delivered record
+that violates the schema fails the consumer's activation, routable through
+`on:"fail"`.
 Guarded edges fire only when the produced choice equals the
 guard label — or, on a `json` producer, when `guard.field` of the delivered
 record strictly equals `guard.equals`, so routing can depend on a structured

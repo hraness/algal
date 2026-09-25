@@ -1,0 +1,96 @@
+[
+  {
+    "name": "list-of-records",
+    "schema": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "urgency"],
+        "properties": {
+          "id": { "type": "string" },
+          "status": { "type": "string", "enum": ["open", "done"] },
+          "urgency": { "type": "integer", "minimum": 0, "maximum": 5 },
+          "tags": { "type": "array", "items": { "type": "string", "enum": ["ops", "ux"] } },
+          "owner": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string" }, "team": { "type": "string", "enum": ["a", "b"] } } }
+        }
+      }
+    },
+    "good": [
+      [],
+      [{ "id": "a", "status": "open", "urgency": 0 }, { "id": "b", "status": "done", "urgency": 5, "tags": ["ux"], "owner": { "name": "N", "team": "b" }, "extra": true }]
+    ],
+    "bad": [
+      [{ "id": "a" }, "expected array"],
+      [[{ "id": "a", "status": "open", "urgency": 1 }, "b"], "item 1: expected object"],
+      [[{ "id": "a", "status": "open", "urgency": 1 }, { "id": "b", "urgency": 1 }], "item 1: missing required field"],
+      [[{ "id": "a", "status": "later", "urgency": 1 }], "item 0: expected an allowed value"],
+      [[{ "id": "a", "status": "open", "urgency": 6 }], "item 0: number above maximum"],
+      [[{ "id": "a", "status": "open", "urgency": -1 }], "item 0: number below minimum"],
+      [[{ "id": "a", "status": "open", "urgency": 1.5 }], "item 0: expected integer"],
+      [[{ "id": "a", "status": "open", "urgency": 1, "tags": ["ux", "sales"] }], "item 0: item 1: expected an allowed value"],
+      [[{ "id": "a", "status": "open", "urgency": 1, "owner": {} }], "item 0: missing required field"],
+      [[{ "id": "a", "status": "open", "urgency": 1, "owner": { "name": "N", "team": "c" } }], "item 0: expected an allowed value"],
+      [[{ "id": 1, "status": "later", "urgency": 9 }], "item 0: expected string"],
+      [[{ "id": "a", "status": "later", "urgency": 9, "owner": [] }], "item 0: expected object"]
+    ]
+  },
+  {
+    "name": "nested-lists",
+    "schema": { "type": "array", "items": { "type": "array", "items": { "type": "number", "maximum": 1 } } },
+    "good": [[[0, 1], []]],
+    "bad": [
+      [[[0], [1, 2]], "item 1: item 1: number above maximum"],
+      [[[0], 3], "item 1: expected array"]
+    ]
+  },
+  {
+    "name": "canonical-allowed-values",
+    "schema": { "type": ["number", "string", "null", "boolean"], "enum": [0, 1, "1", null, false] },
+    "good": [0, -0, 1, 1.0, "1", null, false],
+    "bad": [
+      [2, "expected an allowed value"],
+      ["0", "expected an allowed value"],
+      [true, "expected an allowed value"]
+    ]
+  },
+  {
+    "name": "structured-values-never-allowed",
+    "schema": { "type": ["object", "array", "string"], "enum": ["x"] },
+    "good": ["x"],
+    "bad": [
+      [{}, "expected an allowed value"],
+      [["x"], "expected an allowed value"]
+    ]
+  },
+  {
+    "name": "type-before-allowed-values",
+    "schema": { "type": "string", "enum": ["x"] },
+    "good": ["x"],
+    "bad": [[1, "expected string"]]
+  },
+  {
+    "name": "inclusive-bounds",
+    "schema": { "type": "number", "minimum": -1.5, "maximum": 2 },
+    "good": [-1.5, 0, 2],
+    "bad": [
+      [-1.5000001, "number below minimum"],
+      [2.0000001, "number above maximum"]
+    ]
+  },
+  {
+    "name": "bounds-skip-other-values",
+    "schema": { "type": ["number", "string"], "minimum": 0 },
+    "good": ["-5", 0],
+    "bad": [[-5, "number below minimum"]]
+  },
+  {
+    "name": "version-1-shape",
+    "schema": { "type": "object", "required": ["a"], "properties": { "a": { "type": "string" } } },
+    "good": [{ "a": "x", "b": 1 }],
+    "bad": [
+      [[], "expected object"],
+      [{}, "missing required field"],
+      [{ "a": 1 }, "expected string"]
+    ]
+  }
+]

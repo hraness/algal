@@ -91,8 +91,8 @@ program welcome(name: text) -> text {
 ```
 
 A file contains exactly one program, optionally preceded by local imports and
-[record declarations](#record-types). Programs have named `text`, `json`, or
-record inputs and a `text`, `json`, or record result. A required budget declaration precedes
+[record declarations](#record-types). Programs have named `text`, `json`,
+record, or list inputs and a result of one of those types. A required budget declaration precedes
 immutable `let` bindings and one `return`. Semicolons after bindings and return
 are optional. Lists, records, choice declarations, and match arms use commas,
 with optional trailing commas. Strings use JSON escaping. `//` and `/* */`
@@ -256,20 +256,65 @@ program score(task: Task, weights: Weights) -> Score {
 }
 ```
 
-Each field has a type: `text`, `number`, `boolean`, `json`, or a record
-declared earlier in the same file. A `?` after the type makes the field
-optional. Fields use commas, with an optional trailing comma. Record names
-start with an uppercase letter and contain only ASCII letters and digits;
-field names follow the binding rules. A field name is the JSON key as
-written, without the kebab-case conversion that parameter names receive.
-Records belong to their file. To pass a record to another program, declare a
-record with the fields it needs in each file; the compiler compares records
-field by field, not by name.
+Each field has a type: `text`, `number`, `boolean`, `json`, a record
+declared earlier in the same file, or one of the list, allowed-value, and
+range types below. A `?` after the type makes the field optional. Fields use
+commas, with an optional trailing comma. Record names start with an uppercase
+letter and contain only ASCII letters and digits; field names follow the
+binding rules. A field name is the JSON key as written, without the
+kebab-case conversion that parameter names receive. Records belong to their
+file. To pass a record to another program, declare a record with the fields
+it needs in each file; the compiler compares records field by field, not by
+name.
+
+### Lists, allowed values, and ranges
+
+The typed task project's [plan](../examples/source/projects/typed-tasks/plan.algal)
+declares a whole task list, the values a status may take, and the range of
+each score input, then scores every task with the program above:
+
+```algal
+record Owner { name: text, team: text in ["design", "platform", "support"] }
+record Task {
+  id: text,
+  title: text,
+  urgency: number min 0 max 5,
+  impact: number min 0 max 5,
+  status: text in ["open", "blocked", "done"],
+  owner: Owner,
+  notes: text?,
+}
+record Weights { urgency: number min 0 max 10, impact: number min 0 max 10 }
+record Score { id: text, title: text, total: number, ready: boolean }
+
+program plan(tasks: [Task], weights: Weights) -> [Score] {
+  budget { max_agent_calls: 0 }
+
+  return each score over task in tasks using { weights: weights } max_items 8
+}
+```
+
+- `[Task]` is a list whose items all have type `Task`. Any field type can go
+  in the brackets, including `text`, a record, an allowed-value or range
+  type, or another list; `[json]` accepts any list. A list type can also be a
+  parameter or result type, as `tasks` and the result are here. List items
+  cannot be optional.
+- `text in ["open", "blocked", "done"]` and `number in [1, 2, 3]` name the
+  allowed values. A field with allowed text values has a closed set of
+  labels, so `match task.status { open => …, blocked => …, done => … }` must
+  name each value exactly once.
+- `number min 0 max 5` accepts numbers from 0 through 5, including both
+  bounds. Either bound can be omitted, and a negative bound is written
+  `min -1.5`.
+- A field can be a record that has record fields of its own, down to the
+  level limit in [Record limits](#record-limits). `Owner` is a record inside
+  each `Task`, inside the list.
 
 ### What a record compiles to
 
-A record parameter or result becomes an ordinary `json` port with a `schema`
-in the manifest's existing JSON schema subset. `Task` compiles to:
+A record or list parameter or result becomes an ordinary `json` port with a
+`schema` in the manifest's JSON schema subset. `Task` from the scorer
+compiles to:
 
 ```json
 {
@@ -286,59 +331,92 @@ in the manifest's existing JSON schema subset. `Task` compiles to:
 }
 ```
 
-`required` is sorted, so reordering fields does not change the compiled
-program. A `json` field is listed in `required` only, and an optional `json`
-field adds nothing. Records add no manifest field, port kind, or schema
-keyword; the compiled program uses only what both runtimes already accept.
+The other field types compile to these schemas:
+
+| Field type | Schema |
+| --- | --- |
+| `text in ["open", "done"]` | `{"type":"string","enum":["done","open"]}` |
+| `number in [3, 1]` | `{"type":"number","enum":[1,3]}` |
+| `number min 0 max 5` | `{"type":"number","minimum":0,"maximum":5}` |
+| `[text]` | `{"type":"array","items":{"type":"string"}}` |
+| `[json]` | `{"type":"array"}` |
+| A record | The record's object schema |
+
+`required` and allowed values are sorted, so reordering fields or values does
+not change the compiled program. A `json` field is listed in `required` only,
+and an optional `json` field adds nothing.
+
+A schema that uses `items`, `enum`, `minimum`, or `maximum`, or nests records
+deeper than the original schema subset allows, needs
+[schema version 2](../spec/v1/organism.md#json-schemas), so the compiler adds
+`"schemaVersion": 2` beside it on the port or result. `Task` from the plan is
+one of these; `Task` from the scorer is not, and compiles to exactly the
+schema above. A runtime released before schema version 2 refuses a program
+that declares it when checking the program, before any step runs, instead of
+skipping the checks.
 
 ### What is checked
 
-Both runtimes check a record value where it enters or leaves a program,
-before any cell that uses it runs:
+Both runtimes check a record or list value where it enters or leaves a
+program, before any cell that uses it runs:
 
-- A root program's record parameter is checked when the run starts. A
-  malformed value fails the `input` cell.
-- A record argument to `call`, or a shared `using` argument of `each`, is
-  checked when it reaches that cell, which then fails.
-- Each `each` item is checked against the child's record parameter before
-  that item's run starts. A malformed item fails the `each` cell; earlier
-  items' cells remain in the receipt, and later items do not run.
-- A record result is checked before the program returns it. When a called
-  program returns a different schema, the compiler adds one pass-through cell
-  that declares the caller's record.
+- A root program's record or list parameter is checked when the run starts.
+  A malformed value fails the `input` cell.
+- A record or list argument to `call`, or a shared `using` argument of
+  `each`, is checked when it reaches that cell, which then fails.
+- Each `each` item is checked against the child's parameter before that
+  item's run starts. A malformed item fails the `each` cell; earlier items'
+  cells remain in the receipt, and later items do not run.
+- A record or list result is checked before the program returns it. When a
+  called program returns a different schema, the compiler adds one
+  pass-through cell that declares the caller's type.
 
-A value passes when it is a JSON object, every field without `?` is present,
-and every declared field that is present has its type, recursively for nested
-records. A failure is `TYPE_MISMATCH` with a message such as `expected
-object`, `expected number`, or `missing required field`. The message does not
-name the field.
+A value passes when it has its declared type, recursively for nested records
+and lists: an object has every field without `?` and each present declared
+field has its type, each list item has the item type, a text value with
+allowed values is one of them, and a number is within its bounds. A failure
+is `TYPE_MISMATCH` with a message such as `expected object`,
+`missing required field`, `expected an allowed value`, `number below minimum`,
+or `number above maximum`. The message names the failed check, not the field.
+A list item's failure adds the item's position, counting from zero, such as
+`item 1: number above maximum` for the plan's second task.
 
 The runtime does not check:
 
 - Undeclared fields. They are accepted and passed through unchanged.
 - The value of a `json` field, beyond its presence when required.
-- Number ranges, whole numbers, text length or format, or allowed values.
-- List items. There is no list-of-records type; declare the list as `json`
-  and use `each` with a record parameter to check every item.
+- Whole numbers, text length or format, or whether values such as ids are
+  unique.
+- List length, apart from `each`'s `max_items` and the 262,144-byte limit on
+  any value.
 
 An optional field may be omitted, but a present field must have its type, so
 `"notes": null` is rejected.
 
 The compiler also rejects mismatches it can prove from the source: selecting
 an undeclared field, arithmetic on a `text` field, a record literal or record
-value that lacks a required field or has a field of the wrong type, and a
-record literal with a field the record does not declare. A `json` value is
-accepted and checked at run time. Selecting an optional field gives a `json`
-value, because the field may be absent.
+value that lacks a required field or has a field of the wrong type, a record
+literal with a field the record does not declare, a text literal or decision
+label outside a field's allowed values, a number literal outside its allowed
+values or bounds, a list literal item of the wrong type, and a declared list
+whose items do not suit the parameter `each` passes them to. A `json` value,
+or a number or text value the compiler cannot know, is accepted and checked
+at run time. Selecting an optional field gives a `json` value, because the
+field may be absent.
 
 ### Record limits
 
 A file declares at most 16 records, each with 1 to 32 fields, and a record
 name has at most 40 characters. A field can name only a record declared
-earlier, so records cannot refer to themselves or form a cycle. Each compiled
-schema must fit the manifest's schema depth limit of 4. In practice, a record
-used as a field type may contain only `json` fields; deeper nesting is
-rejected at the declaration.
+earlier, so records cannot refer to themselves or form a cycle. A type lists
+1 to 16 distinct allowed values, and an allowed text value has at most 64
+characters.
+
+A compiled schema has at most eight levels: the record or list itself is one
+level, and each field type and list item type adds one below it. The plan's
+`[Task]` parameter uses four: the list, `Task`, `owner`, and the fields of
+`Owner`. A compiled record or list schema is also limited to 65,536 bytes,
+because a record used as a field is copied into each schema that uses it.
 
 ## Reuse a local program
 
@@ -756,8 +834,9 @@ default. It adds no automatic retries.
 
 Source limits: 65,536 UTF-8 bytes, 8,192 tokens, 1,024 expression nodes,
 16 levels of source nesting, 24 bindings, 16 parameters, 40-character names,
-16 choice labels, 64 entries per collection, 16 records per file, and 32
-fields per record. The lowered program must
+16 choice labels, 64 entries per collection, 16 records per file, 32 fields
+per record, 16 allowed values per type, and eight schema levels and 65,536
+bytes per compiled record or list schema. The lowered program must
 also satisfy the existing manifest and expression bounds. A deeply nested
 expression may reach a core bound before a source maximum. Errors identify a
 source line and column; failures during final manifest validation reference

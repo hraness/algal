@@ -1751,7 +1751,7 @@ export function checkValue(v: JsonValue, decl: PortType, what: string): void {
       parseCapabilityHandle(v, decl.capability, what);
       return;
     case "json":
-      if (decl.schema) checkSchema(decl.schema, v, what, "TYPE_MISMATCH");
+      if (decl.schema) checkSchema(decl.schema, v, what, "TYPE_MISMATCH", decl.schemaVersion);
       return;
   }
 }

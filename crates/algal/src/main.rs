@@ -1890,7 +1890,7 @@ async fn execute(cli: Cli) -> Result<bool> {
                         for field in ["optional", "many"] {
                             if port[field] == true { value[field] = json!(true); }
                         }
-                        for field in ["labels", "schema", "capability"] {
+                        for field in ["labels", "schema", "schemaVersion", "capability"] {
                             if let Some(v) = port.get(field) { value[field] = v.clone(); }
                         }
                         (name.clone(), value)

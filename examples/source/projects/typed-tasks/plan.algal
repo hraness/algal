@@ -1,0 +1,24 @@
+import score from "./score.algal"
+
+// The plan declares the whole task list. Each task's status is one of three
+// values, urgency and impact are between 0 and 5, and each owner belongs to a
+// known team. The runtime checks the list and the weights when the run
+// starts, before any task is scored.
+record Owner { name: text, team: text in ["design", "platform", "support"] }
+record Task {
+  id: text,
+  title: text,
+  urgency: number min 0 max 5,
+  impact: number min 0 max 5,
+  status: text in ["open", "blocked", "done"],
+  owner: Owner,
+  notes: text?,
+}
+record Weights { urgency: number min 0 max 10, impact: number min 0 max 10 }
+record Score { id: text, title: text, total: number, ready: boolean }
+
+program plan(tasks: [Task], weights: Weights) -> [Score] {
+  budget { max_agent_calls: 0 }
+
+  return each score over task in tasks using { weights: weights } max_items 8
+}
