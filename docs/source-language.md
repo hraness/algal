@@ -581,6 +581,69 @@ as an inactive branch, stays listed with zero invocations. Recorded paths that
 no occurrence can own are counted as unattributed rather than guessed. This
 join is digest-bound association, not replay; use `verify` for replay.
 
+#### Bound how often each call runs
+
+`--estimate` adds, for every occurrence and module, how many times it can run
+during one run of the entry:
+
+```sh
+bun cli.ts dependencies examples/source/projects/task-planning/main.algal \
+  --estimate --format text
+```
+
+`max` multiplies the item limits of every enclosing `each`. Each of the
+planner's two clamp calls can run at most 16 times, so the clamp module can
+run at most 32 times. `min` is 1 for a call that runs on every completed run
+that supplies each declared input, and 0 for a call under a branch arm or an
+`each`. A call that follows an `if` or `match` at the same level keeps a
+minimum of 1, because exactly one arm runs. A product above 65,536, the most
+cells one receipt can hold, is reported as 65,536 and marked `saturated`.
+These are limits on possible work derived from the program's structure, not
+measurements, prices, or predictions. With `--receipt` as well, each
+occurrence also shows its recorded invocations, and `exceeded` lists every
+occurrence recorded more often than its maximum. Such a receipt contains an
+`each` item that the program does not allow; the execution join above leaves
+those cells unattributed.
+
+#### Link modules to application revisions
+
+`--application <name>` links the report to one application's history in the
+store that `--dir` names (default `.algal`). The command reads that history
+and commits nothing:
+
+```sh
+bun cli.ts dependencies main.algal --application inventory --dir .algal --format text
+```
+
+A revision entrypoint is linked when its recorded static closure contains a
+report module's executable digest: the entrypoint's manifest is that module,
+or names it as a child by digest, directly or through other manifests in the
+store. Each linked entrypoint appears once in `application.entrypoints`, with
+the transition that activated its revision (`create`, `activate`, `migrate`,
+or `restore`), whether the application's head selects it, whether its closure
+contains the report's root, and the evaluation records that measured it.
+Evaluation records come from transition evidence, directly or through a cited
+comparison or experiment. A revision known only from an evaluation record is
+listed as never activated. Each module and occurrence lists the indices of the
+entrypoints that contain its digest.
+
+Links use digests only: an entrypoint or program that shares a name with a
+report module links nothing unless the digests are equal. Verdicts are shown as
+recorded, because the join does not replay evaluations; replay one with
+`verifyApplicationEvaluation` before relying on it. Records that cannot be read
+or parsed, and evaluations that do not match their own request or parent
+state, are counted as unreadable. Revisions and evaluations that share no
+digest with the report, and evaluations of another application or of a state
+outside the history, are counted as unmatched. A revision whose closure names
+a manifest that is missing from the store or chosen at run time, and that
+contains no report module, is counted as unresolved. The join reads at most
+4,096 records beyond the history and refuses more. It keeps the latest 64
+entrypoints and 16 evaluation records per entrypoint and counts the rest as
+omitted. `--out` cannot write inside the application store.
+
+In the SDK, pass `estimate: true`, and pass `application: { name, reader }`
+with an `ApplicationService` or `ApplicationCore` as the reader.
+
 ### Pin a project with a lock
 
 `lock` writes an `algal.source-lock.v1` record that binds the project to the

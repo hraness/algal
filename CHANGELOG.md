@@ -9,6 +9,19 @@ wire constant (`0.1.0`) is independent of these package versions.
 
 ## Unreleased
 
+- `algal dependencies --estimate` gives every call and module a minimum and
+  maximum number of runs per run of the entry: enclosing `each` item limits
+  multiply, a call under a branch arm has a minimum of 0, and products above
+  65,536 saturate. With `--receipt`, recorded invocations appear beside each
+  bound, and any occurrence recorded above its maximum is listed as
+  `exceeded`. `--application <name> [--dir <path>]` links each module and call,
+  by executable digest, to the application revision entrypoints whose recorded
+  closure contains it, with the transition that activated each revision and
+  the evaluation records that measured it. The join reads validated history,
+  commits nothing, and reports verdicts as recorded without replay; unreadable,
+  unbound, foreign, and unresolved records are counted instead of linked. It
+  reads at most 4,096 records and keeps the latest 64 entrypoints. Reports
+  without the new flags are unchanged.
 - Package subpaths `./source` and `./source-errors` let a browser bundle
   compile `.algal` source. `compileSource` takes every source file as a
   string, and `createSourceErrorReport` and `renderSourceError` format its

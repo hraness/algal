@@ -172,6 +172,9 @@ function parseEvaluation(input: unknown): ApplicationEvaluation {
   keys(verdict, ["status", "reasons"], "evaluation.verdict");
   return { contract: "algal.application-evaluation.v1", request: digest(v.request, "evaluation.request"), parentState: digest(v.parentState, "evaluation.parentState"), candidateRevision: digest(v.candidateRevision, "evaluation.candidateRevision"), cases: digest(v.cases, "evaluation.cases"), scorer: digest(v.scorer, "evaluation.scorer"), policy: digest(v.policy, "evaluation.policy"), foundryReport: digest(v.foundryReport, "evaluation.foundryReport"), compatibility: digest(v.compatibility, "evaluation.compatibility"), verdict: { status: verdict.status, reasons: applicationList(verdict.reasons, 16, value => text(value, "evaluation reason")) } };
 }
+/** The closed evaluation parser, for readers that inspect a recorded
+ * evaluation without replaying it. */
+export { parseEvaluation as parseApplicationEvaluation };
 
 export async function loadRevision(store: Store, ref: Digest): Promise<{ revision: ApplicationRevision; manifests: Map<string, OrganismManifest> }> {
   const revision = await getApplicationRecord(store, ref, parseApplicationRevision);
