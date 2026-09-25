@@ -21,6 +21,11 @@ export { SOURCE_DEPENDENCY_APPLICATION_BOUNDS } from "./src/source-dependencies-
 export type { SourceDependencyApplication, SourceDependencyApplicationActivation, SourceDependencyApplicationEntrypoint, SourceDependencyApplicationEvaluation, SourceDependencyApplicationModuleLinks, SourceDependencyApplicationOccurrenceLinks, SourceDependencyApplicationOptions, SourceDependencyApplicationReader } from "./src/source-dependencies-application";
 export { createSourceLock, parseSourceLock, parseSourceLockCases, renderSourceLockVerification, sourceLockFixtureKeys, sourceLockToJson, verifySourceLock, SOURCE_LOCK_BOUNDS, SOURCE_LOCK_CONTRACT, SOURCE_LOCK_VERIFICATION_CONTRACT } from "./src/source-lock";
 export type { SourceLock, SourceLockCase, SourceLockDrift, SourceLockDriftKind, SourceLockEvaluation, SourceLockEvaluationCase, SourceLockFixture, SourceLockOptions, SourceLockUnit, SourceLockVerification, SourceLockVerifyOptions } from "./src/source-lock";
+export type { SourceLockVendored } from "./src/source-lock";
+export { checkVendoredFiles, loadVendoredSources, parseVendorRecord, vendorRecordToJson, VENDOR_BOUNDS, VENDOR_CONTRACT, VENDOR_RECORD_FILE } from "./src/vendor-record";
+export type { VendorDifference, VendoredSources, VendorFile, VendorRecord } from "./src/vendor-record";
+export { vendorCatalogEntry, VENDOR_FETCH_BOUNDS } from "./src/vendor";
+export type { VendorOptions } from "./src/vendor";
 export { createProgramDiagram, renderMermaid, renderSvg } from "./src/diagram";
 export type { ProgramDiagram, DiagramOptions, DiagramNode, DiagramEdge, SvgDiagramOptions } from "./src/diagram";
 export { compareLibraryRevision, verifyLibraryComparison } from "./src/library-compare";

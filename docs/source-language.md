@@ -796,10 +796,23 @@ A lock pins at most 16 cases and 16 labels. Case names and labels have at
 most 64 characters: ASCII letters, digits, `.`, `_`, and `-`, starting with a
 letter or digit.
 
+A lock also pins programs copied from another project's catalog with
+[`vendor`](library.md#vendor-an-entry-into-another-project). `lock` looks for
+an `algal.vendor.json` record in every directory above the project's files,
+up to but not including the source root, and adds a `vendored` section with
+one entry per record it finds: the directory, the catalog page's address and
+SHA-256 digest, the vendored entry, and a digest of the record. Writing the
+lock refuses a copy that no longer matches its record. `--verify` reads the
+records again and reports `vendor` drift when a record appears, disappears,
+or changes, when a listed file's text no longer has its recorded digest, and
+when a listed file no longer compiles to the executable or interface digest
+the catalog listed. A comment-only edit to a copy therefore moves source
+digests and no executable digest. Records and copied files are read like
+source files, and neither command contacts the catalog's address. A lock pins
+at most 16 vendored directories, and each record lists at most 16 files.
+
 Verification lists drift in this order: entry, compiler, source, unit, root,
-closure, interface, analysis, version, and evaluation. Vendored remote
-catalogs, which would resolve to the same offline verification, are proposed
-and not built.
+closure, interface, analysis, version, evaluation, and vendor.
 
 The same project's second entry, `inspect_task.algal`, reuses the scoring and
 clamp programs. Its report lists 3 source files and 5 occurrences, and its

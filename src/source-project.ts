@@ -108,27 +108,42 @@ function dataKey(key: unknown): key is string {
     && key.split("/").every(part => part !== "" && part !== "." && part !== "..");
 }
 
-/** Read named data files beneath a project's canonical root (`SourceProject.root`)
- * with the same guards as source imports: no symlink traversal, regular files
- * only, `maxBytes` per file, identities rechecked, and strict UTF-8. Returns a
- * closed key → text map; nothing outside the root is read.
+export type SourceFileReadOptions = {
+  /** Names the files in error messages; `file` when omitted. */
+  readonly noun?: string;
+  /** `skip` leaves out a key with no file behind it (ENOENT) instead of failing. */
+  readonly missing?: "fail" | "skip";
+};
+
+/** Read named data files beneath a canonical root (`SourceProject.root`) with
+ * the same guards as source imports: no symlink traversal, regular files only,
+ * `maxBytes` per file, identities rechecked, and strict UTF-8. Returns a
+ * closed key → text map; nothing outside the root is read. Lock fixtures,
+ * vendor records, and vendored files share this path.
  */
-export async function loadSourceFixtures(root: string, keys: readonly string[], maxBytes: number): Promise<Record<string, string>> {
+export async function loadSourceFiles(root: string, keys: readonly string[], maxBytes: number, options: SourceFileReadOptions = {}): Promise<Record<string, string>> {
+  const noun = options.noun ?? "file";
   const files: Record<string, string> = Object.create(null);
   for (const key of keys) {
-    if (!dataKey(key)) throw new AlgalError("PARSE_FAILED", `fixture ${JSON.stringify(key)} must be a normalized project-relative path`);
+    if (!dataKey(key)) throw new AlgalError("PARSE_FAILED", `${noun} ${JSON.stringify(key)} must be a normalized project-relative path`);
     const read = await readProjectFile(root, key, maxBytes);
     if (read.ok) { files[key] = read.text; continue; }
+    if (read.failure === "unreadable" && read.code === "ENOENT" && options.missing === "skip") continue;
     switch (read.failure) {
-      case "too-large": throw new AlgalError("BUDGET_EXHAUSTED", `fixture ${key} exceeds ${maxBytes} bytes`);
-      case "unreadable": throw new AlgalError("IO_FAILED", `cannot read fixture ${key}${read.code ? ` (${read.code})` : ""}`);
+      case "too-large": throw new AlgalError("BUDGET_EXHAUSTED", `${noun} ${key} exceeds ${maxBytes} bytes`);
+      case "unreadable": throw new AlgalError("IO_FAILED", `cannot read ${noun} ${key}${read.code ? ` (${read.code})` : ""}`);
       case "symlink": throw new AlgalError("PARSE_FAILED", `symlink traversal is not allowed: ${key}`);
-      case "not-regular": throw new AlgalError("PARSE_FAILED", `fixture path must contain directories and end in a regular file: ${key}`);
-      case "not-utf8": throw new AlgalError("PARSE_FAILED", `fixture ${key} is not valid UTF-8`);
-      default: throw new AlgalError("PARSE_FAILED", `fixture ${key} changed while reading`);
+      case "not-regular": throw new AlgalError("PARSE_FAILED", `${noun} path must contain directories and end in a regular file: ${key}`);
+      case "not-utf8": throw new AlgalError("PARSE_FAILED", `${noun} ${key} is not valid UTF-8`);
+      default: throw new AlgalError("PARSE_FAILED", `${noun} ${key} changed while reading`);
     }
   }
   return files;
+}
+
+/** Lock evaluation fixtures: `loadSourceFiles` with fixture wording. */
+export async function loadSourceFixtures(root: string, keys: readonly string[], maxBytes: number): Promise<Record<string, string>> {
+  return loadSourceFiles(root, keys, maxBytes, { noun: "fixture" });
 }
 
 /** Load only the entry and its transitive local imports under one explicit root.

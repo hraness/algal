@@ -118,6 +118,18 @@ wire constant (`0.1.0`) is independent of these package versions.
   results by running the comparison again. The task planner's inspector and
   the support queue gain case lists. SDK: `compareLibraryRevision`,
   `verifyLibraryComparison`.
+- `algal vendor <catalog> --entry <path> --into <dir>` copies a shared-catalog
+  entry, with every entry it depends on, from a catalog page (an https URL or a
+  local path) into a new directory of a project. It refuses the copy unless
+  each file compiles to the executable and interface digests the page lists,
+  and writes an `algal.vendor.v1` record of the page's address and digest and
+  each file's digests. Requests stay on the page's host over https, with
+  same-host redirects only, 128 KiB for the page, 64 KiB per file, 16 files,
+  and 15 seconds per request; writing follows no symlink and replaces no file.
+  `algal lock` pins each vendored directory in an optional `vendored` section
+  of `algal.source-lock.v1`, so existing locks keep their digest, and
+  `lock --verify` checks the copies offline against their records and the
+  catalog's digests, reporting `vendor` drift after `evaluation`.
 - `algal lock --evaluation <cases.json>` pins evaluation cases in an optional
   `evaluation` section of `algal.source-lock.v1`: the digests of each case's
   argument and scripted-response files, the run outcome, and a digest of the
