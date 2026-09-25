@@ -28,6 +28,9 @@ export type BrowserTriageCapture = Capture & {
 export type WorkflowInput = { config: Config; schemaVersion: 1 | 2; rationale: string };
 type CheckedJournal = { journal: Journal; history: ApplicationSnapshot[]; candidates: TriageEvaluationDetails[] };
 type VerifiedIndex = Pick<Transfer, "application" | "head" | "states">;
+/** One newly read private source for a read phase, the saved journal that
+ * chose its candidate roots, and the completed candidates proven inside it. */
+type Source = { core: TriageCore; journal: Journal; proven: ReadonlyMap<Digest, TriageEvaluationDetails> };
 const same = (a: unknown, b: unknown) => hash(a) === hash(b);
 const emptyJournal = (initialization: Initialization = { kind: "create" }): Journal => ({ contract: "algal.browser-triage-journal.v1", initialization, completed: [], evaluations: [], pending: null });
 function request(input: unknown): Request {
@@ -104,6 +107,9 @@ export class BrowserTriageController {
   }
   private operation(value: Request): Digest { return hash({ contract: "algal.browser-triage-operation.v1", application: this.application, request: value }); }
   private readPrepared(ref: Digest): Promise<Prepared> { return getApplicationRecord(this.storage.store, ref, prepared); }
+  /** Individual proof: replays the full history for one evaluation. Pending
+   * proposals, and candidates that did not fit a bounded shared source, keep
+   * this path with its reuse limited to one operation, as before. */
   private inspectEvaluation(ref: Digest): Promise<TriageEvaluationDetails> {
     if (!this.scope) return this.core.inspectEvaluation(ref);
     let found = this.scope.candidates.get(ref);
@@ -154,14 +160,27 @@ export class BrowserTriageController {
     if (this.verifiedIndexes.size >= MAX_STATES + MAX_EVALUATIONS) this.verifiedIndexes.delete(this.verifiedIndexes.values().next().value!);
     this.verifiedIndexes.add(key);
   }
+  /** A completed candidate proven in this phase's private source shares that
+   * source's single history replay. Nothing proven there outlives the phase. */
+  private candidate(ref: Digest, source: Source): Promise<TriageEvaluationDetails> {
+    const proven = source.proven.get(ref);
+    return proven ? Promise.resolve(proven) : this.inspectEvaluation(ref);
+  }
+  /** Each read phase opens one newly read private source that also carries
+   * every completed saved candidate, so the source and candidates are proven
+   * together from fresh live evidence. */
+  private async withSource<T>(callback: (source: Source) => Promise<T>): Promise<T> {
+    const saved = await this.readJournal();
+    return this.core.withVerifiedSource((core, proven) => callback({ core, journal: saved, proven }), [], saved.evaluations);
+  }
 
-  private async binding(p: Prepared): Promise<void> {
+  private async binding(p: Prepared, source: Source): Promise<void> {
     const r = p.request;
     const expected = r.kind === "create" || r.kind === "fork" ? null : r.kind === "propose" ? r.proposal.expectedHead : r.expectedHead;
     if (p.expectedHead !== expected) throw new Error("Saved task request/head mismatch");
     if (r.kind === "propose") {
       if (p.operation !== null || p.evaluation === null || p.resultHead !== expected) throw new Error("Saved workflow preparation mismatch");
-      const candidate = await this.inspectEvaluation(p.evaluation);
+      const candidate = await this.candidate(p.evaluation, source);
       if (candidate.evaluation.proposal !== hash(r.proposal) || candidate.evaluation.expectedHead !== expected) throw new Error("Saved workflow differs from its request");
       return;
     }
@@ -173,7 +192,7 @@ export class BrowserTriageController {
       const change = await getApplicationRecord(this.storage.store, t.evidence[0]!, value => object(value, ["contract", "command", "receipt"]));
       if (change.contract !== "algal.triage-change.v1" || !same(parseCommand(change.command), { contract: "algal.triage-command.v1", expectedHead: expected, operation: p.operation, action: r.action })) throw new Error("Saved action evidence differs from its request");
     } else if (r.kind === "adopt") {
-      const candidate = await this.inspectEvaluation(r.evaluation);
+      const candidate = await this.candidate(r.evaluation, source);
       if (p.operation !== this.operation(r) || !candidate.evaluation.accepted || candidate.evaluation.expectedHead !== expected || candidate.evaluation.candidateRevision !== t.revision || !t.evidence.includes(r.evaluation) || !["activate", "migrate"].includes(t.kind)) throw new Error("Saved workflow adoption changed");
     } else {
       if (t.kind !== "create" || t.evidence.length !== 1) throw new Error("Saved task creation changed");
@@ -185,20 +204,23 @@ export class BrowserTriageController {
       } else if (origin.source === null || (await this.core.readTransfer(reference(origin.source))).head !== r.source) throw new Error("Saved fork differs from its source");
     }
   }
-  private checkedJournal(source: TriageCore = this.core): Promise<CheckedJournal> {
+  private checkedJournal(source?: Source): Promise<CheckedJournal> {
     if (!this.scope) return this.checkJournal(source);
     return this.scope.checked ??= this.checkJournal(source);
   }
-  private async checkJournal(source: TriageCore = this.core): Promise<CheckedJournal> {
-    const j = await this.readJournal();
-    await source.verifySourceClosure();
-    const history = await source.service.history(this.application), publications = new Map<Digest, Prepared>(), evaluations: Digest[] = [];
+  private async checkJournal(input?: Source): Promise<CheckedJournal> {
+    // Without a published head there is no history to replay: saved genesis
+    // and fork recovery read the live store directly, as before.
+    if (!input && await this.storage.readHead(this.application) !== undefined) return this.withSource(source => this.checkJournal(source));
+    const source = input ?? { core: this.core, journal: await this.readJournal(), proven: new Map() }, j = source.journal;
+    await source.core.verifySourceClosure();
+    const history = await source.core.service.history(this.application), publications = new Map<Digest, Prepared>(), evaluations: Digest[] = [];
     for (const ref of j.completed) {
       const p = await this.readPrepared(ref);
       if ((p.request.kind === "create" || p.request.kind === "fork") && !same(p.request, j.initialization)) throw new Error("Saved task initialization changed");
       const index = await this.checkedIndex(ref, p), end = history.findIndex(row => row.digest === p.resultHead);
       if (index.application !== this.application || index.head !== p.resultHead || end < 0 || !same(index.states, history.slice(0, end + 1).map(row => row.digest))) throw new Error("Saved task preparation index changed");
-      await this.binding(p);
+      await this.binding(p, source);
       if (p.request.kind === "propose") evaluations.push(p.evaluation!);
       else {
         if (publications.has(p.resultHead)) throw new Error("Duplicate task publication");
@@ -211,7 +233,7 @@ export class BrowserTriageController {
       const p = await this.readPrepared(j.pending), transfer = await this.readIndex(p.transfer);
       if ((p.request.kind === "create" || p.request.kind === "fork") && !same(p.request, j.initialization)) throw new Error("Pending task initialization changed");
       if (transfer.application !== this.application || transfer.head !== p.resultHead) throw new Error("Pending task transfer changed");
-      await this.binding(p);
+      await this.binding(p, source);
       if (p.request.kind !== "propose") {
         if (publications.has(p.resultHead)) throw new Error("Pending task already appears as completed");
         publications.set(p.resultHead, p);
@@ -219,23 +241,23 @@ export class BrowserTriageController {
     }
     if (history.some(row => !publications.has(row.digest))) throw new Error("Task history lacks its saved request");
     const candidates: TriageEvaluationDetails[] = [];
-    for (const ref of j.evaluations) candidates.push(await this.inspectEvaluation(ref));
+    for (const ref of j.evaluations) candidates.push(await this.candidate(ref, source));
     return { journal: j, history, candidates };
   }
-  private async exact(expected: Digest, source: TriageCore = this.core): Promise<Journal> {
+  private async exact(expected: Digest, source?: Source): Promise<CheckedJournal> {
     const checked = await this.checkedJournal(source);
     if (checked.journal.pending !== null) throw new Error("A saved task operation needs recovery before another change");
     if (checked.history.at(-1)?.digest !== reference(expected)) throw new Error("Stale task head; reload and explicitly rebase your change");
-    return checked.journal;
+    return checked;
   }
   private async captureOwned(): Promise<BrowserTriageCapture> {
     // Journal checking and rendering share one newly read private snapshot.
     // Publication has invalidated the old journal proof; the simulated target
     // is never reused as evidence that the live publication succeeded.
-    const { journal: j, history, candidates, current, sessionState } = await this.core.withVerifiedSource(async source => {
+    const { journal: j, history, candidates, current, sessionState } = await this.withSource(async source => {
       const checked = await this.checkedJournal(source);
-      const sessionState = await source.loadSession(this.sessionId);
-      return { ...checked, sessionState, current: await source.capture(sessionState.record?.session ?? DEFAULT_SESSION) };
+      const sessionState = await source.core.loadSession(this.sessionId);
+      return { ...checked, sessionState, current: await source.core.capture(sessionState.record?.session ?? DEFAULT_SESSION) };
     });
     if (current.head !== history.at(-1)?.digest) throw new Error("Task head changed after journal verification");
     const recovery = j.pending === null ? null : await this.readPrepared(j.pending);
@@ -294,8 +316,8 @@ export class BrowserTriageController {
     return this.owned(async () => {
       // The unchanged source, saved draft, and simulation use one proof scope.
       // prepare/recovery still reread and verify the durable source and target.
-      const { j, target } = await this.core.withVerifiedSource(async simulation => {
-        const j = await this.exact(value.expectedHead, simulation), session = await simulation.loadSession(this.sessionId);
+      const { j, target } = await this.withSource(async source => {
+        const simulation = source.core, { journal: j } = await this.exact(value.expectedHead, source), session = await simulation.loadSession(this.sessionId);
         if (["add", "edit"].includes(value.action.kind) && session.status === "stale") throw new Error("Rebase the saved draft explicitly before submission");
         await simulation.command({ contract: "algal.triage-command.v1", expectedHead: value.expectedHead, operation: this.operation(value), action: value.action });
         return { j, target: await simulation.export() };
@@ -306,8 +328,8 @@ export class BrowserTriageController {
   propose(expectedHead: Digest, input: WorkflowInput): Promise<BrowserTriageCapture> {
     const v = object(input, ["config", "schemaVersion", "rationale"]), proposal = parseProposal({ contract: "algal.triage-proposal.v1", expectedHead: reference(expectedHead), ...v, source: "owner" });
     return this.owned(async () => {
-      const j = await this.exact(proposal.expectedHead);
-      for (const ref of j.evaluations) if ((await this.inspectEvaluation(ref)).evaluation.proposal === hash(proposal)) return this.captureOwned();
+      const { journal: j, candidates } = await this.exact(proposal.expectedHead);
+      if (candidates.some(c => c.evaluation.proposal === hash(proposal))) return this.captureOwned();
       if (j.evaluations.length >= MAX_EVALUATIONS) throw new Error("Workflow evaluation capacity reached");
       const target = await this.core.withVerifiedSource(async simulation => {
         const evaluated = await simulation.proposeEvaluate(proposal);
@@ -319,9 +341,9 @@ export class BrowserTriageController {
   adopt(expectedHead: Digest, evaluation: Digest): Promise<BrowserTriageCapture> {
     const value: Request = { kind: "adopt", expectedHead: reference(expectedHead), evaluation: reference(evaluation) };
     return this.owned(async () => {
-      const j = await this.exact(value.expectedHead);
-      if (!j.evaluations.includes(value.evaluation)) throw new Error("Unknown saved workflow evaluation");
-      const candidate = await this.inspectEvaluation(value.evaluation);
+      const { journal: j, candidates } = await this.exact(value.expectedHead);
+      const candidate = j.evaluations.includes(value.evaluation) ? candidates.find(c => c.reference === value.evaluation) : undefined;
+      if (!candidate) throw new Error("Unknown saved workflow evaluation");
       if (!candidate.evaluation.accepted || candidate.evaluation.expectedHead !== value.expectedHead) throw new Error("Workflow did not pass checks for the current task state");
       const target = await this.core.withVerifiedSource(async simulation => {
         await simulation.adopt(value.evaluation, this.operation(value));

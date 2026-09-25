@@ -1,0 +1,24 @@
+// The runtime checks each parameter against its record before this program
+// reads it, and checks the result against Score before returning it.
+record Task {
+  id: text,
+  title: text,
+  urgency: number,
+  impact: number,
+  status: text,
+  notes: text?,
+}
+record Weights { urgency: number, impact: number }
+record Score { id: text, title: text, total: number, ready: boolean }
+
+program score(task: Task, weights: Weights) -> Score {
+  budget { max_agent_calls: 0 }
+
+  let total = task.urgency * weights.urgency + task.impact * weights.impact
+  return {
+    id: task.id,
+    title: task.title,
+    total: total,
+    ready: task.status == "open" && total >= 10,
+  }
+}

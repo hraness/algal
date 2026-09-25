@@ -3,6 +3,7 @@
 import { constants, type Stats } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { AlgalError } from "./errors";
 import {
   compileSource, resolveSourceImport, sourceImports, SOURCE_BOUNDS, SOURCE_PROJECT_BOUNDS,
   SourceError, type SourceCompilation, type SourceErrorImport, type SourceSpan,
@@ -33,34 +34,33 @@ function importedKey(location: Location, path: string): string {
   }
 }
 
-/** Check every component under the canonical root, including the final file.
- * Recheck identities after reading so replaced directories/files are rejected.
+type ProjectFileFailure = "unreadable" | "symlink" | "not-regular" | "changed-before" | "too-large" | "changed" | "path-changed" | "not-utf8";
+type ProjectFileRead = { ok: true; text: string; bytes: number } | { ok: false; failure: ProjectFileFailure; size?: number; code?: string };
+
+/** Read one file beneath a canonical root. Every component, including the
+ * final file, is checked: directories, then a regular file, never a symlink.
+ * Identities are rechecked after reading so replaced directories or files are
+ * rejected. Source imports and lock fixtures share this path.
  */
-async function components(root: string, key: string, location: Location): Promise<{ path: string; stat: Stats }[]> {
+async function readProjectFile(root: string, key: string, limit: number): Promise<ProjectFileRead> {
   const paths = [root];
   for (const part of key.split("/")) paths.push(join(paths.at(-1)!, part));
-  const checked = [];
-  for (const [index, path] of paths.entries()) {
-    const stat = await lstat(path);
-    if (stat.isSymbolicLink()) fail(`symlink traversal is not allowed: ${key}`, location);
-    if (index === paths.length - 1 ? !stat.isFile() : !stat.isDirectory()) fail(`source path must contain directories and end in a regular file: ${key}`, location);
-    checked.push({ path, stat });
-  }
-  return checked;
-}
-
-async function boundedSource(root: string, key: string, remainingBytes: number, location: Location, target: Location): Promise<{ source: string; bytes: number }> {
   try {
-    const checked = await components(root, key, location);
+    const checked: { path: string; stat: Stats }[] = [];
+    for (const [index, path] of paths.entries()) {
+      const stat = await lstat(path);
+      if (stat.isSymbolicLink()) return { ok: false, failure: "symlink" };
+      if (index === paths.length - 1 ? !stat.isFile() : !stat.isDirectory()) return { ok: false, failure: "not-regular" };
+      checked.push({ path, stat });
+    }
     const file = checked.at(-1)!;
     // O_NONBLOCK keeps FIFOs from hanging even if the path changes after lstat;
     // O_NOFOLLOW also rejects a leaf symlink installed before open.
     const handle = await open(file.path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     try {
       const before = await handle.stat();
-      if (!before.isFile() || !sameFile(before, file.stat)) fail(`source file changed before reading: ${key}`, location);
-      const limit = Math.min(SOURCE_BOUNDS.maxSourceBytes, remainingBytes);
-      if (before.size > limit) fail(before.size > SOURCE_BOUNDS.maxSourceBytes ? `source exceeds ${SOURCE_BOUNDS.maxSourceBytes} UTF-8 bytes` : `source project exceeds ${SOURCE_PROJECT_BOUNDS.maxTotalBytes} bytes`, target);
+      if (!before.isFile() || !sameFile(before, file.stat)) return { ok: false, failure: "changed-before" };
+      if (before.size > limit) return { ok: false, failure: "too-large", size: before.size };
       // One extra byte detects a concurrent growth past the admitted length.
       const buffer = Buffer.alloc(Math.min(before.size + 1, limit + 1));
       let size = 0;
@@ -70,21 +70,80 @@ async function boundedSource(root: string, key: string, remainingBytes: number, 
         size += bytesRead;
       }
       const after = await handle.stat();
-      if (size !== before.size || before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs) fail(`source file changed while reading: ${key}`, location);
+      if (size !== before.size || before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs) return { ok: false, failure: "changed" };
       for (const component of checked) {
         const current = await lstat(component.path);
-        if (current.isSymbolicLink() || !sameFile(component.stat, current)) fail(`source path changed while reading: ${key}`, location);
+        if (current.isSymbolicLink() || !sameFile(component.stat, current)) return { ok: false, failure: "path-changed" };
       }
-      let source: string;
-      try { source = new TextDecoder("utf-8", { fatal: true }).decode(buffer.subarray(0, size)); }
-      catch { return fail("source is not valid UTF-8", target); }
-      return { source, bytes: size };
+      try { return { ok: true, text: new TextDecoder("utf-8", { fatal: true }).decode(buffer.subarray(0, size)), bytes: size }; }
+      catch { return { ok: false, failure: "not-utf8" }; }
     } finally { await handle.close(); }
   } catch (error) {
-    if (error instanceof SourceError) throw error;
     const code = (error as NodeJS.ErrnoException).code;
-    return fail(`cannot read source ${key}${code ? ` (${code})` : ""}`, location);
+    return { ok: false, failure: "unreadable", ...(code === undefined ? {} : { code }) };
   }
+}
+
+async function boundedSource(root: string, key: string, remainingBytes: number, location: Location, target: Location): Promise<{ source: string; bytes: number }> {
+  const read = await readProjectFile(root, key, Math.min(SOURCE_BOUNDS.maxSourceBytes, remainingBytes));
+  if (read.ok) return { source: read.text, bytes: read.bytes };
+  switch (read.failure) {
+    case "symlink": return fail(`symlink traversal is not allowed: ${key}`, location);
+    case "not-regular": return fail(`source path must contain directories and end in a regular file: ${key}`, location);
+    case "changed-before": return fail(`source file changed before reading: ${key}`, location);
+    case "too-large": return fail((read.size ?? 0) > SOURCE_BOUNDS.maxSourceBytes ? `source exceeds ${SOURCE_BOUNDS.maxSourceBytes} UTF-8 bytes` : `source project exceeds ${SOURCE_PROJECT_BOUNDS.maxTotalBytes} bytes`, target);
+    case "changed": return fail(`source file changed while reading: ${key}`, location);
+    case "path-changed": return fail(`source path changed while reading: ${key}`, location);
+    case "not-utf8": return fail("source is not valid UTF-8", target);
+    case "unreadable": return fail(`cannot read source ${key}${read.code ? ` (${read.code})` : ""}`, location);
+  }
+}
+
+/** Project data files, such as lock evaluation fixtures, use the source key
+ * rules without the `.algal` suffix: relative, normalized, printable, and
+ * well-formed UTF-16. */
+function dataKey(key: unknown): key is string {
+  return typeof key === "string" && key.length > 0 && key.length <= 512 && !key.includes("\\") && !key.includes(":")
+    && ![...key].some(char => { const code = char.codePointAt(0)!; return code < 32 || code === 127 || (code >= 0xd800 && code <= 0xdfff); })
+    && key.split("/").every(part => part !== "" && part !== "." && part !== "..");
+}
+
+export type SourceFileReadOptions = {
+  /** Names the files in error messages; `file` when omitted. */
+  readonly noun?: string;
+  /** `skip` leaves out a key with no file behind it (ENOENT) instead of failing. */
+  readonly missing?: "fail" | "skip";
+};
+
+/** Read named data files beneath a canonical root (`SourceProject.root`) with
+ * the same guards as source imports: no symlink traversal, regular files only,
+ * `maxBytes` per file, identities rechecked, and strict UTF-8. Returns a
+ * closed key → text map; nothing outside the root is read. Lock fixtures,
+ * vendor records, and vendored files share this path.
+ */
+export async function loadSourceFiles(root: string, keys: readonly string[], maxBytes: number, options: SourceFileReadOptions = {}): Promise<Record<string, string>> {
+  const noun = options.noun ?? "file";
+  const files: Record<string, string> = Object.create(null);
+  for (const key of keys) {
+    if (!dataKey(key)) throw new AlgalError("PARSE_FAILED", `${noun} ${JSON.stringify(key)} must be a normalized project-relative path`);
+    const read = await readProjectFile(root, key, maxBytes);
+    if (read.ok) { files[key] = read.text; continue; }
+    if (read.failure === "unreadable" && read.code === "ENOENT" && options.missing === "skip") continue;
+    switch (read.failure) {
+      case "too-large": throw new AlgalError("BUDGET_EXHAUSTED", `${noun} ${key} exceeds ${maxBytes} bytes`);
+      case "unreadable": throw new AlgalError("IO_FAILED", `cannot read ${noun} ${key}${read.code ? ` (${read.code})` : ""}`);
+      case "symlink": throw new AlgalError("PARSE_FAILED", `symlink traversal is not allowed: ${key}`);
+      case "not-regular": throw new AlgalError("PARSE_FAILED", `${noun} path must contain directories and end in a regular file: ${key}`);
+      case "not-utf8": throw new AlgalError("PARSE_FAILED", `${noun} ${key} is not valid UTF-8`);
+      default: throw new AlgalError("PARSE_FAILED", `${noun} ${key} changed while reading`);
+    }
+  }
+  return files;
+}
+
+/** Lock evaluation fixtures: `loadSourceFiles` with fixture wording. */
+export async function loadSourceFixtures(root: string, keys: readonly string[], maxBytes: number): Promise<Record<string, string>> {
+  return loadSourceFiles(root, keys, maxBytes, { noun: "fixture" });
 }
 
 /** Load only the entry and its transitive local imports under one explicit root.

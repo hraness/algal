@@ -1,14 +1,21 @@
 # ALGAL
 
-**Agent work that survives a pause and comes back with evidence.**
+**Write agent programs that wait, resume, and replay.**
 
-ALGAL is a language and application VM for bounded agent programs. Use it when
-an AI-assisted task needs to wait for a person, survive a CLI restart, reuse
-completed work, or explain what happened without calling the model again.
-Your host application chooses the tools and permissions; the program declares
-its decisions, limits, and approval points. A native Rust CLI and a Bun runtime
-that runs on its own implement the same specifications for programs, receipts,
-and durable processes.
+ALGAL is a programming language and VM for AI agent programs. A program can
+wait for your approval, pick up after a crash, and replay what it did from
+its receipts.
+
+Use it when an AI-assisted task needs to wait for a person, survive a CLI
+restart, reuse completed work, or explain what happened without calling the
+model again. Your host application chooses the tools and permissions; the
+program declares its decisions, limits, and approval points. A native Rust
+CLI and a Bun runtime that runs on its own implement the same specifications
+for programs, receipts, and durable processes.
+
+Preview: the current native build is
+[v0.2.0-vm.9](https://github.com/hraness/algal/releases) for macOS on Apple
+silicon and Linux x86_64, and the Bun runtime runs from this checkout.
 
 ## The idea
 
@@ -194,6 +201,21 @@ The [larger-program guide](docs/scaling-programs.md) covers module boundaries,
 dependency versions, library design, and habitat limits. Its
 [six-file task planner](examples/source/projects/task-planning/README.md)
 separates scoring, policy, and display data while reusing a pure helper.
+`dependencies` lists a project's source files, executable modules, and every
+static call with its caller location; the planner reports six modules and
+seven occurrences because its clamp helper is called twice. Given a receipt,
+it also attributes recorded invocations, cells, and work to each call.
+`lock` pins that closure and `lock --verify` reports source, compiler, and
+closure drift offline.
+
+The [shared program catalog](docs/library.md) lists pure programs that files in
+more than one project call. Its first entries are the planner's scoring and
+clamp programs, which a separate
+[support queue](examples/source/projects/support-queue/README.md) imports with
+`--source-root`. A test recompiles each entry and fails when a digest,
+interface, or caller on the page no longer matches the source. Another project
+can copy an entry with `vendor`, which checks the copy against the page's
+digests, and `lock` pins the copy and checks it offline.
 
 `check` also reports the source entry, file count, inferred maximum executor
 attempts, and required nesting depth. For the two-file inbox project these
@@ -381,9 +403,9 @@ show recorded cell states and are bound to the exact manifest and receipt.
 execution consistency; it does not establish that a model answer is true or
 attest to a provider. [Diagram format and lifecycle views](docs/diagrams.md).
 
-The source front end supports immutable values, pure expressions, exhaustive
-choices, decisions, generation, budgets, local imports, named calls, and bounded
-`each`. Tools, waits, advanced loops, and evolution remain available through the
+The source front end supports immutable values, pure expressions, record types
+with lists, allowed values, and number ranges, exhaustive choices, decisions,
+generation, budgets, local imports, named calls, and bounded `each`. Tools, waits, advanced loops, and evolution remain available through the
 full manifest API. No
 executable statechart syntax is claimed. Existing wire identifiers, manifest
 digests, and receipts remain unchanged.
@@ -553,9 +575,12 @@ Edges connect a producer port to a consumer port. Ports are typed (`text`,
 `json`, `choice`, `ref`, `cap`). A `cap` declares its exact capability class,
 feeds only the same class, and cannot be produced by `const` or widened into
 `json`; authority enters through host args or trusted host drivers and stays
-structural. A `json` port may declare a bounded `schema`
-(`{"type","required","properties"}`, depth ≤ 4) — a delivered record that
-violates it fails the consumer's activation, routable through `on:"fail"`.
+structural. A `json` port may declare a limited `schema`
+(`{"type","required","properties"}`, depth ≤ 4); with `"schemaVersion": 2` it
+also checks `items`, `enum`, `minimum`, and `maximum`, nested up to eight
+levels ([JSON schemas](spec/v1/organism.md#json-schemas)). A delivered record
+that violates the schema fails the consumer's activation, routable through
+`on:"fail"`.
 Guarded edges fire only when the produced choice equals the
 guard label — or, on a `json` producer, when `guard.field` of the delivered
 record strictly equals `guard.equals`, so routing can depend on a structured
@@ -836,6 +861,20 @@ usage, manifest and receipt digests, generator lineage, and the winner's holdout
 `foundry verify` checks the report digest, scores, selection, claimed outputs,
 and every run receipt by offline replay. `foundry pack` verifies that evidence
 before exporting the promoted organism's content-addressed closure.
+
+A config can add a `budget` object with `work`, `attempts`, and `runs` limits
+for the whole foundry, including the generator and losing candidates. Before each run
+starts, the foundry reserves the run's declared `maxWork` and `maxAgentCalls`
+against that budget, then charges what the run's receipt records. When the next
+run does not fit, no further run starts: the command writes the budget account
+with the outcome `exhausted` instead of a report and exits with status 1.
+`examples/foundry-budget.config.json` stops after five runs, and
+`foundry verify` checks that account and replays those runs. A search config
+accepts the same `budget` for all of its generations, and `foundry
+search-verify` checks either file. In the TypeScript CLI, `foundry schedule`
+runs several foundry and search configs against one budget, taking turns, and
+`--journal <dir>` lets an interrupted schedule continue; the native CLI refuses
+schedules. See [habitat schedules](spec/v1/foundry.md#habitat-schedules).
 
 A bounded search repeats generation and selection while keeping holdout sealed.
 The previous winner survives into the next population, and the generator sees
@@ -1211,10 +1250,10 @@ forged-output detection.
 
 ## Related work
 
-ALGAL is a Hraness project. It shares conventions with `oh`
+ALGAL is a Hraness project. It shares conventions with Oh
 (content-addressed canonical records), `platonik` (bounded organisms and
-symbolization), `valhalla` (authority boundaries and witness execution), and
-`oompa` (execution custody and conservative model routing), but it is
+symbolization), Valhalla (authority boundaries and witness execution), and
+xcb (execution custody and model routing), but it is
 standalone: the store and executor seams are where those foundations attach.
 
 ## License

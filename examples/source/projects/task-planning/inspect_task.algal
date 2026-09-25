@@ -1,0 +1,13 @@
+import score_task from "./score_task.algal"
+import clamp from "./lib/clamp.algal"
+
+// A second entry in the same project: explain one task's score against a
+// readiness threshold. It reuses the scoring program and calls the clamp
+// helper directly, so both entries pin the same executable digests.
+program inspect_task(task: json, weights: json, threshold: json) -> json {
+  budget { max_agent_calls: 0, max_depth: 2 }
+
+  let score = call score_task using { task: task, weights: weights }
+  let gap = call clamp using { value: threshold - score, minimum: 0, maximum: threshold }
+  return { title: task.title, score: score, threshold: threshold, gap: gap, ready: gap == 0 }
+}

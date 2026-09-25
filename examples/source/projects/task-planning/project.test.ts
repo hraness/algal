@@ -76,3 +76,33 @@ test("task plan enforces its collection bound, numeric inputs and shared root wo
   const limited = compileSource(limitedSource, { entry: project.entry, modules: { ...project.compilerOptions.modules, [project.entry]: limitedSource } });
   expect((await execute(limited, args)).outcome).toBe("failed");
 });
+
+test("a second entry reuses the scoring and clamp programs under identical digests", async () => {
+  const inspector = await loadSourceProject(`${import.meta.dir}/inspect_task.algal`), planner = await loadSourceProject(entry);
+  expect(inspector.files).toHaveLength(3);
+  expect(inspector.modules).toHaveLength(2);
+  expect(inspector.analysis).toEqual({ maxAgentCalls: 0, requiredDepth: 2 });
+  for (const key of ["score_task.algal", "lib/clamp.algal"]) expect(inspector.project.units[key]!.manifestDigest).toBe(planner.project.units[key]!.manifestDigest);
+  const clampCalls = inspector.project.calls.filter(call => call.childSource === "lib/clamp.algal");
+  expect(clampCalls).toHaveLength(3);
+  expect(clampCalls.filter(call => call.source === "inspect_task.algal")).toHaveLength(1);
+  const args = JSON.parse(await readFile(`${import.meta.dir}/inspect_task.args.json`, "utf8")) as Record<string, Record<string, JsonValue>>;
+  const receipt = await execute(inspector, args);
+  expect(receipt.outcome).toBe("complete");
+  expect(receipt.work.agentCalls).toBe(0);
+  expect(receipt.cells.result!.outputs!.out).toEqual({ title: "Polish the empty state", score: 4, threshold: 10, gap: 6, ready: false });
+  const plannerArgs = await fixture();
+  const ready = await execute(inspector, { input: { task: (plannerArgs.input!.tasks as JsonValue[])[0]!, weights: plannerArgs.input!.weights!, threshold: 10 } });
+  expect(ready.cells.result!.outputs!.out).toEqual({ title: "Ship the task workspace", score: 13, threshold: 10, gap: 0, ready: true });
+  const store = await install(inspector);
+  const bundle = await packOrganism(inspector.manifest, store), portable = new MemoryStore();
+  await unpackBundle(bundle, portable);
+  expect(Object.keys(bundle.manifests)).toHaveLength(3);
+  expect(await execute(inspector, args, portable)).toEqual(receipt);
+  expect((await verifyReceipt(receipt as unknown as JsonValue, manifestToJson(inspector.manifest), portable, builtinRegistry())).ok).toBe(true);
+  const invalid = await execute(inspector, { input: { ...args.input, threshold: "soon" } });
+  expect(invalid.outcome).toBe("failed");
+  expect(invalid.cells.result?.outputs).toBeUndefined();
+  const missing = await execute(inspector, { input: { ...args.input, task: { title: "No urgency" } } });
+  expect(missing.outcome).toBe("failed");
+});

@@ -7,11 +7,13 @@ import {
   type FoundryReport,
 } from "./foundry";
 import { parseFoundryReport, verifyFoundryReport } from "./foundry-verify";
+import { checkHabitatBudgetEvidence, habitatBindingMismatches, parseHabitatBudget } from "./habitat-budget";
 import type { FnRegistry } from "./registry";
 import { parseRunReceipt } from "./run";
 import {
   SEARCH_BOUNDS,
   SEARCH_CONTRACT,
+  searchReportRuns,
   type SearchGeneration,
   type SearchReport,
 } from "./search";
@@ -41,7 +43,7 @@ function digest(value: JsonValue | undefined, at: string): Digest {
 
 export function parseSearchReport(value: unknown): SearchReport {
   const raw = object(value, "search");
-  exactKeys(raw, ["contract", "generatorDigest", "generations", "result", "digest"], "search");
+  exactKeys(raw, ["contract", "generatorDigest", "generations", "result", "budget", "digest"], "search");
   if (raw.contract !== SEARCH_CONTRACT) {
     throw new AlgalError("PARSE_FAILED", `search.contract must be ${SEARCH_CONTRACT}`);
   }
@@ -78,11 +80,13 @@ export function parseSearchReport(value: unknown): SearchReport {
       promoted: parsed.promoted,
     };
   });
+  const budget = raw.budget === undefined ? undefined : parseHabitatBudget(raw.budget);
   return {
     contract: SEARCH_CONTRACT,
     generatorDigest: digest(raw.generatorDigest, "search.generatorDigest"),
     generations,
     result,
+    ...(budget ? { budget } : {}),
     digest: digest(raw.digest, "search.digest"),
   };
 }
@@ -178,6 +182,15 @@ export async function verifySearchReport(
   }
   if (previousWinner !== report.result.promoted) {
     mismatches.push("final result did not preserve the last generation winner");
+  }
+  // One account covers the whole search, so its final epoch never carries
+  // an account of its own.
+  if (report.result.budget !== undefined) mismatches.push("result: the final foundry report carries a budget");
+  if (report.budget) {
+    // Every run above was admitted through this account, in this order. The
+    // receipts were replayed above; check each ceiling and charge here.
+    mismatches.push(...habitatBindingMismatches(report.budget, "search", searchReportRuns(report)));
+    mismatches.push(...(await checkHabitatBudgetEvidence(report.budget, store)).mismatches);
   }
   return { ok: mismatches.length === 0, digest: claimed, checkedReceipts, mismatches };
 }

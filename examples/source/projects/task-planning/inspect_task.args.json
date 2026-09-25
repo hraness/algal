@@ -1,0 +1,7 @@
+{
+  "input": {
+    "task": { "id": "polish", "title": "Polish the empty state", "status": "open", "urgency": 1, "impact": 2 },
+    "weights": { "urgency": 2, "impact": 1 },
+    "threshold": 10
+  }
+}

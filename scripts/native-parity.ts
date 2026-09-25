@@ -12,6 +12,7 @@ import { verifyReceipt } from "../src/verify";
 import { compileSource } from "../src/source";
 import { loadSourceProject } from "../src/source-project";
 import { packOrganism } from "../src/bundle";
+import { habitatBudgetParity } from "./habitat-budget-fixture";
 
 const root = resolve(import.meta.dir, "..");
 const examples = join(root, "examples");
@@ -78,6 +79,40 @@ generated.set("source-task-planning", {
   bundlePath: plannerBundlePath, modules: planner.modules,
   argsPath: `${plannerFixtureBase}.args.json`, responsesPath: `${plannerFixtureBase}.responses.json`,
 });
+// A second entry in the same project reuses the scoring and clamp programs
+// under identical digests; both runtimes must agree on that closure too.
+const inspector = await loadSourceProject(join(examples, "source/projects/task-planning/inspect_task.algal"));
+const inspectorStore = new MemoryStore();
+for (const module of inspector.modules) await inspectorStore.putManifest(module);
+const inspectorBundlePath = join(temporary, "source-task-inspector.bundle.json");
+const inspectorManifestPath = join(temporary, "source-task-inspector.algal.json");
+await writeFile(inspectorBundlePath, canonicalize(await packOrganism(inspector.manifest, inspectorStore) as unknown as JsonValue));
+await writeFile(inspectorManifestPath, canonicalize(manifestToJson(inspector.manifest)));
+const inspectorFixtureBase = join(examples, "source/projects/task-planning/inspect_task");
+files.push("source-task-inspector.algal.json");
+modules.push(inspector.manifest);
+generated.set("source-task-inspector", {
+  manifestPath: inspectorManifestPath, fixtureBase: inspectorFixtureBase,
+  bundlePath: inspectorBundlePath, modules: inspector.modules,
+  argsPath: `${inspectorFixtureBase}.args.json`, responsesPath: `${inspectorFixtureBase}.responses.json`,
+});
+// A separate project imports the planner's scoring and clamp programs with ../
+// paths, so it loads under the projects directory as its explicit source root.
+const queue = await loadSourceProject(join(examples, "source/projects/support-queue/main.algal"), { root: join(examples, "source/projects") });
+const queueStore = new MemoryStore();
+for (const module of queue.modules) await queueStore.putManifest(module);
+const queueBundlePath = join(temporary, "source-support-queue.bundle.json");
+const queueManifestPath = join(temporary, "source-support-queue.algal.json");
+await writeFile(queueBundlePath, canonicalize(await packOrganism(queue.manifest, queueStore) as unknown as JsonValue));
+await writeFile(queueManifestPath, canonicalize(manifestToJson(queue.manifest)));
+const queueFixtureBase = join(examples, "source/projects/support-queue/main");
+files.push("source-support-queue.algal.json");
+modules.push(queue.manifest);
+generated.set("source-support-queue", {
+  manifestPath: queueManifestPath, fixtureBase: queueFixtureBase,
+  bundlePath: queueBundlePath, modules: queue.modules,
+  argsPath: `${queueFixtureBase}.args.json`, responsesPath: `${queueFixtureBase}.responses.json`,
+});
 // Branches around child calls need the same isolation in both runtimes. Cover
 // the generated parameterless wrapper and nested list results through a merge.
 for (const [kind, child, source] of [
@@ -105,12 +140,83 @@ for (const [kind, child, source] of [
       responsesPath: `${fixtureBase}.responses.json` });
   }
 }
+// Record types lower to json ports with schemas. Valid and malformed values
+// must produce identical receipts where each is checked: a root parameter, a
+// list element, a call argument, and a record result.
+const failing = new Set<string>();
+const typedTasks = join(examples, "source/projects/typed-tasks");
+const taskArgs = JSON.parse(await readFile(join(typedTasks, "scores.args.json"), "utf8")) as { input: Record<string, JsonValue> };
+const recordCases: [string, { manifest: OrganismManifest; modules: OrganismManifest[] }, [string, JsonValue][]][] = [
+  ["typed-tasks", await loadSourceProject(join(typedTasks, "scores.algal")), [["valid", taskArgs],
+    ["malformed", JSON.parse(await readFile(join(typedTasks, "scores.malformed.args.json"), "utf8")) as JsonValue],
+    ["malformed-weights", { input: { ...taskArgs.input, weights: { urgency: "high", impact: 1 } } }]]],
+  ["record-call", compileSource('import child from "./child.algal" record S { total: number } program main(value: json) -> S { budget { max_agent_calls: 0 } return call child using { t: value } }',
+    { modules: { "child.algal": "record T { n: number, extra: json? } program child(t: T) -> json { budget { max_agent_calls: 0 } return t.extra }" } }), [
+    ["valid", { input: { value: { n: 1, extra: { total: 3 } } } }],
+    ["malformed-argument", { input: { value: { n: "one" } } }],
+    ["malformed-result", { input: { value: { n: 1, extra: { total: "three" } } } }]]],
+];
+for (const [kind, result, variants] of recordCases) {
+  const store = new MemoryStore();
+  for (const module of result.modules) await store.putManifest(module);
+  const bundlePath = join(temporary, `${kind}.bundle.json`);
+  const manifestPath = join(temporary, `${kind}.algal.json`);
+  await writeFile(bundlePath, canonicalize(await packOrganism(result.manifest, store) as unknown as JsonValue));
+  await writeFile(manifestPath, canonicalize(manifestToJson(result.manifest)));
+  for (const [variant, args] of variants) {
+    const name = `source-${kind}-${variant}`;
+    const fixtureBase = join(temporary, name);
+    await writeFile(`${fixtureBase}.args.json`, canonicalize(args));
+    await writeFile(`${fixtureBase}.responses.json`, "{}");
+    files.push(`${name}.algal.json`);
+    modules.push(result.manifest);
+    generated.set(name, { manifestPath, fixtureBase, bundlePath, modules: result.modules,
+      responsesPath: `${fixtureBase}.responses.json` });
+    if (variant.startsWith("malformed")) failing.add(name);
+  }
+}
+// Schema version 2 records: the typed-tasks plan declares a list of nested
+// records with allowed values and number bounds. Each malformed variant breaks
+// one rule and must fail at the root parameter with identical receipts.
+{
+  const plan = await loadSourceProject(join(typedTasks, "plan.algal"));
+  const planArgs = JSON.parse(await readFile(join(typedTasks, "plan.args.json"), "utf8")) as { input: { tasks: Record<string, JsonValue>[]; weights: JsonValue } };
+  const tasks = planArgs.input.tasks;
+  const edit = (index: number, fields: Record<string, JsonValue>) => tasks.map((task, i) => i === index ? { ...task, ...fields } : task);
+  const variants: [string, Record<string, JsonValue>][] = [
+    ["valid", planArgs.input],
+    ["malformed-list", { ...planArgs.input, tasks: tasks[0]! }],
+    ["malformed-item", { ...planArgs.input, tasks: [...tasks.slice(0, 2), "backup"] }],
+    ["malformed-status", { ...planArgs.input, tasks: edit(1, { status: "later" }) }],
+    ["malformed-maximum", { ...planArgs.input, tasks: edit(1, { urgency: 7 }) }],
+    ["malformed-minimum", { ...planArgs.input, tasks: edit(0, { impact: -1 }) }],
+    ["malformed-nested-team", { ...planArgs.input, tasks: edit(2, { owner: { name: "Sam", team: "sales" } }) }],
+    ["malformed-nested-field", { ...planArgs.input, tasks: edit(0, { owner: { team: "platform" } }) }],
+    ["malformed-weights", { ...planArgs.input, weights: { urgency: 11, impact: 1 } }],
+  ];
+  const store = new MemoryStore();
+  for (const module of plan.modules) await store.putManifest(module);
+  const bundlePath = join(temporary, "typed-plan.bundle.json");
+  const manifestPath = join(temporary, "typed-plan.algal.json");
+  await writeFile(bundlePath, canonicalize(await packOrganism(plan.manifest, store) as unknown as JsonValue));
+  await writeFile(manifestPath, canonicalize(manifestToJson(plan.manifest)));
+  for (const [variant, input] of variants) {
+    const name = `source-typed-plan-${variant}`;
+    const fixtureBase = join(temporary, name);
+    await writeFile(`${fixtureBase}.args.json`, canonicalize({ input }));
+    await writeFile(`${fixtureBase}.responses.json`, "{}");
+    files.push(`${name}.algal.json`);
+    modules.push(plan.manifest);
+    generated.set(name, { manifestPath, fixtureBase, bundlePath, modules: plan.modules, responsesPath: `${fixtureBase}.responses.json` });
+    if (variant.startsWith("malformed")) failing.add(name);
+  }
+}
 let failed = 0;
 
-async function native(args: string[]) {
+async function native(args: string[], exitCode = 0) {
   const proc = Bun.spawn([binary, ...args], { cwd: root, stdout: "pipe", stderr: "pipe" });
   const [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
-  if (code !== 0) throw new Error(stderr || stdout);
+  if (code !== exitCode) throw new Error(stderr || stdout);
   return JSON.parse(stdout) as Record<string, JsonValue>;
 }
 
@@ -147,10 +253,10 @@ try {
     }
     const reference = await runOrganism({ manifest, args, store, transports, fns: builtinRegistry(), executors: [scriptedExecutor(responses)] });
     try {
-      if (generated.has(name) && reference.outcome !== "complete") throw new Error(`source example did not complete: ${reference.outcome}`);
+      if (generated.has(name) && reference.outcome !== (failing.has(name) ? "failed" : "complete")) throw new Error(`source example outcome: ${reference.outcome}`);
       const bundlePath = generated.get(name)?.bundlePath;
       if (bundlePath !== undefined) await native(["unpack", bundlePath, "--dir", join(temporary, name)]);
-      const result = await native(runArgs);
+      const result = await native(runArgs, failing.has(name) ? 1 : 0);
       const expected = reference as unknown as Record<string, JsonValue>;
       const differences = ["manifestDigest", "manifestKey", "args", "outcome", "cells", "effects", "events", "work", "failure"]
         .filter((field) => canonicalize(result[field] ?? null) !== canonicalize(expected[field] ?? null));
@@ -180,10 +286,13 @@ try {
         const namedArgsPath = join(temporary, `${name}.named-args.json`);
         await writeFile(namedArgsPath, canonicalize(namedArgs));
         const called = await native(["call", bundlePath, "--interface", "--args", namedArgsPath,
-          "--responses", generated.get(name)!.responsesPath!, "--dir", join(temporary, `${name}-offline`)]);
-        const expectedOutputs = Object.fromEntries(Object.entries(manifest.interface!.outputs)
+          "--responses", generated.get(name)!.responsesPath!, "--dir", join(temporary, `${name}-offline`)], failing.has(name) ? 1 : 0);
+        // A rejected input fails the standalone call with the reference failure and no outputs.
+        const expectedOutputs = failing.has(name) ? {} : Object.fromEntries(Object.entries(manifest.interface!.outputs)
           .map(([name, end]) => [name, reference.cells[end.cell]!.outputs![end.port]!]));
-        if (called.ok !== true || canonicalize(called.outputs!) !== canonicalize(expectedOutputs)) {
+        const expectedError = failing.has(name) ? { code: reference.failure!.code, message: reference.failure!.message } : null;
+        if (called.ok !== !failing.has(name) || canonicalize(called.outputs!) !== canonicalize(expectedOutputs)
+          || canonicalize(called.error ?? null) !== canonicalize(expectedError)) {
           throw new Error("standalone source-project bundle call did not match reference outputs");
         }
       }
@@ -197,5 +306,9 @@ try {
 } finally {
   await rm(temporary, { recursive: true, force: true });
 }
+// One budgeted foundry activity through both CLIs: complete, exhausted on
+// each limit, and refused configurations.
+const budget = await habitatBudgetParity(binary);
 console.log(JSON.stringify({ examples: files.length, passed: files.length - failed, failed }));
-process.exitCode = failed ? 1 : 0;
+console.log(JSON.stringify({ habitatBudgetCases: budget.cases, failed: budget.failed }));
+process.exitCode = failed || budget.failed ? 1 : 0;

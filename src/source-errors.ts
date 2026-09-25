@@ -1,5 +1,6 @@
 import { digestText, type Digest } from "./digest";
 import { SOURCE_BOUNDS, type SourceError, type SourcePosition, type SourceSpan } from "./source";
+import { utf8Length } from "./utf8";
 
 export const SOURCE_ERROR_BOUNDS = Object.freeze({
   maxMessageBytes: 512, maxPathBytes: 512, maxImports: 8, maxExcerptLines: 3,
@@ -37,9 +38,9 @@ function boundedText(value: unknown, maximum: number): { text: string; truncated
   if (typeof value !== "string") return { text: "", truncated: false };
   const characters: string[] = []; let bytes = 0;
   for (const char of value) {
-    const size = Buffer.byteLength(char);
+    const size = utf8Length(char);
     if (bytes + size > maximum) {
-      while (bytes > maximum - 3) bytes -= Buffer.byteLength(characters.pop()!);
+      while (bytes > maximum - 3) bytes -= utf8Length(characters.pop()!);
       return { text: `${characters.join("")}...`, truncated: true };
     }
     characters.push(char); bytes += size;
@@ -120,7 +121,7 @@ export function createSourceErrorReport(error: SourceError): SourceErrorReport {
   truncated ||= imports.length > SOURCE_ERROR_BOUNDS.maxImports || error.diagnostic?.importsTruncated === true;
   const text = error.sourceText;
   if (typeof text !== "string") report.excerptUnavailable = "source-not-provided";
-  else if (text.length > SOURCE_ERROR_BOUNDS.maxSourceBytes || Buffer.byteLength(text) > SOURCE_ERROR_BOUNDS.maxSourceBytes) {
+  else if (text.length > SOURCE_ERROR_BOUNDS.maxSourceBytes || utf8Length(text) > SOURCE_ERROR_BOUNDS.maxSourceBytes) {
     report.excerptUnavailable = "source-too-large"; truncated = true;
   } else {
     report.sourceDigest = digestText(text);

@@ -30,6 +30,7 @@ import { parseProposal } from "../examples/malleable-site/surface";
 import { renderSurfaceHtml } from "./living-render";
 import { offlineWorkerSource } from "./grow-offline";
 import { docsNavigation } from "./docs-navigation";
+import { BLOG_PATH, BLOG_DESCRIPTION, BLOG_TITLE, blogAtomFeed, blogIndexJsonLd, blogLlmsList, blogSitemapEntries, loadBlogPosts, postJsonLd, renderBlogIndex, renderPostArticle } from "./blog";
 
 const SITE = dirname(fileURLToPath(import.meta.url));
 const ROOT = dirname(SITE);
@@ -557,9 +558,9 @@ const pages: { file: string; out: string; meta: SitePageMeta }[] = [
 // repo and are not mirrored.
 
 const DOC_GROUPS: { title: string; pages: string[] }[] = [
-  { title: "Start here", pages: ["native-release", "native-workbench", "source-language", "scaling-programs", "vm"] },
+  { title: "Start here", pages: ["native-release", "native-workbench", "source-language", "scaling-programs", "library", "scale-measurements", "vm"] },
   { title: "Vision", pages: ["vision", "lineage", "why-unique"] },
-  { title: "Concepts", pages: ["algal-design", "design", "agent-loop-and-organism", "programmable-applications", "application-host-adapters", "executors", "diagrams", "repair"] },
+  { title: "Concepts", pages: ["algal-design", "design", "agent-loop-and-organism", "programmable-applications", "application-host-adapters", "executors", "model-router", "diagrams", "repair"] },
   { title: "Life and selection", pages: ["habitats", "civilization"] },
   { title: "Applications and workflows", pages: ["use-cases", "when-algal-wins", "browser-grow", "browser-tasks", "browser-inference", "malleable-site", "malleable-workbench", "local-triage", "adaptive-inventory", "agent-tool", "coding-harness", "coding-operations", "pr-shepherd"] },
 ];
@@ -643,8 +644,11 @@ await cp(join(ROOT, "examples/malleable-site/model-cost-evidence.json"), join(DI
 for (const f of ["robots.txt", "og.png", "favicon.svg", "algal-mark.svg"]) {
   await cp(join(SITE, f), join(DIST, f));
 }
+// Blog posts joined to their review records; see site/blog.ts.
+const blogPosts = await loadBlogPosts(join(SITE, "blog"));
 // llms.txt leads with the same description as the home page metadata.
-const llms = (await readFile(join(SITE, "llms.txt"), "utf8")).replaceAll("{{SITE_DESCRIPTION}}", SITE_DESCRIPTION);
+const llms = (await readFile(join(SITE, "llms.txt"), "utf8")).replaceAll("{{SITE_DESCRIPTION}}", SITE_DESCRIPTION)
+  .replaceAll("{{BLOG_POSTS}}", blogLlmsList(blogPosts));
 if (/\{\{[A-Z_]+\}\}/.test(llms)) throw new Error("Unresolved site build placeholder in llms.txt");
 await writeFile(join(DIST, "llms.txt"), llms);
 // Shared presentation and iconography are build-time dependencies only. The
@@ -847,8 +851,8 @@ function parseFrontmatter(source: string): { meta: ContentMeta; body: string } {
 const contentSectionUrls: string[] = [];
 
 async function emitMarkdownSection(options: {
-  dir: "blog" | "compare";
-  page: "blog" | "compare";
+  dir: "compare";
+  page: "compare";
   railTitle: string;
   indexIntro: { eyebrow: string; heading: string; lede: string };
   indexMeta: { title: string; description: string; ogTitle: string };
@@ -877,7 +881,6 @@ async function emitMarkdownSection(options: {
       title: /\bALGAL\b/.test(entry.doc.title) ? entry.doc.title : `${entry.doc.title} · ALGAL`,
       description: entry.meta.description ?? entry.doc.description,
       ogTitle: entry.doc.title,
-      ...(options.dir === "blog" && entry.meta.date ? { article: { published: entry.meta.date } } : {}),
     }, `<div class="docs-layout">${rail(entry.slug)}<article class="docs-article prose">${dateBlock}${entry.doc.html}</article></div>`);
     contentSectionUrls.push(`/${options.dir}/${entry.slug}/`);
   }
@@ -897,15 +900,43 @@ await emitMarkdownSection({
   indexIntro: { eyebrow: "Comparisons", heading: "Same questions, different machinery.", lede: "LangGraph, DSPy, and Temporal solve problems that overlap with ALGAL's. Each page shows where they differ and when each tool is the better fit." },
   indexMeta: { title: "Compare ALGAL with agent frameworks, optimizers, and durable execution", description: "How ALGAL, a language and VM whose programs are typed, content-addressed data, compares with LangGraph, DSPy, and Temporal, and when each is the better fit.", ogTitle: "Compare ALGAL" },
 });
-await emitMarkdownSection({
-  dir: "blog", page: "blog", railTitle: "Posts", sortBy: "date",
-  indexIntro: { eyebrow: "Blog", heading: "Notes on living programs.", lede: "Longer posts on how ALGAL works, the research it builds on, and the design choices behind it." },
-  indexMeta: { title: "Notes on living programs · ALGAL blog", description: "Posts on how the ALGAL language and VM work: self-evolving software, receipts that replay offline, and programs that wait for a person or an event.", ogTitle: "ALGAL blog" },
-});
+// --- Blog ------------------------------------------------------------------
+// Posts render through the shared article layer. Every post is readable at its
+// URL; only indexable posts reach the index, sitemap, feed, and llms.txt.
+const blogRail = (current: string) => {
+  const listed = blogPosts.filter(post => post.indexable || post.slug === current);
+  return docsNavigation("Posts",
+    current === "index" ? "Overview" : blogPosts.find(post => post.slug === current)!.title,
+    `<a class="docs-home" href="/blog/"${current === "index" ? ' aria-current="page"' : ""}>Posts</a><ul>${listed.map(post =>
+      `<li><a href="${post.path}"${post.slug === current ? ' aria-current="page"' : ""}>${escapeHtml(post.title)}</a></li>`).join("")}</ul>`);
+};
+for (const post of blogPosts) {
+  if (!post.emit) continue;
+  await emitDocPage({
+    page: "blog", path: post.path,
+    title: /\bALGAL\b/.test(post.title) ? post.title : `${post.title} · ALGAL`,
+    description: post.dek,
+    ogTitle: post.title,
+    article: { published: post.published },
+    ...(post.indexable ? {} : { noindex: true }),
+    jsonLd: [postJsonLd(post)],
+  }, `<div class="docs-layout">${blogRail(post.slug)}<div class="docs-article blog-article">${renderPostArticle(post)}</div></div>`);
+}
+await emitDocPage({
+  page: "blog", path: BLOG_PATH,
+  title: `${BLOG_TITLE} · ALGAL blog`, description: BLOG_DESCRIPTION, ogTitle: "ALGAL blog",
+  jsonLd: [blogIndexJsonLd(blogPosts)],
+}, `<section class="page-intro"><p class="eyebrow">Blog</p><h1>${BLOG_TITLE}.</h1><p class="lede">Longer posts on how ALGAL works, how it is tested, and the design choices behind it.</p></section><div class="docs-layout">${blogRail("index")}<div class="docs-article docs-index">${renderBlogIndex(blogPosts)}</div></div>`);
+await writeFile(join(DIST, "blog/feed.xml"), blogAtomFeed(blogPosts));
+const blogSitemap = blogSitemapEntries(blogPosts);
 
 // Generated sitemap covers every emitted page.
-const sitemapUrls = ["/", "/tour/", "/use-cases/", "/living/", "/grow/", "/tasks/", "/workbench/", "/docs/", ...DOC_SLUGS.map(slug => `/docs/${slug}/`), ...SPEC_SLUGS.map(slug => `/docs/spec/${slug}/`), ...contentSectionUrls];
-await writeFile(join(DIST, "sitemap.xml"), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemapUrls.map(url => `  <url><loc>https://algal.computer${url}</loc></url>`).join("\n")}\n</urlset>\n`);
+// Blog entries carry lastmod and list indexable posts only.
+const sitemapEntries: { path: string; lastModified?: string }[] = [
+  ...["/", "/tour/", "/use-cases/", "/living/", "/grow/", "/tasks/", "/workbench/", "/docs/", ...DOC_SLUGS.map(slug => `/docs/${slug}/`), ...SPEC_SLUGS.map(slug => `/docs/spec/${slug}/`), ...contentSectionUrls].map(path => ({ path })),
+  ...blogSitemap,
+];
+await writeFile(join(DIST, "sitemap.xml"), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemapEntries.map(entry => `  <url><loc>https://algal.computer${entry.path}</loc>${entry.lastModified ? `<lastmod>${entry.lastModified}</lastmod>` : ""}</url>`).join("\n")}\n</urlset>\n`);
 
 // Each browser application owns a route and cache namespace. Neither worker
 // can prune the other's versions. Only grow offers the optional model bundle.
@@ -925,4 +956,4 @@ async function emitOfflineShell(application: "grow" | "tasks", optional: string[
 await emitOfflineShell("grow", ["grow/browser-inference-worker.js"]);
 await emitOfflineShell("tasks");
 
-console.log(`site built → ${DIST} (${manifests.size + 1} structural diagrams, ${childViews.length + 1} focused views, ${verifiedRuns} replay-checked executions, 1 checked authoring error, ${pages.length + DOC_SLUGS.length + SPEC_SLUGS.length + contentSectionUrls.length + 1} pages)`);
+console.log(`site built → ${DIST} (${manifests.size + 1} structural diagrams, ${childViews.length + 1} focused views, ${verifiedRuns} replay-checked executions, 1 checked authoring error, ${pages.length + DOC_SLUGS.length + SPEC_SLUGS.length + contentSectionUrls.length + blogPosts.filter(post => post.emit).length + 2} pages)`);

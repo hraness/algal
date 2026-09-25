@@ -53,6 +53,9 @@ export type TriageEvaluationDetails = {
 const PROFILE = { contract: "algal.triage-host-profile.v1", effects: "none", maxTasks: MAX_TASKS, maxStates: MAX_STATES };
 const POLICY = { contract: "algal.application-evaluation-policy.v1", maxCases: 8, maxWork: 800000, maxModelCalls: 0, requireHoldoutPass: true, strictValidationImprovement: false };
 const EXPORT_BYTES = 8_388_608;
+/** Only the export traversal bounds raise this, so a caller that offered
+ * optional roots can retry with the required closure alone. */
+class TransferBoundError extends Error {}
 export type TriageTransferVerification = { ok: true; states: number; receipts: number; head: Digest };
 /** Only a fresh, private memory copy owns these immutable proofs. Limits apply
  * across all proof categories; a full memo merely falls back to verification. */
@@ -410,21 +413,39 @@ export class TriageCore {
   }
 
   /** Read the live closure before copying it. A callback owns one isolated
-   * proof scope; the next public call always rereads the live evidence. */
-  async withVerifiedSource<T>(callback: (core: TriageCore) => Promise<T>, extraEvaluations: Digest[] = []): Promise<T> {
-    if (!Array.isArray(extraEvaluations) || extraEvaluations.length > 32) throw new Error("Extra evaluation export bound exceeded");
-    const refs = extraEvaluations.map(reference), roots = [...refs];
+   * proof scope; the next public call always rereads the live evidence.
+   * Saved `candidates` join that scope only when history plus their closures
+   * fit the transfer bounds. The callback receives every evaluation proven in
+   * this scope; a candidate it does not receive must be proven separately. */
+  async withVerifiedSource<T>(callback: (core: TriageCore, proven: ReadonlyMap<Digest, TriageEvaluationDetails>) => Promise<T>, extraEvaluations: Digest[] = [], candidates: Digest[] = []): Promise<T> {
+    if (!Array.isArray(extraEvaluations) || extraEvaluations.length > 32 || !Array.isArray(candidates) || candidates.length > 32) throw new Error("Extra evaluation export bound exceeded");
+    const refs = extraEvaluations.map(reference), optional = [...new Set(candidates.map(reference))].filter(ref => !refs.includes(ref));
+    const roots = await this.evaluationRoots(refs);
+    let transfer: Transfer, included = optional;
+    try { transfer = await this.exportRecords([...roots, ...await this.evaluationRoots(optional)]); }
+    catch (error) {
+      // Shared candidate proofs must not lower history capacity. A combined
+      // closure over the bounds leaves each candidate to its own proof.
+      if (!(error instanceof TransferBoundError) || !optional.length) throw error;
+      transfer = await this.exportRecords(roots); included = [];
+    }
+    return withVerifiedTransfer(transfer, async core => {
+      const proven = new Map<Digest, TriageEvaluationDetails>();
+      for (const ref of [...refs, ...included]) proven.set(ref, await core.inspectEvaluation(ref));
+      return callback(core, proven);
+    }, this.sessions);
+  }
+  /** A schema-changing proposal has no target memory yet; its scope, frontier
+   * and attestation records are still required by revision verification. */
+  private async evaluationRoots(refs: Digest[]): Promise<Digest[]> {
+    const roots = [...refs];
     for (const ref of refs) {
       const raw = await getApplicationRecord(this.service.store, ref, value => object(value, ["contract", "expectedHead", "proposal", "candidateRevision", "accepted", "checks", "receipts"]));
       if (raw.contract !== "algal.triage-evaluation.v1") throw new Error("Invalid retained evaluation");
       const definition = await this.definition(reference(raw.candidateRevision));
       roots.push((await this.fixed(definition.schemaVersion)).scope);
     }
-    const transfer = await this.exportRecords(roots);
-    return TriageCore.withVerifiedTransfer(transfer, async core => {
-      for (const ref of refs) await core.inspectEvaluation(ref);
-      return callback(core);
-    }, this.sessions);
+    return roots;
   }
   /** Internal construction boundary: no caller can enable memoization on a
    * supplied live driver. Even an escaped core loses all proofs on scope exit. */
@@ -490,7 +511,7 @@ export class TriageCore {
     if (!states.length || states.length > MAX_STATES) throw new Error("Invalid task history export");
     const records: Transfer["records"] = [], seen = new Set<Digest>(), pending = [...states, ...extra]; let bytes = 0;
     while (pending.length) {
-      const ref = pending.pop()!; if (seen.has(ref)) continue; seen.add(ref); if (seen.size > 8192) throw new Error("Export reference bound");
+      const ref = pending.pop()!; if (seen.has(ref)) continue; seen.add(ref); if (seen.size > 8192) throw new TransferBoundError("Export reference bound");
       let value = await this.service.store.getValue(ref), kind: Transfer["records"][number]["kind"] = "value";
       if (value === undefined) { const manifest = await this.service.store.getManifest(ref); if (manifest) value = manifestToJson(manifest); kind = "manifest"; }
       if (value === undefined) { value = await this.service.store.getReceipt(ref); kind = "receipt"; }
@@ -508,7 +529,7 @@ export class TriageCore {
         kind = "manifest";
       }
       const record = { kind, reference: ref, value }; bytes += utf8Length(canonicalize(applicationJson(record)));
-      if (bytes > EXPORT_BYTES - 65536 || records.length >= 1024) throw new Error("Export byte/record capacity exceeded");
+      if (bytes > EXPORT_BYTES - 65536 || records.length >= 1024) throw new TransferBoundError("Export byte/record capacity exceeded");
       records.push(record);
       const scan = (v: JsonValue): void => { if (typeof v === "string" && /^sha256:[a-f0-9]{64}$/.test(v)) pending.push(v as Digest); else if (v && typeof v === "object") Object.values(v).forEach(scan); }; scan(value);
     }

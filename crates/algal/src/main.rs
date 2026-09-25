@@ -71,7 +71,7 @@ impl app_memory::MemoryAdmission for NoAdmission {
 #[command(
     name = "algal",
     version,
-    about = "Programs that grow. A typed language and harness for bounded agent work."
+    about = "Language and VM for agent programs that wait for approval and resume"
 )]
 struct Cli {
     /// Store directory: manifests, receipts, values, slots, and process state.
@@ -465,9 +465,9 @@ enum BenchCommand {
 
 #[derive(Subcommand)]
 enum FoundryCommand {
-    /// Replay every run in a foundry report offline.
+    /// Replay every run in a foundry report or budget record offline.
     Verify {
-        /// Foundry report (JSON).
+        /// Foundry report or habitat budget record (JSON).
         report: PathBuf,
         /// Tool registry file: tool name to `{signature, exec}`.
         #[arg(long)]
@@ -520,6 +520,22 @@ enum FoundryCommand {
     SearchInspect {
         /// Search report (JSON).
         report: PathBuf,
+    },
+    /// Habitat schedules run in the TypeScript runtime; the native CLI
+    /// refuses them explicitly.
+    #[command(hide = true)]
+    Schedule {
+        #[allow(dead_code)]
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    /// Habitat schedules run in the TypeScript runtime; the native CLI
+    /// refuses them explicitly.
+    #[command(hide = true)]
+    ScheduleVerify {
+        #[allow(dead_code)]
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
     },
     /// Export a verified search winner's bundle.
     SearchPack {
@@ -880,7 +896,16 @@ enum ApplicationCommand {
     Restore { input: PathBuf },
     /// `evaluateApplicationRevision`: foundry over incumbent/candidate
     /// entrypoints; emits the stored evaluation digest and verdict.
-    Evaluate { request: PathBuf },
+    Evaluate {
+        request: PathBuf,
+        /// Charge every run to an experiment habitat budget: a limits file
+        /// `{work, attempts, runs}` opens one, and a complete
+        /// `algal.habitat-budget.v1` record continues it. The output adds
+        /// the updated record as `budget`; an exhausted budget prints the
+        /// record alone and exits 1.
+        #[arg(long)]
+        budget: Option<PathBuf>,
+    },
     /// `verifyApplicationEvaluation`: re-verify a stored evaluation record
     /// against an expected parent state.
     VerifyEvaluation { input: PathBuf },
@@ -1571,9 +1596,17 @@ async fn execute(cli: Cli) -> Result<bool> {
                     modules,
                 }) => {
                     let (store, host) = verifier(tools, modules)?;
-                    let result =
-                        algal::foundry::verify(&load(&report, MAX_DOCUMENT_BYTES)?, &store, &host)
-                            .await?;
+                    let value = load(&report, MAX_DOCUMENT_BYTES)?;
+                    if value["contract"] == algal::habitat_budget::SCHEDULE_CONTRACT {
+                        return Err(algal::habitat_budget::schedule_unsupported());
+                    }
+                    // An exhausted foundry writes its terminal habitat budget
+                    // record in place of a report; `verify` accepts either.
+                    let result = if value["contract"] == algal::habitat_budget::CONTRACT {
+                        algal::habitat_budget::verify(&value, &store, &host).await?
+                    } else {
+                        algal::foundry::verify(&value, &store, &host).await?
+                    };
                     emit(&result)?;
                     Ok(result["ok"] == true)
                 }
@@ -1609,14 +1642,24 @@ async fn execute(cli: Cli) -> Result<bool> {
                     modules,
                 }) => {
                     let (store, host) = verifier(tools, modules)?;
-                    let result = algal::foundry::verify_search(
-                        &load(&report, MAX_DOCUMENT_BYTES)?,
-                        &store,
-                        &host,
-                    )
-                    .await?;
+                    let value = load(&report, MAX_DOCUMENT_BYTES)?;
+                    if value["contract"] == algal::habitat_budget::SCHEDULE_CONTRACT {
+                        return Err(algal::habitat_budget::schedule_unsupported());
+                    }
+                    // An exhausted search writes its terminal habitat budget
+                    // record in place of a report; `search-verify` accepts
+                    // either.
+                    let result = if value["contract"] == algal::habitat_budget::CONTRACT {
+                        algal::habitat_budget::verify_for(&value, &store, &host, Some("search"))
+                            .await?
+                    } else {
+                        algal::foundry::verify_search(&value, &store, &host).await?
+                    };
                     emit(&result)?;
                     Ok(result["ok"] == true)
+                }
+                Some(FoundryCommand::Schedule { .. } | FoundryCommand::ScheduleVerify { .. }) => {
+                    Err(algal::habitat_budget::schedule_unsupported())
                 }
                 Some(FoundryCommand::SearchInspect { report }) => {
                     emit(&algal::foundry::inspect_search(&load(
@@ -1658,7 +1701,14 @@ async fn execute(cli: Cli) -> Result<bool> {
                     let search = config.search.as_ref().ok_or_else(|| {
                         Error::invalid("foundry search requires a search block in the config")
                     })?;
-                    let report = algal::foundry::search(
+                    // One account admits every run of the search: each
+                    // generation's generator and candidates, then the final
+                    // epoch.
+                    let mut account = config
+                        .budget
+                        .map(|limits| algal::habitat_budget::Account::new("search", limits))
+                        .transpose()?;
+                    let result = algal::foundry::search_in(
                         generator,
                         &config.candidates,
                         &config.cases,
@@ -1667,13 +1717,26 @@ async fn execute(cli: Cli) -> Result<bool> {
                         &mut store,
                         &mut host,
                         &transports,
+                        account.as_mut(),
                     )
-                    .await?;
+                    .await;
+                    let report = match result {
+                        Ok(report) => report,
+                        // Exhaustion is a terminal outcome, not a partial
+                        // report: emit the account record. Completed runs
+                        // keep their stored receipts.
+                        Err(error) => {
+                            match account.as_ref().filter(|account| account.exhausted()) {
+                                Some(account) => account.record()?,
+                                None => return Err(error),
+                            }
+                        }
+                    };
                     if let Some(path) = out {
                         std::fs::write(&path, canonical(&report)?)?;
                     }
                     emit(&report)?;
-                    Ok(true)
+                    Ok(report["contract"] != algal::habitat_budget::CONTRACT)
                 }
                 None => {
                     let config = config.ok_or_else(|| {
@@ -1685,39 +1748,62 @@ async fn execute(cli: Cli) -> Result<bool> {
                     options.write = true;
                     let (mut store, mut host, transports) = prepare(&options, &cli.dir)?;
                     let mut config = algal::foundry::load_config(&config, false)?;
-                    let lineage = match &config.generator {
-                        Some(generator) => {
-                            let (generator_digest, receipt_digest, generated) =
-                                algal::foundry::generate(
-                                    &generator.manifest,
-                                    &generator.args,
-                                    &generator.output,
-                                    generator.field.as_deref(),
-                                    &mut store,
-                                    &mut host,
-                                    &transports,
-                                )
-                                .await?;
-                            config.candidates.extend(generated);
-                            Some((generator_digest, receipt_digest))
+                    // One account admits every run of this activity: the
+                    // generator, each selection case, then holdout.
+                    let mut account = config
+                        .budget
+                        .map(|limits| algal::habitat_budget::Account::new("foundry", limits))
+                        .transpose()?;
+                    let result: Result<Value> = async {
+                        let lineage = match &config.generator {
+                            Some(generator) => {
+                                let (generator_digest, receipt_digest, generated) =
+                                    algal::foundry::generate_in(
+                                        &generator.manifest,
+                                        &generator.args,
+                                        &generator.output,
+                                        generator.field.as_deref(),
+                                        &mut store,
+                                        &mut host,
+                                        &transports,
+                                        account.as_mut(),
+                                    )
+                                    .await?;
+                                config.candidates.extend(generated);
+                                Some((generator_digest, receipt_digest))
+                            }
+                            None => None,
+                        };
+                        algal::foundry::run_in(
+                            &config.candidates,
+                            &config.cases,
+                            config.scorer.as_ref(),
+                            lineage,
+                            &mut store,
+                            &mut host,
+                            &transports,
+                            account.as_mut(),
+                        )
+                        .await
+                    }
+                    .await;
+                    let report = match result {
+                        Ok(report) => report,
+                        // Exhaustion is a terminal outcome, not a partial
+                        // report: emit the account record. Completed runs
+                        // keep their stored receipts.
+                        Err(error) => {
+                            match account.as_ref().filter(|account| account.exhausted()) {
+                                Some(account) => account.record()?,
+                                None => return Err(error),
+                            }
                         }
-                        None => None,
                     };
-                    let report = algal::foundry::run(
-                        &config.candidates,
-                        &config.cases,
-                        config.scorer.as_ref(),
-                        lineage,
-                        &mut store,
-                        &mut host,
-                        &transports,
-                    )
-                    .await?;
                     if let Some(path) = out {
                         std::fs::write(&path, canonical(&report)?)?;
                     }
                     emit(&report)?;
-                    Ok(true)
+                    Ok(report["contract"] != algal::habitat_budget::CONTRACT)
                 }
             }
         }
@@ -1868,7 +1954,7 @@ async fn execute(cli: Cli) -> Result<bool> {
                         for field in ["optional", "many"] {
                             if port[field] == true { value[field] = json!(true); }
                         }
-                        for field in ["labels", "schema", "capability"] {
+                        for field in ["labels", "schema", "schemaVersion", "capability"] {
                             if let Some(v) = port.get(field) { value[field] = v.clone(); }
                         }
                         (name.clone(), value)
@@ -2597,21 +2683,56 @@ async fn execute(cli: Cli) -> Result<bool> {
                     .await?;
                     emit(&result)?;
                 }
-                ApplicationCommand::Evaluate { request } => {
+                ApplicationCommand::Evaluate { request, budget } => {
                     // Case-pure evaluation runs without executors or tools:
                     // the builtin fn registry is the only admitted surface.
                     let mut run_host = Host::default();
-                    let (digest, evaluation) =
-                        application_adaptation::evaluate_application_revision(
-                            &mut service.store,
-                            &load(&request, 262_144)?,
-                            &mut run_host,
-                            &Transports::new(),
-                        )
-                        .await?;
-                    emit(&json!({
+                    // An experiment account the host carries across
+                    // evaluations: fresh limits, or the complete record an
+                    // earlier evaluation printed, reconciled with the store.
+                    let mut account = match &budget {
+                        None => None,
+                        Some(path) => {
+                            let value = load(path, MAX_DOCUMENT_BYTES)?;
+                            Some(if value.get("contract").is_some() {
+                                algal::habitat_budget::Account::resume(&value, &service.store)
+                                    .await?
+                            } else {
+                                algal::habitat_budget::Account::new(
+                                    "experiment",
+                                    algal::habitat_budget::parse_limits(&value)?,
+                                )?
+                            })
+                        }
+                    };
+                    let result = application_adaptation::evaluate_application_revision_in(
+                        &mut service.store,
+                        &load(&request, 262_144)?,
+                        &mut run_host,
+                        &Transports::new(),
+                        account.as_mut(),
+                    )
+                    .await;
+                    let (digest, evaluation) = match result {
+                        Ok(evaluated) => evaluated,
+                        // Exhaustion stores no evaluation: print the account.
+                        Err(error) => {
+                            match account.as_ref().filter(|account| account.exhausted()) {
+                                Some(account) => {
+                                    emit(&account.record()?)?;
+                                    return Ok(false);
+                                }
+                                None => return Err(error),
+                            }
+                        }
+                    };
+                    let mut output = json!({
                         "evaluation": digest, "verdict": evaluation["verdict"],
-                    }))?;
+                    });
+                    if let Some(account) = &account {
+                        output["budget"] = account.record()?;
+                    }
+                    emit(&output)?;
                 }
                 ApplicationCommand::VerifyEvaluation { input } => {
                     let input = load(&input, 262_144)?;

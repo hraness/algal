@@ -7,14 +7,31 @@ export { compileSource, sourceImports, SourceError, SOURCE_BOUNDS, SOURCE_PROJEC
 export type { SourceAnnotation, SourceCallOrigin, SourceCompilation, SourceCompilerOptions, SourceErrorContext, SourceErrorImport, SourceImport, SourceMap, SourcePosition, SourceProjectIndex, SourceSpan } from "./src/source";
 export { createSourceErrorReport, renderSourceError, SOURCE_ERROR_BOUNDS } from "./src/source-errors";
 export type { SourceErrorExcerptLine, SourceErrorReport } from "./src/source-errors";
-export { loadSourceProject } from "./src/source-project";
+export { loadSourceFixtures, loadSourceProject } from "./src/source-project";
 export type { SourceProject, SourceProjectOptions } from "./src/source-project";
 export { diagnoseSource, renderSourceDiagnostics, SOURCE_DIAGNOSTIC_BOUNDS } from "./src/source-diagnostics";
 export type { SourceDiagnostics, SourceDiagnosticIssue, SourceDiagnosticLocation, SourceDiagnosticCaller } from "./src/source-diagnostics";
 export { createSourceTrace, resolveSourcePath, SOURCE_TRACE_BOUNDS } from "./src/source-trace";
 export type { SourceTraceContext, SourcePathResult, SourceTraceLocation, SourceTraceFrame } from "./src/source-trace";
+export { classifySourceDependencyCells, createSourceDependencyReport, renderSourceDependencies, SOURCE_DEPENDENCY_BOUNDS, SOURCE_DEPENDENCY_CELL_KINDS, SOURCE_DEPENDENCY_CONTRACT } from "./src/source-dependencies";
+export type { SourceDependencyBundle, SourceDependencyCaller, SourceDependencyEffect, SourceDependencyExecution, SourceDependencyExecutionOccurrence, SourceDependencyInconsistency, SourceDependencyInterface, SourceDependencyModule, SourceDependencyOccurrence, SourceDependencyOptions, SourceDependencyOrigin, SourceDependencyReport, SourceDependencyUnit } from "./src/source-dependencies";
+export { SOURCE_DEPENDENCY_ESTIMATE_BOUNDS } from "./src/source-dependencies-estimate";
+export type { SourceDependencyEstimate, SourceDependencyInvocationBound, SourceDependencyModuleInvocations } from "./src/source-dependencies-estimate";
+export { SOURCE_DEPENDENCY_APPLICATION_BOUNDS } from "./src/source-dependencies-application";
+export type { SourceDependencyApplication, SourceDependencyApplicationActivation, SourceDependencyApplicationEntrypoint, SourceDependencyApplicationEvaluation, SourceDependencyApplicationModuleLinks, SourceDependencyApplicationOccurrenceLinks, SourceDependencyApplicationOptions, SourceDependencyApplicationReader } from "./src/source-dependencies-application";
+export { createSourceLock, parseSourceLock, parseSourceLockCases, renderSourceLockVerification, sourceLockFixtureKeys, sourceLockToJson, verifySourceLock, SOURCE_LOCK_BOUNDS, SOURCE_LOCK_CONTRACT, SOURCE_LOCK_VERIFICATION_CONTRACT } from "./src/source-lock";
+export type { SourceLock, SourceLockCase, SourceLockDrift, SourceLockDriftKind, SourceLockEvaluation, SourceLockEvaluationCase, SourceLockFixture, SourceLockOptions, SourceLockUnit, SourceLockVerification, SourceLockVerifyOptions } from "./src/source-lock";
+export type { SourceLockVendored } from "./src/source-lock";
+export { checkVendoredFiles, loadVendoredSources, parseVendorRecord, vendorRecordToJson, VENDOR_BOUNDS, VENDOR_CONTRACT, VENDOR_RECORD_FILE } from "./src/vendor-record";
+export type { VendorDifference, VendoredSources, VendorFile, VendorRecord } from "./src/vendor-record";
+export { vendorCatalogEntry, VENDOR_FETCH_BOUNDS } from "./src/vendor";
+export type { VendorOptions } from "./src/vendor";
 export { createProgramDiagram, renderMermaid, renderSvg } from "./src/diagram";
 export type { ProgramDiagram, DiagramOptions, DiagramNode, DiagramEdge, SvgDiagramOptions } from "./src/diagram";
+export { compareLibraryRevision, verifyLibraryComparison } from "./src/library-compare";
+export type { LibraryComparisonOptions } from "./src/library-compare";
+export { libraryCaseId, libraryComparisonToJson, parseLibraryComparison, parseLibraryUnseenCases, renderLibraryComparison, LIBRARY_COMPARISON_BOUNDS, LIBRARY_COMPARISON_CONTRACT, LIBRARY_UNSEEN_CASES_CONTRACT } from "./src/library-comparison";
+export type { LibraryComparison, LibraryComparisonCaller, LibraryComparisonCase, LibraryComparisonDependent, LibraryComparisonResult, LibraryComparisonSet, LibraryComparisonVerdict, LibraryComparisonVersion, LibraryUnseenCase, LibraryUnseenCases } from "./src/library-comparison";
 
 export {
   BOUNDS,
@@ -231,8 +248,10 @@ export type { VerifyReport } from "./src/verify";
 export {
   FOUNDRY_BOUNDS,
   FOUNDRY_CONTRACT,
+  foundryReportRuns,
   generateFoundryCandidates,
   runFoundry,
+  runFoundryWithin,
   selectFoundryCandidate,
 } from "./src/foundry";
 export type {
@@ -248,7 +267,62 @@ export type {
 export { parseFoundryReport, verifyFoundryReport } from "./src/foundry-verify";
 export type { FoundryVerifyReport } from "./src/foundry-verify";
 
-export { SEARCH_BOUNDS, SEARCH_CONTRACT, runFoundrySearch } from "./src/search";
+export {
+  HABITAT_ACTIVITIES,
+  HABITAT_BUDGET_BOUNDS,
+  HABITAT_BUDGET_CONTRACT,
+  HabitatAccount,
+  checkHabitatBudgetEvidence,
+  checkHabitatRunsEvidence,
+  habitatBindingMismatches,
+  habitatCeiling,
+  parseHabitatBudget,
+  parseHabitatLimits,
+  parseHabitatRun,
+  verifyHabitatBudget,
+} from "./src/habitat-budget";
+export type {
+  HabitatActivity,
+  HabitatAmount,
+  HabitatBudget,
+  HabitatBudgetVerifyReport,
+  HabitatDimension,
+  HabitatLedger,
+  HabitatLimits,
+  HabitatRefusal,
+  HabitatRun,
+  HabitatRunRequest,
+  HabitatRunResult,
+} from "./src/habitat-budget";
+
+export {
+  HABITAT_JOURNAL_CONTRACT,
+  HABITAT_SCHEDULE_BOUNDS,
+  HABITAT_SCHEDULE_CONFIG_CONTRACT,
+  HABITAT_SCHEDULE_CONTRACT,
+  HABITAT_SCHEDULE_KINDS,
+  HABITAT_SCHEDULE_ORDERS,
+  openHabitatJournal,
+  parseHabitatSchedule,
+  parseHabitatScheduleConfig,
+  runHabitatSchedule,
+  verifyHabitatSchedule,
+} from "./src/habitat-schedule";
+export type {
+  HabitatJournal,
+  HabitatSchedule,
+  HabitatScheduleActivity,
+  HabitatScheduleActivitySpec,
+  HabitatScheduleConfig,
+  HabitatScheduleKind,
+  HabitatScheduleOptions,
+  HabitatScheduleOrder,
+  HabitatScheduleResult,
+  HabitatScheduleRun,
+  HabitatScheduleVerifyReport,
+} from "./src/habitat-schedule";
+
+export { SEARCH_BOUNDS, SEARCH_CONTRACT, runFoundrySearch, searchReportRuns } from "./src/search";
 export type {
   SearchGeneration,
   SearchOptions,

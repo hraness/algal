@@ -137,6 +137,24 @@ execution, restart, and mailbox wakeups. The
 memory state, revision-pinned episodes, proposal evaluation, activation, and
 schema migration. Host policy decides which changes it accepts.
 
+Work has three separate limits. A run's root budget covers that run and every
+nested child: its manifest's `maxSteps`, `maxAgentCalls`, `maxWork`, and depth
+limits. An application evaluation's policy sets `maxWork` and `maxModelCalls`
+for its incumbent, candidate, and holdout runs together, and an evaluation that
+records more is rejected with the reason `budget-exhausted`. A foundry run or a
+search can also declare a [habitat budget](../spec/v1/foundry.md#habitat-budget)
+for all of its runs: one account reserves each run's declared ceiling before the
+run starts and charges the work and model-call attempts the run records,
+including losing candidates, failed runs, and retries. When the next run does
+not fit, no further run starts, and the command writes the account with the
+outcome `exhausted` instead of a report. A host can charge the evaluations of
+an application experiment to one account and cite it in the experiment record.
+
+In the TypeScript CLI, `algal foundry schedule` runs several foundry and search
+configs against one account, taking turns in a fixed order, and a journal lets
+an interrupted schedule continue from its stored receipts. The native CLI
+refuses schedules. Scheduling experiment evaluations is proposed.
+
 Applications can exchange verified messages through configured routes. This
 does not provide distributed consensus or an unrestricted network connecting
 independent habitats. A public name system for program digests and automatic

@@ -7,6 +7,7 @@ import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { hashBytes, hashFile, hashJson, readFileBounded, readJson, type FileBinding } from "../lib/files";
 import { CommandFailure, requireSuccess, runCommand } from "../lib/runner";
+import { childEnv } from "../lib/command-supervisor";
 import { admitBoundarySummary, runBoundary } from "../boundary/run";
 import { array, digest, natural, record, requireThat } from "../lib/schema";
 
@@ -123,7 +124,7 @@ async function binaryHash(path: string): Promise<string> {
 /** Only called inside the outer owned process group/deadline. */
 async function command(argv: string[], cwd: string, env: Record<string, string>): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn(argv[0]!, argv.slice(1), { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(argv[0]!, argv.slice(1), { cwd, env: childEnv(env), stdio: ["ignore", "pipe", "pipe"] });
     const stdout: Buffer[] = [], stderr: Buffer[] = [];
     let bytes = 0, exceeded = false;
     const receive = (chunks: Buffer[]) => (chunk: Buffer) => {

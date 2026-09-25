@@ -9,6 +9,168 @@ wire constant (`0.1.0`) is independent of these package versions.
 
 ## Unreleased
 
+- Public copy adopts the canonical portfolio messaging record: the site
+  title, hero, footer, social card, `llms.txt` introduction, README lead,
+  both CLI introductions, and the package and crate descriptions now carry
+  the same tagline and description lines.
+- `algal dependencies --estimate` gives every call and module a minimum and
+  maximum number of runs per run of the entry: enclosing `each` item limits
+  multiply, a call under a branch arm has a minimum of 0, and products above
+  65,536 saturate. With `--receipt`, recorded invocations appear beside each
+  bound, and any occurrence recorded above its maximum is listed as
+  `exceeded`. `--application <name> [--dir <path>]` links each module and call,
+  by executable digest, to the application revision entrypoints whose recorded
+  closure contains it, with the transition that activated each revision and
+  the evaluation records that measured it. The join reads validated history,
+  commits nothing, and reports verdicts as recorded without replay; unreadable,
+  unbound, foreign, and unresolved records are counted instead of linked. It
+  reads at most 4,096 records and keeps the latest 64 entrypoints. Reports
+  without the new flags are unchanged.
+- Package subpaths `./source` and `./source-errors` let a browser bundle
+  compile `.algal` source. `compileSource` takes every source file as a
+  string, and `createSourceErrorReport` and `renderSourceError` format its
+  errors. Before compiling, a browser host instantiates `./algal_expr.wasm`
+  and passes its exports to `setExprExports` from `./expr`.
+  `loadSourceProject` reads files and remains on the root entry. Source byte
+  limits no longer use `Buffer`: an unpaired UTF-16 surrogate counts as the
+  three bytes `TextEncoder` writes for it (U+FFFD), where Bun's
+  `Buffer.byteLength` counted two.
+- `scripts/measure-source-scaling.ts` measures compile, bundle, and run cost
+  for every example source project and for generated projects that share
+  helpers, growing each until compilation refuses it on the instance, cell,
+  edge, manifest byte, import depth, or executor attempt limit, and records
+  where and after how much of the expansion it stopped.
+  `scripts/measure-history-scaling.ts` measures Browser Tasks history
+  verification separately as history approaches its transfer limits.
+  `docs/scale-measurements.md` publishes the results, and
+  `scripts/source-scaling.test.ts` fails when a published count stops matching
+  the compiler. Compiler and runtime behavior are unchanged.
+- Foundry configs accept an optional habitat budget, `budget: {work, attempts,
+  runs}`, that covers every run of the activity: the generator, each
+  candidate's cases, and holdout. An `algal.habitat-budget.v1` account reserves
+  each run's declared `maxWork` and `maxAgentCalls` before it starts and charges
+  the work and executor attempts its receipt records, including losing
+  candidates, failed runs, and retries. The first run that does not fit stops
+  the foundry, which writes the exhausted account instead of a report and exits
+  with status 1; a complete foundry embeds the account in its report.
+  `foundry verify` checks either file, and both runtimes write identical bytes.
+- `foundry search` accepts the habitat budget: one `search` account covers
+  every generation's generator and candidate runs and the final epoch. The
+  first run that does not fit stops the search, which writes the exhausted
+  account instead of a report and exits with status 1; `foundry search-verify`
+  checks either file, and both runtimes write identical bytes. Application
+  evaluations can charge an `experiment` account the host supplies (native:
+  `application evaluate --budget <file>`), and an experiment may cite the
+  stored account as `budget`; evaluation records and experiments without the
+  field keep their digests. The TypeScript CLI adds `foundry schedule` and
+  `foundry schedule-verify`: several foundry and search configs share one
+  account in round-robin order, recorded as `algal.habitat-schedule.v1`, and
+  `--journal <dir>` resumes an interrupted schedule from its stored receipts
+  and refuses entries that do not match them. The native CLI refuses
+  schedules with status 2.
+- Source record types: `record Task { id: text, urgency: number, notes: text? }`
+  declares fields for a parameter or result. A record compiles to a `json` port
+  with a schema in the existing subset, which both runtimes check where a value
+  enters or leaves a program; the compiler also rejects mismatches it can prove.
+  Compiler version 1.4.0; existing programs compile to the same manifests. The
+  `typed-tasks` example scores a task list and rejects a malformed task.
+- A `json` port or JSON output contract may carry `"schemaVersion": 2` beside
+  its schema. Version 2 makes both runtimes check `items`, `enum` (1 to 32
+  distinct scalar values), `minimum`, and `maximum`, which were provider
+  hints, and rejects every other keyword; nesting is limited to 8 levels and
+  `required` and `properties` to 64 names each. Schemas without the key keep
+  their bytes, digests, and version 1 checks, and runtimes that predate
+  version 2 refuse a manifest with the key at admission, before any cell runs.
+- Source record fields and list items accept `[Task]` (a list whose items all
+  have one type, also as a parameter or result type), `text in ["open",
+  "done"]` or `number in [1, 2, 3]` (allowed values; allowed text values form
+  a closed choice that `match` must cover exactly), `number min 0 max 5`
+  (inclusive bounds, either optional), and records nested up to the
+  eight-level schema limit. The compiler rejects mismatches it can prove and
+  adds schema version 2 only where a schema needs it, so earlier programs
+  compile to the same manifests. Compiler version 1.5.0. Bounds: 16 allowed
+  values of at most 64 characters and 64 KiB per compiled record or list
+  schema. The `typed-tasks` example gains a plan that checks a task list
+  before scoring it.
+- Native `each` checks each item against the child's input type before that
+  item's run, and reports a non-list or oversized list with the reference
+  runtime's messages, so a rejected item yields the same receipt in both
+  runtimes. Earlier native receipts that recorded such a failure under
+  `<each>/i<n>/input` need their original binary to replay.
+- A shared program catalog (`docs/library.md`) lists pure programs called from
+  more than one project, each with its path, executable and interface digests,
+  interface, rejected inputs, limits, callers, compiler, maintainer, and
+  status. `src/library-index.test.ts` recompiles every entry and calling
+  project and fails when the page drifts. A separate `support-queue` project
+  reuses the task planner's `score_task.algal` and `lib/clamp.algal` through
+  `--source-root`, with native parity coverage.
+- Shared program catalog revisions: `algal library compare <name>
+  <revision.algal>` compiles a proposed revision of a listed program, runs each
+  calling entry point's case list and the entry's unseen cases against both
+  versions in memory with scripted responses, and writes an
+  `algal.library-comparison.v1` record that names any interface change,
+  changed case, or case that could not run (exit 1 when it does not pass). An
+  entry pins the digest of an unseen case file kept outside the repository;
+  the comparison refuses a file with another digest, and `library unseen`
+  prints the digest to pin. The catalog test accepts a changed digest only
+  when the entry's status names a passing record that starts from the
+  previous digest and ends at the new one; `--verify` checks a record's case
+  results by running the comparison again. The task planner's inspector and
+  the support queue gain case lists. SDK: `compareLibraryRevision`,
+  `verifyLibraryComparison`.
+- `algal vendor <catalog> --entry <path> --into <dir>` copies a shared-catalog
+  entry, with every entry it depends on, from a catalog page (an https URL or a
+  local path) into a new directory of a project. It refuses the copy unless
+  each file compiles to the executable and interface digests the page lists,
+  and writes an `algal.vendor.v1` record of the page's address and digest and
+  each file's digests. Requests stay on the page's host over https, with
+  same-host redirects only, 128 KiB for the page, 64 KiB per file, 16 files,
+  and 15 seconds per request; writing follows no symlink and replaces no file.
+  `algal lock` pins each vendored directory in an optional `vendored` section
+  of `algal.source-lock.v1`, so existing locks keep their digest, and
+  `lock --verify` checks the copies offline against their records and the
+  catalog's digests, reporting `vendor` drift after `evaluation`.
+- `algal lock --evaluation <cases.json>` pins evaluation cases in an optional
+  `evaluation` section of `algal.source-lock.v1`: the digests of each case's
+  argument and scripted-response files, the run outcome, and a digest of the
+  program's declared outputs. `lock --verify --evaluate` runs the cases again
+  in memory with scripted responses only and reports `evaluation` drift.
+  `--versions <labels.json>` adds labels for exact closure digests; a label
+  whose digest leaves the recompiled closure reports `version` drift and is
+  never moved. Both sections are optional, so existing locks keep their digest.
+- Browser Tasks checks saved workflow evaluations in the same history replay
+  that checks its saved operations, instead of giving each evaluation its own
+  replay, while history and evaluations together fit the 1,024-record and
+  8 MiB transfer limits. With 16 tasks and 16 saved evaluations, one
+  instrumented in-memory edit replayed the history 6 times instead of 22, with
+  identical states, captures, transfers, and writes. Each of those checks
+  rereads every saved evaluation, so an operation fails if one disappears or
+  changes after an earlier check in it. Adds
+  `scripts/triage-history-performance.ts`. This reduces verification work; no
+  latency change is claimed.
+- Package subpaths `./decisions`, `./effects`, `./digest`, `./values`, `./errors`
+  and `./store-contract` expose the browser-clean decision and effect contract
+  modules to consumers that bundle ALGAL for the browser; the root entry still
+  targets Bun.
+- Site: `docs/model-router.md` joins the documentation shelf and `llms.txt`, so
+  hraness.com/prompting and the README can link the router doc on the site.
+- `algal dependencies` and `createSourceDependencyReport` report a source
+  project's files, executable modules, static call occurrences with caller
+  locations, and direct and transitive model effects, and can check a bundle
+  against the recompiled closure. The report is presentation-only and outside
+  executable identity.
+- `algal dependencies --receipt` attributes a recorded run to the static
+  report: invocations, recorded cells by status, effect cells, and self and
+  inclusive work per occurrence, with unattributable paths counted rather than
+  guessed and a `reconciled` flag naming any failed consistency rule. The join
+  is digest-bound, not replay.
+- `algal lock` writes an `algal.source-lock.v1` record pinning a source
+  project's source and executable digests, compiler identity, closure, and
+  interface digests; `lock --verify` recompiles offline and reports drift by
+  kind with exit code 1. No network, install scripts, or upgrades.
+- The task-planning project gains a second entry, `inspect_task.algal`, that
+  reuses the scoring and clamp programs under identical digests, with runtime
+  failure examples and native parity coverage.
 - Application evaluation can opt into `composition: "closed-pure-v1"` to
   check and run stored pure subprograms in both runtimes. Existing policies
   keep their flat-program behavior; generated proposals remain flat.

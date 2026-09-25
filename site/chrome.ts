@@ -3,6 +3,7 @@
 import { OG_IMAGE_ALT, SITE_DESCRIPTION, SITE_TAGLINE } from "./copy";
 import { siteIcon } from "./icons";
 import { escapeHtml } from "./markdown";
+import { serializeJsonLd } from "@hraness/web-discovery";
 
 export type SitePageId = "home" | "tour" | "use-cases" | "living" | "grow" | "tasks" | "workbench" | "docs" | "spec" | "blog" | "compare";
 
@@ -15,6 +16,10 @@ export interface SitePageMeta {
   ogTitle: string;
   /** Blog posts emit article metadata; everything else stays a website. */
   article?: { published: string };
+  /** Quarantined posts stay readable but out of search indexes. */
+  noindex?: boolean;
+  /** Extra JSON-LD nodes, such as BlogPosting or Blog. */
+  jsonLd?: readonly unknown[];
 }
 
 const ORIGIN = "https://algal.computer";
@@ -53,10 +58,10 @@ export function pageDocument(meta: SitePageMeta, main: string): string {
 <meta name="twitter:title" content="${ogTitle}">
 <meta name="twitter:description" content="${description}">
 <meta name="twitter:image" content="${ORIGIN}/og.png">
-<meta name="robots" content="index, follow">
+<meta name="robots" content="${meta.noindex ? "noindex, nofollow" : "index, follow"}">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@graph":[{"@type":"WebSite","name":"ALGAL","url":"${ORIGIN}/"},{"@type":"SoftwareApplication","name":"ALGAL","url":"${ORIGIN}/","description":${JSON.stringify(SITE_DESCRIPTION)},"applicationCategory":"DeveloperApplication","codeRepository":"${REPO}","license":"https://opensource.org/license/mit","author":{"@id":"https://github.com/hraness#org"}},{"@type":"Organization","@id":"https://github.com/hraness#org","name":"hraness","url":"https://github.com/hraness"}]}
-</script>
+</script>${(meta.jsonLd ?? []).map(node => `\n<script type="application/ld+json">${serializeJsonLd(node)}</script>`).join("")}${meta.page === "blog" ? '\n<link rel="alternate" type="application/atom+xml" title="ALGAL blog" href="/blog/feed.xml">' : ""}
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#e1e2e7">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1a1b26">
 <script src="/appearance.js"></script>
@@ -82,7 +87,7 @@ ${meta.page === "workbench" ? '<link rel="stylesheet" href="/living.css">\n<link
       <a href="${REPO}">GitHub ${siteIcon("arrow-up-right")}</a>
     </nav>
     <div class="site-header-actions">
-      <a class="hraness-marketing-action" data-emphasis="primary" href="${REPO}/releases">Install</a>
+      <a class="hraness-marketing-action" data-emphasis="primary" href="/#install">Install</a>
       <div class="hraness-design-theme-toggle" data-hraness-appearance-menu data-presentation="menu" data-ready="false" aria-busy="true">
         <button class="hraness-design-theme-toggle__trigger" type="button" aria-label="Appearance: System" aria-haspopup="menu" aria-expanded="false" aria-controls="algal-appearance-menu" disabled><span data-current-appearance-icon="system">${siteIcon("computer")}</span></button>
         <div class="hraness-design-theme-toggle__popover" hidden>
@@ -99,7 +104,7 @@ ${meta.page === "workbench" ? '<link rel="stylesheet" href="/living.css">\n<link
 
 ${main}
 
-<footer class="site-footer"><a class="wordmark" href="/" aria-label="ALGAL home"><img src="/favicon.svg" width="24" height="24" alt="">algal</a><p>${SITE_TAGLINE}</p><div><a href="${REPO}">Source</a><a href="/docs/">Documentation</a><a href="/living/">Living software</a><a href="/blog/">Blog</a><a href="/compare/">Compare</a><a href="/docs/spec/organism/">Spec</a><a href="/llms.txt">llms.txt</a><span>MIT · Early, working software · {{BUILD_STATS}}</span></div></footer>
+<footer class="site-footer"><a class="wordmark" href="/" aria-label="ALGAL home"><img src="/favicon.svg" width="24" height="24" alt="">algal</a><p>${SITE_TAGLINE}</p><div><a href="${REPO}">Source</a><a href="/docs/">Documentation</a><a href="/living/">Living software</a><a href="/blog/">Blog</a><a href="/compare/">Compare</a><a href="/docs/spec/organism/">Spec</a><a href="/llms.txt">llms.txt</a><span>MIT · Preview · {{BUILD_STATS}}</span></div></footer>
 
 </body>
 </html>

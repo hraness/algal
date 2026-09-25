@@ -51,15 +51,15 @@ describe("browser task controller", () => {
     // The checked journal and the rendered capture must come from one head.
     // A copy that advances after its journal check is never reported as that
     // checked history, and the failure stays read-only on the live store.
-    f.controller.core.withVerifiedSource = async (callback, extra = []) => original(async source => {
+    f.controller.core.withVerifiedSource = async (callback, extra = [], candidates = []) => original(async (source, proven) => {
       const loadSession = source.loadSession.bind(source);
       source.loadSession = async sessionId => {
         const changed = await source.command({ contract: "algal.triage-command.v1", expectedHead: initial.head, operation: hash("private-copy-writer"), action: { kind: "add", task: task("inside") } });
         injectedHead = changed.head;
         return loadSession(sessionId);
       };
-      return callback(source);
-    }, extra);
+      return callback(source, proven);
+    }, extra, candidates);
     f.forbidWrites();
     await expect(f.controller.capture()).rejects.toThrow("Task head changed after journal verification");
     expect(injectedHead).toBeDefined();
@@ -78,7 +78,7 @@ describe("browser task controller", () => {
     let injecting = false, injectedHead: Digest | undefined;
     // A writer that bypasses the controller lands a history row without any
     // saved request. The next verified snapshot sees it and stops, read-only.
-    f.controller.core.withVerifiedSource = async (callback, extra = []) => {
+    f.controller.core.withVerifiedSource = async (callback, extra = [], candidates = []) => {
       if (injectedHead === undefined && !injecting) {
         injecting = true;
         const changed = await f.controller.core.command({ contract: "algal.triage-command.v1", expectedHead: initial.head, operation: hash("independent-public-core-writer"), action: { kind: "add", task: task("outside") } });
@@ -86,7 +86,7 @@ describe("browser task controller", () => {
         // All following capture work must remain read-only, including failure.
         f.forbidWrites();
       }
-      return original(callback, extra);
+      return original(callback, extra, candidates);
     };
     await expect(f.controller.capture()).rejects.toThrow("Task history lacks its saved request");
     expect(injectedHead).toBeDefined();

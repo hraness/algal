@@ -7,12 +7,14 @@ import {
   foundryCaseArgs,
   FOUNDRY_BOUNDS,
   FOUNDRY_CONTRACT,
+  foundryReportRuns,
   selectFoundryCandidate,
   type FoundryCandidateResult,
   type FoundryCaseResult,
   type FoundryReport,
 } from "./foundry";
 import { parseExprScorer } from "./expr";
+import { checkHabitatBudgetEvidence, HABITAT_BUDGET_BOUNDS, habitatBindingMismatches, parseHabitatBudget } from "./habitat-budget";
 import type { FnRegistry } from "./registry";
 import { parseRunReceipt } from "./run";
 import type { Store } from "./store-contract";
@@ -50,8 +52,9 @@ function digest(value: JsonValue | undefined, at: string): Digest {
 }
 
 function count(value: JsonValue | undefined, at: string): number {
-  if (!Number.isInteger(value) || (value as number) < 0) {
-    throw new AlgalError("PARSE_FAILED", `${at} must be a non-negative integer`);
+  // The same per-run bound the native verifier and the habitat account apply.
+  if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > HABITAT_BUDGET_BOUNDS.maxRunWork) {
+    throw new AlgalError("PARSE_FAILED", `${at} must be an integer from 0 through ${HABITAT_BUDGET_BOUNDS.maxRunWork}`);
   }
   return value as number;
 }
@@ -136,7 +139,7 @@ function parseCandidate(value: JsonValue, i: number): FoundryCandidateResult {
 
 export function parseFoundryReport(value: unknown): FoundryReport {
   const report = object(value, "foundry");
-  keys(report, ["contract", "candidates", "promoted", "holdout", "scorer", "lineage", "digest"], "foundry");
+  keys(report, ["contract", "candidates", "promoted", "holdout", "scorer", "lineage", "budget", "digest"], "foundry");
   if (report.contract !== FOUNDRY_CONTRACT) {
     throw new AlgalError("PARSE_FAILED", `foundry.contract must be ${FOUNDRY_CONTRACT}`);
   }
@@ -160,6 +163,7 @@ export function parseFoundryReport(value: unknown): FoundryReport {
   const scorer = report.scorer === undefined
     ? undefined
     : parseExprScorer(report.scorer, "foundry.scorer");
+  const budget = report.budget === undefined ? undefined : parseHabitatBudget(report.budget);
   return {
     contract: FOUNDRY_CONTRACT,
     candidates: report.candidates.map(parseCandidate),
@@ -175,6 +179,7 @@ export function parseFoundryReport(value: unknown): FoundryReport {
         receiptDigest: digest(lineage.receiptDigest, "foundry.lineage.receiptDigest"),
       },
     } : {}),
+    ...(budget ? { budget } : {}),
     digest: digest(report.digest, "foundry.digest"),
   };
 }
@@ -346,5 +351,11 @@ export async function verifyFoundryReport(
     work: { steps: 0, agentCalls: 0, units: 0 },
     usage: { tokensIn: 0, tokensOut: 0 },
   }], false);
+  if (report.budget) {
+    // Every run above was admitted through this account, in this order. The
+    // receipts were replayed above; check each ceiling and charge here.
+    mismatches.push(...habitatBindingMismatches(report.budget, "foundry", foundryReportRuns(report)));
+    mismatches.push(...(await checkHabitatBudgetEvidence(report.budget, store)).mismatches);
+  }
   return { ok: mismatches.length === 0, digest: claimed, checkedReceipts, mismatches };
 }

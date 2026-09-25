@@ -10,6 +10,9 @@ import { runOrganism } from "../src/run";
 import { MemoryStore } from "../src/store";
 import { canonicalize, type JsonObject, type JsonValue } from "../src/values";
 import { verifyReceipt } from "../src/verify";
+import { AlgalError } from "../src/errors";
+import v2Admission from "./fixtures/schema-v2-admission.json";
+import v2Values from "./fixtures/schema-v2-values.json";
 
 const binary = resolve(process.argv[2] ?? process.env.ALGAL_BIN ?? "target/debug/algal");
 const directory = await mkdtemp(join(tmpdir(), "algal-schema-parity-"));
@@ -41,7 +44,8 @@ function require(value: unknown, message: string): asserts value {
   if (!value) throw new Error(message);
 }
 
-async function native(args: string[]) {
+/** A rejected command writes its JSON error to stderr; `rejection` reads it. */
+async function native(args: string[], rejection = false) {
   const child = Bun.spawn([binary, ...args], { cwd: directory, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
   let expired = false;
   const timer = setTimeout(() => { expired = true; child.kill("SIGKILL"); }, 10_000);
@@ -63,8 +67,8 @@ async function native(args: string[]) {
   try {
     const [out, err, code] = await Promise.all([bounded(child.stdout, 1_048_576), bounded(child.stderr, 65_536), child.exited]);
     require(!expired, "schema parity native deadline");
-    require(out.length, `native command returned no JSON: ${err}`);
-    return { value: JSON.parse(out) as Record<string, JsonValue>, code };
+    require(out.length || (rejection && err.length), `native command returned no JSON: ${err}`);
+    return { value: JSON.parse(out.length ? out : err) as Record<string, JsonValue>, code };
   } finally { clearTimeout(timer); if (child.exitCode === null) child.kill("SIGKILL"); await child.exited; }
 }
 
@@ -129,6 +133,81 @@ try {
     require(reference.effects.length === 0 && (result.value.effects as JsonValue[]).length === 0, `${item.name}: malformed input activated an effect`);
     await crossVerify(reference as unknown as Record<string, JsonValue>, result.value, manifestJson, file, `input-${item.name}`);
   }
-  console.log(JSON.stringify({ ok: true, cases: cases.length, comparisons, inputBoundaryCases: inputCases.length,
+  const v2 = await schemaVersion2();
+  console.log(JSON.stringify({ ok: true, cases: cases.length, comparisons, inputBoundaryCases: inputCases.length, ...v2,
     successfulCrossVerifications: crossVerified.complete, failedCrossVerifications: crossVerified.failed, failedSelfVerifications: failedSelfVerified, providerCalls: 0 }));
 } finally { await rm(directory, { recursive: true, force: true }); }
+
+// Schema version 2 (spec/v1/organism.md, "JSON schemas"): every value rule runs
+// through both runtimes at an agent output and at a consumer's input port with
+// identical receipts, and every declaration rule is refused at admission with
+// the same code and reason (the reference prefixes the schema's location).
+async function schemaVersion2() {
+  const store = join(directory, "store");
+  let valueComparisons = 0, inputComparisons = 0, admissionComparisons = 0;
+  const manifestFor = (key: string, cells: JsonValue[], edges: JsonValue[] = []) => ({ contract: "algal.organism.v1", key: `organism:${key}`, name: key, cells, edges });
+  for (const item of v2Values as unknown as { name: string; schema: JsonObject; good: JsonValue[]; bad: [JsonValue, string][] }[]) {
+    const agent = parseOrganismManifest(manifestFor(`v2-${item.name}`, [{ id: "answer", kind: "agent", prompt: "Return the admitted scripted output.",
+      output: { kind: "json", schema: item.schema, schemaVersion: 2 } }]));
+    const input = parseOrganismManifest(manifestFor(`v2-input-${item.name}`, [{ id: "input", kind: "input", outputs: { data: "json" } },
+      { id: "consumer", kind: "agent", inputs: { data: { type: "json", schema: item.schema, schemaVersion: 2 } }, prompt: "Runs only for an admitted value.", output: { kind: "text" } }],
+    [{ from: { cell: "input", port: "data" }, to: { cell: "consumer", port: "data" } }]));
+    const files: string[] = [];
+    for (const manifest of [agent, input]) {
+      const file = join(directory, `${manifest.key.slice("organism:".length)}.algal.json`);
+      await writeFile(file, canonicalize(manifestToJson(manifest)));
+      files.push(file);
+    }
+    const runs: [JsonValue, string | undefined][] = [...item.good.map((value): [JsonValue, undefined] => [value, undefined]), ...item.bad];
+    for (const [index, [value, message]] of runs.entries()) {
+      for (const [boundary, manifest, file] of [["output", agent, files[0]!], ["input", input, files[1]!]] as const) {
+        const label = `v2-${boundary}-${item.name}-${index}`;
+        const responses = boundary === "output" ? { answer: [value] } : { consumer: ["admitted"] };
+        const args = boundary === "output" ? {} : { input: { data: value } };
+        const responseFile = join(directory, `${label}.responses.json`);
+        const argsFile = join(directory, `${label}.args.json`);
+        await writeFile(responseFile, canonicalize(responses));
+        await writeFile(argsFile, canonicalize(args));
+        const reference = await runOrganism({ manifest, fns: builtinRegistry(), store: new MemoryStore(), executors: [scriptedExecutor(responses)], args });
+        const result = await native(["run", file, "--args", argsFile, "--responses", responseFile, "--dir", store]);
+        const expected = message === undefined ? null
+          : { code: boundary === "output" ? "EFFECT_UNPARSEABLE" : "TYPE_MISMATCH", message, path: boundary === "output" ? "answer" : "consumer" };
+        require(canonicalize((reference.failure ?? null) as JsonValue) === canonicalize(expected), `${label}: reference failure ${JSON.stringify(reference.failure)}`);
+        require(canonicalize(result.value.failure ?? null) === canonicalize(expected), `${label}: native failure ${JSON.stringify(result.value.failure)}`);
+        require(result.code === (message === undefined ? 0 : 1), `${label}: native exit ${result.code}`);
+        if (boundary === "input" && message !== undefined) require(reference.effects.length === 0 && (result.value.effects as JsonValue[]).length === 0, `${label}: malformed input activated an effect`);
+        await crossVerify(reference as unknown as Record<string, JsonValue>, result.value, manifestToJson(manifest), file, label);
+        if (boundary === "output") valueComparisons++; else inputComparisons++;
+      }
+    }
+  }
+  const names = (count: number) => Array.from({ length: count }, (_, i) => `f${i}`);
+  const admission = [...v2Admission as { name: string; schema: JsonObject; reason: string }[],
+    { name: "required-over-bound", schema: { required: names(65) }, reason: "required must list at most 64 distinct names of at most 64 UTF-16 code units" },
+    { name: "properties-over-bound", schema: { properties: Object.fromEntries(names(65).map(name => [name, {}])) }, reason: "properties must map at most 64 names to schemas" },
+    { name: "enum-over-bound", schema: { type: "number", enum: Array.from({ length: 33 }, (_, i) => i) }, reason: "enum must list 1 to 32 distinct values" },
+    { name: "enum-value-over-bound", schema: { type: "string", enum: ["x".repeat(255)] }, reason: "enum values must be strings, finite numbers, booleans, or null of at most 256 canonical JSON bytes" },
+    { name: "version-3", schema: { type: "string" }, version: 3, reason: "schemaVersion must be 2" },
+  ] as { name: string; schema: JsonObject; reason: string; version?: number }[];
+  for (const item of admission) {
+    const version = item.version ?? 2;
+    const placements: [string, JsonValue][] = [
+      ["output", { id: "answer", kind: "agent", prompt: "No effect before admission.", output: { kind: "json", schema: item.schema, schemaVersion: version } }],
+      ["input-port", { id: "answer", kind: "agent", inputs: { data: { type: "json", schema: item.schema, schemaVersion: version } }, prompt: "No effect before admission.", output: { kind: "text" } }],
+      ["producer-port", { id: "input", kind: "input", outputs: { data: { type: "json", schema: item.schema, schemaVersion: version } } }],
+    ];
+    for (const [placement, cell] of placements) {
+      const raw = manifestFor(`v2-admission-${item.name}`, [cell]);
+      const file = join(directory, `v2-admission-${item.name}-${placement}.algal.json`);
+      await writeFile(file, JSON.stringify(raw));
+      let reference: unknown;
+      try { parseOrganismManifest(raw); } catch (error) { reference = error; }
+      require(reference instanceof AlgalError && reference.code === "PARSE_FAILED" && reference.message.endsWith(item.reason), `${item.name} ${placement}: reference ${String(reference)}`);
+      const rejected = await native(["check", file, "--dir", store], true);
+      const error = rejected.value.error as JsonObject | undefined;
+      require(rejected.code === 2 && error?.code === "PARSE_FAILED" && error.message === item.reason, `${item.name} ${placement}: native ${JSON.stringify(rejected.value)}`);
+      admissionComparisons++;
+    }
+  }
+  return { schemaV2ValueCases: valueComparisons, schemaV2InputCases: inputComparisons, schemaV2AdmissionCases: admissionComparisons };
+}

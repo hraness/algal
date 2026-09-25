@@ -1,0 +1,10 @@
+{
+  "input": {
+    "tasks": [
+      { "id": "ship", "title": "Ship the task workspace", "status": "open", "urgency": 4, "impact": 5, "owner": { "name": "Ada", "team": "platform" } },
+      { "id": "polish", "title": "Polish the empty state", "status": "open", "urgency": 7, "impact": 2, "owner": { "name": "Lin", "team": "design" } },
+      { "id": "backup", "title": "Export a backup", "status": "done", "urgency": 5, "impact": 5, "owner": { "name": "Sam", "team": "support" } }
+    ],
+    "weights": { "urgency": 2, "impact": 1 }
+  }
+}

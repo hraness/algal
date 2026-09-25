@@ -5,14 +5,16 @@ import { AlgalError } from "./errors";
 import {
   FOUNDRY_BOUNDS,
   evaluateFoundryPopulation,
+  foundryReportRuns,
   generateFoundryCandidates,
-  runFoundry,
+  runFoundryWithin,
   type FoundryCase,
   type FoundryLineage,
   type FoundryReport,
   type FoundryScorer,
   type FoundrySelection,
 } from "./foundry";
+import { HabitatAccount, habitatBindingMismatches, type HabitatBudget, type HabitatLedger } from "./habitat-budget";
 import type { FnRegistry } from "./registry";
 import type { Store } from "./store-contract";
 import type { Transport } from "./transport-contract";
@@ -35,6 +37,9 @@ export type SearchReport = {
   generatorDigest: Digest;
   generations: SearchGeneration[];
   result: FoundryReport;
+  /** The complete `algal.habitat-budget.v1` account every run of the search
+   * was admitted through, when the search ran under a habitat budget. */
+  budget?: HabitatBudget;
   digest: Digest;
 };
 
@@ -53,6 +58,13 @@ export type SearchOptions = {
   transports?: Record<string, Transport>;
   tools?: ToolRegistry;
   scorer?: FoundryScorer;
+  /** Habitat account for the whole search: every generator run, every
+   * candidate's selection runs in every generation, and the final epoch's
+   * selection and holdout runs. A refused reservation stops the search with
+   * `BUDGET_EXHAUSTED` and leaves the terminal record on the account. The
+   * report embeds a standalone `HabitatAccount`; a schedule's shared account
+   * stays in the schedule record. */
+  account?: HabitatLedger;
 };
 
 function feedback(generation: number, selection?: FoundrySelection): JsonValue {
@@ -81,10 +93,31 @@ function dedupe(candidates: OrganismManifest[]): OrganismManifest[] {
   });
 }
 
+/** The runs a search report records, in admission order: for each
+ * generation its generator run and then each candidate's selection runs,
+ * followed by the final epoch's selection and holdout runs. The final
+ * report's lineage names the last generator run, which is listed once. */
+export function searchReportRuns(
+  report: Pick<SearchReport, "generations" | "result">,
+): { manifest: Digest; receipt: Digest }[] {
+  return [
+    ...report.generations.flatMap((generation) => [
+      { manifest: generation.generatorDigest, receipt: generation.receiptDigest },
+      ...generation.candidates.flatMap((candidate) =>
+        candidate.cases.map((c) => ({ manifest: candidate.manifestDigest, receipt: c.receiptDigest }))),
+    ]),
+    ...foundryReportRuns({ candidates: report.result.candidates, promoted: report.result.promoted, holdout: report.result.holdout }),
+  ];
+}
+
 export async function runFoundrySearch(opts: SearchOptions): Promise<SearchReport> {
   if (!Number.isInteger(opts.maxGenerations) || opts.maxGenerations < 1 || opts.maxGenerations > SEARCH_BOUNDS.maxGenerations) {
     throw new AlgalError("PARSE_FAILED", `search maxGenerations must be 1..${SEARCH_BOUNDS.maxGenerations}`);
   }
+  if (opts.account && opts.account.activity !== "search") {
+    throw new AlgalError("PARSE_FAILED", "a search runs under a search habitat account");
+  }
+  const account = opts.account ? { account: opts.account } : {};
   let survivors = dedupe(opts.seeds ?? []);
   let prior: FoundrySelection | undefined;
   const generations: SearchGeneration[] = [];
@@ -103,6 +136,7 @@ export async function runFoundrySearch(opts: SearchOptions): Promise<SearchRepor
       executors: opts.executors,
       ...(opts.transports ? { transports: opts.transports } : {}),
       ...(opts.tools ? { tools: opts.tools } : {}),
+      ...account,
     });
     const population = dedupe([...survivors, ...generated.candidates]);
     if (population.length > FOUNDRY_BOUNDS.maxCandidates) {
@@ -117,6 +151,7 @@ export async function runFoundrySearch(opts: SearchOptions): Promise<SearchRepor
       ...(opts.transports ? { transports: opts.transports } : {}),
       ...(opts.tools ? { tools: opts.tools } : {}),
       ...(opts.scorer ? { scorer: opts.scorer } : {}),
+      ...account,
     });
     generations.push({
       generation,
@@ -135,7 +170,9 @@ export async function runFoundrySearch(opts: SearchOptions): Promise<SearchRepor
     ...(await Promise.all(last.proposed.map(async (digest) => opts.store.getManifest(digest))))
       .filter((candidate): candidate is OrganismManifest => candidate !== undefined),
   ]);
-  const result = await runFoundry({
+  // The final epoch is charged to the search's account; its report never
+  // embeds one.
+  const result = await runFoundryWithin({
     candidates: finalPopulation,
     cases: opts.cases,
     fns: opts.fns,
@@ -148,6 +185,7 @@ export async function runFoundrySearch(opts: SearchOptions): Promise<SearchRepor
       generatorDigest: last.generatorDigest,
       receiptDigest: last.receiptDigest,
     },
+    ...account,
   });
   const base = {
     contract: SEARCH_CONTRACT,
@@ -155,5 +193,14 @@ export async function runFoundrySearch(opts: SearchOptions): Promise<SearchRepor
     generations,
     result,
   };
+  if (opts.account instanceof HabitatAccount) {
+    const budget = opts.account.record();
+    // The account must hold exactly this report's runs; anything else is a
+    // host wiring error, and the report would not verify.
+    const mismatches = habitatBindingMismatches(budget, "search", searchReportRuns(base));
+    if (mismatches.length) throw new AlgalError("INTERNAL", `search habitat budget: ${mismatches.join("; ")}`);
+    const budgeted = { ...base, budget };
+    return { ...budgeted, digest: digestCanonical(budgeted as unknown as JsonValue) };
+  }
   return { ...base, digest: digestCanonical(base as unknown as JsonValue) };
 }

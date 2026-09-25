@@ -77,6 +77,16 @@ history capacity; drafts are stored separately. Quota limits can stop writes
 earlier. Limits fail without silently deleting saved data. Larger histories can
 take several seconds to verify before an edit is saved.
 
+Saved workflow evaluations add verification work to every change. While the
+saved history and evaluations together fit the transfer limits below, each
+check of the history against its saved operations also checks every saved
+evaluation, from freshly read records, in the same replay. Past those limits,
+each evaluation gets its own replay. In one instrumented in-memory run with 16
+tasks and 16 saved evaluations, saving an edit replayed the history 6 times
+and read stored records 5,451 times; checking each evaluation with its own
+replay took 22 replays and 11,893 reads. These counts measure verification
+work, not how long an edit takes in a browser.
+
 Task transfers have a limit of 1,024 records and 8 MiB. Imported application
 ancestry is limited to eight generations. An export proves content consistency
 and replay of the included programs, not who authored the records.

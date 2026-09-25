@@ -2,25 +2,22 @@
 
 {{SITE_DESCRIPTION}}
 
-An ALGAL program, called an organism, is typed, content-addressed data with declared limits. It can wait for an approval and resume in a new process, keep state between runs, propose new programs for the host to test, and leave a receipt that replays offline. Model judgment lives in typed cells that declare their context, output shape, and budget; everything around them is pure dataflow. A native Rust kernel and a TypeScript reference runtime on Bun execute the same manifest, and a saved run can pause in one runtime and resume in the other.
+Agent programs today are scripts: they run start to finish and leave a log. ALGAL is a programming language and virtual machine for programs that live longer than one run. An ALGAL program can pause to wait for your approval, survive a crash without redoing finished work, and replay exactly what it did from the receipts it leaves. The VM is previewing now, and the language toolchain ships with it. ALGAL is free and open source.
 
 ALGAL is prerelease software. Unsigned native builds for macOS on Apple silicon and Linux x86_64 are published as GitHub prereleases.
 
 ## Pages
 
-- [The language for living programs](https://algal.computer/): what an ALGAL program can do, the source language, the habitat it runs in, receipts, and how programs propose new programs
+- [Write agent programs that wait, resume, and replay](https://algal.computer/): what an ALGAL program can do, the source language, the habitat it runs in, receipts, and how programs propose new programs
 - [Inside a living program](https://algal.computer/tour/): the guided tour, with recorded runs, interactive diagrams you can replay, source diagnostics, and composition examples
 - [Put living programs to work](https://algal.computer/use-cases/): change review, checked coding repairs, portable run histories, reusable routing, and current limits
 - [Documentation index](https://algal.computer/docs/): the repository docs rendered for the web, covering install, the source language, the process VM, habitats, civilization, and executors
-- [Notes on living programs](https://algal.computer/blog/): longer posts on the language, its receipts, and related research
+- [Notes on living programs](https://algal.computer/blog/): longer posts on how the language works, how it is tested, and the design choices behind it
 - [Comparisons](https://algal.computer/compare/): how ALGAL compares with LangGraph, DSPy, and Temporal
 
 ## Blog
 
-- [Software that accumulates competence](https://algal.computer/blog/software-that-accumulates-competence/): the thesis behind ALGAL and what evidence would justify it
-- [Self-evolving software needs a selection boundary](https://algal.computer/blog/self-evolving-software-selection-boundary/): Darwin Gödel Machine, Voyager, AlphaEvolve, TextGrad, and DSPy, and why ALGAL makes selection part of the program contract
-- [Receipts are the fossil record of an execution](https://algal.computer/blog/receipts-fossil-record/): replay-verified run artifacts compared with logs, traces, and server-side history
-- [A program that can wait](https://algal.computer/blog/programs-that-wait/): durable waits as checkpointed capabilities, resumable across processes and runtimes
+{{BLOG_POSTS}}
 
 ## Comparisons
 
@@ -65,6 +62,7 @@ The documentation below renders the repository's own `docs/` and `spec/v1/` Mark
 - [Language, harness, habitat](https://algal.computer/docs/algal-design/)
 - [Organisms and agent loops](https://algal.computer/docs/agent-loop-and-organism/)
 - [Executors](https://algal.computer/docs/executors/)
+- [Model router](https://algal.computer/docs/model-router/): the fitted frontier-versus-standard router for first-session prompts, its two head generations, and their limits
 - [Habitats and self-reproduction](https://algal.computer/docs/habitats/)
 - [Civilization loop](https://algal.computer/docs/civilization/)
 - [Use cases and adoption boundary](https://algal.computer/docs/use-cases/)

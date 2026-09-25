@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { open, realpath } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { CHILD_ENV, type SupervisorCompletion, type SupervisorDrain } from "./command-supervisor";
+import { CHILD_ENV, childEnv, type SupervisorCompletion, type SupervisorDrain } from "./command-supervisor";
 import { parseRegistry, parseToolchains, validateClaims } from "./claims";
 import { hashFile, hashJson, inputBindings, readJson, type FileBinding } from "./files";
 import { array, digest, gitHash, natural, record, requireThat, string } from "./schema";
@@ -41,7 +41,7 @@ export async function runCommand(command: string[], cwd: string, options: { time
   requireThat(process.platform !== "win32", "bounded verification command custody requires a POSIX process group");
   return new Promise((resolve, reject) => {
     const supervisor = fileURLToPath(new URL("./command-supervisor.ts", import.meta.url));
-    const child = spawn(process.execPath, [supervisor, JSON.stringify(command)], { cwd, env: CHILD_ENV, stdio: ["ignore", "pipe", "pipe", "ipc"], detached: true });
+    const child = spawn(process.execPath, [supervisor, JSON.stringify(command)], { cwd, env: childEnv(), stdio: ["ignore", "pipe", "pipe", "ipc"], detached: true });
     const capturedOut = child.stdout!, capturedErr = child.stderr!;
     const stdout: Buffer[] = [], stderr: Buffer[] = [];
     let bytes = 0, timedOut = false, outputExceeded = false, stopping = false;

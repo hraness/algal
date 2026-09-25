@@ -7,6 +7,12 @@ import { spawn } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
 
 export const CHILD_ENV = { LANG: "C", LC_ALL: "C", TZ: "UTC", NO_COLOR: "1", FORCE_COLOR: "0" } as const;
+/** The supervised environment is an explicit minimal map. node_modules types
+ * reachable through site imports require NODE_ENV on NodeJS.ProcessEnv, which
+ * these children intentionally do not receive. */
+export function childEnv(env: Record<string, string> = CHILD_ENV): NodeJS.ProcessEnv {
+  return { ...env } as NodeJS.ProcessEnv;
+}
 export type SupervisorCompletion = { kind: "completed"; exitCode: number | null; signal: string | null; error: string | null };
 export type SupervisorDrain = { kind: "drained"; stdoutBytes: number; stderrBytes: number };
 export type SupervisorFailure = { kind: "failed"; error: string };
@@ -57,7 +63,7 @@ async function main(): Promise<void> {
     // Extra Bun pipe descriptors can be closed again by a collected earlier
     // subprocess after their numeric descriptors have been reused. Standard
     // streams retain explicit ownership throughout this lossless relay.
-    const child = spawn(command[0] as string, command.slice(1) as string[], { env: CHILD_ENV, stdio: ["ignore", "pipe", "pipe"], detached: false });
+    const child = spawn(command[0] as string, command.slice(1) as string[], { env: childEnv(), stdio: ["ignore", "pipe", "pipe"], detached: false });
     child.on("error", error => { spawnError = error.message.slice(0, 4096); });
     // A leader can exit while descendants still hold the target pipe writers.
     // Report that status without treating it as drained output or cleanup.

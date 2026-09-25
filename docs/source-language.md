@@ -90,8 +90,9 @@ program welcome(name: text) -> text {
 }
 ```
 
-A file contains exactly one program, optionally preceded by local imports. Programs have named `text` or `json`
-inputs and a `text` or `json` result. A required budget declaration precedes
+A file contains exactly one program, optionally preceded by local imports and
+[record declarations](#record-types). Programs have named `text`, `json`,
+record, or list inputs and a result of one of those types. A required budget declaration precedes
 immutable `let` bindings and one `return`. Semicolons after bindings and return
 are optional. Lists, records, choice declarations, and match arms use commas,
 with optional trailing commas. Strings use JSON escaping. `//` and `/* */`
@@ -223,6 +224,199 @@ Normal host admission and provider behavior still apply; a prompt is not an
 OS sandbox. `decide` and `generate` occupy a whole binding, return expression,
 or branch arm. All declared effects remain in the graph, including unused
 bindings and inactive arms. Inactive arms are skipped at execution.
+
+## Record types
+
+A record type names the fields a JSON value must have. Declare records after
+the imports and before the program, then use a record name as a parameter or
+result type. From the [typed task scorer](../examples/source/projects/typed-tasks/README.md):
+
+```algal
+record Task {
+  id: text,
+  title: text,
+  urgency: number,
+  impact: number,
+  status: text,
+  notes: text?,
+}
+record Weights { urgency: number, impact: number }
+record Score { id: text, title: text, total: number, ready: boolean }
+
+program score(task: Task, weights: Weights) -> Score {
+  budget { max_agent_calls: 0 }
+
+  let total = task.urgency * weights.urgency + task.impact * weights.impact
+  return {
+    id: task.id,
+    title: task.title,
+    total: total,
+    ready: task.status == "open" && total >= 10,
+  }
+}
+```
+
+Each field has a type: `text`, `number`, `boolean`, `json`, a record
+declared earlier in the same file, or one of the list, allowed-value, and
+range types below. A `?` after the type makes the field optional. Fields use
+commas, with an optional trailing comma. Record names start with an uppercase
+letter and contain only ASCII letters and digits; field names follow the
+binding rules. A field name is the JSON key as written, without the
+kebab-case conversion that parameter names receive. Records belong to their
+file. To pass a record to another program, declare a record with the fields
+it needs in each file; the compiler compares records field by field, not by
+name.
+
+### Lists, allowed values, and ranges
+
+The typed task project's [plan](../examples/source/projects/typed-tasks/plan.algal)
+declares a whole task list, the values a status may take, and the range of
+each score input, then scores every task with the program above:
+
+```algal
+record Owner { name: text, team: text in ["design", "platform", "support"] }
+record Task {
+  id: text,
+  title: text,
+  urgency: number min 0 max 5,
+  impact: number min 0 max 5,
+  status: text in ["open", "blocked", "done"],
+  owner: Owner,
+  notes: text?,
+}
+record Weights { urgency: number min 0 max 10, impact: number min 0 max 10 }
+record Score { id: text, title: text, total: number, ready: boolean }
+
+program plan(tasks: [Task], weights: Weights) -> [Score] {
+  budget { max_agent_calls: 0 }
+
+  return each score over task in tasks using { weights: weights } max_items 8
+}
+```
+
+- `[Task]` is a list whose items all have type `Task`. Any field type can go
+  in the brackets, including `text`, a record, an allowed-value or range
+  type, or another list; `[json]` accepts any list. A list type can also be a
+  parameter or result type, as `tasks` and the result are here. List items
+  cannot be optional.
+- `text in ["open", "blocked", "done"]` and `number in [1, 2, 3]` name the
+  allowed values. A field with allowed text values has a closed set of
+  labels, so `match task.status { open => …, blocked => …, done => … }` must
+  name each value exactly once.
+- `number min 0 max 5` accepts numbers from 0 through 5, including both
+  bounds. Either bound can be omitted, and a negative bound is written
+  `min -1.5`.
+- A field can be a record that has record fields of its own, down to the
+  level limit in [Record limits](#record-limits). `Owner` is a record inside
+  each `Task`, inside the list.
+
+### What a record compiles to
+
+A record or list parameter or result becomes an ordinary `json` port with a
+`schema` in the manifest's JSON schema subset. `Task` from the scorer
+compiles to:
+
+```json
+{
+  "type": "object",
+  "required": ["id", "impact", "status", "title", "urgency"],
+  "properties": {
+    "id": { "type": "string" },
+    "title": { "type": "string" },
+    "urgency": { "type": "number" },
+    "impact": { "type": "number" },
+    "status": { "type": "string" },
+    "notes": { "type": "string" }
+  }
+}
+```
+
+The other field types compile to these schemas:
+
+| Field type | Schema |
+| --- | --- |
+| `text in ["open", "done"]` | `{"type":"string","enum":["done","open"]}` |
+| `number in [3, 1]` | `{"type":"number","enum":[1,3]}` |
+| `number min 0 max 5` | `{"type":"number","minimum":0,"maximum":5}` |
+| `[text]` | `{"type":"array","items":{"type":"string"}}` |
+| `[json]` | `{"type":"array"}` |
+| A record | The record's object schema |
+
+`required` and allowed values are sorted, so reordering fields or values does
+not change the compiled program. A `json` field is listed in `required` only,
+and an optional `json` field adds nothing.
+
+A schema that uses `items`, `enum`, `minimum`, or `maximum`, or nests records
+deeper than the original schema subset allows, needs
+[schema version 2](../spec/v1/organism.md#json-schemas), so the compiler adds
+`"schemaVersion": 2` beside it on the port or result. `Task` from the plan is
+one of these; `Task` from the scorer is not, and compiles to exactly the
+schema above. A runtime released before schema version 2 refuses a program
+that declares it when checking the program, before any step runs, instead of
+skipping the checks.
+
+### What is checked
+
+Both runtimes check a record or list value where it enters or leaves a
+program, before any cell that uses it runs:
+
+- A root program's record or list parameter is checked when the run starts.
+  A malformed value fails the `input` cell.
+- A record or list argument to `call`, or a shared `using` argument of
+  `each`, is checked when it reaches that cell, which then fails.
+- Each `each` item is checked against the child's parameter before that
+  item's run starts. A malformed item fails the `each` cell; earlier items'
+  cells remain in the receipt, and later items do not run.
+- A record or list result is checked before the program returns it. When a
+  called program returns a different schema, the compiler adds one
+  pass-through cell that declares the caller's type.
+
+A value passes when it has its declared type, recursively for nested records
+and lists: an object has every field without `?` and each present declared
+field has its type, each list item has the item type, a text value with
+allowed values is one of them, and a number is within its bounds. A failure
+is `TYPE_MISMATCH` with a message such as `expected object`,
+`missing required field`, `expected an allowed value`, `number below minimum`,
+or `number above maximum`. The message names the failed check, not the field.
+A list item's failure adds the item's position, counting from zero, such as
+`item 1: number above maximum` for the plan's second task.
+
+The runtime does not check:
+
+- Undeclared fields. They are accepted and passed through unchanged.
+- The value of a `json` field, beyond its presence when required.
+- Whole numbers, text length or format, or whether values such as ids are
+  unique.
+- List length, apart from `each`'s `max_items` and the 262,144-byte limit on
+  any value.
+
+An optional field may be omitted, but a present field must have its type, so
+`"notes": null` is rejected.
+
+The compiler also rejects mismatches it can prove from the source: selecting
+an undeclared field, arithmetic on a `text` field, a record literal or record
+value that lacks a required field or has a field of the wrong type, a record
+literal with a field the record does not declare, a text literal or decision
+label outside a field's allowed values, a number literal outside its allowed
+values or bounds, a list literal item of the wrong type, and a declared list
+whose items do not suit the parameter `each` passes them to. A `json` value,
+or a number or text value the compiler cannot know, is accepted and checked
+at run time. Selecting an optional field gives a `json` value, because the
+field may be absent.
+
+### Record limits
+
+A file declares at most 16 records, each with 1 to 32 fields, and a record
+name has at most 40 characters. A field can name only a record declared
+earlier, so records cannot refer to themselves or form a cycle. A type lists
+1 to 16 distinct allowed values, and an allowed text value has at most 64
+characters.
+
+A compiled schema has at most eight levels: the record or list itself is one
+level, and each field type and list item type adds one below it. The plan's
+`[Task]` parameter uses four: the list, `Task`, `owner`, and the fields of
+`Owner`. A compiled record or list schema is also limited to 65,536 bytes,
+because a record used as a field is copied into each schema that uses it.
 
 ## Reuse a local program
 
@@ -359,6 +553,15 @@ Here `options.modules` maps those paths to source strings; the returned
 pure compiler never reads the filesystem itself. The loader supplies that
 closed source set.
 
+In a browser bundle, import `compileSource` from `@hraness/algal/source` and
+`createSourceErrorReport` and `renderSourceError` from
+`@hraness/algal/source-errors`, and pass every imported file in
+`options.modules`. `loadSourceProject` reads files and is exported only from
+the package root. The compiler checks each expression it emits with the
+WebAssembly evaluator, so instantiate `@hraness/algal/algal_expr.wasm` and pass
+its exports to `setExprExports` from `@hraness/algal/expr` before the first
+compile.
+
 ### Local resolution has a boundary
 
 Imports name relative `.algal` files. The default project root is the entry
@@ -385,6 +588,237 @@ still runs with its original behavior. It uses no model or tool calls.
 
 See [building larger programs](scaling-programs.md) for module boundaries,
 library design, application evaluation, and the current project limits.
+
+### Inspect project dependencies
+
+`dependencies` reports a project's static structure without running it:
+
+```sh
+bun cli.ts dependencies examples/source/projects/task-planning/main.algal --format text
+bun cli.ts compile examples/source/projects/task-planning/main.algal \
+  --bundle-out task-plan.bundle.json
+bun cli.ts dependencies examples/source/projects/task-planning/main.algal \
+  --bundle task-plan.bundle.json
+# Default output is JSON; --out writes an independent report artifact.
+```
+
+The `algal.source-dependencies.v1` report keeps three lists separate. Source
+files are the imported files, each with its source digest, executable digest,
+and whether the entry reaches it through a call. Modules are the distinct
+executable digests in the entry's static closure, including the entry, with
+the resolved interface, declared budgets, and the model-effect kinds each one
+declares directly or through its children. Occurrences are the expanded static
+calls, including the entry, each with a path of composition cell IDs and the
+caller's file, line, and column. A helper called twice is one module and two
+occurrences. An `each` child is one occurrence with its item limit recorded.
+Generated control wrappers appear as modules and occurrences marked generated.
+The task planner reports 6 source files, 6 modules (5 dependencies),
+7 occurrences, 6 composition edges, and a maximum depth of 3.
+
+The report describes possible structure, not observed execution, permission,
+availability, or cost. It contains file names, cell IDs, spans, interface
+names, budgets, and digests. It omits source text, prompts, literals,
+comments, and compiler annotations. With `--bundle`, the artifact must carry
+the recompiled root and every reachable child under matching digests. A
+missing or altered child fails the check instead of being filled in from
+source; valid extra entries are counted as unreachable. A report is limited to
+8 MiB, bundle input to 64 MiB, and the expanded occurrence count to the
+compiler's 1,024-instance limit.
+
+```ts
+const project = await loadSourceProject(entryPath);
+const report = await createSourceDependencyReport(project.source, { sourceOptions: project.compilerOptions });
+console.log(renderSourceDependencies(report));
+```
+
+Only a report built by `createSourceDependencyReport` can be rendered. A
+serialized or edited copy is data, not compiler evidence.
+
+With `--receipt`, the report also attributes a recorded run to its static
+structure:
+
+```sh
+bun cli.ts run examples/source/projects/task-planning/main.algal \
+  --args examples/source/projects/task-planning/main.args.json > task-plan.receipt.json
+bun cli.ts dependencies examples/source/projects/task-planning/main.algal \
+  --receipt task-plan.receipt.json --format text
+```
+
+The receipt is copied under the receipt parser's limits, and its self-digest
+and root manifest must match the recompiled source. Each recorded cell is then
+attributed to the occurrence that owns it by walking the static tree, so an
+`each` item counts as one invocation of the child occurrence. For every
+occurrence the report gives the number of invocations, recorded cells by
+status, recorded `generate` and `decide` cells that were not skipped, and work
+in two forms: self work covers the occurrence's own cells, and inclusive work
+adds every child occurrence. For a receipt the runtime produced, self work
+sums to the receipt's total work, so nested calls are never counted twice; the
+report checks that sum and three other consistency rules and marks the join
+`reconciled` or lists the rule that failed. An occurrence that never ran, such
+as an inactive branch, stays listed with zero invocations. Recorded paths that
+no occurrence can own are counted as unattributed rather than guessed. This
+join is digest-bound association, not replay; use `verify` for replay.
+
+#### Bound how often each call runs
+
+`--estimate` adds, for every occurrence and module, how many times it can run
+during one run of the entry:
+
+```sh
+bun cli.ts dependencies examples/source/projects/task-planning/main.algal \
+  --estimate --format text
+```
+
+`max` multiplies the item limits of every enclosing `each`. Each of the
+planner's two clamp calls can run at most 16 times, so the clamp module can
+run at most 32 times. `min` is 1 for a call that runs on every completed run
+that supplies each declared input, and 0 for a call under a branch arm or an
+`each`. A call that follows an `if` or `match` at the same level keeps a
+minimum of 1, because exactly one arm runs. A product above 65,536, the most
+cells one receipt can hold, is reported as 65,536 and marked `saturated`.
+These are limits on possible work derived from the program's structure, not
+measurements, prices, or predictions. With `--receipt` as well, each
+occurrence also shows its recorded invocations, and `exceeded` lists every
+occurrence recorded more often than its maximum. Such a receipt contains an
+`each` item that the program does not allow; the execution join above leaves
+those cells unattributed.
+
+#### Link modules to application revisions
+
+`--application <name>` links the report to one application's history in the
+store that `--dir` names (default `.algal`). The command reads that history
+and commits nothing:
+
+```sh
+bun cli.ts dependencies main.algal --application inventory --dir .algal --format text
+```
+
+A revision entrypoint is linked when its recorded static closure contains a
+report module's executable digest: the entrypoint's manifest is that module,
+or names it as a child by digest, directly or through other manifests in the
+store. Each linked entrypoint appears once in `application.entrypoints`, with
+the transition that activated its revision (`create`, `activate`, `migrate`,
+or `restore`), whether the application's head selects it, whether its closure
+contains the report's root, and the evaluation records that measured it.
+Evaluation records come from transition evidence, directly or through a cited
+comparison or experiment. A revision known only from an evaluation record is
+listed as never activated. Each module and occurrence lists the indices of the
+entrypoints that contain its digest.
+
+Links use digests only: an entrypoint or program that shares a name with a
+report module links nothing unless the digests are equal. Verdicts are shown as
+recorded, because the join does not replay evaluations; replay one with
+`verifyApplicationEvaluation` before relying on it. Records that cannot be read
+or parsed, and evaluations that do not match their own request or parent
+state, are counted as unreadable. Revisions and evaluations that share no
+digest with the report, and evaluations of another application or of a state
+outside the history, are counted as unmatched. A revision whose closure names
+a manifest that is missing from the store or chosen at run time, and that
+contains no report module, is counted as unresolved. The join reads at most
+4,096 records beyond the history and refuses more. It keeps the latest 64
+entrypoints and 16 evaluation records per entrypoint and counts the rest as
+omitted. `--out` cannot write inside the application store.
+
+In the SDK, pass `estimate: true`, and pass `application: { name, reader }`
+with an `ApplicationService` or `ApplicationCore` as the reader.
+
+### Pin a project with a lock
+
+`lock` writes an `algal.source-lock.v1` record that binds the project to the
+exact closure it compiles to, and `--verify` recompiles the project offline
+and reports every difference:
+
+```sh
+bun cli.ts lock examples/source/projects/task-planning/main.algal --out task-plan.lock.json
+bun cli.ts lock examples/source/projects/task-planning/main.algal \
+  --verify task-plan.lock.json --format text
+# Exit 0 when the source still compiles to the locked closure, 1 on drift,
+# 2 when the project no longer compiles or the lock is malformed.
+```
+
+The lock records the entry key, the compiler version and profile, every
+imported file with its source digest and executable digest, the root digest,
+the sorted module closure, the inferred attempt and depth bounds, and a digest
+of each module's resolved interface. It supplies no source or manifests and
+changes no executable identity. Verification lists drift in a fixed order and
+by kind: a formatting-only edit shows as source drift with no executable
+drift, a changed helper shows the file digests and closure digests that moved,
+a renamed parameter shows interface drift for that file, and a different
+compiler version string shows as compiler drift. The drift bound is above the
+largest possible list, so nothing is cut off. File keys are relative to the
+source root, so verify with the same `--source-root` used to write the lock.
+Lock data is copied under its own limits (16 units, 60 modules, 128 KiB) and
+parsed strictly before comparison; the lock digest covers the parsed
+canonical JSON, not the file bytes. The lock does not fetch, install, or
+upgrade anything.
+
+A lock can also pin evaluation cases: run inputs, with scripted responses
+when the program calls a model, and the results they must keep producing.
+
+```sh
+bun cli.ts lock examples/source/projects/task-planning/main.algal \
+  --evaluation examples/source/projects/task-planning/main.evaluation.json \
+  --out task-plan.lock.json
+bun cli.ts lock examples/source/projects/task-planning/main.algal \
+  --verify task-plan.lock.json --evaluate --format text
+```
+
+The case list is a JSON array. Each case has a `name`, an `args` file in the
+format `run --args` reads, an optional `responses` file in the format
+`run --responses` reads, and an optional expected `outcome`, which defaults
+to `complete`. Case files are named relative to the source root and read like
+source files: no `..` segments or symlinks, regular files only, at most
+64 KiB each. Writing the lock runs each case in memory and records the digest
+of each file's canonical JSON, the run's outcome, and a digest of the
+program's declared outputs, the `outputs` object that `call --interface`
+prints. A case whose run ends with a different outcome than it expects is
+refused, so a failing case is pinned only when it expects `failed`.
+
+`--evaluate` runs every pinned case again against the recompiled program. It
+answers model and decision steps only from the pinned responses, calls no
+tools or network services, and writes nothing to the store. It reports
+`evaluation` drift for each case whose input file, response file, outcome, or
+output digest changed, and for a different runtime version. A case file that
+is missing, unreadable, or malformed stops verification with exit code 2.
+Without `--evaluate`, no case runs and the output marks the cases as not
+replayed. A helper rewrite that keeps every pinned output shows digest drift
+with no evaluation drift; a behavior change also moves the output digest.
+Evaluation drift covers only the pinned inputs and the recorded responses: it
+shows whether the program still turns them into the same results, not how a
+live model or provider would answer.
+
+`--versions labels.json` adds labels for people: a JSON object that maps each
+label to an executable digest in the closure, such as a unit's
+`manifestDigest` in the lock. Digests are what execute. Verification never
+moves a label to a new digest; when a labeled digest leaves the recompiled
+closure, it reports `version` drift, and relabeling means writing a new lock.
+A lock pins at most 16 cases and 16 labels. Case names and labels have at
+most 64 characters: ASCII letters, digits, `.`, `_`, and `-`, starting with a
+letter or digit.
+
+A lock also pins programs copied from another project's catalog with
+[`vendor`](library.md#vendor-an-entry-into-another-project). `lock` looks for
+an `algal.vendor.json` record in every directory above the project's files,
+up to but not including the source root, and adds a `vendored` section with
+one entry per record it finds: the directory, the catalog page's address and
+SHA-256 digest, the vendored entry, and a digest of the record. Writing the
+lock refuses a copy that no longer matches its record. `--verify` reads the
+records again and reports `vendor` drift when a record appears, disappears,
+or changes, when a listed file's text no longer has its recorded digest, and
+when a listed file no longer compiles to the executable or interface digest
+the catalog listed. A comment-only edit to a copy therefore moves source
+digests and no executable digest. Records and copied files are read like
+source files, and neither command contacts the catalog's address. A lock pins
+at most 16 vendored directories, and each record lists at most 16 files.
+
+Verification lists drift in this order: entry, compiler, source, unit, root,
+closure, interface, analysis, version, evaluation, and vendor.
+
+The same project's second entry, `inspect_task.algal`, reuses the scoring and
+clamp programs. Its report lists 3 source files and 5 occurrences, and its
+`score_task` and `clamp` modules carry the same digests as the planner's, so
+reuse across entries is visible as shared executable identity rather than as
+a copied file.
 
 ## Budgets and compiler bounds
 
@@ -413,7 +847,9 @@ default. It adds no automatic retries.
 
 Source limits: 65,536 UTF-8 bytes, 8,192 tokens, 1,024 expression nodes,
 16 levels of source nesting, 24 bindings, 16 parameters, 40-character names,
-16 choice labels, and 64 entries per collection. The lowered program must
+16 choice labels, 64 entries per collection, 16 records per file, 32 fields
+per record, 16 allowed values per type, and eight schema levels and 65,536
+bytes per compiled record or list schema. The lowered program must
 also satisfy the existing manifest and expression bounds. A deeply nested
 expression may reach a core bound before a source maximum. Errors identify a
 source line and column; failures during final manifest validation reference

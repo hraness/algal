@@ -12,6 +12,7 @@ use crate::{
     contract::{Manifest, keys, object, text},
     effects::Host,
     graph::Transports,
+    habitat_budget::{self, Account},
     runtime,
     scorer::{check_scorer, eval_scorer},
     store::Store,
@@ -87,6 +88,9 @@ pub struct Config {
     pub cases: Vec<FoundryCase>,
     pub search: Option<Search>,
     pub scorer: Option<Value>,
+    /// Habitat budget limits every run of this foundry or search is admitted
+    /// against.
+    pub budget: Option<habitat_budget::Limits>,
 }
 
 /// Parse a `algal.foundry.config.v1` file: candidate manifest paths,
@@ -103,6 +107,7 @@ pub fn load_config(path: &Path, search_mode: bool) -> Result<Config> {
             "cases",
             "search",
             "scorer",
+            "budget",
         ],
     )?;
     if config["contract"] != "algal.foundry.config.v1" {
@@ -115,6 +120,10 @@ pub fn load_config(path: &Path, search_mode: bool) -> Result<Config> {
             "search settings require the foundry search command",
         ));
     }
+    let budget = config
+        .get("budget")
+        .map(habitat_budget::parse_limits)
+        .transpose()?;
     // Contract-level validation before any file IO.
     let scorer = if config["scorer"].is_null() {
         None
@@ -235,6 +244,7 @@ pub fn load_config(path: &Path, search_mode: bool) -> Result<Config> {
         cases,
         search,
         scorer,
+        budget,
     })
 }
 
@@ -328,17 +338,32 @@ async fn evaluate_case(
     store: &mut Store,
     host: &mut Host,
     transports: &Transports,
+    mut account: Option<&mut Account>,
 ) -> Result<Value> {
-    let receipt = runtime::run(
-        manifest.clone(),
-        case_args(manifest, &case.id, &case.args)?,
-        store,
-        host,
-        transports,
-        None,
-    )
-    .await?;
-    let reference = store.put("runs", &receipt)?;
+    let args = case_args(manifest, &case.id, &case.args)?;
+    if let Some(account) = account.as_deref_mut() {
+        account.reserve(manifest)?;
+    }
+    let stored = runtime::run(manifest.clone(), args, store, host, transports, None)
+        .await
+        .and_then(|receipt| {
+            let reference = store.put("runs", &receipt)?;
+            Ok((receipt, reference))
+        });
+    let (receipt, reference) = match stored {
+        Ok(stored) => stored,
+        Err(error) => {
+            // No stored receipt exists to charge; the reservation is released
+            // and the account stays usable for the record.
+            if let Some(account) = account.as_deref_mut() {
+                account.release()?;
+            }
+            return Err(error);
+        }
+    };
+    if let Some(account) = account {
+        account.charge(&reference, &receipt)?;
+    }
     let outputs = runtime::outputs(manifest, &receipt)?;
     let outcome = receipt["outcome"].as_str().unwrap_or("");
     let passed = outcome == "complete"
@@ -420,10 +445,22 @@ async fn evaluate_cases(
     store: &mut Store,
     host: &mut Host,
     transports: &Transports,
+    mut account: Option<&mut Account>,
 ) -> Result<Vec<Value>> {
     let mut results = Vec::with_capacity(cases.len());
     for case in cases {
-        results.push(evaluate_case(manifest, case, scorer, store, host, transports).await?);
+        results.push(
+            evaluate_case(
+                manifest,
+                case,
+                scorer,
+                store,
+                host,
+                transports,
+                account.as_deref_mut(),
+            )
+            .await?,
+        );
     }
     Ok(results)
 }
@@ -438,13 +475,33 @@ pub async fn evaluate_population(
     host: &mut Host,
     transports: &Transports,
 ) -> Result<(Vec<Value>, String)> {
+    evaluate_population_in(candidates, cases, scorer, store, host, transports, None).await
+}
+
+async fn evaluate_population_in(
+    candidates: &[Manifest],
+    cases: &[FoundryCase],
+    scorer: Option<&Value>,
+    store: &mut Store,
+    host: &mut Host,
+    transports: &Transports,
+    mut account: Option<&mut Account>,
+) -> Result<(Vec<Value>, String)> {
     let selection_cases: Vec<&FoundryCase> =
         cases.iter().filter(|c| c.split != "holdout").collect();
     let mut results = Vec::with_capacity(candidates.len());
     for candidate in candidates {
         let manifest_digest = store.admit(candidate)?;
-        let evaluated =
-            evaluate_cases(candidate, &selection_cases, scorer, store, host, transports).await?;
+        let evaluated = evaluate_cases(
+            candidate,
+            &selection_cases,
+            scorer,
+            store,
+            host,
+            transports,
+            account.as_deref_mut(),
+        )
+        .await?;
         let mut work = json!({"steps":0,"agentCalls":0,"units":0});
         let mut usage = json!({"tokensIn":0,"tokensOut":0});
         for case in &evaluated {
@@ -484,18 +541,158 @@ pub async fn run(
     host: &mut Host,
     transports: &Transports,
 ) -> Result<Value> {
+    run_in(
+        candidates, cases, scorer, lineage, store, host, transports, None,
+    )
+    .await
+}
+
+/// The runs a foundry report records, in admission order: the generator
+/// (when lineage is present), each candidate's selection cases in order,
+/// then the promoted candidate's holdout cases. Pairs are
+/// `(manifest, receipt)` digests.
+pub fn report_runs(report: &Value) -> Vec<(String, String)> {
+    let text = |value: &Value| value.as_str().unwrap_or("").to_owned();
+    let mut runs = Vec::new();
+    if let Some(lineage) = report.get("lineage") {
+        runs.push((
+            text(&lineage["generatorDigest"]),
+            text(&lineage["receiptDigest"]),
+        ));
+    }
+    for candidate in report["candidates"].as_array().into_iter().flatten() {
+        for case in candidate["cases"].as_array().into_iter().flatten() {
+            runs.push((
+                text(&candidate["manifestDigest"]),
+                text(&case["receiptDigest"]),
+            ));
+        }
+    }
+    for case in report["holdout"]["cases"].as_array().into_iter().flatten() {
+        runs.push((text(&report["promoted"]), text(&case["receiptDigest"])));
+    }
+    runs
+}
+
+/// `run` under a habitat account: each case run reserves its declared
+/// ceiling first and is charged its recorded work. A refused reservation
+/// stops the foundry with `BUDGET_EXHAUSTED` and leaves the terminal record
+/// on the account; a complete foundry embeds the account as `budget`. Pass
+/// the account the generator ran under.
+#[allow(clippy::too_many_arguments)]
+pub async fn run_in(
+    candidates: &[Manifest],
+    cases: &[FoundryCase],
+    scorer: Option<&Value>,
+    lineage: Option<(String, String)>,
+    store: &mut Store,
+    host: &mut Host,
+    transports: &Transports,
+    mut account: Option<&mut Account>,
+) -> Result<Value> {
+    if account
+        .as_deref()
+        .is_some_and(|account| account.activity() != "foundry")
+    {
+        return Err(Error::invalid(
+            "a foundry runs under a foundry habitat account",
+        ));
+    }
+    let mut report = report_base(
+        candidates,
+        cases,
+        scorer,
+        lineage,
+        store,
+        host,
+        transports,
+        account.as_deref_mut(),
+    )
+    .await?;
+    if let Some(account) = account {
+        let budget = account.record()?;
+        // The account must hold exactly this report's runs; anything else is
+        // a host wiring error, and the report would not verify.
+        let mismatches =
+            habitat_budget::binding_mismatches(&budget, "foundry", &report_runs(&report));
+        if !mismatches.is_empty() {
+            return Err(Error::new(
+                "INTERNAL",
+                format!("foundry habitat budget: {}", mismatches.join("; ")),
+            ));
+        }
+        report["budget"] = budget;
+    }
+    report["digest"] = json!(digest(&report)?);
+    Ok(report)
+}
+
+/// `runFoundryWithin`: a foundry epoch inside a larger activity, such as a
+/// search's final epoch or an application evaluation within an experiment.
+/// Every run is charged to that activity's account when one is given, and
+/// the report never embeds it; without an account the report is the one
+/// `run` writes.
+#[allow(clippy::too_many_arguments)]
+pub async fn run_within(
+    candidates: &[Manifest],
+    cases: &[FoundryCase],
+    scorer: Option<&Value>,
+    lineage: Option<(String, String)>,
+    store: &mut Store,
+    host: &mut Host,
+    transports: &Transports,
+    account: Option<&mut Account>,
+) -> Result<Value> {
+    let mut report = report_base(
+        candidates, cases, scorer, lineage, store, host, transports, account,
+    )
+    .await?;
+    report["digest"] = json!(digest(&report)?);
+    Ok(report)
+}
+
+/// Every report field except `budget` and `digest`: the population's
+/// selection runs, then the promoted candidate's holdout runs.
+#[allow(clippy::too_many_arguments)]
+async fn report_base(
+    candidates: &[Manifest],
+    cases: &[FoundryCase],
+    scorer: Option<&Value>,
+    lineage: Option<(String, String)>,
+    store: &mut Store,
+    host: &mut Host,
+    transports: &Transports,
+    mut account: Option<&mut Account>,
+) -> Result<Value> {
     check_interfaces(candidates, cases)?;
     if let Some(scorer) = scorer {
         check_scorer(scorer)?;
     }
-    let (results, promoted) =
-        evaluate_population(candidates, cases, scorer, store, host, transports).await?;
+    let (results, promoted) = evaluate_population_in(
+        candidates,
+        cases,
+        scorer,
+        store,
+        host,
+        transports,
+        account.as_deref_mut(),
+    )
+    .await?;
     let winner = candidates
         .iter()
         .find(|candidate| candidate.digest().ok().as_deref() == Some(promoted.as_str()))
         .ok_or_else(|| Error::invalid("promoted candidate missing"))?;
     let holdout_cases: Vec<&FoundryCase> = cases.iter().filter(|c| c.split == "holdout").collect();
-    let evaluated = evaluate_cases(winner, &holdout_cases, scorer, store, host, transports).await?;
+    let evaluated = evaluate_cases(
+        winner,
+        &holdout_cases,
+        scorer,
+        store,
+        host,
+        transports,
+        account,
+    )
+    .await?;
     let mut report = json!({
         "contract":"algal.foundry.v1",
         "candidates":results,
@@ -513,7 +710,6 @@ pub async fn run(
         report["lineage"] =
             json!({"generatorDigest":generator_digest,"receiptDigest":receipt_digest});
     }
-    report["digest"] = json!(digest(&report)?);
     Ok(report)
 }
 
@@ -528,6 +724,25 @@ pub async fn generate(
     store: &mut Store,
     host: &mut Host,
     transports: &Transports,
+) -> Result<(String, String, Vec<Manifest>)> {
+    generate_in(
+        generator, args, output, field, store, host, transports, None,
+    )
+    .await
+}
+
+/// `generate` with the generator run admitted through, and charged to, a
+/// habitat account.
+#[allow(clippy::too_many_arguments)]
+pub async fn generate_in(
+    generator: &Manifest,
+    args: &Value,
+    output: &str,
+    field: Option<&str>,
+    store: &mut Store,
+    host: &mut Host,
+    transports: &Transports,
+    mut account: Option<&mut Account>,
 ) -> Result<(String, String, Vec<Manifest>)> {
     let interface = object(&generator.value["interface"]).map_err(|_| {
         Error::invalid(format!(
@@ -567,7 +782,10 @@ pub async fn generate(
             .or_insert_with(|| json!({}))[target["port"].as_str().unwrap_or("")] = value.clone();
     }
     let generator_digest = store.admit(generator)?;
-    let receipt = runtime::run(
+    if let Some(account) = account.as_deref_mut() {
+        account.reserve(generator)?;
+    }
+    let stored = runtime::run(
         generator.clone(),
         Value::Object(run_args),
         store,
@@ -575,8 +793,23 @@ pub async fn generate(
         transports,
         None,
     )
-    .await?;
-    let receipt_digest = store.put("runs", &receipt)?;
+    .await
+    .and_then(|receipt| {
+        let reference = store.put("runs", &receipt)?;
+        Ok((receipt, reference))
+    });
+    let (receipt, receipt_digest) = match stored {
+        Ok(stored) => stored,
+        Err(error) => {
+            if let Some(account) = account.as_deref_mut() {
+                account.release()?;
+            }
+            return Err(error);
+        }
+    };
+    if let Some(account) = account {
+        account.charge(&receipt_digest, &receipt)?;
+    }
     if receipt["outcome"] != "complete" {
         return Err(Error::invalid(format!(
             "generator {} ended {}",
@@ -654,11 +887,73 @@ pub async fn search(
     host: &mut Host,
     transports: &Transports,
 ) -> Result<Value> {
+    search_in(
+        generator, seeds, cases, spec, scorer, store, host, transports, None,
+    )
+    .await
+}
+
+/// The runs a search report records, in admission order: for each
+/// generation its generator run and then each candidate's selection runs,
+/// followed by the final epoch's selection and holdout runs. The final
+/// report's lineage names the last generator run, which is listed once.
+pub fn search_report_runs(report: &Value) -> Vec<(String, String)> {
+    let text = |value: &Value| value.as_str().unwrap_or("").to_owned();
+    let mut runs = Vec::new();
+    for generation in report["generations"].as_array().into_iter().flatten() {
+        runs.push((
+            text(&generation["generatorDigest"]),
+            text(&generation["receiptDigest"]),
+        ));
+        for candidate in generation["candidates"].as_array().into_iter().flatten() {
+            for case in candidate["cases"].as_array().into_iter().flatten() {
+                runs.push((
+                    text(&candidate["manifestDigest"]),
+                    text(&case["receiptDigest"]),
+                ));
+            }
+        }
+    }
+    let mut result = report["result"].clone();
+    if let Some(body) = result.as_object_mut() {
+        body.remove("lineage");
+    }
+    runs.extend(report_runs(&result));
+    runs
+}
+
+/// `search` under a habitat account: every generator run, every candidate's
+/// selection runs in every generation, and the final epoch's selection and
+/// holdout runs reserve their declared ceilings first and are charged their
+/// recorded work. A refused reservation stops the search with
+/// `BUDGET_EXHAUSTED` and leaves the terminal record on the account; a
+/// complete search embeds the account as `budget`, and its final foundry
+/// report never carries one.
+#[allow(clippy::too_many_arguments)]
+pub async fn search_in(
+    generator: &Generator,
+    seeds: &[Manifest],
+    cases: &[FoundryCase],
+    spec: &Search,
+    scorer: Option<&Value>,
+    store: &mut Store,
+    host: &mut Host,
+    transports: &Transports,
+    mut account: Option<&mut Account>,
+) -> Result<Value> {
     let max_generations = spec.max_generations;
     if !(1..=MAX_GENERATIONS).contains(&max_generations) {
         return Err(Error::invalid(format!(
             "search maxGenerations must be 1..{MAX_GENERATIONS}"
         )));
+    }
+    if account
+        .as_deref()
+        .is_some_and(|account| account.activity() != "search")
+    {
+        return Err(Error::invalid(
+            "a search runs under a search habitat account",
+        ));
     }
     let mut survivors = dedupe(seeds.to_vec())?;
     let mut prior: Option<(Vec<Value>, String)> = None;
@@ -674,7 +969,7 @@ pub async fn search(
             }),
         };
         args.insert(spec.feedback_input.clone(), feedback);
-        let (generator_digest, receipt_digest, proposed) = generate(
+        let (generator_digest, receipt_digest, proposed) = generate_in(
             &generator.manifest,
             &Value::Object(args),
             &generator.output,
@@ -682,6 +977,7 @@ pub async fn search(
             store,
             host,
             transports,
+            account.as_deref_mut(),
         )
         .await?;
         let proposed_digests: Vec<String> = proposed
@@ -695,8 +991,16 @@ pub async fn search(
             )));
         }
         check_interfaces(&population, cases)?;
-        let (selection, promoted) =
-            evaluate_population(&population, cases, scorer, store, host, transports).await?;
+        let (selection, promoted) = evaluate_population_in(
+            &population,
+            cases,
+            scorer,
+            store,
+            host,
+            transports,
+            account.as_deref_mut(),
+        )
+        .await?;
         generations.push(json!({
             "generation":generation,
             "generatorDigest":generator_digest,
@@ -729,7 +1033,9 @@ pub async fn search(
         last["generatorDigest"].as_str().unwrap_or("").to_owned(),
         last["receiptDigest"].as_str().unwrap_or("").to_owned(),
     );
-    let result = run(
+    // The final epoch is charged to the search's account; its report never
+    // embeds one.
+    let result = run_within(
         &final_population,
         cases,
         scorer,
@@ -737,6 +1043,7 @@ pub async fn search(
         store,
         host,
         transports,
+        account.as_deref_mut(),
     )
     .await?;
     let mut report = json!({
@@ -745,6 +1052,20 @@ pub async fn search(
         "generations":generations,
         "result":result,
     });
+    if let Some(account) = account {
+        let budget = account.record()?;
+        // The account must hold exactly this report's runs; anything else is
+        // a host wiring error, and the report would not verify.
+        let mismatches =
+            habitat_budget::binding_mismatches(&budget, "search", &search_report_runs(&report));
+        if !mismatches.is_empty() {
+            return Err(Error::new(
+                "INTERNAL",
+                format!("search habitat budget: {}", mismatches.join("; ")),
+            ));
+        }
+        report["budget"] = budget;
+    }
     report["digest"] = json!(digest(&report)?);
     Ok(report)
 }
@@ -813,6 +1134,7 @@ pub fn parse_report(report: &Value) -> Result<()> {
             "holdout",
             "scorer",
             "lineage",
+            "budget",
             "digest",
         ],
     )?;
@@ -821,6 +1143,9 @@ pub fn parse_report(report: &Value) -> Result<()> {
     }
     if let Some(scorer) = report.get("scorer") {
         check_scorer(scorer)?;
+    }
+    if let Some(budget) = report.get("budget") {
+        habitat_budget::parse(budget)?;
     }
     sha(&report["promoted"], "foundry.promoted")?;
     sha(&report["digest"], "foundry.digest")?;
@@ -1130,6 +1455,21 @@ pub async fn verify(report: &Value, store: &Store, tools: &Host) -> Result<Value
         )
         .await?;
     }
+    if let Some(budget) = report.get("budget") {
+        // Every run above was admitted through this account, in this order.
+        // The receipts were replayed above; check each ceiling and charge.
+        let budget = habitat_budget::parse(budget)?;
+        mismatches.extend(habitat_budget::binding_mismatches(
+            &budget,
+            "foundry",
+            &report_runs(report),
+        ));
+        mismatches.extend(
+            habitat_budget::check_evidence(&budget, store, None)
+                .await?
+                .0,
+        );
+    }
     Ok(json!({
         "ok":mismatches.is_empty(),
         "digest":claimed,
@@ -1176,11 +1516,15 @@ pub fn parse_search_report(report: &Value) -> Result<()> {
             "generatorDigest",
             "generations",
             "result",
+            "budget",
             "digest",
         ],
     )?;
     if report["contract"] != "algal.search.v1" {
         return Err(Error::invalid("search.contract must be algal.search.v1"));
+    }
+    if let Some(budget) = report.get("budget") {
+        habitat_budget::parse(budget)?;
     }
     sha(&report["generatorDigest"], "search.generatorDigest")?;
     sha(&report["digest"], "search.digest")?;
@@ -1371,6 +1715,26 @@ pub async fn verify_search(report: &Value, store: &Store, tools: &Host) -> Resul
     }
     if previous_winner.as_deref() != report["result"]["promoted"].as_str() {
         mismatches.push("final result did not preserve the last generation winner".into());
+    }
+    // One account covers the whole search, so its final epoch never carries
+    // an account of its own.
+    if report["result"].get("budget").is_some() {
+        mismatches.push("result: the final foundry report carries a budget".into());
+    }
+    if let Some(budget) = report.get("budget") {
+        // Every run above was admitted through this account, in this order.
+        // The receipts were replayed above; check each ceiling and charge.
+        let budget = habitat_budget::parse(budget)?;
+        mismatches.extend(habitat_budget::binding_mismatches(
+            &budget,
+            "search",
+            &search_report_runs(report),
+        ));
+        mismatches.extend(
+            habitat_budget::check_evidence(&budget, store, None)
+                .await?
+                .0,
+        );
     }
     Ok(json!({
         "ok":mismatches.is_empty(),

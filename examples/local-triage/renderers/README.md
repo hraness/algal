@@ -14,7 +14,7 @@ cargo fmt --manifest-path examples/local-triage/renderers/Cargo.toml --all -- --
 ```
 
 On a Hraness machine, run build/native/packaging work through the installed
-`hra-host-run`, using the `mac-native` lane for desktop builds and packaging.
+`host-run`, using the `mac-native` lane for desktop builds and packaging.
 `--target-dir examples/malleable-site/renderers/target` reuses the existing
 isolated renderer cache without adding dependencies to the root Rust workspace.
 

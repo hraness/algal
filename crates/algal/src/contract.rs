@@ -9,6 +9,24 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const CONTRACT: &str = "algal.organism.v1";
 pub const MAX_VALUE_BYTES: usize = 262_144;
+/// Schema version 2 bounds; see spec/v1/organism.md "JSON schemas".
+pub const MAX_SCHEMA_LEVELS: usize = 8;
+pub const MAX_SCHEMA_PROPERTIES: usize = 64;
+pub const MAX_SCHEMA_REQUIRED: usize = 64;
+pub const MAX_SCHEMA_ENUM_VALUES: usize = 32;
+pub const MAX_SCHEMA_ENUM_VALUE_BYTES: usize = 256;
+const SCHEMA_TYPES: [&str; 7] = [
+    "object", "array", "string", "number", "integer", "boolean", "null",
+];
+const SCHEMA_V2_KEYWORDS: [&str; 7] = [
+    "type",
+    "required",
+    "properties",
+    "items",
+    "enum",
+    "minimum",
+    "maximum",
+];
 pub const MAX_RECALL_K: usize = 32;
 pub const MAX_RECALL_QUERY_BYTES: usize = 4_096;
 pub type Ports = BTreeMap<String, Value>;
@@ -160,6 +178,171 @@ fn schema_declaration(value: &Value) -> Result<()> {
     Ok(())
 }
 
+/// `schemaVersion` is the number 2 beside a schema; without it a schema is
+/// version 1 and keeps its original rules and provider hints.
+fn schema_version(declaration: &Value) -> Result<bool> {
+    let Some(version) = declaration.get("schemaVersion") else {
+        return Ok(false);
+    };
+    if version.as_f64() != Some(2.0) {
+        return Err(Error::invalid("schemaVersion must be 2"));
+    }
+    if declaration.get("schema").is_none() {
+        return Err(Error::invalid("schemaVersion requires a schema"));
+    }
+    Ok(true)
+}
+
+fn check_schema_declaration(schema: &Value, version_2: bool) -> Result<()> {
+    object(schema)?;
+    if version_2 {
+        return schema_declaration_v2(schema, 1);
+    }
+    schema_depth(schema, 0)?;
+    schema_declaration(schema)
+}
+
+/// Schema version 2 admission. Each schema is checked before its children,
+/// children in UTF-8 key order and then `items`; messages match the reference
+/// runtime's reasons (which it prefixes with the schema's location).
+fn schema_declaration_v2(value: &Value, level: usize) -> Result<()> {
+    if level > MAX_SCHEMA_LEVELS {
+        return Err(Error::invalid(format!(
+            "schema exceeds {MAX_SCHEMA_LEVELS} nested levels"
+        )));
+    }
+    let schema = object(value)?;
+    let mut keys: Vec<&String> = schema.keys().collect();
+    keys.sort();
+    if let Some(key) = keys
+        .into_iter()
+        .find(|key| !SCHEMA_V2_KEYWORDS.contains(&key.as_str()))
+    {
+        return Err(Error::invalid(format!(
+            "unknown schema keyword {}",
+            serde_json::to_string(key)?
+        )));
+    }
+    if let Some(kind) = schema.get("type") {
+        let types: Vec<&Value> = match kind.as_array() {
+            Some(items) => items.iter().collect(),
+            None => vec![kind],
+        };
+        let mut seen = BTreeSet::new();
+        if types.is_empty()
+            || types.len() > SCHEMA_TYPES.len()
+            || !types.iter().all(|entry| {
+                entry
+                    .as_str()
+                    .is_some_and(|name| SCHEMA_TYPES.contains(&name) && seen.insert(name))
+            })
+        {
+            return Err(Error::invalid(
+                "type must name a supported JSON type or a nonempty unique union",
+            ));
+        }
+    }
+    let types = schema_types(value);
+    if let Some(required) = schema.get("required") {
+        let mut seen = BTreeSet::new();
+        let valid = required.as_array().is_some_and(|names| {
+            names.len() <= MAX_SCHEMA_REQUIRED
+                && names.iter().all(|name| {
+                    name.as_str()
+                        .is_some_and(|name| name.encode_utf16().count() <= 64 && seen.insert(name))
+                })
+        });
+        if !valid {
+            return Err(Error::invalid(format!(
+                "required must list at most {MAX_SCHEMA_REQUIRED} distinct names of at most 64 UTF-16 code units"
+            )));
+        }
+    }
+    let properties = schema.get("properties");
+    if properties.is_some_and(|properties| {
+        !properties.as_object().is_some_and(|map| {
+            map.len() <= MAX_SCHEMA_PROPERTIES && map.values().all(Value::is_object)
+        })
+    }) {
+        return Err(Error::invalid(format!(
+            "properties must map at most {MAX_SCHEMA_PROPERTIES} names to schemas"
+        )));
+    }
+    let items = schema.get("items");
+    if let Some(items) = items {
+        if !items.is_object() {
+            return Err(Error::invalid("items must be a schema"));
+        }
+        if !types.contains(&"array") {
+            return Err(Error::invalid("items requires type array"));
+        }
+    }
+    if let Some(allowed) = schema.get("enum") {
+        let count = format!("enum must list 1 to {MAX_SCHEMA_ENUM_VALUES} distinct values");
+        let values = allowed
+            .as_array()
+            .filter(|values| (1..=MAX_SCHEMA_ENUM_VALUES).contains(&values.len()))
+            .ok_or_else(|| Error::invalid(count.clone()))?;
+        let mut seen = BTreeSet::new();
+        for value in values {
+            let scalar = matches!(
+                value,
+                Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_)
+            );
+            let encoded = if scalar {
+                Some(canonical(value)?)
+            } else {
+                None
+            };
+            let Some(encoded) =
+                encoded.filter(|encoded| encoded.len() <= MAX_SCHEMA_ENUM_VALUE_BYTES)
+            else {
+                return Err(Error::invalid(format!(
+                    "enum values must be strings, finite numbers, booleans, or null of at most {MAX_SCHEMA_ENUM_VALUE_BYTES} canonical JSON bytes"
+                )));
+            };
+            // Canonical JSON identity: 1 and 1.0 are the same allowed value.
+            if !seen.insert(encoded) {
+                return Err(Error::invalid(count));
+            }
+            if !types.iter().any(|kind| type_matches(kind, value)) {
+                return Err(Error::invalid("enum values must match the schema type"));
+            }
+        }
+    }
+    for bound in ["minimum", "maximum"] {
+        if schema.get(bound).is_some_and(|value| !value.is_number()) {
+            return Err(Error::invalid(format!("{bound} must be a finite number")));
+        }
+    }
+    let minimum = schema.get("minimum").and_then(Value::as_f64);
+    let maximum = schema.get("maximum").and_then(Value::as_f64);
+    if (minimum.is_some() || maximum.is_some())
+        && !types.contains(&"number")
+        && !types.contains(&"integer")
+    {
+        return Err(Error::invalid(
+            "minimum and maximum require type number or integer",
+        ));
+    }
+    if let (Some(minimum), Some(maximum)) = (minimum, maximum)
+        && minimum > maximum
+    {
+        return Err(Error::invalid("minimum exceeds maximum"));
+    }
+    if let Some(properties) = properties.and_then(Value::as_object) {
+        let mut names: Vec<&String> = properties.keys().collect();
+        names.sort();
+        for name in names {
+            schema_declaration_v2(&properties[name], level + 1)?;
+        }
+    }
+    if let Some(items) = items {
+        schema_declaration_v2(items, level + 1)?;
+    }
+    Ok(())
+}
+
 fn labels(value: &Value) -> Result<()> {
     let values = list(value, 32)?;
     if values.is_empty() {
@@ -196,11 +379,20 @@ pub fn ports(value: &Value, producer: bool, constant: bool) -> Result<Ports> {
                     "many",
                     "labels",
                     "schema",
+                    "schemaVersion",
                     "capability",
                     "value",
                 ]
             } else {
-                &["type", "optional", "many", "labels", "schema", "capability"]
+                &[
+                    "type",
+                    "optional",
+                    "many",
+                    "labels",
+                    "schema",
+                    "schemaVersion",
+                    "capability",
+                ]
             },
         )?;
         let kind = text(&p["type"], 16)?;
@@ -221,13 +413,12 @@ pub fn ports(value: &Value, producer: bool, constant: bool) -> Result<Ports> {
             }
             labels(ls)?;
         }
+        let version_2 = schema_version(&p)?;
         if let Some(schema) = p.get("schema") {
             if kind != "json" {
                 return Err(Error::invalid("schema requires json"));
             }
-            object(schema)?;
-            schema_depth(schema, 0)?;
-            schema_declaration(schema)?;
+            check_schema_declaration(schema, version_2)?;
         }
         if kind == "cap" {
             id(p.get("capability")
@@ -250,11 +441,9 @@ pub fn output_contract(value: &Value) -> Result<()> {
     match text(&value["kind"], 16)? {
         "text" => keys(value, &["kind"]),
         "json" => {
-            keys(value, &["kind", "schema"])?;
-            object(&value["schema"])?;
-            schema_depth(&value["schema"], 0)?;
-            schema_declaration(&value["schema"])?;
-            Ok(())
+            keys(value, &["kind", "schema", "schemaVersion"])?;
+            let version_2 = schema_version(value)?;
+            check_schema_declaration(&value["schema"], version_2)
         }
         "choice" => {
             keys(value, &["kind", "labels", "onMiss"])?;
@@ -773,12 +962,16 @@ impl Manifest {
     }
 }
 
-pub fn check_schema(schema: &Value, value: &Value) -> Result<()> {
-    let types: Vec<&str> = match schema["type"].as_array() {
+/// The declared types, with an omitted `type` meaning object.
+fn schema_types(schema: &Value) -> Vec<&str> {
+    match schema["type"].as_array() {
         Some(items) => items.iter().map(|v| v.as_str().unwrap_or("")).collect(),
         None => vec![schema["type"].as_str().unwrap_or("object")],
-    };
-    let matches = types.iter().any(|kind| match *kind {
+    }
+}
+
+fn type_matches(kind: &str, value: &Value) -> bool {
+    match kind {
         "string" => value.is_string(),
         "number" => value.is_number(),
         "integer" => value.as_f64().is_some_and(|n| n.fract() == 0.0),
@@ -787,7 +980,81 @@ pub fn check_schema(schema: &Value, value: &Value) -> Result<()> {
         "object" => value.is_object(),
         "null" => value.is_null(),
         _ => false,
-    });
+    }
+}
+
+/// Allowed values are scalars, so canonical JSON equality is numeric equality
+/// for numbers (1 and 1.0, 0 and -0) and exact equality otherwise.
+fn same_scalar(allowed: &Value, value: &Value) -> bool {
+    match (allowed, value) {
+        (Value::Number(a), Value::Number(b)) => a.as_f64() == b.as_f64(),
+        (Value::String(a), Value::String(b)) => a == b,
+        (Value::Bool(a), Value::Bool(b)) => a == b,
+        (Value::Null, Value::Null) => true,
+        _ => false,
+    }
+}
+
+/// Schema version 2 values: type, allowed values, inclusive number bounds,
+/// required fields, declared properties in UTF-8 key order, then list
+/// elements in index order, a failing element prefixing its zero-based index.
+/// Messages and order are receipt data shared with the reference runtime.
+pub fn check_schema_v2(schema: &Value, value: &Value) -> Result<()> {
+    let types = schema_types(schema);
+    if !types.iter().any(|kind| type_matches(kind, value)) {
+        return Err(Error::new(
+            "TYPE_MISMATCH",
+            format!("expected {}", types.join("|")),
+        ));
+    }
+    if let Some(allowed) = schema["enum"].as_array()
+        && !allowed.iter().any(|entry| same_scalar(entry, value))
+    {
+        return Err(Error::new("TYPE_MISMATCH", "expected an allowed value"));
+    }
+    if let Some(number) = value.as_f64() {
+        if schema["minimum"]
+            .as_f64()
+            .is_some_and(|minimum| number < minimum)
+        {
+            return Err(Error::new("TYPE_MISMATCH", "number below minimum"));
+        }
+        if schema["maximum"]
+            .as_f64()
+            .is_some_and(|maximum| number > maximum)
+        {
+            return Err(Error::new("TYPE_MISMATCH", "number above maximum"));
+        }
+    }
+    if let Some(required) = schema["required"].as_array() {
+        for key in required {
+            if value.get(text(key, 64)?).is_none() {
+                return Err(Error::new("TYPE_MISMATCH", "missing required field"));
+            }
+        }
+    }
+    if let (Some(props), Some(values)) = (schema["properties"].as_object(), value.as_object()) {
+        let mut keys: Vec<_> = props.keys().collect();
+        keys.sort();
+        for key in keys {
+            if let Some(value) = values.get(key) {
+                check_schema_v2(&props[key], value)?;
+            }
+        }
+    }
+    if let (Some(items), Some(values)) = (schema.get("items"), value.as_array()) {
+        for (index, item) in values.iter().enumerate() {
+            check_schema_v2(items, item).map_err(|error| {
+                Error::new(&error.code, format!("item {index}: {}", error.message))
+            })?;
+        }
+    }
+    Ok(())
+}
+
+pub fn check_schema(schema: &Value, value: &Value) -> Result<()> {
+    let types = schema_types(schema);
+    let matches = types.iter().any(|kind| type_matches(kind, value));
     if !matches {
         return Err(Error::new(
             "TYPE_MISMATCH",
@@ -838,6 +1105,7 @@ pub fn check_value(port: &Value, value: &Value) -> Result<()> {
             Ok(())
         }
         Some("json") => match port.get("schema") {
+            Some(s) if port.get("schemaVersion").is_some() => check_schema_v2(s, value),
             Some(s) => check_schema(s, value),
             None => Ok(()),
         },
@@ -869,8 +1137,14 @@ pub fn bind_output(contract: &Value, value: Value) -> Result<Value> {
             }
         }
         Some("json") => {
-            check_schema(contract.get("schema").unwrap_or(&json!({})), &value)
-                .map_err(|e| Error::new("EFFECT_UNPARSEABLE", e.message))?;
+            let empty = json!({});
+            let schema = contract.get("schema").unwrap_or(&empty);
+            let checked = if contract.get("schemaVersion").is_some() {
+                check_schema_v2(schema, &value)
+            } else {
+                check_schema(schema, &value)
+            };
+            checked.map_err(|e| Error::new("EFFECT_UNPARSEABLE", e.message))?;
             Ok(value)
         }
         _ => Err(Error::new(

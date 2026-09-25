@@ -16,6 +16,7 @@ import {
 } from "./decisions";
 import { checkEmbedderSpec } from "./embeddings";
 import type { Digest } from "./digest";
+import { checkSchemaDeclarationV2, SCHEMA_V2_BOUNDS, type SchemaVersion } from "./schema";
 import {
   asArray,
   asInt,
@@ -78,7 +79,14 @@ export const BOUNDS = {
   /** A single port value — produced or collected — never exceeds this.
    * Larger payloads go through `store` cells and `ref` tokens. */
   maxValueBytes: 262_144,
+  /** Schema version 1: JSON nesting of the whole schema. */
   maxSchemaDepth: 4,
+  /** Schema version 2: nested schemas, root included. */
+  maxSchemaLevels: SCHEMA_V2_BOUNDS.maxLevels,
+  maxSchemaProperties: SCHEMA_V2_BOUNDS.maxProperties,
+  maxSchemaRequired: SCHEMA_V2_BOUNDS.maxRequired,
+  maxSchemaEnumValues: SCHEMA_V2_BOUNDS.maxEnumValues,
+  maxSchemaEnumValueBytes: SCHEMA_V2_BOUNDS.maxEnumValueBytes,
   maxInterfacePorts: 32,
 } as const;
 
@@ -101,6 +109,8 @@ export type PortType =
       many?: boolean;
       /** bounded schema subset — same shape as agent json output contracts */
       schema?: JsonObject;
+      /** Present only with `schema`: selects schema version 2. */
+      schemaVersion?: SchemaVersion;
     }
   | { type: "choice"; optional?: boolean; many?: boolean; labels?: string[] }
   | { type: "ref"; optional?: boolean; many?: boolean }
@@ -111,7 +121,7 @@ export type PortMap = Record<PortName, PortType>;
 
 export type AgentOutput =
   | { kind: "text" }
-  | { kind: "json"; schema: JsonObject }
+  | { kind: "json"; schema: JsonObject; schemaVersion?: SchemaVersion }
   | { kind: "choice"; labels: string[]; onMiss?: string };
 
 export type Route = {
@@ -358,7 +368,7 @@ function parsePortType(u: unknown, what: string): PortType {
   const obj = asObject(u, what);
   noUnknownKeys(
     obj,
-    ["type", "optional", "many", "labels", "schema", "capability"],
+    ["type", "optional", "many", "labels", "schema", "schemaVersion", "capability"],
     what,
   );
   const type = asString(reqField(obj, "type", what), `${what}.type`, 16);
@@ -397,6 +407,7 @@ function parsePortType(u: unknown, what: string): PortType {
       );
     }
   }
+  const schemaVersion = parseSchemaVersion(obj, what);
   const schemaRaw = optField(obj, "schema");
   let schema: JsonObject | undefined;
   if (schemaRaw !== undefined) {
@@ -407,8 +418,7 @@ function parsePortType(u: unknown, what: string): PortType {
       );
     }
     schema = asObject(schemaRaw, `${what}.schema`);
-    checkSchemaDepth(schema, `${what}.schema`, 0);
-    checkSchemaDeclaration(schema, `${what}.schema`);
+    checkSchemaAdmission(schema, `${what}.schema`, schemaVersion);
   }
   const capabilityRaw = optField(obj, "capability");
   let capability: string | undefined;
@@ -446,6 +456,7 @@ function parsePortType(u: unknown, what: string): PortType {
   }
   const out: PortType = { type };
   if (schema !== undefined && out.type === "json") out.schema = schema;
+  if (schemaVersion !== undefined && out.type === "json") out.schemaVersion = schemaVersion;
   if (optional !== undefined) out.optional = optional;
   if (many !== undefined) out.many = many;
   return out;
@@ -453,6 +464,25 @@ function parsePortType(u: unknown, what: string): PortType {
 
 function fail(msg: string): never {
   throw new AlgalError("PARSE_FAILED", msg);
+}
+
+/** `schemaVersion` is the number 2 beside a schema; without it a schema is
+ * version 1, whose rules and provider hints stay exactly as they were. */
+function parseSchemaVersion(obj: JsonObject, what: string): SchemaVersion | undefined {
+  const raw = optField(obj, "schemaVersion");
+  if (raw === undefined) return undefined;
+  if (raw !== 2) fail(`${what}.schemaVersion must be 2`);
+  if (optField(obj, "schema") === undefined) fail(`${what}.schemaVersion requires a schema`);
+  return 2;
+}
+
+function checkSchemaAdmission(schema: JsonObject, what: string, version: SchemaVersion | undefined): void {
+  if (version === 2) {
+    checkSchemaDeclarationV2(schema, what);
+    return;
+  }
+  checkSchemaDepth(schema, what, 0);
+  checkSchemaDeclaration(schema, what);
 }
 
 export function parsePortMap(
@@ -493,11 +523,11 @@ function parseAgentOutput(u: unknown, what: string): AgentOutput {
       return { kind: "text" };
     }
     case "json": {
-      noUnknownKeys(obj, ["kind", "schema"], what);
+      noUnknownKeys(obj, ["kind", "schema", "schemaVersion"], what);
+      const schemaVersion = parseSchemaVersion(obj, what);
       const schema = asObject(reqField(obj, "schema", what), `${what}.schema`);
-      checkSchemaDepth(schema, `${what}.schema`, 0);
-      checkSchemaDeclaration(schema, `${what}.schema`);
-      return { kind: "json", schema };
+      checkSchemaAdmission(schema, `${what}.schema`, schemaVersion);
+      return schemaVersion === undefined ? { kind: "json", schema } : { kind: "json", schema, schemaVersion };
     }
     case "choice": {
       noUnknownKeys(obj, ["kind", "labels", "onMiss"], what);
@@ -538,8 +568,9 @@ function parseAgentOutput(u: unknown, what: string): AgentOutput {
   }
 }
 
-/** Admit the enforced vocabulary before any executor can be activated.
- * Other keywords remain opaque provider hints, including nested `items`. */
+/** Schema version 1: admit the enforced vocabulary before any executor can be
+ * activated. Other keywords remain opaque provider hints, including nested
+ * `items`; version 2 (./schema) checks those keywords instead. */
 function checkSchemaDeclaration(schema: JsonObject, what: string): void {
   const type = optField(schema, "type");
   const types = Array.isArray(type) ? type : type === undefined ? undefined : [type];
@@ -1807,6 +1838,7 @@ function portTypeJson(p: PortType): JsonObject {
   if (p.many) o.many = true;
   if (p.type === "choice" && p.labels) o.labels = p.labels;
   if (p.type === "json" && p.schema) o.schema = p.schema;
+  if (p.type === "json" && p.schemaVersion) o.schemaVersion = p.schemaVersion;
   if (p.type === "cap") o.capability = p.capability;
   return o;
 }
@@ -1828,7 +1860,7 @@ function outputJson(o: AgentOutput): JsonObject {
     case "text":
       return { kind: "text" };
     case "json":
-      return { kind: "json", schema: o.schema };
+      return o.schemaVersion === undefined ? { kind: "json", schema: o.schema } : { kind: "json", schema: o.schema, schemaVersion: o.schemaVersion };
     case "choice": {
       const r: JsonObject = { kind: "choice", labels: o.labels };
       if (o.onMiss !== undefined) r.onMiss = o.onMiss;

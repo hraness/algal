@@ -20,7 +20,7 @@ use crate::effects::Host;
 use crate::graph::{Compiled, Transports, compile, interface_signature};
 use crate::scorer::check_scorer;
 use crate::store::Store;
-use crate::{Error, Result, foundry};
+use crate::{Error, Result, foundry, habitat_budget};
 
 const MAX_EVALUATION_CASES: usize = 32;
 const MAX_EVALUATION_WORK: u64 = 1_000_000;
@@ -816,6 +816,30 @@ pub async fn evaluate_application_revision(
     host: &mut Host,
     transports: &Transports,
 ) -> Result<(String, Value)> {
+    evaluate_application_revision_in(store, input, host, transports, None).await
+}
+
+/// `evaluateApplicationRevision` with an `experiment` habitat account the
+/// host supplies. Every incumbent, candidate, and holdout run is reserved
+/// and charged there; a refused reservation stops the evaluation with
+/// `BUDGET_EXHAUSTED` before its report or evaluation record is stored. The
+/// evaluation, its foundry report, and their digests are the same with or
+/// without an account.
+pub async fn evaluate_application_revision_in(
+    store: &mut Store,
+    input: &Value,
+    host: &mut Host,
+    transports: &Transports,
+    account: Option<&mut habitat_budget::Account>,
+) -> Result<(String, Value)> {
+    if account
+        .as_deref()
+        .is_some_and(|account| account.activity() != "experiment")
+    {
+        return Err(fail(
+            "An application evaluation charges an experiment habitat account",
+        ));
+    }
     let request = parse_evaluation_request(input)?;
     let request_ref = put_record(store, &request.value)?;
     let state = parse_state(&get_record(store, &request.parent_state)?)?;
@@ -845,7 +869,9 @@ pub async fn evaluate_application_revision(
         .ok_or_else(|| fail("Entrypoint manifest is missing or wrong-kind"))?;
     evaluation_manifest(old_manifest, store, &policy)?;
     evaluation_manifest(next_manifest, store, &policy)?;
-    let report = foundry::run(
+    // An experiment's account is charged for every run but never embedded,
+    // so the report keeps the bytes an uncharged evaluation writes.
+    let report = foundry::run_within(
         &[old_manifest.clone(), next_manifest.clone()],
         &cases,
         scorer.as_ref(),
@@ -853,6 +879,7 @@ pub async fn evaluate_application_revision(
         store,
         host,
         transports,
+        account,
     )
     .await?;
     let verified = foundry::verify(&report, store, host).await?;
@@ -1752,5 +1779,100 @@ mod tests {
             .await
             .is_err()
         );
+    }
+
+    #[tokio::test]
+    async fn a_charged_evaluation_keeps_its_record_and_charges_every_run() {
+        use habitat_budget::{Account, Limits};
+        let tmp = tempdir().unwrap();
+        let mut store = Store::open(tmp.path(), true).unwrap();
+        let fixture = seed(
+            &mut store,
+            json!([
+                "if",
+                ["eq", ["get", "value"], "v2"],
+                "v2-ok",
+                ["if", ["eq", ["get", "value"], "h1"], "h1-ok", "ok"]
+            ]),
+        );
+        let limits = |runs| Limits {
+            work: 10_000_000,
+            attempts: 64,
+            runs,
+        };
+        let (plain, _) = evaluate_application_revision(
+            &mut store,
+            &request(&fixture),
+            &mut Host::default(),
+            &Transports::new(),
+        )
+        .await
+        .unwrap();
+        let mut account = Account::new("experiment", limits(64)).unwrap();
+        let (charged, evaluation) = evaluate_application_revision_in(
+            &mut store,
+            &request(&fixture),
+            &mut Host::default(),
+            &Transports::new(),
+            Some(&mut account),
+        )
+        .await
+        .unwrap();
+        // The account changes no evaluation, report, or digest.
+        assert_eq!(charged, plain);
+        let record = account.record().unwrap();
+        let report = get_record(&store, evaluation["foundryReport"].as_str().unwrap()).unwrap();
+        assert!(report.get("budget").is_none());
+        let runs: Vec<(String, String)> = record["runs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|run| {
+                (
+                    run["manifest"].as_str().unwrap().to_owned(),
+                    run["receipt"].as_str().unwrap().to_owned(),
+                )
+            })
+            .collect();
+        assert_eq!(runs, foundry::report_runs(&report));
+        assert_eq!(record["activity"], "experiment");
+        // A record continues in a later command only while it reconciles.
+        let resumed = Account::resume(&record, &store).await.unwrap();
+        assert_eq!(resumed.record().unwrap(), record);
+        let mut changed = record.clone();
+        let work = changed["runs"][0]["charged"]["work"].as_u64().unwrap();
+        changed["runs"][0]["charged"]["work"] = json!(work + 1);
+        let total = changed["charged"]["work"].as_u64().unwrap();
+        changed["charged"]["work"] = json!(total + 1);
+        assert!(Account::resume(&changed, &store).await.is_err());
+        // Only an experiment account charges an evaluation.
+        let mut foundry_account = Account::new("foundry", limits(64)).unwrap();
+        assert!(
+            evaluate_application_revision_in(
+                &mut store,
+                &request(&fixture),
+                &mut Host::default(),
+                &Transports::new(),
+                Some(&mut foundry_account),
+            )
+            .await
+            .is_err()
+        );
+        // Exhaustion stops the evaluation and leaves the terminal record.
+        let mut small = Account::new("experiment", limits(3)).unwrap();
+        let error = evaluate_application_revision_in(
+            &mut store,
+            &request(&fixture),
+            &mut Host::default(),
+            &Transports::new(),
+            Some(&mut small),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.code, "BUDGET_EXHAUSTED");
+        let exhausted = small.record().unwrap();
+        assert_eq!(exhausted["outcome"], "exhausted");
+        assert_eq!(exhausted["runs"].as_array().unwrap().len(), 3);
+        assert!(Account::resume(&exhausted, &store).await.is_err());
     }
 }
