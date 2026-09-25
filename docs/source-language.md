@@ -256,16 +256,16 @@ program score(task: Task, weights: Weights) -> Score {
 }
 ```
 
-Each field has a type: `text`, `number`, `boolean`, `json`, a record
-declared earlier in the same file, or one of the list, allowed-value, and
-range types below. A `?` after the type makes the field optional. Fields use
-commas, with an optional trailing comma. Record names start with an uppercase
-letter and contain only ASCII letters and digits; field names follow the
-binding rules. A field name is the JSON key as written, without the
-kebab-case conversion that parameter names receive. Records belong to their
-file. To pass a record to another program, declare a record with the fields
-it needs in each file; the compiler compares records field by field, not by
-name.
+Each field has a type: `text`, `number`, `integer`, `boolean`, `json`, a
+text format (`digest`, `name`, `slug`, or `uri`), a record declared earlier
+in the same file, or one of the list, allowed-value, and range types below.
+A `?` after the type makes the field optional. Fields use commas, with an
+optional trailing comma. Record names start with an uppercase letter and
+contain only ASCII letters and digits; field names follow the binding rules.
+A field name is the JSON key as written, without the kebab-case conversion
+that parameter names receive. Records belong to their file. To pass a record
+to another program, declare a record with the fields it needs in each file;
+the compiler compares records field by field, not by name.
 
 ### Lists, allowed values, and ranges
 
@@ -300,12 +300,29 @@ program plan(tasks: [Task], weights: Weights) -> [Score] {
   parameter or result type, as `tasks` and the result are here. List items
   cannot be optional.
 - `text in ["open", "blocked", "done"]` and `number in [1, 2, 3]` name the
-  allowed values. A field with allowed text values has a closed set of
-  labels, so `match task.status { open => …, blocked => …, done => … }` must
-  name each value exactly once.
+  allowed values. `integer in [1, 2, 3]` does the same for whole numbers. A
+  field with allowed text values has a closed set of labels, so
+  `match task.status { open => …, blocked => …, done => … }` must name each
+  value exactly once.
 - `number min 0 max 5` accepts numbers from 0 through 5, including both
   bounds. Either bound can be omitted, and a negative bound is written
-  `min -1.5`.
+  `min -1.5`. `integer min 0 max 5` accepts the whole numbers in the range;
+  an `integer` is a whole number no larger in magnitude than
+  9,007,199,254,740,991, the range JSON keeps exact in both runtimes.
+- `text min 2 max 40` bounds a text value's length in Unicode code points,
+  from 0 through 1,000,000. Either bound can be omitted.
+- `digest`, `name`, `slug`, and `uri` are text types with a fixed character
+  check, the `format` names of
+  [schema version 3](../spec/v1/organism.md#json-schemas): a `sha256:` digest,
+  a name such as `task-runner`, a slug such as `task-42-review`, or a URI
+  such as `https://example.com/a`. They are not general regular expressions.
+- `[Task] unique` is a list whose items must be pairwise distinct under
+  canonical equality: `1` equals `1.0`, and two records with the same fields
+  in different orders are equal.
+- `closed record Name { … }` declares a record that rejects fields it does
+  not declare. An open record accepts and passes through undeclared fields;
+  a closed record fails the value instead. A `json` field of a closed record
+  is declared and accepts any JSON value.
 - A field can be a record that has record fields of its own, down to the
   level limit in [Record limits](#record-limits). `Owner` is a record inside
   each `Task`, inside the list.
@@ -337,23 +354,32 @@ The other field types compile to these schemas:
 | --- | --- |
 | `text in ["open", "done"]` | `{"type":"string","enum":["done","open"]}` |
 | `number in [3, 1]` | `{"type":"number","enum":[1,3]}` |
+| `integer in [3, 1]` | `{"type":"integer","enum":[1,3]}` |
 | `number min 0 max 5` | `{"type":"number","minimum":0,"maximum":5}` |
+| `integer min 0 max 5` | `{"type":"integer","minimum":0,"maximum":5}` |
+| `text min 2 max 40` | `{"type":"string","minLength":2,"maxLength":40}` |
+| `slug` | `{"type":"string","format":"slug"}` |
 | `[text]` | `{"type":"array","items":{"type":"string"}}` |
+| `[text] unique` | `{"type":"array","items":{"type":"string"},"uniqueItems":true}` |
 | `[json]` | `{"type":"array"}` |
 | A record | The record's object schema |
+| A closed record | The object schema plus `"additionalProperties":false` |
 
 `required` and allowed values are sorted, so reordering fields or values does
 not change the compiled program. A `json` field is listed in `required` only,
-and an optional `json` field adds nothing.
+and an optional `json` field adds nothing; in a closed record a `json` field
+is also declared in `properties` with a schema accepting every JSON type.
 
 A schema that uses `items`, `enum`, `minimum`, or `maximum`, or nests records
 deeper than the original schema subset allows, needs
 [schema version 2](../spec/v1/organism.md#json-schemas), so the compiler adds
-`"schemaVersion": 2` beside it on the port or result. `Task` from the plan is
-one of these; `Task` from the scorer is not, and compiles to exactly the
-schema above. A runtime released before schema version 2 refuses a program
-that declares it when checking the program, before any step runs, instead of
-skipping the checks.
+`"schemaVersion": 2` beside it on the port or result. A schema that uses
+`integer`, `minLength`, `maxLength`, `format`, `uniqueItems`, or
+`additionalProperties` needs schema version 3 and gets `"schemaVersion": 3`.
+`Task` from the plan is version 2; `Task` from the scorer is neither, and
+compiles to exactly the schema above. A runtime released before a schema
+version refuses a program that declares it when checking the program, before
+any step runs, instead of skipping the checks.
 
 ### What is checked
 
@@ -374,19 +400,24 @@ program, before any cell that uses it runs:
 A value passes when it has its declared type, recursively for nested records
 and lists: an object has every field without `?` and each present declared
 field has its type, each list item has the item type, a text value with
-allowed values is one of them, and a number is within its bounds. A failure
-is `TYPE_MISMATCH` with a message such as `expected object`,
-`missing required field`, `expected an allowed value`, `number below minimum`,
-or `number above maximum`. The message names the failed check, not the field.
-A list item's failure adds the item's position, counting from zero, such as
+allowed values is one of them, a bounded text fits its length, a formatted
+text matches its named check, a `unique` list has no repeated items, a closed
+record carries only declared fields, and a number or integer is within its
+bounds. A failure is `TYPE_MISMATCH` with a message such as
+`expected object`, `missing required field`, `expected an allowed value`,
+`number below minimum`, `number above maximum`, `expected integer`,
+`text shorter than minLength`, `text is not a slug`, `repeated item`, or
+`undeclared field`. The message names the failed check, not the field. A
+list item's failure adds the item's position, counting from zero, such as
 `item 1: number above maximum` for the plan's second task.
 
 The runtime does not check:
 
-- Undeclared fields. They are accepted and passed through unchanged.
+- Undeclared fields on an open record. They are accepted and passed through
+  unchanged; a `closed record` rejects them.
 - The value of a `json` field, beyond its presence when required.
-- Whole numbers, text length or format, or whether values such as ids are
-  unique.
+- Whole numbers, text length or format, or uniqueness for fields declared
+  without `integer`, `text min`/`max`, a format, or `unique`.
 - List length, apart from `each`'s `max_items` and the 262,144-byte limit on
   any value.
 
@@ -397,20 +428,22 @@ The compiler also rejects mismatches it can prove from the source: selecting
 an undeclared field, arithmetic on a `text` field, a record literal or record
 value that lacks a required field or has a field of the wrong type, a record
 literal with a field the record does not declare, a text literal or decision
-label outside a field's allowed values, a number literal outside its allowed
-values or bounds, a list literal item of the wrong type, and a declared list
-whose items do not suit the parameter `each` passes them to. A `json` value,
-or a number or text value the compiler cannot know, is accepted and checked
-at run time. Selecting an optional field gives a `json` value, because the
-field may be absent.
+label outside a field's allowed values, a text literal outside a field's
+length or format, a number literal that is not whole for an `integer` field
+or outside its allowed values or bounds, a list literal item of the wrong
+type, and a declared list whose items do not suit the parameter `each` passes
+them to. A `json` value, or a number or text value the compiler cannot know,
+is accepted and checked at run time. Selecting an optional field gives a
+`json` value, because the field may be absent.
 
 ### Record limits
 
 A file declares at most 16 records, each with 1 to 32 fields, and a record
 name has at most 40 characters. A field can name only a record declared
 earlier, so records cannot refer to themselves or form a cycle. A type lists
-1 to 16 distinct allowed values, and an allowed text value has at most 64
-characters.
+1 to 16 distinct allowed values, an allowed text value has at most 64
+characters, and a `text` length bound is an integer from 0 through
+1,000,000.
 
 A compiled schema has at most eight levels: the record or list itself is one
 level, and each field type and list item type adds one below it. The plan's
@@ -719,8 +752,37 @@ contains no report module, is counted as unresolved. The join reads at most
 entrypoints and 16 evaluation records per entrypoint and counts the rest as
 omitted. `--out` cannot write inside the application store.
 
+Adding `--episodes` joins the settled `start-episode` intents in that same
+committed history to the static calls they exercised:
+
+```sh
+bun cli.ts dependencies main.algal --application inventory --dir .algal --episodes --format text
+```
+
+Each committed `start-episode` intent is followed through its dispatch
+record, its result, and the `algal.episode-outcome.v2` record it settled
+with, to the run receipt that outcome names. The receipt's recorded cells are
+then read against the static closure of the program the episode ran, matched
+to report occurrences by executable digest alone. `application.episodes`
+counts the intents seen, the settled and unsettled dispatches, and the
+evidence that could not be read, parsed, or bound (an intent, dispatch,
+result, outcome, receipt, or manifest) as `unreadable`, never guessed.
+Settled dispatches appear as rows under `application.episodes.dispatches`,
+naming the intent, the committed state it came from, and the bound outcome,
+receipt, and run outcome. Each occurrence whose digest an episode's program
+contains lists one row per dispatch and call site: the dispatch index, the
+site inside the episode's program, the receipt's distinct recorded
+invocations of that site, and the invocation bound the program's structure
+allows it (enclosing `each` and `repeat` limits multiplied, saturated like
+`--estimate`). A recorded count above its bound is kept and marked
+`exceeded`, and recorded cells under paths no site owns, such as a `spawn`,
+count as unresolved. The join keeps the latest 64 settled dispatches and 16
+count rows per occurrence, and counts what it drops as omitted.
+
 In the SDK, pass `estimate: true`, and pass `application: { name, reader }`
-with an `ApplicationService` or `ApplicationCore` as the reader.
+with an `ApplicationService` or `ApplicationCore` as the reader; add
+`episodes: true` for the episode join, which reads dispatches through the
+reader's `readDispatch` and receipts through its store's `getReceipt`.
 
 ### Pin a project with a lock
 

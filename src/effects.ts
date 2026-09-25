@@ -12,7 +12,7 @@ import { AlgalError, ERROR_CODES, errorReport, type ErrorCode } from "./errors";
 import { commandJson } from "./io-runtime";
 import { asDigest, digestCanonical, type Digest } from "./digest";
 import type { AgentOutput, Route } from "./contract";
-import { checkSchemaValueV2, type SchemaVersion } from "./schema";
+import { checkSchemaValueV2, checkSchemaValueV3, type SchemaVersion } from "./schema";
 import type { Store } from "./store-contract";
 import {
   asArray,
@@ -422,7 +422,9 @@ export function bindOutput(
  * agent json output contracts and `json` port `schema` declarations.
  * Manifest admission bounds schema depth. In version 1 other schema keywords
  * are retained provider hints, not constraints enforced by the VM; version 2
- * also checks `items`, `enum`, `minimum`, and `maximum`. */
+ * also checks `items`, `enum`, `minimum`, and `maximum`, and version 3 adds
+ * text length and format, unique items, closed records, and a bounded
+ * integer. */
 export function checkSchema(
   schema: JsonObject,
   value: JsonValue,
@@ -430,6 +432,10 @@ export function checkSchema(
   code: "EFFECT_UNPARSEABLE" | "TYPE_MISMATCH" = "EFFECT_UNPARSEABLE",
   version?: SchemaVersion,
 ): void {
+  if (version === 3) {
+    checkSchemaValueV3(schema, value, code);
+    return;
+  }
   if (version === 2) {
     checkSchemaValueV2(schema, value, code);
     return;

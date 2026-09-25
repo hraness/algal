@@ -3,7 +3,7 @@
 import { BOUNDS, manifestToJson, parseOrganismManifest, type AgentOutput, type Budgets, type Cell, type Edge, type OrganismManifest, type PortMap, type PortType } from "./contract";
 import { digestCanonical, digestText, type Digest } from "./digest";
 import { AlgalError } from "./errors";
-import type { SchemaVersion } from "./schema";
+import { SCHEMA_FORMATS, SCHEMA_V3_BOUNDS, schemaFormatMatches, type SchemaFormat, type SchemaVersion } from "./schema";
 import { utf8Length } from "./utf8";
 import { canonicalBytes, canonicalize, type JsonObject, type JsonValue } from "./values";
 
@@ -13,8 +13,8 @@ export const SOURCE_BOUNDS = Object.freeze({
   maxDepth: 16, maxBindings: 24, maxParameters: 16,
   maxNameLength: 40, maxChoiceLabels: 16, maxCollectionItems: 64,
   maxFiles: 16, maxImports: 16, maxProjectBytes: 1_048_576, maxImportDepth: 8,
-  // Record and list types lower to schemas within schema version 2's level
-  // limit; a schema that needs no version 2 keyword stays version 1.
+  // Record and list types lower to schemas within the manifest's schema level
+  // limit; a schema that needs no newer keyword keeps the lowest version.
   maxRecords: 16, maxRecordFields: 32, maxRecordSchemaLevels: BOUNDS.maxSchemaLevels, maxRecordSchemaBytes: 65_536,
   maxAllowedValues: 16, maxAllowedValueLength: 64,
 });
@@ -24,7 +24,7 @@ export const SOURCE_PROJECT_BOUNDS = Object.freeze({
 });
 /** Changing these defaults or the model-visible envelope changes compilation. */
 export const SOURCE_PROFILE = Object.freeze({
-  id: "algal.source.profile.v1", compilerVersion: "1.5.0",
+  id: "algal.source.profile.v1", compilerVersion: "1.6.0",
   budgets: Object.freeze({ maxSteps: 256, maxAgentCalls: 0, maxWork: 1_000_000,
     maxContextBytes: 65_536, maxOutputBytes: 65_536, maxDepth: 4 }),
   exprFuel: BOUNDS.maxExprFuel,
@@ -106,15 +106,18 @@ type Expr = Span & (
   | { kind: "each"; alias: string; over: string; items: Expr; args: Expr; maxItems: number }
 );
 /** A named record declared after imports; it lowers to a bounded core JSON schema. */
-type SourceRecord = Span & { kind: "record"; name: string; fields: SourceField[]; schema: JsonObject; schemaVersion?: SchemaVersion };
+type SourceRecord = Span & { kind: "record"; name: string; closed: boolean; fields: SourceField[]; schema: JsonObject; schemaVersion?: SchemaVersion };
 /** A record field or list item type. Allowed values and inclusive bounds
- * narrow text and number; `[type]` is a list whose items all have `type`. */
+ * narrow text, integer, and number; `format` names a bounded text check;
+ * `[type]` is a list whose items all have `type`, with `unique` for
+ * pairwise-distinct items. */
 type FieldType =
-  | { kind: "text"; values?: string[] }
+  | { kind: "text"; values?: string[]; minimum?: number; maximum?: number; format?: SchemaFormat }
   | { kind: "number"; values?: number[]; minimum?: number; maximum?: number }
+  | { kind: "integer"; values?: number[]; minimum?: number; maximum?: number }
   | { kind: "boolean" } | { kind: "json" }
   | SourceRecord
-  | { kind: "list"; item: FieldType };
+  | { kind: "list"; item: FieldType; unique?: boolean };
 type SourceField = Span & { name: string; type: FieldType; optional: boolean };
 /** A list parameter or result, such as `[Task]`. Like a record, it lowers to a json port with a schema. */
 type SourceList = { kind: "list"; item: FieldType; schema: JsonObject; schemaVersion?: SchemaVersion };
@@ -204,32 +207,70 @@ class Parser {
     if (!record) this.fail(`unknown record type ${token.text}; declare a record before using it`, token);
     return record;
   }
-  /** A field or list item type: `text`, `number`, `boolean`, `json`, an
-   * earlier record, `[type]`, `text in ["a", "b"]`, `number in [1, 2]`, or
-   * `number min 0 max 5` with inclusive, optional bounds. */
+  /** A field or list item type: `text`, `number`, `integer`, `boolean`,
+   * `json`, a text format (`digest`, `name`, `slug`, `uri`), an earlier
+   * record, `[type]` with an optional `unique`, `text in ["a", "b"]`,
+   * `number in [1, 2]`, `integer min 0 max 5`, or `text min 2 max 40` with
+   * inclusive, optional bounds. */
   private fieldType(depth: number): FieldType {
     const token = this.take();
     if (token.text === "[") {
       if (depth >= SOURCE_BOUNDS.maxDepth) this.fail("type nesting limit exceeded", token);
       const item = this.fieldType(depth + 1);
       this.expect("]");
-      return { kind: "list", item };
+      return this.eat("unique") ? { kind: "list", item, unique: true } : { kind: "list", item };
     }
-    if (token.text === "text") return this.eat("in") ? { kind: "text", values: this.allowedText() } : { kind: "text" };
-    if (token.text === "number") {
-      if (this.eat("in")) return { kind: "number", values: this.allowedNumbers() };
+    if (token.text === "text") {
+      if (this.eat("in")) return { kind: "text", values: this.allowedText() };
       const range: { minimum?: number; maximum?: number } = {};
-      if (this.peek().text === "min") { this.take(); range.minimum = this.signedNumber(); }
+      if (this.peek().text === "min") { this.take(); range.minimum = this.lengthBound(); }
       if (this.peek().text === "max") {
         const at = this.take();
-        range.maximum = this.signedNumber();
-        if (range.minimum !== undefined && range.minimum > range.maximum) this.fail(`number range min ${range.minimum} exceeds max ${range.maximum}`, { start: at.start, end: this.tokens[this.index - 1]!.end });
+        range.maximum = this.lengthBound();
+        if (range.minimum !== undefined && range.minimum > range.maximum) this.fail(`text length min ${range.minimum} exceeds max ${range.maximum}`, { start: at.start, end: this.tokens[this.index - 1]!.end });
       }
-      return { kind: "number", ...range };
+      return { kind: "text", ...range };
+    }
+    if ((SCHEMA_FORMATS as readonly string[]).includes(token.text)) return { kind: "text", format: token.text as SchemaFormat };
+    if (token.text === "number") {
+      if (this.eat("in")) return { kind: "number", values: this.allowedNumbers() };
+      return { kind: "number", ...this.bounds("number") };
+    }
+    if (token.text === "integer") {
+      if (this.eat("in")) return { kind: "integer", values: this.allowedIntegers() };
+      return { kind: "integer", ...this.bounds("integer") };
     }
     if (token.text === "boolean" || token.text === "json") return { kind: token.text };
     if (token.kind === "id" && /^[A-Z]/.test(token.text)) return this.recordType(token);
-    return this.fail("record fields and list items use text, number, boolean, json, a record declared earlier, or a list such as [Task]", token);
+    return this.fail("record fields and list items use text, number, integer, boolean, json, a text format such as slug or uri, a record declared earlier, or a list such as [Task]", token);
+  }
+  /** Inclusive `min` and `max` bounds on a number or integer field. */
+  private bounds(kind: "number" | "integer"): { minimum?: number; maximum?: number } {
+    const range: { minimum?: number; maximum?: number } = {};
+    if (this.peek().text === "min") { this.take(); range.minimum = this.signedNumber(); }
+    if (this.peek().text === "max") {
+      const at = this.take();
+      range.maximum = this.signedNumber();
+      if (range.minimum !== undefined && range.minimum > range.maximum) this.fail(`${kind} range min ${range.minimum} exceeds max ${range.maximum}`, { start: at.start, end: this.tokens[this.index - 1]!.end });
+    }
+    return range;
+  }
+  /** A `min` or `max` text length, bounded by the schema version 3 limit. */
+  private lengthBound(): number {
+    const token = this.peek();
+    const value = this.signedNumber();
+    if (!Number.isSafeInteger(value) || value < 0 || value > SCHEMA_V3_BOUNDS.maxTextLength) {
+      this.fail(`text length bounds are integers in 0..${SCHEMA_V3_BOUNDS.maxTextLength}`, { start: token.start, end: this.tokens[this.index - 1]!.end });
+    }
+    return value;
+  }
+  private allowedIntegers(): number[] {
+    return this.allowed(() => {
+      const start = this.peek().start;
+      const value = this.signedNumber();
+      if (!Number.isSafeInteger(value)) this.fail(`integer allowed values must be whole numbers, found ${JSON.stringify(value)}`, { start, end: this.tokens[this.index - 1]!.end });
+      return value;
+    }, String).sort((a, b) => a - b);
   }
   /** `in [ ... ]` after a scalar type: one or more distinct values, sorted so
    * their order does not change the compiled program. */
@@ -271,9 +312,11 @@ class Parser {
     if (schemaLevels(schema) > SOURCE_BOUNDS.maxRecordSchemaLevels) this.fail(`${what} exceeds the schema limit of ${SOURCE_BOUNDS.maxRecordSchemaLevels} levels`, span);
     if (canonicalBytes(schema) > SOURCE_BOUNDS.maxRecordSchemaBytes) this.fail(`${what} compiles to a schema over ${SOURCE_BOUNDS.maxRecordSchemaBytes} bytes`, span);
   }
-  /** `record Name { field: type, other: type? }`. A field can name only an
-   * earlier record, so declarations cannot refer to themselves or form cycles. */
+  /** `record Name { ... }` or `closed record Name { ... }`. A field can name
+   * only an earlier record, so declarations cannot refer to themselves or
+   * form cycles. A closed record rejects fields it does not declare. */
   private record(): void {
+    const closed = this.eat("closed");
     const start = this.expect("record").start;
     if (this.records.size >= SOURCE_BOUNDS.maxRecords) this.fail(`record limit exceeded; a file declares at most ${SOURCE_BOUNDS.maxRecords} records`, { start, end: this.peek().end });
     const name = this.name();
@@ -294,14 +337,14 @@ class Parser {
     }
     const end = this.tokens[this.index - 1]!.end;
     if (!fields.length) this.fail(`record ${name.text} needs at least one field`, { start, end });
-    const schema = recordSchema(fields);
+    const schema = recordSchema(fields, closed);
     if (schemaLevels(schema) > SOURCE_BOUNDS.maxRecordSchemaLevels) {
       // The record is one level; name the field whose schema is too deep.
       const deep = fields.find(field => field.type.kind !== "json" && 1 + schemaLevels(schemaOf(field.type)) > SOURCE_BOUNDS.maxRecordSchemaLevels);
       this.fail(`record ${name.text} nests field ${deep?.name ?? "?"} beyond the schema limit of ${SOURCE_BOUNDS.maxRecordSchemaLevels} levels`, deep ?? { start, end });
     }
     this.checkSchemaSize(schema, { start, end }, `record ${name.text}`);
-    this.records.set(name.text, { kind: "record", name: name.text, fields, schema, ...schemaVersion(schema), start, end });
+    this.records.set(name.text, { kind: "record", name: name.text, closed, fields, schema, ...schemaVersion(schema), start, end });
   }
   private string(): string { const token = this.take(); if (token.kind !== "string") this.fail("expected a quoted string", token); return JSON.parse(token.text) as string; }
   private list<T>(close: string, item: () => T, max: number): T[] {
@@ -327,7 +370,7 @@ class Parser {
     return imports;
   }
   program(): SourceProgram {
-    while (this.peek().text === "record") this.record();
+    while (this.peek().text === "record" || this.peek().text === "closed") this.record();
     const start = this.expect("program").start;
     const name = this.name();
     if (!/^[a-z][a-z0-9_]*$/.test(name.text)) this.fail("program names use lowercase letters, digits, and underscores", name);
@@ -447,27 +490,38 @@ function output(type: Type): AgentOutput {
   return { kind: "json", schema };
 }
 /** Lower a record to the core schema subset: an object, its sorted required
- * field names, and typed properties. A `json` field is checked for presence only. */
-function recordSchema(fields: readonly SourceField[]): JsonObject {
+ * field names, and typed properties. A `json` field is checked for presence
+ * only, unless the record is closed and every declared field needs a
+ * `properties` entry: a `json` field then takes the any-value union. */
+function recordSchema(fields: readonly SourceField[], closed: boolean): JsonObject {
   const required = fields.filter(field => !field.optional).map(field => field.name).sort();
   const properties: JsonObject = {};
   for (const field of fields) {
-    if (field.type.kind === "json") continue;
+    if (field.type.kind === "json") {
+      if (closed) properties[field.name] = { type: ["null", "boolean", "object", "array", "number", "string"] };
+      continue;
+    }
     properties[field.name] = schemaOf(field.type);
   }
-  return { type: "object", ...(required.length ? { required } : {}), ...(Object.keys(properties).length ? { properties } : {}) };
+  return { type: "object", ...(required.length ? { required } : {}), ...(Object.keys(properties).length ? { properties } : {}),
+    ...(closed ? { additionalProperties: false } : {}) };
 }
 /** The schema for a field or list item type. Allowed values become `enum`,
- * bounds `minimum` and `maximum`, and a list `items`; `[json]` is any list. */
+ * bounds `minimum`/`maximum` or `minLength`/`maxLength`, a format name
+ * `format`, a list `items` with `uniqueItems`, and `[json]` is any list. */
 function schemaOf(type: FieldType): JsonObject {
   switch (type.kind) {
-    case "text": return type.values ? { type: "string", enum: [...type.values] } : { type: "string" };
+    case "text": return type.format !== undefined ? { type: "string", format: type.format }
+      : type.values ? { type: "string", enum: [...type.values] }
+      : { type: "string", ...(type.minimum !== undefined ? { minLength: type.minimum } : {}), ...(type.maximum !== undefined ? { maxLength: type.maximum } : {}) };
     case "number": return { type: "number", ...(type.values ? { enum: [...type.values] } : {}),
+      ...(type.minimum !== undefined ? { minimum: type.minimum } : {}), ...(type.maximum !== undefined ? { maximum: type.maximum } : {}) };
+    case "integer": return { type: "integer", ...(type.values ? { enum: [...type.values] } : {}),
       ...(type.minimum !== undefined ? { minimum: type.minimum } : {}), ...(type.maximum !== undefined ? { maximum: type.maximum } : {}) };
     case "boolean": return { type: "boolean" };
     case "json": return {};
     case "record": return structuredClone(type.schema);
-    case "list": return type.item.kind === "json" ? { type: "array" } : { type: "array", items: schemaOf(type.item) };
+    case "list": return { type: "array", ...(type.item.kind === "json" ? {} : { items: schemaOf(type.item) }), ...(type.unique ? { uniqueItems: true } : {}) };
   }
 }
 /** The nesting measure used by manifest schema admission; scalar values count. */
@@ -482,12 +536,24 @@ function schemaLevels(schema: JsonObject): number {
   const children = [...properties, ...(schema.items !== undefined ? [schema.items as JsonObject] : [])];
   return 1 + (children.length ? Math.max(...children.map(schemaLevels)) : 0);
 }
-/** Version 2 only when a schema needs it: a list, allowed values, bounds, or
- * nesting deeper than version 1 admits. Earlier programs keep their bytes. */
+/** The lowest schema version that supports the schema: version 3 for the
+ * bounded integer, text length or format, unique items, or a closed record;
+ * version 2 for a list, allowed values, bounds, or nesting deeper than
+ * version 1 admits. Earlier programs keep their bytes. */
 function schemaVersion(schema: JsonObject): { schemaVersion?: SchemaVersion } {
-  const keywords = (value: JsonObject): boolean => ["items", "enum", "minimum", "maximum"].some(key => Object.hasOwn(value, key)) ||
-    (value.properties !== undefined && Object.values(value.properties as JsonObject).some(child => keywords(child as JsonObject)));
-  return keywords(schema) || schemaDepth(schema) > BOUNDS.maxSchemaDepth ? { schemaVersion: 2 } : {};
+  const children = (value: JsonObject): JsonObject[] => [
+    ...(value.properties !== undefined ? Object.values(value.properties as JsonObject) as JsonObject[] : []),
+    ...(value.items !== undefined ? [value.items as JsonObject] : []),
+  ];
+  const version3 = (value: JsonObject): boolean =>
+    value.type === "integer" ||
+    ["minLength", "maxLength", "format", "uniqueItems", "additionalProperties"].some(key => Object.hasOwn(value, key)) ||
+    children(value).some(version3);
+  const version2 = (value: JsonObject): boolean =>
+    ["items", "enum", "minimum", "maximum"].some(key => Object.hasOwn(value, key)) ||
+    children(value).some(version2);
+  if (version3(schema)) return { schemaVersion: 3 };
+  return version2(schema) || schemaDepth(schema) > BOUNDS.maxSchemaDepth ? { schemaVersion: 2 } : {};
 }
 function jsonPort(shape: SourceShape): PortType {
   return { type: "json", schema: structuredClone(shape.schema), ...(shape.schemaVersion ? { schemaVersion: shape.schemaVersion } : {}) };
@@ -506,6 +572,7 @@ function recordValue(record: SourceRecord): Type {
 function staticType(type: FieldType): Type {
   switch (type.kind) {
     case "text": return type.values ? { kind: "choice", labels: [...type.values] } : { kind: "text" };
+    case "integer": return { kind: "number" };
     case "record": return recordValue(type);
     case "list": return { kind: "list", item: staticType(type.item) };
     default: return { kind: type.kind };
@@ -516,11 +583,15 @@ function sourceValue(type: SourceType): Type { return typeof type === "object" ?
 function parameterType(type: SourceType): FieldType { return typeof type === "object" ? type : { kind: type }; }
 function fieldTypeText(type: FieldType): string {
   switch (type.kind) {
-    case "text": return type.values ? `text in [${type.values.map(value => JSON.stringify(value)).join(", ")}]` : "text";
+    case "text": return type.format !== undefined ? type.format
+      : type.values ? `text in [${type.values.map(value => JSON.stringify(value)).join(", ")}]`
+      : `text${type.minimum !== undefined ? ` min ${type.minimum}` : ""}${type.maximum !== undefined ? ` max ${type.maximum}` : ""}`;
     case "number": return type.values ? `number in [${type.values.join(", ")}]`
       : `number${type.minimum !== undefined ? ` min ${type.minimum}` : ""}${type.maximum !== undefined ? ` max ${type.maximum}` : ""}`;
-    case "record": return type.name;
-    case "list": return `[${fieldTypeText(type.item)}]`;
+    case "integer": return type.values ? `integer in [${type.values.join(", ")}]`
+      : `integer${type.minimum !== undefined ? ` min ${type.minimum}` : ""}${type.maximum !== undefined ? ` max ${type.maximum}` : ""}`;
+    case "record": return `${type.closed ? "closed " : ""}${type.name}`;
+    case "list": return `[${fieldTypeText(type.item)}]${type.unique ? " unique" : ""}`;
     default: return type.kind;
   }
 }
@@ -658,12 +729,19 @@ class Compiler {
         const candidates = actual.kind === "choice" ? actual.labels : actual.kind === "text" && actual.literal !== undefined ? [actual.literal] : [];
         const outside = expected.values ? candidates.find(value => !expected.values!.includes(value)) : undefined;
         if (outside !== undefined) fail(`must be one of the allowed values, found ${JSON.stringify(outside)}`);
+        if (actual.kind === "text" && actual.literal !== undefined) {
+          const length = [...actual.literal].length;
+          if (expected.minimum !== undefined && length < expected.minimum) fail(`must be at least ${expected.minimum} characters, found ${length}`);
+          if (expected.maximum !== undefined && length > expected.maximum) fail(`must be at most ${expected.maximum} characters, found ${length}`);
+          if (expected.format !== undefined && !schemaFormatMatches(expected.format, actual.literal)) fail(`must be ${expected.format}, found ${JSON.stringify(actual.literal)}`);
+        }
         return;
       }
-      case "number": {
-        if (actual.kind !== "number") fail(`must be number, found ${actual.kind}`);
+      case "number": case "integer": {
+        if (actual.kind !== "number") fail(`must be ${expected.kind}, found ${actual.kind}`);
         const value = actual.kind === "number" ? actual.literal : undefined;
         if (value === undefined) return;
+        if (expected.kind === "integer" && !Number.isSafeInteger(value)) fail(`must be a whole number, found ${value}`);
         if (expected.values && !expected.values.includes(value)) fail(`must be one of the allowed values, found ${value}`);
         if (expected.minimum !== undefined && value < expected.minimum) fail(`must be at least ${expected.minimum}, found ${value}`);
         if (expected.maximum !== undefined && value > expected.maximum) fail(`must be at most ${expected.maximum}, found ${value}`);

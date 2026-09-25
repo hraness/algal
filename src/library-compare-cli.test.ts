@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { parseLibraryComparison, LIBRARY_UNSEEN_CASES_CONTRACT } from "./library-comparison";
+import { libraryCaseId, parseLibraryComparison, LIBRARY_UNSEEN_CASES_CONTRACT } from "./library-comparison";
 import { LIBRARY_INDEX_PROJECTS } from "./library-index";
 import { canonicalize, type JsonObject } from "./values";
 
@@ -55,6 +55,38 @@ test("library compare writes a canonical record, exits by its verdict, and check
     expect(mismatch.code).toBe(2);
     expect(mismatch.stdout).toBe("");
     expect(JSON.parse(mismatch.stderr)).toMatchObject({ error: "RECEIPT_MISMATCH", message: expect.stringContaining("differs from a fresh comparison") });
+    // The same failing revision passes when a declaration names exactly the
+    // observed changes; the declaration must be supplied to verify it too.
+    const intendedFile = join(dir, "clamp.intended.json");
+    const changedIds = parseLibraryComparison(JSON.parse(failed.stdout)).cases
+      .filter(row => row.candidate !== null && (row.candidate.outcome !== row.base.outcome || row.candidate.outputs !== row.base.outputs))
+      .map(libraryCaseId).sort();
+    expect(changedIds).toEqual([
+      "pinned:support-queue/main.algal#three-tickets", "pinned:task-planning/inspect_task.algal#polish", "pinned:task-planning/main.algal#three-tasks",
+      "unseen:task-planning/inspect_task.algal#urgency-above-range",
+    ]);
+    await writeFile(intendedFile, JSON.stringify({ changed: changedIds, reason: "corrected" }));
+    const authorized = await cli(dir, "library", "compare", "clamp", failing, "--unseen", unseenFile, "--intended", intendedFile, "--out", intendedFile + ".record.json");
+    expect(authorized.code, authorized.stderr).toBe(0);
+    expect(authorized.stdout).toBe("");
+    const declared = parseLibraryComparison(JSON.parse(await readFile(`${intendedFile}.record.json`, "utf8")));
+    expect(declared.verdict).toMatchObject({ passed: true, changed: changedIds });
+    expect(declared.intended).toEqual({ changed: changedIds, reason: "corrected" });
+    const verifiedIntended = await cli(dir, "library", "compare", "clamp", failing, "--unseen", unseenFile, "--intended", intendedFile, "--verify", `${intendedFile}.record.json`);
+    expect(verifiedIntended.code, verifiedIntended.stderr).toBe(0);
+    const missingIntended = await cli(dir, "library", "compare", "clamp", failing, "--unseen", unseenFile, "--verify", `${intendedFile}.record.json`);
+    expect(missingIntended.code).toBe(2);
+    expect(JSON.parse(missingIntended.stderr)).toMatchObject({ error: "RECEIPT_MISMATCH", message: expect.stringContaining("in intended, verdict") });
+    // A declaration that names fewer cases than changed still exits 1; a
+    // malformed declaration is refused before the comparison runs.
+    await writeFile(intendedFile, JSON.stringify({ changed: ["pinned:task-planning/main.algal#three-tasks"], reason: "corrected" }));
+    const underdeclared = await cli(dir, "library", "compare", "clamp", failing, "--unseen", unseenFile, "--intended", intendedFile);
+    expect(underdeclared.code).toBe(1);
+    expect(parseLibraryComparison(JSON.parse(underdeclared.stdout)).verdict.passed).toBe(false);
+    await writeFile(intendedFile, JSON.stringify({ changed: changedIds, reason: "improved" }));
+    const malformedIntended = await cli(dir, "library", "compare", "clamp", failing, "--unseen", unseenFile, "--intended", intendedFile);
+    expect(malformedIntended.code).toBe(2);
+    expect(JSON.parse(malformedIntended.stderr)).toMatchObject({ error: "PARSE_FAILED", message: expect.stringContaining("reason must be one of corrected, extended, restricted") });
     const unpinned = await cli(root, "library", "compare", "clamp", revision, "--unseen", unseenFile);
     expect(unpinned.code).toBe(2);
     expect(JSON.parse(unpinned.stderr)).toMatchObject({ error: "DIGEST_MISMATCH", message: expect.stringContaining(`pin ${String(summary.digest)}`) });
@@ -63,6 +95,7 @@ test("library compare writes a canonical record, exits by its verdict, and check
       [["library", "compare", "clamp"], "usage: algal library compare"],
       [["library", "compare", "clamp", unseenFile], "usage: algal library compare"],
       [["library", "compare", "clamp", revision, "--modules", dir], "unknown library compare option --modules"],
+      [["library", "compare", "clamp", revision, "--episodes"], "unknown library compare option --episodes"],
       [["library", "compare", "clamp", revision, "--format", "yaml"], "json or text"],
       [["library", "compare", "clamp", revision, "--unseen", unseenFile, "--out", revision], "aliases an input"],
       [["library", "compare", "clamp", join(dir, "missing.algal")], "cannot read revision"],

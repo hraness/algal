@@ -115,13 +115,16 @@ fn version_2_bounds_are_inclusive_and_the_version_is_exact() {
             assert_eq!(parsed.digest().unwrap(), stored.digest().unwrap());
         }
     }
-    for version in [json!(1), json!(3), json!("2"), Value::Null] {
+    for version in [json!(1), json!(4), json!("2"), Value::Null] {
         for cell in cells(&json!({"type":"string"}), version) {
             assert_eq!(
                 Manifest::parse(&manifest(cell)).unwrap_err().message,
-                "schemaVersion must be 2"
+                "schemaVersion must be 2 or 3"
             );
         }
+    }
+    for cell in cells(&json!({"type":"string"}), json!(3)) {
+        Manifest::parse(&manifest(cell)).unwrap();
     }
     for port in [
         json!({"type":"json","schemaVersion":2}),

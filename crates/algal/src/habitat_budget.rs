@@ -46,6 +46,14 @@ pub fn schedule_unsupported() -> Error {
         "habitat schedules (algal.habitat-schedule.v1) run in the TypeScript runtime; the native runtime does not run or verify them",
     )
 }
+
+/// The explicit refusal for counterfactual replay and ordering exploration:
+/// the native runtime neither runs nor verifies them.
+pub fn whatif_unsupported() -> Error {
+    Error::invalid(
+        "counterfactual replay and ordering exploration (algal.replay-comparison.v1, algal.ordering-scenario.v1, algal.ordering-report.v1) run in the TypeScript runtime; the native runtime does not run or verify them",
+    )
+}
 /// Admitted runs per account, and the largest `limits.runs`.
 pub const MAX_RUNS: u64 = 4_096;
 /// A manifest's largest `maxWork` and `maxAgentCalls`: the ceiling bounds.

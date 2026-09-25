@@ -9,6 +9,59 @@ wire constant (`0.1.0`) is independent of these package versions.
 
 ## Unreleased
 
+- `algal db` builds and answers a program database: a derived, disposable
+  structural index over the store (`program.db`, `bun:sqlite`) plus a
+  limited declarative query surface. `algal db build` materializes
+  manifests, cells, port maps, child-manifest links, receipts, per-cell
+  outcomes and work, capability classes, process records and heads, slots,
+  effects, application revisions/entrypoints/states/transitions/evaluations/
+  operations/dispatches, a record-kind histogram, and skipped records under
+  per-place file, byte, and row caps. `algal db query` composes whitelisted
+  table/column/operator predicates (never raw SQL); canned projections cover
+  `callers-of`, `revisions-for-executable`, `receipts-touching-capability`,
+  `unevaluated-revisions`, `largest-work`, `process-status`, and `kinds`.
+  `algal db status` reports index-versus-store drift per place and exits 1
+  when stale. Unreadable or foreign records are counted and skipped, never
+  fatal. See `docs/program-database.md`. Native CLI support is proposed, not
+  shipped.
+- `algal observe --dir <store>` prints one read-only snapshot of live store
+  state: every process (status, generation, manifest and head digests), each
+  mailbox's pending deliveries and counts, capability records, host events,
+  application heads, stored habitat accounts and schedules, and a
+  digest-ordered tail of run receipts. Every listing carries an explicit
+  `total` and `truncated` flag; malformed records count toward `unreadable`
+  and foreign layout entries toward `foreign` instead of aborting the read.
+  A confirm pass re-reads each emitted pointer, so a snapshot that straddled
+  a transition reports `consistent: false`. `algal observe --follow` (alias
+  `algal tail`) streams each change as a canonical JSON line in a fixed
+  section order, bounded by `--interval-ms`, `--max-polls`, and
+  `--max-events`; emitted lines carry no wall-clock fields. Native Rust
+  support is proposed, not shipped.
+- `schemaVersion: 3` extends the bounded JSON schema subset with whole
+  numbers over the exact JSON range (`"type":"integer"` now also bounds a
+  version 3 value to ±9,007,199,254,740,991), `minLength`/`maxLength` counted
+  in Unicode code points, fixed `format` names (`digest`, `name`, `slug`,
+  `uri`), `uniqueItems` with canonical equality, and
+  `additionalProperties: false` for records closed to undeclared fields.
+  Both runtimes share the same declaration rules, check order, and failure
+  messages, and a runtime that predates version 3 refuses the declaration
+  before any step runs. The source compiler (`algal.source.profile.v1`
+  version `1.6.0`) adds matching syntax: `integer`, `text min`/`max` length
+  bounds, the four format types, `[type] unique`, and `closed record`.
+  Programs written before this syntax compile to byte-identical manifests.
+- Counterfactual replay and ordering exploration: `algal replay <receipt>
+  --with <manifest>` and `algal process replay <name> --with <manifest>` run a
+  revised manifest against a recorded run's evidence — recorded effects answer
+  while the trace matches, admitted live executors take over after divergence —
+  and emit a bounded `algal.replay-comparison.v1` record with the reproduced
+  prefix, first divergent cell, and an `identical`/`diverged`/
+  `could-not-replay` verdict. `algal ordering <scenario.json>` enumerates
+  bounded mailbox/dispatch orderings of an `algal.ordering-scenario.v1`
+  durable-process setup under a shared habitat budget, evaluates an
+  `algal.expr.v1` invariant per terminal state, and emits an
+  `algal.ordering-report.v1` with each ordering's outcome, the first
+  counterexample witness, and explicit exhaustion. Both are TypeScript-only;
+  the native CLI accepts the commands and refuses them explicitly.
 - Public copy adopts the canonical portfolio messaging record: the site
   title, hero, footer, social card, `llms.txt` introduction, README lead,
   both CLI introductions, and the package and crate descriptions now carry
@@ -26,6 +79,34 @@ wire constant (`0.1.0`) is independent of these package versions.
   unbound, foreign, and unresolved records are counted instead of linked. It
   reads at most 4,096 records and keeps the latest 64 entrypoints. Reports
   without the new flags are unchanged.
+- `algal dependencies --application <name> --episodes` also follows each
+  settled `start-episode` dispatch in the application's committed history
+  through its result, `algal.episode-outcome.v2` record, and run receipt, and
+  counts that receipt's recorded invocations against every occurrence whose
+  digest the episode's program contains, matched by digest alone. Each
+  counted row shows the dispatch index, the call site inside the episode's
+  program, the recorded count, and the site's static invocation bound, marked
+  `exceeded` when the count is above it. Settled dispatches appear under
+  `application.episodes.dispatches`; unreadable intents, dispatch, result,
+  outcome, and receipt records are counted rather than guessed, and
+  unresolved recorded cells are reported. The join keeps the latest 64
+  settled dispatches and 16 count rows per occurrence and counts the rest as
+  omitted.
+- `algal library compare --intended <declaration.json>` lets a revision
+  declare the exact case results it changes: the declaration lists the case
+  identifiers (`set:entry#name`) expected to change, sorted and unique, with
+  a reason of `corrected`, `extended`, or `restricted`. The comparison passes
+  only when the declared list equals the observed `changed` list exactly, and
+  the `algal.library-comparison.v1` record carries the declaration under
+  `intended`, so `--verify` needs the same file to match such a record.
+  Without a declaration, any changed case fails as before.
+- Catalog entries may pin an optional `Evidence` field: record files under
+  `examples/source/projects` named with the digest of their canonical JSON.
+  The catalog test reads each pinned record; a comparison must have passed
+  and must end the entry's listed digest or move it there as a dependent.
+  Records that cannot be read, parsed, or justified, and record kinds the
+  check does not know, are problems rather than passes. Entries without the
+  field are unchanged.
 - Package subpaths `./source` and `./source-errors` let a browser bundle
   compile `.algal` source. `compileSource` takes every source file as a
   string, and `createSourceErrorReport` and `renderSourceError` format its

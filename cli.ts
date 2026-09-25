@@ -104,14 +104,16 @@ usage:
       [--source-root <dir>] [--format json|text] [--out <file>]
                                               locate a recorded failure in its original source
   algal dependencies <program.algal> [--source-root <dir>] [--bundle <bundle.json>]
-      [--receipt <run.json>] [--estimate] [--application <name> [--dir <path>]]
+      [--receipt <run.json>] [--estimate] [--application <name> [--dir <path>] [--episodes]]
       [--format json|text] [--out <file>]
                                               report source files, modules, call paths, and effects;
                                               --bundle checks an artifact against the compiled closure;
                                               --receipt attributes recorded cells and work to each call;
                                               --estimate bounds how many times each call can run;
                                               --application links each module to the application
-                                              revisions, evaluations, and activations that contain it
+                                              revisions, evaluations, and activations that contain it;
+                                              --episodes also counts each settled episode's recorded
+                                              invocations against the calls its program contains
   algal lock <program.algal> [--source-root <dir>] [--out <lock.json>]
       [--evaluation <cases.json>] [--versions <labels.json>]
       [--verify <lock.json> [--evaluate]] [--format json|text]
@@ -163,6 +165,16 @@ usage:
   algal resume <receipt.json> [manifest.json] [executor options]
                                               continue a suspended run: recorded effects
                                               replay, the rest routes to live executors
+  algal replay <receipt.json> --with <manifest.json> [--args <file>] [executor options]
+      [--modules <dir>] [--transports <file>] [--dir <path>] [--write] [--out <file>]
+                                              counterfactual: run a revised manifest over the
+                                              recorded run's evidence; emit an
+                                              algal.replay-comparison.v1 record
+  algal ordering <scenario.json> [--dir <path>] [--out <file>]
+                                              enumerate a durable-process scenario's delivery
+                                              and dispatch orderings under a habitat budget and
+                                              check an invariant over each terminal state;
+                                              emit an algal.ordering-report.v1 record
   algal process create <name> <manifest.json> [--args <file>] [--max-generations 16]
       [--modules <dir>] [--tools <file>] [--dir <path>]
                                               admit a durable, bounded process
@@ -185,8 +197,19 @@ usage:
                                               run ready processes and recorded mailbox wakeups
   algal process list|inspect <name>|verify <name> [--dir <path>] [--tools <file>]
                                               inspect retained state or verify history offline
+  algal process replay <name> --with <manifest.json> [executor options]
+      [--args <file>] [--dir <path>] [--out <file>]
+                                              replay the process's latest recorded run under a
+                                              revised manifest
   algal inspect <receipt.json>            summarize a run receipt
   algal runs [--dir <path>]               list receipts stored under --dir
+  algal observe [--dir <path>] [--max-items <n>]
+      [--follow [--interval-ms <ms>] [--max-polls <n>] [--max-events <n>]]
+                                              one read-only snapshot of live store state; every
+                                              listing carries totals and truncation flags;
+                                              --follow streams each change in a fixed order
+  algal tail [--dir <path>] [--max-items <n>] [follow options]
+                                              alias for observe --follow
   algal diff <receipt-a.json> <receipt-b.json>
                                               compare two receipts, report divergence
   algal foundry <config.json> [--responses <file>] [--executor-cmd <command>]
@@ -277,6 +300,18 @@ usage:
                                               store's manifests/runs/values (plus docs)
   algal search <query> [--dir <path>] [-k <n>] [--embedder local|gateway[:<model>]]
                                               hybrid rank: embedding cosine ⊕ token overlap
+  algal db build [--dir <path>]              rebuild the derived program index (program.db)
+  algal db status [--dir <path>]             report index-versus-store drift; exit 1 when stale
+  algal db tables                            list the queryable relations, columns, and projections
+  algal db query <json|@file> [--dir <path>]
+                                              run a declarative query: {"table", "columns",
+                                              "where", "order", "limit"} over the built index
+  algal db <projection> [args] [--dir <path>] [--limit <n>]
+                                              canned joins: callers-of <digest>,
+                                              revisions-for-executable <digest>,
+                                              receipts-touching-capability <class>,
+                                              unevaluated-revisions, largest-work,
+                                              process-status, kinds
   algal auth <provider> [--status | --forget | --clipboard]
                                               vault a provider credential locally — keychain
                                               when available, permission-checked file otherwise;
@@ -951,14 +986,16 @@ async function main(): Promise<number> {
     }
 
     case "dependencies": {
-      if (positional.length !== 1) usageError("algal dependencies <program.algal> [--source-root <dir>] [--bundle <bundle.json>] [--receipt <run.json>] [--estimate] [--application <name> [--dir <path>]] [--format json|text] [--out <file>]");
+      if (positional.length !== 1) usageError("algal dependencies <program.algal> [--source-root <dir>] [--bundle <bundle.json>] [--receipt <run.json>] [--estimate] [--application <name> [--dir <path>] [--episodes]] [--format json|text] [--out <file>]");
       for (const key of Object.keys(flags)) {
-        if (!["source-root", "bundle", "receipt", "estimate", "application", "dir", "format", "out"].includes(key)) usageError(`unknown dependencies option --${key}`);
-        if (key !== "estimate") artifactFlag(flags, key);
+        if (!["source-root", "bundle", "receipt", "estimate", "application", "dir", "episodes", "format", "out"].includes(key)) usageError(`unknown dependencies option --${key}`);
+        if (key !== "estimate" && key !== "episodes") artifactFlag(flags, key);
       }
       if (flags.estimate !== undefined && flags.estimate !== true) usageError("--estimate is a boolean flag without a value");
+      if (flags.episodes !== undefined && flags.episodes !== true) usageError("--episodes is a boolean flag without a value");
       const applicationName = artifactFlag(flags, "application");
       if (flags.dir !== undefined && applicationName === undefined) usageError("--dir names the application store and requires --application");
+      if (flags.episodes === true && applicationName === undefined) usageError("--episodes attributes settled episode evidence and requires --application");
       const { createSourceDependencyReport, renderSourceDependencies } = await import("./src/source-dependencies");
       const { RECEIPT_BOUNDS } = await import("./src/run");
       const format = artifactFlag(flags, "format") ?? "json";
@@ -982,6 +1019,7 @@ async function main(): Promise<number> {
       // Reading validated history needs no admission authority; this host refuses every commit.
       const application = applicationName === undefined ? undefined : {
         name: applicationName,
+        ...(flags.episodes === true ? { episodes: true } : {}),
         reader: new (await import("./src/application")).ApplicationService(dir, {
           admitCommit() { return Promise.reject(new AlgalError("CAPABILITY_DENIED", "dependencies reads application history only")); },
         }),
@@ -1107,10 +1145,10 @@ async function main(): Promise<number> {
         out({ contract: LIBRARY_UNSEEN_CASES_CONTRACT, cases: parsed.cases.length, digest: parsed.digest });
         return 0;
       }
-      const usage = "algal library compare <name> <revision.algal> [--unseen <cases.json>] [--repository <dir>] [--verify <record.json>] [--format json|text] [--out <file>]";
+      const usage = "algal library compare <name> <revision.algal> [--unseen <cases.json>] [--intended <declaration.json>] [--repository <dir>] [--verify <record.json>] [--format json|text] [--out <file>]";
       if (positional[0] !== "compare" || positional.length !== 3 || !positional[2]!.endsWith(".algal")) usageError(usage);
       for (const key of Object.keys(flags)) {
-        if (!["unseen", "repository", "verify", "format", "out"].includes(key)) usageError(`unknown library compare option --${key}`);
+        if (!["unseen", "intended", "repository", "verify", "format", "out"].includes(key)) usageError(`unknown library compare option --${key}`);
         artifactFlag(flags, key);
       }
       const format = artifactFlag(flags, "format") ?? "json";
@@ -1121,16 +1159,18 @@ async function main(): Promise<number> {
       const repository = resolve(artifactFlag(flags, "repository") ?? ".");
       const output = artifactFlag(flags, "out");
       const unseenPath = artifactFlag(flags, "unseen");
+      const intendedPath = artifactFlag(flags, "intended");
       const verifyPath = artifactFlag(flags, "verify");
       const revisionPath = resolve(positional[2]!);
-      await distinctArtifactPaths([revisionPath, join(repository, LIBRARY_INDEX_PAGE), ...[unseenPath, verifyPath].flatMap(path => path === undefined ? [] : [resolve(path)])], [output]);
+      await distinctArtifactPaths([revisionPath, join(repository, LIBRARY_INDEX_PAGE), ...[unseenPath, intendedPath, verifyPath].flatMap(path => path === undefined ? [] : [resolve(path)])], [output]);
       // The revision is read like a source file: a regular UTF-8 file within the source byte limit.
       const revisionFile = await realpath(revisionPath).catch((error: NodeJS.ErrnoException) => {
         throw new AlgalError("IO_FAILED", `cannot read revision ${positional[2]!} (${error.code ?? "IO_FAILED"})`);
       });
       const revision = (await loadSourceFixtures(dirname(revisionFile), [basename(revisionFile)], SOURCE_BOUNDS.maxSourceBytes))[basename(revisionFile)]!;
       const unseen = unseenPath === undefined ? undefined : await readJsonBounded(resolve(unseenPath), LIBRARY_COMPARISON_BOUNDS.unseen.maxBytes, "unseen cases");
-      const options = { repository, name: positional[1]!, revision, ...(unseen === undefined ? {} : { unseen }) };
+      const intended = intendedPath === undefined ? undefined : await readJsonBounded(resolve(intendedPath), LIBRARY_COMPARISON_BOUNDS.record.maxBytes, "intended change declaration");
+      const options = { repository, name: positional[1]!, revision, ...(unseen === undefined ? {} : { unseen }), ...(intended === undefined ? {} : { intended }) };
       const record = verifyPath === undefined ? await compareLibraryRevision(options)
         : await verifyLibraryComparison(await readJsonBounded(resolve(verifyPath), LIBRARY_COMPARISON_BOUNDS.record.maxBytes, "library comparison"), options);
       await emitArtifact(format === "text" ? renderLibraryComparison(record) : canonicalize(libraryComparisonToJson(record)), output);
@@ -2292,6 +2332,73 @@ async function main(): Promise<number> {
       return resumed.outcome === "complete" ? 0 : 1;
     }
 
+    case "replay": {
+      const [receiptFile] = positional;
+      if (!receiptFile) {
+        usageError("algal replay <receipt.json> --with <manifest.json> [--args <file>] [executor options]");
+      }
+      const withFile = artifactFlag(flags, "with");
+      if (!withFile) usageError("algal replay requires --with <manifest.json>");
+      const { replayComparison, replayComparisonToJson } = await import("./src/replay");
+      const { cachedExecutor } = await import("./src/effects");
+      const { RECEIPT_BOUNDS } = await import("./src/run");
+      if (flags.modules !== undefined) {
+        const n = await loadModules(String(flags.modules), store);
+        diag(`loaded ${n} module(s) from ${flags.modules}`);
+      }
+      const receipt = await readJsonBounded(resolve(receiptFile), RECEIPT_BOUNDS.maxBytes, "run receipt");
+      const revision = await readJsonBounded(resolve(withFile), BOUNDS.maxManifestBytes, "revised manifest");
+      const executors = await resolveExecutors(flags, dir);
+      const result = await replayComparison({
+        receipt,
+        revision,
+        ...(flags.args !== undefined
+          ? { args: await readJsonBounded(resolve(String(flags.args)), BOUNDS.maxArgsBytes, "replay args") as Record<string, Record<string, JsonValue>> }
+          : {}),
+        store,
+        fns,
+        executors: flags["cache-effects"] !== undefined
+          ? executors.map((e) => cachedExecutor(e, store))
+          : executors,
+        tools: await resolveTools(flags, dir),
+        ...(flags.transports !== undefined
+          ? { transports: await loadTransports(String(flags.transports)) }
+          : {}),
+      });
+      if (flags.write && result.revised) {
+        const rd = await store.putReceipt(result.revised as unknown as JsonValue);
+        diag(`revised receipt  ${rd}`);
+      }
+      const comparison = replayComparisonToJson(result.comparison);
+      const outFile = artifactFlag(flags, "out");
+      if (outFile) {
+        await writeFile(resolve(outFile), `${canonicalize(comparison)}\n`);
+        diag(`comparison  ${outFile}`);
+      }
+      out(comparison);
+      return result.comparison.verdict === "could-not-replay" ? 1 : 0;
+    }
+
+    case "ordering": {
+      const [scenarioFile] = positional;
+      if (!scenarioFile) {
+        usageError("algal ordering <scenario.json> [--dir <path>] [--out <file>]");
+      }
+      const { exploreOrdering, ORDERING_BOUNDS } = await import("./src/ordering");
+      const scenario = await readJsonBounded(
+        resolve(scenarioFile), ORDERING_BOUNDS.maxScenarioBytes, "ordering scenario",
+      );
+      const result = await exploreOrdering(scenario, { store });
+      const report = result.report as unknown as JsonObject;
+      const outFile = artifactFlag(flags, "out");
+      if (outFile) {
+        await writeFile(resolve(outFile), `${canonicalize(report)}\n`);
+        diag(`ordering report  ${outFile}`);
+      }
+      out(report);
+      return result.report.outcome === "complete" ? 0 : 1;
+    }
+
     case "diff": {
       const [aFile, bFile] = positional;
       if (!aFile || !bFile) {
@@ -2349,6 +2456,56 @@ async function main(): Promise<number> {
         digest: raw.digest ?? null,
       };
       out(summary);
+      return 0;
+    }
+
+    case "observe":
+    case "tail": {
+      if (positional.length !== 0)
+        usageError(
+          "algal observe|tail [--dir <path>] [--max-items <n>] [--follow [--interval-ms <ms>] [--max-polls <n>] [--max-events <n>]]",
+        );
+      const { observeStore, followStore, OBSERVE_BOUNDS } = await import("./src/observe");
+      for (const key of Object.keys(flags))
+        if (!["dir", "follow", "max-items", "interval-ms", "max-polls", "max-events"].includes(key))
+          usageError(`unknown observe option --${key}`);
+      if (flags.follow !== undefined && flags.follow !== true)
+        usageError("--follow is a boolean flag without a value");
+      const follow = cmd === "tail" || flags.follow === true;
+      const observeInt = (key: string, max: number): number | undefined => {
+        const value = artifactFlag(flags, key);
+        if (value === undefined) return undefined;
+        const n = Number(value);
+        if (!Number.isSafeInteger(n) || n < 1 || n > max)
+          usageError(`--${key} must be an integer in 1..${max}`);
+        return n;
+      };
+      const maxItems = observeInt("max-items", OBSERVE_BOUNDS.maxItems);
+      if (!follow) {
+        for (const key of ["interval-ms", "max-polls", "max-events"])
+          if (flags[key] !== undefined) usageError(`--${key} requires --follow`);
+        out(await observeStore(dir, maxItems === undefined ? {} : { maxItems }) as unknown as JsonValue);
+        return 0;
+      }
+      const intervalMs = observeInt("interval-ms", OBSERVE_BOUNDS.maxIntervalMs);
+      const maxPolls = observeInt("max-polls", OBSERVE_BOUNDS.maxPolls);
+      const maxEvents = observeInt("max-events", OBSERVE_BOUNDS.maxEvents);
+      const controller = new AbortController();
+      const stop = () => controller.abort();
+      process.once("SIGINT", stop);
+      process.once("SIGTERM", stop);
+      try {
+        await followStore(dir, (event) => out(event as unknown as JsonValue), {
+          ...(maxItems === undefined ? {} : { maxItems }),
+          ...(intervalMs === undefined ? {} : { intervalMs }),
+          ...(maxPolls === undefined ? {} : { maxPolls }),
+          ...(maxEvents === undefined ? {} : { maxEvents }),
+          signal: controller.signal,
+        });
+      } finally {
+        process.removeListener("SIGINT", stop);
+        process.removeListener("SIGTERM", stop);
+      }
       return 0;
     }
 
@@ -2562,7 +2719,7 @@ async function main(): Promise<number> {
       }
       if (flags.modules !== undefined) await loadModules(String(flags.modules), store);
       const tools = await resolveTools(flags, dir);
-      const executors = sub === "tick" || sub === "schedule" || sub === "recover" ? await resolveExecutors(flags, dir) : [];
+      const executors = sub === "tick" || sub === "schedule" || sub === "recover" || sub === "replay" ? await resolveExecutors(flags, dir) : [];
       const transports = flags.transports === undefined ? undefined : await loadTransports(String(flags.transports));
       const supervisor = new ProcessSupervisor(dir, {
         fns, tools,
@@ -2577,7 +2734,7 @@ async function main(): Promise<number> {
         out(await supervisor.schedule(flags["max-ticks"] === undefined ? 16 : Number(flags["max-ticks"])) as unknown as JsonValue);
         return 0;
       }
-      if (!name) usageError("algal process create|inspect|tick|verify <name>");
+      if (!name) usageError("algal process create|inspect|tick|verify|replay <name>");
       if (sub === "create") {
         const file = positional[2]; if (!file) usageError("algal process create <name> <manifest.json>");
         const manifest = await readManifest(resolve(file));
@@ -2595,7 +2752,40 @@ async function main(): Promise<number> {
         return next.process.status === "failed" || next.process.status === "stuck" ? 1 : 0;
       } else if (sub === "journal") out(await supervisor.journal(name));
       else if (sub === "verify") out(await supervisor.verify(name));
-      else usageError("algal process create|list|inspect|tick|schedule|recover|journal|verify|export|verify-evidence");
+      else if (sub === "replay") {
+        const withFile = artifactFlag(flags, "with");
+        if (!withFile) usageError("algal process replay <name> --with <manifest.json>");
+        const { replayComparison, replayComparisonToJson } = await import("./src/replay");
+        const snapshot = await supervisor.inspect(name);
+        if (!snapshot.process.receipt) {
+          usageError(`process "${name}" has no recorded run to replay`);
+        }
+        const head = await store.getReceipt(snapshot.process.receipt);
+        if (!head) {
+          throw new AlgalError("STORE_MISS", `process receipt ${snapshot.process.receipt} missing`);
+        }
+        const result = await replayComparison({
+          receipt: head,
+          revision: await readJsonBounded(resolve(withFile), BOUNDS.maxManifestBytes, "revised manifest"),
+          ...(flags.args !== undefined
+            ? { args: await readJsonBounded(resolve(String(flags.args)), BOUNDS.maxArgsBytes, "replay args") as Record<string, Record<string, JsonValue>> }
+            : {}),
+          store,
+          fns,
+          executors,
+          tools,
+          ...(transports ? { transports } : {}),
+        });
+        const comparison = replayComparisonToJson(result.comparison);
+        const outFile = artifactFlag(flags, "out");
+        if (outFile) {
+          await writeFile(resolve(outFile), `${canonicalize(comparison)}\n`);
+          diag(`comparison  ${outFile}`);
+        }
+        out(comparison);
+        return result.comparison.verdict === "could-not-replay" ? 1 : 0;
+      }
+      else usageError("algal process create|list|inspect|tick|schedule|recover|journal|verify|replay|export|verify-evidence");
       return 0;
     }
 
@@ -2803,6 +2993,79 @@ async function main(): Promise<number> {
         })),
       } as unknown as JsonObject);
       return hits.length > 0 ? 0 : 1;
+    }
+
+    case "db": {
+      // Derived program index: `program.db` under --dir is host tooling —
+      // rebuildable from the store at any time, never contract data.
+      const sub = positional[0];
+      if (sub === undefined) {
+        usageError("algal db <build|status|tables|query|<projection>>");
+      }
+      const {
+        buildProgramIndex,
+        programIndexStatus,
+        runProgramProjection,
+        runProgramQuery,
+        PROGRAM_DB_TABLES,
+        PROGRAM_PROJECTIONS,
+      } = await import("./src/program-db");
+      for (const key of Object.keys(flags)) {
+        if (!["dir", "limit"].includes(key)) usageError(`unknown db option --${key}`);
+      }
+      if (sub === "build") {
+        if (positional.length !== 1 || flags.limit !== undefined) {
+          usageError("algal db build [--dir <path>]");
+        }
+        out((await buildProgramIndex(dir)) as unknown as JsonObject);
+        return 0;
+      }
+      if (sub === "status") {
+        if (positional.length !== 1 || flags.limit !== undefined) {
+          usageError("algal db status [--dir <path>]");
+        }
+        const status = await programIndexStatus(dir);
+        out(status as unknown as JsonObject);
+        return status.stale ? 1 : 0;
+      }
+      if (sub === "tables") {
+        if (positional.length !== 1 || flags.limit !== undefined) {
+          usageError("algal db tables");
+        }
+        out({
+          ok: true,
+          tables: Object.entries(PROGRAM_DB_TABLES).map(([name, t]) => ({
+            table: name, columns: t.columns, description: t.description,
+          })),
+          projections: Object.entries(PROGRAM_PROJECTIONS).map(([name, p]) => ({
+            projection: name, args: p.args, description: p.description,
+          })),
+        } as unknown as JsonObject);
+        return 0;
+      }
+      const limit = flags.limit === undefined ? undefined
+        : asInt(Number(String(flags.limit)), "--limit", 1, 1024);
+      if (sub === "query") {
+        const arg = positional[1];
+        if (arg === undefined || positional.length !== 2) {
+          usageError("algal db query <json|@file> [--dir <path>]");
+        }
+        const raw = arg.startsWith("@")
+          ? await readJsonBounded(resolve(arg.slice(1)), 65_536, "program query")
+          : (JSON.parse(arg) as unknown);
+        out(
+          runProgramQuery(dir, raw, {
+            ...(limit !== undefined ? { limits: { maxRows: limit } } : {}),
+          }) as unknown as JsonObject,
+        );
+        return 0;
+      }
+      out(
+        runProgramProjection(dir, sub, positional.slice(1), {
+          ...(limit !== undefined ? { limit } : {}),
+        }) as unknown as JsonObject,
+      );
+      return 0;
     }
 
     case "auth": {

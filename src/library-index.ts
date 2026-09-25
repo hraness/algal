@@ -8,7 +8,7 @@ import { join } from "node:path";
 import type { PortMap, PortType } from "./contract";
 import { asDigest, digestCanonical, type Digest } from "./digest";
 import { AlgalError } from "./errors";
-import { LIBRARY_COMPARISON_BOUNDS, parseLibraryComparison, type LibraryComparison } from "./library-comparison";
+import { LIBRARY_COMPARISON_BOUNDS, LIBRARY_COMPARISON_CONTRACT, parseLibraryComparison, type LibraryComparison } from "./library-comparison";
 import { createSourceDependencyReport, freezeDeep, type SourceDependencyReport } from "./source-dependencies";
 import { createSourceLock, type SourceLock } from "./source-lock";
 import { loadSourceFixtures, loadSourceProject } from "./source-project";
@@ -36,7 +36,9 @@ export const LIBRARY_INDEX_FIELDS = Object.freeze([
   "Path", "Executable digest", "Interface digest", "Interface", "Depends on", "Inputs and result",
   "Rejected inputs", "Limits", "Callers", "Tests", "Compiler", "Maintainer", "Unseen cases", "Status",
 ] as const);
-type FieldLabel = typeof LIBRARY_INDEX_FIELDS[number];
+/** Fields an entry may add but need not carry; an entry without them stays valid. */
+export const LIBRARY_INDEX_OPTIONAL_FIELDS = Object.freeze(["Evidence"] as const);
+type FieldLabel = typeof LIBRARY_INDEX_FIELDS[number] | typeof LIBRARY_INDEX_OPTIONAL_FIELDS[number];
 
 /** One entry point that calls listed programs, with the source root it loads under. */
 export type LibraryIndexApplication = { readonly entry: string; readonly root: string; readonly purpose: string };
@@ -66,6 +68,14 @@ export type LibraryIndexEntry = {
   readonly maintainer: string;
   readonly status: string;
   readonly revision: LibraryIndexRevision;
+  /** Optional "Evidence" field: record files the entry pins by path and digest. */
+  readonly evidence: readonly LibraryIndexEvidence[];
+};
+/** One record an entry pins as evidence: its file under the projects
+ * directory and the digest of the file's canonical JSON. */
+export type LibraryIndexEvidence = {
+  readonly path: string;
+  readonly digest: Digest;
 };
 export type LibraryIndex = { readonly applications: readonly LibraryIndexApplication[]; readonly entries: readonly LibraryIndexEntry[] };
 
@@ -104,6 +114,11 @@ function programPath(link: Link, what: string): string {
   if (link.href !== `../${LIBRARY_INDEX_PROJECTS}/${path}`) invalid(`${what} ${path} must link to ../${LIBRARY_INDEX_PROJECTS}/${path}`);
   return path;
 }
+function recordPath(link: Link, what: string): string {
+  const path = relativePath(link.label, ".json", what);
+  if (link.href !== `../${LIBRARY_INDEX_PROJECTS}/${path}`) invalid(`${what} ${path} must link to ../${LIBRARY_INDEX_PROJECTS}/${path}`);
+  return path;
+}
 function testPath(link: Link, what: string): string {
   const path = relativePath(link.label, ".test.ts", what);
   if (link.href !== `../${path}`) invalid(`${what} ${path} must link to ../${path}`);
@@ -128,6 +143,30 @@ function onlyProgramLink(text: string, what: string): string {
   const found = links(text, what);
   if (found.length !== 1 || text !== `[\`${found[0]!.label}\`](${found[0]!.href})`) invalid(`${what} must be exactly one link`);
   return programPath(found[0]!, what);
+}
+const EVIDENCE_DIGEST = /^`(sha256:[0-9a-f]{64})`/;
+/** An "Evidence" field: "[`record.json`](../projects/record.json) `sha256:…`"
+ * items joined by ", " and ending in "." — each item pins a record file and
+ * the digest of its canonical JSON. */
+function evidenceField(text: string, what: string): LibraryIndexEvidence[] {
+  const found = links(text, what);
+  if (found.length === 0) invalid(`${what} needs at least one record link`);
+  let rest = text;
+  const items: LibraryIndexEvidence[] = [];
+  for (const link of found) {
+    const marker = `[\`${link.label}\`](${link.href}) `;
+    if (!rest.startsWith(marker)) invalid(`${what} must list "[\`record\`](path) \`sha256:…\`" items separated by ", "`);
+    rest = rest.slice(marker.length);
+    const digest = EVIDENCE_DIGEST.exec(rest) ?? invalid(`${what} item ${link.label} must carry one sha256 digest in code`);
+    rest = rest.slice(digest[0].length);
+    items.push({ path: recordPath(link, what), digest: asDigest(digest[1], what) });
+    if (rest === ".") { rest = ""; break; }
+    if (!rest.startsWith(", ")) invalid(`${what} items are separated by ", " and end in "."`);
+    rest = rest.slice(2);
+  }
+  if (rest !== "" || found.length !== items.length) invalid(`${what} items are separated by ", " and end in "."`);
+  distinct(items.map(item => item.path), what);
+  return items;
 }
 function distinct(values: string[], what: string): string[] {
   const seen = new Set<string>();
@@ -221,7 +260,7 @@ export function parseLibraryIndex(value: unknown): LibraryIndex {
       const field = FIELD.exec(line);
       if (field !== null) {
         const label = field[1]! as FieldLabel;
-        if (!LIBRARY_INDEX_FIELDS.includes(label)) invalid(`entry ${name} has an unknown field "${field[1]}"`);
+        if (!(LIBRARY_INDEX_FIELDS as readonly string[]).includes(label) && !(LIBRARY_INDEX_OPTIONAL_FIELDS as readonly string[]).includes(label)) invalid(`entry ${name} has an unknown field "${field[1]}"`);
         if (fields.has(label)) invalid(`entry ${name} repeats the field "${label}"`);
         fields.set(label, field[2]!.trim());
         open = label;
@@ -258,6 +297,7 @@ export function parseLibraryIndex(value: unknown): LibraryIndex {
         : asDigest(DIGEST.exec(text("Unseen cases"))?.[1] ?? invalid(`${what("Unseen cases")} must be "None pinned." or one sha256 digest in code`), what("Unseen cases")),
       compiler: text("Compiler"), maintainer: text("Maintainer"), status: text("Status"),
       revision: revisionStatus(text("Status"), what("Status")),
+      evidence: fields.has("Evidence") ? evidenceField(text("Evidence"), what("Evidence")) : [],
     };
   });
   distinct(entries.map(entry => entry.name), "\"Programs\"");
@@ -339,6 +379,39 @@ async function revisionProblems(entry: LibraryIndexEntry, from: Digest, path: st
     }
   }
   if (!record.verdict.passed) problems.push(`${at} did not pass`);
+  return problems;
+}
+
+/** Each record an entry pins under "Evidence" must exist beneath the
+ * projects directory, hash to the pinned digest, parse under its contract,
+ * pass, and justify this entry at its listed digest: a comparison must end
+ * the entry's own digest or move it as a dependent. A record kind the check
+ * does not know is a problem, not a pass. */
+async function evidenceProblems(entry: LibraryIndexEntry, repository: string): Promise<string[]> {
+  const problems: string[] = [];
+  for (const reference of entry.evidence) {
+    const at = `${entry.path}: evidence record ${reference.path}`;
+    let value: JsonValue;
+    try {
+      const files = await loadSourceFixtures(join(repository, ...LIBRARY_INDEX_PROJECTS.split("/")), [reference.path], LIBRARY_COMPARISON_BOUNDS.record.maxBytes);
+      value = JSON.parse(files[reference.path]!);
+    } catch (error) { problems.push(`${at} could not be read (${reason(error)})`); continue; }
+    if (digestCanonical(value) !== reference.digest) {
+      problems.push(`${at} has digest ${digestCanonical(value)}, not the pinned ${reference.digest}`);
+      continue;
+    }
+    const contract = value !== null && typeof value === "object" && !Array.isArray(value) ? (value as { contract?: unknown }).contract : undefined;
+    if (contract === LIBRARY_COMPARISON_CONTRACT) {
+      let record: LibraryComparison;
+      try { record = parseLibraryComparison(value); } catch (error) { problems.push(`${at} is not a valid record (${reason(error)})`); continue; }
+      if (!record.verdict.passed) { problems.push(`${at} did not pass`); continue; }
+      const revised = record.path === entry.path && record.candidate.digest === entry.digest;
+      const dependent = record.dependents.some(item => item.path === entry.path && item.candidate === entry.digest);
+      if (!revised && !dependent) problems.push(`${at} does not justify ${entry.path} at the listed digest`);
+    } else {
+      problems.push(`${at} is ${JSON.stringify(contract) ?? "a record without a contract"}; only ${LIBRARY_COMPARISON_CONTRACT} evidence is defined`);
+    }
+  }
   return problems;
 }
 
@@ -455,6 +528,7 @@ export async function checkLibraryIndex(index: LibraryIndex, options: LibraryInd
     if (status.kind === "listed") {
       if (status.digest !== entry.digest) note(`${entry.path}: "Status" lists it at ${status.digest}, but the page pins ${entry.digest}; a revised program names its comparison record`);
     } else for (const problem of await revisionProblems(entry, status.from, status.record, options.repository)) note(problem);
+    for (const problem of await evidenceProblems(entry, options.repository)) note(problem);
   }
   if (omitted > 0) problems.push(`${plural(omitted, "more problem")} not listed`);
   return problems;
