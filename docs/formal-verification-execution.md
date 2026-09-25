@@ -507,11 +507,11 @@ unchanged 180 s deadline, and no deadline was widened.
 Commit `1a75837` then passed the repository check (1,640 tests, 20
 explicit skips), the host-scheduled native gate on unchanged Cargo inputs, all
 20 runtime comparison commands and 28 Chromium checks. The complete
-26-suite formal aggregate returned a passing result for 1029 governed
-inputs at `sha256:96dfb32792103a2c026a2c27205489627404cfeb3c2a3b4af8c7cae5514921a6`. Independent raw rechecking passed all 661 TLC
+26-suite formal aggregate returned a passing result for 1,029 source and
+verification inputs at `sha256:96dfb32792103a2c026a2c27205489627404cfeb3c2a3b4af8c7cae5514921a6`. Independent raw rechecking passed all 661 TLC
 calls, 684 authored Lean theorems (1,862 module theorems)
 across 24 modules, seven rejected Lean controls, 206 scheduler
-comparisons, 4 generated application histories, 115 corpus
+comparisons, four generated application histories, 115 corpus
 cases and 17 dynamic-spawn fixtures. TLC now checks liveness only on
 the exhausted graph (`-lncheck final`); admission was not relaxed and no deadline
 changed.
