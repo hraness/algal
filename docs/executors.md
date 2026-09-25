@@ -177,6 +177,54 @@ A cell's `route.provider` or `route.preset` selects by name (a `provider:` or
 `--responses`, then `--executor-cmd`, then `--executors` entries — is the
 default when no route matches.
 
+## Isolated command execution
+
+`--executor-cmd` children normally inherit the host's whole environment and
+working directory, and only the runner's wall-clock timeout bounds them.
+`--executor-profile isolated` replaces that ambient posture with a declared
+one for every command executor in the invocation (`--executor-cmd`, shell
+commands in `--executors` maps, and `cmd:` bench specs):
+
+- The child's environment is exactly the declared set: `PATH`, `LANG`, and
+  `HOME` (the declared directory) by default, plus `--executor-env` entries.
+  `NAME` inherits the host's value at call time; `NAME=value` fixes a
+  declared value. Credentials belong on the `NAME` form: inherited values
+  stay out of argv and out of the recorded identity, while fixed values are
+  digested verbatim.
+- The child starts in `--executor-cwd` (default `.`). This fixes where it
+  starts; it is not a filesystem sandbox.
+- A fixed wrapper script applies declared `ulimit` bounds before `exec`, so
+  the OS enforces them rather than the runner racing them: `cpuSeconds`
+  (RLIMIT_CPU), `fileSizeBlocks` (`ulimit -f` units; 512-byte POSIX blocks,
+  1024 under bash-style shells), `openFiles`, `processes` (an RLIMIT_NPROC
+  count charged per real uid), `addressSpaceKiB` (`ulimit -v`), `stackKiB`,
+  and `noCore` (refuses core dumps). The default set is
+  `cpuSeconds=60,noCore`; `--executor-limits` restates the whole set, and
+  `none` clears it.
+
+A limit the platform cannot apply is refused at admission instead of being
+silently skipped: macOS cannot set an address-space bound at all, so
+declaring `addressSpaceKiB` there fails the command line. The same honesty
+applies inside the receipts. The recorded executor identity
+(`configurationDigest`) covers the environment allowlist, the working
+directory, every declared limit, each limit's enforcement status, and the
+platform that status was determined for, so a weaker posture can never
+share a stronger profile's identity.
+
+Failure shapes match the plain command executor: a limit-killed child exits
+by signal (`EFFECT_FAILED`, marked uncertain), a timeout records
+`BUDGET_EXHAUSTED`, and a suspension exit still suspends. Verification
+replays the recorded outcome offline without respawning the command.
+Library hosts use `isolatedCommandExecutor(command, { isolation, ... })`
+and `resolveIsolation` from `@hraness/algal`.
+
+This profile is Bun-runtime only; a matching native backend is proposed,
+not implemented. Running untrusted pure-compute tools inside a WASM
+sandbox, the same boundary `algal.expr.v1` cells already use, is a related
+proposal that is also not implemented. Tool-registry `cmd:` execs are not
+covered by `--executor-profile`; they keep the ambient environment
+described under "Tool registries".
+
 ## Rules of thumb
 
 - Keep secrets in the command's environment or config, never in manifests.

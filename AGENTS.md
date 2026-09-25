@@ -1,7 +1,8 @@
 # Contents
 
 - `src/` — the contract (`contract.ts`, `graph.ts`), the scheduler (`run.ts`),
-  the effect seam (`effects.ts`), the store (`store.ts`), verification
+  the effect seam (`effects.ts`), the isolated subprocess executor profile
+  (`isolation.ts`), the store (`store.ts`), verification
   (`verify.ts`), Vercel AI Gateway execution (`gateway.ts`) and portable
   Chat Completions execution (`openai-compatible.ts`, `chat-completions.ts`), typed external
   tools (`tools.ts`), opaque capability handles (`capabilities.ts`) and the

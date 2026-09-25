@@ -7,7 +7,7 @@ import { asJsonValue, canonicalize, type JsonValue } from "./values";
 /** Host-only command capability. Keeping its structural type here lets the
  * pure runtime bundle/typecheck in browsers without importing Bun globals. */
 type CommandRuntime = {
-  spawn(argv: string[], options: { cwd?: string; stdin: "pipe"; stdout: "pipe"; stderr: "pipe" }): {
+  spawn(argv: string[], options: { cwd?: string; env?: Record<string, string>; stdin: "pipe"; stdout: "pipe"; stderr: "pipe" }): {
     stdin: { write(text: string): unknown; end(): unknown };
     stdout: ReadableStream<Uint8Array>; stderr: ReadableStream<Uint8Array>;
     exited: Promise<number>; signalCode: string | null;
@@ -59,7 +59,7 @@ export async function boundedBytes(
 export async function commandJson(
   argv: string[],
   value: JsonValue,
-  options: { timeoutMs?: number; maxStdoutBytes?: number; cwd?: string; signal?: AbortSignal } = {},
+  options: { timeoutMs?: number; maxStdoutBytes?: number; cwd?: string; env?: Record<string, string>; signal?: AbortSignal } = {},
 ): Promise<JsonValue> {
   const timeoutMs = options.timeoutMs ?? 120_000;
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 600_000) {
@@ -76,7 +76,13 @@ export async function commandJson(
   const signal = options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal;
   const runtime = (globalThis as { Bun?: CommandRuntime }).Bun;
   if (!runtime) throw new AlgalError("CAPABILITY_DENIED", "This host does not provide command execution");
-  const child = runtime.spawn(argv, { ...(options.cwd ? { cwd: options.cwd } : {}), stdin: "pipe", stdout: "pipe", stderr: "pipe" });
+  // `env` replaces the child's environment outright (Bun.spawn semantics);
+  // omitting it inherits the host's — the isolated executor always sets it.
+  const child = runtime.spawn(argv, {
+    ...(options.cwd ? { cwd: options.cwd } : {}),
+    ...(options.env ? { env: options.env } : {}),
+    stdin: "pipe", stdout: "pipe", stderr: "pipe",
+  });
   const stop = () => { child.kill("SIGKILL"); };
   signal.addEventListener("abort", stop, { once: true });
   const timer = setTimeout(() => controller.abort(), timeoutMs);
