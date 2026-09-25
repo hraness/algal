@@ -61,6 +61,24 @@ wire constant (`0.1.0`) is independent of these package versions.
   enters or leaves a program; the compiler also rejects mismatches it can prove.
   Compiler version 1.4.0; existing programs compile to the same manifests. The
   `typed-tasks` example scores a task list and rejects a malformed task.
+- A `json` port or JSON output contract may carry `"schemaVersion": 2` beside
+  its schema. Version 2 makes both runtimes check `items`, `enum` (1 to 32
+  distinct scalar values), `minimum`, and `maximum`, which were provider
+  hints, and rejects every other keyword; nesting is limited to 8 levels and
+  `required` and `properties` to 64 names each. Schemas without the key keep
+  their bytes, digests, and version 1 checks, and runtimes that predate
+  version 2 refuse a manifest with the key at admission, before any cell runs.
+- Source record fields and list items accept `[Task]` (a list whose items all
+  have one type, also as a parameter or result type), `text in ["open",
+  "done"]` or `number in [1, 2, 3]` (allowed values; allowed text values form
+  a closed choice that `match` must cover exactly), `number min 0 max 5`
+  (inclusive bounds, either optional), and records nested up to the
+  eight-level schema limit. The compiler rejects mismatches it can prove and
+  adds schema version 2 only where a schema needs it, so earlier programs
+  compile to the same manifests. Compiler version 1.5.0. Bounds: 16 allowed
+  values of at most 64 characters and 64 KiB per compiled record or list
+  schema. The `typed-tasks` example gains a plan that checks a task list
+  before scoring it.
 - Native `each` checks each item against the child's input type before that
   item's run, and reports a non-list or oversized list with the reference
   runtime's messages, so a rejected item yields the same receipt in both
