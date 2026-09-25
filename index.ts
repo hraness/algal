@@ -242,6 +242,7 @@ export {
   foundryReportRuns,
   generateFoundryCandidates,
   runFoundry,
+  runFoundryWithin,
   selectFoundryCandidate,
 } from "./src/foundry";
 export type {
@@ -263,10 +264,12 @@ export {
   HABITAT_BUDGET_CONTRACT,
   HabitatAccount,
   checkHabitatBudgetEvidence,
+  checkHabitatRunsEvidence,
   habitatBindingMismatches,
   habitatCeiling,
   parseHabitatBudget,
   parseHabitatLimits,
+  parseHabitatRun,
   verifyHabitatBudget,
 } from "./src/habitat-budget";
 export type {
@@ -275,12 +278,42 @@ export type {
   HabitatBudget,
   HabitatBudgetVerifyReport,
   HabitatDimension,
+  HabitatLedger,
   HabitatLimits,
   HabitatRefusal,
   HabitatRun,
+  HabitatRunRequest,
+  HabitatRunResult,
 } from "./src/habitat-budget";
 
-export { SEARCH_BOUNDS, SEARCH_CONTRACT, runFoundrySearch } from "./src/search";
+export {
+  HABITAT_JOURNAL_CONTRACT,
+  HABITAT_SCHEDULE_BOUNDS,
+  HABITAT_SCHEDULE_CONFIG_CONTRACT,
+  HABITAT_SCHEDULE_CONTRACT,
+  HABITAT_SCHEDULE_KINDS,
+  HABITAT_SCHEDULE_ORDERS,
+  openHabitatJournal,
+  parseHabitatSchedule,
+  parseHabitatScheduleConfig,
+  runHabitatSchedule,
+  verifyHabitatSchedule,
+} from "./src/habitat-schedule";
+export type {
+  HabitatJournal,
+  HabitatSchedule,
+  HabitatScheduleActivity,
+  HabitatScheduleActivitySpec,
+  HabitatScheduleConfig,
+  HabitatScheduleKind,
+  HabitatScheduleOptions,
+  HabitatScheduleOrder,
+  HabitatScheduleResult,
+  HabitatScheduleRun,
+  HabitatScheduleVerifyReport,
+} from "./src/habitat-schedule";
+
+export { SEARCH_BOUNDS, SEARCH_CONTRACT, runFoundrySearch, searchReportRuns } from "./src/search";
 export type {
   SearchGeneration,
   SearchOptions,

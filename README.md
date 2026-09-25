@@ -867,8 +867,12 @@ against that budget, then charges what the run's receipt records. When the next
 run does not fit, no further run starts: the command writes the budget account
 with the outcome `exhausted` instead of a report and exits with status 1.
 `examples/foundry-budget.config.json` stops after five runs, and
-`foundry verify` checks that account and replays those runs. Search does not
-accept a budget yet.
+`foundry verify` checks that account and replays those runs. A search config
+accepts the same `budget` for all of its generations, and `foundry
+search-verify` checks either file. In the TypeScript CLI, `foundry schedule`
+runs several foundry and search configs against one budget, taking turns, and
+`--journal <dir>` lets an interrupted schedule continue; the native CLI refuses
+schedules. See [habitat schedules](spec/v1/foundry.md#habitat-schedules).
 
 A bounded search repeats generation and selection while keeping holdout sealed.
 The previous winner survives into the next population, and the generator sees

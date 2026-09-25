@@ -18,6 +18,11 @@
 //! experiment as `activate`/`migrate`/`restore` evidence it replays it like
 //! comparison evidence and requires `result.revision` to be the committed
 //! revision.
+//!
+//! An experiment may also cite `budget`: a stored `algal.habitat-budget.v1`
+//! account the host charged while it ran the cited evaluations. The optional
+//! field is absent from records that do not cite one, so their bytes and
+//! digests are unchanged.
 
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -36,7 +41,7 @@ use crate::canonical::canonical;
 use crate::contract::list;
 use crate::effects::Host;
 use crate::store::Store;
-use crate::{Error, Result};
+use crate::{Error, Result, foundry, habitat_budget};
 
 const EXPERIMENT_PROPOSALS: usize = 8;
 const EXPERIMENT_EVALUATIONS: usize = 8;
@@ -45,25 +50,38 @@ fn fail(message: &str) -> Error {
     Error::invalid(message)
 }
 
+/// The closed field list, with `budget` only when the record or input
+/// carries it, so a record without one keeps its original shape.
+fn fields<'a>(input: &Value, base: &[&'a str]) -> Vec<&'a str> {
+    let mut fields = base.to_vec();
+    if input.get("budget").is_some() {
+        fields.push("budget");
+    }
+    fields
+}
+
 /// `parseApplicationExperiment` — closed record: bounded sorted-unique
 /// proposal/evaluation lists, at least one cited record, a selection that
 /// requires a policy, and `result.promoted` requiring `result.revision`.
 pub fn parse_experiment(input: &Value) -> Result<Value> {
     let v = app_object(
         input,
-        &[
-            "contract",
-            "application",
-            "parentState",
-            "entrypoint",
-            "environment",
-            "proposals",
-            "evaluations",
-            "comparison",
-            "selectionPolicy",
-            "selection",
-            "result",
-        ],
+        &fields(
+            input,
+            &[
+                "contract",
+                "application",
+                "parentState",
+                "entrypoint",
+                "environment",
+                "proposals",
+                "evaluations",
+                "comparison",
+                "selectionPolicy",
+                "selection",
+                "result",
+            ],
+        ),
     )?;
     app_tag(&v["contract"], "algal.application-experiment.v1")?;
     let proposals = app_refs(&v["proposals"], EXPERIMENT_PROPOSALS)?;
@@ -89,6 +107,9 @@ pub fn parse_experiment(input: &Value) -> Result<Value> {
     app_ref(&v["parentState"])?;
     app_id(&v["entrypoint"])?;
     app_id(&v["environment"])?;
+    if let Some(budget) = v.get("budget") {
+        app_ref(budget)?;
+    }
     Ok(input.clone())
 }
 
@@ -104,23 +125,29 @@ struct ExperimentInput {
     selection: Option<String>,
     promoted: bool,
     result_revision: Option<String>,
+    /// A stored complete `experiment` habitat account that charged exactly
+    /// the cited evaluations' runs.
+    budget: Option<String>,
 }
 
 fn parse_experiment_input(input: &Value) -> Result<ExperimentInput> {
     let v = app_object(
         input,
-        &[
-            "application",
-            "parentState",
-            "entrypoint",
-            "environment",
-            "proposals",
-            "evaluations",
-            "comparison",
-            "selectionPolicy",
-            "selection",
-            "result",
-        ],
+        &fields(
+            input,
+            &[
+                "application",
+                "parentState",
+                "entrypoint",
+                "environment",
+                "proposals",
+                "evaluations",
+                "comparison",
+                "selectionPolicy",
+                "selection",
+                "result",
+            ],
+        ),
     )?;
     let proposals: Vec<String> = list(&v["proposals"], EXPERIMENT_PROPOSALS)?
         .iter()
@@ -144,6 +171,10 @@ fn parse_experiment_input(input: &Value) -> Result<ExperimentInput> {
     if promoted && result_revision.is_none() {
         return Err(fail("Experiment promotion requires a revision"));
     }
+    let budget = v
+        .get("budget")
+        .map(|budget| app_ref(budget).map(str::to_owned))
+        .transpose()?;
     Ok(ExperimentInput {
         application: app_id(&v["application"])?.to_owned(),
         parent_state: app_ref(&v["parentState"])?.to_owned(),
@@ -156,7 +187,71 @@ fn parse_experiment_input(input: &Value) -> Result<ExperimentInput> {
         selection,
         promoted,
         result_revision,
+        budget,
     })
+}
+
+/// `checkExperimentBudget` — the cited account must be a complete
+/// `experiment` account that charges exactly the cited evaluations' runs:
+/// each evaluation's foundry runs in report order, one evaluation after
+/// another in the order the host ran them. Every evaluation in an
+/// experiment shares one case set, so each contributes the same number of
+/// runs. Ceilings and charges must match the stored manifests and receipts;
+/// the evaluations replayed the receipts.
+async fn check_experiment_budget(store: &Store, reference: &str, reports: &[Value]) -> Result<()> {
+    let budget = habitat_budget::parse(&get_record(store, reference)?)?;
+    if budget["activity"] != "experiment" {
+        return Err(fail("Experiment budget is not an experiment account"));
+    }
+    if budget["outcome"] != "complete" {
+        return Err(fail("Experiment budget is not complete"));
+    }
+    let runs: Vec<(String, String)> = budget["runs"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|run| {
+            (
+                run["manifest"].as_str().unwrap_or_default().to_owned(),
+                run["receipt"].as_str().unwrap_or_default().to_owned(),
+            )
+        })
+        .collect();
+    let groups: Vec<Vec<(String, String)>> = reports.iter().map(foundry::report_runs).collect();
+    let mut used = vec![false; groups.len()];
+    let mut offset = 0;
+    while offset < runs.len() {
+        let start = offset;
+        let found = (0..groups.len()).find(|&i| {
+            let group = &groups[i];
+            !used[i]
+                && !group.is_empty()
+                && start + group.len() <= runs.len()
+                && group
+                    .iter()
+                    .zip(&runs[start..])
+                    .all(|(want, run)| want == run)
+        });
+        let Some(i) = found else {
+            return Err(fail(
+                "Experiment budget does not charge exactly the cited evaluations",
+            ));
+        };
+        used[i] = true;
+        offset += groups[i].len();
+    }
+    if used.iter().any(|used| !used) {
+        return Err(fail(
+            "Experiment budget does not charge exactly the cited evaluations",
+        ));
+    }
+    let (mismatches, _) = habitat_budget::check_evidence(&budget, store, None).await?;
+    if let Some(first) = mismatches.first() {
+        return Err(fail(&format!(
+            "Experiment budget does not reconcile with the store: {first}"
+        )));
+    }
+    Ok(())
 }
 
 /// Replays every cited record against the parent state and derives the
@@ -229,10 +324,15 @@ async fn derive_experiment(store: &Store, input: &ExperimentInput, host: &Host) 
     // measurement set, and a measured candidate must come from a cited
     // proposal when proposals are part of the chain.
     let mut accepted_candidates = BTreeSet::new();
+    let mut reports = Vec::with_capacity(input.evaluations.len());
     let mut shared: Option<(String, String, String)> = None;
     for reference in &input.evaluations {
         let checked =
             verify_application_evaluation(store, reference, &input.parent_state, host).await?;
+        reports.push(get_record(
+            store,
+            checked["foundryReport"].as_str().unwrap_or(""),
+        )?);
         let request = parse_evaluation_request(&get_record(
             store,
             checked["request"].as_str().unwrap_or(""),
@@ -374,11 +474,15 @@ async fn derive_experiment(store: &Store, input: &ExperimentInput, host: &Host) 
             return Err(fail("Experiment result names no accepted candidate"));
         }
     }
+    // An optional account must charge exactly the cited evaluations' runs.
+    if let Some(budget) = &input.budget {
+        check_experiment_budget(store, budget, &reports).await?;
+    }
     let mut proposals = input.proposals.clone();
     proposals.sort_unstable();
     let mut evaluations = input.evaluations.clone();
     evaluations.sort_unstable();
-    Ok(json!({
+    let mut experiment = json!({
         "contract": "algal.application-experiment.v1",
         "application": input.application,
         "parentState": input.parent_state,
@@ -393,7 +497,11 @@ async fn derive_experiment(store: &Store, input: &ExperimentInput, host: &Host) 
             "promoted": input.promoted,
             "revision": input.result_revision.clone().map_or(Value::Null, Value::String),
         },
-    }))
+    });
+    if let Some(budget) = &input.budget {
+        experiment["budget"] = json!(budget);
+    }
+    Ok(experiment)
 }
 
 /// `produceApplicationExperiment` — derive and store the experiment record.
@@ -444,6 +552,10 @@ pub async fn verify_experiment(
         selection: opt_ref(&stored["selection"])?,
         promoted: stored["result"]["promoted"].as_bool().unwrap_or_default(),
         result_revision: opt_ref(&stored["result"]["revision"])?,
+        budget: stored
+            .get("budget")
+            .map(|budget| app_ref(budget).map(str::to_owned))
+            .transpose()?,
     };
     let recomputed = derive_experiment(store, &request, host).await?;
     if canonical(&app_json(&recomputed)?)? != canonical(&app_json(&stored)?)? {

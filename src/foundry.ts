@@ -4,12 +4,12 @@ import { digestCanonical, type Digest } from "./digest";
 import type { Executor } from "./effects";
 import { AlgalError } from "./errors";
 import type { FnRegistry } from "./registry";
-import { runOrganism, type RunOutcome } from "./run";
+import { runOrganism, type RunOutcome, type RunReceipt } from "./run";
 import type { Store } from "./store-contract";
 import type { Transport } from "./transport-contract";
 import type { ToolRegistry } from "./tools";
 import { checkProgram, evalScorer, type ExprScorer } from "./expr";
-import { habitatBindingMismatches, type HabitatAccount, type HabitatBudget } from "./habitat-budget";
+import { HabitatAccount, habitatBindingMismatches, type HabitatBudget, type HabitatLedger, type HabitatRunResult } from "./habitat-budget";
 import { canonicalize, type JsonValue } from "./values";
 
 export const FOUNDRY_CONTRACT = "algal.foundry.v1" as const;
@@ -85,8 +85,9 @@ export type FoundryOptions = {
    * declared ceiling here before it starts and is charged its recorded work;
    * a refused reservation stops the foundry with `BUDGET_EXHAUSTED` and leaves
    * the terminal record on the account. Pass the same account used to run
-   * the generator. */
-  account?: HabitatAccount;
+   * the generator. `runFoundry` embeds a standalone `HabitatAccount` in its
+   * report; a schedule's shared account stays in the schedule record. */
+  account?: HabitatLedger;
 };
 
 export type GenerateCandidatesOptions = {
@@ -100,7 +101,7 @@ export type GenerateCandidatesOptions = {
   transports?: Record<string, Transport>;
   tools?: ToolRegistry;
   /** Habitat account the generator run is admitted through and charged to. */
-  account?: HabitatAccount;
+  account?: HabitatLedger;
 };
 
 export type GeneratedCandidates = FoundryLineage & {
@@ -205,32 +206,39 @@ export function selectFoundryCandidate(candidates: FoundryCandidateResult[]): Di
   return [...candidates].sort(better)[0]!.manifestDigest;
 }
 
+/** Starts one run and stores its receipt. Under a habitat account the run is
+ * admitted through it: reserved before it starts and charged after, or
+ * released when it throws before a receipt exists. */
+async function startRun(
+  opts: { store: Store; account?: HabitatLedger },
+  manifest: OrganismManifest,
+  manifestDigest: Digest,
+  args: Record<string, Record<string, JsonValue>>,
+  execute: () => Promise<RunReceipt>,
+): Promise<HabitatRunResult> {
+  if (opts.account) {
+    return opts.account.admit({ manifest: manifestDigest, budgets: manifest.budgets, args }, execute, opts.store);
+  }
+  const receipt = await execute();
+  return { receipt, receiptDigest: await opts.store.putReceipt(receipt as unknown as JsonValue) };
+}
+
 async function evaluateCase(
   candidate: OrganismManifest,
   manifestDigest: Digest,
   c: FoundryCase,
   opts: FoundryOptions,
 ): Promise<FoundryCaseResult> {
-  opts.account?.reserve(manifestDigest, candidate.budgets);
-  let receipt: Awaited<ReturnType<typeof runOrganism>>;
-  try {
-    receipt = await runOrganism({
-      manifest: candidate,
-      args: caseArgs(candidate, c),
-      fns: opts.fns,
-      store: opts.store,
-      executors: opts.executors,
-      ...(opts.transports ? { transports: opts.transports } : {}),
-      ...(opts.tools ? { tools: opts.tools } : {}),
-    });
-  } catch (error) {
-    // No receipt exists to charge; the reservation is released and the
-    // account stays usable for the record.
-    opts.account?.release();
-    throw error;
-  }
-  const receiptDigest = await opts.store.putReceipt(receipt as unknown as JsonValue);
-  opts.account?.charge(receiptDigest, receipt);
+  const args = caseArgs(candidate, c);
+  const { receipt, receiptDigest } = await startRun(opts, candidate, manifestDigest, args, () => runOrganism({
+    manifest: candidate,
+    args,
+    fns: opts.fns,
+    store: opts.store,
+    executors: opts.executors,
+    ...(opts.transports ? { transports: opts.transports } : {}),
+    ...(opts.tools ? { tools: opts.tools } : {}),
+  }));
   const outputs = caseOutputs(candidate, receipt.cells);
   const usage = receipt.effects.reduce(
     (total, effect) => ({
@@ -269,24 +277,15 @@ export async function generateFoundryCandidates(
     (args[target.cell] ??= Object.create(null) as Record<string, JsonValue>)[target.port] = value;
   }
   const generatorDigest = await opts.store.putManifest(opts.generator);
-  opts.account?.reserve(generatorDigest, opts.generator.budgets);
-  let receipt: Awaited<ReturnType<typeof runOrganism>>;
-  try {
-    receipt = await runOrganism({
-      manifest: opts.generator,
-      args,
-      fns: opts.fns,
-      store: opts.store,
-      executors: opts.executors,
-      ...(opts.transports ? { transports: opts.transports } : {}),
-      ...(opts.tools ? { tools: opts.tools } : {}),
-    });
-  } catch (error) {
-    opts.account?.release();
-    throw error;
-  }
-  const receiptDigest = await opts.store.putReceipt(receipt as unknown as JsonValue);
-  opts.account?.charge(receiptDigest, receipt);
+  const { receipt, receiptDigest } = await startRun(opts, opts.generator, generatorDigest, args, () => runOrganism({
+    manifest: opts.generator,
+    args,
+    fns: opts.fns,
+    store: opts.store,
+    executors: opts.executors,
+    ...(opts.transports ? { transports: opts.transports } : {}),
+    ...(opts.tools ? { tools: opts.tools } : {}),
+  }));
   if (receipt.outcome !== "complete") {
     fail(`generator ${opts.generator.key} ended ${receipt.outcome}`);
   }
@@ -377,10 +376,9 @@ export function foundryReportRuns(
   ];
 }
 
-export async function runFoundry(opts: FoundryOptions): Promise<FoundryReport> {
-  if (opts.account && opts.account.activity !== "foundry") {
-    throw new AlgalError("PARSE_FAILED", "a foundry runs under a foundry habitat account");
-  }
+/** Every report field except `budget` and `digest`: the population's
+ * selection runs, then the promoted candidate's holdout runs. */
+async function foundryReportBase(opts: FoundryOptions): Promise<Omit<FoundryReport, "budget" | "digest">> {
   const { candidates, promoted } = await evaluateFoundryPopulation(opts);
   const promotedManifest = opts.candidates.find(
     (candidate) => digestCanonical(manifestToJson(candidate)) === promoted,
@@ -392,7 +390,7 @@ export async function runFoundry(opts: FoundryOptions): Promise<FoundryReport> {
     opts,
   );
   const holdoutScore = score(holdoutCases, "holdout");
-  const base = {
+  return {
     contract: FOUNDRY_CONTRACT,
     candidates,
     promoted,
@@ -400,7 +398,14 @@ export async function runFoundry(opts: FoundryOptions): Promise<FoundryReport> {
     ...(opts.scorer ? { scorer: opts.scorer } : {}),
     ...(opts.lineage ? { lineage: opts.lineage } : {}),
   };
-  if (opts.account) {
+}
+
+export async function runFoundry(opts: FoundryOptions): Promise<FoundryReport> {
+  if (opts.account && opts.account.activity !== "foundry") {
+    throw new AlgalError("PARSE_FAILED", "a foundry runs under a foundry habitat account");
+  }
+  const base = await foundryReportBase(opts);
+  if (opts.account instanceof HabitatAccount) {
     const budget = opts.account.record();
     // The account must hold exactly this report's runs; anything else is a
     // host wiring error, and the report would not verify.
@@ -409,5 +414,14 @@ export async function runFoundry(opts: FoundryOptions): Promise<FoundryReport> {
     const budgeted = { ...base, budget };
     return { ...budgeted, digest: digestCanonical(budgeted as unknown as JsonValue) };
   }
+  return { ...base, digest: digestCanonical(base as unknown as JsonValue) };
+}
+
+/** A foundry epoch inside a larger activity: a search's final epoch or an
+ * application evaluation within an experiment. Every run is charged to that
+ * activity's account when one is given, and the report never embeds it;
+ * without an account the report is the one `runFoundry` writes. */
+export async function runFoundryWithin(opts: FoundryOptions): Promise<FoundryReport> {
+  const base = await foundryReportBase(opts);
   return { ...base, digest: digestCanonical(base as unknown as JsonValue) };
 }

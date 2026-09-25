@@ -17,6 +17,7 @@ import { produceApplicationSelection } from "./application-selection";
 import { capabilityHandle } from "./capabilities";
 import { manifestToJson, parseOrganismManifest } from "./contract";
 import { digestCanonical } from "./digest";
+import { HabitatAccount, type HabitatBudget, type HabitatLimits } from "./habitat-budget";
 import { builtinRegistry } from "./registry";
 import type { Digest } from "./digest";
 import type { JsonValue } from "./values";
@@ -209,5 +210,85 @@ describe("application experiments", () => {
     const lineage = await f.service.lineage("workspace");
     expect(lineage).toEqual([{ sequence: 0, kind: "create", operation: hash("create"), revision: f.revision, memory: f.memory, evidence: [], causedBy: null }]);
     expect(await f.service.lineage("missing")).toEqual([]);
+  });
+});
+
+describe("experiments under a habitat budget", () => {
+  // Each evaluation runs three selection cases for the incumbent and the
+  // candidate, then one holdout case: seven runs at the default ceiling.
+  const roomy: HabitatLimits = { work: 100_000_000, attempts: 1_024, runs: 64 };
+  const request = (f: Awaited<ReturnType<typeof fixture>>, candidateRevision: Digest) => ({
+    contract: "algal.application-evaluation-request.v1", parentState: f.genesis.digest, candidateRevision,
+    entrypoint: "run", cases: f.cases, scorer: f.scorer, policy: f.evaluationPolicy, environment: "harbor",
+  });
+  const charged = async (f: Awaited<ReturnType<typeof fixture>>, account: HabitatAccount, ...revisions: Digest[]) => {
+    for (const revision of revisions) await evaluateApplicationRevision(f.store, request(f, revision), runtime, { account });
+    return f.put(account.record());
+  };
+
+  test("charged evaluations keep their records, and the experiment cites the account", async () => {
+    const f = await fixture();
+    const c = await chain(f);
+    const account = new HabitatAccount("experiment", roomy);
+    const winner = await evaluateApplicationRevision(f.store, request(f, c.winner.revision), runtime, { account });
+    const loser = await evaluateApplicationRevision(f.store, request(f, c.loser.revision), runtime, { account });
+    // The account changes no evaluation, report, or digest.
+    expect(winner.evaluationRef).toBe(c.winEval.evaluationRef);
+    expect(loser.evaluationRef).toBe(c.loseEval.evaluationRef);
+    const record = account.record();
+    expect(record).toMatchObject({ activity: "experiment", outcome: "complete", charged: { runs: 14 } });
+    expect(record.runs[0]!.ceiling).toEqual({ work: 1_000_000, attempts: 16 });
+    const budget = await f.put(record);
+    const produced = await produceApplicationExperiment(f.store, { ...c.input, budget }, runtime);
+    expect(produced.experiment.budget).toBe(budget);
+    expect(await verifyApplicationExperiment(f.store, produced.experimentRef, f.genesis.digest, runtime)).toEqual(produced.experiment);
+    // Without the field the record keeps the bytes it had before.
+    const plain = await produceApplicationExperiment(f.store, c.input, runtime);
+    expect("budget" in plain.experiment).toBe(false);
+    const { budget: _budget, ...unbudgeted } = produced.experiment;
+    expect(plain.experimentRef).toBe(hash(unbudgeted));
+    // The evaluations may run in either order.
+    const reversed = await charged(f, new HabitatAccount("experiment", roomy), c.loser.revision, c.winner.revision);
+    expect((await produceApplicationExperiment(f.store, { ...c.input, budget: reversed }, runtime)).experiment.budget).toBe(reversed);
+    // An account rebuilt from its record continues where it stopped.
+    const resumed = await HabitatAccount.resume(record, f.store);
+    expect(resumed.record()).toEqual(record);
+    await evaluateApplicationRevision(f.store, request(f, c.winner.revision), runtime, { account: resumed });
+    expect(resumed.record().charged.runs).toBe(21);
+  });
+
+  test("refuses accounts that do not charge exactly the cited evaluations", async () => {
+    const f = await fixture();
+    const c = await chain(f);
+    const deny = async (budget: Digest, message: string) => {
+      await expect(produceApplicationExperiment(f.store, { ...c.input, budget }, runtime)).rejects.toThrow(message);
+    };
+    await deny(await charged(f, new HabitatAccount("experiment", roomy), c.winner.revision), "does not charge exactly the cited evaluations");
+    await deny(await charged(f, new HabitatAccount("experiment", roomy), c.winner.revision, c.loser.revision, c.winner.revision), "does not charge exactly the cited evaluations");
+    const complete = (await f.store.getValue(await charged(f, new HabitatAccount("experiment", roomy), c.winner.revision, c.loser.revision))) as unknown as HabitatBudget;
+    await deny(await f.put({ ...complete, activity: "foundry" }), "not an experiment account");
+    const recharged = structuredClone(complete);
+    recharged.runs[2]!.charged.work += 1;
+    recharged.charged.work += 1;
+    await deny(await f.put(recharged), "does not reconcile with the store");
+    await deny(hash("missing-budget"), "Missing or changed application record");
+    await deny(await f.put({ ...c.input }), "habitat budget");
+    // Exhaustion stops the evaluation that does not fit and leaves the
+    // terminal record; an exhausted account is not experiment evidence.
+    const small = new HabitatAccount("experiment", { ...roomy, runs: 10 });
+    await evaluateApplicationRevision(f.store, request(f, c.winner.revision), runtime, { account: small });
+    const refused = await evaluateApplicationRevision(f.store, request(f, c.loser.revision), runtime, { account: small }).catch((error: unknown) => error);
+    expect((refused as { code?: string }).code).toBe("BUDGET_EXHAUSTED");
+    const exhausted = small.record();
+    expect(exhausted).toMatchObject({ outcome: "exhausted", charged: { runs: 10 }, refused: { reasons: ["runs"] } });
+    await deny(await f.put(exhausted), "not complete");
+    await expect(HabitatAccount.resume(exhausted, f.store)).rejects.toThrow("cannot continue");
+    await expect(HabitatAccount.resume(recharged, f.store)).rejects.toThrow("does not reconcile");
+    // Only an experiment account charges an evaluation.
+    await expect(evaluateApplicationRevision(f.store, request(f, c.winner.revision), runtime, { account: new HabitatAccount("foundry", roomy) })).rejects.toThrow("experiment habitat account");
+    // The closed parser accepts the optional reference and nothing else.
+    const produced = await produceApplicationExperiment(f.store, { ...c.input, budget: await charged(f, new HabitatAccount("experiment", roomy), c.winner.revision, c.loser.revision) }, runtime);
+    expect(() => parseApplicationExperiment({ ...produced.experiment, budget: null })).toThrow();
+    expect(() => parseApplicationExperiment({ ...produced.experiment, budget: "sha256:bad" })).toThrow();
   });
 });

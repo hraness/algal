@@ -6,7 +6,10 @@
  * The complete report and each terminal exhaustion record (work, runs,
  * attempts, and a refused generator) are then verified across runtimes: the
  * reference verifies the native store's output and the native CLI verifies
- * the reference store's output, with identical verification results.
+ * the reference store's output, with identical verification results. Search
+ * cases run `foundry search` under one account across generations, then
+ * cross-verify with `foundry search-verify`; an unbudgeted search pins the
+ * default path.
  *
  * native-parity.ts runs this after the bundled examples; it also runs alone:
  *
@@ -62,9 +65,21 @@ export async function habitatBudgetParity(binary: string): Promise<{ cases: numb
       cells: [{ id: "out", kind: "expr", inputs: {}, expr: { contract: "algal.expr.v1", program: ["quote", [echo]] }, output: { kind: "json", schema: { type: "array" } } }],
       edges: [],
     }));
+    // A search generator proposes the constant before any feedback exists
+    // and the echo afterwards, so the second generation evaluates both.
+    const searchGenerator = manifestToJson(parseOrganismManifest({
+      contract: "algal.organism.v1", key: "organism:budget-search-generator", name: "budget search generator",
+      budgets: { maxWork: 2_000, maxAgentCalls: 0 },
+      interface: { inputs: { feedback: { cell: "src", port: "value" } }, outputs: { candidates: { cell: "out", port: "out" } } },
+      cells: [
+        { id: "src", kind: "input", outputs: { value: "json" } },
+        { id: "out", kind: "expr", inputs: { value: "json" }, expr: { contract: "algal.expr.v1", program: ["if", ["eq", ["get", "value"], null], ["quote", [constant]], ["quote", [echo]]] }, output: { kind: "json", schema: { type: "array" } } },
+      ],
+      edges: [{ from: { cell: "src", port: "value" }, to: { cell: "out", port: "value" } }],
+    }));
     const fixtures = join(temporary, "fixtures");
     await mkdir(fixtures, { recursive: true });
-    for (const [name, value] of Object.entries({ constant, echo, generator })) {
+    for (const [name, value] of Object.entries({ constant, echo, generator, "search-generator": searchGenerator })) {
       await writeFile(join(fixtures, `${name}.algal.json`), canonicalize(value));
     }
     const splits = [
@@ -75,6 +90,9 @@ export async function habitatBudgetParity(binary: string): Promise<{ cases: numb
     const base = { contract: "algal.foundry.config.v1", candidates: ["constant.algal.json", "echo.algal.json"], cases: splits };
     const generated = { contract: "algal.foundry.config.v1", candidates: ["constant.algal.json"], cases: splits,
       generator: { manifest: "generator.algal.json", args: {}, output: "candidates" } };
+    const searched = { contract: "algal.foundry.config.v1", cases: splits,
+      generator: { manifest: "search-generator.algal.json", args: {}, output: "candidates" },
+      search: { maxGenerations: 2, feedbackInput: "feedback" } };
     const scenarios: { name: string; config: JsonObject; search?: boolean; code: number; expect?: (out: JsonObject) => string | undefined }[] = [
       { name: "complete-with-generator", config: { ...generated, budget: { work: 6_000, attempts: 8, runs: 6 } }, code: 0,
         expect: out => (out.budget as JsonObject | undefined)?.outcome === "complete" && ((out.budget as JsonObject).runs as JsonValue[]).length === 6
@@ -88,8 +106,20 @@ export async function habitatBudgetParity(binary: string): Promise<{ cases: numb
       { name: "exhausted-generator", config: { ...generated, budget: { work: 1_999, attempts: 8, runs: 8 } }, code: 1,
         expect: out => refusal(out, ["work"], 0) },
       { name: "invalid-limits", config: { ...base, budget: { work: 1, attempts: 0, runs: 0 } }, code: 2 },
-      { name: "search-refuses-budget", search: true, code: 2,
-        config: { ...generated, search: { maxGenerations: 1, feedbackInput: "feedback" }, budget: { work: 6_000, attempts: 8, runs: 6 } } },
+      // Generations 0 and 1 run the generator and each candidate's selection
+      // cases; the final epoch reruns the winner and its holdout: 11 runs.
+      { name: "search-plain", search: true, config: searched, code: 0,
+        expect: out => out.contract === "algal.search.v1" && out.budget === undefined ? undefined : "expected an unbudgeted search report" },
+      { name: "search-complete", search: true, config: { ...searched, budget: { work: 100_000, attempts: 8, runs: 16 } }, code: 0,
+        expect: out => (out.budget as JsonObject | undefined)?.outcome === "complete" && ((out.budget as JsonObject).runs as JsonValue[]).length === 11 &&
+          (out.result as JsonObject).budget === undefined ? undefined : "expected a search report with a complete 11-run budget" },
+      { name: "search-exhausted-runs", search: true, config: { ...searched, budget: { work: 100_000, attempts: 8, runs: 4 } }, code: 1,
+        expect: out => refusal(out, ["runs"], 4) },
+      // The echo reserves three attempts; it first runs in generation 1.
+      { name: "search-exhausted-attempts", search: true, config: { ...searched, budget: { work: 100_000, attempts: 2, runs: 16 } }, code: 1,
+        expect: out => refusal(out, ["attempts"], 6) },
+      { name: "search-exhausted-generator", search: true, config: { ...searched, budget: { work: 1_999, attempts: 8, runs: 16 } }, code: 1,
+        expect: out => refusal(out, ["work"], 0) },
     ];
     cases = scenarios.length;
     for (const scenario of scenarios) {
@@ -116,17 +146,44 @@ export async function habitatBudgetParity(binary: string): Promise<{ cases: numb
         if (problem) throw new Error(problem);
         // Cross-verify: each runtime verifies the other's output against the
         // other's store; both must accept with identical results.
-        const byTs = await spawn([process.execPath, cli, "foundry", "verify", outs.native, "--dir", stores.native]);
-        const byNative = await spawn([binary, "--dir", stores.ts, "foundry", "verify", outs.ts]);
+        const verify = scenario.search ? "search-verify" : "verify";
+        const byTs = await spawn([process.execPath, cli, "foundry", verify, outs.native, "--dir", stores.native]);
+        const byNative = await spawn([binary, "--dir", stores.ts, "foundry", verify, outs.ts]);
         if (byTs.code !== 0 || byNative.code !== 0) throw new Error(`cross verification failed: ${byTs.stdout} | ${byNative.stdout} ${byNative.stderr}`);
         if (byTs.stdout !== byNative.stdout) throw new Error(`verification differs\nts:     ${byTs.stdout}\nnative: ${byNative.stdout}`);
-        if (output.contract === "algal.habitat-budget.v1") await tampered(output, stores, binary, temporary, scenario.name);
-        else await tamperedReport(output, stores, binary, temporary, scenario.name);
+        if (output.contract === "algal.habitat-budget.v1") await tampered(output, stores, binary, temporary, scenario.name, verify);
+        else if (output.budget !== undefined) await tamperedReport(output, stores, binary, temporary, scenario.name, verify);
         console.log(`habitat-budget ${scenario.name}: identical ${String(output.contract)} + cross-verified`);
       } catch (error) {
         failures.push(scenario.name);
         console.error(`habitat-budget ${scenario.name}: ${error instanceof Error ? error.message : String(error)}`);
       }
+    }
+    // Habitat schedules run in the reference runtime only: the native CLI
+    // must refuse a schedule and its record explicitly, never misread them.
+    cases++;
+    try {
+      await writeFile(join(fixtures, "schedule-foundry.config.json"), canonicalize(base));
+      await writeFile(join(fixtures, "schedule-search.config.json"), canonicalize(searched));
+      const schedule = join(fixtures, "schedule.json");
+      await writeFile(schedule, canonicalize({
+        contract: "algal.habitat-schedule.config.v1", order: "round-robin", budget: { work: 100_000, attempts: 8, runs: 32 },
+        activities: [{ kind: "foundry", config: "schedule-foundry.config.json" }, { kind: "search", config: "schedule-search.config.json" }],
+      }));
+      const store = join(temporary, "ts", "schedule");
+      const record = join(temporary, "schedule.record.json");
+      const ts = await spawn([process.execPath, cli, "foundry", "schedule", schedule, "--dir", store, "--out", record]);
+      if (ts.code !== 0 || (JSON.parse(ts.stdout) as JsonObject).contract !== "algal.habitat-schedule.v1") throw new Error(`reference schedule failed: ${ts.code} ${ts.stderr}`);
+      for (const command of [["foundry", "schedule", schedule], ["foundry", "verify", record], ["foundry", "search-verify", record], ["foundry", "schedule-verify", record]]) {
+        const native = await spawn([binary, "--dir", store, ...command]);
+        if (native.code !== 2 || !native.stderr.includes("algal.habitat-schedule.v1")) {
+          throw new Error(`native ${command.join(" ")} did not refuse the schedule explicitly: ${native.code} ${native.stderr.trim()}`);
+        }
+      }
+      console.log("habitat-budget schedule: the native CLI refuses schedules explicitly");
+    } catch (error) {
+      failures.push("schedule");
+      console.error(`habitat-budget schedule: ${error instanceof Error ? error.message : String(error)}`);
     }
   } finally {
     await rm(temporary, { recursive: true, force: true });
@@ -142,36 +199,45 @@ function refusal(out: JsonObject, reasons: string[], runs: number): string | und
 }
 
 /** Both runtimes must reject the same evidence the same way. */
-async function verifyBoth(value: JsonValue, stores: { ts: string; native: string }, binary: string, file: string) {
+async function verifyBoth(value: JsonValue, stores: { ts: string; native: string }, binary: string, file: string, verify: string) {
   await writeFile(file, canonicalize(value));
-  const ts = await spawn([process.execPath, cli, "foundry", "verify", file, "--dir", stores.ts]);
-  const native = await spawn([binary, "--dir", stores.ts, "foundry", "verify", file]);
+  const ts = await spawn([process.execPath, cli, "foundry", verify, file, "--dir", stores.ts]);
+  const native = await spawn([binary, "--dir", stores.ts, "foundry", verify, file]);
   return { ts, native };
 }
 
-async function tampered(record: JsonObject, stores: { ts: string; native: string }, binary: string, temporary: string, name: string) {
+async function tampered(record: JsonObject, stores: { ts: string; native: string }, binary: string, temporary: string, name: string, verify: string) {
   const missing = structuredClone(record);
   const runs = missing.runs as JsonObject[];
   if (runs.length > 0) {
     runs[0]!.receipt = `sha256:${"0".repeat(64)}`;
-    const { ts, native } = await verifyBoth(missing, stores, binary, join(temporary, `${name}.missing.json`));
+    const { ts, native } = await verifyBoth(missing, stores, binary, join(temporary, `${name}.missing.json`), verify);
     if (ts.code !== 1 || native.code !== 1 || ts.stdout !== native.stdout) {
       throw new Error(`missing-receipt verification differs: ${ts.code} ${ts.stdout} | ${native.code} ${native.stdout}`);
     }
   }
   const totals = structuredClone(record);
   (totals.charged as JsonObject).runs = ((totals.charged as JsonObject).runs as number) + 1;
-  const { ts, native } = await verifyBoth(totals, stores, binary, join(temporary, `${name}.totals.json`));
+  const { ts, native } = await verifyBoth(totals, stores, binary, join(temporary, `${name}.totals.json`), verify);
   if (ts.code !== 2 || native.code !== 2) throw new Error(`inconsistent totals accepted: ${ts.code} | ${native.code}`);
+  if (verify === "search-verify") {
+    // `search-verify` expects a search's account.
+    const foreign = { ...structuredClone(record), activity: "foundry" };
+    const other = await verifyBoth(foreign, stores, binary, join(temporary, `${name}.foreign.json`), verify);
+    if (other.ts.code !== 1 || other.native.code !== 1 || other.ts.stdout !== other.native.stdout ||
+        (JSON.parse(other.ts.stdout) as { mismatches: string[] }).mismatches[0] !== "budget activity is not search") {
+      throw new Error(`foreign-activity verification differs: ${other.ts.code} ${other.ts.stdout} | ${other.native.code} ${other.native.stdout}`);
+    }
+  }
 }
 
-async function tamperedReport(report: JsonObject, stores: { ts: string; native: string }, binary: string, temporary: string, name: string) {
+async function tamperedReport(report: JsonObject, stores: { ts: string; native: string }, binary: string, temporary: string, name: string, verify: string) {
   const swapped = structuredClone(report);
   const runs = (swapped.budget as JsonObject).runs as JsonValue[];
   [runs[1], runs[2]] = [runs[2]!, runs[1]!];
   delete swapped.digest;
   swapped.digest = digestCanonical(swapped);
-  const { ts, native } = await verifyBoth(swapped, stores, binary, join(temporary, `${name}.swapped.json`));
+  const { ts, native } = await verifyBoth(swapped, stores, binary, join(temporary, `${name}.swapped.json`), verify);
   if (ts.code !== 1 || native.code !== 1 || ts.stdout !== native.stdout) {
     throw new Error(`reordered budget verification differs: ${ts.code} ${ts.stdout} | ${native.code} ${native.stdout}`);
   }

@@ -543,7 +543,7 @@ async fn generator_run_is_admitted_first_and_charged_to_the_same_account() {
 }
 
 #[test]
-fn config_budget_is_bounded_and_refused_by_search() {
+fn config_budget_is_bounded_and_accepted_by_search() {
     let config =
         foundry::load_config(&repo().join("examples/foundry-budget.config.json"), false).unwrap();
     assert_eq!(config.budget, Some(limits(10_000_000, 256, 5)));
@@ -568,8 +568,14 @@ fn config_budget_is_bounded_and_refused_by_search() {
     let mut search = base.clone();
     search["budget"] = json!({"work":1,"attempts":0,"runs":1});
     search["search"] = json!({"maxGenerations":1,"feedbackInput":"feedback"});
-    let err = foundry::load_config(&write(search), true).err().unwrap();
-    assert!(err.message.contains("habitat budget"), "{}", err.message);
+    assert_eq!(
+        foundry::load_config(&write(search.clone()), true)
+            .unwrap()
+            .budget,
+        Some(limits(1, 0, 1))
+    );
+    search["budget"] = json!({"work":1,"attempts":0,"runs":0});
+    assert!(foundry::load_config(&write(search), true).is_err());
     assert!(
         foundry::load_config(&write(base), false)
             .unwrap()
@@ -625,4 +631,174 @@ async fn a_run_that_fails_before_a_receipt_releases_its_reservation() {
     assert_eq!(record["outcome"], "complete");
     assert!(record["charged"]["runs"].as_u64().unwrap() > 0);
     assert!(!account.exhausted());
+}
+
+/// Proposes the constant before any feedback exists and the echo afterwards,
+/// so the second generation evaluates both and the echo wins.
+fn search_generator() -> foundry::Generator {
+    let manifest = Manifest::parse(&json!({
+        "contract":"algal.organism.v1","key":"organism:search-generator","name":"search generator",
+        "budgets":{"maxWork":2_000,"maxAgentCalls":0},
+        "interface":{"inputs":{"feedback":{"cell":"src","port":"value"}},"outputs":{"candidates":{"cell":"out","port":"out"}}},
+        "cells":[
+            {"id":"src","kind":"input","outputs":{"value":"json"}},
+            {"id":"out","kind":"expr","inputs":{"value":"json"},"expr":{"contract":"algal.expr.v1","program":["if",["eq",["get","value"],null],["quote",[constant().value]],["quote",[echo().value]]]},"output":{"kind":"json","schema":{"type":"array"}}}
+        ],
+        "edges":[{"from":{"cell":"src","port":"value"},"to":{"cell":"out","port":"value"}}]
+    }))
+    .unwrap();
+    foundry::Generator {
+        manifest,
+        args: json!({}),
+        output: "candidates".into(),
+        field: None,
+    }
+}
+
+async fn budgeted_search(account: Option<&mut Account>, store: &mut Store) -> algal::Result<Value> {
+    foundry::search_in(
+        &search_generator(),
+        &[],
+        &cases(),
+        &foundry::Search {
+            max_generations: 2,
+            feedback_input: "feedback".into(),
+        },
+        None,
+        store,
+        &mut Host::default(),
+        &Transports::new(),
+        account,
+    )
+    .await
+}
+
+#[tokio::test]
+async fn search_charges_every_generator_candidate_and_final_run_to_one_account() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut store = Store::open(directory.path(), true).unwrap();
+    let mut account = Account::new("search", limits(100_000, 0, 64)).unwrap();
+    let report = budgeted_search(Some(&mut account), &mut store)
+        .await
+        .unwrap();
+    let budget = &report["budget"];
+    assert_eq!(budget["activity"], "search");
+    assert_eq!(budget["outcome"], "complete");
+    let (g, c, e) = (
+        search_generator().manifest.digest().unwrap(),
+        constant().digest().unwrap(),
+        echo().digest().unwrap(),
+    );
+    let manifests: Vec<&str> = budget["runs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|run| run["manifest"].as_str().unwrap())
+        .collect();
+    assert_eq!(manifests, [&g, &c, &c, &g, &c, &c, &e, &e, &e, &e, &e]);
+    let runs: Vec<(String, String)> = budget["runs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|run| {
+            (
+                run["manifest"].as_str().unwrap().to_owned(),
+                run["receipt"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    assert_eq!(runs, foundry::search_report_runs(&report));
+    assert!(report["result"].get("budget").is_none());
+    let verified = foundry::verify_search(&report, &store, &Host::default())
+        .await
+        .unwrap();
+    assert_eq!(verified["ok"], true, "{verified}");
+
+    // A search without a budget keeps its bytes.
+    let plain = budgeted_search(None, &mut store).await.unwrap();
+    assert!(plain.get("budget").is_none());
+    let mut base = report.clone();
+    base.as_object_mut().unwrap().remove("budget");
+    base.as_object_mut().unwrap().remove("digest");
+    assert_eq!(plain["digest"], json!(digest(&base).unwrap()));
+
+    let tampered = |change: &dyn Fn(&mut Value)| {
+        let mut value = report.clone();
+        change(&mut value);
+        redigest(&value)
+    };
+    for (value, mismatch) in [
+        (
+            tampered(&|value| {
+                let first = value["budget"]["runs"][1].clone();
+                value["budget"]["runs"][1] = value["budget"]["runs"][3].clone();
+                value["budget"]["runs"][3] = first;
+            }),
+            "budget run 1 is not the search's run 1",
+        ),
+        (
+            tampered(&|value| value["budget"]["activity"] = json!("foundry")),
+            "budget activity is not search",
+        ),
+        (
+            tampered(&|value| value["result"]["budget"] = value["budget"].clone()),
+            "result: the final foundry report carries a budget",
+        ),
+    ] {
+        let verified = foundry::verify_search(&value, &store, &Host::default())
+            .await
+            .unwrap();
+        assert!(
+            mismatches(&verified).contains(&mismatch.to_owned()),
+            "{verified}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn search_exhaustion_leaves_an_exhausted_account_and_no_report() {
+    let (g, c, e) = (
+        search_generator().manifest.digest().unwrap(),
+        constant().digest().unwrap(),
+        echo().digest().unwrap(),
+    );
+    for (budget, listed, refused, reasons) in [
+        (limits(100_000, 0, 4), 4, c, json!(["runs"])),
+        (limits(100_000, 0, 8), 8, e, json!(["runs"])),
+        (limits(1_999, 0, 64), 0, g, json!(["work"])),
+    ] {
+        let directory = tempfile::tempdir().unwrap();
+        let mut store = Store::open(directory.path(), true).unwrap();
+        let mut account = Account::new("search", budget).unwrap();
+        let error = budgeted_search(Some(&mut account), &mut store)
+            .await
+            .unwrap_err();
+        assert_eq!(error.code, "BUDGET_EXHAUSTED");
+        let record = account.record().unwrap();
+        assert_eq!(record["outcome"], "exhausted");
+        assert_eq!(record["runs"].as_array().unwrap().len(), listed);
+        assert_eq!(record["refused"]["manifest"], json!(refused));
+        assert_eq!(record["refused"]["reasons"], reasons);
+        let verified =
+            habitat_budget::verify_for(&record, &store, &Host::default(), Some("search"))
+                .await
+                .unwrap();
+        assert_eq!(verified["ok"], true, "{verified}");
+        assert_eq!(verified["checkedReceipts"], listed);
+    }
+    let directory = tempfile::tempdir().unwrap();
+    let mut store = Store::open(directory.path(), true).unwrap();
+    let mut wrong = Account::new("foundry", limits(100_000, 0, 64)).unwrap();
+    let error = budgeted_search(Some(&mut wrong), &mut store)
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, "PARSE_FAILED");
+    let record = wrong.record().unwrap();
+    let verified = habitat_budget::verify_for(&record, &store, &Host::default(), Some("search"))
+        .await
+        .unwrap();
+    assert_eq!(
+        mismatches(&verified).first().map(String::as_str),
+        Some("budget activity is not search")
+    );
 }

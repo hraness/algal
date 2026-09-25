@@ -28,7 +28,8 @@ import type { RunReceipt } from "./src/run";
 import type { Transport } from "./src/transport";
 import type { Tool, ToolRegistry } from "./src/tools";
 import type { FoundryCase, FoundryReport, FoundryScorer } from "./src/foundry";
-import type { HabitatBudget } from "./src/habitat-budget";
+import type { HabitatBudget, HabitatLedger } from "./src/habitat-budget";
+import type { SearchReport } from "./src/search";
 import type { BenchCase, BenchPrice, BenchSystem } from "./src/bench";
 import type { CodingJobOptions, CodingJobOperationOptions } from "./src/coding-jobs";
 import type { RepairCheck } from "./src/repair";
@@ -198,6 +199,11 @@ usage:
   algal foundry search-inspect <report.json>
   algal foundry search-pack <report.json> --out <dir> [--dir <path>]
                                               inspect or export a verified search winner
+  algal foundry schedule <schedule.json> [executor/store options] [--journal <dir>] [--out <record.json>]
+                                              run several foundry and search configs under one budget,
+                                              taking turns; --journal resumes an interrupted schedule
+  algal foundry schedule-verify <record.json> [--dir <path>]
+                                              replay every run a schedule record lists offline
   algal bench <config.json> [--modules <dir>] [--tools <file>] [--dir <path>] [--out <report.json>]
                                               measure several systems on one workload:
                                               quality, tokens, work, per-model attribution,
@@ -1509,7 +1515,7 @@ async function main(): Promise<number> {
       const { packOrganism } = await import("./src/bundle");
       const { cachedExecutor } = await import("./src/effects");
       const { parseExprScorer } = await import("./src/expr");
-      const { generateFoundryCandidates, runFoundry } = await import("./src/foundry");
+      const { generateFoundryCandidates, runFoundry, runFoundryWithin } = await import("./src/foundry");
       const { parseFoundryReport, verifyFoundryReport } = await import("./src/foundry-verify");
       const { runFoundrySearch } = await import("./src/search");
       const { parseSearchReport, verifySearchReport } = await import("./src/search-verify");
@@ -1550,12 +1556,12 @@ async function main(): Promise<number> {
       if (file === "search-verify") {
         const reportFile = positional[1];
         if (!reportFile) usageError("algal foundry search-verify <report.json> [--dir <path>]");
-        const verified = await verifySearchReport(
-          await readJson(resolve(reportFile)),
-          store,
-          fns,
-          await resolveTools(flags, dir),
-        );
+        const raw = await readJson(resolve(reportFile));
+        // An exhausted search writes its terminal habitat budget record in
+        // place of a report; `search-verify` accepts either.
+        const verified = raw !== null && typeof raw === "object" && !Array.isArray(raw) && raw.contract === HABITAT_BUDGET_CONTRACT
+          ? await verifyHabitatBudget(raw, store, fns, await resolveTools(flags, dir), "search")
+          : await verifySearchReport(raw, store, fns, await resolveTools(flags, dir));
         out(verified as unknown as JsonObject);
         return verified.ok ? 0 : 1;
       }
@@ -1632,139 +1638,237 @@ async function main(): Promise<number> {
         out({ bundle: outputFile, root: bundle.root, foundry: report.digest });
         return 0;
       }
-      const searchMode = file === "search";
-      const configPath = searchMode ? positional[1] : file;
-      if (!configPath) usageError("algal foundry search <config.json>");
-      const configFile = resolve(configPath);
+      if (file === "schedule-verify") {
+        const recordFile = positional[1];
+        if (!recordFile) usageError("algal foundry schedule-verify <record.json> [--dir <path>]");
+        const { verifyHabitatSchedule } = await import("./src/habitat-schedule");
+        const verified = await verifyHabitatSchedule(await readJson(resolve(recordFile)), store, fns, await resolveTools(flags, dir));
+        out(verified as unknown as JsonObject);
+        return verified.ok ? 0 : 1;
+      }
+      // One `algal.foundry.config.v1` file, as the foundry, search, and
+      // schedule commands read it; paths resolve relative to the file.
+      const loadConfig = async (configFile: string, searchMode: boolean) => {
+        const config = asRecord(await readJson(configFile), "foundry config");
+        const unknown = Object.keys(config).filter((k) => !["contract", "candidates", "generator", "cases", "search", "scorer", "budget"].includes(k));
+        if (unknown.length > 0) {
+          throw new AlgalError("PARSE_FAILED", `foundry config: unknown key "${unknown[0]}"`);
+        }
+        if (config.contract !== "algal.foundry.config.v1") {
+          throw new AlgalError("PARSE_FAILED", "foundry config.contract must be algal.foundry.config.v1");
+        }
+        if (!searchMode && config.search !== undefined) {
+          throw new AlgalError("PARSE_FAILED", "search settings require the foundry search command");
+        }
+        const budget = config.budget === undefined ? undefined : parseHabitatLimits(config.budget);
+        const candidateEntries = config.candidates ?? [];
+        if (!Array.isArray(candidateEntries)) {
+          throw new AlgalError("PARSE_FAILED", "foundry config.candidates must be a list");
+        }
+        if (candidateEntries.length === 0 && config.generator === undefined) {
+          throw new AlgalError("PARSE_FAILED", "foundry config needs candidates or a generator");
+        }
+        if (!Array.isArray(config.cases) || config.cases.length === 0) {
+          throw new AlgalError("PARSE_FAILED", "foundry config.cases must be a non-empty list");
+        }
+        const base = dirname(configFile);
+        const candidates = await Promise.all(candidateEntries.map(async (candidate, i) => {
+          if (typeof candidate !== "string") {
+            throw new AlgalError("PARSE_FAILED", `foundry config.candidates[${i}] must be a path`);
+          }
+          return await readManifest(resolve(base, candidate));
+        }));
+        let generator: { manifest: ReturnType<typeof parseOrganismManifest>; args: Record<string, JsonValue>; output: string; field?: string } | undefined;
+        if (config.generator !== undefined) {
+          const raw = asRecord(config.generator, "foundry config.generator");
+          const extra = Object.keys(raw).filter((k) => !["manifest", "args", "output", "field"].includes(k));
+          if (
+            extra.length > 0 ||
+            typeof raw.manifest !== "string" ||
+            typeof raw.output !== "string" ||
+            (raw.field !== undefined && typeof raw.field !== "string")
+          ) {
+            throw new AlgalError("PARSE_FAILED", "foundry config.generator needs manifest, args, and output");
+          }
+          if (raw.args === undefined) {
+            throw new AlgalError("PARSE_FAILED", "foundry config.generator.args must be an object");
+          }
+          generator = {
+            manifest: await readManifest(resolve(base, raw.manifest)),
+            args: asRecord(raw.args, "foundry config.generator.args"),
+            output: raw.output,
+            ...(typeof raw.field === "string" ? { field: raw.field } : {}),
+          };
+        }
+        const cases: FoundryCase[] = config.cases.map((raw, i) => {
+          const c = asRecord(raw, `foundry config.cases[${i}]`);
+          const extra = Object.keys(c).filter((k) => !["id", "split", "args", "expect"].includes(k));
+          if (extra.length > 0) {
+            throw new AlgalError("PARSE_FAILED", `foundry config.cases[${i}]: unknown key "${extra[0]}"`);
+          }
+          if (
+            typeof c.id !== "string" ||
+            (c.split !== "train" && c.split !== "validation" && c.split !== "holdout")
+          ) {
+            throw new AlgalError("PARSE_FAILED", `foundry config.cases[${i}] needs string id and train|validation|holdout split`);
+          }
+          if (c.args === undefined || c.expect === undefined) {
+            throw new AlgalError("PARSE_FAILED", `foundry config.cases[${i}] needs args and expect objects`);
+          }
+          return {
+            id: c.id,
+            split: c.split,
+            args: asRecord(c.args, `foundry config.cases[${i}].args`),
+            expect: asRecord(c.expect, `foundry config.cases[${i}].expect`),
+          };
+        });
+        let scorer: FoundryScorer | undefined;
+        if (config.scorer !== undefined) {
+          scorer = parseExprScorer(config.scorer, "foundry config.scorer");
+        }
+        let search: { generator: NonNullable<typeof generator>; maxGenerations: number; feedbackInput: string } | undefined;
+        if (searchMode) {
+          if (!generator || config.search === undefined) {
+            throw new AlgalError("PARSE_FAILED", "search config needs generator and search objects");
+          }
+          const block = asRecord(config.search, "foundry config.search");
+          const extra = Object.keys(block).filter((key) => !["maxGenerations", "feedbackInput"].includes(key));
+          if (
+            extra.length > 0 ||
+            !Number.isInteger(block.maxGenerations) ||
+            typeof block.feedbackInput !== "string"
+          ) {
+            throw new AlgalError("PARSE_FAILED", "foundry config.search needs maxGenerations and feedbackInput");
+          }
+          search = { generator, maxGenerations: block.maxGenerations as number, feedbackInput: block.feedbackInput };
+        }
+        return { candidates, generator, cases, scorer, budget, search };
+      };
       if (flags.modules !== undefined) {
         const n = await loadModules(String(flags.modules), store);
         diag(`loaded ${n} module(s) from ${flags.modules}`);
       }
-      const config = asRecord(await readJson(configFile), "foundry config");
-      const unknown = Object.keys(config).filter((k) => !["contract", "candidates", "generator", "cases", "search", "scorer", "budget"].includes(k));
-      if (unknown.length > 0) {
-        throw new AlgalError("PARSE_FAILED", `foundry config: unknown key "${unknown[0]}"`);
-      }
-      if (config.contract !== "algal.foundry.config.v1") {
-        throw new AlgalError("PARSE_FAILED", "foundry config.contract must be algal.foundry.config.v1");
-      }
-      if (!searchMode && config.search !== undefined) {
-        throw new AlgalError("PARSE_FAILED", "search settings require the foundry search command");
-      }
-      // Only a single foundry run admits its runs through a habitat account
-      // today; a search refuses the field rather than ignore it.
-      if (searchMode && config.budget !== undefined) {
-        throw new AlgalError("PARSE_FAILED", "foundry search does not accept a habitat budget");
-      }
-      const budget = config.budget === undefined ? undefined : parseHabitatLimits(config.budget);
-      const candidateEntries = config.candidates ?? [];
-      if (!Array.isArray(candidateEntries)) {
-        throw new AlgalError("PARSE_FAILED", "foundry config.candidates must be a list");
-      }
-      if (candidateEntries.length === 0 && config.generator === undefined) {
-        throw new AlgalError("PARSE_FAILED", "foundry config needs candidates or a generator");
-      }
-      if (!Array.isArray(config.cases) || config.cases.length === 0) {
-        throw new AlgalError("PARSE_FAILED", "foundry config.cases must be a non-empty list");
-      }
-      const base = dirname(configFile);
-      const candidates = await Promise.all(candidateEntries.map(async (candidate, i) => {
-        if (typeof candidate !== "string") {
-          throw new AlgalError("PARSE_FAILED", `foundry config.candidates[${i}] must be a path`);
-        }
-        return await readManifest(resolve(base, candidate));
-      }));
-      let generator: { manifest: ReturnType<typeof parseOrganismManifest>; args: Record<string, JsonValue>; output: string; field?: string } | undefined;
-      if (config.generator !== undefined) {
-        const raw = asRecord(config.generator, "foundry config.generator");
-        const extra = Object.keys(raw).filter((k) => !["manifest", "args", "output", "field"].includes(k));
-        if (
-          extra.length > 0 ||
-          typeof raw.manifest !== "string" ||
-          typeof raw.output !== "string" ||
-          (raw.field !== undefined && typeof raw.field !== "string")
-        ) {
-          throw new AlgalError("PARSE_FAILED", "foundry config.generator needs manifest, args, and output");
-        }
-        if (raw.args === undefined) {
-          throw new AlgalError("PARSE_FAILED", "foundry config.generator.args must be an object");
-        }
-        generator = {
-          manifest: await readManifest(resolve(base, raw.manifest)),
-          args: asRecord(raw.args, "foundry config.generator.args"),
-          output: raw.output,
-          ...(typeof raw.field === "string" ? { field: raw.field } : {}),
-        };
-      }
-      const cases: FoundryCase[] = config.cases.map((raw, i) => {
-        const c = asRecord(raw, `foundry config.cases[${i}]`);
-        const extra = Object.keys(c).filter((k) => !["id", "split", "args", "expect"].includes(k));
-        if (extra.length > 0) {
-          throw new AlgalError("PARSE_FAILED", `foundry config.cases[${i}]: unknown key "${extra[0]}"`);
-        }
-        if (
-          typeof c.id !== "string" ||
-          (c.split !== "train" && c.split !== "validation" && c.split !== "holdout")
-        ) {
-          throw new AlgalError("PARSE_FAILED", `foundry config.cases[${i}] needs string id and train|validation|holdout split`);
-        }
-        if (c.args === undefined || c.expect === undefined) {
-          throw new AlgalError("PARSE_FAILED", `foundry config.cases[${i}] needs args and expect objects`);
-        }
-        return {
-          id: c.id,
-          split: c.split,
-          args: asRecord(c.args, `foundry config.cases[${i}].args`),
-          expect: asRecord(c.expect, `foundry config.cases[${i}].expect`),
-        };
-      });
-      let scorer: FoundryScorer | undefined;
-      if (config.scorer !== undefined) {
-        scorer = parseExprScorer(config.scorer, "foundry config.scorer");
-      }
-      const executors = await resolveExecutors(flags, dir);
-      const activeExecutors = flags["cache-effects"] !== undefined
-        ? executors.map((executor) => cachedExecutor(executor, store))
-        : executors;
-      const transports = flags.transports !== undefined
+      const executorsFor = async () => {
+        const executors = await resolveExecutors(flags, dir);
+        return flags["cache-effects"] !== undefined
+          ? executors.map((executor) => cachedExecutor(executor, store))
+          : executors;
+      };
+      const transportsFor = async () => flags.transports !== undefined
         ? await loadTransports(String(flags.transports))
         : undefined;
-      const tools = await resolveTools(flags, dir);
-      if (searchMode) {
-        if (!generator || config.search === undefined) {
-          throw new AlgalError("PARSE_FAILED", "search config needs generator and search objects");
-        }
-        const search = asRecord(config.search, "foundry config.search");
-        const extra = Object.keys(search).filter((key) => !["maxGenerations", "feedbackInput"].includes(key));
-        if (
-          extra.length > 0 ||
-          !Number.isInteger(search.maxGenerations) ||
-          typeof search.feedbackInput !== "string"
-        ) {
-          throw new AlgalError("PARSE_FAILED", "foundry config.search needs maxGenerations and feedbackInput");
-        }
-        const report = await runFoundrySearch({
-          generator: generator.manifest,
-          generatorArgs: generator.args,
-          feedbackInput: search.feedbackInput,
-          output: generator.output,
-          ...(generator.field ? { field: generator.field } : {}),
-          seeds: candidates,
-          cases,
-          maxGenerations: search.maxGenerations as number,
-          fns,
-          store,
-          executors: activeExecutors,
+      if (file === "schedule") {
+        const schedulePath = positional[1];
+        if (!schedulePath) usageError("algal foundry schedule <schedule.json> [--journal <dir>] [--out <record.json>]");
+        const { openHabitatJournal, parseHabitatScheduleConfig, runHabitatSchedule } = await import("./src/habitat-schedule");
+        const scheduleFile = resolve(schedulePath);
+        const schedule = parseHabitatScheduleConfig(await readJson(scheduleFile));
+        const activeExecutors = await executorsFor();
+        const transports = await transportsFor();
+        const tools = await resolveTools(flags, dir);
+        const shared = {
+          fns, store, executors: activeExecutors,
           ...(transports ? { transports } : {}),
           ...(tools ? { tools } : {}),
-          ...(scorer ? { scorer } : {}),
+        };
+        const activities = await Promise.all(schedule.activities.map(async (activity, i) => {
+          const loaded = await loadConfig(resolve(dirname(scheduleFile), activity.config), activity.kind === "search");
+          // One account covers the schedule; an activity brings none.
+          if (loaded.budget !== undefined) {
+            throw new AlgalError("PARSE_FAILED", `habitat schedule activity ${i}: a scheduled config draws on the schedule budget and cannot set its own`);
+          }
+          const scoring = loaded.scorer ? { scorer: loaded.scorer } : {};
+          return {
+            kind: activity.kind,
+            run: async (account: HabitatLedger) => {
+              const search = loaded.search;
+              if (search) {
+                return await runFoundrySearch({
+                  ...shared, ...scoring, account,
+                  generator: search.generator.manifest,
+                  generatorArgs: search.generator.args,
+                  feedbackInput: search.feedbackInput,
+                  output: search.generator.output,
+                  ...(search.generator.field ? { field: search.generator.field } : {}),
+                  seeds: loaded.candidates,
+                  cases: loaded.cases,
+                  maxGenerations: search.maxGenerations,
+                });
+              }
+              const generated = loaded.generator
+                ? await generateFoundryCandidates({
+                    ...shared, account,
+                    generator: loaded.generator.manifest,
+                    args: loaded.generator.args,
+                    output: loaded.generator.output,
+                    ...(loaded.generator.field ? { field: loaded.generator.field } : {}),
+                  })
+                : undefined;
+              return await runFoundryWithin({
+                ...shared, ...scoring, account,
+                candidates: [...loaded.candidates, ...(generated?.candidates ?? [])],
+                cases: loaded.cases,
+                ...(generated ? { lineage: { generatorDigest: generated.generatorDigest, receiptDigest: generated.receiptDigest } } : {}),
+              });
+            },
+          };
+        }));
+        if (flags.journal !== undefined && typeof flags.journal !== "string") usageError("--journal needs a directory");
+        const journal = typeof flags.journal === "string"
+          ? await openHabitatJournal(resolve(flags.journal), schedule.order, schedule.budget)
+          : undefined;
+        const { schedule: record } = await runHabitatSchedule({
+          order: schedule.order, limits: schedule.budget, activities, store, ...(journal ? { journal } : {}),
         });
+        if (flags.out !== undefined) {
+          const { writeFile } = await import("node:fs/promises");
+          await writeFile(resolve(String(flags.out)), canonicalize(record as unknown as JsonValue));
+        }
+        out(record as unknown as JsonObject);
+        return record.outcome === "complete" ? 0 : 1;
+      }
+      const searchMode = file === "search";
+      const configPath = searchMode ? positional[1] : file;
+      if (!configPath) usageError("algal foundry search <config.json>");
+      const { candidates, generator, cases, scorer, budget, search } = await loadConfig(resolve(configPath), searchMode);
+      const activeExecutors = await executorsFor();
+      const transports = await transportsFor();
+      const tools = await resolveTools(flags, dir);
+      if (search) {
+        // One account admits every run of the search: each generation's
+        // generator and candidates, then the final epoch.
+        const searchAccount = budget ? new HabitatAccount("search", budget) : undefined;
+        let report: SearchReport | HabitatBudget;
+        try {
+          report = await runFoundrySearch({
+            generator: search.generator.manifest,
+            generatorArgs: search.generator.args,
+            feedbackInput: search.feedbackInput,
+            output: search.generator.output,
+            ...(search.generator.field ? { field: search.generator.field } : {}),
+            seeds: candidates,
+            cases,
+            maxGenerations: search.maxGenerations,
+            fns,
+            store,
+            executors: activeExecutors,
+            ...(transports ? { transports } : {}),
+            ...(tools ? { tools } : {}),
+            ...(scorer ? { scorer } : {}),
+            ...(searchAccount ? { account: searchAccount } : {}),
+          });
+        } catch (error) {
+          if (!searchAccount?.exhausted) throw error;
+          // Exhaustion is a terminal outcome, not a partial report: emit the
+          // account record. Completed runs keep their stored receipts.
+          report = searchAccount.record();
+        }
         if (flags.out !== undefined) {
           const { writeFile } = await import("node:fs/promises");
           await writeFile(resolve(String(flags.out)), canonicalize(report as unknown as JsonValue));
         }
         out(report as unknown as JsonObject);
-        return 0;
+        return report.contract === HABITAT_BUDGET_CONTRACT ? 1 : 0;
       }
       // One account admits every run of this activity: the generator, each
       // selection case, then holdout.

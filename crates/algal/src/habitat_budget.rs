@@ -1,7 +1,7 @@
 //! Habitat-wide work accounting, port of src/habitat-budget.ts: one account
 //! for every run that belongs to one habitat activity (a foundry run, a
-//! search, or an application experiment), separate from the per-run root
-//! budget.
+//! search, or the evaluations of an application experiment), separate from
+//! the per-run root budget.
 //!
 //! Before a run starts, the account reserves the run's declared ceiling: its
 //! root manifest's `maxWork` and `maxAgentCalls` (nested children share the
@@ -35,6 +35,17 @@ use crate::{
 use serde_json::{Map, Value, json};
 
 pub const CONTRACT: &str = "algal.habitat-budget.v1";
+/// Habitat schedule records, `algal.habitat-schedule.v1`, and their configs
+/// run in the TypeScript reference runtime only.
+pub const SCHEDULE_CONTRACT: &str = "algal.habitat-schedule.v1";
+
+/// The explicit refusal for habitat schedules: the native runtime neither
+/// runs nor verifies them, rather than misreading one as another record.
+pub fn schedule_unsupported() -> Error {
+    Error::invalid(
+        "habitat schedules (algal.habitat-schedule.v1) run in the TypeScript runtime; the native runtime does not run or verify them",
+    )
+}
 /// Admitted runs per account, and the largest `limits.runs`.
 pub const MAX_RUNS: u64 = 4_096;
 /// A manifest's largest `maxWork` and `maxAgentCalls`: the ceiling bounds.
@@ -281,6 +292,39 @@ impl Account {
             refused: None,
             pending: None,
         })
+    }
+
+    /// `HabitatAccount.resume`: rebuild an account from a record it wrote
+    /// earlier so its activity can continue, for example across separate
+    /// `application evaluate` commands. The record must be complete, and
+    /// every listed run must reconcile with the store: its manifest declares
+    /// the recorded ceiling and its receipt records the charge. Anything else
+    /// is refused.
+    pub async fn resume(value: &Value, store: &Store) -> Result<Self> {
+        let budget = parse(value)?;
+        if budget["outcome"] != "complete" {
+            return Err(Error::limit(
+                "habitat budget: an exhausted account cannot continue",
+            ));
+        }
+        let (mismatches, _) = check_evidence(&budget, store, None).await?;
+        if let Some(first) = mismatches.first() {
+            return Err(fail(format!(
+                "the account does not reconcile with the store: {first}"
+            )));
+        }
+        let mut account = Self::new(
+            budget["activity"].as_str().unwrap_or(""),
+            parse_limits(&budget["limits"])?,
+        )?;
+        let total = |field: &str| budget["charged"][field].as_u64().unwrap_or(0);
+        account.charged = Totals {
+            work: total("work"),
+            attempts: total("attempts"),
+            runs: total("runs"),
+        };
+        account.runs = budget["runs"].as_array().cloned().unwrap_or_default();
+        Ok(account)
     }
 
     pub fn activity(&self) -> &'static str {
@@ -536,8 +580,22 @@ pub async fn check_evidence(
 /// record an exhausted activity leaves. Its arithmetic, every ceiling and
 /// charge, and an offline replay of every admitted run.
 pub async fn verify(value: &Value, store: &Store, tools: &Host) -> Result<Value> {
+    verify_for(value, store, tools, None).await
+}
+
+/// `verify` with an expected activity: a record of another activity is a
+/// mismatch (`foundry search-verify` expects `search`).
+pub async fn verify_for(
+    value: &Value,
+    store: &Store,
+    tools: &Host,
+    expected: Option<&str>,
+) -> Result<Value> {
     let budget = parse(value)?;
-    let (mismatches, checked) = check_evidence(&budget, store, Some(tools)).await?;
+    let (mut mismatches, checked) = check_evidence(&budget, store, Some(tools)).await?;
+    if let Some(kind) = expected.filter(|kind| budget["activity"] != *kind) {
+        mismatches.insert(0, format!("budget activity is not {kind}"));
+    }
     Ok(json!({
         "ok":mismatches.is_empty(),
         "digest":digest(&budget)?,
