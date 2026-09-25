@@ -105,8 +105,8 @@ test("record declarations are bounded by count, fields, schema depth, and name r
     ["record Task { id: text, id: number }", "duplicate field id in record Task"],
     ["record Task { }", "needs at least one field"],
     ["record Task { text: text }", "non-reserved identifier"],
-    ["record Task { owner: cap }", "record fields and list items use text, number, boolean, json"],
-    ["record Task { owner: list }", "record fields and list items use text, number, boolean, json"],
+    ["record Task { owner: cap }", "record fields and list items use text, number, integer, boolean, json"],
+    ["record Task { owner: list }", "a list such as [Task]"],
     ["record Task { owner: Owner }\nrecord Owner { name: json }", "unknown record type Owner"],
     ["record Task { next: Task }", "unknown record type Task"],
     ["record Task { id: text, }\nrecord Next { id: text? ? }", 'expected ","'],
@@ -423,4 +423,100 @@ test("every earlier source example compiles to its pinned executable digest", as
   // Every pinned top-level example still exists under its original name.
   const topLevel = (await readdir(examples)).filter(name => name.endsWith(".algal"));
   expect(Object.keys(pinned).filter(name => !name.includes("/")).every(name => topLevel.includes(name))).toBe(true);
+});
+
+const closedRecord = `closed record Task {
+  id: slug,
+  title: text min 2 max 40,
+  urgency: integer min 0 max 5,
+  tags: [text] unique,
+  payload: json?,
+  home: uri,
+}`;
+const closedSchema = {
+  type: "object",
+  required: ["home", "id", "tags", "title", "urgency"],
+  properties: {
+    id: { type: "string", format: "slug" },
+    title: { type: "string", minLength: 2, maxLength: 40 },
+    urgency: { type: "integer", minimum: 0, maximum: 5 },
+    tags: { type: "array", items: { type: "string" }, uniqueItems: true },
+    // A json field of a closed record is declared with the any-value union.
+    payload: { type: ["null", "boolean", "object", "array", "number", "string"] },
+    home: { type: "string", format: "uri" },
+  },
+  additionalProperties: false,
+};
+const closedTask = (fields: Record<string, JsonValue> = {}): Record<string, JsonValue> =>
+  ({ id: "t-1", title: "Ship it", urgency: 3, tags: ["a"], home: "https://example.com/t", ...fields });
+
+test("integer, text bounds, formats, unique lists, and closed records lower to schema version 3", async () => {
+  const source = pure(`${closedRecord}\nrecord Plain { id: text }`, "(task: Task, names: [name], digests: [digest] unique, plain: Plain) -> json", "return task");
+  const compilation = compileSource(source);
+  const input = compilation.manifest.cells.find(cell => cell.id === "input");
+  expect(input?.kind === "input" && input.outputs).toEqual({
+    task: { type: "json", schema: closedSchema, schemaVersion: 3 },
+    names: { type: "json", schema: { type: "array", items: { type: "string", format: "name" } }, schemaVersion: 3 },
+    digests: { type: "json", schema: { type: "array", items: { type: "string", format: "digest" }, uniqueItems: true }, schemaVersion: 3 },
+    // A version 1 record unchanged by the new syntax keeps its bytes.
+    plain: { type: "json", schema: { type: "object", required: ["id"], properties: { id: { type: "string" } } } },
+  });
+  expect(compilation.sourceMap.compilerVersion).toBe("1.6.0");
+  // The version is executable identity: a plain record parameter differs.
+  const open = compileSource(pure("record Task { id: slug }", "(task: Task) -> json", "return task"));
+  const closed = compileSource(pure("closed record Task { id: slug }", "(task: Task) -> json", "return task"));
+  expect(open.sourceMap.manifestDigest).not.toBe(closed.sourceMap.manifestDigest);
+  expect(compileSource(source).sourceMap.manifestDigest).toBe(compilation.sourceMap.manifestDigest);
+  const receipt = await execute(compilation, { input: { task: closedTask(), names: ["alice"], digests: [`sha256:${"a".repeat(64)}`], plain: { id: "p" } } });
+  expect(receipt.outcome).toBe("complete");
+});
+
+test("the runtime enforces version 3 schema rules where values enter a program", async () => {
+  const compilation = compileSource(pure(closedRecord, "(task: Task) -> json", "return task"));
+  const noTitle = closedTask();
+  delete noTitle.title;
+  for (const [task, message] of [
+    [{ ...closedTask(), extra: 1 }, "undeclared field"],
+    [{ ...closedTask(), urgency: 1.5 }, "expected integer"],
+    [{ ...closedTask(), urgency: 9007199254740992 }, "expected integer"],
+    [{ ...closedTask(), tags: ["a", "a"] }, "repeated item"],
+    [{ ...closedTask(), title: "x" }, "text shorter than minLength"],
+    [{ ...closedTask(), title: "x".repeat(41) }, "text longer than maxLength"],
+    [{ ...closedTask(), id: "BAD" }, "text is not a slug"],
+    [{ ...closedTask(), home: "example.com/no-scheme" }, "text is not a uri"],
+    [noTitle, "missing required field"],
+  ] as [Record<string, JsonValue>, string][]) {
+    const receipt = await execute(compilation, { input: { task } });
+    expect(receipt.failure, JSON.stringify(task)).toEqual({ code: "TYPE_MISMATCH", message, path: "input" });
+    expect(receipt.cells.result?.status).toBeUndefined();
+  }
+});
+
+test("version 3 field syntax is bounded and literal mismatches fail at compile time", () => {
+  const field = (type: string) => pure(`record R { value: ${type} }`, "()", "return 1");
+  for (const [type, message] of [
+    ["integer in [1, 2.5]", "integer allowed values must be whole numbers, found 2.5"],
+    ["integer in [9007199254740992]", "integer allowed values must be whole numbers"],
+    ["integer min 5 max 1", "integer range min 5 exceeds max 1"],
+    ["text min 5 max 1", "text length min 5 exceeds max 1"],
+    ["text min -1", "text length bounds are integers in 0..1000000"],
+    ["text max 1000001", "text length bounds are integers in 0..1000000"],
+    ["[text] unique unique", 'expected ","'],
+    ["closed", "record fields and list items use text, number, integer, boolean, json"],
+    ["regex", "record fields and list items use text, number, integer, boolean, json"],
+  ] as const) expect(failure(field(type)).diagnostic.message, type).toContain(message);
+  // `closed` introduces only a record declaration.
+  expect(failure("closed task { id: text }").diagnostic.message).toBe('expected "record", found "task"');
+  expect(failure("closed record task { id: text }").diagnostic.message).toContain("uppercase letter");
+  // Literal values the source can prove are rejected at compile time.
+  const literal = (value: string) => pure("record R { urgency: integer min 0 max 5 }", "() -> R", `return { urgency: ${value} }`);
+  expect(failure(literal("1.5")).diagnostic.message).toBe("return value field urgency must be a whole number, found 1.5");
+  expect(failure(literal("9")).diagnostic.message).toBe("return value field urgency must be at most 5, found 9");
+  const texted = (value: string) => pure("record R { id: slug, title: text min 2 }", "() -> R", `return { id: ${value}, title: "ok" }`);
+  expect(failure(texted('"NOT-A-SLUG"')).diagnostic.message).toBe('return value field id must be slug, found "NOT-A-SLUG"');
+  const short = pure("record R { title: text min 2 }", "() -> R", 'return { title: "x" }');
+  expect(failure(short).diagnostic.message).toBe("return value field title must be at least 2 characters, found 1");
+  // A literal field a closed record does not declare fails the same way.
+  expect(failure(pure("closed record R { id: text }", "() -> R", 'return { id: "a", extra: 1 }')).diagnostic.message)
+    .toBe("return value has field extra, which record R does not declare");
 });

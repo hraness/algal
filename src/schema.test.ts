@@ -1,13 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import invalidV2 from "../scripts/fixtures/schema-v2-admission.json";
+import invalidV3 from "../scripts/fixtures/schema-v3-admission.json";
 import values from "../scripts/fixtures/schema-v2-values.json";
+import valuesV3 from "../scripts/fixtures/schema-v3-values.json";
 import { BOUNDS, manifestToJson, parseOrganismManifest, type OrganismManifest } from "./contract";
 import { digestCanonical } from "./digest";
 import { AlgalError } from "./errors";
 import { checkSchema, scriptedExecutor } from "./effects";
 import { builtinRegistry } from "./registry";
 import { runOrganism } from "./run";
-import { checkSchemaValueV2, SCHEMA_V2_BOUNDS } from "./schema";
+import { checkSchemaValueV2, checkSchemaValueV3, SCHEMA_V2_BOUNDS, SCHEMA_V3_BOUNDS, type SchemaVersion } from "./schema";
 import { MemoryStore } from "./store";
 import { verifyReceipt } from "./verify";
 import type { JsonObject, JsonValue } from "./values";
@@ -73,11 +75,12 @@ describe("schema version 2 declarations", () => {
     expect([BOUNDS.maxSchemaProperties, BOUNDS.maxSchemaRequired, BOUNDS.maxSchemaEnumValues, BOUNDS.maxSchemaEnumValueBytes]).toEqual([64, 64, 32, 256]);
   });
 
-  test("schemaVersion is the number 2 beside a schema", () => {
+  test("schemaVersion is the number 2 or 3 beside a schema", () => {
     for (const placement of placements) {
-      for (const version of [1, 3, "2", null]) {
-        expect(rejection(manifest({ type: "string" }, placement, version)).message).toEndWith("schemaVersion must be 2");
+      for (const version of [1, 4, "2", null]) {
+        expect(rejection(manifest({ type: "string" }, placement, version)).message).toEndWith("schemaVersion must be 2 or 3");
       }
+      expect(() => parseOrganismManifest(manifest({ type: "string" }, placement, 3))).not.toThrow();
     }
     const port = (decl: JsonObject) => ({ contract: "algal.organism.v1", key: "organism:version", name: "Version",
       cells: [{ id: "input", kind: "input", outputs: { data: decl } }], edges: [] });
@@ -204,5 +207,125 @@ describe("schema version 2 at execution boundaries", () => {
     expect(each.failure).toEqual({ code: "TYPE_MISMATCH", message: "number above maximum", path: "map" });
     expect(Object.keys(each.cells).filter(path => path.startsWith("map/i2"))).toEqual([]);
     await replayed(each, parent, store);
+  });
+});
+
+describe("schema version 3 declarations", () => {
+  for (const item of invalidV3 as { name: string; schema: JsonObject; reason: string; version?: number | string }[]) {
+    test(`${item.name} is refused at every schema boundary with the shared reason`, () => {
+      for (const placement of placements) {
+        const error = rejection(manifest(item.schema, placement, item.version ?? 3));
+        expect(error.code).toBe("PARSE_FAILED");
+        expect(error.message.endsWith(item.reason), error.message).toBe(true);
+      }
+    });
+  }
+
+  test("the declared bounds are inclusive", () => {
+    const nested = (levels: number): JsonObject => levels === 1 ? { type: "string" } : { type: "array", items: nested(levels - 1) };
+    for (const schema of [
+      { type: "integer", minimum: -9007199254740991, maximum: 9007199254740991 },
+      { type: "string", minLength: 0, maxLength: SCHEMA_V3_BOUNDS.maxTextLength },
+      { type: "string", format: "digest" },
+      { type: "array", uniqueItems: true },
+      { type: ["array", "null"], uniqueItems: true },
+      { type: "object", properties: {}, additionalProperties: false },
+      { type: ["object", "null"], properties: { a: {} }, additionalProperties: false },
+      { type: "array", items: nested(SCHEMA_V2_BOUNDS.maxLevels - 1) },
+    ] as JsonObject[]) {
+      for (const placement of placements) expect(() => parseOrganismManifest(manifest(schema, placement, 3))).not.toThrow();
+    }
+    // A format name at the length bound still must be one of the fixed names.
+    expect(rejection(manifest({ type: "string", format: "x".repeat(SCHEMA_V3_BOUNDS.maxFormatNameLength) }, "output", 3)).message)
+      .toEndWith("format must name digest, name, slug, or uri");
+    expect([SCHEMA_V3_BOUNDS.maxTextLength, SCHEMA_V3_BOUNDS.maxFormatNameLength, SCHEMA_V3_BOUNDS.maxInteger])
+      .toEqual([1_000_000, 32, 9007199254740991]);
+  });
+
+  test("version 3 is part of the manifest and its identity", () => {
+    const schema = { type: "object", properties: { id: { type: "integer" } }, additionalProperties: false };
+    for (const placement of placements) {
+      const v3 = parseOrganismManifest(manifest(schema, placement, 3));
+      const json = manifestToJson(v3);
+      expect(parseOrganismManifest(json)).toEqual(v3);
+      expect(JSON.stringify(json)).toContain('"schemaVersion":3');
+      const v2 = parseOrganismManifest(manifest({ type: "object", properties: { id: { type: "integer" } } }, placement, 2));
+      expect(digestCanonical(manifestToJson(v2))).not.toBe(digestCanonical(json));
+    }
+  });
+});
+
+// The native tests and scripts/schema-parity.ts run the same table.
+const valueCasesV3 = valuesV3 as unknown as { name: string; schema: JsonObject; version?: SchemaVersion; good: JsonValue[]; bad: [JsonValue, string][] }[];
+
+describe("schema version 3 values", () => {
+  test("the shared table covers every value rule", () => {
+    const messages = new Set(valueCasesV3.filter(item => (item.version ?? 3) === 3)
+      .flatMap(item => item.bad.map(([, message]) => message.replace(/^(item \d+: )+/, ""))));
+    for (const message of ["expected integer", "text shorter than minLength", "text longer than maxLength", "text is not a digest",
+      "text is not a name", "text is not a slug", "text is not a uri", "repeated item", "undeclared field", "missing required field"]) {
+      expect(messages.has(message), message).toBe(true);
+    }
+  });
+  for (const item of valueCasesV3) {
+    test(`${item.name}: accepted and rejected values with exact messages`, () => {
+      const version = item.version ?? 3;
+      for (const placement of placements) expect(() => parseOrganismManifest(manifest(item.schema, placement, version))).not.toThrow();
+      for (const value of item.good) {
+        expect(() => checkSchema(item.schema, value, "value", "TYPE_MISMATCH", version)).not.toThrow();
+        if (version === 3) expect(() => checkSchemaValueV3(item.schema, value, "EFFECT_UNPARSEABLE")).not.toThrow();
+      }
+      for (const [value, message] of item.bad) {
+        for (const code of ["TYPE_MISMATCH", "EFFECT_UNPARSEABLE"] as const) {
+          let caught: unknown;
+          try { checkSchema(item.schema, value, "value", code, version); } catch (error) { caught = error; }
+          expect(caught, JSON.stringify(value)).toBeInstanceOf(AlgalError);
+          expect({ code: (caught as AlgalError).code, message: (caught as AlgalError).message }).toEqual({ code, message });
+        }
+      }
+    });
+  }
+
+  test("version 1 keeps the new keywords as provider hints", () => {
+    expect(() => checkSchema({ type: "object", properties: { a: { type: "object" } }, additionalProperties: false }, { a: {}, b: 2 }, "value", "TYPE_MISMATCH")).not.toThrow();
+    expect(() => checkSchema({ type: "array", uniqueItems: true }, [1, 1], "value", "TYPE_MISMATCH")).not.toThrow();
+    expect(() => checkSchema({ type: "string", minLength: 5, format: "slug" }, "a", "value", "TYPE_MISMATCH")).not.toThrow();
+    expect(() => checkSchema({ type: "object", properties: { a: {} }, additionalProperties: false }, { a: 1, b: 2 }, "value", "TYPE_MISMATCH", 3))
+      .toThrow("undeclared field");
+  });
+
+  test("integer values are safe whole numbers while version 2 stays fract-only", () => {
+    expect(() => checkSchema({ type: "integer" }, 9007199254740992, "value", "TYPE_MISMATCH", 2)).not.toThrow();
+    expect(() => checkSchema({ type: "integer" }, 9007199254740992, "value", "TYPE_MISMATCH", 3)).toThrow("expected integer");
+    expect(() => checkSchemaValueV3({ type: "integer" }, -0, "TYPE_MISMATCH")).not.toThrow();
+  });
+});
+
+describe("schema version 3 at execution boundaries", () => {
+  const closed: JsonObject = { type: "object", required: ["id"], properties: { id: { type: "string", format: "slug" } }, additionalProperties: false };
+  test("agent output fails with EFFECT_UNPARSEABLE and replays", async () => {
+    const root = parseOrganismManifest(manifest(closed, "output", 3));
+    const store = await install([]);
+    const bad = await runOrganism({ manifest: root, store, fns: builtinRegistry(), executors: [scriptedExecutor({ answer: [{ id: "a", extra: 1 }] })] });
+    expect(bad.failure).toEqual({ code: "EFFECT_UNPARSEABLE", message: "undeclared field", path: "answer" });
+    await replayed(bad, root, store);
+    const good = await runOrganism({ manifest: root, store, fns: builtinRegistry(), executors: [scriptedExecutor({ answer: [{ id: "a-1" }] })] });
+    expect(good.outcome).toBe("complete");
+    await replayed(good, root, store);
+  });
+
+  test("a delivered input fails its consumer with TYPE_MISMATCH before any effect", async () => {
+    const root = parseOrganismManifest({
+      contract: "algal.organism.v1", key: "organism:schema-v3-input", name: "Schema version 3 input",
+      cells: [{ id: "input", kind: "input", outputs: { data: "json" } },
+        { id: "consumer", kind: "agent", inputs: { data: { type: "json", schema: { type: "array", uniqueItems: true }, schemaVersion: 3 } }, prompt: "Must not activate.", output: { kind: "text" } }],
+      edges: [{ from: { cell: "input", port: "data" }, to: { cell: "consumer", port: "data" } }],
+    });
+    const store = await install([]);
+    const receipt = await runOrganism({ manifest: root, store, fns: builtinRegistry(), executors: [],
+      args: { input: { data: [{ id: 1 }, { id: 1.0 }] } } });
+    expect(receipt.failure).toEqual({ code: "TYPE_MISMATCH", message: "repeated item", path: "consumer" });
+    expect(receipt.effects).toEqual([]);
+    await replayed(receipt, root, store);
   });
 });

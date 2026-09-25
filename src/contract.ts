@@ -16,7 +16,7 @@ import {
 } from "./decisions";
 import { checkEmbedderSpec } from "./embeddings";
 import type { Digest } from "./digest";
-import { checkSchemaDeclarationV2, SCHEMA_V2_BOUNDS, type SchemaVersion } from "./schema";
+import { checkSchemaDeclarationV2, checkSchemaDeclarationV3, SCHEMA_V2_BOUNDS, type SchemaVersion } from "./schema";
 import {
   asArray,
   asInt,
@@ -81,7 +81,7 @@ export const BOUNDS = {
   maxValueBytes: 262_144,
   /** Schema version 1: JSON nesting of the whole schema. */
   maxSchemaDepth: 4,
-  /** Schema version 2: nested schemas, root included. */
+  /** Schema versions 2 and 3: nested schemas, root included. */
   maxSchemaLevels: SCHEMA_V2_BOUNDS.maxLevels,
   maxSchemaProperties: SCHEMA_V2_BOUNDS.maxProperties,
   maxSchemaRequired: SCHEMA_V2_BOUNDS.maxRequired,
@@ -109,7 +109,7 @@ export type PortType =
       many?: boolean;
       /** bounded schema subset — same shape as agent json output contracts */
       schema?: JsonObject;
-      /** Present only with `schema`: selects schema version 2. */
+      /** Present only with `schema`: selects schema version 2 or 3. */
       schemaVersion?: SchemaVersion;
     }
   | { type: "choice"; optional?: boolean; many?: boolean; labels?: string[] }
@@ -466,17 +466,21 @@ function fail(msg: string): never {
   throw new AlgalError("PARSE_FAILED", msg);
 }
 
-/** `schemaVersion` is the number 2 beside a schema; without it a schema is
- * version 1, whose rules and provider hints stay exactly as they were. */
+/** `schemaVersion` is the number 2 or 3 beside a schema; without it a schema
+ * is version 1, whose rules and provider hints stay exactly as they were. */
 function parseSchemaVersion(obj: JsonObject, what: string): SchemaVersion | undefined {
   const raw = optField(obj, "schemaVersion");
   if (raw === undefined) return undefined;
-  if (raw !== 2) fail(`${what}.schemaVersion must be 2`);
+  if (raw !== 2 && raw !== 3) fail(`${what}.schemaVersion must be 2 or 3`);
   if (optField(obj, "schema") === undefined) fail(`${what}.schemaVersion requires a schema`);
-  return 2;
+  return raw;
 }
 
 function checkSchemaAdmission(schema: JsonObject, what: string, version: SchemaVersion | undefined): void {
+  if (version === 3) {
+    checkSchemaDeclarationV3(schema, what);
+    return;
+  }
   if (version === 2) {
     checkSchemaDeclarationV2(schema, what);
     return;
@@ -570,7 +574,7 @@ function parseAgentOutput(u: unknown, what: string): AgentOutput {
 
 /** Schema version 1: admit the enforced vocabulary before any executor can be
  * activated. Other keywords remain opaque provider hints, including nested
- * `items`; version 2 (./schema) checks those keywords instead. */
+ * `items`; versions 2 and 3 (./schema) check those keywords instead. */
 function checkSchemaDeclaration(schema: JsonObject, what: string): void {
   const type = optField(schema, "type");
   const types = Array.isArray(type) ? type : type === undefined ? undefined : [type];
