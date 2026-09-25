@@ -270,45 +270,50 @@ and [the application links](source-language.md#link-modules-to-application-revis
 
 ## Proposed next steps
 
-1. Measure compilation and execution on realistic reused programs.
-   [Scale measurements](scale-measurements.md) reports compile, bundle, and run
-   costs for each example project and for generated programs that share
-   helpers up to each compilation limit, where compilation refuses them, and
-   Browser Tasks history verification as history approaches its transfer
-   limits. A run stops at 1,024 steps, so the largest programs that compile
-   cannot run to completion. Measuring larger real applications, browser
-   latency with IndexedDB storage, and timings on an idle machine remains
-   proposed.
-2. Attribute an application's recorded episodes to the dependency report by
-   following settled dispatches to their run receipts, so recorded invocations
-   can be compared with the static estimate across revisions. Receipt
-   attribution, the invocation estimate, and revision, evaluation, and
-   activation links are available; the links report evaluation verdicts
-   without replaying them.
-3. Compare library revisions on pinned cases and unseen cases before
-   activation. This is available for the
-   [shared program catalog](library.md#revise-a-listed-program): a comparison
-   runs each caller's case list and the entry's unseen cases against both
-   versions, and the catalog test accepts a changed digest only with a passing
-   record. The test checks a record's digests and verdict, not its case
-   results, which need a rerun on the starting commit with the unseen file. A
-   path for an intended behavior change, which any changed result blocks,
-   remains proposed.
-4. Extend record types as further application needs appear. Lists of
-   records, allowed values, inclusive number ranges, and nesting up to eight
-   schema levels are available through
-   [schema version 2](../spec/v1/organism.md#json-schemas), with matching
-   receipts in both runtimes; runtimes without version 2 refuse such programs
-   instead of skipping the checks. Whole numbers, text length and format,
-   unique values, and rejection of undeclared fields remain unchecked.
-5. Find catalogs through a registry, and propose updates to vendored copies
-   when a catalog entry changes. Copying an entry from a catalog page you name
-   is available: `vendor` checks the copy against the page's digests, and
-   `lock` pins it and checks it offline like the project's own files.
-6. Run habitat schedules in the native runtime, and schedule experiment
-   evaluations and other orders beside foundry and search activities. Searches
-   and experiment evaluations charge the habitat budget in both runtimes;
-   round-robin schedules and journal resumption run in the TypeScript runtime.
+The measurements above landed; see
+[scale measurements](scale-measurements.md). What remains from that round:
+larger real applications, browser latency with IndexedDB storage, timings on
+an idle machine, a catalog registry with vendored-update proposals, and a
+path for intended library behavior changes (a changed result currently blocks
+a revision; see [Revise a listed program](library.md#revise-a-listed-program)).
+
+The next round is ordered for an agent-facing surface: if agents write and
+run most programs, the useful investment moves from authoring ergonomics to
+guarantees a program carries with it, program state an agent can query
+directly, and runtime observation an agent can drive. Each item remains a
+proposal until it ships.
+
+1. Build a program database over the store. Manifests, cells, ports,
+   capabilities, receipts, processes, and application records already live in
+   one content-addressed store, and the semantic index shows the derived,
+   disposable index pattern. A structural index plus a limited query surface
+   would let an agent compose questions no command menu covers: every caller
+   of a module, every revision that ran an executable digest, every receipt
+   that touched a capability class.
+2. Observe running work as bounded projections. Process, mailbox, budget, and
+   application state are recorded data today; a read model over them, plus a
+   receipt tail, would let an agent watch a live habitat instead of replaying
+   it afterwards.
+3. Replay counterfactuals and explore orderings. Because runs replay
+   bit-for-bit and process scheduling order is recorded, an agent could run a
+   recorded failure with a revised program to its divergence point, or walk
+   mailbox orderings under a budget while checking an invariant, with the
+   results recorded as evidence.
+4. Report a program's authority and cost before it runs. The dependency
+   report already bounds invocations; a static closure could report which
+   capability classes a program can reach and the most work one invocation
+   can do, so a reviewer, human or agent, can check the envelope instead of
+   reading the program.
+5. Check more of a schema at admission. Whole numbers, text length and
+   format, unique values, and rejection of undeclared fields remain
+   unchecked; adding them extends schema version 2's rule that runtimes
+   without the version refuse rather than skip.
+6. Join more evidence to the dependency report and the catalog. Following
+   settled episode dispatches to their run receipts would compare recorded
+   invocations with the static estimate; catalog listings could carry
+   comparison evidence for the revision they name.
+7. Run habitat schedules in the native runtime, with experiment evaluations
+   and further orders beside the round-robin the TypeScript runtime ships.
 
 The [cumulative-skill experiment](vision.md#what-would-justify-the-claim)
 measures whether keeping and composing procedures improves later work. More
