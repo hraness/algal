@@ -3,6 +3,7 @@
 import { OG_IMAGE_ALT, SITE_DESCRIPTION, SITE_TAGLINE } from "./copy";
 import { siteIcon } from "./icons";
 import { escapeHtml } from "./markdown";
+import { serializeJsonLd } from "@hraness/web-discovery";
 
 export type SitePageId = "home" | "tour" | "use-cases" | "living" | "grow" | "tasks" | "workbench" | "docs" | "spec" | "blog" | "compare";
 
@@ -15,6 +16,10 @@ export interface SitePageMeta {
   ogTitle: string;
   /** Blog posts emit article metadata; everything else stays a website. */
   article?: { published: string };
+  /** Quarantined posts stay readable but out of search indexes. */
+  noindex?: boolean;
+  /** Extra JSON-LD nodes, such as BlogPosting or Blog. */
+  jsonLd?: readonly unknown[];
 }
 
 const ORIGIN = "https://algal.computer";
@@ -53,10 +58,10 @@ export function pageDocument(meta: SitePageMeta, main: string): string {
 <meta name="twitter:title" content="${ogTitle}">
 <meta name="twitter:description" content="${description}">
 <meta name="twitter:image" content="${ORIGIN}/og.png">
-<meta name="robots" content="index, follow">
+<meta name="robots" content="${meta.noindex ? "noindex, nofollow" : "index, follow"}">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@graph":[{"@type":"WebSite","name":"ALGAL","url":"${ORIGIN}/"},{"@type":"SoftwareApplication","name":"ALGAL","url":"${ORIGIN}/","description":${JSON.stringify(SITE_DESCRIPTION)},"applicationCategory":"DeveloperApplication","codeRepository":"${REPO}","license":"https://opensource.org/license/mit","author":{"@id":"https://github.com/hraness#org"}},{"@type":"Organization","@id":"https://github.com/hraness#org","name":"hraness","url":"https://github.com/hraness"}]}
-</script>
+</script>${(meta.jsonLd ?? []).map(node => `\n<script type="application/ld+json">${serializeJsonLd(node)}</script>`).join("")}${meta.page === "blog" ? '\n<link rel="alternate" type="application/atom+xml" title="ALGAL blog" href="/blog/feed.xml">' : ""}
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#e1e2e7">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1a1b26">
 <script src="/appearance.js"></script>

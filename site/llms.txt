@@ -12,15 +12,12 @@ ALGAL is prerelease software. Unsigned native builds for macOS on Apple silicon 
 - [Inside a living program](https://algal.computer/tour/): the guided tour, with recorded runs, interactive diagrams you can replay, source diagnostics, and composition examples
 - [Put living programs to work](https://algal.computer/use-cases/): change review, checked coding repairs, portable run histories, reusable routing, and current limits
 - [Documentation index](https://algal.computer/docs/): the repository docs rendered for the web, covering install, the source language, the process VM, habitats, civilization, and executors
-- [Notes on living programs](https://algal.computer/blog/): longer posts on the language, its receipts, and related research
+- [Notes on living programs](https://algal.computer/blog/): longer posts on how the language works, how it is tested, and the design choices behind it
 - [Comparisons](https://algal.computer/compare/): how ALGAL compares with LangGraph, DSPy, and Temporal
 
 ## Blog
 
-- [Software that accumulates competence](https://algal.computer/blog/software-that-accumulates-competence/): the thesis behind ALGAL and what evidence would justify it
-- [Self-evolving software needs a selection boundary](https://algal.computer/blog/self-evolving-software-selection-boundary/): Darwin Gödel Machine, Voyager, AlphaEvolve, TextGrad, and DSPy, and why ALGAL makes selection part of the program contract
-- [Receipts are the fossil record of an execution](https://algal.computer/blog/receipts-fossil-record/): replay-verified run artifacts compared with logs, traces, and server-side history
-- [A program that can wait](https://algal.computer/blog/programs-that-wait/): durable waits as checkpointed capabilities, resumable across processes and runtimes
+{{BLOG_POSTS}}
 
 ## Comparisons
 
