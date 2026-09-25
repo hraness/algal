@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { CLAMP, ENTRY, scratchCatalog, temporary } from "./fixtures/vendor-catalog";
+import { ENTRY, scratchCatalog, temporary } from "./fixtures/vendor-catalog";
 import { canonicalize, type JsonObject } from "./values";
 
 const repository = resolve(import.meta.dir, "..");

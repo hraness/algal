@@ -1,15 +1,15 @@
 import { expect, test } from "bun:test";
-import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { realpath } from "node:fs/promises";
-import { digestCanonical, digestText } from "./digest";
+import { digestCanonical, digestText, type Digest } from "./digest";
 import { AlgalError, type ErrorCode } from "./errors";
 import { CLAMP, ENTRY, scratchCatalog, serveCatalog, temporary } from "./fixtures/vendor-catalog";
 import { LIBRARY_INDEX_PROJECTS, parseLibraryIndex } from "./library-index";
 import { createSourceLock, parseSourceLock, sourceLockToJson, verifySourceLock } from "./source-lock";
 import { loadSourceProject } from "./source-project";
-import { canonicalize, type JsonObject, type JsonValue } from "./values";
+import { canonicalize, type JsonValue } from "./values";
 import { vendorCatalogEntry, VENDOR_FETCH_BOUNDS } from "./vendor";
 import {
   checkVendoredCatalogs, parseVendorCheck, parseVendorUpdate, proposeVendorUpdate, renderVendorCheck,
@@ -17,7 +17,7 @@ import {
   type VendorCheck,
 } from "./vendor-registry";
 import {
-  loadVendoredSources, parseVendorRegistries, readVendorRegistries, registryOrigins, vendorRecordToJson,
+  loadVendoredSources, parseVendorRegistries, readVendorRegistries, vendorRecordToJson,
   vendorRegistriesToJson, vendorRegistryOrigin, VENDOR_RECORD_FILE, VENDOR_REGISTRIES_CONTRACT,
   VENDOR_REGISTRIES_FILE, VENDOR_REGISTRY_BOUNDS,
 } from "./vendor-record";
@@ -207,8 +207,9 @@ test("vendor update writes a fresh copy and a proposal; the pinned copy is never
 }, 60_000);
 
 test("vendor check and update parse foreign data strictly and stay inside their bounds", async () => {
-  const pin = { directory: "vendor/algal", origin: "https://example.com/library.md", catalog: `sha256:${"0".repeat(64)}`, entry: ENTRY, record: `sha256:${"1".repeat(64)}` };
-  const base = { contract: VENDOR_CHECK_CONTRACT, entries: [{ ...pin, status: "unchanged", live: `sha256:${"2".repeat(64)}` }] };
+  const pin = { directory: "vendor/algal", origin: "https://example.com/library.md", catalog: `sha256:${"0".repeat(64)}` as Digest, entry: ENTRY, record: `sha256:${"1".repeat(64)}` as Digest };
+  const liveDigest = `sha256:${"2".repeat(64)}` as Digest;
+  const base = { contract: VENDOR_CHECK_CONTRACT, entries: [{ ...pin, status: "unchanged", live: liveDigest }] };
   const check = (value: unknown) => failure(() => parseVendorCheck(value));
   expect((await check({ ...base, extra: 1 })).message).toContain('vendor check has unknown key "extra"');
   expect((await check({ ...base, contract: "algal.vendor.v1" })).message).toContain(`expected contract "${VENDOR_CHECK_CONTRACT}"`);
@@ -231,7 +232,7 @@ test("vendor check and update parse foreign data strictly and stay inside their 
   expect((await check({ ...base, entries: Array.from({ length: VENDOR_CHECK_BOUNDS.maxEntries + 1 }, (_, index) => ({ ...pin, directory: `d${index}`, status: "unchanged", live: pin.catalog })) })).code).toBe("BUDGET_EXHAUSTED");
   expect((await check({ ...base, from: "http://example.com/x.md" })).message).toContain("normalized https or file URL");
   // Rendering refuses foreign objects; only produced or parsed reports render.
-  expect((await failure(() => renderVendorCheck(json(vendorCheckToJson(parseVendorCheck(base))) as VendorCheck))).message).toContain("only reports created by checkVendoredCatalogs or parseVendorCheck");
+  expect((await failure(() => renderVendorCheck(json(vendorCheckToJson(parseVendorCheck(base))) as unknown as VendorCheck))).message).toContain("only reports created by checkVendoredCatalogs or parseVendorCheck");
   // A long reason is bounded.
   const proposal = { contract: VENDOR_UPDATE_CONTRACT, status: "update-available", from: pin, to: { ...pin, directory: "vendor/new" } };
   expect(parseVendorUpdate(proposal).status).toBe("update-available");
