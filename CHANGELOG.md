@@ -37,7 +37,6 @@ wire constant (`0.1.0`) is independent of these package versions.
   section order, bounded by `--interval-ms`, `--max-polls`, and
   `--max-events`; emitted lines carry no wall-clock fields. Native Rust
   support is proposed, not shipped.
-b221a25 (Add read-only `algal observe` projection and bounded `tail` follow)
 - `schemaVersion: 3` extends the bounded JSON schema subset with whole
   numbers over the exact JSON range (`"type":"integer"` now also bounds a
   version 3 value to ±9,007,199,254,740,991), `minLength`/`maxLength` counted
@@ -50,6 +49,19 @@ b221a25 (Add read-only `algal observe` projection and bounded `tail` follow)
   version `1.6.0`) adds matching syntax: `integer`, `text min`/`max` length
   bounds, the four format types, `[type] unique`, and `closed record`.
   Programs written before this syntax compile to byte-identical manifests.
+- Counterfactual replay and ordering exploration: `algal replay <receipt>
+  --with <manifest>` and `algal process replay <name> --with <manifest>` run a
+  revised manifest against a recorded run's evidence — recorded effects answer
+  while the trace matches, admitted live executors take over after divergence —
+  and emit a bounded `algal.replay-comparison.v1` record with the reproduced
+  prefix, first divergent cell, and an `identical`/`diverged`/
+  `could-not-replay` verdict. `algal ordering <scenario.json>` enumerates
+  bounded mailbox/dispatch orderings of an `algal.ordering-scenario.v1`
+  durable-process setup under a shared habitat budget, evaluates an
+  `algal.expr.v1` invariant per terminal state, and emits an
+  `algal.ordering-report.v1` with each ordering's outcome, the first
+  counterexample witness, and explicit exhaustion. Both are TypeScript-only;
+  the native CLI accepts the commands and refuses them explicitly.
 - Public copy adopts the canonical portfolio messaging record: the site
   title, hero, footer, social card, `llms.txt` introduction, README lead,
   both CLI introductions, and the package and crate descriptions now carry

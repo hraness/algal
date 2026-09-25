@@ -277,6 +277,40 @@ export { resumeRun, verifyReceipt } from "./src/verify";
 export type { VerifyReport } from "./src/verify";
 
 export {
+  REPLAY_COMPARISON_CONTRACT,
+  REPLAY_COMPARISON_BOUNDS,
+  parseReplayComparison,
+  replayComparison,
+  replayComparisonToJson,
+} from "./src/replay";
+export type {
+  ReplayComparison,
+  ReplayDivergence,
+  ReplayDivergenceKind,
+  ReplayReason,
+  ReplayReasonCode,
+  ReplayRequest,
+  ReplayResult,
+  ReplayVerdict,
+} from "./src/replay";
+export {
+  ORDERING_BOUNDS,
+  ORDERING_REPORT_CONTRACT,
+  ORDERING_SCENARIO_CONTRACT,
+  DeterministicMailboxService,
+  exploreOrdering,
+  parseOrderingReport,
+  parseOrderingScenario,
+} from "./src/ordering";
+export type {
+  OrderingLimits,
+  OrderingReport,
+  OrderingResult,
+  OrderingRow,
+  OrderingScenario,
+} from "./src/ordering";
+
+export {
   FOUNDRY_BOUNDS,
   FOUNDRY_CONTRACT,
   foundryReportRuns,

@@ -215,6 +215,39 @@ needed to identify whose history was supplied. Host patch attachments, provider
 ledgers, and execution custody are outside this format. See the
 [portable evidence contract](../spec/v1/process-evidence.md).
 
+## Counterfactual replay and ordering exploration
+
+Because runs replay bit-for-bit, recorded history supports two further
+questions as runtime operations, each producing a bounded, parseable record.
+
+`algal replay <receipt.json> --with <manifest.json>` runs a revised manifest
+against a recorded run's evidence: recorded effects answer while the revision
+issues the recorded requests; after the trace diverges, requests the record
+cannot answer reach the admitted live executors, exactly as a fresh run. The
+emitted `algal.replay-comparison.v1` names the reproduced cell prefix in
+recorded activation order, the first divergent cell path with both sides, the
+final outcome comparison, and a verdict — `identical`, `diverged`, or
+`could-not-replay` with an explicit reason (`manifest-invalid`,
+`missing-input`, `missing-effect`). Nothing missing is fabricated. `--args`
+merges overrides over the recorded args; `--write` persists the revised
+receipt. `algal process replay <name> --with <manifest.json>` runs the same
+comparison against a durable process's latest recorded run.
+
+`algal ordering <scenario.json>` enumerates bounded mailbox/dispatch
+orderings of a declared `algal.ordering-scenario.v1` setup — named mailboxes,
+named processes, bounded external sends, an `algal.expr.v1` invariant over
+`{"processes","mailboxes"}`, and limits. Every dispatch is charged to one
+habitat budget account, so exhaustion is recorded rather than silent. The
+`algal.ordering-report.v1` lists each ordering's actions and terminal state,
+the first counterexample witness when an ordering fails the invariant, and an
+outcome of `complete`, `counterexample`, or `exhausted`. Capability handles
+derive deterministically from scenario names, so one scenario file reproduces
+one report bit-for-bit.
+
+Both features ship in the TypeScript runtime. The native CLI accepts the same
+commands and refuses them explicitly rather than misreading the records. See
+the [replay and ordering contract](../spec/v1/replay.md).
+
 ## Failure boundary and current limits
 
 A process that stops after dispatch intent and before recording its result
