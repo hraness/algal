@@ -457,8 +457,12 @@ impl Runtime<'_> {
         // Resume keeps the checkpoint's recorded tool effects but lets a
         // digest miss fall through to the live tool — strict replay (verify)
         // treats a miss as unbound.
-        let replayed = if let Some(replay) = self.host.replay.as_mut() {
-            let hit = replay.get_mut(&request_digest).and_then(|q| q.pop_front());
+        let replayed = if let Some(replay) = self.host.replay.as_ref() {
+            let hit = replay
+                .lock()
+                .map_err(|_| Error::new("INTERNAL", "host replay mutex poisoned"))?
+                .get_mut(&request_digest)
+                .and_then(|q| q.pop_front());
             if hit.is_none() && !self.host.replay_fallthrough {
                 return Err(Error::new("EFFECT_UNBOUND", "tool replay missing"));
             }

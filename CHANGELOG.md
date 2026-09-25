@@ -162,12 +162,12 @@ wire constant (`0.1.0`) is independent of these package versions.
   evaluations can charge an `experiment` account the host supplies (native:
   `application evaluate --budget <file>`), and an experiment may cite the
   stored account as `budget`; evaluation records and experiments without the
-  field keep their digests. The TypeScript CLI adds `foundry schedule` and
+  field keep their digests. Both CLIs add `foundry schedule` and
   `foundry schedule-verify`: several foundry and search configs share one
   account in round-robin order, recorded as `algal.habitat-schedule.v1`, and
   `--journal <dir>` resumes an interrupted schedule from its stored receipts
-  and refuses entries that do not match them. The native CLI refuses
-  schedules with status 2.
+  and refuses entries that do not match them. Both runtimes write identical
+  schedule and journal bytes.
 - Source record types: `record Task { id: text, urgency: number, notes: text? }`
   declares fields for a parameter or result. A record compiles to a `json` port
   with a schema in the existing subset, which both runtimes check where a value

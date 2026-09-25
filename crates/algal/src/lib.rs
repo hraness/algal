@@ -34,6 +34,7 @@ pub mod error;
 pub mod foundry;
 pub mod graph;
 pub mod habitat_budget;
+pub mod habitat_schedule;
 pub mod journal;
 mod lease;
 pub mod mailbox;

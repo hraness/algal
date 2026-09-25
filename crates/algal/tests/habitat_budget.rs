@@ -4,7 +4,7 @@ use algal::{
     effects::Host,
     foundry::{self, FoundryCase},
     graph::Transports,
-    habitat_budget::{self, Account, Limits},
+    habitat_budget::{self, Account, DynLedger, Limits},
     runtime,
     store::Store,
 };
@@ -668,7 +668,7 @@ async fn budgeted_search(account: Option<&mut Account>, store: &mut Store) -> al
         store,
         &mut Host::default(),
         &Transports::new(),
-        account,
+        account.map(|account| account as &mut DynLedger),
     )
     .await
 }

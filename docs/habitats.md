@@ -150,10 +150,10 @@ not fit, no further run starts, and the command writes the account with the
 outcome `exhausted` instead of a report. A host can charge the evaluations of
 an application experiment to one account and cite it in the experiment record.
 
-In the TypeScript CLI, `algal foundry schedule` runs several foundry and search
-configs against one account, taking turns in a fixed order, and a journal lets
-an interrupted schedule continue from its stored receipts. The native CLI
-refuses schedules. Scheduling experiment evaluations is proposed.
+`algal foundry schedule` runs several foundry and search configs against one
+account, taking turns in a fixed order, and a journal lets an interrupted
+schedule continue from its stored receipts. Scheduling experiment evaluations
+is proposed.
 
 Applications can exchange verified messages through configured routes. This
 does not provide distributed consensus or an unrestricted network connecting

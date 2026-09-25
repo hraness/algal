@@ -29,24 +29,14 @@ use crate::{
     canonical::{check_digest, digest},
     contract::Manifest,
     effects::Host,
+    graph::Transports,
     runtime,
     store::Store,
 };
 use serde_json::{Map, Value, json};
+use std::{future::Future, pin::Pin};
 
 pub const CONTRACT: &str = "algal.habitat-budget.v1";
-/// Habitat schedule records, `algal.habitat-schedule.v1`, and their configs
-/// run in the TypeScript reference runtime only.
-pub const SCHEDULE_CONTRACT: &str = "algal.habitat-schedule.v1";
-
-/// The explicit refusal for habitat schedules: the native runtime neither
-/// runs nor verifies them, rather than misreading one as another record.
-pub fn schedule_unsupported() -> Error {
-    Error::invalid(
-        "habitat schedules (algal.habitat-schedule.v1) run in the TypeScript runtime; the native runtime does not run or verify them",
-    )
-}
-
 /// The explicit refusal for counterfactual replay and ordering exploration:
 /// the native runtime neither runs nor verifies them.
 pub fn whatif_unsupported() -> Error {
@@ -163,6 +153,30 @@ pub fn parse_limits(value: &Value) -> Result<Limits> {
 
 fn limits_json(limits: &Limits) -> Value {
     json!({"work":limits.work,"attempts":limits.attempts,"runs":limits.runs})
+}
+
+/// `parseHabitatRun`: one closed `{manifest, receipt, ceiling, charged}` run
+/// entry with the per-run bounds and no account arithmetic; `extra` names
+/// additional fields the caller parses itself (a schedule's `activity`, for
+/// one). Returns the normalized entry.
+pub fn parse_run(value: &Value, at: &str, extra: &[&str]) -> Result<Value> {
+    let fields: Vec<&str> = ["manifest", "receipt", "ceiling", "charged"]
+        .into_iter()
+        .chain(extra.iter().copied())
+        .collect();
+    closed(value, &fields, at)?;
+    let bound = ceiling(&value["ceiling"], &format!("{at}.ceiling"))?;
+    let charged = &value["charged"];
+    closed(charged, &["work", "attempts"], &format!("{at}.charged"))?;
+    Ok(json!({
+        "manifest":reference(&value["manifest"], &format!("{at}.manifest"))?,
+        "receipt":reference(&value["receipt"], &format!("{at}.receipt"))?,
+        "ceiling":{"work":bound.0,"attempts":bound.1},
+        "charged":{
+            "work":count(&charged["work"], 0, MAX_RUN_WORK, &format!("{at}.charged.work"))?,
+            "attempts":count(&charged["attempts"], 0, bound.1, &format!("{at}.charged.attempts"))?,
+        },
+    }))
 }
 
 /// `parseHabitatBudget`: parse a closed `algal.habitat-budget.v1` record and
@@ -450,6 +464,95 @@ impl Account {
     }
 }
 
+/// `HabitatLedger`: what an activity needs from an account. `Account` is the
+/// standalone account; `habitat_schedule::ScheduledLedger` is one activity's
+/// view of a schedule's shared account, where the scheduler serializes the
+/// reserve, run, and charge across every activity.
+pub trait Ledger: Send {
+    /// The activity label a foundry or search checks against.
+    fn activity(&self) -> &'static str;
+    /// Reserves the run's declared ceiling, runs it, stores its receipt, and
+    /// charges what the receipt records. A refused reservation fails with
+    /// `BUDGET_EXHAUSTED`; a run that fails before its receipt is stored
+    /// releases the reservation.
+    fn admit<'a>(
+        &'a mut self,
+        manifest: &'a Manifest,
+        args: &'a Value,
+        store: &'a mut Store,
+        host: &'a mut Host,
+        transports: &'a Transports,
+    ) -> AdmitFuture<'a>;
+    /// The standalone account's closed record, for embedding in a report. A
+    /// schedule's shared-account view returns `None`: a report produced
+    /// inside a schedule never carries an account of its own.
+    fn standalone_record(&self) -> Result<Option<Value>>;
+}
+
+/// One admitted run's future: the stored receipt and its digest.
+pub type AdmitFuture<'a> = Pin<Box<dyn Future<Output = Result<(Value, String)>> + Send + 'a>>;
+
+/// `&mut dyn Ledger` with the object bound pinned to `'static`. Without the
+/// pin, `&'a mut dyn Ledger` infers an object bound of `'a`, and `&mut`'s
+/// pointee invariance then forces an `as_deref_mut` reborrow to last `'a` —
+/// blocking the interleaved borrows foundry and search need.
+pub type DynLedger = dyn Ledger + 'static;
+
+/// Reborrow an owned `Option<Account>` as a shared ledger view: `Option` is
+/// not a coercion site for the `&mut Account -> &mut DynLedger` unsize, so
+/// `account.as_mut()` alone does not typecheck at those parameters.
+pub fn as_ledger(account: &mut Option<Account>) -> Option<&mut DynLedger> {
+    account.as_mut().map(|a| a as &mut DynLedger)
+}
+
+impl Ledger for Account {
+    fn activity(&self) -> &'static str {
+        self.activity
+    }
+
+    fn admit<'a>(
+        &'a mut self,
+        manifest: &'a Manifest,
+        args: &'a Value,
+        store: &'a mut Store,
+        host: &'a mut Host,
+        transports: &'a Transports,
+    ) -> AdmitFuture<'a> {
+        Box::pin(async move {
+            self.reserve(manifest)?;
+            let stored = runtime::run(
+                manifest.clone(),
+                args.clone(),
+                store,
+                host,
+                transports,
+                None,
+            )
+            .await
+            .and_then(|receipt| {
+                store
+                    .put("runs", &receipt)
+                    .map(|reference| (receipt, reference))
+            });
+            let (receipt, reference) = match stored {
+                Ok(stored) => stored,
+                Err(error) => {
+                    // No stored receipt exists to charge; the reservation is
+                    // released and the account stays usable for the record.
+                    self.release()?;
+                    return Err(error);
+                }
+            };
+            self.charge(&reference, &receipt)?;
+            Ok((receipt, reference))
+        })
+    }
+
+    fn standalone_record(&self) -> Result<Option<Value>> {
+        Ok(Some(self.record()?))
+    }
+}
+
 fn reasons_text(reasons: &Value) -> String {
     reasons
         .as_array()
@@ -515,19 +618,23 @@ fn declared(
     Ok(Some(parsed))
 }
 
-/// Check a parsed record against a store: each ceiling is its manifest's
-/// declared budget, and each charge is the work its receipt records. With
-/// `replay`, every receipt is also replayed offline. Returns the mismatches
-/// and the number of replayed receipts.
-pub async fn check_evidence(
-    budget: &Value,
+/// The shared evidence check for listed runs, labelled `<label> run <i>`:
+/// each ceiling is its manifest's declared budget and each charge is the
+/// work its receipt records. With `replay`, a run's receipt is also replayed
+/// offline, for every run or for those `replay_run` selects. Returns the
+/// mismatches and the number of replayed receipts.
+pub async fn check_runs_evidence(
+    runs: &[Value],
+    refused: &Value,
     store: &Store,
     replay: Option<&Host>,
+    label: &str,
+    replay_run: Option<&dyn Fn(usize) -> bool>,
 ) -> Result<(Vec<String>, u64)> {
     let mut mismatches = Vec::new();
     let mut checked = 0u64;
-    for (i, run) in budget["runs"].as_array().into_iter().flatten().enumerate() {
-        let at = format!("budget run {i}");
+    for (i, run) in runs.iter().enumerate() {
+        let at = format!("{label} run {i}");
         let manifest_digest = run["manifest"].as_str().unwrap_or("");
         let Some(manifest) = declared(
             store,
@@ -554,7 +661,9 @@ pub async fn check_evidence(
         {
             mismatches.push(format!("{at}: charge differs from its receipt"));
         }
-        if let Some(tools) = replay {
+        if let Some(tools) = replay
+            && replay_run.is_none_or(|select| select(i))
+        {
             let verified = runtime::verify(&receipt, manifest, store, tools).await?;
             checked += 1;
             if verified["ok"] != true {
@@ -571,17 +680,39 @@ pub async fn check_evidence(
             }
         }
     }
-    let refused = &budget["refused"];
     if !refused.is_null() {
         declared(
             store,
             refused["manifest"].as_str().unwrap_or(""),
             &refused["ceiling"],
-            "budget refusal",
+            &format!("{label} refusal"),
             &mut mismatches,
         )?;
     }
     Ok((mismatches, checked))
+}
+
+/// Check a parsed record against a store: each ceiling is its manifest's
+/// declared budget, and each charge is the work its receipt records. With
+/// `replay`, every receipt is also replayed offline. Returns the mismatches
+/// and the number of replayed receipts.
+pub async fn check_evidence(
+    budget: &Value,
+    store: &Store,
+    replay: Option<&Host>,
+) -> Result<(Vec<String>, u64)> {
+    check_runs_evidence(
+        budget["runs"]
+            .as_array()
+            .map(Vec::as_slice)
+            .unwrap_or_default(),
+        &budget["refused"],
+        store,
+        replay,
+        "budget",
+        None,
+    )
+    .await
 }
 
 /// `verifyHabitatBudget`: verify a standalone record, such as the terminal

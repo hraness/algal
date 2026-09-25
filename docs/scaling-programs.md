@@ -312,8 +312,8 @@ proposal until it ships.
    settled episode dispatches to their run receipts would compare recorded
    invocations with the static estimate; catalog listings could carry
    comparison evidence for the revision they name.
-7. Run habitat schedules in the native runtime, with experiment evaluations
-   and further orders beside the round-robin the TypeScript runtime ships.
+7. Schedule experiment evaluations and further orders beside the round-robin
+   both runtimes ship.
 
 The [cumulative-skill experiment](vision.md#what-would-justify-the-claim)
 measures whether keeping and composing procedures improves later work. More

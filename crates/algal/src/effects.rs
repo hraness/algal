@@ -643,14 +643,21 @@ impl SelectedExecutor {
     }
 }
 
+/// Consumable host queues shared across clones: a habitat schedule's
+/// per-activity host clones drain one queue in grant order, exactly as the
+/// reference runtime's single host object does.
+pub type SharedQueues = std::sync::Arc<std::sync::Mutex<BTreeMap<String, VecDeque<Value>>>>;
+
 #[derive(Clone, Default)]
 pub struct Host {
     pub entries: Vec<(String, Backend)>,
     pub tools: BTreeMap<String, Tool>,
     pub mailbox: Option<MailboxService>,
-    queues: BTreeMap<String, VecDeque<Value>>,
+    /// Consumable scripted-response queues; `Arc`-shared like `replay`.
+    queues: SharedQueues,
     executors: Vec<(String, RegisteredExecutor)>,
-    pub replay: Option<BTreeMap<String, VecDeque<Value>>>,
+    /// Consumable resume-mode replay queues; `Arc`-shared like `queues`.
+    pub replay: Option<SharedQueues>,
     /// Resume mode: a replay digest miss falls through to live executor
     /// routing instead of failing unbound. Strict verify leaves this off.
     pub replay_fallthrough: bool,
@@ -801,7 +808,7 @@ impl Host {
                 .push_back(receipt.clone());
         }
         Ok(Self {
-            replay: Some(replay),
+            replay: Some(std::sync::Arc::new(std::sync::Mutex::new(replay))),
             ..Self::default()
         })
     }
@@ -990,6 +997,8 @@ impl Host {
                     let key = format!("{id}/{name}");
                     let next = self
                         .queues
+                        .lock()
+                        .map_err(|_| Error::new("INTERNAL", "host queue mutex poisoned"))?
                         .entry(key)
                         .or_insert_with(|| queue.iter().cloned().collect())
                         .pop_front()
@@ -1248,8 +1257,10 @@ impl Host {
         memos: Option<&mut Store>,
     ) -> Result<Value> {
         let request_digest = digest(request)?;
-        if let Some(replay) = self.replay.as_mut() {
+        if let Some(replay) = self.replay.as_ref() {
             let hit = replay
+                .lock()
+                .map_err(|_| Error::new("INTERNAL", "host replay mutex poisoned"))?
                 .get_mut(&request_digest)
                 .and_then(VecDeque::pop_front);
             if let Some(receipt) = hit {
