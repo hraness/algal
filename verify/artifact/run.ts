@@ -31,7 +31,8 @@ const RECIPE = { toolchain: TOOLCHAIN, target: TARGET, rustCommit: RUST_COMMIT, 
   packages: PACKAGES.map(([name, version, sha256]) => ({ name, version, sha256: `sha256:${sha256}` })),
   environment: { LANG: "C", LC_ALL: "C", TZ: "UTC", CARGO_INCREMENTAL: "0", SOURCE_DATE_EPOCH: "0" },
   remap: { build: "/algal/build", toolchain: "/algal/toolchain" },
-  workspaceProjection: "Original workspace/manifests/lockfile and complete expression crate; empty unbuilt native lib.rs preserves workspace resolution." };
+  workspaceProjection: "Original workspace/manifests/lockfile and complete expression crate; empty unbuilt native lib.rs preserves workspace resolution.",
+  normalization: "The rustc `name` custom section is dropped; its crate disambiguators differ across host platforms while all executable sections are host-stable." };
 const ABI = [{ name: "algal_alloc", kind: "function" }, { name: "algal_check", kind: "function" }, { name: "algal_dealloc", kind: "function" }, { name: "algal_eval", kind: "function" }, { name: "memory", kind: "memory" }];
 
 async function inventory(root: string, path: string): Promise<string[]> {
@@ -53,6 +54,37 @@ async function inventory(root: string, path: string): Promise<string[]> {
 export async function artifactInputs(root: string): Promise<FileBinding[]> {
   const paths = ["Cargo.toml", "Cargo.lock", "crates/algal/Cargo.toml", "scripts/build-expr-wasm.sh", "verify/artifact/run.ts", "verify/boundary/run.ts", ...["runner", "command-supervisor", "files", "schema", "claims", "suites"].map(name => `verify/lib/${name}.ts`), ...await inventory(root, "crates/algal-expr")].sort();
   return Promise.all(paths.map(async path => ({ path, sha256: await hashFile(root, path) })));
+}
+
+/** Remove the `name` custom section. rustc encodes crate disambiguator hashes
+ * into function-name symbols, and those hashes are not stable across host
+ * platforms; every executable section is already byte-identical, so the
+ * published artifact keeps all sections except `name`. */
+function normalizeWasm(bytes: Uint8Array): Uint8Array {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  requireThat(bytes.byteLength >= 8 && view.getUint32(0, true) === 0x6d736100 && view.getUint32(4, true) === 1, "unexpected WASM header");
+  const chunks: Uint8Array[] = [bytes.subarray(0, 8)];
+  let offset = 8;
+  while (offset < bytes.byteLength) {
+    const start = offset++;
+    let size = 0, shift = 0, byte: number;
+    do {
+      requireThat(offset < bytes.byteLength, "truncated WASM section length");
+      byte = bytes[offset++]!; size |= (byte & 0x7f) << shift; shift += 7;
+      requireThat(shift <= 35, "WASM section length exceeds u32");
+    } while (byte & 0x80);
+    requireThat(offset + size <= bytes.byteLength, "WASM section extends past the artifact");
+    if (bytes[start] === 0) {
+      let end = offset, nameLength = 0, nameShift = 0;
+      do { byte = bytes[end++]!; nameLength |= (byte & 0x7f) << nameShift; nameShift += 7; } while (byte & 0x80);
+      requireThat(end + nameLength <= offset + size, "malformed WASM custom section");
+      if (new TextDecoder().decode(bytes.subarray(end, end + nameLength)) === "name") { offset += size; continue; }
+    }
+    chunks.push(bytes.subarray(start, offset + size));
+    offset += size;
+  }
+  requireThat(offset === bytes.byteLength, "trailing bytes after the final WASM section");
+  return Buffer.concat(chunks.map(chunk => Buffer.from(chunk)));
 }
 
 function wasmBinding(bytes: Uint8Array): { sha256: string; size: number; exports: typeof ABI } {
@@ -215,7 +247,7 @@ async function buildChild(root: string, toolchain: string, cache: string, stage:
   requireThat(artifacts.filter(item => item.package_id === expressionPackage).length === 1, `missing compiled expression crate at staged source path: ${JSON.stringify({ expected: expressionPackage, actual: artifacts.map(item => item.package_id) })}`);
   requireThat(hashJson(observedPackages) === hashJson([...PACKAGES.map(([pkg, ver]) => `${pkg}@${ver}`), expressionId].sort()), `compiled dependency closure differs from reviewed recipe: ${JSON.stringify(observedPackages)}`);
   requireThat(artifacts.every(item => item.fresh === false), "fresh isolated build unexpectedly reused an artifact");
-  const built = await readFileBounded(stage, `target/${TARGET}/release/algal_expr.wasm`, 16_777_216);
+  const built = normalizeWasm(await readFileBounded(stage, `target/${TARGET}/release/algal_expr.wasm`, 16_777_216));
   const wasm = compiledWasmIdentity(built);
   await progress("native-build");
   const nativeRaw = await command([join(toolchain, "bin/cargo"), ...NATIVE_BUILD], stage, env);

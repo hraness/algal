@@ -70,7 +70,8 @@
       "build": "/algal/build",
       "toolchain": "/algal/toolchain"
     },
-    "workspaceProjection": "Original workspace/manifests/lockfile and complete expression crate; empty unbuilt native lib.rs preserves workspace resolution."
+    "workspaceProjection": "Original workspace/manifests/lockfile and complete expression crate; empty unbuilt native lib.rs preserves workspace resolution.",
+    "normalization": "The rustc `name` custom section is dropped; its crate disambiguators differ across host platforms while all executable sections are host-stable."
   },
   "inputs": [
     {
@@ -107,7 +108,7 @@
     },
     {
       "path": "verify/artifact/run.ts",
-      "sha256": "sha256:e2f17e7056a521d0ff56b0059ef28e0aa15c0e208783a670858f1ddefdcb2d84"
+      "sha256": "sha256:683140a431cb4d2924fe4f867e83e1e6822cccbf226023d617d701a1f83d0adb"
     },
     {
       "path": "verify/boundary/run.ts",
@@ -139,8 +140,8 @@
     }
   ],
   "wasm": {
-    "sha256": "sha256:a1c788200feede210cae1b4926c7e2ee5524a814001056d83f2855f77b86eea9",
-    "size": 253235,
+    "sha256": "sha256:22b6777d0dbd88fdb4ac6090d9328f7737c7209e6cdae061189a2bc7590683c9",
+    "size": 223937,
     "exports": [
       {
         "name": "algal_alloc",
