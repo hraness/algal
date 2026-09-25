@@ -5,7 +5,9 @@ canonical JSON that a contract-owned evaluator interprets under a fuel
 meter — never host code, never an effect, never ambient authority. One
 implementation (`crates/algal-expr`, Rust) serves every runtime: linked
 natively into the kernel, compiled to `wasm32-unknown-unknown` for Bun.
-Two targets of one evaluator, so identical semantics hold by construction.
+The targets share evaluator source. Artifact identity and target-sensitive
+behavior still require verification; shared source alone does not establish
+identical semantics.
 
 ## Envelope
 
@@ -78,7 +80,7 @@ coercion anywhere: a number is not a string is not a boolean.
 | `get` | 1..* | `[get, name-expr, ...path]` — see scopes; miss → `null`, unbound name → error |
 | `list` | 0..* | collect evaluated arguments into an array |
 | `len` | 1 | array length |
-| `nth` | 2 | `[nth, list, index]` — out of range is an error |
+| `nth` | 2 | `[nth, list, index]` — nonnegative integral number; out of range is an error |
 | `concat` | 1..* | concatenate arrays |
 | `map` | 3 | `[map, list, "name", body]` — body per element, binder `name` |
 | `filter` | 3 | same shape; keeps elements whose body is `true` (strict bool) |
@@ -150,6 +152,16 @@ All failures are `{code, ...details}` where code is one of:
 `EXPR_NUM`, `EXPR_DIV_ZERO`, `EXPR_BOUNDS` (a bound was exceeded),
 `EXPR_FUEL`. Check-time failures carry the same codes; nothing about an
 error depends on the host.
+
+For `nth`, a nonnegative integral index is compared with the list length
+before conversion to a machine-sized index. Out-of-range detail is
+`index <canonical-number> out of range <length>`; `-0` renders as `0`, and
+even indices beyond 32 or 64 bits retain their canonical number spelling.
+This corrects earlier saturating-cast errors whose details differed between
+WASM and native. Existing receipt bytes are never rewritten: receipts with
+those earlier erroneous wide-index details may fail replay under the fixed
+evaluator and require their original evaluator to reproduce the historical
+execution. Unaffected index errors retain their previous details and fuel.
 
 ## Consumers
 

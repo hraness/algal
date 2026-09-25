@@ -2,20 +2,15 @@ use crate::{
     Error, Result,
     canonical::{MAX_DOCUMENT_BYTES, canonical, check_digest, digest, digest_bytes, read_json},
     contract::{Manifest, id, keys, object},
+    durable_fs,
 };
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{self, File, OpenOptions},
-    io::Write,
     path::{Path, PathBuf},
-    sync::{
-        Arc, Mutex,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::{Arc, Mutex},
 };
-
-static TEMP_ID: AtomicU64 = AtomicU64::new(0);
 
 pub type SourceReads = BTreeMap<(String, String), Option<Value>>;
 #[derive(Default)]
@@ -24,8 +19,9 @@ struct ReadTrace {
     reads: SourceReads,
     bytes: usize,
 }
-/// A content-addressed value admitted through `put`, with the byte length of
-/// its canonical form so bounded reads never re-encode it.
+/// A local memory/overlay value admitted through `put`, with the byte length of
+/// its canonical form so bounded reads never re-encode it. Persistent writes do
+/// not populate this map: subsequent reads must admit the retained file.
 #[derive(Clone)]
 struct Cached {
     value: Value,
@@ -90,20 +86,6 @@ fn open_json_file(path: &Path, max_bytes: usize, follow_links: bool) -> Result<O
     Ok(Some(file))
 }
 
-fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let mut file = options.open(path)?;
-    file.write_all(bytes)?;
-    file.sync_all()?;
-    Ok(())
-}
-
 /// Install `bytes` at `path`. Returns whether this call installed them: an
 /// immutable entry that already existed is left untouched and yields `false`.
 fn publish(path: &Path, bytes: &[u8], replace: bool) -> Result<bool> {
@@ -111,31 +93,63 @@ fn publish(path: &Path, bytes: &[u8], replace: bool) -> Result<bool> {
         .parent()
         .ok_or_else(|| Error::invalid("store parent"))?;
     no_link(parent)?;
-    fs::create_dir_all(parent)?;
     no_link(path)?;
-    let temporary = parent.join(format!(
-        ".algal-{}-{}",
-        std::process::id(),
-        TEMP_ID.fetch_add(1, Ordering::Relaxed)
-    ));
-    write_new(&temporary, bytes)?;
-    let result = if replace {
-        fs::rename(&temporary, path)
-    } else {
-        fs::hard_link(&temporary, path)
-    };
-    let cleanup = fs::remove_file(&temporary);
-    let fresh = match result {
-        Ok(()) => true,
-        Err(e) if !replace && e.kind() == std::io::ErrorKind::AlreadyExists => false,
-        Err(e) => return Err(e.into()),
-    };
-    if let Err(e) = cleanup
-        && e.kind() != std::io::ErrorKind::NotFound
+    // Keep the Store's established special-file admission error, before the
+    // shared publisher applies its generic target guard. Never replace it.
+    if let Ok(metadata) = fs::symlink_metadata(path)
+        && !metadata.is_file()
     {
-        return Err(e.into());
+        return Err(Error::limit("JSON artifact file type or bytes"));
     }
-    Ok(fresh)
+    durable_fs::publish(path, bytes, replace)
+}
+
+/// Apply the reference file store's JSON node/depth bounds before admitting
+/// the closed effect receipt and its bounded canonical publication encoding.
+fn admit_effect_receipt(value: &Value) -> Result<String> {
+    let mut pending = vec![(value, 0usize)];
+    let mut nodes = 0usize;
+    while let Some((value, depth)) = pending.pop() {
+        nodes += 1;
+        if nodes > 1_000_000 || depth > 64 {
+            return Err(Error::limit("effect receipt structural bounds"));
+        }
+        match value {
+            Value::Array(values) => {
+                if values.len() + pending.len() > 1_000_000 {
+                    return Err(Error::limit("effect receipt node bound"));
+                }
+                pending.extend(values.iter().map(|value| (value, depth + 1)));
+            }
+            Value::Object(values) => {
+                if values.len() + pending.len() > 1_000_000 {
+                    return Err(Error::limit("effect receipt node bound"));
+                }
+                pending.extend(values.values().map(|value| (value, depth + 1)));
+            }
+            _ => {}
+        }
+    }
+    crate::receipt::validate_effect(value)?;
+    canonical(value)
+}
+
+fn read_effect_receipt(path: &Path, request_digest: &str, retain: bool) -> Result<Option<Value>> {
+    let Some(file) = open_regular_file(path, MAX_DOCUMENT_BYTES)? else {
+        return Ok(None);
+    };
+    let value = read_json(&file, MAX_DOCUMENT_BYTES)?;
+    admit_effect_receipt(&value)?;
+    if value["requestDigest"].as_str() != Some(request_digest) {
+        return Err(Error::new(
+            "DIGEST_MISMATCH",
+            format!("effect file claims a different request than {request_digest}"),
+        ));
+    }
+    if retain {
+        durable_fs::sync_retained(&file, path)?;
+    }
+    Ok(Some(value))
 }
 
 impl Store {
@@ -148,6 +162,8 @@ impl Store {
         })
     }
 
+    /// Keep the backing store readable while applying writes only to this
+    /// copy's memory layer, as with a store opened with `writable = false`.
     pub fn overlay(&self) -> Self {
         Self {
             writable: false,
@@ -325,7 +341,9 @@ impl Store {
         }
         let path = self.path(kind, key)?;
         let identity = (kind.to_owned(), key.to_owned());
-        if let Some(Cached { value, bytes }) = self.data.get(&identity) {
+        if (!self.writable || self.root.is_none())
+            && let Some(Cached { value, bytes }) = self.data.get(&identity)
+        {
             if *bytes > bound {
                 return Err(Error::limit("store object bytes"));
             }
@@ -387,21 +405,24 @@ impl Store {
             let file = open_regular_file(&path, MAX_DOCUMENT_BYTES)?.ok_or_else(|| {
                 Error::new("IO_FAILED", format!("{}: file not found", path.display()))
             })?;
-            let installed = read_json(file, MAX_DOCUMENT_BYTES)?;
+            let installed = read_json(&file, MAX_DOCUMENT_BYTES)?;
             if digest(&installed)? != key {
                 return Err(Error::new(
                     "DIGEST_MISMATCH",
                     "existing store content is corrupt",
                 ));
             }
+            durable_fs::sync_retained(&file, &path)?;
         }
-        self.data.insert(
-            (kind.to_owned(), key.clone()),
-            Cached {
-                value: value.clone(),
-                bytes: text.len(),
-            },
-        );
+        if !self.writable || self.root.is_none() {
+            self.data.insert(
+                (kind.to_owned(), key.clone()),
+                Cached {
+                    value: value.clone(),
+                    bytes: text.len(),
+                },
+            );
+        }
         Ok(key)
     }
 
@@ -458,35 +479,23 @@ impl Store {
         }
 
         let key = Self::effect_key(request_digest, executor)?;
-        if let Some(value) = self.effects.get(&key) {
+        if (!self.writable || self.root.is_none())
+            && let Some(value) = self.effects.get(&key)
+        {
             return Ok(Some(value.clone()));
         }
         let Some(path) = self.effect_path(&key)? else {
             return Ok(None);
         };
-        let Some(file) = open_regular_file(&path, MAX_DOCUMENT_BYTES)? else {
-            return Ok(None);
-        };
-        let value = read_json(file, MAX_DOCUMENT_BYTES)?;
-        if value["requestDigest"].as_str() != Some(request_digest) {
-            return Err(Error::new(
-                "DIGEST_MISMATCH",
-                format!("effect file claims a different request than {request_digest}"),
-            ));
-        }
-        if value["executor"].as_str().is_none() {
-            return Err(Error::invalid("effect record needs an executor"));
-        }
-        if value.get("output").is_none() && value.get("error").is_none() {
-            return Err(Error::invalid("effect record needs an output or error"));
-        }
-        Ok(Some(value))
+        read_effect_receipt(&path, request_digest, false)
     }
 
-    /// Record an effect response for later runs. First write wins — a
-    /// later differing response for the same request can never overwrite
-    /// the memo.
+    /// Record an effect response for later runs. Writable file stores admit
+    /// the retained disk winner on every read. Nonpersistent stores and overlays retain the
+    /// first response in their memory layer, which may shadow a backing file
+    /// without changing it.
     pub fn put_effect(&mut self, receipt: &Value, executor: &str) -> Result<String> {
+        let text = admit_effect_receipt(receipt)?;
         let request_digest = receipt["requestDigest"]
             .as_str()
             .ok_or_else(|| Error::invalid("effect receipt needs requestDigest"))?
@@ -495,9 +504,17 @@ impl Store {
         if self.writable
             && let Some(path) = self.effect_path(&key)?
         {
-            publish(&path, canonical(receipt)?.as_bytes(), false)?;
+            if !publish(&path, text.as_bytes(), false)? {
+                // Read the actual immutable winner, bypassing the memory map.
+                // Never memoize a proposal that lost publication or hide a
+                // malformed retained record behind the proposed receipt.
+                read_effect_receipt(&path, &request_digest, true)?.ok_or_else(|| {
+                    Error::new("IO_FAILED", "retained effect receipt disappeared")
+                })?;
+            }
+        } else {
+            self.effects.entry(key).or_insert_with(|| receipt.clone());
         }
-        self.effects.entry(key).or_insert_with(|| receipt.clone());
         Ok(request_digest)
     }
 
@@ -579,12 +596,88 @@ impl Store {
     }
 }
 
+/// Whole canonical bundle bounds, including wrapper/default amplification.
+/// Count values (not object keys) as nodes, at root depth zero. The collector
+/// charges entries before retaining them, so many individually admitted values
+/// cannot first allocate an unbounded aggregate and only then be rejected.
+#[derive(Default)]
+struct BundleBudget {
+    nodes: usize,
+    bytes: usize,
+}
+
+impl BundleBudget {
+    fn add(&mut self, bytes: usize) -> Result<()> {
+        self.bytes = self.bytes.saturating_add(bytes);
+        if self.bytes > MAX_DOCUMENT_BYTES {
+            return Err(Error::limit("bundle document byte bound exceeded"));
+        }
+        Ok(())
+    }
+
+    fn string(&mut self, value: &str) -> Result<()> {
+        self.add(2)?;
+        self.add(value.len())?;
+        for byte in value.bytes() {
+            match byte {
+                b'"' | b'\\' | b'\x08' | b'\t' | b'\n' | b'\x0c' | b'\r' => self.add(1)?,
+                0..=31 => self.add(5)?,
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    fn member(&mut self, key: &str, value: &Value, depth: usize, first: bool) -> Result<()> {
+        self.add(if first { 1 } else { 2 })?;
+        self.string(key)?;
+        self.visit(value, depth)
+    }
+
+    fn visit(&mut self, value: &Value, depth: usize) -> Result<()> {
+        self.nodes += 1;
+        if self.nodes > 1_000_000 || depth > 64 {
+            return Err(Error::limit("bundle document depth/node bound exceeded"));
+        }
+        match value {
+            Value::Null => self.add(4),
+            Value::Bool(value) => self.add(if *value { 4 } else { 5 }),
+            Value::Number(value) => {
+                let number = value
+                    .as_f64()
+                    .filter(|number| number.is_finite())
+                    .ok_or_else(|| Error::invalid("finite JSON number required"))?;
+                self.add(ryu_js::Buffer::new().format(number).len())
+            }
+            Value::String(value) => self.string(value),
+            Value::Array(values) => {
+                if values.len() > 1_000_000 - self.nodes {
+                    return Err(Error::limit("bundle document node bound exceeded"));
+                }
+                self.add(2 + values.len().saturating_sub(1))?;
+                for value in values {
+                    self.visit(value, depth + 1)?;
+                }
+                Ok(())
+            }
+            Value::Object(values) => {
+                self.add(2)?;
+                for (index, (key, value)) in values.iter().enumerate() {
+                    self.member(key, value, depth + 1, index == 0)?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
 pub fn pack(root: &Manifest, store: &Store) -> Result<Value> {
     fn visit(
         manifest: &Manifest,
         store: &Store,
         manifests: &mut BTreeMap<String, Value>,
         values: &mut BTreeMap<String, Value>,
+        resources: &mut BundleBudget,
     ) -> Result<()> {
         let key = manifest.digest()?;
         if manifests.contains_key(&key) {
@@ -593,6 +686,7 @@ pub fn pack(root: &Manifest, store: &Store) -> Result<Value> {
         if manifests.len() >= 512 {
             return Err(Error::limit("bundle manifest count"));
         }
+        resources.member(&key, &manifest.value, 2, manifests.is_empty())?;
         manifests.insert(key, manifest.value.clone());
         for cell in &manifest.cells {
             if ["organism", "each", "repeat"]
@@ -604,6 +698,7 @@ pub fn pack(root: &Manifest, store: &Store) -> Result<Value> {
                     store,
                     manifests,
                     values,
+                    resources,
                 )?;
             }
             if cell["kind"] == "const" {
@@ -612,13 +707,17 @@ pub fn pack(root: &Manifest, store: &Store) -> Result<Value> {
                         let reference = port["value"]
                             .as_str()
                             .ok_or_else(|| Error::invalid("const reference"))?;
+                        if values.contains_key(reference) {
+                            continue;
+                        }
+                        if values.len() >= 512 {
+                            return Err(Error::limit("bundle value count"));
+                        }
                         let value = store
                             .get("values", reference)?
                             .ok_or_else(|| Error::new("STORE_MISS", "bundle reference missing"))?;
+                        resources.member(reference, &value, 2, values.is_empty())?;
                         values.insert(reference.to_owned(), value);
-                        if values.len() > 512 {
-                            return Err(Error::limit("bundle value count"));
-                        }
                     }
                 }
             }
@@ -627,8 +726,14 @@ pub fn pack(root: &Manifest, store: &Store) -> Result<Value> {
     }
     let mut manifests = BTreeMap::new();
     let mut values = BTreeMap::new();
-    visit(root, store, &mut manifests, &mut values)?;
+    let mut resources = BundleBudget::default();
+    resources.visit(
+        &json!({"contract":"algal.bundle.v1","root":root.digest()?,"manifests":{},"values":{}}),
+        0,
+    )?;
+    visit(root, store, &mut manifests, &mut values, &mut resources)?;
     let bundle = json!({"contract":"algal.bundle.v1","root":root.digest()?,"manifests":manifests,"values":values});
+    BundleBudget::default().visit(&bundle, 0)?;
     canonical(&bundle)?;
     Ok(bundle)
 }
@@ -638,12 +743,12 @@ pub fn unpack(bundle: &Value, store: &mut Store) -> Result<Manifest> {
     if bundle["contract"] != "algal.bundle.v1" {
         return Err(Error::invalid("bundle contract"));
     }
-    canonical(bundle)?;
+    BundleBudget::default().visit(bundle, 0)?;
     let root = bundle["root"]
         .as_str()
         .ok_or_else(|| Error::invalid("bundle root"))?;
     check_digest(root)?;
-    let mut admitted = Vec::new();
+    let mut admitted = json!({"contract":"algal.bundle.v1","root":root,"manifests":{},"values":{}});
     for namespace in ["manifests", "values"] {
         let empty = json!({});
         let values = object(bundle.get(namespace).unwrap_or(&empty))?;
@@ -663,14 +768,20 @@ pub fn unpack(bundle: &Value, store: &mut Store) -> Result<Manifest> {
                     "bundle content does not match digest",
                 ));
             }
-            admitted.push((namespace, value));
+            admitted[namespace][claimed] = value;
         }
     }
     if bundle["manifests"].get(root).is_none() {
         return Err(Error::invalid("bundle root missing"));
     }
-    for (namespace, value) in admitted {
-        store.put(namespace, &value)?;
+    // Manifest defaults can enlarge a supplied representation. Admit the
+    // normalized envelope before writes; partial supplied-record imports stay
+    // compatible and do not claim static dependency completeness.
+    BundleBudget::default().visit(&admitted, 0)?;
+    for namespace in ["manifests", "values"] {
+        for value in object(&admitted[namespace])?.values() {
+            store.put(namespace, value)?;
+        }
     }
     store.manifest(root)
 }

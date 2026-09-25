@@ -79,6 +79,20 @@ fn request() -> Value {
         "route":{"provider":"project-agent"}})
 }
 
+fn manifest_with_fallback() -> Manifest {
+    let mut value = manifest().value;
+    value["cells"].as_array_mut().unwrap().push(json!({
+        "id":"fallback", "kind":"agent", "inputs":{"err":"json"},
+        "prompt":"Handle a recorded guest failure", "route":{"provider":"project-agent"},
+        "output":{"kind":"text"}, "budget":{"maxOutputBytes":64}
+    }));
+    value["edges"] = json!([{
+        "from":{"cell":"work","port":"out"},
+        "to":{"cell":"fallback","port":"err"},"on":"fail"
+    }]);
+    Manifest::parse(&value).unwrap()
+}
+
 #[tokio::test]
 async fn capture_suspend_supply_resume_and_offline_replay() {
     let executor = Arc::new(Capture::new(vec![]));
@@ -508,4 +522,201 @@ async fn suspended_journal_generation_resumes_with_a_new_intent_and_settled_resu
             .unwrap()["ok"],
         true
     );
+}
+
+#[tokio::test]
+async fn runtime_identity_failure_without_a_receipt_aborts_before_guest_recovery() {
+    for during_call in [false, true] {
+        for journaled in [false, true] {
+            for fallback in [false, true] {
+                let program = if fallback {
+                    manifest_with_fallback()
+                } else {
+                    manifest()
+                };
+                let directory = tempfile::tempdir().unwrap();
+                let journal = Arc::new(Mutex::new(
+                    Journal::create(
+                        directory.path(),
+                        "fixture",
+                        &digest(&json!("identity-failure")).unwrap(),
+                        &program.digest().unwrap(),
+                        2,
+                    )
+                    .unwrap(),
+                ));
+                let mut capture = Capture::new(vec![Ok(json!("settled before drift"))]);
+                capture.change_during_call = during_call;
+                if journaled {
+                    capture.journal = Some(journal.clone());
+                }
+                let executor = Arc::new(capture);
+                let mut live = host(&executor);
+                if journaled {
+                    live.journal = Some(journal.clone());
+                }
+                if !during_call {
+                    *executor.identity.lock().unwrap() =
+                        digest(&json!("changed before call")).unwrap();
+                }
+                let error = runtime::run(
+                    program,
+                    json!({}),
+                    &mut Store::default(),
+                    &mut live,
+                    &Transports::new(),
+                    None,
+                )
+                .await
+                .unwrap_err();
+                assert_eq!(error.code, "DIGEST_MISMATCH");
+                assert_eq!(error.uncertain, during_call);
+                assert_eq!(
+                    executor.calls.load(Ordering::SeqCst),
+                    usize::from(during_call)
+                );
+                if journaled {
+                    let journal = journal.lock().unwrap();
+                    let description = journal.describe().unwrap();
+                    let effects = description["effects"].as_array().unwrap();
+                    assert_eq!(effects.len(), usize::from(during_call));
+                    if during_call {
+                        assert_eq!(effects[0]["record"]["state"], "started");
+                        assert!(journal.finish().is_err());
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn recorded_registered_errors_still_support_guest_failure_and_recovery() {
+    for fallback in [false, true] {
+        let executor = Arc::new(Capture::new(vec![
+            Err(Error::new("EFFECT_FAILED", "settled guest failure")),
+            Ok(json!("recovered")),
+        ]));
+        let mut live = host(&executor);
+        let mut store = Store::default();
+        let program = if fallback {
+            manifest_with_fallback()
+        } else {
+            manifest()
+        };
+        let receipt = runtime::run(
+            program.clone(),
+            json!({}),
+            &mut store,
+            &mut live,
+            &Transports::new(),
+            None,
+        )
+        .await
+        .unwrap();
+        let expected_calls = if fallback { 2 } else { 1 };
+        assert_eq!(
+            receipt["outcome"],
+            if fallback { "complete" } else { "failed" }
+        );
+        assert_eq!(receipt["effects"].as_array().unwrap().len(), expected_calls);
+        assert_eq!(receipt["effects"][0]["error"]["code"], "EFFECT_FAILED");
+        assert_eq!(receipt["effects"][0]["retryable"], false);
+        assert_eq!(executor.calls.load(Ordering::SeqCst), expected_calls);
+        assert_eq!(
+            runtime::verify(&receipt, program, &store, &Host::default())
+                .await
+                .unwrap()["ok"],
+            true
+        );
+        assert_eq!(executor.calls.load(Ordering::SeqCst), expected_calls);
+    }
+}
+
+#[tokio::test]
+async fn malformed_registered_wakes_remain_bounded_replayable_errors() {
+    let handle =
+        algal::capabilities::capability_handle("mailbox-receive", &json!("fixture")).unwrap();
+    let invalid_wakes = [
+        vec!["not-a-capability".to_owned()],
+        vec![handle.clone(), handle],
+        (0..17)
+            .map(|n| algal::capabilities::capability_handle("mailbox-receive", &json!(n)).unwrap())
+            .collect(),
+        vec!["x".repeat(1_000_000)],
+    ];
+    for wake in invalid_wakes {
+        for journaled in [false, true] {
+            for uncertain in [false, true] {
+                let directory = tempfile::tempdir().unwrap();
+                let journal = Arc::new(Mutex::new(
+                    Journal::create(
+                        directory.path(),
+                        "fixture",
+                        &digest(&json!("malformed-wake")).unwrap(),
+                        &manifest().digest().unwrap(),
+                        2,
+                    )
+                    .unwrap(),
+                ));
+                let mut error = Error::new("EFFECT_SUSPENDED", "settled lookup has invalid wake");
+                error.wake = wake.clone();
+                error.uncertain = uncertain;
+                let mut capture = Capture::new(vec![Err(error)]);
+                if journaled {
+                    capture.journal = Some(journal.clone());
+                }
+                let executor = Arc::new(capture);
+                let mut live = host(&executor);
+                if journaled {
+                    live.journal = Some(journal.clone());
+                }
+                let mut store = Store::default();
+                let result = runtime::run(
+                    manifest(),
+                    json!({}),
+                    &mut store,
+                    &mut live,
+                    &Transports::new(),
+                    None,
+                )
+                .await;
+                if uncertain && journaled {
+                    let error = result.unwrap_err();
+                    assert!(error.uncertain);
+                    let journal = journal.lock().unwrap();
+                    assert_eq!(
+                        journal.describe().unwrap()["effects"][0]["record"]["state"],
+                        "started"
+                    );
+                    assert!(journal.finish().is_err());
+                } else {
+                    let receipt = result.unwrap();
+                    assert_eq!(receipt["outcome"], "failed");
+                    assert_eq!(receipt["effects"].as_array().unwrap().len(), 1);
+                    assert_eq!(receipt["effects"][0]["retryable"], false);
+                    assert!(receipt["effects"][0].get("wake").is_none());
+                    assert!(matches!(
+                        receipt["effects"][0]["error"]["code"].as_str(),
+                        Some("EFFECT_FAILED" | "BUDGET_EXHAUSTED")
+                    ));
+                    assert_eq!(
+                        runtime::verify(&receipt, manifest(), &store, &Host::default())
+                            .await
+                            .unwrap()["ok"],
+                        true
+                    );
+                    if journaled {
+                        let journal = journal.lock().unwrap();
+                        assert_eq!(
+                            journal.describe().unwrap()["effects"][0]["record"]["state"],
+                            "completed"
+                        );
+                        journal.finish().unwrap();
+                    }
+                }
+                assert_eq!(executor.calls.load(Ordering::SeqCst), 1);
+            }
+        }
+    }
 }

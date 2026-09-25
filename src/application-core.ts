@@ -414,7 +414,8 @@ export class ApplicationCore {
   }
   async commit(input: unknown): Promise<ApplicationSnapshot> {
     const command = parseApplicationCommand(input); // snapshots before the first await
-    return this.storage.custody(command.application, true, async () => {
+    let publicationAttempted = false;
+    try { return await this.storage.custody(command.application, true, async () => {
       const history = await this.history(command.application), current = history.at(-1) ?? null;
       const request = hash(command);
       const raw = await this.storage.readOperation(command.application, command.operation);
@@ -479,15 +480,18 @@ export class ApplicationCore {
         await putApplicationRecord(this.store, transition); await putApplicationRecord(this.store, state);
         await this.storage.writeOperation(command.application, command.operation, json(operation));
         await this.options.fault?.("prepared");
-        try {
-          await this.storage.writeHead(command.application, head);
-          await this.options.fault?.("head-published");
-        } catch {
-          throw new AlgalError("IO_FAILED", "Application commit acknowledgment uncertain; inspect the exact operation", {operation: command.operation}, {uncertain: true});
-        }
+        publicationAttempted = true;
+        await this.storage.writeHead(command.application, head);
+        await this.options.fault?.("head-published");
       });
       return structuredClone(next);
-    });
+    }); } catch (error) {
+      // Cleanup can fail after the selected head changed, including adapter
+      // publication or custody release. Never report a known pre-publication
+      // failure that a caller could safely repeat blindly.
+      if (publicationAttempted) throw new AlgalError("IO_FAILED", "Application commit acknowledgment uncertain; inspect the exact operation", {operation: command.operation}, {uncertain: true});
+      throw error;
+    }
   }
   private async validatePlan(snapshot: ApplicationSnapshot, work: WorkIntent, ref: Digest, plan: ApplicationDispatchPlan): Promise<void> {
     if (work.kind === "deliver") { if (plan.kind !== "delivery") fail("Delivery requires a delivery plan"); return; }

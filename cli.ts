@@ -3,7 +3,7 @@
 // Data on stdout (JSON), diagnostics on stderr. Exit 0 ok, 1 run/verify
 // failure, 2 usage or parse error.
 
-import { open, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { open, opendir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { constants, writeSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -517,23 +517,48 @@ function unboundHint(
     + `Routes match an executor by id (--executors maps names; --responses serves any route).`);
 }
 
+const CLI_DIRECTORY_LIMITS = { listingEntries: 4096, moduleEntries: 4096, modules: 512 } as const;
+
+/** Count every yielded entry before extension filtering or retained-name growth.
+ * Bun 1.3.14 eagerly prefetches entries inside opendir; this count does not bound
+ * that runtime allocation. Only an absent optional listing is empty. */
+async function directoryFiles(path: string, suffix: string, maxEntries: number, missingIsEmpty = false): Promise<string[]> {
+  let directory;
+  try {
+    // Bun can defer opendir errors until iteration. Establish initial absence
+    // here without swallowing an IO failure after enumeration has begun.
+    if (!(await stat(path)).isDirectory()) throw new AlgalError("IO_FAILED", `${path}: not a directory`);
+    directory = await opendir(path);
+  }
+  catch (error) {
+    if (missingIsEmpty && (error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw new AlgalError("IO_FAILED", `${path}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  const files: string[] = [];
+  let scanned = 0;
+  try {
+    for await (const entry of directory) {
+      if (++scanned > maxEntries) throw new AlgalError("BUDGET_EXHAUSTED", "directory physical entry bound exceeded");
+      if (entry.name.endsWith(suffix)) files.push(entry.name);
+    }
+  } catch (error) {
+    if (error instanceof AlgalError) throw error;
+    throw new AlgalError("IO_FAILED", `${path}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return files.sort();
+}
+
 /** Load every *.algal.json under dir into the store so organism cells
  * resolve by digest. */
 async function loadModules(
   dir: string,
   store: FileStore,
 ): Promise<number> {
-  const { readdir } = await import("node:fs/promises");
   const resolved = resolve(dir);
-  let files: string[];
-  try {
-    files = await readdir(resolved);
-  } catch {
-    throw new AlgalError("IO_FAILED", `modules dir not readable: ${dir}`);
-  }
+  const files = await directoryFiles(resolved, ".algal.json", CLI_DIRECTORY_LIMITS.moduleEntries);
   let loaded = 0;
-  for (const f of files.sort()) {
-    if (!/\.algal\.json$/.test(f)) continue;
+  for (const f of files) {
+    if (loaded >= CLI_DIRECTORY_LIMITS.modules) throw new AlgalError("BUDGET_EXHAUSTED", "module count");
     const m = parseOrganismManifest(await readJsonBounded(join(resolved, f), BOUNDS.maxManifestBytes, "manifest"));
     await store.putManifest(m);
     loaded++;
@@ -847,7 +872,7 @@ async function main(): Promise<number> {
     return 0;
   }
   const dir = String(flags.dir ?? ".algal");
-  const { FileStore } = await import("./src/store");
+  const { FileStore, STORE_BOUNDS } = await import("./src/store");
   const store = new FileStore(dir);
   const { builtinRegistry } = await import("./src/registry");
   const fns = builtinRegistry();
@@ -1311,7 +1336,7 @@ async function main(): Promise<number> {
       const file = positional[0];
       if (!file) usageError("algal unpack <bundle.json>");
       const { parseBundle, unpackBundle } = await import("./src/bundle");
-      const bundle = parseBundle(await readJson(resolve(file)));
+      const bundle = parseBundle(await readJsonBounded(resolve(file), BOUNDS.maxBundleBytes, "bundle"));
       const res = await unpackBundle(bundle, store);
       out({ ok: true, root: bundle.root, ...res });
       return 0;
@@ -1328,7 +1353,7 @@ async function main(): Promise<number> {
         diag(`loaded ${n} module(s) from ${flags.modules}`);
       }
 
-      const bundle = parseBundle(await readJson(resolve(file)));
+      const bundle = parseBundle(await readJsonBounded(resolve(file), BOUNDS.maxBundleBytes, "bundle"));
       await unpackBundle(bundle, store);
       const manifest = await store.getManifest(bundle.root);
       if (!manifest) {
@@ -2485,18 +2510,12 @@ async function main(): Promise<number> {
     }
 
     case "runs": {
-      const { readdir } = await import("node:fs/promises");
-      let files: string[] = [];
-      try {
-        files = (await readdir(join(dir, "runs"))).filter((f) =>
-          f.endsWith(".json"),
-        );
-      } catch { /* no runs directory yet */ }
+      const files = await directoryFiles(join(dir, "runs"), ".json", CLI_DIRECTORY_LIMITS.listingEntries, true);
       const rows: JsonObject[] = [];
-      for (const f of files.sort()) {
+      for (const f of files) {
         const digest = `sha256:${f.replace(/\.json$/, "")}`;
         try {
-          const raw = (await readJson(join(dir, "runs", f))) as JsonObject;
+          const raw = (await readJsonBounded(join(dir, "runs", f), STORE_BOUNDS.maxDocumentBytes, "run record")) as JsonObject;
           rows.push({
             digest,
             manifestKey: raw.manifestKey ?? null,
@@ -2517,18 +2536,12 @@ async function main(): Promise<number> {
     }
 
     case "slots": {
-      const { readdir } = await import("node:fs/promises");
-      let files: string[] = [];
-      try {
-        files = (await readdir(join(dir, "slots"))).filter((f) =>
-          f.endsWith(".json"),
-        );
-      } catch { /* no slots directory yet */ }
+      const files = await directoryFiles(join(dir, "slots"), ".json", CLI_DIRECTORY_LIMITS.listingEntries, true);
       const rows: JsonObject[] = [];
-      for (const f of files.sort()) {
+      for (const f of files) {
         const name = f.replace(/\.json$/, "");
         try {
-          const value = await readJson(join(dir, "slots", f));
+          const value = await readJsonBounded(join(dir, "slots", f), BOUNDS.maxValueBytes, "slot record");
           rows.push({ name, value });
         } catch (e) {
           rows.push({ name, error: errorReport(e).message });
@@ -2539,18 +2552,12 @@ async function main(): Promise<number> {
     }
 
     case "manifests": {
-      const { readdir } = await import("node:fs/promises");
-      let files: string[] = [];
-      try {
-        files = (await readdir(join(dir, "manifests"))).filter((f) =>
-          f.endsWith(".json"),
-        );
-      } catch { /* no manifests directory yet */ }
+      const files = await directoryFiles(join(dir, "manifests"), ".json", CLI_DIRECTORY_LIMITS.listingEntries, true);
       const rows: JsonObject[] = [];
-      for (const f of files.sort()) {
+      for (const f of files) {
         const digest = `sha256:${f.replace(/\.json$/, "")}`;
         try {
-          const raw = (await readJson(join(dir, "manifests", f))) as JsonObject;
+          const raw = (await readJsonBounded(join(dir, "manifests", f), STORE_BOUNDS.maxDocumentBytes, "manifest record")) as JsonObject;
           rows.push({
             digest,
             key: raw.key ?? null,

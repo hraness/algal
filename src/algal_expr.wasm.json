@@ -1,0 +1,168 @@
+{
+  "contract": "algal.expression-artifact.v1",
+  "recipe": {
+    "toolchain": "1.97.1",
+    "target": "wasm32-unknown-unknown",
+    "rustCommit": "8bab26f4f68e0e26f0bb7960be334d5b520ea452",
+    "llvm": "22.1.6",
+    "command": [
+      "build",
+      "--offline",
+      "--locked",
+      "-p",
+      "algal-expr",
+      "--lib",
+      "--target",
+      "wasm32-unknown-unknown",
+      "--release",
+      "--message-format=json-render-diagnostics"
+    ],
+    "nativeCommand": [
+      "build",
+      "--offline",
+      "--locked",
+      "-p",
+      "algal-expr",
+      "--example",
+      "verification_boundary",
+      "--message-format=json-render-diagnostics"
+    ],
+    "packages": [
+      {
+        "name": "itoa",
+        "version": "1.0.18",
+        "sha256": "sha256:8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
+      },
+      {
+        "name": "memchr",
+        "version": "2.8.3",
+        "sha256": "sha256:cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
+      },
+      {
+        "name": "ryu-js",
+        "version": "1.0.2",
+        "sha256": "sha256:dd29631678d6fb0903b69223673e122c32e9ae559d0960a38d574695ebc0ea15"
+      },
+      {
+        "name": "serde_core",
+        "version": "1.0.229",
+        "sha256": "sha256:67dca2c9c51e58a4791a4b1ed58308b39c64224d349a935ab5039aa360942a48"
+      },
+      {
+        "name": "serde_json",
+        "version": "1.0.151",
+        "sha256": "sha256:c841b55ecdae098c80dcae9cf767f6f8a0c2cdb3416bbef72181df4d0fe73f14"
+      },
+      {
+        "name": "zmij",
+        "version": "1.0.23",
+        "sha256": "sha256:29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
+      }
+    ],
+    "environment": {
+      "LANG": "C",
+      "LC_ALL": "C",
+      "TZ": "UTC",
+      "CARGO_INCREMENTAL": "0",
+      "SOURCE_DATE_EPOCH": "0"
+    },
+    "remap": {
+      "build": "/algal/build",
+      "toolchain": "/algal/toolchain"
+    },
+    "workspaceProjection": "Original workspace/manifests/lockfile and complete expression crate; empty unbuilt native lib.rs preserves workspace resolution.",
+    "normalization": "The rustc `name` custom section is dropped; its crate disambiguators differ across host platforms while all executable sections are host-stable."
+  },
+  "inputs": [
+    {
+      "path": "Cargo.lock",
+      "sha256": "sha256:bd01407d32f2ab942c8ecc1de574a40c3eba44f66ecade96ad66892be568bb88"
+    },
+    {
+      "path": "Cargo.toml",
+      "sha256": "sha256:3f4c690f408e2a87dddbd78ba8912ee8087a7daf20a1d46a8ebe92dba44c18a9"
+    },
+    {
+      "path": "crates/algal-expr/Cargo.toml",
+      "sha256": "sha256:3c9fca2733b3a771fbbad5b115094aec77998616c1d6fd671e8f4bd3da4e5b39"
+    },
+    {
+      "path": "crates/algal-expr/examples/verification_boundary.rs",
+      "sha256": "sha256:999a28c91e8f788556fb9cb0d52b2078c755b41f89d1d8a9be2e2d0f9b0ac999"
+    },
+    {
+      "path": "crates/algal-expr/src/lib.rs",
+      "sha256": "sha256:840cb242b0994813e0dd477a5152ddb4ff09346951edb54292ac964e0bd1249f"
+    },
+    {
+      "path": "crates/algal-expr/src/tests.rs",
+      "sha256": "sha256:79eeb333941fa8717e575f60d45995fb930a8401e081eee88831529bc54144fd"
+    },
+    {
+      "path": "crates/algal/Cargo.toml",
+      "sha256": "sha256:2a47f9afd0a5f2a0b86bbbe47ecb168cb39da386f93bb7432b43e43f536cf835"
+    },
+    {
+      "path": "scripts/build-expr-wasm.sh",
+      "sha256": "sha256:7ddc2d7acb26051c8607ba2d5ce8c1aa832732ab997777a16dcd04f4048ecce2"
+    },
+    {
+      "path": "verify/artifact/run.ts",
+      "sha256": "sha256:683140a431cb4d2924fe4f867e83e1e6822cccbf226023d617d701a1f83d0adb"
+    },
+    {
+      "path": "verify/boundary/run.ts",
+      "sha256": "sha256:a9006806c5f824d234ca3298a9143cc77bb0d9901a89365b088009de17a7be6b"
+    },
+    {
+      "path": "verify/lib/claims.ts",
+      "sha256": "sha256:2c88f4cf26b420650cedfa05980b91e81067484d2508127853d658a5761bd8ba"
+    },
+    {
+      "path": "verify/lib/command-supervisor.ts",
+      "sha256": "sha256:32b3df9fdc1670247ef8083acf866012c77dda75f790391acb9797b73a8ed7bc"
+    },
+    {
+      "path": "verify/lib/files.ts",
+      "sha256": "sha256:1fbe703ed4396a8109065dcb9ac1e574f7c24434c2cf583a6f340abbba7e81db"
+    },
+    {
+      "path": "verify/lib/runner.ts",
+      "sha256": "sha256:f4c615ccb7d2c584e6135d16a7ae0b701cb79c3b9cfb868fa630ea5bd65fb7d9"
+    },
+    {
+      "path": "verify/lib/schema.ts",
+      "sha256": "sha256:144809df3dae3ddea8281537efed082a12d0dea7c5faccd20b0eb0db7e2ccbf9"
+    },
+    {
+      "path": "verify/lib/suites.ts",
+      "sha256": "sha256:2f8a41c476cf58f0bc6ccdb6494312d77df708b4509571e173f6519c3f61f56e"
+    }
+  ],
+  "wasm": {
+    "sha256": "sha256:22b6777d0dbd88fdb4ac6090d9328f7737c7209e6cdae061189a2bc7590683c9",
+    "size": 223937,
+    "exports": [
+      {
+        "name": "algal_alloc",
+        "kind": "function"
+      },
+      {
+        "name": "algal_check",
+        "kind": "function"
+      },
+      {
+        "name": "algal_dealloc",
+        "kind": "function"
+      },
+      {
+        "name": "algal_eval",
+        "kind": "function"
+      },
+      {
+        "name": "memory",
+        "kind": "memory"
+      }
+    ]
+  }
+}

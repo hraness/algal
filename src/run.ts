@@ -38,6 +38,7 @@ import {
   checkSchema,
   effectRequestDigest,
   executorSupports,
+  invokeExecutorEffect,
   parseEffectReceipt,
   type EffectKind,
   type EffectReceipt,
@@ -80,6 +81,11 @@ const WORK = {
   perContextByte: 1,
   perOutputByte: 1,
 } as const;
+
+/** Missing dictionary values must not resolve through Object.prototype. */
+function ownEntry<T>(map: Record<string, T> | undefined, key: string): T | undefined {
+  return map !== undefined && Object.hasOwn(map, key) ? map[key] : undefined;
+}
 
 export type RunEvent = {
   seq: number;
@@ -267,7 +273,22 @@ export async function runOrganism(opts: RunOptions): Promise<RunReceipt> {
     work: ctx.work,
     ...(ctx.failure ? { failure: ctx.failure } : {}),
   };
-  return { ...receipt, digest: receiptDigest(receipt as RunReceipt) };
+  // Admit the actual envelope before recursive hashing. A fixed-size digest
+  // placeholder accounts for the field without hashing an unreadable body.
+  const admitted = { ...receipt, digest: `sha256:${"0".repeat(64)}` as Digest };
+  try {
+    checkReceiptResources(admitted, "BUDGET_EXHAUSTED");
+  } catch (error) {
+    // The evidence is too large to mint, store or replay, so no receipt
+    // exists. Callers still receive the run's measured work for reporting.
+    if (error instanceof AlgalError) {
+      throw new AlgalError(error.code, error.message, { outcome: receipt.outcome, failure: receipt.failure?.code ?? null, work: receipt.work }, { uncertain: error.uncertain });
+    }
+    throw error;
+  }
+  parseReceiptFields(admitted);
+  admitted.digest = receiptDigest(admitted);
+  return admitted;
 }
 
 export function receiptDigest(r: Omit<RunReceipt, "digest">): Digest {
@@ -373,7 +394,7 @@ async function runInto(
             : typeof v === "object" &&
               v !== null &&
               !Array.isArray(v) &&
-              v[e.guard.field] === e.guard.equals;
+              ownEntry(v, e.guard.field) === e.guard.equals;
       }
       if (!hit) {
         edgeState[i] = "dead";
@@ -476,7 +497,7 @@ async function runInto(
         // delivered value that violates a declared schema fails this cell
         // (routable via on:"fail"), never silently enters activation
         for (const p of inputNames) {
-          const v = inputs[p];
+          const v = ownEntry(inputs, p);
           if (v !== undefined) checkValue(v, sig.inputs[p]!, `${cell.id}.${p}`);
         }
         const act = await activate(cell, inputs, args, compiled, ctx, cellPath(cell.id), depth);
@@ -495,7 +516,7 @@ async function runInto(
         if (act.items !== undefined) rec.items = act.items;
         const via =
           compiled.resolvedVia.get(cell.id) ??
-          ctx.opts.replayVia?.[cellPath(cell.id)];
+          ownEntry(ctx.opts.replayVia, cellPath(cell.id));
         if (via) rec.via = via;
         if (cell.kind === "slot") rec.slot = { name: cell.name, mode: cell.mode };
         ctx.cells[cellPath(cell.id)] = rec;
@@ -606,9 +627,15 @@ function assertJournal(ctx: RunContext): void {
   if (ctx.journalFailure !== undefined) throw ctx.journalFailure.error;
   ctx.opts.journal?.assertHealthy();
 }
-async function journalStep<T>(ctx: RunContext, operation: () => Promise<T>): Promise<T> {
+async function journalStep<T>(ctx: RunContext, operation: () => Promise<T>, dispatched = false): Promise<T> {
   try { assertJournal(ctx); return await operation(); }
-  catch (error) { ctx.journalFailure = { error }; ctx.opts.journal?.poison(error); throw error; }
+  catch (error) {
+    const report = errorReport(error);
+    const failure = dispatched && !(error instanceof AlgalError && error.uncertain)
+      ? new AlgalError(report.code, report.message, error instanceof AlgalError ? error.details : undefined, { uncertain: true })
+      : error;
+    ctx.journalFailure = { error: failure }; ctx.opts.journal?.poison(failure); throw failure;
+  }
 }
 function processEffectKey(ctx: RunContext, requestDigest: Digest): Digest {
   return ctx.opts.processName === undefined ? requestDigest : digestCanonical({
@@ -681,39 +708,43 @@ async function providerAttempt(
     if (ticket.receipt !== undefined) return ticket.receipt;
   }
   let effect: EffectReceipt;
+  let dispatched = false;
   try {
     const result = await boundedCall(async (signal) => {
       if (!journal) meta = await executor.receiptFor?.(request);
       if (signal?.aborted || (deadline !== undefined && performance.now() >= deadline))
         throw new AlgalError("BUDGET_EXHAUSTED", timeoutMessage);
-      if (executor.executeEffect) {
-        const result = await executor.executeEffect(request, signal);
-        return { output: result.output, metadata: { ...meta, ...result.metadata } };
-      }
-      return { output: await executor.execute(request, signal), metadata: meta };
+      const result = await invokeExecutorEffect(executor, request, signal, value => { dispatched = value; });
+      return { output: result.output, metadata: { ...meta, ...result.metadata } };
     }, remaining(), timeoutMessage);
     meta = result.metadata;
     effect = { requestDigest, output: result.output, executor: meta?.executor ?? executor.id };
   } catch (error) {
     if (journal && error instanceof AlgalError && error.uncertain)
       return journalStep(ctx, async () => { throw error; });
+    // Preflight metadata cannot label a thrown live attempt as a cache hit.
+    // Explicit replay retains its recorded metadata verbatim.
+    if (executor.replay !== true && meta?.cached) meta = { ...meta, cached: false };
     const report = errorReport(error);
     effect = { requestDigest, error: { code: report.code, message: report.message }, executor: meta?.executor ?? executor.id };
     const wake = suspensionWake(error, meta?.wake);
     if (wake.length > 0) effect.wake = wake;
     if (report.code === "EFFECT_SUSPENDED" || (error instanceof AlgalError && error.uncertain)) effect.retryable = false;
   }
-  if (meta?.usage) effect.usage = structuredClone(meta.usage);
-  if (meta?.cached) effect.cached = true;
-  if (meta?.configurationDigest) effect.configurationDigest = meta.configurationDigest;
-  if (retryPolicy && (executor.retryable === false || meta?.retryable === false)) effect.retryable = false;
-  // Compaction has no retry loop, but replay must retain its recorded policy.
-  if (executor.replay === true && meta?.retryable === false) effect.retryable = false;
-  // Adapter-owned output objects must not change while persistence awaits I/O.
-  const terminal = journal ? await journalStep(ctx, async () => structuredClone(effect)) : effect;
-  if (journal && ticket?.token !== undefined)
-    await journalStep(ctx, () => journal.after(ticket.token!, structuredClone(terminal)));
-  return terminal;
+  const complete = async (): Promise<EffectReceipt> => {
+    if (meta?.usage) effect.usage = structuredClone(meta.usage);
+    if (meta?.cached) effect.cached = true;
+    if (meta?.configurationDigest) effect.configurationDigest = meta.configurationDigest;
+    if (retryPolicy && (executor.retryable === false || meta?.retryable === false)) effect.retryable = false;
+    // Compaction has no retry loop, but replay must retain its recorded policy.
+    if (executor.replay === true && meta?.retryable === false) effect.retryable = false;
+    // Adapter-owned output objects must not change while persistence awaits I/O.
+    const terminal = journal ? structuredClone(effect) : effect;
+    if (journal && ticket?.token !== undefined)
+      await journal.after(ticket.token, structuredClone(terminal));
+    return terminal;
+  };
+  return journal ? journalStep(ctx, complete, dispatched) : complete();
 }
 async function toolAttempt(
   ctx: RunContext, name: string, entry: NonNullable<ReturnType<ToolRegistry["get"]>>,
@@ -733,10 +764,14 @@ async function toolAttempt(
     if (ticket.receipt !== undefined) return ticket.receipt;
   }
   let effect: EffectReceipt;
+  let dispatched = false;
   try {
-    const outputs = await boundedCall((signal) => entry.tool(inputs, {
-      requestDigest, idempotencyKey: processEffectKey(ctx, requestDigest), ...(signal ? { signal } : {}),
-    }), timeout, timeoutMessage);
+    const outputs = await boundedCall((signal) => {
+      dispatched = true;
+      return entry.tool(inputs, {
+        requestDigest, idempotencyKey: processEffectKey(ctx, requestDigest), ...(signal ? { signal } : {}),
+      });
+    }, timeout, timeoutMessage);
     effect = { requestDigest, output: outputs as JsonValue, executor: `tool:${name}` };
   } catch (error) {
     if (journal && error instanceof AlgalError && error.uncertain)
@@ -751,9 +786,9 @@ async function toolAttempt(
     };
   }
   // Adapter-owned output objects must not change while persistence awaits I/O.
-  const terminal = journal ? await journalStep(ctx, async () => structuredClone(effect)) : effect;
+  const terminal = journal ? await journalStep(ctx, async () => structuredClone(effect), dispatched) : effect;
   if (journal && ticket?.token !== undefined)
-    await journalStep(ctx, () => journal.after(ticket.token!, structuredClone(terminal)));
+    await journalStep(ctx, () => journal.after(ticket.token!, structuredClone(terminal)), dispatched);
   return terminal;
 }
 
@@ -822,10 +857,10 @@ async function activate(
   assertJournal(ctx);
   switch (cell.kind) {
     case "input": {
-      const supplied = args[cell.id] ?? {};
+      const supplied = ownEntry(args, cell.id) ?? {};
       const out: Record<string, JsonValue> = {};
       for (const [port, decl] of Object.entries(cell.outputs)) {
-        const v = supplied[port];
+        const v = ownEntry(supplied, port);
         if (v === undefined) continue;
         checkValue(v, decl, `${cell.id}.${port}`);
         await checkRefsResolve(ctx, decl, v, `${cell.id}.${port}`);
@@ -893,7 +928,7 @@ async function activate(
       }
       // read: replay serves the recorded outcome — a live slot may have
       // been overwritten since the run being verified
-      const rep = ctx.opts.replaySlots?.[path];
+      const rep = ownEntry(ctx.opts.replaySlots, path);
       if (rep !== undefined) {
         if (rep.missing) {
           throw new AlgalError(
@@ -933,7 +968,7 @@ async function activate(
         ...Object.values(subManifest.interface?.inputs ?? {}),
         ...Object.values(subManifest.interface?.outputs ?? {}),
       ]) {
-        if (subCompiled.ports.get(target.cell)?.outputs[target.port]?.type === "cap") {
+        if (ownEntry(subCompiled.ports.get(target.cell)?.outputs, target.port)?.type === "cap") {
           throw new AlgalError("TYPE_MISMATCH", "spawn cannot expose capability ports through json; use a typed organism cell");
         }
       }
@@ -962,8 +997,8 @@ async function activate(
       const data: Record<string, JsonValue> = {};
       const iface = subManifest.interface ?? { inputs: {}, outputs: {} };
       for (const [name, target] of Object.entries(iface.outputs)) {
-        const rec = ctx.cells[`${path}/${target.cell}`];
-        const v = rec?.outputs?.[target.port];
+        const rec = ownEntry(ctx.cells, `${path}/${target.cell}`);
+        const v = ownEntry(rec?.outputs, target.port);
         if (v !== undefined) data[name] = v;
       }
       return { outputs: { data, digest: subDigest } };
@@ -972,7 +1007,7 @@ async function activate(
       const entry = ctx.opts.fns.get(cell.fn)!;
       ctx.work.units += entry.signature.cost;
       for (const [p, decl] of Object.entries(entry.signature.inputs)) {
-        const v = inputs[p];
+        const v = ownEntry(inputs, p);
         if (v !== undefined) checkValue(v, decl, `${cell.id}.${p}`);
       }
       return { outputs: entry.fn(inputs) };
@@ -1018,8 +1053,8 @@ async function activate(
           `recall cell "${cell.id}" query exceeds maxRecallQueryBytes ${BOUNDS.maxRecallQueryBytes}`,
         );
       }
-      const maxCtx = cell.budget?.maxContextBytes ?? ctx.budgets.maxContextBytes;
-      const maxOut = cell.budget?.maxOutputBytes ?? ctx.budgets.maxOutputBytes;
+      const maxCtx = Math.min(cell.budget?.maxContextBytes ?? ctx.budgets.maxContextBytes, ctx.budgets.maxContextBytes);
+      const maxOut = Math.min(cell.budget?.maxOutputBytes ?? ctx.budgets.maxOutputBytes, ctx.budgets.maxOutputBytes);
       const context: JsonObject = { inputs };
       const contextBytes = canonicalBytes(context);
       if (contextBytes > maxCtx) {
@@ -1169,8 +1204,8 @@ async function activate(
     case "gate":
     case "decide": {
       const budgets = ctx.budgets;
-      const maxCtx = cell.budget?.maxContextBytes ?? budgets.maxContextBytes;
-      const maxOut = cell.budget?.maxOutputBytes ?? budgets.maxOutputBytes;
+      const maxCtx = Math.min(cell.budget?.maxContextBytes ?? budgets.maxContextBytes, budgets.maxContextBytes);
+      const maxOut = Math.min(cell.budget?.maxOutputBytes ?? budgets.maxOutputBytes, budgets.maxOutputBytes);
       const tools =
         cell.kind === "gate" || cell.kind === "decide" ? undefined : cell.tools;
       const maxTurns = cell.kind === "decide" ? 1
@@ -1196,7 +1231,7 @@ async function activate(
       const cellView: JsonObject | undefined = cell.view.cells?.length
         ? Object.fromEntries(
             cell.view.cells.map((cv) => {
-              const rec = ctx.cells[scope ? `${scope}/${cv.cell}` : cv.cell];
+              const rec = ownEntry(ctx.cells, scope ? `${scope}/${cv.cell}` : cv.cell);
               let outputs = rec?.outputs;
               if (outputs && cv.ports) {
                 outputs = Object.fromEntries(
@@ -1464,7 +1499,7 @@ async function activate(
           }
         }
         for (const [p, decl] of Object.entries(signature.inputs)) {
-          const v = (call.inputs as Record<string, JsonValue>)[p];
+          const v = ownEntry(call.inputs as Record<string, JsonValue>, p);
           if (v === undefined) {
             if (!decl.optional) {
               throw new AlgalError(
@@ -1533,8 +1568,8 @@ async function activate(
       const out: Record<string, JsonValue> = {};
       const iface = subCompiled.manifest.interface ?? { inputs: {}, outputs: {} };
       for (const [name, target] of Object.entries(iface.outputs)) {
-        const rec = ctx.cells[`${path}/${target.cell}`];
-        const v = rec?.outputs?.[target.port];
+        const rec = ownEntry(ctx.cells, `${path}/${target.cell}`);
+        const v = ownEntry(rec?.outputs, target.port);
         if (v !== undefined) out[name] = v;
       }
       return { outputs: out };
@@ -1574,16 +1609,16 @@ async function activate(
         }
         out = {};
         for (const [name, target] of Object.entries(iface.outputs)) {
-          const rec = ctx.cells[`${roundPath}/${target.cell}`];
-          const v = rec?.outputs?.[target.port];
+          const rec = ownEntry(ctx.cells, `${roundPath}/${target.cell}`);
+          const v = ownEntry(rec?.outputs, target.port);
           if (v !== undefined) out[name] = v;
         }
         for (const [outName, inName] of Object.entries(cell.carry ?? {})) {
-          const v = out[outName];
+          const v = ownEntry(out, outName);
           if (v !== undefined) carried[inName] = v;
         }
         if (cell.until) {
-          const v = out[cell.until.output];
+          const v = ownEntry(out, cell.until.output);
           const hit =
             v !== undefined &&
             (cell.until.field === undefined
@@ -1591,7 +1626,7 @@ async function activate(
               : typeof v === "object" &&
                 v !== null &&
                 !Array.isArray(v) &&
-                v[cell.until.field] === cell.until.equals);
+                ownEntry(v, cell.until.field) === cell.until.equals);
           if (hit) break;
         }
       }
@@ -1602,7 +1637,7 @@ async function activate(
     case "each": {
       const subCompiled = compiled.children.get(cell.id)!;
       const iface = subCompiled.manifest.interface ?? { inputs: {}, outputs: {} };
-      const list = inputs[cell.over];
+      const list = ownEntry(inputs, cell.over);
       if (!Array.isArray(list)) {
         throw new AlgalError(
           "TYPE_MISMATCH",
@@ -1616,9 +1651,9 @@ async function activate(
         );
       }
       // element type check against the inner input port's declared type
-      const overTarget = iface.inputs[cell.over]!;
+      const overTarget = ownEntry(iface.inputs, cell.over)!;
       const elDecl =
-        subCompiled.ports.get(overTarget.cell)?.outputs[overTarget.port];
+        ownEntry(subCompiled.ports.get(overTarget.cell)?.outputs, overTarget.port);
       const out: Record<string, JsonValue> = {};
       for (const name of Object.keys(iface.outputs)) out[name] = [];
       for (let i = 0; i < list.length; i++) {
@@ -1645,8 +1680,8 @@ async function activate(
           );
         }
         for (const [name, target] of Object.entries(iface.outputs)) {
-          const rec = ctx.cells[`${itemPath}/${target.cell}`];
-          const v = rec?.outputs?.[target.port];
+          const rec = ownEntry(ctx.cells, `${itemPath}/${target.cell}`);
+          const v = ownEntry(rec?.outputs, target.port);
           if (v !== undefined) (out[name] as JsonValue[]).push(v);
         }
       }
@@ -1782,12 +1817,12 @@ function checkOutputs(
   produced: Record<string, JsonValue>,
 ): void {
   for (const [port, decl] of Object.entries(outputs)) {
-    const v = produced[port];
+    const v = ownEntry(produced, port);
     if (v === undefined) continue;
     checkValue(v, decl, `${cell.id}.${port}`);
   }
   for (const port of Object.keys(produced)) {
-    if (!outputs[port]) {
+    if (!Object.hasOwn(outputs, port)) {
       throw new AlgalError(
         "TYPE_MISMATCH",
         `${cell.id}: produced undeclared output "${port}"`,
@@ -1822,35 +1857,55 @@ export const RECEIPT_BOUNDS = {
 /** Validate foreign checkpoints before inspecting or replaying them. Digest
  * consistency is checked by resume; verify still reports tampering as a diff. */
 export function parseRunReceipt(u: unknown): RunReceipt {
+  checkReceiptResources(u, "PARSE_FAILED");
+  return parseReceiptFields(u);
+}
+
+function checkReceiptResources(u: unknown, code: "PARSE_FAILED" | "BUDGET_EXHAUSTED"): void {
   const pending: { value: unknown; depth: number }[] = [{ value: u, depth: 0 }];
   let nodes = 0;
   let stringBytes = 0;
   while (pending.length > 0) {
     const { value, depth } = pending.pop()!;
     if (++nodes > RECEIPT_BOUNDS.maxNodes || depth > RECEIPT_BOUNDS.maxDepth) {
-      throw new AlgalError("PARSE_FAILED", "receipt structural bounds exceeded");
+      throw new AlgalError(code, "receipt structural bounds exceeded");
     }
     if (typeof value === "string") {
       stringBytes += utf8Length(value);
       if (stringBytes > RECEIPT_BOUNDS.maxBytes) {
-        throw new AlgalError("PARSE_FAILED", "receipt byte bound exceeded");
+        throw new AlgalError(code, "receipt byte bound exceeded");
+      }
+    } else if (Array.isArray(value)) {
+      // JSON serialization includes every array position, including holes as
+      // null. Enumerable properties alone do not bound the serialized tree.
+      if (nodes + pending.length + value.length > RECEIPT_BOUNDS.maxNodes) {
+        throw new AlgalError(code, "receipt node bound exceeded");
+      }
+      for (let i = 0; i < value.length; i++) {
+        pending.push({ value: i in value ? value[i] : null, depth: depth + 1 });
       }
     } else if (value !== null && typeof value === "object") {
       for (const [key, child] of Object.entries(value)) {
         stringBytes += utf8Length(key);
         pending.push({ value: child, depth: depth + 1 });
         if (pending.length > RECEIPT_BOUNDS.maxNodes) {
-          throw new AlgalError("PARSE_FAILED", "receipt node bound exceeded");
+          throw new AlgalError(code, "receipt node bound exceeded");
         }
       }
     } else if (value !== null && typeof value !== "boolean" &&
       (typeof value !== "number" || !Number.isFinite(value))) {
-      throw new AlgalError("PARSE_FAILED", "receipt must contain only JSON values");
+      throw new AlgalError(code, "receipt must contain only JSON values");
+    }
+    if (stringBytes > RECEIPT_BOUNDS.maxBytes) {
+      throw new AlgalError(code, "receipt byte bound exceeded");
     }
   }
   if (canonicalBytes(u as JsonValue) > RECEIPT_BOUNDS.maxBytes) {
-    throw new AlgalError("PARSE_FAILED", "receipt byte bound exceeded");
+    throw new AlgalError(code, "receipt byte bound exceeded");
   }
+}
+
+function parseReceiptFields(u: unknown): RunReceipt {
   const r = asObject(u, "receipt");
   noUnknownKeys(r, ["contract", "runtime", "manifestDigest", "manifestKey", "args",
     "outcome", "cells", "effects", "events", "work", "failure", "digest"], "receipt");

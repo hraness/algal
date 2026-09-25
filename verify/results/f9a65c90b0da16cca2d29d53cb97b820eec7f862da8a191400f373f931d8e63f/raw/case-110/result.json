@@ -1,0 +1,1 @@
+{"domain":"raw","expected":{"ok":true,"value":"😀"},"id":"raw-escaped-pair","inputSha256":"sha256:6782fc05b7089adf481195504a7e2bd2fce8fad3be73c16512dd72082287a311","outputs":{"committed-wasm":"{\"fuel\":1,\"ok\":true,\"value\":\"😀\"}","native":"{\"fuel\":1,\"ok\":true,\"value\":\"😀\"}"},"targets":["committed-wasm","native"]}

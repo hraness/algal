@@ -12,8 +12,8 @@ function fail(message: string): never { throw new AlgalError("RECEIPT_MISMATCH",
  * dispatch for the cited intent must be the settled delivery the record
  * describes (same recipient, same settled result), inside the application's
  * validated history. When `channelsDir` is supplied the durable channel must
- * also retain the outcome `{identity, message}` the record implies — the
- * receiver-side half of the delivery. */
+ * also retain the outcome `{identity, message}` the record implies. This is
+ * local route-channel evidence, not destination mailbox or external receipt. */
 export async function verifyInterappDelivery(
   service: ApplicationCore,
   reference: Digest,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { canonicalize, isJsonValue } from "./values";
+import { canonicalize, canonicalBytes, isJsonValue } from "./values";
 import { digestCanonical, digestText } from "./digest";
 
 describe("canonicalize", () => {
@@ -61,4 +61,11 @@ describe("isJsonValue", () => {
   test("accepts JSON", () => {
     expect(isJsonValue({ a: [1, "x", null, { b: true }] })).toBe(true);
   });
+});
+
+// Explicit UTF-8 byte lengths also qualify the portable TextEncoder path.
+test("canonical byte counts include non-BMP, combining, escaped and unpaired-surrogate strings", () => {
+  for (const [value, bytes] of [["abc", 5], ["é", 4], ["😀", 6], ["e\u0301", 5], ["\n", 4], ["\u0000", 8], ["\ud800", 8], ["\udc00", 8], ["\u2028", 5], ['"', 4], ["\\", 4]] as const) {
+    expect(canonicalBytes(value)).toBe(bytes);
+  }
 });

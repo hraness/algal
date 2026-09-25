@@ -6,6 +6,7 @@ import { BOUNDS, manifestToJson, parseOrganismManifest } from "./contract";
 import { digestCanonical } from "./digest";
 import { FileStore, MemoryStore, replayStore, STORE_BOUNDS } from "./store";
 import { runOrganism } from "./run";
+import { asJsonValue } from "./values";
 
 const m = parseOrganismManifest({
   contract: "algal.organism.v1",
@@ -37,6 +38,60 @@ describe("MemoryStore", () => {
 });
 
 describe("FileStore", () => {
+  for (const [name, bytes] of [
+    ["invalid leading byte", Buffer.from([0x22, 0xff, 0x22])],
+    ["overlong encoding", Buffer.from([0x22, 0xc0, 0xaf, 0x22])],
+    ["truncated sequence", Buffer.from([0x22, 0xe2, 0x82, 0x22])],
+    ["UTF-8 encoded surrogate", Buffer.from([0x22, 0xed, 0xa0, 0x80, 0x22])],
+    ["invalid object key", Buffer.from([0x7b, 0x22, 0xff, 0x22, 0x3a, 0x31, 0x7d])],
+    ["invalid overwritten value", Buffer.concat([Buffer.from('{"x":"'), Buffer.from([0xff]), Buffer.from('","x":1}')])],
+  ] as const) {
+    test(`rejects malformed UTF-8 ${name} without replacing the artifact`, async () => {
+      const dir = await mkdtemp(join(tmpdir(), "algal-store-utf8-"));
+      try {
+        const value = asJsonValue(JSON.parse(bytes.toString("utf8")), "lossy fixture");
+        const digest = digestCanonical(value);
+        const path = join(dir, "values", `${digest.slice(7)}.json`);
+        await mkdir(join(dir, "values"));
+        await writeFile(path, bytes);
+        const store = new FileStore(dir);
+        await expect(store.getValue(digest)).rejects.toThrow();
+        await expect(store.putValue(value)).rejects.toThrow();
+        expect(await readFile(path)).toEqual(bytes);
+        expect(await readdir(join(dir, "values"))).toEqual([`${digest.slice(7)}.json`]);
+      } finally { await rm(dir, { recursive: true, force: true }); }
+    });
+  }
+
+  test("byte admission preserves JSON normalization and legacy escaped lone surrogates", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "algal-store-json-domain-"));
+    try {
+      const store = new FileStore(dir);
+      await mkdir(join(dir, "values"));
+      for (const raw of [
+        ' \n{"x":0,"x":1e0,"replacement":"�"}\t',
+        '"\\ud800"',
+        '{"\\ud800":"\\udfff","x":"\\ud800","x":1}',
+        '"\\ud83d\\ude00"',
+      ]) {
+        const value = asJsonValue(JSON.parse(raw), "JSON fixture");
+        const digest = digestCanonical(value);
+        const path = join(dir, "values", `${digest.slice(7)}.json`);
+        await writeFile(path, raw);
+        expect(await store.getValue(digest)).toEqual(value);
+        expect(await store.putValue(value)).toBe(digest);
+        expect(await readFile(path, "utf8")).toBe(raw);
+      }
+      const digest = digestCanonical("bom");
+      const path = join(dir, "values", `${digest.slice(7)}.json`);
+      const bom = Buffer.from('\ufeff"bom"');
+      await writeFile(path, bom);
+      await expect(store.getValue(digest)).rejects.toThrow();
+      await expect(store.putValue("bom")).rejects.toThrow();
+      expect(await readFile(path)).toEqual(bom);
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  });
+
   test("round-trips and detects tampering", async () => {
     const dir = await mkdtemp(join(tmpdir(), "algal-test-"));
     try {

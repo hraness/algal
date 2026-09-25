@@ -22,8 +22,11 @@ must not independently resolve the newest program and newest memory.
 Let `H` be the current state digest, `C` a closed command, `K` its operation
 identity, and `hash(C)` its request digest. Under retained application custody:
 
-1. An existing operation `K` with the same request returns its committed result,
-   even after the head has advanced. A different request under `K` is rejected.
+1. An existing operation `K` with a valid retained operation index and the same
+   request returns its committed result, even after the head has advanced or
+   fresh host admission would deny it. A different request under `K` is rejected.
+   If history contains `K` but its index is absent, both exact and changed retries
+   are rejected; the service does not reconstruct the reply or commit `K` again.
 2. For a new operation, `C.expectedHead` must equal `H` (or `null` for genesis).
 3. The lifecycle checks structural transition invariants. The admitted host
    checks typed dependencies, authority, memory, and transition-specific evidence.
@@ -41,6 +44,49 @@ and epoch, carries no intents, and records generated candidates as evidence.
 schema and interface rules. `migrate` explicitly names a schema change and its
 producing migration evidence. Revisions advance epoch; ordinary memory updates
 advance sequence while retaining epoch. Previous states are retained.
+
+### Retained application custody
+
+Every mutation, including dispatch and reconciliation, acquires the retained
+SQLite owner at `applications/.creation/pending/ID` as its stable primary
+identity. This identity does not change when the first head appears. A short
+shared lease at `applications/.creation` validates the bounded namespace scan;
+it is released before acquiring the per-application owner or calling host
+admission. Independent applications can enter host admission concurrently.
+
+After primary acquisition, the service checks the named directory again. An
+existing `applications/ID` also requires its permanent SQLite owner before
+history, expected-head checks, admission, or dispatch. This secondary owner
+preserves exclusion with older writers and preserves refusal of unrecognized
+legacy ownership markers. Recognized interrupted v2 markers are archived only
+after acquiring the corresponding SQLite transaction. A marker's PID, age, or
+pathname alone does not establish that its owner has stopped.
+
+A new named directory is created only after admission and quota reservation
+succeed, then its permanent owner is acquired before publishing dependencies
+or the head. Both owners remain held through publication; cleanup precedes the
+successful public return. A later owner rereads the selected history before
+checking its expected head. A prepared directory already occupies an
+application slot and may finish at the 32-name limit. Refused admission,
+refused quota reservation, and dispatch to an unknown name do not create a
+named application directory; retained coordination files under `.creation`
+are still subject to the separate conservative scan and allocation bounds.
+
+The repaired exclusion guarantee applies to cooperating upgraded writers
+sharing these retained SQLite identities on the supported local filesystem.
+The two owners also exclude an upgraded writer from an older writer
+holding either original identity. It does not repair the original cutover race
+between two concurrently running older writers; upgrade every mutating host
+before claiming the fleet-wide guarantee. These live-custody checks do not by
+themselves establish power-loss durability or distributed exclusion.
+
+The optional custody-selection diagnostic hook runs after the shared scan is
+released and before primary acquisition. It is separate from the four existing
+durable fault points (`prepared`, `head-published`, `dispatch-started`, and
+`dispatch-settled`), is absent from ordinary hosts and CLIs, and contributes no
+data to canonical application records. The eight Bun/native three-caller
+schedules exercise this gap through the actual services; they are sampled
+implementation evidence, not an exhaustive refinement proof.
 
 ## Records and responsibilities
 
@@ -183,9 +229,12 @@ complete undispatched set — no missing rows, no extras:
 {"contract":"algal.application-drain.v1","application":"inventory","parentState":"sha256:...","dispositions":[{"intent":"sha256:...","status":"abandoned"},{"intent":"sha256:...","status":"migrated"}]}
 ```
 
-Each disposition is explicit. `migrated` keeps the intent pending and
-dispatchable under the new revision; `abandoned` drops it from every future
-`pending` projection and dispatch scan. Abandonment is a projection rule: the
+Each disposition is explicit. `migrated` keeps the original intent pending,
+with its original source revision and memory; fresh dispatch still requires
+admission. In particular, the default host refuses an old episode whose source
+revision or memory is no longer selected. A retained delivery may still qualify
+under its route policy. `abandoned` drops the intent from every future `pending`
+projection and dispatch scan. Abandonment is a projection rule: the
 intent record stays immutable in history and CAS as evidence and is never
 rewritten or deleted, and an abandoned intent can never be re-drained,
 reconciled, or dispatched. A drain cited where the parent has no
@@ -337,6 +386,9 @@ for a settled delivery whose retained result re-establishes the same message
 and idempotency key from CAS. A bound record that would exceed the
 application record bound mints nothing; the channel outcome still stands and
 verification reports the record absent. Reconciliation remints idempotently.
+The result and message records precede outbox settlement publication: a later
+quota or publication failure may leave both in CAS while the outbox remains
+`started`. Their presence alone does not establish durable settlement.
 
 `verifyInterappMessage` checks the CAS bindings: the named intent must be a
 `deliver` intent of this application, operation, and route, and the embedded
@@ -345,9 +397,11 @@ body must be digest-identical to the intent's payload.
 occur in validated application history, its dispatch must be the settled
 delivery naming the recorded recipient, and the recomputed record must
 reproduce the reference. A supplied channel directory must also retain the
-matching `{identity, message}` outcome. The record proves that this exact
-delivery was bound and settled; it does not establish receipt by an external
-party or authority beyond the admitting policy.
+matching `{identity, message}` outcome. Successful full delivery verification
+establishes the exact retained settlement binding. CAS-only verification does
+not establish settlement or the admitted recipient. Neither check establishes
+external receipt or current admission of the destination capability; the default
+host writes the local route channel and does not invoke destination mailbox send.
 
 Default episode settlement includes an `outcome` digest in its immutable
 result. Following the dispatch's `result` and then `outcome` reaches the actual

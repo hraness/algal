@@ -7,6 +7,7 @@ import {
   BENCH_BOUNDS,
   BENCH_CONTRACT,
   benchAxisEnv,
+  benchCaseAdmissionError,
   benchPareto,
   type BenchAttribution,
   type BenchAxis,
@@ -29,6 +30,10 @@ import type { Store } from "./store-contract";
 import type { ToolRegistry } from "./tools";
 import { verifyReceipt } from "./verify";
 import { canonicalize, type JsonObject, type JsonValue } from "./values";
+
+function ownEntry<T>(map: Record<string, T> | undefined, key: string): T | undefined {
+  return map !== undefined && Object.hasOwn(map, key) ? map[key] : undefined;
+}
 
 function object(value: unknown, at: string): JsonObject {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -99,7 +104,7 @@ function parseUsage(value: JsonValue | undefined, at: string) {
 
 function parseAttribution(value: JsonValue | undefined, at: string): Record<string, BenchAttribution> {
   const map = object(value, at);
-  const out: Record<string, BenchAttribution> = {};
+  const out: Record<string, BenchAttribution> = Object.create(null) as Record<string, BenchAttribution>;
   for (const [key, raw] of Object.entries(map)) {
     if (key.length === 0 || key.length > 256) {
       throw new AlgalError("PARSE_FAILED", `${at} has an invalid attribution key`);
@@ -221,7 +226,7 @@ function parseSystem(value: JsonValue, i: number): BenchSystemResult {
 function parseBenchPrice(value: JsonValue | undefined, at: string): Record<string, BenchPrice> | undefined {
   if (value === undefined) return undefined;
   const map = object(value, at);
-  const out: Record<string, BenchPrice> = {};
+  const out: Record<string, BenchPrice> = Object.create(null) as Record<string, BenchPrice>;
   for (const [key, raw] of Object.entries(map)) {
     if (key.length === 0 || key.length > 256) {
       throw new AlgalError("PARSE_FAILED", `${at} has an invalid price key`);
@@ -361,6 +366,10 @@ export async function verifyBenchReport(
     if (!manifest.interface) {
       mismatches.push(`${system.id}: manifest has no interface`);
     }
+    for (const c of report.cases) {
+      const admissionError = benchCaseAdmissionError(manifest, c);
+      if (admissionError) mismatches.push(`${system.id}: ${admissionError}`);
+    }
     const passed = system.cases.filter((c) => c.passed).length;
     if (passed !== system.passed) mismatches.push(`${system.id}: passed does not match its cases`);
     if (system.cases.length !== report.cases.length) {
@@ -368,9 +377,12 @@ export async function verifyBenchReport(
     }
     const work = { steps: 0, agentCalls: 0, units: 0 };
     const usage = { tokensIn: 0, tokensOut: 0, cost: 0 };
-    const attribution: Record<string, BenchAttribution> = {};
+    const attribution: Record<string, BenchAttribution> = Object.create(null) as Record<string, BenchAttribution>;
     let effectCalls = 0;
+    const resultCaseIds = new Set<string>();
     for (const c of system.cases) {
+      if (resultCaseIds.has(c.id)) mismatches.push(`${system.id}: duplicate result case id "${c.id}"`);
+      resultCaseIds.add(c.id);
       const benchCase = casesById.get(c.id);
       if (!benchCase) {
         mismatches.push(`${system.id}: case "${c.id}" is not in the workload`);
@@ -431,20 +443,21 @@ export async function verifyBenchReport(
       if (manifest.interface) {
         const outputs: Record<string, JsonValue> = {};
         for (const [name, source] of Object.entries(manifest.interface.outputs)) {
-          const value = receipt.cells[source.cell]?.outputs?.[source.port];
+          const value = ownEntry(ownEntry(receipt.cells, source.cell)?.outputs, source.port);
           if (value !== undefined) outputs[name] = value;
         }
         if (canonicalize(outputs) !== canonicalize(c.outputs)) {
           mismatches.push(`${system.id} case ${c.id}: outputs differ from receipt`);
         }
-        const expectedArgs: Record<string, Record<string, JsonValue>> = {};
-        for (const [name, value] of Object.entries(benchCase.args)) {
-          const target = manifest.interface.inputs[name];
+        const expectedArgs: Record<string, Record<string, JsonValue>> = Object.create(null) as Record<string, Record<string, JsonValue>>;
+        for (const name of Object.keys(benchCase.args).sort()) {
+          const value = benchCase.args[name]!;
+          const target = ownEntry(manifest.interface.inputs, name);
           if (!target) {
             mismatches.push(`${system.id} case ${c.id}: unknown workload input "${name}"`);
             continue;
           }
-          (expectedArgs[target.cell] ??= {})[target.port] = value;
+          (expectedArgs[target.cell] ??= Object.create(null) as Record<string, JsonValue>)[target.port] = value;
         }
         if (canonicalize(receipt.args as unknown as JsonValue) !== canonicalize(expectedArgs as unknown as JsonValue)) {
           mismatches.push(`${system.id} case ${c.id}: receipt args differ from the workload`);
@@ -457,7 +470,7 @@ export async function verifyBenchReport(
         mismatches.push(`${system.id} case ${c.id}: effectCalls differs from receipt`);
       }
       const receiptUsage = { tokensIn: 0, tokensOut: 0, cost: 0 };
-      const receiptAttribution: Record<string, BenchAttribution> = {};
+      const receiptAttribution: Record<string, BenchAttribution> = Object.create(null) as Record<string, BenchAttribution>;
       for (const effect of receipt.effects) {
         const key = effect.usage?.model ?? effect.executor;
         const entry = (receiptAttribution[key] ??= { calls: 0, tokensIn: 0, tokensOut: 0, cost: 0 });
@@ -466,7 +479,7 @@ export async function verifyBenchReport(
         const tokensOut = effect.usage?.tokensOut ?? 0;
         entry.tokensIn += tokensIn;
         entry.tokensOut += tokensOut;
-        const price = report.prices?.[key];
+        const price = ownEntry(report.prices, key);
         const extraCost = price
           ? (tokensIn * price.input + tokensOut * price.output) / 1_000_000
           : 0;
@@ -475,7 +488,7 @@ export async function verifyBenchReport(
         receiptUsage.tokensOut += tokensOut;
         receiptUsage.cost += extraCost;
       }
-      const reportAttribution: Record<string, BenchAttribution> = {};
+      const reportAttribution: Record<string, BenchAttribution> = Object.create(null) as Record<string, BenchAttribution>;
       for (const [key, value] of Object.entries(c.attribution)) {
         reportAttribution[key] = { ...value };
       }

@@ -733,15 +733,25 @@ impl<'a> Eval<'a> {
             "nth" => {
                 let items = self.list(arr.get(1).unwrap_or(&Value::Null), op, 0)?;
                 let i = self.eval(arr.get(2).unwrap_or(&Value::Null))?;
-                let idx = match i.as_f64() {
-                    Some(n) if n >= 0.0 && n.fract() == 0.0 => n as usize,
+                let index = match i.as_f64() {
+                    Some(n) if n >= 0.0 && n.fract() == 0.0 => n,
                     _ => {
                         return Err(err_type(op, 1, "nonneg integer", kind_of(&i)));
                     }
                 };
-                items.get(idx).cloned().ok_or_else(|| {
-                    err_path(op, format!("index {idx} out of range {}", items.len()))
-                })
+                // Compare before narrowing: a saturating usize cast changes
+                // the error record across native and wasm32 targets. Lists
+                // are bounded, so only an in-range index reaches the cast.
+                let out_of_range = || {
+                    err_path(
+                        op,
+                        format!("index {} out of range {}", canonical(&i), items.len()),
+                    )
+                };
+                if index >= items.len() as f64 {
+                    return Err(out_of_range());
+                }
+                items.get(index as usize).cloned().ok_or_else(out_of_range)
             }
             "concat" => {
                 let args = self.eval_args(arr)?;

@@ -353,33 +353,8 @@ pub fn load_config(path: &Path, apple_bridge: Option<&Path>) -> Result<BenchConf
     };
     // Case args and expected outputs must line up with every system's interface.
     for system in &systems {
-        let inputs = object(&system.manifest.value["interface"]["inputs"])?;
-        let outputs = object(&system.manifest.value["interface"]["outputs"])?;
         for case in &cases {
-            for name in object(&case.args)?.keys() {
-                if !inputs.contains_key(name) {
-                    return Err(Error::invalid(format!(
-                        "case {}: unknown system input \"{name}\"",
-                        case.id
-                    )));
-                }
-            }
-            for name in outputs.keys() {
-                if object(&case.expect)?.get(name).is_none() {
-                    return Err(Error::invalid(format!(
-                        "case {}: missing expected output \"{name}\"",
-                        case.id
-                    )));
-                }
-            }
-            for name in object(&case.expect)?.keys() {
-                if !outputs.contains_key(name) {
-                    return Err(Error::invalid(format!(
-                        "case {}: unknown expected output \"{name}\"",
-                        case.id
-                    )));
-                }
-            }
+            check_case_interface(&system.manifest, case)?;
         }
     }
     Ok(BenchConfig {
@@ -391,9 +366,44 @@ pub fn load_config(path: &Path, apple_bridge: Option<&Path>) -> Result<BenchConf
     })
 }
 
+fn check_case_interface(manifest: &Manifest, case: &BenchCase) -> Result<()> {
+    let inputs = object(&manifest.value["interface"]["inputs"])?;
+    let outputs = object(&manifest.value["interface"]["outputs"])?;
+    for name in object(&case.args)?.keys() {
+        if !inputs.contains_key(name) {
+            return Err(Error::invalid(format!(
+                "case {}: unknown system input \"{name}\"",
+                case.id
+            )));
+        }
+    }
+    for name in outputs.keys() {
+        if !object(&case.expect)?.contains_key(name) {
+            return Err(Error::invalid(format!(
+                "case {}: missing expected output \"{name}\"",
+                case.id
+            )));
+        }
+    }
+    for name in object(&case.expect)?.keys() {
+        if !outputs.contains_key(name) {
+            return Err(Error::invalid(format!(
+                "case {}: unknown expected output \"{name}\"",
+                case.id
+            )));
+        }
+    }
+    Ok(())
+}
+
 fn case_args(manifest: &Manifest, case: &BenchCase) -> Result<Value> {
     let mut args = Map::new();
-    for (name, value) in object(&case.args)? {
+    let supplied = object(&case.args)?;
+    let mut names: Vec<_> = supplied.keys().collect();
+    names.sort();
+    // Conflicting admitted aliases use the same canonical name order as Bun.
+    for name in names {
+        let value = &supplied[name];
         let target = &object(&manifest.value["interface"]["inputs"])?[name];
         args.entry(text(&target["cell"], MAX_ID)?.to_owned())
             .or_insert_with(|| json!({}))[text(&target["port"], MAX_ID)?] = value.clone();
@@ -578,6 +588,13 @@ pub async fn run(
         scorer,
         axes,
     } = config;
+    // Public callers may construct a config without passing through load_config.
+    // Reject every invalid case before running any system or external executor.
+    for system in systems {
+        for case in cases {
+            check_case_interface(&system.manifest, case)?;
+        }
+    }
     let scorer = scorer.as_ref();
     let axes = axes.as_deref();
     let prices = prices.clone();
@@ -974,6 +991,11 @@ pub async fn verify(report: &Value, store: &Store, tools: &Host) -> Result<Value
         if manifest.value["interface"].as_object().is_none() {
             mismatches.push(format!("{id}: manifest has no interface"));
         }
+        for case in &workload_cases {
+            if let Err(error) = check_case_interface(&manifest, case) {
+                mismatches.push(format!("{id}: {}", error.message));
+            }
+        }
         let system_cases = system["cases"]
             .as_array()
             .filter(|list| !list.is_empty() && list.len() <= MAX_CASES)
@@ -994,6 +1016,7 @@ pub async fn verify(report: &Value, store: &Store, tools: &Host) -> Result<Value
         let mut usage = Attribution::default();
         let mut attribution: BTreeMap<String, Attribution> = BTreeMap::new();
         let mut effect_calls = 0u64;
+        let mut result_case_ids = BTreeSet::new();
         for (j, case) in system_cases.iter().enumerate() {
             let cat = format!("{at}.cases[{j}]");
             keys(
@@ -1012,6 +1035,9 @@ pub async fn verify(report: &Value, store: &Store, tools: &Host) -> Result<Value
                 ],
             )?;
             let case_id = bench_id(&case["id"], &format!("{cat}.id"))?;
+            if !result_case_ids.insert(case_id.clone()) {
+                mismatches.push(format!("{id}: duplicate result case id \"{case_id}\""));
+            }
             let outcome = case["outcome"].as_str().unwrap_or("");
             if !["complete", "failed", "stuck"].contains(&outcome) {
                 return Err(Error::invalid(format!("{cat}.outcome is invalid")));
@@ -1093,7 +1119,11 @@ pub async fn verify(report: &Value, store: &Store, tools: &Host) -> Result<Value
                     .as_object()
                     .unwrap_or(&empty);
                 let mut expected_args = Map::new();
-                for (name, value) in object(&bench_case.args)? {
+                let supplied = object(&bench_case.args)?;
+                let mut names: Vec<_> = supplied.keys().collect();
+                names.sort();
+                for name in names {
+                    let value = &supplied[name];
                     match inputs.get(name) {
                         Some(target) => {
                             expected_args

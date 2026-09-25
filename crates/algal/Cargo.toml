@@ -24,6 +24,9 @@ sha2 = "=0.10.9"
 tokio = { version = "=1.47.1", features = ["rt-multi-thread", "macros", "process", "io-util", "io-std", "sync", "time", "signal"] }
 
 [dev-dependencies]
+# Keep the engine in this reviewed Cargo.lock and native test artifact; the
+# default dynamic engine performs a separate ungoverned shim build.
+hegeltest = { version = "=0.46.1", features = ["static-engine"] }
 tempfile = "=3.23.0"
 
 [build-dependencies]

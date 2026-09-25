@@ -10,22 +10,35 @@ import { SHARED_LEASE_RETRY, hostDirectory, hostLease, hostNames, hostRead, host
 import { FileStore } from "./store";
 import type { JsonValue } from "./values";
 
+export type FileApplicationStorageOptions = {
+  /** Host diagnostic barrier after the namespace scan, before application
+   * custody. It grants no authority and is not part of any durable record. */
+  custodySelected?: () => void | Promise<void>;
+};
+
 export class FileApplicationStorage implements ApplicationStorage {
   readonly dir: string;
   readonly store: FileStore;
-  constructor(dir: string) { this.dir = resolve(dir); this.store = new FileStore(this.dir); }
+  // Accessed only under this application's stable pending lease. Tracking by
+  // application keeps independent callbacks on one adapter from sharing state.
+  private readonly legacyHeld = new Set<string>();
+  constructor(dir: string, private readonly options: FileApplicationStorageOptions = {}) { this.dir = resolve(dir); this.store = new FileStore(this.dir); }
   private path(application: string): string { return join(this.dir, "applications", applicationId(application)); }
+  private legacyCustody<T>(application: string, action: () => Promise<T>): Promise<T> {
+    return hostLease(this.path(application), "application-" + application, async () => {
+      this.legacyHeld.add(application);
+      try { return await action(); }
+      finally { this.legacyHeld.delete(application); }
+    });
+  }
   async custody<T>(application: string, creating: boolean, action: () => Promise<T>): Promise<T> {
     const root = join(this.dir, "applications");
     await hostDirectory(root);
-    // The shared creation lease serializes only the namespace scan and the
-    // committed-head check; admission then runs under the application's own
-    // mutex. Until a head exists that mutex is a per-application creation
-    // lease inside `.creation` — coordination residue, never a reserved
-    // namespace — so independent creations and a refused first commit never
-    // queue behind or consume capacity through a trusted host call.
-    const selected = await hostLease(join(root, ".creation"), "application-creation", async (): Promise<{existing: true} | {creating: true} | {result: T}> => {
-      let count = 0, committed = false, scanned = 0;
+    // The namespace scan never selects a different mutex after publication.
+    // Pending is retained as the stable per-application identity. Its residue
+    // stays outside the application count, including refused first commits.
+    await hostLease(join(root, ".creation"), "application-creation", async () => {
+      let count = 0, present = false, scanned = 0;
       for await (const entry of await opendir(root)) {
         if (++scanned > APPLICATION_SERVICE_LIMITS.applications + 2) throw new Error("Application directory bound exceeded");
         if (entry.name === ".creation") continue;
@@ -34,21 +47,25 @@ export class FileApplicationStorage implements ApplicationStorage {
         if (entry.isFile() && !entry.isSymbolicLink()) continue;
         if (!entry.isDirectory() || entry.isSymbolicLink()) throw new Error("Invalid application directory");
         applicationId(entry.name); count++;
-        if (entry.name === application) {
-          try {
-            const head = await lstat(join(root, entry.name, "head.json"));
-            committed = head.isFile() && !head.isSymbolicLink();
-          } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-        }
+        if (entry.name === application) present = true;
       }
-      if (committed) return {existing: true};
-      if (!creating) return {result: await action()};
-      if (count >= APPLICATION_SERVICE_LIMITS.applications) throw new Error("Application count exhausted");
-      return {creating: true};
+      // A prepared namespace already occupies its slot and may finish at the
+      // count limit. The quota ledger rechecks allocation before publication.
+      if (creating && !present && count >= APPLICATION_SERVICE_LIMITS.applications) throw new Error("Application count exhausted");
     }, SHARED_LEASE_RETRY);
-    if ("result" in selected) return selected.result;
-    if ("creating" in selected) return hostLease(join(root, ".creation", "pending", applicationId(application)), "application-" + application, action);
-    return hostLease(this.path(application), "application-" + application, action);
+    await this.options.custodySelected?.();
+    return hostLease(join(root, ".creation", "pending", applicationId(application)), "application-" + application, async () => {
+      let present = false;
+      try {
+        const entry = await lstat(this.path(application));
+        if (!entry.isDirectory() || entry.isSymbolicLink()) throw new Error("Invalid application directory");
+        present = true;
+      } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+      // Existing stores still take the permanent mutex: live old writers and
+      // unrecognized legacy markers must never be bypassed by the new path.
+      // A genuinely new namespace is delayed until admission and quota pass.
+      return present ? this.legacyCustody(application, action) : action();
+    });
   }
 
   async readHead(application: string): Promise<JsonValue | undefined> {
@@ -82,6 +99,7 @@ export class FileApplicationStorage implements ApplicationStorage {
     return hostWrite(join(this.path(application), "outbox", applicationRef(intent).slice(7) + ".json"), value, APPLICATION_LIMITS.recordBytes, immutable);
   }
   publication<T>(application: string, writes: JsonValue[], action: () => Promise<T>): Promise<T> {
-    return withApplicationQuota(this.dir, application, writes, action);
+    return withApplicationQuota(this.dir, application, writes, () =>
+      this.legacyHeld.has(application) ? action() : this.legacyCustody(application, action));
   }
 }

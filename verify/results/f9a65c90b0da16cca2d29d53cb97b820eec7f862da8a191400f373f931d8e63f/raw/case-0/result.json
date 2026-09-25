@@ -1,0 +1,1 @@
+{"domain":"grammar","expected":{"ok":true,"value":9},"id":"grammar-1-0","inputSha256":"sha256:6fe5d8360c890a4a884dfbd54d3910c13a5455bd34b69faf39852409469cfab6","outputs":{"bun-wrapper":"{\"fuel\":1,\"ok\":true,\"value\":9}","committed-wasm":"{\"fuel\":1,\"ok\":true,\"value\":9}","native":"{\"fuel\":1,\"ok\":true,\"value\":9}"},"targets":["committed-wasm","bun-wrapper","native"]}

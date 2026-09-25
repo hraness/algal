@@ -36,6 +36,36 @@ fn env(pairs: &[(&str, Value)]) -> Map<String, Value> {
 // ------------------------------------------------------------ literals ---
 
 #[test]
+fn nth_errors_preserve_indices_beyond_target_pointer_width() {
+    let e = Map::new();
+    for (index, rendered) in [
+        (-0.0, "0"),
+        (1024.0, "1024"),
+        (4294967295.0, "4294967295"),
+        (4294967296.0, "4294967296"),
+        (9007199254740992.0, "9007199254740992"),
+        (18446744073709552000.0, "18446744073709552000"),
+        (1e308, "1e+308"),
+    ] {
+        let (error, fuel) = run(&json!(["nth", ["quote", []], index]), &e, DEFAULT_FUEL)
+            .expect_err("empty list has no admitted index");
+        assert_eq!(fuel, 4);
+        assert_eq!(
+            error.to_json(),
+            json!({"code":"EXPR_PATH","op":"nth","what":format!("index {rendered} out of range 0")})
+        );
+    }
+    assert_eq!(
+        ok_eval(json!(["nth", ["quote", ["first", "last"]], -0.0]), &e),
+        json!("first")
+    );
+    assert_eq!(
+        ok_eval(json!(["nth", ["quote", ["first", "last"]], 1]), &e),
+        json!("last")
+    );
+}
+
+#[test]
 fn scalars_self_evaluate() {
     let e = Map::new();
     assert_eq!(ok_eval(json!(null), &e), json!(null));

@@ -1,8 +1,9 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { copyFile, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, test } from "bun:test";
 import { parseCapabilityHandle } from "./capabilities";
+import { digestCanonical } from "./digest";
 import { parseOrganismManifest, type OrganismManifest } from "./contract";
 import { externalWakeKey, FileMailboxService, mailboxToolRegistry, MemoryMailboxService } from "./mailbox";
 import { MemoryStore } from "./store";
@@ -40,6 +41,44 @@ function receiverManifest(): OrganismManifest {
 }
 
 describe("mailbox capabilities", () => {
+  test("operations reject missing admitted mailbox directories without recreating them", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "algal-mailbox-missing-layout-"));
+    directories.push(dir);
+    const service = new FileMailboxService(dir);
+    const config = await service.create("incomplete");
+    const messages = join(dir, "mailboxes/incomplete/messages");
+    await rm(messages, { recursive: true });
+    await expect(service.send(config.send, "message", digestCanonical("missing layout"))).rejects.toThrow();
+    await expect(lstat(messages)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  for (const operation of ["receive", "hasPending", "retry"] as const) {
+    test(`ambiguous pending and consumed evidence rejects ${operation} without reconciliation`, async () => {
+      const dir = await mkdtemp(join(tmpdir(), "algal-mailbox-uncertain-"));
+      directories.push(dir);
+      const service = new FileMailboxService(dir);
+      const config = await service.create("uncertain");
+      const key = digestCanonical("uncertain delivery");
+      await service.send(config.send, "message", key);
+      const pending = join(dir, "mailboxes/uncertain/pending", `${key.slice(7)}.json`);
+      const consumed = join(dir, "mailboxes/uncertain/consumed", `${key.slice(7)}.json`);
+      await copyFile(pending, consumed);
+      const before = await readFile(pending);
+      const reopened = new FileMailboxService(dir);
+      const invoke = () => operation === "receive" ? reopened.receive(config.receive)
+        : operation === "hasPending" ? reopened.hasPending(config.receive)
+        : reopened.send(config.send, "message", key);
+      await expect(invoke()).rejects.toMatchObject({ code: "IO_FAILED" });
+      expect(await readFile(pending)).toEqual(before);
+      expect(await readFile(consumed)).toEqual(before);
+      await writeFile(consumed, JSON.stringify({ contract: "algal.mailbox-delivery.v1", id: digestCanonical("foreign") }));
+      const conflict = await readFile(consumed);
+      await expect(invoke()).rejects.toMatchObject({ code: "DIGEST_MISMATCH" });
+      expect(await readFile(pending)).toEqual(before);
+      expect(await readFile(consumed)).toEqual(conflict);
+    });
+  }
+
   test("send is idempotent, receive is bounded, and revocation fails closed", async () => {
     const service = new MemoryMailboxService();
     const mailbox = await service.create("worker", {

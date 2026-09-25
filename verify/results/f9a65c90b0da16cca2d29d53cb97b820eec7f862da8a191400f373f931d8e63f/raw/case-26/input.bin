@@ -1,0 +1,1 @@
+{"program":["sub",["add",["neg",7],["neg",["neg",8]]],4],"env":{},"fuel":10000}

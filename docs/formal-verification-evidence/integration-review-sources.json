@@ -1,0 +1,179 @@
+{
+  "head": "f461dd2deb11c11746af38fcb480380b44e2ba29",
+  "mergeHead": "e588f8bc9b0964e5956f4c62e60c14dfbcef171e",
+  "scope": "Independent read-only integration review; no implementation or gate execution",
+  "files": [
+    {
+      "path": "src/application-core.ts",
+      "sha256": "3613b646e58cdcda387c54a6d352451c58221d435b8a319cf257703d4e06c3b6"
+    },
+    {
+      "path": "src/application-storage.ts",
+      "sha256": "eadea5bffc3b7438b521491db2efe4ffa5f63a11d59d35bc397fc73493399a04"
+    },
+    {
+      "path": "src/application-filesystem.ts",
+      "sha256": "f5ffe5f8c5ad97c2e1ed9cbb8f0f4917004dd11606c41097a7bbf4bd4dc2009b"
+    },
+    {
+      "path": "src/application.ts",
+      "sha256": "2674509bb45b061de65d4dc521de683603d6c3985789884a4c465be303be0fb2"
+    },
+    {
+      "path": "src/application-contract.ts",
+      "sha256": "7a74bef117142090aa6cbc20f884d4a2e13e724efc2c33d755560d4d73df0f37"
+    },
+    {
+      "path": "src/application-message-contract.ts",
+      "sha256": "b661698b8277b372c1863eba6e9ac55c143a423bd972ea096b20bbe091ca0ff1"
+    },
+    {
+      "path": "src/application-message.ts",
+      "sha256": "f6b4d057b995bee780a54e07f0e5ebe7e00b1c97c7dab0cfa38fc780de272d89"
+    },
+    {
+      "path": "src/effects.ts",
+      "sha256": "1abecf4b8b37cdbc4cc14eeccbdee98980dc1f7b4324d37b34710a37a563e92e"
+    },
+    {
+      "path": "src/run.ts",
+      "sha256": "76f86bd519ea39a0b77874c217f545ec2c946a1c1a375a66de1b12671d77b9f6"
+    },
+    {
+      "path": "src/process-journal.ts",
+      "sha256": "5b0793a833cb0e1d11689e03366158123e7781df4927b4d26140fe21536c1b6e"
+    },
+    {
+      "path": "src/host-state.ts",
+      "sha256": "ae40c39eb62409b6a1dad07d78eef9612994b39ad73ac971bc47fd06a1a81409"
+    },
+    {
+      "path": "src/bundle.ts",
+      "sha256": "898a4b622fb2263892dfd75d8a51b97aff561a5cade1221e916de06d7e7fc783"
+    },
+    {
+      "path": "src/values.ts",
+      "sha256": "cce324b52aad8eb1426419b738d1a4df7adf41fca6bbe73e440711d1fe4db646"
+    },
+    {
+      "path": "src/chat-completions.ts",
+      "sha256": "5a6ff036b97f6a394da359c997c12bdc94e845ab6b07c142564082130415af00"
+    },
+    {
+      "path": "src/gateway.ts",
+      "sha256": "3177ce4999a9b8009424327cd1f35576d777a42b73b616d36b3032a9f89cbb61"
+    },
+    {
+      "path": "src/mailbox.ts",
+      "sha256": "5cb49c0ec5b2fb56cce1223e5ffe0bf7e375666cede84676f6dde2a592b47ceb"
+    },
+    {
+      "path": "cli.ts",
+      "sha256": "f16f8b87965f930fc34ec99e1cab9524cb36573f10f69c50a22c0b8b708df46a"
+    },
+    {
+      "path": "crates/algal/src/effects.rs",
+      "sha256": "4d854c2feb47e1d8e408b89bd16b0169cf478d70ab3b8a4d4eb9c21d802c9ec6"
+    },
+    {
+      "path": "crates/algal/src/runtime.rs",
+      "sha256": "30052d6694952c446fe960c3320be4309ffbe1717ce1f66a66add1aac661e236"
+    },
+    {
+      "path": "crates/algal/src/receipt.rs",
+      "sha256": "1aad89398bb43d7cec70b68274ac57e2f4501e9d143be176ed68e32aa6e72c96"
+    },
+    {
+      "path": "crates/algal/src/journal.rs",
+      "sha256": "828f37b9b41c8e1851e3ad8cbf13050f74fa0fd0ce64b4f7fc2e83b3576bbf18"
+    },
+    {
+      "path": "crates/algal/src/process.rs",
+      "sha256": "dedf6bcf7554644f6341b470f7499c218687def2099596b5fae5427206d03e98"
+    },
+    {
+      "path": "crates/algal/src/store.rs",
+      "sha256": "5f5756ff757a913a7f8f5261aa3c5977851ec7e850c608d15ee8ee54de5d7faa"
+    },
+    {
+      "path": "crates/algal/src/mailbox.rs",
+      "sha256": "d700be20f7096660fb15e88a73988bf6bbe49f4aaff80d4eddf708e85ca2adcf"
+    },
+    {
+      "path": "crates/algal/src/main.rs",
+      "sha256": "df2379e07d9618769d6c0bccec35ebc718143cc7b2e9cf98baf3abb42d59aefb"
+    },
+    {
+      "path": "src/application-core.test.ts",
+      "sha256": "0d0f25326bc973fefbd067e85e8166fac16262bdff37097feb13bbfbf4e2e1d5"
+    },
+    {
+      "path": "src/application-storage-boundary.test.ts",
+      "sha256": "52be72186a3c562ee81c1485fdc764cfcf72d54e0e4d1dfce744bd5f053ea43a"
+    },
+    {
+      "path": "src/gateway-journal.test.ts",
+      "sha256": "ba22c2c36dfebdb3da619dee1afdc51fb65a284e37b09fdbdf38f2505c9177eb"
+    },
+    {
+      "path": "src/bundle-ingress.test.ts",
+      "sha256": "40f2e5415cc6df83e77cd980665c9c7419e81bdc28befbaebda8f61896b9ca22"
+    },
+    {
+      "path": "src/directory-admission.test.ts",
+      "sha256": "77ef74722112ac5054b54711704aa9dced5a6c99a3bee6d6a5ee9f0c2cae3d5e"
+    },
+    {
+      "path": "src/fixtures/application-test-scope.ts",
+      "sha256": "a5e3f868504f1c283730c01d497d32aa24dfbf00a8ca705a0cfa44d530196278"
+    },
+    {
+      "path": "verify/lib/files.ts",
+      "sha256": "aaffad70367e4a6a6ae95b08b6d137e7a1d12be861d8c753ce52d9a4f274c2ed"
+    },
+    {
+      "path": "verify/lib/claims.ts",
+      "sha256": "0b957f70d7d1ca9b423c9999eb87281b82855ffbf5feb01b30286ff82834e127"
+    },
+    {
+      "path": "verify/lib/suites.ts",
+      "sha256": "30b8b34bc9d867155bd5228734cf512a170c4cfbb15f96f3cf9ef0226656eb72"
+    },
+    {
+      "path": "verify/protocols/run.ts",
+      "sha256": "262e95e9d006a06a8cdd7343b4fed3883e2e9607e3f6664a1398edb12c1c8f4a"
+    },
+    {
+      "path": "spec/v1/organism.md",
+      "sha256": "560d0c98931d970fa6cedc49e14bc5b0ed2bc3420f056823545edfb7e4f49850"
+    },
+    {
+      "path": "spec/v1/mailbox.md",
+      "sha256": "7e44be76795ec418af99fe40a978bfbeb1426615b16ac8394a7d440d01bb9356"
+    },
+    {
+      "path": "docs/directory-admission.md",
+      "sha256": "8e9df36f571b6e8456c621608661b2c284fc99c149fe3cbb2bb841afbaa7ed62"
+    },
+    {
+      "path": "docs/formal-verification-plan.md",
+      "sha256": "a52001ded8efe62edf1c1e29220948c7014062f1d0882cc31465c3ea82cba8f9"
+    },
+    {
+      "path": "docs/formal-verification-evidence/phase06-application.md",
+      "sha256": "fc4cf34c2f40918f780b47277bb4ee9b4581482f756468c37b7c069a02ffb488"
+    },
+    {
+      "path": "docs/formal-verification-evidence/phase07-scheduler.md",
+      "sha256": "b05b1cc3ef27874870c5aa088f2d8d0dfba72f66cc8d116e18782dbdc209e357"
+    },
+    {
+      "path": "docs/formal-verification-evidence/phase08-closure.md",
+      "sha256": "a9559ed01b202a57e9e98033daff5d17cc7a0697755f6f8fafb0379e443138eb"
+    },
+    {
+      "path": "docs/formal-verification-evidence/phase09-core.md",
+      "sha256": "efb1e31f11af338075883ea76942dc803c66e5db935f972cfa683672ea848e7b"
+    }
+  ]
+}

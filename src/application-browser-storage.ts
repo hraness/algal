@@ -153,22 +153,59 @@ async function snapshot(database: IDBDatabase): Promise<Snapshot> {
   } catch (error) { try { transaction.abort(); } catch { /* Already settled. */ } await done.catch(() => {}); throw io(error); }
 }
 function rawJson(input: unknown): JsonValue {
-  let count = 0;
+  let count = 0, bytes = 0;
+  const charge = (amount: number): void => {
+    bytes += amount;
+    if (bytes > BROWSER_STORAGE_LIMITS.rawExportBytes) budget("raw export byte limit exceeded");
+  };
+  // Count the compact JSON encoding before allocating an escaped string or
+  // cloning its container. Recovery must preserve even malformed UTF-16 text.
+  const string = (value: string): void => {
+    if (value.length > BROWSER_STORAGE_LIMITS.rawExportBytes - bytes - 2) budget("raw export byte limit exceeded");
+    charge(2);
+    for (let index = 0; index < value.length; index++) {
+      const code = value.charCodeAt(index);
+      if (code === 34 || code === 92 || code === 8 || code === 9 || code === 10 || code === 12 || code === 13) charge(2);
+      else if (code < 32) charge(6);
+      else if (code < 128) charge(1);
+      else if (code < 2048) charge(2);
+      else if (code >= 0xd800 && code <= 0xdbff && value.charCodeAt(index + 1) >= 0xdc00 && value.charCodeAt(index + 1) <= 0xdfff) { charge(4); index++; }
+      else charge(code >= 0xd800 && code <= 0xdfff ? 6 : 3);
+    }
+  };
   const visit = (value: unknown, depth: number): JsonValue => {
     if (++count > 1_000_000 || depth > 32) budget("raw export structure exceeded");
-    if (value === null || typeof value === "string" || typeof value === "boolean") return value;
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-    if (Array.isArray(value)) return value.map(child => visit(child, depth + 1));
+    if (value === null) { charge(4); return value; }
+    if (typeof value === "string") { string(value); return value; }
+    if (typeof value === "boolean") { charge(value ? 4 : 5); return value; }
+    if (typeof value === "number" && Number.isFinite(value) && !Object.is(value, -0)) { charge(JSON.stringify(value).length); return value; }
+    if (Array.isArray(value)) {
+      if (value.length > 1_000_000 - count) budget("raw export structure exceeded");
+      for (const key in value) if (Object.hasOwn(value, key) && (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= value.length)) fail("raw export array has non-JSON properties");
+      charge(2);
+      const out: JsonValue[] = [];
+      for (let index = 0; index < value.length; index++) {
+        const item = Object.getOwnPropertyDescriptor(value, index);
+        if (!item || !Object.hasOwn(item, "value")) fail("raw export array is sparse or has non-JSON properties");
+        if (index) charge(1);
+        out.push(visit(item.value, depth + 1));
+      }
+      return out;
+    }
     if (value && typeof value === "object" && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)) {
       const out: Record<string, JsonValue> = Object.create(null) as Record<string, JsonValue>;
-      for (const [key, child] of Object.entries(value)) out[key] = visit(child, depth + 1);
+      charge(2); let entries = 0;
+      for (const key in value) if (Object.hasOwn(value, key)) {
+        const item = Object.getOwnPropertyDescriptor(value, key)!;
+        if (!Object.hasOwn(item, "value")) fail("raw export object has non-JSON properties");
+        if (entries++) charge(1);
+        string(key); charge(1); out[key] = visit(item.value, depth + 1);
+      }
       return out;
     }
     fail("raw export contains a non-JSON value; lossless JSON export is unavailable");
   };
-  const value = visit(input, 0);
-  if (utf8Length(JSON.stringify(value)) > BROWSER_STORAGE_LIMITS.rawExportBytes) budget("raw export byte limit exceeded");
-  return value;
+  return visit(input, 0);
 }
 
 export class IndexedDbApplicationStorage implements ApplicationStorage {

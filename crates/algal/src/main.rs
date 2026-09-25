@@ -1322,12 +1322,18 @@ fn tool_definition(
 #[derive(Default)]
 struct MapBuilder(serde_json::Map<String, Value>);
 
+const MAX_LISTING_DIRECTORY_ENTRIES: usize = 4_096;
+
 fn listing(dir: &Path, kind: &str) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
     match std::fs::read_dir(dir.join(kind)) {
         Ok(entries) => {
-            for entry in entries {
-                let path = entry?.path();
+            for (index, entry) in entries.enumerate() {
+                let entry = entry?;
+                if index >= MAX_LISTING_DIRECTORY_ENTRIES {
+                    return Err(Error::limit("store listing physical entry bound exceeded"));
+                }
+                let path = entry.path();
                 if path.extension().and_then(|e| e.to_str()) == Some("json") {
                     files.push(path);
                 }

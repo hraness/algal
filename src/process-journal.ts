@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { AlgalError } from "./errors";
 import { asDigest, digestCanonical, type Digest } from "./digest";
 import { parseEffectReceipt, type EffectReceipt } from "./effects";
-import { hostDirectory, hostNames, hostRead, hostWrite } from "./host-state";
+import { hostDirectory, hostNames, hostRead, hostValue, hostWrite } from "./host-state";
 import { asInt, asObject, asSafeId, asString, canonicalBytes, canonicalize, noUnknownKeys, type JsonValue } from "./values";
 
 export const JOURNAL_BOUNDS = { maxEntries: 4096, maxRecordBytes: 1_048_576, maxBytes: 16_777_216, maxRecoveries: 8 } as const;
@@ -156,7 +156,7 @@ export class ProcessJournal implements RuntimeJournal {
     } catch (error) { this.poison(error); throw error; } finally { this.mutating = false; }
   }
   private async writeRecord(record: RecordEntry): Promise<Entry> {
-    const raw = value(parseRecord(record));
+    const raw = value(parseRecord(hostValue(record)));
     const digest = digestCanonical(raw);
     const bytes = canonicalBytes(raw);
     if (bytes > JOURNAL_BOUNDS.maxRecordBytes || this.bytes + (this.seen.has(digest) ? 0 : bytes) > JOURNAL_BOUNDS.maxBytes) throw new AlgalError("BUDGET_EXHAUSTED", "journal byte budget exceeded");
@@ -206,7 +206,7 @@ export class ProcessJournal implements RuntimeJournal {
       const ordinal = this.active.get(token);
       const entry = ordinal === undefined ? undefined : this.entries[ordinal];
       if (!entry || entry.digest !== token || entry.value.state !== "started") mismatch("journal completion has no live intent");
-      const receipt = parseEffectReceipt(effect);
+      const receipt = parseEffectReceipt(hostValue(effect));
       if (receipt.requestDigest !== entry.value.requestDigest) mismatch("journal result request mismatch");
       await this.writeRecord({...entry.value, state: "completed", previous: entry.digest, receipt});
       this.assertHealthy();

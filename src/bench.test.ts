@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { parseOrganismManifest } from "./contract";
+import { digestCanonical } from "./digest";
 import { scriptedExecutor, type Executor } from "./effects";
 import { builtinRegistry } from "./registry";
 import { MemoryStore } from "./store";
@@ -139,6 +140,213 @@ async function bench() {
 }
 
 describe("bench", () => {
+  test("requires an own expected constructor output", async () => {
+    const manifest = parseOrganismManifest({
+      contract: "algal.organism.v1", key: "organism:bench-constructor-expect", name: "Constructor expectation",
+      cells: [{ id: "source", kind: "input", outputs: { constructor: "json" } }], edges: [],
+      interface: { inputs: {}, outputs: { constructor: { cell: "source", port: "constructor" } } },
+    });
+    await expect(runBenchmark({
+      systems: [{ id: "test", manifest, executors: [scriptedExecutor({})] }], cases: [{ id: "case", args: {}, expect: {} }],
+      fns: builtinRegistry(), store: new MemoryStore(),
+    })).rejects.toThrow('missing expected output "constructor"');
+  });
+
+  test("keeps a missing constructor output absent and verifies the failed case", async () => {
+    const manifest = parseOrganismManifest({
+      contract: "algal.organism.v1", key: "organism:bench-missing-constructor-output", name: "Missing constructor output",
+      cells: [{ id: "source", kind: "input", outputs: { value: "json", constructor: "json" } }], edges: [],
+      interface: { inputs: { value: { cell: "source", port: "value" } }, outputs: { constructor: { cell: "source", port: "constructor" } } },
+    });
+    const store = new MemoryStore(), fns = builtinRegistry();
+    const report = await runBenchmark({
+      systems: [{ id: "test", manifest, executors: [scriptedExecutor({})] }], cases: [{ id: "case", args: { value: 1 }, expect: { constructor: null } }],
+      fns, store,
+    });
+    const c = report.systems[0]!.cases[0]!;
+    expect(c.outcome).toBe("complete");
+    expect(c.passed).toBe(false);
+    expect(Object.keys(c.outputs)).toEqual([]);
+    expect(Object.hasOwn(c.outputs, "constructor")).toBe(false);
+    expect((await verifyBenchReport(report, store, fns)).mismatches).toEqual([]);
+  });
+
+  test("verifies declared constructor names with own __proto__ JSON data", async () => {
+    const manifest = parseOrganismManifest({
+      contract: "algal.organism.v1", key: "organism:bench-constructor-data", name: "Constructor data",
+      cells: [{ id: "constructor", kind: "input", outputs: { value: "json" } }], edges: [],
+      interface: {
+        inputs: { constructor: { cell: "constructor", port: "value" } },
+        outputs: { constructor: { cell: "constructor", port: "value" } },
+      },
+    });
+    const value = JSON.parse('{"__proto__":{"kept":true},"constructor":"data"}') as JsonValue;
+    const store = new MemoryStore(), fns = builtinRegistry();
+    const report = await runBenchmark({
+      systems: [{ id: "constructor", manifest, executors: [scriptedExecutor({})] }],
+      cases: [{ id: "constructor", args: { constructor: value }, expect: { constructor: value } }], fns, store,
+    });
+    expect(report.systems[0]!.passed).toBe(1);
+    const previous = Object.getOwnPropertyDescriptor(Object, "value");
+    try {
+      expect((await verifyBenchReport(report, store, fns)).mismatches).toEqual([]);
+      expect(Object.getOwnPropertyDescriptor(Object, "value")).toEqual(previous);
+    } finally {
+      // Keep the red-before regression from leaking the old accumulator bug.
+      if (previous) Object.defineProperty(Object, "value", previous);
+      else Reflect.deleteProperty(Object, "value");
+    }
+  });
+
+  test("treats inherited price names as absent", async () => {
+    const store = new MemoryStore(), fns = builtinRegistry();
+    const report = await runBenchmark({
+      systems: [{ id: "test", manifest: single, executors: [metered("test", "constructor", { route: "billing" }, CHEAP)] }],
+      cases: [cases[0]!], prices: {}, fns, store,
+    });
+    expect(report.systems[0]!.usage.cost).toBe(0);
+    // Parsing must preserve an own constructor attribution without using it
+    // as an inherited accumulator during receipt verification.
+    const properties = ["calls", "tokensIn", "tokensOut", "cost"];
+    const previous = properties.map(key => Object.getOwnPropertyDescriptor(Object, key));
+    try {
+      expect((await verifyBenchReport(report, store, fns)).mismatches).toEqual([]);
+      expect(properties.map(key => Object.getOwnPropertyDescriptor(Object, key))).toEqual(previous);
+    } finally {
+      properties.forEach((key, i) => {
+        if (previous[i]) Object.defineProperty(Object, key, previous[i]!);
+        else Reflect.deleteProperty(Object, key);
+      });
+    }
+  });
+
+  test("preserves an own __proto__ model attribution and price through parsing and replay", async () => {
+    const store = new MemoryStore(), fns = builtinRegistry();
+    const prices = Object.fromEntries([["__proto__", { input: 2, output: 3 }]]);
+    const report = await runBenchmark({
+      systems: [{ id: "test", manifest: single, executors: [metered("test", "__proto__", { route: "billing" }, CHEAP)] }],
+      cases: [cases[0]!], prices, fns, store,
+    });
+    const parsed = parseBenchReport(JSON.parse(canonicalize(report as unknown as JsonValue)));
+    expect(Object.hasOwn(parsed.prices!, "__proto__")).toBe(true);
+    expect(Object.hasOwn(parsed.systems[0]!.attribution, "__proto__")).toBe(true);
+    expect(parsed.systems[0]!.usage.cost).toBe((CHEAP.tokensIn * 2 + CHEAP.tokensOut * 3) / 1_000_000);
+    expect((await verifyBenchReport(parsed, store, fns)).mismatches).toEqual([]);
+  });
+
+  test("explicitly rejects an inherited workload input in imported reports", async () => {
+    const store = new MemoryStore(), fns = builtinRegistry();
+    const report = await runBenchmark({
+      systems: [{ id: "test", manifest: single, executors: [scriptedExecutor({ route: "billing" })] }],
+      cases: [cases[0]!], fns, store,
+    });
+    report.cases = report.cases.map(c => ({ ...c, args: { ...c.args, constructor: "undeclared" } }));
+    report.workload = digestCanonical(report.cases as unknown as JsonValue);
+    const { digest: _digest, ...body } = report;
+    report.digest = digestCanonical(body as unknown as JsonValue);
+    const checked = await verifyBenchReport(report, store, fns);
+    expect(checked.ok).toBe(false);
+    expect(checked.mismatches).toContain('test case t1: unknown workload input "constructor"');
+  });
+
+  test.each(["missing-expect", "extra-expect"] as const)("rejects imported %s case admission even with genuine replayable receipts", async defect => {
+    const store = new MemoryStore(), fns = builtinRegistry();
+    const options = {
+      systems: [{ id: "test", manifest: single, executors: [scriptedExecutor({ route: "billing" })] }],
+      cases: [cases[0]!], fns, store, scorer: { contract: "algal.expr.v1" as const, program: ["eq", 1, 1] },
+    };
+    const report = await runBenchmark(options);
+    expect((await verifyBenchReport(report, store, fns)).ok).toBe(true);
+    const badExpect = defect === "missing-expect" ? {} : { ...cases[0]!.expect, constructor: null };
+    const badCases = [{ ...cases[0]!, expect: badExpect }];
+    const message = defect === "missing-expect" ? 'missing expected output "out"' : 'unknown expected output "constructor"';
+    await expect(runBenchmark({ ...options, cases: badCases })).rejects.toThrow(message);
+    report.cases = badCases;
+    report.systems[0]!.cases[0]!.expect = badExpect;
+    report.workload = digestCanonical(report.cases as unknown as JsonValue);
+    const { digest: _digest, ...body } = report;
+    report.digest = digestCanonical(body as unknown as JsonValue);
+    const checked = await verifyBenchReport(report, store, fns);
+    expect(checked.checkedReceipts).toBe(1);
+    expect(checked.ok).toBe(false);
+    expect(checked.mismatches.some(mismatch => mismatch.includes(message))).toBe(true);
+  });
+
+  test("maps input aliases in canonical key order through report serialization", async () => {
+    const manifest = parseOrganismManifest({
+      contract: "algal.organism.v1", key: "organism:bench-alias-order", name: "Bench alias order",
+      cells: [{ id: "source", kind: "input", outputs: { value: "json" } }], edges: [],
+      interface: {
+        inputs: { a: { cell: "source", port: "value" }, z: { cell: "source", port: "value" } },
+        outputs: { answer: { cell: "source", port: "value" } },
+      },
+    });
+    const store = new MemoryStore(), fns = builtinRegistry();
+    const report = await runBenchmark({
+      systems: [{ id: "test", manifest, executors: [scriptedExecutor({})] }],
+      cases: [{ id: "case", args: Object.fromEntries([["z", "z"], ["a", "a"]]), expect: { answer: "z" } }],
+      fns, store,
+    });
+    expect(report.systems[0]!.passed).toBe(1);
+    // Shared with the native alias fixture: the complete wire report agrees.
+    expect(report.digest).toBe("sha256:6e443cc8309db86594d91a8f8ec6966b79896e5645ee045e8beb7d9eb0365e0a");
+    expect(report.systems[0]!.cases[0]!.outputs).toEqual({ answer: "z" });
+    expect((await verifyBenchReport(report, store, fns)).mismatches).toEqual([]);
+    expect((await verifyBenchReport(JSON.parse(canonicalize(report as unknown as JsonValue)), store, fns)).mismatches).toEqual([]);
+  });
+
+  test("admits every workload case even when system rows omit one", async () => {
+    const store = new MemoryStore(), fns = builtinRegistry();
+    const report = await runBenchmark({
+      systems: [{ id: "test", manifest: single, executors: [scriptedExecutor({ route: "billing" })] }],
+      cases: [{ ...cases[0]!, id: "first" }, { ...cases[0]!, id: "second" }],
+      fns, store, scorer: { contract: "algal.expr.v1", program: ["eq", 1, 1] },
+    });
+    expect((await verifyBenchReport(report, store, fns)).ok).toBe(true);
+    report.cases[1]!.expect = {};
+    report.systems[0]!.cases[1] = structuredClone(report.systems[0]!.cases[0]!);
+    report.workload = digestCanonical(report.cases as unknown as JsonValue);
+    const { digest: _digest, ...body } = report;
+    report.digest = digestCanonical(body as unknown as JsonValue);
+    const checked = await verifyBenchReport(report, store, fns);
+    expect(checked.ok).toBe(false);
+    expect(checked.mismatches).toContain('test: case second: missing expected output "out"');
+  });
+
+  test("result cases cover the workload once in either order", async () => {
+    const manifest = parseOrganismManifest({
+      contract: "algal.organism.v1", key: "organism:bench-multiplicity", name: "Workload coverage",
+      cells: [{ id: "source", kind: "input", outputs: { value: "json" } }], edges: [],
+      interface: {
+        inputs: { q: { cell: "source", port: "value" } },
+        outputs: { answer: { cell: "source", port: "value" } },
+      },
+    });
+    const store = new MemoryStore(), fns = builtinRegistry();
+    const report = await runBenchmark({
+      systems: [{ id: "system", manifest, executors: [scriptedExecutor({})] }],
+      cases: [
+        { id: "one", args: { q: "a" }, expect: { answer: "a" } },
+        { id: "two", args: { q: "b" }, expect: { answer: "b" } },
+      ],
+      fns, store,
+    });
+    expect((await verifyBenchReport(report, store, fns)).mismatches).toEqual([]);
+    const reordered = structuredClone(report);
+    reordered.systems[0]!.cases.reverse();
+    const { digest: _reorderedDigest, ...reorderedBody } = reordered;
+    reordered.digest = digestCanonical(reorderedBody as unknown as JsonValue);
+    expect((await verifyBenchReport(reordered, store, fns)).mismatches).toEqual([]);
+
+    report.systems[0]!.cases[1] = structuredClone(report.systems[0]!.cases[0]!);
+    const { digest: _digest, ...body } = report;
+    report.digest = digestCanonical(body as unknown as JsonValue);
+    const checked = await verifyBenchReport(report, store, fns);
+    expect(checked.ok).toBe(false);
+    expect(checked.checkedReceipts).toBe(2);
+    expect(checked.mismatches).toContain('system: duplicate result case id "one"');
+  });
+
   test("a cheap-first circuit matches frontier quality at frontier-call rate < 1", async () => {
     const { report } = await bench();
     const byId = new Map(report.systems.map((s) => [s.id, s]));

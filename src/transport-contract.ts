@@ -8,4 +8,3 @@ export interface Transport {
    * hold it. Implementations bound their own latency and size. */
   getBundle(root: Digest): Promise<Bundle | null>;
 }
-

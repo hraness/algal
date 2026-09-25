@@ -110,7 +110,7 @@ export function builtinRegistry(): FnRegistry {
       if (rec === null || typeof rec !== "object" || Array.isArray(rec)) {
         throw new AlgalError("FN_FAILED", "pick.v1: record must be an object");
       }
-      return { value: (rec as JsonObject)[field] ?? null };
+      return { value: Object.hasOwn(rec, field) ? (rec as JsonObject)[field] ?? null : null };
     },
   });
 

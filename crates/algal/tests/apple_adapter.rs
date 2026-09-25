@@ -175,13 +175,14 @@ async fn lost_or_malformed_reply_keeps_original_cause_and_blocks_redispatch() {
             .tick_journal("lost", None, &mut host, &Transports::new(), true, 2)
             .await
             .unwrap_err();
-        assert_eq!(error.code, "RECOVERY_BLOCKED");
+        assert_eq!(error.code, "EFFECT_FAILED");
+        assert!(error.uncertain);
         assert!(
             error.message.contains(cause),
             "expected {cause}; received {} fixture requests; error: {error:?}",
             fixture.requests().len()
         );
-        assert!(error.message.contains("execution cause EFFECT_FAILED:"));
+        assert!(error.message.starts_with("apple bridge: "));
         assert!(error.message.len() <= 1024);
         if removes_executable {
             assert!(

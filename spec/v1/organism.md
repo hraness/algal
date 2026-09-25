@@ -86,7 +86,33 @@ integer range 1–600,000 milliseconds). Native transports currently accept
 file directories. Both reject invalid UTF-8 and a leading BOM. These limits
 bound ingestion; the bundle's digest checks still establish its identity.
 
+JSON files admitted by the content-addressed store and durable host-state
+reader also reject malformed UTF-8 and a leading BOM; rejected bytes are
+left untouched. UTF-8 decoding does not replace invalid byte sequences
+with U+FFFD. A genuine, correctly encoded U+FFFD remains valid data.
+
+Portable JSON strings are sequences of Unicode scalar values, including
+strings in object keys and in members later overwritten by a duplicate
+key. Both runtimes use the last duplicate member, but the native parser
+rejects an escaped lone surrogate even in an overwritten member. The Bun
+runtime retains its existing acceptance of escaped lone surrogates in
+stored JSON and receipts: those records remain readable and replayable
+there, but are outside the portable native/shared-expression domain.
+Decoding does not change duplicate-key resolution, whitespace admission,
+or numeric normalization. This compatibility boundary is not a claim that
+every JSON text accepted by either host is portable to the other.
+
 ### Port types
+
+Declarations, interface names and delivered arguments use own dictionary
+members; inherited JavaScript properties do not declare ports or supply
+values. `constructor` remains a valid declared identifier under the existing
+grammar. When mapping interface inputs into child arguments, process names
+in canonical key order. If multiple supplied interface names alias the same
+child input port, the last name in that order supplies the value. Reordering
+object insertion must not change execution. Historical executions relying on
+conflicting alias insertion order may need their original implementation to
+reproduce their receipt; retained receipt bytes are never rewritten.
 
 Every port declares one of:
 
@@ -593,6 +619,40 @@ re-evaluation.
   wire a read behind a write with an edge to order them, or accept
   schedule order.
 
+### Local filesystem publication
+
+The writable file-backed Store and host-state adapters acknowledge a new
+record only after writing a private temporary, synchronizing its file contents,
+installing it with a same-directory hard link (immutable records) or rename
+(mutable slots/heads), and synchronizing the destination directory. Before
+installation they establish and synchronize the complete physical ancestor
+chain, including already-visible directories. Relative roots are resolved;
+visibility or a prior failed caller is never a durability witness.
+
+An existing immutable record wins without being rewritten. Before an
+idempotent publication acknowledges that winner, the adapter admits its bytes,
+checks its required digest or record identity, and synchronizes that same
+opened inode and its ancestor bindings. Corrupt retained bytes reject and
+remain untouched. The executor cache identity is distinct from the executor
+recorded in an effect receipt. Memory stores and read-only overlays retain
+their local semantics; their writes do not acknowledge disk persistence.
+
+These guarantees assume that successful file/directory syncs persist the
+specified contents/bindings, filesystem roots and mount mappings are already
+durable and stable, and cooperating writers preserve managed namespaces and
+immutable records. They do not provide OS isolation from hostile writers or
+qualify arbitrary filesystems for physical power loss. Publishing a reference
+requires its dependencies to have completed publication or belong to an
+explicitly qualified durable initial state; reading an arbitrary legacy or
+imported record does not retroactively qualify its dependency graph.
+
+A failure after link, rename, unlink or synchronization may leave the new
+state visible or durable. It remains a failed, potentially uncertain call;
+the adapter does not roll back published state or delete another caller's
+temporary. Its own unpublished temporary may remain after a cleanup failure
+or interruption. A process-kill test, a modeled crash image, and a real
+machine/storage power-loss qualification are distinct kinds of evidence.
+
 ### Capability mailboxes and wakeups
 
 Mailboxes are host standard-library tools over the generic `tool` cell — not a
@@ -608,7 +668,8 @@ The host admits two typed drivers:
 
 - `mailbox.send.v1`: inputs `mailbox` (`mailbox-send` cap), `message` (`json`);
   output `id` (`text`). The id is the digest of mailbox, idempotency key, and
-  message. A repeated tool request is one delivery, never a duplicate.
+  message. A clean exact retry retains the same message claim and delivery
+  identity; uncertain transfer evidence rejects instead of redelivering.
 - `mailbox.receive.v1`: input `mailbox` (`mailbox-receive` cap); outputs `id`
   and `message`. Pending messages are selected in deterministic delivery-key
   digest order. Receive mutates the mailbox, so both drivers declare effect
@@ -620,6 +681,17 @@ message bytes are 1–250,000 (default 65,536). `mailbox revoke` disables one
 handle without changing the other. Capability records, immutable message
 claims, and pending/consumed delivery markers live under the host's `--dir`;
 bundles and manifests never contain those admissions.
+
+Mailbox list/create admission accepts at most 2,064 yielded namespace entries,
+separately from the existing 1,024 admitted-mailbox limit. Every entry counts
+before filtering, including ordinary files, orphan directories and retained lock
+residue; these iterators omit `.` and `..`. Exceeding either bound rejects with
+`BUDGET_EXHAUSTED`. Rejection never reclaims recovery records or treats a truncated
+scan as a complete mailbox inventory.
+In Bun 1.3.14, eager runtime enumeration precedes this counter; the counter does
+not bound that initial allocation or work. Native traversal uses Rust `read_dir`,
+whose underlying libc/filesystem behavior is an environmental assumption rather
+than a proved allocation bound. See [filesystem enumeration bounds](../../docs/directory-admission.md).
 
 An empty receive throws `EFFECT_SUSPENDED`. The tool attempt records
 `retryable:false`, the cell/run suspend normally, and the `algal mailbox send`
@@ -633,6 +705,40 @@ Its successful effect receipt records the delivered message id and value.
 Immutable message claims and consumed markers are retained as host recovery
 evidence; mailbox storage accounting and garbage collection remain host
 lifecycle responsibilities.
+
+File-backed receive publishes and synchronizes an immutable consumed marker
+before unlinking the pending marker, then synchronizes the pending directory
+before returning a message. It does not depend on cross-directory rename
+being atomic across machine crash. Each mailbox operation also unlinks its
+own lock and synchronizes the lock's directory before reporting success.
+Release is attempted once: failure after unlink must not remove a subsequent
+caller's lock at the reused pathname. An interrupted operation's retained
+lock remains a reconciliation-required interlock, never an age-based lease.
+
+If matching pending and consumed markers coexist, receive, readiness checking,
+and an exact send retry fail with `IO_FAILED` and preserve both markers and
+the immutable claim. Conflicting identities fail with `DIGEST_MISMATCH`;
+malformed records fail admission. There is no automatic winner selection,
+evidence deletion, or transfer reconciliation. Missing admitted mailbox
+directories are not silently recreated by an operation. Clean v1 layouts
+and wire records are unchanged. Pre-acknowledgment receive interruption has
+no operation identity and can remain uncertain; this is not an exactly-once
+delivery or automatic retry guarantee. Legacy claim-only states cannot be
+retroactively distinguished from an old interrupted send or receive.
+
+The file-backed host marks an error `uncertain` once the current call attempts
+publication of a fresh message claim, pending/consumed marker, or revoked
+capability record. This conservative boundary includes failure before a helper's
+first write and failure during lock release after the mutation completed. The
+host-only flag preserves the existing error code/message and is not part of
+canonical mailbox records. It does not assert that the mutation actually happened.
+Known admission rejections, full-mailbox checks before a fresh publication, empty
+receive, readiness checks and exact retained send retries do not acquire this flag
+merely from acquiring/releasing the lock or syncing retained evidence. A fresh
+call rejecting an ambiguous retained transfer does not settle the earlier call.
+Journaled uncertain mailbox writes retain their started entry, prevent fallback
+dispatch and outcome publication, and remain blocked from automatic or explicit
+write replay. Receive has no caller operation identity to reconcile a lost return.
 
 ### spawn cells
 
@@ -960,11 +1066,28 @@ newly indexed sources; their per-run effect receipt remains replayable.
 A bundle is a portable closure: `{"contract","root","manifests","values"}`.
 `pack` walks the root manifest's embedding graph (`organism`/`repeat`/`each`
 cells) and every payload named by a `const` `ref` port, collecting each into
-a digest-keyed map. `unpack` installs the closure into a store — every entry
-re-hashes against its claimed key (`DIGEST_MISMATCH` on tamper) and the root
-must be among the manifests. A bundle is data with no host code: the
-unpacked organism runs exactly as if its modules had been loaded
-individually.
+a digest-keyed map. Each namespace admits at most 512 distinct entries;
+repeated references share an entry. The complete canonical envelope admits at
+most 67,108,864 bytes, 1,000,000 value nodes and depth 64 with the envelope root
+at depth zero. Object keys consume bytes but are not value nodes. Array positions
+consume nodes even when SDK holes serialize as null. The producer charges
+aggregate resources while collecting dependencies and returns
+`BUDGET_EXHAUSTED` if wrapping individually valid records exceeds these bounds.
+
+`unpack` imports the supplied records into a store. Every entry re-hashes against
+its claimed key (`DIGEST_MISMATCH` on tamper), the root must be supplied, and both
+the supplied and manifest-normalized envelope must meet those resource bounds
+before the first destination write. Import compatibility permits a partial
+closure: successful `unpack` does not establish that every static dependency is
+supplied or that an organism can run without ambient store records. `pack` still
+requires the complete static embedding/ref closure. Runtime-generated spawn
+and arbitrary host dependencies are outside that static closure. A later store
+write failure is not transactional rollback of earlier imported records.
+
+CLI bundle inputs additionally require a regular file under the same raw byte
+ceiling and valid UTF-8 JSON; explicit symlinks may name regular files. A bundle
+is data with no host code: its supplied modules have the same execution semantics
+as those modules loaded individually, subject to the ordinary host admissions.
 
 ## Reserved, not implemented
 

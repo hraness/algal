@@ -139,4 +139,3 @@ export function recallExecutor(searcher: RecallSearcher): Executor {
     },
   };
 }
-

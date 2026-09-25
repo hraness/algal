@@ -6,6 +6,7 @@ import type { JsonValue } from "../../src/values";
 import type { Digest } from "../../src/digest";
 import { parseApplicationRevision, getApplicationRecord } from "../../src/application-contract";
 import { DEFAULT_SESSION, type Task } from "../local-triage/contract";
+import { hash } from "../local-triage/core";
 import { BrowserTriageController, MAX_EVALUATIONS } from "./controller";
 
 const task = (id = "first"): Task => ({ id, title: "A task saved in this browser", priority: "normal", status: "open", category: "inbox" });
@@ -21,22 +22,122 @@ class FaultStorage extends MemoryApplicationStorage {
 }
 function fixture() {
   const source = new MemoryStore(), hidden = new Set<string>();
-  let forbiddenWrites = 0;
+  let forbiddenWrites = 0, readOnly = false;
   const store = new Proxy(source, {
     get(target, key) {
       if (["getValue", "getReceipt", "getManifest"].includes(String(key))) return async (ref: Digest) => hidden.has(`${String(key)}:${ref}`) ? undefined : target[key as "getValue"](ref);
       if (["putValue", "putReceipt", "putManifest"].includes(String(key))) return async (value: never) => {
-        if (hidden.size) { forbiddenWrites++; throw new Error("Attempted to reconstruct hidden evidence"); }
+        if (hidden.size || readOnly) { forbiddenWrites++; throw new Error("Attempted to reconstruct hidden evidence"); }
         return target[key as "putValue"](value);
       };
       const value = Reflect.get(target, key); return typeof value === "function" ? value.bind(target) : value;
     },
   }) as Store;
   const storage = new FaultStorage(store);
-  return { storage, controller: new BrowserTriageController(storage), hidden, get forbiddenWrites() { return forbiddenWrites; } };
+  return { storage, controller: new BrowserTriageController(storage), hidden, forbidWrites() { readOnly = true; }, get forbiddenWrites() { return forbiddenWrites; } };
 }
 
 describe("browser task controller", () => {
+  test("capture rejects a head change between journal verification and rendering", async () => {
+    const f = fixture(), initial = await f.controller.initialize();
+    // The unchanged schedule first returns a coherent, fully checked snapshot.
+    const baseline = await f.controller.capture();
+    expect(baseline.head).toBe(initial.head);
+    expect(baseline.history.at(-1)?.head).toBe(initial.head);
+    const journalKey = `triage-journal-${hash(f.controller.application).slice(7, 39)}`;
+    const savedJournal = await f.storage.store.getSlot(journalKey);
+    const original = f.controller.core.withVerifiedSource.bind(f.controller.core);
+    let injectedHead: Digest | undefined;
+    // The checked journal and the rendered capture must come from one head.
+    // A copy that advances after its journal check is never reported as that
+    // checked history, and the failure stays read-only on the live store.
+    f.controller.core.withVerifiedSource = async (callback, extra = [], candidates = []) => original(async (source, proven) => {
+      const loadSession = source.loadSession.bind(source);
+      source.loadSession = async sessionId => {
+        const changed = await source.command({ contract: "algal.triage-command.v1", expectedHead: initial.head, operation: hash("private-copy-writer"), action: { kind: "add", task: task("inside") } });
+        injectedHead = changed.head;
+        return loadSession(sessionId);
+      };
+      return callback(source, proven);
+    }, extra, candidates);
+    f.forbidWrites();
+    await expect(f.controller.capture()).rejects.toThrow("Task head changed after journal verification");
+    expect(injectedHead).toBeDefined();
+    expect(injectedHead).not.toBe(initial.head);
+    expect(await f.storage.readHead(f.controller.application)).toEqual({ contract: "algal.application-head.v1", application: f.controller.application, state: initial.head });
+    expect(await f.storage.store.getSlot(journalKey)).toEqual(savedJournal);
+    expect(f.forbiddenWrites).toBe(0);
+  }, 30_000);
+  test("capture rejects an independent public core write without reconstructing the journal", async () => {
+    const f = fixture(), initial = await f.controller.initialize();
+    const baseline = await f.controller.capture();
+    expect(baseline.head).toBe(initial.head);
+    const journalKey = `triage-journal-${hash(f.controller.application).slice(7, 39)}`;
+    const savedJournal = await f.storage.store.getSlot(journalKey);
+    const original = f.controller.core.withVerifiedSource.bind(f.controller.core);
+    let injecting = false, injectedHead: Digest | undefined;
+    // A writer that bypasses the controller lands a history row without any
+    // saved request. The next verified snapshot sees it and stops, read-only.
+    f.controller.core.withVerifiedSource = async (callback, extra = [], candidates = []) => {
+      if (injectedHead === undefined && !injecting) {
+        injecting = true;
+        const changed = await f.controller.core.command({ contract: "algal.triage-command.v1", expectedHead: initial.head, operation: hash("independent-public-core-writer"), action: { kind: "add", task: task("outside") } });
+        injectedHead = changed.head;
+        // All following capture work must remain read-only, including failure.
+        f.forbidWrites();
+      }
+      return original(callback, extra, candidates);
+    };
+    await expect(f.controller.capture()).rejects.toThrow("Task history lacks its saved request");
+    expect(injectedHead).toBeDefined();
+    expect(injectedHead).not.toBe(initial.head);
+    expect(await f.storage.readHead(f.controller.application)).toEqual({ contract: "algal.application-head.v1", application: f.controller.application, state: injectedHead! });
+    expect(await f.storage.store.getSlot(journalKey)).toEqual(savedJournal);
+    expect(f.forbiddenWrites).toBe(0);
+    // A fresh controller reads the same durable evidence and stops the same way.
+    await expect(new BrowserTriageController(f.storage).capture()).rejects.toThrow("Task history lacks its saved request");
+    expect(f.forbiddenWrites).toBe(0);
+  }, 30_000);
+  for (const mutation of ["empty", "empty-records", "missing-state", "missing-receipt", "invalid-kind", "truncated-prefix", "wrong-application", "proposal-evaluation", "proposal-receipt"] as const) {
+    test(`completed index ${mutation} rejects without live reconstruction`, async () => {
+      const f = fixture(), initial = await f.controller.initialize();
+      let current = await f.controller.act(initial.head, { kind: "add", task: task() });
+      if (mutation.startsWith("proposal-")) current = await f.controller.propose(current.head, workflow);
+      // Establish a passing nonempty baseline before each independent mutation.
+      expect((await f.controller.capture()).head).toBe(current.head);
+      const key = `triage-journal-${hash(f.controller.application).slice(7, 39)}`;
+      const journal = await f.storage.store.getSlot(key) as { completed: Digest[] } & Record<string, JsonValue>;
+      const prepared = await f.storage.store.getValue(journal.completed.at(-1)!) as { transfer: Digest; evaluation: Digest | null } & Record<string, JsonValue>;
+      const index = await f.storage.store.getValue(prepared.transfer) as { states: Digest[]; records: { kind: string; reference: Digest }[] } & Record<string, JsonValue>;
+      expect(index.states).toHaveLength(2); expect(index.records.length).toBeGreaterThan(0);
+      if (mutation === "empty") { index.states = []; index.records = []; }
+      else if (mutation === "empty-records") index.records = [];
+      else if (mutation === "missing-state") index.records = index.records.filter(row => row.reference !== current.head);
+      else if (mutation === "missing-receipt") { const removed = index.records.find(row => row.kind === "receipt")!; expect(removed).toBeDefined(); index.records = index.records.filter(row => row !== removed); }
+      else if (mutation === "invalid-kind") index.records[0]!.kind = "unknown";
+      else if (mutation === "truncated-prefix") index.states = [current.head];
+      else if (mutation === "wrong-application") index.application = "unrelated-triage";
+      else {
+        const removed = mutation === "proposal-evaluation" ? prepared.evaluation! : current.pending!.evaluation.receipts[0]!;
+        expect(index.records.some(row => row.reference === removed)).toBe(true);
+        index.records = index.records.filter(row => row.reference !== removed);
+        // The live record is present; acceptance must depend on this saved index.
+        expect(await f.storage.store.getValue(removed)).toBeDefined();
+      }
+      const changedTransfer = await f.storage.store.putValue(index);
+      const changedPrepared = await f.storage.store.putValue({ ...prepared, transfer: changedTransfer });
+      journal.completed[journal.completed.length - 1] = changedPrepared;
+      await f.storage.store.setSlot(key, journal);
+      const savedJournal = await f.storage.store.getSlot(key), savedHead = await f.storage.readHead(f.controller.application);
+      f.forbidWrites();
+      await expect(f.controller.capture()).rejects.toThrow();
+      await expect(new BrowserTriageController(f.storage).capture()).rejects.toThrow();
+      expect(f.forbiddenWrites).toBe(0);
+      expect(await f.storage.store.getSlot(key)).toEqual(savedJournal);
+      expect(await f.storage.readHead(f.controller.application)).toEqual(savedHead);
+    }, 30_000);
+  }
+
   test("empty schema-v1 application and task actions survive controller restart", async () => {
     const { controller, storage } = fixture(), initial = await controller.initialize();
     expect(initial.tasks).toEqual([]); expect(initial.definition.schemaVersion).toBe(1);

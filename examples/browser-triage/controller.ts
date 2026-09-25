@@ -4,6 +4,7 @@ import { applicationJson, getApplicationRecord, parseApplicationRevision, parseA
 import type { ApplicationSnapshot } from "../../src/application-core";
 import { MemoryApplicationStorage, type ApplicationStorage } from "../../src/application-storage";
 import type { Digest } from "../../src/digest";
+import type { JsonValue } from "../../src/values";
 import { TriageCore, hash, parseTransfer, verifyTransfer, type TriageEvaluationDetails } from "../local-triage/core";
 import { DEFAULT_SESSION, MAX_STATES, id, object, reference, parseAction, parseCommand, parseProposal, parseSession, type Action, type Capture, type Config, type Proposal, type Session, type SessionLoad, type Transfer } from "../local-triage/contract";
 
@@ -26,6 +27,7 @@ export type BrowserTriageCapture = Capture & {
 };
 export type WorkflowInput = { config: Config; schemaVersion: 1 | 2; rationale: string };
 type CheckedJournal = { journal: Journal; history: ApplicationSnapshot[]; candidates: TriageEvaluationDetails[] };
+type VerifiedIndex = Pick<Transfer, "application" | "head" | "states">;
 /** One newly read private source for a read phase, the saved journal that
  * chose its candidate roots, and the completed candidates proven inside it. */
 type Source = { core: TriageCore; journal: Journal; proven: ReadonlyMap<Digest, TriageEvaluationDetails> };
@@ -72,7 +74,13 @@ export class BrowserTriageController {
   readonly sessionId: string;
   private readonly journalSlot: string;
   private readonly lock: string;
-  private scope: { checked?: Promise<CheckedJournal>; candidates: Map<Digest, Promise<TriageEvaluationDetails>> } | undefined;
+  private scope: { checked?: Promise<CheckedJournal>; candidates: Map<Digest, Promise<TriageEvaluationDetails>>; indexes: Map<Digest, VerifiedIndex>; rows: Map<string, JsonValue> } | undefined;
+  /** Verdicts of isolated index replay are pure functions of the parsed
+   * transfer: a private copy reads only its own rows. Every check still
+   * rereads and rehashes the live rows through readTransfer first; this memo
+   * only skips repeating the deterministic replay of index content this
+   * controller already verified itself. Callers cannot add entries. */
+  private readonly verifiedIndexes = new Set<Digest>();
   constructor(readonly storage: ApplicationStorage, application = "browser-triage", sessionId = "browser") {
     this.application = id(application); this.sessionId = id(sessionId);
     const namespace = hash(this.application).slice(7, 39);
@@ -84,7 +92,7 @@ export class BrowserTriageController {
     return this.storage.custody(this.lock, false, async () => {
       // Proof reuse ends with this custody interval. A later call must reread
       // durable evidence, including rows that disappeared after this call.
-      this.scope = { candidates: new Map() };
+      this.scope = { candidates: new Map(), indexes: new Map(), rows: new Map() };
       try { return await action(); } finally { this.scope = undefined; }
     });
   }
@@ -107,6 +115,50 @@ export class BrowserTriageController {
     let found = this.scope.candidates.get(ref);
     if (!found) { found = this.core.inspectEvaluation(ref); this.scope.candidates.set(ref, found); }
     return found;
+  }
+  /** Each saved index must still describe its complete, verified history
+   * prefix on its own. A valid live history cannot supply missing saved rows,
+   * so the replay runs in a private copy of exactly the reread index rows.
+   * One custody interval rereads and verifies each saved request once. */
+  private async checkedIndex(ref: Digest, p: Prepared): Promise<VerifiedIndex> {
+    const retained = this.scope?.indexes.get(ref);
+    if (retained) return retained;
+    const transfer = await this.readIndex(p.transfer);
+    await this.verifyIndex(transfer, p);
+    const index: VerifiedIndex = { application: transfer.application, head: transfer.head, states: transfer.states };
+    this.scope?.indexes.set(ref, index);
+    return index;
+  }
+  /** Saved indexes of one task history share most rows. Rows are
+   * content-addressed, so one custody interval rereads and rehashes each
+   * referenced row once and reuses that checked content across its indexes.
+   * The next interval starts over, including rows that disappeared. */
+  private async readIndex(ref: Digest): Promise<Transfer> {
+    const index = await this.core.readTransferIndex(ref), records: Transfer["records"] = [];
+    for (const row of index.records) {
+      const key = `${row.kind}:${row.reference}`;
+      let value = this.scope?.rows.get(key);
+      if (value === undefined) {
+        value = await this.core.readTransferRow(row.kind, row.reference);
+        if (hash(value) !== row.reference) throw new Error("Tampered or duplicate transfer content");
+        if (this.scope && this.scope.rows.size < 4096) this.scope.rows.set(key, value);
+      }
+      records.push({ kind: row.kind, reference: row.reference, value });
+    }
+    return parseTransfer({ contract: "algal.triage-transfer.v1", claim: "portable-data-and-pure-replay", application: index.application, head: index.head, states: index.states, records });
+  }
+  private async verifyIndex(transfer: Transfer, p: Prepared): Promise<void> {
+    const evaluation = p.request.kind === "propose" ? p.evaluation : null;
+    if (p.request.kind === "propose" && evaluation === null) throw new Error("Saved workflow preparation mismatch");
+    const key = hash({ contract: "algal.browser-triage-verified-index.v1", application: transfer.application, head: transfer.head, states: transfer.states, records: transfer.records.map(row => ({ kind: row.kind, reference: row.reference })), evaluation });
+    if (this.verifiedIndexes.has(key)) return;
+    await TriageCore.withVerifiedTransfer(transfer, async source => {
+      // A proposal's candidate is outside the committed history. Check it
+      // against this index's private records, not the wider live store.
+      if (evaluation !== null) await source.inspectEvaluation(evaluation);
+    });
+    if (this.verifiedIndexes.size >= MAX_STATES + MAX_EVALUATIONS) this.verifiedIndexes.delete(this.verifiedIndexes.values().next().value!);
+    this.verifiedIndexes.add(key);
   }
   /** A completed candidate proven in this phase's private source shares that
    * source's single history replay. Nothing proven there outlives the phase. */
@@ -166,10 +218,8 @@ export class BrowserTriageController {
     for (const ref of j.completed) {
       const p = await this.readPrepared(ref);
       if ((p.request.kind === "create" || p.request.kind === "fork") && !same(p.request, j.initialization)) throw new Error("Saved task initialization changed");
-      // The compact index remains part of the saved request. Read-only checks
-      // never recreate it, even when all application records are present.
-      const index = await getApplicationRecord(this.storage.store, p.transfer, value => object(value, ["contract", "application", "head", "states", "records"]));
-      if (index.contract !== "algal.triage-transfer-index.v1" || index.application !== this.application || index.head !== p.resultHead) throw new Error("Saved task preparation index changed");
+      const index = await this.checkedIndex(ref, p), end = history.findIndex(row => row.digest === p.resultHead);
+      if (index.application !== this.application || index.head !== p.resultHead || end < 0 || !same(index.states, history.slice(0, end + 1).map(row => row.digest))) throw new Error("Saved task preparation index changed");
       await this.binding(p, source);
       if (p.request.kind === "propose") evaluations.push(p.evaluation!);
       else {
@@ -180,7 +230,7 @@ export class BrowserTriageController {
     }
     if (!same(evaluations, j.evaluations)) throw new Error("Workflow journal differs from completed requests");
     if (j.pending !== null) {
-      const p = await this.readPrepared(j.pending), transfer = await this.core.readTransfer(p.transfer);
+      const p = await this.readPrepared(j.pending), transfer = await this.readIndex(p.transfer);
       if ((p.request.kind === "create" || p.request.kind === "fork") && !same(p.request, j.initialization)) throw new Error("Pending task initialization changed");
       if (transfer.application !== this.application || transfer.head !== p.resultHead) throw new Error("Pending task transfer changed");
       await this.binding(p, source);
@@ -209,6 +259,7 @@ export class BrowserTriageController {
       const sessionState = await source.core.loadSession(this.sessionId);
       return { ...checked, sessionState, current: await source.core.capture(sessionState.record?.session ?? DEFAULT_SESSION) };
     });
+    if (current.head !== history.at(-1)?.digest) throw new Error("Task head changed after journal verification");
     const recovery = j.pending === null ? null : await this.readPrepared(j.pending);
     return { ...current, sessionState, pending: candidates.filter(c => c.evaluation.expectedHead === current.head).at(-1) ?? null, recovery: recovery ? { reference: j.pending!, kind: recovery.request.kind, expectedHead: recovery.expectedHead } : null, remainingEvaluations: MAX_EVALUATIONS - j.evaluations.length, history: history.map(row => ({ head: row.digest, sequence: row.state.sequence, kind: row.transition.kind })) };
   }
@@ -246,15 +297,14 @@ export class BrowserTriageController {
   private async recoverOwned(): Promise<void> {
     const { journal: j, history } = await this.checkedJournal();
     if (j.pending === null) return;
-    const p = await this.readPrepared(j.pending), transfer = await this.core.readTransfer(p.transfer);
-    await verifyTransfer(transfer);
+    const p = await this.readPrepared(j.pending), index = await this.checkedIndex(j.pending, p);
     const current = history.at(-1)?.digest ?? null;
     if (p.request.kind === "propose") {
-      if (current !== p.expectedHead || !same(transfer.states, history.map(row => row.digest))) throw new Error("Workflow preparation belongs to another task history");
+      if (current !== p.expectedHead || !same(index.states, history.map(row => row.digest))) throw new Error("Workflow preparation belongs to another task history");
     } else {
       if (current !== p.expectedHead && current !== p.resultHead) throw new Error("Pending task operation conflicts with the current head");
       const expectedHistory = current === p.resultHead ? history.map(row => row.digest) : [...history.map(row => row.digest), p.resultHead];
-      if (!same(transfer.states, expectedHistory)) throw new Error("Pending task operation changes more than its saved step");
+      if (!same(index.states, expectedHistory)) throw new Error("Pending task operation changes more than its saved step");
       const target = await snapshot(this.core, p.resultHead);
       if ((await this.core.service.commit(commit(target))).digest !== p.resultHead) throw new Error("Recovered task state changed");
     }

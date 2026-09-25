@@ -4,7 +4,7 @@ import {
   parseApplicationState, parseApplicationTransition, parseEpisodeBinding, parseWorkIntent, putApplicationRecord,
 } from "./application-contract";
 import { digestCanonical } from "./digest";
-import { MemoryStore } from "./store";
+import { FileStore, MemoryStore } from "./store";
 
 const ref = digestCanonical("fixture");
 const revision = () => ({
@@ -56,9 +56,24 @@ describe("experimental application contract", () => {
     const address = await pending;
     expect((await getApplicationRecord(store, address, parseApplicationRevision)).entrypoints[0]!.name).toBe("discover");
     await expect(getApplicationRecord(store, address, parseApplicationState)).rejects.toThrow();
-    await expect(getApplicationRecord(store, ref, parseApplicationRevision)).rejects.toThrow();
+    await expect(getApplicationRecord(store, ref, parseApplicationRevision)).rejects.toMatchObject({ code: "PARSE_FAILED", uncertain: false });
     const corrupt = Object.create(store) as MemoryStore;
     corrupt.getValue = async () => applicationJson(revision());
-    await expect(getApplicationRecord(corrupt, ref, parseApplicationRevision)).rejects.toThrow("changed");
+    await expect(getApplicationRecord(corrupt, ref, parseApplicationRevision)).rejects.toMatchObject({ code: "DIGEST_MISMATCH", uncertain: false });
+  });
+  test("binds overridden FileStore results and parses the admitted copy", async () => {
+    class OverriddenStore extends FileStore {
+      override async getValue() { return applicationJson(revision()); }
+    }
+    // No filesystem operation is performed by this deliberately overridden read.
+    await expect(getApplicationRecord(new OverriddenStore("/unused"), ref, parseApplicationRevision))
+      .rejects.toMatchObject({ code: "DIGEST_MISMATCH", uncertain: false });
+    const input = revision(), address = digestCanonical(applicationJson(input));
+    const store = new MemoryStore(); store.getValue = async () => input;
+    const parsed = await getApplicationRecord(store, address, value => {
+      input.entrypoints[0]!.name = "changed-after-admission";
+      return parseApplicationRevision(value);
+    });
+    expect(parsed.entrypoints[0]!.name).toBe("discover");
   });
 });

@@ -28,6 +28,7 @@ pub mod contract;
 pub mod credentials;
 pub mod decisions;
 pub mod demo;
+mod durable_fs;
 pub mod effects;
 pub mod embeddings;
 pub mod error;
@@ -47,7 +48,12 @@ pub mod scorer;
 pub mod semantic;
 pub mod store;
 pub mod suite;
+#[cfg(test)]
+mod verification_trace;
 
 pub use error::{Error, Result};
 
 pub mod demo_report;
+
+#[cfg(test)]
+mod mailbox_model;

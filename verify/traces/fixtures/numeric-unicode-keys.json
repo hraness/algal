@@ -1,0 +1,11 @@
+{
+  "contract":"algal.verification-history.v1",
+  "seed":0,
+  "commands":[
+    {"id":0,"action":{"kind":"store-put","value":{"2":"a","10":"b"}},"fault":null},
+    {"id":1,"action":{"kind":"store-get","value":{"2":"a","10":"b"}},"fault":null},
+    {"id":2,"action":{"kind":"store-put","value":{"￿":1,"😀":2}},"fault":null},
+    {"id":3,"action":{"kind":"restart"},"fault":null},
+    {"id":4,"action":{"kind":"store-get","value":{"￿":1,"😀":2}},"fault":null}
+  ]
+}

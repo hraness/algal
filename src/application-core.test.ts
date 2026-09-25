@@ -1,5 +1,5 @@
-import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { expect } from "bun:test";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ApplicationCore, type ApplicationAdmission, type ApplicationCommand, type ApplicationDispatchContext, type ApplicationFaultPoint } from "./application-core";
@@ -13,10 +13,10 @@ import { restoreApplicationRevision } from "./application-restoration";
 import { capabilityHandle } from "./capabilities";
 import { manifestToJson, parseOrganismManifest } from "./contract";
 import { digestCanonical } from "./digest";
+import { applicationTests } from "./fixtures/application-test-scope";
 import { builtinRegistry } from "./registry";
 
-const directories: string[] = [];
-afterEach(async () => { for (const directory of directories.splice(0)) await rm(directory, { recursive: true, force: true }); });
+const { test, resources } = applicationTests();
 const hash = (value: unknown) => digestCanonical(applicationJson(value));
 const admission: ApplicationAdmission = {
   async admitCommit() {},
@@ -24,7 +24,7 @@ const admission: ApplicationAdmission = {
 };
 async function storage(kind: "memory" | "filesystem"): Promise<ApplicationStorage> {
   if (kind === "memory") return new MemoryApplicationStorage();
-  const directory = await mkdtemp(join(tmpdir(), "algal-core-")); directories.push(directory);
+  const directory = resources().directory(await mkdtemp(join(tmpdir(), "algal-core-")));
   return new FileApplicationStorage(directory);
 }
 async function fixture(adapter: ApplicationStorage) {
@@ -128,7 +128,7 @@ test("injected storage serializes competing owners and leaves denied namespaces 
   let admissions = 0;
   const admit = { async admitCommit() { admissions++; await Promise.resolve(); } };
   const one = new ApplicationCore(adapter, admit), two = new ApplicationCore(adapter, admit);
-  const [a, b] = await Promise.all([one.create(command), two.create(command)]);
+  const [a, b] = await Promise.all([resources().own(one.create(command)), resources().own(two.create(command))]);
   expect(a).toEqual(b); expect(admissions).toBe(1);
   const commands = ["one", "two"].map(label => ({ ...command, kind: "memory", expectedHead: a.digest, operation: hash(label) }));
   const results = await Promise.allSettled([one.commit(commands[0]), two.commit(commands[1])]);
@@ -204,10 +204,13 @@ test("injected namespace publication fences competing first writers at capacity"
   const adapter = new MemoryApplicationStorage(), { command, revisionValue } = await fixture(adapter);
   const create = async (application: string): Promise<ApplicationCommand> => ({ ...command, application, operation: hash(application), revision: await adapter.store.putValue({ ...revisionValue, application }) });
   const ordinary = new ApplicationCore(adapter, admission);
-  for (let index = 0; index < 31; index++) await ordinary.create(await create(`existing-${index}`));
-  let entered = 0, release!: () => void;
-  const admitted = new Promise<void>(resolve => { release = resolve; });
-  const barrier: ApplicationAdmission = { async admitCommit() { if (++entered === 2) release(); await admitted; } };
+  for (let index = 0; index < 31; index++) {
+    resources().checkActive();
+    await ordinary.create(await create(`existing-${index}`));
+  }
+  let entered = 0;
+  const admitted = resources().barrier();
+  const barrier: ApplicationAdmission = { async admitCommit() { if (++entered === 2) admitted.release(); await admitted.wait; } };
   const a = await create("last-a"), b = await create("last-b");
   const results = await Promise.allSettled([new ApplicationCore(adapter, barrier).create(a), new ApplicationCore(adapter, barrier).create(b)]);
   expect(entered).toBe(2);
@@ -226,6 +229,7 @@ test("prepared genesis retains namespace allocation yet can recover at capacity"
   expect(await adapter.operationCount(command.application)).toBe(1);
   const service = new ApplicationCore(adapter, admission);
   for (let index = 0; index < 31; index++) {
+    resources().checkActive();
     const application = `other-${index}`;
     await service.create({ ...command, application, operation: hash(application), revision: await adapter.store.putValue({ ...revisionValue, application }) });
   }

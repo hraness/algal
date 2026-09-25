@@ -1,0 +1,56 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 0 and seed 1 with 1 worker on 18 cores with 245MB heap and 64MB offheap memory [pid: 75148] (Mac OS X 26.5.1 aarch64, Eclipse Adoptium 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /private/tmp/algal-verification-tools/results/smoke-03/tlc-bad-liveness/PublicationSmoke.tla
+Parsing file /private/tmp/algal-verification-tools/results/smoke-03/tlc-bad-liveness/tmp/TLC.tla
+Parsing file /private/tmp/algal-verification-tools/results/smoke-03/tlc-bad-liveness/tmp/Naturals.tla
+Parsing file /private/tmp/algal-verification-tools/results/smoke-03/tlc-bad-liveness/tmp/Sequences.tla
+Parsing file /private/tmp/algal-verification-tools/results/smoke-03/tlc-bad-liveness/tmp/FiniteSets.tla
+Semantic processing of module Naturals
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module PublicationSmoke
+Starting... (2026-09-23 12:33:26)
+Implied-temporal checking--satisfiability problem has 1 branches.
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-09-23 12:33:26.
+Progress(2) at 2026-09-23 12:33:26: 4 states generated, 2 distinct states found, 0 states left on queue.
+Checking temporal properties for the complete state space with 2 total distinct states at (2026-09-23 12:33:26)
+Error: Temporal properties were violated.
+
+Error: The following behavior constitutes a counter-example:
+
+State 1: <Initial predicate>
+/\ prepared = FALSE
+/\ committed = FALSE
+
+State 2: <Prepare line 12, col 12 to line 15, col 33 of module PublicationSmoke>
+/\ prepared = TRUE
+/\ committed = FALSE
+
+State 3: Stuttering
+Finished checking temporal properties in 00s at 2026-09-23 12:33:26
+The coverage statistics at 2026-09-23 12:33:26
+<Init line 9, col 1 to line 9, col 4 of module PublicationSmoke>: 2:2
+  line 9, col 9 to line 10, col 28 of module PublicationSmoke: 2
+<Prepare line 12, col 1 to line 12, col 7 of module PublicationSmoke>: 1:2
+  line 12, col 15 to line 12, col 23 of module PublicationSmoke: 5
+  |line 12, col 16 to line 12, col 23 of module PublicationSmoke: 3
+  line 13, col 15 to line 13, col 24 of module PublicationSmoke: 4
+  |line 13, col 16 to line 13, col 24 of module PublicationSmoke: 2
+  line 14, col 15 to line 14, col 30 of module PublicationSmoke: 2
+  line 15, col 15 to line 15, col 33 of module PublicationSmoke: 2
+<Publish line 17, col 1 to line 17, col 7 of module PublicationSmoke>: 0:0
+  line 17, col 15 to line 17, col 24 of module PublicationSmoke: 2
+  line 18, col 15 to line 18, col 27 of module PublicationSmoke: 2
+  line 20, col 15 to line 20, col 31 of module PublicationSmoke: 0
+  line 21, col 15 to line 21, col 32 of module PublicationSmoke: 0
+<Wait line 23, col 1 to line 23, col 4 of module PublicationSmoke>: 0:2
+  line 23, col 9 to line 23, col 22 of module PublicationSmoke: 2
+<TypeOK line 28, col 1 to line 28, col 6 of module PublicationSmoke>
+  line 28, col 11 to line 29, col 34 of module PublicationSmoke: 2
+<PreparedBeforeCommit line 30, col 1 to line 30, col 20 of module PublicationSmoke>
+  line 30, col 25 to line 30, col 45 of module PublicationSmoke: 2
+End of statistics.
+4 states generated, 2 distinct states found, 0 states left on queue.
+Finished in 00s at (2026-09-23 12:33:26)

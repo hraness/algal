@@ -1,0 +1,4 @@
+WrongProof.lean:5:2: error: failed to synthesize
+  Decidable (ToolchainSmoke.canAppend 1 1)
+
+Hint: Additional diagnostic information may be available using the `set_option diagnostics true` command.

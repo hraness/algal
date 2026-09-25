@@ -545,7 +545,11 @@ pub fn interface_args(manifest: &Manifest, inputs: &Value) -> Result<Value> {
     object(inputs)?;
     let mut args = json!({});
     if let Some(declarations) = manifest.value["interface"]["inputs"].as_object() {
-        for (name, target) in declarations {
+        let mut names: Vec<_> = declarations.keys().collect();
+        names.sort();
+        // Admitted ASCII aliases resolve in canonical name order in both runtimes.
+        for name in names {
+            let target = &declarations[name];
             if let Some(value) = inputs.get(name) {
                 let cell = target["cell"].as_str().unwrap();
                 if args.get(cell).is_none() {

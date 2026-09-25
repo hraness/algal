@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { manifestToJson, parseOrganismManifest } from "./contract";
 import { digestCanonical } from "./digest";
-import { generateFoundryCandidates, runFoundry } from "./foundry";
+import { generateFoundryCandidates, runFoundry, type FoundryCase } from "./foundry";
 import { verifyFoundryReport } from "./foundry-verify";
 import { builtinRegistry } from "./registry";
 import { runFoundrySearch } from "./search";
 import { verifySearchReport } from "./search-verify";
 import { MemoryStore } from "./store";
+import { canonicalize, type JsonValue } from "./values";
 
 const echo = parseOrganismManifest({
   contract: "algal.organism.v1",
@@ -41,6 +42,177 @@ const constant = parseOrganismManifest({
 });
 
 describe("foundry", () => {
+  test("requires an own expected constructor output", async () => {
+    const candidate = parseOrganismManifest({
+      contract: "algal.organism.v1", key: "organism:constructor-expect", name: "Constructor expectation",
+      cells: [{ id: "source", kind: "input", outputs: { constructor: "json" } }], edges: [],
+      interface: { inputs: {}, outputs: { constructor: { cell: "source", port: "constructor" } } },
+    });
+    await expect(runFoundry({
+      candidates: [candidate],
+      cases: (["train", "validation", "holdout"] as const).map(split => ({ id: split, split, args: {}, expect: {} })),
+      fns: builtinRegistry(), store: new MemoryStore(), executors: [],
+    })).rejects.toThrow('missing expected output "constructor"');
+  });
+
+  test("keeps a missing constructor output absent and verifies the failed cases", async () => {
+    const candidate = parseOrganismManifest({
+      contract: "algal.organism.v1", key: "organism:missing-constructor-output", name: "Missing constructor output",
+      cells: [{ id: "source", kind: "input", outputs: { value: "json", constructor: "json" } }], edges: [],
+      interface: { inputs: { value: { cell: "source", port: "value" } }, outputs: { constructor: { cell: "source", port: "constructor" } } },
+    });
+    const store = new MemoryStore(), fns = builtinRegistry();
+    const report = await runFoundry({
+      candidates: [candidate],
+      cases: (["train", "validation", "holdout"] as const).map(split => ({ id: split, split, args: { value: 1 }, expect: { constructor: null } })),
+      fns, store, executors: [],
+    });
+    for (const c of [...report.candidates[0]!.cases, ...report.holdout.cases]) {
+      expect(c.outcome).toBe("complete");
+      expect(c.passed).toBe(false);
+      expect(Object.keys(c.outputs)).toEqual([]);
+      expect(Object.hasOwn(c.outputs, "constructor")).toBe(false);
+    }
+    expect((await verifyFoundryReport(report, store, fns)).mismatches).toEqual([]);
+  });
+
+  test("preserves declared constructor names and own __proto__ JSON data", async () => {
+    const candidate = parseOrganismManifest({
+      contract: "algal.organism.v1", key: "organism:constructor-data", name: "Constructor data",
+      cells: [{ id: "constructor", kind: "input", outputs: { constructor: "json" } }], edges: [],
+      interface: {
+        inputs: { constructor: { cell: "constructor", port: "constructor" } },
+        outputs: { constructor: { cell: "constructor", port: "constructor" } },
+      },
+    });
+    const value = JSON.parse('{"__proto__":{"kept":true},"constructor":"data"}') as Record<string, JsonValue>;
+    const store = new MemoryStore(), fns = builtinRegistry();
+    const report = await runFoundry({
+      candidates: [candidate],
+      cases: (["train", "validation", "holdout"] as const).map(split => ({ id: split, split, args: { constructor: value }, expect: { constructor: value } })),
+      fns, store, executors: [],
+    });
+    expect(report.holdout.passed).toBe(1);
+    const output = report.holdout.cases[0]!.outputs["constructor"]!;
+    expect(output).toEqual(value);
+    expect(Object.hasOwn(output as object, "__proto__")).toBe(true);
+    expect((await verifyFoundryReport(report, store, fns)).mismatches).toEqual([]);
+  });
+
+  test("rejects inherited generator interface names before storing or executing", async () => {
+    const generator = parseOrganismManifest({
+      contract: "algal.organism.v1", key: "organism:generator-admission", name: "Generator admission",
+      cells: [{ id: "batch", kind: "const", outputs: { value: { type: "json", value: [manifestToJson(echo)] } } }], edges: [],
+      interface: { inputs: {}, outputs: { candidates: { cell: "batch", port: "value" } } },
+    });
+    const options: { args: Record<string, JsonValue>; output: string; message: string }[] = [{ args: {}, output: "constructor", message: 'unknown interface output "constructor"' },
+      { args: { constructor: 1 }, output: "candidates", message: 'unknown interface input "constructor"' }];
+    for (const option of options) {
+      const store = new MemoryStore();
+      await expect(generateFoundryCandidates({ generator, args: option.args, output: option.output, fns: builtinRegistry(), store, executors: [] })).rejects.toThrow(option.message);
+      expect(await store.getManifest(digestCanonical(manifestToJson(generator)))).toBeUndefined();
+    }
+  });
+
+  test("generates through declared constructor names and an own __proto__ field", async () => {
+    const generator = parseOrganismManifest({
+      contract: "algal.organism.v1", key: "organism:constructor-generator", name: "Constructor generator",
+      cells: [{ id: "constructor", kind: "input", outputs: { constructor: "json" } }], edges: [],
+      interface: {
+        inputs: { constructor: { cell: "constructor", port: "constructor" } },
+        outputs: { constructor: { cell: "constructor", port: "constructor" } },
+      },
+    });
+    const value = Object.fromEntries([["__proto__", [manifestToJson(echo)]]]);
+    const generated = await generateFoundryCandidates({ generator, args: { constructor: value }, output: "constructor", field: "__proto__", fns: builtinRegistry(), store: new MemoryStore(), executors: [] });
+    expect(generated.candidates.map(candidate => candidate.key)).toEqual([echo.key]);
+  });
+
+  test.each(["missing-expect", "extra-expect", "extra-input"] as const)("rejects imported %s case admission even with genuine replayable receipts", async defect => {
+    const cases: FoundryCase[] = (["train", "validation", "holdout"] as const).map(split => ({ id: split, split, args: { q: "a" }, expect: { answer: "a" } }));
+    const store = new MemoryStore(), fns = builtinRegistry();
+    const options = { candidates: [echo], cases, store, fns, executors: [], scorer: { contract: "algal.expr.v1" as const, program: ["eq", 1, 1] } };
+    const report = await runFoundry(options);
+    const original = await verifyFoundryReport(report, store, fns);
+    expect(original.ok).toBe(true);
+    expect(original.checkedReceipts).toBe(3);
+    const change = (c: FoundryCase): void => {
+      if (defect === "missing-expect") c.expect = {};
+      else if (defect === "extra-expect") c.expect = { ...c.expect, constructor: null };
+      else c.args = { ...c.args, constructor: null };
+    };
+    const badCases = structuredClone(cases);
+    for (const c of badCases) change(c);
+    const message = defect === "missing-expect" ? 'missing expected output "answer"'
+      : defect === "extra-expect" ? 'unknown candidate output "constructor"' : 'unknown candidate input "constructor"';
+    await expect(runFoundry({ ...options, cases: badCases })).rejects.toThrow(message);
+    for (const c of [...report.candidates[0]!.cases, ...report.holdout.cases]) change(c);
+    const { digest: _digest, ...body } = report;
+    report.digest = digestCanonical(body as unknown as JsonValue);
+    const checked = await verifyFoundryReport(report, store, fns);
+    expect(checked.checkedReceipts).toBe(0);
+    expect(checked.ok).toBe(false);
+    expect(checked.mismatches.some(mismatch => mismatch.includes(message))).toBe(true);
+  });
+
+  test("binds admitted declared input values to genuine case receipts", async () => {
+    const store = new MemoryStore(), fns = builtinRegistry();
+    const report = await runFoundry({
+      candidates: [echo],
+      cases: (["train", "validation", "holdout"] as const).map(split => ({ id: split, split, args: { q: "a" }, expect: { answer: "a" } })),
+      store, fns, executors: [], scorer: { contract: "algal.expr.v1", program: ["eq", 1, 1] },
+    });
+    expect((await verifyFoundryReport(report, store, fns)).ok).toBe(true);
+    for (const c of [...report.candidates[0]!.cases, ...report.holdout.cases]) c.args = { q: "changed" };
+    const { digest: _digest, ...body } = report;
+    report.digest = digestCanonical(body as unknown as JsonValue);
+    const checked = await verifyFoundryReport(report, store, fns);
+    expect(checked.checkedReceipts).toBe(3);
+    expect(checked.ok).toBe(false);
+    expect(checked.mismatches).toEqual([
+      "case train: receipt args differ from the case",
+      "case validation: receipt args differ from the case",
+      "case holdout: receipt args differ from the case",
+    ]);
+  });
+
+  test("maps input aliases in canonical key order through report serialization", async () => {
+    const candidate = parseOrganismManifest({
+      contract: "algal.organism.v1", key: "organism:alias-order", name: "Alias order",
+      cells: [{ id: "source", kind: "input", outputs: { value: "json" } }], edges: [],
+      interface: {
+        inputs: { a: { cell: "source", port: "value" }, z: { cell: "source", port: "value" } },
+        outputs: { answer: { cell: "source", port: "value" } },
+      },
+    });
+    const store = new MemoryStore(), fns = builtinRegistry();
+    const report = await runFoundry({
+      candidates: [candidate],
+      cases: (["train", "validation", "holdout"] as const).map(split => ({ id: split, split, args: Object.fromEntries([["z", "z"], ["a", "a"]]), expect: { answer: "z" } })),
+      store, fns, executors: [],
+    });
+    expect(report.holdout.passed).toBe(1);
+    expect(report.holdout.cases[0]!.outputs).toEqual({ answer: "z" });
+    expect((await verifyFoundryReport(report, store, fns)).mismatches).toEqual([]);
+    expect((await verifyFoundryReport(JSON.parse(canonicalize(report as unknown as JsonValue)), store, fns)).mismatches).toEqual([]);
+  });
+
+  test("maps generator input aliases in canonical key order", async () => {
+    const generator = parseOrganismManifest({
+      contract: "algal.organism.v1", key: "organism:generator-alias-order", name: "Generator alias order",
+      cells: [{ id: "source", kind: "input", outputs: { value: "json" } }], edges: [],
+      interface: {
+        inputs: { a: { cell: "source", port: "value" }, z: { cell: "source", port: "value" } },
+        outputs: { candidates: { cell: "source", port: "value" } },
+      },
+    });
+    const generated = await generateFoundryCandidates({
+      generator, args: Object.fromEntries([["z", [manifestToJson(echo)]], ["a", [manifestToJson(constant)]]]), output: "candidates",
+      fns: builtinRegistry(), store: new MemoryStore(), executors: [],
+    });
+    expect(generated.candidates.map(candidate => candidate.key)).toEqual([echo.key]);
+  });
+
   test("search carries validation evidence across bounded generations without exposing holdout", async () => {
     const generator = parseOrganismManifest({
       contract: "algal.organism.v1",

@@ -23,6 +23,19 @@ mailboxes succeed only when both requested bounds exactly match the stored
 `maxMessages` and `maxMessageBytes`, including an immutable-publication race.
 A capacity rejection publishes no new mailbox directory or capability record.
 
+The namespace scan has a separate physical limit of **2,064 entries**
+(`2 × 1,024 + 16`). Every entry counts before type or configuration filtering,
+including ordinary ignored files, orphan directories and retained lock markers.
+Listing or new-mailbox admission fails `BUDGET_EXHAUSTED` on entry 2,065;
+the logical limit remains 1,024 admitted configurations. A refused scan does
+not delete, reclaim or alter residue or recovery evidence. An initially absent
+namespace lists as empty; other directory IO failures remain failures.
+In Bun 1.3.14 this counts entries after the runtime eagerly enumerates them;
+it does not yet bound that initial allocation. Native `read_dir` also relies on
+the underlying libc/filesystem enumeration behavior for its allocation profile.
+See [filesystem enumeration bounds](../../docs/directory-admission.md) for the
+remaining Bun admission limitation.
+
 Contention returns `IO_FAILED` immediately. It does not wait or silently retry.
 Normal release removes the marker while retaining the database inode; process
 death releases the SQLite transaction. A subsequent owner archives a matching

@@ -79,4 +79,3 @@ export function replayStore(source: Store): Store {
     setSlot: (n, v) => overlay.setSlot(n, v),
   };
 }
-

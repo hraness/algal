@@ -2,12 +2,13 @@
 use crate::{
     Error, Result,
     canonical::{canonical, read_json},
+    durable_fs,
 };
 use rusqlite::{Connection, OpenFlags};
 use serde_json::{Value, json};
 use std::{
-    fs::{self, File, OpenOptions},
-    io::{Read, Write},
+    fs::{self, OpenOptions},
+    io::Read,
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
@@ -19,35 +20,7 @@ pub(crate) const SHARED_LEASE_WAIT: Duration = Duration::from_millis(2000);
 pub(crate) const SHARED_LEASE_POLL: Duration = Duration::from_millis(25);
 
 pub(crate) fn directory(path: &Path) -> Result<()> {
-    match fs::symlink_metadata(path) {
-        Ok(m) if m.file_type().is_dir() && !m.file_type().is_symlink() => Ok(()),
-        Ok(_) => Err(Error::new(
-            "IO_FAILED",
-            "host directory must be a real directory",
-        )),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            if let Some(parent) = path.parent() {
-                directory(parent)?;
-            }
-            let mut builder = fs::DirBuilder::new();
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::DirBuilderExt;
-                builder.mode(0o700);
-            }
-            match builder.create(path) {
-                Ok(()) => {
-                    if let Some(parent) = path.parent() {
-                        File::open(parent)?.sync_all()?;
-                    }
-                    Ok(())
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => directory(path),
-                Err(e) => Err(e.into()),
-            }
-        }
-        Err(e) => Err(e.into()),
-    }
+    durable_fs::directory(path)
 }
 pub(crate) fn nodes(value: &Value) -> Result<()> {
     let mut stack = vec![(value, 0)];
@@ -69,6 +42,15 @@ pub(crate) fn nodes(value: &Value) -> Result<()> {
     Ok(())
 }
 pub(crate) fn read(path: &Path, max: usize) -> Result<Option<Value>> {
+    read_admitted(path, max, |_| Ok(()), false)
+}
+
+fn read_admitted(
+    path: &Path,
+    max: usize,
+    admit: impl FnOnce(&Value) -> Result<()>,
+    retain: bool,
+) -> Result<Option<Value>> {
     let mut options = OpenOptions::new();
     options.read(true);
     #[cfg(unix)]
@@ -94,14 +76,14 @@ pub(crate) fn read(path: &Path, max: usize) -> Result<Option<Value>> {
     }
     let value = read_json(std::io::Cursor::new(bytes), max)?;
     nodes(&value)?;
+    admit(&value)?;
+    if retain {
+        durable_fs::sync_retained(&file, path)?;
+    }
     Ok(Some(value))
 }
 pub(crate) fn write(path: &Path, value: &Value, replace: bool) -> Result<()> {
     nodes(value)?;
-    let parent = path
-        .parent()
-        .ok_or_else(|| Error::invalid("host file parent"))?;
-    directory(parent)?;
     let bytes = canonical(value)?;
     if let Ok(meta) = fs::symlink_metadata(path)
         && (!meta.is_file() || meta.file_type().is_symlink())
@@ -111,40 +93,26 @@ pub(crate) fn write(path: &Path, value: &Value, replace: bool) -> Result<()> {
             "host publication target must be regular",
         ));
     }
-    let mut random = [0u8; 24];
-    getrandom::fill(&mut random)
-        .map_err(|_| Error::new("IO_FAILED", "host temporary entropy unavailable"))?;
-    let nonce: String = random.iter().map(|b| format!("{b:02x}")).collect();
-    let temporary = parent.join(format!(".tmp-{nonce}"));
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let mut file = options.open(&temporary)?;
-    let result = (|| -> Result<()> {
-        file.write_all(bytes.as_bytes())?;
-        file.sync_all()?;
-        if replace {
-            fs::rename(&temporary, path)?;
-        } else {
-            match fs::hard_link(&temporary, path) {
-                Ok(()) => (),
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                    if read(path, bytes.len() + 1)?.as_ref() != Some(value) {
-                        return Err(Error::new("IO_FAILED", "immutable host file conflict"));
-                    }
+    if !durable_fs::publish(path, bytes.as_bytes(), replace)? {
+        let retained = read_admitted(
+            path,
+            bytes.len() + 1,
+            |retained| {
+                if canonical(retained)? != bytes {
+                    return Err(Error::new("IO_FAILED", "immutable host file conflict"));
                 }
-                Err(e) => return Err(e.into()),
-            }
+                Ok(())
+            },
+            true,
+        )?;
+        if retained.is_none() {
+            return Err(Error::new(
+                "IO_FAILED",
+                "retained host publication disappeared",
+            ));
         }
-        File::open(parent)?.sync_all()?;
-        Ok(())
-    })();
-    let _ = fs::remove_file(temporary);
-    result
+    }
+    Ok(())
 }
 pub(crate) fn names(path: &Path, max: usize) -> Result<Vec<String>> {
     names_where(path, max, |_| true)
@@ -393,8 +361,7 @@ impl OwnerLease {
                 return Err(Error::limit("host owner archive count"));
             }
             write(&owners.join(format!("{nonce}.json")), &old, false)?;
-            fs::remove_file(&lock)?;
-            File::open(&path)?.sync_all()?;
+            durable_fs::unlink(&lock, "unlink-lock")?;
         }
         let mut bytes = [0u8; 32];
         getrandom::fill(&mut bytes)
@@ -412,10 +379,7 @@ impl OwnerLease {
 impl Drop for OwnerLease {
     fn drop(&mut self) {
         if read(&self.path, 4096).ok().flatten().as_ref() == Some(&self.marker) {
-            let _ = fs::remove_file(&self.path);
-            if let Some(parent) = self.path.parent() {
-                let _ = File::open(parent).and_then(|f| f.sync_all());
-            }
+            let _ = durable_fs::unlink(&self.path, "unlink-lock");
         }
         let _ = self.connection.execute_batch("ROLLBACK");
     }
@@ -424,6 +388,228 @@ impl Drop for OwnerLease {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use std::os::unix::fs::MetadataExt;
+    use std::{cell::Cell, collections::BTreeMap, rc::Rc};
+
+    fn model_marker(n: usize, process: &str) -> Value {
+        json!({"contract":"algal.process-owner.v2","process":process,"nonce":format!("{n:064x}")})
+    }
+
+    fn model_archive_name(n: usize) -> String {
+        format!("{n:064x}.json")
+    }
+
+    fn model_archive_fixture(count: usize) -> (tempfile::TempDir, PathBuf) {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().canonicalize().unwrap();
+        drop(OwnerLease::acquire(&root, "model").unwrap());
+        let owners = root.join("owners");
+        fs::create_dir(&owners).unwrap();
+        // Construct bounded retained state before the observed operation.
+        for n in 0..count {
+            fs::write(
+                owners.join(model_archive_name(n)),
+                canonical(&model_marker(n, "model")).unwrap(),
+            )
+            .unwrap();
+        }
+        (temporary, root)
+    }
+
+    fn model_retained(root: &Path) -> BTreeMap<String, Vec<u8>> {
+        fs::read_dir(root)
+            .unwrap()
+            .map(|entry| {
+                let entry = entry.unwrap();
+                (
+                    entry.file_name().into_string().unwrap(),
+                    fs::read(entry.path()).unwrap(),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn model_owner_archive_admits_256_then_preserves_refused_257th() {
+        let (_temporary, root) = model_archive_fixture(255);
+        let owners = root.join("owners");
+        #[cfg(unix)]
+        let inode = fs::metadata(root.join(".owner.sqlite")).unwrap().ino();
+        let old = canonical(&model_marker(255, "model")).unwrap();
+        fs::write(root.join(".lock"), &old).unwrap();
+        let owner = OwnerLease::acquire(&root, "model").unwrap();
+        assert_eq!(model_retained(&owners).len(), 256);
+        assert_eq!(
+            fs::read_to_string(owners.join(model_archive_name(255))).unwrap(),
+            old
+        );
+        drop(owner);
+        let before = model_retained(&owners);
+        let refused = canonical(&model_marker(256, "model")).unwrap();
+        fs::write(root.join(".lock"), &refused).unwrap();
+        let error = OwnerLease::acquire(&root, "model")
+            .err()
+            .expect("new archive at capacity must fail");
+        assert_eq!(error.code, "BUDGET_EXHAUSTED");
+        assert_eq!(fs::read_to_string(root.join(".lock")).unwrap(), refused);
+        assert_eq!(model_retained(&owners), before);
+        #[cfg(unix)]
+        assert_eq!(
+            fs::metadata(root.join(".owner.sqlite")).unwrap().ino(),
+            inode
+        );
+    }
+
+    #[test]
+    fn model_full_archive_admits_equal_and_preserves_conflicting_winner() {
+        for conflict in [false, true] {
+            let (_temporary, root) = model_archive_fixture(256);
+            let owners = root.join("owners");
+            #[cfg(unix)]
+            let inode = fs::metadata(root.join(".owner.sqlite")).unwrap().ino();
+            if conflict {
+                fs::write(
+                    owners.join(model_archive_name(42)),
+                    canonical(&model_marker(42, "other")).unwrap(),
+                )
+                .unwrap();
+            }
+            let before = model_retained(&owners);
+            let old = canonical(&model_marker(42, "model")).unwrap();
+            fs::write(root.join(".lock"), &old).unwrap();
+            match OwnerLease::acquire(&root, "model") {
+                Ok(owner) => {
+                    assert!(!conflict);
+                    drop(owner);
+                }
+                Err(error) => {
+                    assert!(conflict);
+                    assert_eq!(error.code, "IO_FAILED");
+                    assert_eq!(fs::read_to_string(root.join(".lock")).unwrap(), old);
+                }
+            }
+            assert_eq!(model_retained(&owners), before);
+            #[cfg(unix)]
+            assert_eq!(
+                fs::metadata(root.join(".owner.sqlite")).unwrap().ino(),
+                inode
+            );
+        }
+    }
+
+    #[test]
+    fn model_archive_is_retained_before_old_marker_removal_failure() {
+        let (_temporary, root) = model_archive_fixture(0);
+        let old = canonical(&model_marker(42, "model")).unwrap();
+        fs::write(root.join(".lock"), &old).unwrap();
+        let reached = Rc::new(Cell::new(false));
+        let observed = reached.clone();
+        let probe_root = root.clone();
+        let probe_old = old.clone();
+        let result = durable_fs::with_probe(
+            Rc::new(move |event| {
+                if event.step == "unlink-lock"
+                    && event.phase == "before"
+                    && event.path == probe_root.join(".lock")
+                {
+                    observed.set(true);
+                    assert_eq!(
+                        fs::read_to_string(probe_root.join("owners").join(model_archive_name(42)))
+                            .unwrap(),
+                        probe_old
+                    );
+                    return Err(Error::new("IO_FAILED", "archive-before-clear cut"));
+                }
+                Ok(())
+            }),
+            || OwnerLease::acquire(&root, "model"),
+        );
+        assert!(reached.get());
+        assert_eq!(
+            result
+                .err()
+                .expect("removal cut must reject admission")
+                .message,
+            "archive-before-clear cut"
+        );
+        assert_eq!(fs::read_to_string(root.join(".lock")).unwrap(), old);
+        assert_eq!(model_retained(&root.join("owners")).len(), 1);
+        drop(OwnerLease::acquire(&root, "model").unwrap());
+        assert_eq!(
+            fs::read_to_string(root.join("owners").join(model_archive_name(42))).unwrap(),
+            old
+        );
+    }
+
+    #[test]
+    fn model_native_drop_suppresses_cleanup_error_but_releases_live_custody() {
+        for before_unlink in [true, false] {
+            let (_temporary, root) = model_archive_fixture(0);
+            #[cfg(unix)]
+            let inode = fs::metadata(root.join(".owner.sqlite")).unwrap().ino();
+            let armed = Rc::new(Cell::new(false));
+            let removed = Rc::new(Cell::new(false));
+            let reached = Rc::new(Cell::new(false));
+            let probe_armed = armed.clone();
+            let probe_removed = removed.clone();
+            let probe_reached = reached.clone();
+            let probe_root = root.clone();
+            let (returned, marker) = durable_fs::with_probe(
+                Rc::new(move |event| {
+                    if !probe_armed.get() {
+                        return Ok(());
+                    }
+                    if event.step == "unlink-lock"
+                        && event.phase == "after"
+                        && event.path == probe_root.join(".lock")
+                    {
+                        probe_removed.set(true);
+                    }
+                    let target = if before_unlink {
+                        event.step == "unlink-lock"
+                            && event.phase == "before"
+                            && event.path == probe_root.join(".lock")
+                    } else {
+                        probe_removed.get()
+                            && event.step == "dir-sync"
+                            && event.phase == "before"
+                            && event.path == probe_root
+                    };
+                    if target {
+                        probe_reached.set(true);
+                        return Err(Error::new("IO_FAILED", "native cleanup cut"));
+                    }
+                    Ok(())
+                }),
+                || {
+                    let owner = OwnerLease::acquire(&root, "model").unwrap();
+                    let marker = fs::read(root.join(".lock")).unwrap();
+                    armed.set(true);
+                    drop(owner);
+                    ("callback completed", marker)
+                },
+            );
+            assert_eq!(returned, "callback completed");
+            assert!(armed.get() && reached.get());
+            if before_unlink {
+                assert_eq!(fs::read(root.join(".lock")).unwrap(), marker);
+            } else {
+                assert!(!root.join(".lock").exists());
+            } // Visibility only, not a power-loss guarantee.
+            drop(OwnerLease::acquire(&root, "model").unwrap());
+            let archives = model_retained(&root.join("owners"));
+            assert_eq!(archives.len(), usize::from(before_unlink));
+            if before_unlink {
+                assert_eq!(archives.values().next().unwrap(), &marker);
+            }
+            #[cfg(unix)]
+            assert_eq!(
+                fs::metadata(root.join(".owner.sqlite")).unwrap().ino(),
+                inode
+            );
+        }
+    }
     #[test]
     fn sqlite_excludes_live_owners_and_releases_after_drop() {
         let root = tempfile::tempdir().unwrap();

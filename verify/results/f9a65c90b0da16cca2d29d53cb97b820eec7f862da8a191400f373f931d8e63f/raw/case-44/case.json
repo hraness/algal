@@ -1,0 +1,1 @@
+{"contract":"algal.corpus-case.v1","domain":"grammar","id":"grammar-6d2b79f5-20","program":["if",["lt",["sub",["neg",6],["sub",0,8]],["sub",["add",-6,-9],["add",-9,5]]],5,["neg",["neg",8]]]}

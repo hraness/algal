@@ -1,0 +1,106 @@
+{
+  "scope": "AI source review of conflict resolution and task-owned repairs on top of upstream1737efe; repository and formal integration gates pending. No production proof claim.",
+  "reviewers": [
+    "root integration owner (independent of worker-authored runtime repairs)",
+    "corpus_continue (independent review of root source binding changes)",
+    "application_histories (independent ledger/assumption review)",
+    "parity_finalize (independent mapping and closure review)"
+  ],
+  "findingsClosed": [
+    "Host error without replayable effect aborts before guest failure routing",
+    "Post-callback configuration drift preserves uncertain completion",
+    "Suspension handles admitted before journal completion",
+    "Raw browser export rejects sparse/lossy values and counts encoded bytes before serialization",
+    "Transitive production helper and browser source changes invalidate Lean and aggregate bindings",
+    "Browser assumptions and new host obligations remain explicitly pending"
+  ],
+  "files": [
+    {
+      "path": "src/application-contract.ts",
+      "sha256": "sha256:5bd52ecca0bf70e9139cd721e9e5441111c8edfd362cb8b575563abbab78840a"
+    },
+    {
+      "path": "src/application-browser-storage.ts",
+      "sha256": "sha256:cb2fc47dd2c9b2a565b43a3254f3f7261ecfd6dad09ca61c3450ef2e4c58101d"
+    },
+    {
+      "path": "src/application-browser-storage.test.ts",
+      "sha256": "sha256:4c7ab40f0e736587bbfc31546dd813fd61ee228bca7f0b7019e26ea78514e8fd"
+    },
+    {
+      "path": "crates/algal/src/effects.rs",
+      "sha256": "sha256:983548e933f1e09452c9d765a61fa3d45c0a74579963583ce31b806c3d59e535"
+    },
+    {
+      "path": "crates/algal/src/runtime.rs",
+      "sha256": "sha256:38440bd856e05431b8754d3f2a6e07d35d95fd4effa279e85d7e02f4226c658d"
+    },
+    {
+      "path": "crates/algal/tests/host_executor.rs",
+      "sha256": "sha256:c4f7fc6b025a2e08708062f5f272d6d6d78d1e9ecbcf7109db8b39a5fd143c21"
+    },
+    {
+      "path": "verify/lean/run.ts",
+      "sha256": "sha256:49bcc44803b44f29524763fa4de46176d40ae762be142eb6db810d5f3236aa79"
+    },
+    {
+      "path": "verify/lib/files.ts",
+      "sha256": "sha256:1fbe703ed4396a8109065dcb9ac1e574f7c24434c2cf583a6f340abbba7e81db"
+    },
+    {
+      "path": "verify/lib/claims.ts",
+      "sha256": "sha256:aa85dad664196746fa53eb430f668622f7d4059663e6c929aa5c195e32b1641e"
+    },
+    {
+      "path": "verify/tests/claims.test.ts",
+      "sha256": "sha256:a02f27d7b7e8a249c6b9ca4aa3cddc5a8e17b10639273c578b32aff2107f0d54"
+    },
+    {
+      "path": "verify/tests/lean-vectors.test.ts",
+      "sha256": "sha256:8aa7a23df4fb76fb30c7f0513b776831c8fc677c5cd8c7f4983764cadacc57fe"
+    },
+    {
+      "path": "verify/boundary/run.ts",
+      "sha256": "sha256:a9006806c5f824d234ca3298a9143cc77bb0d9901a89365b088009de17a7be6b"
+    },
+    {
+      "path": "verify/assumptions.md",
+      "sha256": "sha256:035ca83d62de7d1499a8300b7af5fd403915101605001a9a45ebe1fbd07fe9a1"
+    },
+    {
+      "path": "verify/properties.json",
+      "sha256": "sha256:7234c2c21b8fb6302ab6817fa7b7d9932128d2f934335bab6f3d2b5c780782c0"
+    },
+    {
+      "path": "verify/tla/process/profiles.ts",
+      "sha256": "sha256:fa19016fa202aa6a3392622581a96d093750b96e49dbce14456688d4502cda1d"
+    },
+    {
+      "path": "verify/tla/process/SCOPE.md",
+      "sha256": "sha256:a2155403708cbea58456fed1a82654f2715ec6c278dbc7725e186aac90ec34eb"
+    },
+    {
+      "path": "verify/tla/process-journal/profiles.ts",
+      "sha256": "sha256:96a15e427fc101045ca8da2c729bbe8e3b7c54067709d4348f404ef84f3d8985"
+    },
+    {
+      "path": "verify/tla/process-journal/SCOPE.md",
+      "sha256": "sha256:946bc4b65a3bc5722d2c9818685304b6ad06aaf0e949ba93ca7a0079c31136a9"
+    },
+    {
+      "path": "src/algal_expr.wasm.json",
+      "sha256": "sha256:018e5b8261dfc8f3287a8cbaa2f764eab9ea0b36cc0307585e1bcad82de9f6fe"
+    }
+  ],
+  "remaining": [
+    "Fresh Bun/native/browser/parity/formal integration gates",
+    "Register and qualify generated histories and expression corpus",
+    "Full implementation refinement and remaining plan obligations"
+  ],
+  "evidence": [
+    "/private/tmp/algal-host-executor-integration-handoff.json",
+    "/private/tmp/algal-upstream-portable-audit/HANDOFF.json",
+    "/private/tmp/algal-upstream-1737-ledger-independent-review.md",
+    "/private/tmp/algal-upstream-1737-parity/mapping-review.json"
+  ]
+}

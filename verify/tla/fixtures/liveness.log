@@ -1,0 +1,319 @@
+@!@!@STARTMSG 2262:0 @!@!@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+@!@!@ENDMSG 2262 @!@!@
+@!@!@STARTMSG 2187:0 @!@!@
+Running breadth-first search Model-Checking with fp 0 and seed 1 with 1 worker on 18 cores with 245MB heap and 64MB offheap memory [pid: 16337] (Mac OS X 26.5.1 aarch64, Eclipse Adoptium 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
+@!@!@ENDMSG 2187 @!@!@
+@!@!@STARTMSG 2220:0 @!@!@
+Starting SANY...
+@!@!@ENDMSG 2220 @!@!@
+Parsing file /private/tmp/algal-tlc-adapter-probe-8wqldr20/Custody.tla
+Parsing file /private/tmp/algal-tlc-adapter-probe-8wqldr20/tmp/Naturals.tla
+Parsing file /private/tmp/algal-tlc-adapter-probe-8wqldr20/tmp/FiniteSets.tla
+Parsing file /private/tmp/algal-tlc-adapter-probe-8wqldr20/tmp/Sequences.tla
+Semantic processing of module Naturals
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module Custody
+@!@!@STARTMSG 2219:0 @!@!@
+SANY finished.
+@!@!@ENDMSG 2219 @!@!@
+@!@!@STARTMSG 2185:0 @!@!@
+Starting... (2026-09-23 13:45:13)
+@!@!@ENDMSG 2185 @!@!@
+@!@!@STARTMSG 2212:0 @!@!@
+Implied-temporal checking--satisfiability problem has 1 branches.
+@!@!@ENDMSG 2212 @!@!@
+@!@!@STARTMSG 2189:0 @!@!@
+Computing initial states...
+@!@!@ENDMSG 2189 @!@!@
+@!@!@STARTMSG 2190:0 @!@!@
+Finished computing initial states: 1 distinct state generated at 2026-09-23 13:45:13.
+@!@!@ENDMSG 2190 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(14) at 2026-09-23 13:45:13: 248 states generated, 123 distinct states found, 0 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2192:0 @!@!@
+Checking temporal properties for the complete state space with 123 total distinct states at (2026-09-23 13:45:13)
+@!@!@ENDMSG 2192 @!@!@
+@!@!@STARTMSG 2116:1 @!@!@
+Temporal properties were violated.
+
+@!@!@ENDMSG 2116 @!@!@
+@!@!@STARTMSG 2264:1 @!@!@
+The following behavior constitutes a counter-example:
+
+@!@!@ENDMSG 2264 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+1: <Initial predicate>
+/\ published = {}
+/\ selected = [creator |-> "pending", late |-> "pending", live |-> "pending"]
+/\ owners = [pending |-> "none", permanent |-> "none"]
+/\ pc = [creator |-> "select", late |-> "select", live |-> "select"]
+/\ head = "none"
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+2: <Select line 16, col 3 to line 19, col 42 of module Custody>
+/\ published = {}
+/\ selected = [creator |-> "pending", late |-> "pending", live |-> "pending"]
+/\ owners = [pending |-> "none", permanent |-> "none"]
+/\ pc = [creator |-> "select", late |-> "acquire", live |-> "select"]
+/\ head = "none"
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+3: <Acquire line 21, col 3 to line 24, col 44 of module Custody>
+/\ published = {}
+/\ selected = [creator |-> "pending", late |-> "pending", live |-> "pending"]
+/\ owners = [pending |-> "late", permanent |-> "none"]
+/\ pc = [creator |-> "select", late |-> "check", live |-> "select"]
+/\ head = "none"
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+4: <Select line 16, col 3 to line 19, col 42 of module Custody>
+/\ published = {}
+/\ selected = [creator |-> "pending", late |-> "pending", live |-> "pending"]
+/\ owners = [pending |-> "late", permanent |-> "none"]
+/\ pc = [creator |-> "acquire", late |-> "check", live |-> "select"]
+/\ head = "none"
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+5: <RejectHeld line 26, col 3 to line 28, col 52 of module Custody>
+/\ published = {}
+/\ selected = [creator |-> "pending", late |-> "pending", live |-> "pending"]
+/\ owners = [pending |-> "late", permanent |-> "none"]
+/\ pc = [creator |-> "done", late |-> "check", live |-> "select"]
+/\ head = "none"
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+6: <Check line 30, col 3 to line 32, col 52 of module Custody>
+/\ published = {}
+/\ selected = [creator |-> "pending", late |-> "pending", live |-> "pending"]
+/\ owners = [pending |-> "late", permanent |-> "none"]
+/\ pc = [creator |-> "done", late |-> "release", live |-> "select"]
+/\ head = "none"
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+7: <Select line 16, col 3 to line 19, col 42 of module Custody>
+/\ published = {}
+/\ selected = [creator |-> "pending", late |-> "pending", live |-> "pending"]
+/\ owners = [pending |-> "late", permanent |-> "none"]
+/\ pc = [creator |-> "done", late |-> "release", live |-> "acquire"]
+/\ head = "none"
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+8: <RejectHeld line 26, col 3 to line 28, col 52 of module Custody>
+/\ published = {}
+/\ selected = [creator |-> "pending", late |-> "pending", live |-> "pending"]
+/\ owners = [pending |-> "late", permanent |-> "none"]
+/\ pc = [creator |-> "done", late |-> "release", live |-> "done"]
+/\ head = "none"
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2218:4 @!@!@
+9: Stuttering
+@!@!@ENDMSG 2218 @!@!@
+@!@!@STARTMSG 2267:0 @!@!@
+Finished checking temporal properties in 00s at 2026-09-23 13:45:13
+@!@!@ENDMSG 2267 @!@!@
+@!@!@STARTMSG 2201:0 @!@!@
+The coverage statistics at 2026-09-23 13:45:13
+@!@!@ENDMSG 2201 @!@!@
+@!@!@STARTMSG 2773:0 @!@!@
+<Init line 10, col 1 to line 10, col 4 of module Custody>: 2:2
+@!@!@ENDMSG 2773 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 10, col 9 to line 14, col 25 of module Custody: 2
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<Select line 15, col 1 to line 15, col 9 of module Custody>: 36:84
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 16, col 6 to line 16, col 21 of module Custody: 467
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 16, col 6 to line 16, col 10 of module Custody: 383
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 17, col 6 to line 17, col 100 of module Custody: 84
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 18, col 6 to line 18, col 39 of module Custody: 84
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 19, col 6 to line 19, col 42 of module Custody: 84
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<Acquire line 20, col 1 to line 20, col 10 of module Custody>: 12:32
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 21, col 6 to line 21, col 22 of module Custody: 412
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 21, col 6 to line 21, col 10 of module Custody: 380
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 21, col 27 to line 21, col 54 of module Custody: 114
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 21, col 27 to line 21, col 45 of module Custody: 82
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 22, col 6 to line 22, col 49 of module Custody: 32
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 23, col 6 to line 23, col 37 of module Custody: 32
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 24, col 6 to line 24, col 44 of module Custody: 32
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<RejectHeld line 25, col 1 to line 25, col 13 of module Custody>: 28:50
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 26, col 6 to line 26, col 22 of module Custody: 429
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 26, col 6 to line 26, col 10 of module Custody: 379
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 26, col 27 to line 26, col 54 of module Custody: 131
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 26, col 27 to line 26, col 45 of module Custody: 81
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 27, col 6 to line 27, col 36 of module Custody: 50
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 28, col 6 to line 28, col 52 of module Custody: 50
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<Check line 29, col 1 to line 29, col 8 of module Custody>: 19:36
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 30, col 6 to line 30, col 20 of module Custody: 413
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 30, col 6 to line 30, col 10 of module Custody: 377
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 31, col 6 to line 31, col 81 of module Custody: 36
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 32, col 6 to line 32, col 52 of module Custody: 36
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<Publish line 33, col 1 to line 33, col 10 of module Custody>: 5:15
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 34, col 6 to line 34, col 22 of module Custody: 391
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 34, col 6 to line 34, col 10 of module Custody: 376
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 35, col 6 to line 35, col 14 of module Custody: 15
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 36, col 6 to line 36, col 72 of module Custody: 15
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 37, col 6 to line 37, col 39 of module Custody: 15
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 38, col 6 to line 38, col 35 of module Custody: 15
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<Release line 39, col 1 to line 39, col 10 of module Custody>: 22:37
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 40, col 6 to line 40, col 22 of module Custody: 413
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 40, col 6 to line 40, col 10 of module Custody: 376
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 40, col 27 to line 40, col 49 of module Custody: 74
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 40, col 27 to line 40, col 45 of module Custody: 37
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 40, col 49 to line 40, col 49 of module Custody: 37
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 41, col 6 to line 41, col 54 of module Custody: 37
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 42, col 6 to line 42, col 36 of module Custody: 37
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 43, col 6 to line 43, col 44 of module Custody: 37
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<Done line 44, col 1 to line 44, col 4 of module Custody>: 0:4
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 44, col 29 to line 44, col 60 of module Custody: 71
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 44, col 29 to line 44, col 42 of module Custody: 198
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  ||line 44, col 29 to line 44, col 33 of module Custody: 194
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 44, col 47 to line 44, col 60 of module Custody: 42
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 44, col 21 to line 44, col 26 of module Custody: 123
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2774:0 @!@!@
+<TypeOK line 47, col 1 to line 47, col 6 of module Custody>
+@!@!@ENDMSG 2774 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 47, col 11 to line 51, col 63 of module Custody: 123
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2774:0 @!@!@
+<NoSibling line 52, col 1 to line 52, col 9 of module Custody>
+@!@!@ENDMSG 2774 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 52, col 14 to line 52, col 78 of module Custody: 123
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 52, col 30 to line 52, col 78 of module Custody: 492
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  ||line 52, col 30 to line 52, col 73 of module Custody: 492
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |||line 52, col 42 to line 52, col 72 of module Custody: 492
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  ||||line 52, col 60 to line 52, col 71 of module Custody: 248
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  ||||line 52, col 49 to line 52, col 57 of module Custody: 492
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 52, col 23 to line 52, col 27 of module Custody: 123
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2202:0 @!@!@
+End of statistics.
+@!@!@ENDMSG 2202 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(14) at 2026-09-23 13:45:13: 248 states generated (14,144 s/min), 123 distinct states found (7,015 ds/min), 0 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2199:0 @!@!@
+248 states generated, 123 distinct states found, 0 states left on queue.
+@!@!@ENDMSG 2199 @!@!@
+@!@!@STARTMSG 2186:0 @!@!@
+Finished in 1058ms at (2026-09-23 13:45:13)
+@!@!@ENDMSG 2186 @!@!@

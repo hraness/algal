@@ -248,16 +248,19 @@ pub fn load_config(path: &Path, search_mode: bool) -> Result<Config> {
     })
 }
 
-fn case_args(manifest: &Manifest, case: &FoundryCase) -> Result<Value> {
+fn case_args(manifest: &Manifest, id: &str, values: &Value) -> Result<Value> {
     let mut args = Map::new();
-    for (name, value) in object(&case.args)? {
+    let values = object(values)?;
+    let mut names: Vec<_> = values.keys().collect();
+    names.sort();
+    // Interface names are ASCII: canonical name order makes alias resolution
+    // independent of serde_json's optional insertion-order map backend.
+    for name in names {
+        let value = &values[name];
         let target = object(&manifest.value["interface"]["inputs"])?
             .get(name)
             .ok_or_else(|| {
-                Error::invalid(format!(
-                    "case {}: unknown candidate input \"{name}\"",
-                    case.id
-                ))
+                Error::invalid(format!("case {id}: unknown candidate input \"{name}\""))
             })?;
         args.entry(target["cell"].as_str().unwrap_or("").to_owned())
             .or_insert_with(|| json!({}))[target["port"].as_str().unwrap_or("")] = value.clone();
@@ -265,10 +268,37 @@ fn case_args(manifest: &Manifest, case: &FoundryCase) -> Result<Value> {
     Ok(Value::Object(args))
 }
 
+fn check_case_interface(manifest: &Manifest, id: &str, args: &Value, expect: &Value) -> Result<()> {
+    let inputs = object(&manifest.value["interface"]["inputs"])?;
+    let outputs = object(&manifest.value["interface"]["outputs"])?;
+    for name in object(args)?.keys() {
+        if !inputs.contains_key(name) {
+            return Err(Error::invalid(format!(
+                "case {id}: unknown candidate input \"{name}\""
+            )));
+        }
+    }
+    for name in outputs.keys() {
+        if !object(expect)?.contains_key(name) {
+            return Err(Error::invalid(format!(
+                "case {id}: missing expected output \"{name}\""
+            )));
+        }
+    }
+    for name in object(expect)?.keys() {
+        if !outputs.contains_key(name) {
+            return Err(Error::invalid(format!(
+                "case {id}: unknown candidate output \"{name}\""
+            )));
+        }
+    }
+    Ok(())
+}
+
 fn check_interfaces(candidates: &[Manifest], cases: &[FoundryCase]) -> Result<()> {
     let mut digests = BTreeSet::new();
     for candidate in candidates {
-        let interface = object(&candidate.value["interface"]).map_err(|_| {
+        object(&candidate.value["interface"]).map_err(|_| {
             Error::invalid(format!(
                 "candidate {} must declare an interface",
                 candidate.value["key"]
@@ -280,33 +310,8 @@ fn check_interfaces(candidates: &[Manifest], cases: &[FoundryCase]) -> Result<()
                 "duplicate foundry candidate {digest}"
             )));
         }
-        let inputs = object(&interface["inputs"])?;
-        let outputs = object(&interface["outputs"])?;
         for case in cases {
-            for name in object(&case.args)?.keys() {
-                if !inputs.contains_key(name) {
-                    return Err(Error::invalid(format!(
-                        "case {}: unknown candidate input \"{name}\"",
-                        case.id
-                    )));
-                }
-            }
-            for name in outputs.keys() {
-                if object(&case.expect)?.get(name).is_none() {
-                    return Err(Error::invalid(format!(
-                        "case {}: missing expected output \"{name}\"",
-                        case.id
-                    )));
-                }
-            }
-            for name in object(&case.expect)?.keys() {
-                if !outputs.contains_key(name) {
-                    return Err(Error::invalid(format!(
-                        "case {}: unknown candidate output \"{name}\"",
-                        case.id
-                    )));
-                }
-            }
+            check_case_interface(candidate, &case.id, &case.args, &case.expect)?;
         }
     }
     Ok(())
@@ -335,7 +340,7 @@ async fn evaluate_case(
     transports: &Transports,
     mut account: Option<&mut Account>,
 ) -> Result<Value> {
-    let args = case_args(manifest, case)?;
+    let args = case_args(manifest, &case.id, &case.args)?;
     if let Some(account) = account.as_deref_mut() {
         account.reserve(manifest)?;
     }
@@ -761,7 +766,11 @@ pub async fn generate_in(
         .and_then(|i| i.as_object())
         .unwrap_or(&empty);
     let mut run_args = Map::new();
-    for (name, value) in object(args)? {
+    let supplied = object(args)?;
+    let mut names: Vec<_> = supplied.keys().collect();
+    names.sort();
+    for name in names {
+        let value = &supplied[name];
         let target = inputs.get(name).ok_or_else(|| {
             Error::invalid(format!(
                 "generator {}: unknown interface input \"{name}\"",
@@ -1266,6 +1275,12 @@ async fn verify_cases(
     let manifest = Manifest::parse(&manifest_value)?;
     for case in cases {
         let id = case["id"].as_str().unwrap_or("");
+        if verify_claims
+            && let Err(error) = check_case_interface(&manifest, id, &case["args"], &case["expect"])
+        {
+            mismatches.push(error.message);
+            continue;
+        }
         let receipt_digest = case["receiptDigest"].as_str().unwrap_or("");
         let Some(receipt) = store.get("runs", receipt_digest)? else {
             mismatches.push(format!("receipt {receipt_digest} missing"));
@@ -1279,6 +1294,10 @@ async fn verify_cases(
             continue;
         }
         if verify_claims {
+            if canonical(&case_args(&manifest, id, &case["args"])?)? != canonical(&receipt["args"])?
+            {
+                mismatches.push(format!("case {id}: receipt args differ from the case"));
+            }
             if manifest.value["interface"].as_object().is_some() {
                 let outputs = runtime::outputs(&manifest, &receipt)?;
                 if canonical(&outputs)? != canonical(&case["outputs"])? {

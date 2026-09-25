@@ -1,19 +1,19 @@
-import { afterEach, expect, test } from "bun:test";
+import { expect } from "bun:test";
+import { applicationTests } from "./fixtures/application-test-scope";
 import { mkdir, mkdtemp, open, readFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { APPLICATION_QUOTA_LIMITS as limits, withApplicationQuota } from "./application-quota";
 import { canonicalize } from "./values";
 
-const dirs: string[] = [];
-async function root() { const dir = await mkdtemp(join(tmpdir(), "algal-quota-")); dirs.push(dir); return dir; }
+const {test, resources} = applicationTests();
+async function root() { resources().checkActive(); return resources().directory(await mkdtemp(join(tmpdir(), "algal-quota-"))); }
 async function sparse(path: string, bytes: number) {
   const file = await open(path, "w"); try { await file.truncate(bytes); } finally { await file.close(); }
 }
 async function ledger(dir: string): Promise<{applications: {application: string; bytes: number}[]}> {
   return JSON.parse(await readFile(join(dir, ".application-quota", "ledger.json"), "utf8"));
 }
-afterEach(async () => { for (const dir of dirs.splice(0)) await rm(dir, {recursive: true, force: true}); });
 
 test("quota reservations precede publication and survive failed or absent writes", async () => {
   const dir = await root(), value = {retained: "evidence"}, charge = 2 * Buffer.byteLength(canonicalize(value));
@@ -46,12 +46,12 @@ test("aggregate quota includes unindexed prepared, temporary and orphaned namesp
 
 test("concurrent applications cannot allocate through another live quota publication", async () => {
   const dir = await root();
-  let entered!: () => void, release!: () => void;
-  const ready = new Promise<void>(resolve => { entered = resolve; }), wait = new Promise<void>(resolve => { release = resolve; });
-  const first = withApplicationQuota(dir, "one", [null], async () => { entered(); await wait; });
-  await ready;
-  try { await expect(withApplicationQuota(dir, "two", [null], async () => {})).rejects.toThrow("held by another live operation"); }
-  finally { release(); }
+  const ready = resources().barrier(), wait = resources().barrier();
+  const first = resources().own(withApplicationQuota(dir, "one", [null], async () => { ready.release(); await wait.wait; }));
+  try {
+    await Promise.race([ready.wait, first]);
+    await expect(withApplicationQuota(dir, "two", [null], async () => {})).rejects.toThrow("held by another live operation");
+  } finally { wait.release(); await Promise.allSettled([first]); }
   await first;
   await withApplicationQuota(dir, "two", [null], async () => {});
   expect((await ledger(dir)).applications.map(row => row.application)).toEqual(["one", "two"]);
@@ -65,7 +65,10 @@ test("quota scans reject symlinks, deep trees and excessive file counts", async 
   await mkdir(join(app, "a/b/c/d/e"), {recursive: true});
   await expect(withApplicationQuota(dir, "one", [null], async () => {})).rejects.toThrow("scan bound");
   await rm(join(app, "a"), {recursive: true});
-  for (let batch = 0; batch < 100; batch++) await Promise.all(Array.from({length: 100}, (_, i) => sparse(join(app, `${batch}-${i}`), 0)));
+  for (let batch = 0; batch < 100; batch++) {
+    resources().checkActive();
+    await Promise.all(Array.from({length: 100}, (_, i) => resources().own(sparse(join(app, `${batch}-${i}`), 0))));
+  }
   await expect(withApplicationQuota(dir, "one", [null], async () => {})).rejects.toThrow("scan bound");
 });
 

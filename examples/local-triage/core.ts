@@ -62,6 +62,10 @@ export type TriageTransferVerification = { ok: true; states: number; receipts: n
 class ProofMemo {
   private readonly values = new Map<string, unknown>();
   private bytes = 0;
+  async prove<T>(key: string, action: () => Promise<T>): Promise<T> {
+    const cached = this.get<T>(key);
+    return cached === undefined ? this.set(key, await action()) : cached;
+  }
   get<T>(key: string): T | undefined { return structuredClone(this.values.get(key)) as T | undefined; }
   set<T>(key: string, value: T): T {
     if (!this.values.has(key) && this.values.size < 1024) {
@@ -74,9 +78,11 @@ class ProofMemo {
 }
 async function verifyPureReceipt(store: Store, receipt: RunReceipt, manifest: OrganismManifest, memo?: ProofMemo): Promise<void> {
   const key = `receipt:${hash(receipt)}:${hash(manifestToJson(manifest))}`;
-  if (memo?.get<boolean>(key)) return;
-  if (!(await verifyReceipt(applicationJson(receipt), manifestToJson(manifest), store)).ok) throw new Error("Triage receipt replay failed");
-  memo?.set(key, true);
+  const prove = async () => {
+    if (!(await verifyReceipt(applicationJson(receipt), manifestToJson(manifest), store)).ok) throw new Error("Triage receipt replay failed");
+    return true;
+  };
+  if (memo) await memo.prove(key, prove); else await prove();
 }
 const engine: MemoryQueryEngine = { identity: hash({ contract: "algal.triage-direct-projection.v1" }), async query() { throw new Error("Triage uses direct admitted task projection, not a Datalog query engine"); }, async verify() { return false; }, async settle() {} };
 export async function pureRun(store: Store, manifest: OrganismManifest, input: Record<string, JsonValue>): Promise<{ receipt: RunReceipt; reference: Digest; value: JsonValue }> {
@@ -124,8 +130,8 @@ export class TriageCore {
         if (scope.completeFor.length !== 1 || !known.some(f => f.procedure === scope.completeFor[0])) throw new Error("Unadmitted triage procedure");
       },
       decodeObservation: async ({ observation, raw, procedure }) => {
-        const key = `observation:${hash(observation)}`, cached = this.proofMemo?.get<MemoryClaim[]>(key);
-        if (cached) return cached;
+        const key = `observation:${this.application}:${hash({ observation, raw, procedure })}`;
+        const prove = async (): Promise<MemoryClaim[]> => {
         const version = procedure.schema === (await this.fixed(1)).schema ? 1 : procedure.schema === (await this.fixed(2)).schema ? 2 : null;
         if (!version) throw new Error("Unknown task schema");
         const fixed = await this.fixed(version);
@@ -135,7 +141,7 @@ export class TriageCore {
           if (version !== 2 || migration.application !== this.application || migration.program !== hash(manifestToJson(migrationManifest())) || migration.receipt !== observation.receipt) throw new Error("Unadmitted migration");
           await verifyApplicationMigration(this.service.store, migration, observation.scope);
           tasksFromClaims(migration.claims, 2);
-          return this.proofMemo?.set(key, migration.claims) ?? migration.claims;
+          return migration.claims;
         }
         const v = object(raw, ["contract", "tasks", "schemaVersion", "receipt", "previous"]);
         if (v.contract !== "algal.triage-facts.v1" || v.schemaVersion !== version || v.receipt !== observation.receipt) throw new Error("Unbound task facts");
@@ -143,7 +149,9 @@ export class TriageCore {
         if (version === 1 && tasks.some(t => t.category !== "inbox")) throw new Error("v1 cannot retain category facts");
         const claims = tasks.map(t => ({ relation: "task", tuple: [t.id, t.title, t.priority, t.status, ...(version === 2 ? [t.category] : [])], polarity: "supported" as const }));
         await replay(this.service.store, observation.receipt, claimsManifest(version), { tasks }, { claims }, this.proofMemo);
-        return this.proofMemo?.set(key, claims) ?? claims;
+        return claims;
+        };
+        return this.proofMemo ? this.proofMemo.prove(key, prove) : prove();
       },
     };
     this.memory = new ApplicationMemoryService({ store: this.service.store, engine, admission: memoryAdmission });
@@ -154,8 +162,7 @@ export class TriageCore {
    * Only explicit revision construction installs these retained records. */
   private async fixed(version: 1 | 2, mode: "references" | "install" | "verify" = "references"): Promise<Fixed> {
     const key = `fixed:${this.application}:${version}:${mode}`;
-    const cached = mode === "install" ? undefined : this.proofMemo?.get<Fixed>(key);
-    if (cached) return cached;
+    const prove = async (): Promise<Fixed> => {
     const values: JsonValue[] = [], value = (input: unknown): Digest => { const item = applicationJson(input); values.push(item); return hash(item); };
     const schema = value({ contract: "algal.application-memory-schema.v1", relations: [{ name: "task", arity: version === 1 ? 4 : 5 }] });
     const decoder = value({ contract: "algal.triage-decoder.v1", schemaVersion: version });
@@ -175,7 +182,9 @@ export class TriageCore {
       if (!retained || !same(manifestToJson(retained), manifestToJson(manifest))) throw new Error("Missing retained triage facts manifest");
       for (const item of values) if (!same(await getApplicationRecord(this.service.store, hash(item), applicationJson), item)) throw new Error("Retained triage metadata mismatch");
     }
-    return mode === "install" ? result : this.proofMemo?.set(key, result) ?? result;
+    return result;
+    };
+    return mode !== "install" && this.proofMemo ? this.proofMemo.prove(key, prove) : prove();
   }
   private async revisionRecord(definition: Revision, parent: Digest | null, install = true): Promise<Digest> {
     const r = parseRevision(definition), fixed = await this.fixed(r.schemaVersion, install ? "install" : "references"), manifests = [updateManifest(), viewManifest(r)];
@@ -185,8 +194,8 @@ export class TriageCore {
     return this.put(record);
   }
   private async definition(revisionRef: Digest): Promise<Revision> {
-    const key = `definition:${revisionRef}`, cached = this.proofMemo?.get<Revision>(key);
-    if (cached) return cached;
+    const key = `definition:${this.application}:${revisionRef}`;
+    const prove = async (): Promise<Revision> => {
     const r = await getApplicationRecord(this.service.store, revisionRef, parseApplicationRevision);
     const m = await this.service.store.getManifest(r.entrypoints.find(e => e.name === "view")?.manifest ?? revisionRef);
     const cell = m?.cells.find(c => c.id === "definition"); if (!cell || cell.kind !== "const") throw new Error("Missing triage definition");
@@ -194,17 +203,21 @@ export class TriageCore {
     if (revisionRef !== await this.revisionRecord(definition, r.parent, false)) throw new Error("Unadmitted triage revision or authority");
     await this.fixed(definition.schemaVersion, "verify");
     for (const entry of r.entrypoints) if (!await this.service.store.getManifest(entry.manifest)) throw new Error("Missing retained triage entrypoint manifest");
-    return this.proofMemo?.set(key, definition) ?? definition;
+    return definition;
+    };
+    return this.proofMemo ? this.proofMemo.prove(key, prove) : prove();
   }
   private async tasks(snapshot: ApplicationSnapshot): Promise<Task[]> {
-    const key = `tasks:${snapshot.state.revision}:${snapshot.state.memory}`, cached = this.proofMemo?.get<Task[]>(key);
-    if (cached) return cached;
+    const key = `tasks:${this.application}:${hash({ revision: snapshot.state.revision, memory: snapshot.state.memory, revisionRecord: snapshot.revision })}`;
+    const prove = async (): Promise<Task[]> => {
     const definition = await this.definition(snapshot.state.revision);
     const memory = await this.memory.validateForRevision(snapshot.state.memory, snapshot.revision);
     const active = memory.observations.filter(ref => !memory.withdrawn.includes(ref));
     if (active.length !== 1 || memory.hypotheses.length || memory.archive !== undefined) throw new Error("Task snapshot must select exactly one complete fact observation");
     const tasks = tasksFromClaims((await getApplicationRecord(this.service.store, active[0]!, parseMemoryObservation)).claims, definition.schemaVersion);
-    return this.proofMemo?.set(key, tasks) ?? tasks;
+    return tasks;
+    };
+    return this.proofMemo ? this.proofMemo.prove(key, prove) : prove();
   }
   private async facts(tasksInput: Task[], version: 1 | 2, previous: Digest | null): Promise<Digest> {
     const tasks = parseTasks(tasksInput), fixed = await this.fixed(version), execution = await pureRun(this.service.store, claimsManifest(version), { tasks });
@@ -534,17 +547,31 @@ export class TriageCore {
     return { reference: ref, application: transfer.application, head: transfer.head, duplicate };
   }
   async readTransfer(ref: Digest): Promise<Transfer> {
+    const index = await this.readTransferIndex(ref), records = [];
+    for (const row of index.records) records.push({ kind: row.kind, reference: row.reference, value: await this.readTransferRow(row.kind, row.reference) });
+    return parseTransfer({ contract: "algal.triage-transfer.v1", claim: "portable-data-and-pure-replay", application: index.application, head: index.head, states: index.states, records });
+  }
+  /** The saved index names each row's kind and reference. Row content is read
+   * separately so a caller can reuse a row it already reread and rehashed. */
+  async readTransferIndex(ref: Digest): Promise<{ application: string; head: Digest; states: Digest[]; records: { kind: Transfer["records"][number]["kind"]; reference: Digest }[] }> {
     const raw = await getApplicationRecord(this.service.store, ref, v => object(v, ["contract", "application", "head", "states", "records"]));
-    if (raw.contract !== "algal.triage-transfer-index.v1" || !Array.isArray(raw.records) || raw.records.length > 1024) throw new Error("Invalid transfer index");
-    const records = [];
-    for (const item of raw.records) {
-      const r = object(item, ["kind", "reference"]), referenceValue = reference(r.reference);
-      const value = r.kind === "manifest" ? await this.service.store.getManifest(referenceValue).then(m => m ? manifestToJson(m) : undefined) : r.kind === "receipt" ? await this.service.store.getReceipt(referenceValue) : await this.service.store.getValue(referenceValue);
-      if (value === undefined) throw new Error("Missing transfer index content");
-      if (r.kind === "receipt") { const retainedValue = await this.service.store.getValue(referenceValue); if (retainedValue === undefined || !same(retainedValue, value)) throw new Error("Missing or inconsistent retained transfer receipt"); }
-      records.push({ kind: r.kind, reference: referenceValue, value });
-    }
-    return parseTransfer({ contract: "algal.triage-transfer.v1", claim: "portable-data-and-pure-replay", application: raw.application, head: raw.head, states: raw.states, records });
+    if (raw.contract !== "algal.triage-transfer-index.v1" || !Array.isArray(raw.records) || raw.records.length > 1024 || !Array.isArray(raw.states) || !raw.states.length || raw.states.length > MAX_STATES) throw new Error("Invalid transfer index");
+    const records: { kind: Transfer["records"][number]["kind"]; reference: Digest }[] = raw.records.map(item => {
+      const r = object(item, ["kind", "reference"]);
+      if (r.kind !== "value" && r.kind !== "manifest" && r.kind !== "receipt") throw new Error("Invalid transfer record kind");
+      return { kind: r.kind, reference: reference(r.reference) };
+    });
+    const states = raw.states.map(reference), head = reference(raw.head);
+    if (new Set(states).size !== states.length || states.at(-1) !== head || new Set(records.map(r => r.reference)).size !== records.length) throw new Error("Tampered or duplicate transfer content");
+    return { application: id(raw.application), head, states, records };
+  }
+  /** Receipt rows need both retained aliases. The returned content is bound to
+   * its reference by the caller's hash check, never by this read alone. */
+  async readTransferRow(kind: Transfer["records"][number]["kind"], ref: Digest): Promise<JsonValue> {
+    const value = kind === "manifest" ? await this.service.store.getManifest(ref).then(m => m ? manifestToJson(m) : undefined) : kind === "receipt" ? await this.service.store.getReceipt(ref) : await this.service.store.getValue(ref);
+    if (value === undefined) throw new Error("Missing transfer index content");
+    if (kind === "receipt") { const retainedValue = await this.service.store.getValue(ref); if (retainedValue === undefined || !same(retainedValue, value)) throw new Error("Missing or inconsistent retained transfer receipt"); }
+    return value;
   }
   private async transferCapture(transfer: Transfer): Promise<Capture> {
     const source = new TriageCore(this.storage, transfer.application, this.sessions);

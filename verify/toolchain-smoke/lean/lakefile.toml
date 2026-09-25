@@ -1,0 +1,6 @@
+name = "algal_toolchain_smoke"
+version = "0.0.0"
+defaultTargets = ["Smoke"]
+
+[[lean_lib]]
+name = "Smoke"

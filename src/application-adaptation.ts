@@ -121,6 +121,10 @@ function same(a: unknown, b: unknown): boolean {
   return canonicalize(applicationJson(a)) === canonicalize(applicationJson(b));
 }
 
+function checkEvaluationCaseBound(cases: EvaluationCaseSet, policy: EvaluationPolicy): void {
+  if (cases.cases.length > policy.maxCases) throw new Error("Evaluation case set exceeds policy bound");
+}
+
 export function parseEvaluationPolicy(input: unknown): EvaluationPolicy {
   const optional = ["research", "composition"].filter(key => input && typeof input === "object" && Object.hasOwn(input, key));
   const v = applicationObject(input, ["contract", "maxCases", "maxWork", "maxModelCalls", "requireHoldoutPass", "strictValidationImprovement", ...optional]);
@@ -328,8 +332,10 @@ async function reportCases(report: FoundryReport, cases: EvaluationCaseSet, incu
     const manifest = await store.getManifest(manifestDigest);
     if (!manifest?.interface) throw new Error("Foundry candidate manifest interface missing");
     const args: Record<string, Record<string, JsonValue>> = Object.create(null) as Record<string, Record<string, JsonValue>>;
-    for (const [name, value] of Object.entries(frozen.get(resultCase.id)!.args)) {
-      const target = manifest.interface.inputs[name];
+    const frozenArgs = frozen.get(resultCase.id)!.args;
+    for (const name of Object.keys(frozenArgs).sort()) {
+      const value = frozenArgs[name]!;
+      const target = Object.hasOwn(manifest.interface.inputs, name) ? manifest.interface.inputs[name] : undefined;
       if (!target) throw new Error(`Frozen case input ${name} is not in candidate interface`);
       (args[target.cell] ??= Object.create(null) as Record<string, JsonValue>)[target.port] = value;
     }
@@ -398,8 +404,8 @@ export async function evaluateApplicationRevision(store: Store, input: unknown, 
     candidate = await loadRevision(store, request.candidateRevision); incumbent = await loadRevision(store, state.revision);
   }
   const cases = parseEvaluationCases(await optionalObject(store, request.cases));
+  checkEvaluationCaseBound(cases, policy);
   const scorerRecord = parseEvaluationScorer(await optionalObject(store, request.scorer));
-  if (cases.cases.length > policy.maxCases) throw new Error("Evaluation case set exceeds policy bound");
   const old = entrypoint(incumbent.revision, request.entrypoint), next = entrypoint(candidate.revision, request.entrypoint);
   await evaluationManifest(incumbent.manifests.get(request.entrypoint)!, runtime.fns, store, policy, old.manifest); await evaluationManifest(candidate.manifests.get(request.entrypoint)!, runtime.fns, store, policy, next.manifest);
   const foundry = { candidates: [incumbent.manifests.get(request.entrypoint)!, candidate.manifests.get(request.entrypoint)!], cases: cases.cases, fns: runtime.fns, store, executors: runtime.executors ?? [], ...(scorerRecord.scorer ? { scorer: scorerRecord.scorer } : {}) };
@@ -440,6 +446,7 @@ export async function verifyApplicationEvaluation(store: Store, evaluationRef: D
   await evaluationManifest(incumbent.manifests.get(request.entrypoint)!, runtime.fns, store, policy, entrypoint(incumbent.revision, request.entrypoint).manifest);
   await evaluationManifest(candidate.manifests.get(request.entrypoint)!, runtime.fns, store, policy, entrypoint(candidate.revision, request.entrypoint).manifest);
   const cases = parseEvaluationCases(await optionalObject(store, request.cases));
+  checkEvaluationCaseBound(cases, policy);
   const scorerRecord = parseEvaluationScorer(await optionalObject(store, request.scorer));
   const reportValue = await optionalObject(store, evaluation.foundryReport); const report = reportValue as unknown as FoundryReport;
   const verified = await verifyFoundryReport(report, store, runtime.fns); if (!verified.ok) throw new Error(`Foundry evidence is invalid: ${verified.mismatches.join("; ")}`);

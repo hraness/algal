@@ -123,24 +123,36 @@ pub fn validate_effect(value: &Value) -> Result<()> {
 }
 
 pub fn validate(value: &Value) -> Result<()> {
+    resources(value, "PARSE_FAILED")?;
+    fields(value)
+}
+
+/// Producer admission uses the same envelope and resource profile as readers,
+/// with a capacity error for an execution that cannot be represented.
+pub(crate) fn validate_produced(value: &Value) -> Result<()> {
+    resources(value, "BUDGET_EXHAUSTED")?;
+    fields(value)
+}
+
+fn resources(value: &Value, code: &str) -> Result<()> {
     let mut pending = vec![(value, 0usize)];
     let mut nodes = 0usize;
     let mut text_bytes = 0usize;
     while let Some((value, depth)) = pending.pop() {
         nodes += 1;
         if nodes > 1_000_000 || depth > 64 {
-            return Err(Error::invalid("receipt structural bounds exceeded"));
+            return Err(Error::new(code, "receipt structural bounds exceeded"));
         }
         match value {
             Value::Array(values) => {
                 if values.len() + pending.len() > 1_000_000 {
-                    return Err(Error::invalid("receipt node bound exceeded"));
+                    return Err(Error::new(code, "receipt node bound exceeded"));
                 }
                 pending.extend(values.iter().map(|v| (v, depth + 1)));
             }
             Value::Object(values) => {
                 if values.len() + pending.len() > 1_000_000 {
-                    return Err(Error::invalid("receipt node bound exceeded"));
+                    return Err(Error::new(code, "receipt node bound exceeded"));
                 }
                 for key in values.keys() {
                     text_bytes = text_bytes.saturating_add(key.len());
@@ -153,12 +165,16 @@ pub fn validate(value: &Value) -> Result<()> {
             _ => {}
         }
         if text_bytes > MAX_BYTES {
-            return Err(Error::invalid("receipt byte bound exceeded"));
+            return Err(Error::new(code, "receipt byte bound exceeded"));
         }
     }
     if canonical(value)?.len() > MAX_BYTES {
-        return Err(Error::invalid("receipt byte bound exceeded"));
+        return Err(Error::new(code, "receipt byte bound exceeded"));
     }
+    Ok(())
+}
+
+fn fields(value: &Value) -> Result<()> {
     keys(
         value,
         &[

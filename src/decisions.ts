@@ -107,10 +107,11 @@ export function parseDecisionQuestion(u: unknown, at: string): DecisionQuestion 
     const c = asObject(raw, `${at}.criteria`);
     noUnknownKeys(c, ["true", "false"], `${at}.criteria`);
     const criteria: { true?: string; false?: string } = {};
-    if (c.true !== undefined)
-      criteria.true = asString(c.true, `${at}.criteria.true`, DECISION_BOUNDS.maxCriterionBytes);
-    if (c.false !== undefined)
-      criteria.false = asString(c.false, `${at}.criteria.false`, DECISION_BOUNDS.maxCriterionBytes);
+    const yes = optField(c, "true"), no = optField(c, "false");
+    if (yes !== undefined)
+      criteria.true = asString(yes, `${at}.criteria.true`, DECISION_BOUNDS.maxCriterionBytes);
+    if (no !== undefined)
+      criteria.false = asString(no, `${at}.criteria.false`, DECISION_BOUNDS.maxCriterionBytes);
     return { type, instructions: inst, ...(Object.keys(criteria).length ? { criteria } : {}) };
   }
   if (type === "choice") {
@@ -123,11 +124,10 @@ export function parseDecisionQuestion(u: unknown, at: string): DecisionQuestion 
         `${at}.criteria requires 1..${DECISION_BOUNDS.maxCriteria} entries`,
       );
     }
-    const out: Record<string, string | null> = {};
-    for (const [k, v] of entries) {
+    const out: Record<string, string | null> = Object.fromEntries(entries.map(([k, v]) => {
       asString(k, `${at}.criteria key`, DECISION_BOUNDS.maxQuestionNameLen);
-      out[k] = v === null ? null : asString(v, `${at}.criteria["${k}"]`, DECISION_BOUNDS.maxCriterionBytes);
-    }
+      return [k, v === null ? null : asString(v, `${at}.criteria["${k}"]`, DECISION_BOUNDS.maxCriterionBytes)];
+    }));
     return { type, instructions: inst, criteria: out };
   }
   noUnknownKeys(obj, ["type", "instructions", "criteria"], at);
@@ -155,12 +155,11 @@ export function parseDecisionQuestions(u: unknown, at: string): DecisionQuestion
       `${at} requires 1..${DECISION_BOUNDS.maxQuestions} questions`,
     );
   }
-  const out: DecisionQuestions = {};
-  for (const name of names) {
+  // fromEntries creates own data properties even for the admitted name __proto__.
+  return Object.fromEntries(names.map(name => {
     asString(name, `${at} question name`, DECISION_BOUNDS.maxQuestionNameLen);
-    out[name] = parseDecisionQuestion(obj[name], `${at}["${name}"]`);
-  }
-  return out;
+    return [name, parseDecisionQuestion(obj[name], `${at}["${name}"]`)];
+  }));
 }
 
 // --------------------------------------------------------------- answers ---
@@ -183,11 +182,7 @@ function probabilities(u: unknown, at: string): Record<string, number> {
       `decision answer ${at} exceeds ${DECISION_BOUNDS.maxCriteria} entries`,
     );
   }
-  const out: Record<string, number> = {};
-  for (const [k, v] of Object.entries(obj)) {
-    out[k] = finiteNumber(v, `${at}["${k}"]`);
-  }
-  return out;
+  return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, finiteNumber(v, `${at}["${k}"]`)]));
 }
 
 /** Strict-typed parse of one answer. The declared question type decides the
@@ -199,9 +194,9 @@ export function parseDecisionAnswer(
 ): DecisionAnswer {
   const obj = asObject(u, at);
   if (question.type === "noul") {
-    return { type: "noul", noul: finiteNumber(obj.noul, `${at}.noul`) };
+    return { type: "noul", noul: finiteNumber(optField(obj, "noul"), `${at}.noul`) };
   }
-  const conf = finiteNumber(obj.confidence, `${at}.confidence`);
+  const conf = finiteNumber(optField(obj, "confidence"), `${at}.confidence`);
   const probs = probabilities(
     reqField(obj, "probabilities", at),
     `${at}.probabilities`,
@@ -229,17 +224,15 @@ export function parseDecisionAnswers(
   at: string,
 ): Record<string, DecisionAnswer> {
   const raw = asObject(u, at);
-  const answers: Record<string, DecisionAnswer> = {};
-  for (const [name, question] of Object.entries(questions)) {
-    if (!(name in raw)) {
+  return Object.fromEntries(Object.entries(questions).map(([name, question]) => {
+    if (!Object.hasOwn(raw, name)) {
       throw new AlgalError(
         "EFFECT_UNPARSEABLE",
         `decision response missing answer "${name}"`,
       );
     }
-    answers[name] = parseDecisionAnswer(raw[name], question, `${at}["${name}"]`);
-  }
-  return answers;
+    return [name, parseDecisionAnswer(raw[name], question, `${at}["${name}"]`)];
+  }));
 }
 
 /** The derived output contract for `kind:"decide"` requests:
@@ -277,10 +270,7 @@ export function decisionAnswerSchema(questions: DecisionQuestions): JsonObject {
               probabilities: { type: "object" },
             },
           };
-  const properties: Record<string, JsonValue> = {};
-  for (const [name, q] of Object.entries(questions)) {
-    properties[name] = perAnswer(q) as unknown as JsonValue;
-  }
+  const properties: Record<string, JsonValue> = Object.fromEntries(Object.entries(questions).map(([name, q]) => [name, perAnswer(q) as unknown as JsonValue]));
   return {
     type: "object",
     required: ["answers"],
@@ -313,8 +303,7 @@ function choiceQuestion(request: EffectRequest): DecisionQuestions {
       `a decision executor cannot serve a ${request.output.kind} output — it answers typed decisions, not generated text`,
     );
   }
-  const criteria: Record<string, string | null> = {};
-  for (const label of request.output.labels) criteria[label] = null;
+  const criteria: Record<string, string | null> = Object.fromEntries(request.output.labels.map(label => [label, null]));
   return {
     answer: { type: "choice", instructions: request.prompt, criteria },
   };
@@ -380,8 +369,8 @@ export function decisionExecutor(options: DecisionExecutorOptions): Executor {
     const response = await options.asker.ask(state, questions, signal);
     const metadata = usageMeta(response);
     if (single !== undefined) {
-      const answer = response.answers[single];
-      if (answer === undefined || !("choice" in answer)) {
+      const answer = Object.hasOwn(response.answers, single) ? response.answers[single] : undefined;
+      if (answer === undefined || !Object.hasOwn(answer, "choice") || !("choice" in answer)) {
         throw new AlgalError(
           "EFFECT_UNPARSEABLE",
           `decision response missing choice answer "${single}"`,

@@ -1002,9 +1002,16 @@ pub struct Service<'a> {
     pub store: Store,
     admission: &'a dyn Admission,
     fault_hook: Option<&'a (dyn Fn(&'static str) -> Result<()> + Send + Sync)>,
+    custody_hook: Option<&'a (dyn Fn() -> Result<()> + Send + Sync)>,
     /// Intent rows validated by the most recent `history` pass, keyed by
     /// state digest; `pending` reuses them instead of re-reading the records.
     validated_intents: std::sync::Mutex<BTreeMap<String, Vec<(String, Intent)>>>,
+}
+
+// Field drop order releases compatibility custody before the stable primary.
+struct ApplicationCustody {
+    legacy: Option<lease::OwnerLease>,
+    _primary: lease::OwnerLease,
 }
 
 /// Records shared across the states of one history: a revision or memory
@@ -1022,6 +1029,7 @@ impl<'a> Service<'a> {
             store: Store::open(dir, true)?,
             admission,
             fault_hook: None,
+            custody_hook: None,
             validated_intents: std::sync::Mutex::new(BTreeMap::new()),
         })
     }
@@ -1040,19 +1048,23 @@ impl<'a> Service<'a> {
         self.fault_hook.map_or(Ok(()), |hook| hook(point))
     }
 
+    /// Diagnostic selection barrier outside shared namespace custody.
+    /// No hook is installed by the CLI or default host.
+    pub fn with_custody_hook(mut self, hook: &'a (dyn Fn() -> Result<()> + Send + Sync)) -> Self {
+        self.custody_hook = Some(hook);
+        self
+    }
+
     fn path(&self, application: &str) -> PathBuf {
         self.dir.join("applications").join(application)
     }
 
-    fn custody(&self, application: &str, creating: bool) -> Result<lease::OwnerLease> {
+    fn custody(&self, application: &str, creating: bool) -> Result<ApplicationCustody> {
         let root = self.dir.join("applications");
         lease::directory(&root)?;
-        // The shared creation lease serializes only the namespace scan and the
-        // committed-head check; admission then runs under the application's own
-        // mutex. Until a head exists that mutex is a per-application creation
-        // lease inside `.creation` — coordination residue, never a reserved
-        // namespace — so independent creations and a refused first commit never
-        // queue behind or consume capacity through a trusted host call.
+        // Namespace validation never chooses a different mutex after the first
+        // head. Pending is the retained primary identity for every mutation.
+        // Coordination residue does not occupy an application namespace slot.
         let creation = lease::OwnerLease::acquire_shared(
             &root.join(".creation"),
             "application-creation",
@@ -1060,7 +1072,7 @@ impl<'a> Service<'a> {
             lease::SHARED_LEASE_POLL,
         )?;
         let mut count = 0usize;
-        let mut committed = false;
+        let mut present = false;
         let mut scanned = 0usize;
         for entry in std::fs::read_dir(&root)? {
             scanned += 1;
@@ -1088,34 +1100,42 @@ impl<'a> Service<'a> {
             app_id(&json!(name))?;
             count += 1;
             if name == application {
-                committed = match std::fs::symlink_metadata(root.join(&name).join("head.json")) {
-                    Ok(meta) => meta.is_file() && !meta.file_type().is_symlink(),
-                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
-                    Err(error) => return Err(error.into()),
-                };
+                present = true;
             }
         }
-        if committed {
-            drop(creation);
-            return lease::OwnerLease::acquire(
-                &self.path(application),
-                &format!("application-{application}"),
-            );
-        }
-        if !creating {
-            return Ok(creation);
-        }
-        if count >= APPLICATIONS {
+        // A prepared namespace already occupies a slot and can finish at the
+        // limit; the quota ledger rechecks allocation before publication.
+        if creating && !present && count >= APPLICATIONS {
             return Err(Error::limit("Application count exhausted"));
         }
         drop(creation);
-        lease::OwnerLease::acquire(
+        if let Some(hook) = self.custody_hook {
+            hook()?;
+        }
+        let primary = lease::OwnerLease::acquire(
             &root
                 .join(".creation")
                 .join("pending")
                 .join(app_id(&json!(application))?),
             &format!("application-{application}"),
-        )
+        )?;
+        // Recheck only after acquiring primary custody. Existing permanent
+        // owners/legacy markers remain authoritative for compatibility.
+        let legacy = match std::fs::symlink_metadata(self.path(application)) {
+            Ok(meta) if meta.is_dir() && !meta.file_type().is_symlink() => {
+                Some(lease::OwnerLease::acquire(
+                    &self.path(application),
+                    &format!("application-{application}"),
+                )?)
+            }
+            Ok(_) => return Err(Error::new("IO_FAILED", "Invalid application directory")),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error.into()),
+        };
+        Ok(ApplicationCustody {
+            legacy,
+            _primary: primary,
+        })
     }
 
     fn snapshot(&self, reference: &str, shared: &mut SharedRecords) -> Result<Snapshot> {
@@ -1678,7 +1698,7 @@ impl<'a> Service<'a> {
     }
 
     async fn commit_value(&mut self, command: &Command) -> Result<Snapshot> {
-        let _lease = self.custody(&command.application, true)?;
+        let custody = self.custody(&command.application, true)?;
         let path = self.path(&command.application);
         let history = self.history(&command.application)?;
         let current = history.last();
@@ -1900,6 +1920,16 @@ impl<'a> Service<'a> {
             &command.application,
             &[&operation.value, &head],
         )?;
+        // Do not create a named namespace until both host admission and quota
+        // succeed. Hold the old permanent identity before any head can appear.
+        let _publication_legacy = if custody.legacy.is_none() {
+            Some(lease::OwnerLease::acquire(
+                &path,
+                &format!("application-{}", command.application),
+            )?)
+        } else {
+            None
+        };
         for intent in &intents {
             put_record(&mut self.store, &intent.value)?;
         }
@@ -2905,6 +2935,212 @@ mod tests {
             service.inspect("parity").unwrap().unwrap().digest,
             initial.digest
         );
+    }
+
+    #[tokio::test]
+    async fn prepared_genesis_finishes_at_the_application_namespace_bound() {
+        let tmp = tempdir().unwrap();
+        let (revision, memory, _, _) = seed(tmp.path());
+        let allow = Allow;
+        let create = command(
+            "parity",
+            &ops("prepared-capacity"),
+            "create",
+            None,
+            &revision,
+            &memory,
+            vec![],
+        );
+        let fault = |point| {
+            if point == "prepared" {
+                Err(Error::invalid("prepared interruption"))
+            } else {
+                Ok(())
+            }
+        };
+        let mut interrupted = Service::new(tmp.path(), &allow)
+            .unwrap()
+            .with_fault_hook(&fault);
+        assert_eq!(
+            interrupted.create(&create).await.unwrap_err().message,
+            "prepared interruption"
+        );
+        assert!(interrupted.inspect("parity").unwrap().is_none());
+        for i in 1..32 {
+            std::fs::create_dir(
+                tmp.path()
+                    .join("applications")
+                    .join(format!("prepared-{i}")),
+            )
+            .unwrap();
+        }
+        let mut service = Service::new(tmp.path(), &allow).unwrap();
+        assert_eq!(service.create(&create).await.unwrap().state.sequence, 0);
+        assert_eq!(service.history("parity").unwrap().len(), 1);
+        let mut overflow = create;
+        overflow["application"] = json!("overflow");
+        assert_eq!(
+            service.create(&overflow).await.unwrap_err().message,
+            "Application count exhausted"
+        );
+    }
+
+    #[tokio::test]
+    async fn permanent_old_writer_and_legacy_markers_still_exclude_new_custody() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        struct CountAdmission(AtomicUsize);
+        impl Admission for CountAdmission {
+            fn admit_commit(&self, _: &CommitContext) -> Result<()> {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            }
+            fn admit_dispatch(&self, _: &DispatchAdmission) -> Result<Value> {
+                Err(Error::invalid("unused dispatch"))
+            }
+        }
+        let tmp = tempdir().unwrap();
+        let (revision, memory, _, _) = seed(tmp.path());
+        let count = CountAdmission(AtomicUsize::new(0));
+        let mut service = Service::new(tmp.path(), &count).unwrap();
+        let create = command(
+            "parity",
+            &ops("legacy-initial"),
+            "create",
+            None,
+            &revision,
+            &memory,
+            vec![],
+        );
+        let initial = service.create(&create).await.unwrap();
+        count.0.store(0, Ordering::SeqCst);
+        let next = command(
+            "parity",
+            &ops("legacy-next"),
+            "memory",
+            Some(&initial.digest),
+            &revision,
+            &memory,
+            vec![],
+        );
+        let path = service.path("parity");
+        let old = lease::OwnerLease::acquire(&path, "application-parity").unwrap();
+        assert!(
+            service
+                .commit(&next)
+                .await
+                .unwrap_err()
+                .message
+                .contains("held by another live operation")
+        );
+        assert_eq!(count.0.load(Ordering::SeqCst), 0);
+        drop(old);
+        let lock = path.join(".lock");
+        lease::write(
+            &lock,
+            &json!({"contract":"legacy-unrecognized","pid":1}),
+            false,
+        )
+        .unwrap();
+        let retained = std::fs::read(&lock).unwrap();
+        assert!(
+            service
+                .commit(&next)
+                .await
+                .unwrap_err()
+                .message
+                .contains("operator reconciliation")
+        );
+        assert_eq!(std::fs::read(&lock).unwrap(), retained);
+        assert_eq!(count.0.load(Ordering::SeqCst), 0);
+        // The test owns this exact malformed marker; production never repairs it.
+        std::fs::remove_file(&lock).unwrap();
+        let nonce = "a".repeat(64);
+        let stale = json!({"contract":"algal.process-owner.v2","process":"application-parity","nonce":nonce});
+        lease::write(&lock, &stale, false).unwrap();
+        assert_eq!(service.commit(&next).await.unwrap().state.sequence, 1);
+        assert_eq!(
+            lease::read(&path.join("owners").join(format!("{nonce}.json")), 4096).unwrap(),
+            Some(stale)
+        );
+        assert_eq!(count.0.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn independent_applications_enter_admission_while_another_callback_waits() {
+        use std::sync::{Mutex, mpsc};
+        use std::time::Duration;
+        struct Pause {
+            entered: mpsc::Sender<()>,
+            resume: Mutex<mpsc::Receiver<()>>,
+        }
+        impl Admission for Pause {
+            fn admit_commit(&self, _: &CommitContext) -> Result<()> {
+                self.entered
+                    .send(())
+                    .map_err(|_| Error::invalid("custody barrier receiver closed"))?;
+                self.resume
+                    .lock()
+                    .unwrap()
+                    .recv_timeout(Duration::from_secs(10))
+                    .map_err(|_| Error::invalid("custody barrier timed out"))?;
+                Ok(())
+            }
+            fn admit_dispatch(&self, _: &DispatchAdmission) -> Result<Value> {
+                Err(Error::invalid("unused dispatch"))
+            }
+        }
+        let tmp = tempdir().unwrap();
+        let (revision, memory, _, _) = seed(tmp.path());
+        let allow = Allow;
+        let mut other = Service::new(tmp.path(), &allow).unwrap();
+        let first = command(
+            "parity",
+            &ops("parallel-first"),
+            "create",
+            None,
+            &revision,
+            &memory,
+            vec![],
+        );
+        let mut second_revision = get_record(&other.store, &revision).unwrap();
+        second_revision["application"] = json!("second");
+        let second_revision = put_record(&mut other.store, &second_revision).unwrap();
+        let second = command(
+            "second",
+            &ops("parallel-second"),
+            "create",
+            None,
+            &second_revision,
+            &memory,
+            vec![],
+        );
+        let (entered, observed) = mpsc::channel();
+        let (release, resume) = mpsc::channel();
+        let path = tmp.path().to_path_buf();
+        let worker = std::thread::spawn(move || {
+            let pause = Pause {
+                entered,
+                resume: Mutex::new(resume),
+            };
+            let mut service = Service::new(&path, &pause).unwrap();
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            runtime.block_on(service.create(&first))
+        });
+        let ready = observed.recv_timeout(Duration::from_secs(10));
+        let second_result = if ready.is_ok() {
+            Some(other.create(&second).await)
+        } else {
+            None
+        };
+        // Always release and join the owned worker before dropping its directory.
+        let _ = release.send(());
+        let first_result = worker.join().unwrap();
+        ready.unwrap();
+        assert_eq!(second_result.unwrap().unwrap().state.application, "second");
+        assert_eq!(first_result.unwrap().state.application, "parity");
     }
 
     #[tokio::test]

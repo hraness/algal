@@ -1,13 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
 import {
-  link,
   lstat,
-  mkdir,
   open,
   opendir,
-  rename,
-  unlink,
 } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -18,7 +14,8 @@ import {
 } from "./capabilities";
 import { BOUNDS } from "./contract";
 import { asDigest, digestCanonical, type Digest } from "./digest";
-import { AlgalError } from "./errors";
+import { AlgalError, errorReport } from "./errors";
+import { durableStep, durableUnlink, ensureDurableDirectory, publishFile, syncRetainedFile } from "./durable-fs";
 import { hostLease } from "./host-state";
 import type { ToolRegistry } from "./tools";
 import {
@@ -44,6 +41,8 @@ export const MAILBOX_SEND_TOOL = "mailbox.send.v1" as const;
 export const MAILBOX_RECEIVE_TOOL = "mailbox.receive.v1" as const;
 export const MAILBOX_BOUNDS = {
   maxMailboxes: 1024,
+  // Count every physical entry before filtering files or orphan directories.
+  maxDirectoryEntries: 2064,
   maxMessages: 1024,
   maxMessageBytes: 250_000,
 } as const;
@@ -432,7 +431,7 @@ async function noLink(path: string): Promise<void> {
   }
 }
 
-async function readJson(path: string): Promise<unknown | undefined> {
+async function readJson(path: string, retain?: (value: unknown) => void): Promise<unknown | undefined> {
   const maximum = 67_108_864; // Same host-artifact ceiling as the native reader.
   try {
     const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
@@ -453,8 +452,12 @@ async function readJson(path: string): Promise<unknown | undefined> {
       }
       try {
         const text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(Buffer.concat(chunks));
-        return JSON.parse(text) as unknown;
+        const value: unknown = JSON.parse(text);
+        if (retain) { retain(value); await syncRetainedFile(file, path); }
+        return value;
       } catch (error) {
+        if (error instanceof AlgalError) throw error;
+        if (!(error instanceof SyntaxError) && !(error instanceof TypeError)) throw error;
         throw new AlgalError("PARSE_FAILED", `${path}: ${error instanceof Error ? error.message : String(error)}`);
       }
     } finally { await file.close(); }
@@ -468,47 +471,30 @@ async function readJson(path: string): Promise<unknown | undefined> {
 }
 
 async function writeNew(path: string, value: JsonValue): Promise<boolean> {
-  // Publish complete immutable bytes without exposing a partially written file.
-  const temporary = `${path}.algal-${process.pid}-${randomBytes(8).toString("hex")}`;
-  const file = await open(temporary, "wx", 0o600);
-  try {
-    await file.writeFile(canonicalize(value));
-    await file.sync();
-  } catch (error) {
-    await file.close();
-    await unlink(temporary).catch(() => undefined);
-    throw error;
+  const bytes = canonicalize(value);
+  if (await publishFile(path, bytes)) return true;
+  const retained = await readJson(path, raw => {
+    if (canonicalize(asJsonValue(raw, "retained mailbox record")) !== bytes) {
+      throw new AlgalError("DIGEST_MISMATCH", "immutable mailbox publication conflicts");
+    }
+  });
+  if (retained === undefined) {
+    throw new AlgalError("IO_FAILED", "retained mailbox publication disappeared");
   }
-  await file.close();
-  try {
-    await link(temporary, path);
-    return true;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
-    throw error;
-  } finally {
-    await unlink(temporary);
-  }
+  return false;
 }
 
 async function writeReplace(path: string, value: JsonValue): Promise<void> {
-  const temporary = `${path}.algal-${process.pid}-${randomBytes(8).toString("hex")}`;
-  if (!await writeNew(temporary, value)) {
-    throw new AlgalError("IO_FAILED", "mailbox temporary file collision");
-  }
-  try {
-    await rename(temporary, path);
-  } catch (error) {
-    await unlink(temporary).catch(() => undefined);
-    throw error;
-  }
+  await publishFile(path, canonicalize(value), true);
 }
 
 async function jsonFiles(path: string, max: number): Promise<string[]> {
   const files: string[] = [];
+  let scanned = 0;
   try {
     const directory = await opendir(path);
     for await (const entry of directory) {
+      if (++scanned > max * 2 + 16) throw new AlgalError("BUDGET_EXHAUSTED", "mailbox directory physical entry bound exceeded");
       if (entry.isSymbolicLink()) {
         throw new AlgalError("IO_FAILED", "mailbox symlinks are not admitted");
       }
@@ -590,6 +576,7 @@ export class FileMailboxService implements MailboxService {
       ) {
         throw new AlgalError("PARSE_FAILED", `mailbox "${checked}" already has different bounds`);
       }
+      await this.retainConfig(existing);
       return existing;
     }
     if ((await this.list()).length >= MAILBOX_BOUNDS.maxMailboxes) {
@@ -606,10 +593,10 @@ export class FileMailboxService implements MailboxService {
       receive: receive.handle,
     };
     const mailboxDir = join(this.dir, "mailboxes", checked);
-    await mkdir(join(mailboxDir, "messages"), { recursive: true });
-    await mkdir(join(mailboxDir, "pending"), { recursive: true });
-    await mkdir(join(mailboxDir, "consumed"), { recursive: true });
-    await mkdir(join(this.dir, "capabilities"), { recursive: true });
+    await ensureDurableDirectory(join(mailboxDir, "messages"));
+    await ensureDurableDirectory(join(mailboxDir, "pending"));
+    await ensureDurableDirectory(join(mailboxDir, "consumed"));
+    await ensureDurableDirectory(join(this.dir, "capabilities"));
     await this.guard(checked);
     await writeNew(this.recordPath(send.handle), send as unknown as JsonValue);
     await writeNew(this.recordPath(receive.handle), receive as unknown as JsonValue);
@@ -619,6 +606,7 @@ export class FileMailboxService implements MailboxService {
       if (raced.maxMessages !== bounds.maxMessages || raced.maxMessageBytes !== bounds.maxMessageBytes) {
         throw new AlgalError("PARSE_FAILED", `mailbox "${checked}" already has different bounds`);
       }
+      await this.retainConfig(raced);
       return raced;
     }
     return config;
@@ -629,27 +617,34 @@ export class FileMailboxService implements MailboxService {
     const root = join(this.dir, "mailboxes");
     const configs: MailboxConfig[] = [];
     try {
-      const directory = await opendir(root);
-      for await (const entry of directory) {
-        if (entry.isSymbolicLink()) {
-          throw new AlgalError("IO_FAILED", "mailbox symlinks are not admitted");
-        }
-        if (!entry.isDirectory()) continue;
-        await this.guard(entry.name);
-        const raw = await readJson(join(root, entry.name, "config.json"));
-        if (raw === undefined) continue;
-        const config = parseConfig(raw, `mailbox ${entry.name}`);
-        if (config.name !== entry.name) {
-          throw new AlgalError("DIGEST_MISMATCH", "mailbox config is in the wrong directory");
-        }
-        configs.push(config);
-        if (configs.length > MAILBOX_BOUNDS.maxMailboxes) {
-          throw new AlgalError("BUDGET_EXHAUSTED", "mailbox count exhausted");
-        }
-      }
+      // Bun may defer opendir's ENOENT until iteration. Only absence observed
+      // before enumeration is empty; later IO failures must remain failures.
+      await lstat(root);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw error;
+    }
+    const directory = await opendir(root);
+    let scanned = 0;
+    for await (const entry of directory) {
+      if (++scanned > MAILBOX_BOUNDS.maxDirectoryEntries) {
+        throw new AlgalError("BUDGET_EXHAUSTED", "mailbox namespace physical entry bound exceeded");
+      }
+      if (entry.isSymbolicLink()) {
+        throw new AlgalError("IO_FAILED", "mailbox symlinks are not admitted");
+      }
+      if (!entry.isDirectory()) continue;
+      await this.guard(entry.name);
+      const raw = await readJson(join(root, entry.name, "config.json"));
+      if (raw === undefined) continue;
+      const config = parseConfig(raw, `mailbox ${entry.name}`);
+      if (config.name !== entry.name) {
+        throw new AlgalError("DIGEST_MISMATCH", "mailbox config is in the wrong directory");
+      }
+      configs.push(config);
+      if (configs.length > MAILBOX_BOUNDS.maxMailboxes) {
+        throw new AlgalError("BUDGET_EXHAUSTED", "mailbox count exhausted");
+      }
     }
     configs.sort((a, b) => a.name.localeCompare(b.name));
     return configs;
@@ -665,6 +660,31 @@ export class FileMailboxService implements MailboxService {
       throw new AlgalError("DIGEST_MISMATCH", "mailbox config is in the wrong directory");
     }
     return config;
+  }
+
+  private async retainConfig(config: MailboxConfig): Promise<void> {
+    for (const handle of [config.send, config.receive]) {
+      const retained = await readJson(this.recordPath(handle), raw => {
+        const record = parseRecord(raw, "retained mailbox capability");
+        // Revoked records remain revoked; creation never mints replacements.
+        if (record.handle !== handle || record.mailbox !== config.name) {
+          throw new AlgalError("DIGEST_MISMATCH", "mailbox authority does not match its configuration");
+        }
+      });
+      if (retained === undefined) throw new AlgalError("DIGEST_MISMATCH", "mailbox configuration has no authority record");
+    }
+    const retained = await readJson(this.configPath(config.name), raw => {
+      if (canonicalize(parseConfig(raw, "retained mailbox config") as unknown as JsonValue) !== canonicalize(config as unknown as JsonValue)) {
+        throw new AlgalError("DIGEST_MISMATCH", "mailbox configuration changed during publication");
+      }
+    });
+    if (retained === undefined) throw new AlgalError("IO_FAILED", "retained mailbox configuration disappeared");
+    for (const path of [this.messagesDir(config.name), this.pendingDir(config.name), this.consumedDir(config.name)]) {
+      // A clean existing layout must already have all three directories.
+      const stat = await lstat(path);
+      if (!stat.isDirectory() || stat.isSymbolicLink()) throw new AlgalError("IO_FAILED", "mailbox directory is not admitted");
+      await ensureDurableDirectory(path);
+    }
   }
 
   private async resolve(
@@ -689,41 +709,63 @@ export class FileMailboxService implements MailboxService {
     return { config, record };
   }
 
-  private async withMailboxLock<T>(name: string, operation: () => Promise<T>): Promise<T> {
+  private async withMailboxLock<T>(name: string, operation: (markMutation: () => void) => Promise<T>): Promise<T> {
     await this.guard(name);
+    for (const directory of [this.messagesDir(name), this.pendingDir(name), this.consumedDir(name), join(this.dir, "capabilities")]) {
+      const info = await lstat(directory);
+      if (!info.isDirectory() || info.isSymbolicLink()) throw new AlgalError("IO_FAILED", "admitted mailbox directory is missing or invalid");
+    }
     const path = join(this.dir, "mailboxes", asSafeId(name, "mailbox name"), ".lock");
-    let lock;
+    let lock: Awaited<ReturnType<typeof open>> | undefined;
+    let failed = false;
+    let failure: unknown;
+    let result: T | undefined;
+    let mutationAttempted = false;
     try {
-      lock = await open(path, "wx", 0o600);
+      await durableStep("create-lock", path, async () => { lock = await open(path, "wx", 0o600); });
+      result = await operation(() => { mutationAttempted = true; });
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
-        throw new AlgalError("IO_FAILED", `mailbox "${name}" is locked; reconcile the owning operation before retrying`);
+      failed = true;
+      failure = !lock && (error as NodeJS.ErrnoException).code === "EEXIST"
+        ? new AlgalError("IO_FAILED", `mailbox "${name}" is locked; reconcile the owning operation before retrying`)
+        : error;
+    }
+    if (lock) {
+      try {
+        await lock.close();
+        // Exactly one release attempt. A failed post-unlink barrier must never
+        // trigger a second unlink against another caller's reused lock path.
+        await durableUnlink(path, "unlink-lock");
+      } catch (error) { if (!failed) { failed = true; failure = error; } }
+    }
+    if (failed) {
+      if (mutationAttempted) {
+        // An attempted publication may have taken effect even when it throws,
+        // and a successful transfer is not settled until lock release returns.
+        // Keep the wire error unchanged; this flag only governs host recovery.
+        const report = errorReport(failure);
+        throw new AlgalError(report.code, report.message, failure instanceof AlgalError ? failure.details : undefined, { uncertain: true });
       }
-      throw error;
+      throw failure;
     }
-    try {
-      return await operation();
-    } finally {
-      await lock.close();
-      await unlink(path);
-    }
+    return result as T;
   }
 
   async hasPending(handle: CapabilityHandle): Promise<boolean> {
     const { config } = await this.resolve(handle, MAILBOX_RECEIVE);
     return this.withMailboxLock(config.name, async () => {
       await this.resolve(handle, MAILBOX_RECEIVE);
-      return (await jsonFiles(this.pendingDir(config.name), config.maxMessages)).length > 0;
+      return (await this.unambiguousPending(config)).length > 0;
     });
   }
 
   async revoke(handle: CapabilityHandle): Promise<void> {
     const { config } = await this.resolve(handle,
       parseCapabilityHandle(handle).capability === MAILBOX_SEND ? MAILBOX_SEND : MAILBOX_RECEIVE);
-    await this.withMailboxLock(config.name, () => this.revokeLocked(handle));
+    await this.withMailboxLock(config.name, markMutation => this.revokeLocked(handle, markMutation));
   }
 
-  private async revokeLocked(handle: CapabilityHandle): Promise<void> {
+  private async revokeLocked(handle: CapabilityHandle, markMutation: () => void): Promise<void> {
     const { record } = await this.resolve(
       handle,
       parseCapabilityHandle(handle).capability === MAILBOX_SEND
@@ -731,6 +773,7 @@ export class FileMailboxService implements MailboxService {
         : MAILBOX_RECEIVE,
     );
     record.revoked = true;
+    markMutation();
     await writeReplace(this.recordPath(handle), record as unknown as JsonValue);
   }
 
@@ -740,13 +783,14 @@ export class FileMailboxService implements MailboxService {
     idempotencyKey: Digest,
   ): Promise<{ id: Digest }> {
     const { config } = await this.resolve(handle, MAILBOX_SEND);
-    return this.withMailboxLock(config.name, () => this.sendLocked(handle, value, idempotencyKey));
+    return this.withMailboxLock(config.name, markMutation => this.sendLocked(handle, value, idempotencyKey, markMutation));
   }
 
   private async sendLocked(
     handle: CapabilityHandle,
     value: JsonValue,
     idempotencyKey: Digest,
+    markMutation: () => void,
   ): Promise<{ id: Digest }> {
     idempotencyKey = asDigest(idempotencyKey, "mailbox idempotency key");
     value = asJsonValue(value, "mailbox message");
@@ -780,7 +824,7 @@ export class FileMailboxService implements MailboxService {
         );
       }
     };
-    const existingMessage = await readJson(messagePath);
+    const existingMessage = await readJson(messagePath, validateMessage);
     if (existingMessage !== undefined) {
       validateMessage(existingMessage);
     } else {
@@ -800,16 +844,20 @@ export class FileMailboxService implements MailboxService {
         idempotencyKey,
         value,
       };
+      markMutation();
       if (!await writeNew(messagePath, message as unknown as JsonValue)) {
         validateMessage(await readJson(messagePath));
       }
     }
-    for (const markerPath of [pendingPath, consumedPath]) {
-      const marker = await readJson(markerPath);
+    const markers = await this.deliveryMarkers(config, file, id);
+    for (const [markerPath, marker] of [[pendingPath, markers.pending], [consumedPath, markers.consumed]] as const) {
       if (marker === undefined) continue;
-      if (parseDelivery(marker, `mailbox delivery ${idempotencyKey}`).id !== id) {
-        throw new AlgalError("DIGEST_MISMATCH", "mailbox delivery claims another message");
-      }
+      const retained = await readJson(markerPath, raw => {
+        if (parseDelivery(raw, `mailbox delivery ${idempotencyKey}`).id !== id) {
+          throw new AlgalError("DIGEST_MISMATCH", "mailbox delivery claims another message");
+        }
+      });
+      if (retained === undefined) throw new AlgalError("IO_FAILED", "mailbox delivery disappeared");
       return { id };
     }
     const pending = await jsonFiles(this.pendingDir(config.name), config.maxMessages);
@@ -820,6 +868,7 @@ export class FileMailboxService implements MailboxService {
       contract: MAILBOX_DELIVERY_CONTRACT,
       id,
     };
+    markMutation();
     if (!await writeNew(pendingPath, delivery as unknown as JsonValue)) {
       const claimed = parseDelivery(
         await readJson(pendingPath),
@@ -836,16 +885,44 @@ export class FileMailboxService implements MailboxService {
     handle: CapabilityHandle,
   ): Promise<{ id: Digest; message: JsonValue }> {
     const { config } = await this.resolve(handle, MAILBOX_RECEIVE);
-    return this.withMailboxLock(config.name, () => this.receiveLocked(handle));
+    return this.withMailboxLock(config.name, markMutation => this.receiveLocked(handle, markMutation));
+  }
+
+  private async deliveryMarkers(config: MailboxConfig, file: string, id: Digest): Promise<{pending: unknown; consumed: unknown}> {
+    const pending = await readJson(join(this.pendingDir(config.name), file));
+    const consumed = await readJson(join(this.consumedDir(config.name), file));
+    for (const raw of [pending, consumed]) {
+      if (raw !== undefined && parseDelivery(raw, `mailbox delivery ${file}`).id !== id) {
+        throw new AlgalError("DIGEST_MISMATCH", "mailbox delivery claims another message");
+      }
+    }
+    if (pending !== undefined && consumed !== undefined) {
+      throw new AlgalError("IO_FAILED", "mailbox delivery is uncertain; pending and consumed evidence require reconciliation");
+    }
+    return { pending, consumed };
+  }
+
+  private async unambiguousPending(config: MailboxConfig): Promise<string[]> {
+    const pending = await jsonFiles(this.pendingDir(config.name), config.maxMessages);
+    for (const file of pending) {
+      if (await readJson(join(this.consumedDir(config.name), file)) === undefined) continue;
+      const message = parseMessage(await readJson(join(this.messagesDir(config.name), file)), `mailbox message ${file}`);
+      if (message.mailbox !== config.name || `${message.idempotencyKey.slice(7)}.json` !== file) {
+        throw new AlgalError("DIGEST_MISMATCH", "mailbox delivery has a foreign message claim");
+      }
+      await this.deliveryMarkers(config, file, message.id);
+    }
+    return pending;
   }
 
   private async receiveLocked(
     handle: CapabilityHandle,
+    markMutation: () => void,
   ): Promise<{ id: Digest; message: JsonValue }> {
     const { config } = await this.resolve(handle, MAILBOX_RECEIVE);
     await this.guard(config.name);
     for (let attempt = 0; attempt < 16; attempt++) {
-      const pending = await jsonFiles(this.pendingDir(config.name), config.maxMessages);
+      const pending = await this.unambiguousPending(config);
       if (pending.length === 0) {
         throw new AlgalError(
           "EFFECT_SUSPENDED",
@@ -874,12 +951,18 @@ export class FileMailboxService implements MailboxService {
           throw new AlgalError("BUDGET_EXHAUSTED",
             `mailbox message ${bytes}B exceeds ${config.maxMessageBytes}B`);
         }
-        try {
-          await rename(source, join(this.consumedDir(config.name), file));
-          return { id: message.id, message: message.value };
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-        }
+        await this.deliveryMarkers(config, file, message.id);
+        const retained = await readJson(join(this.messagesDir(config.name), file), raw => {
+          const claim = parseMessage(raw, `retained mailbox message ${file}`);
+          if (claim.id !== message.id || claim.mailbox !== config.name || claim.idempotencyKey !== message.idempotencyKey) {
+            throw new AlgalError("DIGEST_MISMATCH", "mailbox message changed during consumption");
+          }
+        });
+        if (retained === undefined) throw new AlgalError("IO_FAILED", "mailbox message disappeared");
+        markMutation();
+        await writeNew(join(this.consumedDir(config.name), file), delivery as unknown as JsonValue);
+        await durableUnlink(source, "unlink-pending");
+        return { id: message.id, message: message.value };
       }
     }
     throw new AlgalError(

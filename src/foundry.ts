@@ -112,6 +112,26 @@ function fail(message: string): never {
   throw new AlgalError("PARSE_FAILED", message);
 }
 
+function ownEntry<T>(map: Record<string, T> | undefined, key: string): T | undefined {
+  return map !== undefined && Object.hasOwn(map, key) ? map[key] : undefined;
+}
+
+/** The case/interface admission contract is also required of imported reports. */
+export function foundryCaseAdmissionError(candidate: OrganismManifest, c: Pick<FoundryCase, "id" | "args" | "expect">): string | undefined {
+  if (!candidate.interface) return `candidate ${candidate.key} must declare an interface`;
+  const { inputs, outputs } = candidate.interface;
+  for (const name of Object.keys(c.args)) {
+    if (!Object.hasOwn(inputs, name)) return `case ${c.id}: unknown candidate input "${name}"`;
+  }
+  for (const name of Object.keys(outputs)) {
+    if (!Object.hasOwn(c.expect, name)) return `case ${c.id}: missing expected output "${name}"`;
+  }
+  for (const name of Object.keys(c.expect)) {
+    if (!Object.hasOwn(outputs, name)) return `case ${c.id}: unknown candidate output "${name}"`;
+  }
+  return undefined;
+}
+
 function validate(opts: FoundryOptions): void {
   if (opts.scorer !== undefined) {
     const c = checkProgram(opts.scorer.program, ["args", "expect", "outputs"]);
@@ -150,26 +170,20 @@ function validate(opts: FoundryOptions): void {
     const digest = digestCanonical(manifestToJson(candidate));
     if (digests.has(digest)) fail(`duplicate foundry candidate ${digest}`);
     digests.add(digest);
-    const inputs = new Set(Object.keys(candidate.interface.inputs));
-    const outputs = new Set(Object.keys(candidate.interface.outputs));
     for (const c of opts.cases) {
-      for (const name of Object.keys(c.args)) {
-        if (!inputs.has(name)) fail(`case ${c.id}: unknown candidate input "${name}"`);
-      }
-      for (const name of outputs) {
-        if (!(name in c.expect)) fail(`case ${c.id}: missing expected output "${name}"`);
-      }
-      for (const name of Object.keys(c.expect)) {
-        if (!outputs.has(name)) fail(`case ${c.id}: unknown candidate output "${name}"`);
-      }
+      const error = foundryCaseAdmissionError(candidate, c);
+      if (error) fail(error);
     }
   }
 }
 
-function caseArgs(candidate: OrganismManifest, c: FoundryCase): Record<string, Record<string, JsonValue>> {
+export function foundryCaseArgs(candidate: OrganismManifest, c: Pick<FoundryCase, "id" | "args">): Record<string, Record<string, JsonValue>> {
   const args: Record<string, Record<string, JsonValue>> = Object.create(null) as Record<string, Record<string, JsonValue>>;
-  for (const [name, value] of Object.entries(c.args)) {
-    const target = candidate.interface!.inputs[name]!;
+  // Admitted names are ASCII; canonical key order resolves aliased targets.
+  for (const name of Object.keys(c.args).sort()) {
+    const value = c.args[name]!;
+    const target = ownEntry(candidate.interface?.inputs, name);
+    if (!target) fail(`case ${c.id}: unknown candidate input "${name}"`);
     (args[target.cell] ??= Object.create(null) as Record<string, JsonValue>)[target.port] = value;
   }
   return args;
@@ -178,7 +192,7 @@ function caseArgs(candidate: OrganismManifest, c: FoundryCase): Record<string, R
 function caseOutputs(candidate: OrganismManifest, cells: Awaited<ReturnType<typeof runOrganism>>["cells"]): Record<string, JsonValue> {
   const outputs: Record<string, JsonValue> = Object.create(null) as Record<string, JsonValue>;
   for (const [name, source] of Object.entries(candidate.interface!.outputs)) {
-    const value = cells[source.cell]?.outputs?.[source.port];
+    const value = ownEntry(ownEntry(cells, source.cell)?.outputs, source.port);
     if (value !== undefined) outputs[name] = value;
   }
   return outputs;
@@ -229,7 +243,7 @@ async function evaluateCase(
   c: FoundryCase,
   opts: FoundryOptions,
 ): Promise<FoundryCaseResult> {
-  const args = caseArgs(candidate, c);
+  const args = foundryCaseArgs(candidate, c);
   const { receipt, receiptDigest } = await startRun(opts, candidate, manifestDigest, args, () => runOrganism({
     manifest: candidate,
     args,
@@ -268,11 +282,12 @@ export async function generateFoundryCandidates(
 ): Promise<GeneratedCandidates> {
   const iface = opts.generator.interface;
   if (!iface) fail(`generator ${opts.generator.key} must declare an interface`);
-  const source = iface.outputs[opts.output];
+  const source = ownEntry(iface.outputs, opts.output);
   if (!source) fail(`generator ${opts.generator.key}: unknown interface output "${opts.output}"`);
   const args: Record<string, Record<string, JsonValue>> = Object.create(null) as Record<string, Record<string, JsonValue>>;
-  for (const [name, value] of Object.entries(opts.args)) {
-    const target = iface.inputs[name];
+  for (const name of Object.keys(opts.args).sort()) {
+    const value = opts.args[name]!;
+    const target = ownEntry(iface.inputs, name);
     if (!target) fail(`generator ${opts.generator.key}: unknown interface input "${name}"`);
     (args[target.cell] ??= Object.create(null) as Record<string, JsonValue>)[target.port] = value;
   }
@@ -289,9 +304,9 @@ export async function generateFoundryCandidates(
   if (receipt.outcome !== "complete") {
     fail(`generator ${opts.generator.key} ended ${receipt.outcome}`);
   }
-  const output = receipt.cells[source.cell]?.outputs?.[source.port];
+  const output = ownEntry(ownEntry(receipt.cells, source.cell)?.outputs, source.port);
   const value = opts.field !== undefined && output !== null && typeof output === "object" && !Array.isArray(output)
-    ? output[opts.field]
+    ? ownEntry(output, opts.field)
     : output;
   if (!Array.isArray(value) || value.length === 0) {
     fail(`generator ${opts.generator.key}.${opts.output} must emit a non-empty manifest list`);

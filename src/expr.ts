@@ -2,8 +2,9 @@
 //
 // The language is implemented ONCE in crates/algal-expr (Rust) and shipped
 // to this runtime as src/algal_expr.wasm — rebuilt by scripts/build-expr-wasm.sh.
-// There is no TypeScript implementation of the semantics: identical results,
-// errors, and fuel burns are guaranteed by construction, not by parity tests.
+// There is no TypeScript implementation of the semantics. Target equivalence
+// still requires checking artifact identity and target-sensitive behavior;
+// sharing source alone does not prove identical results, errors, or fuel.
 //
 // Boundary: JSON string in, JSON string out, over wasm linear memory.
 
@@ -51,8 +52,8 @@ let exports_: EvalExports | null = null;
 /** Hosts that cannot read the committed wasm artifact from disk inject the
  * shared evaluator once — a workerd bundle hands over the same
  * WebAssembly.Module through its wasm import rule. Same artifact,
- * different delivery path: values, error codes, and fuel burns are
- * identical by construction. Keeps node:fs out of this module's import
+ * different delivery path. Hosts must qualify the supplied artifact and ABI.
+ * Keeps node:fs out of this module's import
  * graph so the contract parse chain stays bundle-safe. */
 export function setExprExports(exports: EvalExports): void {
   exports_ = exports;

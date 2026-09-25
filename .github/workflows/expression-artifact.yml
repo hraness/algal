@@ -1,0 +1,46 @@
+name: Expression artifact
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  expression-artifact:
+    name: Expression artifact (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14]
+    env:
+      RUSTUP_TOOLCHAIN: "1.97.1"
+      ALGAL_EXPR_TOOLCHAIN: "1.97.1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      - run: rustup toolchain install 1.97.1 --profile minimal --target wasm32-unknown-unknown
+      - run: cargo fetch --locked
+      - run: bun verify/artifact/run.ts check > "$RUNNER_TEMP/algal-expression-artifact.json"
+        env:
+          ALGAL_EXPR_REPRODUCED_OUT: ${{ runner.temp }}/algal-expression-reproduced.wasm
+      - run: bun test --timeout 20000 verify/tests/artifact.test.ts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: expression-artifact-${{ matrix.os }}
+          path: ${{ runner.temp }}/algal-expression-artifact.json
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: expression-artifact-reproduced-${{ matrix.os }}
+          path: ${{ runner.temp }}/algal-expression-reproduced.wasm
+          if-no-files-found: ignore
+          retention-days: 14

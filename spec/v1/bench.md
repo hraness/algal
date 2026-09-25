@@ -6,6 +6,16 @@ A bench report records one workload measured by several systems. A system is an 
 
 A bench runs 1–8 systems against 1–256 cases. Every system manifest declares an interface; case `args` cover the interface's named inputs and `expect` covers every named output — so all systems see identical inputs and are scored on identical outputs. A case passes when the run completes and its declared outputs canonically equal `expect`; there is no judge and no leniency.
 
+Every supplied argument name must be an own declared input; the expectation's
+own key set must equal the declared output key set. Producer and imported
+verifier both apply this admission rule. Interface arguments map in canonical
+name order, with the last present alias supplying a shared target port.
+Insertion order carries no semantics. Historical reports relying on a
+different conflicting-alias order may require their original implementation
+for replay. Model/executor attribution and price-card keys are also own data
+keys: missing `constructor` prices are absent, and an own `__proto__` model
+name retains its attribution.
+
 The config may instead carry a `scorer` — an `algal.expr.v1` program evaluated per case over `{"args","expect","outputs"}` that must return a boolean and replaces exact-match as the pass claim (the same bounded predicate the foundry selects under — "within tolerance", "any of these labels", "echoes the input" are all config data, not host hooks). A scorer that throws or returns a non-boolean fails the run `SCORER_INVALID` rather than silently flunking the case. When a scorer is present it is recorded in the report and covered by the report digest; verification replays each claim under the recorded program.
 
 Each case result records outcome, declared outputs, expectations, run receipt digest, effect-call count, work, token usage, and per-model attribution (calls and tokens grouped by the effect's recorded model, or by executor id when none was reported — tools and scripted executors attribute to themselves).

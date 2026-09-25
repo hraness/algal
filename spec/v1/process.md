@@ -179,10 +179,25 @@ After contention ends, an explicit new invocation can finish initialization
 using the same retained database inode. It does not reconcile or retry an
 already admitted uncertain external effect.
 
+SQLite's transaction owns live exclusion; the `.lock` record supplies
+versioned recovery evidence. Native `OwnerLease` cleanup runs in `Drop` and
+does not propagate marker unlink or directory-sync errors. Consequently a
+successful native operation does not guarantee an absent owner marker after
+crash: a later holder must acquire SQLite custody, validate the retained v2
+marker and archive it within the existing bound. Bun's `hostLease` propagates
+cleanup errors. This limitation is distinct from the mailbox driver's
+explicit fallible lock release; no clean-owner-marker acknowledgment claim
+is made for native `OwnerLease`.
+
 The supervisor validates digest-addressed records before use. Its durable
 publication path writes complete objects before publishing references and
-syncs the affected files/directories. A head is replaced atomically only after
-its referenced record exists. Symlinked supervisor paths and digest leaves
+syncs the affected files/directories and required ancestor bindings, including
+already-visible ancestors. A head is replaced with a same-directory rename
+after its referenced records have completed publication. Existing immutable
+winners are validated and synchronized through the same opened descriptor.
+The [local filesystem publication contract](organism.md#local-filesystem-publication)
+defines the durable initial-state and filesystem assumptions, uncertainty
+after failed barriers, and the limits of crash-image evidence. Symlinked supervisor paths and digest leaves
 are rejected. These checks assume a trusted host filesystem; they do not
 isolate concurrent malicious writers or authenticate a store owner.
 

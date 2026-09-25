@@ -1,6 +1,7 @@
 import { utf8Length } from "./utf8";
 /** Closed, bounded application records shared with the native implementation. */
 import { asDigest, digestCanonical, type Digest } from "./digest";
+import { AlgalError } from "./errors";
 import type { Store } from "./store-contract";
 import { asJsonValue, canonicalize, type JsonValue } from "./values";
 
@@ -110,12 +111,12 @@ export async function putApplicationRecord(store: Store, record: unknown): Promi
 }
 export async function getApplicationRecord<T>(store: Store, ref: Digest, parse: (v: unknown) => T): Promise<T> {
   const value = await store.getValue(applicationRef(ref));
-  if (value === undefined) throw new Error("Missing or changed application record");
-  // Verify every injected store at the contract boundary. A store's claimed
-  // identity or implementation class is never authority to skip this check.
+  if (value === undefined) throw new AlgalError("PARSE_FAILED", "Missing or changed application record");
+  // Bind every Store result, including subclasses that override FileStore reads.
+  // A class identity is not evidence that its returned bytes were verified.
   const record = applicationJson(value);
-  if (digestCanonical(record) !== ref) throw new Error("Missing or changed application record");
-  return parse(value);
+  if (digestCanonical(record) !== ref) throw new AlgalError("DIGEST_MISMATCH", "Missing or changed application record");
+  return parse(record);
 }
 
 export function parseApplicationRevision(input: unknown): ApplicationRevision {

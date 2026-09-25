@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { putApplicationRecord } from "./application-contract";
-import { parseApplicationEvaluationRequest, parseEvaluationPolicy, evaluateApplicationRevision, verifyApplicationEvaluation, admitApplicationActivation, checkApplicationCompatibility, pureManifest } from "./application-adaptation";
+import { parseApplicationEvaluationRequest, parseEvaluationCases, parseEvaluationPolicy, evaluateApplicationRevision, verifyApplicationEvaluation, admitApplicationActivation, checkApplicationCompatibility, pureManifest } from "./application-adaptation";
 import { manifestToJson, parseOrganismManifest, type OrganismManifest } from "./contract";
 import { digestCanonical, type Digest } from "./digest";
+import { runFoundry } from "./foundry";
+import { parseFoundryReport, verifyFoundryReport } from "./foundry-verify";
 import { builtinRegistry } from "./registry";
 import { MemoryStore } from "./store";
 import { canonicalize, type JsonValue } from "./values";
@@ -22,7 +24,7 @@ const echo = parseOrganismManifest({
   edges: [{ from: { cell: "src", port: "value" }, to: { cell: "out", port: "value" } }],
 });
 
-async function fixture(candidate = echo, capabilities: string[] = [], options: { store?: MemoryStore; composition?: "closed-pure-v1" } = {}) {
+async function fixture(candidate = echo, capabilities: string[] = [], options: { store?: MemoryStore; composition?: "closed-pure-v1"; maxCases?: number; incumbent?: OrganismManifest } = {}) {
   const store = options.store ?? new MemoryStore();
   const schema = await store.putValue({ contract: "algal.application-memory-schema.v1", relations: [{ name: "available", arity: 2 }] });
   const program = await store.putValue({ contract: "algal.query.v1", rules: [], query: { relation: "available", terms: [] } });
@@ -30,8 +32,8 @@ async function fixture(candidate = echo, capabilities: string[] = [], options: {
   const queries = await store.putValue({ contract: "algal.application-memory-queries.v1", queries: [query] });
   const view = await store.putValue({ contract: "algal.application-view.v1", widgets: [] });
   const profile = await store.putValue({ contract: "algal.application-runtime-profile.v1", effects: [] });
-  const policy = await store.putValue({ contract: "algal.application-evaluation-policy.v1", maxCases: 8, maxWork: 1_000_000, maxModelCalls: 0, requireHoldoutPass: true, strictValidationImprovement: true, ...(options.composition ? { composition: options.composition } : {}) });
-  const incumbentManifest = await store.putManifest(constant("a", "incumbent-adaptation"));
+  const policy = await store.putValue({ contract: "algal.application-evaluation-policy.v1", maxCases: options.maxCases ?? 8, maxWork: 1_000_000, maxModelCalls: 0, requireHoldoutPass: true, strictValidationImprovement: true, ...(options.composition ? { composition: options.composition } : {}) });
+  const incumbentManifest = await store.putManifest(options.incumbent ?? constant("a", "incumbent-adaptation"));
   const candidateManifest = await store.putManifest(candidate);
   const revisionBody = (parent: Digest | null, manifest: Digest, caps: string[] = []) => ({ contract: "algal.application-revision.v1", application: "workspace", parent, schema, queries, views: view, runtimeProfile: profile, evaluationPolicy: policy, capabilityRequirements: caps, entrypoints: [{ name: "discover", manifest, applicability: query, maxGenerations: 4, capabilities: [], queries: [query] }] });
   const incumbentRevision = await putApplicationRecord(store, revisionBody(null, incumbentManifest));
@@ -46,7 +48,35 @@ async function fixture(candidate = echo, capabilities: string[] = [], options: {
   ] });
   const scorer = await store.putValue({ contract: "algal.application-evaluation-scorer.v1", scorer: null });
   const request = { contract: "algal.application-evaluation-request.v1", parentState: state, candidateRevision, entrypoint: "discover", cases, scorer, policy };
-  return { store, state, candidateRevision, request, cases, policy, scorer, incumbentRevision, candidateManifest, schema };
+  return { store, state, candidateRevision, request, cases, policy, scorer, incumbentRevision, incumbentManifest, candidateManifest, schema };
+}
+
+async function importedEvaluation(maxCases: number) {
+  const f = await fixture(echo, [], { maxCases });
+  const runtime = { fns: builtinRegistry(), executors: [] };
+  const cases = parseEvaluationCases(await f.store.getValue(f.cases));
+  cases.cases.push({ id: "validation-d", split: "validation", args: { q: "d" }, expect: { answer: "d" } });
+  expect(cases.cases).toHaveLength(4);
+  const casesRef = await putApplicationRecord(f.store, cases);
+  const request = { ...f.request, cases: casesRef };
+  const incumbent = await f.store.getManifest(f.incumbentManifest), candidate = await f.store.getManifest(f.candidateManifest);
+  if (!incumbent || !candidate) throw new Error("Imported evaluation fixture manifest missing");
+  // Build real receipts outside the application producer, just as an imported
+  // foundry report can arrive independently of the application's case budget.
+  const report = await runFoundry({ candidates: [incumbent, candidate], cases: cases.cases, store: f.store, ...runtime });
+  expect((await verifyFoundryReport(report, f.store, runtime.fns)).ok).toBe(true);
+  expect(report.promoted).toBe(f.candidateManifest);
+  expect(report.holdout.total).toBe(1);
+  expect(report.holdout.passed).toBe(report.holdout.total);
+  const compatibility = await checkApplicationCompatibility(f.store, f.incumbentRevision, f.candidateRevision);
+  expect(compatibility.status).toBe("compatible");
+  const evaluationRef = await putApplicationRecord(f.store, {
+    contract: "algal.application-evaluation.v1", request: await putApplicationRecord(f.store, request),
+    parentState: f.state, candidateRevision: f.candidateRevision, cases: casesRef, scorer: f.scorer, policy: f.policy,
+    foundryReport: await putApplicationRecord(f.store, report), compatibility: await putApplicationRecord(f.store, compatibility),
+    verdict: { status: "accepted", selectedManifest: f.candidateManifest },
+  });
+  return { ...f, request, runtime, evaluationRef };
 }
 
 /** Every layer keeps the same public ports and private output mapping. */
@@ -108,6 +138,66 @@ describe("application adaptation", () => {
     const f = await fixture();
     const alternate = await f.store.putValue({ contract: "algal.application-evaluation-policy.v1", maxCases: 3, maxWork: 1_000_000, maxModelCalls: 0, requireHoldoutPass: true, strictValidationImprovement: true });
     await expect(evaluateApplicationRevision(f.store, { ...f.request, policy: alternate }, { fns: builtinRegistry(), executors: [] })).rejects.toThrow("policy");
+  });
+
+  test("rejects genuine imported foundry evidence exceeding the policy case bound", async () => {
+    const f = await importedEvaluation(3);
+    await expect(evaluateApplicationRevision(f.store, f.request, f.runtime)).rejects.toThrow("Evaluation case set exceeds policy bound");
+    const outcomes = await Promise.allSettled([
+      verifyApplicationEvaluation(f.store, f.evaluationRef, f.state, f.runtime),
+      admitApplicationActivation(f.store, { evaluation: f.evaluationRef, expectedState: f.state, revision: f.candidateRevision }, f.runtime),
+    ]);
+    expect(outcomes.map(result => result.status)).toEqual(["rejected", "rejected"]);
+    for (const result of outcomes) if (result.status === "rejected") expect(String(result.reason)).toContain("Evaluation case set exceeds policy bound");
+  });
+
+  test("accepts genuine imported foundry evidence exactly at the policy case bound", async () => {
+    const f = await importedEvaluation(4);
+    const produced = await evaluateApplicationRevision(f.store, f.request, f.runtime);
+    expect(produced.evaluation.verdict.status).toBe("accepted");
+    const checked = await verifyApplicationEvaluation(f.store, f.evaluationRef, f.state, f.runtime);
+    expect(checked.verdict.status).toBe("accepted");
+    const admitted = await admitApplicationActivation(f.store, { evaluation: f.evaluationRef, expectedState: f.state, revision: f.candidateRevision }, f.runtime);
+    expect(admitted.revision).toBe(f.candidateRevision);
+  });
+
+  test("rejects an inherited frozen case input in imported evaluation evidence", async () => {
+    const f = await fixture(), runtime = { fns: builtinRegistry(), executors: [] };
+    const result = await evaluateApplicationRevision(f.store, f.request, runtime);
+    const cases = parseEvaluationCases(await f.store.getValue(f.cases));
+    for (const c of cases.cases) c.args = { ...c.args, constructor: "undeclared" };
+    const casesRef = await putApplicationRecord(f.store, cases);
+    const report = parseFoundryReport(await f.store.getValue(result.evaluation.foundryReport));
+    for (const c of [...report.candidates.flatMap(candidate => candidate.cases), ...report.holdout.cases]) {
+      c.args = { ...c.args, constructor: "undeclared" };
+    }
+    const { digest: _digest, ...body } = report;
+    report.digest = digestCanonical(body as unknown as JsonValue);
+    // Genuine replayable receipts cannot admit undeclared frozen inputs.
+    expect((await verifyFoundryReport(report, f.store, runtime.fns)).ok).toBe(false);
+    const evaluationRef = await putApplicationRecord(f.store, {
+      ...result.evaluation, cases: casesRef,
+      request: await putApplicationRecord(f.store, { ...f.request, cases: casesRef }),
+      foundryReport: await putApplicationRecord(f.store, report),
+    });
+    await expect(verifyApplicationEvaluation(f.store, evaluationRef, f.state, runtime)).rejects.toThrow('unknown candidate input "constructor"');
+  });
+
+  test("binds aliased frozen inputs in canonical key order through activation", async () => {
+    const aliasInterface = {
+      inputs: { a: { cell: "src", port: "value" }, z: { cell: "src", port: "value" } },
+      outputs: { answer: { cell: "out", port: "value" } },
+    };
+    const candidate = parseOrganismManifest({ ...manifestToJson(echo), interface: aliasInterface });
+    const incumbent = parseOrganismManifest({ ...manifestToJson(constant("a", "incumbent-adaptation")), interface: aliasInterface });
+    const f = await fixture(candidate, [], { incumbent }), runtime = { fns: builtinRegistry(), executors: [] };
+    const cases = parseEvaluationCases(await f.store.getValue(f.cases));
+    for (const c of cases.cases) c.args = Object.fromEntries([["z", c.args.q!], ["a", "a"]]);
+    const request = { ...f.request, cases: await putApplicationRecord(f.store, cases) };
+    const result = await evaluateApplicationRevision(f.store, request, runtime);
+    expect(result.evaluation.verdict.status).toBe("accepted");
+    expect((await verifyApplicationEvaluation(f.store, result.evaluationRef, f.state, runtime)).verdict.status).toBe("accepted");
+    expect((await admitApplicationActivation(f.store, { evaluation: result.evaluationRef, expectedState: f.state, revision: f.candidateRevision }, runtime)).revision).toBe(f.candidateRevision);
   });
 
   test("rejects an evaluation whose top-level candidate differs from its request", async () => {

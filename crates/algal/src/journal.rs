@@ -409,6 +409,9 @@ impl Journal {
     }
     fn persist(&mut self, record: Record) -> Result<()> {
         let value = serde_json::to_value(&record)?;
+        // Journal CAS records reopen through the stricter host-state reader.
+        // Refuse before installing either the immutable record or its head.
+        lease::nodes(&value)?;
         Record::parse(value.clone(), &self.intent, record.ordinal)?;
         let bytes = canonical(&value)?.len();
         if bytes > MAX_RECORD || self.bytes.saturating_add(bytes) > MAX_BYTES {
@@ -519,6 +522,9 @@ impl Journal {
     pub fn poison(&mut self) {
         self.poisoned = true;
     }
+    pub(crate) fn is_poisoned(&self) -> bool {
+        self.poisoned
+    }
     pub fn finish(&self) -> Result<()> {
         if self.poisoned
             || self.cursor != self.records.len()
@@ -536,6 +542,7 @@ impl Journal {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     fn key(value: &str) -> String {
         digest(&json!(value)).unwrap()
     }
@@ -587,6 +594,83 @@ mod tests {
         assert!(journal.begin_recovery().is_err());
         assert_eq!(journal.recovery_count().unwrap(), 0);
     }
+    fn value_nodes(value: &Value) -> usize {
+        1 + match value {
+            Value::Array(values) => values.iter().map(value_nodes).sum::<usize>(),
+            Value::Object(values) => values.values().map(value_nodes).sum::<usize>(),
+            _ => 0,
+        }
+    }
+    #[test]
+    fn completion_admission_counts_the_record_wrapper_before_publication() {
+        for extra in [0, 1] {
+            let root = tempfile::tempdir().unwrap();
+            let mut live = journal(root.path());
+            let binding = binding("write", "never");
+            live.before(binding.clone()).unwrap();
+            let mut record = live.records[0].1.clone();
+            record.state = "completed".into();
+            record.previous = Some(live.records[0].0.clone());
+            record.receipt =
+                Some(json!({"requestDigest":binding.request_digest,"executor":"test","output":[]}));
+            let overhead = value_nodes(&serde_json::to_value(&record).unwrap());
+            record.receipt.as_mut().unwrap()["output"] = json!(vec![0; 100_000 - overhead + extra]);
+            assert_eq!(
+                value_nodes(&serde_json::to_value(&record).unwrap()),
+                100_000 + extra
+            );
+            let head = live.directory.join("entries/000000.json");
+            let before = fs::read(&head).unwrap();
+            let value_count = fs::read_dir(root.path().join("values")).unwrap().count();
+            let receipt = record.receipt.unwrap();
+            if extra == 0 {
+                live.after(&receipt).unwrap();
+                live.finish().unwrap();
+                let mut restored = reopen(root.path());
+                restored.begin_recovery().unwrap();
+                assert_eq!(restored.before(binding).unwrap(), Some(receipt));
+                restored.finish().unwrap();
+            } else {
+                let error = live.after(&receipt).unwrap_err();
+                assert_eq!(error.code, "BUDGET_EXHAUSTED");
+                assert!(live.is_poisoned());
+                assert_eq!(fs::read(&head).unwrap(), before);
+                assert_eq!(
+                    fs::read_dir(root.path().join("values")).unwrap().count(),
+                    value_count
+                );
+                let mut restored = reopen(root.path());
+                assert_eq!(restored.records[0].1.state, "started");
+                assert!(restored.records[0].1.receipt.is_none());
+                assert!(restored.begin_recovery().is_err());
+            }
+        }
+    }
+    #[test]
+    fn completion_admission_counts_full_record_depth() {
+        for depth in [62, 63] {
+            let root = tempfile::tempdir().unwrap();
+            let mut live = journal(root.path());
+            let binding = binding("write", "never");
+            live.before(binding.clone()).unwrap();
+            let mut output = json!(0);
+            for _ in 0..depth {
+                output = json!([output]);
+            }
+            let receipt =
+                json!({"requestDigest":binding.request_digest,"executor":"test","output":output});
+            if depth == 62 {
+                live.after(&receipt).unwrap();
+                let mut restored = reopen(root.path());
+                restored.begin_recovery().unwrap();
+                assert_eq!(restored.before(binding).unwrap(), Some(receipt));
+            } else {
+                assert_eq!(live.after(&receipt).unwrap_err().code, "BUDGET_EXHAUSTED");
+                let restored = reopen(root.path());
+                assert_eq!(restored.records[0].1.state, "started");
+            }
+        }
+    }
     #[test]
     fn changed_host_binding_poison_prevents_later_dispatch_and_outcome() {
         let root = tempfile::tempdir().unwrap();
@@ -636,5 +720,113 @@ mod tests {
         drop(journal);
         std::fs::write(path, "{}").unwrap();
         assert!(Journal::open(root.path(), "worker", &key("intent"), &key("manifest")).is_err());
+    }
+
+    #[test]
+    fn identical_requests_replay_their_ordinal_and_new_binding_applies_only_to_new_ordinal() {
+        let root = tempfile::tempdir().unwrap();
+        let mut live = journal(root.path());
+        let original = binding("same-request", "read");
+        let receipt = |output: &str| json!({"requestDigest":original.request_digest,"executor":"test","configurationDigest":original.configuration_digest,"output":output});
+        for output in ["first", "second"] {
+            assert!(live.before(original.clone()).unwrap().is_none());
+            live.after(&receipt(output)).unwrap();
+        }
+        live.finish().unwrap();
+        drop(live);
+        let mut restored = reopen(root.path());
+        restored.begin_recovery().unwrap();
+        assert!(restored.finish().is_err());
+        assert_eq!(
+            restored.before(original.clone()).unwrap(),
+            Some(receipt("first"))
+        );
+        assert!(restored.finish().is_err());
+        assert_eq!(
+            restored.before(original.clone()).unwrap(),
+            Some(receipt("second"))
+        );
+        restored.finish().unwrap();
+        let mut fresh = original.clone();
+        fresh.configuration_digest = key("new-unrecorded-configuration");
+        assert!(restored.before(fresh.clone()).unwrap().is_none());
+        let third = json!({"requestDigest":fresh.request_digest,"executor":"test","configurationDigest":fresh.configuration_digest,"output":"third"});
+        restored.after(&third).unwrap();
+        restored.finish().unwrap();
+        drop(restored);
+        let mut replay = reopen(root.path());
+        replay.begin_recovery().unwrap();
+        assert_eq!(
+            replay.before(original.clone()).unwrap(),
+            Some(receipt("first"))
+        );
+        assert_eq!(
+            replay.before(original.clone()).unwrap(),
+            Some(receipt("second"))
+        );
+        assert_eq!(replay.before(fresh).unwrap(), Some(third));
+        replay.finish().unwrap();
+    }
+
+    #[test]
+    fn lost_recovery_charge_return_remains_charged_through_real_maximum() {
+        use std::{cell::Cell, rc::Rc};
+        let root = tempfile::tempdir().unwrap();
+        let mut live =
+            Journal::create(root.path(), "worker", &key("intent"), &key("manifest"), 8).unwrap();
+        live.before(binding("read", "read")).unwrap();
+        drop(live);
+        let mut restored = reopen(root.path());
+        let directory = restored.directory.join("recoveries");
+        let charge = directory.join("000001.json");
+        let published = Rc::new(Cell::new(false));
+        let reached = Rc::new(Cell::new(false));
+        let seen = reached.clone();
+        let observed_directory = directory.clone();
+        let observed_charge = charge.clone();
+        let result = crate::durable_fs::with_probe(
+            Rc::new(move |event| {
+                if event.step == "link"
+                    && event.phase == "after"
+                    && event.target.as_ref() == Some(&observed_charge)
+                {
+                    published.set(true);
+                }
+                if published.get()
+                    && event.step == "dir-sync"
+                    && event.phase == "after"
+                    && event.path == observed_directory
+                {
+                    seen.set(true);
+                    return Err(Error::new("IO_FAILED", "lost recovery-charge return"));
+                }
+                Ok(())
+            }),
+            || restored.begin_recovery(),
+        );
+        assert_eq!(result.unwrap_err().message, "lost recovery-charge return");
+        assert!(reached.get());
+        assert!(!restored.recovering);
+        assert_eq!(
+            lease::read(&charge, 4096).unwrap(),
+            Some(
+                json!({"contract":"algal.process-recovery-attempt.v1","intent":key("intent"),"attempt":1})
+            )
+        );
+        // The process caller abandons this failed instance. No new dispatch
+        // occurs in the remaining admitted-but-abandoned recovery attempts.
+        drop(restored);
+        for attempt in 2..=8 {
+            let mut reopened = reopen(root.path());
+            reopened.begin_recovery().unwrap();
+            assert_eq!(reopened.recovery_count().unwrap(), attempt);
+        }
+        let mut exhausted = reopen(root.path());
+        assert!(exhausted.begin_recovery().is_err());
+        assert_eq!(exhausted.recovery_count().unwrap(), 8);
+        assert_eq!(exhausted.records[0].1.state, "started");
+        assert_eq!(exhausted.records[0].1.attempt, 0);
+        assert_eq!(std::fs::read_dir(directory).unwrap().count(), 8);
+        assert!(Journal::create(root.path(), "other", &key("other"), &key("manifest"), 9).is_err());
     }
 }

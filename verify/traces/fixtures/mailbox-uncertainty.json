@@ -1,0 +1,18 @@
+{
+  "contract": "algal.verification-history.v1",
+  "seed": 0,
+  "commands": [
+    {"id":0,"action":{"kind":"mailbox-create","box":0,"capacity":2},"fault":null},
+    {"id":1,"action":{"kind":"mailbox-send","box":0,"key":0,"value":"red"},"fault":null},
+    {"id":2,"action":{"kind":"mailbox-receive","box":0},"fault":{"site":"fs","step":"link","phase":"after","occurrence":1,"mode":"error"}},
+    {"id":3,"action":{"kind":"mailbox-pending","box":0},"fault":null},
+    {"id":4,"action":{"kind":"mailbox-receive","box":0},"fault":null},
+    {"id":5,"action":{"kind":"mailbox-send","box":0,"key":0,"value":"red"},"fault":null},
+    {"id":6,"action":{"kind":"mailbox-create","box":1,"capacity":1},"fault":null},
+    {"id":7,"action":{"kind":"mailbox-send","box":1,"key":0,"value":"blue"},"fault":null},
+    {"id":8,"action":{"kind":"mailbox-receive","box":1},"fault":{"site":"fs","step":"unlink-lock","phase":"before","occurrence":1,"mode":"error"}},
+    {"id":9,"action":{"kind":"restart"},"fault":null},
+    {"id":10,"action":{"kind":"mailbox-pending","box":1},"fault":null},
+    {"id":11,"action":{"kind":"mailbox-send","box":1,"key":0,"value":"blue"},"fault":null}
+  ]
+}

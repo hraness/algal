@@ -6,18 +6,20 @@
  * recipient can check authorship claims against the content-addressed store
  * without trusting a transient dispatcher result.
  *
- * The record is minted inside `ApplicationService.execute` the moment a
- * delivery settles: the mint reads the retained settlement result and the
+ * The record is minted inside `ApplicationCore.execute` before outbox
+ * settlement publication: the mint reads the retained settlement result and the
  * intent's message value back out of CAS rather than trusting the dispatcher
- * return. Payloads too large for the application record bound mint nothing —
+ * return. A later quota or publication failure can leave the record in CAS
+ * while the outbox still says started. Payloads too large for the application record bound mint nothing —
  * the channel still carries `{identity, message}` and verification reports
  * the record absent. Reconciliation remints idempotently: the same settled
  * dispatch derives the same record digest.
  *
- * What the record proves: this exact application, operation, intent, route,
- * recipient, and body were bound together in one settled delivery dispatch.
- * What it does not prove: receipt by any external party, human intent, or
- * authority beyond the host policy that admitted the route. */
+ * CAS-level verification binds the application, operation, intent, route and
+ * body. Only full delivery verification additionally establishes a reachable
+ * settled dispatch and its exact admitted recipient; optional channel checking
+ * establishes the retained identity/message pair. None of these checks proves
+ * external receipt, human intent, or current destination capability authority. */
 import {
   applicationId, applicationJson, applicationObject, applicationRef, applicationTag,
   getApplicationRecord, parseWorkIntent, putApplicationRecord,
@@ -119,4 +121,3 @@ export async function verifyInterappMessage(store: Store, reference: Digest): Pr
   if (digestCanonical(body) !== digestCanonical(record.body)) fail("Interapp message does not bind its payload");
   return record;
 }
-
