@@ -254,10 +254,15 @@ and [the application links](source-language.md#link-modules-to-application-revis
 
 ## Proposed next steps
 
-1. Measure compilation and execution on realistic reused programs, including
-   shared dependencies and rejected oversized graphs. Measure browser history
-   verification separately so raising source limits does not conceal slow
-   interaction.
+1. Measure compilation and execution on realistic reused programs.
+   [Scale measurements](scale-measurements.md) reports compile, bundle, and run
+   costs for each example project and for generated programs that share
+   helpers up to each compilation limit, where compilation refuses them, and
+   Browser Tasks history verification as history approaches its transfer
+   limits. A run stops at 1,024 steps, so the largest programs that compile
+   cannot run to completion. Measuring larger real applications, browser
+   latency with IndexedDB storage, and timings on an idle machine remains
+   proposed.
 2. Attribute an application's recorded episodes to the dependency report by
    following settled dispatches to their run receipts, so recorded invocations
    can be compared with the static estimate across revisions. Receipt

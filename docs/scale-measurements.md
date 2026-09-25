@@ -19,8 +19,7 @@ The tables report capacity and cost: how far each program grows before a limit
 refuses it, and what compiling, packing, and running it took on one machine.
 They say nothing about whether reusing programs improves later work; that is
 the open [cumulative-skill experiment](vision.md#what-would-justify-the-claim).
-The generated programs are synthetic shapes built to reach one limit each, not
-applications.
+The generated programs are synthetic shapes, each built to reach one limit.
 
 ## Reproduce the measurements
 
@@ -145,3 +144,66 @@ names the count that crossed. `import-chain` and `drafts` stop earlier, in the
 source loader and the source compiler, before any manifest exists. The static
 depth limit of 64 cannot be reached from source, because source imports stop
 at eight levels.
+
+## Timings
+
+Each time is the median of five repetitions after one warm-up, in
+milliseconds, with the range in parentheses. The run used an Apple M4 Max with
+16 cores and 128 GB of memory, macOS 26.5.2, Bun 1.3.14, and a release build of
+the native CLI from the same commit. Other work shared the machine throughout,
+with load averages between 22 and 28 on its 16 cores, so the times are
+indicative only.
+
+- **Source**: load and compile the source files.
+- **Check**: the check before a run. For a refused program, the source and
+  check times end at the refusal.
+- **Pack**: build and serialize the bundle.
+- **Run**: the TypeScript runtime in the same process, with scripted model
+  answers.
+- **Native**: `algal run`, or `algal check` for a refused program, as a
+  separate process after unpacking the bundle. It includes starting the
+  process, reading the unpacked store, and printing the receipt, so compare it
+  with other native times rather than with **Run**. Every native run matched
+  the reference run's outcome, steps, and work, and every native check refused
+  with the same code and message.
+
+| Program | Size | Source ms | Check ms | Pack ms | Run ms | Native ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `task-planning/main` |  | 8.5 (7.8–10) | 1.7 (1.4–2.9) | 1.1 (0.9–2.0) | 6.3 (5.0–6.9) | 15 (13–16) |
+| `task-planning/inspect_task` |  | 4.7 (3.9–7.8) | 1.1 (0.8–1.8) | 0.7 (0.7–0.9) | 1.3 (1.2–1.4) | 12 (9.9–12) |
+| `support-queue/main` |  | 5.7 (5.2–8.8) | 1.4 (1.2–1.5) | 0.8 (0.8–1.2) | 3.9 (2.9–5.2) | 15 (14–18) |
+| `typed-tasks/scores` |  | 3.0 (2.1–5.8) | 0.4 (0.4–0.5) | 0.4 (0.3–0.5) | 1.2 (0.9–1.7) | 8.6 (8.3–11) |
+| `inbox/inbox` |  | 1.7 (1.5–4.8) | 0.5 (0.4–0.9) | 0.4 (0.4–0.4) | 1.4 (1.2–1.7) | 8.8 (8.4–9.6) |
+| `ratios/ratios` |  | 1.7 (1.2–2.4) | 0.3 (0.2–0.4) | 0.2 (0.2–0.2) | 0.6 (0.4–0.9) | 7.4 (7.1–8.6) |
+| `table-fan-in` | 1 | 12 (9.8–14) | 4.8 (4.3–5.7) | 2.2 (2.2–2.9) | 13 (12–17) | 51 (50–52) |
+| `table-fan-in` | 9 | 18 (15–24) | 33 (31–36) | 5.4 (5.3–6.4) | 66 (62–76) | 339 (307–347) |
+| `planner-fan-in` | 1 | 10 (8.6–11) | 8.2 (7.8–8.4) | 3.4 (3.3–3.8) | 19 (17–21) | 72 (71–75) |
+| `planner-fan-in` | 7 | 17 (14–17) | 47 (45–48) | 8.1 (7.3–9.7) | 73 (64–85) | 590 (475–619) |
+| `dense-scorecard` | 1 | 15 (12–16) | 9.7 (7.8–10) | 8.3 (7.8–9.3) | 15 (15–16) | 60 (58–69) |
+| `dense-scorecard` | 15 | 50 (42–53) | 138 (104–169) | 34 (27–35) | 144 (122–154) | 592 (549–712) |
+| `record-orders` | 1 | 115 (109–121) | 65 (59–67) | 41 (41–45) | 1,687 (1,546–2,119) | 2,036 (1,955–2,103) |
+| `record-orders` | 7 | 594 (445–720) | 954 (647–1,117) | 76 (58–93) | 8,767 (6,293–10,124) | 10,391 (9,468–13,764) |
+| `import-chain` | 1 | 0.8 (0.5–1.0) | 0.1 (0.1–0.1) | 0.1 (0.1–0.1) | 0.1 (0.1–0.1) | 7.6 (6.3–8.7) |
+| `import-chain` | 9 | 5.3 (4.7–6.5) | 0.9 (0.8–1.0) | 0.9 (0.6–1.0) | 1.0 (1.0–1.1) | 14 (11–20) |
+| `compact-dag` | 1 | 1.3 (0.5–2.2) | 0.1 (0.1–0.1) | 0.1 (0.1–0.1) | 0.1 (0.1–0.2) | 30 (7.9–64) |
+| `compact-dag` | 3 | 16 (15–17) | 26 (25–26) | 16 (15–17) | 39 (37–42) | 296 (274–335) |
+| `drafts` | 1 | 2.9 (2.8–4.1) | 1.1 (1.0–1.3) | 0.9 (0.9–0.9) | 2.5 (2.3–3.3) | 14 (13–16) |
+| `drafts` | 8 | 5.4 (4.3–7.4) | 5.7 (5.4–6.9) | 3.0 (2.9–4.0) | 16 (15–21) | 59 (56–60) |
+| `table-fan-in` | 10 | 12 (12–14) | 29 (28–34) | - | - | 265 (247–270) |
+| `planner-fan-in` | 8 | 21 (21–24) | 73 (63–79) | - | - | 562 (468–629) |
+| `dense-scorecard` | 16 | 41 (37–47) | 95 (86–103) | - | - | 602 (579–693) |
+| `record-orders` | 8 | 245 (221–258) | 471 (452–523) | - | - | 4,322 (4,011–4,780) |
+| `import-chain` | 10 | 5.4 (5.0–10) | - | - | - | - |
+| `compact-dag` | 4 | 48 (45–52) | 53 (53–57) | - | - | 450 (407–483) |
+| `compact-dag` | 9 | 306 (283–592) | 55 (46–164) | - | - | 474 (433–491) |
+| `drafts` | 9 | 4.3 (4.0–5.6) | - | - | - | - |
+
+Rows without pack and run times are the refusals from the previous table.
+Median check times stay under a second. The largest, `record-orders` at seven
+regions, checks 120 instances holding 65 MB of manifest JSON in 954 ms, and the
+refusal at eight regions takes 471 ms of checking. The nine-file `compact-dag`
+is refused after 55 ms of checking and 306 ms of source compilation. Run time
+follows the work a run does more than the program's size: each
+`record-orders` call checks and compares sixteen 48 KB orders, so its runs take
+seconds, while `table-fan-in` at nine sections reaches the 1,024-step limit in
+66 ms.
