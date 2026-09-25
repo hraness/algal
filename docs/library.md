@@ -194,9 +194,9 @@ case's outcome and output digest under both versions. It has no timestamps, so
 the same inputs give the same bytes. The comparison passes when the interface
 is unchanged, unseen cases ran, every entry point and dependent entry compiles
 and runs with the revision, and every case reaches the same outcome with the
-same outputs. Otherwise its verdict names the interface change, the programs
-that do not compile, and each case that changed or could not run, and the
-command exits with status 1. A changed result fails the comparison even when
+same outputs. Otherwise its verdict names the interface change, the missing
+unseen cases, the programs that do not compile, and each case that changed or
+could not run, and the command exits with status 1. A changed result fails the comparison even when
 the change is intended, because the comparison cannot tell a fix from a
 regression. A record covers at most 16 entry points, 16 cases per case list,
 and 16 unseen cases, and a record file over 512 KiB is refused.
