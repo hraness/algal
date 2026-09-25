@@ -63,7 +63,7 @@
     },
     {
       "path": "crates/algal/examples/verification_application_history.rs",
-      "sha256": "sha256:9e180499937efa66e5922e12f4170ca4fde4f0e300cfe73058196009f40a485a"
+      "sha256": "sha256:5468fbb2c1cc846812baabdb7562a80ec148c9a52442ba956d2c71f4e149b6ea"
     },
     {
       "path": "crates/algal/examples/verification_lean_vectors.rs",

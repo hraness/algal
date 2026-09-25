@@ -5,7 +5,7 @@ use algal::{
         Admission, CommitContext, DispatchAdmission, DispatchContext, Dispatcher, Service,
         Snapshot, parse_intent, process_name,
     },
-    canonical::digest,
+    canonical::{canonical, digest},
     contract::Manifest,
     store::Store,
 };
@@ -113,10 +113,13 @@ fn parse_history(bytes: &[u8]) -> Harness<Value> {
         "history bytes/BOM",
     )?;
     let history: Value = serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
-    let mut canonical = serde_json::to_vec(&history).map_err(|e| e.to_string())?;
-    canonical.push(b'\n');
+    // A dependency enables serde_json/preserve_order for this package, so plain
+    // reserialization keeps the input's key order. Compare against the kernel's
+    // canonical encoder instead, which sorts keys exactly as the reference runtime does.
+    let mut expected = canonical(&history).map_err(|e| e.to_string())?.into_bytes();
+    expected.push(b'\n');
     ensure(
-        bytes == canonical,
+        bytes == expected,
         "history must use canonical unique-key JSON plus newline",
     )?;
     fields(
@@ -753,7 +756,12 @@ async fn run() -> Harness<()> {
         .open(output)
         .map_err(|e| e.to_string())?;
     let mut writer = LimitedWriter { file, bytes: 0 };
-    serde_json::to_writer(&mut writer, &trace).map_err(|e| e.to_string())?;
+    // The retained trace is admitted as canonical unique-key JSON, so it must be
+    // written through the kernel's canonical encoder rather than this package's
+    // insertion-ordered serde_json.
+    writer
+        .write_all(canonical(&trace).map_err(|e| e.to_string())?.as_bytes())
+        .map_err(|e| e.to_string())?;
     writer.write_all(b"\n").map_err(|e| e.to_string())?;
     writer.flush().map_err(|e| e.to_string())?;
     println!(
