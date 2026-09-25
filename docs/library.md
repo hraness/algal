@@ -32,6 +32,12 @@ later work. That question is the open
 - **Revision status.** Its status gives the digest it was listed at, or the
   digest it was revised from and the record of the
   [comparison](#revise-a-listed-program) that allowed the change.
+- **Evidence, when pinned.** An entry can name the records that justify it,
+  each as a file under the projects directory pinned with the digest of its
+  canonical JSON. The catalog test reads every pinned record: a comparison
+  must have passed and must end the entry's listed digest, or move the entry
+  to it as a dependent. A record the test cannot read, parse, or justify, or
+  a record kind it does not know, is a problem rather than a pass.
 
 `bun test src/library-index.test.ts` recompiles every entry and every calling
 project, and fails when a digest, interface, compiler version, dependency, or
@@ -199,8 +205,21 @@ same outputs. Otherwise its verdict names the interface change, the missing
 unseen cases, the programs that do not compile, and each case that changed or
 could not run, and the command exits with status 1. A changed result fails the comparison even when
 the change is intended, because the comparison cannot tell a fix from a
-regression. A record covers at most 16 entry points, 16 cases per case list,
-and 16 unseen cases, and a record file over 512 KiB is refused.
+regression, unless the proposer declares it. `--intended declaration.json`
+reads a JSON object that lists the exact case identifiers (`set:entry#name`)
+expected to change, sorted and unique, with a reason of `corrected`,
+`extended`, or `restricted`:
+
+```json
+{ "changed": ["pinned:task-planning/main.algal#three-tasks"], "reason": "corrected" }
+```
+
+The verdict passes only when the declared list equals the observed changed
+list exactly: a declared case that did not move fails the same way as an
+observed change left undeclared. The declaration is recorded in the record
+under `intended`, so `--verify` needs the same declaration file to match a
+record that carries one. A record covers at most 16 entry points, 16 cases
+per case list, and 16 unseen cases, and a record file over 512 KiB is refused.
 `--format text` prints a summary instead of the record.
 
 ### Pin unseen cases

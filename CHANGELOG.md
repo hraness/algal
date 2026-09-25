@@ -67,6 +67,34 @@ b221a25 (Add read-only `algal observe` projection and bounded `tail` follow)
   unbound, foreign, and unresolved records are counted instead of linked. It
   reads at most 4,096 records and keeps the latest 64 entrypoints. Reports
   without the new flags are unchanged.
+- `algal dependencies --application <name> --episodes` also follows each
+  settled `start-episode` dispatch in the application's committed history
+  through its result, `algal.episode-outcome.v2` record, and run receipt, and
+  counts that receipt's recorded invocations against every occurrence whose
+  digest the episode's program contains, matched by digest alone. Each
+  counted row shows the dispatch index, the call site inside the episode's
+  program, the recorded count, and the site's static invocation bound, marked
+  `exceeded` when the count is above it. Settled dispatches appear under
+  `application.episodes.dispatches`; unreadable intents, dispatch, result,
+  outcome, and receipt records are counted rather than guessed, and
+  unresolved recorded cells are reported. The join keeps the latest 64
+  settled dispatches and 16 count rows per occurrence and counts the rest as
+  omitted.
+- `algal library compare --intended <declaration.json>` lets a revision
+  declare the exact case results it changes: the declaration lists the case
+  identifiers (`set:entry#name`) expected to change, sorted and unique, with
+  a reason of `corrected`, `extended`, or `restricted`. The comparison passes
+  only when the declared list equals the observed `changed` list exactly, and
+  the `algal.library-comparison.v1` record carries the declaration under
+  `intended`, so `--verify` needs the same file to match such a record.
+  Without a declaration, any changed case fails as before.
+- Catalog entries may pin an optional `Evidence` field: record files under
+  `examples/source/projects` named with the digest of their canonical JSON.
+  The catalog test reads each pinned record; a comparison must have passed
+  and must end the entry's listed digest or move it there as a dependent.
+  Records that cannot be read, parsed, or justified, and record kinds the
+  check does not know, are problems rather than passes. Entries without the
+  field are unchanged.
 - Package subpaths `./source` and `./source-errors` let a browser bundle
   compile `.algal` source. `compileSource` takes every source file as a
   string, and `createSourceErrorReport` and `renderSourceError` format its

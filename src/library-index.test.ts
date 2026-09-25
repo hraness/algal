@@ -2,14 +2,16 @@ import { expect, test } from "bun:test";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { digestCanonical, type Digest } from "./digest";
 import { AlgalError } from "./errors";
+import { libraryComparisonVerdict, LIBRARY_COMPARISON_CONTRACT } from "./library-comparison";
 import { checkLibraryIndex, parseLibraryIndex, LIBRARY_INDEX_BOUNDS, LIBRARY_INDEX_PROJECTS, type LibraryIndex } from "./library-index";
 import { builtinRegistry } from "./registry";
 import { runOrganism, type RunReceipt } from "./run";
 import { compileSource, SourceError } from "./source";
 import { loadSourceProject } from "./source-project";
 import { MemoryStore } from "./store-memory";
-import type { JsonValue } from "./values";
+import { canonicalize, type JsonObject, type JsonValue } from "./values";
 
 const repository = resolve(import.meta.dir, "..");
 const projects = join(repository, LIBRARY_INDEX_PROJECTS);
@@ -31,6 +33,17 @@ function withField(text: string, name: string, label: string, value: string): st
   let end = field + 1;
   while (/^ {2}\S/.test(lines[end] ?? "")) end++;
   return [...lines.slice(0, field), `- **${label}:** ${value}`, ...lines.slice(end)].join("\n");
+}
+/** Insert a new field line after the named field's continuation block, so an
+ * optional field can be added to an entry without disturbing the others. */
+function addedField(text: string, name: string, after: string, label: string, value: string): string {
+  const lines = text.split("\n");
+  const start = lines.indexOf(`### \`${name}\``);
+  const field = lines.findIndex((line, index) => index > start && line.startsWith(`- **${after}:** `));
+  if (start < 0 || field < 0) throw new Error(`no field ${after} in ${name}`);
+  let end = field + 1;
+  while (/^ {2}\S/.test(lines[end] ?? "")) end++;
+  return [...lines.slice(0, end), `- **${label}:** ${value}`, ...lines.slice(end)].join("\n");
 }
 const withoutLine = (text: string, prefix: string) => {
   const lines = text.split("\n");
@@ -245,4 +258,124 @@ test("the page parser rejects unknown, missing, malformed, and oversized data", 
   const section = page.slice(page.indexOf("### `clamp`"), page.indexOf("### `score_task`"));
   rejects(page.replace(section, `${section}${section}`), /"Programs" lists clamp twice/);
   rejects(page.replace(section, section.repeat(LIBRARY_INDEX_BOUNDS.maxEntries + 1)), /more than 32 entries/, "BUDGET_EXHAUSTED");
+});
+
+const digest0 = (char: string): Digest => `sha256:${char.repeat(64)}`;
+/** A passing comparison record over made-up digests that ends `path` at `to`. */
+function comparisonRecord(change: { path: string; name: string; to: Digest; interface: Digest; dependent?: { path: string; to: Digest }; moved?: boolean }): JsonObject {
+  const parts = {
+    base: { digest: digest0("0"), interface: change.interface },
+    candidate: { digest: change.to, interface: change.interface },
+    unseen: digest0("1"),
+    dependents: change.dependent === undefined ? [] : [{ path: change.dependent.path, base: digest0("5"), candidate: change.dependent.to }],
+    callers: [{ entry: "a/main.algal", root: "examples/source/projects", cases: null, base: digest0("2"), candidate: digest0("3") }],
+    cases: [{
+      set: "unseen", entry: "a/main.algal", name: "case",
+      base: { outcome: "complete", outputs: digest0("4") },
+      candidate: change.moved === true ? { outcome: "failed", outputs: digest0("6") } : { outcome: "complete", outputs: digest0("4") },
+    }],
+  };
+  const verdict = libraryComparisonVerdict(parts as Parameters<typeof libraryComparisonVerdict>[0]);
+  return {
+    contract: LIBRARY_COMPARISON_CONTRACT, name: change.name, path: change.path,
+    compiler: { profile: "algal.source.profile.v1", version: "1.5.0" }, runtime: "0.1.0",
+    ...parts, verdict: { ...verdict, notCompiled: [...verdict.notCompiled], changed: [...verdict.changed], notRun: [...verdict.notRun] },
+  } as JsonObject;
+}
+/** Pin `record` under `projects` in the scratch repository and name it in an
+ * "Evidence" field appended to the entry, returning the page variant. */
+async function pinEvidence(dir: string, name: string, recordPath: string, value: JsonObject, pin = digestCanonical(value)): Promise<string> {
+  const target = join(dir, LIBRARY_INDEX_PROJECTS, recordPath);
+  await mkdir(dirname(target), { recursive: true });
+  await writeFile(target, canonicalize(value));
+  return addedField(page, name, "Status", "Evidence", `[${`\`${recordPath}\``}](../${LIBRARY_INDEX_PROJECTS}/${recordPath}) \`${pin}\`.`);
+}
+
+test("an entry's evidence field pins a passing comparison record by digest", async () => {
+  const dir = await scratchRepository(parsed);
+  try {
+    const clamp = entry("clamp"), score = entry("score_task");
+    const recordPath = "task-planning/clamp.comparison.json";
+    // A record that revises the entry itself to its listed digest justifies it.
+    const direct = comparisonRecord({ path: clamp.path, name: clamp.name, to: clamp.digest, interface: clamp.interfaceDigest });
+    const withDirect = parseLibraryIndex(await pinEvidence(dir, "clamp", recordPath, direct));
+    expect(withDirect.entries.find(item => item.name === "clamp")!.evidence).toEqual([{ path: recordPath, digest: digestCanonical(direct) }]);
+    expect(await checkLibraryIndex(withDirect, { repository: dir })).toEqual([]);
+    // So does a record of another revision that moves it as a dependent.
+    const asDependent = comparisonRecord({ path: score.path, name: score.name, to: digest0("7"), interface: score.interfaceDigest, dependent: { path: clamp.path, to: clamp.digest } });
+    expect(await check(await pinEvidence(dir, "clamp", recordPath, asDependent), dir)).toEqual([]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("evidence problems are reported, never guessed past", async () => {
+  const dir = await scratchRepository(parsed);
+  try {
+    const clamp = entry("clamp"), score = entry("score_task");
+    const recordPath = "task-planning/clamp.comparison.json";
+    const record = comparisonRecord({ path: clamp.path, name: clamp.name, to: clamp.digest, interface: clamp.interfaceDigest });
+    // A record the entry does not pin is not read at all; the entry stays clean.
+    const unpinned = parseLibraryIndex(addedField(page, "clamp", "Status", "Evidence", `[\`${recordPath}\`](../${LIBRARY_INDEX_PROJECTS}/${recordPath}) \`${digestCanonical(record)}\`.`));
+    const pinnedElsewhere = await pinEvidence(dir, "clamp", recordPath, record);
+    expect(await check(pinnedElsewhere, dir)).toEqual([]);
+    expect(await checkLibraryIndex(unpinned, { repository: dir })).toEqual([]);
+    // Missing file.
+    const missing = parseLibraryIndex(addedField(page, "clamp", "Status", "Evidence", `[\`task-planning/absent.json\`](../${LIBRARY_INDEX_PROJECTS}/task-planning/absent.json) \`${digest0("9")}\`.`));
+    const absent = await checkLibraryIndex(missing, { repository: dir });
+    expect(absent).toEqual([expect.stringMatching(new RegExp(`^${clamp.path.replaceAll("/", "\\/")}: evidence record task-planning\\/absent\\.json could not be read`))]);
+    // Pinned digest does not match the file's canonical JSON.
+    const wrongPin = parseLibraryIndex(addedField(page, "clamp", "Status", "Evidence", `[\`${recordPath}\`](../${LIBRARY_INDEX_PROJECTS}/${recordPath}) \`${digest0("9")}\`.`));
+    const mismatch = await checkLibraryIndex(wrongPin, { repository: dir });
+    expect(mismatch).toHaveLength(1);
+    expect(mismatch[0]).toMatch(new RegExp(`evidence record ${recordPath.replaceAll("/", "\\/")} has digest ${digestCanonical(record)}, not the pinned ${digest0("9")}`));
+    // A record that passes but justifies a different entry at a different digest.
+    const other = comparisonRecord({ path: score.path, name: score.name, to: score.digest, interface: score.interfaceDigest });
+    const unjustified = await check(await pinEvidence(dir, "clamp", recordPath, other), dir);
+    expect(unjustified).toEqual([`${clamp.path}: evidence record ${recordPath} does not justify ${clamp.path} at the listed digest`]);
+    // A record that did not pass is not evidence either.
+    const failed = comparisonRecord({ path: clamp.path, name: clamp.name, to: clamp.digest, interface: clamp.interfaceDigest, moved: true });
+    expect(await check(await pinEvidence(dir, "clamp", recordPath, failed), dir)).toEqual([`${clamp.path}: evidence record ${recordPath} did not pass`]);
+    // Foreign and contractless records are problems, not guesses.
+    const foreign = { contract: "algal.run.v1", run: digest0("8") };
+    expect(await check(await pinEvidence(dir, "clamp", recordPath, foreign), dir)).toEqual([
+      `${clamp.path}: evidence record ${recordPath} is "algal.run.v1"; only ${LIBRARY_COMPARISON_CONTRACT} evidence is defined`,
+    ]);
+    const contractless = { note: "some text" };
+    expect(await check(await pinEvidence(dir, "clamp", recordPath, contractless), dir)).toEqual([
+      `${clamp.path}: evidence record ${recordPath} is a record without a contract; only ${LIBRARY_COMPARISON_CONTRACT} evidence is defined`,
+    ]);
+    // And a record under the right contract that does not parse.
+    const malformed = { contract: LIBRARY_COMPARISON_CONTRACT };
+    const invalidProblem = await check(await pinEvidence(dir, "clamp", recordPath, malformed), dir);
+    expect(invalidProblem).toHaveLength(1);
+    expect(invalidProblem[0]).toStartWith(`${clamp.path}: evidence record ${recordPath} is not a valid record (`);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("the evidence field parses strictly", () => {
+  const rejects = (text: unknown, pattern: RegExp, code = "PARSE_FAILED") => {
+    const error = failure(() => parseLibraryIndex(text));
+    expect({ code: error.code, message: error.message }).toMatchObject({ code, message: expect.stringMatching(pattern) });
+  };
+  const pinned = `[\`task-planning/c.json\`](../${LIBRARY_INDEX_PROJECTS}/task-planning/c.json) \`${digest0("1")}\`.`;
+  const two = `${pinned.slice(0, -1)}, [\`task-planning/d.json\`](../${LIBRARY_INDEX_PROJECTS}/task-planning/d.json) \`${digest0("2")}\`.`;
+  const parsed2 = parseLibraryIndex(addedField(page, "clamp", "Status", "Evidence", two));
+  expect(parsed2.entries.find(item => item.name === "clamp")!.evidence).toEqual([
+    { path: "task-planning/c.json", digest: digest0("1") }, { path: "task-planning/d.json", digest: digest0("2") },
+  ]);
+  const evidence = (value: string) => addedField(page, "clamp", "Status", "Evidence", value);
+  rejects(evidence("No records."), /"Evidence" needs at least one record link/);
+  rejects(evidence(`[\`task-planning/c.json\`](../${LIBRARY_INDEX_PROJECTS}/task-planning/c.json).`), /must list "\[`record`\]\(path\) `sha256:…`" items separated by ", "/);
+  rejects(evidence(`[\`task-planning/c.json\`](../${LIBRARY_INDEX_PROJECTS}/task-planning/c.json) digest.` ), /item task-planning\/c\.json must carry one sha256 digest in code/);
+  rejects(evidence(`[\`task-planning/c.json\`](../${LIBRARY_INDEX_PROJECTS}/task-planning/c.json) \`${digest0("1")}\``), /items are separated by ", " and end in "\."/);
+  rejects(evidence(`[\`task-planning/c.json\`](../${LIBRARY_INDEX_PROJECTS}/task-planning/c.json)\`${digest0("1")}\`.`), /must list "\[`record`\]\(path\) `sha256:…`" items separated by ", "/);
+  rejects(evidence(`[\`task-planning/c.algal\`](../${LIBRARY_INDEX_PROJECTS}/task-planning/c.algal) \`${digest0("1")}\`.`), /relative path of plain segments ending in \.json/);
+  rejects(evidence(`[\`task-planning/c.json\`](../records/task-planning/c.json) \`${digest0("1")}\`.`), /must link to/);
+  rejects(evidence(`${pinned.slice(0, -1)}, [\`task-planning/c.json\`](../${LIBRARY_INDEX_PROJECTS}/task-planning/c.json) \`${digest0("2")}\`.`), /lists task-planning\/c\.json twice/);
+  rejects(evidence(`[label](../${LIBRARY_INDEX_PROJECTS}/task-planning/c.json) \`${digest0("1")}\`.`), /label is not a single code span/);
+  // The links bound counts `](` markers, so bare links reach it first.
+  rejects(evidence(Array.from({ length: LIBRARY_INDEX_BOUNDS.maxLinks + 1 }, (_, index) => `[\`t/c${index}.json\`](../${LIBRARY_INDEX_PROJECTS}/t/c${index}.json)`).join(", ")), /more than 32 links/, "BUDGET_EXHAUSTED");
 });

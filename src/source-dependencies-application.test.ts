@@ -1,20 +1,24 @@
 import { expect, test } from "bun:test";
-import { ApplicationCore, type ApplicationSnapshot } from "./application-core";
+import { parseWorkIntent } from "./application-contract";
+import { ApplicationCore, type ApplicationDispatch, type ApplicationSnapshot } from "./application-core";
 import { MemoryApplicationStorage } from "./application-storage";
 import { parseOrganismManifest } from "./contract";
 import type { Digest } from "./digest";
 import { AlgalError } from "./errors";
 import {
-  APPLICATION, buildGradesApplication, fabricateEvaluation, gradeModules, gradeSource, hash, permissive, type GradesApplication,
+  APPLICATION, buildGradesApplication, commitEpisodes, episodeAdmission, episodeBinding, fabricateEvaluation,
+  gradeModules, gradeSource, hash, permissive, settlePendingEpisodes, type GradesApplication,
 } from "./fixtures/source-dependencies-application";
+import { receiptDigest, RUNTIME_VERSION, type RunReceipt } from "./run";
 import { createSourceDependencyReport, renderSourceDependencies, SOURCE_DEPENDENCY_BOUNDS, type SourceDependencyReport } from "./source-dependencies";
 import { SOURCE_DEPENDENCY_APPLICATION_BOUNDS, type SourceDependencyApplicationReader } from "./source-dependencies-application";
-import { canonicalize, type JsonValue } from "./values";
+import { canonicalize, type JsonObject, type JsonValue } from "./values";
 
 const json = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const fresh = () => new ApplicationCore(new MemoryApplicationStorage(), permissive);
-const report = (reader: SourceDependencyApplicationReader, name = APPLICATION, estimate = false) =>
-  createSourceDependencyReport(gradeSource, { sourceOptions: { modules: gradeModules }, estimate, application: { name, reader } });
+const episodesCore = () => new ApplicationCore(new MemoryApplicationStorage(), episodeAdmission);
+const report = (reader: SourceDependencyApplicationReader, name = APPLICATION, estimate = false, episodes?: boolean) =>
+  createSourceDependencyReport(gradeSource, { sourceOptions: { modules: gradeModules }, estimate, application: { name, reader, ...(episodes === undefined ? {} : { episodes }) } });
 const failure = async (work: Promise<unknown>): Promise<AlgalError> => {
   try { await work; } catch (error) { if (error instanceof AlgalError) return error; throw error; }
   throw new Error("expected an AlgalError");
@@ -241,4 +245,228 @@ test("evidence that needs more record reads than the bound is refused", async ()
   const refused = await failure(report(core));
   expect(refused.code).toBe("BUDGET_EXHAUSTED");
   expect(refused.message).toContain(`more than ${SOURCE_DEPENDENCY_APPLICATION_BOUNDS.maxRecords} record reads`);
+});
+
+test("settled episodes attribute recorded invocation counts to the occurrences whose digest their program contains", async () => {
+  const core = episodesCore();
+  const fixture = await buildGradesApplication(core);
+  const input = await fixture.put({ input: { q: { score: 5, fallback: 0 } } });
+  // Two episode intents in one committed transition, both dispatched and
+  // settled by really running the bound manifest; a third intent is committed
+  // later and never dispatched.
+  const committed = await commitEpisodes(fixture, [{ input }, { input }]);
+  const attempts = await settlePendingEpisodes(fixture);
+  expect(attempts.map(attempt => attempt.status)).toEqual(["settled", "settled"]);
+  await commitEpisodes(fixture, [{ input }]);
+  const linked = await report(core, APPLICATION, true, true);
+  const application = linked.application!;
+  const episodes = application.episodes!;
+  expect({ intents: episodes.intents, settled: episodes.settled, unsettled: episodes.unsettled, unreadable: episodes.unreadable, omitted: episodes.omitted, exceeded: episodes.exceeded })
+    .toEqual({ intents: 3, settled: 2, unsettled: 1, unreadable: 0, omitted: 0, exceeded: 0 });
+  expect(episodes.dispatches).toHaveLength(2);
+  expect(new Set(episodes.dispatches.map(dispatch => dispatch.intent))).toEqual(new Set(committed.transition.intents));
+  const entrypoint = rowOf(linked, fixture.revisions.r1);
+  for (const dispatch of episodes.dispatches) {
+    expect(dispatch).toMatchObject({ source: 3, entrypoint, run: "complete", unresolved: 0 });
+    expect(dispatch.outcome).not.toBeNull();
+    expect(dispatch.receipt).not.toBeNull();
+  }
+  // Every occurrence's episode counts name the dispatch row, the site inside
+  // that episode's program, the recorded invocations, and the static bound.
+  expect(application.occurrences.map(occurrence => occurrence.episodes)).toEqual([
+    [
+      { dispatch: 0, site: [], invocations: 1, bound: 1 },
+      { dispatch: 1, site: [], invocations: 1, bound: 1 },
+    ],
+    [
+      { dispatch: 0, site: ["b1-graded"], invocations: 1, bound: 1 },
+      { dispatch: 1, site: ["b1-graded"], invocations: 1, bound: 1 },
+    ],
+  ]);
+  // Without the flag nothing is scanned and the report is byte-identical —
+  // including `episodes: false`, which is exactly "not requested".
+  const absent = await report(core, APPLICATION, true);
+  const off = await report(core, APPLICATION, true, false);
+  expect(absent.application!.episodes).toBeUndefined();
+  expect(off.application!.episodes).toBeUndefined();
+  expect(off.application!.occurrences.every(occurrence => occurrence.episodes === undefined)).toBe(true);
+  expect(canonicalize(json(off) as unknown as JsonValue)).toBe(canonicalize(json(absent) as unknown as JsonValue));
+  const text = renderSourceDependencies(linked);
+  expect(text).toContain("Application episodes: 3 start-episode intents in committed history · 2 settled · 1 unsettled · 0 unreadable");
+  expect(text).toContain("episode dispatch [0] · site (root) · recorded 1 of 1 bound");
+  expect(text).toContain("Application episode dispatches");
+  expect(text).toContain(`outcome ${episodes.dispatches[0]!.outcome} · receipt ${episodes.dispatches[0]!.receipt} · run complete`);
+});
+
+test("episode evidence that cannot be read, bound, or verified is counted unreadable rather than guessed", async () => {
+  const core = episodesCore();
+  const fixture = await buildGradesApplication(core);
+  const input = await fixture.put({ input: { q: { score: 3, fallback: 0 } } });
+  const committed = await commitEpisodes(fixture, [{ input }]);
+  const intentRef = committed.transition.intents[0]!;
+  const work = parseWorkIntent(await core.store.getValue(intentRef));
+  const binding = episodeBinding(committed, intentRef, "run", input);
+  const bindingRef = hash(binding);
+  const genuine = async () => (await core.readDispatch(APPLICATION, intentRef, work, committed))!;
+  // Counts for one joined report: intents / settled / unsettled / unreadable.
+  const tally = async (overrides: {
+    readDispatch?: SourceDependencyApplicationReader["readDispatch"];
+    getReceipt?: ((digest: Digest) => Promise<JsonValue | undefined>) | false;
+    values?: (digest: Digest) => Promise<JsonValue | undefined>;
+  } = {}) => {
+    const reader = {
+      history: (name: string) => core.history(name),
+      ...(overrides.readDispatch === undefined ? {} : { readDispatch: overrides.readDispatch }),
+      store: {
+        getValue: overrides.values ?? ((digest: Digest) => core.store.getValue(digest)),
+        getManifest: (digest: Digest) => core.store.getManifest(digest),
+        ...(overrides.getReceipt === false ? {} : { getReceipt: overrides.getReceipt ?? ((digest: Digest) => core.store.getReceipt(digest)) }),
+      },
+    };
+    const linked = await report(reader as SourceDependencyApplicationReader, APPLICATION, false, true);
+    const episodes = linked.application!.episodes!;
+    return { intents: episodes.intents, settled: episodes.settled, unsettled: episodes.unsettled, unreadable: episodes.unreadable };
+  };
+  // A reader without dispatch access and one whose outbox has nothing: each
+  // intent is counted, not guessed.
+  const reader = (extra: object): SourceDependencyApplicationReader => ({ history: name => core.history(name), store: core.store, ...extra });
+  expect(await tallyValues(reader({}))).toEqual({ intents: 1, settled: 0, unsettled: 0, unreadable: 1 });
+  expect(await tallyValues(reader({ readDispatch: async () => null }))).toEqual({ intents: 1, settled: 0, unsettled: 1, unreadable: 0 });
+
+  async function tallyValues(reader: SourceDependencyApplicationReader) {
+    const episodes = (await report(reader, APPLICATION, false, true)).application!.episodes!;
+    return { intents: episodes.intents, settled: episodes.settled, unsettled: episodes.unsettled, unreadable: episodes.unreadable };
+  }
+  // Settle the intent for real so the outbox has a genuine record to tamper.
+  const attempts = await settlePendingEpisodes(fixture);
+  expect(attempts[0]!.status).toBe("settled");
+  const record = await genuine();
+  const tampered = (patch: Partial<ApplicationDispatch>) => ({ ...record, ...patch }) as ApplicationDispatch;
+  // A dispatch that has not settled counts as unsettled.
+  const started: ApplicationDispatch = { ...record, status: "started", result: null, reason: null };
+  expect(await tally({ readDispatch: async () => started })).toEqual({ intents: 1, settled: 0, unsettled: 1, unreadable: 0 });
+  for (const [label, dispatch] of [
+    ["source state", tampered({ sourceState: hash("elsewhere") })],
+    ["plan kind", tampered({ plan: { kind: "delivery", recipient: hash("recipient"), hostProfile: hash("profile") } })],
+    ["identity", tampered({ identity: hash("forged identity") })],
+  ] as const) {
+    expect(await tally({ readDispatch: async () => dispatch }), label).toEqual({ intents: 1, settled: 0, unsettled: 0, unreadable: 1 });
+  }
+  // A "settled" dispatch whose result, outcome, or receipt chain is broken.
+  const fakeResult = async (result: JsonObject) => tampered({ result: await fixture.put(result) });
+  const cases: [string, () => Promise<ApplicationDispatch>][] = [
+    ["result digest absent", async () => tampered({ result: hash("no such result") })],
+    ["result binding forged", async () => fakeResult({ kind: "episode", binding: hash("other binding"), process: binding.process })],
+    ["outcome absent", async () => fakeResult({ kind: "episode", binding: bindingRef, process: binding.process, outcome: hash("no such outcome") })],
+    ["outcome for another binding", async () => fakeResult({ kind: "episode", binding: bindingRef, process: binding.process, outcome: await fixture.put({ contract: "algal.episode-outcome.v2", binding: hash("other binding"), processState: hash("ps"), receipt: hash("receipt") }) })],
+    ["receipt absent", async () => fakeResult({ kind: "episode", binding: bindingRef, process: binding.process, outcome: await fixture.put({ contract: "algal.episode-outcome.v2", binding: bindingRef, processState: hash("ps"), receipt: hash("absent receipt") }) })],
+  ];
+  for (const [label, make] of cases) {
+    expect(await tally({ readDispatch: async () => make() }), label).toEqual({ intents: 1, settled: 1, unsettled: 0, unreadable: 1 });
+  }
+  // A settled dispatch whose result names no outcome record is legitimate
+  // recorded evidence: the row is kept with no receipt rather than counted.
+  expect(await tally({ readDispatch: async () => fakeResult({ kind: "episode", binding: bindingRef, process: binding.process }) }))
+    .toEqual({ intents: 1, settled: 1, unsettled: 0, unreadable: 0 });
+  // A receipt that parses but is bound to a different manifest is unreadable.
+  const foreign = { contract: "algal.run.v1", runtime: { name: "algal", version: RUNTIME_VERSION }, manifestDigest: fixture.manifests.rival, manifestKey: "organism:other", args: { input: { q: { score: 3, fallback: 0 } } }, outcome: "complete", cells: {}, effects: [], events: [], work: { steps: 0, agentCalls: 0, units: 0 } };
+  const foreignReceipt = { ...foreign, digest: receiptDigest(foreign as unknown as Omit<RunReceipt, "digest">) };
+  const foreignRef = await fixture.store.putReceipt(foreignReceipt as unknown as JsonValue);
+  const foreignOutcome = await fixture.put({ contract: "algal.episode-outcome.v2", binding: bindingRef, processState: hash("ps"), receipt: foreignRef });
+  expect(await tally({ readDispatch: async () => fakeResult({ kind: "episode", binding: bindingRef, process: binding.process, outcome: foreignOutcome }) }))
+    .toEqual({ intents: 1, settled: 1, unsettled: 0, unreadable: 1 });
+  // A receipt file whose bytes were replaced is unreadable, not trusted.
+  const tamperedOutcome = await fixture.put({ contract: "algal.episode-outcome.v2", binding: bindingRef, processState: hash("ps"), receipt: foreignRef });
+  expect(await tally({
+    readDispatch: async () => fakeResult({ kind: "episode", binding: bindingRef, process: binding.process, outcome: tamperedOutcome }),
+    getReceipt: async () => ({ ...(foreignReceipt as object), extra: "changed" } as JsonValue),
+  })).toEqual({ intents: 1, settled: 1, unsettled: 0, unreadable: 1 });
+  // Without receipt access the chain cannot be finished either.
+  expect(await tally({ readDispatch: async () => record, getReceipt: async () => undefined })).toEqual({ intents: 1, settled: 1, unsettled: 0, unreadable: 1 });
+  expect(await tally({ readDispatch: async () => record, getReceipt: false })).toEqual({ intents: 1, settled: 1, unsettled: 0, unreadable: 1 });
+  // An intent record that does not stand up is counted before its kind is known.
+  expect(await tally({ values: async digest => digest === intentRef ? { contract: "algal.fixture-note.v1" } : core.store.getValue(digest) }))
+    .toEqual({ intents: 0, settled: 0, unsettled: 0, unreadable: 1 });
+});
+
+test("a receipt recording more invocations than a site allows, or cells no site owns, is reported rather than reconciled", async () => {
+  const core = episodesCore();
+  const fixture = await buildGradesApplication(core);
+  const parent = fixture.states.noted.digest;
+  // A revision whose run entrypoint maps one `each` item to the label helper.
+  const eacher = await fixture.store.putManifest(parseOrganismManifest({
+    contract: "algal.organism.v1", key: "organism:eacher", name: "eacher",
+    interface: { inputs: { q: { cell: "src", port: "value" } }, outputs: { answer: { cell: "result", port: "out" } } },
+    cells: [
+      { id: "src", kind: "input", outputs: { value: "json" } },
+      { id: "loop", kind: "each", manifest: fixture.manifests.label, over: "q", maxItems: 1 },
+      { id: "result", kind: "const", outputs: { value: { type: "json", value: null } } },
+    ],
+    edges: [],
+  }));
+  const revised = await fixture.put(fixture.revisionBody(fixture.revisions.r1, [fixture.entry("audit", fixture.manifests.audit), fixture.entry("run", eacher)]));
+  await fixture.commit("activate", parent, revised, []);
+  const input = await fixture.put({ input: { q: { score: 1, fallback: 0 } } });
+  const committed = await commitEpisodes(fixture, [{ input }]);
+  const intentRef = committed.transition.intents[0]!;
+  const binding = episodeBinding(committed, intentRef, "run", input);
+  const bindingRef = hash(binding);
+  // A receipt claiming three `each` items under a program allowing one, plus
+  // one recorded cell no static site owns.
+  const cell = { status: "committed", work: 0 };
+  const body = {
+    contract: "algal.run.v1", runtime: { name: "algal", version: RUNTIME_VERSION },
+    manifestDigest: eacher, manifestKey: "organism:eacher",
+    args: { input: { q: { score: 1, fallback: 0 } } }, outcome: "complete",
+    cells: {
+      "src": cell, "loop": cell, "result": cell,
+      "loop/i0/input": cell, "loop/i1/input": cell, "loop/i2/input": cell,
+      "ghost/cell": cell,
+    },
+    effects: [], events: [], work: { steps: 7, agentCalls: 0, units: 7 },
+  };
+  const receipt = { ...body, digest: receiptDigest(body as unknown as Omit<RunReceipt, "digest">) };
+  const receiptRef = await fixture.store.putReceipt(receipt as unknown as JsonValue);
+  const outcome = await fixture.put({ contract: "algal.episode-outcome.v2", binding: bindingRef, processState: hash("ps"), receipt: receiptRef });
+  const attempts = await settlePendingEpisodes(fixture, async context => {
+    const plan = context.dispatch.plan;
+    if (plan.kind !== "episode") throw new Error("expected an episode plan");
+    return { status: "settled", result: { kind: "episode", binding: bindingRef, process: plan.binding.process, outcome } };
+  });
+  expect(attempts[0]!.status).toBe("settled");
+  const linked = await report(core, APPLICATION, false, true);
+  const episodes = linked.application!.episodes!;
+  expect({ intents: episodes.intents, settled: episodes.settled, unsettled: episodes.unsettled, unreadable: episodes.unreadable, exceeded: episodes.exceeded })
+    .toEqual({ intents: 1, settled: 1, unsettled: 0, unreadable: 0, exceeded: 1 });
+  expect(episodes.dispatches[0]).toMatchObject({ source: 4, entrypoint: rowOf(linked, revised), run: "complete", unresolved: 1 });
+  // The label occurrence shows the recorded count above its static bound.
+  expect(linked.application!.occurrences[1]!.episodes).toEqual([{ dispatch: 0, site: ["loop"], invocations: 3, bound: 1, exceeded: true }]);
+  expect(renderSourceDependencies(linked)).toContain("episode dispatch [0] · site loop · recorded 3 of 1 bound · above the bound");
+});
+
+test("episode dispatches and per-occurrence counts are bounded, keeping the latest and counting the rest", async () => {
+  const core = episodesCore();
+  const fixture = await buildGradesApplication(core);
+  const input = await fixture.put({ input: { q: { score: 2, fallback: 0 } } });
+  const total = SOURCE_DEPENDENCY_APPLICATION_BOUNDS.maxEpisodes + 1;
+  let settled = 0;
+  while (settled < total) {
+    const batch = Math.min(32, total - settled);
+    await commitEpisodes(fixture, Array.from({ length: batch }, () => ({ input })));
+    for (;;) {
+      const attempts = await settlePendingEpisodes(fixture);
+      if (attempts.length === 0) break;
+      settled += attempts.length;
+    }
+  }
+  const linked = await report(core, APPLICATION, false, true);
+  const episodes = linked.application!.episodes!;
+  expect({ intents: episodes.intents, settled: episodes.settled, unreadable: episodes.unreadable, omitted: episodes.omitted })
+    .toEqual({ intents: total, settled: total, unreadable: 0, omitted: 1 });
+  expect(episodes.dispatches).toHaveLength(SOURCE_DEPENDENCY_APPLICATION_BOUNDS.maxEpisodes);
+  for (const occurrence of linked.application!.occurrences) {
+    expect(occurrence.episodes).toHaveLength(SOURCE_DEPENDENCY_APPLICATION_BOUNDS.maxCountsPerOccurrence);
+    expect(occurrence.episodesOmitted).toBe(episodes.dispatches.length - SOURCE_DEPENDENCY_APPLICATION_BOUNDS.maxCountsPerOccurrence);
+  }
+  expect(renderSourceDependencies(linked)).toContain(`${episodes.omitted} settled dispatches beyond the ${SOURCE_DEPENDENCY_APPLICATION_BOUNDS.maxEpisodes}-dispatch scan bound`);
 });

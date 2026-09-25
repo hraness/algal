@@ -10,10 +10,10 @@ import { join } from "node:path";
 import { digestCanonical, type Digest } from "./digest";
 import { AlgalError, type ErrorCode } from "./errors";
 import {
-  libraryComparisonToJson, libraryComparisonVerdict, parseLibraryComparison, parseLibraryUnseenCases,
+  libraryComparisonToJson, libraryComparisonVerdict, parseLibraryComparison, parseLibraryIntended, parseLibraryUnseenCases,
   LIBRARY_COMPARISON_BOUNDS, LIBRARY_COMPARISON_CONTRACT,
   type LibraryComparison, type LibraryComparisonCaller, type LibraryComparisonCase, type LibraryComparisonDependent,
-  type LibraryComparisonSet, type LibraryUnseenCase, type LibraryUnseenCases,
+  type LibraryComparisonSet, type LibraryIntendedChange, type LibraryUnseenCase, type LibraryUnseenCases,
 } from "./library-comparison";
 import { LIBRARY_INDEX_BOUNDS, LIBRARY_INDEX_PROJECTS, parseLibraryIndex, type LibraryIndex, type LibraryIndexEntry } from "./library-index";
 import { RUNTIME_VERSION, type RunOutcome } from "./run";
@@ -38,6 +38,9 @@ export type LibraryComparisonOptions = {
   readonly revision: string;
   /** The unseen case file as parsed JSON; required exactly when the entry pins one. */
   readonly unseen?: unknown;
+  /** An intended-change declaration (`{changed: [case ids], reason}`) when the
+   * revision deliberately changes exactly those cases' results. */
+  readonly intended?: unknown;
 };
 
 function fail(code: ErrorCode, message: string): never { throw new AlgalError(code, `library compare: ${message}`); }
@@ -166,11 +169,14 @@ export async function compareLibraryRevision(options: LibraryComparisonOptions):
   // Foreign options are copied and checked once, before the first await.
   const repositoryPath: unknown = options.repository, name: unknown = options.name, revision: unknown = options.revision;
   const suppliedUnseen: unknown = options.unseen;
+  const suppliedIntended: unknown = options.intended;
   if (typeof repositoryPath !== "string" || repositoryPath.length === 0) fail("PARSE_FAILED", "repository must be a directory path");
   if (typeof name !== "string" || name.length === 0 || name.length > 64) fail("PARSE_FAILED", "name must be a catalog program name");
   if (typeof revision !== "string") fail("PARSE_FAILED", "revision must be source text");
   if (revision.length > SOURCE_BOUNDS.maxSourceBytes || utf8Length(revision) > SOURCE_BOUNDS.maxSourceBytes) fail("BUDGET_EXHAUSTED", `revision exceeds ${SOURCE_BOUNDS.maxSourceBytes} UTF-8 bytes`);
   const holdout = suppliedUnseen === undefined ? undefined : parseLibraryUnseenCases(suppliedUnseen);
+  // Parsed before any repository read, so a malformed declaration fails fast.
+  const intended: LibraryIntendedChange | undefined = suppliedIntended === undefined ? undefined : parseLibraryIntended(suppliedIntended);
   const repository = await canonicalRepository(repositoryPath);
   const index = await loadLibraryIndex(repository);
   const entry = index.entries.find(item => item.name === name) ?? fail("PARSE_FAILED", `the catalog lists no program named ${JSON.stringify(name)}`);
@@ -259,11 +265,12 @@ export async function compareLibraryRevision(options: LibraryComparisonOptions):
     candidate: { digest: revisedLock.root, interface: revisedLock.interfaces[revisedLock.root]! },
     unseen: holdout?.digest ?? null, dependents, callers, cases,
   };
-  // Parsing the assembled record applies the same rules as to a supplied one.
+  // Parsing the assembled record applies the same rules as to a supplied one,
+  // including the declaration's exact match against the observed changes.
   return parseLibraryComparison(libraryComparisonToJson({
     contract: LIBRARY_COMPARISON_CONTRACT, name: entry.name, path: entry.path,
     compiler: { profile: currentLock.compiler.profile, version: currentLock.compiler.version }, runtime: RUNTIME_VERSION,
-    ...parts, verdict: libraryComparisonVerdict(parts),
+    ...parts, ...(intended === undefined ? {} : { intended }), verdict: libraryComparisonVerdict(parts, intended),
   }));
 }
 
@@ -274,7 +281,10 @@ export async function verifyLibraryComparison(record: unknown, options: LibraryC
   const supplied = libraryComparisonToJson(parseLibraryComparison(record));
   const fresh = await compareLibraryRevision(options);
   const recomputed = libraryComparisonToJson(fresh);
-  const differing = Object.keys(recomputed).filter(key => canonicalize(supplied[key]!) !== canonicalize(recomputed[key]!));
+  // Keys are compared in both directions: an optional field such as
+  // `intended` present on only one side is a difference too.
+  const keys = [...new Set([...Object.keys(supplied), ...Object.keys(recomputed)])].sort(compareUtf8);
+  const differing = keys.filter(key => !Object.hasOwn(supplied, key) || !Object.hasOwn(recomputed, key) || canonicalize(supplied[key]!) !== canonicalize(recomputed[key]!));
   if (differing.length > 0) fail("RECEIPT_MISMATCH", `the record differs from a fresh comparison in ${differing.join(", ")}`);
   return fresh;
 }

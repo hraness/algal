@@ -3,7 +3,10 @@ import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { ApplicationService } from "./application";
-import { APPLICATION, buildGradesApplication, gradeSource, labelSource, permissive } from "./fixtures/source-dependencies-application";
+import { dispatchApplicationEpisode } from "./application-episode";
+import {
+  APPLICATION, buildGradesApplication, commitEpisodes, episodeAdmission, gradeSource, hash, labelSource, permissive,
+} from "./fixtures/source-dependencies-application";
 import { canonicalize, type JsonObject } from "./values";
 
 const root = resolve(import.meta.dir, "..");
@@ -77,6 +80,51 @@ test("dependencies links an application store read-only and adds invocation boun
     const empty = await cli("dependencies", entry, "--application", APPLICATION, "--dir", nowhere);
     expect(JSON.parse(empty.stderr).error).toBe("STORE_MISS");
     expect(await stat(nowhere).then(() => true, () => false)).toBe(false);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("dependencies --episodes reports a settled episode's recorded invocation counts", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "algal-dependencies-episodes-"));
+  try {
+    const project = join(dir, "project");
+    await mkdir(join(project, "lib"), { recursive: true });
+    await writeFile(join(project, "main.algal"), gradeSource);
+    await writeFile(join(project, "lib/label.algal"), labelSource);
+    const entry = join(project, "main.algal");
+    const store = join(dir, "store");
+    const service = new ApplicationService(store, episodeAdmission);
+    const fixture = await buildGradesApplication(service);
+    const input = await fixture.put({ input: { q: { score: 4, fallback: 0 } } });
+    await commitEpisodes(fixture, [{ input }]);
+    const attempts = await service.dispatchPending(APPLICATION, {
+      configurationDigest: hash("episode dispatcher"),
+      dispatch: context => dispatchApplicationEpisode(context, { store: service.store }),
+    });
+    expect(attempts[0]!.status).toBe("settled");
+    const before = await listing(store);
+    const joined = await cli("dependencies", entry, "--application", APPLICATION, "--dir", store, "--episodes", "--estimate");
+    expect(joined.code, joined.stderr).toBe(0);
+    const report = JSON.parse(joined.stdout) as JsonObject;
+    const application = report.application as JsonObject;
+    const episodes = application.episodes as JsonObject;
+    expect({ intents: episodes.intents, settled: episodes.settled, unsettled: episodes.unsettled, unreadable: episodes.unreadable, exceeded: episodes.exceeded })
+      .toEqual({ intents: 1, settled: 1, unsettled: 0, unreadable: 0, exceeded: 0 });
+    const occurrences = application.occurrences as JsonObject[];
+    expect((occurrences[0]!.episodes as JsonObject[]).map(row => [row.site, row.invocations, row.bound])).toEqual([[[], 1, 1]]);
+    expect((occurrences[1]!.episodes as JsonObject[]).map(row => [row.site, row.invocations, row.bound])).toEqual([[["b1-graded"], 1, 1]]);
+    const text = await cli("dependencies", entry, "--application", APPLICATION, "--dir", store, "--episodes", "--format", "text");
+    expect(text.code, text.stderr).toBe(0);
+    expect(text.stdout).toContain("Application episodes: 1 start-episode intent in committed history · 1 settled · 0 unsettled · 0 unreadable");
+    expect(text.stdout).toContain("episode dispatch [0] · site b1-graded · recorded 1 of 1 bound");
+    expect(text.stdout).toContain("Application episode dispatches");
+    // Reading the evidence wrote nothing to the store.
+    expect(await listing(store)).toEqual(before);
+    const missing = await cli("dependencies", entry, "--episodes");
+    expect(missing.code).toBe(2);
+    expect(JSON.parse(missing.stderr).message).toContain("--episodes attributes settled episode evidence and requires --application");
+    const valued = await cli("dependencies", entry, "--application", APPLICATION, "--dir", store, "--episodes", "yes");
+    expect(valued.code).toBe(2);
+    expect(JSON.parse(valued.stderr).message).toContain("--episodes is a boolean flag without a value");
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 

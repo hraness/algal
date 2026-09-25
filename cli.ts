@@ -104,14 +104,16 @@ usage:
       [--source-root <dir>] [--format json|text] [--out <file>]
                                               locate a recorded failure in its original source
   algal dependencies <program.algal> [--source-root <dir>] [--bundle <bundle.json>]
-      [--receipt <run.json>] [--estimate] [--application <name> [--dir <path>]]
+      [--receipt <run.json>] [--estimate] [--application <name> [--dir <path>] [--episodes]]
       [--format json|text] [--out <file>]
                                               report source files, modules, call paths, and effects;
                                               --bundle checks an artifact against the compiled closure;
                                               --receipt attributes recorded cells and work to each call;
                                               --estimate bounds how many times each call can run;
                                               --application links each module to the application
-                                              revisions, evaluations, and activations that contain it
+                                              revisions, evaluations, and activations that contain it;
+                                              --episodes also counts each settled episode's recorded
+                                              invocations against the calls its program contains
   algal lock <program.algal> [--source-root <dir>] [--out <lock.json>]
       [--evaluation <cases.json>] [--versions <labels.json>]
       [--verify <lock.json> [--evaluate]] [--format json|text]
@@ -945,14 +947,16 @@ async function main(): Promise<number> {
     }
 
     case "dependencies": {
-      if (positional.length !== 1) usageError("algal dependencies <program.algal> [--source-root <dir>] [--bundle <bundle.json>] [--receipt <run.json>] [--estimate] [--application <name> [--dir <path>]] [--format json|text] [--out <file>]");
+      if (positional.length !== 1) usageError("algal dependencies <program.algal> [--source-root <dir>] [--bundle <bundle.json>] [--receipt <run.json>] [--estimate] [--application <name> [--dir <path>] [--episodes]] [--format json|text] [--out <file>]");
       for (const key of Object.keys(flags)) {
-        if (!["source-root", "bundle", "receipt", "estimate", "application", "dir", "format", "out"].includes(key)) usageError(`unknown dependencies option --${key}`);
-        if (key !== "estimate") artifactFlag(flags, key);
+        if (!["source-root", "bundle", "receipt", "estimate", "application", "dir", "episodes", "format", "out"].includes(key)) usageError(`unknown dependencies option --${key}`);
+        if (key !== "estimate" && key !== "episodes") artifactFlag(flags, key);
       }
       if (flags.estimate !== undefined && flags.estimate !== true) usageError("--estimate is a boolean flag without a value");
+      if (flags.episodes !== undefined && flags.episodes !== true) usageError("--episodes is a boolean flag without a value");
       const applicationName = artifactFlag(flags, "application");
       if (flags.dir !== undefined && applicationName === undefined) usageError("--dir names the application store and requires --application");
+      if (flags.episodes === true && applicationName === undefined) usageError("--episodes attributes settled episode evidence and requires --application");
       const { createSourceDependencyReport, renderSourceDependencies } = await import("./src/source-dependencies");
       const { RECEIPT_BOUNDS } = await import("./src/run");
       const format = artifactFlag(flags, "format") ?? "json";
@@ -976,6 +980,7 @@ async function main(): Promise<number> {
       // Reading validated history needs no admission authority; this host refuses every commit.
       const application = applicationName === undefined ? undefined : {
         name: applicationName,
+        ...(flags.episodes === true ? { episodes: true } : {}),
         reader: new (await import("./src/application")).ApplicationService(dir, {
           admitCommit() { return Promise.reject(new AlgalError("CAPABILITY_DENIED", "dependencies reads application history only")); },
         }),
@@ -1101,10 +1106,10 @@ async function main(): Promise<number> {
         out({ contract: LIBRARY_UNSEEN_CASES_CONTRACT, cases: parsed.cases.length, digest: parsed.digest });
         return 0;
       }
-      const usage = "algal library compare <name> <revision.algal> [--unseen <cases.json>] [--repository <dir>] [--verify <record.json>] [--format json|text] [--out <file>]";
+      const usage = "algal library compare <name> <revision.algal> [--unseen <cases.json>] [--intended <declaration.json>] [--repository <dir>] [--verify <record.json>] [--format json|text] [--out <file>]";
       if (positional[0] !== "compare" || positional.length !== 3 || !positional[2]!.endsWith(".algal")) usageError(usage);
       for (const key of Object.keys(flags)) {
-        if (!["unseen", "repository", "verify", "format", "out"].includes(key)) usageError(`unknown library compare option --${key}`);
+        if (!["unseen", "intended", "repository", "verify", "format", "out"].includes(key)) usageError(`unknown library compare option --${key}`);
         artifactFlag(flags, key);
       }
       const format = artifactFlag(flags, "format") ?? "json";
@@ -1115,16 +1120,18 @@ async function main(): Promise<number> {
       const repository = resolve(artifactFlag(flags, "repository") ?? ".");
       const output = artifactFlag(flags, "out");
       const unseenPath = artifactFlag(flags, "unseen");
+      const intendedPath = artifactFlag(flags, "intended");
       const verifyPath = artifactFlag(flags, "verify");
       const revisionPath = resolve(positional[2]!);
-      await distinctArtifactPaths([revisionPath, join(repository, LIBRARY_INDEX_PAGE), ...[unseenPath, verifyPath].flatMap(path => path === undefined ? [] : [resolve(path)])], [output]);
+      await distinctArtifactPaths([revisionPath, join(repository, LIBRARY_INDEX_PAGE), ...[unseenPath, intendedPath, verifyPath].flatMap(path => path === undefined ? [] : [resolve(path)])], [output]);
       // The revision is read like a source file: a regular UTF-8 file within the source byte limit.
       const revisionFile = await realpath(revisionPath).catch((error: NodeJS.ErrnoException) => {
         throw new AlgalError("IO_FAILED", `cannot read revision ${positional[2]!} (${error.code ?? "IO_FAILED"})`);
       });
       const revision = (await loadSourceFixtures(dirname(revisionFile), [basename(revisionFile)], SOURCE_BOUNDS.maxSourceBytes))[basename(revisionFile)]!;
       const unseen = unseenPath === undefined ? undefined : await readJsonBounded(resolve(unseenPath), LIBRARY_COMPARISON_BOUNDS.unseen.maxBytes, "unseen cases");
-      const options = { repository, name: positional[1]!, revision, ...(unseen === undefined ? {} : { unseen }) };
+      const intended = intendedPath === undefined ? undefined : await readJsonBounded(resolve(intendedPath), LIBRARY_COMPARISON_BOUNDS.record.maxBytes, "intended change declaration");
+      const options = { repository, name: positional[1]!, revision, ...(unseen === undefined ? {} : { unseen }), ...(intended === undefined ? {} : { intended }) };
       const record = verifyPath === undefined ? await compareLibraryRevision(options)
         : await verifyLibraryComparison(await readJsonBounded(resolve(verifyPath), LIBRARY_COMPARISON_BOUNDS.record.maxBytes, "library comparison"), options);
       await emitArtifact(format === "text" ? renderLibraryComparison(record) : canonicalize(libraryComparisonToJson(record)), output);
