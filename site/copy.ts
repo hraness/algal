@@ -1,15 +1,16 @@
 // Site-wide copy rendered in more than one place: the home page metadata, the
 // JSON-LD description, the footer, the social card, and the limits section
 // shared by the home and use-cases pages. Change these strings here only.
-// Public copy follows STYLE.md; the tagline is the owner's positioning line.
+// Public copy follows STYLE.md; the tagline and description are the canonical
+// lines from the portfolio messaging record for ALGAL.
 
-export const SITE_TAGLINE = "The language for living programs.";
+export const SITE_TAGLINE = "Write agent programs that wait, resume, and replay.";
 
 /** The home page description, JSON-LD description, and social card text. */
-export const SITE_DESCRIPTION = "ALGAL is a programming language and VM for AI agent programs that can wait for approval and propose new ones. Every run leaves a receipt that replays offline.";
+export const SITE_DESCRIPTION = "ALGAL is a programming language and VM for AI agent programs that wait for approval and leave receipts you can replay.";
 
 /** Every page shares one social image, so every page shares its alt text. */
-export const OG_IMAGE_ALT = "ALGAL card with the line “The language for living programs.”, a one-line description, and the algal.computer address";
+export const OG_IMAGE_ALT = "ALGAL card showing the tagline “Write agent programs that wait, resume, and replay.” and the algal.computer address";
 
 /** Fit and prerelease limits, shown once on the home page and once on the use-cases page.
  * Each page states the receipt limit beside its own receipt copy. */

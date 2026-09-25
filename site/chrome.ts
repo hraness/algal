@@ -87,7 +87,7 @@ ${meta.page === "workbench" ? '<link rel="stylesheet" href="/living.css">\n<link
       <a href="${REPO}">GitHub ${siteIcon("arrow-up-right")}</a>
     </nav>
     <div class="site-header-actions">
-      <a class="hraness-marketing-action" data-emphasis="primary" href="${REPO}/releases">Install</a>
+      <a class="hraness-marketing-action" data-emphasis="primary" href="/#install">Install</a>
       <div class="hraness-design-theme-toggle" data-hraness-appearance-menu data-presentation="menu" data-ready="false" aria-busy="true">
         <button class="hraness-design-theme-toggle__trigger" type="button" aria-label="Appearance: System" aria-haspopup="menu" aria-expanded="false" aria-controls="algal-appearance-menu" disabled><span data-current-appearance-icon="system">${siteIcon("computer")}</span></button>
         <div class="hraness-design-theme-toggle__popover" hidden>
@@ -104,7 +104,7 @@ ${meta.page === "workbench" ? '<link rel="stylesheet" href="/living.css">\n<link
 
 ${main}
 
-<footer class="site-footer"><a class="wordmark" href="/" aria-label="ALGAL home"><img src="/favicon.svg" width="24" height="24" alt="">algal</a><p>${SITE_TAGLINE}</p><div><a href="${REPO}">Source</a><a href="/docs/">Documentation</a><a href="/living/">Living software</a><a href="/blog/">Blog</a><a href="/compare/">Compare</a><a href="/docs/spec/organism/">Spec</a><a href="/llms.txt">llms.txt</a><span>MIT · Early, working software · {{BUILD_STATS}}</span></div></footer>
+<footer class="site-footer"><a class="wordmark" href="/" aria-label="ALGAL home"><img src="/favicon.svg" width="24" height="24" alt="">algal</a><p>${SITE_TAGLINE}</p><div><a href="${REPO}">Source</a><a href="/docs/">Documentation</a><a href="/living/">Living software</a><a href="/blog/">Blog</a><a href="/compare/">Compare</a><a href="/docs/spec/organism/">Spec</a><a href="/llms.txt">llms.txt</a><span>MIT · Preview · {{BUILD_STATS}}</span></div></footer>
 
 </body>
 </html>

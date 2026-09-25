@@ -1,14 +1,21 @@
 # ALGAL
 
-**Agent work that survives a pause and comes back with evidence.**
+**Write agent programs that wait, resume, and replay.**
 
-ALGAL is a language and application VM for bounded agent programs. Use it when
-an AI-assisted task needs to wait for a person, survive a CLI restart, reuse
-completed work, or explain what happened without calling the model again.
-Your host application chooses the tools and permissions; the program declares
-its decisions, limits, and approval points. A native Rust CLI and a Bun runtime
-that runs on its own implement the same specifications for programs, receipts,
-and durable processes.
+ALGAL is a programming language and VM for AI agent programs. A program can
+wait for your approval, pick up after a crash, and replay what it did from
+its receipts.
+
+Use it when an AI-assisted task needs to wait for a person, survive a CLI
+restart, reuse completed work, or explain what happened without calling the
+model again. Your host application chooses the tools and permissions; the
+program declares its decisions, limits, and approval points. A native Rust
+CLI and a Bun runtime that runs on its own implement the same specifications
+for programs, receipts, and durable processes.
+
+Preview: the current native build is
+[v0.2.0-vm.9](https://github.com/hraness/algal/releases) for macOS on Apple
+silicon and Linux x86_64, and the Bun runtime runs from this checkout.
 
 ## The idea
 
@@ -1222,10 +1229,10 @@ forged-output detection.
 
 ## Related work
 
-ALGAL is a Hraness project. It shares conventions with `oh`
+ALGAL is a Hraness project. It shares conventions with Oh
 (content-addressed canonical records), `platonik` (bounded organisms and
-symbolization), `valhalla` (authority boundaries and witness execution), and
-`xcb` (execution custody and model routing), but it is
+symbolization), Valhalla (authority boundaries and witness execution), and
+xcb (execution custody and model routing), but it is
 standalone: the store and executor seams are where those foundations attach.
 
 ## License

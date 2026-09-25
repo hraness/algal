@@ -9,6 +9,10 @@ wire constant (`0.1.0`) is independent of these package versions.
 
 ## Unreleased
 
+- Public copy adopts the canonical portfolio messaging record: the site
+  title, hero, footer, social card, `llms.txt` introduction, README lead,
+  both CLI introductions, and the package and crate descriptions now carry
+  the same tagline and description lines.
 - `algal dependencies --estimate` gives every call and module a minimum and
   maximum number of runs per run of the entry: enclosing `each` item limits
   multiply, a call under a branch arm has a minimum of 0, and products above

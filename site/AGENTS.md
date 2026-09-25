@@ -11,7 +11,7 @@
 # Guidelines
 
 - Preserve executable examples, navigation, the `{{PLACEHOLDER}}` tokens in `pages/`, and the Tokyo Night palette and light/dark/system appearance. A design change does not rewrite product copy as a side effect.
-- Copy edits follow the root `AGENTS.md` "Public copy" section and `STYLE.md`. Verify each command, flag, and limit against the CLI and docs before you change it, keep every true limit, and put text shown on more than one page in `copy.ts`. The site tagline and home H1 are owner decisions.
+- Copy edits follow the root `AGENTS.md` "Public copy" section and `STYLE.md`. Verify each command, flag, and limit against the CLI and docs before you change it, keep every true limit, and put text shown on more than one page in `copy.ts`. The site tagline and home H1 come from the portfolio messaging record (product `algal`).
 - Keep Design Kit and UI as pinned build-only dependencies; the CLI retains zero required runtime dependencies.
 - Bundle the released marketing stylesheet with its syntax stylesheet and license. Do not fork its foil recipe.
 - The header mark and wordmark share the released recipe. Retain the original image underneath the alpha mask for forced colors and unsupported masks.

@@ -71,7 +71,7 @@ impl app_memory::MemoryAdmission for NoAdmission {
 #[command(
     name = "algal",
     version,
-    about = "Programs that grow. A typed language and harness for bounded agent work."
+    about = "Language and VM for agent programs that wait for approval and resume"
 )]
 struct Cli {
     /// Store directory: manifests, receipts, values, slots, and process state.
