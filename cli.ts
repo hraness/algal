@@ -119,7 +119,13 @@ usage:
                                               --evaluation pins fixture cases' outcomes and outputs;
                                               --versions labels closure digests for people;
                                               --verify recompiles and reports drift (exit 1);
-                                              --evaluate also replays pinned cases offline
+                                              --evaluate also replays pinned cases offline;
+                                              vendored copies are pinned and checked offline
+  algal vendor <catalog.md|https-url> --entry <path.algal> --into <dir>
+                                              copy a catalog entry and the entries it calls into
+                                              a new directory; refuses unless they compile to the
+                                              digests the catalog lists; https only, no symlinks
+                                              or overwrites; lock never contacts the catalog
   algal examples                          list bundled examples
   algal example <id>                      print the example manifest
   algal run <manifest.json> [options]     run an organism, print its receipt
@@ -988,21 +994,46 @@ async function main(): Promise<number> {
       const lockValue = verifyPath === undefined ? undefined : await readJsonBounded(resolve(verifyPath), SOURCE_LOCK_BOUNDS.lock.maxBytes, "source lock");
       // Fixtures are read only when named, beneath the source root, with the source loader's guards.
       const keys = cases !== undefined ? sourceLockFixtureKeys(cases) : evaluate ? sourceLockFixtureKeys(parseSourceLock(lockValue)) : [];
-      await distinctArtifactPaths([...project.files, ...inputs, ...keys.map(key => join(project.root, ...key.split("/")))], [output]);
+      // Vendored copies are found beside the project's own files and read the same way; nothing is fetched.
+      const { loadVendoredSources, VENDOR_RECORD_FILE } = await import("./src/vendor-record");
+      const vendored = await loadVendoredSources(project.root, Object.keys(project.sources));
+      const vendoredPaths = [...Object.keys(vendored.records).map(directory => `${directory}/${VENDOR_RECORD_FILE}`), ...Object.keys(vendored.files)];
+      await distinctArtifactPaths([...project.files, ...inputs, ...[...keys, ...vendoredPaths].map(key => join(project.root, ...key.split("/")))], [output]);
       const { loadSourceFixtures } = await import("./src/source-project");
       const fixtures = keys.length === 0 ? {} : await loadSourceFixtures(project.root, keys, SOURCE_LOCK_BOUNDS.evaluation.maxFixtureBytes);
       if (lockValue === undefined) {
         const lock = await createSourceLock(project.source, project.compilerOptions, {
           ...(cases === undefined ? {} : { evaluation: cases, fixtures }),
           ...(labels === undefined ? {} : { versions: labels as Record<string, string> }),
+          vendored,
         });
         await emitArtifact(canonicalize(sourceLockToJson(lock)), output);
         return 0;
       }
-      const verification = await verifySourceLock(project.source, project.compilerOptions, lockValue, evaluate ? { fixtures } : {});
+      const verification = await verifySourceLock(project.source, project.compilerOptions, lockValue, { ...(evaluate ? { fixtures } : {}), vendored });
       await emitArtifact(format === "text" ? renderSourceLockVerification(verification) : canonicalize(verification as unknown as JsonValue), output);
       // Exit-code rule shared with the native CLI: 1 means the check ran and found drift.
       return verification.ok ? 0 : 1;
+    }
+
+    case "vendor": {
+      const usage = "algal vendor <catalog.md|https-url> --entry <path.algal> --into <dir>";
+      if (positional.length !== 1) usageError(usage);
+      for (const key of Object.keys(flags)) {
+        if (!["entry", "into"].includes(key)) usageError(`unknown vendor option --${key}`);
+        artifactFlag(flags, key);
+      }
+      const entry = artifactFlag(flags, "entry");
+      const into = artifactFlag(flags, "into");
+      if (entry === undefined || into === undefined) usageError(usage);
+      // Vendoring's only network step; lock and verify read the copy offline. The
+      // directory is created beneath the current one.
+      const { vendorCatalogEntry } = await import("./src/vendor");
+      const { vendorRecordToJson } = await import("./src/vendor-record");
+      const record = await vendorCatalogEntry({ catalog: positional[0]!, entry, into, root: process.cwd() });
+      out(vendorRecordToJson(record));
+      diag(`vendored ${record.files.length} file${record.files.length === 1 ? "" : "s"} into ${into}`);
+      return 0;
     }
 
     case "--help":

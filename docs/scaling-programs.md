@@ -122,6 +122,14 @@ digests, which report drift instead of following a changed program.
 Compilation still accepts a closed source map, so browser tooling and
 deterministic evaluation do not depend on a filesystem or package server.
 
+Programs copied from another project's catalog are pinned the same way.
+[`vendor`](library.md#vendor-an-entry-into-another-project) copies an entry
+and the entries it depends on into the project only if they compile to the
+digests the catalog lists, and records where they came from. The project
+imports the copy by relative paths, so the compiler treats it as ordinary
+source; `lock` also pins each copy's record, and `lock --verify` reports an
+edited copy as `vendor` drift without contacting the catalog.
+
 The host's function implementations, renderer profile, and effect adapters
 also affect compatibility. A program digest is not an identity for arbitrary
 host code or evidence that a model's answer is correct. Application revisions
@@ -170,11 +178,11 @@ and clamp programs are the first entries: a separate
 [support queue](../examples/source/projects/support-queue/README.md) imports
 them through a wider source root and compiles them to the same executable
 digests. A test recompiles every entry and calling project and fails when the
-page stops matching the source. The catalog is repository-local, with no
-package server or automatic dependency resolution. A revised entry replaces a
-listed one only after a [comparison](library.md#revise-a-listed-program) runs
-each caller's cases and the entry's unseen cases against both versions and
-every result matches.
+page stops matching the source. Another project can copy an entry with
+`vendor`; there is no package server or automatic dependency resolution. A
+revised entry replaces a listed one only after a
+[comparison](library.md#revise-a-listed-program) runs each caller's cases and
+the entry's unseen cases against both versions and every result matches.
 
 ## Scale programs and habitats separately
 
@@ -293,8 +301,10 @@ and [the application links](source-language.md#link-modules-to-application-revis
    receipts in both runtimes; runtimes without version 2 refuse such programs
    instead of skipping the checks. Whole numbers, text length and format,
    unique values, and rejection of undeclared fields remain unchecked.
-5. Extend the local lock with vendored remote catalogs that resolve to the
-   same offline verification it applies to local projects.
+5. Find catalogs through a registry, and propose updates to vendored copies
+   when a catalog entry changes. Copying an entry from a catalog page you name
+   is available: `vendor` checks the copy against the page's digests, and
+   `lock` pins it and checks it offline like the project's own files.
 6. Run habitat schedules in the native runtime, and schedule experiment
    evaluations and other orders beside foundry and search activities. Searches
    and experiment evaluations charge the habitat budget in both runtimes;

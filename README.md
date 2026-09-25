@@ -213,7 +213,9 @@ more than one project call. Its first entries are the planner's scoring and
 clamp programs, which a separate
 [support queue](examples/source/projects/support-queue/README.md) imports with
 `--source-root`. A test recompiles each entry and fails when a digest,
-interface, or caller on the page no longer matches the source.
+interface, or caller on the page no longer matches the source. Another project
+can copy an entry with `vendor`, which checks the copy against the page's
+digests, and `lock` pins the copy and checks it offline.
 
 `check` also reports the source entry, file count, inferred maximum executor
 attempts, and required nesting depth. For the two-file inbox project these

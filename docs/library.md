@@ -5,8 +5,9 @@ call, with the digests, interfaces, and callers that a test checks.
 
 Each entry is one `.algal` file in this repository. A project uses it through a
 relative import, loaded with a source root wide enough to reach the file, so
-every caller runs the same compiled program. The catalog is repository-local:
-there is no package server, registry lookup, download, or automatic upgrade.
+every caller runs the same compiled program. A project elsewhere can
+[copy an entry](#vendor-an-entry-into-another-project) from this page; there
+is no package server, registry lookup, or automatic upgrade.
 Inclusion says nothing about whether keeping and composing programs improves
 later work. That question is the open
 [cumulative-skill experiment](vision.md#what-would-justify-the-claim).
@@ -286,3 +287,42 @@ change moves its digest while its source stays the same. The test cannot tell
 those edits from a revision, so review checks them. Revise one entry per pull
 request: a record's digests for dependent entries assume that their own files
 did not change.
+
+## Vendor an entry into another project
+
+Another project can copy an entry, with every entry it depends on, into a
+directory of its own. Run `vendor` from that project's directory:
+
+```sh
+bun cli.ts vendor https://raw.githubusercontent.com/hraness/algal/main/docs/library.md \
+  --entry task-planning/score_task.algal --into vendor/algal
+```
+
+`vendor` reads this page from an https URL or a local path and follows its
+links to the entry's file and to the file of each entry it depends on. Each
+file keeps its catalog path inside the new directory, so relative imports
+between the files still resolve. The copy is refused unless every file
+compiles, from the copied files alone, to the executable and interface digests
+listed here. Beside the files, `vendor` writes `algal.vendor.json`, an
+`algal.vendor.v1` record of the page's address and SHA-256 digest, the entry,
+and each file's source, executable, and interface digests. A program in the
+project imports the copy by an ordinary relative path:
+
+```algal
+import score_task from "./vendor/algal/task-planning/score_task.algal"
+```
+
+For a page at an https URL, `vendor` fetches each file from the page's host and
+follows a redirect only within that host; other schemes, including plain http,
+are refused. It reads at most 128 KiB for the page and 64 KiB for each of at
+most 16 files, and gives each request 15 seconds. `--into` names a directory
+that does not exist yet, beneath the current directory, in plain segments of
+letters, digits, `.`, `_`, and `-`. `vendor` refuses a path through a symlink,
+never replaces a file, and runs nothing it downloads: compiling a program only
+reads it.
+
+[`lock`](source-language.md#pin-a-project-with-a-lock) then records where the
+copy came from, and `lock --verify` checks offline that the copied files
+still match their record and the digests this page listed. Nothing updates a
+copy: to take a newer revision, delete the directory, vendor it again, and
+write a new lock.

@@ -2,10 +2,12 @@
 // closure it compiles to, and verify that pin offline. A lock is data outside
 // executable identity; it never supplies source or manifests, and verification
 // recompiles from the closed source map with no network or package resolver.
-// Two optional sections extend the pin: evaluation cases (fixture digests plus
-// the outcome and interface outputs of an in-memory scripted replay) and human
-// labels for closure digests. Fixtures arrive as a closed map of JSON text, so
-// this module performs no filesystem IO.
+// Three optional sections extend the pin: evaluation cases (fixture digests
+// plus the outcome and interface outputs of an in-memory scripted replay),
+// human labels for closure digests, and vendored directories (the
+// `algal.vendor.v1` record of each copied catalog entry). Fixtures, records,
+// and vendored files arrive as closed maps, so this module performs no
+// filesystem IO and never contacts a catalog's origin.
 import { BOUNDS } from "./contract";
 import { asDigest, digestCanonical, type Digest } from "./digest";
 import { scriptedExecutor } from "./effects";
@@ -17,6 +19,10 @@ import { boundedJsonSnapshot, createSourceDependencyReport, freezeDeep, printabl
 import { MemoryStore } from "./store-memory";
 import { compareUtf8, utf8Length } from "./utf8";
 import { asArray, asInt, asObject, asString, noUnknownKeys, optField, reqField, type JsonObject, type JsonValue } from "./values";
+import {
+  checkVendoredFiles, parseVendorRecord, vendorDifferenceList, vendorOrigin, vendorPath, vendorRecordToJson, VENDOR_BOUNDS, VENDOR_RECORD_FILE,
+  type VendoredSources, type VendorRecord,
+} from "./vendor-record";
 
 export const SOURCE_LOCK_CONTRACT = "algal.source-lock.v1" as const;
 export const SOURCE_LOCK_VERIFICATION_CONTRACT = "algal.source-lock-verification.v1" as const;
@@ -25,12 +31,16 @@ export const SOURCE_LOCK_BOUNDS = Object.freeze({
   /** Twice today's largest closure: one module per imported file plus one
    * generated trigger wrapper per called child (15 + 15 for 16 files). */
   maxModules: 4 * (SOURCE_PROJECT_BOUNDS.maxFiles - 1),
-  /** Above every possible drift list (at most 332 entries), so verification never truncates. */
-  maxDrift: 384,
+  /** Above every possible drift list, so verification never truncates: at
+   * most 332 entries for the closure, labels, and cases, plus 832 for 16
+   * vendored directories (four record fields and three per listed file). */
+  maxDrift: 1_280,
   maxKeyLength: 512,
   maxTokenLength: 64,
   /** Human labels for closure digests. */
   maxVersions: 16,
+  /** Vendored directories, each above at least one of the project's files. */
+  maxVendored: VENDOR_BOUNDS.maxDirectories,
   evaluation: Object.freeze({
     maxCases: 16,
     /** UTF-8 bytes of one fixture's JSON text; the per-file source limit. */
@@ -60,6 +70,19 @@ export type SourceLockEvaluation = {
   /** Sorted by unique name. */
   readonly cases: readonly SourceLockEvaluationCase[];
 };
+/** One vendored directory: where its copy came from and a digest of its record. */
+export type SourceLockVendored = {
+  /** Project-relative directory holding `algal.vendor.json`, above at least one unit. */
+  readonly directory: string;
+  /** The catalog page's address, as the record names it. Lock and verify never contact it. */
+  readonly origin: string;
+  /** SHA-256 of the catalog page the copy was checked against. */
+  readonly catalog: Digest;
+  /** Catalog path of the vendored entry. */
+  readonly entry: string;
+  /** Digest of the record's canonical JSON, which pins each listed file's digests. */
+  readonly record: Digest;
+};
 export type SourceLock = {
   readonly contract: typeof SOURCE_LOCK_CONTRACT;
   readonly entry: string;
@@ -76,6 +99,8 @@ export type SourceLock = {
   /** Human label → executable digest in this closure. Labels are for people;
    * digests are what execute, and verification never moves a label. */
   readonly versions?: Readonly<Record<string, Digest>>;
+  /** Vendored directories above the project's files, sorted by directory. */
+  readonly vendored?: readonly SourceLockVendored[];
 };
 /** One requested case, as `lock --evaluation` reads it. Paths are project-relative keys into `fixtures`. */
 export type SourceLockCase = {
@@ -91,12 +116,17 @@ export type SourceLockOptions = {
   readonly fixtures?: Readonly<Record<string, string>>;
   /** Label → executable digest; every digest must be in the compiled closure. */
   readonly versions?: Readonly<Record<string, string>>;
+  /** Records and listed files of the vendored directories above the project's
+   * files (`loadVendoredSources`). Each copy must still match its record. */
+  readonly vendored?: VendoredSources;
 };
 export type SourceLockVerifyOptions = {
   /** Replay every pinned case offline against this closed map of the lock's fixture paths → JSON text. */
   readonly fixtures?: Readonly<Record<string, string>>;
+  /** Check vendored copies against these records and files; without them, no copy is checked. */
+  readonly vendored?: VendoredSources;
 };
-export type SourceLockDriftKind = "entry" | "compiler" | "source" | "unit" | "root" | "closure" | "interface" | "analysis" | "version" | "evaluation";
+export type SourceLockDriftKind = "entry" | "compiler" | "source" | "unit" | "root" | "closure" | "interface" | "analysis" | "version" | "evaluation" | "vendor";
 export type SourceLockDrift = { readonly kind: SourceLockDriftKind; readonly subject: string; readonly expected: string; readonly actual: string };
 export type SourceLockVerification = {
   readonly contract: typeof SOURCE_LOCK_VERIFICATION_CONTRACT;
@@ -105,18 +135,20 @@ export type SourceLockVerification = {
   readonly lockDigest: Digest;
   readonly root: Digest;
   /** Fixed order: entry, compiler, source digests, unit digests, root, closure,
-   * interfaces, analysis, version labels, evaluation. */
+   * interfaces, analysis, version labels, evaluation, vendored copies. */
   readonly drift: readonly SourceLockDrift[];
   /** Always false today: the bound exceeds the largest possible list. */
   readonly truncated: boolean;
   /** Present when the lock pins evaluation cases; `replayed` is false unless fixtures were supplied. */
   readonly evaluation?: { readonly cases: number; readonly replayed: boolean };
+  /** Present when the lock pins vendored directories; `checked` is false unless their sources were supplied. */
+  readonly vendored?: { readonly directories: number; readonly checked: boolean };
 };
 
 const verifications = new WeakSet<SourceLockVerification>();
 const ABSENT = "(absent)";
 const TOKEN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-const DRIFT_ORDER: readonly SourceLockDriftKind[] = ["entry", "compiler", "source", "unit", "root", "closure", "interface", "analysis", "version", "evaluation"];
+const DRIFT_ORDER: readonly SourceLockDriftKind[] = ["entry", "compiler", "source", "unit", "root", "closure", "interface", "analysis", "version", "evaluation", "vendor"];
 const OUTCOMES: readonly RunOutcome[] = ["complete", "failed", "stuck", "suspended"];
 
 /** Lone surrogates are not text; they would also cost six JSON bytes each. */
@@ -132,17 +164,19 @@ function wellFormed(text: string): boolean {
   }
   return true;
 }
-/** The compiler's normalized project-relative key rules, applied to lock data. */
-function projectPath(value: unknown, what: string, suffix: ".algal" | ".json"): string {
+/** The compiler's normalized project-relative key rules, applied to lock data.
+ * An empty suffix names a directory. */
+function projectPath(value: unknown, what: string, suffix: ".algal" | ".json" | ""): string {
   const key = asString(value, what, SOURCE_LOCK_BOUNDS.maxKeyLength);
   const invalid = !key.endsWith(suffix) || key.includes("\\") || key.includes(":") || !wellFormed(key)
     || [...key].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)
     || key.split("/").some(part => !part || part === "." || part === "..");
-  if (invalid) throw new AlgalError("PARSE_FAILED", `${what} must be a normalized project-relative ${suffix} path`);
+  if (invalid) throw new AlgalError("PARSE_FAILED", `${what} must be a normalized project-relative ${suffix === "" ? "directory" : `${suffix} path`}`);
   return key;
 }
 const sourceKey = (value: unknown, what: string): string => projectPath(value, what, ".algal");
 const fixtureKey = (value: unknown, what: string): string => projectPath(value, what, ".json");
+const directoryKey = (value: unknown, what: string): string => projectPath(value, what, "");
 function token(value: unknown, what: string): string {
   const text = asString(value, what, SOURCE_LOCK_BOUNDS.maxTokenLength);
   if (!TOKEN.test(text)) throw new AlgalError("PARSE_FAILED", `${what} must be a plain token of letters, digits, ".", "_", or "-"`);
@@ -266,6 +300,59 @@ function sameRoot(compilation: SourceCompilation | undefined, root: Digest): voi
   if (compilation !== undefined && compilation.sourceMap.manifestDigest !== root) throw new AlgalError("INTERNAL", "source lock: replay compiled a different root");
 }
 
+/** Own enumerable string-keyed data properties of a plain object, read once. */
+function closedEntries(value: unknown, limit: number, what: string): [string, unknown][] {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) throw new AlgalError("PARSE_FAILED", `${what} must be an object`);
+  const prototype = Object.getPrototypeOf(value) as unknown;
+  if (prototype !== Object.prototype && prototype !== null) throw new AlgalError("PARSE_FAILED", `${what} must be a plain object`);
+  const names = Reflect.ownKeys(value);
+  if (names.length > limit) throw new AlgalError("BUDGET_EXHAUSTED", `${what} exceed ${limit} entries`);
+  return names.map(name => {
+    const descriptor = typeof name === "string" ? Object.getOwnPropertyDescriptor(value, name) : undefined;
+    if (typeof name !== "string" || descriptor === undefined || !Object.hasOwn(descriptor, "value") || !descriptor.enumerable) {
+      throw new AlgalError("PARSE_FAILED", `${what} must hold only plain data properties`);
+    }
+    return [name, descriptor.value as unknown];
+  });
+}
+type VendoredInput = { readonly directory: string; readonly record: VendorRecord; readonly digest: Digest; readonly texts: ReadonlyMap<string, string> };
+/** Copy supplied vendored sources synchronously: records keyed by directory,
+ * each parsed strictly, and exactly the files they list as text within the
+ * per-file source limit. A listed file with no text is absent. */
+function vendoredInputs(value: unknown): VendoredInput[] {
+  const parts = new Map(closedEntries(value, 8, "source lock vendored sources"));
+  for (const key of parts.keys()) if (key !== "records" && key !== "files") throw new AlgalError("PARSE_FAILED", `source lock vendored sources has unknown key "${key}"`);
+  if (!parts.has("records") || !parts.has("files")) throw new AlgalError("PARSE_FAILED", "source lock vendored sources require records and files");
+  const texts = new Map<string, string>();
+  for (const [key, text] of closedEntries(parts.get("files"), SOURCE_LOCK_BOUNDS.maxVendored * VENDOR_BOUNDS.maxFiles, "source lock vendored files")) {
+    if (typeof text !== "string") throw new AlgalError("PARSE_FAILED", `vendored file ${key} must be text`);
+    if (text.length > VENDOR_BOUNDS.maxFileBytes || utf8Length(text) > VENDOR_BOUNDS.maxFileBytes) throw new AlgalError("BUDGET_EXHAUSTED", `vendored file ${key} exceeds ${VENDOR_BOUNDS.maxFileBytes} bytes`);
+    texts.set(key, text);
+  }
+  const listed = new Set<string>();
+  const inputs = closedEntries(parts.get("records"), SOURCE_LOCK_BOUNDS.maxVendored, "source lock vendored records").map(([name, raw]): VendoredInput => {
+    const directory = directoryKey(name, "vendored directory");
+    const record = parseVendorRecord(raw, `${directory}/${VENDOR_RECORD_FILE}`);
+    const own = new Map<string, string>();
+    for (const file of record.files) {
+      const key = `${directory}/${file.path}`;
+      listed.add(key);
+      const text = texts.get(key);
+      if (text !== undefined) own.set(file.path, text);
+    }
+    return { directory, record, digest: digestCanonical(vendorRecordToJson(record)), texts: own };
+  });
+  for (const key of texts.keys()) if (!listed.has(key)) throw new AlgalError("PARSE_FAILED", `source lock vendored files include ${JSON.stringify(key)}, which no record lists`);
+  return inputs.sort((left, right) => compareUtf8(left.directory, right.directory));
+}
+/** Pin each record; its directory must be above one of the project's files. */
+function vendoredPins(inputs: readonly VendoredInput[], sources: readonly string[]): SourceLockVendored[] {
+  return inputs.map(input => {
+    if (!sources.some(source => source.startsWith(`${input.directory}/`))) throw new AlgalError("PARSE_FAILED", `vendored directory ${input.directory} holds none of the project's source files`);
+    return { directory: input.directory, origin: input.record.origin, catalog: input.record.catalog, entry: input.record.entry, record: input.digest };
+  });
+}
+
 function lockFromReport(report: SourceDependencyReport): SourceLock {
   const interfaces: Record<Digest, Digest> = {};
   for (const module of report.modules) interfaces[module.manifestDigest] = digestCanonical(module.interface as unknown as JsonValue);
@@ -285,7 +372,8 @@ function lockFromReport(report: SourceDependencyReport): SourceLock {
  * closure beyond the lock's own bound is refused here rather than at
  * verification. With `evaluation`, each case is replayed in memory and pinned
  * only if it reaches its requested outcome; with `versions`, each label must
- * name a digest in the compiled closure.
+ * name a digest in the compiled closure; with `vendored`, each record is
+ * pinned only if every file it lists still matches it.
  */
 export async function createSourceLock(source: string, sourceOptions?: SourceCompilerOptions, options: SourceLockOptions = {}): Promise<SourceLock> {
   // Foreign options are copied and checked once, before the first await.
@@ -297,6 +385,8 @@ export async function createSourceLock(source: string, sourceOptions?: SourceCom
   const prepared = cases === undefined || values === undefined ? undefined : prepare(cases, values);
   const suppliedVersions: unknown = options.versions;
   const labels = suppliedVersions === undefined ? undefined : versionLabels(boundedJsonSnapshot(suppliedVersions, SOURCE_LOCK_BOUNDS.lock, "source lock versions"), "source lock versions");
+  const suppliedVendored: unknown = options.vendored;
+  const vendoredInput = suppliedVendored === undefined ? [] : vendoredInputs(suppliedVendored);
   const compilation = prepared === undefined ? undefined : compileSource(source, sourceOptions ?? {});
   const lock = lockFromReport(await createSourceDependencyReport(source, sourceOptions === undefined ? {} : { sourceOptions }));
   if (lock.modules.length > SOURCE_LOCK_BOUNDS.maxModules) throw new AlgalError("BUDGET_EXHAUSTED", `source lock: closure exceeds ${SOURCE_LOCK_BOUNDS.maxModules} modules`);
@@ -320,7 +410,15 @@ export async function createSourceLock(source: string, sourceOptions?: SourceCom
     }
     evaluation = { runtime: RUNTIME_VERSION, cases: pinned.sort((left, right) => compareUtf8(left.name, right.name)) };
   }
-  return freezeDeep({ ...lock, ...(evaluation === undefined ? {} : { evaluation }), ...(labels === undefined ? {} : { versions: labels }) });
+  const vendored = vendoredInput.length === 0 ? undefined : vendoredPins(vendoredInput, lock.units.map(unit => unit.source));
+  for (const input of vendoredInput) {
+    const differences = await checkVendoredFiles(input.record, input.texts);
+    if (differences.length > 0) throw new AlgalError("DIGEST_MISMATCH", `source lock: ${input.directory} differs from its vendor record: ${vendorDifferenceList(differences)}`);
+  }
+  return freezeDeep({
+    ...lock, ...(evaluation === undefined ? {} : { evaluation }), ...(labels === undefined ? {} : { versions: labels }),
+    ...(vendored === undefined ? {} : { vendored }),
+  });
 }
 
 function fixturePin(value: unknown, what: string): SourceLockFixture {
@@ -358,17 +456,42 @@ function parseEvaluation(value: unknown): SourceLockEvaluation {
   }
   return { runtime, cases };
 }
+function parseVendored(value: unknown, units: readonly SourceLockUnit[]): SourceLockVendored[] {
+  const raw = asArray(value, "source lock vendored");
+  if (raw.length === 0) throw new AlgalError("PARSE_FAILED", "source lock vendored must name at least one directory");
+  if (raw.length > SOURCE_LOCK_BOUNDS.maxVendored) throw new AlgalError("BUDGET_EXHAUSTED", `source lock vendored exceeds ${SOURCE_LOCK_BOUNDS.maxVendored} directories`);
+  const pins = raw.map((item, index): SourceLockVendored => {
+    const what = `source lock vendored ${index}`;
+    const object = asObject(item, what);
+    noUnknownKeys(object, ["directory", "origin", "catalog", "entry", "record"], what);
+    return {
+      directory: directoryKey(reqField(object, "directory", what), `${what} directory`),
+      origin: vendorOrigin(reqField(object, "origin", what), `${what} origin`),
+      catalog: asDigest(reqField(object, "catalog", what), `${what} catalog`),
+      entry: vendorPath(reqField(object, "entry", what), `${what} entry`),
+      record: asDigest(reqField(object, "record", what), `${what} record`),
+    };
+  });
+  for (let index = 1; index < pins.length; index++) {
+    if (compareUtf8(pins[index - 1]!.directory, pins[index]!.directory) >= 0) throw new AlgalError("PARSE_FAILED", "source lock vendored directories must be sorted and unique");
+  }
+  for (const pin of pins) {
+    if (!units.some(unit => unit.source.startsWith(`${pin.directory}/`))) throw new AlgalError("PARSE_FAILED", `source lock vendored directory ${pin.directory} holds no unit`);
+  }
+  return pins;
+}
 
 /** Parse foreign lock data strictly: known keys only, bounded lists, key and
  * digest shapes, sorted unique units and modules, an entry unit that carries
  * the root digest, interfaces covering exactly the root and its modules,
- * sorted uniquely named evaluation cases, and version labels whose digests are
- * in the closure. The result is fresh, frozen data.
+ * sorted uniquely named evaluation cases, version labels whose digests are in
+ * the closure, and sorted vendored directories that each hold a unit. The
+ * result is fresh, frozen data.
  */
 export function parseSourceLock(value: unknown): SourceLock {
   const data = boundedJsonSnapshot(value, SOURCE_LOCK_BOUNDS.lock, "source lock");
   const object = asObject(data, "source lock");
-  noUnknownKeys(object, ["contract", "entry", "compiler", "units", "root", "modules", "analysis", "interfaces", "evaluation", "versions"], "source lock");
+  noUnknownKeys(object, ["contract", "entry", "compiler", "units", "root", "modules", "analysis", "interfaces", "evaluation", "versions", "vendored"], "source lock");
   if (object.contract !== SOURCE_LOCK_CONTRACT) throw new AlgalError("PARSE_FAILED", `source lock: expected contract "${SOURCE_LOCK_CONTRACT}"`);
   const entry = sourceKey(reqField(object, "entry", "source lock"), "source lock entry");
   const compilerObject = asObject(reqField(object, "compiler", "source lock"), "source lock compiler");
@@ -420,9 +543,12 @@ export function parseSourceLock(value: unknown): SourceLock {
   const evaluation = evaluationValue === undefined ? undefined : parseEvaluation(evaluationValue);
   const versionsValue = optField(object, "versions");
   const versions = versionsValue === undefined ? undefined : versionLabels(versionsValue, "source lock versions", new Set([root, ...modules]));
+  const vendoredValue = optField(object, "vendored");
+  const vendored = vendoredValue === undefined ? undefined : parseVendored(vendoredValue, units);
   return freezeDeep({
     contract: SOURCE_LOCK_CONTRACT, entry, compiler, units, root, modules, analysis, interfaces,
     ...(evaluation === undefined ? {} : { evaluation }), ...(versions === undefined ? {} : { versions }),
+    ...(vendored === undefined ? {} : { vendored }),
   });
 }
 
@@ -443,21 +569,29 @@ export function sourceLockToJson(lock: SourceLock): JsonObject {
       },
     }),
     ...(lock.versions === undefined ? {} : { versions: { ...lock.versions } }),
+    ...(lock.vendored === undefined ? {} : {
+      vendored: lock.vendored.map(pin => ({ directory: pin.directory, origin: pin.origin, catalog: pin.catalog, entry: pin.entry, record: pin.record })),
+    }),
   };
 }
 
 /** Recompile the source and compare it with a lock. Every difference is
  * reported in a fixed order so source, executable, compiler, closure,
- * interface, label, and evaluation drift stay distinguishable; `ok` is true
- * only when nothing differs. With `fixtures`, every pinned case is replayed in
- * memory against the recompiled program; without them, no case runs and
- * `evaluation.replayed` is false.
+ * interface, label, evaluation, and vendored-copy drift stay distinguishable;
+ * `ok` is true only when nothing differs. With `fixtures`, every pinned case
+ * is replayed in memory against the recompiled program; without them, no case
+ * runs and `evaluation.replayed` is false. With `vendored`, the supplied
+ * records are compared with the pinned directories and every listed file with
+ * its record, by source digest and by the executable and interface digests it
+ * compiles to; without them, no copy is checked.
  */
 export async function verifySourceLock(source: string, sourceOptions: SourceCompilerOptions | undefined, lockValue: unknown, options: SourceLockVerifyOptions = {}): Promise<SourceLockVerification> {
   const expected = parseSourceLock(lockValue);
   const suppliedFixtures: unknown = options.fixtures;
   if (suppliedFixtures !== undefined && expected.evaluation === undefined) throw new AlgalError("PARSE_FAILED", "source lock pins no evaluation cases to replay");
   const values = suppliedFixtures === undefined ? undefined : fixtureValues(suppliedFixtures, sourceLockFixtureKeys(expected));
+  const suppliedVendored: unknown = options.vendored;
+  const vendoredInput = suppliedVendored === undefined ? undefined : vendoredInputs(suppliedVendored);
   const cases = expected.evaluation?.cases ?? [];
   const prepared = values === undefined ? undefined
     : prepare(cases.map(item => ({ name: item.name, args: item.args.path, responses: item.responses?.path })), values);
@@ -517,12 +651,35 @@ export async function verifySourceLock(source: string, sourceOptions: SourceComp
       note("evaluation", `${item.name}/outputs`, item.outputs, result.outputs);
     }
   }
+  if (vendoredInput !== undefined) {
+    // Directories are paired by name: a record that appeared, disappeared, or
+    // changed is reported first, then each listed file that no longer matches it.
+    const pinned = new Map((expected.vendored ?? []).map(pin => [pin.directory, pin]));
+    const found = new Map(vendoredPins(vendoredInput, actual.units.map(unit => unit.source)).map(pin => [pin.directory, pin]));
+    const inputs = new Map(vendoredInput.map(input => [input.directory, input]));
+    for (const directory of [...new Set([...pinned.keys(), ...found.keys()])].sort(compareUtf8)) {
+      const wanted = pinned.get(directory);
+      const current = found.get(directory);
+      note("vendor", directory, wanted?.record ?? ABSENT, current?.record ?? ABSENT);
+      if (wanted !== undefined && current !== undefined) {
+        note("vendor", `${directory}:origin`, wanted.origin, current.origin);
+        note("vendor", `${directory}:catalog`, wanted.catalog, current.catalog);
+        note("vendor", `${directory}:entry`, wanted.entry, current.entry);
+      }
+      const input = inputs.get(directory);
+      if (input === undefined) continue;
+      for (const difference of await checkVendoredFiles(input.record, input.texts)) {
+        drift.push({ kind: "vendor", subject: `${directory}/${difference.subject}`, expected: difference.expected, actual: difference.actual });
+      }
+    }
+  }
   drift.sort((left, right) => DRIFT_ORDER.indexOf(left.kind) - DRIFT_ORDER.indexOf(right.kind));
   const truncated = drift.length > SOURCE_LOCK_BOUNDS.maxDrift;
   const verification: SourceLockVerification = {
     contract: SOURCE_LOCK_VERIFICATION_CONTRACT, ok: drift.length === 0, lockDigest, root: actual.root,
     drift: drift.slice(0, SOURCE_LOCK_BOUNDS.maxDrift), truncated,
     ...(expected.evaluation === undefined ? {} : { evaluation: { cases: cases.length, replayed: values !== undefined } }),
+    ...(expected.vendored === undefined ? {} : { vendored: { directories: expected.vendored.length, checked: vendoredInput !== undefined } }),
   };
   freezeDeep(verification);
   verifications.add(verification);
@@ -542,6 +699,10 @@ export function renderSourceLockVerification(verification: SourceLockVerificatio
   const evaluation = Object.hasOwn(verification, "evaluation") ? verification.evaluation : undefined;
   if (evaluation !== undefined) {
     lines.push(`Evaluation: ${evaluation.cases} pinned case${evaluation.cases === 1 ? "" : "s"}${evaluation.replayed ? " replayed offline" : ", not replayed"}.`);
+  }
+  const vendored = Object.hasOwn(verification, "vendored") ? verification.vendored : undefined;
+  if (vendored !== undefined) {
+    lines.push(`Vendored: ${vendored.directories} pinned director${vendored.directories === 1 ? "y" : "ies"}${vendored.checked ? " checked offline" : ", not checked"}.`);
   }
   if (verification.drift.length > 0) {
     lines.push(`Drift (${verification.drift.length}${verification.truncated ? "+, truncated" : ""}):`);
