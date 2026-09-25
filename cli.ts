@@ -128,18 +128,35 @@ usage:
                                               invocation — computed before anything runs
   algal lock <program.algal> [--source-root <dir>] [--out <lock.json>]
       [--evaluation <cases.json>] [--versions <labels.json>]
+      [--registries <registries.json>]
       [--verify <lock.json> [--evaluate]] [--format json|text]
                                               pin a source project to its compiled closure;
                                               --evaluation pins fixture cases' outcomes and outputs;
                                               --versions labels closure digests for people;
+                                              --registries records named catalog addresses;
                                               --verify recompiles and reports drift (exit 1);
                                               --evaluate also replays pinned cases offline;
                                               vendored copies are pinned and checked offline
   algal vendor <catalog.md|https-url> --entry <path.algal> --into <dir>
+      [--from <name>] [--timeout-ms <ms>]
                                               copy a catalog entry and the entries it calls into
                                               a new directory; refuses unless they compile to the
                                               digests the catalog lists; https only, no symlinks
-                                              or overwrites; lock never contacts the catalog
+                                              or overwrites; lock never contacts the catalog;
+                                              --from reads the catalog address named in
+                                              algal.registries.json
+  algal vendor check <program.algal> [--source-root <dir>] [--from <name>]
+      [--timeout-ms <ms>] [--format json|text] [--out <file>]
+                                              fetch each vendored copy's recorded catalog page and
+                                              emit an algal.vendor-check.v1 report: per directory
+                                              unchanged, update-available, removed, or unreadable;
+                                              reads only, writes no copy, and never edits a lock
+  algal vendor update <directory> --into <dir> [--timeout-ms <ms>] [--out <file>]
+                                              re-vendor one copy's catalog entry from its recorded
+                                              origin into a new directory and emit an
+                                              algal.vendor-update.v1 proposal naming the old and
+                                              new pins; applying it means updating the import and
+                                              writing a new lock; never automatic
   algal examples                          list bundled examples
   algal example <id>                      print the example manifest
   algal run <manifest.json> [options]     run an organism, print its receipt
@@ -1217,27 +1234,31 @@ async function main(): Promise<number> {
     }
 
     case "lock": {
-      if (positional.length !== 1) usageError("algal lock <program.algal> [--source-root <dir>] [--out <lock.json>] [--evaluation <cases.json>] [--versions <labels.json>] [--verify <lock.json> [--evaluate]] [--format json|text]");
+      if (positional.length !== 1) usageError("algal lock <program.algal> [--source-root <dir>] [--out <lock.json>] [--evaluation <cases.json>] [--versions <labels.json>] [--registries <registries.json>] [--verify <lock.json> [--evaluate]] [--format json|text]");
       for (const key of Object.keys(flags)) {
-        if (!["source-root", "out", "verify", "format", "evaluation", "versions", "evaluate"].includes(key)) usageError(`unknown lock option --${key}`);
+        if (!["source-root", "out", "verify", "format", "evaluation", "versions", "registries", "evaluate"].includes(key)) usageError(`unknown lock option --${key}`);
         if (key !== "evaluate") artifactFlag(flags, key);
       }
       if (flags.evaluate !== undefined && flags.evaluate !== true) usageError("--evaluate is a boolean flag without a value");
       const { createSourceLock, parseSourceLock, parseSourceLockCases, sourceLockFixtureKeys, verifySourceLock, renderSourceLockVerification, sourceLockToJson, SOURCE_LOCK_BOUNDS } = await import("./src/source-lock");
+      const { parseVendorRegistries, VENDOR_REGISTRY_BOUNDS } = await import("./src/vendor-record");
       const format = artifactFlag(flags, "format") ?? "json";
       if (format !== "json" && format !== "text") usageError("lock format must be json or text");
       const output = artifactFlag(flags, "out");
       const verifyPath = artifactFlag(flags, "verify");
       const casesPath = artifactFlag(flags, "evaluation");
       const versionsPath = artifactFlag(flags, "versions");
+      const registriesPath = artifactFlag(flags, "registries");
       const evaluate = flags.evaluate === true;
       if (verifyPath === undefined && format === "text") usageError("lock text output is only available with --verify");
       if (verifyPath === undefined && evaluate) usageError("--evaluate is only available with --verify");
-      if (verifyPath !== undefined && (casesPath !== undefined || versionsPath !== undefined)) usageError("--evaluation and --versions write a lock; --verify reads them from the lock");
+      if (verifyPath !== undefined && (casesPath !== undefined || versionsPath !== undefined || registriesPath !== undefined)) usageError("--evaluation, --versions, and --registries write a lock; --verify reads them from the lock");
       const project = await readProject(positional[0]!);
-      const inputs = [verifyPath, casesPath, versionsPath].flatMap(path => path === undefined ? [] : [resolve(path)]);
+      const inputs = [verifyPath, casesPath, versionsPath, registriesPath].flatMap(path => path === undefined ? [] : [resolve(path)]);
       const cases = casesPath === undefined ? undefined : parseSourceLockCases(await readJsonBounded(resolve(casesPath), SOURCE_LOCK_BOUNDS.lock.maxBytes, "lock evaluation cases"));
       const labels = versionsPath === undefined ? undefined : await readJsonBounded(resolve(versionsPath), SOURCE_LOCK_BOUNDS.lock.maxBytes, "lock versions");
+      const registries = registriesPath === undefined ? undefined
+        : parseVendorRegistries(await readJsonBounded(resolve(registriesPath), VENDOR_REGISTRY_BOUNDS.record.maxBytes, "vendor registries")).registries;
       const lockValue = verifyPath === undefined ? undefined : await readJsonBounded(resolve(verifyPath), SOURCE_LOCK_BOUNDS.lock.maxBytes, "source lock");
       // Fixtures are read only when named, beneath the source root, with the source loader's guards.
       const keys = cases !== undefined ? sourceLockFixtureKeys(cases) : evaluate ? sourceLockFixtureKeys(parseSourceLock(lockValue)) : [];
@@ -1253,6 +1274,7 @@ async function main(): Promise<number> {
           ...(cases === undefined ? {} : { evaluation: cases, fixtures }),
           ...(labels === undefined ? {} : { versions: labels as Record<string, string> }),
           vendored,
+          ...(registries === undefined ? {} : { registries }),
         });
         await emitArtifact(canonicalize(sourceLockToJson(lock)), output);
         return 0;
@@ -1264,10 +1286,68 @@ async function main(): Promise<number> {
     }
 
     case "vendor": {
-      const usage = "algal vendor <catalog.md|https-url> --entry <path.algal> --into <dir>";
-      if (positional.length !== 1) usageError(usage);
+      const timeoutFlag = (): number | undefined => {
+        const text = artifactFlag(flags, "timeout-ms");
+        return text === undefined ? undefined : Number(text);
+      };
+      if (positional[0] === "check") {
+        const usage = "algal vendor check <program.algal> [--source-root <dir>] [--from <name>] [--timeout-ms <ms>] [--format json|text] [--out <file>]";
+        if (positional.length !== 2) usageError(usage);
+        for (const key of Object.keys(flags)) {
+          if (!["source-root", "from", "timeout-ms", "format", "out"].includes(key)) usageError(`unknown vendor check option --${key}`);
+          artifactFlag(flags, key);
+        }
+        const format = artifactFlag(flags, "format") ?? "json";
+        if (format !== "json" && format !== "text") usageError("vendor check format must be json or text");
+        const output = artifactFlag(flags, "out");
+        const fromName = artifactFlag(flags, "from");
+        const { checkVendoredCatalogs, renderVendorCheck, vendorCheckToJson } = await import("./src/vendor-registry");
+        const { loadVendoredSources, readVendorRegistries, vendorRegistryOrigin, VENDOR_RECORD_FILE, VENDOR_REGISTRIES_FILE } = await import("./src/vendor-record");
+        const project = await readProject(positional[1]!);
+        // The same discovery `lock` uses: records in directories above the
+        // project's files. Check fetches each record's origin; nothing writes.
+        const vendored = await loadVendoredSources(project.root, Object.keys(project.sources));
+        let from: string | undefined;
+        let registriesFile: string | undefined;
+        if (fromName !== undefined) {
+          const registries = await readVendorRegistries(project.root);
+          if (registries === undefined) usageError(`--from names a registry in ${VENDOR_REGISTRIES_FILE}; none exists beneath ${project.root}`);
+          from = vendorRegistryOrigin(registries, fromName);
+          registriesFile = join(project.root, VENDOR_REGISTRIES_FILE);
+        }
+        const vendoredPaths = [...Object.keys(vendored.records).map(directory => `${directory}/${VENDOR_RECORD_FILE}`), ...Object.keys(vendored.files)];
+        const inputs = [...project.files, ...vendoredPaths.map(key => join(project.root, ...key.split("/"))), ...registriesFile === undefined ? [] : [registriesFile]];
+        await distinctArtifactPaths(inputs, [output]);
+        const timeoutMs = timeoutFlag();
+        const report = await checkVendoredCatalogs(vendored, { ...(timeoutMs === undefined ? {} : { timeoutMs }), ...(from === undefined ? {} : { from }) });
+        await emitArtifact(format === "text" ? renderVendorCheck(report) : canonicalize(vendorCheckToJson(report)), output);
+        return 0;
+      }
+      if (positional[0] === "update") {
+        const usage = "algal vendor update <directory> --into <dir> [--timeout-ms <ms>] [--out <file>]";
+        if (positional.length !== 2) usageError(usage);
+        for (const key of Object.keys(flags)) {
+          if (!["into", "timeout-ms", "out"].includes(key)) usageError(`unknown vendor update option --${key}`);
+          artifactFlag(flags, key);
+        }
+        const into = artifactFlag(flags, "into");
+        if (into === undefined) usageError(usage);
+        const output = artifactFlag(flags, "out");
+        const { proposeVendorUpdate, vendorUpdateToJson } = await import("./src/vendor-registry");
+        const { VENDOR_RECORD_FILE } = await import("./src/vendor-record");
+        const directory = positional[1]!;
+        await distinctArtifactPaths([join(process.cwd(), directory, VENDOR_RECORD_FILE)], [output]);
+        const timeoutMs = timeoutFlag();
+        const update = await proposeVendorUpdate({ directory, into, root: process.cwd(), ...(timeoutMs === undefined ? {} : { timeoutMs }) });
+        await emitArtifact(canonicalize(vendorUpdateToJson(update)), output);
+        diag(`vendored an update for ${directory} into ${into} (${update.status})`);
+        return 0;
+      }
+      const usage = "algal vendor <catalog.md|https-url> --entry <path.algal> --into <dir> [--from <name>] [--timeout-ms <ms>]";
+      const fromName = artifactFlag(flags, "from");
+      if ((positional.length === 1) === (fromName !== undefined)) usageError(usage);
       for (const key of Object.keys(flags)) {
-        if (!["entry", "into"].includes(key)) usageError(`unknown vendor option --${key}`);
+        if (!["entry", "into", "from", "timeout-ms"].includes(key)) usageError(`unknown vendor option --${key}`);
         artifactFlag(flags, key);
       }
       const entry = artifactFlag(flags, "entry");
@@ -1276,8 +1356,17 @@ async function main(): Promise<number> {
       // Vendoring's only network step; lock and verify read the copy offline. The
       // directory is created beneath the current one.
       const { vendorCatalogEntry } = await import("./src/vendor");
-      const { vendorRecordToJson } = await import("./src/vendor-record");
-      const record = await vendorCatalogEntry({ catalog: positional[0]!, entry, into, root: process.cwd() });
+      const { catalogForOrigin } = await import("./src/vendor-registry");
+      const { readVendorRegistries, vendorRegistryOrigin, vendorRecordToJson, VENDOR_REGISTRIES_FILE } = await import("./src/vendor-record");
+      let catalog = positional[0];
+      if (fromName !== undefined) {
+        const registries = await readVendorRegistries(await realpath(process.cwd()));
+        if (registries === undefined) usageError(`--from names a registry in ${VENDOR_REGISTRIES_FILE}; none exists beneath the current directory`);
+        catalog = catalogForOrigin(vendorRegistryOrigin(registries, fromName));
+      }
+      if (catalog === undefined) usageError(usage);
+      const timeoutMs = timeoutFlag();
+      const record = await vendorCatalogEntry({ catalog, entry, into, root: process.cwd(), ...(timeoutMs === undefined ? {} : { timeoutMs }) });
       out(vendorRecordToJson(record));
       diag(`vendored ${record.files.length} file${record.files.length === 1 ? "" : "s"} into ${into}`);
       return 0;

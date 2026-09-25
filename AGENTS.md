@@ -30,7 +30,7 @@
 - `index.ts` — the package's public surface.
 - `examples/` — bundled manifests and scripted responses used by `suite`.
 - `spec/v1/organism.md`, `spec/v1/expr.md`, `spec/v1/foundry.md`,
-  `spec/v1/search.md`, `spec/v1/bench.md`, `spec/v1/process.md`,
+  `spec/v1/search.md`, `spec/v1/bench.md`, `spec/v1/vendor.md`, `spec/v1/process.md`,
   `spec/v1/application.md` — authoritative
   contract prose, including the bounded durable process filesystem ABI.
 - `site/` — the static algal.computer source; `build.ts` writes `site/dist`.

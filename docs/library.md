@@ -342,6 +342,52 @@ reads it.
 
 [`lock`](source-language.md#pin-a-project-with-a-lock) then records where the
 copy came from, and `lock --verify` checks offline that the copied files
-still match their record and the digests this page listed. Nothing updates a
-copy: to take a newer revision, delete the directory, vendor it again, and
-write a new lock.
+still match their record and the digests this page listed.
+
+### Check a copy against its catalog
+
+`vendor check` reads the catalog page each copy's record names and reports
+what the pin would find now:
+
+```sh
+bun cli.ts vendor check main.algal
+bun cli.ts vendor check main.algal --from local --format text
+```
+
+The report is an `algal.vendor-check.v1` record, one entry per vendored
+directory the project imports: the directory, entry, origin, pinned catalog
+digest, and record digest, plus the live page digest when a page was read and
+a status of `unchanged`, `update-available`, `removed`, or `unreadable`. A
+catalog that moved past the copy is `update-available`; a page that no longer
+lists the entry is `removed`; a page that cannot be fetched or parsed is
+`unreadable` with a one-line reason. Each outcome is a fact in the report:
+the command exits 0 on any of them, writes nothing, and fetches only under
+the same limits `vendor` uses. `--from` keeps the copies whose record names
+one catalog address.
+
+### Apply a revision with vendor update
+
+`vendor update` re-runs the vendoring pipeline for one copy's recorded entry
+and origin into a directory that does not exist yet:
+
+```sh
+bun cli.ts vendor update vendor/algal --into vendor/algal-2
+```
+
+The fresh copy passes the same compile and digest checks as a first vendor.
+The result is an `algal.vendor-update.v1` proposal naming the pin the lock
+holds (`from`) and the pin a new copy would write (`to`). Applying it is the
+project's own choice: point the imports at the new directory, run `lock`
+again, and delete the old directory when nothing pins it. The command never
+edits a lock, never modifies or removes the pinned copy, and a page that no
+longer lists the entry, or lists digests the programs no longer compile to,
+refuses before anything is written.
+
+A project can also give catalog addresses names. A file
+`algal.registries.json` at the project root holds an `algal.registries.v1`
+record, a short list of names to catalog page addresses, and
+`vendor --from`, `vendor check --from`, and `lock --registries` read it. The
+lock records the names in its optional `registries` field so a lock stays
+self-describing; the field is data for `vendor` commands, never part of the
+verified pin, and a lock written without it is byte-identical to one written
+before the field existed.

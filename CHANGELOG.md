@@ -54,6 +54,28 @@ wire constant (`0.1.0`) is independent of these package versions.
   question and a generated pure adapter validates the provider's answer
   (range, required members, every declared label's probability) before
   downstream cells can consume it.
+- `algal vendor check <program.algal>` consults the catalog origin each
+  vendored copy's `algal.vendor.v1` record names — under the same fetch
+  limits as vendoring — and emits a digest-bearing `algal.vendor-check.v1`
+  report: per directory, `unchanged`, `update-available`, `removed`, or
+  `unreadable` (with the pinned and live page digests and a reason), every
+  outcome a fact rather than an abort. `algal vendor update <dir> --into
+  <dir>` re-vendors one copy's recorded entry and origin through the ordinary
+  pipeline into a fresh directory and emits an `algal.vendor-update.v1`
+  proposal naming the pin the lock holds and the pin a re-lock would write;
+  it never edits a lock, never mutates or deletes the pinned copy, and refuses
+  when the live page no longer lists the entry or its listed digests no longer
+  match. `algal.registries.json` (`algal.registries.v1`, at most 16 names)
+  lets `vendor --from` and `vendor check --from` resolve named catalog
+  addresses, and `lock --registries` records the same map in the lock's
+  optional, advisory `registries` field — parsed strictly, never verified,
+  and byte-identical output when absent. `lock`, `verify`, `dependencies`,
+  and `db` remain offline; only `vendor` subcommands fetch. SDK:
+  `checkVendoredCatalogs`, `proposeVendorUpdate`, `parseVendorCheck`,
+  `parseVendorUpdate`, `renderVendorCheck`, `vendorCheckToJson`,
+  `vendorUpdateToJson`, `parseVendorRegistries`, `readVendorRegistries`,
+  `vendorRegistryOrigin`, `catalogForOrigin`. Native parity is proposed, not
+  implemented.
 - `algal envelope <program.algal|manifest.json>` writes an
   `algal.authority-envelope.v1` report: a static review of a manifest and its
   compiled child closure before any cell runs. Per capability class it lists
