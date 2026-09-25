@@ -11,6 +11,11 @@ import { parseRunReceipt, RECEIPT_BOUNDS, receiptDigest, type RunOutcome, type R
 import { parseBundle, unpackBundle } from "./bundle";
 import { MemoryStore } from "./store-memory";
 import type { SourceCallOrigin, SourceCompilerOptions, SourcePosition, SourceSpan } from "./source";
+import {
+  captureSourceDependencyApplication, joinSourceDependencyApplication, SOURCE_DEPENDENCY_APPLICATION_BOUNDS,
+  type SourceDependencyApplication, type SourceDependencyApplicationOptions,
+} from "./source-dependencies-application";
+import { estimateSourceDependencyInvocations, SOURCE_DEPENDENCY_ESTIMATE_BOUNDS, type SourceDependencyEstimate } from "./source-dependencies-estimate";
 import { createSourceTrace } from "./source-trace";
 import { compareUtf8, utf8Length } from "./utf8";
 import { canonicalize, type JsonObject, type JsonValue } from "./values";
@@ -31,6 +36,10 @@ export const SOURCE_DEPENDENCY_BOUNDS = Object.freeze({
     maxBytes: RECEIPT_BOUNDS.maxBytes, maxDepth: RECEIPT_BOUNDS.maxDepth + 1, maxNodes: RECEIPT_BOUNDS.maxNodes,
     maxEntries: RECEIPT_BOUNDS.maxCells, maxStringBytes: RECEIPT_BOUNDS.maxBytes,
   }),
+  /** Saturation point of the optional invocation estimate. */
+  estimate: SOURCE_DEPENDENCY_ESTIMATE_BOUNDS,
+  /** Reads and kept rows of the optional application join. */
+  application: SOURCE_DEPENDENCY_APPLICATION_BOUNDS,
 });
 /** Cell kinds the source compiler emits today. Any other reachable kind is
  * rejected rather than assumed pure, including future compiler additions. */
@@ -135,8 +144,18 @@ export type SourceDependencyReport = {
   readonly occurrences: readonly SourceDependencyOccurrence[];
   readonly bundle?: SourceDependencyBundle;
   readonly execution?: SourceDependencyExecution;
+  /** Present when requested with `estimate: true`. */
+  readonly estimate?: SourceDependencyEstimate;
+  /** Present when requested with `application`. */
+  readonly application?: SourceDependencyApplication;
 };
-export type SourceDependencyOptions = { sourceOptions?: SourceCompilerOptions; bundle?: unknown; receipt?: unknown };
+export type SourceDependencyOptions = {
+  sourceOptions?: SourceCompilerOptions; bundle?: unknown; receipt?: unknown;
+  /** Add static invocation bounds per occurrence and module. */
+  estimate?: boolean;
+  /** Link modules and occurrences to one application's recorded revisions. */
+  application?: SourceDependencyApplicationOptions;
+};
 
 const reports = new WeakSet<SourceDependencyReport>();
 export function freezeDeep<T>(value: T): T {
@@ -387,7 +406,10 @@ function attributeReceipt(receipt: RunReceipt, occurrences: readonly SourceDepen
  * carry the recompiled root and every reachable child under matching digests;
  * missing children are never repaired from source. With `receipt`, recorded
  * cells are attributed to static occurrences after the receipt's identity is
- * bound to the recompiled root. Returns a frozen report.
+ * bound to the recompiled root. With `estimate`, every occurrence and module
+ * receives a static bound on invocations per root invocation. With
+ * `application`, modules and occurrences are linked to that application's
+ * recorded revisions. Returns a frozen report.
  */
 export async function createSourceDependencyReport(source: string, options: SourceDependencyOptions = {}): Promise<SourceDependencyReport> {
   // Foreign data is read once and captured synchronously, before the first await.
@@ -397,6 +419,10 @@ export async function createSourceDependencyReport(source: string, options: Sour
   const suppliedReceipt: unknown = options.receipt;
   const receipt = suppliedReceipt === undefined ? undefined
     : parseRunReceipt(boundedJsonSnapshot(suppliedReceipt, SOURCE_DEPENDENCY_BOUNDS.receipt, "source dependencies: receipt"));
+  const estimated: unknown = options.estimate;
+  if (estimated !== undefined && typeof estimated !== "boolean") throw new AlgalError("PARSE_FAILED", "source dependencies: estimate must be a boolean");
+  const suppliedApplication: unknown = options.application;
+  const application = suppliedApplication === undefined ? undefined : captureSourceDependencyApplication(suppliedApplication);
   if (receipt !== undefined && receiptDigest(receipt) !== receipt.digest) mismatch("receipt digest mismatch");
   const { compilation } = createSourceTrace(source, options.sourceOptions ?? {});
   const rootDigest = compilation.sourceMap.manifestDigest;
@@ -519,8 +545,12 @@ export async function createSourceDependencyReport(source: string, options: Sour
     source: key, sourceDigest: units[key]!.sourceDigest, manifestDigest: units[key]!.manifestDigest, calledFromEntry: calledSources.has(key),
   }));
   occurrences.sort((left, right) => comparePaths(left.path, right.path));
-  const execution = receipt === undefined ? undefined
-    : attributeReceipt(receipt, occurrences, new Map([...nodes.entries()].map(([digest, node]) => [digest, node.manifest])));
+  const manifests = new Map([...nodes.entries()].map(([digest, node]) => [digest, node.manifest]));
+  const execution = receipt === undefined ? undefined : attributeReceipt(receipt, occurrences, manifests);
+  const moduleDigests = modules.map(module => module.manifestDigest);
+  const estimate = estimated === true ? estimateSourceDependencyInvocations(occurrences, moduleDigests, nodes, receipt) : undefined;
+  const linked = application === undefined ? undefined
+    : await joinSourceDependencyApplication({ root: rootDigest, modules: moduleDigests, manifests, occurrences }, application);
   const report: SourceDependencyReport = {
     contract: SOURCE_DEPENDENCY_CONTRACT, entry,
     sourceDigest: compilation.sourceMap.sourceDigest, rootManifestDigest: rootDigest,
@@ -533,6 +563,8 @@ export async function createSourceDependencyReport(source: string, options: Sour
     sourceUnits, modules, occurrences,
     ...(installed === undefined ? {} : { bundle: { root: rootDigest, manifests: installed.manifests, values: installed.values, reachable: modules.length, unreachable: installed.manifests - modules.length } }),
     ...(execution === undefined ? {} : { execution }),
+    ...(estimate === undefined ? {} : { estimate }),
+    ...(linked === undefined ? {} : { application: linked }),
   };
   if (utf8Length(canonicalize(report as unknown as JsonValue)) > SOURCE_DEPENDENCY_BOUNDS.maxReportBytes) {
     throw new AlgalError("BUDGET_EXHAUSTED", `source dependencies: report exceeds ${SOURCE_DEPENDENCY_BOUNDS.maxReportBytes} bytes`);
@@ -565,6 +597,7 @@ function originText(origin: SourceDependencyOrigin): string {
 function own<T extends object, K extends keyof T>(value: T, key: K): T[K] | undefined {
   return Object.hasOwn(value, key) ? value[key] : undefined;
 }
+const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /** Render a report this module created. Foreign or modified report objects are
  * refused, so the renderer never presents unverified labels as compiler output.
@@ -589,6 +622,18 @@ export function renderSourceDependencies(report: SourceDependencyReport): string
   if (execution !== undefined) {
     lines.push(`Execution: ${execution.outcome} · receipt ${execution.receiptDigest} · digest-bound (not replay verification) · ${execution.work.steps} steps · ${execution.work.agentCalls} executor attempts · ${execution.work.units} work units · ${execution.reconciled ? "reconciled" : `not reconciled: ${execution.inconsistencies.join(", ")}`}`);
   }
+  const estimate = own(report, "estimate");
+  if (estimate !== undefined) {
+    const saturated = estimate.occurrences.filter(entry => own(entry, "saturated") === true).length;
+    const exceeded = own(estimate, "exceeded");
+    lines.push(`Estimate: invocations per root invocation from static structure · an upper bound on possible work, not observed work · cap ${estimate.cap}${saturated ? ` · ${plural(saturated, "saturated occurrence")}` : ""}${exceeded === undefined ? "" : exceeded.length === 0 ? " · recorded invocations within the bound" : ` · inconsistent: ${plural(exceeded.length, "occurrence")} recorded above the maximum`}`);
+  }
+  const linked = own(report, "application");
+  if (linked !== undefined) {
+    const { revisions, evaluations, evidence, manifests } = linked.counts;
+    lines.push(`Application: ${linked.name} · head ${linked.head} · ${plural(linked.counts.states, "state")} · digest-bound links from recorded evidence (evaluations not replayed)`);
+    lines.push(`Application evidence: revisions ${revisions.matched} matched, ${revisions.unmatched} unmatched, ${revisions.unresolved} unresolved · evaluation records ${evaluations.matched} matched, ${evaluations.unmatched} unmatched, ${evaluations.unreadable} unreadable · evidence records ${evidence.examined} examined, ${evidence.unreadable} unreadable · outside manifests ${manifests.examined} read, ${manifests.unreadable} unreadable${linked.omitted.entrypoints || linked.omitted.evaluations ? ` · omitted ${plural(linked.omitted.entrypoints, "entrypoint row")}, ${plural(linked.omitted.evaluations, "evaluation link")}` : ""}`);
+  }
   lines.push("", "Source files");
   for (const unit of report.sourceUnits) lines.push(`  ${unit.source}  ${unit.manifestDigest}  ${unit.calledFromEntry ? "reachable from entry" : "imported but not called"}`);
   lines.push("", "Modules");
@@ -612,6 +657,32 @@ export function renderSourceDependencies(report: SourceDependencyReport): string
       lines.push(`  ${entry.path.join("/") || "(root)"}  ${entry.invocations} invocation${entry.invocations === 1 ? "" : "s"} · ${counts.filter(([, count]) => count > 0).map(([label, count]) => `${count} ${label}`).join(", ") || "no recorded cells"}${entry.effectCells ? ` · ${entry.effectCells} effect cell${entry.effectCells === 1 ? "" : "s"}` : ""} · self ${entry.selfWork} · inclusive ${entry.inclusiveWork}`);
     }
     lines.push(`  Unattributed: ${execution.unattributed.cells} cell${execution.unattributed.cells === 1 ? "" : "s"} · ${execution.unattributed.work} work units`);
+  }
+  if (estimate !== undefined) {
+    const range = (entry: { readonly min: number; readonly max: number; readonly saturated?: true }): string =>
+      own(entry, "saturated") === true ? `${entry.min} to ${entry.max}+ (saturated)` : entry.min === entry.max ? `exactly ${entry.max}` : `${entry.min} to ${entry.max}`;
+    lines.push("", "Invocation bounds per root invocation");
+    for (const entry of estimate.occurrences) {
+      const recorded = own(entry, "recorded");
+      lines.push(`  ${entry.path.join("/") || "(root)"}  ${range(entry)}${recorded === undefined ? "" : ` · recorded ${recorded}${recorded > entry.max ? " · above the maximum" : ""}`}`);
+    }
+    lines.push("", "Module invocation bounds");
+    for (const entry of estimate.modules) lines.push(`  ${entry.manifestDigest}  ${names.get(entry.manifestDigest) ?? entry.manifestDigest}  ${range(entry)}`);
+  }
+  if (linked !== undefined) {
+    const indices = (list: readonly number[]): string => list.map(index => `[${index}]`).join(" ") || "none";
+    lines.push("", "Application revision entrypoints");
+    if (linked.entrypoints.length === 0) lines.push("  none contain a report module");
+    linked.entrypoints.forEach((row, index) => {
+      const activation = row.activation;
+      lines.push(`  [${index}] ${row.revision}  ${row.entrypoint}  ${row.manifest}`);
+      lines.push(`      ${row.root ? "contains the root" : "shares modules"}${row.complete ? "" : " · closure incomplete"} · ${activation === null ? "never activated" : `activated by ${activation.kind} at state ${activation.sequence}`}${row.current ? " · current" : ""}`);
+      for (const evaluation of row.evaluations) lines.push(`      evaluation ${evaluation.evaluation} ${evaluation.verdict} at state ${evaluation.parentSequence}`);
+    });
+    lines.push("", "Modules in application revisions");
+    for (const entry of linked.modules) lines.push(`  ${entry.manifestDigest}  ${names.get(entry.manifestDigest) ?? entry.manifestDigest}  ${indices(entry.entrypoints)}`);
+    lines.push("", "Occurrences in application revisions");
+    for (const entry of linked.occurrences) lines.push(`  ${entry.path.join("/") || "(root)"}  ${indices(entry.entrypoints)}`);
   }
   return `${printableText(lines.join("\n"))}\n`;
 }

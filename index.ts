@@ -15,6 +15,10 @@ export { createSourceTrace, resolveSourcePath, SOURCE_TRACE_BOUNDS } from "./src
 export type { SourceTraceContext, SourcePathResult, SourceTraceLocation, SourceTraceFrame } from "./src/source-trace";
 export { classifySourceDependencyCells, createSourceDependencyReport, renderSourceDependencies, SOURCE_DEPENDENCY_BOUNDS, SOURCE_DEPENDENCY_CELL_KINDS, SOURCE_DEPENDENCY_CONTRACT } from "./src/source-dependencies";
 export type { SourceDependencyBundle, SourceDependencyCaller, SourceDependencyEffect, SourceDependencyExecution, SourceDependencyExecutionOccurrence, SourceDependencyInconsistency, SourceDependencyInterface, SourceDependencyModule, SourceDependencyOccurrence, SourceDependencyOptions, SourceDependencyOrigin, SourceDependencyReport, SourceDependencyUnit } from "./src/source-dependencies";
+export { SOURCE_DEPENDENCY_ESTIMATE_BOUNDS } from "./src/source-dependencies-estimate";
+export type { SourceDependencyEstimate, SourceDependencyInvocationBound, SourceDependencyModuleInvocations } from "./src/source-dependencies-estimate";
+export { SOURCE_DEPENDENCY_APPLICATION_BOUNDS } from "./src/source-dependencies-application";
+export type { SourceDependencyApplication, SourceDependencyApplicationActivation, SourceDependencyApplicationEntrypoint, SourceDependencyApplicationEvaluation, SourceDependencyApplicationModuleLinks, SourceDependencyApplicationOccurrenceLinks, SourceDependencyApplicationOptions, SourceDependencyApplicationReader } from "./src/source-dependencies-application";
 export { createSourceLock, parseSourceLock, parseSourceLockCases, renderSourceLockVerification, sourceLockFixtureKeys, sourceLockToJson, verifySourceLock, SOURCE_LOCK_BOUNDS, SOURCE_LOCK_CONTRACT, SOURCE_LOCK_VERIFICATION_CONTRACT } from "./src/source-lock";
 export type { SourceLock, SourceLockCase, SourceLockDrift, SourceLockDriftKind, SourceLockEvaluation, SourceLockEvaluationCase, SourceLockFixture, SourceLockOptions, SourceLockUnit, SourceLockVerification, SourceLockVerifyOptions } from "./src/source-lock";
 export { createProgramDiagram, renderMermaid, renderSvg } from "./src/diagram";

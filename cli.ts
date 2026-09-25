@@ -103,10 +103,14 @@ usage:
       [--source-root <dir>] [--format json|text] [--out <file>]
                                               locate a recorded failure in its original source
   algal dependencies <program.algal> [--source-root <dir>] [--bundle <bundle.json>]
-      [--receipt <run.json>] [--format json|text] [--out <file>]
+      [--receipt <run.json>] [--estimate] [--application <name> [--dir <path>]]
+      [--format json|text] [--out <file>]
                                               report source files, modules, call paths, and effects;
                                               --bundle checks an artifact against the compiled closure;
-                                              --receipt attributes recorded cells and work to each call
+                                              --receipt attributes recorded cells and work to each call;
+                                              --estimate bounds how many times each call can run;
+                                              --application links each module to the application
+                                              revisions, evaluations, and activations that contain it
   algal lock <program.algal> [--source-root <dir>] [--out <lock.json>]
       [--evaluation <cases.json>] [--versions <labels.json>]
       [--verify <lock.json> [--evaluate]] [--format json|text]
@@ -903,11 +907,14 @@ async function main(): Promise<number> {
     }
 
     case "dependencies": {
-      if (positional.length !== 1) usageError("algal dependencies <program.algal> [--source-root <dir>] [--bundle <bundle.json>] [--receipt <run.json>] [--format json|text] [--out <file>]");
+      if (positional.length !== 1) usageError("algal dependencies <program.algal> [--source-root <dir>] [--bundle <bundle.json>] [--receipt <run.json>] [--estimate] [--application <name> [--dir <path>]] [--format json|text] [--out <file>]");
       for (const key of Object.keys(flags)) {
-        if (!["source-root", "bundle", "receipt", "format", "out"].includes(key)) usageError(`unknown dependencies option --${key}`);
-        artifactFlag(flags, key);
+        if (!["source-root", "bundle", "receipt", "estimate", "application", "dir", "format", "out"].includes(key)) usageError(`unknown dependencies option --${key}`);
+        if (key !== "estimate") artifactFlag(flags, key);
       }
+      if (flags.estimate !== undefined && flags.estimate !== true) usageError("--estimate is a boolean flag without a value");
+      const applicationName = artifactFlag(flags, "application");
+      if (flags.dir !== undefined && applicationName === undefined) usageError("--dir names the application store and requires --application");
       const { createSourceDependencyReport, renderSourceDependencies } = await import("./src/source-dependencies");
       const { RECEIPT_BOUNDS } = await import("./src/run");
       const format = artifactFlag(flags, "format") ?? "json";
@@ -917,10 +924,28 @@ async function main(): Promise<number> {
       const receiptPath = artifactFlag(flags, "receipt");
       const project = await readProject(positional[0]!);
       await distinctArtifactPaths([...project.files, ...(bundlePath === undefined ? [] : [resolve(bundlePath)]), ...(receiptPath === undefined ? [] : [resolve(receiptPath)])], [output]);
+      if (applicationName !== undefined && output !== undefined) {
+        // The application store is an input: a report must not overwrite its records.
+        const root = await realpath(resolve(dir)).catch(() => resolve(dir));
+        const target = resolve(output);
+        const parent = await realpath(dirname(target)).catch(() => dirname(target));
+        const inside = join(parent, basename(target));
+        if (inside === root || inside.startsWith(`${root}/`)) usageError("--out must not write inside the application store");
+      }
       // Both files are ordinary parsed data; the report still checks them under its own limits.
       const bundle = bundlePath === undefined ? undefined : await readJsonBounded(resolve(bundlePath), BOUNDS.maxBundleBytes, "bundle");
       const receipt = receiptPath === undefined ? undefined : await readJsonBounded(resolve(receiptPath), RECEIPT_BOUNDS.maxBytes, "run receipt");
-      const report = await createSourceDependencyReport(project.source, { sourceOptions: project.compilerOptions, ...(bundle === undefined ? {} : { bundle }), ...(receipt === undefined ? {} : { receipt }) });
+      // Reading validated history needs no admission authority; this host refuses every commit.
+      const application = applicationName === undefined ? undefined : {
+        name: applicationName,
+        reader: new (await import("./src/application")).ApplicationService(dir, {
+          admitCommit() { return Promise.reject(new AlgalError("CAPABILITY_DENIED", "dependencies reads application history only")); },
+        }),
+      };
+      const report = await createSourceDependencyReport(project.source, {
+        sourceOptions: project.compilerOptions, ...(bundle === undefined ? {} : { bundle }), ...(receipt === undefined ? {} : { receipt }),
+        ...(flags.estimate === true ? { estimate: true } : {}), ...(application === undefined ? {} : { application }),
+      });
       await emitArtifact(format === "text" ? renderSourceDependencies(report) : canonicalize(report as unknown as JsonValue), output);
       return 0;
     }
