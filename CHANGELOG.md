@@ -31,6 +31,16 @@ wire constant (`0.1.0`) is independent of these package versions.
   limits no longer use `Buffer`: an unpaired UTF-16 surrogate counts as the
   three bytes `TextEncoder` writes for it (U+FFFD), where Bun's
   `Buffer.byteLength` counted two.
+- `scripts/measure-source-scaling.ts` measures compile, bundle, and run cost
+  for every example source project and for generated projects that share
+  helpers, growing each until compilation refuses it on the instance, cell,
+  edge, manifest byte, import depth, or executor attempt limit, and records
+  where and after how much of the expansion it stopped.
+  `scripts/measure-history-scaling.ts` measures Browser Tasks history
+  verification separately as history approaches its transfer limits.
+  `docs/scale-measurements.md` publishes the results, and
+  `scripts/source-scaling.test.ts` fails when a published count stops matching
+  the compiler. Compiler and runtime behavior are unchanged.
 - Foundry configs accept an optional habitat budget, `budget: {work, attempts,
   runs}`, that covers every run of the activity: the generator, each
   candidate's cases, and holdout. An `algal.habitat-budget.v1` account reserves

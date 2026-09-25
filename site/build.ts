@@ -558,7 +558,7 @@ const pages: { file: string; out: string; meta: SitePageMeta }[] = [
 // repo and are not mirrored.
 
 const DOC_GROUPS: { title: string; pages: string[] }[] = [
-  { title: "Start here", pages: ["native-release", "native-workbench", "source-language", "scaling-programs", "library", "vm"] },
+  { title: "Start here", pages: ["native-release", "native-workbench", "source-language", "scaling-programs", "library", "scale-measurements", "vm"] },
   { title: "Vision", pages: ["vision", "lineage", "why-unique"] },
   { title: "Concepts", pages: ["algal-design", "design", "agent-loop-and-organism", "programmable-applications", "application-host-adapters", "executors", "model-router", "diagrams", "repair"] },
   { title: "Life and selection", pages: ["habitats", "civilization"] },
