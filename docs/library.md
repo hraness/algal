@@ -315,7 +315,7 @@ import score_task from "./vendor/algal/task-planning/score_task.algal"
 For a page at an https URL, `vendor` fetches each file from the page's host and
 follows a redirect only within that host; other schemes, including plain http,
 are refused. It reads at most 128 KiB for the page and 64 KiB for each of at
-most 16 files, and each request has 15 seconds. `--into` names a directory
+most 16 files, and gives each request 15 seconds. `--into` names a directory
 that does not exist yet, beneath the current directory, in plain segments of
 letters, digits, `.`, `_`, and `-`. `vendor` refuses a path through a symlink,
 never replaces a file, and runs nothing it downloads: compiling a program only
