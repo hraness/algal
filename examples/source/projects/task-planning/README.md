@@ -97,6 +97,8 @@ The native parity suite runs the compiled example in Rust and cross-verifies
 both runtimes' receipts.
 
 See [building larger programs](../../../../docs/scaling-programs.md) for how
-these module boundaries fit application state, effects, evaluation, and a
-future curated library. This example is independent of the browser task
-workspace; it does not change that workspace's ranking policy.
+these module boundaries fit application state, effects, and evaluation. The
+[shared program catalog](../../../../docs/library.md) lists the scoring and
+clamp programs, which the separate [support queue](../support-queue/README.md)
+also imports. This example is independent of the browser task workspace; it
+does not change that workspace's ranking policy.

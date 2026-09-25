@@ -201,6 +201,13 @@ it also attributes recorded invocations, cells, and work to each call.
 `lock` pins that closure and `lock --verify` reports source, compiler, and
 closure drift offline.
 
+The [shared program catalog](docs/library.md) lists pure programs that files in
+more than one project call. Its first entries are the planner's scoring and
+clamp programs, which a separate
+[support queue](examples/source/projects/support-queue/README.md) imports with
+`--source-root`. A test recompiles each entry and fails when a digest,
+interface, or caller on the page no longer matches the source.
+
 `check` also reports the source entry, file count, inferred maximum executor
 attempts, and required nesting depth. For the two-file inbox project these
 are four attempts and one child level. These are structural bounds, not a

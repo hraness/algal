@@ -136,12 +136,13 @@ migration.
 
 ## Build a standard library in layers
 
-ALGAL has expression operations and host registries. A broader curated program
-library is proposed. Keep its entries separated by what they require:
+ALGAL has expression operations, host registries, and a
+[shared program catalog](library.md) for the first layer below. The other
+layers are proposed. Keep entries separated by what they require:
 
 | Layer | Examples | What a caller needs to know |
 | --- | --- | --- |
-| Pure portable operations | Arithmetic, strings, records, lists, and the task planner's reusable clamp program | Input/result shapes, error behavior, value limits, and deterministic work cost. |
+| Pure portable operations | Arithmetic, strings, records, lists, and the catalog's clamp and scoring programs | Input/result shapes, error behavior, value limits, and deterministic work cost. |
 | Pure host functions | Built-in `fn` registry operations | Host implementation, signature, work cost, and matching behavior across runtimes. |
 | Host effects and capability tools | Mailboxes, allowed storage operations, model execution, and environmental input | Required permissions, adapter identity, idempotency, and recovery after uncertain completion. |
 | Application patterns | Finite fan-out, approval and resume, propose/evaluate/select, evidence forks, and migration | State ownership, total budgets, revision dependencies, and failure/recovery behavior. |
@@ -152,16 +153,17 @@ or measured cost justifies it. Portable primitives need matching values,
 failures, and work accounting across runtimes. Application patterns can remain
 examples built from the normal contracts.
 
-A proposed catalog entry should include its interface, digest, compiler and
-runtime requirements, documentation, tests, evaluation conditions, and known
-limits. Begin with repository-local programs and demonstrated callers. A
-package server or automatic dependency resolution is not required to establish
-useful reuse.
-
-The task-planning project has two entries today: the batch planner and a
-single-task inspector that reuses the same scoring and clamp programs under
-identical executable digests, with failure examples for bad input. That is a
-demonstrated second caller, not yet a curated library.
+Each catalog entry records its path, executable and interface digests,
+interface, meaning, rejected inputs, limits, callers, tests, compiler,
+maintainer, and status. An entry needs calling files in at least two projects,
+and every program it calls must also be an entry. The task planner's scoring
+and clamp programs are the first entries: a separate
+[support queue](../examples/source/projects/support-queue/README.md) imports
+them through a wider source root and compiles them to the same executable
+digests. A test recompiles every entry and calling project and fails when the
+page stops matching the source. The catalog is repository-local, with no
+package server or automatic dependency resolution. Conditions for evaluating a
+revised entry remain proposed.
 
 ## Scale programs and habitats separately
 
@@ -236,10 +238,10 @@ the report with application revisions and evaluation records remains proposed.
 2. Join the dependency report with application revisions: evaluation and
    activation links per occurrence, and a bounded estimate of dynamic
    invocations under branches and item limits. Receipt attribution is available.
-3. Extract a small pure library from multiple applications. The task planner
-   now has a second caller with failure examples; a curated index still needs
-   entries from more than one application, plus comparison of library revisions
-   on pinned cases and unseen cases before activation.
+3. Compare library revisions on pinned cases and unseen cases before
+   activation. The [shared program catalog](library.md) checks each entry's
+   digests and callers across two projects; it does not evaluate a revised
+   entry against its callers' cases.
 4. Add richer source record and result types for demonstrated application needs.
    Lower them to checks the runtime enforces; new validation semantics need
    versioned specification and cross-runtime tests.
