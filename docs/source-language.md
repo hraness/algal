@@ -475,6 +475,15 @@ Here `options.modules` maps those paths to source strings; the returned
 pure compiler never reads the filesystem itself. The loader supplies that
 closed source set.
 
+In a browser bundle, import `compileSource` from `@hraness/algal/source` and
+`createSourceErrorReport` and `renderSourceError` from
+`@hraness/algal/source-errors`, and pass every imported file in
+`options.modules`. `loadSourceProject` reads files and is exported only from
+the package root. The compiler checks each expression it emits with the
+WebAssembly evaluator, so instantiate `@hraness/algal/algal_expr.wasm` and pass
+its exports to `setExprExports` from `@hraness/algal/expr` before the first
+compile.
+
 ### Local resolution has a boundary
 
 Imports name relative `.algal` files. The default project root is the entry

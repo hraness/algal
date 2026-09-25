@@ -45,7 +45,9 @@
     "./digest": "./src/digest.ts",
     "./values": "./src/values.ts",
     "./errors": "./src/errors.ts",
-    "./store-contract": "./src/store-contract.ts"
+    "./store-contract": "./src/store-contract.ts",
+    "./source": "./src/source.ts",
+    "./source-errors": "./src/source-errors.ts"
   },
   "bin": {
     "algal": "./cli.ts"

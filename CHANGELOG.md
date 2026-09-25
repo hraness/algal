@@ -9,6 +9,15 @@ wire constant (`0.1.0`) is independent of these package versions.
 
 ## Unreleased
 
+- Package subpaths `./source` and `./source-errors` let a browser bundle
+  compile `.algal` source. `compileSource` takes every source file as a
+  string, and `createSourceErrorReport` and `renderSourceError` format its
+  errors. Before compiling, a browser host instantiates `./algal_expr.wasm`
+  and passes its exports to `setExprExports` from `./expr`.
+  `loadSourceProject` reads files and remains on the root entry. Source byte
+  limits no longer use `Buffer`: an unpaired UTF-16 surrogate counts as the
+  three bytes `TextEncoder` writes for it (U+FFFD), where Bun's
+  `Buffer.byteLength` counted two.
 - Foundry configs accept an optional habitat budget, `budget: {work, attempts,
   runs}`, that covers every run of the activity: the generator, each
   candidate's cases, and holdout. An `algal.habitat-budget.v1` account reserves

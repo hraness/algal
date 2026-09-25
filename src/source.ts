@@ -3,6 +3,7 @@
 import { BOUNDS, manifestToJson, parseOrganismManifest, type AgentOutput, type Budgets, type Cell, type Edge, type OrganismManifest, type PortMap, type PortType } from "./contract";
 import { digestCanonical, digestText, type Digest } from "./digest";
 import { AlgalError } from "./errors";
+import { utf8Length } from "./utf8";
 import { canonicalize, type JsonObject, type JsonValue } from "./values";
 
 export const SOURCE_VERSION = "algal.source.v1" as const;
@@ -77,7 +78,7 @@ export class SourceError extends AlgalError {
     };
     // Full source is available only to an in-process formatter. It is neither
     // diagnostic JSON nor an enumerable error field; oversized text is absent.
-    if (context.sourceText !== undefined && Buffer.byteLength(context.sourceText) <= SOURCE_BOUNDS.maxSourceBytes) {
+    if (context.sourceText !== undefined && utf8Length(context.sourceText) <= SOURCE_BOUNDS.maxSourceBytes) {
       Object.defineProperty(this, "sourceText", { value: context.sourceText, enumerable: false, writable: false, configurable: false });
     }
   }
@@ -121,7 +122,7 @@ class Parser {
   private nodes = 0;
   private readonly records = new Map<string, SourceRecord>();
   constructor(readonly source: string) {
-    if (Buffer.byteLength(source) > SOURCE_BOUNDS.maxSourceBytes) this.fail("source exceeds 65536 UTF-8 bytes", { start: 0, end: 0 });
+    if (utf8Length(source) > SOURCE_BOUNDS.maxSourceBytes) this.fail("source exceeds 65536 UTF-8 bytes", { start: 0, end: 0 });
     let i = 0;
     while (i < source.length) {
       const rest = source.slice(i);
@@ -828,7 +829,7 @@ export function compileSource(source: string, options: SourceCompilerOptions = {
         if (sources.get(key) !== text) throw new SourceError(`entry source differs from modules[${JSON.stringify(key)}]`, originSpan);
         return;
       }
-      const bytes = Buffer.byteLength(text);
+      const bytes = utf8Length(text);
       if (bytes > SOURCE_BOUNDS.maxSourceBytes) throw new SourceError(`source exceeds ${SOURCE_BOUNDS.maxSourceBytes} UTF-8 bytes`, originSpan);
       if (sources.size >= SOURCE_PROJECT_BOUNDS.maxFiles) throw new SourceError(`source project exceeds ${SOURCE_PROJECT_BOUNDS.maxFiles} files`, originSpan);
       totalBytes += bytes;
