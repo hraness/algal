@@ -9,6 +9,22 @@ wire constant (`0.1.0`) is independent of these package versions.
 
 ## Unreleased
 
+- `--executor-profile isolated` runs `--executor-cmd`, shell commands in
+  `--executors` maps, and `cmd:` bench specs under a declared isolation
+  profile: the child's environment is reduced to a fixed set plus
+  operator-named variables (`--executor-env` `NAME` inherits the host value
+  at call time, `NAME=value` declares a digested fixed value), it starts in
+  `--executor-cwd` (default `.`), and a fixed POSIX wrapper applies
+  declared `ulimit` bounds before `exec` (`--executor-limits` with
+  `cpuSeconds`, `fileSizeBlocks`, `openFiles`, `processes`,
+  `addressSpaceKiB`, `stackKiB`, `noCore`; the default set is
+  `cpuSeconds=60,noCore`, `none` clears it). A knob the platform cannot
+  apply is refused at admission; the allowlist, working directory, declared
+  limits, per-limit enforcement truth, and platform all feed the executor's
+  recorded `configurationDigest`, so a weaker posture never shares a
+  stronger profile's identity. SDK: `isolatedCommandExecutor`,
+  `resolveIsolation`, `ISOLATION_BOUNDS`. Native parity is proposed, not
+  implemented; tool-registry `cmd:` execs are not covered.
 - `algal envelope <program.algal|manifest.json>` writes an
   `algal.authority-envelope.v1` report: a static review of a manifest and its
   compiled child closure before any cell runs. Per capability class it lists

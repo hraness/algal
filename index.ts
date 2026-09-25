@@ -116,6 +116,17 @@ export type {
   ExecutorResult,
 } from "./src/effects";
 
+export {
+  isolatedCommandExecutor,
+  ISOLATION_BOUNDS,
+  resolveIsolation,
+} from "./src/isolation";
+export type {
+  CommandIsolation,
+  IsolationLimits,
+  ResolvedIsolation,
+} from "./src/isolation";
+
 export { VERCEL_AI_GATEWAY_BASE_URL, vercelGatewayExecutor } from "./src/gateway";
 export type { GatewayExecutorOptions, GatewayFetch } from "./src/gateway";
 export { lookupGatewayGenerationCost } from "./src/gateway-accounting";

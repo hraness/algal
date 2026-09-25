@@ -23,6 +23,7 @@ import packageJson from "./package.json" with { type: "json" };
 // helper) that needs it: `--help`, `store`, and the listing commands never
 // pay for the run graph, executors, or the job/repair/shepherd stack.
 import type { Executor } from "./src/effects";
+import type { CommandIsolation, IsolationLimits } from "./src/isolation";
 import type { FileStore, Store } from "./src/store";
 import type { RunReceipt } from "./src/run";
 import type { Transport } from "./src/transport";
@@ -142,6 +143,16 @@ usage:
       --responses <file>                      scripted agent outputs (JSON map)
       --executor-cmd <shell command>          live executor: request on stdin, output on stdout
       --executor-timeout-ms <ms>              command-executor effect timeout (default 120000, max 600000)
+      --executor-profile isolated             run command executors under a declared isolation
+                                                profile: scrubbed environment, fixed working
+                                                directory, OS-applied resource limits
+      --executor-cwd <dir>                    isolated command working directory (default: .)
+      --executor-env <list>                   child-visible variables: NAME or NAME=value,
+                                                comma-separated, up to 32
+      --executor-limits <list>                declared resource limits (replaces the default
+                                                cpuSeconds=60,noCore set): cpuSeconds,
+                                                fileSizeBlocks, openFiles, processes,
+                                                addressSpaceKiB, stackKiB, noCore; "none" clears
       --gateway-model <provider/model>        Vercel AI Gateway structured-output executor
       --base-url <url> --model <model>         OpenAI-compatible endpoint (HTTPS or loopback HTTP)
       --credential-env <name>                 endpoint credential environment variable (optional)
@@ -296,7 +307,8 @@ usage:
                                               --interface maps named interface arguments and
                                               returns only declared interface outputs.
                                               options mirror algal run: --args, --responses,
-                                              --executor-cmd, --gateway-model, --jev, --recall,
+                                              --executor-cmd, --executor-profile, --gateway-model,
+                                              --jev, --recall,
                                               --executors, --modules, --tools, --cache-effects, --dir
   algal tool-def <manifest.json> [--modules <dir>]
                                               print an OpenAI/Anthropic tool definition for the
@@ -682,6 +694,74 @@ async function resolveTools(
     : mergeToolRegistries(standard, await loadTools(String(flags.tools)));
 }
 
+/** `--executor-profile isolated` plus its sub-flags → the declared isolation
+ * posture every command executor in this invocation runs under. Without the
+ * profile the sub-flags are usage errors; with it, bare `isolated` means a
+ * scrubbed environment, a fixed directory, and the default CPU/core limits. */
+async function commandIsolationFlags(
+  flags: Record<string, string | boolean>,
+): Promise<CommandIsolation | undefined> {
+  const profile = artifactFlag(flags, "executor-profile");
+  const dependent = ["executor-cwd", "executor-env", "executor-limits"].find((k) => flags[k] !== undefined);
+  if (profile === undefined) {
+    if (dependent !== undefined) usageError(`--${dependent} requires --executor-profile isolated`);
+    return undefined;
+  }
+  if (profile !== "isolated") usageError("--executor-profile must be isolated");
+  const cwdFlag = artifactFlag(flags, "executor-cwd");
+  let cwd: string;
+  try {
+    // Canonicalize so the recorded directory is the physical one.
+    cwd = await realpath(cwdFlag === undefined ? process.cwd() : resolve(cwdFlag));
+  } catch {
+    usageError(`--executor-cwd does not resolve to a directory: ${cwdFlag ?? process.cwd()}`);
+  }
+  const envInherit: string[] = [];
+  const envSet: Record<string, string> = {};
+  const envFlag = artifactFlag(flags, "executor-env");
+  if (envFlag !== undefined) {
+    for (const entry of envFlag.split(",")) {
+      const eq = entry.indexOf("=");
+      if (entry.length === 0 || eq === 0) {
+        usageError("--executor-env entries are NAME or NAME=value");
+      }
+      if (eq < 0) envInherit.push(entry);
+      else envSet[entry.slice(0, eq)] = entry.slice(eq + 1);
+    }
+  }
+  // Replaceable default: a bare `isolated` profile still bounds CPU and
+  // refuses core dumps. `--executor-limits` restates the whole set; `none`
+  // leaves the limits empty.
+  let limits: IsolationLimits = { cpuSeconds: 60, noCore: true };
+  const limitsFlag = artifactFlag(flags, "executor-limits");
+  if (limitsFlag !== undefined) {
+    const parsed: { -readonly [K in keyof IsolationLimits]?: IsolationLimits[K] } = {};
+    if (limitsFlag !== "none") {
+      for (const entry of limitsFlag.split(",")) {
+        const eq = entry.indexOf("=");
+        const key = (eq < 0 ? entry : entry.slice(0, eq)).trim();
+        const raw = eq < 0 ? undefined : entry.slice(eq + 1);
+        if (key === "noCore") {
+          if (raw !== undefined && raw !== "true" && raw !== "1") {
+            usageError("executor limit noCore takes no value");
+          }
+          parsed.noCore = true;
+          continue;
+        }
+        if (!["cpuSeconds", "fileSizeBlocks", "openFiles", "processes", "addressSpaceKiB", "stackKiB"].includes(key)) {
+          usageError(`unknown executor limit "${key}" (want cpuSeconds, fileSizeBlocks, openFiles, processes, addressSpaceKiB, stackKiB, or noCore)`);
+        }
+        if (raw === undefined) usageError(`executor limit ${key} requires a value`);
+        const value = Number(raw);
+        if (!Number.isInteger(value)) usageError(`executor limit ${key} must be an integer`);
+        (parsed as Record<string, number>)[key] = value;
+      }
+    }
+    limits = parsed;
+  }
+  return { cwd, envInherit, envSet, limits };
+}
+
 /** Live executors from the shared run/call/resume flag set: `--responses`
  * fixtures are wildcard scripted executors, `--executors` names host
  * adapters (cmd / jev / recall specs keep their capability declarations). */
@@ -705,6 +785,14 @@ async function resolveExecutors(
   if (responseFormat !== undefined && !["json_schema", "json_object", "prompt"].includes(responseFormat))
     usageError("--response-format must be json_schema, json_object, or prompt");
   const { commandExecutor, scriptedExecutor } = await import("./src/effects");
+  const isolation = await commandIsolationFlags(flags);
+  const { isolatedCommandExecutor } = isolation === undefined
+    ? { isolatedCommandExecutor: undefined }
+    : await import("./src/isolation");
+  const forCommand = (cmd: string, opts: { timeoutMs?: number } = {}): Executor =>
+    isolation === undefined
+      ? commandExecutor(cmd, opts)
+      : isolatedCommandExecutor!(cmd, { ...opts, isolation });
   const executors: Executor[] = [];
   if (baseUrl !== undefined && endpointModel !== undefined) {
     const { openAICompatibleExecutor } = await import("./src/openai-compatible");
@@ -722,7 +810,7 @@ async function resolveExecutors(
   }
   if (flags["executor-cmd"] !== undefined) {
     const tms = flags["executor-timeout-ms"];
-    executors.push(commandExecutor(String(flags["executor-cmd"]),
+    executors.push(forCommand(String(flags["executor-cmd"]),
       tms !== undefined
         ? { timeoutMs: asInt(Number(tms), "executor-timeout-ms", 1, 600_000) }
         : {}));
@@ -767,7 +855,7 @@ async function resolveExecutors(
         executors.push(named(name, recall));
         continue;
       }
-      const inner = commandExecutor(cmd);
+      const inner = forCommand(cmd);
       executors.push(named(name, inner));
     }
     diag(`loaded ${Object.keys(map).length} named executor(s)`);
@@ -2153,6 +2241,7 @@ async function main(): Promise<number> {
           expect: asRecord(c.expect, `bench config.cases[${i}].expect`),
         };
       });
+      const benchIsolation = await commandIsolationFlags(flags);
       const resolveSpec = async (id: string, spec: string): Promise<Executor> => {
         if (spec.startsWith("gateway:")) {
           const { vercelGatewayExecutor } = await import("./src/gateway");
@@ -2170,7 +2259,11 @@ async function main(): Promise<number> {
           return named(id, scriptedExecutor(responses, id));
         }
         if (spec.startsWith("cmd:")) {
-          return named(id, commandExecutor(spec.slice("cmd:".length)));
+          const specCommand = spec.slice("cmd:".length);
+          const specExecutor = benchIsolation === undefined
+            ? commandExecutor(specCommand)
+            : (await import("./src/isolation")).isolatedCommandExecutor(specCommand, { isolation: benchIsolation });
+          return named(id, specExecutor);
         }
         throw new AlgalError(
           "PARSE_FAILED",
