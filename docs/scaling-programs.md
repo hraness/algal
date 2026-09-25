@@ -317,9 +317,26 @@ shipped:
    TypeScript; see
    [habitat schedules](../spec/v1/foundry.md#habitat-schedules).
 
-Still proposed: scheduling experiment evaluations and further order kinds
-beside round-robin, and native support for replay comparison and ordering
-exploration.
+The next round closes the gaps a generated-program workflow would hit:
+
+1. Isolate untrusted cell work physically. `fn` and `agent` cells run
+   admitted host code under a contractual bound; a generated program could
+   still hang or exhaust the host between checkpoints. Resource-limited
+   subprocess backends and a WASM executor for untrusted pure compute would
+   make a declared budget enforced rather than advisory. The manifest stays
+   data, and isolation becomes a property of the backend the host attaches,
+   which the receipt already binds by configuration digest.
+2. Port replay and ordering to the native runtime. The Rust CLI refuses
+   `replay`, `ordering`, and `process replay` explicitly; identical records
+   in both runtimes would extend the parity both runtimes already hold for
+   schedules.
+3. Grow the catalog into a registry. Vendored entries pin their origin and
+   catalog digest but never contact it again; a registry source with
+   vendored-update proposals would let a project learn that a pinned entry's
+   origin published a revision, while verification stays offline.
+
+Scheduling experiment evaluations and further order kinds beside
+round-robin remains proposed inside item 2's runtime.
 
 The [cumulative-skill experiment](vision.md#what-would-justify-the-claim)
 measures whether keeping and composing procedures improves later work. More
