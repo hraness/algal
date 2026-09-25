@@ -185,3 +185,10 @@ It was admitted for that earlier snapshot and does not qualify the integrated
 tree. Earlier 153-, 199-, 224-, 279-, 372- and 432-claim receipts also remain
 historical milestones; none substitutes for a fresh required gate after its
 source bindings change.
+
+The [684-theorem checkpoint on `1a75837`](../../verify/results/f7ea56a1c69c8f494fa7855e8b361075db12a9c661c84d2bb5aa05d5861ff8ff/core-model.json)
+is the first aggregate receipt for the integrated `FiniteNeighbors`,
+`IntervalSearch`, `RationalBracket` and 37-theorem `RationalSelector` modules,
+which bring `Algal.Core` to 24 modules (1,862 module theorems,
+seven rejected controls, native vector artifact `6d9f5a78e9d30397b29699cc49f003d659c75381f3cd4e44986e83fe5e4508d5`). It
+supersedes the 564-theorem receipt for the integrated source.

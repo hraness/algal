@@ -494,7 +494,29 @@ Independent raw rechecking passed all 661 TLC calls, 564 authored Lean theorems
 include the raw records. The ledger retains 119 obligations, 103 not started and
 16 observed, with zero licensed production proof claims.
 
-Main subsequently advanced through the portable task workspace and site changes
-to `3f81f0ab65961959cbbbf32e6fdc7f908c201483`. Those changes and reviewed
-application-history, spawn, expression-corpus and Lean bracket candidates are the
-next integration batch. Their final aggregate and repository CI are pending.
+### Upstream 7a5c126 merged checkpoint
+
+Main advanced through the portable task workspace, site and model-router changes
+to `7a5c126`. Merge commit `18a11b7` and registration commit `d686f34` carry the
+reviewed application-history, spawn, expression-corpus, Lean bracket and Lean
+selector candidates, the browser-triage replay repair and rebound evidence
+inputs. [Checkpoint evidence and limits](formal-verification-evidence/upstream-1737.md)
+record the repair measurements: the capacity test took 125.1 s under its
+unchanged 180 s deadline, and no deadline was widened.
+
+Commit `1a75837` then passed the repository check (1,640 tests, 20
+explicit skips), the host-scheduled native gate on unchanged Cargo inputs, all
+20 runtime comparison commands and 28 Chromium checks. The complete
+26-suite formal aggregate returned a passing result for 1029 governed
+inputs at `sha256:96dfb32792103a2c026a2c27205489627404cfeb3c2a3b4af8c7cae5514921a6`. Independent raw rechecking passed all 661 TLC
+calls, 684 authored Lean theorems (1,862 module theorems)
+across 24 modules, seven rejected Lean controls, 206 scheduler
+comparisons, 4 generated application histories, 115 corpus
+cases and 17 dynamic-spawn fixtures. TLC now checks liveness only on
+the exhausted graph (`-lncheck final`); admission was not relaxed and no deadline
+changed.
+
+The ledger retains 120 obligations, 104 not started and 16 observed, with zero
+licensed production proof claims. Phases 06–09 remain in progress. No remote
+integration, live-provider qualification or whole-system correctness claim
+follows.

@@ -1,0 +1,1 @@
+{"program":["if",["and",["not",["not",true]],["and",["lt",-4,-6],["and",false,true]]],["neg",6],["add",["add",["neg",1],["neg",-8]],["sub",["add",7,9],["sub",5,-7]]]],"env":{},"fuel":10000}

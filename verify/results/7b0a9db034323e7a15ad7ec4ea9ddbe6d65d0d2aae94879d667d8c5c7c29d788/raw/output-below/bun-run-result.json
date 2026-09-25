@@ -1,0 +1,1 @@
+{"requests":[{"budget":{"maxContextBytes":65536,"maxOutputBytes":2},"cellId":"leaf","context":{"inputs":{},"turn":0},"contract":"algal.effect.v1","kind":"agent","output":{"kind":"text"},"prompt":"fixture"}],"selfVerification":{"digest":"sha256:5cba42ee41f643014632b906eea111de7e66caf0217830873714618850f0a469","mismatches":[],"ok":true,"outcome":"failed"}}
