@@ -99,7 +99,7 @@
     },
     {
       "path": "crates/algal/Cargo.toml",
-      "sha256": "sha256:15bf1c308c46edd88cdc9b4901fa554e3933eaabb42cc3b418f28c8e4f148de4"
+      "sha256": "sha256:2a47f9afd0a5f2a0b86bbbe47ecb168cb39da386f93bb7432b43e43f536cf835"
     },
     {
       "path": "scripts/build-expr-wasm.sh",
@@ -107,7 +107,7 @@
     },
     {
       "path": "verify/artifact/run.ts",
-      "sha256": "sha256:5b712e70b4eb908410d42e272bc2f6d311a719a8eb7ee51d846ea2ad774e577e"
+      "sha256": "sha256:c20f6de971b4e7d2fabeeaebd8732b6c83c0ec76751192f05e94d5af8cd19ef7"
     },
     {
       "path": "verify/boundary/run.ts",
@@ -119,7 +119,7 @@
     },
     {
       "path": "verify/lib/command-supervisor.ts",
-      "sha256": "sha256:ce6cb3bb0ac430f30d659ff6ecc352ee7c2ac3a35b021539a8d171dd0d1a580d"
+      "sha256": "sha256:32b3df9fdc1670247ef8083acf866012c77dda75f790391acb9797b73a8ed7bc"
     },
     {
       "path": "verify/lib/files.ts",
@@ -127,7 +127,7 @@
     },
     {
       "path": "verify/lib/runner.ts",
-      "sha256": "sha256:055785d9cae76a62ac1a22a4bc2c1d6834cf1eccd200023286101633ca1b8925"
+      "sha256": "sha256:f4c615ccb7d2c584e6135d16a7ae0b701cb79c3b9cfb868fa630ea5bd65fb7d9"
     },
     {
       "path": "verify/lib/schema.ts",
