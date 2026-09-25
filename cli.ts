@@ -213,6 +213,13 @@ usage:
   algal bench inspect <report.json>       summarize a pareto comparison
   algal suite                             run and verify all bundled examples
   algal digest <manifest.json>            print the manifest's canonical digest
+  algal library compare <name> <revision.algal> [--unseen <cases.json>]
+      [--repository <dir>] [--verify <record.json>] [--format json|text] [--out <file>]
+                                              compare a revision of a shared catalog program
+                                              with its listed version on each caller's cases
+                                              and the pinned unseen cases (exit 1 if it fails);
+                                              --verify reruns it and checks a saved record
+  algal library unseen <cases.json>       check an unseen case file, print its digest
   algal store put <value.json> [--dir <path>]
                                               write a JSON value to CAS, print its ref token
   algal store get <sha256:…> [--dir <path>]
@@ -1034,6 +1041,45 @@ async function main(): Promise<number> {
       const manifest = await readManifest(file);
       out({ digest: digestCanonical(manifestToJson(manifest)) });
       return 0;
+    }
+
+    case "library": {
+      const { libraryComparisonToJson, parseLibraryUnseenCases, renderLibraryComparison, LIBRARY_COMPARISON_BOUNDS, LIBRARY_UNSEEN_CASES_CONTRACT } = await import("./src/library-comparison");
+      if (positional[0] === "unseen") {
+        if (positional.length !== 2 || Object.keys(flags).length > 0) usageError("algal library unseen <cases.json>");
+        const parsed = parseLibraryUnseenCases(await readJsonBounded(resolve(positional[1]!), LIBRARY_COMPARISON_BOUNDS.unseen.maxBytes, "unseen cases"));
+        out({ contract: LIBRARY_UNSEEN_CASES_CONTRACT, cases: parsed.cases.length, digest: parsed.digest });
+        return 0;
+      }
+      const usage = "algal library compare <name> <revision.algal> [--unseen <cases.json>] [--repository <dir>] [--verify <record.json>] [--format json|text] [--out <file>]";
+      if (positional[0] !== "compare" || positional.length !== 3 || !positional[2]!.endsWith(".algal")) usageError(usage);
+      for (const key of Object.keys(flags)) {
+        if (!["unseen", "repository", "verify", "format", "out"].includes(key)) usageError(`unknown library compare option --${key}`);
+        artifactFlag(flags, key);
+      }
+      const format = artifactFlag(flags, "format") ?? "json";
+      if (format !== "json" && format !== "text") usageError("library compare format must be json or text");
+      const { compareLibraryRevision, verifyLibraryComparison, LIBRARY_INDEX_PAGE } = await import("./src/library-compare");
+      const { loadSourceFixtures } = await import("./src/source-project");
+      const { SOURCE_BOUNDS } = await import("./src/source");
+      const repository = resolve(artifactFlag(flags, "repository") ?? ".");
+      const output = artifactFlag(flags, "out");
+      const unseenPath = artifactFlag(flags, "unseen");
+      const verifyPath = artifactFlag(flags, "verify");
+      const revisionPath = resolve(positional[2]!);
+      await distinctArtifactPaths([revisionPath, join(repository, LIBRARY_INDEX_PAGE), ...[unseenPath, verifyPath].flatMap(path => path === undefined ? [] : [resolve(path)])], [output]);
+      // The revision is read like a source file: a regular UTF-8 file within the source byte limit.
+      const revisionFile = await realpath(revisionPath).catch((error: NodeJS.ErrnoException) => {
+        throw new AlgalError("IO_FAILED", `cannot read revision ${positional[2]!} (${error.code ?? "IO_FAILED"})`);
+      });
+      const revision = (await loadSourceFixtures(dirname(revisionFile), [basename(revisionFile)], SOURCE_BOUNDS.maxSourceBytes))[basename(revisionFile)]!;
+      const unseen = unseenPath === undefined ? undefined : await readJsonBounded(resolve(unseenPath), LIBRARY_COMPARISON_BOUNDS.unseen.maxBytes, "unseen cases");
+      const options = { repository, name: positional[1]!, revision, ...(unseen === undefined ? {} : { unseen }) };
+      const record = verifyPath === undefined ? await compareLibraryRevision(options)
+        : await verifyLibraryComparison(await readJsonBounded(resolve(verifyPath), LIBRARY_COMPARISON_BOUNDS.record.maxBytes, "library comparison"), options);
+      await emitArtifact(format === "text" ? renderLibraryComparison(record) : canonicalize(libraryComparisonToJson(record)), output);
+      // 1 means the comparison ran and did not pass; a record that --verify cannot reproduce exits 2.
+      return record.verdict.passed ? 0 : 1;
     }
 
     case "store": {
