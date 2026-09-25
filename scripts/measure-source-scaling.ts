@@ -38,8 +38,8 @@ import { MemoryStore } from "../src/store-memory";
 import { canonicalize, type JsonValue } from "../src/values";
 import {
   EXAMPLE_COLUMNS, EXAMPLE_PROJECTS, REFUSAL_COLUMNS, REPOSITORY, SHAPES, SHAPE_COLUMNS, TABLE_HEADINGS,
-  evaluate, exampleRow, failureReason, growthSizes, installed, loadShapeFixtures, markdownTable, materializeExample, materializeShape,
-  referenceRun, refusalRow, shapeRow, summarizeRun,
+  evaluate, exampleRow, growthSizes, installed, loadShapeFixtures, markdownTable, materializeExample, materializeShape, measuredRun,
+  refusalRow, shapeRow,
   type Accepted, type Materialized, type Rejection, type RunSummary, type Structure,
 } from "./source-scaling";
 
@@ -136,9 +136,9 @@ async function packTimes(accepted: Accepted) {
 async function runTimes(accepted: Accepted, input: Materialized, expected: RunSummary) {
   return sample(async () => {
     const started = now();
-    const receipt = await referenceRun(accepted.project, input);
+    const measured = await measuredRun(accepted.project, input);
     const elapsed = now() - started;
-    if (canonicalize(summarizeRun(receipt) as unknown as JsonValue) !== canonicalize(expected as unknown as JsonValue)) throw new Error(`${input.id}: the reference run changed between repetitions`);
+    if (canonicalize(measured.summary as unknown as JsonValue) !== canonicalize(expected as unknown as JsonValue)) throw new Error(`${input.id}: the reference run changed between repetitions`);
     return { run: elapsed };
   });
 }
@@ -210,9 +210,9 @@ async function measure(input: Materialized): Promise<Measured> {
     const { accepted: _accepted, ...rejection } = evaluation;
     return { id: input.id, size: input.size, accepted: false, rejection, timings: await refusalTimes(input, evaluation), native: await nativeTimes(input, evaluation, undefined) };
   }
-  const receipt = await referenceRun(evaluation.project, input), run = summarizeRun(receipt);
+  const measured = await measuredRun(evaluation.project, input), run = measured.summary;
   const timings = { ...await compileTimes(input), ...await packTimes(evaluation), ...await runTimes(evaluation, input, run) };
-  return { id: input.id, size: input.size, accepted: true, structure: evaluation.structure, run, runFailure: failureReason(receipt), timings, native: await nativeTimes(input, evaluation, run) };
+  return { id: input.id, size: input.size, accepted: true, structure: evaluation.structure, run, runFailure: measured.failure, timings, native: await nativeTimes(input, evaluation, run) };
 }
 const progress = (row: Measured) => console.error(JSON.stringify({ measurement: "source-scaling-progress", id: row.id, size: row.size, accepted: row.accepted, elapsedMs: Math.round(now()) }));
 

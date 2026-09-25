@@ -276,7 +276,16 @@ export async function runOrganism(opts: RunOptions): Promise<RunReceipt> {
   // Admit the actual envelope before recursive hashing. A fixed-size digest
   // placeholder accounts for the field without hashing an unreadable body.
   const admitted = { ...receipt, digest: `sha256:${"0".repeat(64)}` as Digest };
-  checkReceiptResources(admitted, "BUDGET_EXHAUSTED");
+  try {
+    checkReceiptResources(admitted, "BUDGET_EXHAUSTED");
+  } catch (error) {
+    // The evidence is too large to mint, store or replay, so no receipt
+    // exists. Callers still receive the run's measured work for reporting.
+    if (error instanceof AlgalError) {
+      throw new AlgalError(error.code, error.message, { outcome: receipt.outcome, failure: receipt.failure?.code ?? null, work: receipt.work }, { uncertain: error.uncertain });
+    }
+    throw error;
+  }
   parseReceiptFields(admitted);
   admitted.digest = receiptDigest(admitted);
   return admitted;

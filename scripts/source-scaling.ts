@@ -512,6 +512,27 @@ export const summarizeRun = (receipt: RunReceipt): RunSummary => ({
   outcome: receipt.outcome, failure: receipt.failure?.code ?? null,
   steps: receipt.work.steps, attempts: receipt.work.agentCalls, units: receipt.work.units,
 });
+/** A run whose minted evidence would exceed the receipt and store envelopes
+ * ends in a thrown `BUDGET_EXHAUSTED` that still carries its measured work. */
+const unmintableRun = (error: unknown): RunSummary | null => {
+  if (!(error instanceof AlgalError) || error.code !== "BUDGET_EXHAUSTED") return null;
+  const work = (error.details as { work?: unknown } | undefined)?.work;
+  if (typeof work !== "object" || work === null) return null;
+  const { steps, agentCalls, units } = work as { steps?: unknown; agentCalls?: unknown; units?: unknown };
+  if (typeof steps !== "number" || typeof agentCalls !== "number" || typeof units !== "number") return null;
+  return { outcome: "failed", failure: error.code, steps, attempts: agentCalls, units };
+};
+export type MeasuredRun = { summary: RunSummary; receipt: RunReceipt | null; failure: string | null };
+export async function measuredRun(project: SourceProject, input: Pick<Materialized, "args" | "responses">): Promise<MeasuredRun> {
+  try {
+    const receipt = await referenceRun(project, input);
+    return { summary: summarizeRun(receipt), receipt, failure: failureReason(receipt) };
+  } catch (error) {
+    const summary = unmintableRun(error);
+    if (summary) return { summary, receipt: null, failure: error instanceof Error ? error.message.slice(0, 200) : null };
+    throw error;
+  }
+}
 
 // ------------------------------------------------------------------ growth ---
 
@@ -640,7 +661,7 @@ export async function checkExampleRows(table: PublishedTable, repository = REPOS
     if (!project) { messages.push(`${id}: not an example project entry point`); continue; }
     const input = await materializeExample(project, repository), result = await evaluate(input);
     if (!result.accepted) { messages.push(`${id}: page shows a compiled project; compilation stops with "${result.message}"`); continue; }
-    messages.push(...drift(id, row, exampleRow(id, result.structure, summarizeRun(await referenceRun(result.project, input)))));
+    messages.push(...drift(id, row, exampleRow(id, result.structure, (await measuredRun(result.project, input)).summary)));
   }
   return messages;
 }
@@ -655,7 +676,7 @@ export async function checkShapeRows(table: PublishedTable, fixtures: ShapeFixtu
     try {
       const result = await evaluate(input);
       if (!result.accepted) { messages.push(`${id} ${size}: page shows a compiled program; compilation stops with "${result.message}"`); continue; }
-      messages.push(...drift(`${id} ${size}`, row, shapeRow(id, size!, result.structure, summarizeRun(await referenceRun(result.project, input)))));
+      messages.push(...drift(`${id} ${size}`, row, shapeRow(id, size!, result.structure, (await measuredRun(result.project, input)).summary)));
     } finally { await input.cleanup(); }
   }
   return messages;

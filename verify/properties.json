@@ -1987,7 +1987,7 @@
     },
     {
       "path": "scripts/measure-source-scaling.ts",
-      "sha256": "sha256:d9798061c3a5bf95e7ff97bb94e0c950d0a061309f91f13795910359fde810c7"
+      "sha256": "sha256:268611d9e41530b00fc7cf106ed5c767c70f9f55b3e71ea08aa7b8410a1507b7"
     },
     {
       "path": "scripts/native-parity.ts",
@@ -2027,7 +2027,7 @@
     },
     {
       "path": "scripts/source-scaling.ts",
-      "sha256": "sha256:e6eaba0961cb955878515d5cc1936248f9ac0bec91580490473aed44f1fd3963"
+      "sha256": "sha256:c3f5e878125aa714b1912a6a5df0fc67248056f78510dd1836b4dd49267499ea"
     },
     {
       "path": "scripts/standalone-native-smoke.py",
@@ -2419,7 +2419,7 @@
     },
     {
       "path": "src/algal_expr.wasm.json",
-      "sha256": "sha256:de072c0861e2da179ea1b36869a13757fdca88484036888b043dafbd68cb57fc"
+      "sha256": "sha256:ec679a3c4fa34c1c67bd407f377ae765a5bfb1e2a645f0488478ad540533d2eb"
     },
     {
       "path": "src/application-adaptation.test.ts",
@@ -3103,7 +3103,7 @@
     },
     {
       "path": "src/run.ts",
-      "sha256": "sha256:2de0d223d59ae5466d529a192da9bed5b6e3e2cad5d14d61dc5080e05fddd6db"
+      "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd"
     },
     {
       "path": "src/runtime-journal-contract.ts",
@@ -4882,7 +4882,7 @@
       "sources": [
         {
           "path": "src/run.ts",
-          "sha256": "sha256:2de0d223d59ae5466d529a192da9bed5b6e3e2cad5d14d61dc5080e05fddd6db",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -4974,7 +4974,7 @@
       "sources": [
         {
           "path": "src/run.ts",
-          "sha256": "sha256:2de0d223d59ae5466d529a192da9bed5b6e3e2cad5d14d61dc5080e05fddd6db",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -5066,7 +5066,7 @@
       "sources": [
         {
           "path": "src/run.ts",
-          "sha256": "sha256:2de0d223d59ae5466d529a192da9bed5b6e3e2cad5d14d61dc5080e05fddd6db",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -5158,7 +5158,7 @@
       "sources": [
         {
           "path": "src/run.ts",
-          "sha256": "sha256:2de0d223d59ae5466d529a192da9bed5b6e3e2cad5d14d61dc5080e05fddd6db",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -5251,7 +5251,7 @@
       "sources": [
         {
           "path": "src/run.ts",
-          "sha256": "sha256:2de0d223d59ae5466d529a192da9bed5b6e3e2cad5d14d61dc5080e05fddd6db",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -5345,7 +5345,7 @@
       "sources": [
         {
           "path": "src/run.ts",
-          "sha256": "sha256:2de0d223d59ae5466d529a192da9bed5b6e3e2cad5d14d61dc5080e05fddd6db",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -6260,7 +6260,7 @@
       "sources": [
         {
           "path": "src/run.ts",
-          "sha256": "sha256:2de0d223d59ae5466d529a192da9bed5b6e3e2cad5d14d61dc5080e05fddd6db",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -6368,7 +6368,7 @@
       "sources": [
         {
           "path": "src/run.ts",
-          "sha256": "sha256:2de0d223d59ae5466d529a192da9bed5b6e3e2cad5d14d61dc5080e05fddd6db",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -6478,7 +6478,7 @@
       "sources": [
         {
           "path": "src/run.ts",
-          "sha256": "sha256:2de0d223d59ae5466d529a192da9bed5b6e3e2cad5d14d61dc5080e05fddd6db",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -6588,7 +6588,7 @@
       "sources": [
         {
           "path": "src/run.ts",
-          "sha256": "sha256:2de0d223d59ae5466d529a192da9bed5b6e3e2cad5d14d61dc5080e05fddd6db",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -6699,7 +6699,7 @@
       "sources": [
         {
           "path": "src/run.ts",
-          "sha256": "sha256:2de0d223d59ae5466d529a192da9bed5b6e3e2cad5d14d61dc5080e05fddd6db",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -6832,7 +6832,7 @@
       "sources": [
         {
           "path": "src/run.ts",
-          "sha256": "sha256:2de0d223d59ae5466d529a192da9bed5b6e3e2cad5d14d61dc5080e05fddd6db",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -17610,7 +17610,7 @@
         },
         {
           "path": "src/run.ts",
-          "sha256": "sha256:2de0d223d59ae5466d529a192da9bed5b6e3e2cad5d14d61dc5080e05fddd6db",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -17910,7 +17910,7 @@
         },
         {
           "path": "src/algal_expr.wasm.json",
-          "sha256": "sha256:de072c0861e2da179ea1b36869a13757fdca88484036888b043dafbd68cb57fc",
+          "sha256": "sha256:ec679a3c4fa34c1c67bd407f377ae765a5bfb1e2a645f0488478ad540533d2eb",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
