@@ -9,6 +9,21 @@ wire constant (`0.1.0`) is independent of these package versions.
 
 ## Unreleased
 
+- `algal db` builds and answers a program database: a derived, disposable
+  structural index over the store (`program.db`, `bun:sqlite`) plus a
+  limited declarative query surface. `algal db build` materializes
+  manifests, cells, port maps, child-manifest links, receipts, per-cell
+  outcomes and work, capability classes, process records and heads, slots,
+  effects, application revisions/entrypoints/states/transitions/evaluations/
+  operations/dispatches, a record-kind histogram, and skipped records under
+  per-place file, byte, and row caps. `algal db query` composes whitelisted
+  table/column/operator predicates (never raw SQL); canned projections cover
+  `callers-of`, `revisions-for-executable`, `receipts-touching-capability`,
+  `unevaluated-revisions`, `largest-work`, `process-status`, and `kinds`.
+  `algal db status` reports index-versus-store drift per place and exits 1
+  when stale. Unreadable or foreign records are counted and skipped, never
+  fatal. See `docs/program-database.md`. Native CLI support is proposed, not
+  shipped.
 - Public copy adopts the canonical portfolio messaging record: the site
   title, hero, footer, social card, `llms.txt` introduction, README lead,
   both CLI introductions, and the package and crate descriptions now carry

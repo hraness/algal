@@ -207,6 +207,37 @@ export type {
   SearchHit,
 } from "./src/semantic";
 
+// Program database: the derived, disposable structural index over the
+// store (program.db) plus its bounded declarative query surface.
+export {
+  buildProgramIndex,
+  parseProgramQuery,
+  programDbPath,
+  programIndexStatus,
+  runProgramProjection,
+  runProgramQuery,
+  PROGRAM_DB_BOUNDS,
+  PROGRAM_DB_FILE,
+  PROGRAM_DB_PLACES,
+  PROGRAM_DB_SCHEMA,
+  PROGRAM_DB_TABLES,
+  PROGRAM_PROJECTIONS,
+} from "./src/program-db";
+export type {
+  ProgramDbLimits,
+  ProgramIndexReport,
+  ProgramIndexStatus,
+  ProgramPlace,
+  ProgramPlaceFingerprint,
+  ProgramFingerprint,
+  ProgramProjection,
+  ProgramProjectionName,
+  ProgramQuery,
+  ProgramQueryPredicate,
+  ProgramQueryResult,
+  ProgramTable,
+} from "./src/program-db";
+
 export {
   emptyToolRegistry,
   mergeToolRegistries,

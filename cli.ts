@@ -277,6 +277,18 @@ usage:
                                               store's manifests/runs/values (plus docs)
   algal search <query> [--dir <path>] [-k <n>] [--embedder local|gateway[:<model>]]
                                               hybrid rank: embedding cosine ⊕ token overlap
+  algal db build [--dir <path>]              rebuild the derived program index (program.db)
+  algal db status [--dir <path>]             report index-versus-store drift; exit 1 when stale
+  algal db tables                            list the queryable relations, columns, and projections
+  algal db query <json|@file> [--dir <path>]
+                                              run a declarative query: {"table", "columns",
+                                              "where", "order", "limit"} over the built index
+  algal db <projection> [args] [--dir <path>] [--limit <n>]
+                                              canned joins: callers-of <digest>,
+                                              revisions-for-executable <digest>,
+                                              receipts-touching-capability <class>,
+                                              unevaluated-revisions, largest-work,
+                                              process-status, kinds
   algal auth <provider> [--status | --forget | --clipboard]
                                               vault a provider credential locally — keychain
                                               when available, permission-checked file otherwise;
@@ -2796,6 +2808,79 @@ async function main(): Promise<number> {
         })),
       } as unknown as JsonObject);
       return hits.length > 0 ? 0 : 1;
+    }
+
+    case "db": {
+      // Derived program index: `program.db` under --dir is host tooling —
+      // rebuildable from the store at any time, never contract data.
+      const sub = positional[0];
+      if (sub === undefined) {
+        usageError("algal db <build|status|tables|query|<projection>>");
+      }
+      const {
+        buildProgramIndex,
+        programIndexStatus,
+        runProgramProjection,
+        runProgramQuery,
+        PROGRAM_DB_TABLES,
+        PROGRAM_PROJECTIONS,
+      } = await import("./src/program-db");
+      for (const key of Object.keys(flags)) {
+        if (!["dir", "limit"].includes(key)) usageError(`unknown db option --${key}`);
+      }
+      if (sub === "build") {
+        if (positional.length !== 1 || flags.limit !== undefined) {
+          usageError("algal db build [--dir <path>]");
+        }
+        out((await buildProgramIndex(dir)) as unknown as JsonObject);
+        return 0;
+      }
+      if (sub === "status") {
+        if (positional.length !== 1 || flags.limit !== undefined) {
+          usageError("algal db status [--dir <path>]");
+        }
+        const status = await programIndexStatus(dir);
+        out(status as unknown as JsonObject);
+        return status.stale ? 1 : 0;
+      }
+      if (sub === "tables") {
+        if (positional.length !== 1 || flags.limit !== undefined) {
+          usageError("algal db tables");
+        }
+        out({
+          ok: true,
+          tables: Object.entries(PROGRAM_DB_TABLES).map(([name, t]) => ({
+            table: name, columns: t.columns, description: t.description,
+          })),
+          projections: Object.entries(PROGRAM_PROJECTIONS).map(([name, p]) => ({
+            projection: name, args: p.args, description: p.description,
+          })),
+        } as unknown as JsonObject);
+        return 0;
+      }
+      const limit = flags.limit === undefined ? undefined
+        : asInt(Number(String(flags.limit)), "--limit", 1, 1024);
+      if (sub === "query") {
+        const arg = positional[1];
+        if (arg === undefined || positional.length !== 2) {
+          usageError("algal db query <json|@file> [--dir <path>]");
+        }
+        const raw = arg.startsWith("@")
+          ? await readJsonBounded(resolve(arg.slice(1)), 65_536, "program query")
+          : (JSON.parse(arg) as unknown);
+        out(
+          runProgramQuery(dir, raw, {
+            ...(limit !== undefined ? { limits: { maxRows: limit } } : {}),
+          }) as unknown as JsonObject,
+        );
+        return 0;
+      }
+      out(
+        runProgramProjection(dir, sub, positional.slice(1), {
+          ...(limit !== undefined ? { limit } : {}),
+        }) as unknown as JsonObject,
+      );
+      return 0;
     }
 
     case "auth": {
