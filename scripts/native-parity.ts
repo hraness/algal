@@ -175,6 +175,42 @@ for (const [kind, result, variants] of recordCases) {
     if (variant.startsWith("malformed")) failing.add(name);
   }
 }
+// Schema version 2 records: the typed-tasks plan declares a list of nested
+// records with allowed values and number bounds. Each malformed variant breaks
+// one rule and must fail at the root parameter with identical receipts.
+{
+  const plan = await loadSourceProject(join(typedTasks, "plan.algal"));
+  const planArgs = JSON.parse(await readFile(join(typedTasks, "plan.args.json"), "utf8")) as { input: { tasks: Record<string, JsonValue>[]; weights: JsonValue } };
+  const tasks = planArgs.input.tasks;
+  const edit = (index: number, fields: Record<string, JsonValue>) => tasks.map((task, i) => i === index ? { ...task, ...fields } : task);
+  const variants: [string, Record<string, JsonValue>][] = [
+    ["valid", planArgs.input],
+    ["malformed-list", { ...planArgs.input, tasks: tasks[0]! }],
+    ["malformed-item", { ...planArgs.input, tasks: [...tasks.slice(0, 2), "backup"] }],
+    ["malformed-status", { ...planArgs.input, tasks: edit(1, { status: "later" }) }],
+    ["malformed-maximum", { ...planArgs.input, tasks: edit(1, { urgency: 7 }) }],
+    ["malformed-minimum", { ...planArgs.input, tasks: edit(0, { impact: -1 }) }],
+    ["malformed-nested-team", { ...planArgs.input, tasks: edit(2, { owner: { name: "Sam", team: "sales" } }) }],
+    ["malformed-nested-field", { ...planArgs.input, tasks: edit(0, { owner: { team: "platform" } }) }],
+    ["malformed-weights", { ...planArgs.input, weights: { urgency: 11, impact: 1 } }],
+  ];
+  const store = new MemoryStore();
+  for (const module of plan.modules) await store.putManifest(module);
+  const bundlePath = join(temporary, "typed-plan.bundle.json");
+  const manifestPath = join(temporary, "typed-plan.algal.json");
+  await writeFile(bundlePath, canonicalize(await packOrganism(plan.manifest, store) as unknown as JsonValue));
+  await writeFile(manifestPath, canonicalize(manifestToJson(plan.manifest)));
+  for (const [variant, input] of variants) {
+    const name = `source-typed-plan-${variant}`;
+    const fixtureBase = join(temporary, name);
+    await writeFile(`${fixtureBase}.args.json`, canonicalize({ input }));
+    await writeFile(`${fixtureBase}.responses.json`, "{}");
+    files.push(`${name}.algal.json`);
+    modules.push(plan.manifest);
+    generated.set(name, { manifestPath, fixtureBase, bundlePath, modules: plan.modules, responsesPath: `${fixtureBase}.responses.json` });
+    if (variant.startsWith("malformed")) failing.add(name);
+  }
+}
 let failed = 0;
 
 async function native(args: string[], exitCode = 0) {
