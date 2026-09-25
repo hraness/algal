@@ -429,6 +429,16 @@ export type { CodingOperationAdapter, CodingOperationBinding, CodingOperationOut
 export { PROCESS_EVIDENCE_CONTRACT, PROCESS_EVIDENCE_BOUNDS, parseProcessEvidence, exportProcessEvidence, verifyProcessEvidence } from "./src/process-evidence";
 export type { ProcessEvidence, ProcessEvidenceReport } from "./src/process-evidence";
 
+// Bounded read-only observation of a live store.
+export { OBSERVE_BOUNDS, observeStore, followStore, diffSnapshots } from "./src/observe";
+export type {
+  ObserveSnapshot, ObserveOptions, ObserveChange, ObserveFollowEvent,
+  ObserveFollowOptions, ObserveFollowResult, ObserveListing, ObserveSection,
+  ObserveCount, ObserveProcess, ObservePending, ObserveMailbox,
+  ObserveCapability, ObserveHostEvent, ObserveApplication,
+  ObserveHabitatAccount, ObserveHabitatSchedule, ObserveRun,
+} from "./src/observe";
+
 // Programmable-application records, lifecycle, and captured evidence.
 export {
   ApplicationService,

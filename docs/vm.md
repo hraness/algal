@@ -131,6 +131,58 @@ own intrinsic digest field, so the two digests have different meanings.
 offline, returning `{ok, generations, receipts, digest}`. No live executor is
 needed for verification.
 
+## Observe a live store
+
+```sh
+algal observe --dir .algal
+algal observe --dir .algal --follow --interval-ms 250 --max-polls 256
+algal tail --dir .algal --max-events 512
+```
+
+`observe` prints one JSON snapshot of the store's current state. It exists so
+an agent can watch running work rather than only replaying it afterwards. The
+snapshot lists every process (name, status, generation, manifest digest, and
+head record digest), each mailbox (pending deliveries, consumed count, message
+count, and whether a send or receive holds its lock), capability records, host
+events with their delivery status, application heads (state digest, sequence,
+epoch, and revision), stored habitat accounts and schedules (totals, refusal
+status, and activity outcomes), and a tail of run receipts. Store-wide counts
+cover manifests, CAS values, runs, effects, and slots.
+
+Every listing is `{items, total, truncated}` plus `{unreadable, foreign,
+errors}`. `items` is the emitted page, `total` is the scanned count, and
+`truncated` is true whenever a limit dropped entries. Records that fail to
+parse or validate count toward `unreadable` (with the first eight failures
+named in `errors`) instead of aborting the snapshot, and entries outside the
+store layout count toward `foreign`. `--max-items` sizes each page, up to 256
+(default 32); directory scans stop at 8192 entries, one record read is limited
+to 4 MiB, and at most 16 pending deliveries are listed per mailbox.
+
+Entries emit in a fixed order: processes, mailboxes, and applications by name;
+capabilities, host events, habitat records, and runs by digest; then the
+counter rows in sorted key order. The run tail is the highest digests in sorted
+order, since the store carries no time field.
+
+`--follow` (or the `tail` alias) re-reads the store on a host-side poll
+interval and prints one JSON line per change. The first line is the initial
+snapshot; each later line is one `{event: "change", sequence, section, key,
+change, previous, value}` record where `previous` is the digest of the prior
+projection; a final `{event: "end", reason, polls, emitted}` line reports why
+the follow stopped. Changes emit in the snapshot's section order, each key at
+most once per poll, and `sequence` increases monotonically. Follow stops at
+`--max-polls` polls, `--max-events` emitted events, or an interrupt; the
+interval is limited to 25 ms..60 s and each bound to 65536.
+
+Observation is read-only: it takes no lease, acquires no lock, and never
+writes. A snapshot can straddle a transition, so every emitted pointer is
+re-read in a confirm pass at the end; an entry that moved between the two
+reads reports `stable: false` and the snapshot reports `consistent: false`.
+Emitted lines are deterministic functions of store state and carry no
+wall-clock field; the poll interval lives only in the host loop.
+
+Observation is implemented in the TypeScript runtime today. A native Rust
+projection is proposed, not shipped.
+
 ## Verify a process away from its original host
 
 ```sh
