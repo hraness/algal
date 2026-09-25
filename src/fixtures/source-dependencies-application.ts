@@ -5,14 +5,20 @@
 // that the default policy host would refuse; the join must not trust it.
 import { evaluateApplicationRevision } from "../application-adaptation";
 import { produceApplicationComparison } from "../application-comparison";
-import { applicationJson } from "../application-contract";
-import type { ApplicationCore, ApplicationSnapshot } from "../application-core";
+import { applicationJson, type EpisodeBinding, type WorkIntent } from "../application-contract";
+import {
+  applicationProcessName,
+  type ApplicationCore, type ApplicationDispatchContext, type ApplicationDispatchOutcome,
+  type ApplicationDispatchPlan, type ApplicationSnapshot,
+} from "../application-core";
 import { APPLICATION_MEMORY_NATIVE_LIMITS } from "../application-memory";
 import { manifestToJson, parseOrganismManifest } from "../contract";
 import { digestCanonical, type Digest } from "../digest";
 import { builtinRegistry } from "../registry";
+import { runOrganism } from "../run";
 import { compileSource } from "../source";
-import type { JsonValue } from "../values";
+import type { Store } from "../store-contract";
+import { asObject, type JsonValue } from "../values";
 
 export const APPLICATION = "grades";
 export const labelSource = `program label(score: json) -> json {
@@ -130,6 +136,69 @@ export async function buildGradesApplication(core: ApplicationCore) {
   };
 }
 export type GradesApplication = Awaited<ReturnType<typeof buildGradesApplication>>;
+
+const EPISODE_HOST_PROFILE = hash({ fixture: "episode host profile" });
+/** The episode binding a faithful dispatcher admits for a `start-episode`
+ * intent committed in `snapshot` — exactly the fields dispatch admission pins. */
+export function episodeBinding(snapshot: ApplicationSnapshot, intent: Digest, entrypoint: string, input: Digest): EpisodeBinding {
+  const entry = snapshot.revision.entrypoints.find(e => e.name === entrypoint);
+  if (entry === undefined) throw new Error(`no entrypoint ${entrypoint}`);
+  return {
+    contract: "algal.application-episode.v1", application: APPLICATION, intent, sourceState: snapshot.digest,
+    revision: snapshot.state.revision, memory: snapshot.state.memory, epoch: snapshot.state.epoch,
+    entrypoint: entry.name, manifest: entry.manifest, arguments: input,
+    process: applicationProcessName(APPLICATION, intent), maxGenerations: entry.maxGenerations,
+    hostProfile: EPISODE_HOST_PROFILE, access: "observe",
+  };
+}
+/** An admission that admits every commit and plans each `start-episode`
+ * intent with exactly the binding `episodeBinding` computes. */
+export const episodeAdmission = {
+  async admitCommit(): Promise<void> {},
+  async admitDispatch({ snapshot, intent }: { snapshot: ApplicationSnapshot; intent: WorkIntent }): Promise<ApplicationDispatchPlan> {
+    if (intent.kind !== "start-episode") throw new Error("fixture admits only start-episode intents");
+    const ref = digestCanonical(applicationJson(intent));
+    return { kind: "episode", binding: episodeBinding(snapshot, ref, intent.entrypoint, intent.input) };
+  },
+};
+/** Commit one memory transition carrying `start-episode` intents at the current head. */
+export async function commitEpisodes(fixture: GradesApplication, intents: readonly { readonly entrypoint?: string; readonly input: Digest }[]): Promise<ApplicationSnapshot> {
+  const head = (await fixture.core.inspect(APPLICATION))!;
+  return fixture.core.commit({
+    application: APPLICATION, operation: hash({ fixture: "episode intents", head: head.digest, count: intents.length }),
+    kind: "memory", expectedHead: head.digest, revision: head.state.revision, memory: head.state.memory,
+    intents: intents.map(intent => ({ kind: "start-episode" as const, entrypoint: intent.entrypoint ?? "run", input: intent.input })),
+    evidence: [], causedBy: null,
+  });
+}
+/** Settle one episode dispatch the way `dispatchApplicationEpisode` records
+ * it: run the bound manifest, retain the run receipt, and settle with an
+ * `algal.episode-outcome.v2` record naming it. The dispatcher is the host
+ * seam; the dependency join only reads the retained records. */
+export async function settleEpisode(context: ApplicationDispatchContext, store: Store): Promise<ApplicationDispatchOutcome> {
+  const plan = context.dispatch.plan;
+  if (plan.kind !== "episode") throw new Error("expected an episode plan");
+  const binding = plan.binding;
+  const manifest = await store.getManifest(binding.manifest);
+  if (manifest === undefined) throw new Error("episode manifest missing");
+  const args = asObject(await store.getValue(binding.arguments), "episode arguments") as Record<string, Record<string, JsonValue>>;
+  const receipt = await runOrganism({ manifest, args, store, fns: builtinRegistry(), executors: [] });
+  const receiptRef = await store.putReceipt(receipt as unknown as JsonValue);
+  const bindingRef = hash(binding);
+  const outcome = await store.putValue(applicationJson({
+    contract: "algal.episode-outcome.v2", binding: bindingRef,
+    processState: hash({ fixture: "process state", receipt: receiptRef }), receipt: receiptRef,
+  }));
+  return { status: "settled", result: { kind: "episode", binding: bindingRef, process: binding.process, outcome } };
+}
+/** Dispatch every pending intent once, settling each with `dispatch` (a real
+ * episode run by default). */
+export async function settlePendingEpisodes(fixture: GradesApplication, dispatch?: (context: ApplicationDispatchContext) => Promise<ApplicationDispatchOutcome>) {
+  return fixture.core.dispatchPending(APPLICATION, {
+    configurationDigest: hash({ fixture: "episode dispatcher" }),
+    dispatch: dispatch ?? (context => settleEpisode(context, fixture.store)),
+  });
+}
 /** A fabricated evaluation that binds its request, parent, and policy without
  * any foundry run; the join reports it as recorded because it never replays. */
 export async function fabricateEvaluation(fixture: GradesApplication, parentState: Digest, candidateRevision: Digest, salt: JsonValue = null): Promise<Digest> {

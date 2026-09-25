@@ -18,7 +18,7 @@ export type { SourceDependencyBundle, SourceDependencyCaller, SourceDependencyEf
 export { SOURCE_DEPENDENCY_ESTIMATE_BOUNDS } from "./src/source-dependencies-estimate";
 export type { SourceDependencyEstimate, SourceDependencyInvocationBound, SourceDependencyModuleInvocations } from "./src/source-dependencies-estimate";
 export { SOURCE_DEPENDENCY_APPLICATION_BOUNDS } from "./src/source-dependencies-application";
-export type { SourceDependencyApplication, SourceDependencyApplicationActivation, SourceDependencyApplicationEntrypoint, SourceDependencyApplicationEvaluation, SourceDependencyApplicationModuleLinks, SourceDependencyApplicationOccurrenceLinks, SourceDependencyApplicationOptions, SourceDependencyApplicationReader } from "./src/source-dependencies-application";
+export type { SourceDependencyApplication, SourceDependencyApplicationActivation, SourceDependencyApplicationEntrypoint, SourceDependencyApplicationEpisode, SourceDependencyApplicationEpisodeCount, SourceDependencyApplicationEpisodes, SourceDependencyApplicationEvaluation, SourceDependencyApplicationModuleLinks, SourceDependencyApplicationOccurrenceLinks, SourceDependencyApplicationOptions, SourceDependencyApplicationReader } from "./src/source-dependencies-application";
 export { createSourceLock, parseSourceLock, parseSourceLockCases, renderSourceLockVerification, sourceLockFixtureKeys, sourceLockToJson, verifySourceLock, SOURCE_LOCK_BOUNDS, SOURCE_LOCK_CONTRACT, SOURCE_LOCK_VERIFICATION_CONTRACT } from "./src/source-lock";
 export type { SourceLock, SourceLockCase, SourceLockDrift, SourceLockDriftKind, SourceLockEvaluation, SourceLockEvaluationCase, SourceLockFixture, SourceLockOptions, SourceLockUnit, SourceLockVerification, SourceLockVerifyOptions } from "./src/source-lock";
 export type { SourceLockVendored } from "./src/source-lock";
@@ -30,8 +30,8 @@ export { createProgramDiagram, renderMermaid, renderSvg } from "./src/diagram";
 export type { ProgramDiagram, DiagramOptions, DiagramNode, DiagramEdge, SvgDiagramOptions } from "./src/diagram";
 export { compareLibraryRevision, verifyLibraryComparison } from "./src/library-compare";
 export type { LibraryComparisonOptions } from "./src/library-compare";
-export { libraryCaseId, libraryComparisonToJson, parseLibraryComparison, parseLibraryUnseenCases, renderLibraryComparison, LIBRARY_COMPARISON_BOUNDS, LIBRARY_COMPARISON_CONTRACT, LIBRARY_UNSEEN_CASES_CONTRACT } from "./src/library-comparison";
-export type { LibraryComparison, LibraryComparisonCaller, LibraryComparisonCase, LibraryComparisonDependent, LibraryComparisonResult, LibraryComparisonSet, LibraryComparisonVerdict, LibraryComparisonVersion, LibraryUnseenCase, LibraryUnseenCases } from "./src/library-comparison";
+export { libraryCaseId, libraryComparisonToJson, parseLibraryComparison, parseLibraryIntended, parseLibraryUnseenCases, renderLibraryComparison, LIBRARY_COMPARISON_BOUNDS, LIBRARY_COMPARISON_CONTRACT, LIBRARY_INTENDED_REASONS, LIBRARY_UNSEEN_CASES_CONTRACT } from "./src/library-comparison";
+export type { LibraryComparison, LibraryComparisonCaller, LibraryComparisonCase, LibraryComparisonDependent, LibraryComparisonResult, LibraryComparisonSet, LibraryComparisonVerdict, LibraryComparisonVersion, LibraryIntendedChange, LibraryIntendedReason, LibraryUnseenCase, LibraryUnseenCases } from "./src/library-comparison";
 
 export {
   BOUNDS,

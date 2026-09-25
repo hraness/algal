@@ -633,6 +633,10 @@ export function renderSourceDependencies(report: SourceDependencyReport): string
     const { revisions, evaluations, evidence, manifests } = linked.counts;
     lines.push(`Application: ${linked.name} · head ${linked.head} · ${plural(linked.counts.states, "state")} · digest-bound links from recorded evidence (evaluations not replayed)`);
     lines.push(`Application evidence: revisions ${revisions.matched} matched, ${revisions.unmatched} unmatched, ${revisions.unresolved} unresolved · evaluation records ${evaluations.matched} matched, ${evaluations.unmatched} unmatched, ${evaluations.unreadable} unreadable · evidence records ${evidence.examined} examined, ${evidence.unreadable} unreadable · outside manifests ${manifests.examined} read, ${manifests.unreadable} unreadable${linked.omitted.entrypoints || linked.omitted.evaluations ? ` · omitted ${plural(linked.omitted.entrypoints, "entrypoint row")}, ${plural(linked.omitted.evaluations, "evaluation link")}` : ""}`);
+    const episodes = own(linked, "episodes");
+    if (episodes !== undefined) {
+      lines.push(`Application episodes: ${plural(episodes.intents, "start-episode intent")} in committed history · ${episodes.settled} settled · ${episodes.unsettled} unsettled · ${episodes.unreadable} unreadable${episodes.omitted ? ` · ${episodes.omitted} settled dispatches beyond the ${SOURCE_DEPENDENCY_APPLICATION_BOUNDS.maxEpisodes}-dispatch scan bound` : ""}${episodes.exceeded ? ` · ${plural(episodes.exceeded, "recorded count")} above its static bound` : ""}`);
+    }
   }
   lines.push("", "Source files");
   for (const unit of report.sourceUnits) lines.push(`  ${unit.source}  ${unit.manifestDigest}  ${unit.calledFromEntry ? "reachable from entry" : "imported but not called"}`);
@@ -682,7 +686,23 @@ export function renderSourceDependencies(report: SourceDependencyReport): string
     lines.push("", "Modules in application revisions");
     for (const entry of linked.modules) lines.push(`  ${entry.manifestDigest}  ${names.get(entry.manifestDigest) ?? entry.manifestDigest}  ${indices(entry.entrypoints)}`);
     lines.push("", "Occurrences in application revisions");
-    for (const entry of linked.occurrences) lines.push(`  ${entry.path.join("/") || "(root)"}  ${indices(entry.entrypoints)}`);
+    for (const entry of linked.occurrences) {
+      lines.push(`  ${entry.path.join("/") || "(root)"}  ${indices(entry.entrypoints)}`);
+      for (const count of own(entry, "episodes") ?? []) {
+        lines.push(`      episode dispatch [${count.dispatch}] · site ${count.site.join("/") || "(root)"} · recorded ${count.invocations} of ${count.bound} bound${own(count, "exceeded") === true ? " · above the bound" : ""}`);
+      }
+      const omittedCounts = own(entry, "episodesOmitted");
+      if (omittedCounts !== undefined) lines.push(`      ${omittedCounts} further episode counts omitted by the per-occurrence bound`);
+    }
+    const episodes = own(linked, "episodes");
+    if (episodes !== undefined) {
+      lines.push("", "Application episode dispatches");
+      if (episodes.dispatches.length === 0) lines.push("  none settled");
+      episodes.dispatches.forEach((dispatch, index) => {
+        lines.push(`  [${index}] intent ${dispatch.intent} · committed at state ${dispatch.source} · entrypoint row ${dispatch.entrypoint === null ? "not kept" : `[${dispatch.entrypoint}]`}`);
+        lines.push(`      ${dispatch.outcome === null ? "no outcome record bound" : `outcome ${dispatch.outcome}`} · ${dispatch.receipt === null ? "no receipt bound" : `receipt ${dispatch.receipt} · run ${dispatch.run}`}${dispatch.unresolved ? ` · ${plural(dispatch.unresolved, "unresolved recorded cell")}` : ""}`);
+      });
+    }
   }
   return `${printableText(lines.join("\n"))}\n`;
 }

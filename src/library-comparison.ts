@@ -44,6 +44,19 @@ export const LIBRARY_COMPARISON_BOUNDS = Object.freeze({
 
 /** `pinned` cases come from a calling entry point's case list; `unseen` cases from the pinned case file. */
 export type LibraryComparisonSet = "pinned" | "unseen";
+/** Closed reason classes for a deliberate case change: the author must say
+ * which kind of change the record authorizes, not only which cases. */
+export const LIBRARY_INTENDED_REASONS = ["corrected", "extended", "restricted"] as const;
+export type LibraryIntendedReason = typeof LIBRARY_INTENDED_REASONS[number];
+/** The cases a proposer declares will change, with the declared reason class.
+ * The record passes with changed rows only when this list is exactly the
+ * cases whose outcome or outputs moved — unlisted changes and cases declared
+ * but unchanged both fail. */
+export type LibraryIntendedChange = {
+  /** Case identifiers (`set:entry#name`), sorted and unique. */
+  readonly changed: readonly string[];
+  readonly reason: LibraryIntendedReason;
+};
 export type LibraryComparisonResult = { readonly outcome: RunOutcome; readonly outputs: Digest };
 /** A program's executable digest and the digest of its resolved interface. */
 export type LibraryComparisonVersion = { readonly digest: Digest; readonly interface: Digest };
@@ -109,6 +122,9 @@ export type LibraryComparison = {
   readonly callers: readonly LibraryComparisonCaller[];
   /** Sorted by set, entry point, and name. */
   readonly cases: readonly LibraryComparisonCase[];
+  /** Present when the proposer declares the exact cases the revision changes;
+   * the verdict passes only when the observed changes equal the declaration. */
+  readonly intended?: LibraryIntendedChange;
   readonly verdict: LibraryComparisonVerdict;
 };
 export type LibraryUnseenCase = {
@@ -189,8 +205,10 @@ const moved = (item: LibraryComparisonCase): boolean =>
 /** Derive a verdict from a comparison's rows. It passes only when the
  * interface is unchanged, unseen cases ran, every calling entry point and
  * dependent entry compiles with the revision, and every case reaches the same
- * outcome with the same outputs under both versions. */
-export function libraryComparisonVerdict(parts: Pick<LibraryComparison, "base" | "candidate" | "unseen" | "dependents" | "callers" | "cases">): LibraryComparisonVerdict {
+ * outcome with the same outputs under both versions — except that a declared
+ * `intended` change authorizes exactly the case identifiers it lists: the
+ * observed `changed` list must equal the declaration, no more and no less. */
+export function libraryComparisonVerdict(parts: Pick<LibraryComparison, "base" | "candidate" | "unseen" | "dependents" | "callers" | "cases">, intended?: LibraryIntendedChange): LibraryComparisonVerdict {
   const interfaceChanged = parts.base.interface !== parts.candidate.interface;
   const unseenMissing = parts.unseen === null;
   const notCompiled = [...new Set([
@@ -199,7 +217,9 @@ export function libraryComparisonVerdict(parts: Pick<LibraryComparison, "base" |
   ])].sort(compareUtf8);
   const changed = parts.cases.filter(moved).map(libraryCaseId);
   const notRun = parts.cases.filter(item => item.candidate === null).map(libraryCaseId);
-  const passed = !interfaceChanged && !unseenMissing && notCompiled.length === 0 && changed.length === 0 && notRun.length === 0;
+  const authorized = intended === undefined ? changed.length === 0
+    : intended.changed.length === changed.length && intended.changed.every((id, index) => id === changed[index]);
+  const passed = !interfaceChanged && !unseenMissing && notCompiled.length === 0 && notRun.length === 0 && authorized;
   return { passed, interfaceChanged, unseenMissing, notCompiled, changed, notRun };
 }
 
@@ -224,6 +244,26 @@ function result(value: unknown, what: string): LibraryComparisonResult {
   const found = record(value, ["outcome", "outputs"], what);
   return { outcome: outcome(reqField(found, "outcome", what), `${what} outcome`), outputs: asDigest(reqField(found, "outputs", what), `${what} outputs`) };
 }
+const CASE_ID = /^(pinned|unseen):[A-Za-z0-9_-][A-Za-z0-9_./-]*#[A-Za-z0-9][A-Za-z0-9._-]*$/;
+/** Parse an intended-change declaration: a bounded, sorted, unique list of
+ * case identifiers (`set:entry#name`) plus one closed reason class. */
+export function parseLibraryIntended(value: unknown): LibraryIntendedChange {
+  const what = "intended change declaration";
+  const found = record(value, ["changed", "reason"], what);
+  const changed = list(reqField(found, "changed", what), LIBRARY_COMPARISON_BOUNDS.maxRows, `${what} changed`, (item, index) => {
+    if (typeof item !== "string" || item.length > LIBRARY_COMPARISON_BOUNDS.maxPathLength + LIBRARY_COMPARISON_BOUNDS.maxTokenLength + 8 || !CASE_ID.test(item)) {
+      invalid(`${what} changed ${index} must be a case identifier "pinned:entry#name" or "unseen:entry#name"`);
+    }
+    return item;
+  });
+  if (changed.length === 0) invalid(`${what} must name at least one case`);
+  ordered(changed, `${what} changed`);
+  const reason = reqField(found, "reason", what);
+  if (typeof reason !== "string" || !(LIBRARY_INTENDED_REASONS as readonly string[]).includes(reason)) {
+    invalid(`${what} reason must be one of ${LIBRARY_INTENDED_REASONS.join(", ")}`);
+  }
+  return freezeDeep({ changed, reason: reason as LibraryIntendedReason });
+}
 function version(value: unknown, what: string): LibraryComparisonVersion {
   const found = record(value, ["digest", "interface"], what);
   return { digest: asDigest(reqField(found, "digest", what), `${what} digest`), interface: asDigest(reqField(found, "interface", what), `${what} interface`) };
@@ -238,7 +278,7 @@ function version(value: unknown, what: string): LibraryComparisonVersion {
 export function parseLibraryComparison(value: unknown): LibraryComparison {
   const what = "library comparison";
   const data = boundedJsonSnapshot(value, LIBRARY_COMPARISON_BOUNDS.record, what);
-  const top = record(data, ["contract", "name", "path", "compiler", "runtime", "base", "candidate", "unseen", "dependents", "callers", "cases", "verdict"], what);
+  const top = record(data, ["contract", "name", "path", "compiler", "runtime", "base", "candidate", "unseen", "dependents", "callers", "cases", "intended", "verdict"], what);
   const field = (key: string): unknown => reqField(top, key, what);
   if (field("contract") !== LIBRARY_COMPARISON_CONTRACT) invalid(`${what}: expected contract "${LIBRARY_COMPARISON_CONTRACT}"`);
   const name = field("name");
@@ -318,12 +358,14 @@ export function parseLibraryComparison(value: unknown): LibraryComparison {
   if ((unseen === null) !== (unseenRows === 0)) invalid(`${what} has unseen cases exactly when it names an unseen case file`);
   if (unseenRows > CASES) exceeded(`${what} exceeds ${CASES} unseen cases`);
 
+  const declared = optField(top, "intended");
+  const intended = declared === undefined ? undefined : parseLibraryIntended(declared);
   const parts = { base, candidate, unseen, dependents, callers, cases };
-  const verdict = libraryComparisonVerdict(parts);
+  const verdict = libraryComparisonVerdict(parts, intended);
   if (canonicalize(suppliedVerdict(field("verdict"), `${what} verdict`)) !== canonicalize(verdictJson(verdict))) {
-    invalid(`${what}: the verdict does not follow from the recorded interfaces, programs, and cases`);
+    invalid(`${what}: the verdict does not follow from the recorded interfaces, programs, cases, and declaration`);
   }
-  return freezeDeep({ contract: LIBRARY_COMPARISON_CONTRACT, name: name as string, path, compiler, runtime, ...parts, verdict });
+  return freezeDeep({ contract: LIBRARY_COMPARISON_CONTRACT, name: name as string, path, compiler, runtime, ...parts, ...(intended === undefined ? {} : { intended }), verdict });
 }
 
 export function libraryComparisonToJson(comparison: LibraryComparison): JsonObject {
@@ -344,6 +386,7 @@ export function libraryComparisonToJson(comparison: LibraryComparison): JsonObje
       ...(item.args === undefined ? {} : { args: item.args }), ...(item.responses === undefined ? {} : { responses: item.responses }),
       base: outcomeJson(item.base), candidate: item.candidate === null ? null : outcomeJson(item.candidate),
     })),
+    ...(comparison.intended === undefined ? {} : { intended: { changed: [...comparison.intended.changed], reason: comparison.intended.reason } }),
     verdict: verdictJson(comparison.verdict),
   };
 }
@@ -370,9 +413,13 @@ export function renderLibraryComparison(comparison: LibraryComparison): string {
     const state = item.candidate === null ? `does not run with the revision (${line(item.reason ?? "")})` : "runs with the revision";
     lines.push(`Caller ${line(item.entry)}: ${plural(count("pinned"), "pinned case")}, ${plural(count("unseen"), "unseen case")}; ${state}`);
   }
+  if (comparison.intended !== undefined) {
+    lines.push(`Intended change: ${comparison.intended.reason} · declares ${plural(comparison.intended.changed.length, "case")}`);
+  }
   lines.push(`Cases: ${comparison.cases.length - verdict.notRun.length} of ${comparison.cases.length} ran; ${verdict.changed.length} changed.`);
+  const declared = new Set(comparison.intended?.changed ?? []);
   for (const item of comparison.cases.filter(moved)) {
-    lines.push(`  changed ${line(libraryCaseId(item))}: ${item.base.outcome} ${item.base.outputs} to ${item.candidate!.outcome} ${item.candidate!.outputs}`);
+    lines.push(`  changed ${line(libraryCaseId(item))}: ${item.base.outcome} ${item.base.outputs} to ${item.candidate!.outcome} ${item.candidate!.outputs}${declared.has(libraryCaseId(item)) ? " · declared" : ""}`);
   }
   for (const id of verdict.notRun) lines.push(`  not run ${line(id)}`);
   return `${lines.join("\n")}\n`;

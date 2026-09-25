@@ -719,8 +719,37 @@ contains no report module, is counted as unresolved. The join reads at most
 entrypoints and 16 evaluation records per entrypoint and counts the rest as
 omitted. `--out` cannot write inside the application store.
 
+Adding `--episodes` joins the settled `start-episode` intents in that same
+committed history to the static calls they exercised:
+
+```sh
+bun cli.ts dependencies main.algal --application inventory --dir .algal --episodes --format text
+```
+
+Each committed `start-episode` intent is followed through its dispatch
+record, its result, and the `algal.episode-outcome.v2` record it settled
+with, to the run receipt that outcome names. The receipt's recorded cells are
+then read against the static closure of the program the episode ran, matched
+to report occurrences by executable digest alone. `application.episodes`
+counts the intents seen, the settled and unsettled dispatches, and the
+evidence that could not be read, parsed, or bound (an intent, dispatch,
+result, outcome, receipt, or manifest) as `unreadable`, never guessed.
+Settled dispatches appear as rows under `application.episodes.dispatches`,
+naming the intent, the committed state it came from, and the bound outcome,
+receipt, and run outcome. Each occurrence whose digest an episode's program
+contains lists one row per dispatch and call site: the dispatch index, the
+site inside the episode's program, the receipt's distinct recorded
+invocations of that site, and the invocation bound the program's structure
+allows it (enclosing `each` and `repeat` limits multiplied, saturated like
+`--estimate`). A recorded count above its bound is kept and marked
+`exceeded`, and recorded cells under paths no site owns, such as a `spawn`,
+count as unresolved. The join keeps the latest 64 settled dispatches and 16
+count rows per occurrence, and counts what it drops as omitted.
+
 In the SDK, pass `estimate: true`, and pass `application: { name, reader }`
-with an `ApplicationService` or `ApplicationCore` as the reader.
+with an `ApplicationService` or `ApplicationCore` as the reader; add
+`episodes: true` for the episode join, which reads dispatches through the
+reader's `readDispatch` and receipts through its store's `getReceipt`.
 
 ### Pin a project with a lock
 
