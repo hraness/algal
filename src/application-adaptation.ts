@@ -17,8 +17,9 @@ import {
   parseMemoryQueries, parseMemoryQuery, parseMemorySchema,
 } from "./application-memory";
 import { digestCanonical, type Digest } from "./digest";
-import { runFoundry, type FoundryCase, type FoundryCaseResult, type FoundryReport } from "./foundry";
+import { runFoundry, runFoundryWithin, type FoundryCase, type FoundryCaseResult, type FoundryReport } from "./foundry";
 import { verifyFoundryReport } from "./foundry-verify";
+import type { HabitatLedger } from "./habitat-budget";
 import { parseExprScorer, type ExprScorer } from "./expr";
 import { builtinRegistry, isBuiltinRegistry, type FnRegistry } from "./registry";
 import { compileOrganism, interfaceSignature, type CompiledOrganism } from "./graph";
@@ -373,7 +374,18 @@ async function verifyBinding(store: Store, request: ApplicationEvaluationRequest
   await reportCases(report, cases, oldEntry.manifest, newEntry.manifest, store);
 }
 
-export async function evaluateApplicationRevision(store: Store, input: unknown, runtime: AdaptationRuntime): Promise<{ evaluationRef: Digest; evaluation: ApplicationEvaluation }> {
+export type EvaluationCharge = {
+  /** An `experiment` habitat account the host supplies. Every incumbent,
+   * candidate, and holdout run of the evaluation is reserved and charged
+   * here; a refused reservation stops the evaluation with
+   * `BUDGET_EXHAUSTED` before its report or evaluation record is stored.
+   * The evaluation, its foundry report, and their digests are the same with
+   * or without an account. */
+  account?: HabitatLedger;
+};
+
+export async function evaluateApplicationRevision(store: Store, input: unknown, runtime: AdaptationRuntime, charge: EvaluationCharge = {}): Promise<{ evaluationRef: Digest; evaluation: ApplicationEvaluation }> {
+  if (charge.account && charge.account.activity !== "experiment") throw new Error("An application evaluation charges an experiment habitat account");
   const request = parseApplicationEvaluationRequest(input);
   const requestRef = await putApplicationRecord(store, request);
   const state = await getApplicationRecord(store, request.parentState, parseApplicationState);
@@ -390,7 +402,10 @@ export async function evaluateApplicationRevision(store: Store, input: unknown, 
   if (cases.cases.length > policy.maxCases) throw new Error("Evaluation case set exceeds policy bound");
   const old = entrypoint(incumbent.revision, request.entrypoint), next = entrypoint(candidate.revision, request.entrypoint);
   await evaluationManifest(incumbent.manifests.get(request.entrypoint)!, runtime.fns, store, policy, old.manifest); await evaluationManifest(candidate.manifests.get(request.entrypoint)!, runtime.fns, store, policy, next.manifest);
-  const report = await runFoundry({ candidates: [incumbent.manifests.get(request.entrypoint)!, candidate.manifests.get(request.entrypoint)!], cases: cases.cases, fns: runtime.fns, store, executors: runtime.executors ?? [], ...(scorerRecord.scorer ? { scorer: scorerRecord.scorer } : {}) });
+  const foundry = { candidates: [incumbent.manifests.get(request.entrypoint)!, candidate.manifests.get(request.entrypoint)!], cases: cases.cases, fns: runtime.fns, store, executors: runtime.executors ?? [], ...(scorerRecord.scorer ? { scorer: scorerRecord.scorer } : {}) };
+  // An experiment's account is charged for every run but never embedded, so
+  // the report keeps the bytes an uncharged evaluation writes.
+  const report = charge.account ? await runFoundryWithin({ ...foundry, account: charge.account }) : await runFoundry(foundry);
   const verified = await verifyFoundryReport(report, store, runtime.fns); if (!verified.ok) throw new Error(`Foundry report failed verification: ${verified.mismatches.join("; ")}`);
   await verifyBinding(store, request, state, report, cases, candidate, incumbent, runtime.fns, policy);
   const compatibility = await checkCompatibilityLoaded(store, incumbent, candidate);

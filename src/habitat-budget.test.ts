@@ -338,17 +338,54 @@ describe("foundry command", () => {
       expect(complete.code).toBe(0);
       expect(JSON.parse(complete.stdout).budget).toMatchObject({ outcome: "complete", charged: { runs: 7 } });
       expect((await cli("foundry", "verify", join(dir, "report.json"), "--dir", dir)).code).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 
-      // A search does not accept the field rather than ignore it.
-      const search = join(dir, "search.config.json");
-      await writeFile(search, JSON.stringify({
-        contract: "algal.foundry.config.v1",
-        generator: { manifest: join(root, "examples/foundry-generator.algal.json"), args: {}, output: "candidates" },
-        cases: config.cases, search: { maxGenerations: 1, feedbackInput: "feedback" }, budget: config.budget,
-      }));
-      const refused = await cli("foundry", "search", search, "--dir", dir);
-      expect(refused.code).toBe(2);
-      expect(refused.stderr).toContain("habitat budget");
+  test("a budgeted search writes its report or its exhausted account, and search-verify checks either", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "algal-search-budget-"));
+    try {
+      // The generator proposes the echo once feedback exists.
+      const generator = join(dir, "generator.algal.json");
+      await writeFile(generator, JSON.stringify(manifestToJson(parseOrganismManifest({
+        contract: "algal.organism.v1", key: "organism:budget-search-generator", name: "budget search generator",
+        budgets: { maxWork: 2_000, maxAgentCalls: 0 },
+        interface: { inputs: { feedback: { cell: "src", port: "value" } }, outputs: { candidates: { cell: "out", port: "out" } } },
+        cells: [
+          { id: "src", kind: "input", outputs: { value: "json" } },
+          { id: "out", kind: "expr", inputs: { value: "json" }, expr: { contract: "algal.expr.v1", program: ["if", ["eq", ["get", "value"], null], ["quote", [manifestToJson(constant)]], ["quote", [manifestToJson(echo)]]] }, output: { kind: "json", schema: { type: "array" } } },
+        ],
+        edges: [{ from: { cell: "src", port: "value" }, to: { cell: "out", port: "value" } }],
+      }))));
+      const config = (runs: number) => ({
+        contract: "algal.foundry.config.v1", generator: { manifest: generator, args: {}, output: "candidates" },
+        cases, search: { maxGenerations: 2, feedbackInput: "feedback" }, budget: { work: 100_000, attempts: 0, runs },
+      });
+      const roomy = join(dir, "roomy.config.json");
+      await writeFile(roomy, JSON.stringify(config(64)));
+      const complete = await cli("foundry", "search", roomy, "--dir", dir, "--out", join(dir, "search.json"));
+      expect(complete.code).toBe(0);
+      expect(JSON.parse(complete.stdout)).toMatchObject({ contract: "algal.search.v1", budget: { activity: "search", outcome: "complete", charged: { runs: 11 } } });
+      const verified = await cli("foundry", "search-verify", join(dir, "search.json"), "--dir", dir);
+      expect(verified.code).toBe(0);
+
+      const tight = join(dir, "tight.config.json");
+      await writeFile(tight, JSON.stringify(config(4)));
+      const out = join(dir, "record.json");
+      const exhausted = await cli("foundry", "search", tight, "--dir", dir, "--out", out);
+      expect(exhausted.code).toBe(1);
+      expect(parseHabitatBudget(JSON.parse(exhausted.stdout))).toMatchObject({ activity: "search", outcome: "exhausted", charged: { runs: 4 }, refused: { reasons: ["runs"] } });
+      expect(JSON.parse(await readFile(out, "utf8"))).toEqual(JSON.parse(exhausted.stdout));
+      const replayed = await cli("foundry", "search-verify", out, "--dir", dir);
+      expect(replayed.code).toBe(0);
+      expect(JSON.parse(replayed.stdout)).toMatchObject({ ok: true, outcome: "exhausted", checkedReceipts: 4 });
+      // A foundry's record is not a search's.
+      const foundryRecord = await cli("foundry", "examples/foundry-budget.config.json", "--dir", dir, "--out", join(dir, "foundry-record.json"));
+      expect(foundryRecord.code).toBe(1);
+      const wrong = await cli("foundry", "search-verify", join(dir, "foundry-record.json"), "--dir", dir);
+      expect(wrong.code).toBe(1);
+      expect(JSON.parse(wrong.stdout).mismatches[0]).toBe("budget activity is not search");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

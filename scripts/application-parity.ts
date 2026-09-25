@@ -34,6 +34,7 @@ import { appendObservation } from "../src/application-observation";
 import { restoreApplicationRevision, type ApplicationRestorationPolicy } from "../src/application-restoration";
 import { produceApplicationComparison, verifyApplicationComparison } from "../src/application-comparison";
 import { produceApplicationExperiment, verifyApplicationExperiment, type ProduceExperimentInput } from "../src/application-experiment";
+import { HabitatAccount } from "../src/habitat-budget";
 import { proposeApplicationRevision, verifyApplicationProposal } from "../src/application-proposal";
 import { produceApplicationSelection, selectApplicationStrategy, verifyApplicationSelection } from "../src/application-selection";
 import { rolloverApplicationMemory } from "../src/application-rollover";
@@ -914,6 +915,95 @@ async function checkEvidenceParity(): Promise<void> {
   }
 }
 
+/** Charged experiments: both evaluations charge one `experiment` habitat
+ * account the host supplies (the native CLI's `application evaluate
+ * --budget`, continued from the record the first evaluation printed). The
+ * account changes no evaluation, and the experiment cites the stored
+ * account. Exhaustion, resumption of a changed record, and experiments that
+ * cite an account that does not charge exactly their evaluations must agree
+ * on both runtimes. */
+async function checkChargedExperimentParity(
+  p: { native: string; nativeStore: FileStore; lifecycle: ApplicationService; put: (value: JsonValue) => Promise<Digest> },
+  chain: {
+    evalRequest: (candidateRevision: Digest) => JsonValue; winner: Digest; loser: Digest;
+    winnerEval: { evaluationRef: Digest; evaluation: { verdict: unknown } }; loserEval: { evaluationRef: Digest; evaluation: { verdict: unknown } };
+    experimentInput: ProduceExperimentInput; proposalHead: Digest;
+  },
+): Promise<void> {
+  const equal = (name: string, left: unknown, right: unknown): void => {
+    if (!same(left, right)) throw new Error(`Charged experiment parity diverged: ${name}\n  ts:     ${canonicalize(left as JsonValue)}\n  native: ${canonicalize(right as JsonValue)}`);
+    checked++;
+  };
+  const runtime = { fns: builtinRegistry() };
+  const evaluate = async (name: string, revision: Digest, budget: JsonValue) =>
+    runNativeAttempt(app("evaluate", await dynamic(`${name}-request`, chain.evalRequest(revision)), "--budget", await dynamic(`${name}-budget`, budget)), p.native);
+  const limits = { work: 10_000_000, attempts: 64, runs: 64 };
+  const account = new HabitatAccount("experiment", limits);
+  const winner = await evaluateApplicationRevision(p.lifecycle.store, chain.evalRequest(chain.winner), runtime, { account });
+  const first = await evaluate("charged-winner", chain.winner, limits);
+  if (first.code !== 0) throw new Error(`charged evaluation failed: ${first.stderr}`);
+  const firstOut = JSON.parse(first.stdout) as { budget: JsonValue };
+  equal("charged evaluation", { evaluation: winner.evaluationRef, verdict: winner.evaluation.verdict, budget: account.record() }, firstOut);
+  // Charging changes no evaluation record.
+  equal("charged evaluation keeps its record", winner.evaluationRef, chain.winnerEval.evaluationRef);
+  const loser = await evaluateApplicationRevision(p.lifecycle.store, chain.evalRequest(chain.loser), runtime, { account });
+  const second = await evaluate("charged-loser", chain.loser, firstOut.budget);
+  if (second.code !== 0) throw new Error(`continued charged evaluation failed: ${second.stderr}`);
+  const record = account.record();
+  equal("continued charged evaluation", { evaluation: loser.evaluationRef, verdict: loser.evaluation.verdict, budget: record }, JSON.parse(second.stdout));
+  equal("resumed account", (await HabitatAccount.resume(firstOut.budget, p.lifecycle.store)).record(), firstOut.budget);
+  // The experiment cites the stored account.
+  const budget = await p.put(record);
+  const input = { ...chain.experimentInput, budget };
+  const charged = await produceApplicationExperiment(p.lifecycle.store, input, runtime);
+  equal("charged experiment", { experiment: charged.experimentRef, result: charged.experiment.result }, await runNative(app("experiment", await dynamic("charged-experiment", input)), p.native));
+  equal("charged experiment bytes", await p.lifecycle.store.getValue(charged.experimentRef), await p.nativeStore.getValue(charged.experimentRef));
+  const verified = await verifyApplicationExperiment(p.lifecycle.store, charged.experimentRef, chain.proposalHead, runtime);
+  equal("verify charged experiment", { ok: true, result: verified.result }, await runNative(app("verify-experiment", await dynamic("charged-verify-experiment", { experiment: charged.experimentRef, expectedState: chain.proposalHead })), p.native));
+  // Exhaustion: seven runs per evaluation, so a ten-run account refuses the
+  // second evaluation's fourth run and stores no evaluation.
+  const small = new HabitatAccount("experiment", { ...limits, runs: 10 });
+  await evaluateApplicationRevision(p.lifecycle.store, chain.evalRequest(chain.winner), runtime, { account: small });
+  const refusedTs = await evaluateApplicationRevision(p.lifecycle.store, chain.evalRequest(chain.loser), runtime, { account: small }).then(() => null, (error: unknown) => error);
+  if ((refusedTs as { code?: string } | null)?.code !== "BUDGET_EXHAUSTED") throw new Error("TypeScript charged evaluation was not exhausted");
+  const smallFirst = await evaluate("charged-small-winner", chain.winner, { ...limits, runs: 10 });
+  if (smallFirst.code !== 0) throw new Error(`small charged evaluation failed: ${smallFirst.stderr}`);
+  const exhausted = await evaluate("charged-small-loser", chain.loser, (JSON.parse(smallFirst.stdout) as { budget: JsonValue }).budget);
+  if (exhausted.code !== 1) throw new Error(`native charged evaluation was not exhausted: ${exhausted.code} ${exhausted.stderr}`);
+  const exhaustedRecord = small.record();
+  equal("exhausted charged evaluation", exhaustedRecord, JSON.parse(exhausted.stdout));
+  // Refusals agree: an exhausted or changed record cannot continue, and an
+  // experiment must cite a complete experiment account charging exactly its
+  // evaluations.
+  const changed = structuredClone(record) as unknown as { runs: { charged: { work: number } }[]; charged: { work: number } };
+  changed.runs[0]!.charged.work += 1;
+  changed.charged.work += 1;
+  for (const [name, value] of [["exhausted", exhaustedRecord], ["changed", changed]] as const) {
+    const refused = await HabitatAccount.resume(value, p.lifecycle.store).then(() => false, () => true);
+    const attempt = await evaluate(`charged-resume-${name}`, chain.winner, value as unknown as JsonValue);
+    if (!refused || attempt.code !== 2) throw new Error(`Charged resume rejection differs: ${name}; TS rejected ${refused}, native exit ${attempt.code}`);
+    checked++;
+  }
+  const partial = new HabitatAccount("experiment", limits);
+  await evaluateApplicationRevision(p.lifecycle.store, chain.evalRequest(chain.winner), runtime, { account: partial });
+  for (const [name, value] of [
+    ["one-evaluation", partial.record()],
+    ["foundry-activity", { ...record, activity: "foundry" }],
+    ["exhausted", exhaustedRecord],
+  ] as const) {
+    const bad = { ...chain.experimentInput, budget: await p.put(value as unknown as JsonValue) };
+    const refused = await produceApplicationExperiment(p.lifecycle.store, bad, runtime).then(() => false, () => true);
+    const attempt = await runNativeAttempt(app("experiment", await dynamic(`charged-experiment-${name}`, bad)), p.native);
+    if (!refused || attempt.code !== 2) throw new Error(`Charged experiment rejection differs: ${name}; TS rejected ${refused}, native exit ${attempt.code}`);
+    checked++;
+  }
+  const nullBudget = await p.put({ ...(charged.experiment as unknown as Record<string, JsonValue>), budget: null });
+  const refused = await verifyApplicationExperiment(p.lifecycle.store, nullBudget, chain.proposalHead, runtime).then(() => false, () => true);
+  const attempt = await runNativeAttempt(app("verify-experiment", await dynamic("charged-verify-null-budget", { experiment: nullBudget, expectedState: chain.proposalHead })), p.native);
+  if (!refused || attempt.code !== 2) throw new Error("Charged experiment record with a null budget was not refused on both runtimes");
+  checked++;
+}
+
 /** Exercise admission boundaries on fresh namespaces with shared immutable
  * fixtures. Synthetic quota charges stand for retained reservations; no large
  * files, live effects, or adjustments to production limits are needed. */
@@ -1125,6 +1215,7 @@ async function checkGoalAndQuotaParity(): Promise<void> {
       if (!refused || attempt.code !== 2) throw new Error(`Experiment record rejection differs: ${name}`);
       checked++;
     }
+    await checkChargedExperimentParity(p, { evalRequest, winner: winner.revision, loser: loser.revision, winnerEval, loserEval, experimentInput, proposalHead });
     // The activation cites the experiment alongside the ordinary evidence;
     // the host replays the whole joined chain and binds result.revision to
     // the committed revision.

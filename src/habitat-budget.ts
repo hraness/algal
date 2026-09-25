@@ -1,6 +1,6 @@
 /** Habitat-wide work accounting: one account for every run that belongs to
- * one habitat activity (a foundry run, a search, or an application
- * experiment), separate from the per-run root budget.
+ * one habitat activity (a foundry run, a search, or the evaluations of an
+ * application experiment), separate from the per-run root budget.
  *
  * Before a run starts, the account reserves the run's declared ceiling: its
  * root manifest's `maxWork` and `maxAgentCalls` (nested children share the
@@ -123,13 +123,32 @@ export function habitatCeiling(budgets: Pick<Budgets, "maxWork" | "maxAgentCalls
   return ceilingOf({ work: budgets.maxWork, attempts: budgets.maxAgentCalls }, "ceiling");
 }
 
-/** The limits a reservation of `ceiling` would exceed after `charged`. */
+/** The limits a reservation of `ceiling` would exceed after `charged`, in
+ * sorted order; empty when the reservation fits. */
 function exceeded(limits: HabitatLimits, charged: HabitatAmount & { runs: number }, ceiling: HabitatAmount): HabitatDimension[] {
   const reasons: HabitatDimension[] = [];
   if (charged.attempts + ceiling.attempts > limits.attempts) reasons.push("attempts");
   if (charged.runs + 1 > limits.runs) reasons.push("runs");
   if (charged.work + ceiling.work > limits.work) reasons.push("work");
   return reasons;
+}
+
+/** One closed run entry, `{manifest, receipt, ceiling, charged}`, with the
+ * per-run bounds and no account arithmetic; `extra` names additional fields
+ * the caller parses itself (a schedule's `activity`). */
+export function parseHabitatRun(value: unknown, at: string, extra: readonly string[] = []): HabitatRun {
+  const r = closed(value, ["manifest", "receipt", "ceiling", "charged", ...extra], at);
+  const ceiling = ceilingOf(r.ceiling, `${at}.ceiling`);
+  const c = closed(r.charged, ["work", "attempts"], `${at}.charged`);
+  return {
+    manifest: reference(r.manifest, `${at}.manifest`),
+    receipt: reference(r.receipt, `${at}.receipt`),
+    ceiling,
+    charged: {
+      work: count(c.work, 0, HABITAT_BUDGET_BOUNDS.maxRunWork, `${at}.charged.work`),
+      attempts: count(c.attempts, 0, ceiling.attempts, `${at}.charged.attempts`),
+    },
+  };
 }
 
 export function parseHabitatLimits(value: unknown): HabitatLimits {
@@ -193,9 +212,35 @@ export function parseHabitatBudget(value: unknown): HabitatBudget {
   };
 }
 
+/** A run an activity asks its account to start. */
+export type HabitatRunRequest = {
+  manifest: Digest;
+  budgets: Pick<Budgets, "maxWork" | "maxAgentCalls">;
+  /** The run's arguments. A resumed schedule checks them against the
+   * receipt it serves from its journal. */
+  args: Record<string, Record<string, JsonValue>>;
+};
+
+export type HabitatRunResult = { receipt: RunReceipt; receiptDigest: Digest };
+
+/** What an activity needs from an account. `HabitatAccount` is the
+ * standalone account; a habitat schedule gives each of its activities a view
+ * of one shared account (see habitat-schedule.ts). */
+export interface HabitatLedger {
+  readonly activity: HabitatActivity;
+  /** True once a reservation has been refused. */
+  readonly exhausted: boolean;
+  /** Reserves the run's declared ceiling, starts the run, stores its receipt,
+   * and charges what the receipt records. A refused reservation throws
+   * `BUDGET_EXHAUSTED`; a run that throws before its receipt is stored
+   * releases its reservation and rethrows. */
+  admit(request: HabitatRunRequest, execute: () => Promise<RunReceipt>, store: Store): Promise<HabitatRunResult>;
+}
+
 /** One habitat activity's account. A host calls `reserve` before each run and
- * `charge` with its receipt after; `record` closes the account as evidence. */
-export class HabitatAccount {
+ * `charge` with its receipt after (or `admit`, which does both around the
+ * run); `record` closes the account as evidence. */
+export class HabitatAccount implements HabitatLedger {
   readonly activity: HabitatActivity;
   readonly limits: HabitatLimits;
   readonly #runs: HabitatRun[] = [];
@@ -208,9 +253,48 @@ export class HabitatAccount {
     this.limits = parseHabitatLimits(limits);
   }
 
+  /** Rebuilds an account from a record it wrote earlier so its activity can
+   * continue, for example across separate `application evaluate` commands.
+   * The record must be complete, and every listed run must reconcile with
+   * the store: its manifest declares the recorded ceiling and its receipt
+   * records the charge. Anything else is refused. */
+  static async resume(value: unknown, store: Store): Promise<HabitatAccount> {
+    const budget = parseHabitatBudget(value);
+    if (budget.outcome !== "complete") {
+      throw new AlgalError("BUDGET_EXHAUSTED", "habitat budget: an exhausted account cannot continue");
+    }
+    const { mismatches } = await checkHabitatBudgetEvidence(budget, store);
+    if (mismatches.length) {
+      throw new AlgalError("PARSE_FAILED", `habitat budget: the account does not reconcile with the store: ${mismatches[0]}`);
+    }
+    const account = new HabitatAccount(budget.activity, budget.limits);
+    account.#runs.push(...budget.runs);
+    account.#charged.work = budget.charged.work;
+    account.#charged.attempts = budget.charged.attempts;
+    account.#charged.runs = budget.charged.runs;
+    return account;
+  }
+
   /** True once a reservation has been refused; the account then admits nothing. */
   get exhausted(): boolean {
     return this.#refused !== null;
+  }
+
+  async admit(request: HabitatRunRequest, execute: () => Promise<RunReceipt>, store: Store): Promise<HabitatRunResult> {
+    this.reserve(request.manifest, request.budgets);
+    let receipt: RunReceipt;
+    let receiptDigest: Digest;
+    try {
+      receipt = await execute();
+      receiptDigest = await store.putReceipt(receipt as unknown as JsonValue);
+    } catch (error) {
+      // No stored receipt exists to charge; the reservation is released and
+      // the account stays usable for the record.
+      this.release();
+      throw error;
+    }
+    this.charge(receiptDigest, receipt);
+    return { receipt, receiptDigest };
   }
 
   /** Reserves a run's declared ceiling before it starts. A refusal is
@@ -305,6 +389,19 @@ export async function checkHabitatBudgetEvidence(
   store: Store,
   replay?: { fns: FnRegistry; tools?: ToolRegistry },
 ): Promise<{ mismatches: string[]; checkedReceipts: number }> {
+  return checkHabitatRunsEvidence(budget.runs, budget.refused, store, { label: "budget", ...(replay ? { replay } : {}) });
+}
+
+/** The shared evidence check for listed runs, labelled `<label> run <i>`:
+ * each ceiling is its manifest's declared budget and each charge is the work
+ * its receipt records. With `replay`, a run's receipt is also replayed
+ * offline, for every run or for those `replayRun` selects. */
+export async function checkHabitatRunsEvidence(
+  runs: readonly HabitatRun[],
+  refused: { manifest: Digest; ceiling: HabitatAmount } | null,
+  store: Store,
+  options: { label: string; replay?: { fns: FnRegistry; tools?: ToolRegistry }; replayRun?: (index: number) => boolean },
+): Promise<{ mismatches: string[]; checkedReceipts: number }> {
   const mismatches: string[] = [];
   let checkedReceipts = 0;
   const declared = async (manifest: Digest, ceiling: HabitatAmount, at: string) => {
@@ -318,8 +415,8 @@ export async function checkHabitatBudgetEvidence(
     }
     return stored;
   };
-  for (const [i, run] of budget.runs.entries()) {
-    const at = `budget run ${i}`;
+  for (const [i, run] of runs.entries()) {
+    const at = `${options.label} run ${i}`;
     const manifest = await declared(run.manifest, run.ceiling, at);
     if (!manifest) continue;
     const stored = await store.getReceipt(run.receipt);
@@ -335,13 +432,13 @@ export async function checkHabitatBudgetEvidence(
     if (receipt.work.units !== run.charged.work || receipt.work.agentCalls !== run.charged.attempts) {
       mismatches.push(`${at}: charge differs from its receipt`);
     }
-    if (replay) {
-      const verified = await verifyReceipt(stored, manifestToJson(manifest), store, replay.fns, undefined, replay.tools);
+    if (options.replay && (options.replayRun?.(i) ?? true)) {
+      const verified = await verifyReceipt(stored, manifestToJson(manifest), store, options.replay.fns, undefined, options.replay.tools);
       checkedReceipts++;
       if (!verified.ok) mismatches.push(`${at}: receipt ${run.receipt}: ${verified.mismatches.join("; ")}`);
     }
   }
-  if (budget.refused) await declared(budget.refused.manifest, budget.refused.ceiling, "budget refusal");
+  if (refused) await declared(refused.manifest, refused.ceiling, `${options.label} refusal`);
   return { mismatches, checkedReceipts };
 }
 
@@ -355,15 +452,18 @@ export type HabitatBudgetVerifyReport = {
 
 /** Verifies a standalone record, such as the terminal record an exhausted
  * activity leaves: its arithmetic, every ceiling and charge, and an offline
- * replay of every admitted run. */
+ * replay of every admitted run. With `expected`, a record of another
+ * activity is a mismatch (`foundry search-verify` expects `search`). */
 export async function verifyHabitatBudget(
   value: unknown,
   store: Store,
   fns: FnRegistry,
   tools?: ToolRegistry,
+  expected?: HabitatActivity,
 ): Promise<HabitatBudgetVerifyReport> {
   const budget = parseHabitatBudget(value);
   const { mismatches, checkedReceipts } = await checkHabitatBudgetEvidence(budget, store, { fns, ...(tools ? { tools } : {}) });
+  if (expected !== undefined && budget.activity !== expected) mismatches.unshift(`budget activity is not ${expected}`);
   return {
     ok: mismatches.length === 0,
     digest: digestCanonical(budget as unknown as JsonValue),

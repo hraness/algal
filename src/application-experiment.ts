@@ -15,7 +15,12 @@
  * coverage and the host's own selection/restoration checks. When the default
  * host is offered an experiment as `activate`/`migrate`/`restore` evidence it
  * replays it like comparison evidence and requires `result.revision` to be the
- * committed revision. */
+ * committed revision.
+ *
+ * An experiment may also cite `budget`: a stored `algal.habitat-budget.v1`
+ * account the host charged while it ran the cited evaluations. The optional
+ * field is absent from records that do not cite one, so their bytes and
+ * digests are unchanged. */
 import {
   applicationId, applicationJson, applicationObject, applicationRef, applicationRefs,
   applicationTag, getApplicationRecord, nullableApplicationRef, parseApplicationRevision,
@@ -28,6 +33,8 @@ import { verifyApplicationComparison, type ApplicationComparison } from "./appli
 import { parseApplicationProposal, parseProposalRequest, verifyApplicationProposal } from "./application-proposal";
 import { verifyApplicationSelection, verifyApplicationSelectionPolicy } from "./application-selection";
 import { digestCanonical, type Digest } from "./digest";
+import { foundryReportRuns, type FoundryReport } from "./foundry";
+import { checkHabitatBudgetEvidence, parseHabitatBudget } from "./habitat-budget";
 import { canonicalize } from "./values";
 import type { Store } from "./store-contract";
 
@@ -56,10 +63,16 @@ export type ApplicationExperiment = {
   /** At most one `algal.application-selection.v1` under `selectionPolicy`. */
   selection: Digest | null;
   result: ApplicationExperimentResult;
+  /** Optional complete `experiment` habitat account charging exactly the
+   * cited evaluations' runs; absent when the host charged none. */
+  budget?: Digest;
 };
 
+const hasBudget = (input: unknown): boolean => !!input && typeof input === "object" && Object.hasOwn(input, "budget");
+
 export function parseApplicationExperiment(input: unknown): ApplicationExperiment {
-  const v = applicationObject(input, ["contract", "application", "parentState", "entrypoint", "environment", "proposals", "evaluations", "comparison", "selectionPolicy", "selection", "result"]);
+  const optional = hasBudget(input) ? ["budget"] : [];
+  const v = applicationObject(input, ["contract", "application", "parentState", "entrypoint", "environment", "proposals", "evaluations", "comparison", "selectionPolicy", "selection", "result", ...optional]);
   applicationTag(v.contract, "algal.application-experiment.v1");
   const proposals = applicationRefs(v.proposals, EXPERIMENT_LIMITS.proposals);
   const evaluations = applicationRefs(v.evaluations, EXPERIMENT_LIMITS.evaluations);
@@ -77,6 +90,7 @@ export function parseApplicationExperiment(input: unknown): ApplicationExperimen
     application: applicationId(v.application), parentState: applicationRef(v.parentState),
     entrypoint: applicationId(v.entrypoint), environment: applicationId(v.environment),
     proposals, evaluations, comparison, selectionPolicy, selection, result,
+    ...(optional.length ? { budget: applicationRef(v.budget) } : {}),
   };
 }
 
@@ -91,7 +105,36 @@ export type ProduceExperimentInput = {
   selectionPolicy: Digest | null;
   selection: Digest | null;
   result: ApplicationExperimentResult;
+  /** A stored complete `experiment` habitat account that charged exactly
+   * the cited evaluations' runs. */
+  budget?: Digest;
 };
+
+/** The cited account must be a complete `experiment` account that charges
+ * exactly the cited evaluations' runs: each evaluation's foundry runs in
+ * report order, one evaluation after another in the order the host ran
+ * them. Every evaluation in an experiment shares one case set, so each
+ * contributes the same number of runs. Ceilings and charges must match the
+ * stored manifests and receipts; the evaluations replayed the receipts. */
+async function checkExperimentBudget(store: Store, ref: Digest, reports: readonly FoundryReport[]): Promise<void> {
+  const budget = await getApplicationRecord(store, ref, parseHabitatBudget);
+  if (budget.activity !== "experiment") throw new Error("Experiment budget is not an experiment account");
+  if (budget.outcome !== "complete") throw new Error("Experiment budget is not complete");
+  const groups = reports.map(report => foundryReportRuns(report));
+  const used = new Set<number>();
+  let offset = 0;
+  while (offset < budget.runs.length) {
+    const start = offset;
+    const match = groups.findIndex((group, i) => !used.has(i) && group.length > 0 && start + group.length <= budget.runs.length &&
+      group.every((run, j) => budget.runs[start + j]!.manifest === run.manifest && budget.runs[start + j]!.receipt === run.receipt));
+    if (match < 0) throw new Error("Experiment budget does not charge exactly the cited evaluations");
+    used.add(match);
+    offset += groups[match]!.length;
+  }
+  if (used.size !== groups.length) throw new Error("Experiment budget does not charge exactly the cited evaluations");
+  const { mismatches } = await checkHabitatBudgetEvidence(budget, store);
+  if (mismatches.length) throw new Error(`Experiment budget does not reconcile with the store: ${mismatches[0]}`);
+}
 
 /** Replays every cited record against the parent state and derives the
  * canonical experiment. All join semantics live here, so the stored record is
@@ -113,6 +156,7 @@ async function deriveApplicationExperiment(store: Store, input: ProduceExperimen
   if (input.result.promoted !== true && input.result.promoted !== false) throw new Error("Invalid experiment promotion flag");
   const resultRevision = input.result.revision === null ? null : applicationRef(input.result.revision);
   if (input.result.promoted && resultRevision === null) throw new Error("Experiment promotion requires a revision");
+  const budget = hasBudget(input) ? applicationRef(input.budget) : null;
 
   // The parent state names the application; nothing may join across
   // applications or heads.
@@ -143,9 +187,11 @@ async function deriveApplicationExperiment(store: Store, input: ProduceExperimen
   // measurement set, and a measured candidate must come from a cited proposal
   // when proposals are part of the chain.
   const acceptedCandidates = new Set<Digest>();
+  const reports: FoundryReport[] = [];
   let shared: { cases: Digest; scorer: Digest; policy: Digest } | null = null;
   for (const reference of evaluations) {
     const checked = await verifyApplicationEvaluation(store, reference, parentState, runtime);
+    reports.push(checked.report);
     const request = await getApplicationRecord(store, checked.evaluation.request, parseApplicationEvaluationRequest);
     if (request.parentState !== parentState || request.environment !== environment) {
       throw new Error("Experiment evaluation is not bound to this parent state and environment");
@@ -220,11 +266,14 @@ async function deriveApplicationExperiment(store: Store, input: ProduceExperimen
       throw new Error("Experiment result names no accepted candidate");
     }
   }
+  // An optional account must charge exactly the cited evaluations' runs.
+  if (budget !== null) await checkExperimentBudget(store, budget, reports);
   return {
     contract: "algal.application-experiment.v1", application, parentState, entrypoint, environment,
     proposals: [...proposals].sort(), evaluations: [...evaluations].sort(),
     comparison, selectionPolicy, selection,
     result: { promoted: input.result.promoted, revision: resultRevision },
+    ...(budget !== null ? { budget } : {}),
   };
 }
 
@@ -254,7 +303,7 @@ export async function verifyApplicationExperiment(
     application: stored.application, parentState: stored.parentState, entrypoint: stored.entrypoint,
     environment: stored.environment, proposals: stored.proposals, evaluations: stored.evaluations,
     comparison: stored.comparison, selectionPolicy: stored.selectionPolicy, selection: stored.selection,
-    result: stored.result,
+    result: stored.result, ...(stored.budget !== undefined ? { budget: stored.budget } : {}),
   }, runtime);
   if (canonicalize(applicationJson(recomputed)) !== canonicalize(applicationJson(stored))) {
     throw new Error("Experiment is not reproducible from its evidence");
