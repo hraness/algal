@@ -98,7 +98,7 @@ declared budget adds no separate allowance.
 - **Tests:** [`src/library-index.test.ts`](../src/library-index.test.ts),
   [`examples/source/projects/task-planning/project.test.ts`](../examples/source/projects/task-planning/project.test.ts),
   and [`examples/source/projects/support-queue/project.test.ts`](../examples/source/projects/support-queue/project.test.ts).
-- **Compiler:** `algal.source.profile.v1`, version `1.3.0`.
+- **Compiler:** `algal.source.profile.v1`, version `1.4.0`.
 - **Maintainer:** ALGAL maintainers, through pull requests to [hraness/algal](https://github.com/hraness/algal).
 - **Status:** Listed, first revision.
 
@@ -128,7 +128,7 @@ declared budget adds no separate allowance.
 - **Tests:** [`src/library-index.test.ts`](../src/library-index.test.ts),
   [`examples/source/projects/task-planning/project.test.ts`](../examples/source/projects/task-planning/project.test.ts),
   and [`examples/source/projects/support-queue/project.test.ts`](../examples/source/projects/support-queue/project.test.ts).
-- **Compiler:** `algal.source.profile.v1`, version `1.3.0`.
+- **Compiler:** `algal.source.profile.v1`, version `1.4.0`.
 - **Maintainer:** ALGAL maintainers, through pull requests to [hraness/algal](https://github.com/hraness/algal).
 - **Status:** Listed, first revision.
 
