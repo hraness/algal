@@ -760,7 +760,8 @@ evidence chain — proposals, evaluations, an optional comparison, an optional
 selection policy, and an optional retained selection — for one application,
 one parent state, one entrypoint, and one environment. The closed record
 names `{contract, application, parentState, entrypoint, environment,
-proposals, evaluations, comparison, selectionPolicy, selection, result}`:
+proposals, evaluations, comparison, selectionPolicy, selection, result}`,
+plus `budget` when the experiment cites a habitat budget account (below):
 `proposals` and `evaluations` are sorted-unique reference lists bounded at 8
 each with at least one record total; `comparison`, `selectionPolicy`, and
 `selection` are nullable references; `result` is `{promoted, revision}` where
@@ -803,6 +804,28 @@ coverage checks, and it cannot attach to a `propose` transition, which
 still requires exactly one proposal record. The native CLI exposes
 `application experiment input.json` with the join fields and `application
 verify-experiment input.json` with `{experiment, expectedState}`.
+
+A host can charge an experiment's evaluations to one
+[habitat budget](foundry.md#habitat-budget) account with activity
+`experiment`: `evaluateApplicationRevision(store, input, runtime, {account})`
+in TypeScript, or `application evaluate input.json --budget <file>` in the
+native CLI, where the file holds limits `{work, attempts, runs}` for a new
+account or a complete `algal.habitat-budget.v1` record to continue. Every
+incumbent, candidate, and holdout run reserves its declared ceiling before
+it starts and is charged what its receipt records. The evaluation record, its
+foundry report, and their digests are the same with or without an account.
+When a reservation does not fit, no evaluation is stored, and the native
+command prints the exhausted account and exits with status `1`; otherwise it
+adds the updated account to its output as `budget`. A record continues only
+while every listed run still matches its manifest and receipt, and an
+exhausted record cannot continue.
+
+The experiment may cite the stored account as `budget`, a record digest. The
+account must be complete, have activity `experiment`, and charge exactly the
+cited evaluations' runs: each evaluation's runs together in report order,
+with the evaluations in any order, and every ceiling and charge matching its
+manifest and receipt. Charging proposal generation to the account is
+proposed. Experiments without `budget` keep their bytes and digests.
 
 ## Deterministic lineage
 

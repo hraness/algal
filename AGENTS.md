@@ -12,7 +12,8 @@
   credential custody (`credentials.ts`), embeddings (`embeddings.ts`) and
   the derived semantic index plus recall executor (`semantic.ts`), foundry
   evaluation and search (`foundry.ts`, `search.ts`) with the habitat-wide
-  work account (`habitat-budget.ts`), benchmark comparison (`bench.ts`,
+  work account (`habitat-budget.ts`) and its round-robin scheduler and
+  resumable journal (`habitat-schedule.ts`, TypeScript only), benchmark comparison (`bench.ts`,
   `bench-verify.ts`), bundles (`bundle.ts`), transports (`transport.ts`),
   the `algal.expr.v1` WASM loader (`expr.ts` + committed `algal_expr.wasm`),
   canonical values and digests, and colocated tests.
@@ -117,12 +118,14 @@
   `cargo fmt --all -- --check`. Use `cargo build --locked` followed by
   `bun scripts/native-parity.ts` to compare every bundled example and verify
   receipts in both directions between TypeScript and Rust (it also replays the
-  budgeted foundry fixture in `scripts/habitat-budget-fixture.ts` through both
-  CLIs), and
+  budgeted foundry and search fixture in `scripts/habitat-budget-fixture.ts`
+  through both CLIs and checks that the native CLI refuses habitat schedules),
+  and
   `bun scripts/application-parity.ts` to replay the durable application
   lifecycle (create/commit including activate, propose, select, and migrate
   transitions, dispatch/reconcile, memory scope/observe/snapshot/query, the
-  bounded `algal.application-experiment.v1` promotion-evidence join, the
+  bounded `algal.application-experiment.v1` promotion-evidence join with
+  evaluations charged to an optional habitat budget account, the
   deterministic `application lineage` projection, the structured-facts-only
   ablation fixture, and the `algal.application-host.v1` policy host) through
   both runtimes with

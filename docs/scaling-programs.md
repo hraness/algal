@@ -191,15 +191,18 @@ generations, pending work, retained records, and storage. An individual pure
 helper does not need a separate durable process.
 
 Foundry and search limit candidates, rounds, and cases, and each run keeps its
-own work allowance. A foundry config can add a
+own work allowance. A foundry or search config can add a
 [habitat budget](../spec/v1/foundry.md#habitat-budget) that covers all of its
-runs: before each run starts, one account reserves the run's declared ceiling,
-then charges the work and model-call attempts the run records, including
-rejected candidates, failed runs, and retries. When the next run does not fit,
-the foundry stops and writes the account instead of a report. Search,
-application experiments, and concurrent experiments do not share an account
-yet, so hosts track those totals themselves. A habitat scheduler that starts
-runs from several activities against one account is proposed.
+runs, across every search generation: before each run starts, one account
+reserves the run's declared ceiling, then charges the work and model-call
+attempts the run records, including rejected candidates, failed runs, and
+retries. When the next run does not fit, the activity stops and writes the
+account instead of a report. The evaluations of an application experiment can
+charge one account that the experiment record cites. In the TypeScript CLI, a
+[habitat schedule](../spec/v1/foundry.md#habitat-schedules) runs several
+foundry and search configs against one account, taking turns in activity
+order, and its journal lets an interrupted schedule continue from its stored
+receipts.
 
 Keep code size, expanded execution size, and history size separate when
 measuring capacity:
@@ -285,9 +288,10 @@ and [the application links](source-language.md#link-modules-to-application-revis
    unique values, and rejection of undeclared fields remain unchecked.
 5. Extend the local lock with vendored remote catalogs that resolve to the
    same offline verification it applies to local projects.
-6. Charge search and application experiments to the habitat budget, then add
-   a scheduler that starts runs from concurrent activities against one account
-   and resumes an interrupted activity's account before population sizes grow.
+6. Run habitat schedules in the native runtime, and schedule experiment
+   evaluations and other orders beside foundry and search activities. Searches
+   and experiment evaluations charge the habitat budget in both runtimes;
+   round-robin schedules and journal resumption run in the TypeScript runtime.
 
 The [cumulative-skill experiment](vision.md#what-would-justify-the-claim)
 measures whether keeping and composing procedures improves later work. More

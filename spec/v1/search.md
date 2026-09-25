@@ -16,8 +16,12 @@ Holdout expectations, outputs, scores, and receipts never enter generation evide
 
 ## Evidence
 
-Each generation records its index, generator manifest and receipt digests, proposed manifest digests, complete candidate evidence, and promoted digest. The search report also records the generator digest, final foundry report, and a canonical digest over the complete history.
+Each generation records its index, generator manifest and receipt digests, proposed manifest digests, complete candidate evidence, and promoted digest. The search report also records the generator digest, final foundry report, an optional `budget`, and a canonical digest over the complete history.
 
 Verification checks bounds and unknown fields, recomputes the report digest, verifies deterministic promotion and survivor continuity, confirms every proposal was evaluated, rejects holdout evidence in generations, resolves every referenced manifest and receipt, and replays generator and candidate runs offline. The final foundry report is independently verified.
 
 A verified search report proves the recorded evolutionary history and selection are internally consistent. It does not establish that the fitness cases are representative, prevent a generator from overfitting visible train or validation evidence, or prove future live effects will match recorded effects.
+
+## Habitat budget
+
+A config may add a [habitat budget](foundry.md#habitat-budget), `"budget": {"work": W, "attempts": A, "runs": R}`. One `algal.habitat-budget.v1` account with activity `search` then covers every run: each generation's generator run and candidate cases, then the final epoch's selection and holdout runs. The first reservation that does not fit stops the search, and `foundry search` writes the exhausted account instead of a report and exits with status `1`. A complete search report carries the account as `budget`; its final foundry report never carries one. Verification also checks that `budget` lists exactly the search's runs in that order, with the last generator run listed once, and that each ceiling and charge matches its manifest and receipt. `foundry search-verify` accepts a report or an exhausted `search` account. Reports without `budget` keep their bytes and digests. A [habitat schedule](foundry.md#habitat-schedules) can run a search beside other activities against one shared account.
