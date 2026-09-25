@@ -90,8 +90,9 @@ program welcome(name: text) -> text {
 }
 ```
 
-A file contains exactly one program, optionally preceded by local imports. Programs have named `text` or `json`
-inputs and a `text` or `json` result. A required budget declaration precedes
+A file contains exactly one program, optionally preceded by local imports and
+[record declarations](#record-types). Programs have named `text`, `json`, or
+record inputs and a `text`, `json`, or record result. A required budget declaration precedes
 immutable `let` bindings and one `return`. Semicolons after bindings and return
 are optional. Lists, records, choice declarations, and match arms use commas,
 with optional trailing commas. Strings use JSON escaping. `//` and `/* */`
@@ -223,6 +224,121 @@ Normal host admission and provider behavior still apply; a prompt is not an
 OS sandbox. `decide` and `generate` occupy a whole binding, return expression,
 or branch arm. All declared effects remain in the graph, including unused
 bindings and inactive arms. Inactive arms are skipped at execution.
+
+## Record types
+
+A record type names the fields a JSON value must have. Declare records after
+the imports and before the program, then use a record name as a parameter or
+result type. From the [typed task scorer](../examples/source/projects/typed-tasks/README.md):
+
+```algal
+record Task {
+  id: text,
+  title: text,
+  urgency: number,
+  impact: number,
+  status: text,
+  notes: text?,
+}
+record Weights { urgency: number, impact: number }
+record Score { id: text, title: text, total: number, ready: boolean }
+
+program score(task: Task, weights: Weights) -> Score {
+  budget { max_agent_calls: 0 }
+
+  let total = task.urgency * weights.urgency + task.impact * weights.impact
+  return {
+    id: task.id,
+    title: task.title,
+    total: total,
+    ready: task.status == "open" && total >= 10,
+  }
+}
+```
+
+Each field has a type: `text`, `number`, `boolean`, `json`, or a record
+declared earlier in the same file. A `?` after the type makes the field
+optional. Fields use commas, with an optional trailing comma. Record names
+start with an uppercase letter and contain only ASCII letters and digits;
+field names follow the binding rules. A field name is the JSON key as
+written, without the kebab-case conversion that parameter names receive.
+Records belong to their file. To pass a record to another program, declare a
+record with the fields it needs in each file; the compiler compares records
+field by field, not by name.
+
+### What a record compiles to
+
+A record parameter or result becomes an ordinary `json` port with a `schema`
+in the manifest's existing JSON schema subset. `Task` compiles to:
+
+```json
+{
+  "type": "object",
+  "required": ["id", "impact", "status", "title", "urgency"],
+  "properties": {
+    "id": { "type": "string" },
+    "title": { "type": "string" },
+    "urgency": { "type": "number" },
+    "impact": { "type": "number" },
+    "status": { "type": "string" },
+    "notes": { "type": "string" }
+  }
+}
+```
+
+`required` is sorted, so reordering fields does not change the compiled
+program. A `json` field is listed in `required` only, and an optional `json`
+field adds nothing. Records add no manifest field, port kind, or schema
+keyword; the compiled program uses only what both runtimes already accept.
+
+### What is checked
+
+Both runtimes check a record value where it enters or leaves a program,
+before any cell that uses it runs:
+
+- A root program's record parameter is checked when the run starts. A
+  malformed value fails the `input` cell.
+- A record argument to `call`, or a shared `using` argument of `each`, is
+  checked when it reaches that cell, which then fails.
+- Each `each` item is checked against the child's record parameter before
+  that item's run starts. A malformed item fails the `each` cell; earlier
+  items' cells remain in the receipt, and later items do not run.
+- A record result is checked before the program returns it. When a called
+  program returns a different schema, the compiler adds one pass-through cell
+  that declares the caller's record.
+
+A value passes when it is a JSON object, every field without `?` is present,
+and every declared field that is present has its type, recursively for nested
+records. A failure is `TYPE_MISMATCH` with a message such as `expected
+object`, `expected number`, or `missing required field`. The message does not
+name the field.
+
+The runtime does not check:
+
+- Undeclared fields. They are accepted and passed through unchanged.
+- The value of a `json` field, beyond its presence when required.
+- Number ranges, whole numbers, text length or format, or allowed values.
+- List items. There is no list-of-records type; declare the list as `json`
+  and use `each` with a record parameter to check every item.
+
+An optional field may be omitted, but a present field must have its type, so
+`"notes": null` is rejected.
+
+The compiler also rejects mismatches it can prove from the source: selecting
+an undeclared field, arithmetic on a `text` field, a record literal or record
+value that lacks a required field or has a field of the wrong type, and a
+record literal with a field the record does not declare. A `json` value is
+accepted and checked at run time. Selecting an optional field gives a `json`
+value, because the field may be absent.
+
+### Record limits
+
+A file declares at most 16 records, each with 1 to 32 fields, and a record
+name has at most 40 characters. A field can name only a record declared
+earlier, so records cannot refer to themselves or form a cycle. Each compiled
+schema must fit the manifest's schema depth limit of 4. In practice, a record
+used as a field type may contain only `json` fields; deeper nesting is
+rejected at the declaration.
 
 ## Reuse a local program
 
@@ -568,7 +684,8 @@ default. It adds no automatic retries.
 
 Source limits: 65,536 UTF-8 bytes, 8,192 tokens, 1,024 expression nodes,
 16 levels of source nesting, 24 bindings, 16 parameters, 40-character names,
-16 choice labels, and 64 entries per collection. The lowered program must
+16 choice labels, 64 entries per collection, 16 records per file, and 32
+fields per record. The lowered program must
 also satisfy the existing manifest and expression bounds. A deeply nested
 expression may reach a core bound before a source maximum. Errors identify a
 source line and column; failures during final manifest validation reference

@@ -27,11 +27,14 @@ import cycles, and collects the child manifests needed to run the program.
 The [source language guide](source-language.md#reuse-a-local-program) describes
 these operations and the portable bundle format.
 
-The source language accepts `text` and `json` parameters and results. It checks
-known text/JSON mismatches, but a JSON parameter does not describe all its
-fields statically. Full manifests offer additional port kinds and a limited
-JSON schema subset. Field types, collection constraints, and errors need
-explicit validation where the language cannot express them.
+The source language accepts `text`, `json`, and record parameters and results.
+A [record type](source-language.md#record-types) names required and optional
+fields of type `text`, `number`, `boolean`, `json`, or another record. It
+compiles to the manifest's limited JSON schema subset, which both runtimes
+check where a value enters or leaves a program. A `json` parameter has no
+declared fields. Full manifests offer additional port kinds. Lists of records,
+value ranges, allowed values, rejection of extra fields, and domain errors
+need explicit validation, because the schema subset cannot express them.
 
 ## Factor around the work
 
@@ -69,7 +72,10 @@ A program's interface is its declared input and output mapping. Good library
 documentation also names the meaning of each value, rejected inputs, maximum
 collection sizes, work limits, required host functions or capabilities, and
 examples of success and failure. Keep these facts beside the program that
-implements them.
+implements them. [Record types](source-language.md#record-types) put field
+names and types in the interface itself: both runtimes reject a value that
+lacks a required field or has a field of the wrong type, and `lock --verify`
+reports a changed record as interface drift.
 
 Named interfaces help callers use a child without listing its internal cells.
 They do not imply that every private refactor is compatible with an active
@@ -195,6 +201,7 @@ measuring capacity:
 | Source project | 16 unique files; 1 MiB total source |
 | Source imports | 16 per file; eight levels |
 | Source bindings | 24 per program |
+| Source records | 16 per file; 32 fields each; schema depth 4 |
 | Expanded static compilation | 1,024 manifest instances; 4,096 cells; 16,384 edges; 64 MiB canonical manifest bytes |
 | Runtime embedding | Root-declared depth, at most eight |
 
@@ -242,9 +249,11 @@ the report with application revisions and evaluation records remains proposed.
    activation. The [shared program catalog](library.md) checks each entry's
    digests and callers across two projects; it does not evaluate a revised
    entry against its callers' cases.
-4. Add richer source record and result types for demonstrated application needs.
-   Lower them to checks the runtime enforces; new validation semantics need
-   versioned specification and cross-runtime tests.
+4. Extend record types for demonstrated application needs. Records that
+   compile to the existing schema subset are available, with matching receipts
+   in both runtimes. Lists of records, allowed values, number ranges, and deeper
+   nesting need new validation semantics, which need a versioned specification
+   and cross-runtime tests.
 5. Extend the local lock with vendored remote catalogs that resolve to the
    same offline verification it applies to local projects.
 

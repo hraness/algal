@@ -1,0 +1,10 @@
+import score from "./score.algal"
+
+record Weights { urgency: number, impact: number }
+
+// Each list item is checked against score's Task record before it is scored.
+program scores(tasks: json, weights: Weights) -> json {
+  budget { max_agent_calls: 0 }
+
+  return each score over task in tasks using { weights: weights } max_items 8
+}
