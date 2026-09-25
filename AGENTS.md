@@ -70,10 +70,11 @@
 - Public copy is the website (`site/`), `README.md`, the mirrored `docs/` and
   `spec/v1/` pages, `site/llms.txt`, CLI help, package metadata, release notes,
   and the native workbench report. It follows `STYLE.md` and `WRITING.md`.
-- The canonical one-line description of ALGAL is an open owner decision. Until
-  it is made, reuse `SITE_DESCRIPTION` in `site/copy.ts` instead of writing
-  another variant, and do not change the site tagline or home H1 without the
-  owner.
+- The canonical ALGAL identity lines come from the portfolio messaging record
+  (product `algal`): `site/copy.ts` carries them as `SITE_TAGLINE` and
+  `SITE_DESCRIPTION`, and the home H1, README lead, CLI intros, package
+  descriptions, and `llms.txt` take the same fields. Reuse those constants
+  and record fields instead of writing another variant.
 - Translate this file's internal vocabulary on public pages:
   - admit, admission: check and accept (a manifest); attach (an executor,
     tool, or capability)

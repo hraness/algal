@@ -1,7 +1,7 @@
 {
   "name": "@hraness/algal",
   "version": "0.2.0",
-  "description": "ALGAL: a language for growing agent programs, with typed workflows, bounded model execution, and replayable evidence. Bun-only TypeScript package: exports and bin point at .ts sources (no build step, no Node.js support).",
+  "description": "ALGAL is a programming language and VM for AI agent programs that wait for approval and leave receipts you can replay. Bun-only TypeScript package: exports and bin point at .ts sources (no build step, no Node.js support).",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/hraness/algal.git"

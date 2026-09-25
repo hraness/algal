@@ -87,7 +87,7 @@ async function recallSpecExecutor(spec: string, dir: string): Promise<Executor |
   };
 }
 
-const USAGE = `algal — typed, replayable workflow organisms
+const USAGE = `algal: Language and VM for agent programs that wait for approval and resume
 
 usage:
   algal compile <program.algal> [--out <manifest.json>] [--source-map <map.json>]
