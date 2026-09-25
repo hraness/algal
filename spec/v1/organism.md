@@ -91,12 +91,13 @@ bound ingestion; the bundle's digest checks still establish its identity.
 Every port declares one of:
 
 - `text` — a string
-- `json` — any JSON value; an optional `schema` field narrows it to a
-  bounded subset (`{"type","required","properties"}` — the same shape as
-  agent json output contracts, depth ≤ 4). The declaring cell owns the
+- `json` — any JSON value; an optional `schema` field narrows it to the
+  limited schema subset described in [JSON schemas](#json-schemas), the same
+  subset agent json output contracts use. An optional `"schemaVersion": 2`
+  beside `schema` selects version 2 of that subset. The declaring cell owns the
   check: a produced value violating an output schema fails at commit; a
-  delivered value violating an input schema fails the consumer's activation
-  — either way routable through `on:"fail"`.
+  delivered value violating an input schema fails the consumer's activation.
+  Either failure is routable through `on:"fail"`.
 - `choice` — a string from declared `labels`
 - `ref` — a `sha256:` digest token naming a payload in the store
 - `cap` — an opaque `cap:<class>:sha256:<digest>` handle. It must use the
@@ -123,6 +124,76 @@ JSON-shaped dynamic composition cannot introduce a capability-typed edge:
 `spawn` rejects capability ports on its child interface, and `each.over` cannot
 name a capability input. Use typed `organism` delegation, or a typed pass-through
 input on `each`. Capability and ref lists cannot feed scalar ports.
+
+### JSON schemas
+
+A `json` port's `schema` and a JSON output contract's `schema` use one of two
+versions of a small JSON Schema subset. A schema without `schemaVersion` is
+version 1. Adding `"schemaVersion": 2` selects version 2, on a port
+(`{"type":"json","schema":{…},"schemaVersion":2}`) or in an output contract
+(`{"kind":"json","schema":{…},"schemaVersion":2}`). `schemaVersion` must be
+the number `2` and requires a `schema`. Both runtimes check every schema when
+they check the manifest, before any effect, and reject a malformed one with
+`PARSE_FAILED`.
+
+Both versions check a value's type the same way. JSON output may be an object,
+array, string, number, integer, boolean, or null when the schema declares that
+type, and an omitted `type` means `object`. `type` names one supported type or
+a nonempty array of at most seven distinct supported types (a union). A value
+that matches no declared type fails with `expected <types>`, the declared
+types joined by `|`. Null or scalar child schemas and misspelled declared
+types are rejected. Declared properties are checked in UTF-8 lexicographic key
+order, so failure evidence is independent of source key order.
+
+**Version 1** also checks `required` and `properties`. `required` is an array
+of strings of at most 64 UTF-16 code units, and each listed name must be one of
+the value's own fields (`missing required field`). `properties` maps names to
+object schemas, and each declared property present in the value is checked
+recursively. Other keywords, including `additionalProperties`, `maxLength`,
+`items`, `enum`, `minimum`, and `maximum`, are kept as provider hints; they
+are not checked and carry no replay guarantee. A version 1 schema's JSON nests
+at most four levels deep.
+
+**Version 2** checks `type`, `required`, `properties`, `items`, `enum`,
+`minimum`, and `maximum`, and rejects every other keyword. A keyword that a
+later version adds therefore fails in a runtime that knows only version 2
+instead of being ignored. Its declaration rules are:
+
+- `required` lists at most 64 distinct names of at most 64 UTF-16 code units.
+- `properties` maps at most 64 names to version 2 schemas.
+- `items` is a version 2 schema, and `type` must include `array`.
+- `enum` lists 1 to 32 distinct allowed values. Each is a string, a finite
+  number, a boolean, or null whose canonical JSON is at most 256 bytes, and
+  each must match `type`. Two values are the same when their canonical JSON is
+  identical, so `1` and `1.0` are duplicates.
+- `minimum` and `maximum` are finite numbers, `type` must include `number` or
+  `integer`, and `minimum` may not exceed `maximum`.
+- The root schema is level 1, and a schema under `properties` or `items` is
+  one level below its parent. No schema may be below level 8.
+
+A version 2 value check applies each schema's keywords in this order:
+
+1. `type`, as above.
+2. `enum`: the value must have the same canonical JSON as one allowed value
+   (`expected an allowed value`). An object or array never matches.
+3. `minimum` and `maximum`: both bounds are inclusive and apply only to
+   numbers (`number below minimum`, `number above maximum`).
+4. `required` and `properties`, as in version 1.
+5. `items`: the elements of an array are checked in index order. The first
+   failing element fails the value with `item <i>: <message>`, where `<i>` is
+   its zero-based index and `<message>` is that element's failure, so a nested
+   list can report `item 2: item 0: expected string`.
+
+A schema that uses only `type`, `required`, and `properties` checks values the
+same way in both versions. The failure code is `TYPE_MISMATCH` for a value
+checked against a port and `EFFECT_UNPARSEABLE` for executor output checked
+against an output contract. Messages name the failed check and list positions,
+never field names or values. A list has no separate length limit; the
+262,144-byte value bound applies.
+
+A runtime that predates version 2 treats `schemaVersion` as an unknown port or
+output field and rejects the manifest with `PARSE_FAILED` when it checks it,
+so it never runs a version 2 schema with version 1 checks.
 
 ### agent / classifier / gate fields
 
@@ -165,22 +236,9 @@ input on `each`. Capability and ref lists cannot feed scalar ports.
   plus edges from them to the viewer, each `{from, to, guard?}` with
   dotted `cell.port` endpoints. An agent can see how the records it reads
   were wired, never the wiring of cells it cannot name.
-- `output` is `{"kind":"text"}`, `{"kind":"json","schema":{…}}` (a bounded
-  schema subset: `type`, `required`, `properties`, depth ≤ 4), or
+- `output` is `{"kind":"text"}`, `{"kind":"json","schema":{…}}` with an
+  optional `"schemaVersion": 2` (see [JSON schemas](#json-schemas)), or
   `{"kind":"choice","labels":[…],"onMiss"?}`.
-  JSON output may be an object, array, string, number, integer, boolean, or
-  null when the schema declares that type. An omitted `type` defaults to
-  `object`. Known keywords are validated during manifest admission, before any
-  effect: `type` must name one supported type or a nonempty array of at most
-  seven distinct supported types (a union); `required` must be an array of
-  strings of at most 64 UTF-16 code units; `properties` must map names to object
-  schemas. Null/scalar child schemas and misspelled declared types are rejected.
-  The VM checks `required` and declared `properties` recursively
-  within the existing schema-depth bound. Declared properties are checked in
-  UTF-8 lexicographic key order so failure evidence is independent of source
-  key order. Other keywords, including
-  `additionalProperties`, `maxLength`, `items`, and `enum`, are retained
-  provider hints; they are not VM-enforced constraints or replay guarantees.
 - `route` is a hint the executor may honor. It grants nothing by itself.
   `route.provider` and `route.preset` select among host-supplied executors by
   id (`<name>` or `provider:<name>` / `preset:<name>`). Selection is
@@ -880,3 +938,13 @@ schemas retain their data and execution semantics; unsupported keywords remain
 hints. Preserve VM.7 or the original matching runtime alongside historical
 receipts containing malformed declarations. The current parser intentionally
 rejects those manifests rather than spending an effect or weakening replay.
+
+Schema version 2 is additive. A manifest without `schemaVersion` keeps its
+bytes, digest, and version 1 checks, including provider hints named `items`,
+`enum`, `minimum`, or `maximum`, so its receipts replay unchanged. A manifest
+that declares version 2 needs a runtime that supports it: older runtimes
+reject it with `PARSE_FAILED` before any cell runs, and its receipts replay
+only in a runtime that supports version 2. The source compiler emits
+version 2 only for a record or list type that needs it (compiler version
+1.5.0), so programs without such types compile to the same manifests as
+before.

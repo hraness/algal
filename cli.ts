@@ -1413,6 +1413,7 @@ async function main(): Promise<number> {
         many?: boolean;
         labels?: string[];
         schema?: JsonObject;
+        schemaVersion?: number;
         capability?: string;
       }): JsonValue => {
         const o: JsonObject = { type: p.type };
@@ -1420,6 +1421,7 @@ async function main(): Promise<number> {
         if (p.many) o.many = true;
         if (p.labels) o.labels = p.labels;
         if (p.schema) o.schema = p.schema;
+        if (p.schemaVersion) o.schemaVersion = p.schemaVersion;
         if (p.capability) o.capability = p.capability;
         return o as JsonValue;
       };

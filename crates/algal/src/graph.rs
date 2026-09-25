@@ -251,6 +251,9 @@ fn cell_signature(
             if let Some(schema) = cell["output"].get("schema") {
                 output["schema"] = schema.clone();
             }
+            if let Some(version) = cell["output"].get("schemaVersion") {
+                output["schemaVersion"] = version.clone();
+            }
             Signature {
                 inputs: ports(cell.get("inputs").unwrap_or(&json!({})), false, false)?,
                 outputs: port_map(json!({"out":output}))?,
@@ -264,6 +267,9 @@ fn cell_signature(
             }
             if let Some(schema) = cell["output"].get("schema") {
                 output["schema"] = schema.clone();
+            }
+            if let Some(version) = cell["output"].get("schemaVersion") {
+                output["schemaVersion"] = version.clone();
             }
             Signature {
                 inputs: ports(cell.get("inputs").unwrap_or(&json!({})), false, false)?,

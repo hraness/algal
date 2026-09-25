@@ -309,12 +309,14 @@ export function agentOutputPortType(o: {
   kind: "text" | "json" | "choice";
   labels?: string[];
   schema?: import("./values").JsonObject;
+  schemaVersion?: import("./schema").SchemaVersion;
 }): PortType {
   switch (o.kind) {
     case "text":
       return { type: "text" };
     case "json":
-      return { type: "json", ...(o.schema !== undefined ? { schema: o.schema } : {}) };
+      return { type: "json", ...(o.schema !== undefined ? { schema: o.schema } : {}),
+        ...(o.schemaVersion !== undefined ? { schemaVersion: o.schemaVersion } : {}) };
     case "choice": {
       const out: { type: "choice"; labels?: string[] } = { type: "choice" };
       if (o.labels !== undefined) out.labels = o.labels;

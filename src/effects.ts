@@ -12,6 +12,7 @@ import { AlgalError, ERROR_CODES, type ErrorCode } from "./errors";
 import { commandJson } from "./io-runtime";
 import { asDigest, digestCanonical, type Digest } from "./digest";
 import type { AgentOutput, Route } from "./contract";
+import { checkSchemaValueV2, type SchemaVersion } from "./schema";
 import type { Store } from "./store-contract";
 import {
   asArray,
@@ -371,7 +372,7 @@ export function bindOutput(
       return raw;
     }
     case "json": {
-      checkSchema(output.schema, raw, `cell "${cellId}" output`);
+      checkSchema(output.schema, raw, `cell "${cellId}" output`, "EFFECT_UNPARSEABLE", output.schemaVersion);
       return raw;
     }
     case "choice": {
@@ -388,14 +389,20 @@ export function bindOutput(
 
 /** The bounded schema subset `{type, required, properties}` — used for
  * agent json output contracts and `json` port `schema` declarations.
- * Manifest admission bounds schema depth. Other schema keywords are retained
- * provider hints, not constraints enforced by the VM. */
+ * Manifest admission bounds schema depth. In version 1 other schema keywords
+ * are retained provider hints, not constraints enforced by the VM; version 2
+ * also checks `items`, `enum`, `minimum`, and `maximum`. */
 export function checkSchema(
   schema: JsonObject,
   value: JsonValue,
   _what: string,
   code: "EFFECT_UNPARSEABLE" | "TYPE_MISMATCH" = "EFFECT_UNPARSEABLE",
+  version?: SchemaVersion,
 ): void {
+  if (version === 2) {
+    checkSchemaValueV2(schema, value, code);
+    return;
+  }
   const types = Array.isArray(schema.type) ? schema.type : [typeof schema.type === "string" ? schema.type : "object"];
   const matches = types.some(type =>
     (type === "string" && typeof value === "string") ||
