@@ -12,7 +12,7 @@ use crate::{
     contract::{Manifest, keys, object, text},
     effects::Host,
     graph::Transports,
-    habitat_budget::{self, Account},
+    habitat_budget::{self, DynLedger},
     runtime,
     scorer::{check_scorer, eval_scorer},
     store::Store,
@@ -333,32 +333,25 @@ async fn evaluate_case(
     store: &mut Store,
     host: &mut Host,
     transports: &Transports,
-    mut account: Option<&mut Account>,
+    account: Option<&mut DynLedger>,
 ) -> Result<Value> {
     let args = case_args(manifest, case)?;
-    if let Some(account) = account.as_deref_mut() {
-        account.reserve(manifest)?;
-    }
-    let stored = runtime::run(manifest.clone(), args, store, host, transports, None)
-        .await
-        .and_then(|receipt| {
+    let (receipt, reference) = match account {
+        // The ledger reserves the declared ceiling, runs, stores the
+        // receipt, and charges what it records; under a habitat schedule
+        // the scheduler serializes all of that onto the shared account.
+        Some(ledger) => {
+            ledger
+                .admit(manifest, &args, store, host, transports)
+                .await?
+        }
+        None => {
+            let receipt =
+                runtime::run(manifest.clone(), args, store, host, transports, None).await?;
             let reference = store.put("runs", &receipt)?;
-            Ok((receipt, reference))
-        });
-    let (receipt, reference) = match stored {
-        Ok(stored) => stored,
-        Err(error) => {
-            // No stored receipt exists to charge; the reservation is released
-            // and the account stays usable for the record.
-            if let Some(account) = account.as_deref_mut() {
-                account.release()?;
-            }
-            return Err(error);
+            (receipt, reference)
         }
     };
-    if let Some(account) = account {
-        account.charge(&reference, &receipt)?;
-    }
     let outputs = runtime::outputs(manifest, &receipt)?;
     let outcome = receipt["outcome"].as_str().unwrap_or("");
     let passed = outcome == "complete"
@@ -440,7 +433,7 @@ async fn evaluate_cases(
     store: &mut Store,
     host: &mut Host,
     transports: &Transports,
-    mut account: Option<&mut Account>,
+    mut account: Option<&mut DynLedger>,
 ) -> Result<Vec<Value>> {
     let mut results = Vec::with_capacity(cases.len());
     for case in cases {
@@ -480,7 +473,7 @@ async fn evaluate_population_in(
     store: &mut Store,
     host: &mut Host,
     transports: &Transports,
-    mut account: Option<&mut Account>,
+    mut account: Option<&mut DynLedger>,
 ) -> Result<(Vec<Value>, String)> {
     let selection_cases: Vec<&FoundryCase> =
         cases.iter().filter(|c| c.split != "holdout").collect();
@@ -583,7 +576,7 @@ pub async fn run_in(
     store: &mut Store,
     host: &mut Host,
     transports: &Transports,
-    mut account: Option<&mut Account>,
+    mut account: Option<&mut DynLedger>,
 ) -> Result<Value> {
     if account
         .as_deref()
@@ -604,8 +597,9 @@ pub async fn run_in(
         account.as_deref_mut(),
     )
     .await?;
-    if let Some(account) = account {
-        let budget = account.record()?;
+    if let Some(ledger) = account
+        && let Some(budget) = ledger.standalone_record()?
+    {
         // The account must hold exactly this report's runs; anything else is
         // a host wiring error, and the report would not verify.
         let mismatches =
@@ -636,7 +630,7 @@ pub async fn run_within(
     store: &mut Store,
     host: &mut Host,
     transports: &Transports,
-    account: Option<&mut Account>,
+    account: Option<&mut DynLedger>,
 ) -> Result<Value> {
     let mut report = report_base(
         candidates, cases, scorer, lineage, store, host, transports, account,
@@ -657,7 +651,7 @@ async fn report_base(
     store: &mut Store,
     host: &mut Host,
     transports: &Transports,
-    mut account: Option<&mut Account>,
+    mut account: Option<&mut DynLedger>,
 ) -> Result<Value> {
     check_interfaces(candidates, cases)?;
     if let Some(scorer) = scorer {
@@ -737,7 +731,7 @@ pub async fn generate_in(
     store: &mut Store,
     host: &mut Host,
     transports: &Transports,
-    mut account: Option<&mut Account>,
+    account: Option<&mut DynLedger>,
 ) -> Result<(String, String, Vec<Manifest>)> {
     let interface = object(&generator.value["interface"]).map_err(|_| {
         Error::invalid(format!(
@@ -773,34 +767,20 @@ pub async fn generate_in(
             .or_insert_with(|| json!({}))[target["port"].as_str().unwrap_or("")] = value.clone();
     }
     let generator_digest = store.admit(generator)?;
-    if let Some(account) = account.as_deref_mut() {
-        account.reserve(generator)?;
-    }
-    let stored = runtime::run(
-        generator.clone(),
-        Value::Object(run_args),
-        store,
-        host,
-        transports,
-        None,
-    )
-    .await
-    .and_then(|receipt| {
-        let reference = store.put("runs", &receipt)?;
-        Ok((receipt, reference))
-    });
-    let (receipt, receipt_digest) = match stored {
-        Ok(stored) => stored,
-        Err(error) => {
-            if let Some(account) = account.as_deref_mut() {
-                account.release()?;
-            }
-            return Err(error);
+    let run_args = Value::Object(run_args);
+    let (receipt, receipt_digest) = match account {
+        Some(ledger) => {
+            ledger
+                .admit(generator, &run_args, store, host, transports)
+                .await?
+        }
+        None => {
+            let receipt =
+                runtime::run(generator.clone(), run_args, store, host, transports, None).await?;
+            let reference = store.put("runs", &receipt)?;
+            (receipt, reference)
         }
     };
-    if let Some(account) = account {
-        account.charge(&receipt_digest, &receipt)?;
-    }
     if receipt["outcome"] != "complete" {
         return Err(Error::invalid(format!(
             "generator {} ended {}",
@@ -930,7 +910,7 @@ pub async fn search_in(
     store: &mut Store,
     host: &mut Host,
     transports: &Transports,
-    mut account: Option<&mut Account>,
+    mut account: Option<&mut DynLedger>,
 ) -> Result<Value> {
     let max_generations = spec.max_generations;
     if !(1..=MAX_GENERATIONS).contains(&max_generations) {
@@ -1043,8 +1023,9 @@ pub async fn search_in(
         "generations":generations,
         "result":result,
     });
-    if let Some(account) = account {
-        let budget = account.record()?;
+    if let Some(ledger) = account
+        && let Some(budget) = ledger.standalone_record()?
+    {
         // The account must hold exactly this report's runs; anything else is
         // a host wiring error, and the report would not verify.
         let mismatches =

@@ -159,8 +159,9 @@ export async function habitatBudgetParity(binary: string): Promise<{ cases: numb
         console.error(`habitat-budget ${scenario.name}: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
-    // Habitat schedules run in the reference runtime only: the native CLI
-    // must refuse a schedule and its record explicitly, never misread them.
+    // Habitat schedules run in both runtimes: a foundry and a search take
+    // round-robin turns on one account; the record, the journal, the resumed
+    // replay, and cross-verified results must be byte-identical.
     cases++;
     try {
       await writeFile(join(fixtures, "schedule-foundry.config.json"), canonicalize(base));
@@ -170,17 +171,51 @@ export async function habitatBudgetParity(binary: string): Promise<{ cases: numb
         contract: "algal.habitat-schedule.config.v1", order: "round-robin", budget: { work: 100_000, attempts: 8, runs: 32 },
         activities: [{ kind: "foundry", config: "schedule-foundry.config.json" }, { kind: "search", config: "schedule-search.config.json" }],
       }));
-      const store = join(temporary, "ts", "schedule");
-      const record = join(temporary, "schedule.record.json");
-      const ts = await spawn([process.execPath, cli, "foundry", "schedule", schedule, "--dir", store, "--out", record]);
-      if (ts.code !== 0 || (JSON.parse(ts.stdout) as JsonObject).contract !== "algal.habitat-schedule.v1") throw new Error(`reference schedule failed: ${ts.code} ${ts.stderr}`);
-      for (const command of [["foundry", "schedule", schedule], ["foundry", "verify", record], ["foundry", "search-verify", record], ["foundry", "schedule-verify", record]]) {
-        const native = await spawn([binary, "--dir", store, ...command]);
-        if (native.code !== 2 || !native.stderr.includes("algal.habitat-schedule.v1")) {
-          throw new Error(`native ${command.join(" ")} did not refuse the schedule explicitly: ${native.code} ${native.stderr.trim()}`);
-        }
+      const stores = { ts: join(temporary, "ts", "schedule"), native: join(temporary, "native", "schedule") };
+      const outs = { ts: join(temporary, "schedule.ts.json"), native: join(temporary, "schedule.native.json") };
+      const journals = { ts: join(temporary, "ts", "schedule-journal"), native: join(temporary, "native", "schedule-journal") };
+      const [ts, native] = await Promise.all([
+        spawn([process.execPath, cli, "foundry", "schedule", schedule, "--dir", stores.ts, "--journal", journals.ts, "--out", outs.ts]),
+        spawn([binary, "--dir", stores.native, "foundry", "schedule", schedule, "--journal", journals.native, "--out", outs.native]),
+      ]);
+      if (ts.code !== 0 || native.code !== 0) throw new Error(`exit ts=${ts.code} native=${native.code}: ${ts.stderr.trim()} | ${native.stderr.trim()}`);
+      if (ts.stdout !== native.stdout) throw new Error(`stdout differs\nts:     ${ts.stdout.slice(0, 400)}\nnative: ${native.stdout.slice(0, 400)}`);
+      const [tsOut, nativeOut] = await Promise.all([readFile(outs.ts, "utf8"), readFile(outs.native, "utf8")]);
+      if (tsOut !== nativeOut) throw new Error("--out bytes differ");
+      // The journal's immutable entries are canonical files; each must match.
+      const entries = ["journal.json", ...Array.from({ length: 16 }, (_, i) => `runs/${String(i).padStart(6, "0")}.json`)];
+      for (const entry of entries) {
+        const [a, b] = await Promise.all([readFile(join(journals.ts, entry), "utf8"), readFile(join(journals.native, entry), "utf8")]);
+        if (a !== b) throw new Error(`journal entry ${entry} differs\nts:     ${a.slice(0, 300)}\nnative: ${b.slice(0, 300)}`);
       }
-      console.log("habitat-budget schedule: the native CLI refuses schedules explicitly");
+      // Resuming each complete journal replays it: identical bytes again.
+      const [replayedTs, replayedNative] = await Promise.all([
+        spawn([process.execPath, cli, "foundry", "schedule", schedule, "--dir", stores.ts, "--journal", journals.ts]),
+        spawn([binary, "--dir", stores.native, "foundry", "schedule", schedule, "--journal", journals.native]),
+      ]);
+      if (replayedTs.code !== 0 || replayedNative.code !== 0 || replayedTs.stdout !== ts.stdout || replayedNative.stdout !== ts.stdout) {
+        throw new Error(`journal replay differs: ts=${replayedTs.code} native=${replayedNative.code}\n${replayedTs.stderr.trim()} | ${replayedNative.stderr.trim()}`);
+      }
+      // Cross-verify: each runtime verifies the other's schedule record
+      // against the other's store, with identical results.
+      const verifyTs = await spawn([process.execPath, cli, "foundry", "schedule-verify", outs.native, "--dir", stores.native]);
+      const verifyNative = await spawn([binary, "--dir", stores.ts, "foundry", "schedule-verify", outs.ts]);
+      if (verifyTs.code !== 0 || verifyNative.code !== 0) throw new Error(`schedule verification failed: ${verifyTs.stdout} | ${verifyNative.stdout} ${verifyNative.stderr}`);
+      if (verifyTs.stdout !== verifyNative.stdout) throw new Error(`schedule verification differs\nts:     ${verifyTs.stdout}\nnative: ${verifyNative.stdout}`);
+      // An exhausted schedule writes its terminal record and exits 1.
+      const tight = join(fixtures, "schedule-tight.json");
+      await writeFile(tight, canonicalize({
+        contract: "algal.habitat-schedule.config.v1", order: "round-robin", budget: { work: 100_000, attempts: 8, runs: 3 },
+        activities: [{ kind: "foundry", config: "schedule-foundry.config.json" }, { kind: "search", config: "schedule-search.config.json" }],
+      }));
+      const [tightTs, tightNative] = await Promise.all([
+        spawn([process.execPath, cli, "foundry", "schedule", tight, "--dir", join(temporary, "ts", "schedule-tight")]),
+        spawn([binary, "--dir", join(temporary, "native", "schedule-tight"), "foundry", "schedule", tight]),
+      ]);
+      if (tightTs.code !== 1 || tightNative.code !== 1 || tightTs.stdout !== tightNative.stdout) {
+        throw new Error(`exhausted schedule differs: ts=${tightTs.code} ${tightTs.stdout.slice(0, 300)} | native=${tightNative.code} ${tightNative.stdout.slice(0, 300)}`);
+      }
+      console.log("habitat-budget schedule: identical record, journal, replay, and cross-verification");
     } catch (error) {
       failures.push("schedule");
       console.error(`habitat-budget schedule: ${error instanceof Error ? error.message : String(error)}`);

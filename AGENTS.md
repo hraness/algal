@@ -13,7 +13,7 @@
   the derived semantic index plus recall executor (`semantic.ts`), foundry
   evaluation and search (`foundry.ts`, `search.ts`) with the habitat-wide
   work account (`habitat-budget.ts`) and its round-robin scheduler and
-  resumable journal (`habitat-schedule.ts`, TypeScript only), benchmark comparison (`bench.ts`,
+  resumable journal (`habitat-schedule.ts`), benchmark comparison (`bench.ts`,
   `bench-verify.ts`), bundles (`bundle.ts`), transports (`transport.ts`),
   the `algal.expr.v1` WASM loader (`expr.ts` + committed `algal_expr.wasm`),
   canonical values and digests, and colocated tests.
@@ -119,7 +119,8 @@
   `bun scripts/native-parity.ts` to compare every bundled example and verify
   receipts in both directions between TypeScript and Rust (it also replays the
   budgeted foundry and search fixture in `scripts/habitat-budget-fixture.ts`
-  through both CLIs and checks that the native CLI refuses habitat schedules),
+  through both CLIs, including a round-robin habitat schedule with journal
+  resumption checked byte-for-byte),
   and
   `bun scripts/application-parity.ts` to replay the durable application
   lifecycle (create/commit including activate, propose, select, and migrate

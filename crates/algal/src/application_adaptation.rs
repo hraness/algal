@@ -819,7 +819,7 @@ pub async fn evaluate_application_revision_in(
     input: &Value,
     host: &mut Host,
     transports: &Transports,
-    account: Option<&mut habitat_budget::Account>,
+    account: Option<&mut habitat_budget::DynLedger>,
 ) -> Result<(String, Value)> {
     if account
         .as_deref()

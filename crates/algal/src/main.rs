@@ -536,21 +536,30 @@ enum FoundryCommand {
         /// Search report (JSON).
         report: PathBuf,
     },
-    /// Habitat schedules run in the TypeScript runtime; the native CLI
-    /// refuses them explicitly.
-    #[command(hide = true)]
+    /// Run interleaved foundry/search activities under one shared habitat
+    /// budget, taking round-robin turns.
     Schedule {
-        #[allow(dead_code)]
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
+        /// `algal.habitat-schedule.config.v1` file.
+        config: PathBuf,
+        /// Journal directory; an existing journal resumes the schedule.
+        #[arg(long)]
+        journal: Option<PathBuf>,
+        /// Write the schedule record here as well as to stdout.
+        #[arg(long)]
+        out: Option<PathBuf>,
+        #[command(flatten)]
+        options: Box<Execution>,
     },
-    /// Habitat schedules run in the TypeScript runtime; the native CLI
-    /// refuses them explicitly.
-    #[command(hide = true)]
+    /// Replay every run a schedule record lists offline.
     ScheduleVerify {
-        #[allow(dead_code)]
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
+        /// `algal.habitat-schedule.v1` record (JSON).
+        record: PathBuf,
+        /// Tool registry file: tool name to `{signature, exec}`.
+        #[arg(long)]
+        tools: Option<PathBuf>,
+        /// Directory of `*.algal.json` manifests loaded into the store.
+        #[arg(long)]
+        modules: Option<PathBuf>,
     },
     /// Export a verified search winner's bundle.
     SearchPack {
@@ -1615,9 +1624,6 @@ async fn execute(cli: Cli) -> Result<bool> {
                 }) => {
                     let (store, host) = verifier(tools, modules)?;
                     let value = load(&report, MAX_DOCUMENT_BYTES)?;
-                    if value["contract"] == algal::habitat_budget::SCHEDULE_CONTRACT {
-                        return Err(algal::habitat_budget::schedule_unsupported());
-                    }
                     // An exhausted foundry writes its terminal habitat budget
                     // record in place of a report; `verify` accepts either.
                     let result = if value["contract"] == algal::habitat_budget::CONTRACT {
@@ -1661,9 +1667,6 @@ async fn execute(cli: Cli) -> Result<bool> {
                 }) => {
                     let (store, host) = verifier(tools, modules)?;
                     let value = load(&report, MAX_DOCUMENT_BYTES)?;
-                    if value["contract"] == algal::habitat_budget::SCHEDULE_CONTRACT {
-                        return Err(algal::habitat_budget::schedule_unsupported());
-                    }
                     // An exhausted search writes its terminal habitat budget
                     // record in place of a report; `search-verify` accepts
                     // either.
@@ -1676,8 +1679,132 @@ async fn execute(cli: Cli) -> Result<bool> {
                     emit(&result)?;
                     Ok(result["ok"] == true)
                 }
-                Some(FoundryCommand::Schedule { .. } | FoundryCommand::ScheduleVerify { .. }) => {
-                    Err(algal::habitat_budget::schedule_unsupported())
+                Some(FoundryCommand::ScheduleVerify {
+                    record,
+                    tools,
+                    modules,
+                }) => {
+                    let (store, host) = verifier(tools, modules)?;
+                    let value = load(&record, MAX_DOCUMENT_BYTES)?;
+                    let result = algal::habitat_schedule::verify(&value, &store, &host).await?;
+                    emit(&result)?;
+                    Ok(result["ok"] == true)
+                }
+                Some(FoundryCommand::Schedule {
+                    config: schedule_file,
+                    journal,
+                    out,
+                    mut options,
+                }) => {
+                    options.write = true;
+                    let (store, host, transports) = prepare(&options, &cli.dir)?;
+                    let schedule = algal::habitat_schedule::parse_config(&load(
+                        &schedule_file,
+                        MAX_DOCUMENT_BYTES,
+                    )?)?;
+                    let base = schedule_file.parent().unwrap_or(Path::new("."));
+                    let mut activities = Vec::with_capacity(schedule.activities.len());
+                    for (i, entry) in schedule.activities.iter().enumerate() {
+                        let mut loaded = algal::foundry::load_config(
+                            &base.join(&entry.config),
+                            entry.kind == "search",
+                        )?;
+                        // One account covers the schedule; an activity brings
+                        // none.
+                        if loaded.budget.is_some() {
+                            return Err(Error::invalid(format!(
+                                "habitat schedule activity {i}: a scheduled config draws on the schedule budget and cannot set its own"
+                            )));
+                        }
+                        if entry.kind == "search"
+                            && (loaded.search.is_none() || loaded.generator.is_none())
+                        {
+                            return Err(Error::invalid(
+                                "search config needs generator and search objects",
+                            ));
+                        }
+                        let kind = entry.kind;
+                        activities.push(algal::habitat_schedule::Activity {
+                            kind,
+                            run: Box::new(move |ledger, store, host, transports| {
+                                Box::pin(async move {
+                                    if let Some(search) = loaded.search.as_ref() {
+                                        let generator = loaded.generator.as_ref().ok_or_else(|| {
+                                            Error::invalid(
+                                                "foundry search requires a generator in the config",
+                                            )
+                                        })?;
+                                        return algal::foundry::search_in(
+                                            generator,
+                                            &loaded.candidates,
+                                            &loaded.cases,
+                                            search,
+                                            loaded.scorer.as_ref(),
+                                            store,
+                                            host,
+                                            transports,
+                                            Some(ledger),
+                                        )
+                                        .await;
+                                    }
+                                    let lineage = match &loaded.generator {
+                                        Some(generator) => {
+                                            let (generator_digest, receipt_digest, generated) =
+                                                algal::foundry::generate_in(
+                                                    &generator.manifest,
+                                                    &generator.args,
+                                                    &generator.output,
+                                                    generator.field.as_deref(),
+                                                    store,
+                                                    host,
+                                                    transports,
+                                                    Some(ledger),
+                                                )
+                                                .await?;
+                                            loaded.candidates.extend(generated);
+                                            Some((generator_digest, receipt_digest))
+                                        }
+                                        None => None,
+                                    };
+                                    algal::foundry::run_within(
+                                        &loaded.candidates,
+                                        &loaded.cases,
+                                        loaded.scorer.as_ref(),
+                                        lineage,
+                                        store,
+                                        host,
+                                        transports,
+                                        Some(ledger),
+                                    )
+                                    .await
+                                })
+                            }),
+                        });
+                    }
+                    let journal = match journal {
+                        Some(dir) => Some(algal::habitat_schedule::Journal::open(
+                            &dir,
+                            schedule.order,
+                            &schedule.budget,
+                        )?),
+                        None => None,
+                    };
+                    let record = algal::habitat_schedule::run(
+                        schedule.order,
+                        &schedule.budget,
+                        activities,
+                        &store,
+                        &host,
+                        &transports,
+                        journal,
+                    )
+                    .await?
+                    .schedule;
+                    if let Some(path) = out {
+                        std::fs::write(&path, canonical(&record)?)?;
+                    }
+                    emit(&record)?;
+                    Ok(record["outcome"] == "complete")
                 }
                 Some(FoundryCommand::SearchInspect { report }) => {
                     emit(&algal::foundry::inspect_search(&load(
@@ -1735,7 +1862,7 @@ async fn execute(cli: Cli) -> Result<bool> {
                         &mut store,
                         &mut host,
                         &transports,
-                        account.as_mut(),
+                        algal::habitat_budget::as_ledger(&mut account),
                     )
                     .await;
                     let report = match result {
@@ -1784,7 +1911,7 @@ async fn execute(cli: Cli) -> Result<bool> {
                                         &mut store,
                                         &mut host,
                                         &transports,
-                                        account.as_mut(),
+                                        algal::habitat_budget::as_ledger(&mut account),
                                     )
                                     .await?;
                                 config.candidates.extend(generated);
@@ -1800,7 +1927,7 @@ async fn execute(cli: Cli) -> Result<bool> {
                             &mut store,
                             &mut host,
                             &transports,
-                            account.as_mut(),
+                            algal::habitat_budget::as_ledger(&mut account),
                         )
                         .await
                     }
@@ -2734,7 +2861,7 @@ async fn execute(cli: Cli) -> Result<bool> {
                         &load(&request, 262_144)?,
                         &mut run_host,
                         &Transports::new(),
-                        account.as_mut(),
+                        algal::habitat_budget::as_ledger(&mut account),
                     )
                     .await;
                     let (digest, evaluation) = match result {
