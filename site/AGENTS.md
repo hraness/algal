@@ -4,6 +4,7 @@
 - `copy.ts` holds text rendered in more than one place: the home description (also the JSON-LD, social card, and `llms.txt` lead), the tagline, the social image alt text, and the shared limits paragraphs.
 - `markdown.ts` is the dependency-free renderer behind the `/docs/` mirror: `build.ts` renders the curated `docs/` set and all of `spec/v1/` into `/docs/` and `/docs/spec/` with one shared navigation rail. Repository markdown stays the source of truth; internal working notes are deliberately unmirrored and their links resolve to the GitHub blob.
 - `viewer.ts` is the browser-side interactive diagram runtime: pan/zoom, cell inspection, and recorded-run replay driven by `algal.diagram-view.v1` documents emitted by `build.ts`. It shares layout geometry with `src/diagram.ts`'s `layoutDiagram` and degrades to the static SVG fallback without JavaScript.
+- `blog.ts` renders `blog/*.md` with the Design Kit article layer and writes the blog index, Atom feed, sitemap entries, and llms.txt list; `blog-posts.ts` holds each post's review record (`ArticleAdmission`), its sources, and cross-host links waiting to go live. Only `indexable` posts reach the index, sitemap, feed, and llms.txt; `quarantined` posts render with robots noindex.
 - `icons.ts` holds the Hugeicons sprite map; icon references are root-relative `/icons.svg#name`.
 - `algal-mark.svg`, `BRAND_ASSETS.md`, `client.ts`, and `appearance.ts` bind the existing product identity to the released metallic treatment.
 
