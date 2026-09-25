@@ -15,6 +15,12 @@ pub const MAX_SCHEMA_PROPERTIES: usize = 64;
 pub const MAX_SCHEMA_REQUIRED: usize = 64;
 pub const MAX_SCHEMA_ENUM_VALUES: usize = 32;
 pub const MAX_SCHEMA_ENUM_VALUE_BYTES: usize = 256;
+/// Schema version 3 bounds: `minLength`/`maxLength` count Unicode code
+/// points, and `format` names a fixed character test.
+pub const MAX_SCHEMA_TEXT_LENGTH: usize = 1_000_000;
+pub const MAX_SCHEMA_FORMAT_NAME: usize = 32;
+/// The largest integer the JSON number form keeps exact in both runtimes.
+pub const SCHEMA_INTEGER_MAX: f64 = 9_007_199_254_740_991.0;
 const SCHEMA_TYPES: [&str; 7] = [
     "object", "array", "string", "number", "integer", "boolean", "null",
 ];
@@ -27,6 +33,21 @@ const SCHEMA_V2_KEYWORDS: [&str; 7] = [
     "minimum",
     "maximum",
 ];
+const SCHEMA_V3_KEYWORDS: [&str; 12] = [
+    "type",
+    "required",
+    "properties",
+    "items",
+    "enum",
+    "minimum",
+    "maximum",
+    "minLength",
+    "maxLength",
+    "format",
+    "uniqueItems",
+    "additionalProperties",
+];
+const SCHEMA_FORMATS: [&str; 4] = ["digest", "name", "slug", "uri"];
 pub const MAX_RECALL_K: usize = 32;
 pub const MAX_RECALL_QUERY_BYTES: usize = 4_096;
 pub type Ports = BTreeMap<String, Value>;
@@ -178,45 +199,65 @@ fn schema_declaration(value: &Value) -> Result<()> {
     Ok(())
 }
 
-/// `schemaVersion` is the number 2 beside a schema; without it a schema is
-/// version 1 and keeps its original rules and provider hints.
-fn schema_version(declaration: &Value) -> Result<bool> {
+/// `schemaVersion` is the number 2 or 3 beside a schema; without it a schema
+/// is version 1 and keeps its original rules and provider hints.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SchemaKind {
+    V1,
+    V2,
+    V3,
+}
+
+fn schema_version(declaration: &Value) -> Result<SchemaKind> {
     let Some(version) = declaration.get("schemaVersion") else {
-        return Ok(false);
+        return Ok(SchemaKind::V1);
     };
-    if version.as_f64() != Some(2.0) {
-        return Err(Error::invalid("schemaVersion must be 2"));
+    if version.as_f64() != Some(2.0) && version.as_f64() != Some(3.0) {
+        return Err(Error::invalid("schemaVersion must be 2 or 3"));
     }
     if declaration.get("schema").is_none() {
         return Err(Error::invalid("schemaVersion requires a schema"));
     }
-    Ok(true)
+    Ok(if version.as_f64() == Some(3.0) {
+        SchemaKind::V3
+    } else {
+        SchemaKind::V2
+    })
 }
 
-fn check_schema_declaration(schema: &Value, version_2: bool) -> Result<()> {
+fn check_schema_declaration(schema: &Value, version: SchemaKind) -> Result<()> {
     object(schema)?;
-    if version_2 {
-        return schema_declaration_v2(schema, 1);
+    match version {
+        SchemaKind::V2 => return schema_declaration_strict(schema, 1, false),
+        SchemaKind::V3 => return schema_declaration_strict(schema, 1, true),
+        SchemaKind::V1 => (),
     }
     schema_depth(schema, 0)?;
     schema_declaration(schema)
 }
 
-/// Schema version 2 admission. Each schema is checked before its children,
-/// children in UTF-8 key order and then `items`; messages match the reference
-/// runtime's reasons (which it prefixes with the schema's location).
-fn schema_declaration_v2(value: &Value, level: usize) -> Result<()> {
+/// Schema version 2 and 3 admission. Each schema is checked before its
+/// children, children in UTF-8 key order and then `items`; messages match the
+/// reference runtime's reasons (which it prefixes with the schema's
+/// location). Version 3 adds text length and format, unique items, and
+/// closed records.
+fn schema_declaration_strict(value: &Value, level: usize, version_3: bool) -> Result<()> {
     if level > MAX_SCHEMA_LEVELS {
         return Err(Error::invalid(format!(
             "schema exceeds {MAX_SCHEMA_LEVELS} nested levels"
         )));
     }
     let schema = object(value)?;
+    let keywords: &[&str] = if version_3 {
+        &SCHEMA_V3_KEYWORDS
+    } else {
+        &SCHEMA_V2_KEYWORDS
+    };
     let mut keys: Vec<&String> = schema.keys().collect();
     keys.sort();
     if let Some(key) = keys
         .into_iter()
-        .find(|key| !SCHEMA_V2_KEYWORDS.contains(&key.as_str()))
+        .find(|key| !keywords.contains(&key.as_str()))
     {
         return Err(Error::invalid(format!(
             "unknown schema keyword {}",
@@ -305,7 +346,10 @@ fn schema_declaration_v2(value: &Value, level: usize) -> Result<()> {
             if !seen.insert(encoded) {
                 return Err(Error::invalid(count));
             }
-            if !types.iter().any(|kind| type_matches(kind, value)) {
+            if !types
+                .iter()
+                .any(|kind| type_matches(kind, value, version_3))
+            {
                 return Err(Error::invalid("enum values must match the schema type"));
             }
         }
@@ -330,15 +374,84 @@ fn schema_declaration_v2(value: &Value, level: usize) -> Result<()> {
     {
         return Err(Error::invalid("minimum exceeds maximum"));
     }
+    if version_3 {
+        // Bounds come through f64 like the reference runtime's numbers: 5 and
+        // 5.0 are the same integer, and an u64 above the bound still fails.
+        let text_bound = |bound: Option<&Value>| -> Option<f64> {
+            bound
+                .and_then(Value::as_f64)
+                .filter(|n| n.fract() == 0.0 && *n >= 0.0 && *n <= MAX_SCHEMA_TEXT_LENGTH as f64)
+        };
+        for name in ["minLength", "maxLength"] {
+            if schema.contains_key(name) && text_bound(schema.get(name)).is_none() {
+                return Err(Error::invalid(format!(
+                    "{name} must be an integer from 0 to {MAX_SCHEMA_TEXT_LENGTH}"
+                )));
+            }
+        }
+        let min_length = text_bound(schema.get("minLength"));
+        let max_length = text_bound(schema.get("maxLength"));
+        if (min_length.is_some() || max_length.is_some()) && !types.contains(&"string") {
+            return Err(Error::invalid(
+                "minLength and maxLength require type string",
+            ));
+        }
+        if let (Some(minimum), Some(maximum)) = (min_length, max_length)
+            && minimum > maximum
+        {
+            return Err(Error::invalid("minLength exceeds maxLength"));
+        }
+        if let Some(format) = schema.get("format") {
+            let name = format
+                .as_str()
+                .filter(|name| name.encode_utf16().count() <= MAX_SCHEMA_FORMAT_NAME);
+            let Some(name) = name else {
+                return Err(Error::invalid(format!(
+                    "format must be a name of at most {MAX_SCHEMA_FORMAT_NAME} UTF-16 code units"
+                )));
+            };
+            if !SCHEMA_FORMATS.contains(&name) {
+                return Err(Error::invalid(
+                    "format must name digest, name, slug, or uri",
+                ));
+            }
+            if !types.contains(&"string") {
+                return Err(Error::invalid("format requires type string"));
+            }
+        }
+        if let Some(unique) = schema.get("uniqueItems") {
+            if *unique != true {
+                return Err(Error::invalid("uniqueItems must be the boolean true"));
+            }
+            if !types.contains(&"array") {
+                return Err(Error::invalid("uniqueItems requires type array"));
+            }
+        }
+        if let Some(closed) = schema.get("additionalProperties") {
+            if *closed != false {
+                return Err(Error::invalid(
+                    "additionalProperties must be the boolean false",
+                ));
+            }
+            if !types.contains(&"object") {
+                return Err(Error::invalid("additionalProperties requires type object"));
+            }
+            if properties.is_none_or(|p| !p.is_object()) {
+                return Err(Error::invalid(
+                    "additionalProperties requires a properties map",
+                ));
+            }
+        }
+    }
     if let Some(properties) = properties.and_then(Value::as_object) {
         let mut names: Vec<&String> = properties.keys().collect();
         names.sort();
         for name in names {
-            schema_declaration_v2(&properties[name], level + 1)?;
+            schema_declaration_strict(&properties[name], level + 1, version_3)?;
         }
     }
     if let Some(items) = items {
-        schema_declaration_v2(items, level + 1)?;
+        schema_declaration_strict(items, level + 1, version_3)?;
     }
     Ok(())
 }
@@ -413,12 +526,12 @@ pub fn ports(value: &Value, producer: bool, constant: bool) -> Result<Ports> {
             }
             labels(ls)?;
         }
-        let version_2 = schema_version(&p)?;
+        let version = schema_version(&p)?;
         if let Some(schema) = p.get("schema") {
             if kind != "json" {
                 return Err(Error::invalid("schema requires json"));
             }
-            check_schema_declaration(schema, version_2)?;
+            check_schema_declaration(schema, version)?;
         }
         if kind == "cap" {
             id(p.get("capability")
@@ -442,8 +555,8 @@ pub fn output_contract(value: &Value) -> Result<()> {
         "text" => keys(value, &["kind"]),
         "json" => {
             keys(value, &["kind", "schema", "schemaVersion"])?;
-            let version_2 = schema_version(value)?;
-            check_schema_declaration(&value["schema"], version_2)
+            let version = schema_version(value)?;
+            check_schema_declaration(&value["schema"], version)
         }
         "choice" => {
             keys(value, &["kind", "labels", "onMiss"])?;
@@ -970,15 +1083,88 @@ fn schema_types(schema: &Value) -> Vec<&str> {
     }
 }
 
-fn type_matches(kind: &str, value: &Value) -> bool {
+fn type_matches(kind: &str, value: &Value, version_3: bool) -> bool {
     match kind {
         "string" => value.is_string(),
         "number" => value.is_number(),
-        "integer" => value.as_f64().is_some_and(|n| n.fract() == 0.0),
+        // Version 3 bounds an integer to the range both runtimes keep exact;
+        // earlier versions accept any whole number, as they shipped.
+        "integer" => value
+            .as_f64()
+            .is_some_and(|n| n.fract() == 0.0 && (!version_3 || n.abs() <= SCHEMA_INTEGER_MAX)),
         "boolean" => value.is_boolean(),
         "array" => value.is_array(),
         "object" => value.is_object(),
         "null" => value.is_null(),
+        _ => false,
+    }
+}
+
+/// Each named format is a fixed character test that runs in the value's
+/// length; a general regular expression is not part of the subset.
+fn format_matches(format: &str, value: &str) -> bool {
+    match format {
+        "digest" => check_digest(value).is_ok(),
+        "name" => {
+            value.encode_utf16().count() <= 64
+                && value.bytes().next().is_some_and(|b| b.is_ascii_lowercase())
+                && value
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        }
+        "slug" => {
+            value.encode_utf16().count() <= 128
+                && !value.is_empty()
+                && !value.starts_with('-')
+                && !value.ends_with('-')
+                && !value.contains("--")
+                && value
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        }
+        "uri" => {
+            let Some(colon) = value.find(':') else {
+                return false;
+            };
+            let (scheme, rest) = (&value[..colon], &value[colon + 1..]);
+            value.encode_utf16().count() <= 2048
+                && !rest.is_empty()
+                && scheme
+                    .bytes()
+                    .next()
+                    .is_some_and(|b| b.is_ascii_alphabetic())
+                && scheme
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'-' || b == b'.')
+                && rest.bytes().all(|b| {
+                    b.is_ascii_alphanumeric()
+                        || matches!(
+                            b,
+                            b'-' | b'.'
+                                | b'_'
+                                | b'~'
+                                | b'!'
+                                | b'$'
+                                | b'&'
+                                | b'\''
+                                | b'('
+                                | b')'
+                                | b'*'
+                                | b'+'
+                                | b','
+                                | b';'
+                                | b'='
+                                | b':'
+                                | b'@'
+                                | b'/'
+                                | b'?'
+                                | b'#'
+                                | b'['
+                                | b']'
+                                | b'%'
+                        )
+                })
+        }
         _ => false,
     }
 }
@@ -995,13 +1181,18 @@ fn same_scalar(allowed: &Value, value: &Value) -> bool {
     }
 }
 
-/// Schema version 2 values: type, allowed values, inclusive number bounds,
-/// required fields, declared properties in UTF-8 key order, then list
-/// elements in index order, a failing element prefixing its zero-based index.
-/// Messages and order are receipt data shared with the reference runtime.
-pub fn check_schema_v2(schema: &Value, value: &Value) -> Result<()> {
+/// Schema version 2 and 3 values: type, allowed values, inclusive number
+/// bounds, text length and format, required fields, undeclared fields,
+/// declared properties in UTF-8 key order, unique elements, then list
+/// elements in index order, a failing element prefixing its zero-based
+/// index. Messages and order are receipt data shared with the reference
+/// runtime.
+fn check_schema_strict(schema: &Value, value: &Value, version_3: bool) -> Result<()> {
     let types = schema_types(schema);
-    if !types.iter().any(|kind| type_matches(kind, value)) {
+    if !types
+        .iter()
+        .any(|kind| type_matches(kind, value, version_3))
+    {
         return Err(Error::new(
             "TYPE_MISMATCH",
             format!("expected {}", types.join("|")),
@@ -1026,10 +1217,46 @@ pub fn check_schema_v2(schema: &Value, value: &Value) -> Result<()> {
             return Err(Error::new("TYPE_MISMATCH", "number above maximum"));
         }
     }
+    if version_3 && let Some(text) = value.as_str() {
+        // chars() counts Unicode scalar values, the reference runtime's
+        // code points: an astral character counts once on both sides.
+        let length = text.chars().count() as f64;
+        if schema["minLength"]
+            .as_f64()
+            .is_some_and(|bound| length < bound)
+        {
+            return Err(Error::new("TYPE_MISMATCH", "text shorter than minLength"));
+        }
+        if schema["maxLength"]
+            .as_f64()
+            .is_some_and(|bound| length > bound)
+        {
+            return Err(Error::new("TYPE_MISMATCH", "text longer than maxLength"));
+        }
+        if let Some(format) = schema["format"].as_str()
+            && !format_matches(format, text)
+        {
+            return Err(Error::new(
+                "TYPE_MISMATCH",
+                format!("text is not a {format}"),
+            ));
+        }
+    }
     if let Some(required) = schema["required"].as_array() {
         for key in required {
             if value.get(text(key, 64)?).is_none() {
                 return Err(Error::new("TYPE_MISMATCH", "missing required field"));
+            }
+        }
+    }
+    if version_3
+        && let (Some(properties), Some(values)) =
+            (schema["properties"].as_object(), value.as_object())
+        && schema.get("additionalProperties") == Some(&Value::Bool(false))
+    {
+        for key in values.keys() {
+            if !properties.contains_key(key) {
+                return Err(Error::new("TYPE_MISMATCH", "undeclared field"));
             }
         }
     }
@@ -1038,13 +1265,25 @@ pub fn check_schema_v2(schema: &Value, value: &Value) -> Result<()> {
         keys.sort();
         for key in keys {
             if let Some(value) = values.get(key) {
-                check_schema_v2(&props[key], value)?;
+                check_schema_strict(&props[key], value, version_3)?;
+            }
+        }
+    }
+    if version_3
+        && schema.get("uniqueItems") == Some(&Value::Bool(true))
+        && let Some(values) = value.as_array()
+    {
+        // Canonical JSON identity: 1 and 1.0 repeat, as do reordered records.
+        let mut seen = BTreeSet::new();
+        for item in values {
+            if !seen.insert(canonical(item)?) {
+                return Err(Error::new("TYPE_MISMATCH", "repeated item"));
             }
         }
     }
     if let (Some(items), Some(values)) = (schema.get("items"), value.as_array()) {
         for (index, item) in values.iter().enumerate() {
-            check_schema_v2(items, item).map_err(|error| {
+            check_schema_strict(items, item, version_3).map_err(|error| {
                 Error::new(&error.code, format!("item {index}: {}", error.message))
             })?;
         }
@@ -1052,9 +1291,17 @@ pub fn check_schema_v2(schema: &Value, value: &Value) -> Result<()> {
     Ok(())
 }
 
+pub fn check_schema_v2(schema: &Value, value: &Value) -> Result<()> {
+    check_schema_strict(schema, value, false)
+}
+
+pub fn check_schema_v3(schema: &Value, value: &Value) -> Result<()> {
+    check_schema_strict(schema, value, true)
+}
+
 pub fn check_schema(schema: &Value, value: &Value) -> Result<()> {
     let types = schema_types(schema);
-    let matches = types.iter().any(|kind| type_matches(kind, value));
+    let matches = types.iter().any(|kind| type_matches(kind, value, false));
     if !matches {
         return Err(Error::new(
             "TYPE_MISMATCH",
@@ -1105,8 +1352,11 @@ pub fn check_value(port: &Value, value: &Value) -> Result<()> {
             Ok(())
         }
         Some("json") => match port.get("schema") {
-            Some(s) if port.get("schemaVersion").is_some() => check_schema_v2(s, value),
-            Some(s) => check_schema(s, value),
+            Some(s) => match port.get("schemaVersion").and_then(Value::as_f64) {
+                Some(3.0) => check_schema_v3(s, value),
+                Some(2.0) => check_schema_v2(s, value),
+                _ => check_schema(s, value),
+            },
             None => Ok(()),
         },
         Some("ref") => {
@@ -1139,10 +1389,10 @@ pub fn bind_output(contract: &Value, value: Value) -> Result<Value> {
         Some("json") => {
             let empty = json!({});
             let schema = contract.get("schema").unwrap_or(&empty);
-            let checked = if contract.get("schemaVersion").is_some() {
-                check_schema_v2(schema, &value)
-            } else {
-                check_schema(schema, &value)
+            let checked = match contract.get("schemaVersion").and_then(Value::as_f64) {
+                Some(3.0) => check_schema_v3(schema, &value),
+                Some(2.0) => check_schema_v2(schema, &value),
+                _ => check_schema(schema, &value),
             };
             checked.map_err(|e| Error::new("EFFECT_UNPARSEABLE", e.message))?;
             Ok(value)

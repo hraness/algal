@@ -38,6 +38,18 @@ wire constant (`0.1.0`) is independent of these package versions.
   `--max-events`; emitted lines carry no wall-clock fields. Native Rust
   support is proposed, not shipped.
 b221a25 (Add read-only `algal observe` projection and bounded `tail` follow)
+- `schemaVersion: 3` extends the bounded JSON schema subset with whole
+  numbers over the exact JSON range (`"type":"integer"` now also bounds a
+  version 3 value to ±9,007,199,254,740,991), `minLength`/`maxLength` counted
+  in Unicode code points, fixed `format` names (`digest`, `name`, `slug`,
+  `uri`), `uniqueItems` with canonical equality, and
+  `additionalProperties: false` for records closed to undeclared fields.
+  Both runtimes share the same declaration rules, check order, and failure
+  messages, and a runtime that predates version 3 refuses the declaration
+  before any step runs. The source compiler (`algal.source.profile.v1`
+  version `1.6.0`) adds matching syntax: `integer`, `text min`/`max` length
+  bounds, the four format types, `[type] unique`, and `closed record`.
+  Programs written before this syntax compile to byte-identical manifests.
 - Public copy adopts the canonical portfolio messaging record: the site
   title, hero, footer, social card, `llms.txt` introduction, README lead,
   both CLI introductions, and the package and crate descriptions now carry

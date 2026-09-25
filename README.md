@@ -578,7 +578,9 @@ feeds only the same class, and cannot be produced by `const` or widened into
 structural. A `json` port may declare a limited `schema`
 (`{"type","required","properties"}`, depth ≤ 4); with `"schemaVersion": 2` it
 also checks `items`, `enum`, `minimum`, and `maximum`, nested up to eight
-levels ([JSON schemas](spec/v1/organism.md#json-schemas)). A delivered record
+levels, and `"schemaVersion": 3` adds bounded integers, text length and
+named formats, unique list items, and records closed to undeclared fields
+([JSON schemas](spec/v1/organism.md#json-schemas)). A delivered record
 that violates the schema fails the consumer's activation, routable through
 `on:"fail"`.
 Guarded edges fire only when the produced choice equals the

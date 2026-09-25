@@ -114,7 +114,7 @@ declared budget adds no separate allowance.
 - **Tests:** [`src/library-index.test.ts`](../src/library-index.test.ts),
   [`examples/source/projects/task-planning/project.test.ts`](../examples/source/projects/task-planning/project.test.ts),
   and [`examples/source/projects/support-queue/project.test.ts`](../examples/source/projects/support-queue/project.test.ts).
-- **Compiler:** `algal.source.profile.v1`, version `1.5.0`.
+- **Compiler:** `algal.source.profile.v1`, version `1.6.0`.
 - **Maintainer:** ALGAL maintainers, through pull requests to [hraness/algal](https://github.com/hraness/algal).
 - **Unseen cases:** None pinned.
 - **Status:** Listed at `sha256:e0023e6a72961ff823b468d357572507305652cd0a5e9a31648550684db0cb3a`.
@@ -145,7 +145,7 @@ declared budget adds no separate allowance.
 - **Tests:** [`src/library-index.test.ts`](../src/library-index.test.ts),
   [`examples/source/projects/task-planning/project.test.ts`](../examples/source/projects/task-planning/project.test.ts),
   and [`examples/source/projects/support-queue/project.test.ts`](../examples/source/projects/support-queue/project.test.ts).
-- **Compiler:** `algal.source.profile.v1`, version `1.5.0`.
+- **Compiler:** `algal.source.profile.v1`, version `1.6.0`.
 - **Maintainer:** ALGAL maintainers, through pull requests to [hraness/algal](https://github.com/hraness/algal).
 - **Unseen cases:** None pinned.
 - **Status:** Listed at `sha256:10ee90055c33b6d21956fff7a53e4e34a3f5074c16298dc83d452bedf9c0d0d0`.

@@ -1,0 +1,151 @@
+[
+  {
+    "name": "bounded-integer",
+    "schema": { "type": "integer" },
+    "good": [0, -0, 3, -7, 9007199254740991, -9007199254740991, 1.0],
+    "bad": [
+      [1.5, "expected integer"],
+      [9007199254740992, "expected integer"],
+      [-9007199254740992, "expected integer"],
+      ["3", "expected integer"],
+      [true, "expected integer"]
+    ]
+  },
+  {
+    "name": "integer-union",
+    "schema": { "type": ["integer", "null"], "minimum": 2 },
+    "good": [2, null, 5],
+    "bad": [
+      [1, "number below minimum"],
+      [1.5, "expected integer|null"],
+      ["x", "expected integer|null"]
+    ]
+  },
+  {
+    "name": "text-length",
+    "schema": { "type": "string", "minLength": 2, "maxLength": 4 },
+    "good": ["ab", "abcd", "😀😀", "a😀b"],
+    "bad": [
+      ["a", "text shorter than minLength"],
+      ["abcde", "text longer than maxLength"],
+      ["😀😀😀😀😀", "text longer than maxLength"],
+      [5, "expected string"]
+    ]
+  },
+  {
+    "name": "length-on-union",
+    "schema": { "type": ["string", "number"], "maxLength": 2 },
+    "good": ["ab", 100, -1],
+    "bad": [["abc", "text longer than maxLength"]]
+  },
+  {
+    "name": "format-digest",
+    "schema": { "type": "string", "format": "digest" },
+    "good": ["sha256:0000000000000000000000000000000000000000000000000000000000000000"],
+    "bad": [
+      ["sha256:ABCDEF0000000000000000000000000000000000000000000000000000000000", "text is not a digest"],
+      ["sha256:abcd", "text is not a digest"],
+      ["0000000000000000000000000000000000000000000000000000000000000000", "text is not a digest"],
+      [7, "expected string"]
+    ]
+  },
+  {
+    "name": "format-name",
+    "schema": { "type": "string", "format": "name" },
+    "good": ["task", "a-b-c1", "z"],
+    "bad": [
+      ["Task", "text is not a name"],
+      ["1task", "text is not a name"],
+      ["has space", "text is not a name"],
+      ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "text is not a name"]
+    ]
+  },
+  {
+    "name": "format-slug",
+    "schema": { "type": "string", "format": "slug" },
+    "good": ["task-42-review", "a1", "0-start"],
+    "bad": [
+      ["task--42", "text is not a slug"],
+      ["-task", "text is not a slug"],
+      ["task-", "text is not a slug"],
+      ["Task-42", "text is not a slug"],
+      ["", "text is not a slug"]
+    ]
+  },
+  {
+    "name": "format-uri",
+    "schema": { "type": "string", "format": "uri" },
+    "good": ["https://example.com/a?x=1#frag", "mailto:ops@example.com", "urn:isbn:9780132350884", "https://"],
+    "bad": [
+      ["example.com/no-scheme", "text is not a uri"],
+      ["1https://example.com", "text is not a uri"],
+      ["https://example.com/a b", "text is not a uri"],
+      ["x", "text is not a uri"]
+    ]
+  },
+  {
+    "name": "unique-scalars",
+    "schema": { "type": "array", "uniqueItems": true },
+    "good": [[], [1, "1", true], [1, 2, 3], [null]],
+    "bad": [
+      [[1, 1.0], "repeated item"],
+      [[0, -0], "repeated item"],
+      [["a", "a"], "repeated item"],
+      [[true, true], "repeated item"],
+      [[1, 2, 1], "repeated item"]
+    ]
+  },
+  {
+    "name": "unique-records",
+    "schema": { "type": "array", "uniqueItems": true,
+      "items": { "type": "object", "required": ["id"], "properties": { "id": { "type": "integer" }, "tag": { "type": "string", "format": "slug" } }, "additionalProperties": false } },
+    "good": [[], [{ "id": 1 }, { "id": 2, "tag": "a-b" }], [{ "id": 1, "tag": "x" }, { "id": 1, "tag": "y" }]],
+    "bad": [
+      [[{ "id": 1 }, { "id": 1 }], "repeated item"],
+      [[{ "id": 1, "tag": "a" }, { "tag": "a", "id": 1.0 }], "repeated item"],
+      [[{ "id": "x" }], "item 0: expected integer"],
+      [[{ "id": 1, "extra": true }], "item 0: undeclared field"],
+      [[{ "id": 1, "tag": "BAD" }], "item 0: text is not a slug"],
+      [[{}], "item 0: missing required field"]
+    ]
+  },
+  {
+    "name": "closed-record",
+    "schema": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string" }, "count": { "type": "integer" } }, "additionalProperties": false },
+    "good": [{ "id": "a" }, { "id": "a", "count": 2 }],
+    "bad": [
+      [{ "id": "a", "extra": 1 }, "undeclared field"],
+      [{ "count": 1 }, "missing required field"],
+      [{ "id": 5, "extra": true }, "undeclared field"],
+      [{ "id": 5 }, "expected string"],
+      [[], "expected object"]
+    ]
+  },
+  {
+    "name": "closed-union",
+    "schema": { "type": ["object", "null"], "properties": { "a": { "type": "string" } }, "additionalProperties": false },
+    "good": [null, { "a": "x" }],
+    "bad": [
+      [{ "a": "x", "b": 1 }, "undeclared field"],
+      [5, "expected object|null"]
+    ]
+  },
+  {
+    "name": "nested-v3",
+    "schema": { "type": "array", "items": { "type": "object", "required": ["key"], "properties": { "key": { "type": "string", "format": "slug" }, "vals": { "type": "array", "uniqueItems": true, "items": { "type": "integer" } } }, "additionalProperties": false } },
+    "good": [[], [{ "key": "a-1", "vals": [1, 2] }]],
+    "bad": [
+      [[{ "key": "a", "vals": [1, 2.5] }], "item 0: item 1: expected integer"],
+      [[{ "key": "a", "vals": [1, 1] }], "item 0: repeated item"],
+      [[{ "key": "Bad Key" }], "item 0: text is not a slug"],
+      [[{ "key": "a", "other": 1 }], "item 0: undeclared field"]
+    ]
+  },
+  {
+    "name": "version-2-integer-stays-unbounded",
+    "schema": { "type": "integer" },
+    "version": 2,
+    "good": [9007199254740992],
+    "bad": [[1.5, "expected integer"]]
+  }
+]

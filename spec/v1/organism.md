@@ -93,11 +93,11 @@ Every port declares one of:
 - `text` — a string
 - `json` — any JSON value; an optional `schema` field narrows it to the
   limited schema subset described in [JSON schemas](#json-schemas), the same
-  subset agent json output contracts use. An optional `"schemaVersion": 2`
-  beside `schema` selects version 2 of that subset. The declaring cell owns the
-  check: a produced value violating an output schema fails at commit; a
-  delivered value violating an input schema fails the consumer's activation.
-  Either failure is routable through `on:"fail"`.
+  subset agent json output contracts use. An optional `"schemaVersion": 2` or
+  `"schemaVersion": 3` beside `schema` selects that version of the subset. The
+  declaring cell owns the check: a produced value violating an output schema
+  fails at commit; a delivered value violating an input schema fails the
+  consumer's activation. Either failure is routable through `on:"fail"`.
 - `choice` — a string from declared `labels`
 - `ref` — a `sha256:` digest token naming a payload in the store
 - `cap` — an opaque `cap:<class>:sha256:<digest>` handle. It must use the
@@ -127,23 +127,29 @@ input on `each`. Capability and ref lists cannot feed scalar ports.
 
 ### JSON schemas
 
-A `json` port's `schema` and a JSON output contract's `schema` use one of two
-versions of a small JSON Schema subset. A schema without `schemaVersion` is
-version 1. Adding `"schemaVersion": 2` selects version 2, on a port
-(`{"type":"json","schema":{…},"schemaVersion":2}`) or in an output contract
-(`{"kind":"json","schema":{…},"schemaVersion":2}`). `schemaVersion` must be
-the number `2` and requires a `schema`. Both runtimes check every schema when
-they check the manifest, before any effect, and reject a malformed one with
-`PARSE_FAILED`.
+A `json` port's `schema` and a JSON output contract's `schema` use one of
+three versions of a small JSON Schema subset. A schema without `schemaVersion`
+is version 1. Adding `"schemaVersion": 2` or `"schemaVersion": 3` selects
+that version, on a port
+(`{"type":"json","schema":{…},"schemaVersion":3}`) or in an output contract
+(`{"kind":"json","schema":{…},"schemaVersion":3}`). `schemaVersion` must be
+the number `2` or `3` and requires a `schema`. Both runtimes check every
+schema when they check the manifest, before any effect, and reject a
+malformed one with `PARSE_FAILED`.
 
-Both versions check a value's type the same way. JSON output may be an object,
+All versions check a value's type the same way, with one refinement below.
+JSON output may be an object,
 array, string, number, integer, boolean, or null when the schema declares that
 type, and an omitted `type` means `object`. `type` names one supported type or
 a nonempty array of at most seven distinct supported types (a union). A value
 that matches no declared type fails with `expected <types>`, the declared
 types joined by `|`. Null or scalar child schemas and misspelled declared
 types are rejected. Declared properties are checked in UTF-8 lexicographic key
-order, so failure evidence is independent of source key order.
+order, so failure evidence is independent of source key order. In versions 1
+and 2 `integer` is any whole number; in version 3 it is a whole number whose
+absolute value is at most 9007199254740991 (`2^53 - 1`), the largest integer
+the JSON number form keeps exact in both runtimes. No rounding happens: `1.0`
+is an integer and `1.5` is not.
 
 **Version 1** also checks `required` and `properties`. `required` is an array
 of strings of at most 64 UTF-16 code units, and each listed name must be one of
@@ -194,6 +200,59 @@ never field names or values. A list has no separate length limit; the
 A runtime that predates version 2 treats `schemaVersion` as an unknown port or
 output field and rejects the manifest with `PARSE_FAILED` when it checks it,
 so it never runs a version 2 schema with version 1 checks.
+
+**Version 3** keeps every version 2 rule and adds the tighter `integer` range
+plus `minLength`, `maxLength`, `format`, `uniqueItems`, and
+`additionalProperties`. Its declaration rules add:
+
+- `minLength` and `maxLength` are integers from 0 to 1,000,000, `type` must
+  include `string`, and `minLength` may not exceed `maxLength`.
+- `format` is a string of at most 32 UTF-16 code units naming `digest`,
+  `name`, `slug`, or `uri`, and `type` must include `string`. The format set
+  is fixed: each named format is a character test that runs in the value's
+  length, where matching a general regular expression carries no such bound.
+- `uniqueItems` is the boolean `true`, and `type` must include `array`.
+- `additionalProperties` is the boolean `false`, `type` must include
+  `object`, and a `properties` map must be present. A closed record needs
+  its declared fields to compare against.
+
+The four formats are:
+
+- `digest`: `sha256:` followed by 64 lowercase hexadecimal characters, the
+  same token a `ref` port carries.
+- `name`: 1 to 64 UTF-16 code units, a lowercase ASCII letter followed by
+  lowercase letters, digits, and hyphens, the same shape as cell and port
+  names.
+- `slug`: 1 to 128 UTF-16 code units of lowercase letters, digits, and
+  single hyphens between groups of them, such as `task-42-review`.
+- `uri`: at most 2,048 UTF-16 code units. A scheme of an ASCII letter
+  followed by letters, digits, `+`, `-`, and `.`, then a colon, then one or
+  more characters drawn from the URI alphabet (letters, digits, and
+  `-._~!$&'()*+,;=:@/?#[]%`), such as `https://example.com/a` or
+  `mailto:ops@example.com`.
+
+A version 3 value check applies each schema's keywords in this order:
+
+1. `type`, as above with the bounded `integer`.
+2. `enum`, then `minimum` and `maximum`, as in version 2.
+3. `minLength` and `maxLength`: a string's length in Unicode code points, so
+   a character outside the Basic Multilingual Plane counts once even where a
+   runtime stores it as a surrogate pair. They apply only to strings
+   (`text shorter than minLength`, `text longer than maxLength`).
+4. `format`: the named test, applying only to strings
+   (`text is not a <format>`).
+5. `required`, as in version 1.
+6. `additionalProperties`: every field an object value carries must be
+   declared in `properties` (`undeclared field`), checked before any declared
+   property.
+7. `properties`, as in version 1.
+8. `uniqueItems`: an array's elements must be pairwise distinct under the
+   same canonical equality `enum` uses, so `1` equals `1.0` and two records
+   with the same fields in different orders are equal (`repeated item`).
+9. `items`, as in version 2.
+
+A runtime that knows only version 2 rejects `schemaVersion: 3` with
+`PARSE_FAILED`, so a version 3 schema is never checked by weaker rules.
 
 ### agent / classifier / gate fields
 
@@ -944,7 +1003,11 @@ bytes, digest, and version 1 checks, including provider hints named `items`,
 `enum`, `minimum`, or `maximum`, so its receipts replay unchanged. A manifest
 that declares version 2 needs a runtime that supports it: older runtimes
 reject it with `PARSE_FAILED` before any cell runs, and its receipts replay
-only in a runtime that supports version 2. The source compiler emits
-version 2 only for a record or list type that needs it (compiler version
-1.5.0), so programs without such types compile to the same manifests as
-before.
+only in a runtime that supports version 2. Schema version 3 is additive the
+same way: `minLength`, `maxLength`, `format`, `uniqueItems`, and
+`additionalProperties` stay provider hints under versions 1 and 2, a runtime
+without version 3 refuses `schemaVersion: 3` with `PARSE_FAILED`, and version
+1 and 2 schemas keep their checks, including the earlier unbounded
+`integer`. The source compiler emits the lowest version a record or list
+type needs (compiler version 1.6.0), so programs without such types compile
+to the same manifests as before.

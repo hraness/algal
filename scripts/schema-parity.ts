@@ -13,6 +13,8 @@ import { verifyReceipt } from "../src/verify";
 import { AlgalError } from "../src/errors";
 import v2Admission from "./fixtures/schema-v2-admission.json";
 import v2Values from "./fixtures/schema-v2-values.json";
+import v3Admission from "./fixtures/schema-v3-admission.json";
+import v3Values from "./fixtures/schema-v3-values.json";
 
 const binary = resolve(process.argv[2] ?? process.env.ALGAL_BIN ?? "target/debug/algal");
 const directory = await mkdtemp(join(tmpdir(), "algal-schema-parity-"));
@@ -133,24 +135,42 @@ try {
     require(reference.effects.length === 0 && (result.value.effects as JsonValue[]).length === 0, `${item.name}: malformed input activated an effect`);
     await crossVerify(reference as unknown as Record<string, JsonValue>, result.value, manifestJson, file, `input-${item.name}`);
   }
-  const v2 = await schemaVersion2();
-  console.log(JSON.stringify({ ok: true, cases: cases.length, comparisons, inputBoundaryCases: inputCases.length, ...v2,
+  const v2 = await schemaVersioned(2, v2Values as unknown as VersionedValueCase[], extraV2Admission());
+  const v3 = await schemaVersioned(3, v3Values as unknown as VersionedValueCase[], [...v3Admission] as AdmissionCase[]);
+  console.log(JSON.stringify({ ok: true, cases: cases.length, comparisons, inputBoundaryCases: inputCases.length, ...v2, ...v3,
     successfulCrossVerifications: crossVerified.complete, failedCrossVerifications: crossVerified.failed, failedSelfVerifications: failedSelfVerified, providerCalls: 0 }));
 } finally { await rm(directory, { recursive: true, force: true }); }
 
-// Schema version 2 (spec/v1/organism.md, "JSON schemas"): every value rule runs
-// through both runtimes at an agent output and at a consumer's input port with
-// identical receipts, and every declaration rule is refused at admission with
-// the same code and reason (the reference prefixes the schema's location).
-async function schemaVersion2() {
+interface VersionedValueCase { name: string; schema: JsonObject; version?: number; good: JsonValue[]; bad: [JsonValue, string][]; }
+interface AdmissionCase { name: string; schema: JsonObject; reason: string; version?: number | string; }
+
+function extraV2Admission(): AdmissionCase[] {
+  const names = (count: number) => Array.from({ length: count }, (_, i) => `f${i}`);
+  return [...v2Admission as AdmissionCase[],
+    { name: "required-over-bound", schema: { required: names(65) }, reason: "required must list at most 64 distinct names of at most 64 UTF-16 code units" },
+    { name: "properties-over-bound", schema: { properties: Object.fromEntries(names(65).map(name => [name, {}])) }, reason: "properties must map at most 64 names to schemas" },
+    { name: "enum-over-bound", schema: { type: "number", enum: Array.from({ length: 33 }, (_, i) => i) }, reason: "enum must list 1 to 32 distinct values" },
+    { name: "enum-value-over-bound", schema: { type: "string", enum: ["x".repeat(255)] }, reason: "enum values must be strings, finite numbers, booleans, or null of at most 256 canonical JSON bytes" },
+    { name: "v3-keyword-under-v2", schema: { type: "array", uniqueItems: true }, reason: "unknown schema keyword \"uniqueItems\"" },
+    { name: "version-4", schema: { type: "string" }, version: 4, reason: "schemaVersion must be 2 or 3" },
+  ];
+}
+
+// Schema versions 2 and 3 (spec/v1/organism.md, "JSON schemas"): every value rule
+// runs through both runtimes at an agent output and at a consumer's input port
+// with identical receipts, and every declaration rule is refused at admission
+// with the same code and reason (the reference prefixes the schema's location).
+async function schemaVersioned(version: 2 | 3, valueCases: VersionedValueCase[], admission: AdmissionCase[]) {
+  const tag = `v${version}`;
   const store = join(directory, "store");
   let valueComparisons = 0, inputComparisons = 0, admissionComparisons = 0;
   const manifestFor = (key: string, cells: JsonValue[], edges: JsonValue[] = []) => ({ contract: "algal.organism.v1", key: `organism:${key}`, name: key, cells, edges });
-  for (const item of v2Values as unknown as { name: string; schema: JsonObject; good: JsonValue[]; bad: [JsonValue, string][] }[]) {
-    const agent = parseOrganismManifest(manifestFor(`v2-${item.name}`, [{ id: "answer", kind: "agent", prompt: "Return the admitted scripted output.",
-      output: { kind: "json", schema: item.schema, schemaVersion: 2 } }]));
-    const input = parseOrganismManifest(manifestFor(`v2-input-${item.name}`, [{ id: "input", kind: "input", outputs: { data: "json" } },
-      { id: "consumer", kind: "agent", inputs: { data: { type: "json", schema: item.schema, schemaVersion: 2 } }, prompt: "Runs only for an admitted value.", output: { kind: "text" } }],
+  for (const item of valueCases) {
+    const caseVersion = item.version ?? version;
+    const agent = parseOrganismManifest(manifestFor(`${tag}-${item.name}`, [{ id: "answer", kind: "agent", prompt: "Return the admitted scripted output.",
+      output: { kind: "json", schema: item.schema, schemaVersion: caseVersion } }]));
+    const input = parseOrganismManifest(manifestFor(`${tag}-input-${item.name}`, [{ id: "input", kind: "input", outputs: { data: "json" } },
+      { id: "consumer", kind: "agent", inputs: { data: { type: "json", schema: item.schema, schemaVersion: caseVersion } }, prompt: "Runs only for an admitted value.", output: { kind: "text" } }],
     [{ from: { cell: "input", port: "data" }, to: { cell: "consumer", port: "data" } }]));
     const files: string[] = [];
     for (const manifest of [agent, input]) {
@@ -161,7 +181,7 @@ async function schemaVersion2() {
     const runs: [JsonValue, string | undefined][] = [...item.good.map((value): [JsonValue, undefined] => [value, undefined]), ...item.bad];
     for (const [index, [value, message]] of runs.entries()) {
       for (const [boundary, manifest, file] of [["output", agent, files[0]!], ["input", input, files[1]!]] as const) {
-        const label = `v2-${boundary}-${item.name}-${index}`;
+        const label = `${tag}-${boundary}-${item.name}-${index}`;
         const responses = boundary === "output" ? { answer: [value] } : { consumer: ["admitted"] };
         const args = boundary === "output" ? {} : { input: { data: value } };
         const responseFile = join(directory, `${label}.responses.json`);
@@ -181,24 +201,17 @@ async function schemaVersion2() {
       }
     }
   }
-  const names = (count: number) => Array.from({ length: count }, (_, i) => `f${i}`);
-  const admission = [...v2Admission as { name: string; schema: JsonObject; reason: string }[],
-    { name: "required-over-bound", schema: { required: names(65) }, reason: "required must list at most 64 distinct names of at most 64 UTF-16 code units" },
-    { name: "properties-over-bound", schema: { properties: Object.fromEntries(names(65).map(name => [name, {}])) }, reason: "properties must map at most 64 names to schemas" },
-    { name: "enum-over-bound", schema: { type: "number", enum: Array.from({ length: 33 }, (_, i) => i) }, reason: "enum must list 1 to 32 distinct values" },
-    { name: "enum-value-over-bound", schema: { type: "string", enum: ["x".repeat(255)] }, reason: "enum values must be strings, finite numbers, booleans, or null of at most 256 canonical JSON bytes" },
-    { name: "version-3", schema: { type: "string" }, version: 3, reason: "schemaVersion must be 2" },
-  ] as { name: string; schema: JsonObject; reason: string; version?: number }[];
   for (const item of admission) {
-    const version = item.version ?? 2;
+    const itemVersion = item.version ?? version;
     const placements: [string, JsonValue][] = [
-      ["output", { id: "answer", kind: "agent", prompt: "No effect before admission.", output: { kind: "json", schema: item.schema, schemaVersion: version } }],
-      ["input-port", { id: "answer", kind: "agent", inputs: { data: { type: "json", schema: item.schema, schemaVersion: version } }, prompt: "No effect before admission.", output: { kind: "text" } }],
-      ["producer-port", { id: "input", kind: "input", outputs: { data: { type: "json", schema: item.schema, schemaVersion: version } } }],
+      ["output", { id: "answer", kind: "agent", prompt: "No effect before admission.", output: { kind: "json", schema: item.schema, schemaVersion: itemVersion } }],
+      ["input-port", { id: "answer", kind: "agent", inputs: { data: { type: "json", schema: item.schema, schemaVersion: itemVersion } }, prompt: "No effect before admission.", output: { kind: "text" } }],
+      ["producer-port", { id: "input", kind: "input", outputs: { data: { type: "json", schema: item.schema, schemaVersion: itemVersion } } }],
     ];
+    const slug = item.name.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase();
     for (const [placement, cell] of placements) {
-      const raw = manifestFor(`v2-admission-${item.name}`, [cell]);
-      const file = join(directory, `v2-admission-${item.name}-${placement}.algal.json`);
+      const raw = manifestFor(`${tag}-admission-${slug}`, [cell]);
+      const file = join(directory, `${tag}-admission-${slug}-${placement}.algal.json`);
       await writeFile(file, JSON.stringify(raw));
       let reference: unknown;
       try { parseOrganismManifest(raw); } catch (error) { reference = error; }
@@ -209,5 +222,9 @@ async function schemaVersion2() {
       admissionComparisons++;
     }
   }
-  return { schemaV2ValueCases: valueComparisons, schemaV2InputCases: inputComparisons, schemaV2AdmissionCases: admissionComparisons };
+  return {
+    [`schema${tag.toUpperCase()}ValueCases`]: valueComparisons,
+    [`schema${tag.toUpperCase()}InputCases`]: inputComparisons,
+    [`schema${tag.toUpperCase()}AdmissionCases`]: admissionComparisons,
+  };
 }
