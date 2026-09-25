@@ -4,8 +4,8 @@ import { join, resolve } from "node:path";
 import { digestCanonical } from "./digest";
 import { AlgalError } from "./errors";
 import {
-  libraryComparisonToJson, libraryComparisonVerdict, parseLibraryComparison, parseLibraryUnseenCases, renderLibraryComparison,
-  LIBRARY_COMPARISON_BOUNDS, LIBRARY_COMPARISON_CONTRACT, LIBRARY_UNSEEN_CASES_CONTRACT, type LibraryComparison,
+  libraryComparisonToJson, libraryComparisonVerdict, parseLibraryComparison, parseLibraryIntended, parseLibraryUnseenCases, renderLibraryComparison,
+  LIBRARY_COMPARISON_BOUNDS, LIBRARY_COMPARISON_CONTRACT, LIBRARY_UNSEEN_CASES_CONTRACT, type LibraryComparison, type LibraryIntendedChange,
 } from "./library-comparison";
 import { LIBRARY_INDEX_BOUNDS } from "./library-index";
 import { canonicalize, type JsonObject, type JsonValue } from "./values";
@@ -21,7 +21,7 @@ const rejects = (value: unknown, pattern: RegExp, code = "PARSE_FAILED") => {
 };
 type Row = JsonObject & { set: string; entry: string; name: string };
 /** A consistent record over made-up digests, with its verdict derived from the rows. */
-function record(change: { callers?: JsonObject[]; cases?: Row[]; dependents?: JsonObject[]; unseen?: string | null; candidateInterface?: string } = {}): JsonObject {
+function record(change: { callers?: JsonObject[]; cases?: Row[]; dependents?: JsonObject[]; unseen?: string | null; candidateInterface?: string; intended?: LibraryIntendedChange } = {}): JsonObject {
   const callers = change.callers ?? [
     { entry: "a/main.algal", root: "examples/source/projects", cases: { path: "a/main.evaluation.json", digest: digest(1) }, base: digest(2), candidate: digest(3) },
     { entry: "b/main.algal", root: "examples/source/projects/b", cases: null, base: digest(4), candidate: digest(5) },
@@ -35,10 +35,11 @@ function record(change: { callers?: JsonObject[]; cases?: Row[]; dependents?: Js
     unseen: change.unseen === undefined ? digest(13) : change.unseen,
     dependents: change.dependents ?? [{ path: "a/score.algal", base: digest(14), candidate: digest(15) }], callers, cases,
   };
-  const verdict = libraryComparisonVerdict(parts as unknown as Parameters<typeof libraryComparisonVerdict>[0]);
+  const verdict = libraryComparisonVerdict(parts as unknown as Parameters<typeof libraryComparisonVerdict>[0], change.intended);
   return {
     contract: LIBRARY_COMPARISON_CONTRACT, name: "clamp", path: "a/lib/clamp.algal", compiler: { profile: "algal.source.profile.v1", version: "1.4.0" }, runtime: "0.1.0",
-    ...parts, verdict: { ...verdict, notCompiled: [...verdict.notCompiled], changed: [...verdict.changed], notRun: [...verdict.notRun] },
+    ...parts, ...(change.intended === undefined ? {} : { intended: { changed: [...change.intended.changed], reason: change.intended.reason } }),
+    verdict: { ...verdict, notCompiled: [...verdict.notCompiled], changed: [...verdict.changed], notRun: [...verdict.notRun] },
   } as JsonObject;
 }
 const caseRows = (value: JsonObject) => value.cases as Row[];
@@ -77,6 +78,65 @@ test("a record whose verdict does not follow from its rows is rejected", () => {
   rejects({ ...value, cases: changed }, /verdict does not follow/);
   rejects({ ...value, verdict: { ...verdict, extra: true } }, /unknown key "extra"/);
   rejects({ ...value, verdict: { ...verdict, passed: "yes" } }, /passed must be true or false/);
+});
+
+test("an intended-change declaration authorizes exactly the cases it lists", () => {
+  // A changed pinned row plus a declaration naming exactly that case passes.
+  const changed = caseRows(record()).map((row, index) => index === 0 ? { ...row, candidate: { outcome: "failed", outputs: digest(9) } } : row);
+  const declaration = { changed: ["pinned:a/main.algal#one"], reason: "corrected" as const };
+  const accepted = parseLibraryComparison(record({ cases: changed, intended: declaration }));
+  expect(accepted.verdict).toMatchObject({ passed: true, changed: ["pinned:a/main.algal#one"] });
+  expect(accepted.intended).toEqual({ changed: ["pinned:a/main.algal#one"], reason: "corrected" });
+  expect(canonicalize(libraryComparisonToJson(accepted))).toBe(canonicalize(record({ cases: changed, intended: declaration })));
+  // Without a declaration the same changed row still fails.
+  expect(parseLibraryComparison(record({ cases: changed })).verdict.passed).toBe(false);
+  // A declaration naming fewer, more, or different cases than observed fails.
+  for (const declared of [
+    { changed: ["unseen:b/main.algal#two"], reason: "corrected" },
+    { changed: ["pinned:a/main.algal#one", "unseen:b/main.algal#two"], reason: "extended" },
+    { changed: ["pinned:a/main.algal#zero"], reason: "restricted" },
+  ] as const) {
+    expect(parseLibraryComparison(record({ cases: changed, intended: declared })).verdict).toMatchObject({ passed: false, changed: ["pinned:a/main.algal#one"] });
+  }
+  // Declaring a case that did not change fails the same way.
+  expect(parseLibraryComparison(record({ intended: declaration })).verdict.passed).toBe(false);
+  // An intended record whose verdict forgot the declaration is rejected.
+  const value = record({ cases: changed, intended: declaration });
+  const withoutIntended = record({ cases: changed });
+  rejects({ ...value, verdict: (withoutIntended as { verdict: JsonObject }).verdict }, /verdict does not follow/);
+  // And the interface, notCompiled, and notRun gates still apply alongside one.
+  const broken = callerRows(value).map((row, index) => index === 1 ? { ...row, candidate: null, reason: "PARSE_FAILED: no" } : row);
+  const unrun = changed.map(row => row.entry === "b/main.algal" ? { ...row, candidate: null } : row);
+  expect(parseLibraryComparison(record({ callers: broken, cases: unrun, intended: declaration })).verdict).toMatchObject({ passed: false, notCompiled: ["b/main.algal"], notRun: ["unseen:b/main.algal#two"] });
+  // The text report names the declaration and marks the authorized change.
+  const rendered = renderLibraryComparison(accepted);
+  expect(rendered).toContain("Intended change: corrected · declares 1 case");
+  expect(rendered).toContain("  changed pinned:a/main.algal#one: complete " + digest(7) + " to failed " + digest(9) + " · declared");
+});
+
+test("the intended-change declaration parses strictly", () => {
+  const refuse = (value: unknown, pattern: RegExp, code = "PARSE_FAILED") => {
+    const error = failure(() => parseLibraryIntended(value));
+    expect({ code: error.code, message: error.message }).toMatchObject({ code, message: expect.stringMatching(pattern) });
+  };
+  expect(parseLibraryIntended({ changed: ["pinned:a/b.algal#c"], reason: "extended" })).toEqual({ changed: ["pinned:a/b.algal#c"], reason: "extended" });
+  refuse(null, /must be an object/);
+  refuse({ changed: ["pinned:a/b.algal#c"], reason: "corrected", note: 1 }, /unknown key "note"/);
+  refuse({ reason: "corrected" }, /requires "changed"/);
+  refuse({ changed: [], reason: "corrected" }, /at least one case/);
+  for (const id of ["a/b.algal#c", "held:a/b.algal#c", "pinned:a/b.algal", "unseen:a/b.algal#two words", "pinned:a/b.algal#", "pinned:a b.algal#c"]) {
+    refuse({ changed: [id], reason: "corrected" }, /case identifier/);
+  }
+  refuse({ changed: ["pinned:b/x.algal#a", "pinned:a/x.algal#a"], reason: "corrected" }, /sorted without repeats/);
+  refuse({ changed: ["pinned:a/x.algal#a", "pinned:a/x.algal#a"], reason: "corrected" }, /sorted without repeats/);
+  for (const reason of ["changed", "improved", "", 7]) refuse({ changed: ["pinned:a/b.algal#c"], reason }, /reason must be one of corrected, extended, restricted/);
+  const many = Array.from({ length: LIBRARY_COMPARISON_BOUNDS.maxRows + 1 }, (_, index) => `pinned:a/b.algal#c${String(index).padStart(4, "0")}`);
+  refuse({ changed: many, reason: "corrected" }, /exceed 272 entries/, "BUDGET_EXHAUSTED");
+  // The same rules apply when the declaration rides inside a record.
+  const value = record();
+  rejects({ ...value, intended: { changed: ["pinned:a/main.algal#one"], reason: "wrong" } }, /reason must be one of/);
+  rejects({ ...value, intended: { changed: ["pinned:a/main.algal#one"], reason: "corrected" } }, /verdict does not follow/);
+  rejects({ ...value, intended: null }, /must be an object/);
 });
 
 test("the record parser rejects unknown, malformed, inconsistent, and oversized data", () => {

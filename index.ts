@@ -20,7 +20,7 @@ export type { SourceDependencyEstimate, SourceDependencyInvocationBound, SourceD
 export { AUTHORITY_ENVELOPE_BOUNDS, AUTHORITY_ENVELOPE_CONTRACT, createAuthorityEnvelope, parseAuthorityEnvelope, renderAuthorityEnvelope } from "./src/envelope";
 export type { AuthorityEnvelope, AuthorityEnvelopeOptions, EnvelopeCaller, EnvelopeCapability, EnvelopeCapabilityConsumer, EnvelopeCapabilityProducer, EnvelopeCellWork, EnvelopeConsumerUse, EnvelopeFunctionRef, EnvelopeModule, EnvelopeOccurrence, EnvelopeOpenCell, EnvelopePortEndpoint, EnvelopeProducerRole, EnvelopeSlotUse, EnvelopeToolRef, EnvelopeUse, EnvelopeWorkBound } from "./src/envelope";
 export { SOURCE_DEPENDENCY_APPLICATION_BOUNDS } from "./src/source-dependencies-application";
-export type { SourceDependencyApplication, SourceDependencyApplicationActivation, SourceDependencyApplicationEntrypoint, SourceDependencyApplicationEvaluation, SourceDependencyApplicationModuleLinks, SourceDependencyApplicationOccurrenceLinks, SourceDependencyApplicationOptions, SourceDependencyApplicationReader } from "./src/source-dependencies-application";
+export type { SourceDependencyApplication, SourceDependencyApplicationActivation, SourceDependencyApplicationEntrypoint, SourceDependencyApplicationEpisode, SourceDependencyApplicationEpisodeCount, SourceDependencyApplicationEpisodes, SourceDependencyApplicationEvaluation, SourceDependencyApplicationModuleLinks, SourceDependencyApplicationOccurrenceLinks, SourceDependencyApplicationOptions, SourceDependencyApplicationReader } from "./src/source-dependencies-application";
 export { createSourceLock, parseSourceLock, parseSourceLockCases, renderSourceLockVerification, sourceLockFixtureKeys, sourceLockToJson, verifySourceLock, SOURCE_LOCK_BOUNDS, SOURCE_LOCK_CONTRACT, SOURCE_LOCK_VERIFICATION_CONTRACT } from "./src/source-lock";
 export type { SourceLock, SourceLockCase, SourceLockDrift, SourceLockDriftKind, SourceLockEvaluation, SourceLockEvaluationCase, SourceLockFixture, SourceLockOptions, SourceLockUnit, SourceLockVerification, SourceLockVerifyOptions } from "./src/source-lock";
 export type { SourceLockVendored } from "./src/source-lock";
@@ -32,8 +32,8 @@ export { createProgramDiagram, renderMermaid, renderSvg } from "./src/diagram";
 export type { ProgramDiagram, DiagramOptions, DiagramNode, DiagramEdge, SvgDiagramOptions } from "./src/diagram";
 export { compareLibraryRevision, verifyLibraryComparison } from "./src/library-compare";
 export type { LibraryComparisonOptions } from "./src/library-compare";
-export { libraryCaseId, libraryComparisonToJson, parseLibraryComparison, parseLibraryUnseenCases, renderLibraryComparison, LIBRARY_COMPARISON_BOUNDS, LIBRARY_COMPARISON_CONTRACT, LIBRARY_UNSEEN_CASES_CONTRACT } from "./src/library-comparison";
-export type { LibraryComparison, LibraryComparisonCaller, LibraryComparisonCase, LibraryComparisonDependent, LibraryComparisonResult, LibraryComparisonSet, LibraryComparisonVerdict, LibraryComparisonVersion, LibraryUnseenCase, LibraryUnseenCases } from "./src/library-comparison";
+export { libraryCaseId, libraryComparisonToJson, parseLibraryComparison, parseLibraryIntended, parseLibraryUnseenCases, renderLibraryComparison, LIBRARY_COMPARISON_BOUNDS, LIBRARY_COMPARISON_CONTRACT, LIBRARY_INTENDED_REASONS, LIBRARY_UNSEEN_CASES_CONTRACT } from "./src/library-comparison";
+export type { LibraryComparison, LibraryComparisonCaller, LibraryComparisonCase, LibraryComparisonDependent, LibraryComparisonResult, LibraryComparisonSet, LibraryComparisonVerdict, LibraryComparisonVersion, LibraryIntendedChange, LibraryIntendedReason, LibraryUnseenCase, LibraryUnseenCases } from "./src/library-comparison";
 
 export {
   BOUNDS,
@@ -209,6 +209,37 @@ export type {
   SearchHit,
 } from "./src/semantic";
 
+// Program database: the derived, disposable structural index over the
+// store (program.db) plus its bounded declarative query surface.
+export {
+  buildProgramIndex,
+  parseProgramQuery,
+  programDbPath,
+  programIndexStatus,
+  runProgramProjection,
+  runProgramQuery,
+  PROGRAM_DB_BOUNDS,
+  PROGRAM_DB_FILE,
+  PROGRAM_DB_PLACES,
+  PROGRAM_DB_SCHEMA,
+  PROGRAM_DB_TABLES,
+  PROGRAM_PROJECTIONS,
+} from "./src/program-db";
+export type {
+  ProgramDbLimits,
+  ProgramIndexReport,
+  ProgramIndexStatus,
+  ProgramPlace,
+  ProgramPlaceFingerprint,
+  ProgramFingerprint,
+  ProgramProjection,
+  ProgramProjectionName,
+  ProgramQuery,
+  ProgramQueryPredicate,
+  ProgramQueryResult,
+  ProgramTable,
+} from "./src/program-db";
+
 export {
   emptyToolRegistry,
   mergeToolRegistries,
@@ -246,6 +277,40 @@ export type { Transport } from "./src/transport";
 
 export { resumeRun, verifyReceipt } from "./src/verify";
 export type { VerifyReport } from "./src/verify";
+
+export {
+  REPLAY_COMPARISON_CONTRACT,
+  REPLAY_COMPARISON_BOUNDS,
+  parseReplayComparison,
+  replayComparison,
+  replayComparisonToJson,
+} from "./src/replay";
+export type {
+  ReplayComparison,
+  ReplayDivergence,
+  ReplayDivergenceKind,
+  ReplayReason,
+  ReplayReasonCode,
+  ReplayRequest,
+  ReplayResult,
+  ReplayVerdict,
+} from "./src/replay";
+export {
+  ORDERING_BOUNDS,
+  ORDERING_REPORT_CONTRACT,
+  ORDERING_SCENARIO_CONTRACT,
+  DeterministicMailboxService,
+  exploreOrdering,
+  parseOrderingReport,
+  parseOrderingScenario,
+} from "./src/ordering";
+export type {
+  OrderingLimits,
+  OrderingReport,
+  OrderingResult,
+  OrderingRow,
+  OrderingScenario,
+} from "./src/ordering";
 
 export {
   FOUNDRY_BOUNDS,
@@ -399,6 +464,16 @@ export type { CodingOperationAdapter, CodingOperationBinding, CodingOperationOut
 
 export { PROCESS_EVIDENCE_CONTRACT, PROCESS_EVIDENCE_BOUNDS, parseProcessEvidence, exportProcessEvidence, verifyProcessEvidence } from "./src/process-evidence";
 export type { ProcessEvidence, ProcessEvidenceReport } from "./src/process-evidence";
+
+// Bounded read-only observation of a live store.
+export { OBSERVE_BOUNDS, observeStore, followStore, diffSnapshots } from "./src/observe";
+export type {
+  ObserveSnapshot, ObserveOptions, ObserveChange, ObserveFollowEvent,
+  ObserveFollowOptions, ObserveFollowResult, ObserveListing, ObserveSection,
+  ObserveCount, ObserveProcess, ObservePending, ObserveMailbox,
+  ObserveCapability, ObserveHostEvent, ObserveApplication,
+  ObserveHabitatAccount, ObserveHabitatSchedule, ObserveRun,
+} from "./src/observe";
 
 // Programmable-application records, lifecycle, and captured evidence.
 export {

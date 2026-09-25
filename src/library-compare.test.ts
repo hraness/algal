@@ -138,6 +138,33 @@ test("a behavior-changing rewrite fails on pinned and unseen cases, and a rewrit
   for (const row of uncapped.cases.filter(item => item.set === "pinned")) expect(row.candidate).toEqual(row.base);
 }, 60_000);
 
+test("a declared intended change authorizes exactly the cases it lists, end to end", async () => {
+  // The plus-one rewrite moves every case except the malformed one.
+  const changed = [...PINNED, "unseen:support-queue/main.algal#stale-ticket", "unseen:task-planning/inspect_task.algal#urgency-above-range"];
+  const declared = { changed, reason: "corrected" as const };
+  const record = await compare(revisions.plusOne, { intended: declared });
+  expect(record.verdict).toEqual({ passed: true, interfaceChanged: false, unseenMissing: false, notCompiled: [], changed, notRun: [] });
+  expect(record.intended).toEqual(declared);
+  // Fewer, extra, or different declared cases all fail, as does omitting it.
+  expect((await compare(revisions.plusOne)).verdict.passed).toBe(false);
+  for (const listed of [
+    { changed: PINNED, reason: "extended" },
+    { changed: [...changed, "unseen:task-planning/main.algal#text-impact"].sort(), reason: "restricted" },
+    { changed: changed.map(id => id === changed[0] ? "unseen:task-planning/main.algal#text-impact" : id).sort(), reason: "corrected" },
+  ] as const) {
+    expect((await compare(revisions.plusOne, { intended: listed })).verdict).toMatchObject({ passed: false, changed });
+  }
+  // A malformed declaration fails fast, before any repository read.
+  expect((await refusal(compare(revisions.plusOne, { intended: { changed: [], reason: "corrected" } }))).message).toContain("must name at least one case");
+  expect((await refusal(compare(revisions.plusOne, { intended: { changed, reason: "improved" } }))).message).toContain("reason must be one of corrected, extended, restricted");
+  // The record verifies only against the same declaration: the key-union check
+  // reports a declaration on either side as a difference.
+  const options = { repository: shared, name: "clamp", revision: revisions.plusOne, unseen, intended: declared };
+  expect(await verifyLibraryComparison(libraryComparisonToJson(record), options)).toEqual(record);
+  const without = await refusal(verifyLibraryComparison(libraryComparisonToJson(record), { repository: shared, name: "clamp", revision: revisions.plusOne, unseen }));
+  expect(without.message).toBe("library compare: the record differs from a fresh comparison in intended, verdict");
+}, 90_000);
+
 test("an interface change is reported, with every caller and dependent it breaks", async () => {
   const record = await compare(revisions.renamed);
   expect(record.verdict).toEqual({
@@ -203,7 +230,7 @@ test("a record that hides a regression fails verification by rerunning the compa
   const options = { repository: shared, name: "clamp", revision: revisions.plusOne, unseen };
   const rejected = await refusal(verifyLibraryComparison(libraryComparisonToJson(record), options));
   expect({ code: rejected.code, message: rejected.message }).toEqual({ code: "RECEIPT_MISMATCH", message: "library compare: the record differs from a fresh comparison in cases, verdict" });
-  expect((await refusal(verifyLibraryComparison(libraryComparisonToJson(passing), options))).message).toContain("differs from a fresh comparison in candidate, dependents, callers, cases, verdict");
+  expect((await refusal(verifyLibraryComparison(libraryComparisonToJson(passing), options))).message).toContain("differs from a fresh comparison in callers, candidate, cases, dependents, verdict");
   expect((await refusal(verifyLibraryComparison({ ...libraryComparisonToJson(passing), extra: true }, options))).message).toContain('unknown key "extra"');
 }, 60_000);
 
