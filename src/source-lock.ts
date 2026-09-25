@@ -2,13 +2,21 @@
 // closure it compiles to, and verify that pin offline. A lock is data outside
 // executable identity; it never supplies source or manifests, and verification
 // recompiles from the closed source map with no network or package resolver.
+// Two optional sections extend the pin: evaluation cases (fixture digests plus
+// the outcome and interface outputs of an in-memory scripted replay) and human
+// labels for closure digests. Fixtures arrive as a closed map of JSON text, so
+// this module performs no filesystem IO.
 import { BOUNDS } from "./contract";
 import { asDigest, digestCanonical, type Digest } from "./digest";
+import { scriptedExecutor } from "./effects";
 import { AlgalError } from "./errors";
-import { SOURCE_PROJECT_BOUNDS, type SourceCompilerOptions } from "./source";
+import { builtinRegistry } from "./registry";
+import { runOrganism, RUNTIME_VERSION, type RunOutcome } from "./run";
+import { compileSource, SOURCE_BOUNDS, SOURCE_PROJECT_BOUNDS, type SourceCompilation, type SourceCompilerOptions } from "./source";
 import { boundedJsonSnapshot, createSourceDependencyReport, freezeDeep, printableText, type SourceDependencyReport } from "./source-dependencies";
-import { compareUtf8 } from "./utf8";
-import { asArray, asInt, asObject, asString, noUnknownKeys, reqField, type JsonObject, type JsonValue } from "./values";
+import { MemoryStore } from "./store-memory";
+import { compareUtf8, utf8Length } from "./utf8";
+import { asArray, asInt, asObject, asString, noUnknownKeys, optField, reqField, type JsonObject, type JsonValue } from "./values";
 
 export const SOURCE_LOCK_CONTRACT = "algal.source-lock.v1" as const;
 export const SOURCE_LOCK_VERIFICATION_CONTRACT = "algal.source-lock-verification.v1" as const;
@@ -17,14 +25,41 @@ export const SOURCE_LOCK_BOUNDS = Object.freeze({
   /** Twice today's largest closure: one module per imported file plus one
    * generated trigger wrapper per called child (15 + 15 for 16 files). */
   maxModules: 4 * (SOURCE_PROJECT_BOUNDS.maxFiles - 1),
-  /** Above every possible drift list, so verification never truncates. */
-  maxDrift: 256,
+  /** Above every possible drift list (at most 332 entries), so verification never truncates. */
+  maxDrift: 384,
   maxKeyLength: 512,
   maxTokenLength: 64,
-  /** Own-data snapshot limits for a supplied lock value; the largest legal lock measured is under 40 KiB. */
-  lock: Object.freeze({ maxBytes: 65_536, maxDepth: 8, maxNodes: 16_384, maxEntries: 2_048, maxStringBytes: 2_048 }),
+  /** Human labels for closure digests. */
+  maxVersions: 16,
+  evaluation: Object.freeze({
+    maxCases: 16,
+    /** UTF-8 bytes of one fixture's JSON text; the per-file source limit. */
+    maxFixtureBytes: SOURCE_BOUNDS.maxSourceBytes,
+    /** Own-data limits for a parsed fixture; containers nest at most 64 deep, as run arguments do. */
+    fixture: Object.freeze({ maxBytes: BOUNDS.maxArgsBytes, maxDepth: 64, maxNodes: 65_536, maxEntries: 65_536, maxStringBytes: SOURCE_BOUNDS.maxSourceBytes }),
+  }),
+  /** Own-data snapshot limits for a supplied lock value; the largest legal lock measured is under 100 KiB. */
+  lock: Object.freeze({ maxBytes: 131_072, maxDepth: 8, maxNodes: 16_384, maxEntries: 2_048, maxStringBytes: 2_048 }),
 });
 export type SourceLockUnit = { readonly source: string; readonly sourceDigest: Digest; readonly manifestDigest: Digest };
+/** A project-relative `.json` fixture and the digest of its canonical JSON. */
+export type SourceLockFixture = { readonly path: string; readonly digest: Digest };
+export type SourceLockEvaluationCase = {
+  readonly name: string;
+  /** Run arguments in the `algal run --args` shape: input cell → port → value. */
+  readonly args: SourceLockFixture;
+  /** Scripted responses in the `algal run --responses` shape; without it, every effect is unbound. */
+  readonly responses?: SourceLockFixture;
+  readonly outcome: RunOutcome;
+  /** Digest of the canonical JSON of the root's interface outputs (output name → recorded value). */
+  readonly outputs: Digest;
+};
+export type SourceLockEvaluation = {
+  /** Runtime semantics version (`RUNTIME_VERSION`) that produced the pinned results. */
+  readonly runtime: string;
+  /** Sorted by unique name. */
+  readonly cases: readonly SourceLockEvaluationCase[];
+};
 export type SourceLock = {
   readonly contract: typeof SOURCE_LOCK_CONTRACT;
   readonly entry: string;
@@ -37,8 +72,31 @@ export type SourceLock = {
   readonly analysis: { readonly maxAgentCalls: number; readonly requiredDepth: number };
   /** Executable digest (root included) → digest of its resolved public interface. */
   readonly interfaces: Readonly<Record<Digest, Digest>>;
+  readonly evaluation?: SourceLockEvaluation;
+  /** Human label → executable digest in this closure. Labels are for people;
+   * digests are what execute, and verification never moves a label. */
+  readonly versions?: Readonly<Record<string, Digest>>;
 };
-export type SourceLockDriftKind = "entry" | "compiler" | "source" | "unit" | "root" | "closure" | "interface" | "analysis";
+/** One requested case, as `lock --evaluation` reads it. Paths are project-relative keys into `fixtures`. */
+export type SourceLockCase = {
+  readonly name: string;
+  readonly args: string;
+  readonly responses?: string;
+  /** Outcome the replay must reach before the case is pinned; `complete` when omitted. */
+  readonly outcome?: RunOutcome;
+};
+export type SourceLockOptions = {
+  readonly evaluation?: readonly SourceLockCase[];
+  /** Closed fixture map, project-relative path → JSON text; exactly the paths the cases name. */
+  readonly fixtures?: Readonly<Record<string, string>>;
+  /** Label → executable digest; every digest must be in the compiled closure. */
+  readonly versions?: Readonly<Record<string, string>>;
+};
+export type SourceLockVerifyOptions = {
+  /** Replay every pinned case offline against this closed map of the lock's fixture paths → JSON text. */
+  readonly fixtures?: Readonly<Record<string, string>>;
+};
+export type SourceLockDriftKind = "entry" | "compiler" | "source" | "unit" | "root" | "closure" | "interface" | "analysis" | "version" | "evaluation";
 export type SourceLockDrift = { readonly kind: SourceLockDriftKind; readonly subject: string; readonly expected: string; readonly actual: string };
 export type SourceLockVerification = {
   readonly contract: typeof SOURCE_LOCK_VERIFICATION_CONTRACT;
@@ -46,16 +104,20 @@ export type SourceLockVerification = {
   /** Digest of the parsed lock's canonical JSON, not of the supplied file bytes. */
   readonly lockDigest: Digest;
   readonly root: Digest;
-  /** Fixed order: entry, compiler, source digests, unit digests, root, closure, interfaces, analysis. */
+  /** Fixed order: entry, compiler, source digests, unit digests, root, closure,
+   * interfaces, analysis, version labels, evaluation. */
   readonly drift: readonly SourceLockDrift[];
   /** Always false today: the bound exceeds the largest possible list. */
   readonly truncated: boolean;
+  /** Present when the lock pins evaluation cases; `replayed` is false unless fixtures were supplied. */
+  readonly evaluation?: { readonly cases: number; readonly replayed: boolean };
 };
 
 const verifications = new WeakSet<SourceLockVerification>();
 const ABSENT = "(absent)";
 const TOKEN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-const DRIFT_ORDER: readonly SourceLockDriftKind[] = ["entry", "compiler", "source", "unit", "root", "closure", "interface", "analysis"];
+const DRIFT_ORDER: readonly SourceLockDriftKind[] = ["entry", "compiler", "source", "unit", "root", "closure", "interface", "analysis", "version", "evaluation"];
+const OUTCOMES: readonly RunOutcome[] = ["complete", "failed", "stuck", "suspended"];
 
 /** Lone surrogates are not text; they would also cost six JSON bytes each. */
 function wellFormed(text: string): boolean {
@@ -71,24 +133,143 @@ function wellFormed(text: string): boolean {
   return true;
 }
 /** The compiler's normalized project-relative key rules, applied to lock data. */
-function sourceKey(value: unknown, what: string): string {
+function projectPath(value: unknown, what: string, suffix: ".algal" | ".json"): string {
   const key = asString(value, what, SOURCE_LOCK_BOUNDS.maxKeyLength);
-  const invalid = !key.endsWith(".algal") || key.includes("\\") || key.includes(":") || !wellFormed(key)
+  const invalid = !key.endsWith(suffix) || key.includes("\\") || key.includes(":") || !wellFormed(key)
     || [...key].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)
     || key.split("/").some(part => !part || part === "." || part === "..");
-  if (invalid) throw new AlgalError("PARSE_FAILED", `${what} must be a normalized project-relative .algal path`);
+  if (invalid) throw new AlgalError("PARSE_FAILED", `${what} must be a normalized project-relative ${suffix} path`);
   return key;
 }
+const sourceKey = (value: unknown, what: string): string => projectPath(value, what, ".algal");
+const fixtureKey = (value: unknown, what: string): string => projectPath(value, what, ".json");
 function token(value: unknown, what: string): string {
   const text = asString(value, what, SOURCE_LOCK_BOUNDS.maxTokenLength);
-  if (!TOKEN.test(text)) throw new AlgalError("PARSE_FAILED", `${what} must be a plain version token`);
+  if (!TOKEN.test(text)) throw new AlgalError("PARSE_FAILED", `${what} must be a plain token of letters, digits, ".", "_", or "-"`);
   return text;
+}
+function outcome(value: unknown, what: string): RunOutcome {
+  if (typeof value !== "string" || !(OUTCOMES as readonly string[]).includes(value)) throw new AlgalError("PARSE_FAILED", `${what} must be one of ${OUTCOMES.join(", ")}`);
+  return value as RunOutcome;
+}
+function caseCount(length: number, what: string): void {
+  if (length === 0) throw new AlgalError("PARSE_FAILED", `${what} must name at least one case`);
+  if (length > SOURCE_LOCK_BOUNDS.evaluation.maxCases) throw new AlgalError("BUDGET_EXHAUSTED", `${what} exceed ${SOURCE_LOCK_BOUNDS.evaluation.maxCases} cases`);
+}
+/** Labels map token names to digests; `closure`, when given, must contain every digest. */
+function versionLabels(value: unknown, what: string, closure?: ReadonlySet<string>): Record<string, Digest> {
+  const object = asObject(value, what);
+  const labels = Object.keys(object).sort(compareUtf8);
+  if (labels.length === 0) throw new AlgalError("PARSE_FAILED", `${what} must name at least one label`);
+  if (labels.length > SOURCE_LOCK_BOUNDS.maxVersions) throw new AlgalError("BUDGET_EXHAUSTED", `${what} exceed ${SOURCE_LOCK_BOUNDS.maxVersions} labels`);
+  const out: Record<string, Digest> = {};
+  for (const label of labels) {
+    token(label, "version label");
+    const digest = asDigest(object[label], `version ${label}`);
+    if (closure !== undefined && !closure.has(digest)) throw new AlgalError("PARSE_FAILED", `version ${label} names ${digest}, which is outside the closure`);
+    out[label] = digest;
+  }
+  return out;
+}
+
+/** Parse a requested case list (the `lock --evaluation` file) from foreign
+ * data: one to 16 cases, unique token names, and `.json` fixture paths. */
+export function parseSourceLockCases(value: unknown): SourceLockCase[] {
+  const list = asArray(boundedJsonSnapshot(value, SOURCE_LOCK_BOUNDS.lock, "source lock cases"), "source lock cases");
+  caseCount(list.length, "source lock cases");
+  const names = new Set<string>();
+  return freezeDeep(list.map((raw, index) => {
+    const item = asObject(raw, `source lock case ${index}`);
+    noUnknownKeys(item, ["name", "args", "responses", "outcome"], `source lock case ${index}`);
+    const name = token(reqField(item, "name", "source lock case"), "case name");
+    if (names.has(name)) throw new AlgalError("PARSE_FAILED", `source lock case names must be unique: ${name}`);
+    names.add(name);
+    const responses = optField(item, "responses");
+    const expected = optField(item, "outcome");
+    return {
+      name, args: fixtureKey(reqField(item, "args", "source lock case"), "case args"),
+      ...(responses === undefined ? {} : { responses: fixtureKey(responses, "case responses") }),
+      ...(expected === undefined ? {} : { outcome: outcome(expected, "case outcome") }),
+    };
+  }));
+}
+
+const isCaseList = (value: SourceLock | readonly SourceLockCase[]): value is readonly SourceLockCase[] => Array.isArray(value);
+/** Distinct fixture paths that a case list or a lock's evaluation names,
+ * sorted. A host reads exactly these files and passes their text as `fixtures`. */
+export function sourceLockFixtureKeys(value: SourceLock | readonly SourceLockCase[]): string[] {
+  const paths = isCaseList(value)
+    ? value.flatMap(item => item.responses === undefined ? [item.args] : [item.args, item.responses])
+    : (value.evaluation?.cases ?? []).flatMap(item => item.responses === undefined ? [item.args.path] : [item.args.path, item.responses.path]);
+  return [...new Set(paths)].sort(compareUtf8);
+}
+
+type FixtureValue = { readonly value: JsonValue; readonly digest: Digest };
+/** Copy exactly the named fixtures out of a closed map, synchronously: own
+ * enumerable string data only, each within the byte limit, then parse and
+ * digest each one's canonical JSON. */
+function fixtureValues(value: unknown, keys: readonly string[]): Map<string, FixtureValue> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) throw new AlgalError("PARSE_FAILED", "source lock fixtures must be an object");
+  const prototype = Object.getPrototypeOf(value) as unknown;
+  if (prototype !== Object.prototype && prototype !== null) throw new AlgalError("PARSE_FAILED", "source lock fixtures must be a plain object");
+  const names = Reflect.ownKeys(value);
+  if (names.length > 2 * SOURCE_LOCK_BOUNDS.evaluation.maxCases) throw new AlgalError("BUDGET_EXHAUSTED", `source lock fixtures exceed ${2 * SOURCE_LOCK_BOUNDS.evaluation.maxCases} files`);
+  const wanted = new Set(keys);
+  const values = new Map<string, FixtureValue>();
+  for (const name of names) {
+    if (typeof name !== "string" || !wanted.has(name)) throw new AlgalError("PARSE_FAILED", `source lock fixtures include ${typeof name === "string" ? JSON.stringify(name) : "a symbol key"}, which no case names`);
+    const descriptor = Object.getOwnPropertyDescriptor(value, name);
+    const text: unknown = descriptor !== undefined && Object.hasOwn(descriptor, "value") && descriptor.enumerable ? descriptor.value : undefined;
+    if (typeof text !== "string") throw new AlgalError("PARSE_FAILED", `fixture ${name} must be JSON text`);
+    const limit = SOURCE_LOCK_BOUNDS.evaluation.maxFixtureBytes;
+    if (text.length > limit || utf8Length(text) > limit) throw new AlgalError("BUDGET_EXHAUSTED", `fixture ${name} exceeds ${limit} bytes`);
+    let parsed: unknown;
+    try { parsed = JSON.parse(text); } catch { throw new AlgalError("PARSE_FAILED", `fixture ${name} is not valid JSON`); }
+    const data = boundedJsonSnapshot(parsed, SOURCE_LOCK_BOUNDS.evaluation.fixture, `fixture ${name}`);
+    values.set(name, { value: data, digest: digestCanonical(data) });
+  }
+  for (const key of keys) if (!values.has(key)) throw new AlgalError("PARSE_FAILED", `source lock fixtures omit ${key}`);
+  return values;
+}
+type RunArguments = Record<string, Record<string, JsonValue>>;
+function runArguments(value: JsonValue, path: string): RunArguments {
+  const object = asObject(value, `args fixture ${path}`);
+  for (const cell of Object.keys(object)) asObject(object[cell], `args fixture ${path} cell ${JSON.stringify(cell)}`);
+  return object as RunArguments;
+}
+type Prepared = { readonly name: string; readonly args: RunArguments; readonly responses: JsonObject };
+/** Shape-check every case before anything runs, so a malformed fixture fails first. */
+function prepare(cases: readonly { readonly name: string; readonly args: string; readonly responses?: string | undefined }[], values: ReadonlyMap<string, FixtureValue>): Prepared[] {
+  return cases.map(item => ({
+    name: item.name, args: runArguments(values.get(item.args)!.value, item.args),
+    responses: item.responses === undefined ? {} : asObject(values.get(item.responses)!.value, `responses fixture ${item.responses}`),
+  }));
+}
+
+/** Run one case in memory against the compiled closure: builtin functions, a
+ * scripted executor over the case's responses, and no tools, transports, or
+ * durable store. Only the outcome and the interface outputs are kept. */
+async function replay(compilation: SourceCompilation, prepared: Prepared): Promise<{ outcome: RunOutcome; outputs: Digest; failure?: string }> {
+  const store = new MemoryStore();
+  for (const module of compilation.modules) await store.putManifest(module);
+  await store.putManifest(compilation.manifest);
+  const receipt = await runOrganism({ manifest: compilation.manifest, args: prepared.args, fns: builtinRegistry(), store, executors: [scriptedExecutor(prepared.responses)] });
+  const outputs = Object.create(null) as JsonObject;
+  for (const [name, target] of Object.entries(compilation.manifest.interface?.outputs ?? {})) {
+    const ports = Object.hasOwn(receipt.cells, target.cell) ? receipt.cells[target.cell]!.outputs : undefined;
+    if (ports !== undefined && Object.hasOwn(ports, target.port)) outputs[name] = ports[target.port]!;
+  }
+  return { outcome: receipt.outcome, outputs: digestCanonical(outputs), ...(receipt.failure === undefined ? {} : { failure: `${receipt.failure.code}: ${receipt.failure.message}` }) };
+}
+/** The replayed program must be the root the lock pins or compares. */
+function sameRoot(compilation: SourceCompilation | undefined, root: Digest): void {
+  if (compilation !== undefined && compilation.sourceMap.manifestDigest !== root) throw new AlgalError("INTERNAL", "source lock: replay compiled a different root");
 }
 
 function lockFromReport(report: SourceDependencyReport): SourceLock {
   const interfaces: Record<Digest, Digest> = {};
   for (const module of report.modules) interfaces[module.manifestDigest] = digestCanonical(module.interface as unknown as JsonValue);
-  return freezeDeep({
+  return {
     contract: SOURCE_LOCK_CONTRACT,
     entry: report.entry,
     compiler: { version: report.compilerVersion, profile: report.profile },
@@ -97,26 +278,97 @@ function lockFromReport(report: SourceDependencyReport): SourceLock {
     modules: report.modules.map(module => module.manifestDigest).filter(digest => digest !== report.rootManifestDigest).sort(compareUtf8),
     analysis: { maxAgentCalls: report.analysis.maxAgentCalls, requiredDepth: report.analysis.requiredDepth },
     interfaces,
-  });
+  };
 }
 
 /** Compile a closed source project and pin its closure. Writes nothing. A
- * closure beyond the lock's own bound is refused here rather than at verification. */
-export async function createSourceLock(source: string, sourceOptions?: SourceCompilerOptions): Promise<SourceLock> {
+ * closure beyond the lock's own bound is refused here rather than at
+ * verification. With `evaluation`, each case is replayed in memory and pinned
+ * only if it reaches its requested outcome; with `versions`, each label must
+ * name a digest in the compiled closure.
+ */
+export async function createSourceLock(source: string, sourceOptions?: SourceCompilerOptions, options: SourceLockOptions = {}): Promise<SourceLock> {
+  // Foreign options are copied and checked once, before the first await.
+  const requested: unknown = options.evaluation;
+  const cases = requested === undefined ? undefined : parseSourceLockCases(requested);
+  const suppliedFixtures: unknown = options.fixtures;
+  if ((cases === undefined) !== (suppliedFixtures === undefined)) throw new AlgalError("PARSE_FAILED", "source lock evaluation cases and fixtures must be supplied together");
+  const values = cases === undefined ? undefined : fixtureValues(suppliedFixtures, sourceLockFixtureKeys(cases));
+  const prepared = cases === undefined || values === undefined ? undefined : prepare(cases, values);
+  const suppliedVersions: unknown = options.versions;
+  const labels = suppliedVersions === undefined ? undefined : versionLabels(boundedJsonSnapshot(suppliedVersions, SOURCE_LOCK_BOUNDS.lock, "source lock versions"), "source lock versions");
+  const compilation = prepared === undefined ? undefined : compileSource(source, sourceOptions ?? {});
   const lock = lockFromReport(await createSourceDependencyReport(source, sourceOptions === undefined ? {} : { sourceOptions }));
   if (lock.modules.length > SOURCE_LOCK_BOUNDS.maxModules) throw new AlgalError("BUDGET_EXHAUSTED", `source lock: closure exceeds ${SOURCE_LOCK_BOUNDS.maxModules} modules`);
-  return lock;
+  sameRoot(compilation, lock.root);
+  if (labels !== undefined) versionLabels(labels, "source lock versions", new Set([lock.root, ...lock.modules]));
+  let evaluation: SourceLockEvaluation | undefined;
+  if (cases !== undefined && values !== undefined && prepared !== undefined && compilation !== undefined) {
+    const pinned: SourceLockEvaluationCase[] = [];
+    for (const [index, item] of cases.entries()) {
+      const result = await replay(compilation, prepared[index]!);
+      const wanted = item.outcome ?? "complete";
+      if (result.outcome !== wanted) {
+        const reason = result.failure === undefined ? "" : ` (${[...printableText(result.failure.replaceAll("\n", " "))].slice(0, 240).join("")})`;
+        throw new AlgalError("RECEIPT_MISMATCH", `source lock case ${item.name} ended ${result.outcome}${reason}; expected ${wanted}`);
+      }
+      pinned.push({
+        name: item.name, args: { path: item.args, digest: values.get(item.args)!.digest },
+        ...(item.responses === undefined ? {} : { responses: { path: item.responses, digest: values.get(item.responses)!.digest } }),
+        outcome: result.outcome, outputs: result.outputs,
+      });
+    }
+    evaluation = { runtime: RUNTIME_VERSION, cases: pinned.sort((left, right) => compareUtf8(left.name, right.name)) };
+  }
+  return freezeDeep({ ...lock, ...(evaluation === undefined ? {} : { evaluation }), ...(labels === undefined ? {} : { versions: labels }) });
+}
+
+function fixturePin(value: unknown, what: string): SourceLockFixture {
+  const object = asObject(value, what);
+  noUnknownKeys(object, ["path", "digest"], what);
+  return { path: fixtureKey(reqField(object, "path", what), `${what} path`), digest: asDigest(reqField(object, "digest", what), `${what} digest`) };
+}
+function parseEvaluation(value: unknown): SourceLockEvaluation {
+  const object = asObject(value, "source lock evaluation");
+  noUnknownKeys(object, ["runtime", "cases"], "source lock evaluation");
+  const runtime = token(reqField(object, "runtime", "source lock evaluation"), "evaluation runtime");
+  const raw = asArray(reqField(object, "cases", "source lock evaluation"), "source lock evaluation cases");
+  caseCount(raw.length, "source lock evaluation cases");
+  const pinned = new Map<string, Digest>();
+  const cases = raw.map((entry, index): SourceLockEvaluationCase => {
+    const item = asObject(entry, `source lock evaluation case ${index}`);
+    noUnknownKeys(item, ["name", "args", "responses", "outcome", "outputs"], `source lock evaluation case ${index}`);
+    const responses = optField(item, "responses");
+    const parsed: SourceLockEvaluationCase = {
+      name: token(reqField(item, "name", "source lock evaluation case"), "case name"),
+      args: fixturePin(reqField(item, "args", "source lock evaluation case"), "case args"),
+      ...(responses === undefined ? {} : { responses: fixturePin(responses, "case responses") }),
+      outcome: outcome(reqField(item, "outcome", "source lock evaluation case"), "case outcome"),
+      outputs: asDigest(reqField(item, "outputs", "source lock evaluation case"), "case outputs"),
+    };
+    for (const fixture of parsed.responses === undefined ? [parsed.args] : [parsed.args, parsed.responses]) {
+      const seen = pinned.get(fixture.path);
+      if (seen !== undefined && seen !== fixture.digest) throw new AlgalError("PARSE_FAILED", `source lock fixture ${fixture.path} is pinned with two digests`);
+      pinned.set(fixture.path, fixture.digest);
+    }
+    return parsed;
+  });
+  for (let index = 1; index < cases.length; index++) {
+    if (compareUtf8(cases[index - 1]!.name, cases[index]!.name) >= 0) throw new AlgalError("PARSE_FAILED", "source lock evaluation cases must be sorted by unique name");
+  }
+  return { runtime, cases };
 }
 
 /** Parse foreign lock data strictly: known keys only, bounded lists, key and
  * digest shapes, sorted unique units and modules, an entry unit that carries
- * the root digest, and interfaces covering exactly the root and its modules.
- * The result is fresh, frozen data.
+ * the root digest, interfaces covering exactly the root and its modules,
+ * sorted uniquely named evaluation cases, and version labels whose digests are
+ * in the closure. The result is fresh, frozen data.
  */
 export function parseSourceLock(value: unknown): SourceLock {
   const data = boundedJsonSnapshot(value, SOURCE_LOCK_BOUNDS.lock, "source lock");
   const object = asObject(data, "source lock");
-  noUnknownKeys(object, ["contract", "entry", "compiler", "units", "root", "modules", "analysis", "interfaces"], "source lock");
+  noUnknownKeys(object, ["contract", "entry", "compiler", "units", "root", "modules", "analysis", "interfaces", "evaluation", "versions"], "source lock");
   if (object.contract !== SOURCE_LOCK_CONTRACT) throw new AlgalError("PARSE_FAILED", `source lock: expected contract "${SOURCE_LOCK_CONTRACT}"`);
   const entry = sourceKey(reqField(object, "entry", "source lock"), "source lock entry");
   const compilerObject = asObject(reqField(object, "compiler", "source lock"), "source lock compiler");
@@ -164,26 +416,55 @@ export function parseSourceLock(value: unknown): SourceLock {
   for (const digest of [root, ...modules]) {
     if (!Object.hasOwn(interfaces, digest)) throw new AlgalError("PARSE_FAILED", `source lock interfaces omit ${digest}`);
   }
-  return freezeDeep({ contract: SOURCE_LOCK_CONTRACT, entry, compiler, units, root, modules, analysis, interfaces });
+  const evaluationValue = optField(object, "evaluation");
+  const evaluation = evaluationValue === undefined ? undefined : parseEvaluation(evaluationValue);
+  const versionsValue = optField(object, "versions");
+  const versions = versionsValue === undefined ? undefined : versionLabels(versionsValue, "source lock versions", new Set([root, ...modules]));
+  return freezeDeep({
+    contract: SOURCE_LOCK_CONTRACT, entry, compiler, units, root, modules, analysis, interfaces,
+    ...(evaluation === undefined ? {} : { evaluation }), ...(versions === undefined ? {} : { versions }),
+  });
 }
 
 export function sourceLockToJson(lock: SourceLock): JsonObject {
+  const fixture = (pin: SourceLockFixture): JsonObject => ({ path: pin.path, digest: pin.digest });
   return {
     contract: lock.contract, entry: lock.entry, compiler: { version: lock.compiler.version, profile: lock.compiler.profile },
     units: lock.units.map(unit => ({ source: unit.source, sourceDigest: unit.sourceDigest, manifestDigest: unit.manifestDigest })),
     root: lock.root, modules: [...lock.modules], analysis: { maxAgentCalls: lock.analysis.maxAgentCalls, requiredDepth: lock.analysis.requiredDepth },
     interfaces: { ...lock.interfaces },
+    ...(lock.evaluation === undefined ? {} : {
+      evaluation: {
+        runtime: lock.evaluation.runtime,
+        cases: lock.evaluation.cases.map(item => ({
+          name: item.name, args: fixture(item.args), ...(item.responses === undefined ? {} : { responses: fixture(item.responses) }),
+          outcome: item.outcome, outputs: item.outputs,
+        })),
+      },
+    }),
+    ...(lock.versions === undefined ? {} : { versions: { ...lock.versions } }),
   };
 }
 
 /** Recompile the source and compare it with a lock. Every difference is
- * reported in a fixed order so source, executable, compiler, closure, and
- * interface drift stay distinguishable; `ok` is true only when nothing differs.
+ * reported in a fixed order so source, executable, compiler, closure,
+ * interface, label, and evaluation drift stay distinguishable; `ok` is true
+ * only when nothing differs. With `fixtures`, every pinned case is replayed in
+ * memory against the recompiled program; without them, no case runs and
+ * `evaluation.replayed` is false.
  */
-export async function verifySourceLock(source: string, sourceOptions: SourceCompilerOptions | undefined, lockValue: unknown): Promise<SourceLockVerification> {
+export async function verifySourceLock(source: string, sourceOptions: SourceCompilerOptions | undefined, lockValue: unknown, options: SourceLockVerifyOptions = {}): Promise<SourceLockVerification> {
   const expected = parseSourceLock(lockValue);
+  const suppliedFixtures: unknown = options.fixtures;
+  if (suppliedFixtures !== undefined && expected.evaluation === undefined) throw new AlgalError("PARSE_FAILED", "source lock pins no evaluation cases to replay");
+  const values = suppliedFixtures === undefined ? undefined : fixtureValues(suppliedFixtures, sourceLockFixtureKeys(expected));
+  const cases = expected.evaluation?.cases ?? [];
+  const prepared = values === undefined ? undefined
+    : prepare(cases.map(item => ({ name: item.name, args: item.args.path, responses: item.responses?.path })), values);
+  const compilation = prepared === undefined ? undefined : compileSource(source, sourceOptions ?? {});
   const lockDigest = digestCanonical(sourceLockToJson(expected));
   const actual = await createSourceLock(source, sourceOptions);
+  sameRoot(compilation, actual.root);
   const drift: SourceLockDrift[] = [];
   const note = (kind: SourceLockDriftKind, subject: string, wanted: string, found: string): void => {
     if (wanted !== found) drift.push({ kind, subject, expected: wanted, actual: found });
@@ -222,11 +503,26 @@ export async function verifySourceLock(source: string, sourceOptions: SourceComp
   }
   note("analysis", "maxAgentCalls", String(expected.analysis.maxAgentCalls), String(actual.analysis.maxAgentCalls));
   note("analysis", "requiredDepth", String(expected.analysis.requiredDepth), String(actual.analysis.requiredDepth));
+  // A label never follows a new digest: it drifts once its digest leaves the closure.
+  const closure = new Set<string>([actual.root, ...actual.modules]);
+  const versions = expected.versions ?? {};
+  for (const name of Object.keys(versions).sort(compareUtf8)) note("version", name, versions[name]!, closure.has(versions[name]!) ? versions[name]! : ABSENT);
+  if (expected.evaluation !== undefined && values !== undefined && prepared !== undefined && compilation !== undefined) {
+    note("evaluation", "runtime", expected.evaluation.runtime, RUNTIME_VERSION);
+    for (const [index, item] of cases.entries()) {
+      note("evaluation", `${item.name}/args`, item.args.digest, values.get(item.args.path)!.digest);
+      if (item.responses !== undefined) note("evaluation", `${item.name}/responses`, item.responses.digest, values.get(item.responses.path)!.digest);
+      const result = await replay(compilation, prepared[index]!);
+      note("evaluation", `${item.name}/outcome`, item.outcome, result.outcome);
+      note("evaluation", `${item.name}/outputs`, item.outputs, result.outputs);
+    }
+  }
   drift.sort((left, right) => DRIFT_ORDER.indexOf(left.kind) - DRIFT_ORDER.indexOf(right.kind));
   const truncated = drift.length > SOURCE_LOCK_BOUNDS.maxDrift;
   const verification: SourceLockVerification = {
     contract: SOURCE_LOCK_VERIFICATION_CONTRACT, ok: drift.length === 0, lockDigest, root: actual.root,
     drift: drift.slice(0, SOURCE_LOCK_BOUNDS.maxDrift), truncated,
+    ...(expected.evaluation === undefined ? {} : { evaluation: { cases: cases.length, replayed: values !== undefined } }),
   };
   freezeDeep(verification);
   verifications.add(verification);
@@ -243,7 +539,11 @@ export function renderSourceLockVerification(verification: SourceLockVerificatio
     `ALGAL source lock · ${verification.ok ? "verified" : "drift"} · lock ${verification.lockDigest} · root ${verification.root}`,
   ];
   if (verification.drift.length === 0) lines.push("The source compiles to the locked closure.");
-  else {
+  const evaluation = Object.hasOwn(verification, "evaluation") ? verification.evaluation : undefined;
+  if (evaluation !== undefined) {
+    lines.push(`Evaluation: ${evaluation.cases} pinned case${evaluation.cases === 1 ? "" : "s"}${evaluation.replayed ? " replayed offline" : ", not replayed"}.`);
+  }
+  if (verification.drift.length > 0) {
     lines.push(`Drift (${verification.drift.length}${verification.truncated ? "+, truncated" : ""}):`);
     for (const entry of verification.drift) lines.push(`  ${entry.kind} ${label(entry.subject)}: expected ${label(entry.expected)}, actual ${label(entry.actual)}`);
   }

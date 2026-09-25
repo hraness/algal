@@ -105,9 +105,13 @@ executable digest, the compiler version and profile, the root and module
 digests, and a digest of each module's resolved interface. `lock --verify`
 recompiles offline and reports source, executable, compiler, closure, and
 interface drift separately, with no network access, install scripts, registry
-lookup, or automatic upgrade. Compilation still accepts a closed source map,
-so browser tooling and deterministic evaluation do not depend on a filesystem
-or package server.
+lookup, or automatic upgrade. A lock can also pin
+[evaluation cases](source-language.md#pin-a-project-with-a-lock), which
+`lock --verify --evaluate` runs again offline with scripted responses to show
+whether a change moved a pinned result, and labels for people over exact
+digests, which report drift instead of following a changed program.
+Compilation still accepts a closed source map, so browser tooling and
+deterministic evaluation do not depend on a filesystem or package server.
 
 The host's function implementations, renderer profile, and effect adapters
 also affect compatibility. A program digest is not an identity for arbitrary
@@ -239,9 +243,8 @@ the report with application revisions and evaluation records remains proposed.
 4. Add richer source record and result types for demonstrated application needs.
    Lower them to checks the runtime enforces; new validation semantics need
    versioned specification and cross-runtime tests.
-5. Extend the local lock toward package metadata: evaluation-suite pinning,
-   named versions as human labels over exact digests, and vendored remote
-   catalogs that resolve to the same offline verification.
+5. Extend the local lock with vendored remote catalogs that resolve to the
+   same offline verification it applies to local projects.
 
 The [cumulative-skill experiment](vision.md#what-would-justify-the-claim)
 measures whether keeping and composing procedures improves later work. More
