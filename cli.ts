@@ -187,6 +187,13 @@ usage:
                                               inspect retained state or verify history offline
   algal inspect <receipt.json>            summarize a run receipt
   algal runs [--dir <path>]               list receipts stored under --dir
+  algal observe [--dir <path>] [--max-items <n>]
+      [--follow [--interval-ms <ms>] [--max-polls <n>] [--max-events <n>]]
+                                              one read-only snapshot of live store state; every
+                                              listing carries totals and truncation flags;
+                                              --follow streams each change in a fixed order
+  algal tail [--dir <path>] [--max-items <n>] [follow options]
+                                              alias for observe --follow
   algal diff <receipt-a.json> <receipt-b.json>
                                               compare two receipts, report divergence
   algal foundry <config.json> [--responses <file>] [--executor-cmd <command>]
@@ -2336,6 +2343,56 @@ async function main(): Promise<number> {
         digest: raw.digest ?? null,
       };
       out(summary);
+      return 0;
+    }
+
+    case "observe":
+    case "tail": {
+      if (positional.length !== 0)
+        usageError(
+          "algal observe|tail [--dir <path>] [--max-items <n>] [--follow [--interval-ms <ms>] [--max-polls <n>] [--max-events <n>]]",
+        );
+      const { observeStore, followStore, OBSERVE_BOUNDS } = await import("./src/observe");
+      for (const key of Object.keys(flags))
+        if (!["dir", "follow", "max-items", "interval-ms", "max-polls", "max-events"].includes(key))
+          usageError(`unknown observe option --${key}`);
+      if (flags.follow !== undefined && flags.follow !== true)
+        usageError("--follow is a boolean flag without a value");
+      const follow = cmd === "tail" || flags.follow === true;
+      const observeInt = (key: string, max: number): number | undefined => {
+        const value = artifactFlag(flags, key);
+        if (value === undefined) return undefined;
+        const n = Number(value);
+        if (!Number.isSafeInteger(n) || n < 1 || n > max)
+          usageError(`--${key} must be an integer in 1..${max}`);
+        return n;
+      };
+      const maxItems = observeInt("max-items", OBSERVE_BOUNDS.maxItems);
+      if (!follow) {
+        for (const key of ["interval-ms", "max-polls", "max-events"])
+          if (flags[key] !== undefined) usageError(`--${key} requires --follow`);
+        out(await observeStore(dir, maxItems === undefined ? {} : { maxItems }) as unknown as JsonValue);
+        return 0;
+      }
+      const intervalMs = observeInt("interval-ms", OBSERVE_BOUNDS.maxIntervalMs);
+      const maxPolls = observeInt("max-polls", OBSERVE_BOUNDS.maxPolls);
+      const maxEvents = observeInt("max-events", OBSERVE_BOUNDS.maxEvents);
+      const controller = new AbortController();
+      const stop = () => controller.abort();
+      process.once("SIGINT", stop);
+      process.once("SIGTERM", stop);
+      try {
+        await followStore(dir, (event) => out(event as unknown as JsonValue), {
+          ...(maxItems === undefined ? {} : { maxItems }),
+          ...(intervalMs === undefined ? {} : { intervalMs }),
+          ...(maxPolls === undefined ? {} : { maxPolls }),
+          ...(maxEvents === undefined ? {} : { maxEvents }),
+          signal: controller.signal,
+        });
+      } finally {
+        process.removeListener("SIGINT", stop);
+        process.removeListener("SIGTERM", stop);
+      }
       return 0;
     }
 

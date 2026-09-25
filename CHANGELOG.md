@@ -24,6 +24,20 @@ wire constant (`0.1.0`) is independent of these package versions.
   when stale. Unreadable or foreign records are counted and skipped, never
   fatal. See `docs/program-database.md`. Native CLI support is proposed, not
   shipped.
+- `algal observe --dir <store>` prints one read-only snapshot of live store
+  state: every process (status, generation, manifest and head digests), each
+  mailbox's pending deliveries and counts, capability records, host events,
+  application heads, stored habitat accounts and schedules, and a
+  digest-ordered tail of run receipts. Every listing carries an explicit
+  `total` and `truncated` flag; malformed records count toward `unreadable`
+  and foreign layout entries toward `foreign` instead of aborting the read.
+  A confirm pass re-reads each emitted pointer, so a snapshot that straddled
+  a transition reports `consistent: false`. `algal observe --follow` (alias
+  `algal tail`) streams each change as a canonical JSON line in a fixed
+  section order, bounded by `--interval-ms`, `--max-polls`, and
+  `--max-events`; emitted lines carry no wall-clock fields. Native Rust
+  support is proposed, not shipped.
+b221a25 (Add read-only `algal observe` projection and bounded `tail` follow)
 - Public copy adopts the canonical portfolio messaging record: the site
   title, hero, footer, social card, `llms.txt` introduction, README lead,
   both CLI introductions, and the package and crate descriptions now carry
