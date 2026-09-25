@@ -850,6 +850,16 @@ usage, manifest and receipt digests, generator lineage, and the winner's holdout
 and every run receipt by offline replay. `foundry pack` verifies that evidence
 before exporting the promoted organism's content-addressed closure.
 
+A config can add a `budget` object with `work`, `attempts`, and `runs` limits
+for the whole foundry, including the generator and losing candidates. Before each run
+starts, the foundry reserves the run's declared `maxWork` and `maxAgentCalls`
+against that budget, then charges what the run's receipt records. When the next
+run does not fit, no further run starts: the command writes the budget account
+with the outcome `exhausted` instead of a report and exits with status 1.
+`examples/foundry-budget.config.json` stops after five runs, and
+`foundry verify` checks that account and replays those runs. Search does not
+accept a budget yet.
+
 A bounded search repeats generation and selection while keeping holdout sealed.
 The previous winner survives into the next population, and the generator sees
 only prior train/validation scores, work, and manifest digests:

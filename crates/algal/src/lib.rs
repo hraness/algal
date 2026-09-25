@@ -33,6 +33,7 @@ pub mod embeddings;
 pub mod error;
 pub mod foundry;
 pub mod graph;
+pub mod habitat_budget;
 pub mod journal;
 mod lease;
 pub mod mailbox;

@@ -465,9 +465,9 @@ enum BenchCommand {
 
 #[derive(Subcommand)]
 enum FoundryCommand {
-    /// Replay every run in a foundry report offline.
+    /// Replay every run in a foundry report or budget record offline.
     Verify {
-        /// Foundry report (JSON).
+        /// Foundry report or habitat budget record (JSON).
         report: PathBuf,
         /// Tool registry file: tool name to `{signature, exec}`.
         #[arg(long)]
@@ -1565,9 +1565,14 @@ async fn execute(cli: Cli) -> Result<bool> {
                     modules,
                 }) => {
                     let (store, host) = verifier(tools, modules)?;
-                    let result =
-                        algal::foundry::verify(&load(&report, MAX_DOCUMENT_BYTES)?, &store, &host)
-                            .await?;
+                    let value = load(&report, MAX_DOCUMENT_BYTES)?;
+                    // An exhausted foundry writes its terminal habitat budget
+                    // record in place of a report; `verify` accepts either.
+                    let result = if value["contract"] == algal::habitat_budget::CONTRACT {
+                        algal::habitat_budget::verify(&value, &store, &host).await?
+                    } else {
+                        algal::foundry::verify(&value, &store, &host).await?
+                    };
                     emit(&result)?;
                     Ok(result["ok"] == true)
                 }
@@ -1679,39 +1684,62 @@ async fn execute(cli: Cli) -> Result<bool> {
                     options.write = true;
                     let (mut store, mut host, transports) = prepare(&options, &cli.dir)?;
                     let mut config = algal::foundry::load_config(&config, false)?;
-                    let lineage = match &config.generator {
-                        Some(generator) => {
-                            let (generator_digest, receipt_digest, generated) =
-                                algal::foundry::generate(
-                                    &generator.manifest,
-                                    &generator.args,
-                                    &generator.output,
-                                    generator.field.as_deref(),
-                                    &mut store,
-                                    &mut host,
-                                    &transports,
-                                )
-                                .await?;
-                            config.candidates.extend(generated);
-                            Some((generator_digest, receipt_digest))
+                    // One account admits every run of this activity: the
+                    // generator, each selection case, then holdout.
+                    let mut account = config
+                        .budget
+                        .map(|limits| algal::habitat_budget::Account::new("foundry", limits))
+                        .transpose()?;
+                    let result: Result<Value> = async {
+                        let lineage = match &config.generator {
+                            Some(generator) => {
+                                let (generator_digest, receipt_digest, generated) =
+                                    algal::foundry::generate_in(
+                                        &generator.manifest,
+                                        &generator.args,
+                                        &generator.output,
+                                        generator.field.as_deref(),
+                                        &mut store,
+                                        &mut host,
+                                        &transports,
+                                        account.as_mut(),
+                                    )
+                                    .await?;
+                                config.candidates.extend(generated);
+                                Some((generator_digest, receipt_digest))
+                            }
+                            None => None,
+                        };
+                        algal::foundry::run_in(
+                            &config.candidates,
+                            &config.cases,
+                            config.scorer.as_ref(),
+                            lineage,
+                            &mut store,
+                            &mut host,
+                            &transports,
+                            account.as_mut(),
+                        )
+                        .await
+                    }
+                    .await;
+                    let report = match result {
+                        Ok(report) => report,
+                        // Exhaustion is a terminal outcome, not a partial
+                        // report: emit the account record. Completed runs
+                        // keep their stored receipts.
+                        Err(error) => {
+                            match account.as_ref().filter(|account| account.exhausted()) {
+                                Some(account) => account.record()?,
+                                None => return Err(error),
+                            }
                         }
-                        None => None,
                     };
-                    let report = algal::foundry::run(
-                        &config.candidates,
-                        &config.cases,
-                        config.scorer.as_ref(),
-                        lineage,
-                        &mut store,
-                        &mut host,
-                        &transports,
-                    )
-                    .await?;
                     if let Some(path) = out {
                         std::fs::write(&path, canonical(&report)?)?;
                     }
                     emit(&report)?;
-                    Ok(true)
+                    Ok(report["contract"] != algal::habitat_budget::CONTRACT)
                 }
             }
         }

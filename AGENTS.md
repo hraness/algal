@@ -11,7 +11,8 @@
   (`jev.ts`), cross-platform
   credential custody (`credentials.ts`), embeddings (`embeddings.ts`) and
   the derived semantic index plus recall executor (`semantic.ts`), foundry
-  evaluation and search (`foundry.ts`, `search.ts`), benchmark comparison (`bench.ts`,
+  evaluation and search (`foundry.ts`, `search.ts`) with the habitat-wide
+  work account (`habitat-budget.ts`), benchmark comparison (`bench.ts`,
   `bench-verify.ts`), bundles (`bundle.ts`), transports (`transport.ts`),
   the `algal.expr.v1` WASM loader (`expr.ts` + committed `algal_expr.wasm`),
   canonical values and digests, and colocated tests.
@@ -112,7 +113,9 @@
   `cargo clippy --workspace --all-targets --locked -- -D warnings`, and
   `cargo fmt --all -- --check`. Use `cargo build --locked` followed by
   `bun scripts/native-parity.ts` to compare every bundled example and verify
-  receipts in both directions between TypeScript and Rust, and
+  receipts in both directions between TypeScript and Rust (it also replays the
+  budgeted foundry fixture in `scripts/habitat-budget-fixture.ts` through both
+  CLIs), and
   `bun scripts/application-parity.ts` to replay the durable application
   lifecycle (create/commit including activate, propose, select, and migrate
   transitions, dispatch/reconcile, memory scope/observe/snapshot/query, the

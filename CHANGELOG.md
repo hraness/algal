@@ -9,6 +9,16 @@ wire constant (`0.1.0`) is independent of these package versions.
 
 ## Unreleased
 
+- Foundry configs accept an optional habitat budget, `budget: {work, attempts,
+  runs}`, that covers every run of the activity: the generator, each
+  candidate's cases, and holdout. An `algal.habitat-budget.v1` account reserves
+  each run's declared `maxWork` and `maxAgentCalls` before it starts and charges
+  the work and executor attempts its receipt records, including losing
+  candidates, failed runs, and retries. The first run that does not fit stops
+  the foundry, which writes the exhausted account instead of a report and exits
+  with status 1; a complete foundry embeds the account in its report.
+  `foundry verify` checks either file, and both runtimes write identical bytes.
+  Search and application experiments do not charge an account yet.
 - Source record types: `record Task { id: text, urgency: number, notes: text? }`
   declares fields for a parameter or result. A record compiles to a `json` port
   with a schema in the existing subset, which both runtimes check where a value
