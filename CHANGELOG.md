@@ -37,7 +37,6 @@ wire constant (`0.1.0`) is independent of these package versions.
   section order, bounded by `--interval-ms`, `--max-polls`, and
   `--max-events`; emitted lines carry no wall-clock fields. Native Rust
   support is proposed, not shipped.
-b221a25 (Add read-only `algal observe` projection and bounded `tail` follow)
 - `schemaVersion: 3` extends the bounded JSON schema subset with whole
   numbers over the exact JSON range (`"type":"integer"` now also bounds a
   version 3 value to ±9,007,199,254,740,991), `minLength`/`maxLength` counted
