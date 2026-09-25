@@ -238,8 +238,19 @@ describes possible structure, not observed work. The source guide describes
 With `--receipt`, the same command attributes a recorded run to that
 structure: invocations, recorded cells, and work per occurrence, with self work
 kept separate from inclusive child work so nested calls are not counted twice,
-and with never-run occurrences and unattributable paths left visible. Joining
-the report with application revisions and evaluation records remains proposed.
+and with never-run occurrences and unattributable paths left visible.
+
+With `--estimate`, it gives each call a minimum and maximum number of runs per
+run of the entry. The item limits of enclosing `each` calls multiply, and a
+call under a branch arm has a minimum of 0. The estimate is an upper bound on
+possible work, not observed work; beside a receipt, a recorded count above its
+maximum is reported as an inconsistency. With `--application`, the command
+links each module and call, by executable digest, to the application revisions
+whose recorded entrypoints contain it, the transitions that activated them,
+and the evaluation records that measured them. It reads validated history and
+reports evaluation verdicts as recorded, without replaying them. The source
+guide describes [the estimate](source-language.md#bound-how-often-each-call-runs)
+and [the application links](source-language.md#link-modules-to-application-revisions).
 
 ## Proposed next steps
 
@@ -247,9 +258,12 @@ the report with application revisions and evaluation records remains proposed.
    shared dependencies and rejected oversized graphs. Measure browser history
    verification separately so raising source limits does not conceal slow
    interaction.
-2. Join the dependency report with application revisions: evaluation and
-   activation links per occurrence, and a bounded estimate of dynamic
-   invocations under branches and item limits. Receipt attribution is available.
+2. Attribute an application's recorded episodes to the dependency report by
+   following settled dispatches to their run receipts, so recorded invocations
+   can be compared with the static estimate across revisions. Receipt
+   attribution, the invocation estimate, and revision, evaluation, and
+   activation links are available; the links report evaluation verdicts
+   without replaying them.
 3. Compare library revisions on pinned cases and unseen cases before
    activation. The [shared program catalog](library.md) checks each entry's
    digests and callers across two projects; it does not evaluate a revised
