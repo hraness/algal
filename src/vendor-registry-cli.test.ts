@@ -86,6 +86,7 @@ test("vendor check emits the report, vendor update proposes into a fresh directo
       [["vendor", "check", "main.algal", "--into", "x"], "unknown vendor check option --into"],
       [["vendor", "update", "vendor/algal"], "usage: algal vendor update"],
       [["vendor", "update", "vendor/algal", "--into", "vendor/x", "--format", "text"], "unknown vendor update option --format"],
+      [["vendor", "update", "vendor/algal", "--into", "vendor/next2", "--out", "vendor/next2/proposal.json"], "must not write inside the directory update creates"],
       [["vendor", "update", "../escape", "--into", "vendor/x"], "normalized project-relative directory"],
       [["vendor", page, "--entry", ENTRY, "--into", "vendor/x", "--timeout-ms", "0"], "timeout must be 1 to 60000"],
     ] as const) {

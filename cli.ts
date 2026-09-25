@@ -1336,6 +1336,12 @@ async function main(): Promise<number> {
         const { proposeVendorUpdate, vendorUpdateToJson } = await import("./src/vendor-registry");
         const { VENDOR_RECORD_FILE } = await import("./src/vendor-record");
         const directory = positional[1]!;
+        // The proposal may not overwrite the record read, nor land inside the
+        // directory the update is about to create.
+        const target = resolve(join(process.cwd(), into));
+        if (output !== undefined && (resolve(output) === target || resolve(output).startsWith(`${target}/`))) {
+          usageError("--out must not write inside the directory update creates");
+        }
         await distinctArtifactPaths([join(process.cwd(), directory, VENDOR_RECORD_FILE)], [output]);
         const timeoutMs = timeoutFlag();
         const update = await proposeVendorUpdate({ directory, into, root: process.cwd(), ...(timeoutMs === undefined ? {} : { timeoutMs }) });
