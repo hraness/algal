@@ -309,6 +309,21 @@ enum Commands {
         #[command(flatten)]
         options: Execution,
     },
+    /// Run a revised manifest against a recorded run's evidence and emit an
+    /// `algal.replay-comparison.v1` record (TypeScript runtime only).
+    Replay {
+        /// Run receipt (JSON).
+        receipt: PathBuf,
+        /// Revised manifest (JSON).
+        #[arg(long)]
+        with: PathBuf,
+    },
+    /// Explore bounded mailbox/dispatch orderings of a durable-process
+    /// scenario and emit an `algal.ordering-report.v1` (TypeScript only).
+    Ordering {
+        /// `algal.ordering-scenario.v1` (JSON).
+        scenario: PathBuf,
+    },
     /// Print a closure bundle: the manifest plus embedded sub-manifests and payloads.
     Pack {
         /// Compiled `algal.organism.v1` manifest (JSON).
@@ -768,6 +783,15 @@ enum ProcessCommand {
         name: String,
         #[command(flatten)]
         options: Execution,
+    },
+    /// Replay a process's latest recorded run under a revised manifest
+    /// (TypeScript runtime only).
+    Replay {
+        /// Process name.
+        name: String,
+        /// Revised manifest (JSON).
+        #[arg(long)]
+        with: PathBuf,
     },
 }
 
@@ -2237,6 +2261,9 @@ async fn execute(cli: Cli) -> Result<bool> {
                     service.store = store;
                     emit(&service.verify(&name, &host).await?)?;
                 }
+                ProcessCommand::Replay { .. } => {
+                    return Err(algal::habitat_budget::whatif_unsupported());
+                }
             }
             Ok(true)
         }
@@ -2338,6 +2365,9 @@ async fn execute(cli: Cli) -> Result<bool> {
             }
             emit(&resumed)?;
             Ok(resumed["outcome"] == "complete")
+        }
+        Commands::Replay { .. } | Commands::Ordering { .. } => {
+            Err(algal::habitat_budget::whatif_unsupported())
         }
         Commands::Suite { examples, modules } => {
             if !examples.is_dir() {

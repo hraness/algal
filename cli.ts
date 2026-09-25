@@ -165,6 +165,16 @@ usage:
   algal resume <receipt.json> [manifest.json] [executor options]
                                               continue a suspended run: recorded effects
                                               replay, the rest routes to live executors
+  algal replay <receipt.json> --with <manifest.json> [--args <file>] [executor options]
+      [--modules <dir>] [--transports <file>] [--dir <path>] [--write] [--out <file>]
+                                              counterfactual: run a revised manifest over the
+                                              recorded run's evidence; emit an
+                                              algal.replay-comparison.v1 record
+  algal ordering <scenario.json> [--dir <path>] [--out <file>]
+                                              enumerate a durable-process scenario's delivery
+                                              and dispatch orderings under a habitat budget and
+                                              check an invariant over each terminal state;
+                                              emit an algal.ordering-report.v1 record
   algal process create <name> <manifest.json> [--args <file>] [--max-generations 16]
       [--modules <dir>] [--tools <file>] [--dir <path>]
                                               admit a durable, bounded process
@@ -187,6 +197,10 @@ usage:
                                               run ready processes and recorded mailbox wakeups
   algal process list|inspect <name>|verify <name> [--dir <path>] [--tools <file>]
                                               inspect retained state or verify history offline
+  algal process replay <name> --with <manifest.json> [executor options]
+      [--args <file>] [--dir <path>] [--out <file>]
+                                              replay the process's latest recorded run under a
+                                              revised manifest
   algal inspect <receipt.json>            summarize a run receipt
   algal runs [--dir <path>]               list receipts stored under --dir
   algal observe [--dir <path>] [--max-items <n>]
@@ -2293,6 +2307,73 @@ async function main(): Promise<number> {
       return resumed.outcome === "complete" ? 0 : 1;
     }
 
+    case "replay": {
+      const [receiptFile] = positional;
+      if (!receiptFile) {
+        usageError("algal replay <receipt.json> --with <manifest.json> [--args <file>] [executor options]");
+      }
+      const withFile = artifactFlag(flags, "with");
+      if (!withFile) usageError("algal replay requires --with <manifest.json>");
+      const { replayComparison, replayComparisonToJson } = await import("./src/replay");
+      const { cachedExecutor } = await import("./src/effects");
+      const { RECEIPT_BOUNDS } = await import("./src/run");
+      if (flags.modules !== undefined) {
+        const n = await loadModules(String(flags.modules), store);
+        diag(`loaded ${n} module(s) from ${flags.modules}`);
+      }
+      const receipt = await readJsonBounded(resolve(receiptFile), RECEIPT_BOUNDS.maxBytes, "run receipt");
+      const revision = await readJsonBounded(resolve(withFile), BOUNDS.maxManifestBytes, "revised manifest");
+      const executors = await resolveExecutors(flags, dir);
+      const result = await replayComparison({
+        receipt,
+        revision,
+        ...(flags.args !== undefined
+          ? { args: await readJsonBounded(resolve(String(flags.args)), BOUNDS.maxArgsBytes, "replay args") as Record<string, Record<string, JsonValue>> }
+          : {}),
+        store,
+        fns,
+        executors: flags["cache-effects"] !== undefined
+          ? executors.map((e) => cachedExecutor(e, store))
+          : executors,
+        tools: await resolveTools(flags, dir),
+        ...(flags.transports !== undefined
+          ? { transports: await loadTransports(String(flags.transports)) }
+          : {}),
+      });
+      if (flags.write && result.revised) {
+        const rd = await store.putReceipt(result.revised as unknown as JsonValue);
+        diag(`revised receipt  ${rd}`);
+      }
+      const comparison = replayComparisonToJson(result.comparison);
+      const outFile = artifactFlag(flags, "out");
+      if (outFile) {
+        await writeFile(resolve(outFile), `${canonicalize(comparison)}\n`);
+        diag(`comparison  ${outFile}`);
+      }
+      out(comparison);
+      return result.comparison.verdict === "could-not-replay" ? 1 : 0;
+    }
+
+    case "ordering": {
+      const [scenarioFile] = positional;
+      if (!scenarioFile) {
+        usageError("algal ordering <scenario.json> [--dir <path>] [--out <file>]");
+      }
+      const { exploreOrdering, ORDERING_BOUNDS } = await import("./src/ordering");
+      const scenario = await readJsonBounded(
+        resolve(scenarioFile), ORDERING_BOUNDS.maxScenarioBytes, "ordering scenario",
+      );
+      const result = await exploreOrdering(scenario, { store });
+      const report = result.report as unknown as JsonObject;
+      const outFile = artifactFlag(flags, "out");
+      if (outFile) {
+        await writeFile(resolve(outFile), `${canonicalize(report)}\n`);
+        diag(`ordering report  ${outFile}`);
+      }
+      out(report);
+      return result.report.outcome === "complete" ? 0 : 1;
+    }
+
     case "diff": {
       const [aFile, bFile] = positional;
       if (!aFile || !bFile) {
@@ -2631,7 +2712,7 @@ async function main(): Promise<number> {
       }
       if (flags.modules !== undefined) await loadModules(String(flags.modules), store);
       const tools = await resolveTools(flags, dir);
-      const executors = sub === "tick" || sub === "schedule" || sub === "recover" ? await resolveExecutors(flags, dir) : [];
+      const executors = sub === "tick" || sub === "schedule" || sub === "recover" || sub === "replay" ? await resolveExecutors(flags, dir) : [];
       const transports = flags.transports === undefined ? undefined : await loadTransports(String(flags.transports));
       const supervisor = new ProcessSupervisor(dir, {
         fns, tools,
@@ -2646,7 +2727,7 @@ async function main(): Promise<number> {
         out(await supervisor.schedule(flags["max-ticks"] === undefined ? 16 : Number(flags["max-ticks"])) as unknown as JsonValue);
         return 0;
       }
-      if (!name) usageError("algal process create|inspect|tick|verify <name>");
+      if (!name) usageError("algal process create|inspect|tick|verify|replay <name>");
       if (sub === "create") {
         const file = positional[2]; if (!file) usageError("algal process create <name> <manifest.json>");
         const manifest = await readManifest(resolve(file));
@@ -2664,7 +2745,40 @@ async function main(): Promise<number> {
         return next.process.status === "failed" || next.process.status === "stuck" ? 1 : 0;
       } else if (sub === "journal") out(await supervisor.journal(name));
       else if (sub === "verify") out(await supervisor.verify(name));
-      else usageError("algal process create|list|inspect|tick|schedule|recover|journal|verify|export|verify-evidence");
+      else if (sub === "replay") {
+        const withFile = artifactFlag(flags, "with");
+        if (!withFile) usageError("algal process replay <name> --with <manifest.json>");
+        const { replayComparison, replayComparisonToJson } = await import("./src/replay");
+        const snapshot = await supervisor.inspect(name);
+        if (!snapshot.process.receipt) {
+          usageError(`process "${name}" has no recorded run to replay`);
+        }
+        const head = await store.getReceipt(snapshot.process.receipt);
+        if (!head) {
+          throw new AlgalError("STORE_MISS", `process receipt ${snapshot.process.receipt} missing`);
+        }
+        const result = await replayComparison({
+          receipt: head,
+          revision: await readJsonBounded(resolve(withFile), BOUNDS.maxManifestBytes, "revised manifest"),
+          ...(flags.args !== undefined
+            ? { args: await readJsonBounded(resolve(String(flags.args)), BOUNDS.maxArgsBytes, "replay args") as Record<string, Record<string, JsonValue>> }
+            : {}),
+          store,
+          fns,
+          executors,
+          tools,
+          ...(transports ? { transports } : {}),
+        });
+        const comparison = replayComparisonToJson(result.comparison);
+        const outFile = artifactFlag(flags, "out");
+        if (outFile) {
+          await writeFile(resolve(outFile), `${canonicalize(comparison)}\n`);
+          diag(`comparison  ${outFile}`);
+        }
+        out(comparison);
+        return result.comparison.verdict === "could-not-replay" ? 1 : 0;
+      }
+      else usageError("algal process create|list|inspect|tick|schedule|recover|journal|verify|replay|export|verify-evidence");
       return 0;
     }
 
