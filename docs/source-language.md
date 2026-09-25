@@ -722,6 +722,52 @@ omitted. `--out` cannot write inside the application store.
 In the SDK, pass `estimate: true`, and pass `application: { name, reader }`
 with an `ApplicationService` or `ApplicationCore` as the reader.
 
+### Envelope authority and work
+
+`envelope` answers two review questions for a manifest and its compiled child
+closure without running any cell: which capability classes one invocation can
+exercise, and the most work it can record. It accepts compiled manifests as
+well as source, because capability and tool cells have no source syntax.
+
+```sh
+bun cli.ts envelope examples/vm/release-review.algal.json \
+  --modules examples/vm --capability mailbox-send --format text
+```
+
+The `algal.authority-envelope.v1` report lists, per capability class, every
+producer port — a caller-supplied `input` output, an `fn` or `tool` output the
+host mints, a delegated child output, or a model-called tool's result — marked
+live when a run could emit it, and every consumer port: `tool` and `fn` inputs
+wired to a live producer, `delegated` inputs passed through a child interface,
+`context` inputs whose effect provider receives the handle without exercising
+it, `data` inputs that treat it as a string, and `model` channels for each
+capability input of a tool an agent or classifier declares. `verdict` is `can`
+when a consuming channel is wired and live or model-declared, `cannot` when
+the closed program has none, and `unknown` when a runnable `spawn` cell could
+admit a program that exercises a class an admitted signature consumes.
+`--capability` answers named classes even when the program never declares
+them, and `closure.mintable`/`consumable` list the classes the supplied
+registries' signatures can produce or accept.
+
+`work` bounds one root invocation. `structural` composes each occurrence's
+invocation bound — `each` item limits and `repeat` round limits multiply, and
+`min`/`max` track calls guaranteed on every completed run — with per-cell
+worst-case charges: activation, declared `fn` and tool costs and tool output
+ceilings, expression fuel including guards, store/load/slot payload ceilings,
+effect attempts under `retry`, declared turns, and context/output byte
+ceilings. `bound` clamps each dimension to the ceiling the runtime enforces:
+`maxSteps`, `maxAgentCalls`, or `maxWork` plus `activationCeiling`, the largest
+charge one activation can add before the next check. Sums that reach the
+occurrence-product cap or the integer bound are marked `saturated`; a possible
+`spawn` marks every bound `open`, because admitted but unenumerated content
+still runs under the same ceilings. Occurrences deeper than the root budgets'
+`maxDepth` are listed `runnable: false` and contribute nothing. `--modules`,
+`--tools`, `--transports`, and `--dir` supply the same registries, transports,
+and manifest store a run would use. The SDK exposes `createAuthorityEnvelope`,
+`parseAuthorityEnvelope`, and `renderAuthorityEnvelope`; reports are bounded,
+canonical, and frozen. The native CLI does not yet emit this report — native
+parity is proposed.
+
 ### Pin a project with a lock
 
 `lock` writes an `algal.source-lock.v1` record that binds the project to the

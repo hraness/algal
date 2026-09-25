@@ -110,3 +110,36 @@ test("process tick and schedule honor executor-bound effect caching", async () =
     expect((await cli("process", "verify", "second", "--dir", dir)).code).toBe(0);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+test("envelope reports the static authority and work bound without running", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "algal-cli-envelope-"));
+  try {
+    const manifest = join(dir, "program.algal.json");
+    await writeFile(manifest, JSON.stringify({
+      contract: "algal.organism.v1", key: "organism:cli-envelope", name: "CLI envelope",
+      cells: [
+        { id: "in", kind: "input", outputs: { v: "text" } },
+        { id: "echo", kind: "fn", fn: "echo.v1" },
+      ],
+      edges: [{ from: { cell: "in", port: "v" }, to: { cell: "echo", port: "value" } }],
+    }));
+    const json = await cli("envelope", manifest, "--capability", "mailbox-send", "--dir", dir);
+    expect(json.code).toBe(0);
+    const report = JSON.parse(json.stdout);
+    expect(report.contract).toBe("algal.authority-envelope.v1");
+    expect(report.basis).toBe("static-structure");
+    expect(report.closure.closed).toBe(true);
+    expect(report.capabilities).toEqual([
+      { class: "mailbox-send", verdict: "cannot", producers: [], consumers: [] },
+    ]);
+    expect(report.functions).toEqual([
+      { ref: "echo.v1", cost: 10, uses: [{ path: [], cell: "echo", via: "cell" }] },
+    ]);
+    expect(report.work.steps).toEqual({ structural: 2, bound: 2 });
+    const text = await cli("envelope", manifest, "--format", "text", "--dir", dir);
+    expect(text.code).toBe(0);
+    expect(text.stdout).toContain("organism:cli-envelope");
+    expect(text.stdout).toContain("Work per root invocation");
+    expect((await cli("envelope", manifest, "--format", "bogus", "--dir", dir)).code).not.toBe(0);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});

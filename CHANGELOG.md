@@ -9,6 +9,25 @@ wire constant (`0.1.0`) is independent of these package versions.
 
 ## Unreleased
 
+- `algal envelope <program.algal|manifest.json>` writes an
+  `algal.authority-envelope.v1` report: a static review of a manifest and its
+  compiled child closure before any cell runs. Per capability class it lists
+  every producer port (caller args, `fn`/`tool` mints, delegated child
+  outputs, model-called tool results) marked live when a run could emit it,
+  and every consumer channel — wired `tool`/`fn` inputs, `delegated` child
+  interfaces, `context` disclosures, `data` copies, and model-declared tools —
+  with a `can`/`cannot`/`unknown` verdict; `--capability` answers classes the
+  program never declares. The `work` section composes per-occurrence
+  invocation bounds (`each` items and `repeat` rounds multiply; products past
+  the 65,536-cell receipt cap are `saturated`) with per-cell worst-case
+  charges — activation, declared costs, fuel, retry attempts, turns, and byte
+  ceilings — and clamps each dimension to the enforced ceiling: `maxSteps`,
+  `maxAgentCalls`, or `maxWork` plus `activationCeiling`, the largest charge
+  one activation can add before the next check. A runnable `spawn` cell marks
+  the closure open and every bound `open`, and degrades verdicts for classes
+  an admitted signature consumes to `unknown`. SDK:
+  `createAuthorityEnvelope`, `parseAuthorityEnvelope`,
+  `renderAuthorityEnvelope`. Native parity is proposed, not implemented.
 - Public copy adopts the canonical portfolio messaging record: the site
   title, hero, footer, social card, `llms.txt` introduction, README lead,
   both CLI introductions, and the package and crate descriptions now carry

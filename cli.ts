@@ -112,6 +112,13 @@ usage:
                                               --estimate bounds how many times each call can run;
                                               --application links each module to the application
                                               revisions, evaluations, and activations that contain it
+  algal envelope <program.algal|manifest.json> [--capability <class[,class]>]
+      [--modules <dir>] [--tools <file>] [--transports <file>]
+      [--format json|text] [--out <file>]
+                                              the static authority and work envelope: capability
+                                              verdicts, the channels that can exercise each class,
+                                              declared costs, and worst-case work for one
+                                              invocation — computed before anything runs
   algal lock <program.algal> [--source-root <dir>] [--out <lock.json>]
       [--evaluation <cases.json>] [--versions <labels.json>]
       [--verify <lock.json> [--evaluate]] [--format json|text]
@@ -966,6 +973,34 @@ async function main(): Promise<number> {
         ...(flags.estimate === true ? { estimate: true } : {}), ...(application === undefined ? {} : { application }),
       });
       await emitArtifact(format === "text" ? renderSourceDependencies(report) : canonicalize(report as unknown as JsonValue), output);
+      return 0;
+    }
+
+    case "envelope": {
+      if (positional.length !== 1) usageError("algal envelope <program.algal|manifest.json> [--capability <class[,class]>] [--modules <dir>] [--tools <file>] [--transports <file>] [--format json|text] [--out <file>]");
+      for (const key of Object.keys(flags)) {
+        if (!["capability", "modules", "tools", "transports", "dir", "format", "out", "source-root"].includes(key)) usageError(`unknown envelope option --${key}`);
+        artifactFlag(flags, key);
+      }
+      const { createAuthorityEnvelope, renderAuthorityEnvelope } = await import("./src/envelope");
+      const format = artifactFlag(flags, "format") ?? "json";
+      if (format !== "json" && format !== "text") usageError("envelope format must be json or text");
+      const output = artifactFlag(flags, "out");
+      const project = positional[0]!.endsWith(".algal") ? await readProject(positional[0]!) : undefined;
+      if (project !== undefined) await installSource(project, store);
+      const manifest = project?.manifest ?? parseOrganismManifest(await readJsonBounded(resolve(positional[0]!), BOUNDS.maxManifestBytes, "manifest"));
+      await distinctArtifactPaths([resolve(positional[0]!), ...(project?.files ?? [])], [output]);
+      if (flags.modules !== undefined) await loadModules(String(flags.modules), store);
+      // Named classes are answered even when the program never declares them.
+      const capabilities = artifactFlag(flags, "capability")
+        ?.split(",").map(name => name.trim()).filter(name => name.length > 0);
+      const report = await createAuthorityEnvelope(manifest, {
+        fns, store,
+        tools: await resolveTools(flags, dir),
+        ...(flags.transports === undefined ? {} : { transports: await loadTransports(String(flags.transports)) }),
+        ...(capabilities === undefined || capabilities.length === 0 ? {} : { capabilities }),
+      });
+      await emitArtifact(format === "text" ? renderAuthorityEnvelope(report) : canonicalize(report as unknown as JsonValue), output);
       return 0;
     }
 

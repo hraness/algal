@@ -67,8 +67,11 @@ const conditionKey = (condition: Condition): string => JSON.stringify([...condit
  * more edges into one port combine only when they differ in one selector
  * whose labels they cover, which is how a compiled branch merges its arms.
  * Anything else, including failure routes and many-to-many flattening, is
- * left unproven, so the result never overstates a lower bound. */
-function activationAnalysis(node: CompiledOrganism): { always(cellId: string): boolean; routed(cellId: string): boolean } {
+ * left unproven, so the result never overstates a lower bound.
+ *
+ * Exported for the authority envelope's invocation bounds, which ask the
+ * same activation question of manifest-level occurrences. */
+export function activationAnalysis(node: CompiledOrganism): { always(cellId: string): boolean; routed(cellId: string): boolean } {
   const edges = node.manifest.edges;
   const routed = new Set(edges.filter(edge => edge.on === "fail").map(edge => edge.from.cell));
   const selectors = new Map<string, readonly string[]>();
