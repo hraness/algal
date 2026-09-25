@@ -23,6 +23,10 @@ export { createSourceLock, parseSourceLock, parseSourceLockCases, renderSourceLo
 export type { SourceLock, SourceLockCase, SourceLockDrift, SourceLockDriftKind, SourceLockEvaluation, SourceLockEvaluationCase, SourceLockFixture, SourceLockOptions, SourceLockUnit, SourceLockVerification, SourceLockVerifyOptions } from "./src/source-lock";
 export { createProgramDiagram, renderMermaid, renderSvg } from "./src/diagram";
 export type { ProgramDiagram, DiagramOptions, DiagramNode, DiagramEdge, SvgDiagramOptions } from "./src/diagram";
+export { compareLibraryRevision, verifyLibraryComparison } from "./src/library-compare";
+export type { LibraryComparisonOptions } from "./src/library-compare";
+export { libraryCaseId, libraryComparisonToJson, parseLibraryComparison, parseLibraryUnseenCases, renderLibraryComparison, LIBRARY_COMPARISON_BOUNDS, LIBRARY_COMPARISON_CONTRACT, LIBRARY_UNSEEN_CASES_CONTRACT } from "./src/library-comparison";
+export type { LibraryComparison, LibraryComparisonCaller, LibraryComparisonCase, LibraryComparisonDependent, LibraryComparisonResult, LibraryComparisonSet, LibraryComparisonVerdict, LibraryComparisonVersion, LibraryUnseenCase, LibraryUnseenCases } from "./src/library-comparison";
 
 export {
   BOUNDS,

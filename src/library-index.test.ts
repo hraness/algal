@@ -138,10 +138,12 @@ program caller(a: json, b: json, c: json) -> json {
 test("page drift is reported against the compiled source", async () => {
   const zero = `sha256:${"0".repeat(64)}`;
   const clamp = entry("clamp"), score = entry("score_task");
-  // Every calling project reaches clamp, so each one reports the mismatch too.
+  // Every calling project reaches clamp, so each one reports the mismatch too,
+  // and a digest that moved without a comparison record contradicts "Status".
   expect(await check(withField(page, "clamp", "Executable digest", `\`${zero}\``))).toEqual([
     `${clamp.path}: page pins executable digest ${zero}; the source compiles to ${clamp.digest}`,
     ...parsed.applications.map(item => `${item.entry}: ${clamp.path} compiles to ${clamp.digest}, not the listed ${zero}`),
+    `${clamp.path}: "Status" lists it at ${clamp.digest}, but the page pins ${zero}; a revised program names its comparison record`,
   ]);
   const wrongInterface = await check(withField(page, "clamp", "Interface digest", `\`${zero}\``));
   expect(wrongInterface.slice(0, 2)).toEqual([
@@ -225,6 +227,15 @@ test("the page parser rejects unknown, missing, malformed, and oversized data", 
   rejects(withField(page, "clamp", "Status", "Listed.\n  - A nested item."), /list item without a field label/);
   rejects(withField(page, "clamp", "Status", "Listed.\nAn unindented continuation."), /must be indented two spaces or follow a blank line/);
   rejects(withField(page, "clamp", "Executable digest", "`sha256:abc`"), /must be one sha256 digest in code/);
+  rejects(withField(page, "clamp", "Unseen cases", "A file the maintainers keep."), /"Unseen cases" must be "None pinned." or one sha256 digest in code/);
+  const clampDigest = parsed.entries[0]!.digest;
+  const revised = (record: string) => `Revised from \`${clampDigest}\` after the comparison ${record}.`;
+  rejects(withField(page, "clamp", "Status", "Listed, first revision."), /"Status" must be "Listed at `sha256:…`." or "Revised from/);
+  rejects(withField(page, "clamp", "Status", `Listed at ${clampDigest}.`), /"Status" must be "Listed at/);
+  rejects(withField(page, "clamp", "Status", revised("in review")), /"Status" must be "Listed at/);
+  rejects(withField(page, "clamp", "Status", revised(`${link("task-planning/a.algal")} and ${link("task-planning/b.algal")}`)), /"Status" must be "Listed at/);
+  rejects(withField(page, "clamp", "Status", revised("[`clamp.comparison.json`](../examples/source/projects/clamp.comparison.json)")), /relative path of plain segments ending in \.json/);
+  rejects(withField(page, "clamp", "Status", revised("[`task-planning/c.json`](../records/task-planning/c.json)")), /must link to \.\.\/examples\/source\/projects\/task-planning\/c\.json/);
   rejects(withField(page, "clamp", "Path", "[`task-planning/lib/clamp.algal`](../examples/source/projects/task-planning/score_task.algal)"), /must link to/);
   rejects(withField(page, "clamp", "Path", link("task-planning/../clamp.algal")), /relative path of plain segments/);
   rejects(withField(page, "clamp", "Callers", "[clamp](../examples/source/projects/task-planning/score_task.algal)"), /label is not a single code span/);

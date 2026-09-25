@@ -8,9 +8,10 @@ import { join } from "node:path";
 import type { PortMap, PortType } from "./contract";
 import { asDigest, digestCanonical, type Digest } from "./digest";
 import { AlgalError } from "./errors";
+import { LIBRARY_COMPARISON_BOUNDS, parseLibraryComparison, type LibraryComparison } from "./library-comparison";
 import { createSourceDependencyReport, freezeDeep, type SourceDependencyReport } from "./source-dependencies";
 import { createSourceLock, type SourceLock } from "./source-lock";
-import { loadSourceProject } from "./source-project";
+import { loadSourceFixtures, loadSourceProject } from "./source-project";
 import { compareUtf8, utf8Length } from "./utf8";
 import type { JsonValue } from "./values";
 
@@ -33,12 +34,18 @@ export const LIBRARY_INDEX_BOUNDS = Object.freeze({
 });
 export const LIBRARY_INDEX_FIELDS = Object.freeze([
   "Path", "Executable digest", "Interface digest", "Interface", "Depends on", "Inputs and result",
-  "Rejected inputs", "Limits", "Callers", "Tests", "Compiler", "Maintainer", "Status",
+  "Rejected inputs", "Limits", "Callers", "Tests", "Compiler", "Maintainer", "Unseen cases", "Status",
 ] as const);
 type FieldLabel = typeof LIBRARY_INDEX_FIELDS[number];
 
 /** One entry point that calls listed programs, with the source root it loads under. */
 export type LibraryIndexApplication = { readonly entry: string; readonly root: string; readonly purpose: string };
+/** An entry's "Status": the digest it was listed at, or the digest it was
+ * revised from and the comparison record that allowed the change. */
+export type LibraryIndexRevision =
+  | { readonly kind: "listed"; readonly digest: Digest }
+  /** `record` is relative to `LIBRARY_INDEX_PROJECTS`, like program paths. */
+  | { readonly kind: "revised"; readonly from: Digest; readonly record: string };
 export type LibraryIndexEntry = {
   readonly name: string;
   /** Relative to `LIBRARY_INDEX_PROJECTS`; the first segment names the project. */
@@ -53,9 +60,12 @@ export type LibraryIndexEntry = {
   readonly callers: readonly string[];
   /** Repository-relative test files. */
   readonly tests: readonly string[];
+  /** Digest of the canonical JSON of the unseen case file, or null when none is pinned. */
+  readonly unseen: Digest | null;
   readonly compiler: string;
   readonly maintainer: string;
   readonly status: string;
+  readonly revision: LibraryIndexRevision;
 };
 export type LibraryIndex = { readonly applications: readonly LibraryIndexApplication[]; readonly entries: readonly LibraryIndexEntry[] };
 
@@ -68,6 +78,8 @@ const CODE = /^`([^`]+)`$/;
 const LINK = /\[`([^`[\]]+)`\]\(([^()\s]+)\)/g;
 const FIELD = /^- \*\*([^*]+):\*\* (.+)$/;
 const LIST_ITEM = /^\s*([-*+]|\d+\.)\s/;
+const LISTED = /^Listed at `(sha256:[0-9a-f]{64})`\.$/;
+const REVISED = /^Revised from `(sha256:[0-9a-f]{64})` after the comparison (.+)\.$/;
 
 /** A relative path of plain segments: no empty, `.`, or `..` part, so joining it never leaves its base. */
 function relativePath(value: string, suffix: string, what: string): string {
@@ -96,6 +108,20 @@ function testPath(link: Link, what: string): string {
   const path = relativePath(link.label, ".test.ts", what);
   if (link.href !== `../${path}`) invalid(`${what} ${path} must link to ../${path}`);
   return path;
+}
+/** "Listed at `sha256:…`." or "Revised from `sha256:…` after the comparison
+ * [`<record>.json`](…)." with the record under the projects directory. */
+function revisionStatus(text: string, what: string): LibraryIndexRevision {
+  const listed = LISTED.exec(text);
+  if (listed !== null) return { kind: "listed", digest: asDigest(listed[1], what) };
+  const revised = REVISED.exec(text);
+  const found = revised === null ? [] : links(revised[2]!, what);
+  if (revised === null || found.length !== 1 || revised[2] !== `[\`${found[0]!.label}\`](${found[0]!.href})`) {
+    return invalid(`${what} must be "Listed at \`sha256:…\`." or "Revised from \`sha256:…\` after the comparison [\`<record>.json\`](…)."`);
+  }
+  const record = relativePath(found[0]!.label, ".json", what);
+  if (found[0]!.href !== `../${LIBRARY_INDEX_PROJECTS}/${record}`) invalid(`${what} ${record} must link to ../${LIBRARY_INDEX_PROJECTS}/${record}`);
+  return { kind: "revised", from: asDigest(revised[1], what), record };
 }
 /** The whole text is one program link and nothing else. */
 function onlyProgramLink(text: string, what: string): string {
@@ -228,7 +254,10 @@ export function parseLibraryIndex(value: unknown): LibraryIndex {
       dependencies: text("Depends on") === "None." ? [] : listed("Depends on", programPath),
       meaning: text("Inputs and result"), rejected: text("Rejected inputs"), limits: text("Limits"),
       callers: listed("Callers", programPath), tests: listed("Tests", testPath),
+      unseen: text("Unseen cases") === "None pinned." ? null
+        : asDigest(DIGEST.exec(text("Unseen cases"))?.[1] ?? invalid(`${what("Unseen cases")} must be "None pinned." or one sha256 digest in code`), what("Unseen cases")),
       compiler: text("Compiler"), maintainer: text("Maintainer"), status: text("Status"),
+      revision: revisionStatus(text("Status"), what("Status")),
     };
   });
   distinct(entries.map(entry => entry.name), "\"Programs\"");
@@ -283,6 +312,36 @@ async function compile(repository: string, path: string, root: string): Promise<
 const reason = (error: unknown): string => error instanceof Error ? error.message : String(error);
 const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
+/** A revised entry's status names a comparison record under the projects
+ * directory. The record must parse, compare this entry or list it as a
+ * dependent, start from the status's digest, end at the page's digests, and
+ * have passed. Its case results are not rerun here: that needs the unseen file
+ * and the starting commit, and is what `verifyLibraryComparison` does. */
+async function revisionProblems(entry: LibraryIndexEntry, from: Digest, path: string, repository: string): Promise<string[]> {
+  const at = `${entry.path}: comparison record ${path}`;
+  let record: LibraryComparison;
+  try {
+    const files = await loadSourceFixtures(join(repository, ...LIBRARY_INDEX_PROJECTS.split("/")), [path], LIBRARY_COMPARISON_BOUNDS.record.maxBytes);
+    record = parseLibraryComparison(JSON.parse(files[path]!));
+  } catch (error) { return [`${at} is not a valid record (${reason(error)})`]; }
+  const problems: string[] = [];
+  if (record.path === entry.path) {
+    if (record.name !== entry.name) problems.push(`${at} names the program ${record.name}, not ${entry.name}`);
+    if (record.base.digest !== from) problems.push(`${at} starts from ${record.base.digest}, not the ${from} that "Status" names`);
+    if (record.candidate.digest !== entry.digest) problems.push(`${at} ends at ${record.candidate.digest}, not the listed ${entry.digest}`);
+    if (record.candidate.interface !== entry.interfaceDigest) problems.push(`${at} ends at interface ${record.candidate.interface}, not the listed ${entry.interfaceDigest}`);
+  } else {
+    const dependent = record.dependents.find(item => item.path === entry.path);
+    if (dependent === undefined) problems.push(`${at} compares ${record.path} and does not list this entry as a dependent`);
+    else {
+      if (dependent.base !== from) problems.push(`${at} moves this entry from ${dependent.base}, not the ${from} that "Status" names`);
+      if (dependent.candidate !== entry.digest) problems.push(`${at} moves this entry to ${dependent.candidate ?? "a program that does not compile"}, not the listed ${entry.digest}`);
+    }
+  }
+  if (!record.verdict.passed) problems.push(`${at} did not pass`);
+  return problems;
+}
+
 /** Compare a parsed catalog with the source and return every problem found,
  * in a fixed order; an empty list means the page matches the source.
  *
@@ -294,7 +353,8 @@ const plural = (count: number, noun: string): string => `${count} ${noun}${count
  * digest drift rather than as lost callers. A listed file must keep its
  * digests there, another file carrying an entry's digest is a copy, and the
  * files that call each entry must equal its caller list and span at least two
- * files in at least two projects.
+ * files in at least two projects. An entry's status must be listed at the
+ * page's digest or name a passing comparison record that ends there.
  */
 export async function checkLibraryIndex(index: LibraryIndex, options: LibraryIndexCheckOptions): Promise<string[]> {
   const problems: string[] = [];
@@ -390,6 +450,11 @@ export async function checkLibraryIndex(index: LibraryIndex, options: LibraryInd
       const stat = await lstat(join(options.repository, ...test.split("/"))).catch(() => undefined);
       if (stat === undefined || !stat.isFile()) note(`${entry.path}: test ${test} is not a file in the repository`);
     }
+    // A digest changes only with a record of the comparison that allowed it.
+    const status = entry.revision;
+    if (status.kind === "listed") {
+      if (status.digest !== entry.digest) note(`${entry.path}: "Status" lists it at ${status.digest}, but the page pins ${entry.digest}; a revised program names its comparison record`);
+    } else for (const problem of await revisionProblems(entry, status.from, status.record, options.repository)) note(problem);
   }
   if (omitted > 0) problems.push(`${plural(omitted, "more problem")} not listed`);
   return problems;

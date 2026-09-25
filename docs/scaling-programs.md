@@ -164,15 +164,17 @@ examples built from the normal contracts.
 
 Each catalog entry records its path, executable and interface digests,
 interface, meaning, rejected inputs, limits, callers, tests, compiler,
-maintainer, and status. An entry needs calling files in at least two projects,
+maintainer, unseen cases, and status. An entry needs calling files in at least two projects,
 and every program it calls must also be an entry. The task planner's scoring
 and clamp programs are the first entries: a separate
 [support queue](../examples/source/projects/support-queue/README.md) imports
 them through a wider source root and compiles them to the same executable
 digests. A test recompiles every entry and calling project and fails when the
 page stops matching the source. The catalog is repository-local, with no
-package server or automatic dependency resolution. Conditions for evaluating a
-revised entry remain proposed.
+package server or automatic dependency resolution. A revised entry replaces a
+listed one only after a [comparison](library.md#revise-a-listed-program) runs
+each caller's cases and the entry's unseen cases against both versions and
+every result matches.
 
 ## Scale programs and habitats separately
 
@@ -276,9 +278,14 @@ and [the application links](source-language.md#link-modules-to-application-revis
    activation links are available; the links report evaluation verdicts
    without replaying them.
 3. Compare library revisions on pinned cases and unseen cases before
-   activation. The [shared program catalog](library.md) checks each entry's
-   digests and callers across two projects; it does not evaluate a revised
-   entry against its callers' cases.
+   activation. This is available for the
+   [shared program catalog](library.md#revise-a-listed-program): a comparison
+   runs each caller's case list and the entry's unseen cases against both
+   versions, and the catalog test accepts a changed digest only with a passing
+   record. The test checks a record's digests and verdict, not its case
+   results, which need a rerun on the starting commit with the unseen file. A
+   path for an intended behavior change, which any changed result blocks,
+   remains proposed.
 4. Extend record types as further application needs appear. Lists of
    records, allowed values, inclusive number ranges, and nesting up to eight
    schema levels are available through

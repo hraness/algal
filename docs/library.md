@@ -26,13 +26,19 @@ later work. That question is the open
   below.
 - **Listed dependencies.** Every program it calls is also an entry.
 - **Tests.** Its success and failure cases run in the listed test files.
+- **Unseen cases.** It can pin the digest of a case file kept outside the
+  repository, which a comparison of a revision must run.
+- **Revision status.** Its status gives the digest it was listed at, or the
+  digest it was revised from and the record of the
+  [comparison](#revise-a-listed-program) that allowed the change.
 
 `bun test src/library-index.test.ts` recompiles every entry and every calling
 project, and fails when a digest, interface, compiler version, dependency, or
-caller on this page stops matching the source. The same file runs the success
-and failure cases described below. The native parity suite runs the three
-entry points listed below in the TypeScript and Rust runtimes and checks that
-each runtime verifies the other's results.
+caller on this page stops matching the source, or when a digest changes
+without a passing comparison record. The same file runs the success and
+failure cases described below. The native parity suite runs the three entry
+points listed below in the TypeScript and Rust runtimes and checks that each
+runtime verifies the other's results.
 
 ## Calling projects
 
@@ -65,6 +71,15 @@ bun cli.ts dependencies examples/source/projects/support-queue/main.algal \
 Without `--source-root`, loading stops with
 `import escapes the source project root`. SDK callers pass the same directory
 as `loadSourceProject(entry, { root })`.
+
+Each entry point has a case list beside it, named for the entry point:
+[`task-planning/main.evaluation.json`](../examples/source/projects/task-planning/main.evaluation.json),
+[`task-planning/inspect_task.evaluation.json`](../examples/source/projects/task-planning/inspect_task.evaluation.json),
+and [`support-queue/main.evaluation.json`](../examples/source/projects/support-queue/main.evaluation.json).
+Each names the entry point's fixture as a case in the format
+[`lock --evaluation`](source-language.md#pin-a-project-with-a-lock) reads, with
+file paths relative to the entry point's source root. A comparison of a
+revised entry runs these cases.
 
 ## Programs
 
@@ -100,7 +115,8 @@ declared budget adds no separate allowance.
   and [`examples/source/projects/support-queue/project.test.ts`](../examples/source/projects/support-queue/project.test.ts).
 - **Compiler:** `algal.source.profile.v1`, version `1.5.0`.
 - **Maintainer:** ALGAL maintainers, through pull requests to [hraness/algal](https://github.com/hraness/algal).
-- **Status:** Listed, first revision.
+- **Unseen cases:** None pinned.
+- **Status:** Listed at `sha256:e0023e6a72961ff823b468d357572507305652cd0a5e9a31648550684db0cb3a`.
 
 ### `score_task`
 
@@ -130,20 +146,143 @@ declared budget adds no separate allowance.
   and [`examples/source/projects/support-queue/project.test.ts`](../examples/source/projects/support-queue/project.test.ts).
 - **Compiler:** `algal.source.profile.v1`, version `1.5.0`.
 - **Maintainer:** ALGAL maintainers, through pull requests to [hraness/algal](https://github.com/hraness/algal).
-- **Status:** Listed, first revision.
+- **Unseen cases:** None pinned.
+- **Status:** Listed at `sha256:10ee90055c33b6d21956fff7a53e4e34a3f5074c16298dc83d452bedf9c0d0d0`.
 
-## Change a listed program
+## Revise a listed program
 
 An edit that changes a listed program's compiled form changes its executable
-digest and the digests of the programs that call it; a comment or formatting
-edit does not. The task planner's tests show which digests move when the clamp
-helper changes, and an earlier bundle still runs its earlier version. The
-catalog test fails until this page carries the new digests, so a change to
-shared behavior appears in review as a change to this page. Each calling
-project's own tests decide whether the new behavior suits that project. A
-project that needs to notice any change can record every file and digest it
-compiles to with [`lock`](source-language.md#pin-a-project-with-a-lock).
+digest and the digests of the programs that call it, including other entries;
+a comment or formatting edit does not. The task planner's tests show which
+digests move when the clamp helper changes, and an earlier bundle still runs
+its earlier version. The catalog test accepts a new digest for an entry only
+when its status names a passing comparison record, so a change to shared
+behavior reaches review with a record of how every calling project's cases
+behave under the revision. Each calling project's own tests still decide
+whether a change suits that project. A project that needs to notice any change
+can record every file and digest it compiles to with
+[`lock`](source-language.md#pin-a-project-with-a-lock).
 
-Comparing a revised entry with its current version on each caller's recorded
-cases and on unseen cases, before a project adopts it, is proposed in
-[building larger programs](scaling-programs.md#proposed-next-steps).
+### Compare a revision
+
+Run the comparison in a checkout whose page still lists the current version,
+with the proposed file and, when the entry pins one, its unseen case file:
+
+```sh
+bun cli.ts library compare clamp clamp-revision.algal \
+  --unseen ../clamp.unseen.json \
+  --out examples/source/projects/task-planning/lib/clamp.comparison.json
+```
+
+`library compare` first checks that the entry's file still compiles to the
+digests on this page, so a comparison always starts from the listed version.
+It compiles the revision in the file's place, then compiles each other entry
+that calls the file and each entry point above that loads it, once with each
+version. The revision replaces the file only in memory: the command reads the
+page and the projects, and writes only the `--out` file. Each entry point's
+case list and the entry's unseen cases run against both versions. Runs use the
+built-in functions and each case's scripted responses, and call no model,
+tool, or network service. A case that the listed version does not bring to its
+expected outcome stops the comparison, because the case no longer describes
+the listed program. The SDK offers the same comparison as
+`compareLibraryRevision`.
+
+The `algal.library-comparison.v1` record lists the current and revised
+executable and interface digests, the unseen file's digest, each calling entry
+point's digest before and after, each other entry whose digest moves, and each
+case's outcome and output digest under both versions. It has no timestamps, so
+the same inputs give the same bytes. The comparison passes when the interface
+is unchanged, unseen cases ran, every entry point and dependent entry compiles
+and runs with the revision, and every case reaches the same outcome with the
+same outputs. Otherwise its verdict names the interface change, the missing
+unseen cases, the programs that do not compile, and each case that changed or
+could not run, and the command exits with status 1. A changed result fails the comparison even when
+the change is intended, because the comparison cannot tell a fix from a
+regression. A record covers at most 16 entry points, 16 cases per case list,
+and 16 unseen cases, and a record file over 512 KiB is refused.
+`--format text` prints a summary instead of the record.
+
+### Pin unseen cases
+
+The repository cannot know which inputs a revision's author has seen. Unseen
+cases make one part of that question checkable. Before a revision is
+proposed, the maintainers write a case file, keep it outside the repository,
+and put the digest of its canonical JSON on the entry's "Unseen cases" line in
+place of `None pinned.`:
+
+```json
+{
+  "contract": "algal.library-unseen-cases.v1",
+  "cases": [
+    {
+      "name": "urgency-above-range",
+      "entry": "task-planning/inspect_task.algal",
+      "args": {
+        "input": {
+          "task": { "id": "keys", "title": "Rotate keys", "status": "open", "urgency": 9, "impact": 3 },
+          "weights": { "urgency": 2, "impact": 1 },
+          "threshold": 12
+        }
+      }
+    }
+  ]
+}
+```
+
+Each case names an entry point from the table above, its run arguments in the
+format `run --args` reads, optional `responses` in the format
+`run --responses` reads, and an optional `outcome` that the listed version must
+reach, `complete` by default. A file holds one to 16 cases in at most 64 KiB.
+`bun cli.ts library unseen clamp.unseen.json` checks a file and prints the
+digest to pin. `library compare` refuses a file whose digest differs from the
+page and refuses to run without the file when the entry pins one. When the
+entry pins none, the comparison runs only the case lists and cannot pass.
+
+The pin guarantees that a comparison runs the file the page names and no
+other, and the page's history shows when that pin landed. It does not
+guarantee that the revision's author never saw the file, since the repository
+cannot know who read a file kept elsewhere, or that the cases represent how
+the program is used. A record also reveals each unseen case's
+name, entry point, outcome, and output digest, and a digest of a small output
+can be confirmed by guessing the output. Each verdict tells an author whether
+a revision passed. Treat a file as seen once a record that ran it is
+published, and pin a new file before the next revision. A record keeps the
+digest of the file it ran, so a later pin does not invalidate it.
+
+### Change the page
+
+After a passing comparison, make these changes in one pull request:
+
+1. Replace the entry's file with the revision.
+2. Add the record under `examples/source/projects`, beside the entry's file.
+3. Set the entry's executable digest to the record's revised digest.
+4. Set the entry's status to name its previous digest and the record, as in
+   the example below.
+5. Give each dependent entry that the record lists its new digest, and the
+   same status with its own previous digest.
+
+```md
+- **Status:** Revised from `sha256:e0023e6a72961ff823b468d357572507305652cd0a5e9a31648550684db0cb3a` after the comparison [`task-planning/lib/clamp.comparison.json`](../examples/source/projects/task-planning/lib/clamp.comparison.json).
+```
+
+The catalog test then reads each revised entry's record. The record must
+parse, compare that entry or list it as a dependent, start from the digest the
+status names, end at the page's digests, and have passed. An entry whose
+digest changes while its status still reads "Listed at" the old digest fails
+the test. The test does not rerun a record's cases, because that needs the
+unseen file and the commit the record starts from. To check a record's
+results, run the same comparison on that commit and pass a copy of the record
+with `--verify`. The command exits with status 2 and names the fields that
+differ when the record does not match a fresh comparison; the SDK's
+`verifyLibraryComparison` does the same.
+
+```sh
+bun cli.ts library compare clamp clamp-revision.algal --unseen ../clamp.unseen.json \
+  --verify ../clamp.comparison.json
+```
+
+A status reads "Listed at" when an entry is added, and again if a compiler
+change moves its digest while its source stays the same. The test cannot tell
+those edits from a revision, so review checks them. Revise one entry per pull
+request: a record's digests for dependent entries assume that their own files
+did not change.

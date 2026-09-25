@@ -104,6 +104,20 @@ wire constant (`0.1.0`) is independent of these package versions.
   project and fails when the page drifts. A separate `support-queue` project
   reuses the task planner's `score_task.algal` and `lib/clamp.algal` through
   `--source-root`, with native parity coverage.
+- Shared program catalog revisions: `algal library compare <name>
+  <revision.algal>` compiles a proposed revision of a listed program, runs each
+  calling entry point's case list and the entry's unseen cases against both
+  versions in memory with scripted responses, and writes an
+  `algal.library-comparison.v1` record that names any interface change,
+  changed case, or case that could not run (exit 1 when it does not pass). An
+  entry pins the digest of an unseen case file kept outside the repository;
+  the comparison refuses a file with another digest, and `library unseen`
+  prints the digest to pin. The catalog test accepts a changed digest only
+  when the entry's status names a passing record that starts from the
+  previous digest and ends at the new one; `--verify` checks a record's case
+  results by running the comparison again. The task planner's inspector and
+  the support queue gain case lists. SDK: `compareLibraryRevision`,
+  `verifyLibraryComparison`.
 - `algal lock --evaluation <cases.json>` pins evaluation cases in an optional
   `evaluation` section of `algal.source-lock.v1`: the digests of each case's
   argument and scripted-response files, the run outcome, and a digest of the
