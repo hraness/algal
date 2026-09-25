@@ -273,47 +273,53 @@ and [the application links](source-language.md#link-modules-to-application-revis
 The measurements above landed; see
 [scale measurements](scale-measurements.md). What remains from that round:
 larger real applications, browser latency with IndexedDB storage, timings on
-an idle machine, a catalog registry with vendored-update proposals, and a
-path for intended library behavior changes (a changed result currently blocks
-a revision; see [Revise a listed program](library.md#revise-a-listed-program)).
+an idle machine, and a catalog registry with vendored-update proposals.
 
-The next round is ordered for an agent-facing surface: if agents write and
-run most programs, the useful investment moves from authoring ergonomics to
-guarantees a program carries with it, program state an agent can query
-directly, and runtime observation an agent can drive. Each item remains a
-proposal until it ships.
+The agent-era round ordered work for an agent-facing surface: if agents
+write and run most programs, the useful investment moves from authoring
+ergonomics to guarantees a program carries with it, program state an agent
+can query directly, and runtime observation an agent can drive. That round
+shipped:
 
-1. Build a program database over the store. Manifests, cells, ports,
-   capabilities, receipts, processes, and application records already live in
-   one content-addressed store, and the semantic index shows the derived,
-   disposable index pattern. A structural index plus a limited query surface
-   would let an agent compose questions no command menu covers: every caller
-   of a module, every revision that ran an executable digest, every receipt
-   that touched a capability class.
-2. Observe running work as bounded projections. Process, mailbox, budget, and
-   application state are recorded data today; a read model over them, plus a
-   receipt tail, would let an agent watch a live habitat instead of replaying
-   it afterwards.
-3. Replay counterfactuals and explore orderings. Because runs replay
-   bit-for-bit and process scheduling order is recorded, an agent could run a
-   recorded failure with a revised program to its divergence point, or walk
-   mailbox orderings under a budget while checking an invariant, with the
-   results recorded as evidence.
-4. Report a program's authority and cost before it runs. The dependency
-   report already bounds invocations; a static closure could report which
+1. A program database over the store. `algal db` builds a derived index of
+   manifests, cells, ports, capabilities, receipts, processes, and
+   application records, and answers bounded queries no command menu covers:
+   callers of a module, revisions that ran an executable digest, receipts
+   that touched a capability class. See the
+   [program database](program-database.md).
+2. Bounded observation of running work. `algal observe` reads process,
+   mailbox, budget, and application state into a read-only projection, and
+   `algal tail` follows it. See
+   [observe a live store](vm.md#observe-a-live-store).
+3. Counterfactual replay and bounded ordering exploration.
+   `algal replay <receipt> --with <manifest>` runs a recorded receipt against
+   a revised manifest up to a divergence point, and `algal ordering` walks
+   bounded mailbox orderings under a habitat account while checking an
+   invariant. The native CLI accepts both commands and refuses them
+   explicitly. See
+   [counterfactual replay](vm.md#counterfactual-replay-and-ordering-exploration)
+   and the [replay spec](../spec/v1/replay.md).
+4. A static authority and work envelope. `algal envelope` reports which
    capability classes a program can reach and the most work one invocation
-   can do, so a reviewer, human or agent, can check the envelope instead of
-   reading the program.
-5. Check more of a schema at admission. Whole numbers, text length and
-   format, unique values, and rejection of undeclared fields remain
-   unchecked; adding them extends schema version 2's rule that runtimes
-   without the version refuse rather than skip.
-6. Join more evidence to the dependency report and the catalog. Following
-   settled episode dispatches to their run receipts would compare recorded
-   invocations with the static estimate; catalog listings could carry
-   comparison evidence for the revision they name.
-7. Schedule experiment evaluations and further orders beside the round-robin
-   both runtimes ship.
+   can do, before it runs. See
+   [envelope authority and work](source-language.md#envelope-authority-and-work).
+5. Schema version 3. Whole numbers, text length and format, unique values,
+   and closed records are checked at admission in both runtimes, and a
+   runtime without the version refuses rather than skips. See
+   [JSON schemas](../spec/v1/organism.md#json-schemas).
+6. Evidence joined to reports and the catalog. Settled episode dispatches
+   resolve to run receipts that are compared with the static invocation
+   estimate, and a catalog listing can pin comparison evidence and accept a
+   declared, exactly-matching behavior change. See
+   [revise a listed program](library.md#revise-a-listed-program).
+7. Habitat schedules in the native runtime. Round-robin order, account
+   charging, and journal resume produce identical records in Rust and
+   TypeScript; see
+   [habitat schedules](../spec/v1/foundry.md#habitat-schedules).
+
+Still proposed: scheduling experiment evaluations and further order kinds
+beside round-robin, and native support for replay comparison and ordering
+exploration.
 
 The [cumulative-skill experiment](vision.md#what-would-justify-the-claim)
 measures whether keeping and composing procedures improves later work. More
