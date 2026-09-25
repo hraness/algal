@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { copyFile, mkdir, mkdtemp, open, readdir, realpath, rename, rm, symlink } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { hashBytes, hashFile, hashJson, readFileBounded, readJson, type FileBinding } from "../lib/files";
@@ -290,7 +290,15 @@ export async function runArtifact(root: string, mode: "build" | "check" = "check
     const manifest = { contract: "algal.expression-artifact.v1", recipe: RECIPE, inputs, wasm: report.wasm };
     if (mode === "check") {
       const retained = await readFileBounded(root, ARTIFACT, 16_777_216);
-      requireThat(Buffer.from(retained).equals(Buffer.from(bytes)), "reproduced WASM differs from committed bytes");
+      if (!Buffer.from(retained).equals(Buffer.from(bytes))) {
+        // Keep the freshly produced bytes for forensics when the platform
+        // asks for them, then fail closed as before.
+        const capture = process.env.ALGAL_EXPR_REPRODUCED_OUT;
+        if (typeof capture === "string" && capture.length > 0 && capture.length <= 4096) {
+          await Bun.write(await realpath(dirname(capture)).then(dir => join(dir, basename(capture))), bytes);
+        }
+        requireThat(false, `reproduced WASM differs from committed bytes (produced ${hashBytes(bytes)}, committed ${hashBytes(retained)})`);
+      }
       admitArtifactManifest(await readJson(root, MANIFEST), inputs, retained);
     } else {
       // An interruption between the source writes leaves a stale manifest,

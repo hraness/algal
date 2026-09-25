@@ -15,7 +15,7 @@
     },
     {
       "path": ".github/workflows/expression-artifact.yml",
-      "sha256": "sha256:980636bb26ad8a18f121ef989c968b08affb0abed6682b77ff95a07f36eff0c1"
+      "sha256": "sha256:155d514229013cd1a8d15ed51408f3aa93a1732a6d8d2775d69f7851971997ff"
     },
     {
       "path": ".github/workflows/release.yml",
@@ -2419,7 +2419,7 @@
     },
     {
       "path": "src/algal_expr.wasm.json",
-      "sha256": "sha256:ec679a3c4fa34c1c67bd407f377ae765a5bfb1e2a645f0488478ad540533d2eb"
+      "sha256": "sha256:b89c5ca7efaf0e68a653f7ff5eb245d3a3c7b91413c21aed3d9ef5c4083cb10b"
     },
     {
       "path": "src/application-adaptation.test.ts",
@@ -17910,7 +17910,7 @@
         },
         {
           "path": "src/algal_expr.wasm.json",
-          "sha256": "sha256:ec679a3c4fa34c1c67bd407f377ae765a5bfb1e2a645f0488478ad540533d2eb",
+          "sha256": "sha256:b89c5ca7efaf0e68a653f7ff5eb245d3a3c7b91413c21aed3d9ef5c4083cb10b",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]

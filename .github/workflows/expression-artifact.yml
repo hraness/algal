@@ -28,10 +28,19 @@ jobs:
       - run: rustup toolchain install 1.97.1 --profile minimal --target wasm32-unknown-unknown
       - run: cargo fetch --locked
       - run: bun verify/artifact/run.ts check > "$RUNNER_TEMP/algal-expression-artifact.json"
+        env:
+          ALGAL_EXPR_REPRODUCED_OUT: ${{ runner.temp }}/algal-expression-reproduced.wasm
       - run: bun test --timeout 20000 verify/tests/artifact.test.ts
       - uses: actions/upload-artifact@v4
         with:
           name: expression-artifact-${{ matrix.os }}
           path: ${{ runner.temp }}/algal-expression-artifact.json
           if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: expression-artifact-reproduced-${{ matrix.os }}
+          path: ${{ runner.temp }}/algal-expression-reproduced.wasm
+          if-no-files-found: ignore
           retention-days: 14
