@@ -1,5 +1,5 @@
 program draft(email: text, tone: text) -> text {
   budget { max_agent_calls: 1 }
-  return generate "Draft a reply using the requested tone."
-    using { email: email, tone: tone }
+
+  return generate "Draft a reply using the requested tone." using { email: email, tone: tone }
 }

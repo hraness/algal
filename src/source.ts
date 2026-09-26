@@ -133,8 +133,12 @@ const operators: Record<string, { precedence: number; op: string }> = {
   "*": { precedence: 6, op: "mul" }, "/": { precedence: 6, op: "div" }, "%": { precedence: 6, op: "mod" },
 };
 
+/** A line or block comment dropped by the lexer, kept for the formatter. */
+export type SourceComment = { text: string; block: boolean; start: number; end: number };
+
 class Parser {
   readonly tokens: Token[] = [];
+  readonly comments: SourceComment[] = [];
   private index = 0;
   private nodes = 0;
   private readonly records = new Map<string, SourceRecord>();
@@ -145,8 +149,18 @@ class Parser {
       const rest = source.slice(i);
       const whitespace = /^\s+/.exec(rest);
       if (whitespace) { i += whitespace[0].length; continue; }
-      if (rest.startsWith("//")) { const end = source.indexOf("\n", i); i = end < 0 ? source.length : end + 1; continue; }
-      if (rest.startsWith("/*")) { const end = source.indexOf("*/", i + 2); if (end < 0) this.fail("unterminated comment", { start: i, end: source.length }); i = end + 2; continue; }
+      if (rest.startsWith("//")) {
+        const end = source.indexOf("\n", i);
+        const stop = end < 0 ? source.length : end;
+        this.comments.push({ text: source.slice(i, stop), block: false, start: i, end: stop });
+        i = end < 0 ? source.length : end + 1; continue;
+      }
+      if (rest.startsWith("/*")) {
+        const end = source.indexOf("*/", i + 2);
+        if (end < 0) this.fail("unterminated comment", { start: i, end: source.length });
+        this.comments.push({ text: source.slice(i, end + 2), block: true, start: i, end: end + 2 });
+        i = end + 2; continue;
+      }
       const start = i;
       let kind: Token["kind"] = "symbol";
       let text: string;
@@ -1048,6 +1062,16 @@ class Compiler {
  * JSON inputs retain dynamic types; strict expr operators check them at run time.
  */
 export function sourceImports(source: string): SourceImport[] { return new Parser(source).imports(); }
+
+/** Tokenize and fully parse a source file (imports, records, program) for the
+ * formatter: the returned arrays carry source offsets so comments can be
+ * reinserted. Throws SourceError on any violation. */
+export function lexSource(source: string): { tokens: readonly Token[]; comments: readonly SourceComment[] } {
+  const parser = new Parser(source);
+  parser.imports();
+  parser.program();
+  return { tokens: parser.tokens, comments: parser.comments };
+}
 
 const originSpan: SourceSpan = { start: { offset: 0, line: 1, column: 1 }, end: { offset: 0, line: 1, column: 1 } };
 function invalidPathCharacters(value: string): boolean {

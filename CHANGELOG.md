@@ -25,6 +25,18 @@ wire constant (`0.1.0`) is independent of these package versions.
   stronger profile's identity. SDK: `isolatedCommandExecutor`,
   `resolveIsolation`, `ISOLATION_BOUNDS`. Native parity is proposed, not
   implemented; tool-registry `cmd:` execs are not covered.
+- `algal fmt <program.algal|dir> [more ...]` rewrites `.algal` source to one
+  canonical layout: two-space indent, width 100, at most one blank line,
+  dropped optional `;`, flat-when-it-fits groups with canonical trailing
+  commas when broken, `match` and `as choice` always broken, `in` allowed
+  values sorted the way the compiler sorts them, and comments preserved
+  (line comments take their own line; same-line block comments stay inline).
+  Formatting is input-independent, idempotent, and never changes the
+  compiled manifest digest. `--check` exits 1 listing non-canonical files,
+  `--write` rewrites in place reporting only changed files, and `--out`
+  writes a single formatted file elsewhere. Directories scan for `.algal`
+  files with bounded depth and no symlink traversal. The bundled source
+  examples are formatted canonically. SDK: `formatSource`.
 - `algal envelope <program.algal|manifest.json>` writes an
   `algal.authority-envelope.v1` report: a static review of a manifest and its
   compiled child closure before any cell runs. Per capability class it lists

@@ -3,7 +3,7 @@
 // Data on stdout (JSON), diagnostics on stderr. Exit 0 ok, 1 run/verify
 // failure, 2 usage or parse error.
 
-import { open, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { lstat, open, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import { constants, writeSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -95,6 +95,10 @@ usage:
   algal compile <program.algal> [--out <manifest.json>] [--source-map <map.json>]
       [--bundle-out <bundle.json>] [--source-root <dir>]
                                               compile source; bundle its complete local import closure
+  algal fmt <program.algal|dir> [more ...] [--check] [--write] [--out <file>]
+                                              canonical source layout; --check exits 1 when a file
+                                              is not canonical; --write rewrites files in place;
+                                              --out or stdout formats a single file
   algal diagram <program.algal|manifest.json> [--format mermaid|svg|json]
       [--source <program.algal>] [--receipt <receipt.json>] [--focus <invocation>] [--out <file>]
       [--modules <dir>] [--tools <file>]
@@ -983,6 +987,88 @@ async function main(): Promise<number> {
       if (mapPath !== undefined) await emitArtifact(canonicalize(result.sourceMap as unknown as JsonValue), mapPath);
       if (bundle !== undefined) await emitArtifact(canonicalize(bundle as unknown as JsonValue), bundlePath);
       await emitArtifact(canonicalize(manifestToJson(result.manifest)), output);
+      return 0;
+    }
+
+    case "fmt": {
+      if (positional.length === 0) usageError("algal fmt <program.algal|dir> [more ...] [--check] [--write] [--out <file>]");
+      for (const key of Object.keys(flags)) {
+        if (!["check", "write", "out"].includes(key)) usageError(`unknown fmt option --${key}`);
+        if (key === "out") continue;
+        if (flags[key] !== true) usageError(`--${key} is a boolean flag without a value`);
+      }
+      const check = flags.check === true;
+      const write = flags.write === true;
+      const output = artifactFlag(flags, "out");
+      if (check && write) usageError("--check and --write are exclusive");
+      if (output !== undefined && (check || write)) usageError("--out formats a file elsewhere; it cannot combine with --check or --write");
+      if (output === undefined && !check && !write && positional.length !== 1) usageError("stdout formatting takes exactly one file; use --check or --write for several");
+      if (output !== undefined && positional.length !== 1) usageError("--out formats exactly one file");
+      const { SOURCE_BOUNDS, SourceError } = await import("./src/source");
+      const { formatSource } = await import("./src/source-format");
+      const { loadSourceFiles } = await import("./src/source-project");
+      // A directory argument scans for .algal sources beneath it: regular
+      // files only, no symlink traversal, with scan size and depth bounded.
+      const FMT_BOUNDS = { maxFiles: 1_024, maxDepth: 16, maxScanEntries: 65_536 };
+      const scan = async (root: string, dir: string, keys: string[], depth: number, left: { entries: number }): Promise<void> => {
+        if (depth > FMT_BOUNDS.maxDepth) throw new AlgalError("BUDGET_EXHAUSTED", `fmt: directory depth exceeds ${FMT_BOUNDS.maxDepth}: ${dir}`);
+        for (const entry of await readdir(join(root, dir), { withFileTypes: true })) {
+          if (left.entries-- <= 0) throw new AlgalError("BUDGET_EXHAUSTED", `fmt: directory entries exceed ${FMT_BOUNDS.maxScanEntries}: ${root}`);
+          const key = dir === "" ? entry.name : `${dir}/${entry.name}`;
+          if (entry.isSymbolicLink()) {
+            if (entry.name.endsWith(".algal")) throw new AlgalError("PARSE_FAILED", `symlink traversal is not allowed: ${key}`);
+            continue;
+          }
+          if (entry.isDirectory()) await scan(root, key, keys, depth + 1, left);
+          else if (entry.isFile() && entry.name.endsWith(".algal")) keys.push(key);
+        }
+      };
+      // Collect every input as resolved path → display path → text. Explicit
+      // files read through the same bounded, symlink-free loader as projects.
+      const targets = new Map<string, { path: string; source: string }>();
+      for (const path of positional) {
+        const absolute = resolve(path);
+        let info;
+        try { info = await lstat(absolute); }
+        catch (error) { throw new AlgalError("IO_FAILED", `cannot read ${path} (${(error as NodeJS.ErrnoException).code ?? "IO_FAILED"})`); }
+        if (info.isDirectory()) {
+          if (!check && !write) usageError("a directory input needs --check or --write");
+          const root = await realpath(absolute);
+          const keys: string[] = [];
+          await scan(root, "", keys, 0, { entries: FMT_BOUNDS.maxScanEntries });
+          if (keys.length === 0) throw new AlgalError("INPUT_MISSING", `no .algal source files found in ${path}`);
+          if (keys.length > FMT_BOUNDS.maxFiles) throw new AlgalError("BUDGET_EXHAUSTED", `fmt: more than ${FMT_BOUNDS.maxFiles} .algal files beneath ${path}`);
+          keys.sort();
+          const sources = await loadSourceFiles(root, keys, SOURCE_BOUNDS.maxSourceBytes, { noun: "source" });
+          for (const key of keys) targets.set(join(root, ...key.split("/")), { path: join(path, ...key.split("/")), source: sources[key]! });
+        } else if (info.isFile()) {
+          const root = await realpath(dirname(absolute));
+          const sources = await loadSourceFiles(root, [basename(absolute)], SOURCE_BOUNDS.maxSourceBytes, { noun: "source" });
+          targets.set(join(root, basename(absolute)), { path, source: sources[basename(absolute)]! });
+        } else throw new AlgalError("PARSE_FAILED", `fmt: not a regular file or directory: ${path}`);
+      }
+      const files = new Map<string, { path: string; source: string; formatted: string }>();
+      for (const [absolute, target] of targets) {
+        try {
+          files.set(absolute, { ...target, formatted: formatSource(target.source) });
+        } catch (error) {
+          if (error instanceof SourceError) throw new SourceError(error.diagnostic.message, error.diagnostic.span, { source: target.path });
+          throw error;
+        }
+      }
+      const changed = [...files.values()].filter(file => file.formatted !== file.source).map(file => file.path);
+      if (check) {
+        out({ ok: changed.length === 0, changed });
+        // Exit-code rule shared with the native CLI: 1 means the check ran and found drift.
+        return changed.length === 0 ? 0 : 1;
+      }
+      if (write) {
+        for (const [absolute, file] of files) if (file.formatted !== file.source) await writeFile(absolute, file.formatted);
+        out({ ok: true, changed });
+        return 0;
+      }
+      await distinctArtifactPaths([...files.keys()], [output]);
+      await emitArtifact(files.values().next().value!.formatted, output);
       return 0;
     }
 

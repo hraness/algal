@@ -5,16 +5,19 @@ import score from "./score.algal"
 // known team. The runtime checks the list and the weights when the run
 // starts, before any task is scored.
 record Owner { name: text, team: text in ["design", "platform", "support"] }
+
 record Task {
   id: text,
   title: text,
   urgency: number min 0 max 5,
   impact: number min 0 max 5,
-  status: text in ["open", "blocked", "done"],
+  status: text in ["blocked", "done", "open"],
   owner: Owner,
   notes: text?,
 }
+
 record Weights { urgency: number min 0 max 10, impact: number min 0 max 10 }
+
 record Score { id: text, title: text, total: number, ready: boolean }
 
 program plan(tasks: [Task], weights: Weights) -> [Score] {

@@ -3,11 +3,8 @@ import draft from "./draft.algal"
 program inbox(sample: text, emails: json) -> json {
   budget { max_agent_calls: 4 }
 
-  let preview = call draft using {
-    email: sample, tone: "helpful"
-  }
-  let replies = each draft over email in emails
-    using { tone: "helpful" } max_items 3
+  let preview = call draft using { email: sample, tone: "helpful" }
+  let replies = each draft over email in emails using { tone: "helpful" } max_items 3
 
   return { preview: preview, replies: replies }
 }

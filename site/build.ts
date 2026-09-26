@@ -335,7 +335,7 @@ const authoringReport = (() => {
   }
   throw new Error("The intentionally invalid authoring example unexpectedly compiled");
 })();
-if (authoringReport.source !== "helpers/draft.algal" || authoringReport.span?.start.line !== 5
+if (authoringReport.source !== "helpers/draft.algal" || authoringReport.span?.start.line !== 4
   || !authoringReport.message.includes("emial") || authoringReport.imports.length !== 1
   || authoringReport.imports[0]?.source !== "main.algal" || authoringReport.imports[0]?.path !== "./helpers/draft.algal"
   || authoringReport.imports[0]?.span?.start.line !== 1 || !authoringReport.excerpt?.lines.some(line => line.text.includes("emial") && line.highlight)) {
