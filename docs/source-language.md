@@ -154,7 +154,11 @@ let total = fold over sum, n in nums from 0 using sum + n
 - `fold over <acc>, <item> in <list> from <init> using <expr>` folds left to
   right: the accumulator starts at `init` and each step binds it under
   `<acc>` and the element under `<item>`. The two binder names must differ.
-  The accumulator's type is inferred by converging the initial and body types.
+  The accumulator's type is the widened `init` type — literal seeds widen to
+  their kind — and the body must produce exactly that type: a body returning
+  a different type (for example a comparison, which the fold then feeds back
+  as the next accumulator) is a compile error, so parenthesize the fold when
+  its result feeds a larger expression.
 - The list operand must be a typed list or `json`. A typed list checks the
   body against its declared element type; a `json` operand binds a dynamic
   element, and an empty typed list infers the body's type where possible.

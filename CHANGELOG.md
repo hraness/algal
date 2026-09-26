@@ -87,10 +87,11 @@ wire constant (`0.1.0`) is independent of these package versions.
   element in order, `filter` keeps each original element whose boolean body
   returns true, and `fold over <acc>, <item> in <list> from <init> using
   <expr>` folds left to right with the accumulator bound under `<acc>` (the
-  two binder names must differ). Binders shadow outer names only inside their
-  `using` body, the list operand must be a typed list or `json`, effects are
-  rejected inside bodies, and all three lower to the existing fuel-, size-,
-  and byte-bounded `algal.expr.v1` operations.
+  two binder names must differ; the body must reproduce the widened `init`
+  type — literal seeds widen to their kind). Binders shadow outer names only
+  inside their `using` body, the list operand must be a typed list or `json`,
+  effects are rejected inside bodies, and all three lower to the existing
+  fuel-, size-, and byte-bounded `algal.expr.v1` operations.
 - `algal envelope <program.algal|manifest.json>` writes an
   `algal.authority-envelope.v1` report: a static review of a manifest and its
   compiled child closure before any cell runs. Per capability class it lists

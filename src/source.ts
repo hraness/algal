@@ -853,6 +853,17 @@ class Compiler {
     if (type.kind === "json") return { kind: "json" };
     return this.parser.fail(`map, filter, and fold require a list, found ${type.kind}`, span);
   }
+  /** The type a `fold` accumulator carries: value literals and list literals
+   * widen to their kind so the seed's shape, not its instance, is checked. */
+  private widen(type: Type): Type {
+    switch (type.kind) {
+      case "text": case "number": return { kind: type.kind };
+      case "list": return type.item === undefined && type.items === undefined ? type
+        : { kind: "list", ...(type.item === undefined ? {} : { item: this.widen(type.item) }) };
+      case "record": return { kind: "record", fields: new Map([...type.fields].map(([name, field]) => [name, this.widen(field)])) };
+      default: return type;
+    }
+  }
   private pure(expr: Expr): Pure {
     const refs = new Map<string, Reference>();
     const scope = new Map<string, Type>();
@@ -938,17 +949,12 @@ class Compiler {
           const items = visit(expr.items); const over = this.element(items.type, expr.items);
           const init = visit(expr.from); const [accName, itemName] = expr.over;
           const priorAcc = scope.get(accName); const priorItem = scope.get(itemName);
-          scope.set(itemName, over);
-          let acc = init.type; let body: { program: JsonValue; type: Type } = { program: null, type: { kind: "json" } };
-          for (let pass = 0; pass < 4; pass++) {
-            scope.set(accName, acc);
-            body = visit(expr.using);
-            const merged = this.compatible(acc, body.type, expr);
-            if (sameType(merged, acc)) break;
-            acc = merged;
-          }
+          const acc = this.widen(init.type);
+          scope.set(itemName, over); scope.set(accName, acc);
+          const body = visit(expr.using);
           if (priorAcc === undefined) scope.delete(accName); else scope.set(accName, priorAcc);
           if (priorItem === undefined) scope.delete(itemName); else scope.set(itemName, priorItem);
+          if (!sameType(this.widen(body.type), acc)) this.parser.fail(`fold body must produce the accumulator's type ${acc.kind}, found ${body.type.kind}`, expr.using);
           return { program: ["fold", items.program, init.program, accName, itemName, body.program], type: acc };
         }
         case "decide": case "generate": case "call": case "each": return this.parser.fail("effects and calls require a whole binding, return, or branch arm; conditions, operands, and context expressions must be pure", expr);

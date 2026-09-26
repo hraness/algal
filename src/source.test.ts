@@ -237,11 +237,12 @@ test("map, filter, and fold check binders, bodies, and list operands statically"
   expect(() => compileSource(pure(`map over x in 5 using x`))).toThrow(/require a list/);
   expect(() => compileSource(pure(`fold over x in [1] from 0 using x`))).toThrow(/expected|binder|unsupported/i);
   expect(() => compileSource(pure(`fold over a, a in [1] from 0 using a`))).toThrow(/binder names must differ/);
+  expect(() => compileSource(pure(`fold over s, c in [1, 2] from 0 using s + c > 2`))).toThrow(/accumulator's type number, found boolean/);
   expect(() => compileSource(pure(`map over x in [1] using decide "q" using x as noul`))).toThrow(/effects and calls require a whole binding/);
   for (const word of ["map", "filter", "fold"]) expect(() => compileSource(pure(`let ${word} = 1`))).toThrow();
 });
 
-test("fold types the accumulator by convergence and binders shadow outer names", async () => {
+test("fold requires the body to reproduce the accumulator type and binders shadow outer names", async () => {
   const { manifest } = compileSource(`program fold_typing(x: text, nums: json) -> json {
     budget { max_agent_calls: 0 }
     let joined = fold over acc, n in nums from "" using acc + "n"
