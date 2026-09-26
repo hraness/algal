@@ -1,0 +1,58 @@
+[effect appleIntelligenceNotEnabled]
+EFFECT_UNBOUND: Apple Intelligence is off. Turn it on in System Settings › Apple Intelligence & Siri, then try again.
+[effect modelNotReady]
+EFFECT_UNBOUND: Apple's on-device model is still downloading. Try again in a few minutes. System Settings › Apple Intelligence & Siri shows the progress.
+[effect deviceNotEligible]
+EFFECT_UNBOUND: This Mac can't run Apple's on-device model. It needs Apple silicon and Apple Intelligence support. Use --gateway-model or --base-url instead.
+[effect requiresMacOS26]
+EFFECT_UNBOUND: Apple's on-device model needs macOS 26 or later. Update macOS in System Settings › General › Software Update, then try again.
+[effect helperMissing]
+EFFECT_UNBOUND: The helper that talks to Apple's on-device model isn't installed. Check the path in --apple-bridge or ALGAL_APPLE_BRIDGE, or unset it so algal builds its own helper.
+[effect unavailable]
+EFFECT_UNBOUND: Apple's on-device model isn't available right now. Check System Settings › Apple Intelligence & Siri, then try again.
+[doctor ready]
+✓ Apple's on-device model is ready.
+  Helper: /opt/algal/bin/algal-apple
+[doctor ready quiet ascii]
+OK Apple's on-device model is ready.
+  Helper: /opt/algal/bin/algal-apple
+[doctor ready json]
+{"provider":"apple","available":true,"reason":null,"bridge":"/opt/algal/bin/algal-apple","message":null,"fix":null,"settingsUrl":null,"next":null}
+[doctor off]
+⚠ Apple Intelligence is off.
+  Turn it on in System Settings › Apple Intelligence & Siri, then try again.
+  Helper: /opt/algal/bin/algal-apple
+→ open x-apple.systempreferences:com.apple.Siri-Settings.extension
+[doctor off quiet ascii]
+WARN Apple Intelligence is off.
+  Turn it on in System Settings › Apple Intelligence & Siri, then try again.
+  Helper: /opt/algal/bin/algal-apple
+[doctor off json]
+{"provider":"apple","available":false,"reason":"appleIntelligenceNotEnabled","bridge":"/opt/algal/bin/algal-apple","message":"Apple Intelligence is off.","fix":"Turn it on in System Settings › Apple Intelligence & Siri, then try again.","settingsUrl":"x-apple.systempreferences:com.apple.Siri-Settings.extension","next":"open x-apple.systempreferences:com.apple.Siri-Settings.extension"}
+[doctor intel]
+⚠ This Mac can't run Apple's on-device model. It needs Apple silicon and Apple Intelligence support.
+  Use --gateway-model or --base-url instead.
+  Helper: /opt/algal/bin/algal-apple
+[doctor intel quiet ascii]
+WARN This Mac can't run Apple's on-device model. It needs Apple silicon and Apple Intelligence support.
+  Use --gateway-model or --base-url instead.
+  Helper: /opt/algal/bin/algal-apple
+[doctor intel json]
+{"provider":"apple","available":false,"reason":"deviceNotEligible","bridge":"/opt/algal/bin/algal-apple","message":"This Mac can't run Apple's on-device model. It needs Apple silicon and Apple Intelligence support.","fix":"Use --gateway-model or --base-url instead.","settingsUrl":null,"next":null}
+[doctor no tools]
+⚠ algal needs Apple's command line tools. Nothing was installed.
+  Run xcode-select --install, then try again.
+→ xcode-select --install
+[doctor no tools quiet ascii]
+WARN algal needs Apple's command line tools. Nothing was installed.
+  Run xcode-select --install, then try again.
+[doctor no tools json]
+{"provider":"apple","available":false,"reason":"helperMissing","bridge":null,"message":"algal needs Apple's command line tools. Nothing was installed.","fix":"Run xcode-select --install, then try again.","settingsUrl":null,"next":"xcode-select --install"}
+[xcode tools notice]
+🔐 algal needs Apple's command line tools to build a small helper. macOS will offer to install them (about 1 GB).
+   Nothing is installed unless you agree in that window. Or skip: run without --apple, or use --gateway-model or --base-url.
+   Press Enter to continue · s to skip
+[xcode tools notice ascii]
+NOTE algal needs Apple's command line tools to build a small helper. macOS will offer to install them (about 1 GB).
+   Nothing is installed unless you agree in that window. Or skip: run without --apple, or use --gateway-model or --base-url.
+   Press Enter to continue · s to skip

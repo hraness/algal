@@ -128,8 +128,24 @@ The native CLI's `algal run --apple` (and `algal civ --live --apple`) routes cel
 on-device Foundation Models framework through the shared `apple-foundation`
 bridge (`hraness/apple-foundation`, pinned by tag). `algal doctor --apple`
 checks availability; building the bridge is not proof the model is present.
-The default sibling binary auto-builds via `swiftc` when missing or stale;
-explicit `--apple-bridge`/`ALGAL_APPLE_BRIDGE` paths are used as-is.
+The default sibling binary, `algal-apple`, builds itself with `swiftc` when it
+is missing or stale; this takes about 10 seconds, once. Explicit
+`--apple-bridge`/`ALGAL_APPLE_BRIDGE` paths are used as-is.
+
+Before that build, ALGAL checks for Apple's command line tools. If they are
+missing, a run at a terminal asks first ("macOS will offer to install them
+(about 1 GB)"), and only opens the macOS installer when you press Enter.
+Scripts, agents and `doctor` never open it; they print
+`xcode-select --install` instead. A failed build keeps the compiler output in
+`algal-apple.build.log` next to the helper rather than printing it.
+
+When the model can't be used, the error and `doctor --apple` say why and what
+to do: Apple Intelligence is off (with the System Settings link), the model is
+still downloading, the Mac isn't eligible, or macOS is older than 26.
+`doctor --apple` prints that as text at a terminal and as JSON when piped, run
+by an agent, or given `--json`. The JSON's `reason` is one of
+`appleIntelligenceNotEnabled`, `modelNotReady`, `deviceNotEligible`,
+`requiresMacOS26`, `helperMissing` or `unavailable`.
 
 The bridge translates a declared `output.schema` into a
 `DynamicGenerationSchema` — strings, numbers, integers, booleans, arrays,

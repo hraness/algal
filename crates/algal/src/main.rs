@@ -1123,20 +1123,26 @@ fn bridge_path(explicit: Option<&PathBuf>) -> Result<PathBuf> {
     if let Some(path) = explicit {
         return Ok(path.clone());
     }
-    if let Some(path) = std::env::var_os("ALGAL_APPLE_BRIDGE") {
+    if let Some(path) = std::env::var_os("ALGAL_APPLE_BRIDGE").filter(|p| !p.is_empty()) {
         return Ok(path.into());
     }
+    // The default sibling is managed: build (or rebuild) it from the pinned
+    // apple-foundation source when absent or stale, after checking for
+    // Apple's command line tools and saying so first. Explicit flag/env
+    // paths are user-managed and used as-is.
+    algal::apple::ensure_default_bridge(
+        &default_bridge()?,
+        "run without --apple, or use --gateway-model or --base-url",
+        true,
+    )
+}
+
+fn default_bridge() -> Result<PathBuf> {
     let binary = std::env::current_exe()?;
-    let path = binary
+    Ok(binary
         .parent()
         .unwrap_or(Path::new("."))
-        .join("algal-apple");
-    // The default sibling is managed: build (or rebuild) it from the pinned
-    // apple-foundation source when absent or stale. Explicit flag/env paths
-    // are user-managed and used as-is.
-    apple_foundation::ensure_bridge(&path)
-        .map_err(|e| Error::invalid(format!("apple bridge unavailable: {e}")))?;
-    Ok(path)
+        .join("algal-apple"))
 }
 
 fn host(options: &Execution, dir: &Path) -> Result<Host> {
@@ -3446,18 +3452,25 @@ async fn execute(cli: Cli) -> Result<bool> {
                     }
                 }
             } else if apple {
-                let bridge = bridge_path(apple_bridge.as_ref())?;
-                let output = algal::effects::command_output(
-                    &[bridge.to_string_lossy().into_owned(), "--check".into()],
-                    None,
-                    b"",
-                    4096,
-                    10_000,
-                )
-                .await?;
-                let result: Value = serde_json::from_slice(&output)?;
-                emit(&result)?;
-                Ok(result["available"] == true)
+                let diagnosis = doctor_apple(apple_bridge.as_ref()).await?;
+                if human {
+                    let style = cli_style::Style::stdout();
+                    let audience = match cli_style::audience() {
+                        cli_style::Audience::Quiet => algal::apple::Audience::Quiet,
+                        cli_style::Audience::Agent => algal::apple::Audience::Agent,
+                        cli_style::Audience::Human => algal::apple::Audience::Human,
+                    };
+                    cli_style::print_stdout(&diagnosis.to_text(
+                        algal::apple::Style {
+                            color: style.color,
+                            ascii: style.ascii,
+                        },
+                        audience,
+                    ));
+                } else {
+                    emit(&diagnosis.to_json())?;
+                }
+                Ok(diagnosis.available())
             } else if human {
                 let jev_env = std::env::var("TYPESAFE_API_KEY").is_ok_and(|key| !key.is_empty());
                 print_doctor(
@@ -3553,6 +3566,53 @@ fn platform_name() -> String {
         other => other,
     };
     format!("{os} {}", std::env::consts::ARCH)
+}
+
+/// Resolve the helper the way `run --apple` does, without offering to
+/// install anything, and ask it whether Apple's model can be used.
+async fn doctor_apple(explicit: Option<&PathBuf>) -> Result<algal::apple::Diagnosis> {
+    let explicit = explicit.cloned().or_else(|| {
+        std::env::var_os("ALGAL_APPLE_BRIDGE")
+            .filter(|p| !p.is_empty())
+            .map(PathBuf::from)
+    });
+    let bridge = match explicit {
+        Some(path) => path,
+        None => {
+            let path = default_bridge()?;
+            match tokio::task::spawn_blocking(move || {
+                algal::apple::ensure_default_bridge_advice(&path, false)
+            })
+            .await
+            .map_err(|e| Error::new("IO_FAILED", format!("apple helper join: {e}")))?
+            {
+                Ok(path) => path,
+                Err(advice) => {
+                    return Ok(algal::apple::Diagnosis {
+                        bridge: None,
+                        advice: Some(advice),
+                    });
+                }
+            }
+        }
+    };
+    let argv = vec![bridge.to_string_lossy().into_owned()];
+    let checked = tokio::task::spawn_blocking(move || apple_foundation::check(&argv))
+        .await
+        .map_err(|e| Error::new("IO_FAILED", format!("apple check join: {e}")))?;
+    Ok(match checked {
+        Ok(availability) => algal::apple::Diagnosis::from_check(bridge, availability),
+        Err(error @ apple_foundation::Error::Unsupported(_)) => algal::apple::Diagnosis {
+            bridge: None,
+            advice: Some(algal::apple::resolve_advice(error)),
+        },
+        Err(error) => {
+            return Err(Error::new(
+                "EFFECT_FAILED",
+                format!("apple helper check failed: {error}"),
+            ));
+        }
+    })
 }
 
 /// Best-effort clipboard read across platforms; errors when nothing yields

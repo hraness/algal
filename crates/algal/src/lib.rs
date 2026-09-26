@@ -1,4 +1,5 @@
 pub mod acp;
+pub mod apple;
 pub mod application;
 pub mod application_adaptation;
 pub mod application_comparison;

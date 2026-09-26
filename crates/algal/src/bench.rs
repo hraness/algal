@@ -302,9 +302,11 @@ pub fn load_config(path: &Path, apple_bridge: Option<&Path>) -> Result<BenchConf
                     timeout_ms: 120_000,
                 }
             } else if spec == "apple" {
-                let explicit = apple_bridge
-                    .map(|p| p.to_path_buf())
-                    .or_else(|| std::env::var_os("ALGAL_APPLE_BRIDGE").map(PathBuf::from));
+                let explicit = apple_bridge.map(|p| p.to_path_buf()).or_else(|| {
+                    std::env::var_os("ALGAL_APPLE_BRIDGE")
+                        .filter(|p| !p.is_empty())
+                        .map(PathBuf::from)
+                });
                 let bridge = match explicit {
                     Some(path) => path,
                     None => {
@@ -312,8 +314,11 @@ pub fn load_config(path: &Path, apple_bridge: Option<&Path>) -> Result<BenchConf
                             .ok()
                             .map(|exe| exe.parent().unwrap_or(Path::new(".")).join("algal-apple"))
                             .ok_or_else(|| Error::invalid("apple spec needs a bridge path"))?;
-                        apple_foundation::ensure_bridge(&sibling)
-                            .map_err(|e| Error::invalid(format!("apple bridge unavailable: {e}")))?
+                        crate::apple::ensure_default_bridge(
+                            &sibling,
+                            "remove the apple system from the bench config",
+                            true,
+                        )?
                     }
                 };
                 Backend::Apple { bridge }
