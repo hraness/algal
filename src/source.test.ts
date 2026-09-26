@@ -72,6 +72,64 @@ test("malformed decision metadata cannot fall through an exhaustive match", asyn
   }
 });
 
+test("generate declares its output type, checks it at execution, and types downstream use", async () => {
+  const program = (as: string, output = "json", tail = "verdict") =>
+    `record Reply { verdict: text in ["keep", "drop"], score: integer min 0 max 10, note: text }
+     program judge(email: text) -> ${output} {
+       budget { max_agent_calls: 1 }
+       let verdict = generate "Judge this email." using email${as === "" ? "" : ` as ${as}`}
+       return ${tail}
+     }`;
+  const agent = (source: string) => compileSource(source).manifest.cells.find(c => c.kind === "agent");
+
+  const bare = agent(program("", "text"));
+  const declaredText = agent(program("text", "text"));
+  expect(bare?.output).toEqual({ kind: "text" });
+  expect(declaredText?.output).toEqual({ kind: "text" });
+  expect(compileSource(program("", "text")).sourceMap.manifestDigest).toBe(compileSource(program("text", "text")).sourceMap.manifestDigest);
+
+  expect(agent(program("Reply"))?.output).toEqual({
+    kind: "json",
+    schema: {
+      type: "object",
+      required: ["note", "score", "verdict"],
+      properties: { note: { type: "string" }, score: { type: "integer", minimum: 0, maximum: 10 }, verdict: { type: "string", enum: ["drop", "keep"] } },
+    },
+    schemaVersion: 3,
+  });
+  expect(agent(program("json"))?.output).toEqual({ kind: "json", schema: { type: ["null", "boolean", "object", "array", "number", "string"] } });
+  expect(agent(program("text in [\"keep\", \"drop\"]", "text", 'match verdict { drop => "D", keep => "K" }'))?.output).toEqual({ kind: "choice", labels: ["drop", "keep"] });
+  expect(agent(program("[Reply]"))?.output).toEqual({
+    kind: "json",
+    schema: { type: "array", items: { type: "object", required: ["note", "score", "verdict"], properties: { note: { type: "string" }, score: { type: "integer", minimum: 0, maximum: 10 }, verdict: { type: "string", enum: ["drop", "keep"] } } } },
+    schemaVersion: 3,
+  });
+  expect(agent(program("integer min 0 max 5", "json", "verdict + 1"))?.output).toEqual({ kind: "json", schema: { type: "integer", minimum: 0, maximum: 5 }, schemaVersion: 3 });
+
+  const { manifest } = compileSource(program("Reply"));
+  const args = { input: { email: "from a person" } };
+  const good = { verdict: "keep", score: 8, note: "obvious" };
+  const receipt = await runOrganism({ manifest, args, store: new MemoryStore(), fns: builtinRegistry(), executors: [scriptedExecutor({ "b1-verdict": good })] });
+  expect(receipt.outcome).toBe("complete");
+  expect(receipt.cells["b1-verdict"]?.outputs?.out).toEqual(good);
+  expect(receipt.cells.result?.outputs?.out).toEqual(good);
+  expect((await verifyReceipt(receipt as unknown as JsonValue, manifestToJson(manifest), new MemoryStore(), builtinRegistry())).ok).toBe(true);
+
+  for (const bad of [{ verdict: "bogus", score: 8, note: "obvious" }, { verdict: "keep", score: 11, note: "obvious" }, { verdict: "keep", score: 8 }]) {
+    const failed = await runOrganism({ manifest, args, store: new MemoryStore(), fns: builtinRegistry(), executors: [scriptedExecutor({ "b1-verdict": bad })] });
+    expect(failed.outcome).toBe("failed");
+    expect(failed.cells["b1-verdict"]?.status).toBe("failed");
+  }
+
+  for (const [invalid, message] of [
+    ['generate "x" using email as Unknown', "unknown record type Unknown"],
+    ['generate "x" using email as', "a record declared earlier"],
+    ['generate "x" using email as slug extra', 'expected "return"'],
+  ] as const) {
+    expect(() => compileSource(program("", "text", "verdict").replace('generate "Judge this email." using email', invalid))).toThrow(message);
+  }
+});
+
 test("formatting changes source identity but not executable identity", async () => {
   const source = await fixture("reply.algal");
   const a = compileSource(source);

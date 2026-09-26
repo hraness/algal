@@ -183,6 +183,13 @@ program p(x: R) -> text { budget { max_agent_calls: 0 } return x.s }`;
     }`);
   });
 
+  test("generate as type keeps its declared type with the context", () => {
+    const formatted = formatSource(`record Reply { verdict: text in ["keep","drop"], note: text } program p(x: text) -> Reply { budget { max_agent_calls: 1 } return generate "judge" using x as Reply }`);
+    expect(formatted).toContain(`return generate "judge" using x as Reply\n`);
+    const typed = formatSource(`record Reply { verdict: text in ["keep","drop"], note: text } program p(x: text) -> json { budget { max_agent_calls: 1 } let v = generate "judge" using x as [Reply]; return v }`);
+    expect(typed).toContain(`let v = generate "judge" using x as [Reply]\n`);
+  });
+
   test("invalid source fails with SourceError, not a formatter error", () => {
     expect(() => formatSource(`program p(x: text) -> text { budget { max_agent_calls: 0 } return }`)).toThrow(SourceError);
     expect(() => formatSource(`program p(x: Undeclared) -> text { budget { max_agent_calls: 0 } return "x" }`)).toThrow(SourceError);
