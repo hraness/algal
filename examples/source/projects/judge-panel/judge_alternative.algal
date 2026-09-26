@@ -1,0 +1,34 @@
+record Alternative { id: text, body: json }
+
+record Verdict {
+  alternative: text,
+  score: number,
+  confidence: number,
+  keep: number,
+  flagged: boolean,
+}
+
+// Judge one alternative for a case brief: a labeled score for quality and a
+// keep probability for safety, reduced to a verdict record. Both questions
+// are decide effects, so this program and anything calling it are not pure.
+program judge_alternative(alternative: Alternative, brief: text) -> Verdict {
+  budget { max_agent_calls: 2 }
+
+  let quality = decide "Rate how well this alternative answers the brief."
+    using { brief: brief, alternative: alternative }
+    as score {
+      "poor",
+      "ok",
+      "great"
+    }
+  let keep = decide "Is this alternative safe to present as written?"
+    using { brief: brief, alternative: alternative }
+    as noul
+  return {
+    alternative: alternative.id,
+    score: quality.score,
+    confidence: quality.confidence,
+    keep: keep,
+    flagged: keep >= 0.5,
+  }
+}

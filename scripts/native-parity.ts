@@ -117,6 +117,31 @@ generated.set("source-support-queue", {
   bundlePath: queueBundlePath, modules: queue.modules,
   argsPath: `${queueFixtureBase}.args.json`, responsesPath: `${queueFixtureBase}.responses.json`,
 });
+// The shared program catalog's calling projects run every listed pure entry
+// under one source root; the judge panel adds nested `each` over `decide`
+// cells, served by scripted responses in both runtimes.
+for (const [name, entry] of [
+  ["message-log", "message-log/main.algal"],
+  ["message-thread", "message-log/thread.algal"],
+  ["ballot-box", "ballot-box/main.algal"],
+  ["ballot-view", "ballot-box/ballot.algal"],
+  ["judge-panel", "judge-panel/main.algal"],
+] as const) {
+  const project = await loadSourceProject(join(examples, "source/projects", entry), { root: join(examples, "source/projects") });
+  const projectStore = new MemoryStore();
+  for (const module of project.modules) await projectStore.putManifest(module);
+  const bundlePath = join(temporary, `source-${name}.bundle.json`);
+  const manifestPath = join(temporary, `source-${name}.algal.json`);
+  await writeFile(bundlePath, canonicalize(await packOrganism(project.manifest, projectStore) as unknown as JsonValue));
+  await writeFile(manifestPath, canonicalize(manifestToJson(project.manifest)));
+  const fixtureBase = join(examples, "source/projects", entry.slice(0, -".algal".length));
+  files.push(`source-${name}.algal.json`);
+  modules.push(project.manifest);
+  generated.set(`source-${name}`, {
+    manifestPath, fixtureBase, bundlePath, modules: project.modules,
+    argsPath: `${fixtureBase}.args.json`, responsesPath: `${fixtureBase}.responses.json`,
+  });
+}
 // Branches around child calls need the same isolation in both runtimes. Cover
 // the generated parameterless wrapper and nested list results through a merge.
 for (const [kind, child, source] of [

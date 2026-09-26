@@ -1,0 +1,55 @@
+import group_by_key from "../shared/group_by_key.algal"
+import includes_text from "../shared/includes_text.algal"
+import latest_value from "../shared/latest_value.algal"
+import lookup_by_key from "../shared/lookup_by_key.algal"
+
+record Event {
+  id: text min 1,
+  kind: text in ["edit", "mark", "post", "retract"],
+  author: text min 1,
+  clock: text,
+  target: text,
+  thread: text,
+  body: json,
+}
+
+// A view of one post in the same event log: the members of its named
+// thread, whether the post was retracted or marked, and the text of its
+// last edit. `body` is null when no edit names the post.
+program thread_view(events: [Event], key: text, post: text) -> json {
+  budget { max_agent_calls: 0, max_steps: 512, max_depth: 2 }
+
+  let threads = call group_by_key
+    using {
+      pairs: map over event in (
+        filter over event in events using event.kind == "post" && event.thread != ""
+      ) using { key: event.thread, id: event.id, member: event.id },
+    }
+  let members = call lookup_by_key
+    using {
+      pairs: map over thread in threads
+        using { key: thread.key, id: thread.key, member: thread.members },
+      key: key,
+      fallback: [],
+    }
+  let gone = call includes_text
+    using {
+      items: map over event in (filter over event in events using event.kind == "retract")
+        using event.target,
+      value: post,
+    }
+  let marked = call includes_text
+    using {
+      items: map over event in (filter over event in events using event.kind == "mark")
+        using event.target,
+      value: post,
+    }
+  let body = call latest_value
+    using {
+      updates: map over event in (filter over event in events using event.kind == "edit")
+        using { target: event.target, value: event.body },
+      target: post,
+      fallback: null,
+    }
+  return { members: members, gone: gone, marked: marked, body: body }
+}

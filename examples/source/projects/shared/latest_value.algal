@@ -1,0 +1,11 @@
+record Update { target: text, value: json }
+
+// A last-wins lookup over an ordered update list: the value of the last
+// update naming the target, or the caller's fallback. The fallback carries
+// the "no update matched" meaning, including null.
+program latest_value(updates: [Update], target: text, fallback: json) -> json {
+  budget { max_agent_calls: 0 }
+
+  return fold over current, update in updates
+    from fallback using if update.target == target { update.value } else { current }
+}

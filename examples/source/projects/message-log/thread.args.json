@@ -1,0 +1,15 @@
+{
+  "input": {
+    "events": [
+      { "id": "p1", "kind": "post", "author": "alice", "clock": "c1", "target": "", "thread": "t1", "body": "first draft" },
+      { "id": "p2", "kind": "post", "author": "bob", "clock": "c2", "target": "", "thread": "t1", "body": "second note" },
+      { "id": "p3", "kind": "post", "author": "alice", "clock": "c3", "target": "", "thread": "t2", "body": "other thread" },
+      { "id": "e1", "kind": "edit", "author": "alice", "clock": "c4", "target": "p1", "thread": "", "body": "edited once" },
+      { "id": "e2", "kind": "edit", "author": "alice", "clock": "c5", "target": "p1", "thread": "", "body": "edited twice" },
+      { "id": "r1", "kind": "retract", "author": "bob", "clock": "c6", "target": "p2", "thread": "", "body": null },
+      { "id": "m1", "kind": "mark", "author": "alice", "clock": "c7", "target": "p1", "thread": "", "body": null }
+    ],
+    "key": "t1",
+    "post": "p1"
+  }
+}

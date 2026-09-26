@@ -1,0 +1,39 @@
+import apply_updates from "../shared/apply_updates.algal"
+import flags_for from "../shared/flags_for.algal"
+import group_by_key from "../shared/group_by_key.algal"
+
+record Ballot { id: text min 1, pick: text min 1 }
+
+record Change { target: text, value: json }
+
+// A ballot box: every ballot's current pick after corrections, whether a
+// correction touched it, whether it is spoiled, and the tally over current
+// picks. A change must carry a text value; a non-text change fails when
+// the tally groups rows by their value.
+program ballot_box(ballots: [Ballot], changes: [Change], spoiled: [text]) -> json {
+  budget { max_agent_calls: 0, max_steps: 512, max_depth: 2 }
+
+  let current = call apply_updates
+    using {
+      entries: map over ballot in ballots using { id: ballot.id, value: ballot.pick },
+      updates: changes,
+    }
+  let flags = call flags_for using { ids: map over row in current using row.id, flags: spoiled }
+  let tally = call group_by_key
+    using { pairs: map over row in current using { key: row.value, id: row.id, member: row.id } }
+  return {
+    ballots: map over row in current
+      using {
+        id: row.id,
+        pick: row.value,
+        corrected: row.revised,
+        spoiled: fold over hit, flag in flags
+          from false using if flag.id == row.id { flag.flagged } else { hit },
+      },
+    tally: map over group in tally
+      using {
+        pick: group.key,
+        count: fold over count, member in group.members from 0 using count + 1,
+      },
+  }
+}

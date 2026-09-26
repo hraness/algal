@@ -1,0 +1,14 @@
+{
+  "input": {
+    "ballots": [
+      { "id": "b1", "pick": "yes" },
+      { "id": "b2", "pick": "no" },
+      { "id": "b3", "pick": "no" }
+    ],
+    "changes": [
+      { "target": "b2", "value": "yes" },
+      { "target": "b9", "value": "no" }
+    ],
+    "spoiled": ["b3"]
+  }
+}

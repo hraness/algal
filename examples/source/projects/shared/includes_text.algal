@@ -1,0 +1,8 @@
+// A membership scan over a text list: true when any item equals the value.
+// This is the evaluator's `contains` operation expressed as a program, so
+// callers bound by list size, not by a hidden primitive.
+program includes_text(items: [text], value: text) -> json {
+  budget { max_agent_calls: 0 }
+
+  return fold over found, item in items from false using found || item == value
+}

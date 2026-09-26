@@ -1,0 +1,14 @@
+record Pair { key: text, id: text min 1, member: json }
+
+// A first-wins keyed lookup: the member of the first pair carrying the key,
+// or the caller's fallback when no pair does. The `id` channel identifies
+// each pair; `lookup_by_key` works through ids, so callers keep one scheme
+// for identifying an element and another for grouping it.
+program lookup_by_key(pairs: [Pair], key: text, fallback: json) -> json {
+  budget { max_agent_calls: 0 }
+
+  let wanted = fold over found, pair in pairs
+    from "" using if found == "" { if pair.key == key { pair.id } else { found } } else { found }
+  return fold over member, pair in pairs
+    from fallback using if pair.id == wanted { pair.member } else { member }
+}

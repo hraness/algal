@@ -1,0 +1,25 @@
+record Pair { key: text, id: text min 1, member: json }
+
+record Grouped { key: text, members: [json] }
+
+// Members grouped by key: one group per distinct key in order of first
+// occurrence, each holding its pairs' members in list order. The `id`
+// channel identifies the pair that leads each group, so a group is emitted
+// once, by the first pair carrying its key.
+program group_by_key(pairs: [Pair]) -> [Grouped] {
+  budget { max_agent_calls: 0 }
+
+  let buckets = map over pair in pairs
+    using {
+      key: pair.key,
+      self: pair.id,
+      leader: fold over found, candidate in pairs
+        from "" using if found == "" {
+          if candidate.key == pair.key { candidate.id } else { found }
+        } else { found },
+      members: map over kept in (filter over candidate in pairs using candidate.key == pair.key)
+        using kept.member,
+    }
+  let distinct = filter over bucket in buckets using bucket.self == bucket.leader
+  return map over bucket in distinct using { key: bucket.key, members: bucket.members }
+}

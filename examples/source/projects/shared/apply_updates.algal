@@ -1,0 +1,21 @@
+record Entry { id: text min 1, value: json }
+
+record Update { target: text, value: json }
+
+record Revised { id: text, value: json, revised: boolean }
+
+// A last-wins update application over a whole list: each entry keeps the
+// value of the last update naming its id, or its own value when none does.
+// `revised` records whether any update targeted the entry, including an
+// update that rewrote the value with equal content.
+program apply_updates(entries: [Entry], updates: [Update]) -> [Revised] {
+  budget { max_agent_calls: 0 }
+
+  return map over entry in entries
+    using {
+      id: entry.id,
+      value: fold over current, update in updates
+        from entry.value using if update.target == entry.id { update.value } else { current },
+      revised: fold over hit, update in updates from false using hit || update.target == entry.id,
+    }
+}

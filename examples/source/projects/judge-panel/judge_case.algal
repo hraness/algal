@@ -1,0 +1,15 @@
+import judge_alternative from "./judge_alternative.algal"
+
+record Alternative { id: text, body: json }
+
+record Case { id: text, brief: text, alternatives: [Alternative] }
+
+// Judge every alternative of one case, bounded at four. Each item reuses the
+// case brief as shared context; verdicts keep the alternative order.
+program judge_case(case: Case) -> json {
+  budget { max_agent_calls: 8, max_depth: 2 }
+
+  let verdicts = each judge_alternative over alternative in case.alternatives
+    using { brief: case.brief } max_items 4
+  return { case: case.id, verdicts: verdicts }
+}
