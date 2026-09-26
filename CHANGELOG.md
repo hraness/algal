@@ -23,6 +23,15 @@ wire constant (`0.1.0`) is independent of these package versions.
   `judge-panel`, shows the impure counterpart: nested `each` fans cases out
   to per-alternative `decide` questions (`score` and `noul` forms), and is
   deliberately not a catalog entry.
+
+- The record-triage task corpus is regenerated at revision v2: a
+  decision-model audit found three template bodies carrying truth labels
+  that disagreed with the taxonomy's declared semantics
+  (billing-inquiry records phrased as disputes, integration-help records
+  phrased as error reports), enough to cap the promotion gate on several
+  tasks for any semantic-reading classifier. Contested phrasings moved to
+  their semantic class and question classes reworded; the revised corpus
+  regenerates deterministically from the same committed family configs.
 - `algal experiment <config.json>` runs one cumulative-skill experiment arm
   over a bounded task set: `retained`, `ablation`, `fresh`, and `fixed`
   profiles share one code path, every generation, task, and promotion run
