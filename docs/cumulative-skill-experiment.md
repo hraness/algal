@@ -62,7 +62,14 @@ execution.
    evaluation. The arm option `citeKeptEvaluation` changes that: a task
    that ran an already-kept manifest re-cites the entry's stored promotion
    evidence (`evaluated: false` in the run record) and the hit charges the
-   task run alone, so retention can amortize over a horizon.
+   task run alone, so retention can amortize over a horizon. A second arm
+   option, `normalizeEmitted`, applies bounded deterministic repairs to a
+   generator emission that fails the manifest parse — the observed classes
+   are a `view.inputs` list holding `"*"` (replaced by the contract's
+   wildcard string) and a stray `id` on an `expr` descriptor (dropped);
+   applied repair kinds are recorded on the run record's
+   `generator.normalized`, so repaired validity stays distinguishable from
+   emitted validity.
 2. **ablation**: identical machinery, catalog consultation disabled. Every
    task generates and evaluates fresh under the same budgets. This arm is
    the load-bearing comparison: the same system without access to what it

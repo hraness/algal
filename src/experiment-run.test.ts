@@ -223,6 +223,106 @@ describe("experiment arm runner", () => {
     expect(() => arm({ arm: "retained", ...generating, cases: promotionCases, citeKeptEvaluation: true })).not.toThrow();
   });
 
+  test("normalizeEmitted repairs an emitted wildcard view and records the repair", async () => {
+    // The emission is `kept` with the fn cell swapped for an agent cell whose
+    // view declares `inputs: ["*"]` — the observed live defect: a list cannot
+    // hold "*", the bare string is the contract's wildcard form.
+    const emitted = manifestToJson(kept) as Record<string, unknown>;
+    const cells = [...(emitted.cells as Record<string, unknown>[])];
+    cells[1] = {
+      id: "echo",
+      kind: "agent",
+      inputs: { value: "json" },
+      prompt: "Echo the input.",
+      view: { inputs: ["*"] },
+      output: { kind: "json", schema: { type: "object" } },
+    };
+    emitted.cells = cells;
+    (emitted.interface as Record<string, unknown>).outputs = { label: { cell: "echo", port: "out" } };
+    const repaired = { ...emitted, cells: [{ ...cells[0] }, { ...(cells[1] as Record<string, unknown>), view: { inputs: "*" } }] };
+    const repairedManifest = parseOrganismManifest(repaired);
+    const wildResponses = { writer: emitted as JsonValue, echo: { value: "seen" } as JsonValue };
+
+    const store = new MemoryStore();
+    const result = await runExperimentArm({
+      arm: arm({ arm: "ablation", ...generating, normalizeEmitted: true }),
+      tasks: [tasks[0]!],
+      fns: builtinRegistry(),
+      store,
+      executors: [scriptedExecutor(wildResponses)],
+    });
+
+    const run = result.runs[0]!;
+    expect(run.outcome).toBe("complete");
+    expect(run.generator!.normalized).toEqual(["view-inputs-wildcard"]);
+    expect(run.manifest).toBe(digestCanonical(manifestToJson(repairedManifest)));
+    // The stored record round-trips with the repair list.
+    const stored = parseExperimentRun((await store.getValue(result.runDigests[0]!))!);
+    expect(stored.generator!.normalized).toEqual(["view-inputs-wildcard"]);
+  });
+
+  test("normalizeEmitted repairs a stray id on an expr descriptor", async () => {
+    const emitted = manifestToJson(kept) as Record<string, unknown>;
+    const cells = [...(emitted.cells as Record<string, unknown>[])];
+    cells[1] = {
+      id: "echo",
+      kind: "expr",
+      inputs: { value: "json" },
+      expr: { contract: "algal.expr.v1", id: "echo", program: { label: ["get", "value"] } },
+      output: { kind: "json", schema: { type: "object" } },
+    };
+    emitted.cells = cells;
+    (emitted.interface as Record<string, unknown>).outputs = { label: { cell: "echo", port: "out" } };
+    const idResponses = { writer: emitted as JsonValue };
+
+    const result = await runExperimentArm({
+      arm: arm({ arm: "ablation", ...generating, normalizeEmitted: true }),
+      tasks: [tasks[0]!],
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [scriptedExecutor(idResponses)],
+    });
+
+    const run = result.runs[0]!;
+    expect(run.outcome).toBe("complete");
+    expect(run.generator!.normalized).toEqual(["expr-id"]);
+  });
+
+  test("without normalizeEmitted the same emissions stay invalid", async () => {
+    const emitted = manifestToJson(kept) as Record<string, unknown>;
+    const cells = [...(emitted.cells as Record<string, unknown>[])];
+    cells[1] = {
+      id: "echo",
+      kind: "agent",
+      inputs: { value: "json" },
+      prompt: "Echo the input.",
+      view: { inputs: ["*"] },
+      output: { kind: "json", schema: { type: "object" } },
+    };
+    emitted.cells = cells;
+    (emitted.interface as Record<string, unknown>).outputs = { label: { cell: "echo", port: "out" } };
+
+    const result = await runExperimentArm({
+      arm: arm({ arm: "ablation", ...generating }),
+      tasks: [tasks[0]!],
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [scriptedExecutor({ writer: emitted as JsonValue })],
+    });
+
+    const run = result.runs[0]!;
+    expect(run.outcome).toBe("invalid");
+    expect(run.generator!.normalized).toBeUndefined();
+  });
+
+  test("normalizeEmitted parses only on generative arms", async () => {
+    expect(() => arm({ arm: "fixed", manifest: manifestToJson(kept), normalizeEmitted: true })).toThrow();
+    expect(() => arm({ arm: "ablation", ...generating, normalizeEmitted: "yes" })).toThrow();
+    expect(() => arm({ arm: "ablation", ...generating, normalizeEmitted: true })).not.toThrow();
+    expect(() => arm({ arm: "fresh", ...generating, normalizeEmitted: true })).not.toThrow();
+    expect(() => arm({ arm: "retained", ...generating, cases: promotionCases, normalizeEmitted: true })).not.toThrow();
+  });
+
   test("ablation disables both hooks: every task regenerates and the catalog stays empty", async () => {
     const { store, run } = fixture({ arm: "ablation", ...generating });
     const result = await run();

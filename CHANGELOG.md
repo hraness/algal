@@ -12,7 +12,6 @@ independent of these package versions.
 
 ## Unreleased
 
-<<<<<<< HEAD
 - CLI help is shorter and starts where a new person starts. Bare `algal`
   (Bun) prints a start screen of at most 25 lines. `algal --help` groups
   everyday commands, `algal help advanced` lists the research commands, and
@@ -55,6 +54,14 @@ independent of these package versions.
   promotion policies — under per-hit re-evaluation the retained arm cost
   2.6x ablation; under cite-on-hit re-citation it ran 24% cheaper than
   ablation with identical held-out completion.
+- The generative experiment arms gain an opt-in `normalizeEmitted` field:
+  when a generator's emitted value fails `parseOrganismManifest`, bounded
+  deterministic repairs run before the second parse attempt — a
+  `view.inputs` list holding `"*"` becomes the contract's wildcard string,
+  and a stray `id` on an `expr` descriptor is dropped. Applied repair kinds
+  land on the run record's `generator.normalized` (1..8 labels), so an
+  emission's validity stays distinguishable from its usability. The v3
+  study's invalid-manifest failures were all of these two classes.
 - The shared program catalog gains six pure collection entries under
   `examples/source/projects/shared/`: `includes_text` (membership scan),
   `latest_value` (last-wins lookup over `{target, value}` updates),
