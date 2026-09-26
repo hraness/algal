@@ -331,6 +331,38 @@ describe("experiment arm runner", () => {
       .toThrow("taskId");
   });
 
+  test("arm records parse embedded manifests deeper than the shared record bound", () => {
+    // Manifests nest legitimately past the record snapshot depth (cell config,
+    // schemas, expression trees); the shared bound only covers the arm's own
+    // fields, and each embedded structure re-parses under its own bounds.
+    const deep = manifestToJson(parseOrganismManifest({
+      contract: "algal.organism.v1",
+      key: "organism:deep-const",
+      name: "Deep const",
+      interface: {
+        outputs: { out: { cell: "k", port: "value" } },
+      },
+      cells: [
+        {
+          id: "k",
+          kind: "const",
+          outputs: {
+            value: { type: "json", value: { a: { b: { c: { d: { e: { f: "g" } } } } } } },
+          },
+        },
+      ],
+      edges: [],
+    }));
+    const arm = parseExperimentArm({
+      contract: "algal.experiment-arm.v1",
+      arm: "fixed",
+      family: "triage",
+      budget,
+      manifest: deep,
+    });
+    expect(arm.manifest).toBeDefined();
+  });
+
   test("run record parser rejects unknown keys and inconsistent digests", async () => {
     const { run } = fixture({ arm: "fixed", manifest: manifestToJson(kept) }, tasks.slice(0, 1));
     const result = await run();

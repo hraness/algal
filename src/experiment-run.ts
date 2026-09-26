@@ -222,15 +222,17 @@ export type ExperimentArm = {
 };
 
 function parseGenerator(value: unknown, at: string): ExperimentGenerator {
-  const v = closed(boundedJsonSnapshot(value, EXPERIMENT_BOUNDS.record, at), ["manifest", "output"], ["field", "args"], at);
+  const raw = asObject(value, `experiment ${at}`);
+  const shallow: Record<string, unknown> = { ...raw };
+  if (Object.hasOwn(shallow, "manifest")) shallow.manifest = true;
+  const v = closed(boundedJsonSnapshot(shallow, EXPERIMENT_BOUNDS.record, at), ["manifest", "output"], ["field", "args"], at);
   const generator: ExperimentGenerator = {
-    manifest: parseOrganismManifest(v.manifest),
+    manifest: parseOrganismManifest(raw.manifest),
     output: label(v.output, `${at}.output`, EXPERIMENT_BOUNDS.maxFamilyLength),
   };
   const field = opt(v, "field");
   if (field.present) generator.field = label(field.value, `${at}.field`, EXPERIMENT_BOUNDS.maxFamilyLength);
-  const args = opt(v, "args");
-  if (args.present) generator.args = valueMap(args.value, `${at}.args`);
+  if (raw.args !== undefined) generator.args = valueMap(raw.args, `${at}.args`);
   return generator;
 }
 
@@ -248,7 +250,15 @@ function parseFoundryCase(value: unknown, at: string): FoundryCase {
 /** Parse a closed `algal.experiment-arm.v1` record. Manifests arrive as inline
  * manifest JSON; a caller that reads paths resolves them before parsing. */
 export function parseExperimentArm(value: unknown): ExperimentArm {
-  const v = closed(boundedJsonSnapshot(value, EXPERIMENT_BOUNDS.record, "arm"), ["contract", "arm", "family", "budget"], ["generator", "manifest", "cases", "scorer", "maxEntries"], "arm");
+  const raw = asObject(value, "experiment arm");
+  // Manifest, generator, case, and scorer subtrees carry their own bounds
+  // (organism manifests legitimately nest past the shared record depth), so
+  // the shared snapshot only checks this record's own shape.
+  const shallow: Record<string, unknown> = { ...raw };
+  for (const key of ["generator", "manifest", "cases", "scorer"] as const) {
+    if (Object.hasOwn(shallow, key)) shallow[key] = true;
+  }
+  const v = closed(boundedJsonSnapshot(shallow, EXPERIMENT_BOUNDS.record, "arm"), ["contract", "arm", "family", "budget"], ["generator", "manifest", "cases", "scorer", "maxEntries"], "arm");
   if (v.contract !== EXPERIMENT_ARM_CONTRACT) fail(`contract must be ${EXPERIMENT_ARM_CONTRACT}`);
   const arm: ExperimentArm = {
     contract: EXPERIMENT_ARM_CONTRACT,
@@ -256,19 +266,15 @@ export function parseExperimentArm(value: unknown): ExperimentArm {
     family: label(v.family, "arm.family", EXPERIMENT_BOUNDS.maxFamilyLength),
     budget: parseHabitatLimits(v.budget),
   };
-  const generator = opt(v, "generator");
-  if (generator.present) arm.generator = parseGenerator(generator.value, "arm.generator");
-  const manifest = opt(v, "manifest");
-  if (manifest.present) arm.manifest = parseOrganismManifest(manifest.value);
-  const cases = opt(v, "cases");
-  if (cases.present) {
-    if (!Array.isArray(cases.value) || cases.value.length === 0 || cases.value.length > EXPERIMENT_BOUNDS.maxCases) {
+  if (raw.generator !== undefined) arm.generator = parseGenerator(raw.generator, "arm.generator");
+  if (raw.manifest !== undefined) arm.manifest = parseOrganismManifest(raw.manifest);
+  if (raw.cases !== undefined) {
+    if (!Array.isArray(raw.cases) || raw.cases.length === 0 || raw.cases.length > EXPERIMENT_BOUNDS.maxCases) {
       fail(`arm.cases must list 1..${EXPERIMENT_BOUNDS.maxCases} entries`);
     }
-    arm.cases = cases.value.map((raw, i) => parseFoundryCase(raw, `arm.cases[${i}]`));
+    arm.cases = raw.cases.map((entry, i) => parseFoundryCase(entry, `arm.cases[${i}]`));
   }
-  const scorer = opt(v, "scorer");
-  if (scorer.present) arm.scorer = parseExprScorer(scorer.value, "arm.scorer");
+  if (raw.scorer !== undefined) arm.scorer = parseExprScorer(raw.scorer, "arm.scorer");
   const maxEntries = opt(v, "maxEntries");
   if (maxEntries.present) arm.maxEntries = asInt(maxEntries.value, "arm.maxEntries", 1, EXPERIMENT_BOUNDS.maxCatalogEntries);
 
