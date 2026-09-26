@@ -604,6 +604,13 @@ class Formatter {
         this.expect(using, "using");
         const context: Doc[] = [];
         this.expression(context);
+        if (this.peek().text === "as") {
+          const tail: Doc[] = [];
+          this.take(tail);
+          tail.push(TEXT(" "));
+          this.fieldType(tail);
+          context.push(TEXT(" "), ...tail);
+        }
         out.push(...head, TEXT(" "), ...instruction, grp(ind(LINE, ...using, TEXT(" "), ...context)));
         return;
       }

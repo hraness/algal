@@ -101,7 +101,7 @@ type Expr = Span & (
   | { kind: "if"; condition: Expr; yes: Expr; no: Expr }
   | { kind: "match"; value: Expr; arms: [string, Expr][] }
   | { kind: "decide"; question: string; context: Expr; criteria: [string, string][] }
-  | { kind: "generate"; instruction: Expr; context: Expr }
+  | { kind: "generate"; instruction: Expr; context: Expr; as?: FieldType }
   | { kind: "call"; alias: string; args: Expr }
   | { kind: "each"; alias: string; over: string; items: Expr; args: Expr; maxItems: number }
 );
@@ -466,7 +466,12 @@ class Parser {
       this.unique(criteria.map(([label]) => label), "choice label", token);
       return build({ kind: "decide", question, context, criteria } as never);
     }
-    if (token.text === "generate") { const instruction = this.expression(0, depth + 1); this.expect("using"); const context = this.expression(0, depth + 1); return build({ kind: "generate", instruction, context } as never); }
+    if (token.text === "generate") {
+      const instruction = this.expression(0, depth + 1); this.expect("using"); const context = this.expression(0, depth + 1);
+      const asToken = this.peek(); const as = this.eat("as") ? this.fieldType(0) : undefined;
+      if (as !== undefined) this.checkSchemaSize(schemaOf(as), { start: asToken.start, end: this.tokens[this.index - 1]!.end }, `generate output type ${fieldTypeText(as)}`);
+      return build({ kind: "generate", instruction, context, as } as never);
+    }
     if (token.text === "call") {
       const alias = this.name().text; this.expect("using"); const args = this.expression(0, depth + 1);
       return build({ kind: "call", alias, args } as never);
@@ -502,6 +507,16 @@ function output(type: Type): AgentOutput {
   // The core schema is shallow. Only claim what the expression itself proves.
   const schema: JsonObject = { type: type.kind === "json" ? ["null", "boolean", "object", "array", "number", "string"] : type.kind === "record" || type.kind === "decision" ? "object" : type.kind === "list" ? "array" : type.kind };
   return { kind: "json", schema };
+}
+/** The output contract a `generate ... as type` declares. Plain text keeps the
+ * same text contract as an undeclared generate; allowed text values are a
+ * closed choice; every other declared type is a checked JSON schema. */
+function generateOutput(type: FieldType): AgentOutput {
+  if (type.kind === "text" && type.values === undefined && type.format === undefined && type.minimum === undefined && type.maximum === undefined) return { kind: "text" };
+  const checked = staticType(type);
+  if (checked.kind === "choice") return { kind: "choice", labels: checked.labels };
+  const schema = type.kind === "json" ? { type: ["null", "boolean", "object", "array", "number", "string"] } : schemaOf(type);
+  return { kind: "json", schema, ...schemaVersion(schema) };
 }
 /** Lower a record to the core schema subset: an object, its sorted required
  * field names, and typed properties. A `json` field is checked for presence
@@ -632,7 +647,7 @@ function describe(expr: Expr): string {
     case "if": text = `if ${show(expr.condition)} { ${show(expr.yes)} } else { ${show(expr.no)} }`; break;
     case "match": text = `match ${show(expr.value)}`; break;
     case "decide": text = `decide ${JSON.stringify(expr.question)} using ${show(expr.context)}`; break;
-    case "generate": text = `generate ${show(expr.instruction)} using ${show(expr.context)}`; break;
+    case "generate": text = `generate ${show(expr.instruction)} using ${show(expr.context)}${expr.as === undefined ? "" : ` as ${fieldTypeText(expr.as)}`}`; break;
     case "call": text = `call ${expr.alias} using ${show(expr.args)}`; break;
     case "each": text = `each ${expr.alias} over ${expr.over} in ${show(expr.items)} max_items ${expr.maxItems}`; break;
   }
@@ -644,7 +659,7 @@ function annotation(title: string, operation: string, summary: string, details: 
 function expressionAnnotation(title: string, expr: Expr, role: string): SourceAnnotation {
   let details: string[] = [];
   if (expr.kind === "decide") details = expr.criteria.map(([label, description]) => `${label}: ${description}`);
-  if (expr.kind === "generate") details = [`instruction: ${describe(expr.instruction)}`, `context: ${describe(expr.context)}`];
+  if (expr.kind === "generate") details = [`instruction: ${describe(expr.instruction)}`, `context: ${describe(expr.context)}`, ...(expr.as === undefined ? [] : [`output: ${fieldTypeText(expr.as)}`])];
   if (expr.kind === "match") details = expr.arms.map(([label, arm]) => `${label} => ${describe(arm)}`);
   if (expr.kind === "if") details = [`condition: ${describe(expr.condition)}`, `true => ${describe(expr.yes)}`, `false => ${describe(expr.no)}`];
   if (expr.kind === "call") details = [`arguments: ${describe(expr.args)}`];
@@ -920,8 +935,8 @@ class Compiler {
       const instruction = this.operand(`${id}-instruction`, expr.instruction, `${title} · instruction`);
       if (!isText(instruction.type)) this.parser.fail("generation instruction must be text", expr.instruction);
       const context = this.operand(`${id}-context`, expr.context, `${title} · context`); this.calls++;
-      this.add({ id, kind: "agent", inputs: this.wire(id, new Map([["instruction", instruction], ["context", context]])), prompt: GENERATE_PROMPT, view: { inputs: ["instruction", "context"] }, output: { kind: "text" } }, expr, "generate", expressionAnnotation(title, expr, "generate"));
-      return { cell: id, port: "out", type: { kind: "text" } };
+      this.add({ id, kind: "agent", inputs: this.wire(id, new Map([["instruction", instruction], ["context", context]])), prompt: GENERATE_PROMPT, view: { inputs: ["instruction", "context"] }, output: expr.as === undefined ? { kind: "text" } : generateOutput(expr.as) }, expr, "generate", expressionAnnotation(title, expr, "generate"));
+      return { cell: id, port: "out", type: expr.as === undefined ? { kind: "text" } : staticType(expr.as) };
     }
     if (expr.kind === "decide") {
       const context = this.operand(`${id}-context`, expr.context, `${title} · context`); const raw = `${id}-decide`; const labels = expr.criteria.map(([label]) => label); this.calls++;

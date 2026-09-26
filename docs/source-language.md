@@ -227,6 +227,17 @@ OS sandbox. `decide` and `generate` occupy a whole binding, return expression,
 or branch arm. All declared effects remain in the graph, including unused
 bindings and inactive arms. Inactive arms are skipped at execution.
 
+`generate instruction using context as type` declares the output's field type:
+`as Reply` returns the declared record, `as [Reply]` a list, `as integer min 0
+max 5` a bounded integer, `as text in ["a", "b"]` a closed choice that `match`
+can cover, and `as json` any value. The cell's output contract is the type's
+compiled schema with its lowest enforcing schema version, and the runtime
+checks the executor's output against it before downstream cells see it; an
+output that does not satisfy the contract fails the cell. `as text` is the
+same contract as an undeclared generate. The declared type also types the
+value downstream, so `verdict.verdict` reads record fields and `match` covers
+allowed values.
+
 ## Record types
 
 A record type names the fields a JSON value must have. Declare records after

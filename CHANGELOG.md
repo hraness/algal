@@ -37,6 +37,15 @@ wire constant (`0.1.0`) is independent of these package versions.
   writes a single formatted file elsewhere. Directories scan for `.algal`
   files with bounded depth and no symlink traversal. The bundled source
   examples are formatted canonically. SDK: `formatSource`.
+- `generate instruction using context as <field type>` declares a source
+  generation's output type: a record (`as Reply`), a list (`as [Reply]`),
+  a bounded number or integer, a closed choice (`as text in ["a", "b"]`),
+  a text format, or any `json`. The agent cell's output contract is the
+  type's compiled schema at its lowest enforcing schema version, the runtime
+  checks the executor's output against it before downstream cells run, and
+  the declared type types the value downstream, so record fields read
+  directly and `match` covers allowed values. `as text` is the same contract
+  as an undeclared `generate`.
 - `algal envelope <program.algal|manifest.json>` writes an
   `algal.authority-envelope.v1` report: a static review of a manifest and its
   compiled child closure before any cell runs. Per capability class it lists
