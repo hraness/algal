@@ -463,8 +463,11 @@ impl Runtime<'_> {
                 .map_err(|_| Error::new("INTERNAL", "host replay mutex poisoned"))?
                 .get_mut(&request_digest)
                 .and_then(|q| q.pop_front());
-            if hit.is_none() && !self.host.replay_fallthrough {
-                return Err(Error::new("EFFECT_UNBOUND", "tool replay missing"));
+            if hit.is_none() && (!self.host.replay_fallthrough || self.host.replay_tools_strict) {
+                return Err(Error::new(
+                    "EFFECT_UNBOUND",
+                    format!("replay has no tool receipt for {request_digest}"),
+                ));
             }
             hit
         } else {
@@ -505,8 +508,20 @@ impl Runtime<'_> {
                     ToolBackend::DemoCrash(fixture) => fixture.run(&idempotency_key, timeout).await,
                     ToolBackend::External(Backend::Scripted { responses }) => responses.get(&canonical(inputs)?).cloned().ok_or_else(|| Error::new("TOOL_FAILED", "scripted tool result missing")),
                     ToolBackend::External(backend) => self.host.execute_backend(name, backend, &json!({"inputs":inputs,"requestDigest":request_digest,"idempotencyKey":idempotency_key}), tool.max_bytes, timeout).await.map(|(v, _)| v),
-                    ToolBackend::MailboxSend => self.host.mailbox.as_ref().ok_or_else(|| Error::new("CAPABILITY_DENIED", "mailbox host is not admitted")).and_then(|mailbox| mailbox.send(inputs["mailbox"].as_str().unwrap_or(""), inputs["message"].clone(), &idempotency_key)),
-                    ToolBackend::MailboxReceive => self.host.mailbox.as_ref().ok_or_else(|| Error::new("CAPABILITY_DENIED", "mailbox host is not admitted")).and_then(|mailbox| mailbox.receive(inputs["mailbox"].as_str().unwrap_or(""))),
+                    ToolBackend::MailboxSend => {
+                        if let Some(mailboxes) = self.host.ordering_mailboxes.as_ref() {
+                            mailboxes.lock().map_err(|_| Error::new("INTERNAL", "ordering mailbox mutex poisoned"))?.send(inputs["mailbox"].as_str().unwrap_or(""), inputs["message"].clone(), &idempotency_key)
+                        } else {
+                            self.host.mailbox.as_ref().ok_or_else(|| Error::new("CAPABILITY_DENIED", "mailbox host is not admitted")).and_then(|mailbox| mailbox.send(inputs["mailbox"].as_str().unwrap_or(""), inputs["message"].clone(), &idempotency_key))
+                        }
+                    },
+                    ToolBackend::MailboxReceive => {
+                        if let Some(mailboxes) = self.host.ordering_mailboxes.as_ref() {
+                            mailboxes.lock().map_err(|_| Error::new("INTERNAL", "ordering mailbox mutex poisoned"))?.receive(inputs["mailbox"].as_str().unwrap_or(""))
+                        } else {
+                            self.host.mailbox.as_ref().ok_or_else(|| Error::new("CAPABILITY_DENIED", "mailbox host is not admitted")).and_then(|mailbox| mailbox.receive(inputs["mailbox"].as_str().unwrap_or("")))
+                        }
+                    },
                 };
                 let receipt = match result {
                     Ok(output) => {
@@ -1464,6 +1479,7 @@ pub async fn verify(
     let mut host = Host::replay(&receipt["effects"])?;
     host.tools = tools.tools.clone();
     host.mailbox = tools.mailbox.clone();
+    host.ordering_mailboxes = tools.ordering_mailboxes.clone();
     let replayed = run(
         manifest,
         receipt["args"].clone(),

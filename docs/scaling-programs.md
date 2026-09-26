@@ -295,8 +295,7 @@ shipped:
    `algal replay <receipt> --with <manifest>` runs a recorded receipt against
    a revised manifest up to a divergence point, and `algal ordering` walks
    bounded mailbox orderings under a habitat account while checking an
-   invariant. The native CLI accepts both commands and refuses them
-   explicitly. See
+   invariant. Both runtimes run the commands and emit identical records. See
    [counterfactual replay](vm.md#counterfactual-replay-and-ordering-exploration)
    and the [replay spec](../spec/v1/replay.md).
 4. A static authority and work envelope. `algal envelope` reports which

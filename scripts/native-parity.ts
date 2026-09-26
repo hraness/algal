@@ -1,7 +1,7 @@
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { canonicalize, type JsonValue } from "../src/values";
+import { canonicalize, type JsonObject, type JsonValue } from "../src/values";
 import { manifestToJson, parseOrganismManifest, type OrganismManifest } from "../src/contract";
 import { FileStore, MemoryStore } from "../src/store";
 import { fileTransport, type Transport } from "../src/transport";
@@ -9,6 +9,10 @@ import { scriptedExecutor } from "../src/effects";
 import { builtinRegistry } from "../src/registry";
 import { runOrganism } from "../src/run";
 import { verifyReceipt } from "../src/verify";
+import { replayComparison, replayComparisonToJson } from "../src/replay";
+import { exploreOrdering } from "../src/ordering";
+import { digestCanonical } from "../src/digest";
+import { FileMailboxService, mailboxToolRegistry } from "../src/mailbox";
 import { compileSource } from "../src/source";
 import { loadSourceProject } from "../src/source-project";
 import { packOrganism } from "../src/bundle";
@@ -301,6 +305,182 @@ try {
       failed++;
       console.error(`${name}: ${error instanceof Error ? error.message : String(error)}`);
       console.error(`manifest: ${canonicalize(manifestToJson(manifest)).slice(0, 160)}`);
+    }
+  }
+  // Counterfactual replay parity: a recorded run replayed under revised
+  // manifests must emit the same algal.replay-comparison.v1 record through
+  // both runtimes, and the revised receipts must verify in the opposite
+  // runtime in both directions.
+  {
+    const manifestPath = join(examples, "approve.algal.json");
+    const manifest = parseOrganismManifest(JSON.parse(await readFile(manifestPath, "utf8")));
+    const args = JSON.parse(await readFile(join(examples, "approve.args.json"), "utf8")) as Record<string, Record<string, JsonValue>>;
+    const responses = JSON.parse(await readFile(join(examples, "approve.responses.json"), "utf8")) as Record<string, JsonValue>;
+    const responsesPath = join(examples, "approve.responses.json");
+    const replayDir = join(temporary, "replay-store");
+    const store = new FileStore(replayDir);
+    const original = await runOrganism({
+      manifest, args, store, fns: builtinRegistry(), executors: [scriptedExecutor(responses)],
+    });
+    const receiptPath = join(temporary, "replay.receipt.json");
+    await writeFile(receiptPath, canonicalize(original as unknown as JsonValue));
+    // Mutate a plain copy, then re-admit it: port types must come back in
+    // their normalized object form, exactly like a caller-edited manifest.
+    const revision = (edit: (copy: JsonObject) => void): JsonValue => {
+      const copy = JSON.parse(canonicalize(manifestToJson(manifest))) as JsonObject & { cells: JsonValue[]; edges: JsonValue[] };
+      edit(copy);
+      return manifestToJson(parseOrganismManifest(copy)) as unknown as JsonValue;
+    };
+    const revisions: [string, JsonValue][] = [
+      ["identical", manifestToJson(manifest) as unknown as JsonValue],
+      ["diverged", revision((copy) => {
+        (copy.cells as { id: string; prompt?: string }[]).find((cell) => cell.id === "gate")!.prompt = "Approve this change for merge? Answer decisively.";
+      })],
+      ["missing-effect", revision((copy) => {
+        (copy.cells as JsonValue[]).push({ id: "postmortem", kind: "agent", inputs: { summary: "text" },
+          prompt: "One-line postmortem.", view: { inputs: "*" }, output: { kind: "text" } });
+        (copy.edges as JsonValue[]).push({ from: { cell: "review", port: "out" }, to: { cell: "postmortem", port: "summary" } });
+      })],
+      ["missing-input", revision((copy) => {
+        const input = (copy.cells as { id: string; outputs?: Record<string, JsonValue> }[]).find((cell) => cell.id === "pr")!;
+        input.outputs!.extra = "text";
+        (copy.cells as JsonValue[]).push({ id: "audit", kind: "agent", inputs: { extra: "text" },
+          prompt: "Audit the extra input.", view: { inputs: "*" }, output: { kind: "text" } });
+        (copy.edges as JsonValue[]).push({ from: { cell: "pr", port: "extra" }, to: { cell: "audit", port: "extra" } });
+      })],
+    ];
+    for (const [label, rev] of revisions) {
+      const caseName = `replay-${label}`;
+      try {
+        const revPath = join(temporary, `${caseName}.algal.json`);
+        await writeFile(revPath, canonicalize(rev));
+        const expected = await replayComparison({
+          receipt: original as unknown as JsonValue, revision: rev,
+          store: new MemoryStore(), fns: builtinRegistry(), executors: [scriptedExecutor(responses)],
+        });
+        const expectedJson = replayComparisonToJson(expected.comparison);
+        const nativeDir = join(temporary, `${caseName}-native`);
+        const result = await native(
+          ["replay", receiptPath, "--with", revPath, "--responses", responsesPath, "--write", "--dir", nativeDir],
+          expected.comparison.verdict === "could-not-replay" ? 1 : 0,
+        );
+        if (canonicalize(result) !== canonicalize(expectedJson)) {
+          throw new Error(`comparison differs: ${canonicalize(result)}`);
+        }
+        // The native revised receipt was persisted by --write under its CAS
+        // storage digest — locate it by its intrinsic receipt digest. The
+        // reference runtime must replay it offline; the reference's revised
+        // receipt must verify under the native runtime.
+        if (expected.comparison.revisedReceipt !== null) {
+          let persisted: JsonValue | undefined;
+          for (const file of await readdir(join(nativeDir, "runs"))) {
+            const candidate = JSON.parse(await readFile(join(nativeDir, "runs", file), "utf8")) as { digest?: string };
+            if (candidate.digest === expected.comparison.revisedReceipt) persisted = candidate as JsonValue;
+          }
+          if (persisted === undefined) throw new Error("native did not persist the revised receipt");
+          const reverse = await verifyReceipt(persisted, rev, new FileStore(nativeDir), builtinRegistry());
+          if (!reverse.ok) throw new Error(`reference could not verify native revised receipt: ${JSON.stringify(reverse)}`);
+          const revisedPath = join(temporary, `${caseName}.revised.json`);
+          await writeFile(revisedPath, canonicalize(expected.revised as JsonValue));
+          const forward = await native(["verify", revisedPath, revPath, "--dir", nativeDir]);
+          if (forward.ok !== true) throw new Error(`native could not verify reference revised receipt: ${JSON.stringify(forward)}`);
+        }
+        console.log(`${caseName}: identical comparison + revised receipts cross-verified`);
+      } catch (error) {
+        failed++;
+        console.error(`${caseName}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  }
+  // Ordering exploration parity: the same algal.ordering-scenario.v1 must
+  // produce the same algal.ordering-report.v1 through both runtimes, and the
+  // dispatch receipts the evidence store accumulates must verify natively.
+  {
+    const budgets = { maxSteps: 16, maxAgentCalls: 4, maxWork: 10_000, maxContextBytes: 8192, maxOutputBytes: 8192, maxDepth: 2 };
+    const waiter = {
+      contract: "algal.organism.v1", key: "organism:waiter", name: "Waiter",
+      cells: [
+        { id: "inbox", kind: "input", outputs: { mailbox: { type: "cap", capability: "mailbox-receive" } } },
+        { id: "take", kind: "tool", tool: "mailbox.receive.v1" },
+      ],
+      edges: [{ from: { cell: "inbox", port: "mailbox" }, to: { cell: "take", port: "mailbox" } }],
+      budgets,
+    };
+    const allComplete = ["and",
+      ["eq", ["get", "processes", "alpha", "status"], "complete"],
+      ["eq", ["get", "processes", "beta", "status"], "complete"]];
+    const base: JsonObject = {
+      contract: "algal.ordering-scenario.v1",
+      mailboxes: [{ name: "inbox", maxMessages: 4, maxMessageBytes: 1024 }],
+      processes: [
+        { name: "alpha", manifest: waiter as JsonValue, args: { inbox: { mailbox: "mailbox:inbox:receive" } } },
+        { name: "beta", manifest: waiter as JsonValue, args: { inbox: { mailbox: "mailbox:inbox:receive" } } },
+      ],
+      sends: [{ mailbox: "inbox", value: "go", key: digestCanonical({ k: 1 }) }],
+      invariant: { contract: "algal.expr.v1", program: allComplete },
+      limits: { orderings: 16, depth: 12, work: 1_000_000, attempts: 64, runs: 64 },
+    };
+    const scenarios: [string, JsonValue][] = [
+      ["ordering-counterexample", base],
+      ["ordering-exhaust-budget", { ...base, limits: { ...base.limits as JsonObject, runs: 1 } }],
+      ["ordering-exhaust-orderings", { ...base, limits: { ...base.limits as JsonObject, orderings: 1 } }],
+      ["ordering-complete", {
+        ...base,
+        mailboxes: [
+          { name: "inbox-a", maxMessages: 4, maxMessageBytes: 1024 },
+          { name: "inbox-b", maxMessages: 4, maxMessageBytes: 1024 },
+        ],
+        processes: [
+          { name: "alpha", manifest: waiter as JsonValue, args: { inbox: { mailbox: "mailbox:inbox-a:receive" } } },
+          { name: "beta", manifest: waiter as JsonValue, args: { inbox: { mailbox: "mailbox:inbox-b:receive" } } },
+        ],
+        sends: [
+          { mailbox: "inbox-a", value: "for-a", key: digestCanonical({ k: "a" }) },
+          { mailbox: "inbox-b", value: "for-b", key: digestCanonical({ k: "b" }) },
+        ],
+        limits: { orderings: 64, depth: 12, work: 1_000_000_000, attempts: 4096, runs: 4096 },
+      }],
+    ];
+    const waiterPath = join(temporary, "ordering-waiter.algal.json");
+    await writeFile(waiterPath, canonicalize(waiter as JsonValue));
+    for (const [caseName, scenario] of scenarios) {
+      try {
+        const scenarioPath = join(temporary, `${caseName}.scenario.json`);
+        await writeFile(scenarioPath, canonicalize(scenario));
+        const refStore = new MemoryStore();
+        const expected = await exploreOrdering(scenario, { store: refStore });
+        const dir = join(temporary, `${caseName}-native`);
+        const report = await native(["ordering", scenarioPath, "--dir", dir],
+          expected.report.outcome === "complete" ? 0 : 1);
+        if (canonicalize(report) !== canonicalize(expected.report as unknown as JsonValue)) {
+          throw new Error(`report differs: ${canonicalize(report)}`);
+        }
+        // Every dispatch receipt the reference produced verifies natively,
+        // and the native evidence store's receipts verify under the
+        // reference runtime.
+        for (const receipt of expected.receipts) {
+          const receiptPath = join(temporary, `${caseName}.${receipt.digest.slice(7, 15)}.receipt.json`);
+          await writeFile(receiptPath, canonicalize(receipt as unknown as JsonValue));
+          const forward = await native(["verify", receiptPath, waiterPath, "--dir", dir]);
+          if (forward.ok !== true) throw new Error(`native could not verify ordering dispatch receipt: ${JSON.stringify(forward)}`);
+        }
+        const nativeStore = new FileStore(dir);
+        const digests = new Set<string>();
+        for (const row of report.orderings as { processes: { receipt: string | null }[] }[]) {
+          for (const proc of row.processes) if (proc.receipt !== null) digests.add(proc.receipt);
+        }
+        const tools = mailboxToolRegistry(new FileMailboxService(dir));
+        for (const digest of digests) {
+          const receipt = await nativeStore.getReceipt(digest as `sha256:${string}`);
+          if (receipt === undefined) throw new Error(`native evidence store missing receipt ${digest}`);
+          const reverse = await verifyReceipt(receipt, waiter as JsonValue, new FileStore(dir), builtinRegistry(), undefined, tools);
+          if (!reverse.ok) throw new Error(`reference could not verify native ordering receipt: ${JSON.stringify(reverse)}`);
+        }
+        console.log(`${caseName}: identical ordering report + dispatch receipts cross-verified`);
+      } catch (error) {
+        failed++;
+        console.error(`${caseName}: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
   }
 } finally {

@@ -244,8 +244,8 @@ outcome of `complete`, `counterexample`, or `exhausted`. Capability handles
 derive deterministically from scenario names, so one scenario file reproduces
 one report bit-for-bit.
 
-Both features ship in the TypeScript runtime. The native CLI accepts the same
-commands and refuses them explicitly rather than misreading the records. See
+Both features ship in the TypeScript reference runtime and the native kernel,
+which emit identical records for the same inputs. See
 the [replay and ordering contract](../spec/v1/replay.md).
 
 ## Failure boundary and current limits
