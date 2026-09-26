@@ -93,6 +93,12 @@ fn doctor_reports_a_missing_helper_in_plain_words() {
         .unwrap();
     assert_eq!(output.status.code(), Some(1));
     let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    // On a Mac that can't run the model at all (CI's macOS 14 runners), that
+    // is the more useful reason and wins over the missing helper.
+    if let Err(apple_foundation::Error::Unavailable(reason)) = apple_foundation::platform_check() {
+        assert_eq!(report["reason"], reason.as_str());
+        return;
+    }
     assert_eq!(report["reason"], "helperMissing");
     assert!(
         report["fix"]
