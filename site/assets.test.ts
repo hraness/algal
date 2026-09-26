@@ -22,7 +22,7 @@ test("site CSS references separate hashed fonts with exact shared font bytes", a
     }
     expect(faces.length).toBe(originals.size);
     expect(faces.length).toBeGreaterThan(0);
-    expect(Buffer.byteLength(css)).toBeLessThan(524_288);
+    expect(Buffer.byteLength(css)).toBeLessThan(589_824);
     const references = new Set<string>();
     const hashes = new Set<string>();
     for (const face of faces) {

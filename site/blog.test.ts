@@ -18,7 +18,7 @@ test("lifecycles match the reviewed set", () => {
   const lifecycle = Object.fromEntries(BLOG_ADMISSIONS.map(record => [record.href, record.lifecycle]));
   expect(lifecycle).toEqual({
     "/blog/typescript-rust-parity/": "indexable",
-    "/blog/built-on-algal/": "quarantined",
+    "/blog/built-on-algal/": "indexable",
     "/blog/software-that-accumulates-competence/": "quarantined",
     "/blog/self-evolving-software-selection-boundary/": "quarantined",
     "/blog/receipts-fossil-record/": "quarantined",
@@ -47,13 +47,14 @@ test("every post shows the Hraness byline and the provenance note from its recor
 
 test("only indexable posts reach the index, feed, sitemap, and llms.txt", () => {
   const indexable = posts.filter(post => post.indexable).map(post => post.path);
-  expect(indexable).toEqual(["/blog/typescript-rust-parity/"]);
+  expect(indexable).toEqual(["/blog/built-on-algal/", "/blog/typescript-rust-parity/"]);
   const index = renderBlogIndex(posts);
   const feed = blogAtomFeed(posts);
   const llms = blogLlmsList(posts);
   const sitemap = blogSitemapEntries(posts);
   expect(sitemap).toEqual([
     { path: "/blog/", lastModified: "2026-09-24" },
+    { path: "/blog/built-on-algal/", lastModified: "2026-09-24" },
     { path: "/blog/typescript-rust-parity/", lastModified: "2026-09-24" },
   ]);
   for (const post of posts) {

@@ -108,12 +108,10 @@ export const BLOG_ADMISSIONS: readonly ArticleAdmission[] = [
     ],
   },
   {
-    // The draft's own release gate holds this hub back: its relations are not
-    // in the published portfolio facts yet, and none of its linked posts is
-    // live. It stays quarantined, and the build does not emit the page until
-    // at least one entry can render.
+    // The hub emits only when at least one registered relation has a live
+    // post (ALGAL_USES_POSTS); with none the build skips the page.
     href: "/blog/built-on-algal/",
-    lifecycle: "quarantined",
+    lifecycle: "indexable",
     readerJob: "Find which Hraness products run on ALGAL and open the post that shows how each one uses it.",
     nonObviousAnswer: "ALGAL is in use outside its own repo: Textbutler gates per-contact reply plans with it, xcb replays task history through it, Clankdar computes puzzle answers with its pinned evaluator, and Slopcamera bakes character behavior as tool-free organisms.",
     originalContribution: "An index of registered relations; each entry is the relation's reviewed sentence and one link.",
@@ -122,7 +120,10 @@ export const BLOG_ADMISSIONS: readonly ArticleAdmission[] = [
       { url: "/blog/software-that-accumulates-competence/", distinction: "The thesis behind ALGAL; the hub lists products that use it and does not restate the thesis." },
     ],
     sources: stripPublic(HUB_SOURCES),
-    observations: [],
+    observations: [
+      "The hub lists a product only when its relation detail sentence is in the published portfolio facts and its post is marked live, so a live post can stay absent until a design-kit release ships the relation.",
+      "Each entry links the consumer's own host rather than an ALGAL page, so the hub points readers to the site that owns the evidence.",
+    ],
     scores: { readerUtility: 1, originalEvidence: 1, factualConfidence: 2, hostFit: 2, voiceIntegrity: 2, maintenanceValue: 1 },
     owner: "Hraness",
     drafting: "ai-from-source",
@@ -160,16 +161,14 @@ export const BLOG_SOURCES: Readonly<Record<string, readonly ArticleSourceItem[]>
 
 /** Cross-host posts from the blog program that are not live yet. Links to
  * them render as plain text until each URL returns 200; then remove it here. */
-export const PENDING_CROSS_HOST_LINKS: ReadonlySet<string> = new Set([
-  "https://hraness.com/reference/correctness/two-implementations-one-spec",
-]);
+export const PENDING_CROSS_HOST_LINKS: ReadonlySet<string> = new Set([]);
 
 /** "How <consumer> uses ALGAL" posts, keyed by portfolio product id. The hub
  * lists an entry only when the portfolio records the relation with a detail
  * sentence and the post here is marked live. */
 export const ALGAL_USES_POSTS: Readonly<Record<string, Readonly<{ url: string; live: boolean }>>> = {
-  textbutler: { url: "https://textbutler.app/blog/how-textbutler-uses-algal", live: false },
-  xcb: { url: "https://xcb.sh/blog/how-xcb-uses-algal", live: false },
-  clankdar: { url: "https://clankdar.com/blog/how-clankdar-uses-algal", live: false },
-  slopcamera: { url: "https://slopcamera.com/blog/how-slopcamera-uses-algal", live: false },
+  "message-like-me": { url: "https://textbutler.app/blog/how-textbutler-uses-algal", live: true },
+  xcb: { url: "https://xcb.sh/blog/how-xcb-uses-algal", live: true },
+  clankdar: { url: "https://clankdar.com/blog/how-clankdar-uses-algal", live: true },
+  slopcamera: { url: "https://slopcamera.com/blog/how-slopcamera-uses-algal", live: true },
 };
