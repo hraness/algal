@@ -70,9 +70,44 @@ describe("claim ledger admission", () => {
     expect(() => parseRegistry(change({ licensedClaims: ["proved correct"] }))).toThrow("pending work");
   });
 
-  test("a handwritten successful result cannot promote a missing production adapter", async () => {
+  test("a claim above its suite's evidence class rejects at admission", async () => {
     const { registry } = await fixture();
-    expect(() => parseRegistry({ ...registry, properties: [{ ...registry.properties[0], evidence: { status: "proved-implementation", suite: "claims", required: true, results: ["verify/results/fake.json"] } }] })).toThrow("admission adapter is Not started");
+    const claim = (status: string, suite: string, results: string[] = []) => ({ ...registry, properties: [{ ...registry.properties[0], relation: { kind: "tested", description: "x" }, unresolved: [], evidence: { status, suite, required: true, results } }] });
+    expect(() => parseRegistry(claim("proved-implementation", "claims", ["verify/results/x.json"]))).toThrow("proved-implementation evidence requires a proved-implementation-class suite");
+    expect(() => parseRegistry(claim("proved-model", "boundary", ["verify/results/x.json"]))).toThrow("proved-model evidence requires a proved-model-class suite");
+    expect(() => parseRegistry(claim("tested", "lean-core", ["verify/results/x.json"]))).toThrow("tested evidence requires a tested-class suite");
+    expect(() => parseRegistry(claim("tested", "kani", ["verify/results/x.json"]))).toThrow("Not started");
+    expect(() => parseRegistry(claim("tested", "boundary"))).toThrow("claimed evidence needs a suite and result");
+  });
+
+  test("claimed results must be admitted content-addressed evidence for the named suite", async () => {
+    const { root, registry } = await fixture();
+    const writeManifest = async (name: string, suite: string, classification: string) => {
+      const dir = join(root, "verify/results", name);
+      await mkdir(dir, { recursive: true });
+      const bytes = Buffer.from(JSON.stringify({ contract: "algal.retained-evidence.v1", suite, classification, authorityDigest: "sha256:" + "0".repeat(64), recordedArchive: "/tmp/x", limits: {}, files: [], directories: [], bytes: 0 }) + "\n");
+      const digest = (await hashBytes(bytes)).slice(7);
+      const realDir = join(root, "verify/results", digest);
+      await mkdir(realDir, { recursive: true });
+      await writeFile(join(realDir, "manifest.json"), bytes);
+      return `verify/results/${digest}/manifest.json`;
+    };
+    const base = { ...registry.properties[0], relation: { kind: "tested", description: "x" }, unresolved: [], evidence: { status: "tested", suite: "boundary", required: true, results: [] as string[] } };
+    const registryWith = (results: string[]) => ({ ...registry, properties: [{ ...base, evidence: { ...base.evidence, results } }] });
+    // Admitted manifest for the right suite: validates.
+    const good = await writeManifest("unused", "boundary", "admitted");
+    await writeFile(join(root, "verify/properties.json"), JSON.stringify(registryWith([good])));
+    expect((await validateClaims(root, { coverage: false, inventory: false })).statuses.tested).toBe(1);
+    // A diagnostic manifest or wrong suite rejects.
+    const diagnostic = await writeManifest("unused2", "boundary", "diagnostic");
+    await writeFile(join(root, "verify/properties.json"), JSON.stringify(registryWith([diagnostic])));
+    await expect(validateClaims(root, { coverage: false, inventory: false })).rejects.toThrow("diagnostic evidence");
+    const wrongSuite = await writeManifest("unused3", "claims", "admitted");
+    await writeFile(join(root, "verify/properties.json"), JSON.stringify(registryWith([wrongSuite])));
+    await expect(validateClaims(root, { coverage: false, inventory: false })).rejects.toThrow("belongs to suite");
+    // A non-content-addressed or missing path rejects.
+    await writeFile(join(root, "verify/properties.json"), JSON.stringify(registryWith(["verify/results/deadbeef/manifest.json"])));
+    await expect(validateClaims(root, { coverage: false, inventory: false })).rejects.toThrow();
   });
 
   test("assumption references must name defined assumptions", async () => {

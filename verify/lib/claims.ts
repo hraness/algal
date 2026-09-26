@@ -28,6 +28,20 @@ export type Toolchains = {
 };
 
 const FAMILY_COUNTS: Record<string, number> = { ADM: 4, VAL: 5, GRF: 5, EXE: 6, EXP: 5, SRC: 4, RCP: 6, STO: 5, CUS: 4, PRO: 7, CAP: 4, MBX: 5, APP: 10, MEM: 7, CTX: 3, RET: 3, EVO: 8, HST: 16, PKG: 6, CLD: 7 };
+
+/** The strongest evidence class each ready suite produces — the ceiling for
+ *  any claim it can back. Pinned-toolchain Lean module builds produce
+ *  proved-model evidence; the TLC model suites produce finite-checked
+ *  evidence; every other in-band suite produces tested evidence only. No
+ *  in-band suite produces qualified (live host/browser qualification is
+ *  separate) or proved-implementation evidence. */
+const PROVED_MODEL_SUITES = new Set(["lean-core", "lean-expr", "lean-memory", "lean-replay", "lean-admission", "lean-source"]);
+const FINITE_CHECKED_SUITES = new Set(["process-model", "mailbox-model", "lease-model", "application-model", "outbox-model", "quota-model", "authority-model", "scheduler-model"]);
+export function suiteEvidenceClass(suite: string): EvidenceState {
+  if (PROVED_MODEL_SUITES.has(suite)) return "proved-model";
+  if (FINITE_CHECKED_SUITES.has(suite)) return "finite-checked";
+  return "tested";
+}
 export const REQUIRED_PROPERTY_IDS = Object.entries(FAMILY_COUNTS).flatMap(([prefix, count]) => Array.from({ length: count }, (_, i) => `${prefix}-${String(i + 1).padStart(2, "0")}`));
 export const REQUIRED_FINDINGS = Array.from({ length: 12 }, (_, i) => `F${String(i + 1).padStart(2, "0")}`);
 
@@ -83,10 +97,14 @@ function property(value: unknown, label: string): Property {
     requireThat(!required && results.length === 0 && licensedClaims.length === 0 && unresolved.length > 0 && kind === "unestablished", `${id}: pending work cannot license claims or required passing evidence`);
   } else if (status !== "observed") {
     requireThat(suite !== null && results.length > 0, `${id}: claimed evidence needs a suite and result`);
-    // Phase 00 deliberately has no admitted formal/result adapter. A document
-    // asserting a successful proof cannot activate a future suite by itself.
+    // A document asserting a successful proof cannot activate a future suite
+    // by itself: the named suite must be registered ready, and the declared
+    // evidence class must be exactly what that suite produces — a test lane
+    // cannot back a model proof and a model cannot claim implementation
+    // correspondence.
     requireThat(SUITES.get(suite) === "ready", `${id}: evidence suite is Not started`);
-    requireThat(false, `${id}: production proof/test-result admission adapter is Not started`);
+    requireThat(status === suiteEvidenceClass(suite!), `${id}: ${status} evidence requires a ${status}-class suite, not ${suite}`);
+    requireThat(kind === "tested" || (status === "proved-implementation" && kind === "proved"), `${id}: relation kind ${kind} cannot be backed by ${status} evidence`);
   }
   if (required) requireThat(suite !== null && SUITES.get(suite) === "ready" && results.length > 0, `${id}: required evidence has no implemented passing harness`);
   if (status === "observed") requireThat(results.length === 0 && licensedClaims.length === 0 && !required && kind !== "proved" && kind !== "tested", `${id}: observation is not admitted execution/proof evidence`);
@@ -161,6 +179,22 @@ export async function validateClaims(root: string, options: { inventory?: boolea
     expected.set(binding.path, binding.sha256);
   }
   for (const [path, sha256] of expected) requireThat(await hashFile(root, path) === sha256, `${path}: stale dependency/source digest`);
+  // Result admission: every claimed result resolves to an admitted retained
+  // evidence manifest bound to the claimed suite. The content-addressed
+  // path must equal the manifest bytes' digest, and diagnostic evidence or
+  // tampered/renamed manifests never back a claim.
+  for (const item of registry.properties) {
+    if (item.evidence.status === "observed" || item.evidence.status === "not-started") continue;
+    for (const resultPath of item.evidence.results) {
+      const match = /^verify\/results\/([0-9a-f]{64})\/manifest\.json$/.exec(resultPath);
+      requireThat(match !== null, `${item.id}: ${resultPath} is not a content-addressed retained manifest`);
+      requireThat(await hashFile(root, resultPath) === `sha256:${match![1]}`, `${item.id}: ${resultPath} digest does not match its content`);
+      const manifest = record(await readJson(root, resultPath), ["contract", "suite", "classification", "recordedArchive", "authorityDigest", "limits", "directories", "files", "bytes"], `${item.id}: ${resultPath}`);
+      requireThat(manifest.contract === "algal.retained-evidence.v1", `${item.id}: ${resultPath} is not a retained evidence manifest`);
+      requireThat(manifest.suite === item.evidence.suite, `${item.id}: ${resultPath} belongs to suite ${string(manifest.suite, "suite")}, not ${item.evidence.suite}`);
+      requireThat(manifest.classification === "admitted", `${item.id}: ${resultPath} is diagnostic evidence and cannot back a claim`);
+    }
+  }
   const statuses = Object.fromEntries(EVIDENCE_STATES.map(status => [status, 0])) as Record<EvidenceState, number>;
   for (const item of registry.properties) statuses[item.evidence.status]++;
   return { properties: registry.properties.length, findings: new Set(registry.properties.flatMap(item => item.findings)).size, dependencies: registry.dependencies.length, statuses,
