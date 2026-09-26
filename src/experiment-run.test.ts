@@ -185,6 +185,44 @@ describe("experiment arm runner", () => {
     expect(parseExperimentSession((await store.getValue(result.sessionDigest))!)).toEqual(result.session);
   });
 
+  test("retained with citeKeptEvaluation re-cites stored evidence on hits instead of re-evaluating", async () => {
+    const { store, run } = fixture({ arm: "retained", ...generating, cases: promotionCases, citeKeptEvaluation: true });
+    const result = await run();
+
+    expect(result.session.outcome).toBe("complete");
+    expect(result.catalog.entries).toHaveLength(1);
+    const entry = result.catalog.entries[0]!;
+
+    // Task one still generates, evaluates, and promotes.
+    const first = result.runs[0]!;
+    expect(first.consult.outcome).toBe("miss");
+    expect(first.promote!.evaluated).toBe(true);
+    expect(first.promote!.promoted).toBe(true);
+
+    // Hits run the kept manifest but re-cite its stored promotion evidence:
+    // no evaluation ran, the promote record points at the kept entry and its
+    // original report digest.
+    for (const hit of result.runs.slice(1)) {
+      expect(hit.consult.outcome).toBe("hit");
+      expect(hit.promote!.evaluated).toBe(false);
+      expect(hit.promote!.promoted).toBe(false);
+      expect(hit.promote!.entry).toBe(0);
+      expect(hit.promote!.report).toBe(entry.report);
+      expect(hit.promote!.validation).toEqual({ passed: 1, total: 1 });
+    }
+
+    // The account charged fewer runs: task one generated + ran + evaluated two
+    // cases; each hit ran the kept manifest alone.
+    const account = await budgetOf(store, result.session.budget);
+    expect(account.runs).toHaveLength(4 + 2);
+  });
+
+  test("citeKeptEvaluation parses only on retained arms", async () => {
+    expect(() => arm({ arm: "ablation", ...generating, citeKeptEvaluation: true })).toThrow();
+    expect(() => arm({ arm: "retained", ...generating, cases: promotionCases, citeKeptEvaluation: "yes" })).toThrow();
+    expect(() => arm({ arm: "retained", ...generating, cases: promotionCases, citeKeptEvaluation: true })).not.toThrow();
+  });
+
   test("ablation disables both hooks: every task regenerates and the catalog stays empty", async () => {
     const { store, run } = fixture({ arm: "ablation", ...generating });
     const result = await run();

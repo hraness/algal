@@ -262,6 +262,10 @@ export type ExperimentArm = {
   scorer?: ExprScorer;
   /** Catalog bound; defaults to `maxCatalogEntries`. */
   maxEntries?: number;
+  /** Retained only: when true, a task that ran an already-kept manifest
+   * re-cites the entry's stored promotion evidence instead of re-evaluating
+   * it, so a catalog hit charges the task run alone. */
+  citeKeptEvaluation?: boolean;
 };
 
 function parseGenerator(value: unknown, at: string): ExperimentGenerator {
@@ -303,7 +307,7 @@ export function parseExperimentArm(value: unknown): ExperimentArm {
   for (const key of ["generator", "manifest", "cases", "scorer"] as const) {
     if (Object.hasOwn(shallow, key)) shallow[key] = true;
   }
-  const v = closed(boundedJsonSnapshot(shallow, EXPERIMENT_BOUNDS.record, "arm"), ["contract", "arm", "family", "budget"], ["generator", "manifest", "cases", "scorer", "maxEntries"], "arm");
+  const v = closed(boundedJsonSnapshot(shallow, EXPERIMENT_BOUNDS.record, "arm"), ["contract", "arm", "family", "budget"], ["generator", "manifest", "cases", "scorer", "maxEntries", "citeKeptEvaluation"], "arm");
   if (v.contract !== EXPERIMENT_ARM_CONTRACT) fail(`contract must be ${EXPERIMENT_ARM_CONTRACT}`);
   const arm: ExperimentArm = {
     contract: EXPERIMENT_ARM_CONTRACT,
@@ -322,6 +326,11 @@ export function parseExperimentArm(value: unknown): ExperimentArm {
   if (raw.scorer !== undefined) arm.scorer = parseExprScorer(raw.scorer, "arm.scorer");
   const maxEntries = opt(v, "maxEntries");
   if (maxEntries.present) arm.maxEntries = asInt(maxEntries.value, "arm.maxEntries", 1, EXPERIMENT_BOUNDS.maxCatalogEntries);
+  const citeKeptEvaluation = opt(v, "citeKeptEvaluation");
+  if (citeKeptEvaluation.present) {
+    if (typeof citeKeptEvaluation.value !== "boolean") fail("arm.citeKeptEvaluation must be boolean");
+    arm.citeKeptEvaluation = citeKeptEvaluation.value;
+  }
 
   if (arm.arm === "fixed") {
     if (arm.manifest === undefined) fail("a fixed arm requires manifest");
@@ -347,6 +356,7 @@ export function parseExperimentArm(value: unknown): ExperimentArm {
   } else {
     if (arm.cases !== undefined) fail(`a ${arm.arm} arm declares no cases`);
     if (arm.scorer !== undefined) fail(`a ${arm.arm} arm declares no scorer`);
+    if (arm.citeKeptEvaluation !== undefined) fail(`a ${arm.arm} arm declares no citeKeptEvaluation`);
   }
   return arm;
 }
@@ -737,6 +747,23 @@ async function promoteHook(
   catalog: ExperimentCatalogState,
 ): Promise<ExperimentPromote> {
   const arm = ctx.arm;
+  // A task that ran an already-kept manifest re-cites the entry's stored
+  // promotion evidence when the arm opts in: qualification happened once,
+  // so a catalog hit charges the task run alone, not another evaluation.
+  if (arm.citeKeptEvaluation === true) {
+    const keptIndex = catalog.entries.findIndex(entry => entry.manifest === manifestDigest);
+    if (keptIndex >= 0) {
+      const entry = catalog.entries[keptIndex]!;
+      const validations = entry.cases.filter(c => c.split === "validation").length;
+      return {
+        evaluated: false,
+        promoted: false,
+        report: entry.report,
+        entry: keptIndex,
+        validation: { passed: validations, total: validations },
+      };
+    }
+  }
   const selection = await evaluateFoundryPopulation({
     candidates: [manifest],
     cases: arm.cases!,
