@@ -346,13 +346,15 @@ async function executeSuite(root: string, suite: string): Promise<unknown> {
     return { tests, commandResult: result, targets, targetCommandResult: targetResult,
       scope: "Focused production regression tests and sampled target agreement; no exhaustive property or implementation proof. Native graph/store/adaptation tests remain required Cargo gates." };
   }
-  if (suite === "receipt-closure" || suite === "host-conformance" || suite === "memory-oracle" || suite === "memory-mutation" || suite === "context-laws" || suite === "memory-authority") {
+  if (suite === "receipt-closure" || suite === "host-conformance" || suite === "memory-oracle" || suite === "memory-mutation" || suite === "context-laws" || suite === "memory-authority" || suite === "replay-isolation") {
     const directories: Record<string, string> = {
       "receipt-closure": "verify/receipt", "host-conformance": "verify/host",
       "memory-oracle": "verify/reference/memory", "memory-mutation": "verify/memory-mutation",
       "context-laws": "verify/context-laws", "memory-authority": "verify/memory-authority",
+      "replay-isolation": "verify/replay/replay-isolation",
     };
-    const command = [process.execPath, "test", "--timeout", "20000", directories[suite]!];
+    const timeouts: Record<string, string> = { "replay-isolation": "60000" };
+    const command = [process.execPath, "test", "--timeout", timeouts[suite] ?? "20000", directories[suite]!];
     const result = await runCommand(command, root);
     const scopes: Record<string, string> = {
       "receipt-closure": "Static closure-decision and bound-mirror checks over measured run summaries against the production receipt predicate; no exhaustive or producer-instrumented claim.",
@@ -361,8 +363,15 @@ async function executeSuite(root: string, suite: string): Promise<unknown> {
       "memory-mutation": "Targeted semantic mutants of admitted derivations must reject with their declared typed reason; the documented survivor boundary is pinned, not a proof obligation.",
       "context-laws": "Algebraic context/compaction/recall laws on real service paths under an instrumented host; no live-provider or FileStore durability claim.",
       "memory-authority": "Captured-state, exact-snapshot and admission-authority binding through instrumented policy hosts and the independent derivation checker; cell-simulated frontier movement, no arbitrary-host claim.",
+      "replay-isolation": "Instrumented store/executor/tool/transport counters over seven replay and resume scenarios; fixtures only, no arbitrary-callback claim.",
     };
     return { tests: admitSelftestOutput(result), commandResult: result, scope: scopes[suite] };
+  }
+  if (suite === "lean-replay") {
+    const command = [process.execPath, "test", "--timeout", "300000", "verify/replay/lean-replay"];
+    const result = await runCommand(command, root);
+    return { tests: admitSelftestOutput(result), commandResult: result,
+      scope: "Staged pinned-toolchain build and theorem audit of the replay model; model-level proof, no production-correspondence claim." };
   }
   if (suite === "expr-conformance" || suite === "expr-abi") {
     const files: Record<string, string> = { "expr-conformance": "verify/expr/conformance.test.ts", "expr-abi": "verify/expr/abi.test.ts" };
