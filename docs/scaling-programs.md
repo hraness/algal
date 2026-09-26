@@ -316,26 +316,24 @@ shipped:
    TypeScript; see
    [habitat schedules](../spec/v1/foundry.md#habitat-schedules).
 
-The next round closes the gaps a generated-program workflow would hit:
+The foundation round closed the gaps a generated-program workflow hits:
 
-1. Isolate untrusted cell work physically. `fn` and `agent` cells run
-   admitted host code under a contractual bound; a generated program could
-   still hang or exhaust the host between checkpoints. Resource-limited
-   subprocess backends and a WASM executor for untrusted pure compute would
-   make a declared budget enforced rather than advisory. The manifest stays
-   data, and isolation becomes a property of the backend the host attaches,
-   which the receipt already binds by configuration digest.
-2. Port replay and ordering to the native runtime. The Rust CLI refuses
-   `replay`, `ordering`, and `process replay` explicitly; identical records
-   in both runtimes would extend the parity both runtimes already hold for
+1. Isolation for untrusted cell work. `--executor-profile isolated` runs
+   command executors under a declared posture: scrubbed child environment,
+   fixed working directory, and OS-applied resource limits, with the profile
+   bound into the executor's configuration digest. See
+   [isolated command execution](executors.md#isolated-command-execution).
+   Still proposed: isolation for tool-registry `cmd:` entries, the native
+   command backend, and WASM tool sandboxing.
+2. Replay and ordering in the native runtime. Both runtimes emit identical
+   `algal.replay-comparison.v1` and `algal.ordering-report.v1` records. Still
+   proposed: experiment evaluations and further order kinds in habitat
    schedules.
-3. Grow the catalog into a registry. Vendored entries pin their origin and
-   catalog digest but never contact it again; a registry source with
-   vendored-update proposals would let a project learn that a pinned entry's
-   origin published a revision, while verification stays offline.
-
-Scheduling experiment evaluations and further order kinds beside
-round-robin remains proposed inside item 2's runtime.
+3. The catalog as a registry. `algal vendor check` reports live page digests
+   against the lock's pins, `algal vendor update` re-vendors a revision into
+   a fresh directory and emits an `algal.vendor-update.v1` proposal, and
+   `algal.registries.json` names catalog addresses. Verification stays
+   offline. See the [vendor spec](../spec/v1/vendor.md).
 
 The [cumulative-skill experiment](vision.md#what-would-justify-the-claim)
 measures whether keeping and composing procedures improves later work. More

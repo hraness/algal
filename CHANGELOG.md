@@ -9,6 +9,12 @@ wire constant (`0.1.0`) is independent of these package versions.
 
 ## Unreleased
 
+- `algal replay`, `algal ordering`, and `algal process replay` run in the
+  native runtime: the Rust CLI emits byte-identical
+  `algal.replay-comparison.v1` and `algal.ordering-report.v1` records
+  (verified in both directions through the parity fixtures), removes the
+  previous explicit refusals, and charges ordering dispatches to the same
+  `algal.habitat-budget.v1` account semantics as the TypeScript runtime.
 - `--executor-profile isolated` runs `--executor-cmd`, shell commands in
   `--executors` maps, and `cmd:` bench specs under a declared isolation
   profile: the child's environment is reduced to a fixed set plus
