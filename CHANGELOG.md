@@ -48,8 +48,12 @@ independent of these package versions.
   validation-versus-held-out gaps, and joins kept manifests to later task
   receipts through the program index. `experiment verify` re-derives every
   aggregate from the cited evidence and flags session task records the
-  report does not cite. The pre-registered human-correction measure is not
-  reported yet: the run records carry no correction signal.
+  report does not cite. Run records gain an optional bounded `corrections`
+  list (`{kind, note}`, at most 32 per task) an operator declares on a task
+  entry to record human interventions; each arm's report re-derives
+  `correctionsTotal` from its cited records, so the pre-registered
+  human-correction measure has a field and a count while the runner itself
+  records none.
 - `algal replay`, `algal ordering`, and `algal process replay` run in the
   native runtime: the Rust CLI emits byte-identical
   `algal.replay-comparison.v1` and `algal.ordering-report.v1` records

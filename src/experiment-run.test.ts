@@ -3,6 +3,7 @@ import { manifestToJson, parseOrganismManifest } from "./contract";
 import { digestCanonical, type Digest } from "./digest";
 import { scriptedExecutor } from "./effects";
 import {
+  EXPERIMENT_BOUNDS,
   EXPERIMENT_CATALOG_CONTRACT,
   EXPERIMENT_RUN_CONTRACT,
   parseExperimentArm,
@@ -374,6 +375,53 @@ describe("experiment arm runner", () => {
       ],
     });
     expect(set.tasks[0]!.taskId).toBe("deep-1");
+  });
+
+  test("operator corrections declared on a task land on its run record", async () => {
+    const declared = [{ kind: "operator-edit", note: "spec threshold raised by hand" }];
+    const corrected: ExperimentTask[] = [
+      { ...tasks[0]!, corrections: declared },
+      tasks[1]!,
+    ];
+    const { store, run } = fixture({ arm: "fixed", manifest: manifestToJson(kept) }, corrected);
+    const result = await run();
+
+    // The task's declarations ride onto its record; an undeclared task
+    // writes none — absent, not an empty list.
+    expect(result.runs[0]!.corrections).toEqual(declared);
+    expect(result.runs[1]!.corrections).toBeUndefined();
+    const stored = parseExperimentRun((await store.getValue(result.runDigests[0]!))!);
+    expect(stored.corrections).toEqual(declared);
+    expect("corrections" in (stored as unknown as Record<string, unknown>)).toBe(true);
+    const plain = parseExperimentRun((await store.getValue(result.runDigests[1]!))!);
+    expect("corrections" in (plain as unknown as Record<string, unknown>)).toBe(false);
+  });
+
+  test("corrections parse when present and reject bad shapes", async () => {
+    const { run } = fixture({ arm: "fixed", manifest: manifestToJson(kept) }, tasks.slice(0, 1));
+    const result = await run();
+    const record = result.runs[0]! as unknown as Record<string, unknown>;
+    // The runner records no corrections itself.
+    expect(record.corrections).toBeUndefined();
+
+    const correction = { kind: "hint", note: "operator supplied the taxonomy" };
+    expect(parseExperimentRun({ ...record, corrections: [correction] }).corrections).toEqual([correction]);
+    expect(() => parseExperimentRun({ ...record, corrections: "yes" })).toThrow();
+    // An empty list is not "none recorded": the field must be absent.
+    expect(() => parseExperimentRun({ ...record, corrections: [] })).toThrow();
+    expect(() => parseExperimentRun({ ...record, corrections: [{ kind: "hint" }] })).toThrow();
+    expect(() => parseExperimentRun({ ...record, corrections: [{ ...correction, extra: 1 }] })).toThrow("unknown");
+    expect(() => parseExperimentRun({ ...record, corrections: [{ kind: "", note: "x" }] })).toThrow();
+    expect(() => parseExperimentRun({ ...record, corrections: [{ kind: "k", note: "x".repeat(EXPERIMENT_BOUNDS.maxCorrectionNoteLength + 1) }] })).toThrow();
+    const over = Array.from({ length: EXPERIMENT_BOUNDS.maxCorrections + 1 }, () => correction);
+    expect(() => parseExperimentRun({ ...record, corrections: over })).toThrow();
+
+    // Task entries carry the same optional field through the task set.
+    const entry = { taskId: "t", phase: "unseen", spec: {}, args: {}, corrections: [correction] };
+    const set = parseExperimentTaskSet({ contract: "algal.experiment-tasks.v1", tasks: [entry] });
+    expect(set.tasks[0]!.corrections).toEqual([correction]);
+    expect(() => parseExperimentTaskSet({ contract: "algal.experiment-tasks.v1", tasks: [{ ...entry, corrections: [] }] })).toThrow();
+    expect(() => parseExperimentTaskSet({ contract: "algal.experiment-tasks.v1", tasks: [{ ...entry, corrections: [{ note: "x" }] }] })).toThrow();
   });
 
   test("run record parser rejects unknown keys and inconsistent digests", async () => {

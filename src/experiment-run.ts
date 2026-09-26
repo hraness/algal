@@ -71,6 +71,12 @@ export const EXPERIMENT_BOUNDS = Object.freeze({
   maxCases: FOUNDRY_BOUNDS.maxCases,
   /** Recorded failure message length. */
   maxFailureLength: 512,
+  /** Operator corrections one task may declare and one run record may carry. */
+  maxCorrections: 32,
+  /** A correction's `kind` label length. */
+  maxCorrectionKindLength: 64,
+  /** A correction's `note` length. */
+  maxCorrectionNoteLength: 512,
   /** Snapshot limits for a task's opaque `spec` or one argument value. */
   spec: Object.freeze({ maxBytes: 65_536, maxDepth: 32, maxNodes: 16_384, maxEntries: 16_384, maxStringBytes: 65_536 }),
   /** Snapshot limits for a foreign record value. */
@@ -134,6 +140,26 @@ function phase(value: unknown, at: string): ExperimentPhase {
   return value as ExperimentPhase;
 }
 
+/** One explicit human/operator intervention in a run — an operator-edited
+ * manifest or spec, a manually corrected label, a hand-supplied hint. `kind`
+ * is a short label for the intervention; `note` says what was done. */
+export type ExperimentCorrection = { kind: string; note: string };
+
+/** A bounded non-empty correction list. Absence is the honest "none recorded"
+ * signal, so a present list must carry at least one entry. */
+function parseCorrections(value: unknown, at: string): ExperimentCorrection[] {
+  if (!Array.isArray(value) || value.length === 0 || value.length > EXPERIMENT_BOUNDS.maxCorrections) {
+    fail(`${at} must list 1..${EXPERIMENT_BOUNDS.maxCorrections} entries`);
+  }
+  return value.map((entry, i) => {
+    const c = closed(entry, ["kind", "note"], [], `${at}[${i}]`);
+    return {
+      kind: label(c.kind, `${at}[${i}].kind`, EXPERIMENT_BOUNDS.maxCorrectionKindLength),
+      note: label(c.note, `${at}[${i}].note`, EXPERIMENT_BOUNDS.maxCorrectionNoteLength),
+    };
+  });
+}
+
 /** A bounded named-value map (task args, case args, expectations). */
 function valueMap(value: unknown, at: string): Record<string, JsonValue> {
   const object = asObject(boundedJsonSnapshot(value, EXPERIMENT_BOUNDS.spec, at), `experiment ${at}`);
@@ -156,6 +182,10 @@ export type ExperimentTask = {
   phase: ExperimentPhase;
   spec: JsonValue;
   args: Record<string, JsonValue>;
+  /** Operator interventions declared for this task; the runner records them
+   * on the run record it writes. Absent means none were recorded — the
+   * measure counts what was declared, not zero by default. */
+  corrections?: ExperimentCorrection[];
 };
 
 export type ExperimentTaskSet = {
@@ -171,13 +201,16 @@ export function parseExperimentTask(value: unknown, at = "task"): ExperimentTask
   for (const key of ["spec", "args"] as const) {
     if (Object.hasOwn(shallow, key)) shallow[key] = true;
   }
-  const v = closed(boundedJsonSnapshot(shallow, EXPERIMENT_BOUNDS.record, at), ["taskId", "phase", "spec", "args"], [], at);
-  return {
+  const v = closed(boundedJsonSnapshot(shallow, EXPERIMENT_BOUNDS.record, at), ["taskId", "phase", "spec", "args"], ["corrections"], at);
+  const task: ExperimentTask = {
     taskId: label(v.taskId, `${at}.taskId`),
     phase: phase(v.phase, `${at}.phase`),
     spec: boundedJsonSnapshot(raw.spec, EXPERIMENT_BOUNDS.spec, `${at}.spec`),
     args: valueMap(raw.args, `${at}.args`),
   };
+  const corrections = opt(v, "corrections");
+  if (corrections.present) task.corrections = parseCorrections(corrections.value, `${at}.corrections`);
+  return task;
 }
 
 export function parseExperimentTaskSet(value: unknown): ExperimentTaskSet {
@@ -449,6 +482,10 @@ export type ExperimentRun = {
   work: { units: number; agentCalls: number };
   failure: { code: string; message: string } | null;
   promote: ExperimentPromote | null;
+  /** Operator interventions recorded for this run — the human-correction
+   * measure's raw signal. Absent means none were recorded; the arm runner
+   * only copies what the task declares, it produces none itself. */
+  corrections?: ExperimentCorrection[];
 };
 
 function parseConsult(value: unknown, at: string): ExperimentConsult {
@@ -480,7 +517,7 @@ function parsePromote(value: unknown, at: string): ExperimentPromote {
 
 export function parseExperimentRun(value: unknown): ExperimentRun {
   const at = "run";
-  const v = closed(boundedJsonSnapshot(value, EXPERIMENT_BOUNDS.record, at), ["contract", "arm", "taskId", "phase", "consult", "generator", "manifest", "args", "receipt", "outcome", "work", "failure", "promote"], [], at);
+  const v = closed(boundedJsonSnapshot(value, EXPERIMENT_BOUNDS.record, at), ["contract", "arm", "taskId", "phase", "consult", "generator", "manifest", "args", "receipt", "outcome", "work", "failure", "promote"], ["corrections"], at);
   if (v.contract !== EXPERIMENT_RUN_CONTRACT) fail(`contract must be ${EXPERIMENT_RUN_CONTRACT}`);
   let generator: ExperimentRun["generator"] = null;
   if (v.generator !== null) {
@@ -505,7 +542,7 @@ export function parseExperimentRun(value: unknown): ExperimentRun {
   if (outcome === "complete" || outcome === "failed" || outcome === "stuck" || outcome === "suspended") {
     if (manifest === null || receipt === null) fail(`${at}: a finished run needs a manifest and a receipt`);
   }
-  return {
+  const run: ExperimentRun = {
     contract: EXPERIMENT_RUN_CONTRACT,
     arm: armKind(v.arm, `${at}.arm`),
     taskId: label(v.taskId, `${at}.taskId`),
@@ -523,6 +560,9 @@ export function parseExperimentRun(value: unknown): ExperimentRun {
     failure,
     promote: v.promote === null ? null : parsePromote(v.promote, `${at}.promote`),
   };
+  const corrections = opt(v, "corrections");
+  if (corrections.present) run.corrections = parseCorrections(corrections.value, `${at}.corrections`);
+  return run;
 }
 
 /** The per-arm record: each task's run record in task order, the arm's closed
@@ -765,7 +805,11 @@ export async function runExperimentArm(opts: ExperimentRunOptions): Promise<Expe
     const ctx: ExperimentTaskContext = { arm, task, ...shared, account };
     const record = async (partial: Omit<ExperimentRun, "contract" | "arm" | "taskId" | "phase">): Promise<ExperimentRun> => {
       const run = parseExperimentRun({
-        contract: EXPERIMENT_RUN_CONTRACT, arm: arm.arm, taskId: task.taskId, phase: task.phase, ...partial,
+        contract: EXPERIMENT_RUN_CONTRACT, arm: arm.arm, taskId: task.taskId, phase: task.phase,
+        // Operator-declared corrections ride from the task onto whatever
+        // record the task writes; the runner itself records none.
+        ...(task.corrections === undefined ? {} : { corrections: task.corrections }),
+        ...partial,
       });
       runs.push(run);
       runDigests.push(await opts.store.putValue(run as unknown as JsonValue));

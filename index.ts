@@ -505,6 +505,7 @@ export type {
   ExperimentCatalog,
   ExperimentCatalogEntry,
   ExperimentConsult,
+  ExperimentCorrection,
   ExperimentGenerator,
   ExperimentPhase,
   ExperimentPromote,
