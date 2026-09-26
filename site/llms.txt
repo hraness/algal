@@ -13,7 +13,7 @@ ALGAL is prerelease software. Unsigned native builds for macOS on Apple silicon 
 - [Put living programs to work](https://algal.computer/use-cases/): change review, checked coding repairs, portable run histories, reusable routing, and current limits
 - [Documentation index](https://algal.computer/docs/): the repository docs rendered for the web, covering install, the source language, the process VM, habitats, civilization, and executors
 - [Notes on living programs](https://algal.computer/blog/): longer posts on how the language works, how it is tested, and the design choices behind it
-- [Comparisons](https://algal.computer/compare/): how ALGAL compares with LangGraph, DSPy, and Temporal
+- [Comparisons](https://algal.computer/compare/): how ALGAL compares with LangGraph, DSPy, Temporal, Restate, and Inngest
 
 ## Blog
 
@@ -24,6 +24,8 @@ ALGAL is prerelease software. Unsigned native builds for macOS on Apple silicon 
 - [ALGAL vs LangGraph](https://algal.computer/compare/langgraph/): agent orchestration framework versus a language and VM where the program is data
 - [ALGAL vs DSPy](https://algal.computer/compare/dspy/): prompt-space optimization inside a fixed pipeline versus measured search over program structure
 - [ALGAL vs Temporal](https://algal.computer/compare/temporal/): durable execution service versus portable, verifiable program artifacts
+- [ALGAL vs Restate](https://algal.computer/compare/restate/): journaled durable handlers in a single Rust binary versus agent programs as typed, replay-verified data
+- [ALGAL vs Inngest](https://algal.computer/compare/inngest/): checkpointed step functions on a metered cloud versus a program-as-data VM with offline-verifiable receipts
 
 ## Downloadable examples and receipts
 
