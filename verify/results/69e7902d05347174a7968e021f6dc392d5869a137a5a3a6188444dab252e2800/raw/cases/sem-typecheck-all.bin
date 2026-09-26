@@ -1,0 +1,1 @@
+{"program":["list",["isText","x"],["isNum",1],["isBool",true],["isList",["list",1]],["isMap",{}],["isNull",null]]}

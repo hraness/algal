@@ -1,0 +1,11 @@
+{	"env"	: { 
+ "e" 
+ : 
+ [  { 
+ "𐀀" : 
+ [1.5e+300 ,	null]}  ],"y":	"a\nb"  ,  "x" 
+ : 
+ {"𐀀"  :  true	} } ,	"program" :  [ "get" 
+ ,"2"  , 
+ "aaaaaaaaaaaaaaaaaaaa"] 
+ }

@@ -1,0 +1,1 @@
+{"program":["if","𐀀",["flat",["quote",["a"]]],["get","y",1]],"env":{"x":[["𐀀"],{"hasOwnProperty":2}],"y":"4294967295","e":"a\nb"},"fuel":20}

@@ -1,0 +1,1 @@
+{"program":["gte",["lte",["sort",["quote",[["a\tb"],null,["0",null,"\"quoted\""],["2"]]]],["isMap",["upper",["quote","with space"]]]],["or",["has",["quote","10"],"2"],["toText","hasOwnProperty"]]],"env":{"x":0,"y":-9223372036854776000,"e":2.2250738585072014e-308},"fuel":4}

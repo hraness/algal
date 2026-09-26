@@ -1,0 +1,1 @@
+{"program":["clamp",1.5e+300,["get","y"],["toText",["get","01","hasOwnProperty",1]]],"env":{"x":[{"01":"prototype","Z":0}],"y":1e+21,"e":{}},"fuel":200}

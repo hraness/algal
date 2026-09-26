@@ -1,0 +1,26 @@
+{
+"program":  [  "toText"  , [
+"contains"
+, 
+ [  "quo\u0074e" 
+ , 
+ [ "constructor" , 
+ [	null	, 
+ "key-with-dash" ]
+] ]  ,	{  "\u0031\u0030":  null 
+ ,
+"𐀀" 
+ :	"￿" } 
+ ]], 
+ "fuel" :
+0.0  , "env"	:	{"x":
+[ "a"
+, 
+ null	, 
+ [ 
+ true , "Z" 
+ ,"" ]]
+,
+"e"	:
+"hasOwnProperty"	,	"y" 
+ :  {	"∀x" :	"__proto__"  } }  }

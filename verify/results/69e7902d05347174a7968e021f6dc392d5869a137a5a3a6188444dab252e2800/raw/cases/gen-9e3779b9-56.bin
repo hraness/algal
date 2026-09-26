@@ -1,0 +1,21 @@
+{ 
+ "env"  :	{ "e"  :  [	[
+[ 
+ "1e\u0032"  , 
+ "10"]	] ] ,  "\u0079":	{  "2": 
+ [	false,  false ]
+, 
+ "￿" 
+ :	null  }
+,	"x"
+:"aaaaaaaaaaaaaaaaaaaa"  }  ,"progra\u006d":	[  "eq" ,  []	,  [  "gt"
+, [ "len"	, 
+ [	"\u0071uo\u0074e"	,	[ "∀\u0078" 
+ ] 
+ ] ] 
+ ,
+[
+"get"  , "x"]
+]] ,"fuel"	:
+200 
+ }

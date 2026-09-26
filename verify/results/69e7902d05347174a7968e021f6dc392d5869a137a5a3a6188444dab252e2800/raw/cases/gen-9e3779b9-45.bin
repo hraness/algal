@@ -1,0 +1,1 @@
+{"program":["not",["isNull",["toText",["if",["contains",["quote",[{"10":"01","k":null},null]],["∀x",2.5]],["fold",[null,null,null],["quote","2"],"n1","y",["get","n1"]],["isList",false]]]]],"env":{"x":{"1e2":{}},"y":["￿"],"e":"2"}}

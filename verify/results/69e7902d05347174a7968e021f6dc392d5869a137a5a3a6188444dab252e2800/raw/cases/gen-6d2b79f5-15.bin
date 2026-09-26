@@ -1,0 +1,1 @@
+{"program":["not",["mul",["and",["trim",["quote","\u0000"]]]]],"env":{"x":[],"y":5e-324,"e":null},"fuel":20}

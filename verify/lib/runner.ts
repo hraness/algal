@@ -363,6 +363,18 @@ async function executeSuite(root: string, suite: string): Promise<unknown> {
     };
     return { tests: admitSelftestOutput(result), commandResult: result, scope: scopes[suite] };
   }
+  if (suite === "differential") {
+    const { runDifferentialSuite } = await import("../differential/adapter");
+    return runDifferentialSuite(root);
+  }
+  if (suite === "fuzz-smoke") {
+    const { runFuzzSuite } = await import("../fuzz/adapter");
+    return runFuzzSuite(root);
+  }
+  if (suite === "evidence-mutation") {
+    const { runMutationSuite } = await import("../mutation/adapter");
+    return runMutationSuite(root);
+  }
   if (suite === "lean-expr" || suite === "lean-memory") {
     const { leanRuntime } = await import("../lean/runtime");
     const runtime = await leanRuntime(root);

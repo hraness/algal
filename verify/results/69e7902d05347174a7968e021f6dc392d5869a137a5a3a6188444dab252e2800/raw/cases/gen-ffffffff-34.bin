@@ -1,0 +1,1 @@
+{"program":["ceil",["isMap",["lte",["drop",["quote",[-42]],0],["eq",["sconcat",["quote","\u0000"],["quote","2"],["quote"," x "]],["fold",["quote",[[null],true]]]]]]],"env":{"x":null,"y":[{" x ":"0"},-1],"e":"a\nb"}}

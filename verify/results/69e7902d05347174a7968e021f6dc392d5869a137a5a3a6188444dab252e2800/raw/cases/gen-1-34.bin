@@ -1,0 +1,1 @@
+{"program":["neq",["scontains",["quote","10"],["quote","Z"]],["unique",["quote",["0"]]]],"env":{"x":[[0.5,false],"0"],"y":"a","e":2.5},"fuel":200}

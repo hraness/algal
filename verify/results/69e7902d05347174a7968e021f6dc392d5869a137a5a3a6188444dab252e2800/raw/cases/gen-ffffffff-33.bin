@@ -1,0 +1,1 @@
+{"program":["if",["toText",["list",["quote",null]]],{"\\n":{}},["and",["get","y","01"],["get","01"],["values",["quote",[[42]]]]]],"env":{"x":{"𐀀":null,"a":-2.5},"y":false,"e":42},"fuel":0}

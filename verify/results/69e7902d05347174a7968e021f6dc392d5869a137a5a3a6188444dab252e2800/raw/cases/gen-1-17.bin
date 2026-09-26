@@ -1,0 +1,51 @@
+{
+"fuel"	:4, "program"
+:  [
+"gte" ,["\u0067t" ,[ 
+ "let"	,"acc"  , 
+ [  "map" , [
+"quote"	,
+[ 42
+,  false]
+], "z",  false] ,	[
+"isNull" , [
+"map"
+, [
+"q\u0075o\u0074e"
+,[
+{ 
+ "Z"
+: 
+ "2",  "with space"
+:
+" x "  } ,
+[ "prototype" 
+ ]	] ] ,"v"  ,[ "get"
+, 
+ "x"  ]
+] ] 
+ ] 
+ ,
+["neq", 
+ [ ""
+] 
+ ,[ "merge"	,
+[ 
+ "quote"  ,  {}	] 
+ ,
+[
+"quote" , 
+ 7	]
+]  ]  ]  , 
+ ["gt"
+,
+null , [ "1e2"
+, true]
+]
+]
+,	"env"  : 
+ {
+"x" :  true , "e"	:	true,
+"y"	:[ 
+ {}]
+}}

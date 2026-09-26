@@ -1,0 +1,12 @@
+{ "fuel"
+:200  , 
+ "program" 
+ :	[  "quote"  ,false
+]
+,"env":  { 
+ "x"  : 
+ [],	"\u0079":
+"a\nb"  ,"e" :
+[false  ,
+1.5e+300 ]
+}}

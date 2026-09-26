@@ -1,0 +1,1 @@
+{"program":["fold",-0.5,["lt",["has",["quote",[]],"1e2"],false],"it","y",["quote",null]],"env":{"x":"4294967295","y":true,"e":1e+21}}

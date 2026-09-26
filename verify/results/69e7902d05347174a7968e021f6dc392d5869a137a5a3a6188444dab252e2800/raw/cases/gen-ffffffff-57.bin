@@ -1,0 +1,1 @@
+{"program":["let","y",["lte",["sub",["neg",["toText",{"Z":{"1e2":"a","prototype":true}}]],["add",9007199254740991]],["merge",["quote",[7,null]]]],["min",["quote",false],["toText",[-1,{"￿":9007199254740992}]]]],"env":{"x":[],"y":{"aaaaaaaaaaaaaaaaaaaa":{"a":0.5,"k":-1e-7}},"e":-1e+21}}

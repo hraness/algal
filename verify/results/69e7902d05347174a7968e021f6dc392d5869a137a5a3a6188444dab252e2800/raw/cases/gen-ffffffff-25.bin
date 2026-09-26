@@ -1,0 +1,27 @@
+{	"env" :{ "\u0079"  :
+{"𐀀"  :	"a\nb"
+,
+"k"
+:null 
+ } , "e"	:	{ "2" 
+ : 
+ {}  , 
+ "10" :{ "4294967296" 
+ :  -1000000000000000
+, 
+ "hasOwnProperty"  :  "aaaaaaaaaaaaaaaaaaaa"
+}
+}
+,  "x"  :  [ 1e+21
+,true  ]
+}, 
+ "fue\u006c" 
+ :	4.0
+, 
+ "program" 
+ :  [
+"values"
+,	[ "quote",	{	"k"  : 
+ {} ,	"a" 
+ :  null 
+ }]] }

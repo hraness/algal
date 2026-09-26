@@ -1,0 +1,1 @@
+{"program":["or",["not",["map",["quote",[{"constructor":"10"},{"k":0.5},[]]],"y",["keys",["quote",["\u0000",["with space","￿"],["a",true]]]]]],["ends",["quote","1e2"],["quote","aaaaaaaaaaaaaaaaaaaa"]],["get","x"]],"env":{"x":[[]],"y":"aaaaaaaaaaaaaaaaaaaa","e":{"10":false,"a":[[]]}},"fuel":200}

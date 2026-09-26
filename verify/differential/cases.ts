@@ -16,7 +16,6 @@
  * Bun evalProgram/checkProgram leg (JS-representable envelopes).
  */
 
-import { BOUNDS } from "./canonical";
 import { genProgram, genValue, renderEnvelope } from "./gen";
 import { Rng } from "./prng";
 import type { JVal } from "./json";
@@ -44,12 +43,14 @@ function renderJVal(v: JVal): string {
   if (v === null) return "null";
   if (typeof v === "boolean") return v ? "true" : "false";
   if (typeof v === "string") return JSON.stringify(v);
-  if (isNumLike(v)) return JSON.stringify(v.f64);
   if (Array.isArray(v)) return `[${v.map(renderJVal).join(",")}]`;
+  if ("f64" in v) {
+    const spelled = JSON.stringify(v.f64);
+    if (spelled === undefined) throw new Error("non-finite number cannot be spelled");
+    return spelled;
+  }
   return `{${[...v.entries()].map(([k, x]) => `${JSON.stringify(k)}:${renderJVal(x)}`).join(",")}}`;
 }
-const isNumLike = (v: JVal): v is { kind: "num"; f64: number; u64: bigint | null } =>
-  v !== null && typeof v === "object" && !Array.isArray(v) && !(v instanceof Map);
 
 export function catalog(seedStream: readonly number[]): Case[] {
   const out: Case[] = [];
@@ -169,7 +170,7 @@ export function catalog(seedStream: readonly number[]): Case[] {
     ["surr-in-env-val", "{\"program\":true,\"env\":{\"x\":\"\\udfff\"}}"],
     ["surr-in-names", "{\"program\":[\"get\",\"x\"],\"names\":[\"\\ud800\"]}", ],
   ];
-  for (const [id, t] of surrogateEscapes) rawText(`raw-${id}`, "surrogate escape edge", t === surrogateEscapes[12]?.[1] ? t : t);
+  for (const [id, t] of surrogateEscapes) rawText(`raw-${id}`, "surrogate escape edge", t);
 
   // Duplicate and prototype keys at each level.
   rawText("raw-dup-envelope", "duplicate program key last-wins", "{\"program\":false,\"program\":true}");
@@ -279,16 +280,10 @@ export function catalog(seedStream: readonly number[]): Case[] {
   }
   // env object-keys: boundary 256.
   for (const [d, k] of [[255, 255], [256, 256], [257, 257]] as const) {
-    const env = new Map<string, JVal>();
-    for (let i = 0; i < k; i++) env.set(`k${i}`, num(0));
-    env.set("x", num(7));
-    // remove one filler so x stays: k = total keys incl x? keep exact count.
     const env2 = new Map<string, JVal>();
-    let i = 0;
-    for (const key of [...env.keys()].slice(0, k - 1)) env2.set(key, env.get(key)!);
+    for (let i = 0; i < k - 1; i++) env2.set(`k${i}`, num(0));
     env2.set("x", num(7));
     add(prog(`bound-env-keys-${d}`, `env has ${k} keys`, ["get", "x"], { env: env2 }));
-    void i;
   }
   // env-bytes: env {"x":"y"*n} canonical = n+8 → boundary 262144.
   for (const [d, n] of [[262143, 262135], [262144, 262136], [262145, 262137]] as const) {
@@ -335,8 +330,8 @@ export function catalog(seedStream: readonly number[]): Case[] {
     add(prog("bound-sconcat-65537", "sconcat over string-bytes", ["sconcat", ["get", "a"], ["get", "b"]], { env }));
   }
   // output-bytes: quote payload canonical >65536 → EXPR_BOUNDS output-bytes at fuel 1.
-  for (const [d, total] of [[65536, "at"], [65537, "over"]] as const) {
-    // {"k0":"x"*m,...} — tune m so canonical size = total.
+  for (const d of [65536, 65537] as const) {
+    // {"k0":"x"*m,...} — tune m so canonical size is at/over the bound.
     const keys = 250;
     const per = Math.floor((d - 2 - (keys - 1)) / keys) - 5; // braces + commas + "kNNN":""
     const payload = new Map<string, JVal>();
@@ -360,8 +355,8 @@ export function catalog(seedStream: readonly number[]): Case[] {
   // get-path index-key edges.
   const indexKeys: [string, JVal][] = [
     ["idx-0", num(0)], ["idx-neg", num(-1)], ["idx-frac", num(1.5)],
-    ["idx-u32max", num(4294967295)], ["idx-u32max+1", num(4294967296)],
-    ["idx-1e20", num(1e20)], ["idx-bignum", num(18446744073709551615)],
+    ["idx-u32max", num(4294967295)], ["idx-u32max-plus", num(4294967296)],
+    ["idx-1e20", num(1e20)], ["idx-bignum", num(Number("18446744073709551615"))],
     ["idx-str-0", "0"], ["idx-str-01", "01"], ["idx-str-neg", "-1"],
   ];
   for (const [id, k] of indexKeys) {
@@ -397,7 +392,7 @@ export function catalog(seedStream: readonly number[]): Case[] {
     ["sem-get-null-short", ["get", "o", "a", "x", "y"], { env: new Map([["o", new Map([["a", num(1)]])]]) }],
     ["sem-and-short", ["and", false, ["div", num(1), num(0)]], {}],
     ["sem-or-short", ["or", true, ["div", num(1), num(0)]], {}],
-    ["sem-and-type", ["and", true, 1], {}],
+    ["sem-and-type", ["and", true, num(1)], {}],
     ["sem-let-shadow-env", ["let", "x", num(5), ["get", "x"]], { env: new Map([["x", num(9)]]) }],
     ["sem-let-nested-shadow", ["let", "x", num(1), ["let", "x", num(2), ["get", "x"]]], {}],
     ["sem-map-scope-leak", ["list", ["map", ["list", num(1)], "x", ["get", "x"]], ["get", "x"]], { env: new Map([["x", num(7)]]) }],
@@ -436,7 +431,10 @@ export function catalog(seedStream: readonly number[]): Case[] {
     ["sem-contains-obj", ["contains", ["list", ["quote", new Map([["a", num(1)]])]], ["quote", new Map([["a", num(1)]])]], {}],
     ["sem-typecheck-all", ["list", ["isText", "x"], ["isNum", num(1)], ["isBool", true], ["isList", ["list", num(1)]], ["isMap", new Map()], ["isNull", null]], {}],
   ];
-  for (const [id, p, extra] of sem) add(prog(id, "semantic probe", p, extra));
+  for (const [id, p, extra] of sem) {
+    try { add(prog(id, "semantic probe", p, extra)); }
+    catch (e) { throw new Error(`sem case ${id} failed to render: ${String(e)}`); }
+  }
 
   // ---------------------------------------------------- seeded generated ---
   for (const seed of seedStream) {
@@ -451,7 +449,7 @@ export function catalog(seedStream: readonly number[]): Case[] {
       env.set("y", genValue(vctx, 2));
       env.set("e", genValue(vctx, 3));
       const fuelPick = rng.pick([undefined, undefined, undefined, 0, 4, 20, 200, 10_000]);
-      const bytes = renderEnvelope({ program, env, fuel: fuelPick }, rng, rng.bool(35));
+      const bytes = renderEnvelope(fuelPick === undefined ? { program, env } : { program, env, fuel: fuelPick }, rng, rng.bool(35));
       addDedup({ id: `gen-${seed.toString(16)}-${i}`, mode: "eval", bytes, note: "seeded generated program", wrapper: true });
     }
   }

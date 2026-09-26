@@ -1,0 +1,24 @@
+{"fuel"  : 200,
+"program"	:	[
+"add"
+, {}	, 
+ [  "list",  [	"keys"
+, 
+ [ 
+ "quote" 
+ , 
+ "2"	]
+]
+,[ "join"	,	[	"quote"
+,"a\nb"	]	, 
+ [ 
+ "quot\u0065"
+,  ["a"  ,"b"	] ]	]
+, null 
+ ,	[	false] 
+ ]
+],	"\u0065n\u0076"  :	{	"e"
+:1e-7  , "\u0078" : false  , "y"	: 
+ [ [null  ,  null , "4294967294"	] 
+ ]	} 
+ }

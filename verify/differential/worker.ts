@@ -12,15 +12,16 @@
  * its own inputs.
  */
 
-import { readFileBounded, hashBytes } from "../lib/files";
+import { readFileBounded } from "../lib/files";
 import { requireThat } from "../lib/schema";
-import { dirname, resolve, isAbsolute } from "node:path";
-import { loadWasmModule, callRaw, type WasmModule } from "./wasm";
+import { dirname, isAbsolute } from "node:path";
+import { loadWasmModule, callRaw } from "./wasm";
+import { wrapperFaithful } from "./engine";
 
 export type CaseRef = { id: string; path: string; mode: "eval" | "check"; wrapper: boolean };
 export type WorkerLine =
   | { id: string; wasm: { status: "ok"; text: string }; wrapper: unknown | "skipped" | { threw: string } }
-  | { id: string; wasm: { status: "trap" | "bad-output"; error: string }; wrapper: unknown | "skipped" | { threw: string } }
+  | { id: string; wasm: { status: "trap" | "bad-output" | "null-input"; error: string }; wrapper: unknown | "skipped" | { threw: string } }
   | { id: string; wasm: { status: "read-error"; error: string }; wrapper: "skipped" };
 
 export const WORKER_LIMITS = { manifestBytes: 8_388_608, cases: 2_048, inputBytes: 400_000, lineBytes: 2_097_152 } as const;
@@ -72,16 +73,23 @@ export async function runWorkerManifest(manifestPath: string): Promise<WorkerLin
       lines.push({ id: c.id, wasm: { status: "read-error", error: String(error).slice(0, 200) }, wrapper: "skipped" });
       continue;
     }
-    let text: string, status: WorkerLine extends never ? never : "ok" | "trap" | "bad-output";
+    if (input.byteLength === 0) {
+      // The wasm ABI cannot carry a zero-byte input (algal_alloc(0) returns
+      // null) — this is a transport admission edge, not a semantic result.
+      lines.push({ id: c.id, wasm: { status: "null-input", error: "zero-byte input cannot allocate" }, wrapper: "skipped" });
+      continue;
+    }
+    let text: string;
     try {
       text = callRaw(mod, c.mode === "eval" ? "algal_eval" : "algal_check", input);
       JSON.parse(text); // the boundary must emit parseable JSON
-      status = "ok";
     } catch (error) {
       lines.push({ id: c.id, wasm: { status: "trap", error: String(error).slice(0, 512) }, wrapper: "skipped" });
       continue;
     }
-    const wrapper = c.wrapper ? await wrapperEval(c.mode, input, new WebAssembly.Instance(mod.module, {})) : "skipped";
+    const wrapper = c.wrapper && wrapperFaithful(input)
+      ? await wrapperEval(c.mode, input, new WebAssembly.Instance(mod.module, {}))
+      : "skipped";
     const line = { id: c.id, wasm: { status: "ok" as const, text }, wrapper };
     bytes += JSON.stringify(line).length;
     requireThat(bytes <= WORKER_LIMITS.lineBytes, "worker output byte bound");

@@ -1,0 +1,1 @@
+{"program":["fold",["isNull",-9007199254740992],["get","e"],"x","n1",{"b":-5e-324}],"env":{"x":-9007199254740992,"y":null,"e":"hasOwnProperty"}}

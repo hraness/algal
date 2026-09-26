@@ -12,7 +12,6 @@
  */
 
 import { Rng } from "./prng";
-import { BOUNDS, canonical, isNum } from "./canonical";
 import type { JVal } from "./json";
 
 export type Envelope = { program: JVal; env?: ReadonlyMap<string, JVal>; fuel?: number | JVal; names?: JVal };
@@ -20,8 +19,8 @@ export type Envelope = { program: JVal; env?: ReadonlyMap<string, JVal>; fuel?: 
 const NUM_POOL: readonly number[] = [
   0, -0, 1, -1, 2, 7, 42, -42, 0.5, -0.5, 2.5, -2.5, 0.1, 1e-7, -1e-7,
   1e21, -1e21, 5e-324, -5e-324, 2.2250738585072014e-308, 1.7976931348623157e308,
-  9007199254740991, 9007199254740993, -9007199254740993, 1e15, -1e15,
-  18446744073709551615, 18446744073709551616, -9223372036854775808,
+  9007199254740991, Number("9007199254740993"), Number("-9007199254740993"), 1e15, -1e15,
+  Number("18446744073709551615"), 2 ** 64, -(2 ** 63),
   3.141592653589793, 1.5e300, -1.5e300,
 ];
 const STR_POOL: readonly string[] = [
@@ -74,11 +73,12 @@ export function genProgram(ctx: Ctx, depth: number): JVal {
   ctx.nodes++;
   const table: [string, number, (op: string, argc: number) => JVal[]][] = [
     ["arith", 30, (op) => {
-      const spec = { add: [1, 4], mul: [1, 3], sub: [2, 2], div: [2, 2], mod: [2, 2], neg: [1, 1], min: [1, 4], max: [1, 4], abs: [1, 1], floor: [1, 1], ceil: [1, 1], round: [1, 1], clamp: [3, 3] }[op]!;
+      const specTable: Record<string, readonly [number, number]> = { add: [1, 4], mul: [1, 3], sub: [2, 2], div: [2, 2], mod: [2, 2], neg: [1, 1], min: [1, 4], max: [1, 4], abs: [1, 1], floor: [1, 1], ceil: [1, 1], round: [1, 1], clamp: [3, 3] };
+      const spec = specTable[op] ?? [1, 1];
       const n = spec[0] + r.below(spec[1] - spec[0] + 1);
       return Array.from({ length: defect ? spec[0] - 1 : n }, () => genOperand(ctx, depth));
     }],
-    ["cmp", 12, (op) => [genOperand(ctx, depth), genOperand(ctx, depth)]],
+    ["cmp", 12, () => [genOperand(ctx, depth), genOperand(ctx, depth)]],
     ["logic", 10, (op) => {
       if (op === "if") return [genOperand(ctx, depth), genOperand(ctx, depth), genOperand(ctx, depth)];
       const n = op === "not" ? 1 : 1 + r.below(3);
@@ -138,7 +138,7 @@ export function genProgram(ctx: Ctx, depth: number): JVal {
       return [m];
     }],
     ["quote", 4, () => [genValue(ctx, 2)]],
-    ["type", 4, (op) => [genOperand(ctx, depth)]],
+    ["type", 4, () => [genOperand(ctx, depth)]],
     ["toText", 3, () => [genOperand(ctx, depth)]],
     ["get", 4, () => {
       const name = r.pick([...VAR_POOL, ...ctx.envKeys, ...STR_POOL.slice(4, 12)]);
@@ -194,8 +194,8 @@ export function renderEnvelope(env: Envelope, rng: Rng, noisy: boolean): Uint8Ar
     if (v === null) return "null";
     if (typeof v === "boolean") return v ? "true" : "false";
     if (typeof v === "string") return strLit(v);
-    if (isNum(v)) return numLit(v);
     if (Array.isArray(v)) return `[${v.map(i => ws() + render(i, depth + 1) + ws()).join(",")}]`;
+    if (!(v instanceof Map)) return numLit(v);
     const keys = [...v.keys()];
     if (noisy) for (let i = keys.length - 1; i > 0; i--) { const j = rng.below(i + 1); [keys[i], keys[j]] = [keys[j]!, keys[i]!]; }
     return `{${keys.map(k => `${ws()}${strLit(k)}${ws()}:${ws()}${render(v.get(k)!, depth + 1)}${ws()}`).join(",")}}`;

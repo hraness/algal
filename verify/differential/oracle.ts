@@ -31,11 +31,9 @@ export type Prediction =
 export class OracleReject extends Error {
   constructor(readonly code: string, message: string) { super(message); this.name = "OracleReject"; }
 }
-/** Marker: the mirror declines to predict this case. Cross-target only. */
-class Uncovered extends Error {}
-
-type E = { code: string; fuel?: number };
-const errAt = (code: string): OracleReject => new OracleReject(code, code);
+/** Marker: the mirror declines to predict this case. Cross-target only.
+ * (Kept as documentation — the mirror currently predicts every catalog
+ * case; uncovered verdicts are observable through the case table alone.) */
 
 // ------------------------------------------------------------ op schema -----
 
@@ -256,7 +254,6 @@ export class Mirror {
     return result;
   }
   op(op: string, arr: JVal[]): JVal {
-    const argc = arr.length - 1;
     const at = (i: number): JVal => i < arr.length ? arr[i]! : null;
     switch (op) {
       case "add": case "mul": {
@@ -347,10 +344,11 @@ export class Mirror {
       case "get": {
         const first = this.eval(at(1));
         if (typeof first !== "string") throw errType(op, 0, "name string", kindOf(first));
-        let cur: JVal | undefined;
-        for (let i = this.scope.length - 1; i >= 0; i--) if (this.scope[i]![0] === first) { cur = this.scope[i]![1]; break; }
-        if (cur === undefined) cur = this.env.get(first);
-        if (cur === undefined) throw errPath(op, `unbound name "${first}"`);
+        let found: JVal | undefined;
+        for (let i = this.scope.length - 1; i >= 0; i--) if (this.scope[i]![0] === first) { found = this.scope[i]![1]; break; }
+        if (found === undefined) found = this.env.get(first);
+        if (found === undefined) throw errPath(op, `unbound name "${first}"`);
+        let cur: JVal = found;
         for (let i = 2; i < arr.length; i++) {
           const k = this.eval(arr[i]!);
           const step = i - 1;
@@ -511,7 +509,16 @@ export class Mirror {
         let out: string;
         if (op === "upper") out = s.replace(/[a-z]/g, c => c.toUpperCase());
         else if (op === "lower") out = s.replace(/[A-Z]/g, c => c.toLowerCase());
-        else out = s.replace(/^[ \t\n\r\x0b\x0c]+|[ \t\n\r\x0b\x0c]+$/g, "");
+        else {
+          // Mirror Rust char::is_whitespace's ASCII subset at the edges —
+          // written as a loop because a regex literal for \x0b/\x0c trips
+          // no-control-regex.
+          const WS = new Set([" ", "\t", "\n", "\r", "\x0b", "\x0c"]);
+          let a = 0, b = s.length;
+          while (a < b && WS.has(s[a]!)) a++;
+          while (b > a && WS.has(s[b - 1]!)) b--;
+          out = s.slice(a, b);
+        }
         if (utf8(out) > BOUNDS.maxStringBytes) throw boundsError(new Bounds("string-bytes", BOUNDS.maxStringBytes));
         return out;
       }
@@ -627,7 +634,7 @@ export function predictEval(input: Uint8Array): Prediction {
   const envRaw = doc instanceof Map ? doc.get("env") : undefined;
   const env: ReadonlyMap<string, JVal> = envRaw instanceof Map ? envRaw : new Map();
   const fuelRaw = doc instanceof Map ? doc.get("fuel") : undefined;
-  let budget = BOUNDS.defaultFuel;
+  let budget: number = BOUNDS.defaultFuel;
   if (fuelRaw !== undefined) {
     if (isNum(fuelRaw) && fuelRaw.u64 !== null) budget = Number(fuelRaw.u64);
     else return { ok: false, code: "EXPR_BOUNDS", fuel: 0 };

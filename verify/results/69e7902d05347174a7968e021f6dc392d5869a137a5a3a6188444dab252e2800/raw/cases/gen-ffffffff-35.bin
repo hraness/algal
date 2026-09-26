@@ -1,0 +1,21 @@
+{"fuel": 
+ 4  ,
+"env"  :  { 
+ "y"
+: {} 
+ ,	"e"  :  -1e+21,  "x" :true  } ,"program"  :  [ "isMap"  , [ 
+ "map"
+, ["list"
+,
+[  "st\u0061rts"  , [ "quote"  ,
+"Z"  ] ,
+[ 
+ "quote"  ,  "\u0020x\u0020"	]	]  ]  ,
+"y"
+,
+["unique"	,	[ 
+ "\u0071\u0075o\u0074e"
+,[null , 
+ 9007199254740991, 
+ false  ,"é" ]	]	]	] ] 
+ }

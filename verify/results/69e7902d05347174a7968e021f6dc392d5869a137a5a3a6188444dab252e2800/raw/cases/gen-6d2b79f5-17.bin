@@ -1,0 +1,47 @@
+{ "program":	[	"\u0067t" 
+ , 
+ [	"trim" 
+ , 
+ [  "quote" ,	"with spac\u0065" ]
+]  ,
+[	"\u0066ol\u0064" ,
+[ "get"	,
+"01"]
+, [ "sub" 
+ , [  "starts"  , [
+"quote" , 
+ "with space"
+], [ 
+ "quote" 
+ ,  "\u0000"  ] ] 
+ , [
+"neq"
+,  1 ,	[  "and" ,[ null
+, 
+ [	"x"
+] ]  ]	]  ]
+,  "n1"
+, 
+ "z", ["isList"  ,["keys"  , 
+ [
+"quote" 
+ ,
+false ] 
+ ] ] ]	]
+, "env"
+:  {
+"x" 
+ :  {  "\\n" :
+"aaaaaaaaaaaaaaaaa\u0061aa",  "4294967294"
+:  {} 
+ }  ,
+"e" :	9007199254740991  , 
+ "y" 
+ :
+[
+[ 
+ null 
+ ,	"1e\u0032" ,	false 
+ ],"Z",  "with space"]	}  ,"fuel": 
+ 10000 
+ }

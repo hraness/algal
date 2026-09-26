@@ -1,0 +1,1 @@
+{"program":["filter","abc","y",["neq",["quote","é"],["toText",["and",["filter",["get","y"],"acc",{"":0.5}],[1.5e+300,false,2]]]]],"env":{"x":"constructor","y":null,"e":"é"},"fuel":10000}

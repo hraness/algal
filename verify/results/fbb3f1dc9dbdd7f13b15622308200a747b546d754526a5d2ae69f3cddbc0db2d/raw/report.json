@@ -1,0 +1,3874 @@
+{
+  "contract": "algal.evidence-mutation-report.v1",
+  "bases": [
+    {
+      "id": "complete",
+      "head": "sha256:ede8aea20aa840d8a4d727552bb8b0aa30030d069f924239655c312c71fc9878",
+      "status": "complete",
+      "records": 3,
+      "receipts": 1
+    },
+    {
+      "id": "failed-miss",
+      "head": "sha256:7c3d0aef483a43cf240153a9687f7675db8223bbba89ed1048880f81d32404f8",
+      "status": "failed",
+      "records": 3,
+      "receipts": 1
+    },
+    {
+      "id": "suspended",
+      "head": "sha256:f745a468c7d9bd2173a62974c660e450612cd583088131523d6eb8f529dcb87c",
+      "status": "suspended",
+      "records": 3,
+      "receipts": 1
+    },
+    {
+      "id": "uncertain",
+      "head": "sha256:675cea34f89bfa28932adacce10fe52990a0f14a80a75197cf57b6a4f5d8bd6f",
+      "status": "uncertain",
+      "records": 4,
+      "receipts": 1
+    },
+    {
+      "id": "value-dep",
+      "head": "sha256:a8e8efd7af531db65697d0aba63dbdc16b1cdc4e5222bbb1c13f657a9c8c7e38",
+      "status": "complete",
+      "records": 3,
+      "receipts": 1
+    }
+  ],
+  "results": [
+    {
+      "id": "envelope-contract-rewritten",
+      "base": "complete",
+      "field": "contract",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "contract"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid process evidence contract"
+      },
+      "pass": true
+    },
+    {
+      "id": "envelope-unknown-key",
+      "base": "complete",
+      "field": "(envelope unknown key)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "part": "unknown key"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "process evidence has unknown key \"executable\""
+      },
+      "pass": true
+    },
+    {
+      "id": "envelope-head-foreign",
+      "base": "complete",
+      "field": "head",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "head or root"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process evidence head or root is missing or mismatched"
+      },
+      "pass": true
+    },
+    {
+      "id": "envelope-head-nondigest",
+      "base": "complete",
+      "field": "head",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "process evidence head must be a sha256:<64 lowercase hex> digest"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-stale-key",
+      "base": "complete",
+      "field": "records (key)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "part": "digest"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "message": "evidence records digest mismatch"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-extra-field",
+      "base": "complete",
+      "field": "records[].(unknown key)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "part": "unknown key"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "process has unknown key \"executable\""
+      },
+      "pass": true
+    },
+    {
+      "id": "record-status-bogus",
+      "base": "complete",
+      "field": "records[].status",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "status"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid process status"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-generation-over-max",
+      "base": "complete",
+      "field": "records[].maxGenerations",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "part": "maxGenerations"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "maxGenerations must be an integer in [1, 64]"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-args-nonobject",
+      "base": "complete",
+      "field": "records[].args",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "process args must be an object"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-wake-on-terminal",
+      "base": "complete",
+      "field": "records[].wake",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "wake"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "terminal process cannot carry wake evidence"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-status-complete-to-failed",
+      "base": "complete",
+      "field": "records[].status",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "does not match record"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process receipt does not match record"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-status-to-suspended",
+      "base": "complete",
+      "field": "records[].status",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "does not match record"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process receipt does not match record"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-generation-bump",
+      "base": "complete",
+      "field": "records[].generation",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "invalid"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid process completion transition"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-previous-skip-dispatch",
+      "base": "complete",
+      "field": "records[].previous",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "transition"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid process completion transition"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-name-mutated",
+      "base": "complete",
+      "field": "records[].name",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "definition changed"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process definition changed"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-args-mutated",
+      "base": "complete",
+      "field": "records[].args",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "definition changed"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process definition changed"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-cause-start-to-manual",
+      "base": "complete",
+      "field": "records[].cause",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "cause"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "dispatch cause does not match prior wake"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-mid-dropped",
+      "base": "complete",
+      "field": "records (missing member)",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "STORE_MISS",
+        "part": "declared dependency"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "STORE_MISS",
+        "message": "process evidence lacks a declared dependency"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-manifest-swap",
+      "base": "complete",
+      "field": "records[].manifestDigest + program.root",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "does not match record"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process receipt does not match record"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-stale-digest-field",
+      "base": "complete",
+      "field": "receipts[].digest",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "part": "receipt"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "message": "evidence receipt digest mismatch"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-outcome-flip",
+      "base": "complete",
+      "field": "receipts[].outcome",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "does not match record"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process receipt does not match record"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-outcome-and-status",
+      "base": "complete",
+      "field": "receipts[].outcome + records[].status",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "does not replay"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: outcome: failed vs complete; failure presence differs"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-status",
+      "base": "complete",
+      "field": "receipts[].cells.*.status",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell source: status skipped vs committed; cell source: outputs differ"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-outputs",
+      "base": "complete",
+      "field": "receipts[].cells.*.outputs",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "outputs"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell source: outputs differ"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-work",
+      "base": "complete",
+      "field": "receipts[].cells.*.work",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "work"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell source: work 0 vs 100"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-via",
+      "base": "complete",
+      "field": "receipts[].cells.*.via",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "via records which transport resolved the cell — it is echoed verbatim by replay (replayVia serves the recorded value), so a forged transport name verifies: the field binds what the host claimed, not an independently re-resolvable fact"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-slot",
+      "base": "complete",
+      "field": "receipts[].cells.*.slot",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "slot"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell source: slot differs"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-shadowout",
+      "base": "complete",
+      "field": "receipts[].cells.*.shadowOut",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "shadowOut"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell source: shadowOut differs"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-rounds",
+      "base": "complete",
+      "field": "receipts[].cells.*.rounds",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell source: rounds 99 vs undefined; cell source: items 7 vs undefined"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-failure",
+      "base": "complete",
+      "field": "receipts[].cells.*.failure",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "failure"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell source: failure differs"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-toolcalls",
+      "base": "complete",
+      "field": "receipts[].cells.*.toolCalls",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "toolCalls"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell source: toolCalls differ"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-effectdigest",
+      "base": "complete",
+      "field": "receipts[].cells.*.effectDigest",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: receipt records differ"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-args-mutated",
+      "base": "complete",
+      "field": "receipts[].args",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process receipt does not match record"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-work-steps",
+      "base": "complete",
+      "field": "receipts[].work.steps",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "work.steps"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: work.steps: 0 vs 1"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-work-agentcalls",
+      "base": "complete",
+      "field": "receipts[].work.agentCalls",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "agentCalls"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: work.agentCalls: 7 vs 0"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-work-units",
+      "base": "complete",
+      "field": "receipts[].work.units",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "units"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: work.units: 0 vs 100"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-events-rewritten",
+      "base": "complete",
+      "field": "receipts[].events",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "events"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: events: event logs differ"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-runtime-renamed",
+      "base": "complete",
+      "field": "receipts[].runtime",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "replay stamps the receipt's own runtime field into the rerun by design — replay determinism must hold across runtime versions, so the recorded runtime is echoed, not re-derived"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-manifestkey-renamed",
+      "base": "complete",
+      "field": "receipts[].manifestKey",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: receipt records differ"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-contract-mutated",
+      "base": "complete",
+      "field": "receipts[].contract",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "part": "contract"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "expected contract \"algal.run.v1\""
+      },
+      "pass": true
+    },
+    {
+      "id": "program-contract-rewritten",
+      "base": "complete",
+      "field": "program.contract",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "program contract"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid evidence program contract"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-root-foreign",
+      "base": "complete",
+      "field": "program.root",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "head or root"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process evidence head or root is missing or mismatched"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-manifest-stale-key",
+      "base": "complete",
+      "field": "program.manifests (key)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "part": "manifest"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "message": "evidence manifests digest mismatch"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-manifest-rekeyed-no-root",
+      "base": "complete",
+      "field": "program.manifests (key) + root",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "head or root"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process evidence head or root is missing or mismatched"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-manifest-nonparseable",
+      "base": "complete",
+      "field": "program.manifests (content)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "manifest.contract must be \"algal.organism.v1\" (got \"algal.organism.v2\")"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-manifest-cell-forged",
+      "base": "complete",
+      "field": "program.manifests[].cells",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "does not match record"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process receipt does not match record"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-manifest-budget-lowered",
+      "base": "complete",
+      "field": "program.manifests[].budgets",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "does not replay"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: events: event logs differ"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-manifest-name-renamed",
+      "base": "complete",
+      "field": "program.manifests[].name + receipts[].manifestDigest",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "events"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: events: event logs differ"
+      },
+      "pass": true
+    },
+    {
+      "id": "missing-values-overlap",
+      "base": "complete",
+      "field": "missing.values",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "overlap"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "positive and missing evidence overlap"
+      },
+      "pass": true
+    },
+    {
+      "id": "missing-manifests-extra",
+      "base": "complete",
+      "field": "missing.manifests (extra entry)",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "the missing lists record what the source lacked at export time — an extra absent entry is an unverifiable claim about a past state, inert to replay of the retained head"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-extra-unreferenced",
+      "base": "complete",
+      "field": "records (extra member)",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "an unreferenced record is declared evidence that replay never reads — it extends the claim set without changing what the head authenticates"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    },
+    {
+      "id": "envelope-contract-rewritten",
+      "base": "failed-miss",
+      "field": "contract",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "contract"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid process evidence contract"
+      },
+      "pass": true
+    },
+    {
+      "id": "envelope-unknown-key",
+      "base": "failed-miss",
+      "field": "(envelope unknown key)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "part": "unknown key"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "process evidence has unknown key \"executable\""
+      },
+      "pass": true
+    },
+    {
+      "id": "envelope-head-foreign",
+      "base": "failed-miss",
+      "field": "head",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "head or root"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process evidence head or root is missing or mismatched"
+      },
+      "pass": true
+    },
+    {
+      "id": "envelope-head-nondigest",
+      "base": "failed-miss",
+      "field": "head",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "process evidence head must be a sha256:<64 lowercase hex> digest"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-stale-key",
+      "base": "failed-miss",
+      "field": "records (key)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "part": "digest"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "message": "evidence records digest mismatch"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-extra-field",
+      "base": "failed-miss",
+      "field": "records[].(unknown key)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "part": "unknown key"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "process has unknown key \"executable\""
+      },
+      "pass": true
+    },
+    {
+      "id": "record-status-bogus",
+      "base": "failed-miss",
+      "field": "records[].status",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "status"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid process status"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-generation-over-max",
+      "base": "failed-miss",
+      "field": "records[].maxGenerations",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "part": "maxGenerations"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "maxGenerations must be an integer in [1, 64]"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-args-nonobject",
+      "base": "failed-miss",
+      "field": "records[].args",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "process args must be an object"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-generation-bump",
+      "base": "failed-miss",
+      "field": "records[].generation",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "invalid"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid process completion transition"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-previous-skip-dispatch",
+      "base": "failed-miss",
+      "field": "records[].previous",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "transition"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid process completion transition"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-name-mutated",
+      "base": "failed-miss",
+      "field": "records[].name",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "definition changed"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process definition changed"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-cause-start-to-manual",
+      "base": "failed-miss",
+      "field": "records[].cause",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "cause"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "dispatch cause does not match prior wake"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-mid-dropped",
+      "base": "failed-miss",
+      "field": "records (missing member)",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "STORE_MISS",
+        "part": "declared dependency"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "STORE_MISS",
+        "message": "process evidence lacks a declared dependency"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-stale-digest-field",
+      "base": "failed-miss",
+      "field": "receipts[].digest",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "part": "receipt"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "message": "evidence receipt digest mismatch"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-status",
+      "base": "failed-miss",
+      "field": "receipts[].cells.*.status",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell input: status skipped vs failed"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-work",
+      "base": "failed-miss",
+      "field": "receipts[].cells.*.work",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "work"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell input: work 0 vs 100"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-via-uncommitted",
+      "base": "failed-miss",
+      "field": "receipts[].cells.*.via (on a non-committed cell)",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell input: via forged-transport vs local"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-slot",
+      "base": "failed-miss",
+      "field": "receipts[].cells.*.slot",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "slot"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell input: slot differs"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-shadowout",
+      "base": "failed-miss",
+      "field": "receipts[].cells.*.shadowOut",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "shadowOut"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell input: shadowOut differs"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-rounds",
+      "base": "failed-miss",
+      "field": "receipts[].cells.*.rounds",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell input: rounds 99 vs undefined; cell input: items 7 vs undefined"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-failure",
+      "base": "failed-miss",
+      "field": "receipts[].cells.*.failure",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "failure"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell input: failure differs"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-toolcalls",
+      "base": "failed-miss",
+      "field": "receipts[].cells.*.toolCalls",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "toolCalls"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell input: toolCalls differ"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-effectdigest",
+      "base": "failed-miss",
+      "field": "receipts[].cells.*.effectDigest",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: receipt records differ"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-work-steps",
+      "base": "failed-miss",
+      "field": "receipts[].work.steps",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "work.steps"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: work.steps: 0 vs 1"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-work-agentcalls",
+      "base": "failed-miss",
+      "field": "receipts[].work.agentCalls",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "agentCalls"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: work.agentCalls: 7 vs 0"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-work-units",
+      "base": "failed-miss",
+      "field": "receipts[].work.units",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "units"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: work.units: 0 vs 100"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-events-rewritten",
+      "base": "failed-miss",
+      "field": "receipts[].events",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "events"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: events: event logs differ"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-runtime-renamed",
+      "base": "failed-miss",
+      "field": "receipts[].runtime",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "replay stamps the receipt's own runtime field into the rerun by design — replay determinism must hold across runtime versions, so the recorded runtime is echoed, not re-derived"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-manifestkey-renamed",
+      "base": "failed-miss",
+      "field": "receipts[].manifestKey",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: receipt records differ"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-contract-mutated",
+      "base": "failed-miss",
+      "field": "receipts[].contract",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "part": "contract"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "expected contract \"algal.run.v1\""
+      },
+      "pass": true
+    },
+    {
+      "id": "program-contract-rewritten",
+      "base": "failed-miss",
+      "field": "program.contract",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "program contract"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid evidence program contract"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-root-foreign",
+      "base": "failed-miss",
+      "field": "program.root",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "head or root"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process evidence head or root is missing or mismatched"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-manifest-stale-key",
+      "base": "failed-miss",
+      "field": "program.manifests (key)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "part": "manifest"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "message": "evidence manifests digest mismatch"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-manifest-rekeyed-no-root",
+      "base": "failed-miss",
+      "field": "program.manifests (key) + root",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "head or root"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process evidence head or root is missing or mismatched"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-manifest-nonparseable",
+      "base": "failed-miss",
+      "field": "program.manifests (content)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "manifest.contract must be \"algal.organism.v1\" (got \"algal.organism.v2\")"
+      },
+      "pass": true
+    },
+    {
+      "id": "missing-values-overlap",
+      "base": "failed-miss",
+      "field": "missing.values",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "overlap"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "positive and missing evidence overlap"
+      },
+      "pass": true
+    },
+    {
+      "id": "missing-values-unsorted",
+      "base": "failed-miss",
+      "field": "missing.values (order)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "sorted"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "missing values must be sorted and unique"
+      },
+      "pass": true
+    },
+    {
+      "id": "missing-needed-dropped",
+      "base": "failed-miss",
+      "field": "missing.values (needed entry)",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "does not replay"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell input: failure differs; failure.code: INPUT_MISSING vs STORE_MISS"
+      },
+      "pass": true
+    },
+    {
+      "id": "missing-manifests-extra",
+      "base": "failed-miss",
+      "field": "missing.manifests (extra entry)",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "the missing lists record what the source lacked at export time — an extra absent entry is an unverifiable claim about a past state, inert to replay of the retained head"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-extra-unreferenced",
+      "base": "failed-miss",
+      "field": "records (extra member)",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "an unreferenced record is declared evidence that replay never reads — it extends the claim set without changing what the head authenticates"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    },
+    {
+      "id": "envelope-contract-rewritten",
+      "base": "suspended",
+      "field": "contract",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "contract"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid process evidence contract"
+      },
+      "pass": true
+    },
+    {
+      "id": "envelope-unknown-key",
+      "base": "suspended",
+      "field": "(envelope unknown key)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "part": "unknown key"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "process evidence has unknown key \"executable\""
+      },
+      "pass": true
+    },
+    {
+      "id": "envelope-head-foreign",
+      "base": "suspended",
+      "field": "head",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "head or root"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process evidence head or root is missing or mismatched"
+      },
+      "pass": true
+    },
+    {
+      "id": "envelope-head-nondigest",
+      "base": "suspended",
+      "field": "head",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "process evidence head must be a sha256:<64 lowercase hex> digest"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-stale-key",
+      "base": "suspended",
+      "field": "records (key)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "part": "digest"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "message": "evidence records digest mismatch"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-extra-field",
+      "base": "suspended",
+      "field": "records[].(unknown key)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "part": "unknown key"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "process has unknown key \"executable\""
+      },
+      "pass": true
+    },
+    {
+      "id": "record-status-bogus",
+      "base": "suspended",
+      "field": "records[].status",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "status"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid process status"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-generation-over-max",
+      "base": "suspended",
+      "field": "records[].maxGenerations",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "part": "maxGenerations"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "maxGenerations must be an integer in [1, 64]"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-args-nonobject",
+      "base": "suspended",
+      "field": "records[].args",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "process args must be an object"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-wake-stripped",
+      "base": "suspended",
+      "field": "records[].wake",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process receipt does not match record"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-generation-bump",
+      "base": "suspended",
+      "field": "records[].generation",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "invalid"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid process completion transition"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-previous-skip-dispatch",
+      "base": "suspended",
+      "field": "records[].previous",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "transition"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid process completion transition"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-name-mutated",
+      "base": "suspended",
+      "field": "records[].name",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "definition changed"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process definition changed"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-cause-start-to-manual",
+      "base": "suspended",
+      "field": "records[].cause",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "cause"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "dispatch cause does not match prior wake"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-mid-dropped",
+      "base": "suspended",
+      "field": "records (missing member)",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "STORE_MISS",
+        "part": "declared dependency"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "STORE_MISS",
+        "message": "process evidence lacks a declared dependency"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-stale-digest-field",
+      "base": "suspended",
+      "field": "receipts[].digest",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "part": "receipt"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "message": "evidence receipt digest mismatch"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-status",
+      "base": "suspended",
+      "field": "receipts[].cells.*.status",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell wait: status skipped vs suspended"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-work",
+      "base": "suspended",
+      "field": "receipts[].cells.*.work",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "work"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell wait: work 0 vs 100"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-via-uncommitted",
+      "base": "suspended",
+      "field": "receipts[].cells.*.via (on a non-committed cell)",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell wait: via forged-transport vs local"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-slot",
+      "base": "suspended",
+      "field": "receipts[].cells.*.slot",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "slot"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell wait: slot differs"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-shadowout",
+      "base": "suspended",
+      "field": "receipts[].cells.*.shadowOut",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "shadowOut"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell wait: shadowOut differs"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-rounds",
+      "base": "suspended",
+      "field": "receipts[].cells.*.rounds",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell wait: rounds 99 vs undefined; cell wait: items 7 vs undefined"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-failure",
+      "base": "suspended",
+      "field": "receipts[].cells.*.failure",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "failure"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell wait: failure differs"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-toolcalls",
+      "base": "suspended",
+      "field": "receipts[].cells.*.toolCalls",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "toolCalls"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell wait: toolCalls differ"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-effectdigest",
+      "base": "suspended",
+      "field": "receipts[].cells.*.effectDigest",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: receipt records differ"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-work-steps",
+      "base": "suspended",
+      "field": "receipts[].work.steps",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "work.steps"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: work.steps: 0 vs 1"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-work-agentcalls",
+      "base": "suspended",
+      "field": "receipts[].work.agentCalls",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "agentCalls"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: work.agentCalls: 7 vs 0"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-work-units",
+      "base": "suspended",
+      "field": "receipts[].work.units",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "units"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: work.units: 0 vs 100"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-events-rewritten",
+      "base": "suspended",
+      "field": "receipts[].events",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "events"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: events: event logs differ"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-runtime-renamed",
+      "base": "suspended",
+      "field": "receipts[].runtime",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "replay stamps the receipt's own runtime field into the rerun by design — replay determinism must hold across runtime versions, so the recorded runtime is echoed, not re-derived"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-manifestkey-renamed",
+      "base": "suspended",
+      "field": "receipts[].manifestKey",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: receipt records differ"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-contract-mutated",
+      "base": "suspended",
+      "field": "receipts[].contract",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "part": "contract"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "expected contract \"algal.run.v1\""
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-effect-requestdigest",
+      "base": "suspended",
+      "field": "receipts[].effects.*.requestDigest",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: outcome: suspended vs failed; cell wait: status suspended vs failed; cell wait: failure differs; effects: 1 vs 0; events: event logs differ; failure presence differs"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-effect-output",
+      "base": "suspended",
+      "field": "receipts[].effects.*.output",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process receipt does not match record"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-effect-error-code",
+      "base": "suspended",
+      "field": "receipts[].effects.*.error.code",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "part": "wake"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "effect receipt.wake requires EFFECT_SUSPENDED"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-effect-executor",
+      "base": "suspended",
+      "field": "receipts[].effects.*.executor",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "the executor id is what the host claimed ran the effect; replay echoes it into the rerun receipt, so a forged id verifies — evidence binds the recorded claim, not the true executor"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-effect-usage",
+      "base": "suspended",
+      "field": "receipts[].effects.*.usage",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "usage is executor-reported telemetry replayed verbatim; evidence cannot refute a reported meter — the record binds what was claimed"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-effect-configurationdigest",
+      "base": "suspended",
+      "field": "receipts[].effects.*.configurationDigest",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "configurationDigest binds an admitted executor configuration — it is replayed verbatim; offline evidence cannot re-derive which configuration the host admitted"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-effect-wake-strip",
+      "base": "suspended",
+      "field": "receipts[].effects.*.wake + records[].wake",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "the suspension's wake set is evidence-derived — record and receipt agree and replay reproduces the claimed effects; stripping yields consistent evidence of a suspension claiming no wakeup path"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-effect-appended",
+      "base": "suspended",
+      "field": "receipts[].effects (count)",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: effects: 2 vs 1"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-contract-rewritten",
+      "base": "suspended",
+      "field": "program.contract",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "program contract"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid evidence program contract"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-root-foreign",
+      "base": "suspended",
+      "field": "program.root",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "head or root"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process evidence head or root is missing or mismatched"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-manifest-stale-key",
+      "base": "suspended",
+      "field": "program.manifests (key)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "part": "manifest"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "message": "evidence manifests digest mismatch"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-manifest-rekeyed-no-root",
+      "base": "suspended",
+      "field": "program.manifests (key) + root",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "head or root"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process evidence head or root is missing or mismatched"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-manifest-nonparseable",
+      "base": "suspended",
+      "field": "program.manifests (content)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "manifest.contract must be \"algal.organism.v1\" (got \"algal.organism.v2\")"
+      },
+      "pass": true
+    },
+    {
+      "id": "missing-values-overlap",
+      "base": "suspended",
+      "field": "missing.values",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "overlap"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "positive and missing evidence overlap"
+      },
+      "pass": true
+    },
+    {
+      "id": "missing-manifests-extra",
+      "base": "suspended",
+      "field": "missing.manifests (extra entry)",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "the missing lists record what the source lacked at export time — an extra absent entry is an unverifiable claim about a past state, inert to replay of the retained head"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    },
+    {
+      "id": "tools-effect-narrowed",
+      "base": "suspended",
+      "field": "tools[].effect",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: outcome: suspended vs failed; cell wait: status suspended vs failed; cell wait: failure differs; effects: 1 vs 0; events: event logs differ; failure presence differs"
+      },
+      "pass": true
+    },
+    {
+      "id": "tools-signature-invalid",
+      "base": "suspended",
+      "field": "tools[] (schema)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "tool signature.effect must be read|write"
+      },
+      "pass": true
+    },
+    {
+      "id": "tools-cost-mutated",
+      "base": "suspended",
+      "field": "tools[].cost",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "the declared signature is evidence of what the run admitted — replayed tool effects are served from the recorded receipts and the declared cost is never re-priced; the signature binds the claimed admission, not an independently recomputed charge"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    },
+    {
+      "id": "tools-name-renamed",
+      "base": "suspended",
+      "field": "tools (name)",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "TOOL_UNKNOWN",
+        "part": "unknown tool"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "TOOL_UNKNOWN",
+        "message": "cell \"wait\" references unknown tool \"fixture.wait.v1\""
+      },
+      "pass": true
+    },
+    {
+      "id": "tools-maxbytes-mutated",
+      "base": "suspended",
+      "field": "tools[].maxOutputBytes",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "the declared output bound is claimed admission metadata — the replayed tool effect is served from the recorded receipt, whose output already fits whatever the record claimed"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    },
+    {
+      "id": "tools-extra-inert",
+      "base": "suspended",
+      "field": "tools (extra entry)",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "a declared-but-unreferenced tool signature is inert — offline tools cannot be invoked; the declared set is evidence of what the run could name, and extra names carry no capability"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    },
+    {
+      "id": "tools-name-nul",
+      "base": "suspended",
+      "field": "tools (name format)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "tool name"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid evidence tool name"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-extra-unreferenced",
+      "base": "suspended",
+      "field": "records (extra member)",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "an unreferenced record is declared evidence that replay never reads — it extends the claim set without changing what the head authenticates"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    },
+    {
+      "id": "head-trimmed-to-prior",
+      "base": "suspended",
+      "field": "head (earlier record)",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "evidence of an earlier head is honest evidence of that head — binding `head` to a claimed process is the caller's obligation, discharged through evidenceDigest and the head digest"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    },
+    {
+      "id": "envelope-contract-rewritten",
+      "base": "uncertain",
+      "field": "contract",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "contract"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid process evidence contract"
+      },
+      "pass": true
+    },
+    {
+      "id": "envelope-unknown-key",
+      "base": "uncertain",
+      "field": "(envelope unknown key)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "part": "unknown key"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "process evidence has unknown key \"executable\""
+      },
+      "pass": true
+    },
+    {
+      "id": "envelope-head-foreign",
+      "base": "uncertain",
+      "field": "head",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "head or root"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process evidence head or root is missing or mismatched"
+      },
+      "pass": true
+    },
+    {
+      "id": "envelope-head-nondigest",
+      "base": "uncertain",
+      "field": "head",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "process evidence head must be a sha256:<64 lowercase hex> digest"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-stale-key",
+      "base": "uncertain",
+      "field": "records (key)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "part": "digest"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "message": "evidence records digest mismatch"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-extra-field",
+      "base": "uncertain",
+      "field": "records[].(unknown key)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "part": "unknown key"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "process has unknown key \"executable\""
+      },
+      "pass": true
+    },
+    {
+      "id": "record-status-bogus",
+      "base": "uncertain",
+      "field": "records[].status",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "status"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid process status"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-generation-over-max",
+      "base": "uncertain",
+      "field": "records[].maxGenerations",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "part": "maxGenerations"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "maxGenerations must be an integer in [1, 64]"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-args-nonobject",
+      "base": "uncertain",
+      "field": "records[].args",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "process args must be an object"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-wake-stripped",
+      "base": "uncertain",
+      "field": "records[].wake",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid dispatch intent"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-generation-bump",
+      "base": "uncertain",
+      "field": "records[].generation",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "invalid"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid dispatch intent"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-name-mutated",
+      "base": "uncertain",
+      "field": "records[].name",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "definition changed"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process definition changed"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-cause-start-to-manual",
+      "base": "uncertain",
+      "field": "records[].cause",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "cause"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "dispatch cause does not match prior wake"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-mid-dropped",
+      "base": "uncertain",
+      "field": "records (missing member)",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "STORE_MISS",
+        "part": "declared dependency"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "STORE_MISS",
+        "message": "process evidence lacks a declared dependency"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-contract-rewritten",
+      "base": "uncertain",
+      "field": "program.contract",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "program contract"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid evidence program contract"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-root-foreign",
+      "base": "uncertain",
+      "field": "program.root",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "head or root"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process evidence head or root is missing or mismatched"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-manifest-stale-key",
+      "base": "uncertain",
+      "field": "program.manifests (key)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "part": "manifest"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "message": "evidence manifests digest mismatch"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-manifest-rekeyed-no-root",
+      "base": "uncertain",
+      "field": "program.manifests (key) + root",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "head or root"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process evidence head or root is missing or mismatched"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-manifest-nonparseable",
+      "base": "uncertain",
+      "field": "program.manifests (content)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "manifest.contract must be \"algal.organism.v1\" (got \"algal.organism.v2\")"
+      },
+      "pass": true
+    },
+    {
+      "id": "missing-values-overlap",
+      "base": "uncertain",
+      "field": "missing.values",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "overlap"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "positive and missing evidence overlap"
+      },
+      "pass": true
+    },
+    {
+      "id": "missing-manifests-extra",
+      "base": "uncertain",
+      "field": "missing.manifests (extra entry)",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "the missing lists record what the source lacked at export time — an extra absent entry is an unverifiable claim about a past state, inert to replay of the retained head"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    },
+    {
+      "id": "tools-effect-narrowed",
+      "base": "uncertain",
+      "field": "tools[].effect",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: outcome: suspended vs failed; cell wait: status suspended vs failed; cell wait: failure differs; effects: 1 vs 0; events: event logs differ; failure presence differs"
+      },
+      "pass": true
+    },
+    {
+      "id": "tools-signature-invalid",
+      "base": "uncertain",
+      "field": "tools[] (schema)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "tool signature.effect must be read|write"
+      },
+      "pass": true
+    },
+    {
+      "id": "tools-cost-mutated",
+      "base": "uncertain",
+      "field": "tools[].cost",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "the declared signature is evidence of what the run admitted — replayed tool effects are served from the recorded receipts and the declared cost is never re-priced; the signature binds the claimed admission, not an independently recomputed charge"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    },
+    {
+      "id": "tools-name-renamed",
+      "base": "uncertain",
+      "field": "tools (name)",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "TOOL_UNKNOWN",
+        "part": "unknown tool"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "TOOL_UNKNOWN",
+        "message": "cell \"wait\" references unknown tool \"fixture.wait.v1\""
+      },
+      "pass": true
+    },
+    {
+      "id": "tools-maxbytes-mutated",
+      "base": "uncertain",
+      "field": "tools[].maxOutputBytes",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "the declared output bound is claimed admission metadata — the replayed tool effect is served from the recorded receipt, whose output already fits whatever the record claimed"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-extra-unreferenced",
+      "base": "uncertain",
+      "field": "records (extra member)",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "an unreferenced record is declared evidence that replay never reads — it extends the claim set without changing what the head authenticates"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    },
+    {
+      "id": "envelope-contract-rewritten",
+      "base": "value-dep",
+      "field": "contract",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "contract"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid process evidence contract"
+      },
+      "pass": true
+    },
+    {
+      "id": "envelope-unknown-key",
+      "base": "value-dep",
+      "field": "(envelope unknown key)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "part": "unknown key"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "process evidence has unknown key \"executable\""
+      },
+      "pass": true
+    },
+    {
+      "id": "envelope-head-foreign",
+      "base": "value-dep",
+      "field": "head",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "head or root"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process evidence head or root is missing or mismatched"
+      },
+      "pass": true
+    },
+    {
+      "id": "envelope-head-nondigest",
+      "base": "value-dep",
+      "field": "head",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "process evidence head must be a sha256:<64 lowercase hex> digest"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-stale-key",
+      "base": "value-dep",
+      "field": "records (key)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "part": "digest"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "message": "evidence records digest mismatch"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-extra-field",
+      "base": "value-dep",
+      "field": "records[].(unknown key)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "part": "unknown key"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "process has unknown key \"executable\""
+      },
+      "pass": true
+    },
+    {
+      "id": "record-status-bogus",
+      "base": "value-dep",
+      "field": "records[].status",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "status"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid process status"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-generation-over-max",
+      "base": "value-dep",
+      "field": "records[].maxGenerations",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "part": "maxGenerations"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "maxGenerations must be an integer in [1, 64]"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-args-nonobject",
+      "base": "value-dep",
+      "field": "records[].args",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "process args must be an object"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-wake-on-terminal",
+      "base": "value-dep",
+      "field": "records[].wake",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "wake"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "terminal process cannot carry wake evidence"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-status-complete-to-failed",
+      "base": "value-dep",
+      "field": "records[].status",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "does not match record"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process receipt does not match record"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-status-to-suspended",
+      "base": "value-dep",
+      "field": "records[].status",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "does not match record"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process receipt does not match record"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-generation-bump",
+      "base": "value-dep",
+      "field": "records[].generation",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "invalid"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid process completion transition"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-previous-skip-dispatch",
+      "base": "value-dep",
+      "field": "records[].previous",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "transition"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid process completion transition"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-name-mutated",
+      "base": "value-dep",
+      "field": "records[].name",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "definition changed"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process definition changed"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-args-mutated",
+      "base": "value-dep",
+      "field": "records[].args",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "definition changed"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process definition changed"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-cause-start-to-manual",
+      "base": "value-dep",
+      "field": "records[].cause",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "cause"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "dispatch cause does not match prior wake"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-mid-dropped",
+      "base": "value-dep",
+      "field": "records (missing member)",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "STORE_MISS",
+        "part": "declared dependency"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "STORE_MISS",
+        "message": "process evidence lacks a declared dependency"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-manifest-swap",
+      "base": "value-dep",
+      "field": "records[].manifestDigest + program.root",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "does not match record"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process receipt does not match record"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-stale-digest-field",
+      "base": "value-dep",
+      "field": "receipts[].digest",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "part": "receipt"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "message": "evidence receipt digest mismatch"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-outcome-flip",
+      "base": "value-dep",
+      "field": "receipts[].outcome",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "does not match record"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process receipt does not match record"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-outcome-and-status",
+      "base": "value-dep",
+      "field": "receipts[].outcome + records[].status",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "does not replay"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: outcome: failed vs complete; failure presence differs"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-status",
+      "base": "value-dep",
+      "field": "receipts[].cells.*.status",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell input: status skipped vs committed; cell input: outputs differ"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-work",
+      "base": "value-dep",
+      "field": "receipts[].cells.*.work",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "work"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell input: work 0 vs 100"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-via",
+      "base": "value-dep",
+      "field": "receipts[].cells.*.via",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "via records which transport resolved the cell — it is echoed verbatim by replay (replayVia serves the recorded value), so a forged transport name verifies: the field binds what the host claimed, not an independently re-resolvable fact"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-slot",
+      "base": "value-dep",
+      "field": "receipts[].cells.*.slot",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "slot"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell input: slot differs"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-shadowout",
+      "base": "value-dep",
+      "field": "receipts[].cells.*.shadowOut",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "shadowOut"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell input: shadowOut differs"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-rounds",
+      "base": "value-dep",
+      "field": "receipts[].cells.*.rounds",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell input: rounds 99 vs undefined; cell input: items 7 vs undefined"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-failure",
+      "base": "value-dep",
+      "field": "receipts[].cells.*.failure",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "failure"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell input: failure differs"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-toolcalls",
+      "base": "value-dep",
+      "field": "receipts[].cells.*.toolCalls",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "toolCalls"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: cell input: toolCalls differ"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-cell-effectdigest",
+      "base": "value-dep",
+      "field": "receipts[].cells.*.effectDigest",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: receipt records differ"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-args-mutated",
+      "base": "value-dep",
+      "field": "receipts[].args",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process receipt does not match record"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-work-steps",
+      "base": "value-dep",
+      "field": "receipts[].work.steps",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "work.steps"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: work.steps: 0 vs 1"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-work-agentcalls",
+      "base": "value-dep",
+      "field": "receipts[].work.agentCalls",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "agentCalls"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: work.agentCalls: 7 vs 0"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-work-units",
+      "base": "value-dep",
+      "field": "receipts[].work.units",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "units"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: work.units: 0 vs 100"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-events-rewritten",
+      "base": "value-dep",
+      "field": "receipts[].events",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "part": "events"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: events: event logs differ"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-runtime-renamed",
+      "base": "value-dep",
+      "field": "receipts[].runtime",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "replay stamps the receipt's own runtime field into the rerun by design — replay determinism must hold across runtime versions, so the recorded runtime is echoed, not re-derived"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-manifestkey-renamed",
+      "base": "value-dep",
+      "field": "receipts[].manifestKey",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: receipt records differ"
+      },
+      "pass": true
+    },
+    {
+      "id": "receipt-contract-mutated",
+      "base": "value-dep",
+      "field": "receipts[].contract",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "part": "contract"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "expected contract \"algal.run.v1\""
+      },
+      "pass": true
+    },
+    {
+      "id": "program-contract-rewritten",
+      "base": "value-dep",
+      "field": "program.contract",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "program contract"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "invalid evidence program contract"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-root-foreign",
+      "base": "value-dep",
+      "field": "program.root",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "head or root"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process evidence head or root is missing or mismatched"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-manifest-stale-key",
+      "base": "value-dep",
+      "field": "program.manifests (key)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "part": "manifest"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "message": "evidence manifests digest mismatch"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-manifest-rekeyed-no-root",
+      "base": "value-dep",
+      "field": "program.manifests (key) + root",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "head or root"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process evidence head or root is missing or mismatched"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-manifest-nonparseable",
+      "base": "value-dep",
+      "field": "program.manifests (content)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "PARSE_FAILED"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "PARSE_FAILED",
+        "message": "manifest.contract must be \"algal.organism.v1\" (got \"algal.organism.v2\")"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-value-dropped",
+      "base": "value-dep",
+      "field": "program.values (needed entry)",
+      "kind": "semantic",
+      "expect": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH"
+      },
+      "observed": {
+        "stage": "semantic",
+        "code": "RECEIPT_MISMATCH",
+        "message": "process generation 1 does not replay: outcome: complete vs failed; cell input: status committed vs failed; cell input: outputs differ; cell input: failure differs; events: event logs differ; failure presence differs"
+      },
+      "pass": true
+    },
+    {
+      "id": "program-value-forged",
+      "base": "value-dep",
+      "field": "program.values (content)",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "DIGEST_MISMATCH",
+        "message": "evidence values digest mismatch"
+      },
+      "pass": true
+    },
+    {
+      "id": "missing-values-overlap",
+      "base": "value-dep",
+      "field": "missing.values",
+      "kind": "admission",
+      "expect": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "part": "overlap"
+      },
+      "observed": {
+        "stage": "admission",
+        "code": "RECEIPT_MISMATCH",
+        "message": "positive and missing evidence overlap"
+      },
+      "pass": true
+    },
+    {
+      "id": "missing-manifests-extra",
+      "base": "value-dep",
+      "field": "missing.manifests (extra entry)",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "the missing lists record what the source lacked at export time — an extra absent entry is an unverifiable claim about a past state, inert to replay of the retained head"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    },
+    {
+      "id": "record-extra-unreferenced",
+      "base": "value-dep",
+      "field": "records (extra member)",
+      "kind": "survivor-probe",
+      "expect": {
+        "stage": "survivor",
+        "reason": "an unreferenced record is declared evidence that replay never reads — it extends the claim set without changing what the head authenticates"
+      },
+      "observed": {
+        "stage": "accepted"
+      },
+      "pass": true
+    }
+  ],
+  "totals": {
+    "mutants": 73,
+    "probes": 224,
+    "passed": 224,
+    "failed": 0,
+    "byExpectation": {
+      "admission": 91,
+      "semantic": 107,
+      "survivor": 26
+    },
+    "fieldCoverage": {
+      "fields": 58,
+      "covered": 57,
+      "declaredOnly": 1
+    }
+  },
+  "survivors": [
+    {
+      "id": "receipt-cell-via",
+      "base": "complete",
+      "reason": "via records which transport resolved the cell — it is echoed verbatim by replay (replayVia serves the recorded value), so a forged transport name verifies: the field binds what the host claimed, not an independently re-resolvable fact"
+    },
+    {
+      "id": "receipt-runtime-renamed",
+      "base": "complete",
+      "reason": "replay stamps the receipt's own runtime field into the rerun by design — replay determinism must hold across runtime versions, so the recorded runtime is echoed, not re-derived"
+    },
+    {
+      "id": "missing-manifests-extra",
+      "base": "complete",
+      "reason": "the missing lists record what the source lacked at export time — an extra absent entry is an unverifiable claim about a past state, inert to replay of the retained head"
+    },
+    {
+      "id": "record-extra-unreferenced",
+      "base": "complete",
+      "reason": "an unreferenced record is declared evidence that replay never reads — it extends the claim set without changing what the head authenticates"
+    },
+    {
+      "id": "receipt-runtime-renamed",
+      "base": "failed-miss",
+      "reason": "replay stamps the receipt's own runtime field into the rerun by design — replay determinism must hold across runtime versions, so the recorded runtime is echoed, not re-derived"
+    },
+    {
+      "id": "missing-manifests-extra",
+      "base": "failed-miss",
+      "reason": "the missing lists record what the source lacked at export time — an extra absent entry is an unverifiable claim about a past state, inert to replay of the retained head"
+    },
+    {
+      "id": "record-extra-unreferenced",
+      "base": "failed-miss",
+      "reason": "an unreferenced record is declared evidence that replay never reads — it extends the claim set without changing what the head authenticates"
+    },
+    {
+      "id": "receipt-runtime-renamed",
+      "base": "suspended",
+      "reason": "replay stamps the receipt's own runtime field into the rerun by design — replay determinism must hold across runtime versions, so the recorded runtime is echoed, not re-derived"
+    },
+    {
+      "id": "receipt-effect-executor",
+      "base": "suspended",
+      "reason": "the executor id is what the host claimed ran the effect; replay echoes it into the rerun receipt, so a forged id verifies — evidence binds the recorded claim, not the true executor"
+    },
+    {
+      "id": "receipt-effect-usage",
+      "base": "suspended",
+      "reason": "usage is executor-reported telemetry replayed verbatim; evidence cannot refute a reported meter — the record binds what was claimed"
+    },
+    {
+      "id": "receipt-effect-configurationdigest",
+      "base": "suspended",
+      "reason": "configurationDigest binds an admitted executor configuration — it is replayed verbatim; offline evidence cannot re-derive which configuration the host admitted"
+    },
+    {
+      "id": "receipt-effect-wake-strip",
+      "base": "suspended",
+      "reason": "the suspension's wake set is evidence-derived — record and receipt agree and replay reproduces the claimed effects; stripping yields consistent evidence of a suspension claiming no wakeup path"
+    },
+    {
+      "id": "missing-manifests-extra",
+      "base": "suspended",
+      "reason": "the missing lists record what the source lacked at export time — an extra absent entry is an unverifiable claim about a past state, inert to replay of the retained head"
+    },
+    {
+      "id": "tools-cost-mutated",
+      "base": "suspended",
+      "reason": "the declared signature is evidence of what the run admitted — replayed tool effects are served from the recorded receipts and the declared cost is never re-priced; the signature binds the claimed admission, not an independently recomputed charge"
+    },
+    {
+      "id": "tools-maxbytes-mutated",
+      "base": "suspended",
+      "reason": "the declared output bound is claimed admission metadata — the replayed tool effect is served from the recorded receipt, whose output already fits whatever the record claimed"
+    },
+    {
+      "id": "tools-extra-inert",
+      "base": "suspended",
+      "reason": "a declared-but-unreferenced tool signature is inert — offline tools cannot be invoked; the declared set is evidence of what the run could name, and extra names carry no capability"
+    },
+    {
+      "id": "record-extra-unreferenced",
+      "base": "suspended",
+      "reason": "an unreferenced record is declared evidence that replay never reads — it extends the claim set without changing what the head authenticates"
+    },
+    {
+      "id": "head-trimmed-to-prior",
+      "base": "suspended",
+      "reason": "evidence of an earlier head is honest evidence of that head — binding `head` to a claimed process is the caller's obligation, discharged through evidenceDigest and the head digest"
+    },
+    {
+      "id": "missing-manifests-extra",
+      "base": "uncertain",
+      "reason": "the missing lists record what the source lacked at export time — an extra absent entry is an unverifiable claim about a past state, inert to replay of the retained head"
+    },
+    {
+      "id": "tools-cost-mutated",
+      "base": "uncertain",
+      "reason": "the declared signature is evidence of what the run admitted — replayed tool effects are served from the recorded receipts and the declared cost is never re-priced; the signature binds the claimed admission, not an independently recomputed charge"
+    },
+    {
+      "id": "tools-maxbytes-mutated",
+      "base": "uncertain",
+      "reason": "the declared output bound is claimed admission metadata — the replayed tool effect is served from the recorded receipt, whose output already fits whatever the record claimed"
+    },
+    {
+      "id": "record-extra-unreferenced",
+      "base": "uncertain",
+      "reason": "an unreferenced record is declared evidence that replay never reads — it extends the claim set without changing what the head authenticates"
+    },
+    {
+      "id": "receipt-cell-via",
+      "base": "value-dep",
+      "reason": "via records which transport resolved the cell — it is echoed verbatim by replay (replayVia serves the recorded value), so a forged transport name verifies: the field binds what the host claimed, not an independently re-resolvable fact"
+    },
+    {
+      "id": "receipt-runtime-renamed",
+      "base": "value-dep",
+      "reason": "replay stamps the receipt's own runtime field into the rerun by design — replay determinism must hold across runtime versions, so the recorded runtime is echoed, not re-derived"
+    },
+    {
+      "id": "missing-manifests-extra",
+      "base": "value-dep",
+      "reason": "the missing lists record what the source lacked at export time — an extra absent entry is an unverifiable claim about a past state, inert to replay of the retained head"
+    },
+    {
+      "id": "record-extra-unreferenced",
+      "base": "value-dep",
+      "reason": "an unreferenced record is declared evidence that replay never reads — it extends the claim set without changing what the head authenticates"
+    }
+  ]
+}

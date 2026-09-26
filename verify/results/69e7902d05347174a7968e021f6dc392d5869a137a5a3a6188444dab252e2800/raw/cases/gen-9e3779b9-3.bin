@@ -1,0 +1,16 @@
+{ "program"
+:[  "ge\u0074" 
+ ,
+"e"]	,
+"env"	: { 
+ "e"  : 
+ {
+"aa\u0061aa\u0061aaaaa\u0061a\u0061aaa\u0061aa"
+: 
+ "hasOwnProperty"	} ,
+"x"	:
+[  false , [  false ]] 
+ , 
+ "y"  :false
+}
+}

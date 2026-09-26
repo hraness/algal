@@ -1,0 +1,1 @@
+{"program":["list",["mul",["merge",["quote",{"10":true}],["quote",-42]]],["fold",["lt",{"":2},["values",["quote",2.5]]],-1e-7,"_q","_q",["list",-1.5e+300]]],"env":{"x":"x","y":{"a":{}},"e":["Z",{},{"hasOwnProperty":["with space","2","𐀀"]}]},"fuel":20}

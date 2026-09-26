@@ -1,0 +1,24 @@
+{ 
+ "env" 
+ : {
+"e"
+:  { 
+ "2"
+:	[ 
+ null	,
+null , 
+ 2 ]}  , 
+ "x"  : "constructor",
+"y" :
+true
+}  ,	"program": 
+ [  "and"
+,	["let"	,	"x"	,	-5e-324 ,	[	"values"
+,
+[ 
+ "\u0071u\u006f\u0074e",  "key-with-dash"  ]]  ],  [ 
+ "isList"  , ["ad\u0064"  ,"a\nb" ,	[
+"get",
+"e"] 
+ ] 
+ ]]}

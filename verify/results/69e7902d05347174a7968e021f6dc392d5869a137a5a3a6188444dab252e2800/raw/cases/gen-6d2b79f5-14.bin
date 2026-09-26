@@ -1,0 +1,23 @@
+{ 
+ "env" 
+ :
+{
+"e" :[false
+, 
+ 0.1 
+ , 
+ null ]  ,  "x":	[]  , "y":
+"a\nb"}
+, 
+ "program"	:
+[ "\u0069\u0073\u004e\u0075ll", 
+ ["round" , 
+ [ "sconcat"
+,[	"quote",  "a\tb"]
+,	[  "quote" 
+ ,
+"10" ],
+[	"quo\u0074e" 
+ , "a"	]	]
+]  ]	, 
+ "f\u0075\u0065\u006c" :	20}

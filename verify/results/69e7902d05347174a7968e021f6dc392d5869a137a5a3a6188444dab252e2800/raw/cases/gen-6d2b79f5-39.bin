@@ -1,0 +1,1 @@
+{"program":["scontains",["quote","01"],["quote","with space"]],"env":{"x":{"𐀀":[1e+21,null]},"y":"","e":9007199254740992},"fuel":20}

@@ -1,0 +1,1 @@
+{"program":["eq",["max",[["a"]],["sort",["quote",[false,{"a":true,"2":18446744073709552000},{"2":"4294967295"},5e-324]]],["let","z",["starts",["quote","hasOwnProperty"],["quote","a"]],{"\u0000":{"\"quoted\"":1,"01":1.7976931348623157e+308}}]],["keys",["quote","constructor"]]],"env":{"x":0,"y":1e+21,"e":[]}}

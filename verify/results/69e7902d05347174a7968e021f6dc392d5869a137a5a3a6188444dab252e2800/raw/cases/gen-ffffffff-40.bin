@@ -1,0 +1,1 @@
+{"program":["lt",["ceil",["not",1000000000000000]],["if",[5e-324,9007199254740992],["split",["quote","key-with-dash"],["quote","aaaaaaaaaaaaaaaaaaaa"]],[false,{"2":"∀x"},"\"quoted\""]]],"env":{"x":false,"y":18446744073709552000,"e":0.1},"fuel":200}

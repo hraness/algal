@@ -1,0 +1,1 @@
+{"program":["scontains",["quote","\u0000"],["quote","10"]],"env":{"x":[[1.5e+300,"constructor",false],null],"y":null,"e":true},"fuel":200}

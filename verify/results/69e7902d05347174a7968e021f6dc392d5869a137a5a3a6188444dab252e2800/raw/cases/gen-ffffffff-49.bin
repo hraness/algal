@@ -1,0 +1,1 @@
+{"program":["isList",["map",["get","v"],"v",["join",["quote","abc"],["quote",["a","b"]]]]],"env":{"x":"x","y":{"constructor":null,"10":null},"e":null},"fuel":10000}

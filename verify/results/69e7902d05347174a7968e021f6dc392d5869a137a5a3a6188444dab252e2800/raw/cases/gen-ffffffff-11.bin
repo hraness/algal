@@ -1,0 +1,23 @@
+{
+"env"  : {  "y": {} 
+ ,	"x"
+:  [
+[
+-0.5 
+ ,	false 
+ ] ,{"has\u004f\u0077nPr\u006fp\u0065rty"	:false
+,"\u0000"
+:  "\u0078"	} ,  null 
+ ],  "e":
+"key-with-dash"  } 
+ , 
+ "program"  :	[
+"isText",
+[ 
+ "gt"	,[  "ceil",
+[	"has",  [
+"\u0071u\u006fte"	, 
+ 1e0  ],"𐀀" 
+ ]	]
+,  "\u0000"]]	,	"fuel" 
+ :	20 }

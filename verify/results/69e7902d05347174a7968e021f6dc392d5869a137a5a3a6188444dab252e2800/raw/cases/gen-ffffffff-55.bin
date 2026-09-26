@@ -1,0 +1,1 @@
+{"program":["neq",["get","e","01",2],["toText",["upper",["quote",""]]]],"env":{"x":false,"y":[],"e":true},"fuel":20}

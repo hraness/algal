@@ -1,0 +1,11 @@
+{"env"
+:{ 
+ "x": [	"1e2"	], "e" 
+ :{  "2"	:[	"with space" 
+ ]} ,  "y":  [
+0 ,	"with space"]  }
+, 
+ "fuel"
+: 4 
+ ,	"program"	:	[
+"get"	,"y" ]}

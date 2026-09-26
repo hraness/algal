@@ -1,0 +1,20 @@
+{ 
+ "fuel"
+:	0 
+ ,
+"env"	:
+{"x"	: 
+ "prototype"	, 
+ "e"	:
+"constructor" , 
+ "y": 
+ true	} ,"program"
+: 
+ [ "values"
+,
+[ "quote"
+,
+{} 
+ ] 
+ ]
+}

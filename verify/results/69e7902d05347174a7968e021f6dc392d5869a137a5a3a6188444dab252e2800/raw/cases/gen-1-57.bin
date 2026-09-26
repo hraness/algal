@@ -1,0 +1,1 @@
+{"program":["split",["quote"," x "],["quote","é"]],"env":{"x":{"with space":{"constructor":false},"01":{}},"y":[],"e":{}},"fuel":10000}
