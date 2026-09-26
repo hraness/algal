@@ -213,6 +213,47 @@ test("pure expressions preserve arithmetic, records, lists, null, short circuit 
   }
 });
 
+test("map, filter, and fold lower to bounded evaluator ops and type their results", async () => {
+  const { manifest } = compileSource(`program transforms(nums: json) -> json {
+    budget { max_agent_calls: 0 }
+    let doubled = map over n in nums using n * 2
+    let big = filter over n in nums using n > 2
+    let total = fold over sum, n in nums from 0 using sum + n
+    let wrapped = map over n in [1, 2, 3] using { v: n, ok: n > 1 }
+    return { d: doubled, b: big, t: total, w: wrapped }
+  }`);
+  const cells = manifest.cells.filter(c => c.kind === "expr");
+  const programs = cells.map(c => JSON.stringify(c.expr.program));
+  expect(programs.some(p => p.includes('"map"'))).toBe(true);
+  expect(programs.some(p => p.includes('"filter"'))).toBe(true);
+  expect(programs.some(p => p.includes('"fold"'))).toBe(true);
+  const receipt = await runOrganism({ manifest, args: { input: { nums: [1, 2, 3, 4] } }, store: new MemoryStore(), fns: builtinRegistry(), executors: [] });
+  expect(receipt.outcome).toBe("complete");
+  expect(receipt.cells.result?.outputs?.out).toEqual({ d: [2, 4, 6, 8], b: [3, 4], t: 10, w: [{ v: 1, ok: false }, { v: 2, ok: true }, { v: 3, ok: true }] });
+});
+
+test("map, filter, and fold check binders, bodies, and list operands statically", () => {
+  expect(() => compileSource(pure(`filter over x in [1, 2] using x + 1`))).toThrow(/expected boolean/);
+  expect(() => compileSource(pure(`map over x in 5 using x`))).toThrow(/require a list/);
+  expect(() => compileSource(pure(`fold over x in [1] from 0 using x`))).toThrow(/expected|binder|unsupported/i);
+  expect(() => compileSource(pure(`fold over a, a in [1] from 0 using a`))).toThrow(/binder names must differ/);
+  expect(() => compileSource(pure(`map over x in [1] using decide "q" using x as noul`))).toThrow(/effects and calls require a whole binding/);
+  for (const word of ["map", "filter", "fold"]) expect(() => compileSource(pure(`let ${word} = 1`))).toThrow();
+});
+
+test("fold types the accumulator by convergence and binders shadow outer names", async () => {
+  const { manifest } = compileSource(`program fold_typing(x: text, nums: json) -> json {
+    budget { max_agent_calls: 0 }
+    let joined = fold over acc, n in nums from "" using acc + "n"
+    let counted = fold over acc, n in nums from 0 using acc + 1
+    let shadowed = map over x in nums using x
+    return { j: joined, c: counted, s: shadowed }
+  }`);
+  const receipt = await runOrganism({ manifest, args: { input: { x: "outer", nums: [1, 2, 3] } }, store: new MemoryStore(), fns: builtinRegistry(), executors: [] });
+  expect(receipt.outcome).toBe("complete");
+  expect(receipt.cells.result?.outputs?.out).toEqual({ j: "nnn", c: 3, s: [1, 2, 3] });
+});
+
 test("JSON runtime types are checked by pure operators and bindings use safe wire names", async () => {
   const { manifest } = compileSource(`program price(order_data: json) -> json {
     budget { max_agent_calls: 0 }

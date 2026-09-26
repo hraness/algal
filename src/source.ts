@@ -109,6 +109,8 @@ type Expr = Span & (
   | { kind: "generate"; instruction: Expr; context: Expr; as?: FieldType }
   | { kind: "call"; alias: string; args: Expr }
   | { kind: "each"; alias: string; over: string; items: Expr; args: Expr; maxItems: number }
+  | { kind: "map" | "filter"; over: string; items: Expr; using: Expr }
+  | { kind: "fold"; over: [string, string]; items: Expr; from: Expr; using: Expr }
 );
 /** A named record declared after imports; it lowers to a bounded core JSON schema. */
 type SourceRecord = Span & { kind: "record"; name: string; closed: boolean; fields: SourceField[]; schema: JsonObject; schemaVersion?: SchemaVersion };
@@ -129,7 +131,7 @@ type SourceList = { kind: "list"; item: FieldType; schema: JsonObject; schemaVer
 type SourceShape = SourceRecord | SourceList;
 type SourceType = "text" | "json" | SourceShape;
 type SourceProgram = Span & { name: string; parameters: { name: string; type: SourceType; span: Span }[]; output: SourceType; budgets: Budgets; bindings: { name: string; expr: Expr }[]; result: Expr };
-const reserved = new Set(["program", "budget", "let", "return", "decide", "generate", "using", "as", "choice", "match", "if", "else", "true", "false", "null", "text", "json", "import", "from", "call", "each", "over", "in", "max_items", "__proto__", "prototype", "constructor"]);
+const reserved = new Set(["program", "budget", "let", "return", "decide", "generate", "using", "as", "choice", "match", "if", "else", "true", "false", "null", "text", "json", "import", "from", "call", "each", "over", "in", "max_items", "map", "filter", "fold", "__proto__", "prototype", "constructor"]);
 const operators: Record<string, { precedence: number; op: string }> = {
   "||": { precedence: 1, op: "or" }, "&&": { precedence: 2, op: "and" },
   "==": { precedence: 3, op: "eq" }, "!=": { precedence: 3, op: "neq" },
@@ -500,6 +502,18 @@ class Parser {
       if (bound.kind !== "number" || !Number.isSafeInteger(maxItems) || maxItems < 1 || maxItems > BOUNDS.maxEachItems) this.fail(`max_items must be an integer in 1..${BOUNDS.maxEachItems}`, bound);
       return build({ kind: "each", alias, over, items, args, maxItems } as never);
     }
+    if (token.text === "map" || token.text === "filter") {
+      this.expect("over"); const over = this.name().text; this.expect("in");
+      const items = this.expression(0, depth + 1); this.expect("using"); const using = this.expression(0, depth + 1);
+      return build({ kind: token.text, over, items, using } as never);
+    }
+    if (token.text === "fold") {
+      this.expect("over"); const acc = this.name().text; this.expect(","); const item = this.name().text; this.expect("in");
+      if (acc === item) this.fail("fold binder names must differ", token);
+      const items = this.expression(0, depth + 1); this.expect("from"); const from = this.expression(0, depth + 1);
+      this.expect("using"); const using = this.expression(0, depth + 1);
+      return build({ kind: "fold", over: [acc, item], items, from, using } as never);
+    }
     if (token.kind === "id" && !reserved.has(token.text)) { if (token.text.length > SOURCE_BOUNDS.maxNameLength) this.fail("identifier exceeds 40 characters", token); return build({ kind: "name", name: token.text } as never); }
     return this.fail(`unsupported expression ${JSON.stringify(token.text)}`, token);
   }
@@ -667,9 +681,23 @@ function describe(expr: Expr): string {
     case "generate": text = `generate ${show(expr.instruction)} using ${show(expr.context)}${expr.as === undefined ? "" : ` as ${fieldTypeText(expr.as)}`}`; break;
     case "call": text = `call ${expr.alias} using ${show(expr.args)}`; break;
     case "each": text = `each ${expr.alias} over ${expr.over} in ${show(expr.items)} max_items ${expr.maxItems}`; break;
+    case "map": case "filter": text = `${expr.kind} over ${expr.over} in ${show(expr.items)} using ${show(expr.using)}`; break;
+    case "fold": text = `fold over ${expr.over[0]}, ${expr.over[1]} in ${show(expr.items)} from ${show(expr.from)} using ${show(expr.using)}`; break;
   }
   return clipped(text);
 }
+function sameType(a: Type, b: Type): boolean {
+  if (a.kind !== b.kind) return false;
+  switch (a.kind) {
+    case "text": case "number": return a.literal === (b as Extract<Type, { kind: typeof a.kind }>).literal;
+    case "choice": case "decision": case "scored": { const labels = (b as typeof a).labels; return a.labels.length === labels.length && a.labels.every(label => labels.includes(label)); }
+    case "list": { const bb = b as typeof a; return sameOptional(a.item, bb.item) && a.items?.length === bb.items?.length && (a.items ?? []).every((item, index) => sameType(item, bb.items![index]!)); }
+    case "record": { const bb = b as typeof a; if ((a.declared === undefined) !== (bb.declared === undefined) || a.fields.size !== bb.fields.size) return false; for (const [name, type] of a.fields) { const other = bb.fields.get(name); if (other === undefined || !sameType(type, other)) return false; } return true; }
+    default: return true;
+  }
+}
+function sameOptional(a: Type | undefined, b: Type | undefined): boolean { return a === undefined ? b === undefined : b !== undefined && sameType(a, b); }
+
 function annotation(title: string, operation: string, summary: string, details: string[] = []): SourceAnnotation {
   return { title: clipped(title, 96), operation: clipped(operation, 40), summary: clipped(summary), details: details.slice(0, 16).map(detail => clipped(detail)) };
 }
@@ -681,6 +709,8 @@ function expressionAnnotation(title: string, expr: Expr, role: string): SourceAn
   if (expr.kind === "if") details = [`condition: ${describe(expr.condition)}`, `true => ${describe(expr.yes)}`, `false => ${describe(expr.no)}`];
   if (expr.kind === "call") details = [`arguments: ${describe(expr.args)}`];
   if (expr.kind === "each") details = [`arguments: ${describe(expr.args)}`, `At most ${expr.maxItems} items; ordered results`];
+  if (expr.kind === "map" || expr.kind === "filter") details = [`items: ${describe(expr.items)}`, `per ${expr.over}: ${describe(expr.using)}`];
+  if (expr.kind === "fold") details = [`items: ${describe(expr.items)}`, `from: ${describe(expr.from)}`, `per ${expr.over[0]}, ${expr.over[1]}: ${describe(expr.using)}`];
   if (role === "decision-check") {
     const labels = expr.kind === "decide" ? expr.as === "choice" ? expr.criteria.map(([label]) => label) : expr.as === "score" ? expr.labels : [] : [];
     const what = expr.kind === "decide" && expr.as === "noul" ? "keep probability" : `${expr.kind === "decide" ? expr.as : "choice"}, confidence, and every probability`;
@@ -699,6 +729,8 @@ function hasEffect(expr: Expr): boolean {
     case "list": return expr.items.some(hasEffect);
     case "if": return hasEffect(expr.condition) || hasEffect(expr.yes) || hasEffect(expr.no);
     case "match": return hasEffect(expr.value) || expr.arms.some(([, arm]) => hasEffect(arm));
+    case "map": case "filter": return hasEffect(expr.items) || hasEffect(expr.using);
+    case "fold": return hasEffect(expr.items) || hasEffect(expr.from) || hasEffect(expr.using);
   }
 }
 
@@ -810,13 +842,27 @@ class Compiler {
     if (type.kind === "json" || type.kind === kind || (kind === "text" && isText(type))) return;
     this.parser.fail(`expected ${kind}, found ${type.kind}`, span);
   }
+  /** The element type a `map`, `filter`, or `fold` binder sees: the declared
+   * item type, the merge of a list literal's items, or json for dynamic data. */
+  private element(type: Type, span: Span): Type {
+    if (type.kind === "list") {
+      if (type.item !== undefined) return type.item;
+      if (type.items !== undefined && type.items.length > 0) return type.items.reduce((acc, item) => this.compatible(acc, item, span));
+      return { kind: "json" };
+    }
+    if (type.kind === "json") return { kind: "json" };
+    return this.parser.fail(`map, filter, and fold require a list, found ${type.kind}`, span);
+  }
   private pure(expr: Expr): Pure {
     const refs = new Map<string, Reference>();
+    const scope = new Map<string, Type>();
     const visit = (expr: Expr): { program: JsonValue; type: Type } => {
       switch (expr.kind) {
         case "literal": return { program: expr.value, type: typeof expr.value === "string" ? { kind: "text", literal: expr.value }
           : typeof expr.value === "number" ? { kind: "number", literal: expr.value } : { kind: expr.value === null ? "null" : "boolean" } };
         case "name": {
+          const bound = scope.get(expr.name);
+          if (bound !== undefined) return { program: ["get", expr.name], type: bound };
           const ref = this.env.get(expr.name);
           if (!ref) this.parser.fail(`unknown name ${expr.name}`, expr);
           let name = [...refs].find(([, existing]) => existing === ref)?.[0];
@@ -879,6 +925,31 @@ class Compiler {
           };
           const body = branch(arms);
           return { program: ["let", "_source_match", value.program, body], type };
+        }
+        case "map": case "filter": {
+          const items = visit(expr.items); const over = this.element(items.type, expr.items);
+          const prior = scope.get(expr.over); scope.set(expr.over, over);
+          const body = visit(expr.using);
+          if (prior === undefined) scope.delete(expr.over); else scope.set(expr.over, prior);
+          if (expr.kind === "filter") this.require(body.type, "boolean", expr.using);
+          return { program: [expr.kind, items.program, expr.over, body.program], type: { kind: "list", item: expr.kind === "filter" ? over : body.type } };
+        }
+        case "fold": {
+          const items = visit(expr.items); const over = this.element(items.type, expr.items);
+          const init = visit(expr.from); const [accName, itemName] = expr.over;
+          const priorAcc = scope.get(accName); const priorItem = scope.get(itemName);
+          scope.set(itemName, over);
+          let acc = init.type; let body: { program: JsonValue; type: Type } = { program: null, type: { kind: "json" } };
+          for (let pass = 0; pass < 4; pass++) {
+            scope.set(accName, acc);
+            body = visit(expr.using);
+            const merged = this.compatible(acc, body.type, expr);
+            if (sameType(merged, acc)) break;
+            acc = merged;
+          }
+          if (priorAcc === undefined) scope.delete(accName); else scope.set(accName, priorAcc);
+          if (priorItem === undefined) scope.delete(itemName); else scope.set(itemName, priorItem);
+          return { program: ["fold", items.program, init.program, accName, itemName, body.program], type: acc };
         }
         case "decide": case "generate": case "call": case "each": return this.parser.fail("effects and calls require a whole binding, return, or branch arm; conditions, operands, and context expressions must be pure", expr);
       }

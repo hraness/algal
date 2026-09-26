@@ -175,6 +175,15 @@ program p(x: R) -> text { budget { max_agent_calls: 0 } return x.s }`;
     expect(long).toContain("\n    using { w: 1, z: 2, y: 3 } max_items 3");
   });
 
+  test("map, filter, and fold keep their over/from/using structure", () => {
+    const formatted = formatSource(`program p(x: json) -> json { budget { max_agent_calls: 0 } return { a: map over n in x using n*2, b: filter over n in x using n>1, c: fold over s,n in x from 0 using s+n } }`);
+    expect(formatted).toContain("map over n in x using n * 2");
+    expect(formatted).toContain("filter over n in x using n > 1");
+    expect(formatted).toContain("fold over s, n in x from 0 using s + n");
+    const long = formatSource(`program p(x: json) -> json { budget { max_agent_calls: 0 } let total = fold over accumulated_total, current_line_item in x from 0 using accumulated_total + current_line_item.weight * current_line_item.quantity; return total }`);
+    expect(long).toContain("\n    from 0 using accumulated_total + current_line_item.weight");
+  });
+
   test("decide as choice keeps its block broken", () => {
     const formatted = formatSource(`program p(x: text) -> text { budget { max_agent_calls: 1 } return decide "what?" using x as choice { a: "first", b: "second" } }`);
     expect(formatted).toContain(`as choice {
