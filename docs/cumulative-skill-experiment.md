@@ -56,7 +56,13 @@ execution.
    signature; a hit runs the vendored manifest. After each task, passing
    programs may be promoted into the catalog through the ordinary foundry
    path (train/validation cases, holdout untouched). A later task may reuse
-   or deliberately revise a kept procedure.
+   or deliberately revise a kept procedure. By default the promote hook
+   re-evaluates the executed manifest after every task, hits included —
+   recurring qualification of a kept procedure is charged like its first
+   evaluation. The arm option `citeKeptEvaluation` changes that: a task
+   that ran an already-kept manifest re-cites the entry's stored promotion
+   evidence (`evaluated: false` in the run record) and the hit charges the
+   task run alone, so retention can amortize over a horizon.
 2. **ablation**: identical machinery, catalog consultation disabled. Every
    task generates and evaluates fresh under the same budgets. This arm is
    the load-bearing comparison: the same system without access to what it
@@ -127,6 +133,47 @@ unless its marginal cost is small.
   the arm runner produces none itself: it records only corrections an
   operator declares on a task entry, so a live human-in-the-loop measure
   still waits on a producer that records interventions.
+
+## Studies run
+
+### v3 · 48 tasks, `citeKeptEvaluation` off (default re-evaluation)
+
+Verified report `sha256:117af73c0dee47f3472237fad40b9ec1cccf1a604fe2a18445616428d7ae24ba`
+(192 records, zero mismatches): retention engaged unseeded (one promotion,
+47 hits, zero failures) but the per-hit re-evaluation policy priced the
+retained arm at 3,444,384 work — 3.7x fixed, 2.6x ablation. Reuse could
+never amortize: every hit still paid train and validation case runs.
+
+### v3 · 48 tasks, `citeKeptEvaluation` on (cite-on-hit)
+
+Verified report `sha256:f8347b00d029e29977be765fbc6b75688fed6ab486b2cd652fc526d64efbad8f`
+(192 records, zero mismatches), same corpus and executor (xAI `grok-4.5`),
+the other three arms' sessions re-cited unchanged.
+
+| arm | tasks | held-out | work | runs | catalog |
+|-----|-------|----------|------|------|---------|
+| fixed | 48/48 | 40/40 | 933,716 | 48 | - |
+| retained | 48/48 | 40/40 | 997,334 | 51 | 48 (47 hit, 1 miss), 1 promotion |
+| ablation | 38/48 | 30/40 | 1,304,446 | 86 | - |
+| fresh | 47/48 | 39/40 | 1,486,118 | 95 | - |
+
+Findings:
+
+- The cost crossover exists: the retained arm ran 24% less work than
+  ablation and only 6.8% more than the non-adaptive fixed pipeline, while
+  retaining identical held-out completion. Per-hit cost is a single task
+  run (~19.5k units); acquisition (one generation plus one evaluation)
+  amortized over 47 hits.
+- Retention also hedged generation failure: the kept manifest ran all 47
+  later tasks without a single invalid run, where ablation lost 10/48
+  tasks (21%) to manifests that failed admission. Reuse made the arm both
+  cheaper and more reliable than regeneration.
+- The kept procedure's held-out record is unchanged: validation 1/1,
+  held-out 40/40 across all hits.
+- Policy comparison is now a measured result, not an assumption: the same
+  arm, corpus, and executor priced at 3.44M work under per-hit
+  re-evaluation vs 0.997M under cite-on-hit — a 3.5x swing controlled by
+  one declared arm option.
 
 ## Status and limits
 

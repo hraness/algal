@@ -12,6 +12,7 @@ independent of these package versions.
 
 ## Unreleased
 
+<<<<<<< HEAD
 - CLI help is shorter and starts where a new person starts. Bare `algal`
   (Bun) prints a start screen of at most 25 lines. `algal --help` groups
   everyday commands, `algal help advanced` lists the research commands, and
@@ -39,6 +40,14 @@ independent of these package versions.
 - `algal doctor --apple` prints a short report at a terminal and JSON when
   piped, run by an agent, or given `--json`. The JSON now carries `reason`,
   `message`, `fix`, `settingsUrl` and `next` alongside `available`.
+- The retained experiment arm gains an opt-in `citeKeptEvaluation` field:
+  a task that ran an already-kept manifest re-cites the entry's stored
+  promotion evidence (`evaluated: false`, the entry's report digest and
+  index on the run record) instead of re-evaluating it, so a catalog hit
+  charges the task run alone. The v3 horizon study measured the default
+  re-evaluation policy at roughly double the per-task cost of ablation;
+  this flag makes the amortizing policy expressible for comparison.
+>>>>>>> 29b2da4 (experiment: cite kept evaluation on retained catalog hits)
 - The shared program catalog gains six pure collection entries under
   `examples/source/projects/shared/`: `includes_text` (membership scan),
   `latest_value` (last-wins lookup over `{target, value}` updates),
