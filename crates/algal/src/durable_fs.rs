@@ -900,4 +900,181 @@ mod tests {
             "successor owns this lock"
         );
     }
+    /// Generative fault-point coverage over the CAS store: every put draws
+    /// an optional injection at one instrumentation point — the same
+    /// phase×step grid `actual_io_failures_preserve_uncertainty_and_owned_cleanup`
+    /// enumerates exhaustively at one value — interleaved with re-puts of
+    /// committed content (the EEXIST read-back path) and full reopens.
+    /// A shadow model requires: committed entries always read back after
+    /// reopen, a faulted put never produces a wrong value, no `.tmp-`
+    /// residue survives any step, and unrelated sibling files are never
+    /// touched.
+    #[hegel::test(test_cases = 64)]
+    fn drawn_fault_points_preserve_store_consistency(tc: hegel::TestCase) {
+        use hegel::generators as gs;
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let dir = root.join("child/store");
+        let sentinel = root.join(".tmp-unrelated");
+        fs::write(&sentinel, "belongs to someone else").unwrap();
+        let mut store = Store::open(&dir, true).unwrap();
+
+        let mut committed: BTreeMap<String, serde_json::Value> = BTreeMap::new();
+        let mut uncertain: BTreeMap<String, serde_json::Value> = BTreeMap::new();
+        let mut orphans = 0usize;
+        let kinds = [
+            "mkdir",
+            "write-temp",
+            "file-sync",
+            "link",
+            "dir-sync",
+            "unlink-temp",
+        ];
+        let steps = tc.draw(gs::integers::<usize>().max_value(23));
+        for _ in 0..steps {
+            let kind = kinds[tc.draw(gs::integers::<usize>().max_value(5))];
+            let phase = if tc.draw(gs::booleans()) {
+                "before"
+            } else {
+                "after"
+            };
+            let fired = Rc::new(Cell::new(false));
+            let observed = fired.clone();
+            let anchor = root.clone();
+            let faulted = tc.draw(gs::booleans());
+            match tc.draw(gs::integers::<u8>().max_value(3)) {
+                // Fresh put under a drawn fault point.
+                0..=2 => {
+                    let value = json!(format!("v{}", committed.len() + uncertain.len()));
+                    let key = digest(&value).unwrap();
+                    let result = if faulted {
+                        with_probe(
+                            Rc::new(move |event| {
+                                if !observed.get()
+                                    && event.phase == phase
+                                    && event.step == kind
+                                    && event.path.starts_with(&anchor)
+                                {
+                                    observed.set(true);
+                                    return Err(Error::new("IO_FAILED", "drawn fault"));
+                                }
+                                Ok(())
+                            }),
+                            || store.put("values", &value),
+                        )
+                    } else {
+                        store.put("values", &value)
+                    };
+                    match result {
+                        Ok(_) => {
+                            committed.insert(key.clone(), value.clone());
+                            assert_eq!(
+                                store.get("values", &key).unwrap(),
+                                Some(value),
+                                "freshly committed value unreadable"
+                            );
+                        }
+                        Err(_) => {
+                            uncertain.insert(key, value);
+                            // A fault at the cleanup step itself orphans the
+                            // temp file — the same residue a power loss
+                            // between link and unlink leaves on a real disk.
+                            if faulted && kind == "unlink-temp" && phase == "before" {
+                                orphans += 1;
+                            }
+                        }
+                    }
+                }
+                // Re-put committed content — exercises the existing-entry
+                // read-back verification — also under a drawn fault.
+                _ => {
+                    if committed.is_empty() {
+                        continue;
+                    }
+                    let keys: Vec<String> = committed.keys().cloned().collect();
+                    let key =
+                        keys[tc.draw(gs::integers::<usize>().max_value(keys.len() - 1))].clone();
+                    let value = committed[&key].clone();
+                    let result = if faulted {
+                        with_probe(
+                            Rc::new(move |event| {
+                                if !observed.get()
+                                    && event.phase == phase
+                                    && event.step == kind
+                                    && event.path.starts_with(&anchor)
+                                {
+                                    observed.set(true);
+                                    return Err(Error::new("IO_FAILED", "drawn fault"));
+                                }
+                                Ok(())
+                            }),
+                            || store.put("values", &value),
+                        )
+                    } else {
+                        store.put("values", &value)
+                    };
+                    // Refusal and success are both legal; a wrong read-back
+                    // is not — the committed entry must still verify.
+                    if faulted && kind == "unlink-temp" && phase == "before" && result.is_err() {
+                        orphans += 1;
+                    }
+                    assert_eq!(
+                        store.get("values", &key).unwrap(),
+                        Some(committed[&key].clone()),
+                        "committed entry corrupted by a re-put"
+                    );
+                }
+            }
+            // Every step: no temp residue and no unrelated-file damage. A
+            // fault before the first mkdir legitimately leaves no dir.
+            fn walk(dir: &Path, hits: &mut Vec<PathBuf>) {
+                if !dir.exists() {
+                    return;
+                }
+                for entry in fs::read_dir(dir).unwrap() {
+                    let path = entry.unwrap().path();
+                    if path.is_dir() {
+                        walk(&path, hits);
+                    } else if path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .is_some_and(|n| n.starts_with(".tmp-"))
+                    {
+                        hits.push(path);
+                    }
+                }
+            }
+            let mut residue = Vec::new();
+            walk(&dir, &mut residue);
+            assert_eq!(
+                residue.len(),
+                orphans,
+                "temp residue beyond the interrupted-cleanup orphans: {residue:?}"
+            );
+            assert_eq!(
+                fs::read_to_string(&sentinel).unwrap(),
+                "belongs to someone else"
+            );
+            // Reopen roughly every fourth step: committed entries must read
+            // back exactly; faulted puts may be absent or present but never
+            // wrong.
+            if dir.exists() && tc.draw(gs::integers::<u8>().max_value(3)) == 0 {
+                let reopened = Store::open(&dir, false).unwrap();
+                for (key, value) in &committed {
+                    assert_eq!(
+                        reopened.get("values", key).unwrap(),
+                        Some(value.clone()),
+                        "committed entry lost across reopen"
+                    );
+                }
+                for (key, value) in &uncertain {
+                    let got = reopened.get("values", key).unwrap();
+                    assert!(
+                        got.is_none() || got.as_ref() == Some(value),
+                        "faulted put produced a wrong value"
+                    );
+                }
+            }
+        }
+    }
 }
