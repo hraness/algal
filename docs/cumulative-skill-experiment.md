@@ -242,6 +242,28 @@ Findings:
   executor priced at 3.44M work under per-hit re-evaluation versus 0.997M
   under cite-on-hit — a 3.5x swing controlled by one declared arm option.
 
+### Follow-on measurements (v3 corpus)
+
+- Invalid-manifest diagnosis: every one of the 11 invalid generative runs
+  was one of two emission classes — `view.inputs: ["*"]` (10x) and a stray
+  `id` on an `expr` descriptor (1x). Both are now covered by the opt-in
+  `normalizeEmitted` arm field, which records applied repairs on
+  `generator.normalized`.
+- Jev classify probe: the full 2,304-record corpus was classified with
+  per-record typed decisions (Jev `choice` questions carrying each task's
+  taxonomy as criteria). Agreement with the declared truth: 2,292/2,304
+  (99.48%) — matching the grok batch classify's holdout score exactly
+  (573/576), on every split. One genuinely contested record remains
+  (a webhook-delivery error between bug-report and integration-help,
+  flagged at `pExpected` 0.15). Per-record decisions at ~$0.001 each are
+  a cheaper classify substrate; a `classifier` cell pipeline is not
+  expressible today because `output.labels` is manifest-static while the
+  family's taxonomy varies per task.
+- Corrections machinery exercised end-to-end at CLI level: declared
+  task corrections land on run records, aggregate to `correctionsTotal`,
+  and re-derive under `experiment verify`. The live studies themselves
+  recorded zero corrections — no operator interventions were injected.
+
 ## Status and limits
 
 This is the first comparative study of the project's central claim. Its
