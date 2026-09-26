@@ -39,27 +39,28 @@ export async function storageChecks(): Promise<{ checks: string[]; mailboxDb: st
   const got = await service.receive(config.receive);
   assert(got.id === id && (got.message as { hello: string }).hello === "浏览器 ✓", "delivery round-trips the canonical message");
   await rejects(() => service.receive(config.receive), "empty mailbox suspension");
-  await service.revoke(config.send);
-  await rejects(() => service.send(config.send, "x", hex("b")), "revoked capability denial");
   service.close();
   service = await IndexedDbMailboxService.open({ name: mailboxDb });
   assert((await service.inspect("panel"))?.receive === config.receive, "reopen on the real engine preserves admission");
-  checks.push("real IndexedDB mailbox: admission, idempotent send, ordered delivery, suspension, revocation, reopen");
+  checks.push("real IndexedDB mailbox: admission, idempotent send, ordered delivery, suspension, reopen");
 
-  // Durable host outbox acknowledging through the same mailbox service.
+  // Durable host outbox acknowledging through the same mailbox service, on a
+  // dedicated mailbox so the panel mailbox's handles stay live for the peer
+  // tab below and revocation can be exercised here without breaking it.
+  const outbox = await service.create("outbox", { maxMessages: 4, maxMessageBytes: 4096 });
   let events = await IndexedDbHostEventService.open({ name: eventDb, mailboxes: service });
-  const snap = await events.enqueue({ source: "panel", deliveryId: "host-evt-1", target: config.send, payload: { tick: 1 } });
+  const snap = await events.enqueue({ source: "panel", deliveryId: "host-evt-1", target: outbox.send, payload: { tick: 1 } });
   assert(snap.status === "pending" && snap.event.contract === "algal.host-event.v1", "event admitted pending");
-  const dup = await events.enqueue({ source: "panel", deliveryId: "host-evt-1", target: config.send, payload: { tick: 1 } });
+  const dup = await events.enqueue({ source: "panel", deliveryId: "host-evt-1", target: outbox.send, payload: { tick: 1 } });
   assert(dup.event.eventId === snap.event.eventId, "replayed admission resolves the retained event");
-  await rejects(() => events.enqueue({ source: "panel", deliveryId: "host-evt-1", target: config.send, payload: { other: 2 } }), "event identity conflict");
+  await rejects(() => events.enqueue({ source: "panel", deliveryId: "host-evt-1", target: outbox.send, payload: { other: 2 } }), "event identity conflict");
   const delivered = await events.deliverDue();
   assert(delivered.length === 1 && delivered[0]!.status === "delivered", "intent-to-delivery settles delivered");
-  const host = await service.receive(config.receive);
+  const host = await service.receive(outbox.receive);
   const envelope = host.message as Record<string, unknown>;
   assert(envelope.contract === "algal.host-message.v1" && envelope.eventId === snap.event.eventId && (envelope.payload as { tick: number }).tick === 1, "mailbox carries the host message envelope");
   assert((await events.deliverDue()).length === 0, "delivered event does not re-send");
-  const cancelPending = await events.enqueue({ source: "panel", deliveryId: "host-evt-2", target: config.send, payload: null });
+  const cancelPending = await events.enqueue({ source: "panel", deliveryId: "host-evt-2", target: outbox.send, payload: null });
   const cancelled = await events.cancel(cancelPending.event.eventId);
   assert(cancelled.cancelled && cancelled.event.status === "cancelled", "pending cancel commits");
   const tooLate = await events.cancel(snap.event.eventId);
@@ -68,9 +69,12 @@ export async function storageChecks(): Promise<{ checks: string[]; mailboxDb: st
   events = await IndexedDbHostEventService.open({ name: eventDb, mailboxes: service });
   const statuses = (await events.list()).map((s) => `${s.event.deliveryId}:${s.status}`).sort();
   assert(statuses.join(",") === "host-evt-1:delivered,host-evt-2:cancelled", "event snapshots survive reopen");
+  // The panel mailbox's send must stay live: the peer tab sends to it below.
+  await service.revoke(outbox.send);
+  await rejects(() => service.send(outbox.send, "x", hex("b")), "revoked capability denial");
   service.close();
   events.close();
-  checks.push("real IndexedDB host outbox: deduped admission, durable intent, mailbox acknowledgement, cancel races, reopen");
+  checks.push("real IndexedDB host outbox: deduped admission, durable intent, mailbox acknowledgement, cancel races, reopen, revoked capability denial");
 
   return { checks, mailboxDb, eventDb };
 }
