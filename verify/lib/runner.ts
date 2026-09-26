@@ -346,14 +346,20 @@ async function executeSuite(root: string, suite: string): Promise<unknown> {
     return { tests, commandResult: result, targets, targetCommandResult: targetResult,
       scope: "Focused production regression tests and sampled target agreement; no exhaustive property or implementation proof. Native graph/store/adaptation tests remain required Cargo gates." };
   }
-  if (suite === "receipt-closure" || suite === "host-conformance" || suite === "memory-oracle") {
-    const directories: Record<string, string> = { "receipt-closure": "verify/receipt", "host-conformance": "verify/host", "memory-oracle": "verify/reference/memory" };
+  if (suite === "receipt-closure" || suite === "host-conformance" || suite === "memory-oracle" || suite === "memory-mutation" || suite === "context-laws") {
+    const directories: Record<string, string> = {
+      "receipt-closure": "verify/receipt", "host-conformance": "verify/host",
+      "memory-oracle": "verify/reference/memory", "memory-mutation": "verify/memory-mutation",
+      "context-laws": "verify/context-laws",
+    };
     const command = [process.execPath, "test", "--timeout", "20000", directories[suite]!];
     const result = await runCommand(command, root);
     const scopes: Record<string, string> = {
       "receipt-closure": "Static closure-decision and bound-mirror checks over measured run summaries against the production receipt predicate; no exhaustive or producer-instrumented claim.",
       "host-conformance": "Deterministic fixture violations over host-seam contracts; live adapter/provider dispatch is out of scope.",
       "memory-oracle": "Independent derivation-checker fixtures; no production-path instrumented claim.",
+      "memory-mutation": "Targeted semantic mutants of admitted derivations must reject with their declared typed reason; the documented survivor boundary is pinned, not a proof obligation.",
+      "context-laws": "Algebraic context/compaction/recall laws on real service paths under an instrumented host; no live-provider or FileStore durability claim.",
     };
     return { tests: admitSelftestOutput(result), commandResult: result, scope: scopes[suite] };
   }
