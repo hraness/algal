@@ -16,8 +16,9 @@ async function cli(...args: string[]) {
 }
 
 test("ALGAL branding reports the v1 wire identity", async () => {
-  const result = await cli("--version");
+  const result = await cli("--version", "--json");
   expect(result.code).toBe(0);
+  expect((await cli("--version")).stdout).toBe("algal 0.2.0\n");
   expect(JSON.parse(result.stdout)).toEqual({
     name: "algal", version: "0.2.0", contract: "algal.organism.v1",
   });

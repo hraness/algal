@@ -1,0 +1,13 @@
+ALGAL is a programming language and VM for AI agent programs that wait for
+approval and leave receipts you can replay.
+
+Start here
+  algal examples                  List the bundled example programs
+  algal compile <program.algal>   Compile a program to a manifest
+  algal check <program>           Check a program without running it
+  algal run <manifest.json>       Run a program and print its receipt
+  algal verify <receipt.json>     Replay a run and confirm it matches
+
+A receipt is the saved record of every step a run took.
+All commands: algal --help · Command help: algal <command> --help
+algal <version>
