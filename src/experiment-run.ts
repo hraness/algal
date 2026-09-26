@@ -75,6 +75,8 @@ export const EXPERIMENT_BOUNDS = Object.freeze({
   maxCorrections: 32,
   /** A correction's `kind` label length. */
   maxCorrectionKindLength: 64,
+  /** Repair kinds one normalization pass may record on a run's generator. */
+  maxRepairs: 8,
   /** A correction's `note` length. */
   maxCorrectionNoteLength: 512,
   /** Snapshot limits for a task's opaque `spec` or one argument value. */
@@ -266,6 +268,11 @@ export type ExperimentArm = {
    * re-cites the entry's stored promotion evidence instead of re-evaluating
    * it, so a catalog hit charges the task run alone. */
   citeKeptEvaluation?: boolean;
+  /** Generative arms only: when true, an emitted value that fails
+   * `parseOrganismManifest` is passed through the bounded deterministic
+   * repairs (`normalizeEmittedManifest`) and parsed again; applied repairs
+   * land on the run record's `generator.normalized`. */
+  normalizeEmitted?: boolean;
 };
 
 function parseGenerator(value: unknown, at: string): ExperimentGenerator {
@@ -307,7 +314,7 @@ export function parseExperimentArm(value: unknown): ExperimentArm {
   for (const key of ["generator", "manifest", "cases", "scorer"] as const) {
     if (Object.hasOwn(shallow, key)) shallow[key] = true;
   }
-  const v = closed(boundedJsonSnapshot(shallow, EXPERIMENT_BOUNDS.record, "arm"), ["contract", "arm", "family", "budget"], ["generator", "manifest", "cases", "scorer", "maxEntries", "citeKeptEvaluation"], "arm");
+  const v = closed(boundedJsonSnapshot(shallow, EXPERIMENT_BOUNDS.record, "arm"), ["contract", "arm", "family", "budget"], ["generator", "manifest", "cases", "scorer", "maxEntries", "citeKeptEvaluation", "normalizeEmitted"], "arm");
   if (v.contract !== EXPERIMENT_ARM_CONTRACT) fail(`contract must be ${EXPERIMENT_ARM_CONTRACT}`);
   const arm: ExperimentArm = {
     contract: EXPERIMENT_ARM_CONTRACT,
@@ -331,10 +338,16 @@ export function parseExperimentArm(value: unknown): ExperimentArm {
     if (typeof citeKeptEvaluation.value !== "boolean") fail("arm.citeKeptEvaluation must be boolean");
     arm.citeKeptEvaluation = citeKeptEvaluation.value;
   }
+  const normalizeEmitted = opt(v, "normalizeEmitted");
+  if (normalizeEmitted.present) {
+    if (typeof normalizeEmitted.value !== "boolean") fail("arm.normalizeEmitted must be boolean");
+    arm.normalizeEmitted = normalizeEmitted.value;
+  }
 
   if (arm.arm === "fixed") {
     if (arm.manifest === undefined) fail("a fixed arm requires manifest");
     if (arm.generator !== undefined) fail("a fixed arm declares no generator");
+    if (arm.normalizeEmitted !== undefined) fail("a fixed arm declares no normalizeEmitted");
   } else {
     if (arm.manifest !== undefined) fail(`a ${arm.arm} arm declares no manifest`);
     if (arm.generator === undefined) fail(`a ${arm.arm} arm requires a generator`);
@@ -482,7 +495,7 @@ export type ExperimentRun = {
   phase: ExperimentPhase;
   consult: ExperimentConsult;
   /** The generation run, when this task generated its manifest. */
-  generator: { manifest: Digest; receipt: Digest } | null;
+  generator: { manifest: Digest; receipt: Digest; normalized?: string[] } | null;
   /** The executed manifest's digest; null when none was produced. */
   manifest: Digest | null;
   /** Digest of the stored run arguments; null when the run never admitted. */
@@ -531,8 +544,14 @@ export function parseExperimentRun(value: unknown): ExperimentRun {
   if (v.contract !== EXPERIMENT_RUN_CONTRACT) fail(`contract must be ${EXPERIMENT_RUN_CONTRACT}`);
   let generator: ExperimentRun["generator"] = null;
   if (v.generator !== null) {
-    const g = closed(v.generator, ["manifest", "receipt"], [], `${at}.generator`);
+    const g = closed(v.generator, ["manifest", "receipt"], ["normalized"], `${at}.generator`);
     generator = { manifest: reference(g.manifest, `${at}.generator.manifest`), receipt: reference(g.receipt, `${at}.generator.receipt`) };
+    if (g.normalized !== undefined) {
+      if (!Array.isArray(g.normalized) || g.normalized.length === 0 || g.normalized.length > EXPERIMENT_BOUNDS.maxRepairs) {
+        fail(`${at}.generator.normalized must list 1..${EXPERIMENT_BOUNDS.maxRepairs} repairs`);
+      }
+      generator.normalized = g.normalized.map((entry, i) => label(entry, `${at}.generator.normalized[${i}]`, 64));
+    }
   }
   const outcomes = ["complete", "failed", "stuck", "suspended", "exhausted", "invalid"];
   if (!outcomes.includes(v.outcome as string)) fail(`${at}.outcome must be one of ${outcomes.join(", ")}`);
@@ -633,11 +652,11 @@ export type ExperimentRunTaskResult =
     manifest: OrganismManifest;
     args: Record<string, Record<string, JsonValue>>;
     /** The generation run that produced the manifest, when one ran. */
-    generator?: { manifest: Digest; receipt: Digest };
+    generator?: { manifest: Digest; receipt: Digest; normalized?: string[] };
   }
   | {
     failure: { code: string; message: string };
-    generator?: { manifest: Digest; receipt: Digest };
+    generator?: { manifest: Digest; receipt: Digest; normalized?: string[] };
   };
 
 export type ExperimentRunTask = (ctx: ExperimentTaskContext) => Promise<ExperimentRunTaskResult>;
@@ -692,6 +711,48 @@ function interfaceArgs(manifest: OrganismManifest, args: Record<string, JsonValu
   return out;
 }
 
+/** The bounded deterministic repairs `normalizeEmitted` applies to a
+ * generator's emitted value before its second parse attempt — one entry per
+ * defect class observed in live generation:
+ * - `"view-inputs-wildcard"`: a cell's `view.inputs` list containing `"*"`
+ *   is replaced by the contract's wildcard form — the bare string `"*"`,
+ *   meaning all declared inputs. A list cannot hold `"*"`; the intent is
+ *   unambiguous.
+ * - `"expr-id"`: an `expr` descriptor carrying a stray `id` member (the cell's
+ *   own id duplicated into it) drops that member.
+ * Repairs are keyed by class, not position: the returned list names each kind
+ * applied at least once. Anything else stays untouched so the residual parse
+ * failure describes what the generator actually emitted. */
+export function normalizeEmittedManifest(value: unknown): { value: unknown; repairs: string[] } {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return { value, repairs: [] };
+  const root = value as Record<string, unknown>;
+  if (!Array.isArray(root.cells)) return { value, repairs: [] };
+  const repairs = new Set<string>();
+  const cells = root.cells.map((cell) => {
+    if (cell === null || typeof cell !== "object" || Array.isArray(cell)) return cell;
+    const c = { ...(cell as Record<string, unknown>) };
+    const view = c.view;
+    if (view !== null && typeof view === "object" && !Array.isArray(view)) {
+      const v = { ...(view as Record<string, unknown>) };
+      if (Array.isArray(v.inputs) && v.inputs.includes("*")) {
+        v.inputs = "*";
+        repairs.add("view-inputs-wildcard");
+      }
+      c.view = v;
+    }
+    const expr = c.expr;
+    if (expr !== null && typeof expr === "object" && !Array.isArray(expr) && Object.hasOwn(expr, "id")) {
+      const e = { ...(expr as Record<string, unknown>) };
+      delete e.id;
+      c.expr = e;
+      repairs.add("expr-id");
+    }
+    return c;
+  });
+  if (repairs.size === 0) return { value, repairs: [] };
+  return { value: { ...root, cells }, repairs: [...repairs].sort() };
+}
+
 /** The default task mapping: `fixed` serves its declared manifest; every other
  * arm runs the generator through the arm's account and parses the emitted
  * manifest with `parseOrganismManifest`. A generator that ran and charged but
@@ -731,8 +792,20 @@ async function defaultRunTask(ctx: ExperimentTaskContext): Promise<ExperimentRun
   try {
     const manifest = parseOrganismManifest(value);
     return { manifest, args: interfaceArgs(manifest, task.args), generator: lineage };
-  } catch (error) {
-    return { failure: failureOf(error), generator: lineage };
+  } catch (first) {
+    if (arm.normalizeEmitted === true) {
+      const repaired = normalizeEmittedManifest(value);
+      if (repaired.repairs.length > 0) {
+        const normalized = { ...lineage, normalized: repaired.repairs };
+        try {
+          const manifest = parseOrganismManifest(repaired.value);
+          return { manifest, args: interfaceArgs(manifest, task.args), generator: normalized };
+        } catch (second) {
+          return { failure: failureOf(second), generator: normalized };
+        }
+      }
+    }
+    return { failure: failureOf(first), generator: lineage };
   }
 }
 
