@@ -2544,10 +2544,10 @@ async function main(): Promise<number> {
         );
         return 0;
       }
-      const { parseExperimentArm, parseExperimentTaskSet, runExperimentArm } = await import("./src/experiment-run");
+      const { parseExperimentArm, parseExperimentCatalog, parseExperimentTaskSet, runExperimentArm } = await import("./src/experiment-run");
       const configFile = resolve(file);
       const config = asRecord(await readJson(configFile), "experiment config");
-      const unknown = Object.keys(config).filter((k) => !["contract", "arm", "tasks"].includes(k));
+      const unknown = Object.keys(config).filter((k) => !["contract", "arm", "tasks", "catalog"].includes(k));
       if (unknown.length > 0) {
         throw new AlgalError("PARSE_FAILED", `experiment config: unknown key "${unknown[0]}"`);
       }
@@ -2572,12 +2572,18 @@ async function main(): Promise<number> {
       const executors = await resolveExecutors(flags, dir);
       const transports = flags.transports !== undefined ? await loadTransports(String(flags.transports)) : undefined;
       const tools = await resolveTools(flags, dir);
+      // An optional `catalog` record seeds the session's kept-procedure list,
+      // for sessions that resume retention from an earlier session's catalog.
+      const catalog = config.catalog === undefined
+        ? undefined
+        : parseExperimentCatalog(config.catalog).entries;
       const result = await runExperimentArm({
         arm,
         tasks,
         fns,
         store,
         executors,
+        ...(catalog !== undefined ? { catalog } : {}),
         ...(transports ? { transports } : {}),
         ...(tools ? { tools } : {}),
       });
