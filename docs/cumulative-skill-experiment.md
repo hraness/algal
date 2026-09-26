@@ -136,19 +136,82 @@ unless its marginal cost is small.
 
 ## Studies run
 
-### v3 · 48 tasks, `citeKeptEvaluation` off (default re-evaluation)
+### v2 · 20 tasks (8 acquisition / 8 unseen / 4 shift)
+
+Verified report `sha256:6fdc8942991eff306886c90b039802fdc49ac8cbceef6f4f27f51a0c404e1c99`
+(80 records, zero mismatches, zero uncited), one live executor
+configuration across arms (xAI `grok-4.5`).
+
+| arm | tasks | held-out | work | runs | catalog |
+|-----|-------|----------|------|------|---------|
+| fixed | 20/20 | 12/12 | 411,360 | 20 | - |
+| retained | 16/20 | 10/12 | 1,203,751 | 59 | 20 (18 hit, 2 miss), 1 promotion |
+| ablation | 18/20 | 11/12 | 611,418 | 38 | - |
+| fresh | 17/20 | 10/12 | 586,858 | 37 | - |
+
+Post-hoc held-out grading (receipt outputs vs expected): fixed mean 0.978,
+retained 10/10 graded runs at 1.000, ablation 0.976, fresh 0.973. The
+promoted manifest was reused on 18 later tasks and scored 1.000 on every
+held-out run it completed. Two retained shift tasks were lost to transient
+provider transport failures, not capability failures.
+
+### v3 · 48 tasks (8 acquisition / 32 unseen / 8 shift)
+
+Corpus revision v3: same deterministic family generator, repaired semantic
+templates (billing inquiry reworded as questions, dispute phrasing moved to
+billing-dispute, integration help reworded as setup questions, error-report
+phrasing moved to bug-report). Unseen extended to the parser maximum of 32;
+shift extended to 8. Jev audit of the repaired templates: 956/960 record
+agreement, zero high-confidence contests.
 
 Verified report `sha256:117af73c0dee47f3472237fad40b9ec1cccf1a604fe2a18445616428d7ae24ba`
-(192 records, zero mismatches): retention engaged unseeded (one promotion,
-47 hits, zero failures) but the per-hit re-evaluation policy priced the
-retained arm at 3,444,384 work — 3.7x fixed, 2.6x ablation. Reuse could
-never amortize: every hit still paid train and validation case runs.
+(192 records, zero mismatches, zero uncited), same live executor
+configuration (xAI `grok-4.5`).
+
+| arm | tasks | held-out | work | runs | catalog |
+|-----|-------|----------|------|------|---------|
+| fixed | 48/48 | 40/40 | 933,716 | 48 | - |
+| retained | 48/48 | 40/40 | 3,444,384 | 145 | 48 (47 hit, 1 miss), 1 promotion |
+| ablation | 38/48 | 30/40 | 1,304,446 | 86 | - |
+| fresh | 47/48 | 39/40 | 1,486,118 | 95 | - |
+
+Post-hoc held-out grading: fixed 46/48 exact (mean 0.992), retained 46/48
+(0.992), fresh 45/47 (0.991), ablation 36/38 (0.989). Three residual record
+disagreements, identical across arms.
+
+Findings:
+
+- Retention engaged unseeded: the first acquisition task's generated
+  manifest passed the promotion gate and was reused on all 47 later tasks,
+  including all 8 shift tasks, with zero invalid and zero failed runs. The
+  kept procedure matched the fixed pipeline on held-out quality.
+- No cost crossover: the retained arm cost 3.7x fixed and 2.6x ablation in
+  work. The promotion hook re-evaluates the executed manifest on every
+  task, catalog hits included — each hit pays a task run (~19.5k units)
+  plus train and validation case evaluations (~40k units), roughly double
+  ablation's per-task generation-plus-execution. Under this recurring
+  qualification design the retained arm is strictly more expensive per hit
+  at every horizon; reuse saves generation spend but the saved fee is
+  smaller than the re-evaluation it still pays.
+- Generator validity remains a failure mode: ablation lost 10/48 tasks
+  (21%) to manifests that failed admission, fresh lost 1/48 (2%). The
+  hardened generator emits schema-declared outputs with retry, but
+  admission failures still land on the generative arms' scoreboard.
+- Held-out quality saturates on the repaired corpus: all arms grade near
+  0.99 mean, so correctness no longer discriminates between pipelines in
+  this family.
 
 ### v3 · 48 tasks, `citeKeptEvaluation` on (cite-on-hit)
 
-Verified report `sha256:f8347b00d029e29977be765fbc6b75688fed6ab486b2cd652fc526d64efbad8f`
+The re-evaluation finding above isolated the cost driver: the promote hook
+re-evaluates the executed manifest on every task, catalog hits included.
+The arm option `citeKeptEvaluation` makes hits re-cite the kept entry's
+stored promotion evidence instead (`evaluated: false` on the run record),
+so a hit charges the task run alone.
+
+Verified report `sha256:57f4917c126dfd463ed6ef80725989651386fc63d7dba69f4836de10032bf756`
 (192 records, zero mismatches), same corpus and executor (xAI `grok-4.5`),
-the other three arms' sessions re-cited unchanged.
+the fixed, ablation, and fresh sessions re-cited unchanged.
 
 | arm | tasks | held-out | work | runs | catalog |
 |-----|-------|----------|------|------|---------|
@@ -160,20 +223,17 @@ the other three arms' sessions re-cited unchanged.
 Findings:
 
 - The cost crossover exists: the retained arm ran 24% less work than
-  ablation and only 6.8% more than the non-adaptive fixed pipeline, while
-  retaining identical held-out completion. Per-hit cost is a single task
-  run (~19.5k units); acquisition (one generation plus one evaluation)
-  amortized over 47 hits.
+  ablation and only 6.8% more than the non-adaptive fixed pipeline, with
+  identical held-out completion. A hit costs one task run (~19.5k units);
+  acquisition (one generation plus one evaluation) amortized over 47 hits.
 - Retention also hedged generation failure: the kept manifest ran all 47
-  later tasks without a single invalid run, where ablation lost 10/48
-  tasks (21%) to manifests that failed admission. Reuse made the arm both
-  cheaper and more reliable than regeneration.
+  later tasks without a single invalid run, while ablation lost 10/48
+  tasks (21%) to manifests that failed admission.
 - The kept procedure's held-out record is unchanged: validation 1/1,
   held-out 40/40 across all hits.
-- Policy comparison is now a measured result, not an assumption: the same
-  arm, corpus, and executor priced at 3.44M work under per-hit
-  re-evaluation vs 0.997M under cite-on-hit — a 3.5x swing controlled by
-  one declared arm option.
+- The policy comparison is a measured result: the same arm, corpus, and
+  executor priced at 3.44M work under per-hit re-evaluation versus 0.997M
+  under cite-on-hit — a 3.5x swing controlled by one declared arm option.
 
 ## Status and limits
 

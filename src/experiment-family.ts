@@ -263,15 +263,15 @@ const CLASS_POOL: ClassTemplate[] = [
   {
     id: "billing-inquiry",
     about: "Question about an invoice, charge, or payment method",
-    subjects: ["Question about invoice {n}", "Charge on my {thing} bill", "Invoice total looks wrong"],
-    bodies: ["My latest invoice lists a charge of {n} dollars I do not recognize.", "Can you explain the {n} dollar line item on my {thing} bill?", "The total on invoice {n} is higher than the quote I received."],
-    hints: ["a charge I do not recognize", "the invoice total", "my last bill"],
+    subjects: ["Question about invoice {n}", "Explain a line item", "Payment due date", "Update my payment method"],
+    bodies: ["Can you explain the {n} dollar line item on my {thing} bill?", "What is the {n} dollar charge on my latest invoice for?", "When is payment due on invoice {n}?", "How do I change the card on my {thing} billing profile?"],
+    hints: ["my payment method", "the invoice total", "my last bill"],
   },
   {
     id: "billing-dispute",
     about: "A charge the customer says is wrong or duplicate",
-    subjects: ["Duplicate charge of {n} dollars", "Charged twice this month", "Disputing a payment"],
-    bodies: ["I was charged {n} dollars twice for the same {thing} order.", "There is a duplicate charge of {n} dollars on my card ending in {n}.", "Please reverse the second charge of {n} dollars; I only placed one order."],
+    subjects: ["Duplicate charge of {n} dollars", "Charged twice this month", "Disputing a payment", "A charge I do not recognize"],
+    bodies: ["I was charged {n} dollars twice for the same {thing} order.", "There is a duplicate charge of {n} dollars on my card ending in {n}.", "Please reverse the second charge of {n} dollars; I only placed one order.", "My latest invoice lists a charge of {n} dollars I do not recognize.", "The total on invoice {n} is higher than the quote I received."],
     hints: ["charged twice", "a duplicate payment", "reverse the charge"],
   },
   {
@@ -306,7 +306,7 @@ const CLASS_POOL: ClassTemplate[] = [
     id: "bug-report",
     about: "Something in the product is broken or errors out",
     subjects: ["Export crashes with error {n}", "Button does nothing", "Page throws an error"],
-    bodies: ["Clicking save throws error {n} and my changes are lost.", "The dashboard shows a blank panel since the last update.", "Sync fails at {n} percent every single time."],
+    bodies: ["Clicking save throws error {n} and my changes are lost.", "The dashboard shows a blank panel since the last update.", "Sync fails at {n} percent every single time.", "The API returns {n} when we create a record.", "Our webhook endpoint never receives events from your side."],
     hints: ["an error message", "it crashes", "a blank screen"],
   },
   {
@@ -326,8 +326,8 @@ const CLASS_POOL: ClassTemplate[] = [
   {
     id: "integration-help",
     about: "Help connecting the product to another system",
-    subjects: ["Webhook not firing", "API returns {n} errors", "Help with the integration"],
-    bodies: ["Our webhook endpoint never receives events from your side.", "The API returns {n} when we create a record.", "We cannot get the {thing} integration to sync contacts."],
+    subjects: ["Help with the {thing} integration", "Setting up our webhook", "Connect our {thing} system"],
+    bodies: ["We need help configuring the {thing} integration to sync contacts.", "How do I map fields for the {thing} integration?", "Which credentials does the {thing} connector need?", "We want to set up the webhook for our {thing} sync."],
     hints: ["the API", "our webhook", "the integration"],
   },
   {
