@@ -234,7 +234,9 @@ export type ExperimentArm = {
 function parseGenerator(value: unknown, at: string): ExperimentGenerator {
   const raw = asObject(value, `experiment ${at}`);
   const shallow: Record<string, unknown> = { ...raw };
-  if (Object.hasOwn(shallow, "manifest")) shallow.manifest = true;
+  for (const key of ["manifest", "args"] as const) {
+    if (Object.hasOwn(shallow, key)) shallow[key] = true;
+  }
   const v = closed(boundedJsonSnapshot(shallow, EXPERIMENT_BOUNDS.record, at), ["manifest", "output"], ["field", "args"], at);
   const generator: ExperimentGenerator = {
     manifest: parseOrganismManifest(raw.manifest),
