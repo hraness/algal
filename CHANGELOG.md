@@ -12,6 +12,21 @@ independent of these package versions.
 
 ## Unreleased
 
+- CLI help is shorter and starts where a new person starts. Bare `algal`
+  (Bun) prints a start screen of at most 25 lines. `algal --help` groups
+  everyday commands, `algal help advanced` lists the research commands, and
+  `algal help all` keeps the full reference. Every command answers
+  `<command> --help`. The native `algal --help` lists `demo`, `doctor`, and
+  `run` first and hides `civ`, `bench`, `foundry`, and the other research
+  commands, which `algal help advanced` lists.
+- A person at a terminal sees errors as one sentence and one next command,
+  such as `✗ Can't find x.json.` and `→ algal run --help`. Scripts, pipes,
+  agents, and `--json` keep the JSON error object. `HRANESS_DEBUG=1` adds the
+  error code.
+- `algal doctor` prints a short checklist at a terminal and keeps its JSON
+  report when piped or with `--json`. Bun `algal --version` prints
+  `algal <version>`, like the native binary; `--version --json` keeps the
+  object.
 - The shared program catalog gains six pure collection entries under
   `examples/source/projects/shared/`: `includes_text` (membership scan),
   `latest_value` (last-wins lookup over `{target, value}` updates),

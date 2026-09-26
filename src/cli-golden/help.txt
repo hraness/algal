@@ -1,0 +1,47 @@
+Usage: algal <command> [options]
+
+ALGAL is a programming language and VM for AI agent programs that wait for
+approval and leave receipts you can replay.
+
+Start here
+  examples                        List the bundled example programs
+  compile <program.algal>         Compile a program to a manifest
+  check <program>                 Check a program without running it
+  run <manifest.json>             Run a program and print its receipt
+  verify <receipt.json>           Replay a run and confirm it matches
+
+Write and inspect
+  fmt <program.algal>             Format source files
+  diagram <program>               Draw a program as SVG, Mermaid, or JSON
+  explain <manifest.json>         Print a program's inputs, outputs, and checks
+  inspect <receipt.json>          Summarize a run
+  diagnose <receipt.json>         Point a failed run back to its source line
+  diff <receipt-a> <receipt-b>    Compare two runs
+  runs                            List saved runs
+
+Wait and continue
+  resume <receipt.json>           Continue a run that is waiting
+  replay <receipt> --with <m>     Rerun saved work against a changed program
+  process <create|tick|inspect>   Keep a program running across restarts
+  mailbox <create|send|receive>   Wake a waiting program with a message
+  observe                         Show recent activity in the store
+
+Store and share
+  store <put|get|has>             Save and read JSON values by digest
+  pack <manifest.json>            Bundle a program with everything it imports
+  unpack <bundle.json>            Install a bundle, checking every digest
+  call <bundle.json>              Run a bundle and print a short result
+  manifests                       List saved programs
+
+Setup
+  auth jev                        Save a TypeSafe Jev key on this computer
+  doctor                          Check that ALGAL is ready
+
+Options
+  -h, --help                      Show help. Also: algal <command> --help
+  --version                       Print the version
+  --dir <path>                    Store folder (default: .algal)
+  --diagnostic-format json|text   Error format for source files
+
+A receipt is the saved record of every step a run took.
+More commands: algal help advanced · Full reference: algal help all

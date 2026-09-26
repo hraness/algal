@@ -19,6 +19,8 @@ import {
   type JsonValue,
 } from "./src/values";
 import packageJson from "./package.json" with { type: "json" };
+import { advancedHelp, commandHelp, commandWords, rootHelp, startHelp } from "./src/cli-help";
+import { closestMatch, detectAudience, renderFailure, sentence, symbol, terminalStyle, type Audience } from "./src/cli-style";
 // Every other module arrives through `await import()` at the subcommand (or
 // helper) that needs it: `--help`, `store`, and the listing commands never
 // pay for the run graph, executors, or the job/repair/shepherd stack.
@@ -159,7 +161,7 @@ usage:
                                               writing a new lock; never automatic
   algal examples                          list bundled examples
   algal example <id>                      print the example manifest
-  algal run <manifest.json> [options]     run an organism, print its receipt
+  algal run <manifest.json> [options]     run a program, print its receipt
       --args <file>                           input-cell values (JSON)
       --responses <file>                      scripted agent outputs (JSON map)
       --executor-cmd <shell command>          live executor: request on stdin, output on stdout
@@ -185,7 +187,7 @@ usage:
                                                 local or gateway[:<model>] (default local)
       --executors <file>                      JSON map of executor name → shell command;
                                               route.provider/route.preset pick by name
-      --modules <dir>                         load *.algal.json into the store for organism cells
+      --modules <dir>                         load *.algal.json into the store for sub-program cells
       --transports <file>                     JSON map of transport name → bundle directory;
                                               via cells resolve remote manifests through it
       --tools <file>                          tool registry: name → {signature, exec};
@@ -195,7 +197,7 @@ usage:
       --cache-effects                         memoize effects: identical request digests
                                               serve the store's recorded response
   algal check <program.algal|manifest.json> [--modules <dir>] [--transports <file>] [--dir <path>]
-                                              admit without running; source includes attempt/depth bounds
+                                              check without running; source includes attempt/depth bounds
   algal explain <manifest.json> [--modules <dir>] [--transports <file>] [--dir <path>]
                                               print the compiled signature: resolved ports, guards
   algal verify <receipt.json> [manifest.json] [--modules <dir>] [--transports <file>] [--dir <path>]
@@ -216,13 +218,13 @@ usage:
                                               emit an algal.ordering-report.v1 record
   algal process create <name> <manifest.json> [--args <file>] [--max-generations 16]
       [--modules <dir>] [--tools <file>] [--dir <path>]
-                                              admit a durable, bounded process
+                                              create a durable process with a generation limit
   algal process export <name> [--dir <path>] [--tools <file>]
                                               write portable process evidence JSON to stdout
   algal process verify-evidence <file>          verify evidence without a store or host configuration
   algal process recover <name> --expected-intent SHA [same tool/executor options]
   algal process journal <name>
-  algal job prepare <config.json>           admit a bounded coding job in a clean checkout
+  algal job prepare <config.json>           check and queue a coding job in a clean checkout
   algal job prepare-operation <config.json> admit an explicitly keyed operation adapter job
   algal job run|inspect <job-digest>         run once in foreground or inspect retained state
   algal job reconcile <job-digest>          observe an admitted v2 operation; never resubmit
@@ -324,7 +326,7 @@ usage:
                                               recompute a grade record against the task
                                               (exit 1 on mismatch)
   algal store put <value.json> [--dir <path>]
-                                              write a JSON value to CAS, print its ref token
+                                              save a JSON value by digest, print its ref token
   algal store get <sha256:…> [--dir <path>]
                                               print the payload a ref resolves to
   algal store has <sha256:…> [--dir <path>]
@@ -339,8 +341,8 @@ usage:
   algal slot set <name> <value.json> [--dir <path>]
                                               write a slot directly (seeding)
   algal mailbox create <name> [--max-messages <n>] [--max-message-bytes <n>]
-                                              create bounded send/receive capabilities
-  algal mailbox list [--dir <path>]          list admitted mailboxes and handles
+                                              create send/receive capabilities with message limits
+  algal mailbox list [--dir <path>]          list mailboxes and their capabilities
   algal mailbox send <send-cap> <value.json> [--idempotency-key <sha256:…>]
                                               enqueue an external wakeup
   algal mailbox receive <receive-cap>        consume one message or suspend
@@ -358,7 +360,7 @@ usage:
   algal unpack <bundle.json> [--dir <path>]
                                               install a bundle into the store, digests verified
   algal call <bundle.json> [--interface] [options]
-                                              run a packed organism and print a compact result:
+                                              run a packed program and print a compact result:
                                               { ok, outputs, receiptDigest, manifestDigest }.
                                               --interface maps named interface arguments and
                                               returns only declared interface outputs.
@@ -387,7 +389,7 @@ usage:
                                               receipts-touching-capability <class>,
                                               unevaluated-revisions, largest-work,
                                               process-status, kinds
-  algal auth <provider> [--status | --forget | --clipboard]
+  algal auth jev [--status | --forget | --stdin | --clipboard]
                                               vault a provider credential locally — keychain
                                               when available, permission-checked file otherwise;
                                               never echoes the key
@@ -981,9 +983,70 @@ function deriveInputs(c: {
   return inputs;
 }
 
+/** Who reads stderr, decided once: people get sentences, everyone else JSON. */
+const AUDIENCE: Audience = detectAudience(process.env, process.stderr.isTTY === true);
+const ERROR_STYLE = terminalStyle(process.env, process.stderr.isTTY === true);
+/** The command words of this invocation, for the error's next step. */
+let invokedCommand: readonly string[] = [];
+
+function humanErrors(argv: readonly string[]): boolean {
+  return AUDIENCE === "human" && !argv.includes("--json");
+}
+
+/**
+ * Doctor's report is data on stdout. Scripts that read it through a pipe keep
+ * the JSON object; a person at a terminal (or HRANESS_AUDIENCE=human) gets
+ * sentences.
+ */
+function humanReport(argv: readonly string[]): boolean {
+  return humanErrors(argv) && (process.stdout.isTTY === true || process.env.HRANESS_AUDIENCE === "human");
+}
+
+/**
+ * Help and version, answered before any parsing so `<command> --help` works
+ * even when the rest of the line would not parse. Undefined means "not help".
+ */
+function helpRequest(argv: readonly string[]): { text: string; code: number } | undefined {
+  const [first, ...rest] = argv;
+  if (first === undefined) return { text: startHelp(PACKAGE_VERSION), code: 0 };
+  if (first === "--version" || first === "-V" || first === "version") {
+    return {
+      text: rest.includes("--json")
+        ? `${canonicalize({ name: "algal", version: PACKAGE_VERSION, contract: "algal.organism.v1" })}\n`
+        : `algal ${PACKAGE_VERSION}\n`,
+      code: 0,
+    };
+  }
+  if (first === "help" || first === "--help" || first === "-h") {
+    const topic = rest.filter((word) => word !== "--help" && word !== "-h");
+    if (topic.length === 0) return { text: rootHelp(), code: 0 };
+    if (topic.length === 1 && topic[0] === "advanced") return { text: advancedHelp(), code: 0 };
+    if (topic.length === 1 && topic[0] === "all") return { text: USAGE, code: 0 };
+    const page = commandHelp(USAGE, topic);
+    if (page !== undefined) return { text: page, code: 0 };
+    usageError(`there is no help for "${topic.join(" ").slice(0, 40)}"`);
+  }
+  const end = argv.indexOf("--") === -1 ? argv.length : argv.indexOf("--");
+  const at = argv.slice(0, end).findIndex((word, index) =>
+    word === "--help" || (word === "-h" && (index === end - 1 || !argv[index - 1]!.startsWith("--"))));
+  if (at > 0) {
+    const words = argv.slice(0, at).filter((word) => !word.startsWith("-"));
+    const page = commandHelp(USAGE, words);
+    if (page !== undefined) return { text: page, code: 0 };
+  }
+  return undefined;
+}
+
 async function main(): Promise<number> {
-  const { cmd, positional, flags } = parseArgs(process.argv.slice(2));
-  const requestedDiagnosticFormat = artifactFlag(flags, "diagnostic-format") ?? "json";
+  const argv = process.argv.slice(2);
+  invokedCommand = argv.filter((word) => !word.startsWith("-")).slice(0, 2);
+  const help = helpRequest(argv);
+  if (help !== undefined) {
+    process.stdout.write(help.text);
+    return help.code;
+  }
+  const { cmd, positional, flags } = parseArgs(argv);
+  const requestedDiagnosticFormat = artifactFlag(flags, "diagnostic-format") ?? (humanErrors(argv) ? "text" : "json");
   if (requestedDiagnosticFormat !== "json" && requestedDiagnosticFormat !== "text") {
     usageError("--diagnostic-format must be json or text");
   }
@@ -1412,17 +1475,6 @@ async function main(): Promise<number> {
       diag(`vendored ${record.files.length} file${record.files.length === 1 ? "" : "s"} into ${into}`);
       return 0;
     }
-
-    case "--help":
-    case "-h":
-    case "help":
-      process.stdout.write(USAGE);
-      return 0;
-
-    case "--version":
-    case "version":
-      out({ name: "algal", version: PACKAGE_VERSION, contract: "algal.organism.v1" });
-      return 0;
 
     case "examples": {
       const { readdir } = await import("node:fs/promises");
@@ -3678,10 +3730,13 @@ async function main(): Promise<number> {
           provider: "jev",
           credential: status as unknown as JsonValue,
         };
+        const human = humanReport(process.argv.slice(2));
         if (!status.configured) {
           report.available = false;
           report.error = `credential not configured — run \`algal auth jev\` or set ${providerSpec("jev").env}`;
-          out(report);
+          if (human) {
+            printDoctor([["warn", `Jev isn't set up. Save a key, or set ${providerSpec("jev").env}.`]], "algal auth jev");
+          } else out(report);
           return 1;
         }
         try {
@@ -3694,15 +3749,27 @@ async function main(): Promise<number> {
           const probe = res.answers.probe;
           if (probe !== undefined && "noul" in probe) report.noul = probe.noul;
           if (res.usage !== undefined) report.usage = res.usage as unknown as JsonValue;
-          out(report);
+          if (human) printDoctor([["ok", `Jev answered a test question (key from ${status.source}).`]]);
+          else out(report);
           return 0;
         } catch (e) {
           const rep = errorReport(e);
           report.available = false;
           report.error = `${rep.code}: ${rep.message}`;
-          out(report);
+          if (human) printDoctor([["fail", `Jev didn't answer: ${sentence(rep.message)}`]], "algal doctor --jev");
+          else out(report);
           return 1;
         }
+      }
+      if (humanReport(process.argv.slice(2))) {
+        const jevEnv = process.env.TYPESAFE_API_KEY !== undefined && process.env.TYPESAFE_API_KEY !== "";
+        printDoctor([
+          ["ok", `ALGAL ${PACKAGE_VERSION} is ready (Bun reference runtime on ${platformName()}).`],
+          jevEnv
+            ? ["ok", "Jev key found in TYPESAFE_API_KEY. Test it: algal doctor --jev"]
+            : ["skip", "Jev decisions: not checked. Test a saved key: algal doctor --jev"],
+        ], undefined, "algal examples");
+        return 0;
       }
       out({
         runtime: "algal",
@@ -3714,9 +3781,16 @@ async function main(): Promise<number> {
       return 0;
     }
 
-    default:
-      process.stderr.write(`unknown command "${cmd}"; see algal --help\n`);
+    default: {
+      const safeWord = /^[A-Za-z][A-Za-z0-9-]{0,39}$/u.test(cmd);
+      const suggestion = safeWord ? closestMatch(cmd, commandWords()) : undefined;
+      process.stderr.write(renderFailure(
+        `${safeWord ? `Unknown command "${cmd}".` : "Unknown command."}${suggestion === undefined ? "" : ` Did you mean "${suggestion}"?`}`,
+        "algal --help",
+        ERROR_STYLE,
+      ));
       return 2;
+    }
   }
 }
 
@@ -3811,6 +3885,31 @@ function parseBenchPrices(
   return prices;
 }
 
+type DoctorLine = readonly ["ok" | "warn" | "fail" | "skip", string];
+
+/**
+ * Human doctor output on stdout: one symbol per check, a count, and one `→`
+ * step when something needs attention. A `Next:` hint goes to stderr.
+ */
+function printDoctor(checks: readonly DoctorLine[], next?: string, hint?: string): void {
+  const style = terminalStyle(process.env, process.stdout.isTTY === true);
+  const lines = checks.map(([state, text]) => `${symbol(state, style)} ${text}`);
+  const failed = checks.filter(([state]) => state === "fail").length;
+  const warned = checks.filter(([state]) => state === "warn").length;
+  if (failed + warned > 0) {
+    lines.push("", [failed > 0 ? `${failed} failed` : "", warned > 0 ? `${warned} warning${warned === 1 ? "" : "s"}` : ""]
+      .filter((part) => part !== "").join(", ") + ".");
+  }
+  if (next !== undefined) lines.push(`${symbol("next", style)} ${next}`);
+  process.stdout.write(`${lines.join("\n")}\n`);
+  if (next === undefined && hint !== undefined) process.stderr.write(`Next: ${hint}\n`);
+}
+
+function platformName(): string {
+  const os = process.platform === "darwin" ? "macOS" : process.platform === "win32" ? "Windows" : process.platform === "linux" ? "Linux" : process.platform;
+  return `${os} ${process.arch}`;
+}
+
 function usageError(msg: string): never {
   throw new AlgalError("PARSE_FAILED", `usage: ${msg}`);
 }
@@ -3831,9 +3930,26 @@ main()
           diagnostic: diagnostic as unknown as JsonValue }) + "\n");
       process.exit(2);
     }
-    process.stderr.write(
-      canonicalize({ error: rep.code, message: rep.message }) + "\n",
-    );
+    if (humanErrors(process.argv.slice(2))) {
+      const [first, second] = invokedCommand;
+      const known = first !== undefined && commandWords().includes(first);
+      const action = known && second !== undefined && /^[a-z][a-z-]*$/u.test(second)
+        && USAGE.includes(`\n  algal ${first} ${second}`);
+      const next = known ? `algal ${first}${action ? ` ${second}` : ""} --help` : "algal --help";
+      const synopsis = /^usage:\s*(algal .*)$/su.exec(rep.message)?.[1];
+      const missing = /ENOENT: no such file or directory, (?:open|stat|lstat|scandir) '([^']+)'/u.exec(rep.message)?.[1];
+      const text = missing !== undefined
+        ? `Can't find ${missing}.`
+        : synopsis === undefined
+        ? sentence(rep.message)
+        : `Missing or invalid arguments. Usage: ${synopsis.split("\n")[0]!.trim()}`;
+      process.stderr.write(renderFailure(text, next, ERROR_STYLE));
+      if (process.env.HRANESS_DEBUG === "1") process.stderr.write(`  code: ${rep.code}\n`);
+    } else {
+      process.stderr.write(
+        canonicalize({ error: rep.code, message: rep.message }) + "\n",
+      );
+    }
     // Exit-code rule shared with the native CLI: 0 the command succeeded,
     // 1 it ran and reported a negative result, 2 it could not run.
     process.exit(2);

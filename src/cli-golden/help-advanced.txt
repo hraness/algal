@@ -1,0 +1,29 @@
+Usage: algal <command> [options]
+
+Advanced commands for experiments, coding jobs, and program libraries.
+
+  foundry <config.json>           Generate candidate programs, score them, keep the best
+  bench <config.json>             Compare several setups on one workload
+  experiment <config.json>        Run a repeatable experiment and report it
+  library compare <name> <rev>    Compare a library revision on unseen cases
+  suite                           Run and verify every bundled example
+  ordering <scenario.json>        Explore message and dispatch orderings
+  application <drain|lineage>     Durable application tools
+  job <prepare|run|inspect>       Run a coding job in a clean checkout
+  repair <start|tick|verify>      Check and apply a coding job's patch
+  shepherd <start|tick|watch>     Watch a GitHub pull request until it settles
+  dependencies <program.algal>    List a program's imports and their digests
+  lock <program.algal>            Pin a program's imports to exact digests
+  vendor <catalog> --entry <p>    Copy a program from a catalog into this repo
+  envelope <program>              Print what a program is allowed to do
+  index                           Build the local search index over saved programs
+  search <query>                  Search saved programs by meaning and words
+  db <build|status|query>         Query the program index with SQL-like records
+  slot <get|set> <name>           Read or seed one durable value
+  slots                           List durable values
+  manifest <sha256:...>           Print a saved program
+  digest <manifest.json>          Print a program's digest
+  tool-def <manifest.json>        Print a tool definition for a program
+  tail                            Follow new activity in the store
+
+Command help: algal <command> --help · Full reference: algal help all

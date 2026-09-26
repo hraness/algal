@@ -15,12 +15,14 @@ use algal::{
     runtime,
     store::{Store, pack, unpack},
 };
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand};
 use serde_json::{Value, json};
 use std::{
     io::{self, IsTerminal},
     path::{Path, PathBuf},
 };
+
+mod cli_style;
 
 /// Reject-all admission used when no `--policy` record is supplied; read-only
 /// commands still work, every trusted boundary denies.
@@ -71,7 +73,7 @@ impl app_memory::MemoryAdmission for NoAdmission {
 #[command(
     name = "algal",
     version,
-    about = "Language and VM for agent programs that wait for approval and resume"
+    about = "ALGAL is a programming language and VM for AI agent programs that wait for approval and leave receipts you can replay."
 )]
 struct Cli {
     /// Store directory: manifests, receipts, values, slots, and process state.
@@ -207,7 +209,7 @@ enum Commands {
         #[command(flatten)]
         options: Execution,
     },
-    /// Run a packed organism bundle and print a compact result.
+    /// Run a packed program bundle and print a compact result.
     Call {
         /// Closure bundle written by `pack`.
         bundle: PathBuf,
@@ -217,7 +219,7 @@ enum Commands {
         #[command(flatten)]
         options: Execution,
     },
-    /// Admit a compiled manifest without running it.
+    /// Check a compiled manifest without running it.
     Check {
         /// Compiled `algal.organism.v1` manifest (JSON).
         manifest: PathBuf,
@@ -348,7 +350,7 @@ enum Commands {
         /// Closure bundle written by `pack`.
         bundle: PathBuf,
     },
-    /// Print a tool definition for the organism's declared interface.
+    /// Print a tool definition for the program's declared interface.
     ToolDef {
         /// Compiled `algal.organism.v1` manifest (JSON).
         manifest: PathBuf,
@@ -458,6 +460,9 @@ enum Commands {
         /// TypeSafe Jev availability: credential status plus a live probe.
         #[arg(long)]
         jev: bool,
+        /// Print the machine-readable report (the default when not at a terminal).
+        #[arg(long)]
+        json: bool,
     },
     /// Serve the Agent Client Protocol over stdio with a host-admitted executor.
     Acp {
@@ -1064,7 +1069,7 @@ fn load(path: &Path, max: usize) -> Result<Value> {
     read_json(file, max).map_err(at)
 }
 fn emit(value: &Value) -> Result<()> {
-    println!("{}", canonical(value)?);
+    cli_style::print_stdout(&format!("{}\n", canonical(value)?));
     Ok(())
 }
 /// Explain an `EFFECT_UNBOUND` run failure on stderr: which cell asked for
@@ -3358,7 +3363,14 @@ async fn execute(cli: Cli) -> Result<bool> {
             apple,
             apple_bridge,
             jev,
+            json,
         } => {
+            // The report is data on stdout: a pipe keeps the JSON object unless
+            // HRANESS_AUDIENCE=human asks for sentences.
+            let human = !json
+                && cli_style::audience() == cli_style::Audience::Human
+                && (io::stdout().is_terminal()
+                    || std::env::var("HRANESS_AUDIENCE").as_deref() == Ok("human"));
             if jev {
                 let status = tokio::task::spawn_blocking(|| algal::credentials::status("jev"))
                     .await
@@ -3369,6 +3381,17 @@ async fn execute(cli: Cli) -> Result<bool> {
                     report["error"] = json!(
                         "credential not configured — run `algal auth jev` or set TYPESAFE_API_KEY"
                     );
+                    if human {
+                        print_doctor(
+                            &[(
+                                cli_style::Symbol::Warn,
+                                "Jev isn't set up. Save a key, or set TYPESAFE_API_KEY.".into(),
+                            )],
+                            Some("algal auth jev"),
+                            None,
+                        );
+                        return Ok(false);
+                    }
                     emit(&report)?;
                     return Ok(false);
                 }
@@ -3392,12 +3415,32 @@ async fn execute(cli: Cli) -> Result<bool> {
                         if let Some(usage) = meta.get("usage") {
                             report["usage"] = usage.clone();
                         }
+                        if human {
+                            let source = status["source"].as_str().unwrap_or("saved key");
+                            print_doctor(
+                                &[(cli_style::Symbol::Ok, format!("Jev answered a test question (key from {source})."))],
+                                None,
+                                None,
+                            );
+                            return Ok(true);
+                        }
                         emit(&report)?;
                         Ok(true)
                     }
                     Err(error) => {
                         report["available"] = json!(false);
                         report["error"] = json!(format!("{}: {}", error.code, error.message));
+                        if human {
+                            print_doctor(
+                                &[(
+                                    cli_style::Symbol::Fail,
+                                    format!("Jev didn't answer: {}", cli_style::sentence(&error.message)),
+                                )],
+                                Some("algal doctor --jev"),
+                                None,
+                            );
+                            return Ok(false);
+                        }
                         emit(&report)?;
                         Ok(false)
                     }
@@ -3415,6 +3458,41 @@ async fn execute(cli: Cli) -> Result<bool> {
                 let result: Value = serde_json::from_slice(&output)?;
                 emit(&result)?;
                 Ok(result["available"] == true)
+            } else if human {
+                let jev_env = std::env::var("TYPESAFE_API_KEY").is_ok_and(|key| !key.is_empty());
+                print_doctor(
+                    &[
+                        (
+                            cli_style::Symbol::Ok,
+                            format!(
+                                "ALGAL {} is ready (native, {}).",
+                                env!("CARGO_PKG_VERSION"),
+                                platform_name()
+                            ),
+                        ),
+                        if jev_env {
+                            (
+                                cli_style::Symbol::Ok,
+                                "Jev key found in TYPESAFE_API_KEY. Test it: algal doctor --jev"
+                                    .into(),
+                            )
+                        } else {
+                            (
+                                cli_style::Symbol::Skip,
+                                "Jev decisions: not checked. Test a saved key: algal doctor --jev"
+                                    .into(),
+                            )
+                        },
+                        (
+                            cli_style::Symbol::Skip,
+                            "Apple on-device model: not checked. Check it: algal doctor --apple"
+                                .into(),
+                        ),
+                    ],
+                    None,
+                    Some("algal demo start ./my-review"),
+                );
+                Ok(true)
             } else {
                 emit(
                     &json!({"runtime":"algal","version":env!("CARGO_PKG_VERSION"),"native":true,"platform":std::env::consts::OS,"wireContract":"algal.organism.v1","build":algal::build_info::diagnostic()}),
@@ -3423,6 +3501,58 @@ async fn execute(cli: Cli) -> Result<bool> {
             }
         }
     }
+}
+
+/// Human doctor output on stdout: one symbol per check, a count when anything
+/// needs attention, and one `→` step. A `Next:` hint goes to stderr.
+fn print_doctor(checks: &[(cli_style::Symbol, String)], next: Option<&str>, hint: Option<&str>) {
+    let style = cli_style::Style::stdout();
+    let mut lines: Vec<String> = checks
+        .iter()
+        .map(|(state, text)| format!("{} {text}", cli_style::symbol(*state, style)))
+        .collect();
+    let failed = checks
+        .iter()
+        .filter(|(state, _)| matches!(state, cli_style::Symbol::Fail))
+        .count();
+    let warned = checks
+        .iter()
+        .filter(|(state, _)| matches!(state, cli_style::Symbol::Warn))
+        .count();
+    if failed + warned > 0 {
+        let mut parts = Vec::new();
+        if failed > 0 {
+            parts.push(format!("{failed} failed"));
+        }
+        if warned > 0 {
+            parts.push(format!(
+                "{warned} warning{}",
+                if warned == 1 { "" } else { "s" }
+            ));
+        }
+        lines.push(String::new());
+        lines.push(format!("{}.", parts.join(", ")));
+    }
+    if let Some(next) = next {
+        lines.push(format!(
+            "{} {next}",
+            cli_style::symbol(cli_style::Symbol::Next, style)
+        ));
+    }
+    cli_style::print_stdout(&(lines.join("\n") + "\n"));
+    if let (None, Some(hint)) = (next, hint) {
+        eprintln!("Next: {hint}");
+    }
+}
+
+fn platform_name() -> String {
+    let os = match std::env::consts::OS {
+        "macos" => "macOS",
+        "linux" => "Linux",
+        "windows" => "Windows",
+        other => other,
+    };
+    format!("{os} {}", std::env::consts::ARCH)
 }
 
 /// Best-effort clipboard read across platforms; errors when nothing yields
@@ -3487,17 +3617,133 @@ fn read_secret_line(prompt: &str) -> Result<String> {
     Ok(key)
 }
 
+/// Commands a new person reaches for, in the order they run them. Root help
+/// lists these first; every other visible command follows in its own order.
+const FIRST_COMMANDS: [&str; 12] = [
+    "demo", "doctor", "run", "check", "verify", "resume", "inspect", "explain", "diff", "example",
+    "suite", "process",
+];
+
+/// Research and maintainer commands: hidden from root help, listed by
+/// `algal help advanced`, and still runnable with their own `--help`.
+const ADVANCED_COMMANDS: [&str; 8] = [
+    "civ",
+    "civ-verify",
+    "bench",
+    "foundry",
+    "ordering",
+    "application",
+    "agent",
+    "acp",
+];
+
+/// The clap command with root help ordered for a first run.
+fn command() -> clap::Command {
+    let mut command = Cli::command()
+        .after_help("More commands: algal help advanced · Command help: algal <command> --help");
+    for (order, name) in FIRST_COMMANDS.iter().enumerate() {
+        command = command.mut_subcommand(*name, |sub| sub.display_order(order));
+    }
+    for name in ADVANCED_COMMANDS {
+        command = command.mut_subcommand(name, |sub| sub.hide(true));
+    }
+    command
+}
+
+/// `algal help advanced`: the hidden commands with their one-line summaries.
+fn advanced_help() -> String {
+    let command = Cli::command();
+    let mut lines = vec![
+        "Usage: algal <command> [options]".to_owned(),
+        String::new(),
+        "Advanced commands for experiments, benchmarks, and agent hosting.".to_owned(),
+        String::new(),
+    ];
+    for name in ADVANCED_COMMANDS {
+        let about = command
+            .find_subcommand(name)
+            .and_then(|sub| sub.get_about())
+            .map(|about| about.to_string())
+            .unwrap_or_default();
+        let first = about.split(". ").next().unwrap_or("");
+        let summary = first.trim_end_matches('.').replace('`', "");
+        let mut row = format!("  {name:<14}");
+        for word in summary.split_whitespace() {
+            if row.len() + 1 + word.len() > 80 && row.trim().len() > name.len() {
+                lines.push(row);
+                row = " ".repeat(16);
+            }
+            if !row.ends_with(' ') {
+                row.push(' ');
+            }
+            row.push_str(word);
+        }
+        lines.push(row);
+    }
+    lines.push(String::new());
+    lines.push("Command help: algal <command> --help · Everyday commands: algal --help".to_owned());
+    lines.join("\n") + "\n"
+}
+
+/// The command words of this invocation that name a real subcommand, for the
+/// error's next step: `algal process tick --help`.
+fn next_step(args: &[String]) -> String {
+    let command = Cli::command();
+    let words: Vec<&str> = args
+        .iter()
+        .skip(1)
+        .map(String::as_str)
+        .filter(|arg| !arg.starts_with('-'))
+        .take(2)
+        .collect();
+    let Some(sub) = words
+        .first()
+        .and_then(|first| command.find_subcommand(first))
+    else {
+        return "algal --help".to_owned();
+    };
+    match words.get(1).and_then(|second| sub.find_subcommand(second)) {
+        Some(action) => format!("algal {} {} --help", sub.get_name(), action.get_name()),
+        None => format!("algal {} --help", sub.get_name()),
+    }
+}
+
 #[tokio::main]
 async fn main() {
-    let code = match execute(Cli::parse()).await {
+    let args: Vec<String> = std::env::args().collect();
+    if matches!(args.get(1..), Some([help, advanced]) if help == "help" && advanced == "advanced") {
+        cli_style::print_stdout(&advanced_help());
+        std::process::exit(0);
+    }
+    let cli = command()
+        .try_get_matches_from(&args)
+        .and_then(|matches| Cli::from_arg_matches(&matches))
+        .unwrap_or_else(|error| error.exit());
+    let code = match execute(cli).await {
         Ok(true) => 0,
         Ok(false) => 1,
         Err(error) => {
-            let report = json!({"ok":false,"error":error});
-            eprintln!(
-                "{}",
-                canonical(&report).unwrap_or_else(|_| "{\"ok\":false}".into())
-            );
+            let human = cli_style::audience() == cli_style::Audience::Human
+                && !args.iter().any(|arg| arg == "--json");
+            if human {
+                eprint!(
+                    "{}",
+                    cli_style::render_failure(
+                        &cli_style::sentence(&error.message),
+                        &next_step(&args),
+                        cli_style::Style::stderr(),
+                    )
+                );
+                if std::env::var("HRANESS_DEBUG").as_deref() == Ok("1") {
+                    eprintln!("  code: {}", error.code);
+                }
+            } else {
+                let report = json!({"ok":false,"error":error});
+                eprintln!(
+                    "{}",
+                    canonical(&report).unwrap_or_else(|_| "{\"ok\":false}".into())
+                );
+            }
             2
         }
     };
