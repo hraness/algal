@@ -157,6 +157,21 @@ adapter before a dependent branch or generation can run. The adapter retains
 declared-label probabilities; it does not assert calibration or establish
 that they describe reality. It does not impose an additional sum-to-one rule.
 
+Two other question forms share the same effect. `as noul` asks for a keep
+probability and binds a plain number; it has no labels, confidence, or
+probability map. `as score { "label", ... }` asks for a numeric rating over
+declared score labels and binds a scored decision exposing `score`,
+`confidence`, `probabilities`, and `probability(label)`; the adapter checks
+the score is numeric, confidence and each declared label's probability are in
+range, and a missing probability fails.
+
+```algal
+let keep = decide "Is this still relevant?" using email as noul
+let rating = decide "How good is it?" using email
+  as score { "poor", "ok", "great" }
+return { keep: keep, score: rating.score }
+```
+
 `match` requires a closed choice and exactly one arm per declared label. The
 selection itself makes no model call. Pure `if` and `match` expressions stay
 inside one pure cell; they can select an instruction for a later effect.

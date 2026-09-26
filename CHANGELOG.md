@@ -46,6 +46,14 @@ wire constant (`0.1.0`) is independent of these package versions.
   the declared type types the value downstream, so record fields read
   directly and `match` covers allowed values. `as text` is the same contract
   as an undeclared `generate`.
+- `decide` accepts all three provider question forms: `as noul` binds a keep
+  probability as a plain number, `as score { "label", ... }` binds a scored
+  decision exposing `score`, `confidence`, `probabilities`, and
+  `probability(label)`, and `as choice { label: "criterion" }` is unchanged.
+  Each form compiles to the matching `noul`, `score`, or `choice` decision
+  question and a generated pure adapter validates the provider's answer
+  (range, required members, every declared label's probability) before
+  downstream cells can consume it.
 - `algal envelope <program.algal|manifest.json>` writes an
   `algal.authority-envelope.v1` report: a static review of a manifest and its
   compiled child closure before any cell runs. Per capability class it lists
