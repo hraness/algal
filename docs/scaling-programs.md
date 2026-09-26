@@ -335,7 +335,7 @@ The foundation round closed the gaps a generated-program workflow hits:
    `algal.registries.json` names catalog addresses. Verification stays
    offline. See the [vendor spec](../spec/v1/vendor.md).
 
-The [cumulative-skill experiment](vision.md#what-would-justify-the-claim)
+The [cumulative-skill experiment](cumulative-skill-experiment.md)
 measures whether keeping and composing procedures improves later work. More
 files, library entries, or generated revisions are capacity measures; useful
 reuse requires evidence from the work those programs perform.

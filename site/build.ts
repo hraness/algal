@@ -561,7 +561,7 @@ const DOC_GROUPS: { title: string; pages: string[] }[] = [
   { title: "Start here", pages: ["native-release", "native-workbench", "source-language", "scaling-programs", "library", "scale-measurements", "vm"] },
   { title: "Vision", pages: ["vision", "lineage", "why-unique"] },
   { title: "Concepts", pages: ["algal-design", "design", "agent-loop-and-organism", "programmable-applications", "application-host-adapters", "executors", "model-router", "diagrams", "repair", "program-database"] },
-  { title: "Life and selection", pages: ["habitats", "civilization"] },
+  { title: "Life and selection", pages: ["habitats", "civilization", "cumulative-skill-experiment"] },
   { title: "Applications and workflows", pages: ["use-cases", "when-algal-wins", "browser-grow", "browser-tasks", "browser-inference", "malleable-site", "malleable-workbench", "local-triage", "adaptive-inventory", "agent-tool", "coding-harness", "coding-operations", "pr-shepherd"] },
 ];
 const DOC_SLUGS = DOC_GROUPS.flatMap(group => group.pages);
