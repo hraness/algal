@@ -1,0 +1,1 @@
+{"domain":"raw","expected":{"ok":true,"value":5e-324},"id":"raw-minimum-subnormal","inputSha256":"sha256:df07995dfec744854db87f45c8f376da958f4d34959c2d9067d287f8c8e2626e","outputs":{"committed-wasm":"{\"fuel\":1,\"ok\":true,\"value\":5e-324}","native":"{\"fuel\":1,\"ok\":true,\"value\":5e-324}"},"targets":["committed-wasm","native"]}

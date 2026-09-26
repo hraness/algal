@@ -1,0 +1,1 @@
+{"cleanupObserved":true,"command":["/Users/bg/.local/share/algal-verify/merged/artifacts/verification_boundary","eval","/var/folders/k3/s4y7dlcj4mz2j1kbg428r5bw0000gn/T/algal-corpus-expression-jf3Dmx/case-78/input.bin"],"exitCode":0,"outputExceeded":false,"signal":null,"stderr":"","stdout":"{\"fuel\":2,\"ok\":true,\"value\":false}\n","timedOut":false}

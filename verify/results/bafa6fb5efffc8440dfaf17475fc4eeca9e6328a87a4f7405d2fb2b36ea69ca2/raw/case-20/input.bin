@@ -1,0 +1,1 @@
+{"program":["if",["or",["or",["or",false,false],["or",true,true]],["or",["lt",-2,-5],["not",true]]],["sub",-6,["neg",8]],3],"env":{},"fuel":10000}

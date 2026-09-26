@@ -110,6 +110,8 @@ export async function verificationPaths(root: string): Promise<string[]> {
       requireThat(++visited <= 20_000, "verification input inventory exceeds 20000 entries");
       const child = `${path}/${entry.name}`;
       if (path === "verify" && ["results", "tools", ".cache"].includes(entry.name)) continue;
+      // Regenerated dependency resolution metadata, never a source input.
+      if (entry.name === "lake-manifest.json") continue;
       if (entry.isDirectory() && (GENERATED_DIRECTORIES.has(entry.name) || entry.name === "build" && path.endsWith("/.lake"))) continue;
       if (entry.isDirectory()) { await walk(child); continue; }
       requireThat(entry.isFile(), `${child}: nonregular verification input`);

@@ -4,6 +4,8 @@ site/dist/
 .algal/
 /target/
 /verify/lean/.lake/build/
+/verify/lean/lake-manifest.json
+/verify/rust-bridge/target/
 promoted/
 /civ/
 .env

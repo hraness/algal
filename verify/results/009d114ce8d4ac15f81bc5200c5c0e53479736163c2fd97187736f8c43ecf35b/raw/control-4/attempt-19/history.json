@@ -1,0 +1,1 @@
+{"commands":[{"action":{"access":"external-write","app":1,"batch":1,"configuration":1,"deny":"none","kind":"scan","results":["blocked","unknown"]},"id":0}],"contract":"algal.application-history.v1","generator":"state-selected-v1","profile":"delivery","seed":1}

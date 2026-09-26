@@ -1,6 +1,6 @@
 # ALGAL formal-verification and system-confidence plan
 
-Status: execution authorized on 2026-09-23; Phases 00–05 are Complete; Phases 06–09 are In progress. Later phases remain Not started until their dependencies and acceptance criteria are met. Completion of infrastructure does not complete any production proof obligation.
+Status: execution authorized on 2026-09-23; Phases 00–05 are Complete; Phases 06–16 are In progress. Later phases remain Not started until their dependencies and acceptance criteria are met. Completion of infrastructure does not complete any production proof obligation.
 
 Basis: [2026-09-23 audit](formal-verification-audit-2026-09-23.md), ALGAL tree f19f7381f80ee7745f0faa0e9e3e8eb0d43a8bfe at a86327f76f6e632fe7fceda17b738a749a341ab6. Rebase the evidence against the exact integration candidate before execution.
 
@@ -298,7 +298,7 @@ TLC does not establish that a proposed symmetry is valid, and its documentation 
 
 ## Phase 10: expression semantics, fuel and safe evaluation
 
-- **Status:** Not started
+- **Status:** In progress
 - **Depends on:** 03, 09.
 - **Objective:** Prove a precisely scoped interpreter semantics and expose the remaining implementation gap.
 - **Scope:** verify/lean/Algal/Expr, independent evaluator/corpus, bounded production expression proof adapters.
@@ -315,7 +315,7 @@ TLC does not establish that a proposed symmetry is valid, and its documentation 
 
 ## Phase 11: memory derivation checker and Datalog correctness
 
-- **Status:** Not started
+- **Status:** In progress
 - **Depends on:** 04, 09.
 - **Objective:** Check logical derivations independently of re-executing the same query implementation.
 - **Scope:** verify/lean/Algal/Memory, verify/reference/memory, bounded checker/test adapters; no required runtime dependency initially.
@@ -331,7 +331,7 @@ TLC does not establish that a proposed symmetry is valid, and its documentation 
 
 ## Phase 12: direct implementation proof and Lean linkage pilot
 
-- **Status:** Not started
+- **Status:** In progress
 - **Depends on:** 04, 09.
 - **Objective:** Demonstrate a maintainable proof over actual production code and select the bridge for deeper work.
 - **Scope:** Small pure admission/count/length helpers actually called from contract boundaries; verify/rust-bridge and Kani harnesses. Avoid overlapping expression/memory implementation edits.
@@ -359,7 +359,7 @@ TLC does not establish that a proposed symmetry is valid, and its documentation 
 
 ## Phase 14: receipt, replay, resume and evidence assurance
 
-- **Status:** Not started
+- **Status:** In progress
 - **Depends on:** 05, 07, 09, 10.
 - **Objective:** Establish the exact meaning of a verifying receipt and a safe continuation.
 - **Scope:** Independent trace checker/proofs, verify/lean/Algal/Replay, replay/evidence generated tests.
@@ -396,7 +396,7 @@ TLC does not establish that a proposed symmetry is valid, and its documentation 
 
 ## Phase 16: host and runtime qualification
 
-- **Status:** Not started
+- **Status:** In progress
 - **Depends on:** 04, 05.
 - **Objective:** Validate assumptions that mathematical models leave at the host boundary.
 - **Scope:** Store/Executor/Transport/Tool/MemoryAdmissionHost conformance; gateway/Jev/xcb/ACP fixtures; HostEventService dueAtMs/poll delivery; credential, retrieval, coding-job, repair and GitHub adapter checks.

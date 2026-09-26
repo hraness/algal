@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { open, realpath } from "node:fs/promises";
+import { mkdtemp, open, realpath, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CHILD_ENV, childEnv, type SupervisorCompletion, type SupervisorDrain } from "./command-supervisor";
 import { parseRegistry, parseToolchains, validateClaims } from "./claims";
@@ -343,6 +345,36 @@ async function executeSuite(root: string, suite: string): Promise<unknown> {
     admitBoundarySummary(targets);
     return { tests, commandResult: result, targets, targetCommandResult: targetResult,
       scope: "Focused production regression tests and sampled target agreement; no exhaustive property or implementation proof. Native graph/store/adaptation tests remain required Cargo gates." };
+  }
+  if (suite === "receipt-closure" || suite === "host-conformance" || suite === "memory-oracle") {
+    const directories: Record<string, string> = { "receipt-closure": "verify/receipt", "host-conformance": "verify/host", "memory-oracle": "verify/reference/memory" };
+    const command = [process.execPath, "test", "--timeout", "20000", directories[suite]!];
+    const result = await runCommand(command, root);
+    const scopes: Record<string, string> = {
+      "receipt-closure": "Static closure-decision and bound-mirror checks over measured run summaries against the production receipt predicate; no exhaustive or producer-instrumented claim.",
+      "host-conformance": "Deterministic fixture violations over host-seam contracts; live adapter/provider dispatch is out of scope.",
+      "memory-oracle": "Independent derivation-checker fixtures; no production-path instrumented claim.",
+    };
+    return { tests: admitSelftestOutput(result), commandResult: result, scope: scopes[suite] };
+  }
+  if (suite === "lean-expr" || suite === "lean-memory") {
+    const { leanRuntime } = await import("../lean/runtime");
+    const runtime = await leanRuntime(root);
+    const stage = await mkdtemp(join(tmpdir(), `algal-${suite}-`));
+    const modules = suite === "lean-expr"
+      ? ["Algal.Expr.Model", "Algal.Expr.Eval", "Algal.Expr.Theorems"]
+      : ["Algal.Memory.Datalog", "Algal.Memory.Theorems"];
+    try {
+      const environment = ["/usr/bin/env", "-i", `HOME=${join(stage, "home")}`, `PATH=${join(runtime.root, "bin")}:/usr/bin:/bin`, "LANG=C", "LC_ALL=C", "TZ=UTC"];
+      const commands: CommandResult[] = [];
+      for (const module of modules) {
+        const result = await runCommand([...environment, runtime.lake, "--no-cache", "--no-ansi", "build", module], join(root, "verify/lean"), { timeoutMs: 600_000, maxOutputBytes: 2_097_152 });
+        requireSuccess(result);
+        commands.push(result);
+      }
+      return { modules, commands, runtime: { root: runtime.root, version: runtime.version, manifestSha256: runtime.manifestSha256, fileCount: runtime.fileCount, filesDigest: runtime.filesDigest },
+        scope: "Independent Lean semantic-model modules theorem-checked by the pinned runtime. Model-level claims only: no production-code, translation, ABI or execution-target linkage." };
+    } finally { await rm(stage, { recursive: true, force: true }); }
   }
   throw new Error(`${suite}: no execution adapter (Not started)`);
 }

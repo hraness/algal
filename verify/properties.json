@@ -2435,7 +2435,7 @@
     },
     {
       "path": "src/algal_expr.wasm.json",
-      "sha256": "sha256:32f55d324aa416a6e147ad9a48d9d1f07cfe938707c0e99c19ed158afa13d11c"
+      "sha256": "sha256:09ab2301edf297d7814b816b531ac99a9a85786bf2399f41adf06acbcc2687a0"
     },
     {
       "path": "src/application-adaptation.test.ts",
@@ -15627,7 +15627,7 @@
       "specs": [
         {
           "path": "docs/formal-verification-plan.md",
-          "sha256": "sha256:a52001ded8efe62edf1c1e29220948c7014062f1d0882cc31465c3ea82cba8f9",
+          "sha256": "sha256:e315f55dccafe184a42619d69df4a0078484cb99cb695423506f39c0635388da",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -15752,7 +15752,7 @@
       "specs": [
         {
           "path": "docs/formal-verification-plan.md",
-          "sha256": "sha256:a52001ded8efe62edf1c1e29220948c7014062f1d0882cc31465c3ea82cba8f9",
+          "sha256": "sha256:e315f55dccafe184a42619d69df4a0078484cb99cb695423506f39c0635388da",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -15877,7 +15877,7 @@
       "specs": [
         {
           "path": "docs/formal-verification-plan.md",
-          "sha256": "sha256:a52001ded8efe62edf1c1e29220948c7014062f1d0882cc31465c3ea82cba8f9",
+          "sha256": "sha256:e315f55dccafe184a42619d69df4a0078484cb99cb695423506f39c0635388da",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -16002,7 +16002,7 @@
       "specs": [
         {
           "path": "docs/formal-verification-plan.md",
-          "sha256": "sha256:a52001ded8efe62edf1c1e29220948c7014062f1d0882cc31465c3ea82cba8f9",
+          "sha256": "sha256:e315f55dccafe184a42619d69df4a0078484cb99cb695423506f39c0635388da",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -16127,7 +16127,7 @@
       "specs": [
         {
           "path": "docs/formal-verification-plan.md",
-          "sha256": "sha256:a52001ded8efe62edf1c1e29220948c7014062f1d0882cc31465c3ea82cba8f9",
+          "sha256": "sha256:e315f55dccafe184a42619d69df4a0078484cb99cb695423506f39c0635388da",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -16253,7 +16253,7 @@
       "specs": [
         {
           "path": "docs/formal-verification-plan.md",
-          "sha256": "sha256:a52001ded8efe62edf1c1e29220948c7014062f1d0882cc31465c3ea82cba8f9",
+          "sha256": "sha256:e315f55dccafe184a42619d69df4a0078484cb99cb695423506f39c0635388da",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -16378,7 +16378,7 @@
       "specs": [
         {
           "path": "docs/formal-verification-plan.md",
-          "sha256": "sha256:a52001ded8efe62edf1c1e29220948c7014062f1d0882cc31465c3ea82cba8f9",
+          "sha256": "sha256:e315f55dccafe184a42619d69df4a0078484cb99cb695423506f39c0635388da",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]
@@ -17958,7 +17958,7 @@
         },
         {
           "path": "src/algal_expr.wasm.json",
-          "sha256": "sha256:32f55d324aa416a6e147ad9a48d9d1f07cfe938707c0e99c19ed158afa13d11c",
+          "sha256": "sha256:09ab2301edf297d7814b816b531ac99a9a85786bf2399f41adf06acbcc2687a0",
           "symbols": [
             "whole module; narrow symbol refinement pending"
           ]

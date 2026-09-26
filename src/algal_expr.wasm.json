@@ -124,11 +124,11 @@
     },
     {
       "path": "verify/lib/files.ts",
-      "sha256": "sha256:1fbe703ed4396a8109065dcb9ac1e574f7c24434c2cf583a6f340abbba7e81db"
+      "sha256": "sha256:c15c0d6460a4ac7d0b7f3ff4e67625888a4ba72fe20a19cd2cb9e332403d85d8"
     },
     {
       "path": "verify/lib/runner.ts",
-      "sha256": "sha256:f4c615ccb7d2c584e6135d16a7ae0b701cb79c3b9cfb868fa630ea5bd65fb7d9"
+      "sha256": "sha256:c220b183b360c971c34456baaf1ef9ffdbf4e3fb60f833b82415d8f6daa06472"
     },
     {
       "path": "verify/lib/schema.ts",
@@ -136,7 +136,7 @@
     },
     {
       "path": "verify/lib/suites.ts",
-      "sha256": "sha256:2f8a41c476cf58f0bc6ccdb6494312d77df708b4509571e173f6519c3f61f56e"
+      "sha256": "sha256:a67876316bcb302b5aaa410fe0be3304aa60e2baaf7b077f0d485571a9106ebf"
     }
   ],
   "wasm": {

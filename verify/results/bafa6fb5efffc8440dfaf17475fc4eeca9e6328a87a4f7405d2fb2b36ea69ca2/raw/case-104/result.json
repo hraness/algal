@@ -1,0 +1,1 @@
+{"domain":"raw","expected":{"ok":true,"value":0},"id":"raw-minus-zero","inputSha256":"sha256:8da8d99767b96f7cb3f94a4fd89a7c0d4365e2c6148fe1e4f6b177f80d18bfc7","outputs":{"committed-wasm":"{\"fuel\":1,\"ok\":true,\"value\":0}","native":"{\"fuel\":1,\"ok\":true,\"value\":0}"},"targets":["committed-wasm","native"]}

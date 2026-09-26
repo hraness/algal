@@ -1,0 +1,40 @@
+# Phase 12 pilot: proof harnesses over the *production* `algal` crate.
+#
+# This crate is deliberately a SEPARATE cargo workspace (empty `[workspace]`
+# table) so it never joins the root workspace and never perturbs the root
+# Cargo.lock. Its own Cargo.lock lives beside this file and is private to the
+# pilot.
+#
+# Nothing under crates/ or src/ is modified: the harnesses link against
+# `algal` through a read-only path dependency and exercise only its public
+# API surface.
+
+[package]
+name = "algal-rust-bridge"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "Kani proof harnesses over the production algal crate (Phase 12 pilot)"
+
+# Keep this crate out of the repository workspace.
+[workspace]
+
+[dependencies]
+# The crate under proof. Read-only path dependency; identical sources to the
+# production build.
+algal = { path = "../../crates/algal" }
+# Needed to name serde_json::Value, the input type of the codec under proof.
+# Pinned to the exact version the root Cargo.lock resolves for algal.
+serde_json = "=1.0.151"
+
+# The `kani` library crate is intentionally NOT a declared dependency: harness
+# code is `#[cfg(kani)]`-gated and cargo-kani injects its bundled kani library
+# (built for its own rustc 1.100.0-nightly) when verifying. Plain `cargo check`
+# and `cargo test` therefore never need a kani package.
+
+[lints.rust]
+# `cfg(kani)` is set by cargo-kani, not by any Cargo feature.
+unexpected_cfgs = { level = "allow", check-cfg = ["cfg(kani)"] }
+# `from_utf8_unchecked` appears in *harness input construction only* (the
+# symbolically-constrained-UTF8 argument is documented at each use); the code
+# under proof stays the repo's `unsafe_code = "forbid"` algal crate.

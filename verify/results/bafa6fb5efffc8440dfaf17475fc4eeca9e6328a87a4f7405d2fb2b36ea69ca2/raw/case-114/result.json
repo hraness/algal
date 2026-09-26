@@ -1,0 +1,1 @@
+{"domain":"raw","expected":{"ok":true,"value":true},"id":"raw-fuel-two","inputSha256":"sha256:567bc3423fa37a78f96b6c0b6f3267950adcfd11990005e1531b98c98f7e91e4","outputs":{"committed-wasm":"{\"fuel\":1,\"ok\":true,\"value\":true}","native":"{\"fuel\":1,\"ok\":true,\"value\":true}"},"targets":["committed-wasm","native"]}

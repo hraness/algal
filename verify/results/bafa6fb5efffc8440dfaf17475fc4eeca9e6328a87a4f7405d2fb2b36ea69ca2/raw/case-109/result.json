@@ -1,0 +1,1 @@
+{"domain":"raw","expected":{"ok":true,"value":1},"id":"raw-exponent-one","inputSha256":"sha256:bba0b4004244faf5e2bf57f9bdfa02061f4fad611a098d19adc75bd4ff04fb98","outputs":{"committed-wasm":"{\"fuel\":1,\"ok\":true,\"value\":1}","native":"{\"fuel\":1,\"ok\":true,\"value\":1}"},"targets":["committed-wasm","native"]}

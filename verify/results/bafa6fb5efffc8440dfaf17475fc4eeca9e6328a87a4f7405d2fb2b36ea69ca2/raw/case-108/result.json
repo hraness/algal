@@ -1,0 +1,1 @@
+{"domain":"raw","expected":{"ok":true,"value":9007199254740992},"id":"raw-integer-rounding","inputSha256":"sha256:d7269f319a5ea188ed640a8b51c5eb197f8ea770ab837f48ed82ea75be4f2c8c","outputs":{"committed-wasm":"{\"fuel\":1,\"ok\":true,\"value\":9007199254740992}","native":"{\"fuel\":1,\"ok\":true,\"value\":9007199254740992}"},"targets":["committed-wasm","native"]}
