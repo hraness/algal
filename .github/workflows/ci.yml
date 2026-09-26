@@ -81,6 +81,7 @@ jobs:
       - run: bun run lint
       - run: bun run docs:check
       - run: bun run build:site
+      - run: python3 scripts/test-release-notes.py
 
   test:
     name: Test

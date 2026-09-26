@@ -114,6 +114,17 @@ creating a prerelease if needed. Stable releases and existing asset names are
 never overwritten. Publishing is one explicit owner-operated workflow action;
 merging source alone does not publish binaries.
 
+The release page is titled `ALGAL <tag>`. Its summary and `## Changes` come from
+the tag's section of `CHANGELOG.md` (`## <tag>` with an optional ` - YYYY-MM-DD`
+date), and `scripts/release-notes.py` generates the `## Install` and `## Verify`
+sections from the qualified package records. Publishing stops before it creates
+or edits the release when that section is missing, empty, or still says
+Unreleased. The body ends with an `algal.release-page.v1` HTML comment that
+records the tag, source commit, and archive digests. A retry accepts an existing
+page only when its notes match the rendered changelog section exactly, so a
+hand-edited page is refused; correct a published page by changing the page and
+the changelog together.
+
 The native semver remains `0.2.0`. The embedded commit/input digest and installed
 package tag distinguish prerelease builds even when `algal --version` is identical. These packages
 distribute the native kernel and process CLI. GitHub shepherd, coding-job

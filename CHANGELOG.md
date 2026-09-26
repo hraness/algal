@@ -1,11 +1,14 @@
 # Changelog
 
-Entries are seeded from the GitHub release notes for each tag
-(`gh release view <tag>`); the release page remains the authoritative record,
-including archive checksums and qualified source commits. Native semver stays
-`0.2.0` across the `v0.2.0-vm.N` prereleases; the embedded build identity and
-the installed package record distinguish them. The receipt `runtime.version`
-wire constant (`0.1.0`) is independent of these package versions.
+Each version section holds a summary paragraph and a bulleted list of
+changes. The release workflow copies the section whose heading is the tag onto
+that tag's GitHub Release page and adds install and verification details from
+the release packages; it refuses to publish when the section is missing,
+empty, or still says Unreleased. Sections before v0.2.0-vm.9 are kept as they
+first shipped. Native semver stays `0.2.0` across the `v0.2.0-vm.N`
+prereleases; the embedded build identity and the installed package record
+distinguish them. The receipt `runtime.version` wire constant (`0.1.0`) is
+independent of these package versions.
 
 ## Unreleased
 
@@ -474,22 +477,26 @@ wire constant (`0.1.0`) is independent of these package versions.
   expr cells apply the declared rules and summaries, passing every
   acquisition case under the scripted executor.
 
-## v0.2.0-vm.9 — 2026-09-20
+## v0.2.0-vm.9 - 2026-09-20
 
-ALGAL VM9: bounded execution and shared design.
+Programs that compile other programs now share one set of size limits, local
+inputs refuse special files before reading them, and the site uses the shared
+Hraness design system.
 
-- Recursive compilation shares limits across child occurrences: 1,024 manifest
-  instances, 4,096 cells, 16,384 edges, 64 MiB normalized manifest bytes.
-- Handled failures consume work before recovery effects can execute, matching
-  the native runtime.
-- Local transport/process inputs reject non-regular files before reading; the
-  Bun HTTP transport bounds streamed bytes and body lifetime with strict UTF-8
-  admission.
-- Initialized host leases avoid redundant bootstrap writes before taking
-  custody in both runtimes; incompatible database state is rejected.
+- Recursive compilation shares its limits across every child occurrence:
+  1,024 manifest instances, 4,096 cells, 16,384 edges, and 64 MiB of
+  normalized manifest bytes in total.
+- Handled failures consume work before recovery effects can run, matching the
+  native runtime.
+- Local transport and process inputs refuse FIFOs, devices, and other
+  non-regular files before reading them. The Bun HTTP transport limits
+  streamed bytes and body lifetime and accepts only valid UTF-8.
+- An initialized host lease no longer rewrites its bootstrap records before
+  taking ownership, in both runtimes. An empty interrupted initialization can
+  be finished explicitly, and incompatible database state is rejected.
 - The site adopts the shared Hraness design system.
 
-## v0.2.0-vm.8 — 2026-09-20
+## v0.2.0-vm.8 - 2026-09-20
 
 Stricter admission, safer retained-state reads, race-safe mailbox creation,
 and less repeated evidence serialization.
@@ -508,7 +515,7 @@ and less repeated evidence serialization.
 - Upgrade boundary: concurrent mailbox creators sharing a store must all
   implement this release's admission ABI.
 
-## v0.2.0-vm.7 — 2026-09-20
+## v0.2.0-vm.7 - 2026-09-20
 
 Retain a real on-device model decision, stop for human review, and finish
 later with the model disconnected.
@@ -521,7 +528,7 @@ later with the model disconnected.
 - A blocked process retains the original executor error in its diagnostic
   without manufacturing a settled receipt.
 
-## v0.2.0-vm.6 — 2026-09-20
+## v0.2.0-vm.6 - 2026-09-20
 
 Native workbench and crash laboratory.
 
@@ -534,34 +541,34 @@ Native workbench and crash laboratory.
 - Portable evidence export and verification without the source store.
 - `doctor` reports build identity; packaging rejects stale binaries.
 
-## v0.2.0-vm.5 — 2026-09-20
+## v0.2.0-vm.5 - 2026-09-20
 
 Portable process evidence: a process history can be checked on another
 machine from one bounded JSON file with the standalone native executable.
 Verification admits no live adapter and creates no runnable process.
 
-## v0.2.0-vm.4 — 2026-09-20
+## v0.2.0-vm.4 - 2026-09-20
 
 Explicit recovery of a coding result whose acknowledgement was lost:
 `job prepare-operation` and `job reconcile`, immutable bounded observations,
 and read-only reconciliation that never resubmits the coding task. Includes
 selected-branch generation and source-annotated execution diagrams.
 
-## v0.2.0-vm.3 — 2026-09-19
+## v0.2.0-vm.3 - 2026-09-19
 
 Coding repair as a durable, inspectable VM workload, plus installable native
 process-kernel packages for Ubuntu 24.04 x86_64 and macOS 14+ Apple silicon.
 Dispatched deadlines, interrupted responses, and unknown coding outcomes
 remain uncertain; no automatic push, merge, or provider retry.
 
-## v0.2.0-vm.2 — 2026-09-19
+## v0.2.0-vm.2 - 2026-09-19
 
 Explicit crash recovery across Bun and the Rust VM (ordered effect journals,
 exact-intent recovery, SQLite custody that survives process death) and a
 read-only PR/CI shepherd. Fixes an early-stdin-close race in both runtimes.
 Source only; no packages published.
 
-## v0.2.0-vm.1 — 2026-09-19
+## v0.2.0-vm.1 - 2026-09-19
 
 Source preview of the ALGAL process VM: bounded typed agent programs that
 persist their identity and history, exit, and resume from verified
