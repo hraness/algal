@@ -61,6 +61,7 @@ function checkArmAggregates(
     ["admissionFailures", derived.admissionFailures],
     ["keptEntries", derived.keptEntries],
     ["reusedEntries", derived.reusedEntries],
+    ["correctionsTotal", derived.correctionsTotal],
   ];
   for (const [field, want] of counts) {
     if (arm[field] !== want) mismatches.push(`${at}.${field}: claimed ${arm[field]}, the cited records derive ${want}`);

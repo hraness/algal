@@ -163,6 +163,11 @@ async function fixture(): Promise<Fixture> {
       generator: null,
       manifest: dK, args: argsK, receipt: receipts.r3, outcome: "failed",
       work: { units: 14, agentCalls: 1 }, failure: null, promote: null,
+      // The operator touched this task twice; the other records carry none.
+      corrections: [
+        { kind: "operator-edit", note: "record schema field renamed by hand" },
+        { kind: "hint", note: "operator supplied the revised taxonomy" },
+      ],
     }),
     runRecord({
       arm: "retained", taskId: "t-unseen-4", phase: "unseen",
@@ -277,6 +282,7 @@ describe("skill experiment rollup", () => {
       admissionFailures: 1,
       keptEntries: 1,
       reusedEntries: 1,
+      correctionsTotal: 2,
     });
     expect(retained?.records).toEqual(digests.records.retained);
     expect(retained?.reuse).toEqual([{
@@ -308,6 +314,7 @@ describe("skill experiment rollup", () => {
       reusedEntries: 0,
       reuse: [],
       holdoutGaps: [],
+      correctionsTotal: 0,
     });
     // The built report round-trips its own strict parser and digest.
     const parsed = parseSkillExperimentReport(report as unknown as JsonValue);
@@ -318,6 +325,7 @@ describe("skill experiment rollup", () => {
     expect(text).toContain("retained");
     expect(text).toContain("fresh");
     expect(text).toContain("1/3");
+    expect(text).toContain("operator corrections recorded: retained 2");
   });
 
   test("fails the rollup when a task receipt is not charged to the arm's account", async () => {
@@ -365,13 +373,15 @@ describe("skill experiment rollup", () => {
     const report = await buildExperimentReport(dir, config);
     const { digest: _omit, ...base } = report as unknown as { digest: Digest } & Record<string, unknown>;
     const arms = (base.arms as JsonObject[]).map((arm, i) =>
-      i === 0 ? { ...arm, heldOutPassed: 2, tasksPassed: 3 } : arm);
+      i === 0 ? { ...arm, heldOutPassed: 2, tasksPassed: 3, correctionsTotal: 0 } : arm);
     const doctored = { ...base, arms };
     const value = { ...doctored, digest: digestCanonical(doctored as unknown as JsonValue) } as JsonValue;
     const verified = await verifyExperimentReport(value, dir);
     expect(verified.ok).toBe(false);
     expect(verified.mismatches.some((m) => m.includes("heldOutPassed"))).toBe(true);
     expect(verified.mismatches.some((m) => m.includes("tasksPassed"))).toBe(true);
+    // correctionsTotal is re-derived from the cited records, not trusted.
+    expect(verified.mismatches.some((m) => m.includes("correctionsTotal: claimed 0, the cited records derive 2"))).toBe(true);
   });
 
   test("verify flags stored run records the session does not cite", async () => {
@@ -420,6 +430,7 @@ describe("skill experiment parser", () => {
     reusedEntries: 0,
     reuse: [],
     holdoutGaps: [],
+    correctionsTotal: 0,
     records: [],
     ...over,
   }) as unknown as JsonObject;
@@ -449,6 +460,8 @@ describe("skill experiment parser", () => {
     expect(() => bad({ reusedEntries: 1 })).toThrow(AlgalError);
     expect(() => bad({ workTotal: 101 })).toThrow(AlgalError); // beyond declared limits
     expect(() => bad({ tasksAttempted: 0, records: [D(4)] })).toThrow(AlgalError);
+    // One record carries at most maxCorrections entries (32).
+    expect(() => bad({ correctionsTotal: 33 })).toThrow(AlgalError);
     expect(() => bad({ name: "plural" })).toThrow(AlgalError); // arm names come from the runner's contract
   });
 

@@ -26,14 +26,17 @@
 //                          reusedEntries
 //   spend comparison     → limits + workTotal/attemptsTotal/runsTotal,
 //                          matched across arms by the account records
+//   human corrections    → correctionsTotal: `corrections` entries summed
+//                          over the arm's cited run records
 //
 // Evidence discovery: the report config cites each arm's session digest; the
 // rollup re-reads the session's account, catalog, and task records,
 // reconciles the account against the store, and joins kept manifests to
 // task receipts through the derived program index (whose state digest the
-// report records). Human-correction effort is not measured: the run records
-// the arm-runner stream writes carry no correction signal, so no field
-// claims one.
+// report records). Human-correction effort folds out of the same pass:
+// correctionsTotal sums the optional `corrections` entries the cited run
+// records carry — absent means none recorded, so a runner with no human in
+// the loop still derives an honest zero.
 import { lstat, open, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { digestCanonical, type Digest } from "./digest";
@@ -98,6 +101,9 @@ export const SKILL_EXPERIMENT_BOUNDS = Object.freeze({
   maxFiles: 65_536,
   /** Kept manifests joined per index query (the query surface's `in` bound). */
   maxJoinChunk: 64,
+  /** Correction entries summed across an arm's task records: every record
+   * bounds its own list, so the arm total is records × that bound. */
+  maxCorrections: EXPERIMENT_BOUNDS.maxTasks * EXPERIMENT_BOUNDS.maxCorrections,
 } as const);
 
 export type SkillExperimentScore = { passed: number; total: number };
@@ -170,6 +176,9 @@ export type SkillExperimentArm = {
   reusedEntries: number;
   reuse: SkillExperimentReuse[];
   holdoutGaps: SkillExperimentHoldoutGap[];
+  /** Operator corrections the arm's cited run records carry, summed — the
+   * human-correction measure; zero when no record declares any. */
+  correctionsTotal: number;
   /** The `algal.experiment-run.v1` record digests this arm aggregates, in
    * the session's task order — the cited evidence every count derives
    * from. */
@@ -280,7 +289,7 @@ function parseArm(value: unknown, i: number): SkillExperimentArm {
     "tasksAttempted", "tasksPassed", "heldOutPassed", "heldOutTotal",
     "invalidTasks", "exhaustedTasks",
     "consultations", "catalogHits", "catalogMisses", "admissionFailures",
-    "keptEntries", "reusedEntries", "reuse", "holdoutGaps", "records",
+    "keptEntries", "reusedEntries", "reuse", "holdoutGaps", "correctionsTotal", "records",
   ], at);
   const name = a.name;
   if (!(EXPERIMENT_ARMS as readonly unknown[]).includes(name)) {
@@ -341,6 +350,10 @@ function parseArm(value: unknown, i: number): SkillExperimentArm {
   }
   const stillKept = reuse.filter((entry) => entry.runs.length > 0).length;
   if (stillKept !== reusedEntries) fail(`${at}.reusedEntries must count the kept entries later tasks ran`);
+  const correctionsTotal = count(reqField(a, "correctionsTotal", at), 0, SKILL_EXPERIMENT_BOUNDS.maxCorrections, `${at}.correctionsTotal`);
+  if (correctionsTotal > tasksAttempted * EXPERIMENT_BOUNDS.maxCorrections) {
+    fail(`${at}.correctionsTotal exceeds what ${tasksAttempted} records can carry`);
+  }
   const records = parseDigestList(reqField(a, "records", at), `${at}.records`, SKILL_EXPERIMENT_BOUNDS.maxRecords);
   if (records.length !== tasksAttempted) fail(`${at}.records must cite every attempted task record`);
   return {
@@ -368,6 +381,7 @@ function parseArm(value: unknown, i: number): SkillExperimentArm {
     reusedEntries,
     reuse,
     holdoutGaps: gaps,
+    correctionsTotal,
     records,
   };
 }
@@ -376,7 +390,8 @@ function parseArm(value: unknown, i: number): SkillExperimentArm {
  * rejected, every count and list is bounded, and the aggregates must be
  * internally coherent — passes within attempts, consultations equal to hits
  * plus misses, one reuse row per catalog entry in catalog order, held-out
- * gaps in reuse order, and one cited run record per attempted task.
+ * gaps in reuse order, a correction total the cited records could carry,
+ * and one cited run record per attempted task.
  * Evidence checks against a store are `verifyExperimentReport`'s job. */
 export function parseSkillExperimentReport(value: unknown): SkillExperimentReport {
   const r = asObject(value, "skill experiment report");
@@ -548,6 +563,7 @@ export function aggregateExperimentArm(
   let catalogHits = 0;
   let catalogMisses = 0;
   let admissionFailures = 0;
+  let correctionsTotal = 0;
   /** Each in-session promotion: the catalog index it added, the promoting
    * task's position, and the recorded validation score when present. */
   const promotedInSession = new Map<number, { taskIndex: number; manifest: Digest; validation: SkillExperimentScore | null }>();
@@ -594,6 +610,7 @@ export function aggregateExperimentArm(
     if (run.outcome === "complete") tasksPassed += 1;
     if (run.outcome === "invalid") invalidTasks += 1;
     if (run.outcome === "exhausted") exhaustedTasks += 1;
+    if (run.corrections !== undefined) correctionsTotal += run.corrections.length;
     if (HELD_OUT_PHASES.includes(run.phase)) {
       heldOutTotal += 1;
       if (run.outcome === "complete") heldOutPassed += 1;
@@ -655,6 +672,7 @@ export function aggregateExperimentArm(
     reusedEntries: reuse.filter((entry) => entry.runs.length > 0).length,
     reuse,
     holdoutGaps,
+    correctionsTotal,
     records: session.tasks.map((task) => task.run),
   };
 }
@@ -851,6 +869,10 @@ export function renderExperimentReport(report: SkillExperimentReport): string {
   }
   if (report.arms.some((arm) => arm.accountOutcome === "exhausted")) {
     lines.push("* account exhausted: a reservation was refused before the arm finished");
+  }
+  const corrected = report.arms.filter((arm) => arm.correctionsTotal > 0);
+  if (corrected.length > 0) {
+    lines.push(`operator corrections recorded: ${corrected.map((arm) => `${arm.name} ${arm.correctionsTotal}`).join(", ")}`);
   }
   const gaps = report.arms.flatMap((arm) => arm.holdoutGaps.map((gap) => ({ arm: arm.name, gap })));
   if (gaps.length > 0) {

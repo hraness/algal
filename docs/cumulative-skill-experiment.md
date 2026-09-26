@@ -80,8 +80,10 @@ unless its marginal cost is small.
 - **Reuse contribution** (retained arm): which promoted catalog entries were
   run by later tasks, computed by joining catalog and revision records to
   run receipts in the program database, not by reading narratives.
-- **Human correction effort**: interventions recorded during the study;
-  the design targets zero and reports deviations.
+- **Human correction effort**: interventions recorded during the study.
+  A task entry may declare `corrections` records (a kind label and a note,
+  at most 32 per task) that the run record carries and the report sums per
+  arm; the design targets zero and reports deviations.
 
 ## Pre-registered failure-mode checks
 
@@ -120,9 +122,11 @@ unless its marginal cost is small.
   reported aggregate from the cited session, account, catalog, and task
   records, re-opens each promotion's stored evaluation, and flags stored
   task records a session does not cite; manifest runs can be
-  cross-verified by the native runtime where covered. The run records do
-  not yet carry a human-correction signal, so that pre-registered measure
-  is deferred rather than reported as zero.
+  cross-verified by the native runtime where covered. Run records carry
+  the optional `corrections` list and the report counts it per arm, but
+  the arm runner produces none itself: it records only corrections an
+  operator declares on a task entry, so a live human-in-the-loop measure
+  still waits on a producer that records interventions.
 
 ## Status and limits
 
