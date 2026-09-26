@@ -395,13 +395,15 @@ async function executeSuite(root: string, suite: string): Promise<unknown> {
     const { runMutationSuite } = await import("../mutation/adapter");
     return runMutationSuite(root);
   }
-  if (suite === "lean-expr" || suite === "lean-memory") {
+  if (suite === "lean-expr" || suite === "lean-memory" || suite === "lean-admission") {
     const { leanRuntime } = await import("../lean/runtime");
     const runtime = await leanRuntime(root);
     const stage = await mkdtemp(join(tmpdir(), `algal-${suite}-`));
     const modules = suite === "lean-expr"
       ? ["Algal.Expr.Model", "Algal.Expr.Eval", "Algal.Expr.Theorems"]
-      : ["Algal.Memory.Datalog", "Algal.Memory.Theorems"];
+      : suite === "lean-memory"
+        ? ["Algal.Memory.Datalog", "Algal.Memory.Theorems"]
+        : ["Algal.Admission.Model", "Algal.Admission.Theorems"];
     try {
       const environment = ["/usr/bin/env", "-i", `HOME=${join(stage, "home")}`, `PATH=${join(runtime.root, "bin")}:/usr/bin:/bin`, "LANG=C", "LC_ALL=C", "TZ=UTC"];
       const commands: CommandResult[] = [];
@@ -410,8 +412,17 @@ async function executeSuite(root: string, suite: string): Promise<unknown> {
         requireSuccess(result);
         commands.push(result);
       }
-      return { modules, commands, runtime: { root: runtime.root, version: runtime.version, manifestSha256: runtime.manifestSha256, fileCount: runtime.fileCount, filesDigest: runtime.filesDigest },
-        scope: "Independent Lean semantic-model modules theorem-checked by the pinned runtime. Model-level claims only: no production-code, translation, ABI or execution-target linkage." };
+      let selftest: CommandResult | undefined;
+      if (suite === "lean-admission") {
+        const result = await runCommand([process.execPath, "test", "--timeout", "20000", "verify/admission"], root);
+        admitSelftestOutput(result);
+        selftest = result;
+      }
+      const detail = { modules, commands, runtime: { root: runtime.root, version: runtime.version, manifestSha256: runtime.manifestSha256, fileCount: runtime.fileCount, filesDigest: runtime.filesDigest },
+        scope: suite === "lean-admission"
+          ? "Admission-authority binding theorems over the memory checker plus sampled executable correspondence; model-level claims only: no production-code or refinement linkage."
+          : "Independent Lean semantic-model modules theorem-checked by the pinned runtime. Model-level claims only: no production-code, translation, ABI or execution-target linkage." };
+      return selftest === undefined ? detail : { ...detail, selftestResult: selftest };
     } finally { await rm(stage, { recursive: true, force: true }); }
   }
   throw new Error(`${suite}: no execution adapter (Not started)`);
