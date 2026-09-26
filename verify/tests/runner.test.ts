@@ -11,7 +11,7 @@ function commandResult(): CommandResult { return { command: ["bun", "test"], exi
 describe("runner fail-closed admission", () => {
   test("unknown and planned suites cannot pass through an absent adapter", async () => {
     await expect(runSuite("/unneeded", "made-up")).rejects.toThrow("unknown verification suite");
-    await expect(runSuite("/unneeded", "kani")).rejects.toThrow("Not started");
+    await expect(runSuite("/unneeded", "hosted-conformance")).rejects.toThrow("Not started");
   });
   test("successful output must include nonempty parsed Bun test completion", () => {
     expect(admitSelftestOutput(commandResult())).toBe(27);
