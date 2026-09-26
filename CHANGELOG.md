@@ -47,7 +47,14 @@ independent of these package versions.
   charges the task run alone. The v3 horizon study measured the default
   re-evaluation policy at roughly double the per-task cost of ablation;
   this flag makes the amortizing policy expressible for comparison.
->>>>>>> 29b2da4 (experiment: cite kept evaluation on retained catalog hits)
+- The record-triage corpus widens to 48 tasks (8 acquisition, 32 unseen, 8
+  shift) as revision v3, built on the repaired semantic templates so the
+  retention loop can be measured at a longer horizon. The v3 four-arm live
+  studies are recorded in `docs/cumulative-skill-experiment.md`: retention
+  engaged unseeded (one promotion, 47 catalog hits, zero failures) in both
+  promotion policies — under per-hit re-evaluation the retained arm cost
+  2.6x ablation; under cite-on-hit re-citation it ran 24% cheaper than
+  ablation with identical held-out completion.
 - The shared program catalog gains six pure collection entries under
   `examples/source/projects/shared/`: `includes_text` (membership scan),
   `latest_value` (last-wins lookup over `{target, value}` updates),
