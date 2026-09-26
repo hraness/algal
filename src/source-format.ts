@@ -656,6 +656,49 @@ class Formatter {
           grp(ind(LINE, ...using, TEXT(" "), ...args, TEXT(" "), ...maxItems)));
         return;
       }
+      case "map":
+      case "filter": {
+        const overKeyword: Doc[] = [];
+        this.expect(overKeyword, "over");
+        const over: Doc[] = [];
+        this.take(over);
+        const inKeyword: Doc[] = [];
+        this.expect(inKeyword, "in");
+        const items: Doc[] = [];
+        this.expression(items);
+        const using: Doc[] = [];
+        this.expect(using, "using");
+        const body: Doc[] = [];
+        this.expression(body);
+        out.push(...head, TEXT(" "), ...overKeyword, TEXT(" "), ...over, TEXT(" "), ...inKeyword, TEXT(" "), ...items,
+          grp(ind(LINE, ...using, TEXT(" "), ...body)));
+        return;
+      }
+      case "fold": {
+        const overKeyword: Doc[] = [];
+        this.expect(overKeyword, "over");
+        const acc: Doc[] = [];
+        this.take(acc);
+        const comma: Doc[] = [];
+        this.expect(comma, ",");
+        const item: Doc[] = [];
+        this.take(item);
+        const inKeyword: Doc[] = [];
+        this.expect(inKeyword, "in");
+        const items: Doc[] = [];
+        this.expression(items);
+        const from: Doc[] = [];
+        this.expect(from, "from");
+        const init: Doc[] = [];
+        this.expression(init);
+        const using: Doc[] = [];
+        this.expect(using, "using");
+        const body: Doc[] = [];
+        this.expression(body);
+        out.push(...head, TEXT(" "), ...overKeyword, TEXT(" "), ...acc, ...comma, TEXT(" "), ...item, TEXT(" "), ...inKeyword, TEXT(" "), ...items,
+          grp(ind(LINE, ...from, TEXT(" "), ...init, TEXT(" "), ...using, TEXT(" "), ...body)));
+        return;
+      }
       case "!":
       case "-": {
         const operand: Doc[] = [];
