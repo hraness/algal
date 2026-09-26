@@ -1,0 +1,22 @@
+{
+  "input": {
+    "cases": [
+      {
+        "id": "c1",
+        "brief": "Draft a reply to a churned customer.",
+        "alternatives": [
+          { "id": "a1", "body": "Apologize and offer a refund." },
+          { "id": "a2", "body": "Offer a discount to return." }
+        ]
+      },
+      {
+        "id": "c2",
+        "brief": "Summarize a 40-page contract.",
+        "alternatives": [
+          { "id": "a3", "body": "Extract obligations and dates." },
+          { "id": "a4", "body": "Write a one-paragraph summary." }
+        ]
+      }
+    ]
+  }
+}

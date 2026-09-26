@@ -1,0 +1,14 @@
+{
+  "b1-quality-decide": [
+    { "answers": { "answer": { "score": 8, "confidence": 0.9, "probabilities": { "poor": 0.05, "ok": 0.25, "great": 0.7 } } } },
+    { "answers": { "answer": { "score": 5, "confidence": 0.7, "probabilities": { "poor": 0.1, "ok": 0.6, "great": 0.3 } } } },
+    { "answers": { "answer": { "score": 7, "confidence": 0.8, "probabilities": { "poor": 0.05, "ok": 0.45, "great": 0.5 } } } },
+    { "answers": { "answer": { "score": 4, "confidence": 0.6, "probabilities": { "poor": 0.4, "ok": 0.45, "great": 0.15 } } } }
+  ],
+  "b2-keep-decide": [
+    { "answers": { "answer": { "noul": 0.9 } } },
+    { "answers": { "answer": { "noul": 0.6 } } },
+    { "answers": { "answer": { "noul": 0.8 } } },
+    { "answers": { "answer": { "noul": 0.3 } } }
+  ]
+}

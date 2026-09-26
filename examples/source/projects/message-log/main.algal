@@ -1,0 +1,68 @@
+import apply_updates from "../shared/apply_updates.algal"
+import flags_for from "../shared/flags_for.algal"
+import group_by_key from "../shared/group_by_key.algal"
+
+record Event {
+  id: text min 1,
+  kind: text in ["edit", "mark", "post", "retract"],
+  author: text min 1,
+  clock: text,
+  target: text,
+  thread: text,
+  body: json,
+}
+
+// A message feed projected from an event log: each post's current text after
+// edits, whether it was retracted or marked, who wrote it, and the thread
+// groups it belongs to. `target` and `thread` carry "" when an event does
+// not use them; event ids are never "".
+program message_log(events: [Event], person: text) -> json {
+  budget { max_agent_calls: 0, max_steps: 512, max_depth: 2 }
+
+  let posts = filter over event in events using event.kind == "post"
+  let current = call apply_updates
+    using {
+      entries: map over event in posts using { id: event.id, value: event.body },
+      updates: map over event in (filter over event in events using event.kind == "edit")
+        using { target: event.target, value: event.body },
+    }
+  let gone = call flags_for
+    using {
+      ids: map over row in current using row.id,
+      flags: map over event in (filter over event in events using event.kind == "retract")
+        using event.target,
+    }
+  let marked = call flags_for
+    using {
+      ids: map over row in current using row.id,
+      flags: map over event in (filter over event in events using event.kind == "mark")
+        using event.target,
+    }
+  let threads = call group_by_key
+    using {
+      pairs: map over event in (filter over event in posts using event.thread != "")
+        using { key: event.thread, id: event.id, member: event.id },
+    }
+  return {
+    rows: map over row in current
+      using {
+        id: row.id,
+        author: fold over who, post in posts
+          from "" using if post.id == row.id { post.author } else { who },
+        body: if fold over hit, flag in gone
+          from false using if flag.id == row.id { flag.flagged } else { hit } { null } else {
+          row.value
+        },
+        revised: row.revised,
+        gone: fold over hit, flag in gone
+          from false using if flag.id == row.id { flag.flagged } else { hit },
+        marked: fold over hit, flag in marked
+          from false using if flag.id == row.id { flag.flagged } else { hit },
+        own: (
+          fold over who, post in posts
+            from "" using if post.id == row.id { post.author } else { who }
+        ) == person,
+      },
+    threads: threads,
+  }
+}

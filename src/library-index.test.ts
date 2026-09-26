@@ -19,6 +19,11 @@ const page = await readFile(join(repository, "docs/library.md"), "utf8");
 const parsed = parseLibraryIndex(page);
 const entry = (name: string) => parsed.entries.find(candidate => candidate.name === name)!;
 const link = (path: string) => `[\`${path}\`](../${LIBRARY_INDEX_PROJECTS}/${path})`;
+// Applications whose closure reaches the task planner's shared files: the two
+// planner entry points and the support queue that imports them. Drift in
+// task-planning/* reports only from these; other projects never load it.
+const plannerCallers = parsed.applications.filter(app => app.entry.startsWith("task-planning/") || app.entry.startsWith("support-queue/"));
+const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 const failure = (work: () => unknown): AlgalError => {
   try { work(); } catch (error) { if (error instanceof AlgalError) return error; throw error; }
   throw new Error("expected an AlgalError");
@@ -74,7 +79,11 @@ const outcome = (receipt: RunReceipt): JsonValue => receipt.outcome === "complet
   ? receipt.cells.result!.outputs!.out! : { failed: receipt.failure?.code ?? null, at: receipt.failure?.path ?? null };
 
 test("the shared program catalog matches fresh compiles of every entry and calling project", async () => {
-  expect(parsed.entries.map(item => item.path)).toEqual(expect.arrayContaining(["task-planning/lib/clamp.algal", "task-planning/score_task.algal"]));
+  expect(parsed.entries.map(item => item.path)).toEqual(expect.arrayContaining([
+    "task-planning/lib/clamp.algal", "task-planning/score_task.algal",
+    "shared/apply_updates.algal", "shared/flags_for.algal", "shared/group_by_key.algal",
+    "shared/includes_text.algal", "shared/latest_value.algal", "shared/lookup_by_key.algal",
+  ]));
   expect(parsed.applications.map(item => item.entry)).toContain("support-queue/main.algal");
   for (const item of parsed.entries) {
     expect(new Set(item.callers).size).toBeGreaterThanOrEqual(2);
@@ -130,6 +139,102 @@ test("score_task clamps, weights, and rejects missing or non-numeric fields, as 
   for (const [input, expected] of cases) expect({ input, result: outcome(await score(input)) }).toEqual({ input, result: expected });
 });
 
+test("apply_updates applies last-wins updates and flags revised entries, as its entry states", async () => {
+  const apply = await program(entry("apply_updates").path);
+  const entries = [{ id: "m1", value: { text: "hello" } }, { id: "m2", value: { text: "bye" } }];
+  const cases: [Record<string, JsonValue>, JsonValue][] = [
+    // The last update naming an id wins; an update naming no entry is ignored.
+    [{ entries, updates: [{ target: "m1", value: "v1" }, { target: "m9", value: 0 }, { target: "m1", value: "v2" }] },
+      [{ id: "m1", value: "v2", revised: true }, { id: "m2", value: { text: "bye" }, revised: false }]],
+    // Rewriting an entry with equal content still counts as a revision.
+    [{ entries: [{ id: "m1", value: "same" }], updates: [{ target: "m1", value: "same" }] },
+      [{ id: "m1", value: "same", revised: true }]],
+    [{ entries: [], updates: [{ target: "m1", value: 1 }] }, []],
+    [{ entries: [{ id: "m1", value: 1 }], updates: [] }, [{ id: "m1", value: 1, revised: false }]],
+    // A value may be any json, including null.
+    [{ entries: [{ id: "m1", value: null }], updates: [] }, [{ id: "m1", value: null, revised: false }]],
+    [{ entries: [{ id: "", value: 1 }], updates: [] }, { failed: "TYPE_MISMATCH", at: "input" }],
+    [{ entries: [{ id: "m1" }], updates: [] }, { failed: "TYPE_MISMATCH", at: "input" }],
+    [{ entries, updates: [{ value: "x" }] }, { failed: "TYPE_MISMATCH", at: "input" }],
+    [{ entries: "no", updates: [] }, { failed: "TYPE_MISMATCH", at: "input" }],
+  ];
+  for (const [input, expected] of cases) expect({ input, result: outcome(await apply(input)) }).toEqual({ input, result: expected });
+});
+
+test("flags_for answers one membership flag per id, as its entry states", async () => {
+  const flags = await program(entry("flags_for").path);
+  const cases: [Record<string, JsonValue>, JsonValue][] = [
+    [{ ids: ["m1", "m2", "m3"], flags: ["m3", "m1"] },
+      [{ id: "m1", flagged: true }, { id: "m2", flagged: false }, { id: "m3", flagged: true }]],
+    [{ ids: [], flags: ["a"] }, []],
+    [{ ids: ["a"], flags: [] }, [{ id: "a", flagged: false }]],
+    [{ ids: ["a", 1], flags: [] }, { failed: "TYPE_MISMATCH", at: "input" }],
+    [{ ids: ["a"], flags: "no" }, { failed: "TYPE_MISMATCH", at: "input" }],
+  ];
+  for (const [input, expected] of cases) expect({ input, result: outcome(await flags(input)) }).toEqual({ input, result: expected });
+});
+
+test("group_by_key groups members by key in first-occurrence order, as its entry states", async () => {
+  const group = await program(entry("group_by_key").path);
+  const cases: [Record<string, JsonValue>, JsonValue][] = [
+    [{ pairs: [
+      { key: "a", id: "p1", member: "m1" }, { key: "b", id: "p2", member: "m2" },
+      { key: "a", id: "p3", member: "m3" }, { key: "a", id: "p4", member: "m4" }, { key: "c", id: "p5", member: "m5" },
+    ] }, [{ key: "a", members: ["m1", "m3", "m4"] }, { key: "b", members: ["m2"] }, { key: "c", members: ["m5"] }]],
+    [{ pairs: [] }, []],
+    // A member may be any json.
+    [{ pairs: [{ key: "k", id: "p1", member: null }, { key: "k", id: "p2", member: { n: 1 } }] },
+      [{ key: "k", members: [null, { n: 1 }] }]],
+    // The contract asks for distinct ids; repeated ids can repeat a group.
+    [{ pairs: [{ key: "a", id: "p1", member: 1 }, { key: "a", id: "p1", member: 2 }, { key: "a", id: "p2", member: 3 }] },
+      [{ key: "a", members: [1, 2, 3] }, { key: "a", members: [1, 2, 3] }]],
+    [{ pairs: [{ key: "a", id: "", member: 1 }] }, { failed: "TYPE_MISMATCH", at: "input" }],
+    [{ pairs: [{ key: "a", id: "p1" }] }, { failed: "TYPE_MISMATCH", at: "input" }],
+    [{ pairs: [{ key: "a", id: "p1", member: 1 }, 7] }, { failed: "TYPE_MISMATCH", at: "input" }],
+  ];
+  for (const [input, expected] of cases) expect({ input, result: outcome(await group(input)) }).toEqual({ input, result: expected });
+});
+
+test("includes_text scans a text list for a value, as its entry states", async () => {
+  const includes = await program(entry("includes_text").path);
+  const cases: [Record<string, JsonValue>, JsonValue][] = [
+    [{ items: ["a", "b"], value: "b" }, true],
+    [{ items: ["a"], value: "z" }, false],
+    [{ items: [], value: "x" }, false],
+    [{ items: ["a", 1], value: "a" }, { failed: "TYPE_MISMATCH", at: "input" }],
+    [{ items: "no", value: "a" }, { failed: "TYPE_MISMATCH", at: "input" }],
+    [{ items: ["a"], value: 1 }, { failed: "TYPE_MISMATCH", at: "input" }],
+  ];
+  for (const [input, expected] of cases) expect({ input, result: outcome(await includes(input)) }).toEqual({ input, result: expected });
+});
+
+test("latest_value answers the last update naming a target or the fallback, as its entry states", async () => {
+  const latest = await program(entry("latest_value").path);
+  const cases: [Record<string, JsonValue>, JsonValue][] = [
+    [{ updates: [{ target: "m1", value: "v1" }, { target: "m2", value: "x" }, { target: "m1", value: "v2" }], target: "m1", fallback: "orig" }, "v2"],
+    [{ updates: [], target: "m9", fallback: null }, null],
+    [{ updates: [{ target: "m1", value: 1 }], target: "m9", fallback: { d: 1 } }, { d: 1 }],
+    [{ updates: [{ target: "m1" }], target: "m1", fallback: 0 }, { failed: "TYPE_MISMATCH", at: "input" }],
+    [{ updates: [{ target: "m1", value: 1 }], target: 3, fallback: 0 }, { failed: "TYPE_MISMATCH", at: "input" }],
+    [{ updates: "no", target: "m1", fallback: 0 }, { failed: "TYPE_MISMATCH", at: "input" }],
+  ];
+  for (const [input, expected] of cases) expect({ input, result: outcome(await latest(input)) }).toEqual({ input, result: expected });
+});
+
+test("lookup_by_key answers the member of the first pair carrying a key, as its entry states", async () => {
+  const lookup = await program(entry("lookup_by_key").path);
+  const cases: [Record<string, JsonValue>, JsonValue][] = [
+    // The first pair with the key answers, not the last.
+    [{ pairs: [{ key: "a", id: "p1", member: 1 }, { key: "b", id: "p2", member: 2 }, { key: "a", id: "p3", member: 3 }], key: "a", fallback: "none" }, 1],
+    [{ pairs: [{ key: "a", id: "p1", member: 1 }], key: "z", fallback: "none" }, "none"],
+    [{ pairs: [], key: "a", fallback: null }, null],
+    [{ pairs: [{ key: "a", id: "p1", member: [1, 2] }], key: "a", fallback: [] }, [1, 2]],
+    [{ pairs: [{ key: "a", id: "", member: 1 }], key: "a", fallback: 0 }, { failed: "TYPE_MISMATCH", at: "input" }],
+    [{ pairs: [{ key: "a", id: "p1", member: 1 }], key: 5, fallback: 0 }, { failed: "TYPE_MISMATCH", at: "input" }],
+  ];
+  for (const [input, expected] of cases) expect({ input, result: outcome(await lookup(input)) }).toEqual({ input, result: expected });
+});
+
 test("callers declare the nesting depth each entry states", async () => {
   const modules = Object.fromEntries(await Promise.all(["task-planning/score_task.algal", "task-planning/lib/clamp.algal"]
     .map(async key => [key, await readFile(join(projects, key), "utf8")] as const)));
@@ -146,16 +251,39 @@ program caller(a: json, b: json, c: json) -> json {
     expect(error).toBeInstanceOf(SourceError);
     expect(error.message).toContain(`composition requires depth ${depth + 1}, exceeding max_depth ${depth}`);
   }
+  // The shared collection entries are leaf programs: like clamp, a caller
+  // needs max_depth 1 for the call itself.
+  const leaves: [string, string, string][] = [
+    ["apply_updates", "shared/apply_updates.algal", "{ entries: [], updates: [] }"],
+    ["flags_for", "shared/flags_for.algal", "{ ids: [], flags: [] }"],
+    ["group_by_key", "shared/group_by_key.algal", "{ pairs: [] }"],
+    ["includes_text", "shared/includes_text.algal", "{ items: [], value: \"\" }"],
+    ["latest_value", "shared/latest_value.algal", "{ updates: [], target: \"\", fallback: null }"],
+    ["lookup_by_key", "shared/lookup_by_key.algal", "{ pairs: [], key: \"\", fallback: null }"],
+  ];
+  const leafModules = Object.fromEntries(await Promise.all(leaves.map(([, key]) => key)
+    .map(async key => [key, await readFile(join(projects, key), "utf8")] as const)));
+  for (const [alias, key, args] of leaves) {
+    const source = (depth: number) => `import ${alias} from "./${key}"
+program leaf_caller() -> json {
+  budget { max_agent_calls: 0, max_depth: ${depth} }
+  return call ${alias} using ${args}
+}`;
+    expect(compileSource(source(1), { entry: "leaf_caller.algal", modules: leafModules }).analysis.requiredDepth).toBe(1);
+    const error = failure(() => compileSource(source(0), { entry: "leaf_caller.algal", modules: leafModules }));
+    expect(error).toBeInstanceOf(SourceError);
+    expect(error.message).toContain("composition requires depth 1, exceeding max_depth 0");
+  }
 });
 
 test("page drift is reported against the compiled source", async () => {
   const zero = `sha256:${"0".repeat(64)}`;
   const clamp = entry("clamp"), score = entry("score_task");
-  // Every calling project reaches clamp, so each one reports the mismatch too,
-  // and a digest that moved without a comparison record contradicts "Status".
+  // Every project that reaches clamp reports the mismatch too, and a digest
+  // that moved without a comparison record contradicts "Status".
   expect(await check(withField(page, "clamp", "Executable digest", `\`${zero}\``))).toEqual([
     `${clamp.path}: page pins executable digest ${zero}; the source compiles to ${clamp.digest}`,
-    ...parsed.applications.map(item => `${item.entry}: ${clamp.path} compiles to ${clamp.digest}, not the listed ${zero}`),
+    ...plannerCallers.map(item => `${item.entry}: ${clamp.path} compiles to ${clamp.digest}, not the listed ${zero}`),
     `${clamp.path}: "Status" lists it at ${clamp.digest}, but the page pins ${zero}; a revised program names its comparison record`,
   ]);
   const wrongInterface = await check(withField(page, "clamp", "Interface digest", `\`${zero}\``));
@@ -163,7 +291,7 @@ test("page drift is reported against the compiled source", async () => {
     `${clamp.path}: page pins interface digest ${zero}; the lock records ${clamp.interfaceDigest}`,
     `${clamp.path}: page pins interface digest ${zero}; the dependency report resolves ${clamp.interfaceDigest}`,
   ]);
-  expect(wrongInterface.slice(2)).toEqual(parsed.applications.map(item => `${item.entry}: ${clamp.path} resolves interface digest ${clamp.interfaceDigest}, not the listed ${zero}`));
+  expect(wrongInterface.slice(2)).toEqual(plannerCallers.map(item => `${item.entry}: ${clamp.path} resolves interface digest ${clamp.interfaceDigest}, not the listed ${zero}`));
   expect(await check(withField(page, "score_task", "Interface", "inputs `task: json`, `weights: json`; outputs `result: json`."))).toEqual([
     `${score.path}: page shows interface "inputs \`task: json\`, \`weights: json\`; outputs \`result: json\`."; the source resolves "${score.interface}"`,
   ]);
@@ -182,12 +310,21 @@ test("page drift is reported against the compiled source", async () => {
 });
 
 test("an entry needs calling files in two projects", async () => {
-  // Drop the support queue and its callers: every remaining caller is in one project.
+  // Drop the support queue and the ballot box and their callers: every
+  // remaining caller of every entry is in one project.
+  const dropped = (path: string) => !path.startsWith("support-queue/") && !path.startsWith("ballot-box/");
   let single = withoutLine(page, `| ${link("support-queue/main.algal")} |`);
-  for (const item of parsed.entries) {
-    single = withField(single, item.name, "Callers", item.callers.filter(path => !path.startsWith("support-queue/")).map(link).join(", "));
+  for (const application of parsed.applications.filter(app => app.entry.startsWith("ballot-box/"))) {
+    single = withoutLine(single, `| ${link(application.entry)} |`);
   }
-  expect(await check(single)).toEqual(parsed.entries.map(item => `${item.path}: needs callers in at least two files across at least two projects; the page lists 2 files in 1 project`));
+  for (const item of parsed.entries) {
+    single = withField(single, item.name, "Callers", item.callers.filter(dropped).map(link).join(", "));
+  }
+  expect(await check(single)).toEqual(parsed.entries.map(item => {
+    const left = item.callers.filter(dropped);
+    const projects = new Set(left.map(path => path.split("/")[0]!)).size;
+    return `${item.path}: needs callers in at least two files across at least two projects; the page lists ${plural(left.length, "file")} in ${plural(projects, "project")}`;
+  }));
 });
 
 test("source drift fails the check until the page carries the new digests", async () => {
@@ -202,7 +339,8 @@ test("source drift fails the check until the page carries the new digests", asyn
     await writeFile(clampFile, original.replace("else { value }", "else { value + 1 }"));
     const drift = await check(page, dir);
     const clamp = entry("clamp"), score = entry("score_task");
-    expect(drift).toHaveLength(2 + 2 * parsed.applications.length);
+    // Only applications whose closure reaches the drifted files report.
+    expect(drift).toHaveLength(2 + 2 * plannerCallers.length);
     expect(drift[0]).toStartWith(`${clamp.path}: page pins executable digest ${clamp.digest}; the source compiles to sha256:`);
     expect(drift[1]).toStartWith(`${score.path}: page pins executable digest ${score.digest}; the source compiles to sha256:`);
     for (const line of drift.slice(2)) expect(line).toMatch(/^(task-planning\/main|task-planning\/inspect_task|support-queue\/main)\.algal: task-planning\/(lib\/clamp|score_task)\.algal compiles to sha256:[0-9a-f]{64}, not the listed sha256:[0-9a-f]{64}$/);

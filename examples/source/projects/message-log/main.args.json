@@ -1,0 +1,16 @@
+{
+  "input": {
+    "events": [
+      { "id": "p1", "kind": "post", "author": "alice", "clock": "c1", "target": "", "thread": "t1", "body": "first draft" },
+      { "id": "p2", "kind": "post", "author": "bob", "clock": "c2", "target": "", "thread": "t1", "body": "second note" },
+      { "id": "p3", "kind": "post", "author": "alice", "clock": "c3", "target": "", "thread": "", "body": "third note" },
+      { "id": "e1", "kind": "edit", "author": "alice", "clock": "c4", "target": "p1", "thread": "", "body": "edited once" },
+      { "id": "e2", "kind": "edit", "author": "alice", "clock": "c5", "target": "p1", "thread": "", "body": "edited twice" },
+      { "id": "e3", "kind": "edit", "author": "bob", "clock": "c6", "target": "p9", "thread": "", "body": "no such post" },
+      { "id": "r1", "kind": "retract", "author": "bob", "clock": "c7", "target": "p2", "thread": "", "body": null },
+      { "id": "m1", "kind": "mark", "author": "alice", "clock": "c8", "target": "p1", "thread": "", "body": null },
+      { "id": "m2", "kind": "mark", "author": "alice", "clock": "c9", "target": "p3", "thread": "", "body": null }
+    ],
+    "person": "alice"
+  }
+}

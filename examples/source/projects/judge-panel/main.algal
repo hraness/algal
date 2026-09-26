@@ -1,0 +1,14 @@
+import judge_case from "./judge_case.algal"
+
+record Alternative { id: text, body: json }
+
+record Case { id: text, brief: text, alternatives: [Alternative] }
+
+// A small judge panel: nested `each` fans cases out to per-alternative
+// decide questions. Two cases at four alternatives is the declared bound;
+// every decide lands inside the shared 16-call budget.
+program judge_panel(cases: [Case]) -> json {
+  budget { max_agent_calls: 16, max_steps: 1024, max_depth: 4 }
+
+  return each judge_case over case in cases using {} max_items 2
+}

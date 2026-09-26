@@ -1,0 +1,10 @@
+record Flagged { id: text, flagged: boolean }
+
+// One membership flag per id: whether the id appears in the flag list. The
+// keyed result is a lookup table a caller folds into rows of its own shape.
+program flags_for(ids: [text], flags: [text]) -> [Flagged] {
+  budget { max_agent_calls: 0 }
+
+  return map over id in ids
+    using { id: id, flagged: fold over hit, flag in flags from false using hit || flag == id }
+}

@@ -9,6 +9,20 @@ wire constant (`0.1.0`) is independent of these package versions.
 
 ## Unreleased
 
+- The shared program catalog gains six pure collection entries under
+  `examples/source/projects/shared/`: `includes_text` (membership scan),
+  `latest_value` (last-wins lookup over `{target, value}` updates),
+  `lookup_by_key` (member of the first `{key, id, member}` pair carrying a
+  key), `apply_updates` (last-wins update application over an entry list with
+  revision flags), `flags_for` (one membership flag per id), and
+  `group_by_key` (first-occurrence grouping). Two calling projects exercise
+  every entry under the shared source root: `message-log` projects a feed
+  from an ordered event log (posts, edits, retracts, marks, thread keys), and
+  `ballot-box` tallies corrected and spoiled ballots; both are documented in
+  `docs/library.md` and run in the native parity suite. A third example,
+  `judge-panel`, shows the impure counterpart: nested `each` fans cases out
+  to per-alternative `decide` questions (`score` and `noul` forms), and is
+  deliberately not a catalog entry.
 - `algal experiment <config.json>` runs one cumulative-skill experiment arm
   over a bounded task set: `retained`, `ablation`, `fresh`, and `fixed`
   profiles share one code path, every generation, task, and promotion run

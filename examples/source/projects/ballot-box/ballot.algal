@@ -1,0 +1,44 @@
+import apply_updates from "../shared/apply_updates.algal"
+import group_by_key from "../shared/group_by_key.algal"
+import includes_text from "../shared/includes_text.algal"
+import latest_value from "../shared/latest_value.algal"
+import lookup_by_key from "../shared/lookup_by_key.algal"
+
+record Ballot { id: text min 1, pick: text min 1 }
+
+record Change { target: text, value: json }
+
+// A view of one ballot: whether it is on the roll, its original and current
+// picks, whether a correction touched it, whether it is spoiled, and the
+// other ballots sharing its current pick.
+program ballot_view(ballots: [Ballot], changes: [Change], spoiled: [text], ballot: text) -> json {
+  budget { max_agent_calls: 0, max_steps: 512, max_depth: 2 }
+
+  let original = call lookup_by_key
+    using {
+      pairs: map over b in ballots using { key: b.id, id: b.id, member: b.pick },
+      key: ballot,
+      fallback: "",
+    }
+  let pick = call latest_value using { updates: changes, target: ballot, fallback: original }
+  let spoiled_flag = call includes_text using { items: spoiled, value: ballot }
+  let current = call apply_updates
+    using { entries: map over b in ballots using { id: b.id, value: b.pick }, updates: changes }
+  let tally = call group_by_key
+    using { pairs: map over row in current using { key: row.value, id: row.id, member: row.id } }
+  let with = call lookup_by_key
+    using {
+      pairs: map over group in tally using { key: group.key, id: group.key, member: group.members },
+      key: pick,
+      fallback: [],
+    }
+  return {
+    ballot: ballot,
+    known: original != "",
+    original: original,
+    pick: pick,
+    corrected: fold over hit, change in changes from false using hit || change.target == ballot,
+    spoiled: spoiled_flag,
+    with: with,
+  }
+}

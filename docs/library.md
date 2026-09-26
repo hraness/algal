@@ -43,8 +43,8 @@ later work. That question is the open
 project, and fails when a digest, interface, compiler version, dependency, or
 caller on this page stops matching the source, or when a digest changes
 without a passing comparison record. The same file runs the success and
-failure cases described below. The native parity suite runs the three entry
-points listed below in the TypeScript and Rust runtimes and checks that each
+failure cases described below. The native parity suite runs the entry points
+listed below in the TypeScript and Rust runtimes and checks that each
 runtime verifies the other's results.
 
 ## Calling projects
@@ -60,6 +60,10 @@ entry point below and collects every file that calls a listed program.
 | [`task-planning/main.algal`](../examples/source/projects/task-planning/main.algal) | `examples/source/projects/task-planning` | Propose the next action for up to 16 tasks. |
 | [`task-planning/inspect_task.algal`](../examples/source/projects/task-planning/inspect_task.algal) | `examples/source/projects/task-planning` | Explain one task's score against a readiness threshold. |
 | [`support-queue/main.algal`](../examples/source/projects/support-queue/main.algal) | `examples/source/projects` | Assign up to eight support tickets to a response queue. |
+| [`message-log/main.algal`](../examples/source/projects/message-log/main.algal) | `examples/source/projects` | Project a message feed from an event log: edits, retracts, marks, and threads. |
+| [`message-log/thread.algal`](../examples/source/projects/message-log/thread.algal) | `examples/source/projects` | View one post's thread members, flags, and last edit. |
+| [`ballot-box/main.algal`](../examples/source/projects/ballot-box/main.algal) | `examples/source/projects` | Tally a ballot box after last-wins corrections, with spoiled ballots flagged. |
+| [`ballot-box/ballot.algal`](../examples/source/projects/ballot-box/ballot.algal) | `examples/source/projects` | View one ballot's original and current pick and the ballots sharing it. |
 
 The [task planner](../examples/source/projects/task-planning/README.md) has two
 entry points in one project. The
@@ -82,7 +86,11 @@ as `loadSourceProject(entry, { root })`.
 Each entry point has a case list beside it, named for the entry point:
 [`task-planning/main.evaluation.json`](../examples/source/projects/task-planning/main.evaluation.json),
 [`task-planning/inspect_task.evaluation.json`](../examples/source/projects/task-planning/inspect_task.evaluation.json),
-and [`support-queue/main.evaluation.json`](../examples/source/projects/support-queue/main.evaluation.json).
+[`support-queue/main.evaluation.json`](../examples/source/projects/support-queue/main.evaluation.json),
+[`message-log/main.evaluation.json`](../examples/source/projects/message-log/main.evaluation.json),
+[`message-log/thread.evaluation.json`](../examples/source/projects/message-log/thread.evaluation.json),
+[`ballot-box/main.evaluation.json`](../examples/source/projects/ballot-box/main.evaluation.json),
+and [`ballot-box/ballot.evaluation.json`](../examples/source/projects/ballot-box/ballot.evaluation.json).
 Each names the entry point's fixture as a case in the format
 [`lock --evaluation`](source-language.md#pin-a-project-with-a-lock) reads, with
 file paths relative to the entry point's source root. A comparison of a
@@ -155,6 +163,179 @@ declared budget adds no separate allowance.
 - **Maintainer:** ALGAL maintainers, through pull requests to [hraness/algal](https://github.com/hraness/algal).
 - **Unseen cases:** None pinned.
 - **Status:** Listed at `sha256:10ee90055c33b6d21956fff7a53e4e34a3f5074c16298dc83d452bedf9c0d0d0`.
+
+### `apply_updates`
+
+- **Path:** [`shared/apply_updates.algal`](../examples/source/projects/shared/apply_updates.algal)
+- **Executable digest:** `sha256:331c36296feaa1ed9510ee471fa992c6ea58de0f31ab3b905d907b2c24327623`
+- **Interface digest:** `sha256:53fa8f5c0096a6a3fc3334ab17a2989964b700636adcd80affcc9beec1b66e11`
+- **Interface:** inputs `entries: json` (array), `updates: json` (array); outputs `result: json` (array).
+- **Depends on:** None.
+- **Inputs and result:** `entries` is a list of records with a nonempty text
+  `id` and a json `value`; `updates` is a list of records with a text
+  `target` and a json `value`. The result is one `{id, value, revised}` record
+  per entry, in entry order: `value` is the last update naming the id, or the
+  entry's own value when none does, and `revised` records whether any update
+  targeted the entry, including one that rewrote it with equal content.
+- **Rejected inputs:** An `entries` or `updates` item that is not a record of
+  the declared shape, including an empty `id`, fails the run with
+  `TYPE_MISMATCH` at the corresponding argument. Updates naming no entry are
+  ignored.
+- **Limits:** Each entry scans the whole update list twice, so a call costs
+  `entries` times `updates` comparisons with no early exit. A caller declares
+  `max_depth` of at least 1.
+- **Callers:** [`ballot-box/ballot.algal`](../examples/source/projects/ballot-box/ballot.algal),
+  [`ballot-box/main.algal`](../examples/source/projects/ballot-box/main.algal),
+  and [`message-log/main.algal`](../examples/source/projects/message-log/main.algal).
+- **Tests:** [`src/library-index.test.ts`](../src/library-index.test.ts),
+  [`examples/source/projects/ballot-box/project.test.ts`](../examples/source/projects/ballot-box/project.test.ts),
+  and [`examples/source/projects/message-log/project.test.ts`](../examples/source/projects/message-log/project.test.ts).
+- **Compiler:** `algal.source.profile.v1`, version `1.6.0`.
+- **Maintainer:** ALGAL maintainers, through pull requests to [hraness/algal](https://github.com/hraness/algal).
+- **Unseen cases:** None pinned.
+- **Status:** Listed at `sha256:331c36296feaa1ed9510ee471fa992c6ea58de0f31ab3b905d907b2c24327623`.
+
+### `flags_for`
+
+- **Path:** [`shared/flags_for.algal`](../examples/source/projects/shared/flags_for.algal)
+- **Executable digest:** `sha256:0722d8a0c20edcdef9ad27c000992a288244580357fd7f0156c7af0662600bbf`
+- **Interface digest:** `sha256:09fd95e97acf3727298dfa497d96550393f4dede5b292484cefef50266ba2f3c`
+- **Interface:** inputs `flags: json` (array), `ids: json` (array); outputs `result: json` (array).
+- **Depends on:** None.
+- **Inputs and result:** `ids` and `flags` are text lists. The result is one
+  `{id, flagged}` record per id, in `ids` order: `flagged` is true when the id
+  appears anywhere in `flags`. A caller folds the keyed result into rows of
+  its own shape, which is how a one-direction join reads without a zip
+  primitive.
+- **Rejected inputs:** A non-text item in either list, or a non-list
+  argument, fails the run with `TYPE_MISMATCH` at the corresponding argument.
+- **Limits:** Each id scans the whole flag list, so a call costs `ids` times
+  `flags` comparisons with no early exit. A caller declares `max_depth` of at
+  least 1.
+- **Callers:** [`ballot-box/main.algal`](../examples/source/projects/ballot-box/main.algal)
+  and [`message-log/main.algal`](../examples/source/projects/message-log/main.algal).
+- **Tests:** [`src/library-index.test.ts`](../src/library-index.test.ts),
+  [`examples/source/projects/ballot-box/project.test.ts`](../examples/source/projects/ballot-box/project.test.ts),
+  and [`examples/source/projects/message-log/project.test.ts`](../examples/source/projects/message-log/project.test.ts).
+- **Compiler:** `algal.source.profile.v1`, version `1.6.0`.
+- **Maintainer:** ALGAL maintainers, through pull requests to [hraness/algal](https://github.com/hraness/algal).
+- **Unseen cases:** None pinned.
+- **Status:** Listed at `sha256:0722d8a0c20edcdef9ad27c000992a288244580357fd7f0156c7af0662600bbf`.
+
+### `group_by_key`
+
+- **Path:** [`shared/group_by_key.algal`](../examples/source/projects/shared/group_by_key.algal)
+- **Executable digest:** `sha256:e2e9a709ff63a2c671f1669baf939d6f89a9a79fc1264e4b1980cd520c620c63`
+- **Interface digest:** `sha256:10233bcd8ae7be10ecb9509a1de7fbedd0eb4fc31da1c0f20259b6b3abba32b5`
+- **Interface:** inputs `pairs: json` (array); outputs `result: json` (array).
+- **Depends on:** None.
+- **Inputs and result:** `pairs` is a list of records with a text `key`, a
+  nonempty text `id`, and a json `member`. The result is one `{key, members}`
+  record per distinct key, in order of first occurrence; `members` holds the
+  members of that key's pairs in list order.
+- **Rejected inputs:** A pair that is not a record of the declared shape,
+  including an empty `id`, fails the run with `TYPE_MISMATCH` at the `pairs`
+  argument.
+- **Limits:** Every pair scans the whole list twice more, so a call costs a
+  quadratic number of comparisons; an empty list returns an empty list.
+  Distinct nonempty ids keep a key's group unique; when ids repeat, that
+  key's group can appear more than once. A caller declares `max_depth` of at
+  least 1.
+- **Callers:** [`ballot-box/ballot.algal`](../examples/source/projects/ballot-box/ballot.algal),
+  [`ballot-box/main.algal`](../examples/source/projects/ballot-box/main.algal),
+  [`message-log/main.algal`](../examples/source/projects/message-log/main.algal),
+  and [`message-log/thread.algal`](../examples/source/projects/message-log/thread.algal).
+- **Tests:** [`src/library-index.test.ts`](../src/library-index.test.ts),
+  [`examples/source/projects/ballot-box/project.test.ts`](../examples/source/projects/ballot-box/project.test.ts),
+  and [`examples/source/projects/message-log/project.test.ts`](../examples/source/projects/message-log/project.test.ts).
+- **Compiler:** `algal.source.profile.v1`, version `1.6.0`.
+- **Maintainer:** ALGAL maintainers, through pull requests to [hraness/algal](https://github.com/hraness/algal).
+- **Unseen cases:** None pinned.
+- **Status:** Listed at `sha256:e2e9a709ff63a2c671f1669baf939d6f89a9a79fc1264e4b1980cd520c620c63`.
+
+### `includes_text`
+
+- **Path:** [`shared/includes_text.algal`](../examples/source/projects/shared/includes_text.algal)
+- **Executable digest:** `sha256:c37ca73b619bf07c68d829f1d43028c5d20fd4d49f8cc7b78d3bf251960e72cc`
+- **Interface digest:** `sha256:3f3cfa7c021a4e8efc1cf3d4f3bc28ce1e6432b0d63ceb7a9809103325d2014b`
+- **Interface:** inputs `items: json` (array), `value: text`; outputs `result: json` (boolean).
+- **Depends on:** None.
+- **Inputs and result:** `items` is a text list and `value` a text. The
+  result is true when any item equals the value, false otherwise. This is the
+  evaluator's `contains` operation written as a program, so callers bound by
+  list size rather than a hidden primitive.
+- **Rejected inputs:** A non-text item, a non-list `items`, or a non-text
+  `value` fails the run with `TYPE_MISMATCH` at the corresponding argument.
+- **Limits:** The fold scans the whole list with no early exit, so a call
+  takes `items` steps whether or not a match exists. A caller declares
+  `max_depth` of at least 1.
+- **Callers:** [`ballot-box/ballot.algal`](../examples/source/projects/ballot-box/ballot.algal)
+  and [`message-log/thread.algal`](../examples/source/projects/message-log/thread.algal).
+- **Tests:** [`src/library-index.test.ts`](../src/library-index.test.ts),
+  [`examples/source/projects/ballot-box/project.test.ts`](../examples/source/projects/ballot-box/project.test.ts),
+  and [`examples/source/projects/message-log/project.test.ts`](../examples/source/projects/message-log/project.test.ts).
+- **Compiler:** `algal.source.profile.v1`, version `1.6.0`.
+- **Maintainer:** ALGAL maintainers, through pull requests to [hraness/algal](https://github.com/hraness/algal).
+- **Unseen cases:** None pinned.
+- **Status:** Listed at `sha256:c37ca73b619bf07c68d829f1d43028c5d20fd4d49f8cc7b78d3bf251960e72cc`.
+
+### `latest_value`
+
+- **Path:** [`shared/latest_value.algal`](../examples/source/projects/shared/latest_value.algal)
+- **Executable digest:** `sha256:96a8649f6dff50438c1023c00c91a1622c8a4c87b3d20bd775bbf5ae48b86245`
+- **Interface digest:** `sha256:89336fcaa77a538c8976e8ae5efc5ab54fe55718839af143fdb34dc8bbb127b2`
+- **Interface:** inputs `fallback: json`, `target: text`, `updates: json` (array); outputs `result: json`.
+- **Depends on:** None.
+- **Inputs and result:** `updates` is a list of records with a text `target`
+  and a json `value`; `target` is a text and `fallback` any json. The result
+  is the `value` of the last update naming the target, or `fallback` when no
+  update matches, so the caller chooses what "no update" means, including
+  `null`.
+- **Rejected inputs:** An update that is not a record of the declared shape,
+  a non-text `target`, or a non-list `updates` fails the run with
+  `TYPE_MISMATCH` at the corresponding argument. An update naming a different
+  target is ignored.
+- **Limits:** The fold scans the whole list, so a call takes `updates` steps.
+  A caller declares `max_depth` of at least 1.
+- **Callers:** [`ballot-box/ballot.algal`](../examples/source/projects/ballot-box/ballot.algal)
+  and [`message-log/thread.algal`](../examples/source/projects/message-log/thread.algal).
+- **Tests:** [`src/library-index.test.ts`](../src/library-index.test.ts),
+  [`examples/source/projects/ballot-box/project.test.ts`](../examples/source/projects/ballot-box/project.test.ts),
+  and [`examples/source/projects/message-log/project.test.ts`](../examples/source/projects/message-log/project.test.ts).
+- **Compiler:** `algal.source.profile.v1`, version `1.6.0`.
+- **Maintainer:** ALGAL maintainers, through pull requests to [hraness/algal](https://github.com/hraness/algal).
+- **Unseen cases:** None pinned.
+- **Status:** Listed at `sha256:96a8649f6dff50438c1023c00c91a1622c8a4c87b3d20bd775bbf5ae48b86245`.
+
+### `lookup_by_key`
+
+- **Path:** [`shared/lookup_by_key.algal`](../examples/source/projects/shared/lookup_by_key.algal)
+- **Executable digest:** `sha256:4caa1b42036484d402b79428f8db7ab9803dbdc3ba21ab5f44b2c695cdbb148e`
+- **Interface digest:** `sha256:1cc7c1b9dbc60680d8c6c3e8aeb4193f436fc1237ec736232ce80e277b1eb885`
+- **Interface:** inputs `fallback: json`, `key: text`, `pairs: json` (array); outputs `result: json`.
+- **Depends on:** None.
+- **Inputs and result:** `pairs` is a list of records with a text `key`, a
+  nonempty text `id`, and a json `member`; `key` is a text and `fallback` any
+  json. The result is the `member` of the first pair carrying the key, or
+  `fallback` when no pair does. The `id` channel identifies each pair:
+  `lookup_by_key` finds the first pair with the key by its id, then answers
+  that pair's member.
+- **Rejected inputs:** A pair that is not a record of the declared shape,
+  including an empty `id`, a non-text `key`, or a non-list `pairs` fails the
+  run with `TYPE_MISMATCH` at the corresponding argument.
+- **Limits:** Two full scans, so a call costs twice `pairs` steps. When ids
+  repeat, the member comes from the last pair carrying the matched id;
+  distinct ids keep first-wins exact. A caller declares `max_depth` of at
+  least 1.
+- **Callers:** [`ballot-box/ballot.algal`](../examples/source/projects/ballot-box/ballot.algal)
+  and [`message-log/thread.algal`](../examples/source/projects/message-log/thread.algal).
+- **Tests:** [`src/library-index.test.ts`](../src/library-index.test.ts),
+  [`examples/source/projects/ballot-box/project.test.ts`](../examples/source/projects/ballot-box/project.test.ts),
+  and [`examples/source/projects/message-log/project.test.ts`](../examples/source/projects/message-log/project.test.ts).
+- **Compiler:** `algal.source.profile.v1`, version `1.6.0`.
+- **Maintainer:** ALGAL maintainers, through pull requests to [hraness/algal](https://github.com/hraness/algal).
+- **Unseen cases:** None pinned.
+- **Status:** Listed at `sha256:4caa1b42036484d402b79428f8db7ab9803dbdc3ba21ab5f44b2c695cdbb148e`.
 
 ## Revise a listed program
 
