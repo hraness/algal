@@ -346,12 +346,13 @@ async function executeSuite(root: string, suite: string): Promise<unknown> {
     return { tests, commandResult: result, targets, targetCommandResult: targetResult,
       scope: "Focused production regression tests and sampled target agreement; no exhaustive property or implementation proof. Native graph/store/adaptation tests remain required Cargo gates." };
   }
-  if (suite === "receipt-closure" || suite === "host-conformance" || suite === "memory-oracle" || suite === "memory-mutation" || suite === "context-laws" || suite === "memory-authority" || suite === "replay-isolation" || suite === "evolution-model") {
+  if (suite === "receipt-closure" || suite === "host-conformance" || suite === "memory-oracle" || suite === "memory-mutation" || suite === "context-laws" || suite === "memory-authority" || suite === "replay-isolation" || suite === "evolution-model" || suite === "policy-mutation") {
     const directories: Record<string, string> = {
       "receipt-closure": "verify/receipt", "host-conformance": "verify/host",
       "memory-oracle": "verify/reference/memory", "memory-mutation": "verify/memory-mutation",
       "context-laws": "verify/context-laws", "memory-authority": "verify/memory-authority",
       "replay-isolation": "verify/replay/replay-isolation", "evolution-model": "verify/evolution",
+      "policy-mutation": "verify/policy-mutation",
     };
     const timeouts: Record<string, string> = { "replay-isolation": "60000" };
     const command = [process.execPath, "test", "--timeout", timeouts[suite] ?? "20000", directories[suite]!];
@@ -365,6 +366,7 @@ async function executeSuite(root: string, suite: string): Promise<unknown> {
       "memory-authority": "Captured-state, exact-snapshot and admission-authority binding through instrumented policy hosts and the independent derivation checker; cell-simulated frontier movement, no arbitrary-host claim.",
       "replay-isolation": "Instrumented store/executor/tool/transport counters over seven replay and resume scenarios; fixtures only, no arbitrary-callback claim.",
       "evolution-model": "Evaluation/selection/migration/restoration and drain conformance under instrumented stores and policy hosts; finite forged-input rejection coverage, no universal quality claim.",
+      "policy-mutation": "143 targeted mutants over the application-policy admission surface with per-survivor rationales; boundary-targeted, not exhaustive.",
     };
     return { tests: admitSelftestOutput(result), commandResult: result, scope: scopes[suite] };
   }
