@@ -346,11 +346,11 @@ async function executeSuite(root: string, suite: string): Promise<unknown> {
     return { tests, commandResult: result, targets, targetCommandResult: targetResult,
       scope: "Focused production regression tests and sampled target agreement; no exhaustive property or implementation proof. Native graph/store/adaptation tests remain required Cargo gates." };
   }
-  if (suite === "receipt-closure" || suite === "host-conformance" || suite === "memory-oracle" || suite === "memory-mutation" || suite === "context-laws") {
+  if (suite === "receipt-closure" || suite === "host-conformance" || suite === "memory-oracle" || suite === "memory-mutation" || suite === "context-laws" || suite === "memory-authority") {
     const directories: Record<string, string> = {
       "receipt-closure": "verify/receipt", "host-conformance": "verify/host",
       "memory-oracle": "verify/reference/memory", "memory-mutation": "verify/memory-mutation",
-      "context-laws": "verify/context-laws",
+      "context-laws": "verify/context-laws", "memory-authority": "verify/memory-authority",
     };
     const command = [process.execPath, "test", "--timeout", "20000", directories[suite]!];
     const result = await runCommand(command, root);
@@ -360,6 +360,7 @@ async function executeSuite(root: string, suite: string): Promise<unknown> {
       "memory-oracle": "Independent derivation-checker fixtures; no production-path instrumented claim.",
       "memory-mutation": "Targeted semantic mutants of admitted derivations must reject with their declared typed reason; the documented survivor boundary is pinned, not a proof obligation.",
       "context-laws": "Algebraic context/compaction/recall laws on real service paths under an instrumented host; no live-provider or FileStore durability claim.",
+      "memory-authority": "Captured-state, exact-snapshot and admission-authority binding through instrumented policy hosts and the independent derivation checker; cell-simulated frontier movement, no arbitrary-host claim.",
     };
     return { tests: admitSelftestOutput(result), commandResult: result, scope: scopes[suite] };
   }
