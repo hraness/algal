@@ -171,7 +171,7 @@ jobs:
           export ALGAL_BROWSER_EXECUTABLE="$(bun -e 'import {chromium} from "playwright-core"; console.log(chromium.executablePath())')"
           export ALGAL_BROWSER_EVIDENCE="$RUNNER_TEMP/algal-idb-evidence"
           bun scripts/browser-idb-qualification.mjs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: browser-application-evidence
@@ -259,7 +259,7 @@ jobs:
       - run: cargo build --locked
       - name: Package the debug binary for the parity jobs
         run: tar -C target/debug -cf "$RUNNER_TEMP/algal-debug.tar" algal
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: algal-debug-linux
           path: ${{ runner.temp }}/algal-debug.tar
