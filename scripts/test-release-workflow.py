@@ -84,7 +84,7 @@ print(os.environ["CI_RESPONSE"])
 
     def test_default_checkouts_are_not_selected_by_inputs_or_job_outputs(self):
         checkouts = re.findall(r"(?m)^      - uses: actions/checkout@v4\n((?:[ ]{8,}[^\n]*\n)*)", WORKFLOW)
-        self.assertEqual(len(checkouts), 2)
+        self.assertEqual(len(checkouts), 3)
         for checkout in checkouts:
             self.assertNotRegex(checkout, r"(?m)^\s+ref:")
             self.assertIn("persist-credentials: false", checkout)
