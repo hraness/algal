@@ -27,6 +27,18 @@ independent of these package versions.
   report when piped or with `--json`. Bun `algal --version` prints
   `algal <version>`, like the native binary; `--version --json` keeps the
   object.
+- `algal run --apple`, `algal bench` Apple systems and `algal doctor --apple`
+  use apple-foundation v0.2.0. When Apple's on-device model can't be used,
+  they say why (Apple Intelligence is off, the model is still downloading,
+  the Mac isn't eligible, or macOS is older than 26) and what to do, with
+  the System Settings link. They no longer print a bridge error code.
+- The `algal-apple` helper build checks for Apple's command line tools
+  first. At a terminal ALGAL asks before macOS offers to install them;
+  scripts and agents get `xcode-select --install` instead of a dialog.
+  Compiler output from a failed build goes to `algal-apple.build.log`.
+- `algal doctor --apple` prints a short report at a terminal and JSON when
+  piped, run by an agent, or given `--json`. The JSON now carries `reason`,
+  `message`, `fix`, `settingsUrl` and `next` alongside `available`.
 - The shared program catalog gains six pure collection entries under
   `examples/source/projects/shared/`: `includes_text` (membership scan),
   `latest_value` (last-wins lookup over `{target, value}` updates),

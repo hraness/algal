@@ -1615,9 +1615,8 @@ fn apple_error(error: apple_foundation::Error) -> Error {
             Error::limit("apple bridge timed out; generation may be uncertain").uncertain()
         }
         E::QueueFull => Error::new("EFFECT_FAILED", "apple bridge queue full"),
-        E::Unsupported(m) | E::Unavailable(m) => {
-            Error::new("EFFECT_UNBOUND", format!("apple bridge: {m}"))
-        }
+        E::Unsupported(m) => Error::new("EFFECT_UNBOUND", format!("apple bridge: {m}")),
+        E::Unavailable(reason) => crate::apple::unavailable_error(reason),
         E::Bridge(code) => Error::new("EFFECT_FAILED", format!("apple bridge: {code}")),
         error @ (E::Io(_) | E::Protocol(_)) => {
             Error::new("EFFECT_FAILED", format!("apple bridge: {error}")).uncertain()
@@ -1818,7 +1817,7 @@ mod tests {
         for error in [
             E::Spawn(std::io::Error::other("could not start")),
             E::QueueFull,
-            E::Unavailable("unavailable".into()),
+            E::Unavailable(apple_foundation::Reason::AppleIntelligenceNotEnabled),
             E::Bridge("known_failure".into()),
         ] {
             assert!(!apple_error(error).uncertain);

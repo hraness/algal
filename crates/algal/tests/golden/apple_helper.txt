@@ -1,0 +1,87 @@
+[current]
+--- notices
+--- ok /opt/algal/bin/algal-apple
+[fresh human]
+--- notices
+↻ Building the Apple model helper (one time, about 10 seconds)…
+--- ok /opt/algal/bin/algal-apple
+[fresh quiet]
+--- notices
+--- ok /opt/algal/bin/algal-apple
+[no tools, Enter]
+--- notices
+🔐 algal needs Apple's command line tools to build a small helper. macOS will offer to install them (about 1 GB).
+   Nothing is installed unless you agree in that window. Or skip: run without --apple, or use --gateway-model or --base-url.
+   Press Enter to continue · s to skip
+--- error helperMissing
+Apple's command line tools are installing. Finish in the window macOS opened, then run this again.
+next: -
+[no tools, s]
+--- notices
+🔐 algal needs Apple's command line tools to build a small helper. macOS will offer to install them (about 1 GB).
+   Nothing is installed unless you agree in that window. Or skip: run without --apple, or use --gateway-model or --base-url.
+   Press Enter to continue · s to skip
+--- error helperMissing
+algal needs Apple's command line tools. Nothing was installed. Run xcode-select --install, then try again.
+next: xcode-select --install
+[no tools, no answer]
+--- notices
+🔐 algal needs Apple's command line tools to build a small helper. macOS will offer to install them (about 1 GB).
+   Nothing is installed unless you agree in that window. Or skip: run without --apple, or use --gateway-model or --base-url.
+   Press Enter to continue · s to skip
+--- error helperMissing
+algal needs Apple's command line tools. Nothing was installed. Run xcode-select --install, then try again.
+next: xcode-select --install
+[no tools, unattended]
+--- notices
+--- error helperMissing
+algal needs Apple's command line tools. Nothing was installed. Run xcode-select --install, then try again.
+next: xcode-select --install
+[no tools, agent]
+--- notices
+--- error helperMissing
+algal needs Apple's command line tools. Nothing was installed. Run xcode-select --install, then try again.
+next: xcode-select --install
+[no tools, doctor]
+--- notices
+--- error helperMissing
+algal needs Apple's command line tools. Nothing was installed. Run xcode-select --install, then try again.
+next: xcode-select --install
+[old sdk]
+--- notices
+--- error helperMissing
+The Apple model helper needs the macOS 26 SDK, but the selected tools have macOS 15.4. Update Xcode or the command line tools in System Settings › General › Software Update.
+next: open x-apple.systempreferences:com.apple.Software-Update-Settings.extension
+[build failed]
+--- notices
+↻ Building the Apple model helper (one time, about 10 seconds)…
+--- error helperMissing
+The Apple model helper didn't build: swiftc exited with status 1. Check that Xcode 26 or later is selected (xcode-select -p), then try again. Compiler output: /opt/algal/bin/algal-apple.build.log
+next: -
+[read-only prefix]
+--- notices
+↻ Building the Apple model helper (one time, about 10 seconds)…
+--- error helperMissing
+algal can't write the Apple model helper to /opt/algal/bin: permission denied. Build one with scripts/build-apple.sh and pass it with --apple-bridge or ALGAL_APPLE_BRIDGE.
+next: -
+[build failed, read-only prefix]
+--- notices
+↻ Building the Apple model helper (one time, about 10 seconds)…
+--- error helperMissing
+algal can't write the Apple model helper to /opt/algal/bin: permission denied. Build one with scripts/build-apple.sh and pass it with --apple-bridge or ALGAL_APPLE_BRIDGE.
+next: -
+[intel]
+--- notices
+--- error deviceNotEligible
+This Mac can't run Apple's on-device model. It needs Apple silicon and Apple Intelligence support. Use --gateway-model or --base-url instead.
+next: -
+[old macos]
+--- notices
+--- error requiresMacOS26
+Apple's on-device model needs macOS 26 or later. Update macOS in System Settings › General › Software Update, then try again.
+next: open x-apple.systempreferences:com.apple.Software-Update-Settings.extension
+[not macos]
+--- notices
+--- error deviceNotEligible
+Apple's on-device model only runs on macOS. Use --gateway-model or --base-url instead.
+next: -
