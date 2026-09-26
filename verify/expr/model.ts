@@ -47,9 +47,12 @@ export class MErr extends Error {
     this.name = "MErr";
   }
 }
-const fail = (code: ErrCode, details: Record<string, unknown> = {}): never => {
+// Never-returning helpers are `function` declarations: TS does not apply
+// never-returning-call narrowing to const arrow bindings, and these sit in
+// statement position to narrow MV unions (e.g. `if (!ok) errType(...)`).
+function fail(code: ErrCode, details: Record<string, unknown> = {}): never {
   throw new MErr(code, details);
-};
+}
 
 // ---------------------------------------------------------------- bounds ---
 // Mirror of the `max*` constants in Model.lean (the crates/algal-expr MAX_* set).
@@ -192,14 +195,14 @@ export function canonicalBytes(v: MV): number {
 // ----------------------------------------------------------- value measures
 
 export function countNodes(v: MV): number {
-  if (Array.isArray(v)) return 1 + v.reduce((n, x) => n + countNodes(x), 0);
-  if (v instanceof Map) return 1 + [...v.values()].reduce((n, x) => n + countNodes(x), 0);
+  if (Array.isArray(v)) return 1 + v.reduce<number>((n, x) => n + countNodes(x), 0);
+  if (v instanceof Map) return 1 + [...v.values()].reduce<number>((n, x) => n + countNodes(x), 0);
   return 1;
 }
 
 export function valueDepth(v: MV): number {
-  if (Array.isArray(v)) return 1 + v.reduce((n, x) => Math.max(n, valueDepth(x)), 0);
-  if (v instanceof Map) return 1 + [...v.values()].reduce((n, x) => Math.max(n, valueDepth(x)), 0);
+  if (Array.isArray(v)) return 1 + v.reduce<number>((n, x) => Math.max(n, valueDepth(x)), 0);
+  if (v instanceof Map) return 1 + [...v.values()].reduce<number>((n, x) => Math.max(n, valueDepth(x)), 0);
   return 0;
 }
 
@@ -227,8 +230,9 @@ export function valueByteCount(v: MV): number {
   return n;
 }
 
-const errBounds = (what: string, max: number): never =>
-  fail("bounds", { what, max });
+function errBounds(what: string, max: number): never {
+  return fail("bounds", { what, max });
+}
 
 function addValueBytes(total: number, extra: number): number {
   if (BOUNDS.maxValueBytes < total + extra) return errBounds("value-bytes", BOUNDS.maxValueBytes);
@@ -271,7 +275,7 @@ const envBytes = (env: Map<string, MV>): number => {
   return n;
 };
 const envDepth = (env: Map<string, MV>): number =>
-  1 + [...env.values()].reduce((d, v) => Math.max(d, valueDepth(v)), 0);
+  1 + [...env.values()].reduce<number>((d, v) => Math.max(d, valueDepth(v)), 0);
 
 // --------------------------------------------------------- equality/order --
 
@@ -312,12 +316,14 @@ const jsRound = (n: number): number => {
 type Ctx = { env: Map<string, MV>; scope: [string, MV][]; charges: number[] };
 const charge = (ctx: Ctx, c: number): void => { ctx.charges.push(c); };
 
-const errType = (op: string, arg: number, want: string, got: string): never =>
-  fail("type", { op, arg, want, got });
+function errType(op: string, arg: number, want: string, got: string): never {
+  return fail("type", { op, arg, want, got });
+}
 const arityWant = (lo: number, hi: number | null): string =>
   hi === null ? `${lo}..` : `${lo}..${hi}`;
-const errArity = (op: string, want: string, got: number): never =>
-  fail("arity", { op, want, got });
+function errArity(op: string, want: string, got: number): never {
+  return fail("arity", { op, want, got });
+}
 
 const checkArity = (op: string, argc: number, lo: number, hi: number | null): void => {
   if (!(lo <= argc && (hi === null || argc <= hi))) errArity(op, arityWant(lo, hi), argc);

@@ -19,8 +19,8 @@
 // against all three runtimes, so a wrong pin fails loudly.
 
 import {
-  admit, canonical, checkMirror, programOps, MODEL_GAP_OPS, UNMODELED_OPS,
-  type ErrCode, type MV,
+  admit, checkMirror, programOps, MODEL_GAP_OPS, UNMODELED_OPS,
+  type MV,
 } from "./model";
 
 export interface Expected {
@@ -50,7 +50,12 @@ const mk = (
   id: string, family: Case["family"], program: unknown,
   env: Record<string, unknown> = {}, fuel = 10_000,
   expect: Expected | null = null, model: ModelPin = "agree", note?: string,
-): Case => ({ contract: "algal.expr-conformance.v1", id, family, program, env, fuel, expect, model, note });
+): Case => ({
+  contract: "algal.expr-conformance.v1", id, family, program, env, fuel, expect, model,
+  // `note` is optional in the case shape: omitting the key keeps the catalog
+  // JSON-representable for the determinism fingerprint.
+  ...(note === undefined ? {} : { note }),
+});
 
 const ok = (value: unknown, fuel: number): Expected => ({ ok: true, value, fuel });
 const err = (code: string, fuel: number): Expected => ({ ok: false, code, fuel });
@@ -118,7 +123,7 @@ const CORNER: Case[] = [
   mk("corner-keys-literal", "corner", ["keys", { b: 1, "2": 2, "10": 3, a: 4 }], {}, 10_000, ok(["2", "10", "a", "b"], 7)),
   mk("corner-values-literal", "corner", ["values", { b: 1, "2": 2, "10": 3, a: 4 }], {}, 10_000, ok([2, 3, 4, 1], 7)),
   mk("corner-merge-order", "corner", ["merge", { b: 1 }, { a: 2, b: 3 }], {}, 10_000, ok({ a: 2, b: 3 }, 10)),
-  mk("corner-merge-last-wins", "corner", ["merge", { a: 1 }, { a: 9 }, { a: 5, b: 2 }], {}, 10_000, ok({ a: 5, b: 2 }, 11)),
+  mk("corner-merge-last-wins", "corner", ["merge", { a: 1 }, { a: 9 }, { a: 5, b: 2 }], {}, 10_000, ok({ a: 5, b: 2 }, 13)),
   // — equality: order-insensitive maps, structural lists, kind strictness.
   mk("corner-eq-map-order", "corner", ["eq", { a: 1, b: 2 }, { b: 2, a: 1 }], {}, 10_000, ok(true, 14)),
   mk("corner-neq-list", "corner", ["neq", ["list", 1, 2], ["list", 1, 3]], {}, 10_000, ok(true, 14)),
@@ -128,13 +133,13 @@ const CORNER: Case[] = [
   mk("corner-concat-order", "corner", ["concat", ["list", 1, 2], ["list", 3], ["list"]], {}, 10_000, ok([1, 2, 3], 11)),
   mk("corner-sconcat-order", "corner", ["sconcat", "a", "😀", "b"], {}, 10_000, ok("a😀b", 11)),
   // — let scope restoration: siblings see the env binding, not the let.
-  mk("corner-let-shadow", "corner", ["concat", ["let", "x", 1, ["list", ["get", "x"]]], ["list", ["get", "x"]]], ENV_BASIC, 10_000, ok([[1], [9]], 16)),
+  mk("corner-let-shadow", "corner", ["concat", ["let", "x", 1, ["list", ["get", "x"]]], ["list", ["get", "x"]]], ENV_BASIC, 10_000, ok([1, 9], 16)),
   mk("corner-let-nested-shadow", "corner",
     ["let", "n", 5, ["let", "n", ["mul", ["get", "n"], 2], ["add", ["get", "n"], 1]]], {}, 10_000, ok(11, 17)),
   mk("corner-let-body", "corner", ["let", "x", 1, ["get", "x"]], {}, 10_000, ok(1, 6)),
   // — map scope restoration: the binder dies with the map; env name survives.
   mk("corner-map-restore", "corner",
-    ["concat", ["map", ["list", 1], "x", ["list", ["get", "x"]]], ["list", ["get", "x"]]], ENV_BASIC, 10_000, ok([[1], [9]], 19)),
+    ["concat", ["map", ["list", 1], "x", ["list", ["get", "x"]]], ["list", ["get", "x"]]], ENV_BASIC, 10_000, ok([[1], 9], 19)),
   mk("corner-map-shadow-env", "corner", ["map", ["get", "xs"], "xs", ["get", "xs"]], ENV_BASIC, 10_000, ok([1, 2, 3], 21)),
   mk("corner-filter-shadow", "corner", ["filter", ["get", "xs"], "it", ["gt", ["get", "it"], 1]], ENV_BASIC, 10_000, ok([2, 3], 30)),
   mk("corner-fold-acc", "corner", ["fold", ["get", "xs"], 0, "acc", "it", ["add", ["get", "acc"], ["get", "it"]]], ENV_BASIC, 10_000, ok(6, 40)),
@@ -178,11 +183,15 @@ const CORNER: Case[] = [
   mk("corner-split-edge", "corner", ["split", ",", ","], {}, 10_000, ok(["", ""], 7)),
   mk("corner-upper-ascii", "corner", ["upper", "héllo"], {}, 10_000, ok("HéLLO", 9)),
   mk("corner-lower-ascii", "corner", ["lower", "HÉLLO"], {}, 10_000, ok("hÉllo", 9)),
-  mk("corner-trim", "corner", ["trim", "  pad  "], {}, 10_000, ok("pad", 11)),
+  mk("corner-trim", "corner", ["trim", "  pad  "], {}, 10_000, ok("pad", 10)),
   mk("corner-has", "corner", ["has", { a: 1 }, "a"], {}, 10_000, ok(true, 5)),
   mk("corner-has-miss", "corner", ["has", { a: 1 }, "z"], {}, 10_000, ok(false, 5)),
   mk("corner-isX", "corner", ["list", ["isText", "a"], ["isNum", 1], ["isList", ["list"]], ["isMap", {}], ["isNull", null], ["isBool", false]], {}, 10_000,
     ok([true, true, true, true, true, true], 13)),
+  mk("corner-isX-negative", "corner", ["list", ["isText", 1], ["isNum", "a"], ["isBool", 0], ["isList", {}], ["isMap", ["list"]], ["isNull", 0]], {}, 10_000,
+    ok([false, false, false, false, false, false], 13)),
+  mk("corner-ends", "corner", ["ends", "algal", "gal"], {}, 10_000, ok(true, 9)),
+  mk("corner-ends-miss", "corner", ["ends", "algal", "x"], {}, 10_000, ok(false, 9)),
   mk("corner-nth-zero", "corner", ["nth", ["list", 9, 8, 7], 0], {}, 10_000, ok(9, 7)),
   mk("corner-nth-neg-one", "corner", ["nth", ["list", 9, 8, 7], -1], {}, 10_000, err("EXPR_TYPE", 7)),
   mk("corner-empty-list-node", "corner", ["list"], {}, 10_000, ok([], 1)),
@@ -211,24 +220,33 @@ const BOUNDARY: Case[] = [
   mk("boundary-fuel-over", "boundary", true, {}, 1_000_001, err("EXPR_BOUNDS", 0)),
   mk("boundary-fuel-zero", "boundary", true, {}, 0, err("EXPR_FUEL", 0)),
   // — program depth (MAX_PROGRAM_DEPTH = 16, root at depth 1): 14/15 accept,
-  //   16/17 reject. Envelope-level in both production check and model run.
+  //   16/17 reject. The wire rejects inside the static check; the model's
+  //   run-level program-depth bound reports the identical observable outcome.
   mk("boundary-depth-14", "boundary", notChain(14), {}, 10_000, ok(true, 15)),
   mk("boundary-depth-15", "boundary", notChain(15), {}, 10_000, ok(false, 16)),
-  mk("boundary-depth-16", "boundary", notChain(16), {}, 10_000, err("EXPR_BOUNDS", 0)),
-  mk("boundary-depth-17", "boundary", notChain(17), {}, 10_000, err("EXPR_BOUNDS", 0)),
-  // — program nodes (MAX_PROGRAM_NODES = 512): a flat list of n scalars has
-  //   n+1 nodes → 510/511 accept, 512 rejects.
-  mk("boundary-nodes-511", "boundary", ["list", ...listOf(null, 510)], {}, 10_000, ok(listOf(null, 510), 511)),
-  mk("boundary-nodes-512", "boundary", ["list", ...listOf(null, 511)], {}, 10_000, ok(listOf(null, 511), 512)),
-  mk("boundary-nodes-513", "boundary", ["list", ...listOf(null, 512)], {}, 10_000, err("EXPR_BOUNDS", 0)),
+  mk("boundary-depth-16", "boundary", notChain(16), {}, 10_000, err("EXPR_BOUNDS", 0), merr("EXPR_BOUNDS", 0),
+    "check-level rejection; the model's run-level depth bound reports the same code at fuel 0"),
+  mk("boundary-depth-17", "boundary", notChain(17), {}, 10_000, err("EXPR_BOUNDS", 0), merr("EXPR_BOUNDS", 0)),
+  // — program nodes (MAX_PROGRAM_NODES = 512): every JSON node counts,
+  //   including the op-head text node — ["list", ...n scalars] is n+2 nodes,
+  //   so 509/510 scalar args sit under/at the bound and 511 rejects.
+  mk("boundary-nodes-511", "boundary", ["list", ...listOf(null, 509)], {}, 10_000, ok(listOf(null, 509), 510)),
+  mk("boundary-nodes-512", "boundary", ["list", ...listOf(null, 510)], {}, 10_000, ok(listOf(null, 510), 511)),
+  mk("boundary-nodes-513", "boundary", ["list", ...listOf(null, 511)], {}, 10_000, err("EXPR_BOUNDS", 0), merr("EXPR_BOUNDS", 0),
+    "check-level node bound; the model's run-level node bound agrees on (code, fuel)"),
   // — program bytes (MAX_PROGRAM_BYTES = 16384): ["slen","x"*k] renders k+11.
   mk("boundary-bytes-under", "boundary", ["slen", str(16372)], {}, 10_000, ok(16372, 3)),
   mk("boundary-bytes-at", "boundary", ["slen", str(16373)], {}, 10_000, ok(16373, 3)),
-  mk("boundary-bytes-over", "boundary", ["slen", str(16374)], {}, 10_000, err("EXPR_BOUNDS", 0)),
-  // — string-bytes (MAX_STRING_BYTES = 65536) through sconcat:
-  //   65535 / 65536 accept, 65537 rejects after args are charged.
-  mk("boundary-str-under", "boundary", ["sconcat", ["get", "a"], ["get", "b"]], ENV_SCONCAT(32767), 10_000, ok(str(65535), 65545)),
-  mk("boundary-str-at", "boundary", ["sconcat", ["get", "a"], ["get", "b"]], ENV_SCONCAT(32768), 10_000, ok(str(65536), 65546)),
+  mk("boundary-bytes-over", "boundary", ["slen", str(16374)], {}, 10_000, err("EXPR_BOUNDS", 0), merr("EXPR_BOUNDS", 0),
+    "check-level byte bound; the model's run-level byte bound agrees on (code, fuel)"),
+  // — string-bytes (MAX_STRING_BYTES = 65536) vs output-bytes interaction:
+  //   a produced string renders inside quotes, so a 65534-byte concat is the
+  //   largest that still fits the 65536 output bound; at 65536 the string
+  //   bound admits but the output render (65538) does not; at 65537 the
+  //   string bound itself rejects before the byte charge lands.
+  mk("boundary-str-under", "boundary", ["sconcat", ["get", "a"], ["get", "b"]], ENV_SCONCAT(32766), 100_000, ok(str(65534), 65544)),
+  mk("boundary-str-at", "boundary", ["sconcat", ["get", "a"], ["get", "b"]], ENV_SCONCAT(32768), 100_000, err("EXPR_BOUNDS", 65546), "agree",
+    "string-bytes admits 65536; the canonical render (quotes) exceeds output-bytes"),
   mk("boundary-str-over", "boundary", ["sconcat", ["get", "a"], ["get", "b"]], ENV_SCONCAT(32769), 10_000, err("EXPR_BOUNDS", 10)),
   // — list-len (MAX_LIST_LEN = 1024): concat total / split parts.
   mk("boundary-list-under", "boundary", ["concat", ["get", "a"], ["get", "b"]], ENV_CONCAT(511), 10_000, ok(listOf(null, 1023), 1033)),
@@ -276,7 +294,8 @@ const REJECT: Case[] = [
   mk("reject-binder-shape-let", "reject", ["let", 5, 1, 2], {}, 10_000, err("EXPR_PARSE", 0), mok(2, 3),
     "production requires a literal identifier; the model binds the empty name"),
   mk("reject-binder-shape-map", "reject", ["map", ["list", 1], 9, ["get", "x"]], {}, 10_000,
-    err("EXPR_PARSE", 0), merr("EXPR_PATH", 8)),
+    err("EXPR_PARSE", 0), merr("EXPR_PATH", 9),
+    "model binds the empty name; the failing get charges base+head before the path error"),
   mk("reject-sibling-scope", "reject", ["concat", ["let", "x", 1, ["list", ["get", "x"]]], ["get", "x"]], {}, 10_000,
     err("EXPR_PATH", 0), merr("EXPR_PATH", 13),
     "the Lean scope-restoration witness: check rejects the sibling get outright"),
@@ -360,6 +379,7 @@ export function admitCase(c: Case): Admitted {
   if (c.contract !== "algal.expr-conformance.v1") throw new CaseAdmissionError(c.id, "contract");
   const program = admit(c.program);
   const env = admit(c.env);
+  if (!(env instanceof Map)) throw new CaseAdmissionError(c.id, "env must be an object");
   const check = checkMirror(program, Object.keys(c.env));
   const ops = programOps(program);
   const excluded = [...ops].some(op => UNMODELED_OPS.has(op) || MODEL_GAP_OPS.has(op));

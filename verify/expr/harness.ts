@@ -19,12 +19,17 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { requireSuccess, runCommand } from "../lib/runner";
-import { artifactIdentity, type CommandArtifact } from "../traces/native";
-import { evalProgram, setExprExports, type EvalExports } from "../../src/expr";
-import { admit, canonical, run as modelRun, type MV, type RunOutcome } from "./model";
-import type { Case, Expected, ModelPin } from "./catalog";
+import { artifactIdentity, type Artifact } from "../traces/native";
+import { evalProgram, checkProgram, setExprExports, type EvalExports } from "../../src/expr";
+import type { JsonObject, JsonValue } from "../../src/values";
+import {
+  admit, canonical, checkMirror, CODE_NAME, run as modelRun,
+  type MV, type RunOutcome,
+} from "./model";
+import { admitCase, type Case, type Expected, type ModelPin } from "./catalog";
 
-const REPO = join(import.meta.dir, "..", "..");
+export const REPO_ROOT = join(import.meta.dir, "..", "..");
+const REPO = REPO_ROOT;
 export const WASM_PATH = join(REPO, "src", "algal_expr.wasm");
 
 export const DEFAULT_ARTIFACT_DIR = join(
@@ -38,9 +43,9 @@ export function artifactPath(name: string): string {
 }
 
 export interface ArtifactSet {
-  boundary: CommandArtifact;
-  leanVectors: CommandArtifact;
-  algal: CommandArtifact;
+  boundary: Artifact;
+  leanVectors: Artifact;
+  algal: Artifact;
   wasmSha256: string;
   wasmBytes: number;
 }
@@ -115,7 +120,7 @@ const nativeFile = (bytes: Uint8Array): string => {
  *  trailing newline (both drivers print the response plus one LF). */
 export async function nativeBoundary(mode: "eval" | "check", input: Uint8Array): Promise<string> {
   const path = nativeFile(input);
-  const result = await runCommand([artifactPath("verification_boundary"), mode, path], { timeoutMs: 15_000 });
+  const result = await runCommand([artifactPath("verification_boundary"), mode, path], REPO, { timeoutMs: 15_000 });
   requireSuccess(result);
   if (!result.stdout.endsWith("\n")) throw new Error(`native ${mode}: unterminated stdout`);
   return result.stdout.slice(0, -1);
@@ -198,6 +203,30 @@ function modelPinMatches(pin: Exclude<ModelPin, "agree">, got: Projected, label:
   }
 }
 
+export interface CheckVerdict { ok: boolean; code: string | null }
+
+/** Project an algal_check response: {"ok":true} | {"ok":false,"err":{…}}. */
+export function projectCheck(raw: string, label: string): CheckVerdict {
+  const parsed: unknown = JSON.parse(raw);
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`${label}: check response not an object`);
+  }
+  const r = parsed as Record<string, unknown>;
+  if (r.ok === true) {
+    if (Object.keys(r).some(k => k !== "ok")) throw new Error(`${label}: stray keys`);
+    return { ok: true, code: null };
+  }
+  if (r.ok === false) {
+    if (Object.keys(r).some(k => k !== "ok" && k !== "err")) throw new Error(`${label}: stray keys`);
+    const e = r.err;
+    if (e === null || typeof e !== "object" || Array.isArray(e)) throw new Error(`${label}: err not object`);
+    const code = (e as Record<string, unknown>).code;
+    if (typeof code !== "string" || !/^EXPR_[A-Z_]+$/.test(code)) throw new Error(`${label}: bad code`);
+    return { ok: false, code };
+  }
+  throw new Error(`${label}: ok not boolean`);
+}
+
 export interface CaseReport {
   id: string;
   family: Case["family"];
@@ -208,46 +237,66 @@ export interface CaseReport {
 }
 
 /** The full per-case comparison. Asserts:
- *  - wasm raw bytes ≡ native stdout bytes (strongest: response text exact);
+ *  - wasm raw eval bytes ≡ native stdout bytes (strongest: response text
+ *    exact, including error detail fields);
+ *  - wasm check bytes ≡ native check bytes, and the check verdict matches the
+ *    checkMirror prediction (the static-check mirror, cross-validated);
  *  - the authored `expect` pin, when present, holds on the wire;
  *  - the Bun wrapper produces the same projected outcome (JSON round-trip);
- *  - on three-way cases the independent model agrees on
- *    (ok, canonical value, error code, fuel used); on pinned cases the model
- *    produces the pinned disposition exactly (code, fuel). */
+ *  - `model: "agree"` ⇒ the independent model matches the wire outcome on
+ *    (ok, canonical value, error code, fuel used); a pinned disposition is
+ *    matched exactly (the documented asymmetry/gap relations). */
 export async function compareCase(c: Case, native = true): Promise<CaseReport> {
   bindWrapper();
+  const adm = admitCase(c);
   const ex = wasmInstance();
   const request = evalRequestBytes(c);
   const wasmRaw = rawCall(ex, "algal_eval", request);
   const projected = project(wasmRaw, `${c.id}:wasm`);
 
+  // The check lane: same request shape through algal_check on both targets,
+  // cross-validated against the production-check mirror.
+  const checkReq = checkRequestBytes(c);
+  const wasmCheck = projectCheck(rawCall(ex, "algal_check", checkReq), `${c.id}:check`);
+  // The Bun wrapper's check lane is held to the same verdict.
+  const wrappedCheck = checkProgram(c.program as JsonValue, [...Object.keys(c.env)].sort());
+  if (wrappedCheck.ok !== wasmCheck.ok ||
+      (!wasmCheck.ok && !wrappedCheck.ok &&
+        (wrappedCheck.err as Record<string, unknown>).code !== wasmCheck.code)) {
+    throw new Error(`${c.id}:wrapper check verdict diverges`);
+  }
+  const mirror = checkMirror(adm.program, Object.keys(c.env));
+  const mirrorOk = mirror.ok;
+  if (wasmCheck.ok !== mirrorOk) {
+    throw new Error(`${c.id}: check verdict ${wasmCheck.ok} != mirror ${mirrorOk}`);
+  }
+  if (!wasmCheck.ok && !mirrorOk && wasmCheck.code !== CODE_NAME[mirror.code]) {
+    throw new Error(`${c.id}: check code ${wasmCheck.code} != mirror ${CODE_NAME[mirror.code]}`);
+  }
+
   if (c.expect !== null) expectedMatches(c.expect, projected, `${c.id}:pin`);
 
-  const program = admit(c.program);
-  const env = admit(c.env);
-  const modelOutcome = projectModel(modelRun(program, env, c.fuel));
-
-  if (c.family === "reject") {
-    // Model relation is pinned explicitly; the production pin asserts the
-    // check-level code. Both are exact.
-    if (c.model !== "agree") modelPinMatches(c.model, modelOutcome, `${c.id}:model`);
-  } else if (c.model === "agree") {
-    expectedMatches(
-      projected.ok
-        ? { ok: true, value: undefined, fuel: projected.fuel }
-        : { ok: false, code: projected.code, fuel: projected.fuel },
-      modelOutcome,
-      `${c.id}:model`,
-    );
-    if (projected.ok && modelOutcome.ok && !sameValue(modelOutcome.value, projected.value)) {
-      throw new Error(`${c.id}:model value ${canonical(modelOutcome.value)} != ${canonical(projected.value)}`);
+  const modelOutcome = projectModel(modelRun(adm.program, adm.env, c.fuel));
+  if (c.model === "agree") {
+    if (adm.relation === "wasm-native") {
+      throw new Error(`${c.id}: pinned "agree" but not in the modelled subset`);
+    }
+    const sameShape = projected.ok === modelOutcome.ok &&
+      projected.fuel === modelOutcome.fuel &&
+      (projected.ok && modelOutcome.ok
+        ? sameValue(projected.value, modelOutcome.value)
+        : !projected.ok && !modelOutcome.ok && projected.code === modelOutcome.code);
+    if (!sameShape) {
+      throw new Error(
+        `${c.id}: model diverges\nwire:  ${wasmRaw.slice(0, 400)}\nmodel: ${JSON.stringify(modelOutcome.fuel)} ${modelOutcome.ok ? canonical(modelOutcome.value).slice(0, 300) : modelOutcome.code}`,
+      );
     }
   } else {
     modelPinMatches(c.model, modelOutcome, `${c.id}:model`);
   }
 
   // Wrapper fidelity: JSON in/out over the same module.
-  const wrapped = evalProgram(c.program as never, c.env as never, c.fuel);
+  const wrapped = evalProgram(c.program as JsonValue, c.env as JsonObject, c.fuel);
   const wrapProjected: Projected = wrapped.ok
     ? { ok: true, value: admit(wrapped.value), fuel: wrapped.fuel }
     : { ok: false, code: (wrapped.err as Record<string, unknown>).code as string, err: wrapped.err as Record<string, unknown>, fuel: wrapped.fuel };
@@ -261,13 +310,18 @@ export async function compareCase(c: Case, native = true): Promise<CaseReport> {
     throw new Error(`${c.id}:wrapper value mismatch`);
   }
 
-  let nativeRaw = "";
   if (native) {
-    nativeRaw = await nativeBoundary("eval", request);
+    const nativeRaw = await nativeBoundary("eval", request);
     if (nativeRaw !== wasmRaw) {
-      throw new Error(`${c.id}: native/wasm bytes diverge\nwasm:   ${wasmRaw.slice(0, 400)}\nnative: ${nativeRaw.slice(0, 400)}`);
+      throw new Error(`${c.id}: native/wasm eval bytes diverge\nwasm:   ${wasmRaw.slice(0, 400)}\nnative: ${nativeRaw.slice(0, 400)}`);
+    }
+    const nativeCheck = await nativeBoundary("check", checkReq);
+    if (nativeCheck !== rawCall(ex, "algal_check", checkReq)) {
+      throw new Error(`${c.id}: native/wasm check bytes diverge`);
     }
   }
-  return { id: c.id, family: c.family, relation: "three-way", raw: wasmRaw,
-    modelCode: modelOutcome.ok ? null : modelOutcome.code, modelFuel: modelOutcome.fuel };
+  return {
+    id: c.id, family: c.family, relation: adm.relation, raw: wasmRaw,
+    modelCode: modelOutcome.ok ? null : modelOutcome.code, modelFuel: modelOutcome.fuel,
+  };
 }

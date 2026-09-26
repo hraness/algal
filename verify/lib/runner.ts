@@ -363,6 +363,16 @@ async function executeSuite(root: string, suite: string): Promise<unknown> {
     };
     return { tests: admitSelftestOutput(result), commandResult: result, scope: scopes[suite] };
   }
+  if (suite === "expr-conformance" || suite === "expr-abi") {
+    const files: Record<string, string> = { "expr-conformance": "verify/expr/conformance.test.ts", "expr-abi": "verify/expr/abi.test.ts" };
+    const command = [process.execPath, "test", "--timeout", "120000", files[suite]!];
+    const result = await runCommand(command, root);
+    const scopes: Record<string, string> = {
+      "expr-conformance": "Seeded catalog agreement among committed WASM, frozen native artifacts and an independent mirror of the Lean model; bounded runtime correspondence, not production translation proof.",
+      "expr-abi": "WASM loader boundary checks — module admission, memory bounds, envelope decoding, typed error mapping; boundary conformance, not compiler proof.",
+    };
+    return { tests: admitSelftestOutput(result), commandResult: result, scope: scopes[suite] };
+  }
   if (suite === "differential") {
     const { runDifferentialSuite } = await import("../differential/adapter");
     return runDifferentialSuite(root);

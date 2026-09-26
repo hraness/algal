@@ -44,8 +44,6 @@ const STRS: readonly string[] = [
   "", "a", "b", "x", "ab", "abc", "héllo", "wörld", "😀", "a😀e", "é", "  pad  ",
   "0", "10", "2", "key", "null", "true", "CamelCase", "with space", "end,dot.",
 ];
-const NAMES: readonly string[] = ["n", "d", "s", "t", "b", "xs", "ss", "ys", "m", "nested", "pair", "words"];
-
 export interface Generated {
   program: unknown;
   env: Record<string, unknown>;
@@ -315,7 +313,12 @@ function injectFault(g: G): unknown | null {
 /** Generate one deterministic case. `fault` plants a seeded runtime fault on
  *  ~1 in 6 calls; `program` stays inside the modelled op set always. */
 export function generate(seed: number, index: number): Generated {
-  const rng = new Random((seed ^ ((index + 1) * 0x9e3779b9)) >>> 0);
+  // Per-case mix of (seed, index). xorshift32 cannot take the absorbing
+  // state: when the mix lands on 0 (seed 0x9e3779b9 at index 0, where the
+  // seed equals the mixer constant) it remaps to a fixed nonzero seed —
+  // deterministic, and collision-free within the fixed catalog grid.
+  const mixed = (seed ^ Math.imul(index + 1, 0x9e3779b9)) >>> 0;
+  const rng = new Random(mixed === 0 ? 0x6d2b79f5 : mixed);
   const env = genEnv(rng);
   const g: G = { rng, env, names: Object.keys(env), scope: [] };
   const program = rng.chance(1, 6) ? injectFault(g) ?? genAny(g, 0) : genAny(g, 0);
@@ -325,5 +328,7 @@ export function generate(seed: number, index: number): Generated {
 /** Cheap sanity admission: the generated program/env enter the modelled
  *  domain and stay inside the program bounds the suite samples. */
 export function admitGenerated(out: Generated): { program: MV; env: Map<string, MV> } {
-  return { program: admit(out.program), env: admit(out.env) };
+  const env = admit(out.env);
+  if (!(env instanceof Map)) throw new Error("generated env is not an object");
+  return { program: admit(out.program), env };
 }
