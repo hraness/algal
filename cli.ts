@@ -3,7 +3,7 @@
 // Data on stdout (JSON), diagnostics on stderr. Exit 0 ok, 1 run/verify
 // failure, 2 usage or parse error.
 
-import { lstat, open, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import { constants, writeSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -303,6 +303,26 @@ usage:
                                               and the pinned unseen cases (exit 1 if it fails);
                                               --verify reruns it and checks a saved record
   algal library unseen <cases.json>       check an unseen case file, print its digest
+  algal experiment tasks <config.json> [--out <dir>]
+                                              deterministically generate one phase's
+                                              record-triage task set from an
+                                              algal.experiment-family.v1 config; emits the
+                                              algal.experiment-set.v1 index and, with --out,
+                                              writes <taskId>.task.json files plus index.json
+  algal experiment check <task.json>      reparse a task spec and replay every declared
+                                              expectation through the reference path
+                                              (exit 1 on mismatches)
+  algal experiment cases <task.json> [--split <train|validation|holdout>] [--out <file>]
+                                              render a task spec into
+                                              {id, split, args, expect} case records
+  algal experiment grade <task.json> <case> <outputs.json> [--out <file>]
+                                              score one case's interface outputs under the
+                                              task's declared grader and emit an
+                                              algal.experiment-grade.v1 record
+                                              (exit 1 when the grade does not pass)
+  algal experiment grade-verify <task.json> <grade.json>
+                                              recompute a grade record against the task
+                                              (exit 1 on mismatch)
   algal store put <value.json> [--dir <path>]
                                               write a JSON value to CAS, print its ref token
   algal store get <sha256:…> [--dir <path>]
@@ -2358,6 +2378,106 @@ async function main(): Promise<number> {
     }
 
     case "experiment": {
+      const sub = positional[0];
+      if (sub === "tasks") {
+        const file = positional[1];
+        if (!file || positional.length !== 2) usageError("algal experiment tasks <config.json> [--out <dir>]");
+        for (const key of Object.keys(flags)) {
+          if (key !== "out") usageError(`unknown experiment tasks option --${key}`);
+        }
+        const { EXPERIMENT_FAMILY_BOUNDS, generateExperimentTasks, parseExperimentFamilyConfig } =
+          await import("./src/experiment-family");
+        const outDir = artifactFlag(flags, "out");
+        const config = parseExperimentFamilyConfig(
+          await readJsonBounded(resolve(file), EXPERIMENT_FAMILY_BOUNDS.maxBytes, "experiment family config"),
+        );
+        const generated = generateExperimentTasks(config);
+        if (outDir !== undefined) {
+          const dirPath = resolve(outDir);
+          await mkdir(dirPath, { recursive: true });
+          for (const task of generated.tasks) {
+            await writeFile(join(dirPath, `${task.taskId}.task.json`), canonicalize(task as unknown as JsonValue) + "\n");
+          }
+          await writeFile(join(dirPath, "index.json"), canonicalize(generated.set as unknown as JsonValue) + "\n");
+          diag(`wrote ${generated.tasks.length} task file(s) plus index.json to ${outDir}`);
+        }
+        out(generated.set as unknown as JsonValue);
+        return 0;
+      }
+      const { EXPERIMENT_TASK_BOUNDS, gradeExperimentCase, gradeExperimentMismatches, parseExperimentGrade, parseExperimentTaskSpec, taskCases, taskExpectationMismatches } =
+        await import("./src/experiment-task");
+      if (sub === "check") {
+        const file = positional[1];
+        if (!file || positional.length !== 2) usageError("algal experiment check <task.json>");
+        if (Object.keys(flags).length !== 0) usageError("algal experiment check accepts no options");
+        const task = parseExperimentTaskSpec(await readJsonBounded(resolve(file), EXPERIMENT_TASK_BOUNDS.maxBytes, "experiment task"));
+        const mismatches = taskExpectationMismatches(task);
+        out({
+          ok: mismatches.length === 0,
+          taskId: task.taskId,
+          phase: task.phase,
+          digest: task.digest,
+          batches: task.inputs.length,
+          records: task.inputs.reduce((sum, batch) => sum + batch.records.length, 0),
+          classes: task.taxonomy.classes.length,
+          rules: task.rules.length,
+          mismatches: mismatches as unknown as JsonValue,
+        });
+        return mismatches.length === 0 ? 0 : 1;
+      }
+      if (sub === "cases") {
+        const file = positional[1];
+        if (!file || positional.length !== 2) usageError("algal experiment cases <task.json> [--split <train|validation|holdout>] [--out <file>]");
+        for (const key of Object.keys(flags)) {
+          if (key !== "split" && key !== "out") usageError(`unknown experiment cases option --${key}`);
+        }
+        const split = artifactFlag(flags, "split");
+        if (split !== undefined && split !== "train" && split !== "validation" && split !== "holdout") {
+          usageError("--split must be train, validation, or holdout");
+        }
+        const task = parseExperimentTaskSpec(await readJsonBounded(resolve(file), EXPERIMENT_TASK_BOUNDS.maxBytes, "experiment task"));
+        const cases = taskCases(task).filter((c) => split === undefined || c.split === split);
+        await emitArtifact(canonicalize({
+          contract: "algal.experiment-cases.v1",
+          taskId: task.taskId,
+          taskDigest: task.digest,
+          cases: cases as unknown as JsonValue,
+        }), artifactFlag(flags, "out"));
+        return 0;
+      }
+      if (sub === "grade") {
+        const file = positional[1];
+        const caseId = positional[2];
+        const outputsFile = positional[3];
+        if (!file || !caseId || !outputsFile || positional.length !== 4) {
+          usageError("algal experiment grade <task.json> <case> <outputs.json> [--out <file>]");
+        }
+        for (const key of Object.keys(flags)) {
+          if (key !== "out") usageError(`unknown experiment grade option --${key}`);
+        }
+        const task = parseExperimentTaskSpec(await readJsonBounded(resolve(file), EXPERIMENT_TASK_BOUNDS.maxBytes, "experiment task"));
+        const batch = task.inputs.find((entry) => entry.id === caseId);
+        if (batch === undefined) usageError(`task has no case "${caseId}" (have ${task.inputs.map((entry) => entry.id).join(", ")})`);
+        const outputs = asJsonValue(await readJsonBounded(resolve(outputsFile), EXPERIMENT_TASK_BOUNDS.maxBytes, "experiment outputs"), "experiment outputs");
+        if (outputs === null || typeof outputs !== "object" || Array.isArray(outputs)) {
+          usageError("experiment outputs must be an interface-output object");
+        }
+        const grade = gradeExperimentCase(task, batch, outputs as JsonObject);
+        await emitArtifact(canonicalize(grade as unknown as JsonValue), artifactFlag(flags, "out"));
+        return grade.passed ? 0 : 1;
+      }
+      if (sub === "grade-verify") {
+        const file = positional[1];
+        const gradeFile = positional[2];
+        if (!file || !gradeFile || positional.length !== 3) usageError("algal experiment grade-verify <task.json> <grade.json>");
+        if (Object.keys(flags).length !== 0) usageError("algal experiment grade-verify accepts no options");
+        const task = parseExperimentTaskSpec(await readJsonBounded(resolve(file), EXPERIMENT_TASK_BOUNDS.maxBytes, "experiment task"));
+        const grade = parseExperimentGrade(await readJsonBounded(resolve(gradeFile), EXPERIMENT_TASK_BOUNDS.maxBytes, "experiment grade"));
+        const mismatches = gradeExperimentMismatches(task, grade);
+        out({ ok: mismatches.length === 0, taskId: task.taskId, case: grade.case, passed: grade.passed, score: grade.score, mismatches: mismatches as unknown as JsonValue });
+        return mismatches.length === 0 ? 0 : 1;
+      }
+
       const file = positional[0];
       if (!file) usageError("algal experiment <config.json> | experiment report|verify|inspect <...>");
       if (file === "report" || file === "verify" || file === "inspect") {

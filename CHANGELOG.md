@@ -444,6 +444,21 @@ wire constant (`0.1.0`) is independent of these package versions.
   Chromium qualification fixture covers reopen, revocation, delivery, and a
   peer-tab handoff. SDK: `IndexedDbMailboxService`, `IndexedDbHostEventService`,
   `MAILBOX_IDB_NAME`, `HOST_EVENTS_IDB_NAME`.
+- `algal experiment` adds the record-triage task family for the
+  cumulative-skill study: `algal.experiment-task.v1` task specs are bounded,
+  closed records (taxonomy, record schema, ordered rules, output format,
+  labeled batches with expected outputs, and an exact or `algal.expr.v1`
+  scorer grader), generated deterministically from seeded
+  `algal.experiment-family.v1` configs and indexed as
+  `algal.experiment-set.v1`. The CLI generates task sets (`experiment
+  tasks`), reparses and replays expectations (`check`), renders
+  foundry-shaped cases (`cases`), scores interface outputs into
+  `algal.experiment-grade.v1` records (`grade`), and verifies them
+  (`grade-verify`). `experiments/cumulative-skill/` ships three committed
+  sets (8 acquisition, 8 unseen, 4 shift tasks) plus the reference
+  `record-triage` pipeline: an agent cell labels records and deterministic
+  expr cells apply the declared rules and summaries, passing every
+  acquisition case under the scripted executor.
 
 ## v0.2.0-vm.9 — 2026-09-20
 
