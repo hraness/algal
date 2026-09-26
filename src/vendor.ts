@@ -1,9 +1,10 @@
 // `algal vendor`: copy one shared-catalog entry, with every entry it depends
 // on, from a catalog page in the `docs/library.md` format into a new directory
-// of a project. Vendoring uses the network only here; `lock` and its
-// verification read the copy offline. The page comes from a local path or an
-// https URL, and program files come from the page's own relative links, so
-// every request stays on the page's host.
+// of a project. Vendoring uses the network only here and in the `vendor check`
+// and `vendor update` read paths, which share this file's catalog reader;
+// `lock` and its verification read the copy offline. The page comes from a
+// local path or an https URL, and program files come from the page's own
+// relative links, so every request stays on the page's host.
 // Responses are limited in bytes, count, and time; downloaded text is only
 // compiled, never run; and the copy is written only after it compiles to the
 // digests the page lists, into a directory that did not exist, without
@@ -94,7 +95,8 @@ function decode(bytes: Uint8Array, what: string, page: boolean): string {
   catch { throw new AlgalError("PARSE_FAILED", `vendor: ${what} is not valid UTF-8`); }
 }
 
-type FetchContext = { readonly timeoutMs: number; readonly allowLoopbackHttp: boolean };
+export type VendorFetchContext = { readonly timeoutMs: number; readonly allowLoopbackHttp: boolean };
+type FetchContext = VendorFetchContext;
 /** GET one resource: same-origin redirects only, status 200, at most `limit`
  * bytes whether or not a length is declared, and one timeout covering the
  * response headers and body. No credentials or cookies are sent. */
@@ -137,13 +139,14 @@ async function fetchText(url: URL, limit: number, what: string, page: boolean, c
   }
 }
 
-type Catalog = {
+export type VendorCatalog = {
   readonly text: string;
   /** Normalized address of the page, recorded as the copy's origin. */
   readonly origin: string;
   /** Read the named programs through the page's own links. */
   readonly programs: (paths: readonly string[]) => Promise<Record<string, string>>;
 };
+type Catalog = VendorCatalog;
 
 async function localCatalog(path: string): Promise<Catalog> {
   let real: string;
@@ -183,8 +186,10 @@ async function remoteCatalog(url: URL, context: FetchContext): Promise<Catalog> 
   };
 }
 
-/** The entry and, transitively, every entry it depends on, sorted by path. */
-function entryClosure(index: LibraryIndex, entry: string): LibraryIndexEntry[] {
+/** The entry and, transitively, every entry it depends on, sorted by path.
+ * Exported for `vendor check`, which asks only whether a live page still
+ * resolves a pinned entry. */
+export function entryClosure(index: LibraryIndex, entry: string): LibraryIndexEntry[] {
   const byPath = new Map(index.entries.map(item => [item.path, item]));
   if (!byPath.has(entry)) refuse(`the catalog lists no entry ${entry}`);
   const found = new Map<string, LibraryIndexEntry>();
@@ -271,6 +276,16 @@ async function writeCopy(base: string, into: string, record: VendorRecord, texts
   }
 }
 
+/** Open a catalog page: validate the address, then read it under the fetch
+ * bounds. `vendor check` and `vendor update` share this with vendoring. */
+export async function openVendorCatalog(catalog: string, options: { readonly timeoutMs?: number; readonly allowLoopbackHttp?: boolean } = {}): Promise<VendorCatalog> {
+  const timeoutMs = options.timeoutMs ?? VENDOR_FETCH_BOUNDS.timeoutMs;
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > VENDOR_FETCH_BOUNDS.maxTimeoutMs) refuse(`timeout must be 1 to ${VENDOR_FETCH_BOUNDS.maxTimeoutMs} milliseconds`);
+  const allowLoopbackHttp = options.allowLoopbackHttp === true;
+  const location = catalogLocation(catalog, allowLoopbackHttp);
+  return location.kind === "url" ? remoteCatalog(location.url, { timeoutMs, allowLoopbackHttp }) : localCatalog(location.path);
+}
+
 /** Copy `entry` and every entry it depends on from a catalog page into the
  * new directory `into` beneath `root`, and write its `algal.vendor.v1` record.
  * The copy is refused unless every file compiles, from exactly the copied
@@ -283,11 +298,11 @@ export async function vendorCatalogEntry(options: VendorOptions): Promise<Vendor
   const allowLoopbackHttp = options.allowLoopbackHttp === true;
   const timeoutMs = options.timeoutMs ?? VENDOR_FETCH_BOUNDS.timeoutMs;
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > VENDOR_FETCH_BOUNDS.maxTimeoutMs) refuse(`timeout must be 1 to ${VENDOR_FETCH_BOUNDS.maxTimeoutMs} milliseconds`);
-  const location = catalogLocation(options.catalog, allowLoopbackHttp);
+  catalogLocation(options.catalog, allowLoopbackHttp);
   let base: string;
   try { base = await realpath(options.root); } catch (error) { throw failed("cannot resolve the project directory", error); }
   await walkTarget(base, into);
-  const catalog = location.kind === "url" ? await remoteCatalog(location.url, { timeoutMs, allowLoopbackHttp }) : await localCatalog(location.path);
+  const catalog = await openVendorCatalog(options.catalog, { timeoutMs, allowLoopbackHttp });
   const entries = entryClosure(parseLibraryIndex(catalog.text), entry);
   const texts = await catalog.programs(entries.map(item => item.path));
   const record = parseVendorRecord({

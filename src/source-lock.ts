@@ -2,12 +2,14 @@
 // closure it compiles to, and verify that pin offline. A lock is data outside
 // executable identity; it never supplies source or manifests, and verification
 // recompiles from the closed source map with no network or package resolver.
-// Three optional sections extend the pin: evaluation cases (fixture digests
+// Four optional sections extend the record: evaluation cases (fixture digests
 // plus the outcome and interface outputs of an in-memory scripted replay),
-// human labels for closure digests, and vendored directories (the
-// `algal.vendor.v1` record of each copied catalog entry). Fixtures, records,
-// and vendored files arrive as closed maps, so this module performs no
-// filesystem IO and never contacts a catalog's origin.
+// human labels for closure digests, vendored directories (the
+// `algal.vendor.v1` record of each copied catalog entry), and named catalog
+// addresses (`registries`, advisory names for `vendor` commands that are
+// parsed but never compared). Fixtures, records, and vendored files arrive
+// as closed maps, so this module performs no filesystem IO and never contacts
+// a catalog's origin.
 import { BOUNDS } from "./contract";
 import { asDigest, digestCanonical, type Digest } from "./digest";
 import { scriptedExecutor } from "./effects";
@@ -20,7 +22,7 @@ import { MemoryStore } from "./store-memory";
 import { compareUtf8, utf8Length } from "./utf8";
 import { asArray, asInt, asObject, asString, noUnknownKeys, optField, reqField, type JsonObject, type JsonValue } from "./values";
 import {
-  checkVendoredFiles, parseVendorRecord, vendorDifferenceList, vendorOrigin, vendorPath, vendorRecordToJson, VENDOR_BOUNDS, VENDOR_RECORD_FILE,
+  checkVendoredFiles, parseVendorRecord, registryOrigins, vendorDifferenceList, vendorOrigin, vendorPath, vendorRecordToJson, VENDOR_BOUNDS, VENDOR_RECORD_FILE, VENDOR_REGISTRY_BOUNDS,
   type VendoredSources, type VendorRecord,
 } from "./vendor-record";
 
@@ -41,6 +43,8 @@ export const SOURCE_LOCK_BOUNDS = Object.freeze({
   maxVersions: 16,
   /** Vendored directories, each above at least one of the project's files. */
   maxVendored: VENDOR_BOUNDS.maxDirectories,
+  /** Named catalog addresses; they are recorded, not verified. */
+  maxRegistries: VENDOR_REGISTRY_BOUNDS.maxRegistries,
   evaluation: Object.freeze({
     maxCases: 16,
     /** UTF-8 bytes of one fixture's JSON text; the per-file source limit. */
@@ -101,6 +105,10 @@ export type SourceLock = {
   readonly versions?: Readonly<Record<string, Digest>>;
   /** Vendored directories above the project's files, sorted by directory. */
   readonly vendored?: readonly SourceLockVendored[];
+  /** Named catalog addresses (`algal.registries.v1` names): they say where
+   * `vendor` commands may fetch, carry no executable content, and are never
+   * part of the verified pin. */
+  readonly registries?: Readonly<Record<string, string>>;
 };
 /** One requested case, as `lock --evaluation` reads it. Paths are project-relative keys into `fixtures`. */
 export type SourceLockCase = {
@@ -119,6 +127,10 @@ export type SourceLockOptions = {
   /** Records and listed files of the vendored directories above the project's
    * files (`loadVendoredSources`). Each copy must still match its record. */
   readonly vendored?: VendoredSources;
+  /** Named catalog addresses to record on the lock (the `registries` field of
+   * an `algal.registries.v1` file). Advisory naming data: `verify` parses it
+   * strictly but never compares it, since it cannot be derived from source. */
+  readonly registries?: Readonly<Record<string, string>>;
 };
 export type SourceLockVerifyOptions = {
   /** Replay every pinned case offline against this closed map of the lock's fixture paths → JSON text. */
@@ -387,6 +399,9 @@ export async function createSourceLock(source: string, sourceOptions?: SourceCom
   const labels = suppliedVersions === undefined ? undefined : versionLabels(boundedJsonSnapshot(suppliedVersions, SOURCE_LOCK_BOUNDS.lock, "source lock versions"), "source lock versions");
   const suppliedVendored: unknown = options.vendored;
   const vendoredInput = suppliedVendored === undefined ? [] : vendoredInputs(suppliedVendored);
+  const suppliedRegistries: unknown = options.registries;
+  const registries = suppliedRegistries === undefined ? undefined
+    : registryOrigins(boundedJsonSnapshot(suppliedRegistries, SOURCE_LOCK_BOUNDS.lock, "source lock registries"), "source lock registries");
   const compilation = prepared === undefined ? undefined : compileSource(source, sourceOptions ?? {});
   const lock = lockFromReport(await createSourceDependencyReport(source, sourceOptions === undefined ? {} : { sourceOptions }));
   if (lock.modules.length > SOURCE_LOCK_BOUNDS.maxModules) throw new AlgalError("BUDGET_EXHAUSTED", `source lock: closure exceeds ${SOURCE_LOCK_BOUNDS.maxModules} modules`);
@@ -417,7 +432,7 @@ export async function createSourceLock(source: string, sourceOptions?: SourceCom
   }
   return freezeDeep({
     ...lock, ...(evaluation === undefined ? {} : { evaluation }), ...(labels === undefined ? {} : { versions: labels }),
-    ...(vendored === undefined ? {} : { vendored }),
+    ...(vendored === undefined ? {} : { vendored }), ...(registries === undefined ? {} : { registries }),
   });
 }
 
@@ -485,13 +500,14 @@ function parseVendored(value: unknown, units: readonly SourceLockUnit[]): Source
  * digest shapes, sorted unique units and modules, an entry unit that carries
  * the root digest, interfaces covering exactly the root and its modules,
  * sorted uniquely named evaluation cases, version labels whose digests are in
- * the closure, and sorted vendored directories that each hold a unit. The
- * result is fresh, frozen data.
+ * the closure, sorted vendored directories that each hold a unit, and an
+ * optional bounded map of registry names to origins. The result is fresh,
+ * frozen data.
  */
 export function parseSourceLock(value: unknown): SourceLock {
   const data = boundedJsonSnapshot(value, SOURCE_LOCK_BOUNDS.lock, "source lock");
   const object = asObject(data, "source lock");
-  noUnknownKeys(object, ["contract", "entry", "compiler", "units", "root", "modules", "analysis", "interfaces", "evaluation", "versions", "vendored"], "source lock");
+  noUnknownKeys(object, ["contract", "entry", "compiler", "units", "root", "modules", "analysis", "interfaces", "evaluation", "versions", "vendored", "registries"], "source lock");
   if (object.contract !== SOURCE_LOCK_CONTRACT) throw new AlgalError("PARSE_FAILED", `source lock: expected contract "${SOURCE_LOCK_CONTRACT}"`);
   const entry = sourceKey(reqField(object, "entry", "source lock"), "source lock entry");
   const compilerObject = asObject(reqField(object, "compiler", "source lock"), "source lock compiler");
@@ -545,10 +561,12 @@ export function parseSourceLock(value: unknown): SourceLock {
   const versions = versionsValue === undefined ? undefined : versionLabels(versionsValue, "source lock versions", new Set([root, ...modules]));
   const vendoredValue = optField(object, "vendored");
   const vendored = vendoredValue === undefined ? undefined : parseVendored(vendoredValue, units);
+  const registriesValue = optField(object, "registries");
+  const registries = registriesValue === undefined ? undefined : registryOrigins(registriesValue, "source lock registries");
   return freezeDeep({
     contract: SOURCE_LOCK_CONTRACT, entry, compiler, units, root, modules, analysis, interfaces,
     ...(evaluation === undefined ? {} : { evaluation }), ...(versions === undefined ? {} : { versions }),
-    ...(vendored === undefined ? {} : { vendored }),
+    ...(vendored === undefined ? {} : { vendored }), ...(registries === undefined ? {} : { registries }),
   });
 }
 
@@ -572,6 +590,7 @@ export function sourceLockToJson(lock: SourceLock): JsonObject {
     ...(lock.vendored === undefined ? {} : {
       vendored: lock.vendored.map(pin => ({ directory: pin.directory, origin: pin.origin, catalog: pin.catalog, entry: pin.entry, record: pin.record })),
     }),
+    ...(lock.registries === undefined ? {} : { registries: { ...lock.registries } }),
   };
 }
 

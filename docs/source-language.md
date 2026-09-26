@@ -941,6 +941,17 @@ the catalog listed. A comment-only edit to a copy therefore moves source
 digests and no executable digest. Records and copied files are read like
 source files, and neither command contacts the catalog's address. A lock pins
 at most 16 vendored directories, and each record lists at most 16 files.
+`vendor check` and `vendor update` are the only commands that contact a
+recorded address again; they are described with
+[`vendor`](library.md#vendor-an-entry-into-another-project).
+
+`--registries registries.json` records named catalog addresses on the lock:
+a JSON file holding an `algal.registries.v1` record, at most 16 names of up
+to 64 characters mapping to the catalog addresses `vendor --from` accepts.
+The optional `registries` field is advisory data for `vendor` commands: it
+is parsed strictly like every other field, but verification does not compare
+it, since it cannot be derived from source. A lock written without it is
+byte-identical to one written before the field existed.
 
 Verification lists drift in this order: entry, compiler, source, unit, root,
 closure, interface, analysis, version, evaluation, and vendor.

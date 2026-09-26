@@ -1,6 +1,7 @@
 // The `algal.vendor.v1` record: which shared-catalog entry a project copied,
-// where the catalog page came from, and the digests its files must keep. This
-// module parses and checks records, and reads them with the files they list
+// where the catalog page came from, and the digests its files must keep, plus
+// the `algal.registries.v1` list of named catalog addresses. This module
+// parses and checks records, and reads them with the files they list
 // beneath a project root through the source loader's guarded reads. It never
 // uses the network: `vendor.ts` alone reads a catalog page, and
 // `source-lock.ts` pins records and checks them offline.
@@ -17,6 +18,20 @@ import { asArray, asObject, asString, noUnknownKeys, reqField, type JsonObject, 
 export const VENDOR_CONTRACT = "algal.vendor.v1" as const;
 /** The record's file name inside a vendored directory, where `lock` finds it. */
 export const VENDOR_RECORD_FILE = "algal.vendor.json" as const;
+/** Named catalog addresses a project may pin in its lock, so `vendor` and
+ * `vendor check` can reference `--from <name>` instead of repeating a URL. */
+export const VENDOR_REGISTRIES_CONTRACT = "algal.registries.v1" as const;
+/** The conventional file name for a project's registry list: `algal vendor
+ * --from` and `vendor check --from` read it beneath the project root. */
+export const VENDOR_REGISTRIES_FILE = "algal.registries.json" as const;
+export const VENDOR_REGISTRY_BOUNDS = Object.freeze({
+  /** Named origins one project may carry. */
+  maxRegistries: 16,
+  /** Characters of a registry name. */
+  maxNameLength: 64,
+  /** Own-data limits for an `algal.registries.v1` value and bytes of its file. */
+  record: Object.freeze({ maxBytes: 16_384, maxDepth: 4, maxNodes: 128, maxEntries: 18, maxStringBytes: 1_024 }),
+});
 export const VENDOR_BOUNDS = Object.freeze({
   /** The entry and every entry it depends on: a source project's file limit. */
   maxFiles: SOURCE_PROJECT_BOUNDS.maxFiles,
@@ -233,4 +248,67 @@ export async function loadVendoredSources(root: string, keys: readonly string[])
   }
   const files = await loadSourceFiles(root, [...listed], VENDOR_BOUNDS.maxFileBytes, { noun: "vendored file", missing: "skip" });
   return { records, files };
+}
+
+/** A project's named catalog addresses: the `algal.registries.v1` record behind
+ * `algal.registries.json`. Names are for people and commands; every consumer
+ * still fetches the URL the name resolves to under the vendor bounds. */
+export type VendorRegistries = {
+  readonly contract: typeof VENDOR_REGISTRIES_CONTRACT;
+  /** Name → catalog origin (an https URL or a file URL for a local page). */
+  readonly registries: Readonly<Record<string, string>>;
+};
+
+const REGISTRY_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+/** A registry name → origin map, as the record body and the lock's optional
+ * `registries` field share it. */
+export function registryOrigins(value: unknown, what: string): Record<string, string> {
+  const object = asObject(value, what);
+  const names = Object.keys(object);
+  if (names.length === 0) throw new AlgalError("PARSE_FAILED", `${what} must name at least one registry`);
+  if (names.length > VENDOR_REGISTRY_BOUNDS.maxRegistries) throw new AlgalError("BUDGET_EXHAUSTED", `${what} exceed ${VENDOR_REGISTRY_BOUNDS.maxRegistries} registries`);
+  const out: Record<string, string> = {};
+  for (const name of names) {
+    if (name.length > VENDOR_REGISTRY_BOUNDS.maxNameLength || !REGISTRY_NAME.test(name)) {
+      throw new AlgalError("PARSE_FAILED", `registry name ${JSON.stringify(name)} must be a plain token of letters, digits, ".", "_", or "-"`);
+    }
+    out[name] = vendorOrigin(object[name], `${what} ${name}`);
+  }
+  return out;
+}
+
+/** Parse foreign registry data strictly: the contract, then a bounded map of
+ * token names to normalized origins. The result is fresh, frozen data. */
+export function parseVendorRegistries(value: unknown, label = "vendor registries"): VendorRegistries {
+  const object = asObject(boundedJsonSnapshot(value, VENDOR_REGISTRY_BOUNDS.record, label), label);
+  noUnknownKeys(object, ["contract", "registries"], label);
+  if (object.contract !== VENDOR_REGISTRIES_CONTRACT) throw new AlgalError("PARSE_FAILED", `${label}: expected contract "${VENDOR_REGISTRIES_CONTRACT}"`);
+  const registries = registryOrigins(reqField(object, "registries", label), `${label} registries`);
+  return freezeDeep({ contract: VENDOR_REGISTRIES_CONTRACT, registries });
+}
+
+export function vendorRegistriesToJson(registries: VendorRegistries): JsonObject {
+  return { contract: registries.contract, registries: { ...registries.registries } };
+}
+
+/** Read `algal.registries.json` beneath a canonical project root through the
+ * source loader's guarded reads; absent file, absent result. Nothing is
+ * fetched: the file only names addresses a later vendor command may fetch. */
+export async function readVendorRegistries(root: string): Promise<VendorRegistries | undefined> {
+  const files = await loadSourceFiles(root, [VENDOR_REGISTRIES_FILE], VENDOR_REGISTRY_BOUNDS.record.maxBytes, { noun: "vendor registries", missing: "skip" });
+  const text = files[VENDOR_REGISTRIES_FILE];
+  if (text === undefined) return undefined;
+  let value: unknown;
+  try { value = JSON.parse(text); } catch { throw new AlgalError("PARSE_FAILED", `${VENDOR_REGISTRIES_FILE} is not valid JSON`); }
+  return parseVendorRegistries(value, VENDOR_REGISTRIES_FILE);
+}
+
+/** Resolve a `--from` name to its catalog origin, or refuse with the names on file. */
+export function vendorRegistryOrigin(registries: VendorRegistries, name: string): string {
+  const origin = registries.registries[name];
+  if (origin === undefined) {
+    const known = Object.keys(registries.registries).sort(compareUtf8).join(", ");
+    throw new AlgalError("PARSE_FAILED", `no registry named ${JSON.stringify(name)}; ${VENDOR_REGISTRIES_FILE} names ${known.length === 0 ? "none" : known}`);
+  }
+  return origin;
 }

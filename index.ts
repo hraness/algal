@@ -25,10 +25,12 @@ export type { SourceDependencyApplication, SourceDependencyApplicationActivation
 export { createSourceLock, parseSourceLock, parseSourceLockCases, renderSourceLockVerification, sourceLockFixtureKeys, sourceLockToJson, verifySourceLock, SOURCE_LOCK_BOUNDS, SOURCE_LOCK_CONTRACT, SOURCE_LOCK_VERIFICATION_CONTRACT } from "./src/source-lock";
 export type { SourceLock, SourceLockCase, SourceLockDrift, SourceLockDriftKind, SourceLockEvaluation, SourceLockEvaluationCase, SourceLockFixture, SourceLockOptions, SourceLockUnit, SourceLockVerification, SourceLockVerifyOptions } from "./src/source-lock";
 export type { SourceLockVendored } from "./src/source-lock";
-export { checkVendoredFiles, loadVendoredSources, parseVendorRecord, vendorRecordToJson, VENDOR_BOUNDS, VENDOR_CONTRACT, VENDOR_RECORD_FILE } from "./src/vendor-record";
-export type { VendorDifference, VendoredSources, VendorFile, VendorRecord } from "./src/vendor-record";
-export { vendorCatalogEntry, VENDOR_FETCH_BOUNDS } from "./src/vendor";
-export type { VendorOptions } from "./src/vendor";
+export { checkVendoredFiles, loadVendoredSources, parseVendorRecord, parseVendorRegistries, readVendorRegistries, registryOrigins, vendorRecordToJson, vendorRegistriesToJson, vendorRegistryOrigin, VENDOR_BOUNDS, VENDOR_CONTRACT, VENDOR_RECORD_FILE, VENDOR_REGISTRIES_CONTRACT, VENDOR_REGISTRIES_FILE, VENDOR_REGISTRY_BOUNDS } from "./src/vendor-record";
+export type { VendorDifference, VendoredSources, VendorFile, VendorRecord, VendorRegistries } from "./src/vendor-record";
+export { vendorCatalogEntry, openVendorCatalog, VENDOR_FETCH_BOUNDS } from "./src/vendor";
+export type { VendorCatalog, VendorFetchContext, VendorOptions } from "./src/vendor";
+export { catalogForOrigin, checkVendoredCatalogs, parseVendorCheck, parseVendorUpdate, proposeVendorUpdate, renderVendorCheck, vendorCheckToJson, vendorUpdateToJson, VENDOR_CHECK_BOUNDS, VENDOR_CHECK_CONTRACT, VENDOR_CHECK_STATUSES, VENDOR_UPDATE_CONTRACT } from "./src/vendor-registry";
+export type { VendorCheck, VendorCheckEntry, VendorCheckOptions, VendorCheckStatus, VendorUpdate, VendorUpdateOptions } from "./src/vendor-registry";
 export { createProgramDiagram, renderMermaid, renderSvg } from "./src/diagram";
 export type { ProgramDiagram, DiagramOptions, DiagramNode, DiagramEdge, SvgDiagramOptions } from "./src/diagram";
 export { compareLibraryRevision, verifyLibraryComparison } from "./src/library-compare";

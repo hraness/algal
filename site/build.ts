@@ -565,7 +565,7 @@ const DOC_GROUPS: { title: string; pages: string[] }[] = [
   { title: "Applications and workflows", pages: ["use-cases", "when-algal-wins", "browser-grow", "browser-tasks", "browser-inference", "malleable-site", "malleable-workbench", "local-triage", "adaptive-inventory", "agent-tool", "coding-harness", "coding-operations", "pr-shepherd"] },
 ];
 const DOC_SLUGS = DOC_GROUPS.flatMap(group => group.pages);
-const SPEC_SLUGS = ["organism", "expr", "foundry", "search", "bench", "mailbox", "process", "process-evidence", "process-journal", "application", "coding-job", "coding-job-v2", "coding-operation", "replay"];
+const SPEC_SLUGS = ["organism", "expr", "foundry", "search", "bench", "mailbox", "process", "process-evidence", "process-journal", "application", "coding-job", "coding-job-v2", "coding-operation", "replay", "vendor"];
 const GITHUB_BLOB = (path: string) => `https://github.com/hraness/algal/blob/main/${path}`;
 
 /** Resolve a markdown link from a mirrored file to a site URL or the
