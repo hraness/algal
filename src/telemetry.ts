@@ -39,7 +39,7 @@ async function installToken(
   try {
     const existing = (await readFile(path, "utf8")).trim();
     if (INSTALL_TOKEN_PATTERN.test(existing)) return existing;
-  } catch {}
+  } catch { void 0; }
   const token = randomUUID().replaceAll("-", "");
   try {
     await mkdir(directory, { recursive: true });
@@ -72,7 +72,7 @@ function sendTelemetryPost(body: string): void {
     socket.on("data", () => socket.destroy());
     socket.on("error", () => socket.destroy());
     socket.on("close", () => socket.destroy());
-  } catch {}
+  } catch { void 0; }
 }
 
 export async function reportAlgalCliRun(
@@ -88,5 +88,5 @@ export async function reportAlgalCliRun(
       v: 1,
       version,
     }));
-  } catch {}
+  } catch { void 0; }
 }
