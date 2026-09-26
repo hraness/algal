@@ -164,24 +164,34 @@ export type ExperimentTaskSet = {
 };
 
 export function parseExperimentTask(value: unknown, at = "task"): ExperimentTask {
-  const v = closed(boundedJsonSnapshot(value, EXPERIMENT_BOUNDS.record, at), ["taskId", "phase", "spec", "args"], [], at);
+  const raw = asObject(value, `experiment ${at}`);
+  // `spec` and `args` carry task data that nests legitimately past the shared
+  // record depth; each re-parses under the deeper `spec` bound.
+  const shallow: Record<string, unknown> = { ...raw };
+  for (const key of ["spec", "args"] as const) {
+    if (Object.hasOwn(shallow, key)) shallow[key] = true;
+  }
+  const v = closed(boundedJsonSnapshot(shallow, EXPERIMENT_BOUNDS.record, at), ["taskId", "phase", "spec", "args"], [], at);
   return {
     taskId: label(v.taskId, `${at}.taskId`),
     phase: phase(v.phase, `${at}.phase`),
-    spec: boundedJsonSnapshot(v.spec, EXPERIMENT_BOUNDS.spec, `${at}.spec`),
-    args: valueMap(v.args, `${at}.args`),
+    spec: boundedJsonSnapshot(raw.spec, EXPERIMENT_BOUNDS.spec, `${at}.spec`),
+    args: valueMap(raw.args, `${at}.args`),
   };
 }
 
 export function parseExperimentTaskSet(value: unknown): ExperimentTaskSet {
-  const v = closed(boundedJsonSnapshot(value, EXPERIMENT_BOUNDS.record, "task set"), ["contract", "tasks"], [], "task set");
+  const raw = asObject(value, "experiment task set");
+  const shallow: Record<string, unknown> = { ...raw };
+  if (Object.hasOwn(shallow, "tasks")) shallow.tasks = true;
+  const v = closed(boundedJsonSnapshot(shallow, EXPERIMENT_BOUNDS.record, "task set"), ["contract", "tasks"], [], "task set");
   if (v.contract !== EXPERIMENT_TASKS_CONTRACT) fail(`contract must be ${EXPERIMENT_TASKS_CONTRACT}`);
-  if (!Array.isArray(v.tasks) || v.tasks.length === 0 || v.tasks.length > EXPERIMENT_BOUNDS.maxTasks) {
+  if (!Array.isArray(raw.tasks) || raw.tasks.length === 0 || raw.tasks.length > EXPERIMENT_BOUNDS.maxTasks) {
     fail(`tasks must list 1..${EXPERIMENT_BOUNDS.maxTasks} entries`);
   }
   const ids = new Set<string>();
-  const tasks = v.tasks.map((raw, i) => {
-    const task = parseExperimentTask(raw, `tasks[${i}]`);
+  const tasks = raw.tasks.map((entry, i) => {
+    const task = parseExperimentTask(entry, `tasks[${i}]`);
     if (ids.has(task.taskId)) fail(`tasks[${i}] repeats taskId "${task.taskId}"`);
     ids.add(task.taskId);
     return task;

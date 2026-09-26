@@ -361,6 +361,19 @@ describe("experiment arm runner", () => {
       manifest: deep,
     });
     expect(arm.manifest).toBeDefined();
+
+    const set = parseExperimentTaskSet({
+      contract: "algal.experiment-tasks.v1",
+      tasks: [
+        {
+          taskId: "deep-1",
+          phase: "unseen",
+          spec: { nested: { deeper: { still: { going: { here: "yes" } } } } },
+          args: { in: { records: [{ a: { b: { c: { d: 1 } } } }] } },
+        },
+      ],
+    });
+    expect(set.tasks[0]!.taskId).toBe("deep-1");
   });
 
   test("run record parser rejects unknown keys and inconsistent digests", async () => {
