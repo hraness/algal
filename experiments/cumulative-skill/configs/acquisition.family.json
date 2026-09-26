@@ -1,0 +1,18 @@
+{
+  "contract": "algal.experiment-family.v1",
+  "family": "record-triage",
+  "seed": 20260925,
+  "phase": "acquisition",
+  "tasks": 8,
+  "splits": { "train": 24, "validation": 12, "holdout": 12 },
+  "shape": {
+    "classes": [6, 10],
+    "optionalFields": [2, 4],
+    "rules": [5, 9],
+    "decisionLabels": [3, 5],
+    "queueLabels": [3, 5],
+    "summaries": [2, 4],
+    "grader": "mixed",
+    "scorerPassAt": 0.9
+  }
+}

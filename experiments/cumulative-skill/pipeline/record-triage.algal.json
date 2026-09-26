@@ -1,0 +1,105 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:experiment-record-triage",
+  "name": "Record triage task pipeline",
+  "note": "The reference pipeline for algal.experiment-task.v1 tasks: one agent cell assigns each record its taxonomy class, and deterministic expr cells apply the declared rules and summaries. Interface inputs are `records` (the batch) and `spec` (the task statement: taxonomy, recordSchema, rules, outputFormat); the interface output `out` carries {results, summary}.",
+  "budgets": { "maxSteps": 8, "maxAgentCalls": 2, "maxWork": 500000 },
+  "interface": {
+    "inputs": {
+      "records": { "cell": "in", "port": "records" },
+      "spec": { "cell": "in", "port": "spec" }
+    },
+    "outputs": { "out": { "cell": "pack", "port": "out" } }
+  },
+  "cells": [
+    {
+      "id": "in",
+      "kind": "input",
+      "outputs": { "records": "json", "spec": "json" }
+    },
+    {
+      "id": "classify",
+      "kind": "agent",
+      "inputs": { "records": "json", "spec": "json" },
+      "prompt": "Assign each record its issue class. The spec's taxonomy.classes list the valid class ids; each class's about text describes it. Read each record's subject and body and reply with a JSON object mapping every record id to its best-matching class id. Judge from the text alone; the pipeline applies the declared rules afterward.",
+      "view": { "inputs": "*" },
+      "output": { "kind": "json", "schema": { "type": "object" } },
+      "budget": { "maxContextBytes": 200000, "maxOutputBytes": 8192, "maxEffectMs": 120000 }
+    },
+    {
+      "id": "apply",
+      "kind": "expr",
+      "inputs": { "records": "json", "spec": "json", "labels": "json" },
+      "expr": {
+        "contract": "algal.expr.v1",
+        "program": [
+          "map", ["get", "records"], "r",
+          ["merge",
+            { "recordId": ["get", "r", "id"], "label": ["get", "labels", ["get", "r", "id"]] },
+            ["fold", ["get", "spec", "rules"], {}, "acc", "rule",
+              ["if",
+                ["fold", ["keys", ["get", "rule", "when"]], true, "ok", "slot",
+                  ["and", ["get", "ok"],
+                    ["let", "c", ["get", "rule", "when", ["get", "slot"]],
+                      ["let", "sv", ["if", ["eq", ["get", "slot"], "label"], ["get", "labels", ["get", "r", "id"]], ["get", "r", ["get", "slot"]]],
+                        ["if", ["isMap", ["get", "c"]],
+                          ["if", ["has", ["get", "c"], "in"],
+                            ["contains", ["get", "c", "in"], ["get", "sv"]],
+                            ["and",
+                              ["if", ["has", ["get", "c"], "min"], ["gte", ["get", "sv"], ["get", "c", "min"]], true],
+                              ["if", ["has", ["get", "c"], "max"], ["lte", ["get", "sv"], ["get", "c", "max"]], true],
+                              ["if", ["has", ["get", "c"], "eq"], ["eq", ["get", "sv"], ["get", "c", "eq"]], true]]],
+                          ["eq", ["get", "c"], ["get", "sv"]]]]]]],
+                ["merge", ["get", "acc"], ["get", "rule", "then"]],
+                ["get", "acc"]]]]]
+      },
+      "output": { "kind": "json", "schema": { "type": "array" } }
+    },
+    {
+      "id": "summarize",
+      "kind": "expr",
+      "inputs": { "results": "json", "spec": "json" },
+      "expr": {
+        "contract": "algal.expr.v1",
+        "program": [
+          "map", ["get", "spec", "outputFormat", "summaries"], "sname",
+          ["if", ["eq", ["get", "sname"], "total"],
+            { "name": "total", "counts": ["list", { "key": "records", "count": ["len", ["get", "results"]] }] },
+            ["if", ["eq", ["get", "sname"], "perLabel"],
+              {
+                "name": "perLabel",
+                "counts": ["map", ["get", "spec", "taxonomy", "classes"], "c",
+                  { "key": ["get", "c", "id"], "count": ["len", ["filter", ["get", "results"], "r", ["eq", ["get", "r", "label"], ["get", "c", "id"]]]] }]
+              },
+              ["let", "fld", ["if", ["eq", ["get", "sname"], "perDecision"], "decision", ["if", ["eq", ["get", "sname"], "perPriority"], "priority", "queue"]],
+                {
+                  "name": ["get", "sname"],
+                  "counts": ["map", ["get", "spec", "outputFormat", "fields", ["get", "fld"]], "L",
+                    { "key": ["get", "L"], "count": ["len", ["filter", ["get", "results"], "r", ["eq", ["get", "r", ["get", "fld"]], ["get", "L"]]]] }]
+                }]]]]
+      },
+      "output": { "kind": "json", "schema": { "type": "array" } }
+    },
+    {
+      "id": "pack",
+      "kind": "expr",
+      "inputs": { "results": "json", "summary": "json" },
+      "expr": {
+        "contract": "algal.expr.v1",
+        "program": { "results": ["get", "results"], "summary": ["get", "summary"] }
+      },
+      "output": { "kind": "json", "schema": { "type": "object" } }
+    }
+  ],
+  "edges": [
+    { "from": { "cell": "in", "port": "records" }, "to": { "cell": "classify", "port": "records" } },
+    { "from": { "cell": "in", "port": "spec" }, "to": { "cell": "classify", "port": "spec" } },
+    { "from": { "cell": "in", "port": "records" }, "to": { "cell": "apply", "port": "records" } },
+    { "from": { "cell": "in", "port": "spec" }, "to": { "cell": "apply", "port": "spec" } },
+    { "from": { "cell": "classify", "port": "out" }, "to": { "cell": "apply", "port": "labels" } },
+    { "from": { "cell": "apply", "port": "out" }, "to": { "cell": "summarize", "port": "results" } },
+    { "from": { "cell": "in", "port": "spec" }, "to": { "cell": "summarize", "port": "spec" } },
+    { "from": { "cell": "apply", "port": "out" }, "to": { "cell": "pack", "port": "results" } },
+    { "from": { "cell": "summarize", "port": "out" }, "to": { "cell": "pack", "port": "summary" } }
+  ]
+}
