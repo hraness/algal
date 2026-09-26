@@ -653,6 +653,11 @@ pub struct Host {
     pub entries: Vec<(String, Backend)>,
     pub tools: BTreeMap<String, Tool>,
     pub mailbox: Option<MailboxService>,
+    /// Deterministic in-memory mailbox service used by ordering exploration:
+    /// capability handles derive from the scenario by digest, and the
+    /// `mailbox.send.v1`/`mailbox.receive.v1` tools route to it when set.
+    pub ordering_mailboxes:
+        Option<std::sync::Arc<std::sync::Mutex<crate::ordering::OrderingMailboxes>>>,
     /// Consumable scripted-response queues; `Arc`-shared like `replay`.
     queues: SharedQueues,
     executors: Vec<(String, RegisteredExecutor)>,
@@ -661,6 +666,10 @@ pub struct Host {
     /// Resume mode: a replay digest miss falls through to live executor
     /// routing instead of failing unbound. Strict verify leaves this off.
     pub replay_fallthrough: bool,
+    /// Counterfactual replay: tool requests never reach a live tool. A tool
+    /// replay miss fails EFFECT_UNBOUND even with `replay_fallthrough` set —
+    /// generic effects may still fall through to live executors.
+    pub replay_tools_strict: bool,
     pub permissions: Option<crate::acp::PermissionBroker>,
     pub updates: Option<tokio::sync::mpsc::Sender<crate::acp::AgentUpdate>>,
     pub permission_scope: String,
@@ -860,7 +869,9 @@ impl Host {
         self.replay.is_some() || !self.entries.is_empty() || !self.executors.is_empty()
     }
 
-    pub fn install_mailboxes(&mut self, service: MailboxService) -> Result<()> {
+    /// Install the `mailbox.send.v1`/`mailbox.receive.v1` tool signatures.
+    /// Shared by the filesystem driver and the deterministic ordering driver.
+    fn install_mailbox_tools(&mut self) -> Result<()> {
         if self.tools.contains_key(MAILBOX_SEND_TOOL)
             || self.tools.contains_key(MAILBOX_RECEIVE_TOOL)
         {
@@ -907,7 +918,24 @@ impl Host {
                 configuration_digest: Some(digest(&json!({"contract":"algal.process-tool-binding.v1","tool":MAILBOX_RECEIVE_TOOL,"driver":"builtin"}))?),
             },
         );
+        Ok(())
+    }
+
+    pub fn install_mailboxes(&mut self, service: MailboxService) -> Result<()> {
+        self.install_mailbox_tools()?;
         self.mailbox = Some(service);
+        Ok(())
+    }
+
+    /// Ordering exploration installs its deterministic in-memory mailbox
+    /// service: identical tool signatures, scenario-derived capability
+    /// handles, no filesystem state.
+    pub fn install_ordering_mailboxes(
+        &mut self,
+        service: std::sync::Arc<std::sync::Mutex<crate::ordering::OrderingMailboxes>>,
+    ) -> Result<()> {
+        self.install_mailbox_tools()?;
+        self.ordering_mailboxes = Some(service);
         Ok(())
     }
 
@@ -986,13 +1014,17 @@ impl Host {
                 if let Some(value) = responses.get(&digest_key) {
                     return Ok((value.clone(), json!({})));
                 }
-                let name = request["cellId"].as_str().unwrap_or("");
-                let value = responses.get(name).ok_or_else(|| {
+                // The reference runtime's miss covers an unlisted cell and a
+                // drained response queue identically — one EFFECT_UNBOUND
+                // message naming the cell and the request it could not answer.
+                let miss = |name: &str| {
                     Error::new(
                         "EFFECT_UNBOUND",
-                        format!("no scripted response for cell {name}"),
+                        format!("no scripted response for cell \"{name}\" (digest {digest_key})"),
                     )
-                })?;
+                };
+                let name = request["cellId"].as_str().unwrap_or("undefined");
+                let value = responses.get(name).ok_or_else(|| miss(name))?;
                 if let Some(queue) = value.as_array() {
                     let key = format!("{id}/{name}");
                     let next = self
@@ -1002,9 +1034,7 @@ impl Host {
                         .entry(key)
                         .or_insert_with(|| queue.iter().cloned().collect())
                         .pop_front()
-                        .ok_or_else(|| {
-                            Error::new("EFFECT_UNBOUND", "scripted response queue exhausted")
-                        })?;
+                        .ok_or_else(|| miss(name))?;
                     Ok((next, json!({})))
                 } else {
                     Ok((value.clone(), json!({})))

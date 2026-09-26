@@ -310,19 +310,27 @@ enum Commands {
         options: Execution,
     },
     /// Run a revised manifest against a recorded run's evidence and emit an
-    /// `algal.replay-comparison.v1` record (TypeScript runtime only).
+    /// `algal.replay-comparison.v1` record.
     Replay {
         /// Run receipt (JSON).
         receipt: PathBuf,
         /// Revised manifest (JSON).
         #[arg(long)]
         with: PathBuf,
+        /// Write the comparison record to this file.
+        #[arg(long)]
+        out: Option<PathBuf>,
+        #[command(flatten)]
+        options: Execution,
     },
     /// Explore bounded mailbox/dispatch orderings of a durable-process
-    /// scenario and emit an `algal.ordering-report.v1` (TypeScript only).
+    /// scenario and emit an `algal.ordering-report.v1`.
     Ordering {
         /// `algal.ordering-scenario.v1` (JSON).
         scenario: PathBuf,
+        /// Write the report to this file.
+        #[arg(long)]
+        out: Option<PathBuf>,
     },
     /// Print a closure bundle: the manifest plus embedded sub-manifests and payloads.
     Pack {
@@ -793,14 +801,18 @@ enum ProcessCommand {
         #[command(flatten)]
         options: Execution,
     },
-    /// Replay a process's latest recorded run under a revised manifest
-    /// (TypeScript runtime only).
+    /// Replay a process's latest recorded run under a revised manifest.
     Replay {
         /// Process name.
         name: String,
         /// Revised manifest (JSON).
         #[arg(long)]
         with: PathBuf,
+        /// Write the comparison record to this file.
+        #[arg(long)]
+        out: Option<PathBuf>,
+        #[command(flatten)]
+        options: Execution,
     },
 }
 
@@ -2388,8 +2400,43 @@ async fn execute(cli: Cli) -> Result<bool> {
                     service.store = store;
                     emit(&service.verify(&name, &host).await?)?;
                 }
-                ProcessCommand::Replay { .. } => {
-                    return Err(algal::habitat_budget::whatif_unsupported());
+                ProcessCommand::Replay {
+                    name,
+                    with,
+                    out,
+                    options,
+                } => {
+                    let (store, host, transports) = prepare(&options, &cli.dir)?;
+                    service.store = store;
+                    let snapshot = service.inspect(&name)?;
+                    let Some(reference) = snapshot.process.receipt.clone() else {
+                        return Err(Error::invalid(format!(
+                            "process \"{name}\" has no recorded run to replay"
+                        )));
+                    };
+                    let head = service.store.get("runs", &reference)?.ok_or_else(|| {
+                        Error::new("STORE_MISS", format!("process receipt {reference} missing"))
+                    })?;
+                    let revision = load(&with, 1_048_576)?;
+                    let override_args = if options.args.is_some() {
+                        Some(args(&options)?)
+                    } else {
+                        None
+                    };
+                    let (comparison, _revised) = algal::replay::compare(
+                        &head,
+                        &revision,
+                        override_args.as_ref(),
+                        &service.store,
+                        &host,
+                        &transports,
+                    )
+                    .await?;
+                    if let Some(path) = out {
+                        std::fs::write(&path, format!("{}\n", canonical(&comparison)?))?;
+                    }
+                    emit(&comparison)?;
+                    return Ok(comparison["verdict"] != "could-not-replay");
                 }
             }
             Ok(true)
@@ -2493,8 +2540,52 @@ async fn execute(cli: Cli) -> Result<bool> {
             emit(&resumed)?;
             Ok(resumed["outcome"] == "complete")
         }
-        Commands::Replay { .. } | Commands::Ordering { .. } => {
-            Err(algal::habitat_budget::whatif_unsupported())
+        Commands::Replay {
+            receipt: file,
+            with,
+            out,
+            options,
+        } => {
+            let receipt = load(&file, 67_108_864)?;
+            let revision = load(&with, 1_048_576)?;
+            let (mut store, host, transports) = prepare(&options, &cli.dir)?;
+            let override_args = if options.args.is_some() {
+                Some(args(&options)?)
+            } else {
+                None
+            };
+            let (comparison, revised) = algal::replay::compare(
+                &receipt,
+                &revision,
+                override_args.as_ref(),
+                &store,
+                &host,
+                &transports,
+            )
+            .await?;
+            if options.write
+                && let Some(revised) = revised
+            {
+                eprintln!("revised receipt  {}", store.put("runs", &revised)?);
+            }
+            if let Some(path) = out {
+                std::fs::write(&path, format!("{}\n", canonical(&comparison)?))?;
+            }
+            emit(&comparison)?;
+            Ok(comparison["verdict"] != "could-not-replay")
+        }
+        Commands::Ordering { scenario, out } => {
+            let scenario = load(&scenario, algal::ordering::MAX_SCENARIO_BYTES)?;
+            // The explorer's evidence sink: every scenario manifest and
+            // dispatch receipt lands in the store under --dir.
+            let mut evidence = Store::open(&cli.dir, true)?;
+            let (report, _receipts) =
+                algal::ordering::explore(&scenario, Some(&mut evidence)).await?;
+            if let Some(path) = out {
+                std::fs::write(&path, format!("{}\n", canonical(&report)?))?;
+            }
+            emit(&report)?;
+            Ok(report["outcome"] == "complete")
         }
         Commands::Suite { examples, modules } => {
             if !examples.is_dir() {

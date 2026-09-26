@@ -118,7 +118,10 @@
   `cargo fmt --all -- --check`. Use `cargo build --locked` followed by
   `bun scripts/native-parity.ts` to compare every bundled example and verify
   receipts in both directions between TypeScript and Rust (it also replays the
-  budgeted foundry and search fixture in `scripts/habitat-budget-fixture.ts`
+  counterfactual `algal.replay-comparison.v1` cases and the bounded
+  `algal.ordering-scenario.v1` explorations through both CLIs with the revised
+  and dispatch receipts cross-verified, and the budgeted foundry and search
+  fixture in `scripts/habitat-budget-fixture.ts`
   through both CLIs, including a round-robin habitat schedule with journal
   resumption checked byte-for-byte),
   and

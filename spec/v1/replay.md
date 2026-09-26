@@ -2,7 +2,7 @@
 
 Because a run replays bit-for-bit, two questions become runtime operations with recorded evidence: what would a revised manifest have done against the same recorded world, and does a mailbox outcome depend on delivery order. Both produce bounded, parseable records. Neither fabricates evidence: a missing input, capability, or effect is recorded, never synthesized.
 
-These contracts ship in the TypeScript runtime. The native CLI accepts the commands and refuses them explicitly (`replay`, `ordering`, `process replay`); a record cannot be misread as another record.
+These contracts ship in both runtimes. The TypeScript reference CLI and the native CLI run `replay`, `ordering`, and `process replay` and emit byte-identical records for the same inputs; a record cannot be misread as another record. One diagnostic is runtime-local: a `manifest-invalid` reason's `detail` carries the producing runtime's own parse error text, whose wording differs between the parsers, while the verdict, reason code, and digests agree.
 
 ## Replay comparison
 

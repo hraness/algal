@@ -37,13 +37,6 @@ use serde_json::{Map, Value, json};
 use std::{future::Future, pin::Pin};
 
 pub const CONTRACT: &str = "algal.habitat-budget.v1";
-/// The explicit refusal for counterfactual replay and ordering exploration:
-/// the native runtime neither runs nor verifies them.
-pub fn whatif_unsupported() -> Error {
-    Error::invalid(
-        "counterfactual replay and ordering exploration (algal.replay-comparison.v1, algal.ordering-scenario.v1, algal.ordering-report.v1) run in the TypeScript runtime; the native runtime does not run or verify them",
-    )
-}
 /// Admitted runs per account, and the largest `limits.runs`.
 pub const MAX_RUNS: u64 = 4_096;
 /// A manifest's largest `maxWork` and `maxAgentCalls`: the ceiling bounds.
