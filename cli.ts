@@ -272,6 +272,11 @@ usage:
                                               taking turns; --journal resumes an interrupted schedule
   algal foundry schedule-verify <record.json> [--dir <path>]
                                               replay every run a schedule record lists offline
+  algal experiment <config.json> [--responses <file>] [--executor-cmd <command>]
+      [--executors <file>] [--transports <file>] [--tools <file>]
+      [--dir <path>] [--out <record.json>]
+                                              run one experiment arm over a task set and record
+                                              every run against the arm's work account
   algal bench <config.json> [--modules <dir>] [--tools <file>] [--dir <path>] [--out <report.json>]
                                               measure several systems on one workload:
                                               quality, tokens, work, per-model attribution,
@@ -2340,6 +2345,61 @@ async function main(): Promise<number> {
       }
       out(report as unknown as JsonObject);
       return report.contract === HABITAT_BUDGET_CONTRACT ? 1 : 0;
+    }
+
+    case "experiment": {
+      const file = positional[0];
+      if (!file) usageError("algal experiment <config.json>");
+      const { parseExperimentArm, parseExperimentTaskSet, runExperimentArm } = await import("./src/experiment-run");
+      const configFile = resolve(file);
+      const config = asRecord(await readJson(configFile), "experiment config");
+      const unknown = Object.keys(config).filter((k) => !["contract", "arm", "tasks"].includes(k));
+      if (unknown.length > 0) {
+        throw new AlgalError("PARSE_FAILED", `experiment config: unknown key "${unknown[0]}"`);
+      }
+      if (config.contract !== "algal.experiment.config.v1") {
+        throw new AlgalError("PARSE_FAILED", "experiment config.contract must be algal.experiment.config.v1");
+      }
+      const base = dirname(configFile);
+      // Manifest fields accept an inline manifest or a path the CLI resolves
+      // to one before the record parses.
+      const armRecord = asRecord(config.arm ?? {}, "experiment config.arm");
+      const inline = async (container: JsonObject, key: string) => {
+        const value = container[key];
+        if (typeof value === "string") container[key] = manifestToJson(await readManifest(resolve(base, value)));
+      };
+      await inline(armRecord, "manifest");
+      if (armRecord.generator !== undefined) {
+        const generator = asRecord(armRecord.generator, "experiment config.arm.generator");
+        await inline(generator, "manifest");
+      }
+      const arm = parseExperimentArm(armRecord);
+      const { tasks } = parseExperimentTaskSet({ contract: "algal.experiment-tasks.v1", tasks: config.tasks });
+      const executors = await resolveExecutors(flags, dir);
+      const transports = flags.transports !== undefined ? await loadTransports(String(flags.transports)) : undefined;
+      const tools = await resolveTools(flags, dir);
+      const result = await runExperimentArm({
+        arm,
+        tasks,
+        fns,
+        store,
+        executors,
+        ...(transports ? { transports } : {}),
+        ...(tools ? { tools } : {}),
+      });
+      if (flags.out !== undefined) {
+        const { writeFile } = await import("node:fs/promises");
+        await writeFile(resolve(String(flags.out)), canonicalize(result.session as unknown as JsonValue));
+      }
+      out({
+        session: result.sessionDigest,
+        outcome: result.session.outcome,
+        arm: result.session.arm,
+        tasks: result.runs.length,
+        budget: result.session.budget,
+        catalog: result.session.catalog,
+      });
+      return result.session.outcome === "complete" ? 0 : 1;
     }
 
     case "bench": {
