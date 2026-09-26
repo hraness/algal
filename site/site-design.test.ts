@@ -101,3 +101,14 @@ test("site copy uses no em dashes", () => {
   const llms = readFileSync(join(SITE, "llms.txt"), "utf8");
   for (const text of [allMarkup, copy, llms]) expect(text).not.toContain("—");
 });
+
+test("the 404 document names no canonical URL and stays out of search indexes", () => {
+  const meta = { path: "/404.html", title: "Page not found · ALGAL", description: SITE_DESCRIPTION, ogTitle: "Page not found · ALGAL" };
+  const missing = pageDocument({ ...meta, page: "not-found" }, "<main id=\"main\"></main>");
+  expect(missing).not.toContain('rel="canonical"');
+  expect(missing).not.toContain('property="og:url"');
+  expect(missing).toContain('<meta name="robots" content="noindex, nofollow">');
+  const home = pageDocument({ ...meta, page: "home", path: "/" }, "<main id=\"main\"></main>");
+  expect(home).toContain('<link rel="canonical" href="https://algal.computer/">');
+  expect(home).toContain('<meta name="robots" content="index, follow">');
+});

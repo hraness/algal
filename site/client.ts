@@ -1,7 +1,12 @@
-import { attachFoil, attachHeroLight } from "@hraness/design-kit/browser";
+import { attachFoil, attachHeroLight, attachStatusPage } from "@hraness/design-kit/browser";
 
 const header = document.querySelector<HTMLElement>(".site-header");
 if (header) attachFoil(header);
+
+// The 404 page: dot-field glyph, "Did you mean" for a mistyped address, and a
+// Back link when the reader came from another page on this site.
+const statusPage = document.querySelector<HTMLElement>(".hraness-status-page");
+if (statusPage) attachStatusPage(statusPage);
 
 // Preserve anchors published on the old single-page site. Fragments never
 // reach the server, so the homepage forwards them to their new sections.
