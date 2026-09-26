@@ -4,7 +4,6 @@
 // accept/reject or semantics divergence in the differential corpus.
 import { utf8Length } from "../../src/utf8";
 import { canonicalBytes } from "../../src/values";
-import type { JsonValue } from "../../src/values";
 import {
   DEFAULT_BUDGETS, SOURCE_LIMITS, fail,
   type Budgets, type Expr, type FieldType, type Module, type Parameter,
@@ -64,7 +63,7 @@ export class Parser {
     }
     this.tokens.push({ kind: "eof", text: "<end>", start: i, end: i });
   }
-  fail(message: string, start: number, end: number): never {
+  fail(message: string, start: number, _end: number): never {
     const prefix = this.source.slice(0, start);
     const line = prefix.split("\n").length;
     const column = start - prefix.lastIndexOf("\n");

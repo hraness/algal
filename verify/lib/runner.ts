@@ -373,13 +373,16 @@ async function executeSuite(root: string, suite: string): Promise<unknown> {
     return { tests: admitSelftestOutput(result), commandResult: result,
       scope: "Staged pinned-toolchain build and theorem audit of the replay model; model-level proof, no production-correspondence claim." };
   }
-  if (suite === "expr-conformance" || suite === "expr-abi") {
-    const files: Record<string, string> = { "expr-conformance": "verify/expr/conformance.test.ts", "expr-abi": "verify/expr/abi.test.ts" };
+  if (suite === "expr-conformance" || suite === "expr-abi" || suite === "source-reference" || suite === "source-differential") {
+    const files: Record<string, string> = { "expr-conformance": "verify/expr/conformance.test.ts", "expr-abi": "verify/expr/abi.test.ts",
+      "source-reference": "verify/source/model.test.ts", "source-differential": "verify/source/differential.test.ts" };
     const command = [process.execPath, "test", "--timeout", "120000", files[suite]!];
     const result = await runCommand(command, root);
     const scopes: Record<string, string> = {
       "expr-conformance": "Seeded catalog agreement among committed WASM, frozen native artifacts and an independent mirror of the Lean model; bounded runtime correspondence, not production translation proof.",
       "expr-abi": "WASM loader boundary checks — module admission, memory bounds, envelope decoding, typed error mapping; boundary conformance, not compiler proof.",
+      "source-reference": "Independent source-semantics interpreter fixtures over the TypeScript model; no manifest translation or production linkage claim.",
+      "source-differential": "Source model versus generated graph execution on authored and seeded programs; bounded correspondence, no refinement proof.",
     };
     return { tests: admitSelftestOutput(result), commandResult: result, scope: scopes[suite] };
   }
@@ -395,7 +398,7 @@ async function executeSuite(root: string, suite: string): Promise<unknown> {
     const { runMutationSuite } = await import("../mutation/adapter");
     return runMutationSuite(root);
   }
-  if (suite === "lean-expr" || suite === "lean-memory" || suite === "lean-admission") {
+  if (suite === "lean-expr" || suite === "lean-memory" || suite === "lean-admission" || suite === "lean-source") {
     const { leanRuntime } = await import("../lean/runtime");
     const runtime = await leanRuntime(root);
     const stage = await mkdtemp(join(tmpdir(), `algal-${suite}-`));
@@ -403,7 +406,9 @@ async function executeSuite(root: string, suite: string): Promise<unknown> {
       ? ["Algal.Expr.Model", "Algal.Expr.Eval", "Algal.Expr.Theorems"]
       : suite === "lean-memory"
         ? ["Algal.Memory.Datalog", "Algal.Memory.Theorems"]
-        : ["Algal.Admission.Model", "Algal.Admission.Theorems"];
+        : suite === "lean-admission"
+          ? ["Algal.Admission.Model", "Algal.Admission.Theorems"]
+          : ["Algal.Source.Model", "Algal.Source.Eval", "Algal.Source.Theorems"];
     try {
       const environment = ["/usr/bin/env", "-i", `HOME=${join(stage, "home")}`, `PATH=${join(runtime.root, "bin")}:/usr/bin:/bin`, "LANG=C", "LC_ALL=C", "TZ=UTC"];
       const commands: CommandResult[] = [];

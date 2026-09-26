@@ -8,9 +8,9 @@ import { utf8Length } from "../../src/utf8";
 import type { JsonObject, JsonValue } from "../../src/values";
 import { canonicalBytes } from "../../src/values";
 import {
-  SOURCE_LIMITS, fail, isTextType,
+  SOURCE_LIMITS, isTextType,
   type FieldType, type PortType, type Record_, type SType, type SourceField,
-  type SourceList, type SourceShape, type SourceType,
+  type SourceShape, type SourceType,
 } from "./model";
 
 export type Reject = (message: string) => never;

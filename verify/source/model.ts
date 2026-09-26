@@ -19,9 +19,13 @@ export const SOURCE_LIMITS = Object.freeze({
   maxTextLength: 1_000_000, // SCHEMA_V3_BOUNDS.maxTextLength
   maxEachItems: 64,         // BOUNDS.maxEachItems
   maxCells: 64, maxEdges: 256, maxIdLength: 64,
-  // manifest budget ceilings mirrored from BOUNDS
+  // manifest budget ceilings mirrored from BOUNDS. `contractMaxDepth` is the
+  // admission ceiling (BOUNDS.maxDepth=8): source `max_depth` parses 0..16
+  // (the expression-depth bound is reused as its range), and admission of
+  // the generated manifest is what rejects 9..16.
+  contractMaxDepth: 8,
   maxSteps: 1024, maxAgentCalls: 64, maxWork: 100_000_000,
-  maxContextBytes: 262_144, maxOutputBytes: 262_144, maxDepth: 8,
+  maxContextBytes: 262_144, maxOutputBytes: 262_144,
 } as const);
 
 export const DEFAULT_BUDGETS = Object.freeze({
@@ -45,9 +49,9 @@ export class SrcError extends Error {
     readonly source?: string,
   ) { super(source === undefined ? message : `${source}: ${message}`); this.name = "SrcError"; }
 }
-export const fail = (phase: "parse" | "check" | "eval" | "load", code: string, message: string, source?: string): never => {
+export function fail(phase: "parse" | "check" | "eval" | "load", code: string, message: string, source?: string): never {
   throw new SrcError(phase, code, message, source);
-};
+}
 
 // ------------------------------------------------------------------ AST ---
 
@@ -114,10 +118,16 @@ export const kebab = (name: string): string => name.toLowerCase().replaceAll("_"
 
 // ------------------------------------------------------------- modules ---
 
+/** Per-expression lowering metadata the interpreter consumes: the generated
+ *  position id for tail expressions, whether a call is wrapped in a trigger
+ *  shim, the resolved binary operator (`+` on statically-text operands lowers
+ *  to `sconcat`), and — for effectful `if`/`match` — the branch index and the
+ *  label set the selector contract enforces. */
+export type SiteInfo = { id?: string; wrap?: boolean; op?: string; branch?: { index: number; labels: string[] } };
+
 /** A statically checked module: the program, its resolved import closure,
- *  and the static call/depth analysis the source semantics itself computes.
- *  `manifest`/`manifestDigest` are attached by the differential harness for
- *  skeleton comparisons; the interpreter never consults them. */
+ *  the static call/depth analysis the source semantics itself computes, and
+ *  the checker's generated-cell outline + site map. */
 export type CheckedModule = {
   key: string;
   module: Module;
@@ -125,6 +135,11 @@ export type CheckedModule = {
   parameters: { name: string; port: PortType; sourceType: SourceType }[];
   output: SourceType;
   analysis: { maxAgentCalls: number; requiredDepth: number };
+  importDepth: number;
+  /** The check outcome: generated-cell outline, call sites, per-node sites. */
+  check?: import("./check").CheckOutcome;
+  /** The port contract the result cell's `out` declares. */
+  resultPort?: PortType;
 };
 
 export type SourceProject = {
@@ -148,6 +163,8 @@ export type SourceOracle = {
   generate: (obs: Extract<SourceObservation, { kind: "generate" }>) => JsonValue;
 };
 
+
+
 /** `missing` models a source value a generated run would never deliver:
  *  an arm cell that stays skipped produces nothing downstream. It is only
  *  reachable through an out-of-labels match discriminant, which static
@@ -156,15 +173,24 @@ export const MISSING: unique symbol = Symbol("algal.source.missing");
 export type Missing = typeof MISSING;
 export type Maybe<T> = T | Missing;
 
+/** The run projection the differential compares: value or typed failure,
+ *  ordered external observations, agent-call and cell-activation counts,
+ *  and whether the interface result was ever produced. */
 export type SourceRun = {
   ok: boolean;
   value?: Maybe<JsonValue>;
+  /** Dynamic failure class; `EXPR_FAILED`, `TYPE_MISMATCH`, `EFFECT_*`,
+   *  `BUDGET_EXHAUSTED`, `DEPTH_EXCEEDED` mirror the receipt's failure code. */
   error?: { code: string; message: string };
   /** Ordered oracle observations actually issued — the source-level effect
    *  trace a generated run's effect events must match. */
   observations: SourceObservation[];
   /** Executor attempts charged — decide and generate each cost one. */
   agentCalls: number;
-  /** True when the run ended with no result value delivered. */
+  /** Cell activations on the selected path — the model's `work.steps`. */
+  steps: number;
+  /** True when the run ended with no result value delivered — the interface
+   *  `result` cell stayed skipped (an undelivered argument or an unselected
+   *  arm). */
   resultAbsent?: boolean;
 };
