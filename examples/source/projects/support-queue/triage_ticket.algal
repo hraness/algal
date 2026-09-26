@@ -7,9 +7,16 @@ program triage_ticket(ticket: json, weights: json, window: json) -> json {
   budget { max_agent_calls: 0, max_depth: 2 }
 
   let priority = call score_task using { task: ticket, weights: weights }
-  let hours_left = call clamp using { value: window - ticket.hours_open, minimum: 0, maximum: window }
+  let hours_left = call clamp
+    using { value: window - ticket.hours_open, minimum: 0, maximum: window }
   let queue = if hours_left == 0 { "overdue" } else {
     if priority >= 10 { "urgent" } else { "standard" }
   }
-  return { id: ticket.id, subject: ticket.subject, priority: priority, hours_left: hours_left, queue: queue }
+  return {
+    id: ticket.id,
+    subject: ticket.subject,
+    priority: priority,
+    hours_left: hours_left,
+    queue: queue,
+  }
 }

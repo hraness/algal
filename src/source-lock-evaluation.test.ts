@@ -115,8 +115,8 @@ test("evaluation drift is its own kind: fixture edits, pinned result edits, beha
   expect(changed.drift.at(-1)!.kind).toBe("evaluation");
   // An equivalent refactor moves digests but reproduces every pinned result.
   const refactor = edit(project, "lib/clamp.algal",
-    "return if value < minimum { minimum } else {\n    if value > maximum { maximum } else { value }\n  }",
-    "return if value > maximum { maximum } else {\n    if value < minimum { minimum } else { value }\n  }");
+    "return if value < minimum { minimum } else { if value > maximum { maximum } else { value } }",
+    "return if value > maximum { maximum } else { if value < minimum { minimum } else { value } }");
   const equivalent = await verify(lock, fixtures, refactor);
   expect(equivalent.ok).toBe(false);
   expect(kinds(equivalent).evaluation).toBeUndefined();

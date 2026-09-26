@@ -7,6 +7,7 @@ export { compileSource, sourceImports, SourceError, SOURCE_BOUNDS, SOURCE_PROJEC
 export type { SourceAnnotation, SourceCallOrigin, SourceCompilation, SourceCompilerOptions, SourceErrorContext, SourceErrorImport, SourceImport, SourceMap, SourcePosition, SourceProjectIndex, SourceSpan } from "./src/source";
 export { createSourceErrorReport, renderSourceError, SOURCE_ERROR_BOUNDS } from "./src/source-errors";
 export type { SourceErrorExcerptLine, SourceErrorReport } from "./src/source-errors";
+export { formatSource } from "./src/source-format";
 export { loadSourceFixtures, loadSourceProject } from "./src/source-project";
 export type { SourceProject, SourceProjectOptions } from "./src/source-project";
 export { diagnoseSource, renderSourceDiagnostics, SOURCE_DIAGNOSTIC_BOUNDS } from "./src/source-diagnostics";

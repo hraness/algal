@@ -85,6 +85,7 @@ inspect receipt evidence, while `verify` separately replays execution.
 ```algal
 program welcome(name: text) -> text {
   budget { max_agent_calls: 0 }
+
   let message = "Hello, " + name
   return message
 }
@@ -119,6 +120,7 @@ contract; it does not imply a successful lookup.
 ```algal
 program quote(order: json) -> json {
   budget { max_agent_calls: 0 }
+
   let subtotal = order.quantity * order.unit_price
   let shipping = if subtotal >= 50 { 0 } else { 5 }
   return { subtotal: subtotal, shipping: shipping, total: subtotal + shipping }
@@ -232,15 +234,10 @@ the imports and before the program, then use a record name as a parameter or
 result type. From the [typed task scorer](../examples/source/projects/typed-tasks/README.md):
 
 ```algal
-record Task {
-  id: text,
-  title: text,
-  urgency: number,
-  impact: number,
-  status: text,
-  notes: text?,
-}
+record Task { id: text, title: text, urgency: number, impact: number, status: text, notes: text? }
+
 record Weights { urgency: number, impact: number }
+
 record Score { id: text, title: text, total: number, ready: boolean }
 
 program score(task: Task, weights: Weights) -> Score {
@@ -275,16 +272,19 @@ each score input, then scores every task with the program above:
 
 ```algal
 record Owner { name: text, team: text in ["design", "platform", "support"] }
+
 record Task {
   id: text,
   title: text,
   urgency: number min 0 max 5,
   impact: number min 0 max 5,
-  status: text in ["open", "blocked", "done"],
+  status: text in ["blocked", "done", "open"],
   owner: Owner,
   notes: text?,
 }
+
 record Weights { urgency: number min 0 max 10, impact: number min 0 max 10 }
+
 record Score { id: text, title: text, total: number, ready: boolean }
 
 program plan(tasks: [Task], weights: Weights) -> [Score] {
@@ -299,7 +299,7 @@ program plan(tasks: [Task], weights: Weights) -> [Score] {
   type, or another list; `[json]` accepts any list. A list type can also be a
   parameter or result type, as `tasks` and the result are here. List items
   cannot be optional.
-- `text in ["open", "blocked", "done"]` and `number in [1, 2, 3]` name the
+- `text in ["blocked", "done", "open"]` and `number in [1, 2, 3]` name the
   allowed values. `integer in [1, 2, 3]` does the same for whole numbers. A
   field with allowed text values has a closed set of labels, so
   `match task.status { open => …, blocked => …, done => … }` must name each
@@ -463,8 +463,8 @@ bindings.
 ```algal
 program draft(email: text, tone: text) -> text {
   budget { max_agent_calls: 1 }
-  return generate "Draft a reply using the requested tone."
-    using { email: email, tone: tone }
+
+  return generate "Draft a reply using the requested tone." using { email: email, tone: tone }
 }
 ```
 
@@ -476,11 +476,8 @@ import draft from "./draft.algal"
 program inbox(sample: text, emails: json) -> json {
   budget { max_agent_calls: 4 }
 
-  let preview = call draft using {
-    email: sample, tone: "helpful"
-  }
-  let replies = each draft over email in emails
-    using { tone: "helpful" } max_items 3
+  let preview = call draft using { email: sample, tone: "helpful" }
+  let replies = each draft over email in emails using { tone: "helpful" } max_items 3
 
   return { preview: preview, replies: replies }
 }
@@ -1048,6 +1045,26 @@ inspection, `createSourceTrace(source, options)` constructs an immutable
 compiler-derived context; `resolveSourcePath(context, path, "cell")` or
 `"invocation"` follows manifest call boundaries and bounded item indices.
 Serialized or modified tracing contexts are not accepted as source evidence.
+
+## Format source
+
+`fmt` rewrites `.algal` files to one canonical layout: two-space indentation,
+at most one blank line, grouped expressions broken only when a line exceeds
+100 columns, and a single trailing newline. Optional semicolons and trailing
+commas that fit on one line are dropped, `match` and `as choice` blocks stay
+broken, and comments are preserved. The result does not depend on the input
+layout, formatting twice changes nothing, and the compiled manifest digest is
+unchanged, so reformatting never alters executable identity.
+
+```sh
+bun cli.ts fmt examples/source/reply.algal            # formatted source to stdout
+bun cli.ts fmt src/ --write                           # rewrite every .algal file
+bun cli.ts fmt src/ --check                           # exit 1 listing non-canonical files
+bun cli.ts fmt examples/source/reply.algal --out reply.algal
+```
+
+`--write` reports only files it changed. `fmt` parses before it writes and
+leaves invalid source untouched; `--check` fits a formatting gate in CI.
 
 ## Scope
 

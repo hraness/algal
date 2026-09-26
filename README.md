@@ -206,7 +206,9 @@ static call with its caller location; the planner reports six modules and
 seven occurrences because its clamp helper is called twice. Given a receipt,
 it also attributes recorded invocations, cells, and work to each call.
 `lock` pins that closure and `lock --verify` reports source, compiler, and
-closure drift offline.
+closure drift offline. `fmt` rewrites source to one canonical layout; it keeps
+comments and the compiled manifest digest, and `--check` exits 1 when a file
+is not canonical.
 
 The [shared program catalog](docs/library.md) lists pure programs that files in
 more than one project call. Its first entries are the planner's scoring and
@@ -273,11 +275,8 @@ import draft from "./draft.algal"
 program inbox(sample: text, emails: json) -> json {
   budget { max_agent_calls: 4 }
 
-  let preview = call draft using {
-    email: sample, tone: "helpful"
-  }
-  let replies = each draft over email in emails
-    using { tone: "helpful" } max_items 3
+  let preview = call draft using { email: sample, tone: "helpful" }
+  let replies = each draft over email in emails using { tone: "helpful" } max_items 3
 
   return { preview: preview, replies: replies }
 }

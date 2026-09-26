@@ -162,7 +162,7 @@ test("the plan's allowed values and bounds are part of its checked interface", a
   const project = await loadSourceProject(planEntry);
   const modules = project.compilerOptions.modules;
   const lock = await createSourceLock(project.source, project.compilerOptions);
-  const widened = project.source.replace('"open", "blocked", "done"', '"open", "blocked", "done", "archived"');
+  const widened = project.source.replace('"blocked", "done", "open"', '"archived", "blocked", "done", "open"');
   const drift = await verifySourceLock(widened, { entry: project.entry, modules: { ...modules, [project.entry]: widened } }, lock);
   expect(drift.ok).toBe(false);
   expect(drift.drift.find(item => item.kind === "interface")).toMatchObject({ subject: "plan.algal" });

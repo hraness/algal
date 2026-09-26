@@ -1,14 +1,9 @@
 // The runtime checks each parameter against its record before this program
 // reads it, and checks the result against Score before returning it.
-record Task {
-  id: text,
-  title: text,
-  urgency: number,
-  impact: number,
-  status: text,
-  notes: text?,
-}
+record Task { id: text, title: text, urgency: number, impact: number, status: text, notes: text? }
+
 record Weights { urgency: number, impact: number }
+
 record Score { id: text, title: text, total: number, ready: boolean }
 
 program score(task: Task, weights: Weights) -> Score {

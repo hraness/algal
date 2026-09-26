@@ -57,11 +57,11 @@ its committed fixture:
 
 | Program | Files | Source bytes | Modules | Call sites | Instances | Cells | Edges | Manifest bytes | Bundle bytes | Attempts | Depth | Steps | Work | Run |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| `task-planning/main` | 6 | 1,818 | 6 | 6 | 7 | 34 | 42 | 13,109 | 12,497 | 0 | 3 | 92 | 9,994 | complete |
-| `task-planning/inspect_task` | 3 | 1,324 | 3 | 4 | 5 | 25 | 34 | 10,446 | 8,410 | 0 | 2 | 25 | 2,671 | complete |
-| `support-queue/main` | 4 | 1,734 | 4 | 5 | 6 | 32 | 43 | 13,236 | 11,275 | 0 | 3 | 84 | 8,964 | complete |
-| `typed-tasks/scores` | 2 | 1,002 | 2 | 1 | 2 | 8 | 9 | 3,858 | 4,145 | 0 | 1 | 14 | 1,603 | complete |
-| `inbox/inbox` | 2 | 517 | 2 | 2 | 3 | 17 | 17 | 5,751 | 4,484 | 4 | 1 | 25 | 5,408 | complete |
+| `task-planning/main` | 6 | 1,808 | 6 | 6 | 7 | 34 | 42 | 13,109 | 12,497 | 0 | 3 | 92 | 9,994 | complete |
+| `task-planning/inspect_task` | 3 | 1,318 | 3 | 4 | 5 | 25 | 34 | 10,446 | 8,410 | 0 | 2 | 25 | 2,671 | complete |
+| `support-queue/main` | 4 | 1,755 | 4 | 5 | 6 | 32 | 43 | 13,236 | 11,275 | 0 | 3 | 84 | 8,964 | complete |
+| `typed-tasks/scores` | 2 | 991 | 2 | 1 | 2 | 8 | 9 | 3,858 | 4,145 | 0 | 1 | 14 | 1,603 | complete |
+| `inbox/inbox` | 2 | 504 | 2 | 2 | 3 | 17 | 17 | 5,751 | 4,484 | 4 | 1 | 25 | 5,408 | complete |
 | `ratios/ratios` | 2 | 334 | 2 | 1 | 2 | 7 | 5 | 2,237 | 2,524 | 0 | 1 | 8 | 837 | `EXPR_FAILED` |
 
 The task planner's clamp helper is two of its seven instances and one of its
@@ -100,8 +100,8 @@ unit and the largest size that compiles; the JSON record has every step.
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 | `table-fan-in` | 1 | 11 | 2,943 | 11 | 21 | 110 | 246 | 147 | 88,077 | 17,462 | 0 | 3 | 246 | 25,560 | complete |
 | `table-fan-in` | 9 | 11 | 3,511 | 11 | 29 | 982 | 2,198 | 1,323 | 788,253 | 23,022 | 0 | 3 | 1,024 | 106,382 | `BUDGET_EXHAUSTED` |
-| `planner-fan-in` | 1 | 7 | 3,307 | 7 | 22 | 98 | 519 | 677 | 202,266 | 30,864 | 0 | 4 | 519 | 55,697 | complete |
-| `planner-fan-in` | 7 | 7 | 3,793 | 7 | 28 | 680 | 3,621 | 4,739 | 1,412,148 | 37,500 | 0 | 4 | 1,024 | 109,810 | `BUDGET_EXHAUSTED` |
+| `planner-fan-in` | 1 | 7 | 3,301 | 7 | 22 | 98 | 519 | 677 | 202,266 | 30,864 | 0 | 4 | 519 | 55,697 | complete |
+| `planner-fan-in` | 7 | 7 | 3,787 | 7 | 28 | 680 | 3,621 | 4,739 | 1,412,148 | 37,500 | 0 | 4 | 1,024 | 109,810 | `BUDGET_EXHAUSTED` |
 | `dense-scorecard` | 1 | 3 | 3,510 | 3 | 5 | 6 | 138 | 1,039 | 166,985 | 59,434 | 0 | 2 | 138 | 19,664 | complete |
 | `dense-scorecard` | 15 | 3 | 4,410 | 3 | 19 | 76 | 2,042 | 15,585 | 2,497,143 | 68,952 | 0 | 2 | 1,024 | 146,349 | `BUDGET_EXHAUSTED` |
 | `record-orders` | 1 | 4 | 5,271 | 4 | 8 | 18 | 310 | 711 | 9,341,738 | 797,340 | 0 | 3 | 310 | 414,602 | complete |
