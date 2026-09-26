@@ -474,6 +474,28 @@ export { parseBenchAxes, parseBenchReport, verifyBenchReport } from "./src/bench
 export type { BenchVerifyReport } from "./src/bench-verify";
 
 export {
+  aggregateExperimentArm,
+  buildExperimentReport,
+  parseSkillExperimentConfig,
+  parseSkillExperimentReport,
+  renderExperimentReport,
+  SKILL_EXPERIMENT_BOUNDS,
+  SKILL_EXPERIMENT_CONFIG_CONTRACT,
+  SKILL_EXPERIMENT_CONTRACT,
+} from "./src/experiment-report";
+export type {
+  SkillExperimentArm,
+  SkillExperimentConfig,
+  SkillExperimentConfigArm,
+  SkillExperimentHoldoutGap,
+  SkillExperimentReport,
+  SkillExperimentReuse,
+  SkillExperimentScore,
+} from "./src/experiment-report";
+export { verifyExperimentReport } from "./src/experiment-verify";
+export type { SkillExperimentVerifyReport } from "./src/experiment-verify";
+
+export {
   evalAxis,
   evalProgram,
   checkProgram,

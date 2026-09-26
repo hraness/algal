@@ -277,6 +277,16 @@ usage:
       [--dir <path>] [--out <record.json>]
                                               run one experiment arm over a task set and record
                                               every run against the arm's work account
+  algal experiment report <config.json> [--dir <path>]
+      [--format json|text] [--out <report.json>]
+                                              aggregate a cumulative-skill study's arms from
+                                              store evidence: sessions, accounts, task records,
+                                              receipts, and the program index's reuse join
+  algal experiment verify <report.json> [--dir <path>]
+                                              re-check every aggregate against the evidence
+                                              the report cites
+  algal experiment inspect <report.json> [--format json|text]
+                                              summarize a skill-experiment report
   algal bench <config.json> [--modules <dir>] [--tools <file>] [--dir <path>] [--out <report.json>]
                                               measure several systems on one workload:
                                               quality, tokens, work, per-model attribution,
@@ -2349,7 +2359,71 @@ async function main(): Promise<number> {
 
     case "experiment": {
       const file = positional[0];
-      if (!file) usageError("algal experiment <config.json>");
+      if (!file) usageError("algal experiment <config.json> | experiment report|verify|inspect <...>");
+      if (file === "report" || file === "verify" || file === "inspect") {
+        const {
+          buildExperimentReport,
+          parseSkillExperimentConfig,
+          parseSkillExperimentReport,
+          renderExperimentReport,
+          SKILL_EXPERIMENT_BOUNDS,
+        } = await import("./src/experiment-report");
+        if (file === "verify") {
+          const reportFile = positional[1];
+          if (!reportFile || positional.length !== 2) {
+            usageError("algal experiment verify <report.json> [--dir <path>]");
+          }
+          for (const key of Object.keys(flags)) {
+            if (!["dir"].includes(key)) usageError(`unknown experiment option --${key}`);
+          }
+          const { verifyExperimentReport } = await import("./src/experiment-verify");
+          const verified = await verifyExperimentReport(
+            await readJsonBounded(resolve(reportFile), SKILL_EXPERIMENT_BOUNDS.maxBytes, "skill experiment report"),
+            dir,
+          );
+          out(verified as unknown as JsonObject);
+          return verified.ok ? 0 : 1;
+        }
+        if (file === "inspect") {
+          const reportFile = positional[1];
+          if (!reportFile || positional.length !== 2) {
+            usageError("algal experiment inspect <report.json> [--format json|text]");
+          }
+          for (const key of Object.keys(flags)) {
+            if (!["format"].includes(key)) usageError(`unknown experiment option --${key}`);
+          }
+          const format = artifactFlag(flags, "format") ?? "json";
+          if (format !== "json" && format !== "text") usageError("--format must be json or text");
+          const report = parseSkillExperimentReport(
+            await readJsonBounded(resolve(reportFile), SKILL_EXPERIMENT_BOUNDS.maxBytes, "skill experiment report"),
+          );
+          await emitArtifact(
+            format === "text" ? renderExperimentReport(report) : canonicalize(report as unknown as JsonValue),
+            undefined,
+          );
+          return 0;
+        }
+        const configFile = positional[1];
+        if (!configFile || positional.length !== 2) {
+          usageError("algal experiment report <config.json> [--dir <path>] [--format json|text] [--out <file>]");
+        }
+        for (const key of Object.keys(flags)) {
+          if (!["dir", "format", "out"].includes(key)) usageError(`unknown experiment option --${key}`);
+        }
+        const format = artifactFlag(flags, "format") ?? "json";
+        if (format !== "json" && format !== "text") usageError("--format must be json or text");
+        const config = parseSkillExperimentConfig(
+          await readJsonBounded(resolve(configFile), SKILL_EXPERIMENT_BOUNDS.maxConfigBytes, "skill experiment config"),
+        );
+        const output = artifactFlag(flags, "out");
+        await distinctArtifactPaths([resolve(configFile)], [output]);
+        const report = await buildExperimentReport(dir, config);
+        await emitArtifact(
+          format === "text" ? renderExperimentReport(report) : canonicalize(report as unknown as JsonValue),
+          output,
+        );
+        return 0;
+      }
       const { parseExperimentArm, parseExperimentTaskSet, runExperimentArm } = await import("./src/experiment-run");
       const configFile = resolve(file);
       const config = asRecord(await readJson(configFile), "experiment config");

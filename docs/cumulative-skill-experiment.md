@@ -98,18 +98,31 @@ unless its marginal cost is small.
 
 ## Method
 
-- Every run is recorded: receipts, accounts, catalogs, and reports live in
-  the store. `algal replay` reproduces any arm's run bit-for-bit.
+- Every run is recorded: `algal experiment <config.json>` runs one arm over
+  its task set and writes an `algal.experiment-session.v1` record naming
+  the arm's `algal.habitat-budget.v1` account, its
+  `algal.experiment-catalog.v1` kept-procedure list, and one
+  `algal.experiment-run.v1` record per task in session order. Receipts,
+  accounts, catalogs, and reports live in the store. `algal replay`
+  reproduces any arm's run bit-for-bit.
 - Harness validation runs use scripted executors (deterministic, free); the
   reported study uses one declared live executor configuration across all
   arms.
-- The study emits a bounded `algal.experiment.v1` report record summarizing
-  per-arm aggregates, checked by a strict parser. The report records inputs
-  and digests; conclusions are prose beside it, scoped to what the record
-  shows.
-- Independent evaluation: held-out scoring is re-verified through the
-  verify path, and manifest runs can be cross-verified by the native
-  runtime where covered.
+- `algal experiment report <config.json>` rolls the study's sessions into a
+  bounded `algal.skill-experiment.v1` report: the config cites each arm's
+  session record, and the rollup re-reads the account, catalog, and task
+  records the session names, reconciles the account against stored receipts
+  and manifests, joins kept manifests to later task receipts through the
+  program index, and recomputes the measures above. The report records
+  counts and digests; conclusions are prose beside it, scoped to what the
+  record shows. `experiment inspect` renders the same record as a table.
+- Independent evaluation: `algal experiment verify` re-derives every
+  reported aggregate from the cited session, account, catalog, and task
+  records, re-opens each promotion's stored evaluation, and flags stored
+  task records a session does not cite; manifest runs can be
+  cross-verified by the native runtime where covered. The run records do
+  not yet carry a human-correction signal, so that pre-registered measure
+  is deferred rather than reported as zero.
 
 ## Status and limits
 

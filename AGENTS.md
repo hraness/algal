@@ -15,7 +15,9 @@
   evaluation and search (`foundry.ts`, `search.ts`) with the habitat-wide
   work account (`habitat-budget.ts`) and its round-robin scheduler and
   resumable journal (`habitat-schedule.ts`), benchmark comparison (`bench.ts`,
-  `bench-verify.ts`), bundles (`bundle.ts`), transports (`transport.ts`),
+  `bench-verify.ts`), the cumulative-skill experiment arm runner and report
+  (`experiment-run.ts`, `experiment-report.ts`, `experiment-verify.ts`),
+  bundles (`bundle.ts`), transports (`transport.ts`),
   the `algal.expr.v1` WASM loader (`expr.ts` + committed `algal_expr.wasm`),
   canonical values and digests, and colocated tests.
 - `crates/algal-expr/` — the one expression evaluator (Rust): linked into
@@ -26,6 +28,7 @@
   `explain`, `dependencies`, `lock`, `vendor`, `diff`, `foundry`, `bench`, `runs`, `digest`, `store`,
   `manifests`, `manifest`, `slots`, `slot`, `mailbox`, `process`, `pack`, `unpack`,
   `application` drain/verify-drain, `library` compare/unseen,
+  `experiment` `<config.json>`/report/verify/inspect,
   `example`, `suite`, `index`, `search`, `auth`, `doctor`).
 - `index.ts` — the package's public surface.
 - `examples/` — bundled manifests and scripted responses used by `suite`.
