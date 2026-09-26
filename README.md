@@ -11,7 +11,8 @@ restart, reuse completed work, or explain what happened without calling the
 model again. Your host application chooses the tools and permissions; the
 program declares its decisions, limits, and approval points. A native Rust
 CLI and a Bun runtime that runs on its own implement the same specifications
-for programs, receipts, and durable processes.
+for programs, receipts, and durable processes. [algal.computer](https://algal.computer)
+has the tour, the docs, and the blog.
 
 Preview: the current native build is
 [v0.2.0-vm.9](https://github.com/hraness/algal/releases) for macOS on Apple
