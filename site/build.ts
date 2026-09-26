@@ -897,8 +897,8 @@ async function emitMarkdownSection(options: {
 
 await emitMarkdownSection({
   dir: "compare", page: "compare", railTitle: "Comparisons", sortBy: "order",
-  indexIntro: { eyebrow: "Comparisons", heading: "Same questions, different machinery.", lede: "LangGraph, DSPy, and Temporal solve problems that overlap with ALGAL's. Each page shows where they differ and when each tool is the better fit." },
-  indexMeta: { title: "Compare ALGAL with agent frameworks, optimizers, and durable execution", description: "How ALGAL, a language and VM whose programs are typed, content-addressed data, compares with LangGraph, DSPy, and Temporal, and when each is the better fit.", ogTitle: "Compare ALGAL" },
+  indexIntro: { eyebrow: "Comparisons", heading: "Same questions, different machinery.", lede: "LangGraph, DSPy, Temporal, Restate, and Inngest solve problems that overlap with ALGAL's. Each page shows where they differ and when each tool is the better fit." },
+  indexMeta: { title: "Compare ALGAL with agent frameworks, optimizers, and durable execution", description: "How ALGAL, a language and VM whose programs are typed, content-addressed data, compares with LangGraph, DSPy, Temporal, Restate, and Inngest, and when each is the better fit.", ogTitle: "Compare ALGAL" },
 });
 // --- Blog ------------------------------------------------------------------
 // Posts render through the shared article layer. Every post is readable at its
