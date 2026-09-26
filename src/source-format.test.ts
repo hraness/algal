@@ -183,6 +183,18 @@ program p(x: R) -> text { budget { max_agent_calls: 0 } return x.s }`;
     }`);
   });
 
+  test("decide as noul stays bare and as score breaks its label list", () => {
+    const noul = formatSource(`program p(x: text) -> json { budget { max_agent_calls: 1 } return decide "keep?" using x as noul }`);
+    expect(noul).toContain(`return decide "keep?" using x
+    as noul\n`);
+    const score = formatSource(`program p(x: text) -> json { budget { max_agent_calls: 1 } return decide "rate?" using x as score {"poor","ok","great"} }`);
+    expect(score).toContain(`as score {
+      "poor",
+      "ok",
+      "great"
+    }`);
+  });
+
   test("generate as type keeps its declared type with the context", () => {
     const formatted = formatSource(`record Reply { verdict: text in ["keep","drop"], note: text } program p(x: text) -> Reply { budget { max_agent_calls: 1 } return generate "judge" using x as Reply }`);
     expect(formatted).toContain(`return generate "judge" using x as Reply\n`);

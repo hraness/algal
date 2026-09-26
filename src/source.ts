@@ -2,6 +2,7 @@
 // source locations and compiler identity stay in a separate, digest-bound map.
 import { BOUNDS, manifestToJson, parseOrganismManifest, type AgentOutput, type Budgets, type Cell, type Edge, type OrganismManifest, type PortMap, type PortType } from "./contract";
 import { digestCanonical, digestText, type Digest } from "./digest";
+import { type DecisionQuestion } from "./decisions";
 import { AlgalError } from "./errors";
 import { SCHEMA_FORMATS, SCHEMA_V3_BOUNDS, schemaFormatMatches, type SchemaFormat, type SchemaVersion } from "./schema";
 import { utf8Length } from "./utf8";
@@ -100,7 +101,11 @@ type Expr = Span & (
   | { kind: "list"; items: Expr[] }
   | { kind: "if"; condition: Expr; yes: Expr; no: Expr }
   | { kind: "match"; value: Expr; arms: [string, Expr][] }
-  | { kind: "decide"; question: string; context: Expr; criteria: [string, string][] }
+  | ({ kind: "decide"; question: string; context: Expr } & (
+    { as: "choice"; criteria: [string, string][] }
+    | { as: "noul" }
+    | { as: "score"; labels: string[] }
+  ))
   | { kind: "generate"; instruction: Expr; context: Expr; as?: FieldType }
   | { kind: "call"; alias: string; args: Expr }
   | { kind: "each"; alias: string; over: string; items: Expr; args: Expr; maxItems: number }
@@ -460,11 +465,23 @@ class Parser {
       return build({ kind: "match", value, arms } as never);
     }
     if (token.text === "decide") {
-      const question = this.string(); const context = (this.expect("using"), this.expression(0, depth + 1)); this.expect("as"); this.expect("choice"); this.expect("{");
-      const criteria = this.list("}", (): [string, string] => { const label = this.name().text; this.expect(":"); return [label, this.string()]; }, SOURCE_BOUNDS.maxChoiceLabels);
-      if (criteria.length === 0) this.fail("a choice needs at least one label", token);
-      this.unique(criteria.map(([label]) => label), "choice label", token);
-      return build({ kind: "decide", question, context, criteria } as never);
+      const question = this.string(); const context = (this.expect("using"), this.expression(0, depth + 1)); this.expect("as"); const form = this.take();
+      if (form.text === "choice") {
+        this.expect("{");
+        const criteria = this.list("}", (): [string, string] => { const label = this.name().text; this.expect(":"); return [label, this.string()]; }, SOURCE_BOUNDS.maxChoiceLabels);
+        if (criteria.length === 0) this.fail("a choice needs at least one label", token);
+        this.unique(criteria.map(([label]) => label), "choice label", token);
+        return build({ kind: "decide", question, context, as: "choice", criteria } as never);
+      }
+      if (form.text === "score") {
+        this.expect("{");
+        const labels = this.list("}", () => this.string(), SOURCE_BOUNDS.maxChoiceLabels);
+        if (labels.length === 0) this.fail("a scored decide needs at least one label", token);
+        this.unique(labels, "score label", token);
+        return build({ kind: "decide", question, context, as: "score", labels } as never);
+      }
+      if (form.text === "noul") return build({ kind: "decide", question, context, as: "noul" } as never);
+      return this.fail("a decide is `as choice { label: \"criterion\" }`, `as score { \"label\" }`, or `as noul`", form);
     }
     if (token.text === "generate") {
       const instruction = this.expression(0, depth + 1); this.expect("using"); const context = this.expression(0, depth + 1);
@@ -492,7 +509,7 @@ class Parser {
 type Type = { kind: "text"; literal?: string } | { kind: "number"; literal?: number } | { kind: "json" | "boolean" | "null" }
   // A list literal knows its `items`; a checked list value knows its declared `item` type.
   | { kind: "list"; items?: Type[]; item?: Type }
-  | { kind: "choice" | "decision"; labels: string[] }
+  | { kind: "choice" | "decision" | "scored"; labels: string[] }
   // A `declared` record value was checked against that record; it may carry undeclared fields.
   | { kind: "record"; fields: Map<string, Type>; declared?: SourceRecord };
 type Reference = { cell: string; port: string; type: Type };
@@ -505,7 +522,7 @@ function output(type: Type): AgentOutput {
   if (type.kind === "choice") return { kind: "choice", labels: type.labels };
   if (isText(type)) return { kind: "text" };
   // The core schema is shallow. Only claim what the expression itself proves.
-  const schema: JsonObject = { type: type.kind === "json" ? ["null", "boolean", "object", "array", "number", "string"] : type.kind === "record" || type.kind === "decision" ? "object" : type.kind === "list" ? "array" : type.kind };
+  const schema: JsonObject = { type: type.kind === "json" ? ["null", "boolean", "object", "array", "number", "string"] : type.kind === "record" || type.kind === "decision" || type.kind === "scored" ? "object" : type.kind === "list" ? "array" : type.kind };
   return { kind: "json", schema };
 }
 /** The output contract a `generate ... as type` declares. Plain text keeps the
@@ -658,13 +675,17 @@ function annotation(title: string, operation: string, summary: string, details: 
 }
 function expressionAnnotation(title: string, expr: Expr, role: string): SourceAnnotation {
   let details: string[] = [];
-  if (expr.kind === "decide") details = expr.criteria.map(([label, description]) => `${label}: ${description}`);
+  if (expr.kind === "decide") details = expr.as === "choice" ? expr.criteria.map(([label, description]) => `${label}: ${description}`) : expr.as === "score" ? [...expr.labels] : [];
   if (expr.kind === "generate") details = [`instruction: ${describe(expr.instruction)}`, `context: ${describe(expr.context)}`, ...(expr.as === undefined ? [] : [`output: ${fieldTypeText(expr.as)}`])];
   if (expr.kind === "match") details = expr.arms.map(([label, arm]) => `${label} => ${describe(arm)}`);
   if (expr.kind === "if") details = [`condition: ${describe(expr.condition)}`, `true => ${describe(expr.yes)}`, `false => ${describe(expr.no)}`];
   if (expr.kind === "call") details = [`arguments: ${describe(expr.args)}`];
   if (expr.kind === "each") details = [`arguments: ${describe(expr.args)}`, `At most ${expr.maxItems} items; ordered results`];
-  if (role === "decision-check") return annotation(title, role, "Validate the declared choice, confidence, and every probability before use.", expr.kind === "decide" ? expr.criteria.map(([label]) => `admitted label: ${label}`) : []);
+  if (role === "decision-check") {
+    const labels = expr.kind === "decide" ? expr.as === "choice" ? expr.criteria.map(([label]) => label) : expr.as === "score" ? expr.labels : [] : [];
+    const what = expr.kind === "decide" && expr.as === "noul" ? "keep probability" : `${expr.kind === "decide" ? expr.as : "choice"}, confidence, and every probability`;
+    return annotation(title, role, `Validate the declared ${what} before use.`, labels.map(label => `admitted label: ${label}`));
+  }
   return annotation(title, role === "expression" ? expr.kind : role, describe(expr), details);
 }
 function hasEffect(expr: Expr): boolean {
@@ -717,7 +738,7 @@ class Compiler {
     if (isText(left) && isText(right)) return { kind: "text" };
     // A merged number or list keeps its kind, not one arm's literal or items.
     if (left.kind === right.kind && (left.kind === "number" || left.kind === "list")) return { kind: left.kind };
-    if (left.kind === right.kind && left.kind !== "decision" && left.kind !== "record") return left;
+    if (left.kind === right.kind && left.kind !== "decision" && left.kind !== "record" && left.kind !== "scored") return left;
     if (!isText(left) && !isText(right)) return { kind: "json" };
     return this.parser.fail("branches must agree on text versus json output", span);
   }
@@ -811,13 +832,17 @@ class Compiler {
             else if (expr.field === "confidence") type = { kind: "number" };
             else if (expr.field === "probabilities") type = { kind: "record", fields: new Map(value.type.labels.map(label => [label, { kind: "number" }])) };
             else this.parser.fail(`unknown decision field ${expr.field}`, expr);
+          } else if (value.type.kind === "scored") {
+            if (expr.field === "score" || expr.field === "confidence") type = { kind: "number" };
+            else if (expr.field === "probabilities") type = { kind: "record", fields: new Map(value.type.labels.map(label => [label, { kind: "number" }])) };
+            else this.parser.fail(`unknown scored decision field ${expr.field}`, expr);
           } else if (value.type.kind === "record") { const known = value.type.fields.get(expr.field); if (!known) this.parser.fail(`unknown record field ${expr.field}`, expr); type = known; }
           else if (value.type.kind !== "json") this.parser.fail(`cannot select a field from ${value.type.kind}`, expr);
           return { program: field(value.program, expr.field), type };
         }
         case "probability": {
           const value = visit(expr.value); const label = visit(expr.label);
-          if (value.type.kind !== "decision") this.parser.fail("probability requires a decision value", expr);
+          if (value.type.kind !== "decision" && value.type.kind !== "scored") this.parser.fail("probability requires a decision value", expr);
           const labels = label.type.kind === "choice" ? label.type.labels : label.type.kind === "text" && label.type.literal !== undefined ? [label.type.literal] : [];
           const allowed = value.type.labels;
           if (!labels.length || labels.some(item => !allowed.includes(item))) this.parser.fail("probability requires one of this decision's declared labels", expr.label);
@@ -901,6 +926,7 @@ class Compiler {
       // Preserve a decision refinement only when every arm validates the same
       // closed labels. Pure-expression lowering retains its original types.
       if (type.kind === "decision" && result.type.kind === "decision" && type.labels.length === result.type.labels.length && type.labels.every(label => result.type.kind === "decision" && result.type.labels.includes(label))) continue;
+      if (type.kind === "scored" && result.type.kind === "scored" && type.labels.length === result.type.labels.length && type.labels.every(label => result.type.kind === "scored" && result.type.labels.includes(label))) continue;
       type = this.compatible(type, result.type, expr);
     }
     for (const result of results) this.edges.push({ from: { cell: result.cell, port: result.port }, to: { cell: id, port: "selected" } });
@@ -939,31 +965,49 @@ class Compiler {
       return { cell: id, port: "out", type: expr.as === undefined ? { kind: "text" } : staticType(expr.as) };
     }
     if (expr.kind === "decide") {
-      const context = this.operand(`${id}-context`, expr.context, `${title} · context`); const raw = `${id}-decide`; const labels = expr.criteria.map(([label]) => label); this.calls++;
-      this.add({ id: raw, kind: "decide", inputs: this.wire(raw, new Map([["context", context]])), questions: { answer: { type: "choice", instructions: expr.question, criteria: Object.fromEntries(expr.criteria) } }, view: { inputs: ["context"] } }, expr, "decide", expressionAnnotation(`${title} · decide`, expr, "decide"));
+      const context = this.operand(`${id}-context`, expr.context, `${title} · context`); const raw = `${id}-decide`; this.calls++;
+      const question: DecisionQuestion = expr.as === "choice" ? { type: "choice", instructions: expr.question, criteria: Object.fromEntries(expr.criteria) }
+        : expr.as === "score" ? { type: "score", instructions: expr.question, criteria: [...expr.labels] }
+        : { type: "noul", instructions: expr.question };
+      this.add({ id: raw, kind: "decide", inputs: this.wire(raw, new Map([["context", context]])), questions: { answer: question }, view: { inputs: ["context"] } }, expr, "decide", expressionAnnotation(`${title} · decide`, expr, "decide"));
       // Core decide results are JSON. Check every source refinement before a
       // downstream branch can rely on it; malformed labels never take an else.
       const get = (...path: string[]): JsonValue => ["get", "_source_decision", ...path];
-      const validProbabilities: JsonValue = ["fold", ["quote", labels], true, "_source_valid", "_source_label",
-        ["and", ["get", "_source_valid"], ["let", "_source_probability", ["get", "_source_decision", "probabilities", ["get", "_source_label"]],
-          ["and", ["isNum", ["get", "_source_probability"]], ["gte", ["get", "_source_probability"], 0], ["lte", ["get", "_source_probability"], 1]]]],
+      const inUnit = (value: JsonValue): JsonValue => ["and", ["isNum", value], ["gte", value, 0], ["lte", value, 1]];
+      const validProbabilities = (labels: string[]): JsonValue => ["fold", ["quote", labels], true, "_source_valid", "_source_label",
+        ["and", ["get", "_source_valid"], ["let", "_source_probability", ["get", "_source_decision", "probabilities", ["get", "_source_label"]], inUnit(["get", "_source_probability"])]],
       ];
-      const valid: JsonValue = ["and", ["contains", ["quote", labels], get("choice")], ["isNum", get("confidence")], ["gte", get("confidence"), 0], ["lte", get("confidence"), 1], validProbabilities];
       // A source Decision has exactly one admitted value. Selecting index zero
       // from an empty list deliberately fails the pure evaluator on malformed
       // metadata. Expr output schemas alone are not a runtime assertion.
-      const normalized: JsonValue = { value: get("choice"), confidence: get("confidence"), probabilities: Object.fromEntries(labels.map(label => [label, get("probabilities", label)])) };
-      const program: JsonValue = ["let", "_source_decision", ["get", "raw", "answers", "answer"], ["nth", ["if", valid, ["list", normalized], ["list"]], 0]];
+      let program: JsonValue; let schema: JsonObject; let type: Type;
+      if (expr.as === "noul") {
+        const valid = inUnit(get("noul"));
+        program = ["let", "_source_decision", ["get", "raw", "answers", "answer"], ["nth", ["if", valid, ["list", get("noul")], ["list"]], 0]];
+        schema = { type: "number" };
+        type = { kind: "number" };
+      } else {
+        const labels = expr.as === "choice" ? expr.criteria.map(([label]) => label) : expr.labels;
+        const answer = expr.as === "choice"
+          ? ["contains", ["quote", labels], get("choice")]
+          : ["isNum", get("score")];
+        const valid: JsonValue = ["and", answer, ["isNum", get("confidence")], ["gte", get("confidence"), 0], ["lte", get("confidence"), 1], validProbabilities(labels)];
+        const normalized: JsonValue = expr.as === "choice"
+          ? { value: get("choice"), confidence: get("confidence"), probabilities: Object.fromEntries(labels.map(label => [label, get("probabilities", label)])) }
+          : { score: get("score"), confidence: get("confidence"), probabilities: Object.fromEntries(labels.map(label => [label, get("probabilities", label)])) };
+        program = ["let", "_source_decision", ["get", "raw", "answers", "answer"], ["nth", ["if", valid, ["list", normalized], ["list"]], 0]];
+        schema = expr.as === "choice"
+          ? { type: "object", required: ["value", "confidence", "probabilities"], properties: { value: { type: "string" }, confidence: { type: "number" }, probabilities: { type: "object" } } }
+          : { type: "object", required: ["score", "confidence", "probabilities"], properties: { score: { type: "number" }, confidence: { type: "number" }, probabilities: { type: "object" } } };
+        type = { kind: expr.as === "choice" ? "decision" : "scored", labels };
+      }
       this.add({
         id, kind: "expr",
         inputs: this.wire(id, new Map([["raw", { cell: raw, port: "out", type: { kind: "json" } }]])),
         expr: { contract: "algal.expr.v1", program },
-        output: { kind: "json", schema: {
-          type: "object", required: ["value", "confidence", "probabilities"],
-          properties: { value: { type: "string" }, confidence: { type: "number" }, probabilities: { type: "object" } },
-        } },
+        output: { kind: "json", schema },
       }, expr, "decision-check", expressionAnnotation(title, expr, "decision-check"));
-      return { cell: id, port: "out", type: { kind: "decision", labels } };
+      return { cell: id, port: "out", type };
     }
     return this.expression(id, expr, "expression", title);
   }

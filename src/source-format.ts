@@ -578,23 +578,32 @@ class Formatter {
         this.expect(using, "using");
         const context: Doc[] = [];
         this.expression(context);
-        const asChoice: Doc[] = [];
-        this.expect(asChoice, "as");
-        asChoice.push(TEXT(" "));
-        this.expect(asChoice, "choice");
+        const asForm: Doc[] = [];
+        this.expect(asForm, "as");
+        asForm.push(TEXT(" "));
+        const choice = this.peek().text === "choice";
+        const noul = this.peek().text === "noul";
+        this.take(asForm);         // choice | noul | score
+        if (noul) {
+          out.push(...head, TEXT(" "), ...question, grp(ind(LINE, ...using, TEXT(" "), ...context)),
+            ind(LINE, ...asForm));
+          return;
+        }
         const open: Doc[] = [];
         this.expect(open, "{");
         const criteria: Doc[] = [];
         this.items("}", criteria, criterion => {
-          this.take(criterion);  // label
-          this.expect(criterion, ":");
-          criterion.push(TEXT(" "));
-          this.take(criterion);  // description string
+          if (choice) {
+            this.take(criterion);  // label
+            this.expect(criterion, ":");
+            criterion.push(TEXT(" "));
+          }
+          this.take(criterion);    // description or score label string
         });
         const close: Doc[] = [];
         this.expect(close, "}");
         out.push(...head, TEXT(" "), ...question, grp(ind(LINE, ...using, TEXT(" "), ...context)),
-          ind(LINE, ...asChoice, TEXT(" "), ...open, ind(HARD, ...criteria), HARD, ...close));
+          ind(LINE, ...asForm, TEXT(" "), ...open, ind(HARD, ...criteria), HARD, ...close));
         return;
       }
       case "generate": {

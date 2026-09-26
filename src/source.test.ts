@@ -72,6 +72,64 @@ test("malformed decision metadata cannot fall through an exhaustive match", asyn
   }
 });
 
+test("decide admits noul and score questions and types their answers", async () => {
+  const { manifest } = compileSource(`program triage(email: text) -> json {
+    budget { max_agent_calls: 2 }
+    let keep = decide "Is this still relevant?" using email as noul
+    let rating = decide "How good is it?" using email as score { "poor", "ok", "great" }
+    return { keep: keep, score: rating.score, confidence: rating.confidence, odds: rating.probability("great") }
+  }`);
+  const decides = manifest.cells.filter(c => c.kind === "decide");
+  expect(decides[0]?.questions).toEqual({ answer: { type: "noul", instructions: "Is this still relevant?" } });
+  expect(decides[1]?.questions).toEqual({ answer: { type: "score", instructions: "How good is it?", criteria: ["poor", "ok", "great"] } });
+  const responses = {
+    "b1-keep-decide": { answers: { answer: { noul: 0.6 } } },
+    "b2-rating-decide": { answers: { answer: { score: 3, confidence: 0.8, probabilities: { poor: 0.1, ok: 0.2, great: 0.7 } } } },
+  };
+  const receipt = await runOrganism({ manifest, args: { input: { email: "hi" } }, store: new MemoryStore(), fns: builtinRegistry(), executors: [scriptedExecutor(responses)] });
+  expect(receipt.outcome).toBe("complete");
+  expect(receipt.cells.result?.outputs?.out).toEqual({ keep: 0.6, score: 3, confidence: 0.8, odds: 0.7 });
+});
+
+test("malformed noul and score answers fail before downstream use", async () => {
+  const { manifest } = compileSource(`program triage(email: text) -> json {
+    budget { max_agent_calls: 2 }
+    let keep = decide "Keep?" using email as noul
+    let rating = decide "Rate?" using email as score { "poor", "great" }
+    return { keep: keep, score: rating.score }
+  }`);
+  const goodScore = { score: 1, confidence: 0.5, probabilities: { poor: 0.5, great: 0.5 } };
+  for (const answer of [{ noul: 2 }, { noul: "yes" }, { noul: -0.1 }]) {
+    const responses = { "b1-keep-decide": { answers: { answer } }, "b2-rating-decide": { answers: { answer: goodScore } } };
+    const receipt = await runOrganism({ manifest, args: { input: { email: "x" } }, store: new MemoryStore(), fns: builtinRegistry(), executors: [scriptedExecutor(responses)] });
+    expect(receipt.outcome).toBe("failed");
+    expect(receipt.cells.result?.status).not.toBe("committed");
+  }
+  for (const answer of [{ score: "high" }, { score: 1, confidence: 2 }, { score: 1, confidence: 0.5 }, { score: 1, confidence: 0.5, probabilities: { poor: 0.5, great: 1.5 } }]) {
+    const responses = { "b1-keep-decide": { answers: { answer: { noul: 0.5 } } }, "b2-rating-decide": { answers: { answer } } };
+    const receipt = await runOrganism({ manifest, args: { input: { email: "x" } }, store: new MemoryStore(), fns: builtinRegistry(), executors: [scriptedExecutor(responses)] });
+    expect(receipt.outcome).toBe("failed");
+    expect(receipt.cells.result?.status).not.toBe("committed");
+  }
+});
+
+test("decide question forms reject empty and duplicate declarations", () => {
+  expect(() => compileSource(`program t(email: text) -> json { budget { max_agent_calls: 1 } return decide "q" using email as choice {} }`)).toThrow(/a choice needs at least one label/);
+  expect(() => compileSource(`program t(email: text) -> json { budget { max_agent_calls: 1 } return decide "q" using email as score {} }`)).toThrow(/a scored decide needs at least one label/);
+  expect(() => compileSource(`program t(email: text) -> json { budget { max_agent_calls: 1 } return decide "q" using email as choice { a: "x", a: "y" } }`)).toThrow(/duplicate choice label/);
+  expect(() => compileSource(`program t(email: text) -> json { budget { max_agent_calls: 1 } return decide "q" using email as score { "a", "a" } }`)).toThrow(/duplicate score label/);
+  expect(() => compileSource(`program t(email: text) -> json { budget { max_agent_calls: 1 } return decide "q" using email as banana }`)).toThrow(/as choice.*as score.*as noul/);
+});
+
+test("noul and scored answers expose only their declared member surface", () => {
+  const wrap = (binding: string, result: string) => `program t(email: text) -> json { budget { max_agent_calls: 1 } ${binding} return ${result} }`;
+  expect(() => compileSource(wrap(`let d = decide "q" using email as score { "a", "b" }`, `d.value`))).toThrow(/unknown scored decision field/);
+  expect(() => compileSource(wrap(`let d = decide "q" using email as choice { a: "x" }`, `d.score`))).toThrow(/unknown decision field/);
+  expect(() => compileSource(wrap(`let d = decide "q" using email as score { "a", "b" }`, `d.probability("c")`))).toThrow(/declared labels/);
+  compileSource(wrap(`let d = decide "q" using email as score { "a", "b" }`, `{ s: d.score, c: d.confidence, p: d.probability("a"), all: d.probabilities }`));
+  compileSource(wrap(`let d = decide "q" using email as noul`, `d * 2`));
+});
+
 test("generate declares its output type, checks it at execution, and types downstream use", async () => {
   const program = (as: string, output = "json", tail = "verdict") =>
     `record Reply { verdict: text in ["keep", "drop"], score: integer min 0 max 10, note: text }
