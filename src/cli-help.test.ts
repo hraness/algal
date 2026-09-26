@@ -134,6 +134,12 @@ test("a person sees two-line errors; scripts keep the JSON line", async () => {
   expect(JSON.parse(agent.stderr).error).toBe("PARSE_FAILED");
 });
 
+test("a partial action word falls back to the command's help", async () => {
+  const result = await cli(["process", "t"], HUMAN);
+  expect(result.code).toBe(2);
+  expect(lines(result.stderr).at(-1)).toBe("→ algal process --help");
+});
+
 test("a missing file says so plainly", async () => {
   const result = await cli(["run", "no-such-file.json"], HUMAN);
   expect(result.code).toBe(2);

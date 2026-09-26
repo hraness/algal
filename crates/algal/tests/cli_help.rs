@@ -113,6 +113,16 @@ fn errors_are_two_lines_for_a_person_and_json_otherwise() {
         "FAIL missing.json: file not found.\n-> algal run --help\n"
     );
 
+    let global = algal(
+        &["--dir", "/nonexistent-algal-store", "run", "missing.json"],
+        &HUMAN,
+    );
+    assert!(
+        text(&global.stderr).ends_with("→ algal run --help\n"),
+        "{}",
+        text(&global.stderr)
+    );
+
     let debug = algal(
         &["run", "missing.json"],
         &[("HRANESS_AUDIENCE", "human"), ("HRANESS_DEBUG", "1")],

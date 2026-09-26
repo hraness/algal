@@ -3934,7 +3934,7 @@ main()
       const [first, second] = invokedCommand;
       const known = first !== undefined && commandWords().includes(first);
       const action = known && second !== undefined && /^[a-z][a-z-]*$/u.test(second)
-        && USAGE.includes(`\n  algal ${first} ${second}`);
+        && new RegExp(`\\n  algal ${first} ${second}(?=[ \\n|])`, "u").test(USAGE);
       const next = known ? `algal ${first}${action ? ` ${second}` : ""} --help` : "algal --help";
       const synopsis = /^usage:\s*(algal .*)$/su.exec(rep.message)?.[1];
       const missing = /ENOENT: no such file or directory, (?:open|stat|lstat|scandir) '([^']+)'/u.exec(rep.message)?.[1];

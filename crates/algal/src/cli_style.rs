@@ -148,9 +148,11 @@ pub fn render_failure(text: &str, next: &str, style: Style) -> String {
     )
 }
 
-/// Write to stdout. `algal ... | head -1` must exit quietly, and the crate
-/// forbids the `unsafe` a SIGPIPE reset needs, so a closed pipe ends the
-/// process with status 0 instead of a `println!` panic.
+/// Write human text (help, the doctor checklist) to stdout. `algal help
+/// advanced | head -1` must exit quietly, and the crate forbids the `unsafe`
+/// a SIGPIPE reset needs, so a closed pipe ends the process with status 0
+/// instead of a `println!` panic. JSON results keep `println!`, so a failed
+/// command never turns into a success when its reader goes away.
 pub fn print_stdout(text: &str) {
     use std::io::Write;
     let mut stdout = std::io::stdout().lock();

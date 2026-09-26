@@ -1069,7 +1069,7 @@ fn load(path: &Path, max: usize) -> Result<Value> {
     read_json(file, max).map_err(at)
 }
 fn emit(value: &Value) -> Result<()> {
-    cli_style::print_stdout(&format!("{}\n", canonical(value)?));
+    println!("{}", canonical(value)?);
     Ok(())
 }
 /// Explain an `EFFECT_UNBOUND` run failure on stderr: which cell asked for
@@ -3685,26 +3685,15 @@ fn advanced_help() -> String {
     lines.join("\n") + "\n"
 }
 
-/// The command words of this invocation that name a real subcommand, for the
-/// error's next step: `algal process tick --help`.
-fn next_step(args: &[String]) -> String {
-    let command = Cli::command();
-    let words: Vec<&str> = args
-        .iter()
-        .skip(1)
-        .map(String::as_str)
-        .filter(|arg| !arg.starts_with('-'))
-        .take(2)
-        .collect();
-    let Some(sub) = words
-        .first()
-        .and_then(|first| command.find_subcommand(first))
-    else {
-        return "algal --help".to_owned();
-    };
-    match words.get(1).and_then(|second| sub.find_subcommand(second)) {
-        Some(action) => format!("algal {} {} --help", sub.get_name(), action.get_name()),
-        None => format!("algal {} --help", sub.get_name()),
+/// The next step after an error: the help page of the command (and action)
+/// that was run, such as `algal process tick --help`.
+fn next_step(matches: &clap::ArgMatches) -> String {
+    match matches.subcommand() {
+        Some((name, sub)) => match sub.subcommand_name() {
+            Some(action) => format!("algal {name} {action} --help"),
+            None => format!("algal {name} --help"),
+        },
+        None => "algal --help".to_owned(),
     }
 }
 
@@ -3715,10 +3704,11 @@ async fn main() {
         cli_style::print_stdout(&advanced_help());
         std::process::exit(0);
     }
-    let cli = command()
+    let matches = command()
         .try_get_matches_from(&args)
-        .and_then(|matches| Cli::from_arg_matches(&matches))
         .unwrap_or_else(|error| error.exit());
+    let next = next_step(&matches);
+    let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|error| error.exit());
     let code = match execute(cli).await {
         Ok(true) => 0,
         Ok(false) => 1,
@@ -3730,7 +3720,7 @@ async fn main() {
                     "{}",
                     cli_style::render_failure(
                         &cli_style::sentence(&error.message),
-                        &next_step(&args),
+                        &next,
                         cli_style::Style::stderr(),
                     )
                 );
