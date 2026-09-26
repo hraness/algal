@@ -132,3 +132,19 @@ work; a positive result would justify a larger production-family study, and
 a negative result would be evidence about the current machinery, not a proof
 that retention cannot help. The study measures what it records: it cannot
 show that generated procedures generalize beyond this family.
+
+### Task-corpus revision (v2)
+
+The first committed corpus labeled records by the template that
+generated them; three template bodies carried truth that disagreed with
+the taxonomy's declared semantics ("a charge I do not recognize" under
+billing-inquiry, "the API returns errors" under integration-help). A
+decision-model audit of all 960 records found 35 disagreements with
+declared truth, 23 of them high-confidence, concentrated on exactly
+those two boundaries — enough to cap the promotion gate on four
+acquisition tasks regardless of classifier quality. The corpus was
+repaired so template text matches its truth label's semantics, then
+regenerated deterministically from the same family configs; the revised
+corpus audits at 956/960 agreement with zero high-confidence contests.
+Reports cite task digests, so each run binds the corpus revision it
+executed.
