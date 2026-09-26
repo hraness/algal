@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { BOUNDS, manifestToJson, parseOrganismManifest, type OrganismManifest } from "./src/contract";
 import { asDigest, digestCanonical } from "./src/digest";
 import { errorReport, AlgalError } from "./src/errors";
+import { reportAlgalCliRun, TELEMETRY_TIMEOUT_MS } from "./src/telemetry";
 import {
   asInt,
   asJsonValue,
@@ -397,6 +398,12 @@ usage:
 Source diagnostics (all commands that load .algal files):
   --diagnostic-format json|text               stderr format for compile errors (default json)
                                               JSON preserves error/message and adds diagnostic
+
+Telemetry:
+  One aggregate run ping reports the product name and version to Hraness
+  Accounts; no arguments, paths, or output ever leave the machine. A locally
+  minted install token joins daily-active counts only.
+  HRANESS_TELEMETRY=off or ALGAL_TELEMETRY=off disables it entirely.
 `;
 
 type ParsedArgs = {
@@ -3816,7 +3823,12 @@ function usageError(msg: string): never {
 }
 
 main()
-  .then((code) => process.exit(code))
+  .then((code) =>
+    Promise.race([
+      reportAlgalCliRun(PACKAGE_VERSION),
+      new Promise(resolve => setTimeout(resolve, TELEMETRY_TIMEOUT_MS)),
+    ]).finally(() => process.exit(code))
+  )
   .catch(async (e) => {
     const rep = errorReport(e);
     const { SourceError } = await import("./src/source");
