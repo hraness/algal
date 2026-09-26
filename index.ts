@@ -86,6 +86,7 @@ export {
   mailboxToolRegistry,
 } from "./src/mailbox";
 export type { MailboxConfig, MailboxService } from "./src/mailbox";
+export { IndexedDbMailboxService, MAILBOX_IDB_NAME } from "./src/mailbox-idb";
 
 export {
   RUN_CONTRACT,
@@ -458,6 +459,8 @@ export type { ErrorCode } from "./src/errors";
 export { ProcessSupervisor, PROCESS_CONTRACT, PROCESS_BOUNDS, parseProcessRecord, type ProcessRecord, type ProcessSnapshot, type ProcessHost } from "./src/process";
 
 export { HostEventService, HOST_EVENT_BOUNDS, HOST_EVENT_CONTRACT, HOST_MESSAGE_CONTRACT, hostEventMessage } from "./src/host-events";
+export { IndexedDbHostEventService, HOST_EVENTS_IDB_NAME } from "./src/host-events-idb";
+export type { IndexedDbHostEventOptions } from "./src/host-events-idb";
 export type { HostEventInput, HostEventRecord, HostEventSnapshot, HostEventPollOptions, HostEventPollResult } from "./src/host-events";
 export { ProcessJournal, JOURNAL_BOUNDS } from "./src/process-journal";
 export type { RuntimeJournal, JournalBinding, JournalTicket } from "./src/process-journal";
