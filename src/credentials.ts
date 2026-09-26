@@ -66,8 +66,7 @@ export function checkCredentialShape(key: string, at: string): void {
   if (
     key.length < KEY_MIN ||
     key.length > KEY_MAX ||
-    /[\r\n]/.test(key) ||
-    key !== key.trim()
+    /\s/.test(key)
   ) {
     throw new AlgalError(
       "PARSE_FAILED",

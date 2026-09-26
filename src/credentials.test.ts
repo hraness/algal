@@ -37,6 +37,8 @@ describe("credential shape + redaction", () => {
     expect(() => checkCredentialShape("short", "k")).toThrow(AlgalError);
     expect(() => checkCredentialShape(" padded ", "k")).toThrow(AlgalError);
     expect(() => checkCredentialShape("line\nbreak_ok_123", "k")).toThrow(AlgalError);
+    expect(() => checkCredentialShape("inner space_123", "k")).toThrow(AlgalError);
+    expect(() => checkCredentialShape("inner\ttab_12345", "k")).toThrow(AlgalError);
     expect(() => checkCredentialShape("ts_valid_key_1234", "k")).not.toThrow();
   });
 
