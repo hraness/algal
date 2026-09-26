@@ -50,3 +50,26 @@ nonblocking descriptor admission before checking regular-file type and size.
 The artifact ceiling is 67,108,864 bytes; existing smaller payload and
 configuration limits still apply. A FIFO cannot hold a mailbox operation
 waiting for a writer, and rejection does not consume a pending delivery.
+
+## IndexedDB drivers
+
+Browser hosts run the same wire records through the `mailbox-idb.ts` and
+`host-events-idb.ts` drivers. Rows are canonical-JSON envelopes carrying a
+content digest, keyed so messages, pending and consumed delivery markers,
+capability records, event admissions, and delivery markers all resolve by
+digest. Every atomic transition commits inside one readwrite transaction that
+requests the strict durability hint and fails closed when the engine cannot
+report it; IndexedDB serializes readwrite transactions across connections and
+tabs, which replaces the file driver's admission lease and per-mailbox locks.
+A crashed tab's in-flight write simply never commits.
+
+The drivers keep this document's observable contract exactly: the same
+record contracts and digests, idempotent `send` by idempotency key,
+immutable-conflict `DIGEST_MISMATCH`, pending-marker delivery dedupe,
+consumed-marker evidence, capability admission checks, mailbox and event
+bounds, `EFFECT_SUSPENDED` on an empty receive, and host-event intent before
+acknowledgement with replay on retry. Quota errors surface as
+`BUDGET_EXHAUSTED`; other engine failures surface as `IO_FAILED` with
+retained data left untouched. Browser eviction, user-cleared site data, and
+device loss still require the host to keep independent export or replay
+evidence.

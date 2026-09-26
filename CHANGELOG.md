@@ -401,6 +401,25 @@ wire constant (`0.1.0`) is independent of these package versions.
   `verify-proposal`, and `select`; the programmable-applications milestone
   record marks the packaged surfaces, native workbench, and second
   application as existing.
+- IndexedDB durable drivers for browser hosts: `IndexedDbMailboxService` and
+  `IndexedDbHostEventService` run the existing `algal.mailbox.v1`,
+  capability, message, delivery, `algal.host-event.v1`, and
+  `algal.host-delivery.v1` wire records in IndexedDB. Rows are
+  canonical-JSON envelopes with content digests; every atomic transition
+  commits inside one readwrite transaction under the strict durability hint
+  (fail closed when the engine cannot report it), and serialized readwrite
+  transactions across connections and tabs replace the file drivers' leases
+  and locks. Same observable semantics: idempotent sends and event
+  admission, immutable-conflict `DIGEST_MISMATCH`, pending/consumed delivery
+  dedupe, capability checks, every documented bound, `EFFECT_SUSPENDED`,
+  durable sending-intent before mailbox acknowledgement, and bounded `poll`.
+  Quota failures surface as `BUDGET_EXHAUSTED`; other engine failures as
+  `IO_FAILED` without touching retained data. Browser-safe package subpaths
+  `mailbox-core`, `mailbox-idb`, `host-events-core`, `host-events-idb` share
+  the wire layer extracted from `mailbox.ts`/`host-events.ts`; a real
+  Chromium qualification fixture covers reopen, revocation, delivery, and a
+  peer-tab handoff. SDK: `IndexedDbMailboxService`, `IndexedDbHostEventService`,
+  `MAILBOX_IDB_NAME`, `HOST_EVENTS_IDB_NAME`.
 
 ## v0.2.0-vm.9 — 2026-09-20
 

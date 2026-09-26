@@ -165,6 +165,12 @@ jobs:
           export ALGAL_BROWSER_EXECUTABLE="$(bun -e 'import {chromium} from "playwright-core"; console.log(chromium.executablePath())')"
           export ALGAL_BROWSER_EVIDENCE="$RUNNER_TEMP/algal-task-evidence"
           bun scripts/browser-triage-qualification.mjs
+      - name: IndexedDB mailbox and host-event drivers
+        run: |
+          export ALGAL_PLAYWRIGHT_MODULE="$PWD/node_modules/playwright-core/index.mjs"
+          export ALGAL_BROWSER_EXECUTABLE="$(bun -e 'import {chromium} from "playwright-core"; console.log(chromium.executablePath())')"
+          export ALGAL_BROWSER_EVIDENCE="$RUNNER_TEMP/algal-idb-evidence"
+          bun scripts/browser-idb-qualification.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -172,6 +178,7 @@ jobs:
           path: |
             ${{ runner.temp }}/algal-browser-evidence/*.json
             ${{ runner.temp }}/algal-task-evidence/*.json
+            ${{ runner.temp }}/algal-idb-evidence/*.json
           if-no-files-found: ignore
 
   surface-renderers:
