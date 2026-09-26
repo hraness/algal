@@ -21,6 +21,18 @@ wire constant (`0.1.0`) is independent of these package versions.
   path; holdout cases are declared but never run. Each task writes a closed
   `algal.experiment-run.v1` record and the session writes
   `algal.experiment-session.v1`, both strict-parsed and digest-bearing.
+- `algal experiment report|verify|inspect` measure a cumulative-skill study
+  from store evidence: the bounded `algal.skill-experiment.v1` report cites
+  each arm's `algal.experiment-session.v1` record, which names the arm's
+  `algal.habitat-budget.v1` account, its `algal.experiment-catalog.v1`
+  kept-procedure list, and its `algal.experiment-run.v1` task records, then
+  recomputes held-out success, work and attempts per held-out pass, catalog
+  hits, misses, and admission failures, kept-versus-reused entries with
+  validation-versus-held-out gaps, and joins kept manifests to later task
+  receipts through the program index. `experiment verify` re-derives every
+  aggregate from the cited evidence and flags session task records the
+  report does not cite. The pre-registered human-correction measure is not
+  reported yet: the run records carry no correction signal.
 - `algal replay`, `algal ordering`, and `algal process replay` run in the
   native runtime: the Rust CLI emits byte-identical
   `algal.replay-comparison.v1` and `algal.ordering-report.v1` records
