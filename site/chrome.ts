@@ -5,7 +5,7 @@ import { siteIcon } from "./icons";
 import { escapeHtml } from "./markdown";
 import { serializeJsonLd } from "@hraness/web-discovery";
 
-export type SitePageId = "home" | "tour" | "use-cases" | "living" | "grow" | "tasks" | "workbench" | "docs" | "spec" | "blog" | "compare";
+export type SitePageId = "home" | "tour" | "use-cases" | "living" | "grow" | "tasks" | "workbench" | "docs" | "spec" | "blog" | "compare" | "not-found";
 
 export interface SitePageMeta {
   page: SitePageId;
@@ -32,6 +32,9 @@ function navLink(page: SitePageId, id: SitePageId, href: string, label: string):
 
 export function pageDocument(meta: SitePageMeta, main: string): string {
   const canonical = `${ORIGIN}${meta.path}`;
+  // The 404 document answers every missing address, so it names no canonical
+  // URL and stays out of search indexes.
+  const missing = meta.page === "not-found";
   // Titles and descriptions can come from Markdown, which may contain quotes.
   const title = escapeHtml(meta.title);
   const description = escapeHtml(meta.description);
@@ -43,14 +46,12 @@ export function pageDocument(meta: SitePageMeta, main: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title}</title>
 <meta name="description" content="${description}">
-<link rel="canonical" href="${canonical}">
-<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+${missing ? "" : `<link rel="canonical" href="${canonical}">\n`}<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta property="og:type" content="${meta.article ? "article" : "website"}">${meta.article ? `\n<meta property="article:published_time" content="${meta.article.published}">` : ""}
 <meta property="og:site_name" content="ALGAL">
 <meta property="og:title" content="${ogTitle}">
 <meta property="og:description" content="${description}">
-<meta property="og:url" content="${canonical}">
-<meta property="og:image" content="${ORIGIN}/og.png">
+${missing ? "" : `<meta property="og:url" content="${canonical}">\n`}<meta property="og:image" content="${ORIGIN}/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="${escapeHtml(OG_IMAGE_ALT)}">
@@ -58,7 +59,7 @@ export function pageDocument(meta: SitePageMeta, main: string): string {
 <meta name="twitter:title" content="${ogTitle}">
 <meta name="twitter:description" content="${description}">
 <meta name="twitter:image" content="${ORIGIN}/og.png">
-<meta name="robots" content="${meta.noindex ? "noindex, nofollow" : "index, follow"}">
+<meta name="robots" content="${meta.noindex || missing ? "noindex, nofollow" : "index, follow"}">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@graph":[{"@type":"WebSite","name":"ALGAL","url":"${ORIGIN}/"},{"@type":"SoftwareApplication","name":"ALGAL","url":"${ORIGIN}/","description":${JSON.stringify(SITE_DESCRIPTION)},"applicationCategory":"DeveloperApplication","codeRepository":"${REPO}","license":"https://opensource.org/license/mit","author":{"@id":"https://github.com/hraness#org"}},{"@type":"Organization","@id":"https://github.com/hraness#org","name":"hraness","url":"https://github.com/hraness"}]}
 </script>${(meta.jsonLd ?? []).map(node => `\n<script type="application/ld+json">${serializeJsonLd(node)}</script>`).join("")}${meta.page === "blog" ? '\n<link rel="alternate" type="application/atom+xml" title="ALGAL blog" href="/blog/feed.xml">' : ""}

@@ -806,3 +806,8 @@ nav a[aria-current="page"] { color: var(--ink); }
 .amoeba:nth-child(13) { left: 46%; top: 60%; }
 .amoeba:nth-child(14) { left: 75%; top: 62%; }
 @media (prefers-reduced-motion: reduce) { .amoeba { transform: none; filter: blur(2px); } }
+
+/* The shared 404 page (design-kit status-page.css) sits in a cascade layer, so
+   the unlayered element rules above would restyle its title, its next-links
+   heading, and its nav. Hand those elements back to the shared layer. */
+.hraness-status-page :is(h1, h2, nav, nav a) { all: revert-layer; }

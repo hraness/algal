@@ -21,6 +21,7 @@ import { asJsonValue, asObject, canonicalize, type JsonObject } from "../src/val
 import { verifyReceipt } from "../src/verify";
 import { renderIconSprite, siteIcon } from "./icons";
 import { buildSiteStyles } from "./assets";
+import { renderStatusPageHtml } from "@hraness/design-kit";
 import { pageDocument, type SitePageMeta } from "./chrome";
 import { ADOPTION_BOUNDARY, SITE_DESCRIPTION, SITE_TAGLINE } from "./copy";
 import { renderMarkdown, type LinkRewriter, type RenderedDoc } from "./markdown";
@@ -759,7 +760,19 @@ await writeFile(join(authoringDownloadDirectory, "diagnostic.json"), `${JSON.str
 // Render each page fragment inside the shared document, then apply the
 // measured placeholders across the whole emitted document.
 replacements.BUILD_STATS = `${verifiedRuns} recorded runs replay-verified in this build`;
+// Page names by path, for the 404 page's "Did you mean" suggestion. The
+// shared status page takes labels of at most 48 characters.
+const routeLabels = new Map<string, string>();
+function routeLabel(path: string, title: string): string {
+  if (path === "/") return "Home";
+  // Drop the brand segment ("· ALGAL spec"); keep titles that are only a brand phrase.
+  const name = title.split(" · ").filter(part => !/^ALGAL\b/.test(part)).join(" · ") || title;
+  if (name.length <= 48) return name;
+  const cut = name.slice(0, 47);
+  return `${cut.slice(0, cut.lastIndexOf(" ") > 24 ? cut.lastIndexOf(" ") : 47).replace(/[\s·,]+$/u, "")}…`;
+}
 for (const { file, out, meta } of pages) {
+  routeLabels.set(meta.path, routeLabel(meta.path, meta.ogTitle));
   let document = pageDocument(meta, await readFile(join(SITE, file), "utf8"));
   for (const [key, value] of Object.entries(replacements)) {
     document = document.replaceAll(`{{${key}}}`, value);
@@ -783,6 +796,7 @@ for (const [slug, doc] of docRenderers) docTitles.set(`docs/${slug}`, doc.title)
 for (const [slug, doc] of specRenderers) docTitles.set(`spec/${slug}`, doc.title);
 
 const emitDocPage = async (meta: SitePageMeta, body: string) => {
+  routeLabels.set(meta.path, routeLabel(meta.path, meta.ogTitle));
   let document = pageDocument(meta, `<main id="main" class="hraness-marketing-page docs-page">${body}</main>`);
   for (const [key, value] of Object.entries(replacements)) document = document.replaceAll(`{{${key}}}`, value);
   if (/\{\{[A-Z_]+\}\}/.test(document)) throw new Error(`Unresolved site build placeholder in ${meta.path}`);
@@ -937,6 +951,33 @@ const sitemapEntries: { path: string; lastModified?: string }[] = [
   ...blogSitemap,
 ];
 await writeFile(join(DIST, "sitemap.xml"), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemapEntries.map(entry => `  <url><loc>https://algal.computer${entry.path}</loc>${entry.lastModified ? `<lastmod>${entry.lastModified}</lastmod>` : ""}</url>`).join("\n")}\n</urlset>\n`);
+
+// Vercel answers every missing address with 404.html and HTTP 404. The page
+// offers the same next step as the home hero and suggests the closest page
+// from the sitemap when a link is mistyped.
+{
+  const statusPage = renderStatusPageHtml({
+    siteName: "ALGAL",
+    primaryAction: { href: "/#install", label: "Install ALGAL" },
+    next: [
+      { href: "/tour/", label: "Tour", description: "Explore real ALGAL programs as interactive diagrams with recorded runs." },
+      { href: "/docs/", label: "Documentation", description: "Install the VM, write .algal source, and read the v1 specification." },
+      { href: "/use-cases/", label: "Use cases", description: "Wait for approval, survive a restart, and keep a history others can verify." },
+    ],
+    routes: sitemapEntries.map(({ path }) => ({ href: path, label: routeLabels.get(path) ?? path })),
+    agentIndexHref: "/llms.txt",
+    rootElement: "div",
+  });
+  let document = pageDocument({
+    page: "not-found", path: "/404.html",
+    title: "Page not found · ALGAL",
+    description: SITE_DESCRIPTION,
+    ogTitle: "Page not found · ALGAL",
+  }, `<main id="main">${statusPage}</main>`);
+  for (const [key, value] of Object.entries(replacements)) document = document.replaceAll(`{{${key}}}`, value);
+  if (/\{\{[A-Z_]+\}\}/.test(document)) throw new Error("Unresolved site build placeholder in 404.html");
+  await writeFile(join(DIST, "404.html"), document);
+}
 
 // Each browser application owns a route and cache namespace. Neither worker
 // can prune the other's versions. Only grow offers the optional model bundle.
