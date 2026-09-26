@@ -9,6 +9,18 @@ wire constant (`0.1.0`) is independent of these package versions.
 
 ## Unreleased
 
+- `algal experiment <config.json>` runs one cumulative-skill experiment arm
+  over a bounded task set: `retained`, `ablation`, `fresh`, and `fixed`
+  profiles share one code path, every generation, task, and promotion run
+  charges to the arm's own `algal.habitat-budget.v1` account (activity
+  `experiment`), and a refused reservation records the exhausted run instead
+  of aborting the session. The retained arm consults a bounded
+  `algal.experiment-catalog.v1` kept-procedure list before each task (a hit
+  digest-resolves the kept manifest through the store) and promotes programs
+  that pass every declared validation case through the ordinary foundry
+  path; holdout cases are declared but never run. Each task writes a closed
+  `algal.experiment-run.v1` record and the session writes
+  `algal.experiment-session.v1`, both strict-parsed and digest-bearing.
 - `algal replay`, `algal ordering`, and `algal process replay` run in the
   native runtime: the Rust CLI emits byte-identical
   `algal.replay-comparison.v1` and `algal.ordering-report.v1` records

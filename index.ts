@@ -414,6 +414,44 @@ export { parseSearchReport, verifySearchReport } from "./src/search-verify";
 export type { SearchVerifyReport } from "./src/search-verify";
 
 export {
+  EXPERIMENT_ARM_CONTRACT,
+  EXPERIMENT_ARMS,
+  EXPERIMENT_BOUNDS,
+  EXPERIMENT_CATALOG_CONTRACT,
+  EXPERIMENT_PHASES,
+  EXPERIMENT_RUN_CONTRACT,
+  EXPERIMENT_SESSION_CONTRACT,
+  EXPERIMENT_TASKS_CONTRACT,
+  ExperimentCatalogState,
+  parseExperimentArm,
+  parseExperimentCatalog,
+  parseExperimentRun,
+  parseExperimentSession,
+  parseExperimentTask,
+  parseExperimentTaskSet,
+  runExperimentArm,
+} from "./src/experiment-run";
+export type {
+  ExperimentArm,
+  ExperimentArmKind,
+  ExperimentCatalog,
+  ExperimentCatalogEntry,
+  ExperimentConsult,
+  ExperimentGenerator,
+  ExperimentPhase,
+  ExperimentPromote,
+  ExperimentRun,
+  ExperimentRunOptions,
+  ExperimentRunResult,
+  ExperimentRunTask,
+  ExperimentRunTaskResult,
+  ExperimentSession,
+  ExperimentTask,
+  ExperimentTaskContext,
+  ExperimentTaskSet,
+} from "./src/experiment-run";
+
+export {
   axesPareto,
   BENCH_AXIS_NAMES,
   BENCH_BOUNDS,
