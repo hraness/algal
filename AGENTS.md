@@ -54,8 +54,9 @@
   uncertainty, model and protocol identities, and missing cost data. Receipt
   verification does not establish task success or model quality.
 - Never export raw stores, third-party benchmark tasks, private traces, signing
-  material, or provider accounts. The initial staged card and file set require
-  Ben’s approval; later synchronization follows configured publication authority.
+  material, or provider accounts. Ben approved initial publication and routine
+  reviewed syncs on 2026-09-27 within the existing dataset; follow the runbook’s
+  recorded scope, rights review, validation, and history-preservation requirements.
 - Use the supported `hf` CLI from a reviewed stage after rights review and normal
   repository checks. Record the remote commit and verify downloaded file hashes.
 
