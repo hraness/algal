@@ -43,10 +43,16 @@ does not install the CLI, create tokens, or configure credentials. Confirm the
 account can write to the `hranesscom` organization and that the destination is
 the dataset above. Keep authentication material outside the repository and logs.
 
-For this SEO handoff, Ben must approve the exact public card and file set before
-the first upload. Routine future synchronization needs recorded standing
-publication authorization; a completed local stage alone never grants it.
-After approval, upload the reviewed stage:
+On 2026-09-27, Ben approved the reviewed initial publication and granted standing
+authority for routine reviewed synchronization to the existing
+`hranesscom/algal-experiments` dataset. Future agents may publish reviewed updates
+there without asking for the same permission again after the repository's
+required checks pass. Preserve historical study files, license and attribution
+records, source identities, limitations, and the remote hash verification below.
+Review rights for each changed or added artifact. This permission does not cover
+new destinations, private data, paid resources, or deletion of historical studies.
+A completed local stage alone does not satisfy these review and validation gates.
+Upload the reviewed stage:
 
 ```sh
 uvx --from huggingface-hub==2.0.0 hf auth whoami
@@ -69,5 +75,6 @@ provider run, new benchmark, or product release is required by dataset sync.
 
 ## Copy record
 
-Dataset card and runbook drafted by the Codex ALGAL Hugging Face worker. No human
-review or publication is claimed by these files.
+Dataset card and runbook drafted by the Codex ALGAL Hugging Face worker.
+Publication permission is recorded above; successful uploads require their own
+remote commit and verification evidence.
