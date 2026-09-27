@@ -562,6 +562,257 @@ describe("experiment arm runner", () => {
     expect(() => parseExperimentTaskSet({ contract: "algal.experiment-tasks.v1", tasks: [{ ...entry, corrections: [{ note: "x" }] }] })).toThrow();
   });
 
+  test("optimizer consults, cites within the staleness window, and re-qualifies stale entries", async () => {
+    // requalifyAfter=2: task 1 cites (ordinal gap 1 < 2), task 2 is stale
+    // (gap 2 >= 2) and re-qualifies, task 3 cites the refreshed entry.
+    const reviser = {
+      manifest: manifestToJson(generator),
+      output: "manifest",
+    };
+    const four: ExperimentTask[] = [...tasks, { taskId: "task-four", phase: "unseen", spec: { family: "triage" }, args: { record: "d" } }];
+    const { store, run } = fixture({
+      arm: "optimizer", ...generating, reviser, requalifyAfter: 2, cases: promotionCases,
+    }, four);
+    const result = await run();
+
+    expect(result.runs).toHaveLength(4);
+    // Task 0: miss → generate → promote (ordinal 0).
+    expect(result.runs[0]!.promote).toMatchObject({ evaluated: true, promoted: true, entry: 0 });
+    // Task 1: hit inside the window → cite stored evidence, no evaluation.
+    expect(result.runs[1]!.consult.outcome).toBe("hit");
+    expect(result.runs[1]!.promote).toMatchObject({ evaluated: false, promoted: false, entry: 0 });
+    expect(result.runs[1]!.revise).toBeUndefined();
+    // Task 2: stale → re-evaluated; the pass refreshes the entry, no demotion.
+    expect(result.runs[2]!.promote).toMatchObject({ evaluated: true, promoted: false, entry: 0 });
+    expect(result.runs[2]!.promote!.demoted).toBeUndefined();
+    expect(result.runs[2]!.revise).toBeUndefined();
+    // Task 3: back inside the refreshed window → cite again.
+    expect(result.runs[3]!.promote).toMatchObject({ evaluated: false, entry: 0 });
+    // One entry total, still active.
+    const catalog = parseExperimentCatalog((await store.getValue(result.catalogDigest))!);
+    expect(catalog.entries).toHaveLength(1);
+    expect(catalog.entries[0]!.retired).toBeUndefined();
+  });
+
+  test("optimizer demotes an entry whose re-qualification fails and promotes the revision that supersedes it", async () => {
+    // A stale kept manifest: always emits "stale" regardless of the record —
+    // it completes task runs but fails the arm's echo-shaped cases.
+    const stale = parseOrganismManifest({
+      contract: "algal.organism.v1",
+      key: "organism:stale-echo",
+      name: "Stale echo",
+      interface: {
+        inputs: { record: { cell: "src", port: "value" } },
+        outputs: { label: { cell: "fixed", port: "value" } },
+      },
+      cells: [
+        { id: "src", kind: "input", outputs: { value: "json" } },
+        { id: "fixed", kind: "const", outputs: { value: { type: "json", value: "stale" } } },
+      ],
+    });
+    const store = new MemoryStore();
+    const staleDigest = await store.putManifest(stale);
+    const seedReport = await store.putValue({ kind: "stale-promotion" } as JsonValue);
+    const catalog = [{
+      family: "triage", manifest: staleDigest, interfaceDigest: null,
+      cases: [{ id: "t-1", split: "train" as const }, { id: "v-1", split: "validation" as const }],
+      report: seedReport, taskId: "seeded",
+    }];
+
+    // The reviser declares kept+evidence inputs; the scripted response emits
+    // the good echo manifest — the "repaired" procedure.
+    const reviserManifest = parseOrganismManifest({
+      contract: "algal.organism.v1",
+      key: "organism:reviser",
+      name: "Reviser",
+      interface: {
+        inputs: {
+          task: { cell: "spec", port: "value" },
+          kept: { cell: "prior", port: "value" },
+          evidence: { cell: "why", port: "value" },
+        },
+        outputs: { manifest: { cell: "writer", port: "out" } },
+      },
+      cells: [
+        { id: "spec", kind: "input", outputs: { value: "json" } },
+        { id: "prior", kind: "input", outputs: { value: "json" } },
+        { id: "why", kind: "input", outputs: { value: "json" } },
+        {
+          id: "writer", kind: "agent",
+          inputs: { task: "json", kept: "json", evidence: "json" },
+          prompt: "Revise the kept manifest using the evidence.",
+          view: { inputs: ["task", "kept", "evidence"] },
+          output: { kind: "json", schema: { type: "object" } },
+        },
+      ],
+      edges: [
+        { from: { cell: "spec", port: "value" }, to: { cell: "writer", port: "task" } },
+        { from: { cell: "prior", port: "value" }, to: { cell: "writer", port: "kept" } },
+        { from: { cell: "why", port: "value" }, to: { cell: "writer", port: "evidence" } },
+      ],
+    });
+    const result = await runExperimentArm({
+      arm: arm({
+        arm: "optimizer", ...generating,
+        reviser: { manifest: manifestToJson(reviserManifest), output: "manifest" },
+        requalifyAfter: 1, cases: promotionCases,
+      }),
+      tasks, fns: builtinRegistry(), store,
+      executors: [scriptedExecutor({ writer: manifestToJson(kept) as JsonValue })],
+      catalog,
+    });
+
+    expect(result.runs).toHaveLength(3);
+    // Task 0 cites the seeded entry inside its window (ordinal gap 0 < 1).
+    expect(result.runs[0]!.consult.outcome).toBe("hit");
+    expect(result.runs[0]!.promote).toMatchObject({ evaluated: false, entry: 0 });
+    // Task 1 is stale: re-qualification fails (stale echoes "stale", the
+    // cases want the record back) → the entry demotes and the reviser runs.
+    expect(result.runs[1]!.promote).toMatchObject({ evaluated: true, promoted: false, entry: 0, demoted: true });
+    expect(result.runs[1]!.revise).toMatchObject({
+      trigger: "requalification", evaluated: true, promoted: true, entry: 1, supersedes: 0,
+    });
+    // Task 2 consults the revision — entry 0 no longer matches consult.
+    expect(result.runs[2]!.consult).toMatchObject({ outcome: "hit", entry: 1 });
+    const storedCatalog = parseExperimentCatalog((await store.getValue(result.catalogDigest))!);
+    expect(storedCatalog.entries).toHaveLength(2);
+    expect(storedCatalog.entries[0]!.retired).toMatch(/^sha256:/);
+    expect(storedCatalog.entries[1]!.supersedes).toBe(0);
+    // The reviser received the evidence record it declared.
+    const reviseRecord = result.runs[1]!.revise!;
+    const evidence = (await store.getValue(reviseRecord.evidence))! as Record<string, JsonValue>;
+    expect(evidence).toMatchObject({ taskId: "task-two", trigger: "requalification", report: result.runs[1]!.promote!.report });
+  });
+
+  test("optimizer revises on a missed task expectation and the demotion lands in the catalog", async () => {
+    const reviser = {
+      manifest: manifestToJson(generator),
+      output: "manifest",
+    };
+    const grading: ExperimentTask[] = [
+      tasks[0]!,
+      { taskId: "task-two", phase: "unseen", spec: { family: "triage" }, args: { record: "b" }, expect: { label: "WRONG" } },
+      tasks[2]!,
+    ];
+    const { store, run } = fixture({
+      arm: "optimizer", ...generating, reviser, requalifyAfter: 8, cases: promotionCases,
+    }, grading);
+    const result = await run();
+
+    // Task 1's kept manifest echoes "b", the task expects "WRONG": the hit
+    // still cites within the window, but the miss retires the entry and the
+    // reviser promotes a repair that supersedes it.
+    expect(result.runs[1]!.consult.outcome).toBe("hit");
+    expect(result.runs[1]!.promote).toMatchObject({ evaluated: false, entry: 0 });
+    expect(result.runs[1]!.revise).toMatchObject({ trigger: "missed-expectation", promoted: true, entry: 1, supersedes: 0 });
+    const catalog = parseExperimentCatalog((await store.getValue(result.catalogDigest))!);
+    expect(catalog.entries[0]!.retired).toMatch(/^sha256:/);
+    expect(catalog.entries[1]!.supersedes).toBe(0);
+    // Task 2 consults the revision.
+    expect(result.runs[2]!.consult).toMatchObject({ outcome: "hit", entry: 1 });
+  });
+
+  test("optimizer revises on a failed hit run and records the failure evidence", async () => {
+    // A kept manifest whose agent cell has no scripted response: admitted,
+    // then fails at the executor boundary mid-run.
+    const broken = parseOrganismManifest({
+      contract: "algal.organism.v1",
+      key: "organism:broken",
+      name: "Broken",
+      interface: {
+        inputs: { record: { cell: "src", port: "value" } },
+        outputs: { label: { cell: "bad", port: "out" } },
+      },
+      cells: [
+        { id: "src", kind: "input", outputs: { value: "json" } },
+        {
+          id: "bad", kind: "agent",
+          inputs: { record: "json" },
+          prompt: "Classify the record.",
+          view: { inputs: ["record"] },
+          output: { kind: "json", schema: { type: "object" } },
+        },
+      ],
+      edges: [
+        { from: { cell: "src", port: "value" }, to: { cell: "bad", port: "record" } },
+      ],
+    });
+    const store = new MemoryStore();
+    const brokenDigest = await store.putManifest(broken);
+    const seedReport = await store.putValue({ kind: "seed" } as JsonValue);
+    const catalog = [{
+      family: "triage", manifest: brokenDigest, interfaceDigest: null,
+      cases: [{ id: "t-1", split: "train" as const }, { id: "v-1", split: "validation" as const }],
+      report: seedReport, taskId: "seeded",
+    }];
+    const result = await runExperimentArm({
+      arm: arm({
+        arm: "optimizer", ...generating,
+        reviser: { manifest: manifestToJson(generator), output: "manifest" },
+        requalifyAfter: 4, cases: promotionCases,
+      }),
+      tasks, fns: builtinRegistry(), store,
+      executors: [scriptedExecutor(responses)],
+      catalog,
+    });
+
+    expect(result.runs[0]!.outcome).toBe("failed");
+    expect(result.runs[0]!.revise).toMatchObject({ trigger: "failed-run", promoted: true, entry: 1, supersedes: 0 });
+    const storedCatalog = parseExperimentCatalog((await store.getValue(result.catalogDigest))!);
+    expect(storedCatalog.entries[0]!.retired).toMatch(/^sha256:/);
+    // The evidence names the failed receipt.
+    const evidence = (await store.getValue(result.runs[0]!.revise!.evidence))! as Record<string, JsonValue>;
+    expect(evidence).toMatchObject({ taskId: "task-one", trigger: "failed-run", outcome: "failed" });
+  });
+
+  test("optimizer arm parsing gates its declared fields", () => {
+    const reviser = { manifest: manifestToJson(generator), output: "manifest" };
+    const base = { ...generating, cases: promotionCases, reviser, requalifyAfter: 2 };
+    expect(() => arm({ arm: "optimizer", ...base })).not.toThrow();
+    expect(() => arm({ arm: "optimizer", ...generating, cases: promotionCases, requalifyAfter: 2 })).toThrow("reviser");
+    expect(() => arm({ arm: "optimizer", ...generating, cases: promotionCases, reviser })).toThrow("requalifyAfter");
+    expect(() => arm({ arm: "optimizer", ...generating, cases: promotionCases, reviser, requalifyAfter: 0 })).toThrow();
+    expect(() => arm({ arm: "optimizer", ...base, citeKeptEvaluation: true })).toThrow("citeKeptEvaluation");
+    expect(() => arm({ arm: "optimizer", ...generating, reviser, requalifyAfter: 2 })).toThrow("cases");
+    expect(() => arm({ arm: "optimizer", manifest: manifestToJson(kept), ...base })).toThrow("manifest");
+    // Other arms reject the optimizer fields.
+    expect(() => arm({ arm: "retained", ...generating, cases: promotionCases, reviser })).toThrow("reviser");
+    expect(() => arm({ arm: "fixed", manifest: manifestToJson(kept), requalifyAfter: 2 })).toThrow("requalifyAfter");
+    // The reviser interface must expose task input + the declared output.
+    const noTask = manifestToJson(parseOrganismManifest({
+      contract: "algal.organism.v1", key: "organism:no-task", name: "No task",
+      interface: {
+        inputs: { other: { cell: "src", port: "value" } },
+        outputs: { manifest: { cell: "src", port: "value" } },
+      },
+      cells: [{ id: "src", kind: "input", outputs: { value: "json" } }],
+    }));
+    expect(() => arm({ arm: "optimizer", ...generating, cases: promotionCases, requalifyAfter: 2, reviser: { manifest: noTask, output: "manifest" } })).toThrow('"task"');
+  });
+
+  test("run record parser accepts and bounds revise records", async () => {
+    const reviser = { manifest: manifestToJson(generator), output: "manifest" };
+    const grading: ExperimentTask[] = [
+      tasks[0]!,
+      { ...tasks[1]!, expect: { label: "WRONG" } },
+    ];
+    const { run } = fixture({
+      arm: "optimizer", ...generating, reviser, requalifyAfter: 8, cases: promotionCases,
+    }, grading);
+    const result = await run();
+    const record = result.runs[1]! as unknown as Record<string, unknown>;
+    const revise = record["revise"] as Record<string, unknown>;
+    expect(revise["trigger"]).toBe("missed-expectation");
+    expect(() => parseExperimentRun({ ...record, revise: { ...revise, trigger: "renamed" } })).toThrow("trigger");
+    expect(() => parseExperimentRun({ ...record, revise: { ...revise, promoted: true, entry: null } })).toThrow();
+    expect(() => parseExperimentRun({ ...record, revise: { ...revise, evaluated: true, report: null } })).toThrow();
+    expect(() => parseExperimentRun({ ...record, revise: { ...revise, extra: 1 } })).toThrow("unknown");
+    // promote.demoted parses and is shape-checked.
+    const promoted = record["promote"] as Record<string, unknown>;
+    expect(() => parseExperimentRun({ ...record, promote: { ...promoted, demoted: true } })).toThrow();
+    expect(parseExperimentRun({ ...record, promote: { ...promoted, demoted: false } }).promote!.demoted).toBe(false);
+  });
+
   test("run record parser rejects unknown keys and inconsistent digests", async () => {
     const { run } = fixture({ arm: "fixed", manifest: manifestToJson(kept) }, tasks.slice(0, 1));
     const result = await run();

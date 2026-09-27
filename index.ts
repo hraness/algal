@@ -509,6 +509,7 @@ export type {
   ExperimentGenerator,
   ExperimentPhase,
   ExperimentPromote,
+  ExperimentRevise,
   ExperimentRun,
   ExperimentRunOptions,
   ExperimentRunResult,

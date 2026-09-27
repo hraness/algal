@@ -79,8 +79,21 @@ execution.
    write-code-on-demand baseline.
 4. **fixed**: one hand-authored manifest, written to be strong across the
    family, runs every task. The non-adaptive upper bound.
+5. **optimizer**: the retained consult-and-promote path plus revision and
+   demotion. A consulted entry cites its stored promotion evidence inside
+   a `requalifyAfter` task window; past the window the hit re-qualifies on
+   the declared cases — a pass refreshes the window, a failure retires the
+   entry. A hit that fails outright, or whose outputs miss the task's
+   declared `expect` (under the arm's scorer, or canonical equality),
+   retires the entry on the evidence record's digest. Every trigger runs
+   the declared `reviser` generator with the task spec, the kept manifest,
+   and the stored evidence record; its emitted manifest is evaluated on
+   the same cases, and a passing revision joins the catalog carrying
+   `supersedes` back to the retired index. Revision repairs the catalog,
+   not the task that tripped it; the episode lands on the run record's
+   `revise` field and aggregates to `revisionsTotal`/`demotionsTotal`.
 
-A fifth arm, a single fixed pipeline tuned on training cases (the
+A further arm, a single fixed pipeline tuned on training cases (the
 conventional-workflow-with-optimizer comparison), is proposed but deferred
 unless its marginal cost is small.
 
@@ -299,7 +312,9 @@ measure:
 
 What the study does not show: the task family is synthetic and saturating,
 so held-out success no longer discriminates between arms; nothing here is
-evidence that retained procedures generalize to production work. The named
-next steps remain a production-derived task family, an optimizer arm that
-revises kept procedures against their own receipts, and a corpus rich
-enough to keep the graders discriminative.
+evidence that retained procedures generalize to production work. The
+optimizer arm now ships — revision and demotion land on run records and
+catalog entries with stored evidence, and aggregate to measured counts —
+but it has not yet been exercised against a corpus discriminative enough
+to make its triggers fire at scale. The named next steps remain a harder
+synthetic family and, ultimately, a production-derived one.

@@ -12,6 +12,20 @@ independent of these package versions.
 
 ## Unreleased
 
+- The cumulative-skill experiment gains a fifth `optimizer` arm: the
+  retained consult-and-promote path plus revision and demotion. Consulted
+  catalog entries cite their stored promotion evidence inside a declared
+  `requalifyAfter` task window; past the window a hit re-qualifies on the
+  arm's cases, a pass refreshes the window, and a failure retires the
+  entry. A failed hit run or a hit whose outputs miss the task's optional
+  `expect` also retires the entry. Every trigger runs the arm's declared
+  `reviser` generator over the task, the kept manifest, and a stored
+  evidence record; a passing revision joins the catalog with `supersedes`
+  lineage back to the retired entry. Retired entries stay in the catalog
+  as evidence and no longer match consultation. Run records carry the
+  episode under `revise`; reports aggregate `revisionsTotal` and
+  `demotionsTotal`, and `algal experiment verify` re-derives the joins.
+
 ## v0.2.0-vm.10 - 2026-09-26
 
 ALGAL's command line now starts where a new person starts, and the tools for

@@ -94,10 +94,11 @@ type Fixture = {
     kept: Digest;
     selection: Digest;
     receipts: { r1: Digest; r2: Digest; r3: Digest; r4: Digest; r5: Digest; g1: Digest; e1: Digest };
-    sessions: { retained: Digest; fresh: Digest };
-    catalogs: { retained: Digest; fresh: Digest };
-    records: { retained: Digest[]; fresh: Digest[] };
-    manifests: { k: Digest; f: Digest; g: Digest };
+    opt: Record<string, Digest>;
+    sessions: { retained: Digest; fresh: Digest; optimizer: Digest };
+    catalogs: { retained: Digest; fresh: Digest; optimizer: Digest };
+    records: { retained: Digest[]; fresh: Digest[]; optimizer: Digest[] };
+    manifests: { k: Digest; f: Digest; g: Digest; v: Digest };
   };
 };
 
@@ -193,10 +194,99 @@ async function fixture(): Promise<Fixture> {
       work: { units: 22, agentCalls: 0 }, failure: null, promote: null,
     }),
   ];
-  const recordDigests = { retained: [] as Digest[], fresh: [] as Digest[] };
+  // optimizer: one acquired entry, a stale-hit re-qualification that
+  // demotes it, and a promoted revision that supersedes it — then a cite.
+  const [mV, mR] = [manifest("organism:revised"), manifest("organism:reviser")];
+  const [dV, dR] = [await store.putManifest(mV), await store.putManifest(mR)];
+  const opt = {
+    gO: await store.putReceipt(receipt(mG, dG, { steps: 1, agentCalls: 1, units: 5 }) as unknown as JsonValue),
+    rO0: await store.putReceipt(receipt(mK, dK, { steps: 1, agentCalls: 1, units: 10 }) as unknown as JsonValue),
+    eO0: await store.putReceipt(receipt(mK, dK, { steps: 1, agentCalls: 1, units: 8 }) as unknown as JsonValue),
+    rO1: await store.putReceipt(receipt(mK, dK, { steps: 1, agentCalls: 1, units: 9 }) as unknown as JsonValue),
+    eO1: await store.putReceipt(receipt(mK, dK, { steps: 1, agentCalls: 1, units: 7 }) as unknown as JsonValue),
+    rV: await store.putReceipt(receipt(mR, dR, { steps: 1, agentCalls: 1, units: 6 }) as unknown as JsonValue),
+    eV: await store.putReceipt(receipt(mV, dV, { steps: 1, agentCalls: 1, units: 5 }) as unknown as JsonValue),
+    rO2: await store.putReceipt(receipt(mV, dV, { steps: 1, agentCalls: 1, units: 8 }) as unknown as JsonValue),
+  };
+  const sel0 = await store.putValue(selectionRecord(dK, { passed: 3, total: 3 }));
+  const selBad = await store.putValue(selectionRecord(dK, { passed: 1, total: 3 }));
+  const selGood = await store.putValue(selectionRecord(dV, { passed: 3, total: 3 }));
+  const ev1 = await store.putValue({ taskId: "t-stale-2", trigger: "requalification", report: selBad } as JsonValue);
+  const catalogO = await store.putValue({
+    contract: "algal.experiment-catalog.v1",
+    entries: [
+      {
+        family: "triage", manifest: dK, interfaceDigest: null,
+        cases: [{ id: "t-1", split: "train" }, { id: "v-1", split: "validation" }],
+        report: sel0, taskId: "t-acq-1", retired: selBad,
+      },
+      {
+        family: "triage", manifest: dV, interfaceDigest: null,
+        cases: [{ id: "t-1", split: "train" }, { id: "v-1", split: "validation" }],
+        report: selGood, taskId: "t-stale-2", supersedes: 0,
+      },
+    ],
+  } as unknown as JsonObject);
+  const optimizerRecords: JsonObject[] = [
+    runRecord({
+      arm: "optimizer", taskId: "t-acq-1", phase: "acquisition",
+      consult: { outcome: "miss", entry: null, manifest: null },
+      generator: { manifest: dG, receipt: opt.gO },
+      manifest: dK, args: argsK, receipt: opt.rO0, outcome: "complete",
+      work: { units: 10, agentCalls: 1 }, failure: null,
+      promote: { evaluated: true, promoted: true, entry: 0, report: sel0, validation: { passed: 3, total: 3 } },
+    }),
+    runRecord({
+      arm: "optimizer", taskId: "t-stale-2", phase: "unseen",
+      consult: { outcome: "hit", entry: 0, manifest: dK },
+      generator: null,
+      manifest: dK, args: argsK, receipt: opt.rO1, outcome: "complete",
+      work: { units: 9, agentCalls: 1 }, failure: null,
+      promote: { evaluated: true, promoted: false, entry: 0, report: selBad, validation: { passed: 1, total: 3 }, demoted: true },
+      revise: {
+        trigger: "requalification", evidence: ev1,
+        generator: { manifest: dR, receipt: opt.rV },
+        evaluated: true, promoted: true, report: selGood, validation: { passed: 3, total: 3 },
+        entry: 1, supersedes: 0,
+      },
+    }),
+    runRecord({
+      arm: "optimizer", taskId: "t-hit-3", phase: "unseen",
+      consult: { outcome: "hit", entry: 1, manifest: dV },
+      generator: null,
+      manifest: dV, args: argsK, receipt: opt.rO2, outcome: "complete",
+      work: { units: 8, agentCalls: 1 }, failure: null,
+      promote: { evaluated: false, promoted: false, entry: 1, report: selGood, validation: { passed: 3, total: 3 } },
+    }),
+  ];
+  const optimizerDigests: Digest[] = [];
+  for (const record of optimizerRecords) optimizerDigests.push(await store.putValue(record as unknown as JsonValue));
+  const ceiling = { work: 100, attempts: 4 };
+  const optimizerAccount = await store.putValue(accountRecord(
+    { work: 1_000, attempts: 100, runs: 10 },
+    [
+      { manifest: dG, receipt: opt.gO, ceiling, charged: { work: 5, attempts: 1 } },
+      { manifest: dK, receipt: opt.rO0, ceiling, charged: { work: 10, attempts: 1 } },
+      { manifest: dK, receipt: opt.eO0, ceiling, charged: { work: 8, attempts: 1 } },
+      { manifest: dK, receipt: opt.rO1, ceiling, charged: { work: 9, attempts: 1 } },
+      { manifest: dK, receipt: opt.eO1, ceiling, charged: { work: 7, attempts: 1 } },
+      { manifest: dR, receipt: opt.rV, ceiling, charged: { work: 6, attempts: 1 } },
+      { manifest: dV, receipt: opt.eV, ceiling, charged: { work: 5, attempts: 1 } },
+      { manifest: dV, receipt: opt.rO2, ceiling, charged: { work: 8, attempts: 1 } },
+    ],
+  ));
+  const optimizerSession = await store.putValue({
+    contract: "algal.experiment-session.v1",
+    arm: "optimizer",
+    family: "triage",
+    tasks: optimizerRecords.map((record, i) => ({ taskId: record.taskId, phase: record.phase, run: optimizerDigests[i]! })),
+    budget: optimizerAccount,
+    catalog: catalogO,
+    outcome: "complete",
+  } as unknown as JsonObject);
+  const recordDigests = { retained: [] as Digest[], fresh: [] as Digest[], optimizer: optimizerDigests };
   for (const record of retainedRecords) recordDigests.retained.push(await store.putValue(record as unknown as JsonValue));
   for (const record of freshRecords) recordDigests.fresh.push(await store.putValue(record as unknown as JsonValue));
-  const ceiling = { work: 100, attempts: 4 };
   const retainedAccount = await store.putValue(accountRecord(
     { work: 1_000, attempts: 100, runs: 10 },
     [
@@ -237,7 +327,7 @@ async function fixture(): Promise<Fixture> {
   const config: SkillExperimentConfig = {
     contract: SKILL_EXPERIMENT_CONFIG_CONTRACT,
     study: "triage-study",
-    arms: [{ session: retainedSession }, { session: freshSession }],
+    arms: [{ session: retainedSession }, { session: freshSession }, { session: optimizerSession }],
   };
   return {
     dir,
@@ -246,10 +336,11 @@ async function fixture(): Promise<Fixture> {
       kept: dK,
       selection,
       receipts,
-      sessions: { retained: retainedSession, fresh: freshSession },
-      catalogs: { retained: catalogR, fresh: catalogF },
+      opt,
+      sessions: { retained: retainedSession, fresh: freshSession, optimizer: optimizerSession },
+      catalogs: { retained: catalogR, fresh: catalogF, optimizer: catalogO },
       records: recordDigests,
-      manifests: { k: dK, f: dF, g: dG },
+      manifests: { k: dK, f: dF, g: dG, v: dV },
     },
   };
 }
@@ -260,8 +351,8 @@ describe("skill experiment rollup", () => {
     const report = await buildExperimentReport(dir, config);
     expect(report.contract).toBe(SKILL_EXPERIMENT_CONTRACT);
     expect(report.study).toBe("triage-study");
-    expect(report.arms).toHaveLength(2);
-    const [retained, fresh] = report.arms;
+    expect(report.arms).toHaveLength(3);
+    const [retained, fresh, optimizer] = report.arms;
     expect(retained).toMatchObject({
       name: "retained",
       family: "triage",
@@ -316,6 +407,37 @@ describe("skill experiment rollup", () => {
       holdoutGaps: [],
       correctionsTotal: 0,
     });
+    // The optimizer arm: one acquired entry, one re-qualification demotion,
+    // one promoted revision superseding it, then a cite of the revision.
+    expect(optimizer).toMatchObject({
+      name: "optimizer",
+      session: digests.sessions.optimizer,
+      workTotal: 58,
+      attemptsTotal: 8,
+      runsTotal: 8,
+      tasksAttempted: 3,
+      tasksPassed: 3,
+      heldOutPassed: 2,
+      heldOutTotal: 2,
+      consultations: 3,
+      catalogHits: 2,
+      catalogMisses: 1,
+      keptEntries: 2,
+      reusedEntries: 2,
+      revisionsTotal: 1,
+      demotionsTotal: 1,
+      correctionsTotal: 0,
+    });
+    expect(optimizer?.reuse).toEqual([
+      { manifest: digests.kept, entry: 0, taskId: "t-acq-1", promotedSequence: 0, runs: [digests.opt.rO1!], heldOutRuns: [digests.opt.rO1!] },
+      { manifest: digests.manifests.v, entry: 1, taskId: "t-stale-2", promotedSequence: 1, runs: [digests.opt.rO2!], heldOutRuns: [digests.opt.rO2!] },
+    ]);
+    // The revision's promotion joins the holdout-gap ledger like an ordinary
+    // in-session promotion, carrying the validation the revise record cites.
+    expect(optimizer?.holdoutGaps).toEqual([
+      { manifest: digests.kept, validation: { passed: 3, total: 3 }, heldOut: { passed: 1, total: 1 } },
+      { manifest: digests.manifests.v, validation: { passed: 3, total: 3 }, heldOut: { passed: 1, total: 1 } },
+    ]);
     // The built report round-trips its own strict parser and digest.
     const parsed = parseSkillExperimentReport(report as unknown as JsonValue);
     expect(parsed).toEqual(report);
@@ -365,7 +487,7 @@ describe("skill experiment rollup", () => {
     const report = await buildExperimentReport(dir, config);
     const verified = await verifyExperimentReport(report as unknown as JsonValue, dir);
     expect(verified.mismatches).toEqual([]);
-    expect(verified).toMatchObject({ ok: true, digest: report.digest, checkedRecords: 6, uncited: 0, storeMoved: false });
+    expect(verified).toMatchObject({ ok: true, digest: report.digest, checkedRecords: 9, uncited: 0, storeMoved: false });
   });
 
   test("verify catches a doctored aggregate even with a recomputed digest", async () => {
@@ -431,6 +553,8 @@ describe("skill experiment parser", () => {
     reuse: [],
     holdoutGaps: [],
     correctionsTotal: 0,
+    revisionsTotal: 0,
+    demotionsTotal: 0,
     records: [],
     ...over,
   }) as unknown as JsonObject;
