@@ -14,15 +14,16 @@ independent of these package versions.
 
 ## v0.2.0-vm.10 - 2026-09-26
 
-ALGAL's command line now starts where a new person starts, and the language
-and tools for sharing programs grow. At a terminal, bare `algal` prints a
-short start screen, errors read as one sentence and one next command, and
-`algal doctor` prints a checklist; scripts, pipes and agents keep the JSON.
-When Apple's on-device model can't be used, ALGAL says why and what to do.
-Source programs gain record and list types, `map`, `filter` and `fold`, typed
-`generate`, and `algal fmt`. New commands report a project's dependencies,
-pin it with `algal lock`, copy shared programs with `algal vendor`, replay a
-run against a revised program, and run cumulative-skill experiments.
+ALGAL's command line now starts where a new person starts, and the tools for
+writing and sharing programs grow. At a terminal, both CLIs print errors as
+one sentence and one next command, and `algal doctor` prints a checklist;
+scripts, pipes and agents keep the JSON. Bare `algal` in the Bun CLI prints a
+short start screen. When Apple's on-device model can't be used, ALGAL says
+why and what to do. Both runtimes replay a recorded run against a revised
+program. The Bun CLI and the `@hraness/algal` package add record and list
+types, `map`, `filter` and `fold`, typed `generate`, `algal fmt`, dependency
+reports, `algal lock`, `algal vendor`, and cumulative-skill experiments.
+Compiling `.algal` source still needs the Bun CLI.
 
 - Both CLIs read `HRANESS_AUDIENCE` in any letter case, ignoring surrounding
   spaces, and a nonempty `NO_COLOR` now wins over `FORCE_COLOR`, which
@@ -282,8 +283,7 @@ run against a revised program, and run cumulative-skill experiments.
   durable-process setup under a shared habitat budget, evaluates an
   `algal.expr.v1` invariant per terminal state, and emits an
   `algal.ordering-report.v1` with each ordering's outcome, the first
-  counterexample witness, and explicit exhaustion. Both are TypeScript-only;
-  the native CLI accepts the commands and refuses them explicitly.
+  counterexample witness, and explicit exhaustion.
 - Public copy adopts the canonical portfolio messaging record: the site
   title, hero, footer, social card, `llms.txt` introduction, README lead,
   both CLI introductions, and the package and crate descriptions now carry
