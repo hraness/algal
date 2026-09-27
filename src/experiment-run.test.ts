@@ -709,8 +709,97 @@ describe("experiment arm runner", () => {
     const catalog = parseExperimentCatalog((await store.getValue(result.catalogDigest))!);
     expect(catalog.entries[0]!.retired).toMatch(/^sha256:/);
     expect(catalog.entries[1]!.supersedes).toBe(0);
+    const evidence = await store.getValue(result.runs[1]!.revise!.evidence);
+    expect(evidence).toMatchObject({
+      taskId: "task-two", trigger: "missed-expectation",
+      args: { record: "b" }, outputs: { label: "b" }, expect: { label: "WRONG" },
+      receipt: result.runs[1]!.receipt,
+    });
     // Task 2 consults the revision.
     expect(result.runs[2]!.consult).toMatchObject({ outcome: "hit", entry: 1 });
+  });
+
+  test.each([5, 7])("optimizer keeps its revision episode when the account exhausts after %i admitted runs", async (runs) => {
+    const grading: ExperimentTask[] = [tasks[0]!, { ...tasks[1]!, expect: { label: "WRONG" } }, tasks[2]!];
+    const { store, run } = fixture({
+      arm: "optimizer", ...generating,
+      reviser: { manifest: manifestToJson(generator), output: "manifest" },
+      requalifyAfter: 8, cases: promotionCases, budget: { ...budget, runs },
+    }, grading);
+    const result = await run();
+
+    expect(result.session.outcome).toBe("exhausted");
+    expect(result.runs).toHaveLength(2);
+    const stopped = result.runs[1]!;
+    expect(stopped.outcome).toBe("exhausted");
+    expect(stopped.failure?.code).toBe("BUDGET_EXHAUSTED");
+    expect(stopped.receipt).not.toBeNull();
+    expect(stopped.revise).toMatchObject({
+      trigger: "missed-expectation", evaluated: false, promoted: false,
+      report: null, validation: null, entry: null, supersedes: 0,
+    });
+    if (runs === 5) expect(stopped.revise!.generator).toBeNull();
+    else expect(stopped.revise!.generator?.receipt).toMatch(/^sha256:/);
+    expect(result.catalog.entries[0]!.retired).toBe(stopped.revise!.evidence);
+    expect((await budgetOf(store, result.session.budget)).runs).toHaveLength(runs);
+    expect(parseExperimentRun((await store.getValue(result.runDigests[1]!))!).revise).toEqual(stopped.revise);
+  });
+
+  test("optimizer preserves the evaluated revision and retirement when the catalog is full", async () => {
+    const { store, run } = fixture({
+      arm: "optimizer", ...generating,
+      reviser: { manifest: manifestToJson(generator), output: "manifest" },
+      requalifyAfter: 8, cases: promotionCases, maxEntries: 1,
+    }, [tasks[0]!, { ...tasks[1]!, expect: { label: "WRONG" } }]);
+    const result = await run();
+    const last = result.runs[1]!;
+
+    expect(result.session.outcome).toBe("complete");
+    expect(last.outcome).toBe("complete");
+    expect(last.failure?.message).toContain("catalog is full");
+    expect(last.revise).toMatchObject({
+      trigger: "missed-expectation", evaluated: true, promoted: false,
+      validation: { passed: 1, total: 1 }, entry: null, supersedes: 0,
+    });
+    expect(last.revise!.report).toMatch(/^sha256:/);
+    expect(last.revise!.generator?.receipt).toMatch(/^sha256:/);
+    expect(result.catalog.entries).toHaveLength(1);
+    expect(result.catalog.entries[0]!.retired).toBe(last.revise!.evidence);
+    expect(await store.getValue(last.revise!.report!)).toBeDefined();
+  });
+
+  test("optimizer bounds actual outputs in the evidence delivered to the reviser", async () => {
+    const large = "x".repeat(EXPERIMENT_BOUNDS.spec.maxBytes + 1);
+    const oversized = parseOrganismManifest({
+      contract: "algal.organism.v1", key: "organism:oversized-output", name: "Large output",
+      interface: {
+        inputs: { record: { cell: "src", port: "value" } },
+        outputs: { label: { cell: "fixed", port: "value" } },
+      },
+      cells: [
+        { id: "src", kind: "input", outputs: { value: "json" } },
+        { id: "fixed", kind: "const", outputs: { value: { type: "json", value: large } } },
+      ],
+    });
+    const { store, run } = fixture({
+      arm: "optimizer", ...generating,
+      reviser: { manifest: manifestToJson(generator), output: "manifest" },
+      requalifyAfter: 8, cases: promotionCases,
+    }, [{ ...tasks[0]!, expect: { label: "WRONG" } }]);
+    const manifest = await store.putManifest(oversized);
+    const report = await store.putValue({ kind: "seed" });
+    const result = await run([{
+      family: "triage", manifest, interfaceDigest: null,
+      cases: [{ id: "validation-b", split: "validation" }], report, taskId: "seeded",
+    }]);
+    const episode = result.runs[0]!.revise!;
+    const evidence = await store.getValue(episode.evidence) as Record<string, JsonValue>;
+    expect(episode.trigger).toBe("missed-expectation");
+    expect(evidence.outputs).toBeUndefined();
+    expect(evidence.outputsOmitted).toBe("exceeds-task-data-bound");
+    expect(evidence.outputsDigest).toBe(digestCanonical({ label: large }));
+    expect(evidence.receipt).toBe(result.runs[0]!.receipt);
+    expect(evidence.args).toEqual({ record: "a" });
   });
 
   test("optimizer revises on a failed hit run and records the failure evidence", async () => {

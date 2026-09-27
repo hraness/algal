@@ -12,6 +12,19 @@ independent of these package versions.
 
 ## Unreleased
 
+- The v4 optimizer study includes its saved executions, portable arm
+  configurations, an offline replay command, and a grader that separates
+  completion from output correctness. On unseen and shift tasks the
+  optimizer classified 466/480 records correctly versus retained's
+  385/480, using 2.96 times the work. The study records the asymmetric
+  prompts and online feedback policy; it leaves matched-spend improvement
+  unproven and corrects the earlier claim that every measure had passed.
+- Experiment verification checks revision and demotion counts, revision
+  evidence, and catalog lineage. Reuse is attributed to the consulted
+  catalog entry so saving the same program again cannot double-count its
+  later runs. Revision attempts retain their history when budgets or
+  catalog capacity prevent promotion; revisers receive the task arguments
+  and actual outputs, within the task-data limit, alongside expectations.
 - The cumulative-skill experiment gains a fifth `optimizer` arm: the
   retained consult-and-promote path plus revision and demotion. Consulted
   catalog entries cite their stored promotion evidence inside a declared

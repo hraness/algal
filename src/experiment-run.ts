@@ -498,6 +498,10 @@ export class ExperimentCatalogState {
     return this.#entries;
   }
 
+  get full(): boolean {
+    return this.#entries.length >= this.#maxEntries;
+  }
+
   /** The most recently promoted active entry matching `family`, or
    * undefined. Retired entries stay in the record but no longer match. */
   consult(family: string): ExperimentCatalogEntry | undefined {
@@ -1076,7 +1080,7 @@ async function reviseHook(
   evidenceValue: Record<string, JsonValue>,
   kept: OrganismManifest,
   catalog: ExperimentCatalogState,
-): Promise<ExperimentRevise> {
+): Promise<{ revise: ExperimentRevise; failure: ExperimentRun["failure"] }> {
   const arm = ctx.arm;
   const reviser = arm.reviser!;
   const evidence = await ctx.store.putValue(evidenceValue as JsonValue);
@@ -1084,13 +1088,17 @@ async function reviseHook(
   const base: Omit<ExperimentRevise, "evidence"> = {
     trigger, generator: null, evaluated: false, promoted: false, report: null, validation: null, entry: null, supersedes: consultEntry,
   };
+  let lineage: ExperimentRevise["generator"] = null;
+  const finish = (partial: Partial<ExperimentRevise> = {}, error?: unknown) => ({
+    revise: { ...base, evidence, generator: lineage, ...partial },
+    failure: error === undefined ? null : failureOf(error),
+  });
   const declared: Record<string, JsonValue> = { task: ctx.task.spec };
   const inputs = reviser.manifest.interface?.inputs ?? {};
   if (inputs["kept"] !== undefined) declared["kept"] = kept as unknown as JsonValue;
   if (inputs["evidence"] !== undefined) declared["evidence"] = evidenceValue;
   const revArgs = interfaceArgs(reviser.manifest, { ...(reviser.args ?? {}), ...declared });
   const reviserDigest = await ctx.store.putManifest(reviser.manifest);
-  let lineage: { manifest: Digest; receipt: Digest; normalized?: string[] } | null = null;
   let value: unknown;
   try {
     const { receipt, receiptDigest } = await ctx.account.admit(
@@ -1107,54 +1115,61 @@ async function reviseHook(
       ctx.store,
     );
     lineage = { manifest: reviserDigest, receipt: receiptDigest };
-    if (receipt.outcome !== "complete") return { ...base, evidence, generator: lineage };
+    if (receipt.outcome !== "complete") return finish({}, new AlgalError("EFFECT_FAILED", `reviser ${reviser.manifest.key} ended ${receipt.outcome}`));
     const source = reviser.manifest.interface!.outputs[reviser.output]!;
     const output = receipt.cells[source.cell]?.outputs?.[source.port];
     value = reviser.field !== undefined && output !== null && typeof output === "object" && !Array.isArray(output)
       ? output[reviser.field]
       : output;
   } catch (error) {
-    if (exhausted(error)) return { ...base, evidence, generator: lineage };
+    if (exhausted(error)) return finish({}, error);
     throw error;
   }
   let revision: OrganismManifest;
   try {
     revision = parseOrganismManifest(value);
-  } catch {
+  } catch (first) {
     if (arm.normalizeEmitted === true) {
       const repaired = normalizeEmittedManifest(value);
       if (repaired.repairs.length > 0) {
         lineage = { ...lineage!, normalized: repaired.repairs };
         try {
           revision = parseOrganismManifest(repaired.value);
-        } catch {
-          return { ...base, evidence, generator: lineage };
+        } catch (second) {
+          return finish({}, second);
         }
       } else {
-        return { ...base, evidence, generator: lineage };
+        return finish({}, first);
       }
     } else {
-      return { ...base, evidence, generator: lineage };
+      return finish({}, first);
     }
   }
   const revisionDigest = await ctx.store.putManifest(revision);
-  const selection = await evaluateFoundryPopulation({
-    candidates: [revision],
-    cases: arm.cases!,
-    fns: ctx.fns,
-    store: ctx.store,
-    executors: ctx.executors,
-    ...(ctx.transports ? { transports: ctx.transports } : {}),
-    ...(ctx.tools ? { tools: ctx.tools } : {}),
-    ...(arm.scorer ? { scorer: arm.scorer } : {}),
-    account: ctx.account,
-  });
+  let selection;
+  try {
+    selection = await evaluateFoundryPopulation({
+      candidates: [revision],
+      cases: arm.cases!,
+      fns: ctx.fns,
+      store: ctx.store,
+      executors: ctx.executors,
+      ...(ctx.transports ? { transports: ctx.transports } : {}),
+      ...(ctx.tools ? { tools: ctx.tools } : {}),
+      ...(arm.scorer ? { scorer: arm.scorer } : {}),
+      account: ctx.account,
+    });
+  } catch (error) {
+    if (error instanceof AlgalError) return finish({}, error);
+    throw error;
+  }
   const candidate = selection.candidates[0]!;
   const report = await ctx.store.putValue(selection as unknown as JsonValue);
   const validation = { passed: candidate.validation.passed, total: candidate.validation.total };
   if (candidate.validation.passed !== candidate.validation.total || catalog.kept(revisionDigest)) {
-    return { ...base, evidence, generator: lineage, evaluated: true, report, validation };
+    return finish({ evaluated: true, report, validation });
   }
+  if (catalog.full) return finish({ evaluated: true, report, validation }, new AlgalError("PARSE_FAILED", "experiment: catalog is full; the evaluated revision was not kept"));
   const entry = catalog.add({
     family: arm.family,
     manifest: revisionDigest,
@@ -1165,7 +1180,7 @@ async function reviseHook(
     taskId: ctx.task.taskId,
     supersedes: consultEntry,
   });
-  return { ...base, evidence, generator: lineage, evaluated: true, promoted: true, report, validation, entry };
+  return finish({ evaluated: true, promoted: true, report, validation, entry });
 }
 
 /** Runs one arm configuration over the task set and records everything.
@@ -1326,7 +1341,17 @@ export async function runExperimentArm(opts: ExperimentRunOptions): Promise<Expe
         reviseEvidence = { taskId: task.taskId, trigger: "failed-run", outcome: settled.receipt.outcome, receipt: settled.receiptDigest };
       } else if (task.expect !== undefined && !taskOutputsMatch(manifest!, task, settled.receipt, arm)) {
         reviseTrigger = "missed-expectation";
-        reviseEvidence = { taskId: task.taskId, trigger: "missed-expectation", outcome: "complete", receipt: settled.receiptDigest, expect: task.expect };
+        reviseEvidence = { taskId: task.taskId, trigger: "missed-expectation", outcome: "complete", receipt: settled.receiptDigest, expect: task.expect, args: task.args };
+        // A digest alone gives a tool-less reviser nothing to diagnose. Keep
+        // the observed outputs beside the expected values when they fit the
+        // task-data bound; oversized output remains available in the receipt.
+        const outputs = interfaceOutputs(manifest, settled.receipt);
+        try {
+          reviseEvidence.outputs = boundedJsonSnapshot(outputs, EXPERIMENT_BOUNDS.spec, "revision evidence outputs");
+        } catch {
+          reviseEvidence.outputsDigest = digestCanonical(outputs as JsonValue);
+          reviseEvidence.outputsOmitted = "exceeds-task-data-bound";
+        }
       }
     }
 
@@ -1358,9 +1383,10 @@ export async function runExperimentArm(opts: ExperimentRunOptions): Promise<Expe
     }
 
     let revise: ExperimentRevise | undefined;
+    let revisionFailure: ExperimentRun["failure"] = null;
     if (reviseTrigger !== undefined) {
       try {
-        revise = await reviseHook(ctx, consult.entry!, reviseTrigger, reviseEvidence!, manifest!, catalog);
+        ({ revise, failure: revisionFailure } = await reviseHook(ctx, consult.entry!, reviseTrigger, reviseEvidence!, manifest!, catalog));
       } catch (error) {
         const run = await record({
           consult, generator, manifest: settled.manifest, args: settled.args,
@@ -1372,6 +1398,9 @@ export async function runExperimentArm(opts: ExperimentRunOptions): Promise<Expe
         continue;
       }
       if (revise.promoted && revise.entry !== null) evalOrdinals.set(revise.entry, taskIndex);
+      // Refusal is terminal even when it happened inside revision. Do not
+      // invent another attempted task solely to notice the exhausted account.
+      if (account.exhausted) stopped = true;
     }
 
     await record({
@@ -1380,9 +1409,9 @@ export async function runExperimentArm(opts: ExperimentRunOptions): Promise<Expe
       manifest: settled.manifest,
       args: settled.args,
       receipt: settled.receiptDigest,
-      outcome: settled.receipt.outcome,
+      outcome: account.exhausted ? "exhausted" : settled.receipt.outcome,
       work: { units: settled.receipt.work.units, agentCalls: settled.receipt.work.agentCalls },
-      failure: null,
+      failure: revisionFailure,
       promote,
       ...(revise === undefined ? {} : { revise }),
     });
