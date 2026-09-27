@@ -7,8 +7,9 @@
 //   spawn option replaces, never merges, so host credentials cannot leak),
 // - the child starts in one declared directory (a launch property — it is
 //   not a filesystem sandbox), and
-// - a fixed POSIX wrapper script applies `ulimit` resource bounds before
-//   `exec`, so the OS — not the runner's wall-clock race — enforces them.
+// - a fixed POSIX wrapper script sets `ulimit` values before `exec`, with
+//   each platform's enforcement status recorded separately from the
+//   command executor's independent wall-clock timeout.
 //
 // Every declared parameter, plus which knobs this platform actually enforces,
 // feeds the executor's configuration digest: a weaker posture can never
@@ -87,7 +88,8 @@ type LimitKnob = {
  * refused outright rather than silently skipped. Linux enforces every knob
  * here. Darwin's `setrlimit` accepts `RLIMIT_AS` for `getrlimit` only — the
  * shell reports "cannot modify limit" — so the address-space knob cannot be
- * applied there at all. */
+ * applied there at all. Darwin also accepts RLIMIT_CPU while some shell
+ * builtin workloads exceed it, so that limit is recorded as best effort. */
 const LIMIT_SUPPORT: Record<string, Record<keyof IsolationLimits, LimitKnob>> = {
   linux: {
     cpuSeconds: { flag: "t", settable: true, enforced: true },
@@ -99,7 +101,7 @@ const LIMIT_SUPPORT: Record<string, Record<keyof IsolationLimits, LimitKnob>> = 
     noCore: { flag: "c", settable: true, enforced: true },
   },
   darwin: {
-    cpuSeconds: { flag: "t", settable: true, enforced: true },
+    cpuSeconds: { flag: "t", settable: true, enforced: false },
     fileSizeBlocks: { flag: "f", settable: true, enforced: true },
     openFiles: { flag: "n", settable: true, enforced: true },
     processes: { flag: "u", settable: true, enforced: true, scope: "uid" },
