@@ -227,8 +227,7 @@ export function parseExperimentTask(value: unknown, at = "task"): ExperimentTask
   };
   const corrections = opt(v, "corrections");
   if (corrections.present) task.corrections = parseCorrections(corrections.value, `${at}.corrections`);
-  const expect = opt(v, "expect");
-  if (expect.present) task.expect = valueMap(expect.value, `${at}.expect`);
+  if (Object.hasOwn(raw, "expect")) task.expect = valueMap(raw.expect, `${at}.expect`);
   return task;
 }
 
