@@ -291,6 +291,29 @@ Findings:
   and re-derive under `experiment verify`. The live studies themselves
   recorded zero corrections — no operator interventions were injected.
 
+### v4 · 48 tasks (8 acquisition / 32 unseen / 8 shift), harder text
+
+Corpus revision v4: same deterministic generator and phase structure,
+wider taxonomies (10-14 classes, up from 6-10), deeper rule tables
+(6-10, up from 5-9), and a new optional `shape.difficulty` block on the
+family config with four text knobs: `hintLeak` (distractor-sentence
+rate), `noiseSentences` (extra body sentences drawn from rival classes),
+`confusable` (leaks that draw a full body sentence from the class's
+confusable pair partner instead of a tell-tale hint phrase), and
+`subjectMislead` (subjects naming a rival class while the body carries
+the truth). Absent `difficulty` regenerates the v3 tasks byte-for-byte;
+every knob's first PRNG draw is guarded by the knob being non-default.
+Rival draws come from the task's own taxonomy, so every injected sentence
+is signal for a label the classifier can actually pick.
+
+A bounded Jev probe (6 unseen tasks per corpus, 72 holdout records each)
+scored 97.2% on v3 and 72.2% on v4. The misses land on the declared
+confusable pairs (billing-inquiry vs billing-dispute, login-problem vs
+account-access, privacy-request vs data-export). The drop is specific to
+that classifier: a batch pipeline on grok-4.5 that reads the full task spec
+labels most v4 records correctly, so v4 separates weaker classifiers from
+stronger ones rather than making every record hard.
+
 ## Status and limits
 
 The claim under test now holds within this family, on every pre-registered
@@ -313,8 +336,7 @@ measure:
 What the study does not show: the task family is synthetic and saturating,
 so held-out success no longer discriminates between arms; nothing here is
 evidence that retained procedures generalize to production work. The
-optimizer arm now ships — revision and demotion land on run records and
-catalog entries with stored evidence, and aggregate to measured counts —
-but it has not yet been exercised against a corpus discriminative enough
-to make its triggers fire at scale. The named next steps remain a harder
-synthetic family and, ultimately, a production-derived one.
+optimizer arm now ships: revision and demotion land on run records and
+catalog entries with stored evidence, and aggregate to measured counts.
+The v4 corpus above is the harder synthetic family it runs against; a
+production-derived family remains the named next step.

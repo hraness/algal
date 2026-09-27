@@ -25,6 +25,16 @@ independent of these package versions.
   as evidence and no longer match consultation. Run records carry the
   episode under `revise`; reports aggregate `revisionsTotal` and
   `demotionsTotal`, and `algal experiment verify` re-derives the joins.
+- The record-triage experiment family generator accepts an optional
+  `shape.difficulty` block: `hintLeak` (distractor-sentence rate),
+  `noiseSentences` (extra body sentences drawn from rival classes),
+  `confusable` (leaks drawn from a confusable pair partner's real body
+  text), and `subjectMislead` (subjects naming a rival class while the
+  body carries the truth). Rival draws come from the task's own taxonomy.
+  Absent `difficulty`, generation is unchanged: v3 tasks regenerate
+  byte-for-byte. A v4 corpus (8 acquisition / 32 unseen / 8 shift tasks,
+  10-14 classes, 6-10 rules) ships under
+  `experiments/cumulative-skill/{configs,tasks}/v4/`.
 
 ## v0.2.0-vm.10 - 2026-09-26
 

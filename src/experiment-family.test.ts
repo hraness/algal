@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { AlgalError } from "./errors";
 import { canonicalize, type JsonObject, type JsonValue } from "./values";
 import {
+  CLASS_POOL,
   EXPERIMENT_FAMILY_CONTRACT,
   EXPERIMENT_SET_CONTRACT,
   SeededRng,
@@ -231,5 +232,119 @@ describe("shift evolution", () => {
     const a = shiftGen();
     const b = shiftGen();
     expect(canonicalize(a.tasks as unknown as JsonValue)).toBe(canonicalize(b.tasks as unknown as JsonValue));
+  });
+});
+
+describe("difficulty knobs", () => {
+  const hardShape = {
+    ...BASE_SHAPE,
+    difficulty: {
+      hintLeak: 0.6,
+      noiseSentences: [1, 3] as [number, number],
+      confusable: 0.8,
+      subjectMislead: 0.5,
+    },
+  };
+
+  test("absent difficulty is byte-identical to explicit defaults", () => {
+    const plain = generateExperimentTasks(config({ seed: 5150 }));
+    const explicit = generateExperimentTasks(
+      config({ seed: 5150, shape: { ...BASE_SHAPE, difficulty: { hintLeak: 0.25, noiseSentences: [0, 0], confusable: 0, subjectMislead: 0 } } }),
+    );
+    // Tasks embed the config digest twice — under family.config and inside
+    // each task's own digest — so compare the generated content directly.
+    const content = (gen: typeof plain): JsonValue[] =>
+      gen.tasks.map(
+        (task) =>
+          ({
+            taskId: task.taskId,
+            phase: task.phase,
+            taxonomy: task.taxonomy,
+            recordSchema: task.recordSchema,
+            rules: task.rules,
+            outputFormat: task.outputFormat,
+            grader: task.grader,
+            inputs: task.inputs,
+          }) as unknown as JsonValue,
+      );
+    expect(canonicalize(content(explicit))).toBe(canonicalize(content(plain)));
+    expect(explicit.tasks.map((t) => t.taskId)).toEqual(plain.tasks.map((t) => t.taskId));
+  });
+
+  test("difficulty generation is deterministic and still validates", () => {
+    const a = generateExperimentTasks(config({ seed: 4242, shape: hardShape }));
+    const b = generateExperimentTasks(config({ seed: 4242, shape: hardShape }));
+    expect(canonicalize(a.tasks as unknown as JsonValue)).toBe(canonicalize(b.tasks as unknown as JsonValue));
+    for (const task of a.tasks) {
+      expect(taskExpectationMismatches(task)).toEqual([]);
+    }
+  });
+
+  test("rejects malformed difficulty blocks", () => {
+    expectConfigError(
+      { ...rawConfig(), shape: { ...BASE_SHAPE, difficulty: { hintLeak: 2 } } },
+      "shape.difficulty.hintLeak",
+    );
+    expectConfigError(
+      { ...rawConfig(), shape: { ...BASE_SHAPE, difficulty: { noiseSentences: [0, 9] } } },
+      "shape.difficulty.noiseSentences",
+    );
+    expectConfigError(
+      { ...rawConfig(), shape: { ...BASE_SHAPE, difficulty: { surprise: 1 } } },
+      'unknown key "surprise"',
+    );
+  });
+
+  test("noise sentences lengthen bodies and confusable leaks drop the hint phrase", () => {
+    const easy = generateExperimentTasks(config({ seed: 31337 }));
+    const noisy = generateExperimentTasks(
+      config({ seed: 31337, shape: { ...BASE_SHAPE, difficulty: { hintLeak: 1, noiseSentences: [2, 3], confusable: 1, subjectMislead: 0 } } }),
+    );
+    const bodies = (gen: typeof easy): string[] =>
+      gen.tasks.flatMap((task) => task.inputs.flatMap((batch) => batch.records.map((record) => String(record["body"]))));
+    const easyAvg = bodies(easy).reduce((sum, body) => sum + body.length, 0) / bodies(easy).length;
+    const noisyBodies = bodies(noisy);
+    const noisyAvg = noisyBodies.reduce((sum, body) => sum + body.length, 0) / noisyBodies.length;
+    expect(noisyAvg).toBeGreaterThan(easyAvg);
+    // confusable=1 replaces every "has been on my mind" hint phrase with a
+    // full rival-class body sentence.
+    expect(noisyBodies.filter((body) => body.includes("has been on my mind")).length).toBe(0);
+  });
+
+  test("subjectMislead rewrites subjects toward rival classes", () => {
+    // Two classes only, so every misled subject comes from the single rival.
+    // Match subjects against template stems: literal text with {n} → digits
+    // and {thing} → a word.
+    const poolById = new Map(CLASS_POOL.map((entry) => [entry.id, entry] as const));
+    const subjectPatterns = (id: string): RegExp[] =>
+      poolById.get(id)!.subjects.map(
+        (t) =>
+          new RegExp(`^${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replaceAll("\\{n\\}", "\\d+").replaceAll("\\{thing\\}", "\\w+")}$`),
+      );
+    const misled = generateExperimentTasks(
+      config({
+        seed: 2718,
+        tasks: 2,
+        shape: {
+          ...BASE_SHAPE,
+          classes: [2, 2],
+          difficulty: { hintLeak: 0, noiseSentences: [0, 0], confusable: 0, subjectMislead: 1 },
+        },
+      }),
+    );
+    for (const task of misled.tasks) {
+      const ids = task.taxonomy.classes.map((entry) => entry.id);
+      for (const batch of task.inputs) {
+        const results = (batch.expect.out as { results: { label: string }[] }).results;
+        for (const [i, record] of batch.records.entries()) {
+          const truth = results[i]!.label;
+          const rival = ids.find((id) => id !== truth)!;
+          const subject = String(record["subject"]);
+          expect(subjectPatterns(truth).some((p) => p.test(subject))).toBe(false);
+          expect(subjectPatterns(rival).some((p) => p.test(subject))).toBe(true);
+        }
+      }
+      expect(taskExpectationMismatches(task)).toEqual([]);
+    }
   });
 });
