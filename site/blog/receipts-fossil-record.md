@@ -30,7 +30,7 @@ Records of what a system did differ in whom they ask you to trust:
 1. **Logs** are the process's own account, so you trust the process.
 2. **Traces**, such as LangSmith or OpenTelemetry, are structured observation, so you trust the pipeline that collected them.
 3. **Event history**, as in Temporal, is the orchestrator's record, so you trust the service that kept it.
-4. **Replayable receipts** re-execute the same way anywhere, so you do not have to trust the host at all.
+4. **Replayable receipts** re-execute the same way anywhere, so you do not have to trust the host's account of how the run used its recorded answers.
 
 ALGAL's receipts are the fourth kind. Replay needs the same inputs, the same recorded answers, and the same event order, or the digest does not match. The [diagrams on the tour](/tour/) replay each receipt's recorded event order rather than animating an illustration, so what you see is the run itself.
 
@@ -44,7 +44,7 @@ Several ALGAL features depend on receipts rather than sitting beside them:
 
 - **Resuming in another process.** A run can wait on an external event, exit, and resume in a new process, even in the other runtime (Rust or TypeScript), because resuming means verifying: the new process checks the recorded effects and continues the declared graph. See the [process spec](/docs/spec/process/).
 - **Evidence that travels.** `algal process export` packs a run's evidence into a size-limited bundle, and verification still works after the original store is gone. The history moves with the work instead of staying in someone's database.
-- **Auditable self-modification.** When a program spawns a child, the child manifest's digest goes onto the parent's receipt. When a foundry epoch promotes a candidate, the cases and the winner go onto receipts. [Self-evolving software](/blog/self-evolving-software-selection-boundary/) can be audited only because those records exist: proposal digests, measured outcomes, and selection decisions.
+- **Auditable self-modification.** When a program spawns a child, the child manifest's digest goes onto the parent's receipt. When a foundry epoch promotes a candidate, a content-addressed report records the cases and the winner and points to each case's receipt. [Self-evolving software](/blog/self-evolving-software-selection-boundary/) can be audited only because those records exist: proposal digests, measured outcomes, and selection decisions.
 - **Diagnosis without a debugger.** The TypeScript CLI's `algal diagnose` maps a failed receipt back to the source location, naming the cell that failed and what was in scope, because the receipt records the run's structure rather than free text.
 
 ## Receipts show failures too
