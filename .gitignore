@@ -13,3 +13,5 @@ promoted/
 .vercel
 coverage/
 .env*
+
+/verify/rust-bridge/target/
