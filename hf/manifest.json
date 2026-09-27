@@ -1,0 +1,26 @@
+{
+  "schema": "hraness-hf-export-v1",
+  "repo_id": "hranesscom/algal-experiments",
+  "repo_type": "dataset",
+  "license": "mit",
+  "source_repository": "https://github.com/hraness/algal",
+  "scope": "Existing public experiment summaries only. No raw stores, Terminal-Bench task content, private traces, or provider accounting.",
+  "files": [
+    {
+      "source": "docs/coding-harness-pilot-evidence.json",
+      "destination": "studies/coding-harness-pilot-2026-09-20/results.json",
+      "sha256": "160a168cf8563deeb4517f0cd3bdeb91bf125338e7c05a7572db9dd897324619"
+    },
+    {
+      "source": "docs/application-research-results-2026-09-23.json",
+      "destination": "studies/application-research-2026-09-23/results.json",
+      "sha256": "afa304111f052faef1c0205d8d39c88bf7b8fe6e4c014e8fe7a4c3816acea1d2"
+    },
+    {
+      "source": "LICENSE",
+      "destination": "LICENSE",
+      "sha256": "74b69bf37c8f340c9c2a54d431a15218738d9c463d0e014fa6a8bb8edce4e539"
+    }
+  ],
+  "rights_status": "reviewed-existing-mit"
+}
