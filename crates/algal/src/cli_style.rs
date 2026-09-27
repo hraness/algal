@@ -1,29 +1,21 @@
 //! Terminal style for the native CLI's human output: the shared audience
 //! rule, status symbols with ASCII fallbacks, symbol-only color, and the
-//! two-line error.
+//! two-line error — now the `hraness-cli-kit` crate's own APIs (pinned at
+//! desktop-foundation v0.8.1). The Bun copy in `src/cli-style.ts` follows the
+//! same contract, and a test compares it with the desktop-foundation SDK.
 //!
-//! TODO(df-0.8): use `hraness-cli-kit` (`audience::detect` and the style
-//! helpers) once desktop-foundation tags the crate. Until then this module
-//! copies that contract, and it follows the Bun copy in `src/cli-style.ts`,
-//! which a test compares with the desktop-foundation 0.8 SDK.
+//! Kept local because the kit has no equivalent:
+//! - `explicit_audience`: `audience::detect` folds `HRANESS_AUDIENCE` into
+//!   its chain; `algal doctor` needs the explicit value alone so a piped
+//!   human still gets sentences.
+//! - `sentence`: the kit's `sentence` spares only `keep` prefixes; ALGAL
+//!   never capitalizes a path, flag, or identifier ("nothing.json: file not
+//!   found." keeps its case).
+//! - `print_stdout`: the kit's `write_stdout` swallows write errors; a failed
+//!   print must never read as success, so only a closed pipe exits quietly.
 
-use std::io::IsTerminal;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Audience {
-    Human,
-    Agent,
-    Quiet,
-}
-
-const AGENT_MARKERS: [&str; 6] = [
-    "AI_AGENT",
-    "CLAUDECODE",
-    "CODEX_SANDBOX",
-    "CODEX_SANDBOX_NETWORK_DISABLED",
-    "CURSOR_AGENT",
-    "GEMINI_CLI",
-];
+pub use hraness_cli_kit::audience::{Audience, detect_current as audience, process_env};
+pub use hraness_cli_kit::style::{CliError, Style, Symbol, is_broken_pipe};
 
 /// The audience `HRANESS_AUDIENCE` names, in any letter case with
 /// surrounding spaces ignored (`off` means quiet), or `None`.
@@ -37,97 +29,6 @@ pub fn explicit_audience(env: &dyn Fn(&str) -> Option<String>) -> Option<Audienc
         "agent" => Some(Audience::Agent),
         "quiet" | "off" => Some(Audience::Quiet),
         _ => None,
-    }
-}
-
-/// `HRANESS_AUDIENCE` (any letter case, surrounding spaces ignored) wins,
-/// then exact agent markers, then a terminal on stderr means a person;
-/// anything else stays quiet.
-pub fn detect_audience(env: &dyn Fn(&str) -> Option<String>, stderr_is_tty: bool) -> Audience {
-    if let Some(explicit) = explicit_audience(env) {
-        return explicit;
-    }
-    if AGENT_MARKERS
-        .iter()
-        .any(|marker| env(marker).is_some_and(|value| !value.is_empty()))
-    {
-        return Audience::Agent;
-    }
-    if stderr_is_tty {
-        Audience::Human
-    } else {
-        Audience::Quiet
-    }
-}
-
-pub fn process_env(name: &str) -> Option<String> {
-    std::env::var(name).ok()
-}
-
-/// The audience for this process's stderr.
-pub fn audience() -> Audience {
-    detect_audience(&process_env, std::io::stderr().is_terminal())
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Style {
-    pub ascii: bool,
-    pub color: bool,
-}
-
-impl Style {
-    pub fn detect(env: &dyn Fn(&str) -> Option<String>, is_tty: bool) -> Self {
-        let nonempty = |name: &str| env(name).filter(|value| !value.is_empty());
-        let term_dumb = env("TERM").as_deref() == Some("dumb");
-        let locale = nonempty("LC_ALL")
-            .or_else(|| nonempty("LC_CTYPE"))
-            .or_else(|| nonempty("LANG"));
-        let utf8 = locale.is_some_and(|value| {
-            let lower = value.to_ascii_lowercase();
-            lower.contains("utf-8") || lower.contains("utf8")
-        });
-        let ascii = term_dumb || env("HRANESS_ASCII").as_deref() == Some("1") || !utf8;
-        // A nonempty NO_COLOR wins; FORCE_COLOR other than `0` or `false` forces color.
-        let forced = nonempty("FORCE_COLOR").is_some_and(|value| value != "0" && value != "false");
-        let color = if nonempty("NO_COLOR").is_some() {
-            false
-        } else {
-            forced || (is_tty && !term_dumb)
-        };
-        Self { ascii, color }
-    }
-
-    pub fn stderr() -> Self {
-        Self::detect(&process_env, std::io::stderr().is_terminal())
-    }
-
-    pub fn stdout() -> Self {
-        Self::detect(&process_env, std::io::stdout().is_terminal())
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum Symbol {
-    Ok,
-    Fail,
-    Warn,
-    Next,
-    Skip,
-}
-
-pub fn symbol(symbol: Symbol, style: Style) -> String {
-    let (unicode, ascii, color) = match symbol {
-        Symbol::Ok => ("✓", "OK", "32"),
-        Symbol::Fail => ("✗", "FAIL", "31"),
-        Symbol::Warn => ("⚠", "WARN", "33"),
-        Symbol::Next => ("→", "->", "2"),
-        Symbol::Skip => ("–", "-", "2"),
-    };
-    let glyph = if style.ascii { ascii } else { unicode };
-    if style.color {
-        format!("\u{1b}[{color}m{glyph}\u{1b}[0m")
-    } else {
-        glyph.to_owned()
     }
 }
 
@@ -155,11 +56,9 @@ pub fn sentence(message: &str) -> String {
 
 /// What happened, then exactly one next command.
 pub fn render_failure(text: &str, next: &str, style: Style) -> String {
-    format!(
-        "{} {text}\n{} {next}\n",
-        symbol(Symbol::Fail, style),
-        symbol(Symbol::Next, style)
-    )
+    CliError::new("error", text)
+        .with_next(next)
+        .render_human(style)
 }
 
 /// Write human text (help, the doctor checklist) to stdout. `algal help
@@ -174,7 +73,7 @@ pub fn print_stdout(text: &str) {
         .write_all(text.as_bytes())
         .and_then(|()| stdout.flush());
     if let Err(error) = result {
-        if error.kind() == std::io::ErrorKind::BrokenPipe {
+        if is_broken_pipe(&error) {
             std::process::exit(0);
         }
         panic!("failed printing to stdout: {error}");
@@ -184,6 +83,7 @@ pub fn print_stdout(text: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hraness_cli_kit::audience::detect as detect_audience;
 
     fn env_of(pairs: &'static [(&'static str, &'static str)]) -> impl Fn(&str) -> Option<String> {
         move |name| {

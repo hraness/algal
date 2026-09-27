@@ -11,6 +11,13 @@
 
 use crate::error::{Error, Result};
 use apple_foundation::{Error as AppleError, Reason, ToolsProblem};
+// Who is reading, how a stream renders symbols, and the permission copy all
+// come from `hraness-cli-kit`; ALGAL keeps no copy of the shared contract.
+pub use hraness_cli_kit::audience::Audience;
+use hraness_cli_kit::permissions::{
+    self, NoticeKind, PermissionKind, PermissionNeed, ProductRef, RecoveryState, Surface,
+};
+pub use hraness_cli_kit::style::{Style, Symbol};
 use serde_json::{Value, json};
 use std::io::{BufRead as _, IsTerminal as _, Write as _};
 use std::path::{Path, PathBuf};
@@ -62,17 +69,30 @@ pub fn advice(reason: Reason) -> Advice {
     }
 }
 
-const TOOLS_RECOVERY: &str = "algal needs Apple's command line tools. Nothing was installed.";
-const TOOLS_NEXT: &str = "xcode-select --install";
+/// The product's shared identity, for the kit's permission copy.
+fn product() -> ProductRef {
+    ProductRef::new("algal", "algal")
+}
 
 fn tools_advice(problem: &ToolsProblem) -> Advice {
     if *problem == ToolsProblem::NotInstalled {
-        // Permissions kit "missing, developer-tools" recovery.
+        // The permissions kit's "missing developer-tools" recovery.
+        let need = PermissionNeed::new(
+            product(),
+            PermissionKind::DeveloperTools,
+            "build a small helper",
+            "Nothing is installed unless you agree in that window.",
+        );
+        let rendered =
+            permissions::render_recovery(&need, RecoveryState::Missing, Surface::Cli, &env_var);
+        let next = rendered
+            .next
+            .unwrap_or_else(|| "xcode-select --install".to_owned());
         return Advice {
             reason: Reason::HelperMissing,
-            summary: TOOLS_RECOVERY.to_owned(),
-            fix: format!("Run {TOOLS_NEXT}, then try again."),
-            next: Some(TOOLS_NEXT.to_owned()),
+            summary: rendered.title,
+            fix: format!("Run {next}, then try again."),
+            next: Some(next),
             settings_url: None,
         };
     }
@@ -101,98 +121,6 @@ pub fn unavailable_error(reason: Reason) -> Error {
     Error::new("EFFECT_UNBOUND", advice(reason).message())
 }
 
-// TODO(df-0.8): use hraness_cli_kit's audience and style helpers once
-// desktop-foundation 0.8.0 ships them. These copy the shared CLI contract
-// (audience detection and the symbol table) verbatim.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Audience {
-    Human,
-    Agent,
-    Quiet,
-}
-
-const AGENT_MARKERS: [&str; 6] = [
-    "AI_AGENT",
-    "CLAUDECODE",
-    "CODEX_SANDBOX",
-    "CODEX_SANDBOX_NETWORK_DISABLED",
-    "CURSOR_AGENT",
-    "GEMINI_CLI",
-];
-
-pub fn detect_audience(env: &dyn Fn(&str) -> Option<String>, stderr_tty: bool) -> Audience {
-    let explicit = env("HRANESS_AUDIENCE").map(|value| value.trim().to_ascii_lowercase());
-    match explicit.as_deref() {
-        Some("human") => return Audience::Human,
-        Some("agent") => return Audience::Agent,
-        Some("quiet" | "off") => return Audience::Quiet,
-        _ => {}
-    }
-    if AGENT_MARKERS
-        .iter()
-        .any(|key| env(key).is_some_and(|v| !v.is_empty()))
-    {
-        Audience::Agent
-    } else if stderr_tty {
-        Audience::Human
-    } else {
-        Audience::Quiet
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Symbol {
-    Ok,
-    Warn,
-    Fail,
-    Next,
-    Progress,
-    Notice,
-}
-
-/// How one stream renders symbols.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Style {
-    pub color: bool,
-    pub ascii: bool,
-}
-
-impl Style {
-    pub fn detect(env: &dyn Fn(&str) -> Option<String>, is_tty: bool) -> Self {
-        let dumb = env("TERM").as_deref() == Some("dumb");
-        let utf8 = ["LC_ALL", "LC_CTYPE", "LANG"].iter().any(|key| {
-            env(key).is_some_and(|v| {
-                let v = v.to_ascii_lowercase();
-                v.contains("utf-8") || v.contains("utf8")
-            })
-        });
-        Self {
-            // A nonempty NO_COLOR wins; FORCE_COLOR other than `0` or `false` forces color.
-            color: env("NO_COLOR").is_none_or(|v| v.is_empty())
-                && (env("FORCE_COLOR").is_some_and(|v| !v.is_empty() && v != "0" && v != "false")
-                    || (is_tty && !dumb)),
-            ascii: dumb || !utf8 || env("HRANESS_ASCII").as_deref() == Some("1"),
-        }
-    }
-
-    pub fn symbol(self, symbol: Symbol) -> String {
-        let (glyph, ascii, color) = match symbol {
-            Symbol::Ok => ("✓", "OK", "32"),
-            Symbol::Warn => ("⚠", "WARN", "33"),
-            Symbol::Fail => ("✗", "FAIL", "31"),
-            Symbol::Next => ("→", "->", "2"),
-            Symbol::Progress => ("↻", "...", ""),
-            Symbol::Notice => ("🔐", "NOTE", ""),
-        };
-        let text = if self.ascii { ascii } else { glyph };
-        if self.color && !color.is_empty() {
-            format!("\x1b[{color}m{text}\x1b[0m")
-        } else {
-            text.to_owned()
-        }
-    }
-}
-
 fn env_var(key: &str) -> Option<String> {
     std::env::var(key).ok()
 }
@@ -200,10 +128,9 @@ fn env_var(key: &str) -> Option<String> {
 /// The shared "XCODE_TOOLS" notice, shown before ALGAL lets macOS offer to
 /// install Apple's command line tools.
 pub fn xcode_tools_notice(style: Style, skip_effect: &str) -> String {
-    format!(
-        "{} algal needs Apple's command line tools to build a small helper. macOS will offer to install them (about 1 GB).\n   Nothing is installed unless you agree in that window. Or skip: {skip_effect}.\n   Press Enter to continue · s to skip\n",
-        style.symbol(Symbol::Notice)
-    )
+    let need = permissions::presets::xcode_tools(product(), skip_effect);
+    let rendered = permissions::render_pre_prompt(&need, Surface::Cli, &env_var);
+    permissions::format_notice(&rendered, NoticeKind::PrePrompt, true, style)
 }
 
 /// The apple-foundation calls the helper build makes, behind a seam so tests
@@ -259,7 +186,7 @@ struct StdTerminal;
 
 impl Terminal for StdTerminal {
     fn audience(&self) -> Audience {
-        detect_audience(&env_var, std::io::stderr().is_terminal())
+        hraness_cli_kit::audience::detect(&env_var, std::io::stderr().is_terminal())
     }
     fn interactive(&self) -> bool {
         std::io::stdin().is_terminal() && std::io::stderr().is_terminal()
@@ -508,6 +435,7 @@ impl Diagnosis {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hraness_cli_kit::audience::detect as detect_audience;
     use std::cell::{Cell, RefCell};
 
     fn plain() -> Style {
