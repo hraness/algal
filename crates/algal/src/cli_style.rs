@@ -3,8 +3,9 @@
 //! two-line error.
 //!
 //! TODO(df-0.8): use `hraness-cli-kit` (`audience::detect` and the style
-//! helpers) from desktop-foundation once 0.8.0 is released. This module
-//! copies that contract so the output already matches it.
+//! helpers) once desktop-foundation tags the crate. Until then this module
+//! copies that contract, and it follows the Bun copy in `src/cli-style.ts`,
+//! which a test compares with the desktop-foundation 0.8 SDK.
 
 use std::io::IsTerminal;
 
@@ -24,10 +25,12 @@ const AGENT_MARKERS: [&str; 6] = [
     "GEMINI_CLI",
 ];
 
-/// `HRANESS_AUDIENCE` wins, then exact agent markers, then a terminal on
-/// stderr means a person; anything else stays quiet.
+/// `HRANESS_AUDIENCE` (any letter case, surrounding spaces ignored) wins,
+/// then exact agent markers, then a terminal on stderr means a person;
+/// anything else stays quiet.
 pub fn detect_audience(env: &dyn Fn(&str) -> Option<String>, stderr_is_tty: bool) -> Audience {
-    match env("HRANESS_AUDIENCE").as_deref() {
+    let explicit = env("HRANESS_AUDIENCE").map(|value| value.trim().to_ascii_lowercase());
+    match explicit.as_deref() {
         Some("human") => return Audience::Human,
         Some("agent") => return Audience::Agent,
         Some("quiet" | "off") => return Audience::Quiet,
@@ -73,12 +76,12 @@ impl Style {
             lower.contains("utf-8") || lower.contains("utf8")
         });
         let ascii = term_dumb || env("HRANESS_ASCII").as_deref() == Some("1") || !utf8;
-        let color = if env("FORCE_COLOR").as_deref() == Some("1") {
-            true
-        } else if nonempty("NO_COLOR").is_some() {
+        // A nonempty NO_COLOR wins; FORCE_COLOR other than `0` or `false` forces color.
+        let forced = nonempty("FORCE_COLOR").is_some_and(|value| value != "0" && value != "false");
+        let color = if nonempty("NO_COLOR").is_some() {
             false
         } else {
-            is_tty && !term_dumb
+            forced || (is_tty && !term_dumb)
         };
         Self { ascii, color }
     }
@@ -205,6 +208,17 @@ mod tests {
             detect_audience(&env_of(&[("CURSOR_AGENT", "")]), false),
             Audience::Quiet
         );
+        assert_eq!(
+            detect_audience(&env_of(&[("HRANESS_AUDIENCE", " Agent ")]), true),
+            Audience::Agent
+        );
+        assert_eq!(
+            detect_audience(
+                &env_of(&[("HRANESS_AUDIENCE", "OFF"), ("CLAUDECODE", "1")]),
+                true
+            ),
+            Audience::Quiet
+        );
     }
 
     #[test]
@@ -242,6 +256,9 @@ mod tests {
         );
         assert!(Style::detect(&env_of(&[("LANG", "C")]), false).ascii);
         assert!(Style::detect(&env_of(&[("FORCE_COLOR", "1")]), false).color);
+        assert!(Style::detect(&env_of(&[("FORCE_COLOR", "true")]), false).color);
+        assert!(!Style::detect(&env_of(&[("FORCE_COLOR", "0")]), false).color);
+        assert!(!Style::detect(&env_of(&[("FORCE_COLOR", "1"), ("NO_COLOR", "1")]), true).color);
     }
 
     #[test]
