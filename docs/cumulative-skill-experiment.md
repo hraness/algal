@@ -256,9 +256,23 @@ Findings:
   (573/576), on every split. One genuinely contested record remains
   (a webhook-delivery error between bug-report and integration-help,
   flagged at `pExpected` 0.15). Per-record decisions at ~$0.001 each are
-  a cheaper classify substrate; a `classifier` cell pipeline is not
-  expressible today because `output.labels` is manifest-static while the
-  family's taxonomy varies per task.
+  a cheaper classify substrate.
+- Jev classify arm (pipeline `record-triage-jev`): the `labelsExpr`
+  contract change makes the per-record variant expressible — an `each`
+  cell maps records through a child classifier whose choice set resolves
+  from the task spec, route-pinned to `provider: "jev"`, and a fold
+  recombines the emitted {recordId, label} pairs for the shared
+  apply/summarize/pack stages. The fixed arm over all 48 tasks' holdout
+  batches (session `3f19d913`, report `759c686f`, verified clean):
+  576 classifier effects — one per record — 573/576 labels correct
+  (matching the batch classify's score; the misses land on the family's
+  ambiguous class boundaries — billing-dispute vs billing-inquiry,
+  bug-report vs integration-help/data-export — not on different record
+  subsets), and 45/48 tasks fully exact. Work: 2,795,714 units vs the
+  batch arm's 933,716 — the per-record arm costs ~3x in work units (12
+  effect calls per task) while spending ~$0.60 total; the trade is
+  per-record provenance, no batch JSON repair, and a classify bound that
+  no longer scales with context.
 - Corrections machinery exercised end-to-end at CLI level: declared
   task corrections land on run records, aggregate to `correctionsTotal`,
   and re-derive under `experiment verify`. The live studies themselves

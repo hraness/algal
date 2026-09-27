@@ -277,7 +277,7 @@ usage:
                                               replay every run a schedule record lists offline
   algal experiment <config.json> [--responses <file>] [--executor-cmd <command>]
       [--executors <file>] [--transports <file>] [--tools <file>]
-      [--dir <path>] [--out <record.json>]
+      [--modules <dir>] [--dir <path>] [--out <record.json>]
                                               run one experiment arm over a task set and record
                                               every run against the arm's work account
   algal experiment report <config.json> [--dir <path>]
@@ -2628,6 +2628,9 @@ async function main(): Promise<number> {
       }
       const arm = parseExperimentArm(armRecord);
       const { tasks } = parseExperimentTaskSet({ contract: "algal.experiment-tasks.v1", tasks: config.tasks });
+      // `--modules` preloads digest-referenced sub-manifests (`each`,
+      // `organism`, `repeat`) so arm manifests compose over them.
+      if (flags.modules !== undefined) await loadModules(String(flags.modules), store);
       const executors = await resolveExecutors(flags, dir);
       const transports = flags.transports !== undefined ? await loadTransports(String(flags.transports)) : undefined;
       const tools = await resolveTools(flags, dir);

@@ -1,0 +1,53 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:experiment-record-classify",
+  "name": "Record classify child",
+  "note": "The per-record child for the Jev classify arm: each record-triage item runs one classifier effect. `labelsExpr` derives the choice set from the outer task's spec, so the taxonomy is never pinned in the manifest. The emit cell pairs the record id with the chosen label for deterministic recombination upstream.",
+  "budgets": { "maxSteps": 8, "maxAgentCalls": 2, "maxWork": 50000 },
+  "interface": {
+    "inputs": {
+      "record": { "cell": "in", "port": "record" },
+      "spec": { "cell": "in", "port": "spec" }
+    },
+    "outputs": { "pair": { "cell": "emit", "port": "out" } }
+  },
+  "cells": [
+    {
+      "id": "in",
+      "kind": "input",
+      "outputs": { "record": "json", "spec": "json" }
+    },
+    {
+      "id": "cls",
+      "kind": "classifier",
+      "inputs": { "record": "json", "spec": "json" },
+      "prompt": "Assign the record its issue class. The spec's taxonomy.classes list the valid class ids; each class's about text describes it. Judge from the record's subject and body alone; the pipeline applies the declared rules afterward.",
+      "view": { "inputs": "*" },
+      "output": {
+        "kind": "choice",
+        "labelsExpr": {
+          "contract": "algal.expr.v1",
+          "program": ["map", ["get", "spec", "taxonomy", "classes"], "c", ["get", "c", "id"]]
+        }
+      },
+      "route": { "provider": "jev" },
+      "budget": { "maxContextBytes": 65536, "maxOutputBytes": 1024, "maxEffectMs": 120000 }
+    },
+    {
+      "id": "emit",
+      "kind": "expr",
+      "inputs": { "record": "json", "label": "json" },
+      "expr": {
+        "contract": "algal.expr.v1",
+        "program": { "recordId": ["get", "record", "id"], "label": ["get", "label"] }
+      },
+      "output": { "kind": "json", "schema": { "type": "object" } }
+    }
+  ],
+  "edges": [
+    { "from": { "cell": "in", "port": "record" }, "to": { "cell": "cls", "port": "record" } },
+    { "from": { "cell": "in", "port": "spec" }, "to": { "cell": "cls", "port": "spec" } },
+    { "from": { "cell": "cls", "port": "out" }, "to": { "cell": "emit", "port": "label" } },
+    { "from": { "cell": "in", "port": "record" }, "to": { "cell": "emit", "port": "record" } }
+  ]
+}

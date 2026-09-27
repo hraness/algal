@@ -88,6 +88,15 @@ Compiling `.algal` source still needs the Bun CLI.
   exact; `onMiss` and a classifier `shadow.take` validate against the
   resolved set at run time. `labels` and `labelsExpr` are mutually
   exclusive in both runtimes.
+- The cumulative-skill pipeline gains a per-record classify variant,
+  `record-triage-jev.algal.json` with its `record-classify.algal.json`
+  child: an `each` cell runs one `classifier` effect per record, the
+  child's `labelsExpr` resolves the task's taxonomy from the delivered
+  `spec`, and `route.provider: "jev"` pins the typed-decision backend. An
+  expr cell folds the emitted `{recordId, label}` pairs into the shape
+  the shared apply and summarize stages consume. `algal experiment`
+  accepts `--modules` so arm manifests can compose over digest-referenced
+  sub-manifests.
 - The shared program catalog gains six pure collection entries under
   `examples/source/projects/shared/`: `includes_text` (membership scan),
   `latest_value` (last-wins lookup over `{target, value}` updates),
