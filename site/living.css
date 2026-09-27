@@ -1,10 +1,11 @@
 /* Page-scoped composition. Colors, fonts, and appearance come from Paper. */
 .living-intro { display: grid; grid-template-columns: 1.15fr 1fr; gap: 3rem; align-items: end; padding: 4.5rem 0 3.5rem; }
 .living-intro .eyebrow { margin-bottom: 1.5rem; }
-.living-intro h1 { font-size: clamp(3.8rem, 6.7vw, 6rem); }
+.living-intro h1 { font-size: clamp(3.2rem, 5.4vw, 5rem); font-weight: var(--hraness-marketing-display-weight); line-height: var(--hraness-marketing-h1-leading); letter-spacing: var(--hraness-marketing-h1-tracking); }
+.living-intro h1 em { font-style: normal; font-weight: 400; }
 .living-intro-copy { padding-bottom: .3rem; }
 .living-intro-copy .lede { max-width: 26rem; font-size: .97rem; }
-.living-local-note { display: flex; gap: .65rem; align-items: center; margin: 1.5rem 0 0; color: var(--green); font: .72rem var(--mono); }
+.living-local-note { display: flex; gap: .65rem; align-items: center; margin: 1.5rem 0 0; color: var(--green); font: .85rem/1.5 var(--sans); }
 .living-workbench { border: 1px solid var(--line); border-radius: 8px; background: var(--white); overflow: hidden; }
 .living-workbench-bar { display: flex; gap: 1rem; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); background: var(--secondary); padding: .9rem 1.35rem; font: .72rem/1.5 var(--mono); }
 .living-file-label { display: flex; gap: .65rem; align-items: center; }
@@ -50,7 +51,7 @@
 .living-page textarea:focus-visible, .living-page input:focus-visible, .living-page select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .living-editor-row { display: grid; grid-template-columns: minmax(0, 1fr) 6.5rem; gap: .8rem; align-items: end; }
 .living-editor-row select { width: 100%; min-height: 43px; background: var(--paper); }
-.living-fine { font-size: .66rem; line-height: 1.7; color: var(--muted); margin: .65rem 0 0; }
+.living-fine { font-size: .8rem; line-height: 1.7; color: var(--muted); margin: .65rem 0 0; }
 .living-editor-footer { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-top: 1.2rem; }
 .living-button { display: inline-flex; gap: 1.4rem; justify-content: space-between; align-items: center; border: 1px solid var(--line); border-radius: 4px; background: var(--white); color: var(--ink); padding: .7rem .85rem; min-height: 42px; font: 500 .74rem/1.4 var(--sans); cursor: pointer; text-decoration: none; }
 .living-button:hover { background: var(--secondary); }
@@ -114,7 +115,7 @@
 }
 @media (max-width: 720px) {
   .living-intro { grid-template-columns: 1fr; gap: 1.5rem; padding-top: 3rem; padding-bottom: 2.2rem; }
-  .living-intro h1 { font-size: 4.1rem; }
+  .living-intro h1 { font-size: clamp(2.25rem, 9.5vw, 3.4rem); }
   .living-intro-copy .lede { max-width: 33rem; }
   .living-workspace { grid-template-columns: 1fr; }
   .living-workbench-bar { padding: .8rem 1rem; font-size: .64rem; }
@@ -138,7 +139,6 @@
   .living-afterword > div { grid-template-columns: 1fr; gap: 1.5rem; }
 }
 @media (max-width: 400px) {
-  .living-intro h1 { font-size: 3.65rem; }
   .living-surface > .living-node-stack { padding: 1.3rem; }
   .living-node-heading { font-size: 2.55rem; }
   .living-node-split { grid-template-columns: minmax(0, 1fr); }

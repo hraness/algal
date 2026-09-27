@@ -39,7 +39,7 @@
 .tasks-checks [data-passed="false"] { color: var(--destructive, #a43a34); }
 .tasks-page .living-history-copy strong { overflow-wrap: anywhere; }
 @media (max-width: 900px) { .tasks-workflow-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tasks-row { flex-direction: column; } .tasks-row-actions { justify-content: start; max-width: none; } }
-@media (max-width: 760px) { .tasks-workspace { grid-template-columns: 1fr; } .tasks-editor { border-left: 0; border-top: 1px solid var(--line); } .tasks-list-panel, .tasks-editor, .tasks-workflow { padding: 1.2rem; } .tasks-stale { margin-inline: 1.2rem; } .tasks-status { padding-inline: 1.2rem; } .tasks-page .living-intro h1 { font-size: 3.3rem; } }
+@media (max-width: 760px) { .tasks-workspace { grid-template-columns: 1fr; } .tasks-editor { border-left: 0; border-top: 1px solid var(--line); } .tasks-list-panel, .tasks-editor, .tasks-workflow { padding: 1.2rem; } .tasks-stale { margin-inline: 1.2rem; } .tasks-status { padding-inline: 1.2rem; } .tasks-page .living-intro h1 { font-size: clamp(2.25rem, 9.5vw, 3.4rem); } }
 @media (max-width: 420px) { .tasks-workflow-fields { grid-template-columns: 1fr; } }
 
 @media (forced-colors: active) {

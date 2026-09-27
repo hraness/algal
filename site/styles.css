@@ -485,7 +485,7 @@ h2 em { font-style: normal; color: inherit; }
   .intro-field { margin-inline: -1.25rem; padding-inline: 1.25rem; }
   .hero.hraness-marketing-hero { padding-block: 2.75rem 2.5rem; }
   .hero .lede { font-size: 1rem; }
-  .hero h1 { font-size: clamp(2.35rem, 10vw, 3.4rem); }
+  .hero h1 { font-size: clamp(2.25rem, 9.2vw, 3.4rem); }
   .vm-lifecycle { padding: 1.25rem; gap: 1rem; }
   .vm-preview-command { padding: 1rem 1.25rem; }
   .use-cases-section, .source-section, .route-section, .composition-section, .examples-section { padding-top: 3rem; }
@@ -512,7 +512,7 @@ h2 em { font-style: normal; color: inherit; }
 /* --- Living-programs pages ------------------------------------------------ */
 nav a[aria-current="page"] { color: var(--ink); }
 .page-intro { padding-block: 4rem 1rem; max-width: 52rem; }
-.page-intro .eyebrow { margin-bottom: 1.4rem; }
+.page-intro .eyebrow { display: flex; align-items: center; gap: .6rem; margin-bottom: 1.4rem; }
 .page-intro h1 { font-family: var(--serif); font-size: var(--hraness-marketing-h1-size); font-weight: var(--hraness-marketing-display-weight); line-height: var(--hraness-marketing-h1-leading); letter-spacing: var(--hraness-marketing-h1-tracking); margin: 0 0 1.4rem; }
 .page-intro h1 em { font-style: normal; }
 .page-intro .lede { font-size: 1.08rem; line-height: 1.65; color: var(--muted); max-width: 46rem; }
@@ -529,7 +529,7 @@ nav a[aria-current="page"] { color: var(--ink); }
 .hero-choose:hover { background: var(--surface-hover); }
 .hero-choose[aria-pressed="true"] { border-bottom-color: var(--primary); }
 .hero-choose[aria-pressed="true"] .hc-file { color: var(--primary); }
-.hc-file { font: 500 .82rem/1.4 var(--mono); overflow-wrap: anywhere; }
+.hc-file { font: 500 .82rem/1.4 var(--mono); }
 .hc-blurb { font-size: .8rem; line-height: 1.4; color: var(--muted); }
 .hero-stage { margin-top: 1.25rem; }
 .hs-set { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 1.25rem; align-items: start; }
@@ -543,7 +543,7 @@ nav a[aria-current="page"] { color: var(--ink); }
 .hs-dl div { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: .6rem 0; border-bottom: 1px solid var(--line); }
 .hs-dl dt { font-size: .85rem; color: var(--muted); white-space: nowrap; }
 .hs-dl dd { margin: 0; font: .8rem/1.5 var(--mono); color: var(--ink); text-align: right; overflow-wrap: anywhere; }
-.hs-dl dd code { font: inherit; }
+.hs-dl dd code { font: inherit; padding: 0; background: none; }
 .hs-links { display: flex; flex-wrap: wrap; gap: .25rem 1.25rem; margin: 0; padding: .55rem 1.1rem .7rem; font-size: .88rem; }
 .hs-links a { display: inline-flex; align-items: center; min-block-size: 2.75rem; text-decoration: none; }
 .life-section { padding-top: var(--hraness-marketing-story-space); }
@@ -674,6 +674,8 @@ nav a[aria-current="page"] { color: var(--ink); }
 .post-meta { margin: 0 0 .4rem; font: .75rem var(--mono); color: var(--muted); }
 .post-meta + h1 { margin-top: 0; }
 .docs-list-wide { max-width: 44rem; }
+.blog-index { max-width: 46rem; padding-block: 1rem 4rem; }
+.algal-site .blog-index > .plain-site.plain-publication.plain-publication--embedded { margin-inline: 0; padding-inline: 0; }
 
 /* Mirrored markdown typography — restrained, dense enough for reference. */
 .prose { font-size: 1rem; line-height: 1.75; color: var(--ink); }
@@ -729,7 +731,8 @@ nav a[aria-current="page"] { color: var(--ink); }
   .hero-actions { gap: .5rem 1.25rem; margin-top: 1.6rem; }
   .hero-proof { margin-top: 2.25rem; }
   .hero-chooser { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .hero-choose { padding: .6rem .75rem .65rem; }
+  .hero-choose { padding: .6rem .6rem .65rem; }
+  .hc-file { font-size: .76rem; }
   .hs-pre { max-height: 22rem; font-size: .76rem; padding: .9rem 1rem; }
   .hs-bar, .hs-dl, .hs-links { padding-inline: 1rem; }
 }

@@ -437,7 +437,7 @@ const heroExamples: HeroExample[] = [
 ];
 
 const HERO_CHOOSER = `<div class="hero-chooser" role="group" aria-label="Choose an example program">${heroExamples.map((example, index) =>
-  `<button type="button" class="hero-choose" data-hero-choose="${example.key}" aria-pressed="${index === 0}"><span class="hc-file">${escapeHtml(example.file)}</span><span class="hc-blurb">${escapeHtml(example.blurb)}</span></button>`).join("")}</div>`;
+  `<button type="button" class="hero-choose" data-hero-choose="${example.key}" aria-pressed="${index === 0}"><span class="hc-file">${escapeHtml(example.file).replaceAll(".", "<wbr>.")}</span><span class="hc-blurb">${escapeHtml(example.blurb)}</span></button>`).join("")}</div>`;
 
 const heroIcon = (name: "arrow-up-right" | "download") => `<svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#${name}"></use></svg>`;
 const HERO_STAGE = `<div class="hero-stage" data-hero-stage>${heroExamples.map((example, index) => `
@@ -835,7 +835,7 @@ await emitDocPage({
   title: "ALGAL documentation",
   description: "Install and run the ALGAL VM, write programs in .algal source, and read the v1 contract specification. These pages render the repository's own Markdown.",
   ogTitle: "ALGAL documentation",
-}, `<section class="page-intro"><p class="eyebrow">Documentation</p><h1>The reference shelf.</h1><p class="lede">These pages render the same Markdown files kept in the repository's <code>docs/</code> and <code>spec/v1/</code> folders. Dated reviews, pilot results, and research notes stay in the repository.</p></section><div class="docs-layout">${docsRail("index", docTitles)}<div class="docs-article docs-index"><div class="docs-index-groups">${indexGroups}${indexSpec}</div></div></div>`);
+}, `<section class="page-intro"><p class="eyebrow">Documentation</p><h1>The reference shelf.</h1><p class="lede">Install the VM, write programs in <code>.algal</code> source, and read the v1 specification. Each page renders the Markdown in the repository's <code>docs/</code> and <code>spec/v1/</code> folders; dated reviews, pilot results, and research notes stay on GitHub.</p></section><div class="docs-layout">${docsRail("index", docTitles)}<div class="docs-article docs-index"><div class="docs-index-groups">${indexGroups}${indexSpec}</div></div></div>`);
 
 // --- Authored content: blog posts and comparison pages ---------------------
 // Same renderer as the docs mirror, but these pages are site-native: they
@@ -908,12 +908,13 @@ await emitMarkdownSection({
 });
 // --- Blog ------------------------------------------------------------------
 // Posts render through the shared article layer. Every post is readable at its
-// URL; only indexable posts reach the index, sitemap, feed, and llms.txt.
+// URL; only indexable posts reach the index, sitemap, feed, and llms.txt. The
+// index page is the list itself, so it carries no duplicate rail.
 const blogRail = (current: string) => {
   const listed = blogPosts.filter(post => post.indexable || post.slug === current);
   return docsNavigation("Posts",
-    current === "index" ? "Overview" : blogPosts.find(post => post.slug === current)!.title,
-    `<a class="docs-home" href="/blog/"${current === "index" ? ' aria-current="page"' : ""}>Posts</a><ul>${listed.map(post =>
+    blogPosts.find(post => post.slug === current)!.title,
+    `<a class="docs-home" href="/blog/">Posts</a><ul>${listed.map(post =>
       `<li><a href="${post.path}"${post.slug === current ? ' aria-current="page"' : ""}>${escapeHtml(post.title)}</a></li>`).join("")}</ul>`);
 };
 for (const post of blogPosts) {
@@ -932,7 +933,7 @@ await emitDocPage({
   page: "blog", path: BLOG_PATH,
   title: `${BLOG_TITLE} · ALGAL blog`, description: BLOG_DESCRIPTION, ogTitle: "ALGAL blog",
   jsonLd: [blogIndexJsonLd(blogPosts)],
-}, `<section class="page-intro"><p class="eyebrow">Blog</p><h1>${BLOG_TITLE}.</h1><p class="lede">Longer posts on how ALGAL works, how it is tested, and the design choices behind it.</p></section><div class="docs-layout">${blogRail("index")}<div class="docs-article docs-index">${renderBlogIndex(blogPosts)}</div></div>`);
+}, `<section class="page-intro"><p class="eyebrow">Blog</p><h1>${BLOG_TITLE}.</h1><p class="lede">Longer posts on how ALGAL works, how it is tested, and the design choices behind it.</p></section><div class="docs-index blog-index">${renderBlogIndex(blogPosts)}</div>`);
 await writeFile(join(DIST, "blog/feed.xml"), blogAtomFeed(blogPosts));
 const blogSitemap = blogSitemapEntries(blogPosts);
 
