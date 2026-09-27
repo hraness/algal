@@ -1,0 +1,96 @@
+{
+  "contract": "algal.bridge-drift.v1",
+  "inputs": [
+    {
+      "path": "verify/rust-bridge/Cargo.lock",
+      "sha256": "sha256:d5aa0c8976812d8855219288e92259f303c9d67d6ced76fcb9c1bd51388cfb3c"
+    },
+    {
+      "path": "verify/rust-bridge/Cargo.toml",
+      "sha256": "sha256:5863c85bf3ce97b50c50507ea6bb9e7bd360a1e3c3578e64f781236b81a311c7"
+    },
+    {
+      "path": "verify/rust-bridge/FEASIBILITY.md",
+      "sha256": "sha256:55ca5b6d122d132ce1e880f2649fdac2e3b9ac11dd7f3f4b8bc7f61c78672aa4"
+    },
+    {
+      "path": "verify/rust-bridge/REGISTRATION.md",
+      "sha256": "sha256:ce7a832dbb77a6ef3c26b290737c2f6760248ce7f35bee06a870e1a268c4e843"
+    },
+    {
+      "path": "verify/rust-bridge/TOOLS.md",
+      "sha256": "sha256:b97eb55238c5b09b82091bef59b89eb2f35dfda2202eb5eb10b4fca748ab128c"
+    },
+    {
+      "path": "verify/rust-bridge/run.sh",
+      "sha256": "sha256:d76b5ffcd421f1115ca6df1c1075d67793ea31d74920ce1ceac866491d4d8ffc"
+    },
+    {
+      "path": "verify/rust-bridge/src/lib.rs",
+      "sha256": "sha256:506f08724d85658f10296eb01bf667f0ff99b0a1bfdb4da0e35c079a978ed72d"
+    },
+    {
+      "path": "verify/rust-bridge/src/proofs.rs",
+      "sha256": "sha256:becba78d6e7806c7a669ad7e6c8d4389fb952d4c79436412191084450c6961b8"
+    },
+    {
+      "path": "verify/rust-bridge/src/sanity.rs",
+      "sha256": "sha256:cd8968b4bcc014c05ef7d71a63aeb4afe1ef411251943199cac50fb8f803bd2e"
+    }
+  ],
+  "proofTarget": {
+    "path": "crates/algal/src/canonical.rs",
+    "sha256": "sha256:ffd42453bb791861bc88c368f28b8c57762178b6749b87ca1db78072bb5eb9ef"
+  },
+  "symbols": [
+    {
+      "symbol": "MAX_DOCUMENT_BYTES",
+      "sha256": "sha256:e305ee840876913c99d9d555f85d3ab5051e2fc1b3ce3312cb4cca06c5d12197"
+    },
+    {
+      "symbol": "read_json",
+      "sha256": "sha256:a38e57aede4d1fb1acb3fe249047a88965b76235a10545ffa9a1cbecfc98feb5"
+    },
+    {
+      "symbol": "array_index",
+      "sha256": "sha256:043a8ffb6c3d2a0693beff5a2d7d40f54ec1ae3621b6cf132167b5a654e4c47f"
+    },
+    {
+      "symbol": "key_order",
+      "sha256": "sha256:eef388c26545bc172a27ee803092ba827c9e475a7f5504c7208143290958732b"
+    },
+    {
+      "symbol": "encode",
+      "sha256": "sha256:4c1f5da04cc13830fc8d1ae210eed28785a9a048befa136df3c8ae70b327b670"
+    },
+    {
+      "symbol": "canonical",
+      "sha256": "sha256:e461c27e50bde7b9166e19161711c009666e7a64179f741667d448edef0cb722"
+    },
+    {
+      "symbol": "digest_bytes",
+      "sha256": "sha256:416966423d6d2064c7804e8e751203d134bb2bb86af2403fb8f4da5b2908ccdb"
+    },
+    {
+      "symbol": "digest",
+      "sha256": "sha256:f171e0d63bba384c90df244f971366387b3c03ef47141bd9af08a146ac7b524b"
+    },
+    {
+      "symbol": "check_digest",
+      "sha256": "sha256:99b2821c9141fba333e94237a1f71f86d740e222a2ec9cd7bbbbe2b31cd7dc24"
+    }
+  ],
+  "harnesses": [
+    "check_digest_accepts_canonical_form",
+    "check_digest_soundness_bounded_input",
+    "check_digest_soundness_utf8",
+    "check_digest_rejects_noncanonical_tail",
+    "check_digest_rejects_wrong_length",
+    "canonical_bool_leaf_bounded",
+    "canonical_object_key_emission",
+    "canonical_scalar_leaves_bounded",
+    "canonical_array_index_key_order",
+    "canonical_depth_guard_exact",
+    "canonical_shallow_tree_bounded"
+  ]
+}

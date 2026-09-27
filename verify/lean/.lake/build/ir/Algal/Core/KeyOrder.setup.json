@@ -1,0 +1,11 @@
+{"plugins": [],
+ "package": "algalVerification",
+ "options": {},
+ "name": "Algal.Core.KeyOrder",
+ "isModule": false,
+ "importArts":
+ {"Algal.Core.Text":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/Text.olean"]],
+  "Algal.Core.OwnMap":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/OwnMap.olean"]]},
+ "dynlibs": []}

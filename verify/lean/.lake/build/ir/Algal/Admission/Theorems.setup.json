@@ -1,0 +1,11 @@
+{"plugins": [],
+ "package": "algalVerification",
+ "options": {},
+ "name": "Algal.Admission.Theorems",
+ "isModule": false,
+ "importArts":
+ {"Algal.Memory.Datalog":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Memory/Datalog.olean"]],
+  "Algal.Admission.Model":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Admission/Model.olean"]]},
+ "dynlibs": []}

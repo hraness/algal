@@ -1,0 +1,31 @@
+{"synthetic": false,
+ "schemaVersion": "2025-09-10",
+ "outputs":
+ {"o": ["1733ade01485c6bb.olean"],
+  "m": false,
+  "i": "1d3332da2a0527df.ilean",
+  "c": "d0e667d160e95d66.c"},
+ "log":
+ [{"message":
+   ".> LEAN_PATH=/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean /Users/bg/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lean --threads=1 --memory=1024 /Users/bg/Documents/algal/verify/lean/Algal/Memory/Datalog.lean -o /Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Memory/Datalog.olean -i /Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Memory/Datalog.ilean -c /Users/bg/Documents/algal/verify/lean/.lake/build/ir/Algal/Memory/Datalog.c --setup /Users/bg/Documents/algal/verify/lean/.lake/build/ir/Algal/Memory/Datalog.setup.json --json",
+   "level": "trace"}],
+ "inputs":
+ [["deps",
+   [["algalVerification/Algal:extraDep",
+     [["@algalVerification:extraDep", "00000000000006bb"]]],
+    ["imports", "00000000000006bb"]]],
+  ["libs",
+   [["import dynlibs", "00000000000006bb"],
+    ["package external libraries", "00000000000006bb"],
+    ["module dynlibs", "00000000000006bb"],
+    ["module plugins", "00000000000006bb"]]],
+  ["Lean 4.34.0, commit 293d5d0c0c3f3dded4688b3ccd6a33939ac5102b",
+   "a1c6c7aa3e9abfe7"],
+  ["/Users/bg/Documents/algal/verify/lean/Algal/Memory/Datalog.lean",
+   "3ac4cbc0627c9321"],
+  ["options", "00000000000006bb"],
+  ["isModule: false", "feefd2a0d3a1847e"],
+  ["Module.name: Algal.Memory.Datalog", "b262d686724fce3a"],
+  ["Package.id?: (some algalVerification)", "322e4bdf4ecfef12"],
+  ["Module.leanArgs: #[--threads=1, --memory=1024]", "42b59798c0f2dde0"]],
+ "depHash": "6e738ca9b9c7e5ae"}

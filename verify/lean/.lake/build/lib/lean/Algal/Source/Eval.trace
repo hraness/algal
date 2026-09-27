@@ -1,0 +1,38 @@
+{"synthetic": false,
+ "schemaVersion": "2025-09-10",
+ "outputs":
+ {"o": ["32a59c753b90fb4b.olean"],
+  "m": false,
+  "i": "d5b3fe9acd63d6cc.ilean",
+  "c": "cb3d1bfdf5b9eda1.c"},
+ "log":
+ [{"message":
+   ".> LEAN_PATH=/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean /Users/bg/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lean --threads=1 --memory=1024 /Users/bg/Documents/algal/verify/lean/Algal/Source/Eval.lean -o /Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Source/Eval.olean -i /Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Source/Eval.ilean -c /Users/bg/Documents/algal/verify/lean/.lake/build/ir/Algal/Source/Eval.c --setup /Users/bg/Documents/algal/verify/lean/.lake/build/ir/Algal/Source/Eval.setup.json --json",
+   "level": "trace"},
+  {"message":
+   "Algal/Source/Eval.lean:501:34: Variable name `oracle` is not explicitly referenced.\n\nHint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:\n  [apply] _oracle\n\nNote: This linter can be disabled with `set_option linter.unusedVariables false`",
+   "level": "warning"}],
+ "inputs":
+ [["deps",
+   [["algalVerification/Algal:extraDep",
+     [["@algalVerification:extraDep", "00000000000006bb"]]],
+    ["imports",
+     [["Algal.Source.Model transitive imports (legacy)", "36c935d68dc33a61"],
+      ["Algal.Source.Model:importAllArts", "ad4bdf13834ffd1b"],
+      ["Algal.Core.KeyOrder transitive imports (legacy)", "ae773068ea27d363"],
+      ["Algal.Core.KeyOrder:importAllArts", "53e2edc16537c82e"]]]]],
+  ["libs",
+   [["import dynlibs", "00000000000006bb"],
+    ["package external libraries", "00000000000006bb"],
+    ["module dynlibs", "00000000000006bb"],
+    ["module plugins", "00000000000006bb"]]],
+  ["Lean 4.34.0, commit 293d5d0c0c3f3dded4688b3ccd6a33939ac5102b",
+   "a1c6c7aa3e9abfe7"],
+  ["/Users/bg/Documents/algal/verify/lean/Algal/Source/Eval.lean",
+   "e0ff6ec90a5aa810"],
+  ["options", "00000000000006bb"],
+  ["isModule: false", "feefd2a0d3a1847e"],
+  ["Module.name: Algal.Source.Eval", "77e6a3cef805963f"],
+  ["Package.id?: (some algalVerification)", "322e4bdf4ecfef12"],
+  ["Module.leanArgs: #[--threads=1, --memory=1024]", "42b59798c0f2dde0"]],
+ "depHash": "8dc0b190cadfe738"}

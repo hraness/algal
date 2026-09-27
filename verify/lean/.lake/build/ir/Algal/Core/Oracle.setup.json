@@ -1,0 +1,15 @@
+{"plugins": [],
+ "package": "algalVerification",
+ "options": {},
+ "name": "Algal.Core.Oracle",
+ "isModule": false,
+ "importArts":
+ {"Algal.Core.Text":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/Text.olean"]],
+  "Algal.Core.OwnMap":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/OwnMap.olean"]],
+  "Algal.Core.Json":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/Json.olean"]],
+  "Algal.Core.Binary64":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/Binary64.olean"]]},
+ "dynlibs": []}

@@ -1,0 +1,27 @@
+{"plugins": [],
+ "package": "algalVerification",
+ "options": {},
+ "name": "Algal.Core.RationalSelector",
+ "isModule": false,
+ "importArts":
+ {"Algal.Core.SignedRounding":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/SignedRounding.olean"]],
+  "Algal.Core.RoundingInterval":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/RoundingInterval.olean"]],
+  "Algal.Core.RoundingEndpoints":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/RoundingEndpoints.olean"]],
+  "Algal.Core.RationalBracket":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/RationalBracket.olean"]],
+  "Algal.Core.NumericInjectivity":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/NumericInjectivity.olean"]],
+  "Algal.Core.NegativeEndpoints":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/NegativeEndpoints.olean"]],
+  "Algal.Core.IntervalSearch":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/IntervalSearch.olean"]],
+  "Algal.Core.FiniteNeighbors":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/FiniteNeighbors.olean"]],
+  "Algal.Core.BinaryValue":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/BinaryValue.olean"]],
+  "Algal.Core.Binary64":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/Binary64.olean"]]},
+ "dynlibs": []}
