@@ -25,16 +25,27 @@ const AGENT_MARKERS: [&str; 6] = [
     "GEMINI_CLI",
 ];
 
+/// The audience `HRANESS_AUDIENCE` names, in any letter case with
+/// surrounding spaces ignored (`off` means quiet), or `None`.
+pub fn explicit_audience(env: &dyn Fn(&str) -> Option<String>) -> Option<Audience> {
+    match env("HRANESS_AUDIENCE")?
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "human" => Some(Audience::Human),
+        "agent" => Some(Audience::Agent),
+        "quiet" | "off" => Some(Audience::Quiet),
+        _ => None,
+    }
+}
+
 /// `HRANESS_AUDIENCE` (any letter case, surrounding spaces ignored) wins,
 /// then exact agent markers, then a terminal on stderr means a person;
 /// anything else stays quiet.
 pub fn detect_audience(env: &dyn Fn(&str) -> Option<String>, stderr_is_tty: bool) -> Audience {
-    let explicit = env("HRANESS_AUDIENCE").map(|value| value.trim().to_ascii_lowercase());
-    match explicit.as_deref() {
-        Some("human") => return Audience::Human,
-        Some("agent") => return Audience::Agent,
-        Some("quiet" | "off") => return Audience::Quiet,
-        _ => {}
+    if let Some(explicit) = explicit_audience(env) {
+        return explicit;
     }
     if AGENT_MARKERS
         .iter()
@@ -211,6 +222,14 @@ mod tests {
         assert_eq!(
             detect_audience(&env_of(&[("HRANESS_AUDIENCE", " Agent ")]), true),
             Audience::Agent
+        );
+        assert_eq!(
+            explicit_audience(&env_of(&[("HRANESS_AUDIENCE", "Human")])),
+            Some(Audience::Human)
+        );
+        assert_eq!(
+            explicit_audience(&env_of(&[("HRANESS_AUDIENCE", "robot")])),
+            None
         );
         assert_eq!(
             detect_audience(
