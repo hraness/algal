@@ -3,11 +3,12 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { manifestToJson, parseOrganismManifest } from "./contract";
 import { digestCanonical } from "./digest";
-import { scriptedExecutor } from "./effects";
+import { scriptedExecutor, type Executor } from "./effects";
 import { gradeExperimentCase, gradeExperimentMismatches, parseExperimentTaskSpec, taskBatchArgs } from "./experiment-task";
 import { builtinRegistry } from "./registry";
 import { runOrganism } from "./run";
 import { MemoryStore } from "./store";
+import { AlgalError } from "./errors";
 import type { JsonObject, JsonValue } from "./values";
 
 // The committed reference pipeline under experiments/cumulative-skill/pipeline:
@@ -95,5 +96,93 @@ describe("record-triage reference pipeline", () => {
     const outputs = interfaceOutputs(receipt.cells);
     const grade = gradeExperimentCase(task, batch, outputs);
     expect(grade.passed).toBe(false);
+  });
+});
+
+// The Jev classify variant: `each` maps records through the record-classify
+// child, whose classifier resolves its choice set from the task spec via
+// `labelsExpr` and routes to provider "jev". The test's executor stands in
+// for Jev — it asserts the request carries the task's resolved label set,
+// then returns the batch's declared label for the record.
+const jevManifest = parseOrganismManifest(
+  JSON.parse(readFileSync(join(PIPELINE_DIR, "record-triage-jev.algal.json"), "utf8")) as JsonValue,
+);
+const childManifest = parseOrganismManifest(
+  JSON.parse(readFileSync(join(PIPELINE_DIR, "record-classify.algal.json"), "utf8")) as JsonValue,
+);
+
+function jevManifestArgs(task: (typeof tasks)[number], batch: (typeof tasks)[number]["inputs"][number]) {
+  const args: Record<string, Record<string, JsonValue>> = Object.create(null);
+  for (const [name, value] of Object.entries(taskBatchArgs(task, batch))) {
+    const target = jevManifest.interface!.inputs[name]!;
+    (args[target.cell] ??= Object.create(null))[target.port] = value;
+  }
+  return args;
+}
+
+function jevStubExecutor(batch: (typeof tasks)[number]["inputs"][number], classIds: string[]) {
+  const expectLabels = new Map(
+    batch.expect.out.results.map((r) => [r.recordId, r.label]),
+  );
+  let calls = 0;
+  const executor: Executor = {
+    id: "jev",
+    capabilities: { effects: ["classifier"] },
+    async execute(request) {
+      calls += 1;
+      // labelsExpr resolved before dispatch: the request carries the
+      // task's concrete taxonomy classes, never an unresolved program.
+      const output = request.output as { kind: string; labels?: string[] };
+      expect(output.kind).toBe("choice");
+      expect(output.labels).toEqual(classIds);
+      const record = (request.context.inputs as JsonObject).record as JsonObject;
+      const label = expectLabels.get(record.id as string);
+      if (label === undefined) {
+        throw new AlgalError("EFFECT_UNBOUND", `no expected label for record ${String(record.id)}`);
+      }
+      return label;
+    },
+  };
+  return { executor, calls: () => calls };
+}
+
+describe("record-triage Jev pipeline", () => {
+  test("digests are stable, the each cell pins the child manifest", () => {
+    const childDigest = digestCanonical(manifestToJson(childManifest));
+    const each = jevManifest.cells.find((cell) => cell.kind === "each");
+    expect(each).toBeDefined();
+    expect((each as { manifest: string }).manifest).toBe(childDigest);
+    expect(Object.keys(jevManifest.interface!.inputs).sort()).toEqual(["records", "spec"]);
+    const kinds = jevManifest.cells.map((cell) => cell.kind).sort();
+    expect(kinds).toEqual(["each", "expr", "expr", "expr", "input"]);
+  });
+
+  test("every acquisition case passes with one classifier effect per record", async () => {
+    for (const task of tasks) {
+      const store = new MemoryStore();
+      await store.putManifest(childManifest);
+      const classIds = task.taxonomy.classes.map((c) => c.id);
+      for (const batch of task.inputs) {
+        const stub = jevStubExecutor(batch, classIds);
+        const receipt = await runOrganism({
+          manifest: jevManifest,
+          args: jevManifestArgs(task, batch),
+          fns: builtinRegistry(),
+          store,
+          executors: [stub.executor],
+        });
+        expect(receipt.outcome).toBe("complete");
+        expect(stub.calls()).toBe(batch.records.length);
+        expect(receipt.effects.length).toBe(batch.records.length);
+        const outputs: JsonObject = Object.create(null) as JsonObject;
+        for (const [name, source] of Object.entries(jevManifest.interface!.outputs)) {
+          const value = receipt.cells[source.cell]?.outputs?.[source.port];
+          if (value !== undefined) outputs[name] = value;
+        }
+        const grade = gradeExperimentCase(task, batch, outputs);
+        expect(grade.passed).toBe(true);
+        expect(gradeExperimentMismatches(task, grade)).toEqual([]);
+      }
+    }
   });
 });

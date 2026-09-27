@@ -25,6 +25,11 @@ pipeline/
   record-triage.algal.json       reference pipeline (agent + expr cells)
   record-triage.responses.json   scripted classify responses for the
                                  acquisition batches, keyed by request digest
+  record-triage-jev.algal.json   per-record classify variant: `each` maps
+                                 records through a child classifier whose
+                                 `labelsExpr` resolves the task taxonomy
+  record-classify.algal.json     the child: one classifier effect routed to
+                                 `provider: "jev"`, emitting {recordId, label}
 ```
 
 ## Task spec: `algal.experiment-task.v1`
