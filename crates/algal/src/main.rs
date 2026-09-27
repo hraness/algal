@@ -3455,19 +3455,9 @@ async fn execute(cli: Cli) -> Result<bool> {
             } else if apple {
                 let diagnosis = doctor_apple(apple_bridge.as_ref()).await?;
                 if human {
-                    let style = cli_style::Style::stdout();
-                    let audience = match cli_style::audience() {
-                        cli_style::Audience::Quiet => algal::apple::Audience::Quiet,
-                        cli_style::Audience::Agent => algal::apple::Audience::Agent,
-                        cli_style::Audience::Human => algal::apple::Audience::Human,
-                    };
-                    cli_style::print_stdout(&diagnosis.to_text(
-                        algal::apple::Style {
-                            color: style.color,
-                            ascii: style.ascii,
-                        },
-                        audience,
-                    ));
+                    cli_style::print_stdout(
+                        &diagnosis.to_text(cli_style::Style::stdout(), cli_style::audience()),
+                    );
                 } else {
                     emit(&diagnosis.to_json())?;
                 }
@@ -3523,7 +3513,7 @@ fn print_doctor(checks: &[(cli_style::Symbol, String)], next: Option<&str>, hint
     let style = cli_style::Style::stdout();
     let mut lines: Vec<String> = checks
         .iter()
-        .map(|(state, text)| format!("{} {text}", cli_style::symbol(*state, style)))
+        .map(|(state, text)| format!("{} {text}", style.symbol(*state)))
         .collect();
     let failed = checks
         .iter()
@@ -3548,10 +3538,7 @@ fn print_doctor(checks: &[(cli_style::Symbol, String)], next: Option<&str>, hint
         lines.push(format!("{}.", parts.join(", ")));
     }
     if let Some(next) = next {
-        lines.push(format!(
-            "{} {next}",
-            cli_style::symbol(cli_style::Symbol::Next, style)
-        ));
+        lines.push(format!("{} {next}", style.symbol(cli_style::Symbol::Next)));
     }
     cli_style::print_stdout(&(lines.join("\n") + "\n"));
     if let (None, Some(hint)) = (next, hint) {
@@ -3765,9 +3752,18 @@ async fn main() {
         cli_style::print_stdout(&advanced_help());
         std::process::exit(0);
     }
-    let matches = command()
-        .try_get_matches_from(&args)
-        .unwrap_or_else(|error| error.exit());
+    let root = command();
+    let matches = match root.clone().try_get_matches_from(&args) {
+        Ok(matches) => matches,
+        // One-sentence usage errors (`✗ … Did you mean …?` + `→ algal … --help`,
+        // exit 2, JSON for `--json`/agents); help and version still print and exit 0.
+        Err(error) => std::process::exit(hraness_cli_kit::clap::exit_on_parse_error(
+            error,
+            &root,
+            &args,
+            &hraness_cli_kit::clap::UsageOptions::default(),
+        )),
+    };
     let next = next_step(&matches);
     let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|error| error.exit());
     let code = match execute(cli).await {

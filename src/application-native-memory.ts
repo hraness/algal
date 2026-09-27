@@ -49,7 +49,9 @@ export class NativeMemoryQueryEngine implements MemoryQueryEngine {
     const file = await open(this.executable, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     try {
       const stat = await file.stat();
-      if (!stat.isFile() || stat.size > 128 * 1024 * 1024) throw new Error("Native memory executable must be a bounded regular file");
+      // The bound only limits how many bytes the integrity hash reads; Linux
+      // debug builds carry full DWARF and now exceed 128 MiB.
+      if (!stat.isFile() || stat.size > 256 * 1024 * 1024) throw new Error("Native memory executable must be a bounded regular file");
       const identity: ExecutableIdentity = { dev: stat.dev, ino: stat.ino, size: stat.size, mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs };
       const seen = this.verifiedExecutable;
       if (seen && seen.dev === identity.dev && seen.ino === identity.ino && seen.size === identity.size && seen.mtimeMs === identity.mtimeMs && seen.ctimeMs === identity.ctimeMs) return;
