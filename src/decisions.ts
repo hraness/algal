@@ -307,7 +307,7 @@ export type DecisionExecutorOptions = {
 };
 
 function choiceQuestion(request: EffectRequest): DecisionQuestions {
-  if (request.output.kind !== "choice") {
+  if (request.output.kind !== "choice" || !("labels" in request.output)) {
     throw new AlgalError(
       "EFFECT_UNPARSEABLE",
       `a decision executor cannot serve a ${request.output.kind} output — it answers typed decisions, not generated text`,

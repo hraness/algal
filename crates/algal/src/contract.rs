@@ -456,7 +456,7 @@ fn schema_declaration_strict(value: &Value, level: usize, version_3: bool) -> Re
     Ok(())
 }
 
-fn labels(value: &Value) -> Result<()> {
+pub(crate) fn labels(value: &Value) -> Result<()> {
     let values = list(value, 32)?;
     if values.is_empty() {
         return Err(Error::invalid("empty labels"));
@@ -550,7 +550,7 @@ pub fn ports(value: &Value, producer: bool, constant: bool) -> Result<Ports> {
     Ok(result)
 }
 
-pub fn output_contract(value: &Value) -> Result<()> {
+pub fn output_contract(value: &Value, binders: &BTreeSet<String>) -> Result<()> {
     match text(&value["kind"], 16)? {
         "text" => keys(value, &["kind"]),
         "json" => {
@@ -559,12 +559,34 @@ pub fn output_contract(value: &Value) -> Result<()> {
             check_schema_declaration(&value["schema"], version)
         }
         "choice" => {
-            keys(value, &["kind", "labels", "onMiss"])?;
-            labels(&value["labels"])?;
-            if let Some(miss) = value.get("onMiss")
-                && !value["labels"].as_array().unwrap().contains(miss)
-            {
-                return Err(Error::invalid("onMiss must be a label"));
+            keys(value, &["kind", "labels", "labelsExpr", "onMiss"])?;
+            if value.get("labels").is_some() && value.get("labelsExpr").is_some() {
+                return Err(Error::invalid("declares labels or labelsExpr, not both"));
+            }
+            if let Some(expr) = value.get("labelsExpr") {
+                // dynamic label set: a bounded program over the cell's inputs
+                // yields the concrete list at run time — the request, its
+                // digest, and the receipt all carry resolved labels
+                keys(expr, &["contract", "program"])?;
+                if expr["contract"] != "algal.expr.v1" {
+                    return Err(Error::invalid("labelsExpr.contract must be algal.expr.v1"));
+                }
+                if expr.get("program").is_none() {
+                    return Err(Error::invalid("labelsExpr.program is required"));
+                }
+                algal_expr::check_program(&expr["program"], binders)
+                    .map_err(|e| Error::invalid(format!("labelsExpr program: {}", e.to_json())))?;
+            } else {
+                labels(&value["labels"])?;
+            }
+            if let Some(miss) = value.get("onMiss") {
+                // With labelsExpr the set is input-dependent; the run validates
+                // onMiss against the resolved labels before dispatch.
+                if let Some(ls) = value.get("labels")
+                    && !ls.as_array().unwrap().contains(miss)
+                {
+                    return Err(Error::invalid("onMiss must be a label"));
+                }
             }
             Ok(())
         }
@@ -631,16 +653,16 @@ fn normalize_cell(value: &Value) -> Result<Value> {
             if v["expr"].get("program").is_none() {
                 return Err(Error::invalid("expr.program is required"));
             }
-            output_contract(&v["output"])?;
+            let names: BTreeSet<String> = v["inputs"]
+                .as_object()
+                .map(|m| m.keys().cloned().collect())
+                .unwrap_or_default();
+            output_contract(&v["output"], &names)?;
             if v["output"].get("onMiss").is_some() {
                 return Err(Error::invalid(
                     "expr output onMiss is meaningless — programs return exact values",
                 ));
             }
-            let names: BTreeSet<String> = v["inputs"]
-                .as_object()
-                .map(|m| m.keys().cloned().collect())
-                .unwrap_or_default();
             algal_expr::check_program(&v["expr"]["program"], &names)
                 .map_err(|e| Error::invalid(format!("expr program: {}", e.to_json())))?;
         }
@@ -687,7 +709,11 @@ fn normalize_cell(value: &Value) -> Result<Value> {
         "agent" | "classifier" | "gate" => {
             normalize_inputs(&mut v)?;
             text(&v["prompt"], 8192)?;
-            output_contract(&v["output"])?;
+            let names: BTreeSet<String> = v["inputs"]
+                .as_object()
+                .map(|m| m.keys().cloned().collect())
+                .unwrap_or_default();
+            output_contract(&v["output"], &names)?;
             if kind != "agent" && v["output"]["kind"] != "choice" {
                 return Err(Error::invalid("classifier/gate requires choice"));
             }
@@ -745,10 +771,13 @@ fn normalize_cell(value: &Value) -> Result<Value> {
             }
             if let Some(shadow) = v.get("shadow") {
                 keys(shadow, &["take"])?;
+                // With labelsExpr the set is input-dependent; the run validates
+                // take against the resolved labels before dispatch.
                 if kind != "classifier"
-                    || !v["output"]["labels"]
-                        .as_array()
-                        .is_some_and(|ls| ls.contains(&shadow["take"]))
+                    || (v["output"].get("labelsExpr").is_none()
+                        && !v["output"]["labels"]
+                            .as_array()
+                            .is_some_and(|ls| ls.contains(&shadow["take"])))
                 {
                     return Err(Error::invalid("invalid classifier shadow"));
                 }
@@ -1375,6 +1404,12 @@ pub fn bind_output(contract: &Value, value: Value) -> Result<Value> {
     match contract["kind"].as_str() {
         Some("text") if value.is_string() => Ok(value),
         Some("choice") => {
+            if contract.get("labelsExpr").is_some() {
+                return Err(Error::new(
+                    "EFFECT_UNPARSEABLE",
+                    "labelsExpr must be resolved before output binding",
+                ));
+            }
             if contract["labels"]
                 .as_array()
                 .is_some_and(|labels| labels.contains(&value))

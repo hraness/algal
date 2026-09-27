@@ -297,7 +297,16 @@ A runtime that knows only version 2 rejects `schemaVersion: 3` with
   were wired, never the wiring of cells it cannot name.
 - `output` is `{"kind":"text"}`, `{"kind":"json","schema":{…}}` with an
   optional `"schemaVersion": 2` (see [JSON schemas](#json-schemas)), or
-  `{"kind":"choice","labels":[…],"onMiss"?}`.
+  `{"kind":"choice","labels":[…],"onMiss"?}`. In place of `labels` a choice
+  output may declare `labelsExpr` — a `{"contract":"algal.expr.v1","program":…}`
+  descriptor whose bounded program is checked against the cell's declared
+  input names at admission and evaluated against the delivered inputs at run
+  time, before the effect request is built. The program must return the same
+  list a static `labels` would declare: 1–32 unique strings of ≤ 64 chars
+  each. The resolved list is what enters the request, its digest, and the
+  receipt, so replay is exact. `labels` and `labelsExpr` are mutually
+  exclusive; `onMiss` and a classifier `shadow.take` are validated against
+  the resolved set at run time when `labelsExpr` is used.
 - `route` is a hint the executor may honor. It grants nothing by itself.
   `route.provider` and `route.preset` select among host-supplied executors by
   id (`<name>` or `provider:<name>` / `preset:<name>`). Selection is

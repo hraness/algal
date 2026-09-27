@@ -93,9 +93,9 @@ function description(cell: Cell): Pick<DiagramNode, "category" | "label" | "deta
     case "fn": return { category: "pure", label: "PURE · function", details: [cell.fn] };
     case "expr": return { category: "pure", label: "PURE · expression", details: ["Bounded algal.expr.v1"] };
     case "agent": return { category: "model", label: "MODEL · generate", details: [cell.prompt, ...(cell.tools?.length ? [`Admitted tools: ${cell.tools.join(", ")}`] : [])] };
-    case "classifier": return { category: "model", label: "MODEL · classify", details: [`Choice: ${cell.output.labels.join(" | ")}`, cell.prompt] };
+    case "classifier": return { category: "model", label: "MODEL · classify", details: ["labels" in cell.output ? `Choice: ${cell.output.labels.join(" | ")}` : "Choice: labels from labelsExpr", cell.prompt] };
     case "decide": return { category: "model", label: "MODEL · decide", details: sortedEntries(cell.questions).map(([name, q]) => `${name}: ${q.type}${q.type === "choice" ? ` (${Object.keys(q.criteria).sort(compare).join(" | ")})` : ""}`) };
-    case "gate": return { category: "effect", label: "EFFECT · gate", details: [`Choice: ${cell.output.labels.join(" | ")}`, cell.prompt] };
+    case "gate": return { category: "effect", label: "EFFECT · gate", details: ["labels" in cell.output ? `Choice: ${cell.output.labels.join(" | ")}` : "Choice: labels from labelsExpr", cell.prompt] };
     case "tool": return { category: "tool", label: "TOOL · external operation", details: [cell.tool, "Authority and behavior supplied by host"] };
     case "recall": return { category: "effect", label: "EFFECT · semantic recall", details: [...(cell.k === undefined ? [] : [`Up to ${cell.k} results`]), ...(cell.rerank ? ["Recorded reranking decision"] : [])] };
     case "organism": return { category: "composition", label: "CALL · child program", details: [cell.manifest, ...(cell.via ? [`Via ${cell.via}`] : [])] };

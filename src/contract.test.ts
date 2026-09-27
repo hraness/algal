@@ -897,3 +897,128 @@ describe("expr guards", () => {
     ).toThrow("algal.expr.v1");
   });
 });
+
+describe("choice labelsExpr", () => {
+  const exprRef = {
+    contract: "algal.expr.v1",
+    program: ["get", "spec", "labels"],
+  };
+  const base = {
+    contract: "algal.organism.v1",
+    key: "organism:labelexpr",
+    name: "LabelsExpr",
+    cells: [
+      {
+        id: "in",
+        kind: "input",
+        outputs: { spec: "json", record: "json" },
+      },
+      {
+        id: "cls",
+        kind: "classifier",
+        inputs: { spec: "json", record: "json" },
+        prompt: "classify",
+        output: { kind: "choice", labelsExpr: exprRef },
+      },
+    ],
+    edges: [
+      { from: { cell: "in", port: "spec" }, to: { cell: "cls", port: "spec" } },
+      { from: { cell: "in", port: "record" }, to: { cell: "cls", port: "record" } },
+    ],
+  };
+  const withOutput = (output: unknown) => ({
+    ...base,
+    cells: [base.cells[0], { ...base.cells[1], output }],
+  });
+
+  test("parses and round-trips, and static labels still parse", () => {
+    const m = parseOrganismManifest(base);
+    const cls = m.cells.find((c) => c.id === "cls")!;
+    if (cls.kind !== "classifier") throw new Error("wrong cell");
+    expect("labelsExpr" in cls.output).toBe(true);
+    expect(manifestToJson(parseOrganismManifest(manifestToJson(m)))).toEqual(
+      manifestToJson(m),
+    );
+    const s = parseOrganismManifest(
+      withOutput({ kind: "choice", labels: ["a", "b"] }),
+    );
+    const scls = s.cells.find((c) => c.id === "cls")!;
+    if (scls.kind !== "classifier") throw new Error("wrong cell");
+    expect("labels" in scls.output && scls.output.labels).toEqual(["a", "b"]);
+  });
+
+  test("rejects labels plus labelsExpr and unknown keys", () => {
+    expect(() =>
+      parseOrganismManifest(
+        withOutput({ kind: "choice", labels: ["a"], labelsExpr: exprRef }),
+      ),
+    ).toThrow("not both");
+    expect(() =>
+      parseOrganismManifest(
+        withOutput({
+          kind: "choice",
+          labelsExpr: { ...exprRef, extra: 1 },
+        }),
+      ),
+    ).toThrow("unknown key");
+    expect(() =>
+      parseOrganismManifest(
+        withOutput({
+          kind: "choice",
+          labelsExpr: { contract: "other.v1", program: ["get", "spec"] },
+        }),
+      ),
+    ).toThrow("algal.expr.v1");
+    // neither labels nor labelsExpr is still a parse failure
+    expect(() =>
+      parseOrganismManifest(withOutput({ kind: "choice" })),
+    ).toThrow("labels");
+  });
+
+  test("checks the program against the cell's declared input binders", () => {
+    // "ghost" is not a declared input port — rejected at admission
+    expect(() =>
+      parseOrganismManifest(
+        withOutput({
+          kind: "choice",
+          labelsExpr: {
+            contract: "algal.expr.v1",
+            program: ["get", "ghost"],
+          },
+        }),
+      ),
+    ).toThrow("unbound name");
+    expect(() =>
+      parseOrganismManifest(
+        withOutput({
+          kind: "choice",
+          labelsExpr: {
+            contract: "algal.expr.v1",
+            program: ["bogus-op", ["get", "spec"]],
+          },
+        }),
+      ),
+    ).toThrow("EXPR_OP");
+  });
+
+  test("dynamic onMiss parses without membership check (deferred to run)", () => {
+    const m = parseOrganismManifest(
+      withOutput({
+        kind: "choice",
+        labelsExpr: exprRef,
+        onMiss: "anything",
+      }),
+    );
+    const cls = m.cells.find((c) => c.id === "cls")!;
+    if (cls.kind !== "classifier" || !("labelsExpr" in cls.output)) {
+      throw new Error("wrong cell");
+    }
+    expect(cls.output.onMiss).toBe("anything");
+    // static labels still enforce onMiss membership at parse
+    expect(() =>
+      parseOrganismManifest(
+        withOutput({ kind: "choice", labels: ["a"], onMiss: "b" }),
+      ),
+    ).toThrow("onMiss");
+  });
+});

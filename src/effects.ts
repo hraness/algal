@@ -376,6 +376,12 @@ export function bindOutput(
       return raw;
     }
     case "choice": {
+      if (!("labels" in output)) {
+        throw new AlgalError(
+          "EFFECT_UNPARSEABLE",
+          `cell "${cellId}": labelsExpr must be resolved before output binding`,
+        );
+      }
       const s = typeof raw === "string" ? raw : null;
       if (s !== null && output.labels.includes(s)) return s;
       if (output.onMiss !== undefined) return output.onMiss;

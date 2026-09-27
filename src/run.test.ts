@@ -3963,3 +3963,232 @@ describe("effect deadline dispatch boundaries", () => {
     expect((await verifyReceipt(result as unknown as JsonValue, manifestToJson(m), new MemoryStore())).ok).toBe(true);
   });
 });
+
+describe("labelsExpr dynamic choice labels", () => {
+  const specCell = { id: "src", kind: "input", outputs: { spec: "json", record: "json" } } as const;
+  const specArgs = { src: { spec: { labels: ["bug", "feat"] }, record: { text: "t" } } };
+  const labelsExpr = {
+    contract: "algal.expr.v1",
+    program: ["get", "spec", "labels"],
+  } as const;
+  const clsManifest = (output: unknown, extra?: object) => manifest({
+    contract: "algal.organism.v1",
+    key: "organism:dynlabels",
+    name: "DynLabels",
+    cells: [
+      specCell,
+      {
+        id: "cls",
+        kind: "classifier",
+        inputs: { spec: "json", record: "json" },
+        prompt: "classify",
+        output,
+        ...(extra ?? {}),
+      },
+    ],
+    edges: [
+      { from: { cell: "src", port: "spec" }, to: { cell: "cls", port: "spec" } },
+      { from: { cell: "src", port: "record" }, to: { cell: "cls", port: "record" } },
+    ],
+  });
+  const capturing = (response: JsonValue) => {
+    const seen: { output?: unknown } = {};
+    const executor: Executor = {
+      id: "capture",
+      capabilities: { effects: ["classifier"] },
+      async execute(request) {
+        seen.output = request.output;
+        return response;
+      },
+    };
+    return { executor, seen };
+  };
+
+  test("resolves labels against delivered inputs and the request carries them concretely", async () => {
+    const { executor, seen } = capturing("bug");
+    const r = await runOrganism({
+      manifest: clsManifest({ kind: "choice", labelsExpr }),
+      args: specArgs,
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [executor],
+    });
+    expect(r.outcome).toBe("complete");
+    expect(r.cells["cls"]?.outputs?.out).toBe("bug");
+    // the request the executor saw names the resolved labels, not labelsExpr
+    expect(seen.output).toEqual({ kind: "choice", labels: ["bug", "feat"] });
+    // fuel for the resolution program is charged to work — the identical
+    // run with static labels is strictly cheaper
+    const control = await runOrganism({
+      manifest: clsManifest({ kind: "choice", labels: ["bug", "feat"] }),
+      args: specArgs,
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [scriptedExecutor({ cls: "bug" })],
+    });
+    expect(control.outcome).toBe("complete");
+    expect(r.cells["cls"]!.work!).toBeGreaterThan(control.cells["cls"]!.work!);
+  });
+
+  test("dynamic onMiss passes when in resolved labels and fails when absent", async () => {
+    const ok = await runOrganism({
+      manifest: clsManifest(
+        { kind: "choice", labelsExpr, onMiss: "bug" },
+      ),
+      args: specArgs,
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [scriptedExecutor({ cls: "not-a-label" })],
+    });
+    expect(ok.outcome).toBe("complete");
+    expect(ok.cells["cls"]?.outputs?.out).toBe("bug");
+    const bad = await runOrganism({
+      manifest: clsManifest(
+        { kind: "choice", labelsExpr, onMiss: "ghost" },
+      ),
+      args: specArgs,
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [scriptedExecutor({ cls: "bug" })],
+    });
+    expect(bad.outcome).toBe("failed");
+    expect(bad.failure?.code).toBe("EXPR_FAILED");
+    expect(bad.failure?.message).toContain("onMiss");
+  });
+
+  test("rejects non-list, empty, duplicate, and non-string resolved values", async () => {
+    const cases: [JsonValue, string][] = [
+      [{ labels: [] }, "1.."],
+      [{ labels: ["a", "a"] }, "unique"],
+      [{ labels: ["a", 7] }, "labelsExpr result"],
+      [{ labels: "bug" }, "labelsExpr result"],
+    ];
+    for (const [spec, why] of cases) {
+      const r = await runOrganism({
+        manifest: clsManifest({ kind: "choice", labelsExpr }),
+        args: { src: { spec, record: {} } },
+        fns: builtinRegistry(),
+        store: new MemoryStore(),
+        executors: [scriptedExecutor({ cls: "bug" })],
+      });
+      expect(r.outcome).toBe("failed");
+      expect(r.failure?.code).toBe("EXPR_FAILED");
+      expect(r.failure?.message).toContain(why);
+    }
+  });
+
+  test("classifier shadow.take validates against resolved labels at run time", async () => {
+    const m = clsManifest(
+      { kind: "choice", labelsExpr },
+      { shadow: { take: "ghost" } },
+    );
+    const r = await runOrganism({
+      manifest: m,
+      args: specArgs,
+      fns: builtinRegistry(),
+      store: new MemoryStore(),
+      executors: [scriptedExecutor({ cls: "bug" })],
+    });
+    expect(r.outcome).toBe("failed");
+    expect(r.failure?.code).toBe("EXPR_FAILED");
+    expect(r.failure?.message).toContain("shadow.take");
+  });
+
+  test("resolves inside each with both item and outer inputs in scope", async () => {
+    const sub = manifest({
+      contract: "algal.organism.v1",
+      key: "organism:dynlabels-sub",
+      name: "Sub",
+      interface: {
+        inputs: {
+          spec: { cell: "in", port: "spec" },
+          record: { cell: "in", port: "record" },
+        },
+        outputs: { label: { cell: "cls", port: "out" } },
+      },
+      cells: [
+        { id: "in", kind: "input", outputs: { spec: "json", record: "json" } },
+        {
+          id: "cls",
+          kind: "classifier",
+          inputs: { spec: "json", record: "json" },
+          prompt: "classify",
+          output: { kind: "choice", labelsExpr },
+        },
+      ],
+      edges: [
+        { from: { cell: "in", port: "spec" }, to: { cell: "cls", port: "spec" } },
+        { from: { cell: "in", port: "record" }, to: { cell: "cls", port: "record" } },
+      ],
+    });
+    const store = new MemoryStore();
+    const subDigest = await store.putManifest(sub);
+    const outer = manifest({
+      contract: "algal.organism.v1",
+      key: "organism:dynlabels-each",
+      name: "Each",
+      interface: {
+        inputs: {
+          spec: { cell: "in", port: "spec" },
+          records: { cell: "in", port: "records" },
+        },
+        outputs: { labels: { cell: "per", port: "label" } },
+      },
+      cells: [
+        { id: "in", kind: "input", outputs: { spec: "json", records: "json" } },
+        { id: "per", kind: "each", manifest: subDigest, over: "record", maxItems: 8 },
+      ],
+      edges: [
+        { from: { cell: "in", port: "spec" }, to: { cell: "per", port: "spec" } },
+        { from: { cell: "in", port: "records" }, to: { cell: "per", port: "record" } },
+      ],
+    });
+    const seen: unknown[] = [];
+    const executor: Executor = {
+      id: "capture",
+      capabilities: { effects: ["classifier"] },
+      async execute(request) {
+        seen.push(request.output);
+        return "feat";
+      },
+    };
+    const r = await runOrganism({
+      manifest: outer,
+      args: {
+        in: {
+          spec: { labels: ["bug", "feat"] },
+          records: [{ text: "a" }, { text: "b" }],
+        },
+      },
+      fns: builtinRegistry(),
+      store,
+      executors: [executor],
+    });
+    expect(r.outcome).toBe("complete");
+    expect(r.cells["per"]?.outputs?.label).toEqual(["feat", "feat"]);
+    // each item's classifier request carried the resolved spec labels
+    expect(seen).toEqual([
+      { kind: "choice", labels: ["bug", "feat"] },
+      { kind: "choice", labels: ["bug", "feat"] },
+    ]);
+  });
+
+  test("replay verifies — resolved labels are fixed in the request digest", async () => {
+    const m = clsManifest({ kind: "choice", labelsExpr });
+    const store = new MemoryStore();
+    const r = await runOrganism({
+      manifest: m,
+      args: specArgs,
+      fns: builtinRegistry(),
+      store,
+      executors: [scriptedExecutor({ cls: "feat" })],
+    });
+    expect(r.outcome).toBe("complete");
+    const check = await verifyReceipt(
+      r as unknown as JsonValue,
+      manifestToJson(m),
+      store,
+    );
+    expect(check.ok).toBe(true);
+  });
+});
