@@ -82,6 +82,7 @@ jobs:
       - run: bun run docs:check
       - run: bun run build:site
       - run: python3 scripts/test-release-notes.py
+      - run: bun run check:hf
 
   test:
     name: Test

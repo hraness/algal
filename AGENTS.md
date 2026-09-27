@@ -44,6 +44,21 @@
   competence) and the evidence that would justify it; `docs/lineage.md` —
   the programmable-environment traditions and research precedents.
 
+# Hugging Face experiment archive
+
+- Maintain `hranesscom/algal-experiments` as a dataset using
+  [the runbook](hf/MAINTAINING.md). `hf/manifest.json` owns the exact public
+  artifact paths and hashes; `hf/stage.py` validates and stages without network
+  or inference. Update the card when adding a completed public study.
+- Append immutable study directories. Preserve negative findings, failures,
+  uncertainty, model and protocol identities, and missing cost data. Receipt
+  verification does not establish task success or model quality.
+- Never export raw stores, third-party benchmark tasks, private traces, signing
+  material, or provider accounts. The initial staged card and file set require
+  Ben’s approval; later synchronization follows configured publication authority.
+- Use the supported `hf` CLI from a reviewed stage after rights review and normal
+  repository checks. Record the remote commit and verify downloaded file hashes.
+
 # Guidelines
 
 - Bun 1.3.x, strict TypeScript, zero required runtime dependencies. Shared

@@ -86,6 +86,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p site/tsconfig.json && tsc --noEmit -p site/tsconfig.inference-worker.json",
     "lint": "eslint .",
     "test": "bun test --timeout 20000",
+    "check:hf": "python3 -B hf/stage.py && python3 -B hf/test_stage.py",
     "check": "bun run typecheck && bun run lint && bun run test && bun run docs:check && bun run build:site",
     "docs:diagrams": "bun scripts/docs-diagrams.ts",
     "docs:check": "bun scripts/docs-diagrams.ts --check",
