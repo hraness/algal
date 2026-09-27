@@ -45,7 +45,7 @@ Engelbart, and the research on self-improving programs.
 
 | Your job | What ALGAL keeps | Start here |
 | --- | --- | --- |
-| Define a typed model task and compare instructions or labeled examples | Ordinary manifests, source-disjoint evaluation, guarded changes, and a frozen holdout result | [Task authoring and optimization](docs/task-optimization.md) |
+| Define a typed model task and compare instructions or labeled examples | Ordinary manifests, source-disjoint evaluation, guarded changes, and a frozen holdout result | [Task authoring and optimization](docs/task-optimization.md), [CLI and portable artifacts](docs/task-workflow.md) |
 | Review a change brief now; approve the exact local report later | Evidence, proposal, human decision, and publication history across separate invocations | [Native workbench](docs/native-workbench.md); optional [on-device Apple brief](docs/apple-brief.md) |
 | Turn a coding attempt into a checked patch | The pinned source revision, the proposed patch, results of the tests you chose, and a record of which process owns any job whose outcome is still unknown | [Durable repairs](docs/repair.md) |
 | Give another reviewer a verifiable execution history | One portable evidence file that replays without your store, credentials, or model | [Offline evidence](docs/vm.md#verify-a-process-away-from-its-original-host) |

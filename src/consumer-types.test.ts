@@ -23,6 +23,8 @@ test("public process and task subpaths do not introduce browser DOM globals", as
       'export { verifyProcessEvidence } from "@hraness/algal/process-evidence";',
       'export type { RuntimeJournal, JournalBinding, JournalTicket } from "@hraness/algal/runtime-journal-contract";',
       'export { compileTask, runTask } from "@hraness/algal/task";',
+      'export { parseEvaluatedTaskArtifact, assertEvaluatedTaskCompatible } from "@hraness/algal/task-artifact";',
+      'export { parseTaskWorkflowConfig, verifyTaskWorkflowArchive } from "@hraness/algal/task-workflow";',
       'export { MemoryStore } from "@hraness/algal/store-memory";',
       'export type { Store } from "@hraness/algal/store-contract";',
       '// @ts-expect-error This consumer has no browser document.',
@@ -33,7 +35,7 @@ test("public process and task subpaths do not introduce browser DOM globals", as
     const result = await checkTypes(file, true);
     expect({ code: result.code, stderr: result.stderr, diagnostics: result.stdout.split("\n").filter(line => /error TS\d+/.test(line)) }).toEqual({ code: 0, stderr: "", diagnostics: [] });
     expect(result.stdout).not.toMatch(/[/\\]lib\.dom(?:\.[^/\\]+)?\.d\.ts/);
-    for (const module of ["process", "process-evidence", "runtime-journal-contract", "task"]) {
+    for (const module of ["process", "process-evidence", "runtime-journal-contract", "task", "task-artifact", "task-workflow"]) {
       expect(result.stdout).toContain(resolve(root, `src/${module}.ts`));
     }
   } finally {

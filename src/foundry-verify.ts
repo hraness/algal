@@ -113,7 +113,7 @@ function parseCase(value: JsonValue, at: string): FoundryCaseResult {
   };
 }
 
-function parseCandidate(value: JsonValue, i: number): FoundryCandidateResult {
+export function parseFoundryCandidate(value: JsonValue, i: number = 0): FoundryCandidateResult {
   const at = `foundry.candidates[${i}]`;
   const c = object(value, at);
   keys(c, ["manifestDigest", "manifestKey", "train", "validation", "work", "usage", "cases"], at);
@@ -160,7 +160,7 @@ export function parseFoundryReport(value: unknown): FoundryReport {
   const budget = report.budget === undefined ? undefined : parseHabitatBudget(report.budget);
   return {
     contract: FOUNDRY_CONTRACT,
-    candidates: report.candidates.map(parseCandidate),
+    candidates: report.candidates.map(parseFoundryCandidate),
     promoted: digest(report.promoted, "foundry.promoted"),
     holdout: {
       ...holdoutScore,
