@@ -461,9 +461,10 @@ describe("experiment arm runner", () => {
 
     const taskSet = parseExperimentTaskSet({
       contract: "algal.experiment-tasks.v1",
-      tasks,
+      tasks: [...tasks, { taskId: "with-expect", phase: "unseen" as const, spec: {}, args: {}, expect: { out: { label: "x" } } }],
     });
-    expect(taskSet.tasks).toHaveLength(3);
+    expect(taskSet.tasks).toHaveLength(4);
+    expect(taskSet.tasks[3]!.expect).toEqual({ out: { label: "x" } });
     expect(() => parseExperimentTaskSet({ contract: "algal.experiment-tasks.v1", tasks: [{ taskId: "x", phase: "nowhere", spec: {}, args: {} }] }))
       .toThrow();
     expect(() => parseExperimentTaskSet({ contract: "algal.experiment-tasks.v1", tasks: [tasks[0], tasks[0]] }))
