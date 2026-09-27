@@ -1,4 +1,4 @@
-import { attachFoil, attachHeroLight, attachStatusPage } from "@hraness/design-kit/browser";
+import { attachFoil, attachStatusPage } from "@hraness/design-kit/browser";
 
 const header = document.querySelector<HTMLElement>(".site-header");
 if (header) attachFoil(header);
@@ -66,11 +66,11 @@ document.querySelectorAll<HTMLElement>("[data-tabset]").forEach(tablist => {
   tablist.hidden = false;
 });
 
-// Hero specimen chooser — swaps which organism's graph/source/evidence set is
-// pinned to the board. Progressive enhancement: the first set is visible
-// without JavaScript.
+// Hero example chooser: swaps which program's source and recorded run the proof
+// panel shows. Progressive enhancement: the first set is visible without
+// JavaScript.
 document.querySelectorAll<HTMLElement>(".hero-chooser").forEach(chooser => {
-  const stage = chooser.closest(".hero-grid")?.querySelector<HTMLElement>("[data-hero-stage]");
+  const stage = chooser.closest("[data-hero-proof]")?.querySelector<HTMLElement>("[data-hero-stage]");
   const buttons = Array.from(chooser.querySelectorAll<HTMLButtonElement>("[data-hero-choose]"));
   if (!stage || buttons.length === 0) return;
   const sets = Array.from(stage.querySelectorAll<HTMLElement>("[data-example-set]"));
@@ -80,9 +80,3 @@ document.querySelectorAll<HTMLElement>(".hero-chooser").forEach(chooser => {
   };
   for (const button of buttons) button.addEventListener("click", () => selectExample(button.dataset.heroChoose!));
 });
-
-// --- Amoeba field -------------------------------------------------------------
-// The shared controller keeps pointer light bounded and suspends it offscreen.
-// The cell taxonomy remains real HTML, including with JavaScript disabled.
-const hero = document.querySelector<HTMLElement>(".hero");
-if (hero) attachHeroLight(hero);

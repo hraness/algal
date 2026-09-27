@@ -1,58 +1,27 @@
 <main id="main" class="hraness-marketing-page">
   <div class="intro-field hraness-marketing-field">
   <section class="hero hraness-marketing-hero" aria-labelledby="hero-title">
-    <div class="amoeba-field" aria-hidden="true" inert>
-      <div class="amoeba am-model" data-hraness-hero-item><span class="am-tag"><b>decide</b><i>text → choice</i></span></div>
-      <div class="amoeba am-pure" data-hraness-hero-item><span class="am-tag"><b>match</b><i>value → branch</i></span></div>
-      <div class="amoeba am-composition" data-hraness-hero-item><span class="am-tag"><b>each</b><i>list → map</i></span></div>
-      <div class="amoeba am-state" data-hraness-hero-item><span class="am-tag"><b>slot.read</b><i>key → value</i></span></div>
-      <div class="amoeba am-input" data-hraness-hero-item><span class="am-tag"><b>in</b><i>param: text</i></span></div>
-      <div class="amoeba am-effect" data-hraness-hero-item><span class="am-tag"><b>tool</b><i>cap → result</i></span></div>
-      <div class="amoeba am-model" data-hraness-hero-item><span class="am-tag"><b>generate</b><i>text → text</i></span></div>
-      <div class="amoeba am-pure" data-hraness-hero-item><span class="am-tag"><b>expr</b><i>fuel · bounded</i></span></div>
-      <div class="amoeba am-composition" data-hraness-hero-item><span class="am-tag"><b>spawn</b><i>manifest → run</i></span></div>
-      <div class="amoeba am-state" data-hraness-hero-item><span class="am-tag"><b>recall</b><i>query → memories</i></span></div>
-      <div class="amoeba am-composition" data-hraness-hero-item><span class="am-tag"><b>call</b><i>args → child</i></span></div>
-      <div class="amoeba am-state" data-hraness-hero-item><span class="am-tag"><b>wait</b><i>event → resume</i></span></div>
-      <div class="amoeba am-effect" data-hraness-hero-item><span class="am-tag"><b>gate</b><i>evidence → allow</i></span></div>
-      <div class="amoeba am-pure" data-hraness-hero-item><span class="am-tag"><b>emit</b><i>value → out</i></span></div>
-    </div>
     <p class="eyebrow"><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#terminal"></use></svg>Agent programming language</p>
     <h1 id="hero-title" class="hraness-marketing-hero__heading">Write agent programs that wait,<br><em>resume, and replay.</em></h1>
-    <div class="hero-grid">
-      <div class="hero-copy">
-        <p class="lede hraness-marketing-hero__summary">Write agent programs that can wait for approval, survive a crash, and replay their runs from the receipts they leave.</p>
-        <div class="hero-actions">
-          <a class="button hraness-marketing-action" data-emphasis="primary" href="#install">Install ALGAL <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-right"></use></svg></a>
-          <a class="hero-secondary" href="/tour/">See a program run <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-right"></use></svg></a>
-        </div>
-        <p class="hero-meta"><code>algal.organism.v1</code> · Rust kernel + TypeScript reference · MIT</p>
-        {{HERO_CHOOSER}}
-      </div>
+    <p class="lede hraness-marketing-hero__summary">{{SITE_DESCRIPTION}} When a run stops for an approval or a crash, it continues in a new process and reuses the work it already finished.</p>
+    <div class="hero-actions">
+      <a class="button hraness-marketing-action" data-emphasis="primary" href="#install">Install ALGAL <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-right"></use></svg></a>
+      <a class="hero-secondary" href="/tour/">See a program run <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-right"></use></svg></a>
+    </div>
+    <p class="hero-meta">Prerelease · MIT license · macOS on Apple silicon and Linux x86_64</p>
+    <div class="hero-proof" data-hero-proof>
+      {{HERO_CHOOSER}}
       {{HERO_STAGE}}
     </div>
-    <p class="under-note">The examples above are runs that the site build executed with scripted model answers and then replay-checked; nothing runs in your browser. Prerelease builds are available for macOS on Apple silicon and Linux x86_64.</p>
+    <p class="under-note">Each example is a run the site build executed with scripted model answers and then replay-checked. Nothing runs in your browser.</p>
   </section>
   </div>
 
   <section class="idea-section" id="idea" aria-labelledby="idea-title">
     <div><p class="eyebrow">The idea</p><h2 id="idea-title" class="hraness-marketing-section__heading">Software that<br><em>accumulates competence.</em></h2></div>
     <div class="idea-copy">
-      <p>The bet behind ALGAL is that a computer can keep tested ways of acting, not only produce new answers or new code. A model proposes a bounded, executable procedure. The procedure is checked, measured on declared cases, kept with its evidence, composed into larger procedures, and revised under rules the host sets. Useful work should leave the computer with a more capable, reusable way of doing the next piece of work.</p>
-      <p>Lisp made code into data. Emacs made the environment programmable from within. Smalltalk made it a medium for thought. ALGAL asks whether an AI can use such an environment to evolve its own methods under evidence, while the result stays understandable and changeable by the person who owns it. The mechanisms exist today; whether accumulated procedures make later work measurably better is the open question the project is organized around.</p>
+      <p>ALGAL is built on one bet: a computer can accumulate tested ways of acting, not only produce new answers or new code. A model proposes a procedure. ALGAL checks it and measures it on cases you declare, and the host decides whether to keep it. Those mechanisms work today. Whether kept procedures make later work measurably better is an open experiment.</p>
       <p><a href="/docs/vision/">Read the vision <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a><a href="/docs/lineage/">Where the idea comes from <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a></p>
-    </div>
-  </section>
-
-  <section class="life-section" aria-labelledby="life-title">
-    <div class="section-heading"><div><p class="eyebrow">Capabilities</p><h2 id="life-title" class="hraness-marketing-section__heading">Six things<br><em>a program can do.</em></h2></div><p>Each capability below is defined in the v1 specs (<code>algal.organism.v1</code>, <code>algal.process.v1</code>, and <code>algal.foundry.v1</code>). Each is implemented, runs within declared limits, and can be inspected.</p></div>
-    <div class="life-grid">
-      <article class="life-card hraness-material-panel"><span class="capability-label"><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#hourglass"></use></svg>waits</span><p>Pauses on an external event, such as an approval or a mailbox message, and resumes in a new process, even in the other runtime. Completed work that was acknowledged is reused; a write with an unknown outcome stays blocked.</p></article>
-      <article class="life-card hraness-material-panel"><span class="capability-label"><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#memory"></use></svg>remembers</span><p>Durable slots, a content-addressed store, and semantic recall are built into the language, so a program's memory persists from one run to the next without a separate database.</p></article>
-      <article class="life-card hraness-material-panel"><span class="capability-label"><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#brain"></use></svg>decides</span><p>Model judgment lives in its own typed cell. The cell declares the context the model may see, the output shape it must return, and its budget. Everything around it is pure dataflow.</p></article>
-      <article class="life-card hraness-material-panel"><span class="capability-label"><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#dna"></use></svg>reproduces</span><p>A program can write its own successor as ordinary data. The <code>spawn</code> cell checks that manifest and runs it within the parent's limits.</p></article>
-      <article class="life-card hraness-material-panel"><span class="capability-label"><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#leaf"></use></svg>evolves</span><p>A foundry scores candidate programs on cases you declare, and the host decides which to keep. Receipts record where each candidate came from, how it scored, and whether it was promoted.</p></article>
-      <article class="life-card hraness-material-panel"><span class="capability-label"><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#history"></use></svg>leaves a receipt</span><p>Every run produces a canonical receipt that replays bit-for-bit. You can verify it without the model, the original store, or credentials.</p></article>
     </div>
   </section>
 
@@ -66,25 +35,37 @@
           <pre class="source-code"><code>{{REPLY_SOURCE}}</code></pre>
           <div class="source-annotation">
             <span class="annotation-line" aria-hidden="true"></span>
-            <p><strong>A decision. A pure match. A draft.</strong><br>The model sees the context you declare. The program makes the limits visible.</p>
+            <p><strong>The model classifies the email, a pure <code>match</code> picks the task, and the model drafts the reply.</strong><br>Each model call sees only the context named after <code>using</code>.</p>
           </div>
           <div class="source-facts"><span><b>{{REPLY_MAX_AGENT_CALLS}}</b> executor attempts, at most</span><span><b>0</b> model calls in <code>match</code></span></div>
         </div>
         <figure class="graph-pane">
           <div class="pane-heading"><span class="eyebrow">02 / See the structure</span><a href="/diagrams/reply.svg" target="_blank" rel="noopener">Expand <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a></div>
           <div class="diagram-frame diagram-frame-embed" data-diagram-view="/diagrams/reply.view.json">
-            <img class="reply-diagram" src="/diagrams/reply.svg" alt="Generated reply organism graph: email flows into a typed decision, a pure decision check and match, then generation. Email also flows directly into generation as explicit context." width="480" height="730" fetchpriority="high">
+            <img class="reply-diagram" src="/diagrams/reply.svg" alt="Generated reply program graph: email flows into a typed decision, a pure decision check and match, then generation. Email also flows directly into generation as explicit context." width="480" height="730" fetchpriority="high">
           </div>
           <figcaption>Source names explain the work; exact cell IDs remain visible. The graph includes the pure decision check.</figcaption>
         </figure>
       </div>
       <div class="window-footer"><span><span class="legend-dot model" aria-hidden="true"></span>Model judgment</span><span><span class="legend-dot pure" aria-hidden="true"></span>Deterministic logic</span><a href="/examples/reply.algal.json">Inspect the executable manifest <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a></div>
     </div>
-    <p class="under-note">The site build compiles and runs this source. The name nods to ALGOL, the algorithmic language; ALGAL is its agentic counterpart. The compiler lowers <code>.algal</code> into the existing <code>algal.organism.v1</code> format, and both runtimes execute the compiled manifest.</p>
+    <p class="under-note">The site build compiles and runs this source. The compiler turns <code>.algal</code> into the <code>algal.organism.v1</code> format, and both runtimes run the compiled manifest. The name nods to ALGOL, the algorithmic language.</p>
+  </section>
+
+  <section class="life-section" aria-labelledby="life-title">
+    <div class="section-heading"><div><p class="eyebrow">Capabilities</p><h2 id="life-title" class="hraness-marketing-section__heading">Six things<br><em>a program can do.</em></h2></div><p>Each capability below is defined in the v1 specs (<code>algal.organism.v1</code>, <code>algal.process.v1</code>, and <code>algal.foundry.v1</code>). Each is implemented, runs within declared limits, and can be inspected.</p></div>
+    <div class="life-grid">
+      <article class="life-card"><span class="capability-label"><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#hourglass"></use></svg>waits</span><p>Pauses on an external event, such as an approval or a mailbox message, and resumes in a new process, even in the other runtime. Completed work that was acknowledged is reused; a write with an unknown outcome stays blocked.</p></article>
+      <article class="life-card"><span class="capability-label"><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#memory"></use></svg>remembers</span><p>Durable slots, a content-addressed store, and semantic recall are built into the language, so a program's memory persists from one run to the next without a separate database.</p></article>
+      <article class="life-card"><span class="capability-label"><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#brain"></use></svg>decides</span><p>Model judgment lives in its own typed cell. The cell declares the context the model may see, the output shape it must return, and its budget. Everything around it is pure dataflow.</p></article>
+      <article class="life-card"><span class="capability-label"><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#dna"></use></svg>reproduces</span><p>A program can write its own successor as ordinary data. The <code>spawn</code> cell checks that manifest and runs it within the parent's limits.</p></article>
+      <article class="life-card"><span class="capability-label"><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#leaf"></use></svg>evolves</span><p>A foundry scores candidate programs on cases you declare, and the host decides which to keep. Receipts record where each candidate came from, how it scored, and whether it was promoted.</p></article>
+      <article class="life-card"><span class="capability-label"><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#history"></use></svg>leaves a receipt</span><p>Every run produces a receipt that replays bit-for-bit. You can verify it without the model, the original store, or credentials.</p></article>
+    </div>
   </section>
 
   <section class="habitat-section" id="habitat" aria-labelledby="habitat-title">
-    <div class="section-heading"><div><p class="eyebrow">The habitat</p><h2 id="habitat-title" class="hraness-marketing-section__heading">The computer<br><em>organisms live on.</em></h2></div><p>Programs run inside a habitat: the store, the function and tool registries, and the model executors your host application provides, all under limits the host sets.</p></div>
+    <div class="section-heading"><div><p class="eyebrow">The habitat</p><h2 id="habitat-title" class="hraness-marketing-section__heading">The computer<br><em>organisms live on.</em></h2></div><p>An ALGAL program, which the spec calls an organism, runs inside a habitat: the store, the function and tool registries, and the model executors your host application provides, all under limits the host sets.</p></div>
     <div class="habitat-grid">
       <div class="habitat-copy">
         <p>The native Rust kernel and the TypeScript reference runtime execute the same manifest. A saved run can pause in one runtime and resume in the other on a shared local store.</p>
@@ -97,14 +78,14 @@
         <div class="spec-row" role="row"><span role="cell">Instruction set</span><div role="cell"><code>17 cell kinds</code><p>Data <code>input</code>/<code>const</code> · pure <code>fn</code>/<code>expr</code> · model <code>agent</code>/<code>decide</code>/<code>classifier</code> · effect <code>tool</code>/<code>gate</code>/<code>recall</code> · composition <code>organism</code>/<code>repeat</code>/<code>each</code>/<code>spawn</code> · state <code>store</code>/<code>load</code>/<code>slot</code></p></div></div>
         <div class="spec-row" role="row"><span role="cell">Memory</span><div role="cell"><code>Built in</code><p>Content-addressed store · durable slots · semantic recall · recorded compaction</p></div></div>
         <div class="spec-row" role="row"><span role="cell">Peripherals</span><div role="cell"><code>Host-attached</code><p>Model executors, typed tools, and human approval gates. The host attaches them; a program cannot create them.</p></div></div>
-        <div class="spec-row" role="row"><span role="cell">Run records</span><div role="cell"><code>Canonical receipts</code><p>One record per run, identified by its digest · replays bit-for-bit</p></div></div>
+        <div class="spec-row" role="row"><span role="cell">Run records</span><div role="cell"><code>Receipts</code><p>One record per run, named by its content hash · replays bit-for-bit</p></div></div>
         <div class="spec-row" role="row"><span role="cell">Implementations</span><div role="cell"><code>Two runtimes</code><p>Native Rust kernel · Bun/TypeScript reference · cross-runtime handoff</p></div></div>
       </div>
     </div>
   </section>
 
   <section class="artifact-section" id="fossils" aria-labelledby="fossils-title">
-    <div class="section-intro"><p class="eyebrow">Receipts</p><h2 id="fossils-title" class="hraness-marketing-section__heading">Every run<br><em>leaves a fossil.</em></h2><p>Each run leaves a receipt: a canonical, content-addressed record you can replay and inspect after the run ends.</p><p><a class="text-link" href="/tour/">See recorded runs on the tour <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-right"></use></svg></a></p></div>
+    <div class="section-intro"><p class="eyebrow">Receipts</p><h2 id="fossils-title" class="hraness-marketing-section__heading">Every run<br><em>leaves a fossil.</em></h2><p>Each run leaves a receipt: a record, named by its content hash, that you can replay and inspect after the run ends.</p><p><a class="text-link" href="/tour/">See recorded runs on the tour <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-right"></use></svg></a></p></div>
     <ol class="artifact-flow">
       <li><span class="step-number">01</span><h3>Verify</h3><p>Replay a run offline. Recorded effects stay fixed while the orchestration is recomputed bit-for-bit, with no model, store, or credentials needed.</p><code>algal verify receipt.json</code></li>
       <li><span class="step-number">02</span><h3>Diff</h3><p>Compare two runs: which cells diverged, and where their work counts differ.</p><code>algal diff a.json b.json</code></li>
@@ -115,7 +96,7 @@
 
   <section class="evolution-section" id="evolution" aria-labelledby="evolution-title">
     <p class="eyebrow">Reproduction and selection</p>
-    <div class="section-heading"><h2 id="evolution-title" class="hraness-marketing-section__heading">Programs propose.<br><em>The habitat selects.</em></h2><p>An organism can emit a new manifest as data. <code>spawn</code> checks it and runs it within the parent's budgets. A generated program is a manifest, not host code. Foundries and the civilization loop measure candidates on declared cases and promote winners.</p></div>
+    <div class="section-heading"><h2 id="evolution-title" class="hraness-marketing-section__heading">Programs propose.<br><em>The habitat selects.</em></h2><p>An organism can emit a new manifest as data. <code>spawn</code> checks it and runs it within the parent's budgets. A generated program is a manifest, not host code. Foundries and the civilization loop measure candidates on cases you declare, and the host decides which to keep.</p></div>
     <ol class="lineage-flow" aria-label="Conceptual program selection lifecycle, not an execution trace">
       <li><span>01 / propose</span><strong>Candidate artifacts</strong><p>Model-produced plans or manifests</p></li>
       <li><span>02 / check</span><strong>Typed programs with declared limits</strong><p>Host compilation and checks</p></li>
@@ -123,7 +104,7 @@
       <li><span>04 / select</span><strong>Keep or promote</strong><p>Host policy and recorded lineage</p></li>
     </ol>
     <div class="epoch-note">
-      <p><strong>In one local on-device run</strong>, which is not published as replayable evidence, Apple Intelligence acted as the designer. An on-device model of about 3B parameters proposed plans, a host function compiled them into checked manifests, and candidates that passed their cases were promoted. The whole civilization epoch stayed on the machine. Running it needs a Mac with Apple Intelligence and Xcode: on first use, <code>--apple</code> builds the separate Apple bridge, which is not part of the CLI package.</p>
+      <p><strong>In one local on-device run</strong>, which is not published as replayable evidence, Apple Intelligence acted as the designer. An on-device model of about 3B parameters proposed plans, a host function compiled them into checked manifests, and candidates that passed their cases were kept. The whole civilization epoch stayed on the machine. Running it needs a Mac with Apple Intelligence and Xcode: on first use, <code>--apple</code> builds the separate Apple bridge, which is not part of the CLI package.</p>
       <pre class="epoch-terminal"><code>algal civ --live --apple --dir .algal/civ   <span class="code-comment"># an on-device epoch</span>
 algal civ-verify --dir .algal/civ           <span class="code-comment"># replay + audit it offline</span></code></pre>
       <p><a href="/docs/civilization/">Civilization workflows <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a> · <a href="/docs/habitats/">Habitats and self-reproduction <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a> · <a href="/tour/#grow">Watch an organism propose a child on the tour <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-right"></use></svg></a></p>
@@ -133,17 +114,7 @@ algal civ-verify --dir .algal/civ           <span class="code-comment"># replay 
 
   <section class="try-section" id="install" aria-labelledby="try-title">
     <div class="section-intro"><p class="eyebrow">Get started</p><h2 id="try-title" class="hraness-marketing-section__heading">Install one binary.<br><em>Run your first program.</em></h2><p>Download and verify a native prerelease. The built-in workbench needs no checkout, Bun, Cargo, credentials, or web server. Use a fresh directory for each demo.</p><a class="button hraness-marketing-action" data-emphasis="primary" href="https://github.com/hraness/algal/releases">Download the prerelease <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a><p><a href="/docs/native-release/">Checksums, install instructions, and platform support <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a></p></div>
-    <div class="terminal"><div class="terminal-bar"><span>Terminal · after installation</span><span>Keep / review / prove</span></div><pre><code><span class="code-comment"># Inspect the installed build identity</span>
-algal doctor
-
-<span class="code-comment"># Leave a VM process waiting for your decision</span>
-algal demo start ./my-review
-algal demo inspect ./my-review
-
-<span class="code-comment"># Open my-review/report.html for the exact decision command</span>
-
-<span class="code-comment"># Kill owned VM children and check their recovery</span>
-algal demo prove ./crash-laboratory</code></pre><p><code>crash-laboratory/proof.json</code> records an approval that publishes once, a denial that publishes nothing, completed writes reused after a crash during a read, and a write with an unknown outcome that is not sent again. The decisions are fixtures; everything else, including the processes, journals, and verification, runs in the VM.</p></div>
+    {{INSTALL_TERMINAL}}
   </section>
 
   <section class="adoption-section" aria-labelledby="adoption-title">

@@ -40,7 +40,7 @@ export function pageDocument(meta: SitePageMeta, main: string): string {
   const description = escapeHtml(meta.description);
   const ogTitle = escapeHtml(meta.ogTitle);
   return `<!doctype html>
-<html lang="en" data-hraness-theme="paper" data-hraness-marketing-preset="editorial" data-hraness-material="lantern" data-palette="tokyo-night" data-hraness-pattern="mesh">
+<html lang="en" data-hraness-theme="paper" data-hraness-marketing-preset="editorial" data-hraness-material="lantern" data-palette="tokyo-night" data-hraness-pattern="none">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
