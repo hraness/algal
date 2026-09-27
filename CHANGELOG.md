@@ -62,6 +62,15 @@ independent of these package versions.
   land on the run record's `generator.normalized` (1..8 labels), so an
   emission's validity stays distinguishable from its usability. The v3
   study's invalid-manifest failures were all of these two classes.
+- Choice outputs accept `labelsExpr` in place of `labels`: a bounded
+  `algal.expr.v1` program checked against the cell's input names at
+  admission and evaluated against the delivered inputs before the effect
+  request is built, for per-request label sets the manifest cannot
+  enumerate (a classifier over a task-supplied taxonomy). The resolved
+  labels enter the request, its digest, and the receipt, so replay stays
+  exact; `onMiss` and a classifier `shadow.take` validate against the
+  resolved set at run time. `labels` and `labelsExpr` are mutually
+  exclusive in both runtimes.
 - The shared program catalog gains six pure collection entries under
   `examples/source/projects/shared/`: `includes_text` (membership scan),
   `latest_value` (last-wins lookup over `{target, value}` updates),

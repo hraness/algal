@@ -23,6 +23,7 @@ import {
   type CompiledOrganism,
 } from "./graph";
 import type {
+  AgentOutput,
   Budgets,
   Cell,
   OrganismManifest,
@@ -31,6 +32,7 @@ import type {
 import {
   BOUNDS,
   manifestToJson,
+  parseLabels,
   parseOrganismManifest,
 } from "./contract";
 import {
@@ -1180,6 +1182,13 @@ async function activate(
       const output = cell.kind === "decide"
         ? { kind: "json" as const, schema: decisionAnswerSchema(cell.questions) }
         : cell.output;
+      // labelsExpr resolves the choice label set against the delivered
+      // inputs before the request exists — the request, its digest, and the
+      // receipt all carry the concrete labels.
+      const resolvedOutput =
+        output.kind === "choice" && "labelsExpr" in output
+          ? resolveLabelsExpr(output, inputs, cell, ctx)
+          : output;
 
       const viewInputs: Record<string, JsonValue> = {};
       const wanted = cell.view.inputs;
@@ -1354,7 +1363,7 @@ async function activate(
           kind: cell.kind,
           prompt: cell.prompt ?? "",
           context,
-          output,
+          output: resolvedOutput,
           budget: { maxContextBytes: maxCtx, maxOutputBytes: maxOut },
           ...(cell.route ? { route: cell.route } : {}),
           ...(cell.kind === "decide" ? { questions: cell.questions } : {}),
@@ -1418,7 +1427,7 @@ async function activate(
           try {
             settled = {
               kind: "final",
-              bound: bindOutput(output, raw, cell.id),
+              bound: bindOutput(resolvedOutput, raw, cell.id),
             };
           } catch (e) {
             lastErr = e;
@@ -1655,6 +1664,47 @@ async function activate(
       return act;
     }
   }
+}
+
+/** `labelsExpr` resolution: the bounded program evaluates against the cell's
+ * delivered inputs and must produce a string list meeting the same contract a
+ * static `labels` declaration would. `onMiss` and a classifier `shadow.take`,
+ * which parse-time checks cannot verify against an input-dependent set, are
+ * validated here before the effect request is built. */
+function resolveLabelsExpr(
+  output: Extract<AgentOutput, { kind: "choice" }>,
+  inputs: Record<string, JsonValue>,
+  cell: Cell,
+  ctx: { work: { units: number } },
+): AgentOutput {
+  const r = evalProgram(
+    (output as { labelsExpr: { program: JsonValue } }).labelsExpr.program,
+    inputs as JsonObject,
+    BOUNDS.maxExprFuel,
+  );
+  ctx.work.units += r.fuel;
+  if (!r.ok) {
+    throw new AlgalError(
+      r.err.code === "EXPR_FUEL" ? "BUDGET_EXHAUSTED" : "EXPR_FAILED",
+      `labelsExpr ${canonicalize(r.err)}`,
+    );
+  }
+  let labels: string[];
+  try {
+    labels = parseLabels(r.value, `cell "${cell.id}" labelsExpr result`);
+  } catch (e) {
+    throw new AlgalError(
+      "EXPR_FAILED",
+      e instanceof Error ? e.message : String(e),
+    );
+  }
+  if (output.onMiss !== undefined && !labels.includes(output.onMiss)) {
+    throw new AlgalError("EXPR_FAILED", `cell "${cell.id}" onMiss "${output.onMiss}" is not in the resolved labels`);
+  }
+  if (cell.kind === "classifier" && cell.shadow !== undefined && !labels.includes(cell.shadow.take)) {
+    throw new AlgalError("EXPR_FAILED", `cell "${cell.id}" shadow.take "${cell.shadow.take}" is not in the resolved labels`);
+  }
+  return { kind: "choice", labels, ...(output.onMiss !== undefined ? { onMiss: output.onMiss } : {}) };
 }
 
 function unboundExecutor(kind: EffectKind): Executor {

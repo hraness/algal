@@ -119,10 +119,23 @@ export type PortType =
 export type PortName = string;
 export type PortMap = Record<PortName, PortType>;
 
+export type ChoiceOutput =
+  | { kind: "choice"; labels: string[]; onMiss?: string }
+  | {
+      kind: "choice";
+      /** Dynamic label set: an `algal.expr.v1` program evaluated against the
+       * cell's delivered inputs at run time, yielding the same list a static
+       * `labels` would declare — for per-request taxonomies the manifest
+       * cannot enumerate. Resolved before the effect request is built, so the
+       * request, its digest, and the receipt all carry concrete labels. */
+      labelsExpr: { contract: "algal.expr.v1"; program: JsonValue };
+      onMiss?: string;
+    };
+
 export type AgentOutput =
   | { kind: "text" }
   | { kind: "json"; schema: JsonObject; schemaVersion?: SchemaVersion }
-  | { kind: "choice"; labels: string[]; onMiss?: string };
+  | ChoiceOutput;
 
 export type Route = {
   provider?: string;
@@ -215,7 +228,7 @@ export type Cell =
       inputs: PortMap;
       prompt: string;
       view: AgentView;
-      output: { kind: "choice"; labels: string[]; onMiss?: string };
+      output: ChoiceOutput;
       route?: Route;
       tools?: string[];
       budget?: CellBudget;
@@ -245,7 +258,7 @@ export type Cell =
       inputs: PortMap;
       prompt: string;
       view: AgentView;
-      output: { kind: "choice"; labels: string[]; onMiss?: string };
+      output: ChoiceOutput;
       route?: Route;
       budget?: CellBudget;
       retry?: { attempts: number };
@@ -518,7 +531,42 @@ export function parsePortMap(
 
 // ------------------------------------------------------------ agent bits ---
 
-function parseAgentOutput(u: unknown, what: string): AgentOutput {
+/** The shared label-list check: 1..maxLabels unique strings, each within
+ * maxLabelLen — used by static `labels` and by runtime `labelsExpr`
+ * resolution, so a resolved set meets exactly the same contract. */
+export function parseLabels(u: unknown, what: string): string[] {
+  const labels = asArray(u, what).map((l, i) => asString(l, `${what}[${i}]`, BOUNDS.maxLabelLen));
+  if (labels.length === 0 || labels.length > BOUNDS.maxLabels) {
+    throw new AlgalError("PARSE_FAILED", `${what} must have 1..${BOUNDS.maxLabels} entries`);
+  }
+  if (new Set(labels).size !== labels.length) {
+    throw new AlgalError("PARSE_FAILED", `${what} must be unique`);
+  }
+  return labels;
+}
+
+/** An embedded `{contract: "algal.expr.v1", program}` descriptor — the same
+ * shape `expr` cells and guards carry. When `binders` names the cell's
+ * declared inputs, the program is statically checked against them at parse
+ * time, the same admission rule an `expr` cell's program meets. */
+function parseExprRef(u: unknown, what: string, binders?: string[]): { contract: "algal.expr.v1"; program: JsonValue } {
+  const obj = asObject(u, what);
+  noUnknownKeys(obj, ["contract", "program"], what);
+  if (obj.contract !== "algal.expr.v1") {
+    throw new AlgalError("PARSE_FAILED", `${what}.contract must be "algal.expr.v1"`);
+  }
+  const program = asJsonValue(reqField(obj, "program", what), `${what}.program`);
+  if (binders !== undefined) {
+    const check = checkProgram(program, binders);
+    if (!check.ok) {
+      const { code, ...details } = check.err;
+      throw new AlgalError("PARSE_FAILED", `${what}.program: ${code} ${JSON.stringify(details)}`);
+    }
+  }
+  return { contract: "algal.expr.v1", program };
+}
+
+function parseAgentOutput(u: unknown, what: string, binders?: string[]): AgentOutput {
   const obj = asObject(u, what);
   const kind = asString(reqField(obj, "kind", what), `${what}.kind`, 16);
   switch (kind) {
@@ -534,27 +582,25 @@ function parseAgentOutput(u: unknown, what: string): AgentOutput {
       return schemaVersion === undefined ? { kind: "json", schema } : { kind: "json", schema, schemaVersion };
     }
     case "choice": {
-      noUnknownKeys(obj, ["kind", "labels", "onMiss"], what);
-      const labels = asArray(reqField(obj, "labels", what), `${what}.labels`).map(
-        (l, i) => asString(l, `${what}.labels[${i}]`, BOUNDS.maxLabelLen),
-      );
-      if (labels.length === 0 || labels.length > BOUNDS.maxLabels) {
+      noUnknownKeys(obj, ["kind", "labels", "labelsExpr", "onMiss"], what);
+      const labelsRaw = optField(obj, "labels");
+      const exprRaw = optField(obj, "labelsExpr");
+      if (labelsRaw !== undefined && exprRaw !== undefined) {
         throw new AlgalError(
           "PARSE_FAILED",
-          `${what}.labels must have 1..${BOUNDS.maxLabels} entries`,
+          `${what} declares labels or labelsExpr, not both`,
         );
       }
-      if (new Set(labels).size !== labels.length) {
-        throw new AlgalError(
-          "PARSE_FAILED",
-          `${what}.labels must be unique`,
-        );
-      }
-      const out: AgentOutput = { kind: "choice", labels };
+      const out: AgentOutput =
+        exprRaw === undefined
+          ? { kind: "choice", labels: parseLabels(reqField(obj, "labels", what), `${what}.labels`) }
+          : { kind: "choice", labelsExpr: parseExprRef(exprRaw, `${what}.labelsExpr`, binders) };
       const onMiss = optField(obj, "onMiss");
       if (onMiss !== undefined) {
         const miss = asString(onMiss, `${what}.onMiss`, BOUNDS.maxLabelLen);
-        if (!labels.includes(miss)) {
+        // With labelsExpr the set is input-dependent; the run validates
+        // onMiss against the resolved labels before dispatch.
+        if ("labels" in out && !out.labels.includes(miss)) {
           throw new AlgalError(
             "PARSE_FAILED",
             `${what}.onMiss "${miss}" is not a declared label`,
@@ -776,6 +822,7 @@ function parseCell(u: unknown, what: string): Cell {
       const output = parseAgentOutput(
         reqField(obj, "output", what),
         `${what}.output`,
+        Object.keys(inputs),
       );
       if (output.kind === "choice" && output.onMiss !== undefined) {
         throw new AlgalError(
@@ -993,6 +1040,7 @@ function parseCell(u: unknown, what: string): Cell {
       const output = parseAgentOutput(
         reqField(obj, "output", what),
         `${what}.output`,
+        Object.keys(inputs),
       );
       const route =
         obj.route === undefined
@@ -1146,7 +1194,9 @@ function parseCell(u: unknown, what: string): Cell {
             `${what}.shadow.take`,
             BOUNDS.maxLabelLen,
           );
-          if (!output.labels.includes(take)) {
+          // With labelsExpr the set is input-dependent; the run validates
+          // take against the resolved labels before dispatch.
+          if ("labels" in output && !output.labels.includes(take)) {
             throw new AlgalError(
               "PARSE_FAILED",
               `${what}.shadow.take must be a declared label`,
@@ -1866,7 +1916,9 @@ function outputJson(o: AgentOutput): JsonObject {
     case "json":
       return o.schemaVersion === undefined ? { kind: "json", schema: o.schema } : { kind: "json", schema: o.schema, schemaVersion: o.schemaVersion };
     case "choice": {
-      const r: JsonObject = { kind: "choice", labels: o.labels };
+      const r: JsonObject = "labelsExpr" in o
+        ? { kind: "choice", labelsExpr: { contract: o.labelsExpr.contract, program: o.labelsExpr.program } }
+        : { kind: "choice", labels: o.labels };
       if (o.onMiss !== undefined) r.onMiss = o.onMiss;
       return r;
     }

@@ -1,7 +1,7 @@
 use crate::{
     Error, Result,
     canonical::{canonical, digest},
-    contract::{Budgets, Manifest, Ports, bind_output, check_value, object},
+    contract::{Budgets, Manifest, Ports, bind_output, check_value, labels, object},
     effects::{Backend, Host, ToolBackend},
     graph::{Compiled, Transports, compile, interface_args},
     registry,
@@ -1122,6 +1122,64 @@ impl Runtime<'_> {
         } else {
             cell["output"].clone()
         };
+        // labelsExpr resolves the choice label set against the delivered
+        // inputs before the request exists — the request, its digest, and the
+        // receipt all carry the concrete labels.
+        let output_contract =
+            if output_contract["kind"] == "choice" && output_contract.get("labelsExpr").is_some() {
+                let env = inputs.as_object().cloned().unwrap_or_default();
+                let resolved = match algal_expr::run(
+                    &output_contract["labelsExpr"]["program"],
+                    &env,
+                    MAX_EXPR_FUEL,
+                ) {
+                    Ok((value, fuel)) => {
+                        self.work += fuel as usize;
+                        value
+                    }
+                    Err((e, fuel)) => {
+                        self.work += fuel as usize;
+                        return Err(if e.code == "EXPR_FUEL" {
+                            Error::limit("labelsExpr fuel exhausted")
+                        } else {
+                            let detail =
+                                canonical(&e.to_json()).unwrap_or_else(|_| e.to_json().to_string());
+                            Error::new("EXPR_FAILED", format!("labelsExpr {detail}"))
+                        });
+                    }
+                };
+                labels(&resolved).map_err(|e| {
+                    Error::new(
+                        "EXPR_FAILED",
+                        format!("cell \"{name}\" labelsExpr result: {}", e.message),
+                    )
+                })?;
+                let resolved_labels = resolved.as_array().unwrap();
+                if let Some(miss) = output_contract.get("onMiss")
+                    && !resolved_labels.contains(miss)
+                {
+                    return Err(Error::new(
+                        "EXPR_FAILED",
+                        format!("cell \"{name}\" onMiss {miss} is not in the resolved labels"),
+                    ));
+                }
+                if cell["kind"] == "classifier"
+                    && let Some(take) = cell["shadow"].get("take")
+                    && !resolved_labels.contains(take)
+                {
+                    return Err(Error::new(
+                        "EXPR_FAILED",
+                        format!("cell \"{name}\" shadow.take {take} is not in the resolved labels"),
+                    ));
+                }
+                let mut out = json!({"kind":"choice","labels":resolved});
+                if let Some(miss) = output_contract.get("onMiss") {
+                    out["onMiss"] = miss.clone();
+                }
+                out
+            } else {
+                output_contract
+            };
         let max_turns = cell["budget"]["maxTurns"]
             .as_u64()
             .unwrap_or(if tools.is_empty() { 1 } else { 8 });

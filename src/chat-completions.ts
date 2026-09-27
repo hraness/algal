@@ -38,7 +38,15 @@ function integer(value: unknown): number | undefined {
 }
 function outputSchema(output: AgentOutput): JsonObject {
   if (output.kind === "text") return { type: "string" };
-  if (output.kind === "choice") return { type: "string", enum: output.labels } as unknown as JsonObject;
+  if (output.kind === "choice") {
+    if (!("labels" in output)) {
+      throw new AlgalError(
+        "EFFECT_UNPARSEABLE",
+        "choice output with labelsExpr must be resolved before a request reaches an executor",
+      );
+    }
+    return { type: "string", enum: output.labels } as unknown as JsonObject;
+  }
   return output.schema;
 }
 
