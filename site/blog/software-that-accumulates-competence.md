@@ -7,7 +7,7 @@ description: ALGAL bets that a computer can keep tested procedures, combine them
 
 # Software that accumulates competence
 
-ALGAL bets that a computer can accumulate tested ways of acting, so that doing useful work leaves it with a better, reusable way to do the next piece of work. That is a narrower claim than "AI writes software", which every frontier model can already do in draft form. It is also untested: ALGAL has the mechanisms, and this post ends with the experiment that would show whether they work. The [vision page](/docs/vision/) has the full argument.
+ALGAL bets that a computer can accumulate tested ways of acting, so that doing useful work leaves it with a better, reusable way to do the next piece of work. That is a narrower claim than "AI writes software", which every frontier model can already do in draft form. It is also not established: ALGAL has the mechanisms, and this post ends with the experiment that would show whether they work. The [vision page](/docs/vision/) has the full argument.
 
 ## Two ways to think about software
 
@@ -29,7 +29,7 @@ ALGAL is a language and an application VM, not a new processor or an operating s
 
 **AI supplies judgment; ordinary computation supplies discipline.** A model call is a typed cell that declares the context it may see, the output shape it must return, and its budget. Everything around it is dataflow. The rule is to use a model where a judgment must be inferred, and ordinary code where the procedure can be written down. The hoped-for consequence, which is a hypothesis and not a measured result, is a system that grows more capable while spending less unconstrained reasoning on familiar work.
 
-**Evidence and permission are part of the mechanism.** The foundry ties candidate identities, per-case results, resource accounting, selection, and verification together, and keeps holdout cases apart from selection cases. A program cannot promote itself or grant itself capabilities. The host decides and the receipt records it. A system cannot accumulate improvements reliably unless it can say what changed, what was tested, what happened, and who allowed it. Recording where each change came from, and checking it before it runs, is what keeps accumulated change under control.
+**Evidence and permission are part of the mechanism.** The foundry ties candidate identities, per-case results, resource accounting, selection, and verification together, and keeps holdout cases apart from selection cases. A program cannot promote itself or grant itself capabilities. The host decides, and the foundry's report records the decision. A system cannot accumulate improvements reliably unless it can say what changed, what was tested, what happened, and who allowed it. Recording where each change came from, and checking it before it runs, is what keeps accumulated change under control.
 
 ## Composition is the result that would matter
 

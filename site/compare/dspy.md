@@ -6,7 +6,7 @@ order: 2
 
 # ALGAL vs DSPy
 
-Of the tools compared on this site, DSPy is closest to what ALGAL is for, and it works at a different layer. DSPy treats language-model pipelines as programs to optimize: optimizers such as MIPROv2 search instruction and few-shot candidates against a metric, and DSPy can also tune model weights. ALGAL treats the program itself as data that can be proposed, measured, and selected, and it gives that loop a runtime, a type system, receipts, and a rule that only the host decides which program runs.
+Of the tools compared on this site, DSPy is closest to what ALGAL is for, and it works at a different layer. DSPy treats language-model pipelines as programs to optimize: optimizers such as MIPROv2 search instruction and few-shot candidates against a metric, and DSPy can also tune model weights. ALGAL treats the program itself as data that can be proposed, measured, and selected, and it gives that loop a runtime, a type system, receipts, and a rule that only the host decides which program is promoted.
 
 ## Tuning a pipeline versus choosing one
 
@@ -25,7 +25,7 @@ DSPy answers "given this pipeline, which prompts make it score best?" ALGAL asks
 | Evaluation | a metric over a devset, at compile time | declared cases at run time; foundry epochs with recorded lineage |
 | Record of the result | program state after `compile` | receipts, verified by replay, for every run and candidate |
 | Where it runs | your Python process and your model provider | a VM with two implementations (a Rust kernel and a TypeScript reference) |
-| Who decides what runs | your metric and your code | the host, after contract checks, capability classes, and budgets |
+| Who decides what is promoted | your metric and your code | the host, after contract checks, capability classes, and budgets |
 
 ## What they share
 
@@ -43,7 +43,7 @@ The two could also work together. A DSPy-style optimizer could propose the conte
 
 - You want to search over the program itself, its cells, wiring, and budgets, and not only its prompts.
 - Candidates and winners need to be stored as files you can hash, replay, diff, and verify offline.
-- Only a program the host accepted after measurement should run, with its lineage on the receipt. See [habitats and civilization](/docs/habitats/).
+- Only a program the host accepted after measurement should be promoted, with its lineage recorded. See [habitats and civilization](/docs/habitats/).
 - You want the search to run where the program runs, including with an on-device model of about 3B parameters, rather than as a separate compile step.
 
 ## Status and limits
