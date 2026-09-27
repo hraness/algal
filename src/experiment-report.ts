@@ -179,6 +179,12 @@ export type SkillExperimentArm = {
   /** Operator corrections the arm's cited run records carry, summed — the
    * human-correction measure; zero when no record declares any. */
   correctionsTotal: number;
+  /** Revision episodes the arm's run records carry — optimizer-arm
+   * triggers only; zero for every other arm. */
+  revisionsTotal: number;
+  /** Catalog entries the session's catalog record marks retired —
+   * optimizer demotions. */
+  demotionsTotal: number;
   /** The `algal.experiment-run.v1` record digests this arm aggregates, in
    * the session's task order — the cited evidence every count derives
    * from. */
@@ -289,7 +295,8 @@ function parseArm(value: unknown, i: number): SkillExperimentArm {
     "tasksAttempted", "tasksPassed", "heldOutPassed", "heldOutTotal",
     "invalidTasks", "exhaustedTasks",
     "consultations", "catalogHits", "catalogMisses", "admissionFailures",
-    "keptEntries", "reusedEntries", "reuse", "holdoutGaps", "correctionsTotal", "records",
+    "keptEntries", "reusedEntries", "reuse", "holdoutGaps", "correctionsTotal",
+    "revisionsTotal", "demotionsTotal", "records",
   ], at);
   const name = a.name;
   if (!(EXPERIMENT_ARMS as readonly unknown[]).includes(name)) {
@@ -354,6 +361,9 @@ function parseArm(value: unknown, i: number): SkillExperimentArm {
   if (correctionsTotal > tasksAttempted * EXPERIMENT_BOUNDS.maxCorrections) {
     fail(`${at}.correctionsTotal exceeds what ${tasksAttempted} records can carry`);
   }
+  const revisionsTotal = count(reqField(a, "revisionsTotal", at), 0, SKILL_EXPERIMENT_BOUNDS.maxRecords, `${at}.revisionsTotal`);
+  if (revisionsTotal > tasksAttempted) fail(`${at}.revisionsTotal exceeds attempted tasks`);
+  const demotionsTotal = count(reqField(a, "demotionsTotal", at), 0, keptEntries, `${at}.demotionsTotal`);
   const records = parseDigestList(reqField(a, "records", at), `${at}.records`, SKILL_EXPERIMENT_BOUNDS.maxRecords);
   if (records.length !== tasksAttempted) fail(`${at}.records must cite every attempted task record`);
   return {
@@ -382,6 +392,8 @@ function parseArm(value: unknown, i: number): SkillExperimentArm {
     reuse,
     holdoutGaps: gaps,
     correctionsTotal,
+    revisionsTotal,
+    demotionsTotal,
     records,
   };
 }
@@ -564,6 +576,7 @@ export function aggregateExperimentArm(
   let catalogMisses = 0;
   let admissionFailures = 0;
   let correctionsTotal = 0;
+  let revisionsTotal = 0;
   /** Each in-session promotion: the catalog index it added, the promoting
    * task's position, and the recorded validation score when present. */
   const promotedInSession = new Map<number, { taskIndex: number; manifest: Digest; validation: SkillExperimentScore | null }>();
@@ -578,6 +591,8 @@ export function aggregateExperimentArm(
     if (run.phase !== task.phase) evidenceError(`task ${task.taskId}'s record claims phase ${run.phase}, not ${task.phase}`);
     if (run.generator !== null) positionOf(run.generator.receipt, `task ${task.taskId}'s generator`);
     if (run.receipt !== null) positionOf(run.receipt, `task ${task.taskId}'s`);
+    // A revision runs after the task run it was triggered by.
+    if (run.revise?.generator != null) positionOf(run.revise.generator.receipt, `task ${task.taskId}'s reviser`);
     if (run.consult.outcome === "hit") {
       catalogHits += 1;
       const consulted = catalog.entries[run.consult.entry!];
@@ -594,6 +609,12 @@ export function aggregateExperimentArm(
       catalogMisses += 1;
     }
     if (run.promote !== null) {
+      if (run.promote.demoted === true) {
+        const demoted = catalog.entries[run.promote.entry ?? -1];
+        if (demoted === undefined || demoted.retired !== run.promote.report) {
+          evidenceError(`task ${task.taskId}'s demotion does not name a catalog entry retired by its report`);
+        }
+      }
       if (run.promote.promoted) {
         const index = run.promote.entry!;
         const added = catalog.entries[index];
@@ -604,6 +625,29 @@ export function aggregateExperimentArm(
           if (added.manifest !== run.manifest) evidenceError(`task ${task.taskId}'s promotion entry ${index} keeps ${added.manifest}, not ${run.manifest}`);
           if (added.report !== run.promote.report) evidenceError(`task ${task.taskId}'s promotion cites report ${run.promote.report}, the catalog records ${added.report}`);
           promotedInSession.set(index, { taskIndex: i, manifest: added.manifest, validation: run.promote.validation });
+        }
+      }
+    }
+    if (run.revise !== undefined) {
+      revisionsTotal += 1;
+      const revise = run.revise;
+      if (revise.supersedes !== null) {
+        const prior = catalog.entries[revise.supersedes];
+        if (prior === undefined || prior.retired === undefined) {
+          evidenceError(`task ${task.taskId}'s revision supersedes entry ${revise.supersedes}, which is not retired in the catalog`);
+        }
+      }
+      if (revise.promoted) {
+        const added = catalog.entries[revise.entry ?? -1];
+        if (added === undefined) {
+          evidenceError(`task ${task.taskId}'s revision entry ${revise.entry} is beyond the catalog`);
+        } else {
+          if (added.taskId !== task.taskId) evidenceError(`task ${task.taskId}'s revision is recorded as entry ${revise.entry}, which names task ${added.taskId}`);
+          if (added.supersedes !== revise.supersedes) {
+            evidenceError(`task ${task.taskId}'s revision entry ${revise.entry} supersedes ${added.supersedes}, not ${revise.supersedes}`);
+          }
+          if (added.report !== revise.report) evidenceError(`task ${task.taskId}'s revision cites report ${revise.report}, the catalog records ${added.report}`);
+          promotedInSession.set(revise.entry!, { taskIndex: i, manifest: added.manifest, validation: revise.validation });
         }
       }
     }
@@ -673,6 +717,8 @@ export function aggregateExperimentArm(
     reuse,
     holdoutGaps,
     correctionsTotal,
+    revisionsTotal,
+    demotionsTotal: catalog.entries.filter((entry) => entry.retired !== undefined).length,
     records: session.tasks.map((task) => task.run),
   };
 }
@@ -873,6 +919,10 @@ export function renderExperimentReport(report: SkillExperimentReport): string {
   const corrected = report.arms.filter((arm) => arm.correctionsTotal > 0);
   if (corrected.length > 0) {
     lines.push(`operator corrections recorded: ${corrected.map((arm) => `${arm.name} ${arm.correctionsTotal}`).join(", ")}`);
+  }
+  const revised = report.arms.filter((arm) => arm.revisionsTotal > 0 || arm.demotionsTotal > 0);
+  if (revised.length > 0) {
+    lines.push(`optimizer episodes: ${revised.map((arm) => `${arm.name} ${arm.revisionsTotal} revisions, ${arm.demotionsTotal} demotions`).join(", ")}`);
   }
   const gaps = report.arms.flatMap((arm) => arm.holdoutGaps.map((gap) => ({ arm: arm.name, gap })));
   if (gaps.length > 0) {
