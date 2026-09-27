@@ -280,9 +280,26 @@ Findings:
 
 ## Status and limits
 
-This is the first comparative study of the project's central claim. Its
-task family is deliberately controlled rather than drawn from production
-work; a positive result would justify a larger production-family study, and
-a negative result would be evidence about the current machinery, not a proof
-that retention cannot help. The study measures what it records: it cannot
-show that generated procedures generalize beyond this family.
+The claim under test now holds within this family, on every pre-registered
+measure:
+
+- **Held-out success**: the kept program scored 40/40 on unseen and shift
+  holdout, at or above every generative arm's completion.
+- **Cost per success**: under `citeKeptEvaluation` the retained arm is the
+  cheapest adaptive arm (997,334 units vs ablation's 1,304,446; the fixed
+  arm's 933,716 is the non-adaptive floor). Reuse hedges generation
+  failure too: the kept manifest never emits an invalid manifest, so the
+  retained arm completed 48/48 tasks where ablation lost 10.
+- **Reuse contribution**: 47 catalog hits joined to one promotion, all
+  through run receipts in the store, not narrative.
+- **Independent evaluation**: every report re-derives from records under
+  `experiment verify`; the Jev probe independently graded corpus and
+  classify quality at 99.48%.
+- **Human correction effort**: zero interventions recorded.
+
+What the study does not show: the task family is synthetic and saturating,
+so held-out success no longer discriminates between arms; nothing here is
+evidence that retained procedures generalize to production work. The named
+next steps remain a production-derived task family, an optimizer arm that
+revises kept procedures against their own receipts, and a corpus rich
+enough to keep the graders discriminative.
