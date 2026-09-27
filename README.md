@@ -1077,6 +1077,15 @@ use it from a larger system without giving the system ambient authority.
 
 ### From code
 
+For Worker consumers, import the specific package paths you need, such as
+`@hraness/algal/task`, `@hraness/algal/run`, and
+`@hraness/algal/runtime-journal-contract`. The main entry point also exports
+IndexedDB adapters, whose TypeScript declarations load browser DOM globals.
+The `process` and `process-evidence` paths expose the existing Bun host modules;
+they require filesystem support at runtime. A Worker can import `ProcessRecord`
+with `import type` without loading those host modules at runtime. Keeping DOM
+types out of a consumer does not establish runtime support for a host module.
+
 ```ts
 import { builtinRegistry, FileStore, runOrganism, vercelGatewayExecutor } from "@hraness/algal";
 // FileStore ships from the package root; any custom Store works too
