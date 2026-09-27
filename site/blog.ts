@@ -46,6 +46,14 @@ export const SEARCH_SITE: SearchSite = {
 const SOCIAL_IMAGE = { path: "/og.png", width: 1200, height: 630, contentType: "image/png", alt: OG_IMAGE_ALT } as const;
 const USES_MARKER = "{{ALGALUSES}}";
 
+/** The Hraness org as a schema/feed party: a real entity with a canonical URL and profiles. */
+const BLOG_PARTY = {
+  kind: "Organization",
+  name: BLOG_AUTHOR.name,
+  url: "https://hraness.com",
+  sameAs: ["https://github.com/hraness"],
+} as const;
+
 export interface BlogPost {
   slug: string;
   path: `/blog/${string}/`;
@@ -136,8 +144,8 @@ export function articleDiscovery(post: BlogPost): ArticleDiscovery {
     description: post.dek,
     image: SOCIAL_IMAGE,
     publishedTime: timestamp(post.published),
-    authors: [{ kind: "Organization", name: BLOG_AUTHOR.name }],
-    publisher: { kind: "Organization", name: BLOG_AUTHOR.name },
+    authors: [BLOG_PARTY],
+    publisher: BLOG_PARTY,
     blogPath: BLOG_PATH,
     ...(post.eyebrow ? { section: post.eyebrow } : {}),
   };
@@ -172,7 +180,7 @@ export function renderBlogIndex(posts: readonly BlogPost[]): string {
 }
 
 export function blogIndexJsonLd(posts: readonly BlogPost[]) {
-  return blogJsonLd(SEARCH_SITE, { name: BLOG_TITLE, description: BLOG_DESCRIPTION, path: BLOG_PATH, publisher: { kind: "Organization", name: BLOG_AUTHOR.name } },
+  return blogJsonLd(SEARCH_SITE, { name: BLOG_TITLE, description: BLOG_DESCRIPTION, path: BLOG_PATH, publisher: BLOG_PARTY },
     posts.filter(post => post.indexable).map(articleDiscovery));
 }
 
@@ -184,7 +192,7 @@ export function blogAtomFeed(posts: readonly BlogPost[]): string {
   const indexable = posts.filter(post => post.indexable);
   return createAtomFeed(SEARCH_SITE, {
     title: "ALGAL blog", description: BLOG_DESCRIPTION, homePath: BLOG_PATH, path: BLOG_FEED_PATH,
-    authors: [{ kind: "Organization", name: BLOG_AUTHOR.name }],
+    authors: [BLOG_PARTY],
   }, indexable.map(post => createFeedEntry(articleDiscovery(post), { contentHtml: post.bodyHtml })));
 }
 
