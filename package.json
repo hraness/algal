@@ -51,7 +51,13 @@
     "./errors": "./src/errors.ts",
     "./store-contract": "./src/store-contract.ts",
     "./source": "./src/source.ts",
-    "./source-errors": "./src/source-errors.ts"
+    "./source-errors": "./src/source-errors.ts",
+    "./task": "./src/task.ts",
+    "./task-parameters": "./src/task-parameters.ts",
+    "./task-optimizer": "./src/task-optimizer.ts",
+    "./graph": "./src/graph.ts",
+    "./tools": "./src/tools.ts",
+    "./tool-context": "./src/tool-context.ts"
   },
   "bin": {
     "algal": "./cli.ts"
