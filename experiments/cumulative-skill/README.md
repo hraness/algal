@@ -18,9 +18,14 @@ by the task, so every grader can replay the expected output exactly.
 ```
 configs/                  algal.experiment-family.v1 generator configs
   acquisition.family.json   seed 20260925, 8 tasks
-  unseen.family.json        seed 987654, 8 tasks
-  shift.family.json         seed 77013, 4 tasks evolved from acquisition
+  unseen.family.json        seed 987654, 32 tasks
+  shift.family.json         seed 77013, 8 tasks evolved from acquisition
+  v4/                       harder corpus: same phases, wider taxonomies
+                            (10-14 classes), deeper rules (6-10), and the
+                            optional shape.difficulty block — hintLeak,
+                            noiseSentences, confusable, subjectMislead
 tasks/<phase>/            generated algal.experiment-task.v1 files + index.json
+tasks/v4/<phase>/         the v4 corpus (8 acquisition / 32 unseen / 8 shift)
 pipeline/
   record-triage.algal.json       reference pipeline (agent + expr cells)
   record-triage.responses.json   scripted classify responses for the
@@ -84,7 +89,14 @@ values it wrote.
 The generator is host-side tooling in `src/experiment-family.ts`. A config
 names a seed, a phase, a task count, per-split record counts, and a `shape`
 (ranges for classes, optional fields, rules, label pools, and summaries,
-plus the grader mix and scorer threshold). `algal experiment tasks
+plus the grader mix and scorer threshold). `shape.difficulty` is an
+optional block of text-difficulty knobs: `hintLeak` (distractor-sentence
+rate), `noiseSentences` (extra body sentences drawn from rival classes),
+`confusable` (leaks drawn from a confusable pair partner's real body text),
+and `subjectMislead` (subjects naming a rival class while the body carries
+the truth). Rivals are drawn from the task's own taxonomy, so injected
+sentences name labels a classifier can actually pick. Absent `difficulty`
+the generator reproduces the earlier corpora byte-for-byte. `algal experiment tasks
 <config.json>` emits the `algal.experiment-set.v1` index; `--out <dir>`
 also writes the task files. Identical config and seed produce identical
 canonical bytes; the set index records the config digest, per-task digests,

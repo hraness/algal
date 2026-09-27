@@ -1,0 +1,24 @@
+{
+  "contract": "algal.experiment-family.v1",
+  "family": "record-triage",
+  "seed": 314159,
+  "phase": "unseen",
+  "tasks": 32,
+  "splits": { "train": 24, "validation": 12, "holdout": 12 },
+  "shape": {
+    "classes": [10, 14],
+    "optionalFields": [3, 4],
+    "rules": [6, 10],
+    "decisionLabels": [3, 5],
+    "queueLabels": [3, 5],
+    "summaries": [2, 4],
+    "grader": "mixed",
+    "scorerPassAt": 0.9,
+    "difficulty": {
+      "hintLeak": 0.5,
+      "noiseSentences": [0, 2],
+      "confusable": 0.7,
+      "subjectMislead": 0.25
+    }
+  }
+}

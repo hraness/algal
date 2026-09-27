@@ -117,6 +117,33 @@ export class SeededRng {
 
 // ------------------------------------------------------------------ config ---
 
+/** Text-difficulty knobs a family config may declare under `shape.difficulty`.
+ * Every field is resolved (defaults applied) at parse time when the block is
+ * present; the absent block behaves identically via `DEFAULT_DIFFICULTY`. */
+export type FamilyDifficulty = {
+  /** Probability a record's body leaks a distractor line. */
+  hintLeak: number;
+  /** Extra body sentences [min, max], each drawn from a rival class's
+   * bodies — real signal for a wrong label, so the text no longer
+   * disambiguates by majority. */
+  noiseSentences: [number, number];
+  /** When the leak fires, probability the distractor is a full body sentence
+   * from the class's confusable partner instead of a generic hint phrase. */
+  confusable: number;
+  /** Probability the subject names a rival class while the body carries
+   * the truth — the strongest single-feature mislead. */
+  subjectMislead: number;
+};
+
+/** The v3 generation behavior, kept as defaults so existing configs produce
+ * byte-identical tasks. */
+export const DEFAULT_DIFFICULTY: FamilyDifficulty = {
+  hintLeak: 0.25,
+  noiseSentences: [0, 0],
+  confusable: 0,
+  subjectMislead: 0,
+};
+
 export type ExperimentFamilyConfig = {
   contract: typeof EXPERIMENT_FAMILY_CONTRACT;
   family: typeof EXPERIMENT_TASK_FAMILY;
@@ -138,6 +165,10 @@ export type ExperimentFamilyConfig = {
     grader: "exact" | "scorer" | "mixed";
     /** Pass threshold on scorer tasks (0..1). */
     scorerPassAt: number;
+    /** Optional text-difficulty knobs; absent means the v3 generation
+     * behavior byte-for-byte — every knob's first PRNG draw is guarded by
+     * the knob being non-default, so defaults consume the same stream. */
+    difficulty?: FamilyDifficulty;
   };
   /** Required for phase "shift": the base environment to revise. */
   evolve?: {
@@ -208,7 +239,7 @@ export function parseExperimentFamilyConfig(value: unknown): ExperimentFamilyCon
   if (splits.train + splits.validation + splits.holdout > EXPERIMENT_TASK_BOUNDS.maxRecords) {
     fail(`splits total ${splits.train + splits.validation + splits.holdout} records exceeds ${EXPERIMENT_TASK_BOUNDS.maxRecords}`);
   }
-  const shapeRaw = closedRecord(reqField(config, "shape", "experiment family config"), ["classes", "optionalFields", "rules", "decisionLabels", "queueLabels", "summaries", "grader", "scorerPassAt"], "shape");
+  const shapeRaw = closedRecord(reqField(config, "shape", "experiment family config"), ["classes", "optionalFields", "rules", "decisionLabels", "queueLabels", "summaries", "grader", "scorerPassAt", "difficulty"], "shape");
   const grader = reqField(shapeRaw, "grader", "experiment family shape");
   if (grader !== "exact" && grader !== "scorer" && grader !== "mixed") fail("shape.grader must be exact, scorer, or mixed");
   const scorerPassAt = reqField(shapeRaw, "scorerPassAt", "experiment family shape");
@@ -225,6 +256,24 @@ export function parseExperimentFamilyConfig(value: unknown): ExperimentFamilyCon
     grader,
     scorerPassAt,
   };
+  const difficultyRaw = shapeRaw["difficulty"];
+  if (difficultyRaw !== undefined) {
+    const d = closedRecord(difficultyRaw, ["hintLeak", "noiseSentences", "confusable", "subjectMislead"], "shape.difficulty");
+    const unit = (key: string, fallback: number): number => {
+      const raw = d[key];
+      if (raw === undefined) return fallback;
+      if (typeof raw !== "number" || !Number.isFinite(raw) || raw < 0 || raw > 1) {
+        fail(`shape.difficulty.${key} must be a number in [0,1]`);
+      }
+      return raw;
+    };
+    shape.difficulty = {
+      hintLeak: unit("hintLeak", DEFAULT_DIFFICULTY.hintLeak),
+      noiseSentences: d["noiseSentences"] === undefined ? [...DEFAULT_DIFFICULTY.noiseSentences] : range(d["noiseSentences"], 0, 4, "shape.difficulty.noiseSentences"),
+      confusable: unit("confusable", DEFAULT_DIFFICULTY.confusable),
+      subjectMislead: unit("subjectMislead", DEFAULT_DIFFICULTY.subjectMislead),
+    };
+  }
   let evolve: ExperimentFamilyConfig["evolve"];
   if (config.evolve !== undefined) {
     const raw = closedRecord(config.evolve, ["fromSeed", "fromPhase", "addFields", "reviseClasses", "jitterRules"], "evolve");
@@ -259,7 +308,7 @@ type ClassTemplate = { id: string; about: string; subjects: string[]; bodies: st
  * `bodies` are the signal a classifier reads — `{n}` fills with a number,
  * `{thing}` with a noun phrase; `hints` are the distractor phrases the
  * generator sometimes leaks into a record of another class. */
-const CLASS_POOL: ClassTemplate[] = [
+export const CLASS_POOL: ClassTemplate[] = [
   {
     id: "billing-inquiry",
     about: "Question about an invoice, charge, or payment method",
@@ -374,6 +423,32 @@ const CLASS_POOL: ClassTemplate[] = [
   },
 ];
 
+/** Adjacent class pairs — ids whose real support tickets overlap enough
+ * that a sentence from one plausibly belongs to the other. `confusable`
+ * leaks draw the partner's body text, not a tell-tale hint phrase. */
+const CONFUSABLE_PAIRS: ReadonlyArray<readonly [string, string]> = [
+  ["billing-inquiry", "billing-dispute"],
+  ["billing-dispute", "refund-request"],
+  ["refund-request", "subscription-change"],
+  ["account-access", "login-problem"],
+  ["account-access", "security-concern"],
+  ["bug-report", "performance-issue"],
+  ["bug-report", "service-outage"],
+  ["service-outage", "performance-issue"],
+  ["data-export", "privacy-request"],
+  ["integration-help", "documentation"],
+  ["feature-request", "documentation"],
+];
+
+const CONFUSABLE_PARTNERS: ReadonlyMap<string, string> = (() => {
+  const map = new Map<string, string>();
+  for (const [a, b] of CONFUSABLE_PAIRS) {
+    if (!map.has(a)) map.set(a, b);
+    if (!map.has(b)) map.set(b, a);
+  }
+  return map;
+})();
+
 const THINGS = ["April", "team", "annual", "sandbox", "production", "monthly", "trial", "enterprise"];
 const OPENERS = ["Hi team,", "Hello,", "Hi support,", "Good morning,"];
 const CLOSERS = ["Thanks in advance.", "Please advise.", "Appreciate any help.", "This is blocking our work.", "We need this sorted this week."];
@@ -444,14 +519,49 @@ function renderTemplate(rng: SeededRng, template: string): string {
     .replaceAll("{thing}", rng.pick(THINGS));
 }
 
-function renderRecordText(rng: SeededRng, klass: ClassTemplate, pool: readonly ClassTemplate[]): { subject: string; body: string } {
-  const subject = renderTemplate(rng, rng.pick(klass.subjects));
+function renderRecordText(
+  rng: SeededRng,
+  klass: ClassTemplate,
+  pool: readonly ClassTemplate[],
+  difficulty: FamilyDifficulty = DEFAULT_DIFFICULTY,
+  /** Classes a wrong label could name — the task's taxonomy minus the truth.
+   * Defaults to `pool` so standalone callers get the widest rival set. */
+  rivals: readonly ClassTemplate[] = pool,
+): { subject: string; body: string } {
+  const otherRivals = rivals.filter((entry) => entry.id !== klass.id);
+  // Each new draw is guarded by its knob so default difficulty consumes the
+  // same stream as the original fixed-shape renderer.
+  const subjectFrom =
+    otherRivals.length > 0 && difficulty.subjectMislead > 0 && rng.chance(difficulty.subjectMislead)
+      ? rng.pick(otherRivals)
+      : klass;
+  const subject = renderTemplate(rng, rng.pick(subjectFrom.subjects));
   const parts: string[] = [];
   if (rng.chance(0.4)) parts.push(rng.pick(OPENERS));
   parts.push(renderTemplate(rng, rng.pick(klass.bodies)));
-  if (rng.chance(0.25)) {
-    const others = pool.filter((entry) => entry.id !== klass.id);
-    parts.push(`Also, ${renderTemplate(rng, rng.pick(rng.pick(others).hints))} has been on my mind.`);
+  const [noiseLo, noiseHi] = difficulty.noiseSentences;
+  if (noiseHi > 0 && otherRivals.length > 0) {
+    const extra = rng.int(noiseLo, noiseHi);
+    for (let i = 0; i < extra; i++) {
+      parts.push(renderTemplate(rng, rng.pick(rng.pick(otherRivals).bodies)));
+    }
+  }
+  if (rng.chance(difficulty.hintLeak)) {
+    const partnerId = CONFUSABLE_PARTNERS.get(klass.id);
+    const partner =
+      partnerId === undefined
+        ? undefined
+        : (otherRivals.find((entry) => entry.id === partnerId) ?? pool.find((entry) => entry.id === partnerId));
+    const leaked =
+      difficulty.confusable > 0 && rng.chance(difficulty.confusable)
+        ? (partner ?? (otherRivals.length > 0 ? rng.pick(otherRivals) : undefined))
+        : undefined;
+    if (leaked !== undefined) {
+      parts.push(renderTemplate(rng, rng.pick(leaked.bodies)));
+    } else {
+      const others = pool.filter((entry) => entry.id !== klass.id);
+      parts.push(`Also, ${renderTemplate(rng, rng.pick(rng.pick(others).hints))} has been on my mind.`);
+    }
   }
   parts.push(rng.pick(CLOSERS));
   return { subject, body: parts.join(" ") };
@@ -556,6 +666,7 @@ function generateSkeleton(config: ExperimentFamilyConfig, index: number): TaskSk
   const valueFor = (name: string): ((rng: SeededRng) => JsonValue) | undefined =>
     [...CORE_FIELDS, ...optional].find((spec) => spec.name === name)?.value;
   const templateFor = new Map(classTemplates.map((entry) => [entry.id, entry]));
+  const difficulty = config.shape.difficulty ?? DEFAULT_DIFFICULTY;
   const batches = (["train", "validation", "holdout"] as const).map((split, splitIndex) => {
     const records: JsonObject[] = [];
     const labels: string[] = [];
@@ -564,7 +675,7 @@ function generateSkeleton(config: ExperimentFamilyConfig, index: number): TaskSk
     for (let i = 0; i < count; i++) {
       const truth = batchRng.pick(classIds);
       const template = templateFor.get(truth)!;
-      const { subject, body } = renderRecordText(batchRng, template, CLASS_POOL);
+      const { subject, body } = renderRecordText(batchRng, template, CLASS_POOL, difficulty, classTemplates);
       const record: JsonObject = { [RECORD_ID_FIELD]: `${split}-${String(i + 1).padStart(2, "0")}` };
       for (const field of recordSchema.fields) {
         if (field.name === "id") continue;
@@ -631,6 +742,10 @@ function evolveSkeleton(config: ExperimentFamilyConfig, index: number): { skelet
     }
     const replacementIds = skeleton.taxonomy.classes.map((entry) => entry.id);
     const addedIds = added.map((entry) => entry.id);
+    const difficulty = config.shape.difficulty ?? DEFAULT_DIFFICULTY;
+    const taxonomyTemplates = skeleton.taxonomy.classes
+      .map((entry) => CLASS_POOL.find((candidate) => candidate.id === entry.id))
+      .filter((entry): entry is ClassTemplate => entry !== undefined);
     for (const batch of skeleton.batches) {
       for (let i = 0; i < batch.records.length; i++) {
         const truth = batch.labels[i]!;
@@ -638,7 +753,7 @@ function evolveSkeleton(config: ExperimentFamilyConfig, index: number): { skelet
         const next = rng.chance(0.65) && addedIds.length > 0 ? rng.pick(addedIds) : rng.pick(replacementIds);
         batch.labels[i] = next;
         const template = CLASS_POOL.find((entry) => entry.id === next)!;
-        const { subject, body } = renderRecordText(rng, template, CLASS_POOL);
+        const { subject, body } = renderRecordText(rng, template, CLASS_POOL, difficulty, taxonomyTemplates);
         batch.records[i]!["subject"] = subject;
         batch.records[i]!["body"] = body;
       }
