@@ -2626,6 +2626,10 @@ async function main(): Promise<number> {
         const generator = asRecord(armRecord.generator, "experiment config.arm.generator");
         await inline(generator, "manifest");
       }
+      if (armRecord.reviser !== undefined) {
+        const reviser = asRecord(armRecord.reviser, "experiment config.arm.reviser");
+        await inline(reviser, "manifest");
+      }
       const arm = parseExperimentArm(armRecord);
       const { tasks } = parseExperimentTaskSet({ contract: "algal.experiment-tasks.v1", tasks: config.tasks });
       // `--modules` preloads digest-referenced sub-manifests (`each`,
