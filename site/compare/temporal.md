@@ -1,60 +1,60 @@
 ---
 title: ALGAL vs Temporal
-description: Temporal is a durable execution platform for backend workflows. ALGAL is a language and VM for bounded agent programs whose programs — and their run receipts — are portable, verifiable data.
+description: Temporal keeps each workflow's history in its service. ALGAL writes every run to a receipt file that anyone can replay offline with algal verify.
 order: 3
 ---
 
 # ALGAL vs Temporal
 
-**Temporal is a durable execution engine. ALGAL is a language and virtual machine for agent programs.** They share a deep conviction — deterministic replay around nondeterministic effects, execution that survives process death — and then diverge on almost everything else. This comparison matters because people evaluate them with the same question: *"will my long-running work survive?"*
+Temporal is a durable execution engine: you write workflows as code in one of its SDKs, and the Temporal Service stores each workflow's event history so the run survives a crash. ALGAL is a language and virtual machine for agent programs. An ALGAL program is typed data rather than code, and each run leaves a receipt file that someone else can verify offline. People reach both with the same question, "will my long-running work survive?", so this page shows where the answers differ and when to pick each.
 
-## The shared spine
+## What both systems do
 
-Both systems make the same architectural bet:
+- Keep nondeterminism at a boundary so a run can be replayed. Temporal moves it into activities and requires deterministic workflow code; ALGAL confines it to typed effect cells around a pure dataflow core.
+- Treat the record of what happened, rather than the running process, as the source of truth, so progress survives the process dying.
+- Let a run wait for a signal indefinitely without holding a thread.
 
-- Execution is replayable because nondeterminism is quarantined at a boundary (Temporal: activities + workflow determinism; ALGAL: typed effect cells on a pure dataflow core).
-- Progress survives process death because the record of what happened — not the process — is the source of truth.
-- Human-scale waits are first-class: a run can wait for a signal indefinitely without holding a thread.
+ALGAL's [receipts](/tour/#fossils) rest on the same idea as Temporal's history: the recorded event order is the truth, and re-execution must match it.
 
-If you already buy Temporal's model, ALGAL's [receipts](/tour/#fossils) will feel familiar — the event order is the truth, and re-execution must match it.
-
-## Where they diverge
+## How they differ
 
 | | Temporal | ALGAL |
 |---|---|---|
-| The program is | workflow code (TypeScript, Go, Java, Python…) | typed data — `algal.organism.v1` manifest |
-| The history is | event history held by the Temporal service | a portable receipt file — verify offline, no server, no store |
-| Nondeterminism | activities, side effects, timers — anything nondeterministic must leave the workflow | declared effect cells: agent, decide, tool — typed, budgeted, recorded |
-| Long waits | signals + async handlers in a running service | suspension is a checkpointed capability wait; any later process resumes it |
-| Who runs it | workers registered to a cluster | a single binary — or two runtimes that can hand a run to each other |
-| Authority model | whatever your code calls | host-admitted capabilities a manifest cannot mint |
-| Programs as values | workflows can start child workflows | manifests are data: hashed, diffed, transported, and emitted by `spawn` |
+| The program is | workflow code (TypeScript, Go, Java, Python, and others) | typed data: an `algal.organism.v1` manifest |
+| The history is | event history held by the Temporal service | a receipt file that verifies offline, with no server or store |
+| Nondeterminism | activities, side effects, and timers; anything nondeterministic must leave the workflow | declared effect cells (agent, decide, tool), each typed, budgeted, and recorded |
+| Long waits | signals and async handlers in a running service | a checkpointed wait on a declared capability that any later process can resume |
+| Who runs it | workers registered to a cluster | one binary, or two runtimes that can hand a run to each other |
+| Permissions | whatever your code calls | capabilities the host grants; a manifest cannot create its own |
+| Programs as values | workflows can start child workflows | manifests are data: hashed, diffed, moved between hosts, and emitted by `spawn` |
 
-## The evidence object
+## Where the history lives
 
-Temporal's event history lives in the service that ran the workflow. It is excellent — and it is *yours*, on your infra.
+Temporal's event history lives in the service that ran the workflow, on infrastructure you or Temporal operate. It is a durable, detailed record, and it serves the system that produced it.
 
-An ALGAL receipt is a **file**. It records events, per-cell args and outputs, and effect digests; `algal verify` replays it bit-for-bit with no model, no store, no credentials, and `algal diff` compares two runs. You can export a process, delete the original store, and a stranger can still verify what happened. That portability is the difference between *operational history* and *portable evidence*.
+An ALGAL receipt is a file. It records the event order, each cell's arguments and outputs, and a digest of every effect. `algal verify` replays it bit-for-bit with no model, no store, and no credentials, and `algal diff` compares two runs. You can export a process, delete the original store, and someone who never ran the work can still check what happened.
 
-## The wait
+## How a run waits
 
-Temporal suspends by keeping workflow state in its service and delivering signals to it. It works beautifully — at the cost of running the service.
+Temporal keeps workflow state in its service and delivers signals to it, so the service has to be running when the wait ends.
 
-ALGAL's wait is a **capability the manifest declares**. A `wait`-style cell suspends on an admitted mailbox receive; the checkpoint binds the manifest digest; a *different* process — even the Rust kernel resuming a run the Bun host started — verifies recorded effects and continues. There is no orchestrator process to keep alive between invocations. The [process spec](/docs/spec/process/) has the mechanics.
+In ALGAL, a wait is a capability the manifest declares. A wait-style cell suspends on a mailbox receive that the host granted, and the checkpoint records the manifest's digest. A different process, even the Rust runtime resuming a run that the TypeScript runtime on Bun started, verifies the recorded effects and continues. No orchestrator process stays alive between invocations. The [process spec](/docs/spec/process/) has the mechanics.
 
-## Where Temporal is the better fit
+## When to choose Temporal
 
-- General backend orchestration at scale: payments, pipelines, sagas — Temporal is battle-tested infrastructure with SDKs in every major language.
-- Your work is ordinary deterministic code around service calls; model calls are incidental.
+- You need general backend orchestration at scale, such as payments, pipelines, and sagas. Temporal is proven in production and has SDKs in the major languages.
+- Your work is ordinary deterministic code around service calls, and model calls are incidental.
 - You want a mature operational platform with a company behind it.
 
-## Where ALGAL is the better fit
+## When to choose ALGAL
 
-- The workflow is an **agent program**: typed model-effect cells with declared budgets and context views, not arbitrary code.
-- Evidence must be portable and independently verifiable — a receipt that survives export, offline replay, and host change.
-- The program itself is an artifact — content-addressed, spawnable, diffable — because something (a host, a habitat, another program) needs to inspect or generate it.
-- You want durable waits without running an orchestration service: one binary, a store, a receipt.
+- The workflow is an agent program: typed model calls with declared budgets and declared context, rather than arbitrary code.
+- Someone other than you needs to check the run, so the record has to survive export, replay offline, and verify on a different host.
+- A host or another program needs to inspect or generate the program itself, so it has to be data with a content address that can be diffed and spawned.
+- You want durable waits without running an orchestration service: one binary, a store, and a receipt.
 
-## The honest caveat
+## Status and limits
 
-Temporal is mature, funded, and runs production fleets. ALGAL is a prerelease application VM: single binary, local stores, unsigned packages, no hosted service — by design, but it means *you* operate it. If you need production-grade general orchestration today, use Temporal (and note they are honest that agent frameworks still need an orchestrator — see their [LangGraph plugin](https://temporal.io/blog/temporal-langgraph-plugin-durable-execution)). If you need agent programs that are inspectable, portable evidence-bearing artifacts, [take the tour](/tour/).
+Temporal is mature, funded, and runs production fleets. ALGAL is a prerelease application VM: one binary, local stores, unsigned packages, and no hosted service, so you operate it yourself. If you need production orchestration today, use Temporal. Temporal also argues that agent frameworks still need an orchestrator underneath, and ships a [LangGraph plugin](https://temporal.io/blog/temporal-langgraph-plugin-durable-execution) for that. To see ALGAL programs and their recorded runs, [take the tour](/tour/).
+
+*Sources: [Temporal event history](https://docs.temporal.io/workflow-execution/event), [Temporal workflow message passing](https://docs.temporal.io/encyclopedia/workflow-message-passing), and the [Temporal LangGraph plugin announcement](https://temporal.io/blog/temporal-langgraph-plugin-durable-execution) (July 16, 2026), checked 2026-09-26.*

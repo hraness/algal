@@ -2,51 +2,53 @@
 title: "Receipts are the fossil record of an execution"
 order: 2
 date: 2026-09-22
-description: Agent runs are usually logs: prose about what happened that nobody can check. An ALGAL receipt is a content-addressed artifact that replays bit-for-bit offline: execution evidence you can hand to someone who does not trust you.
+description: An ALGAL receipt replays an agent run bit-for-bit offline, so someone who does not trust you can check what ran. What it records, and what it proves.
 ---
 
 # Receipts are the fossil record of an execution
 
-Ask what an agent run did and the honest answer is usually: *the logs say it worked.* Which is a way of saying the system asserts, and you take its word.
+Ask what an agent run did, and the usual answer is that the logs say it worked. That answer asks you to take the system's word for it.
 
-ALGAL's answer is a receipt, and the word choice matters. A log is a narrative a process wrote about itself. A fossil is what remains when the organism is gone: physical evidence, structured enough that someone who was not there can reconstruct what happened.
+Every ALGAL run instead writes a receipt: a file that someone else can replay offline to check what ran, without your model, your store, or your credentials. A log is a story a process tells about itself. A receipt works more like a fossil, the structure left after the organism is gone, detailed enough that someone who was not there can reconstruct what happened. (In ALGAL an organism is a program: a typed manifest the runtime executes.)
 
-## What a receipt actually is
+## What a receipt records
 
-Every ALGAL run emits one artifact: a content-addressed JSON document recording
+A receipt is a content-addressed JSON document. It records:
 
-- the **event order**: `run.start`, `cell.commit`, `effect`, `cell.skip`, `run.end`, in sequence;
-- **per-cell args and outputs**: the values each cell received and produced;
-- **effect digests**: the hashed request and recorded answer for every model call;
-- **work accounting**: what each cell spent of the declared budget;
-- the **run's own digest**, which binds all of it, and lands on the parent's receipt if the run was spawned.
+- the **event order**: `run.start`, `cell.commit`, `effect`, `cell.skip`, and `run.end`, in sequence;
+- the **arguments and outputs of each cell**;
+- **effect digests**: the hashed request and the recorded answer for every model call;
+- **work accounting**: how much of the declared budget each cell spent;
+- the **run's own digest**, which covers all of the above and is written onto the parent's receipt when the run was spawned by another program.
 
-That is enough structure to **replay**. `algal verify` reconstructs the run bit-for-bit (no model calls, no store, no credentials) and fails if any byte disagrees. `algal diff` compares two runs and reports exactly where they diverged. The receipt is self-sufficient evidence: you can export it, delete the store it came from, and a stranger with the CLI can still check your work.
+That is enough to replay the run. `algal verify` reconstructs it bit-for-bit, with no model calls, no store, and no credentials, and fails if any byte disagrees. `algal diff` compares two runs and reports where they diverged. You can export a receipt, delete the store it came from, and a stranger with the CLI can still check your work.
 
-## Replay verification is the difference between evidence and testimony
+## Replay turns a claim into something you can check
 
-There is a spectrum of "what happened" claims:
+Records of what a system did differ in whom they ask you to trust:
 
-1. **Logs**: the process says what it did. Trust the process.
-2. **Traces**: structured observation (LangSmith, OpenTelemetry). Trust the pipeline that collected it.
-3. **Event history**: the orchestrator's record (Temporal's model). Trust the service that kept it.
-4. **Replayable receipts**: an artifact that re-executes identically anywhere. Trust is optional.
+1. **Logs** are the process's own account, so you trust the process.
+2. **Traces**, such as LangSmith or OpenTelemetry, are structured observation, so you trust the pipeline that collected them.
+3. **Event history**, as in Temporal, is the orchestrator's record, so you trust the service that kept it.
+4. **Replayable receipts** re-execute the same way anywhere, so you do not have to trust the host at all.
 
-ALGAL sits at the far end. The receipt does not ask you to believe the host. It asks you to *rerun the physics*: same inputs, same recorded answers, same event order, or the digest does not match. The [interactive diagrams on the tour](/tour/) literally replay the receipt's recorded event order rather than animating an illustration, because the receipt is the ground truth of the demo.
+ALGAL's receipts are the fourth kind. Replay needs the same inputs, the same recorded answers, and the same event order, or the digest does not match. The [diagrams on the tour](/tour/) replay each receipt's recorded event order rather than animating an illustration, so what you see is the run itself.
 
-It is worth being precise about the claim, because receipts get oversold: **replay proves consistency, not truth.** A receipt verifies that the recorded effect answers, threaded through the declared cells, produce the recorded outputs. It does not prove the model was right, the answers were good, or that some provider honestly served the request. Receipts are execution evidence (exceptionally strong evidence about *what ran*), not attestations about the world.
+## Replay proves consistency, not truth
 
-## Why this is the load-bearing piece
+Receipts are easy to oversell, so the limit belongs here. A receipt shows that the recorded model answers, passed through the declared cells, produce the recorded outputs. It does not show that the model was right, that its answers were good, or that the provider actually served the request. A receipt is strong evidence about what ran. It says nothing about whether the result is true of the world.
 
-Receipts are not a logging feature; they are what several other ALGAL properties rest on:
+## Other ALGAL features rest on receipts
 
-- **Suspension across processes.** A run can wait on an external event, die, and resume in a *new* process, even the other runtime (Rust kernel ↔ TypeScript reference), because resumption is verification: the new process checks recorded effects and continues the declared graph. [Process spec](/docs/spec/process/).
-- **Portable evidence.** `algal process export` packs a run's evidence into a bounded capsule; verification works after the source store moves away. Execution history that travels with the work instead of living in someone's database.
-- **Auditable evolution.** When a program spawns a child, the child manifest's digest lands on the parent's receipt; when a foundry epoch promotes a candidate, the cases and the winner land on receipts. [Self-evolving software](/blog/self-evolving-software-selection-boundary/) is only auditable if the fossils exist: proposal digests, measured outcomes, selection decisions.
-- **Diagnosis without a debugger.** `algal diagnose` reads a failed receipt back to source location (which cell failed, with what in scope) because the receipt knows the run structurally, not textually.
+Several ALGAL features depend on receipts rather than sitting beside them:
 
-## The uncomfortable part receipts force
+- **Resuming in another process.** A run can wait on an external event, exit, and resume in a new process, even in the other runtime (Rust or TypeScript), because resuming means verifying: the new process checks the recorded effects and continues the declared graph. See the [process spec](/docs/spec/process/).
+- **Evidence that travels.** `algal process export` packs a run's evidence into a size-limited bundle, and verification still works after the original store is gone. The history moves with the work instead of staying in someone's database.
+- **Auditable self-modification.** When a program spawns a child, the child manifest's digest goes onto the parent's receipt. When a foundry epoch promotes a candidate, the cases and the winner go onto receipts. [Self-evolving software](/blog/self-evolving-software-selection-boundary/) can be audited only because those records exist: proposal digests, measured outcomes, and selection decisions.
+- **Diagnosis without a debugger.** The TypeScript CLI's `algal diagnose` maps a failed receipt back to the source location, naming the cell that failed and what was in scope, because the receipt records the run's structure rather than free text.
 
-Receipts also keep the system honest in a subtler way: **they make cheating visible.** If a model effect were silently cached, the receipt says `cached: true`. It is a fact of the run, so replay reproduces the flag. If a tool call failed and the run recovered, the failure record is in the receipt. If a run ended `stuck`, that is the outcome on the artifact. A system that cannot hide its own failures is a system whose successes mean more.
+## Receipts show failures too
 
-The fossils are public on this site: every diagram on the [tour](/tour/) ships its [receipt](/receipts/reply.receipt.json), and the footer counts the runs replay-verified during each build. The evidence is the demo.
+A receipt cannot quietly drop an inconvenient fact. If a model call was answered from cache, the receipt says `cached: true`, and replay reproduces the flag. If a tool call failed and the run recovered, the failure is on the receipt. If a run ended `stuck`, that is the recorded outcome. Because failures cannot be hidden, a successful receipt means more.
+
+You can check this on the site. Every diagram on the [tour](/tour/) ships its [receipt](/receipts/reply.receipt.json), and the footer shows how many recorded runs were replay-verified during each build.

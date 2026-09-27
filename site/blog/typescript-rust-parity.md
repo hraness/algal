@@ -2,7 +2,7 @@
 title: "How ALGAL keeps its TypeScript and Rust in step"
 date: 2026-09-24
 eyebrow: Technique
-description: "ALGAL runs the same programs through its TypeScript runtime and its Rust runtime on every CI run, and fails if any compared field differs or either one rejects the other's run record."
+description: "ALGAL runs the same programs through its TypeScript and Rust runtimes in CI and fails if a compared field differs or either rejects the other's run record."
 ---
 
 An ALGAL program can start in one runtime and finish in another. The TypeScript runtime, which runs on Bun, can create a process that waits for an approval, and the native Rust runtime can pick it up from the same local store after the first process has exited. That handoff works only if both runtimes mean the same thing by every program, every error, and every record they write. ALGAL keeps them in step by running the same programs through both on every change and failing the build on any difference. Each runtime also has to accept the other's record of the run, so neither one serves as the answer key.
@@ -11,15 +11,15 @@ An ALGAL program can start in one runtime and finish in another. The TypeScript 
 
 ## Two versions of the same program drift apart
 
-A second implementation is easy to produce now. A model ports a library to a faster language in an afternoon, the tests that came with the original pass, and the port ships. This is vibe-coded slop at its most convincing: it looks finished, it handles the examples, and it disagrees with the original somewhere nobody looked. Anything built on it assumes the two versions are interchangeable, and that assumption has never been checked.
+A second implementation is easy to produce now. A model ports a library to a faster language in an afternoon, the tests that came with the original pass, and the port ships. The port looks finished and handles the examples, and it still disagrees with the original somewhere nobody looked. Anything built on it assumes the two versions are interchangeable, and that assumption has never been checked.
 
 The disagreements are small. One version sorts text slightly differently. One rejects a malformed value that the other quietly accepts. One counts the length of a string with an emoji in it as 2 and the other as 4. Each difference stays invisible until a user moves work from one runtime to the other and gets a different answer, or a record that the second runtime refuses to read.
 
 ALGAL depends on those two versions agreeing. A run's record is meant to be checkable by someone other than the machine that produced it, and a paused process is meant to be resumable elsewhere. If the two runtimes disagree about what a program did, both promises break at once.
 
-## What agreement buys you
+## Comparing outputs and cross-checking records
 
-The fix is to make disagreement impossible to ship. Keep both implementations, run them side by side on the same inputs, and fail the build on the first field that differs. Then ask each runtime to verify the record the other one wrote. The comparison catches a difference in output, and the cross-check catches a difference in how each runtime reads records back.
+The fix is to stop a disagreement from shipping unnoticed. Keep both implementations, run them side by side on the same inputs, and fail the build on the first field that differs. Then ask each runtime to verify the record the other one wrote. The comparison catches a difference in output, and the cross-check catches a difference in how each runtime reads records back.
 
 With that running on every change, a user can pick either runtime for any program in the test set and get the same outcome, the same values, the same errors, and the same accounting of work. Moving a process from one runtime to the other is an ordinary resume.
 
@@ -49,7 +49,7 @@ If the Rust runtime wrote a record that only Rust could read back, the TypeScrip
 
 For source projects, the script also packs the project into a portable bundle, calls that bundle through the Rust binary without the source loader, and requires the outputs to match what the TypeScript runtime produced.
 
-## Refusals have to match too
+## The runtimes must reject the same inputs
 
 A port that accepts input the original rejects has diverged, even when its answer looks reasonable. A separate parity script covers the JSON schemas that describe what a model is allowed to return. Each case in a fixed list has a schema, a value that should pass, and a value that should fail. Both runtimes must complete on the good value, fail on the bad one, and fail with the same error code. A second set of cases feeds a bad value in as a program input and requires both runtimes to stop with the same type error before any model call is made.
 
@@ -77,18 +77,18 @@ fn key_order(a: &str, b: &str) -> Ordering {
 
 ALGAL's expression language makes the same choice: string comparison uses UTF-16 order, and string length counts UTF-16 code units, so an emoji has length 2 in both runtimes. The parity tests hold these rules in place. Without them, a cleanup on either side could switch to that language's natural order and nothing else would notice.
 
-## One evaluator where two would be a liability
+## The expression evaluator has one implementation
 
 The expression language that programs use for arithmetic, conditionals, lists, and string handling has one implementation, written in Rust. The native runtime compiles it in directly, and the TypeScript runtime loads the same code compiled to WebAssembly. The crate's own documentation says the point is that there is no second implementation to keep in step.
 
 Parity testing is worth its cost where two implementations give you an independent check, as they do for record handling, process lifecycles, and verification. For a small pure evaluator, a second copy would add another place to disagree without adding much independent evidence. Sharing one evaluator removes that class of drift, and the parity scripts still exercise it from both hosts.
 
-## The rest of the lifecycle
+## Processes, applications, and the store are compared too
 
 The main script covers single runs. Sibling scripts apply the same method to the parts of ALGAL that outlive a run:
 
 - **Processes.** Durable processes are created, suspended, resumed, and exported through both runtimes, and every emitted record and digest must match. One leg plants an interrupted creation marker, with its record digest computed on the TypeScript side, into both stores and requires the Rust runtime to accept it, so Rust has to accept a digest it did not compute.
-- **Applications.** One durable application lifecycle is replayed through the TypeScript services and the native application commands, and every digest and record must be identical.
+- **Applications.** One durable application lifecycle is replayed through the TypeScript services and the native application commands, and every digest and record must match.
 - **The store and the command line.** Storage and listing commands, and the public commands including failed and suspended runs, are compared record by record along with their exit status.
 
 The CI workflow's Native VM job builds the Rust binary and runs these scripts, along with sibling parity scripts for inference, compilation, and mailboxes, on Ubuntu and on macOS for every pull request and every push to the main branch.

@@ -2,56 +2,58 @@
 title: Self-evolving software needs a selection boundary
 order: 1
 date: 2026-09-22
-description: Darwin-Gödel Machine, Voyager, AlphaEvolve, and TextGrad all converge on the same loop: propose, evaluate, select. The hard part is not getting a model to write programs; it is deciding what gets to run. ALGAL makes that boundary the contract.
+description: Darwin-Gödel Machine, AlphaEvolve, and Voyager share one loop: propose, evaluate, select. ALGAL makes the select step a checked contract.
 ---
 
 # Self-evolving software needs a selection boundary
 
-Something quietly converged over the last two years: half a dozen serious research efforts independently arrived at the same architecture for software that improves itself.
+Research on software that improves itself has settled on one loop: a model proposes a program, an evaluator measures it, and a selector decides which version runs next. Getting a model to write candidates is now the easy part. The hard part is the selector, because it decides which generated code gets to act. ALGAL's design makes that decision a checked contract, recorded on a receipt, instead of whatever the surrounding script happens to do.
 
-- **Darwin-Gödel Machine** ([Sakana AI / UBC, 2025](https://arxiv.org/abs/2505.22954)): an agent that rewrites its own code, keeps every variant in an archive, and validates each on coding benchmarks. SWE-bench scores climbed from 20% to 50% through self-modification alone.
-- **AlphaEvolve** ([DeepMind, 2025](https://deepmind.google/blog/alphaevolve-a-gemini-powered-coding-agent-for-designing-advanced-algorithms/)): Gemini models propose program variants; automated evaluators score them; an evolutionary database selects parents for the next round. It found a 4×4 matrix-multiplication algorithm that beat Strassen after 56 years.
-- **Voyager** ([MineDojo, 2023](https://arxiv.org/abs/2305.16291)): the Minecraft agent that accumulates a skill library of executable code, each skill admitted only after self-verification against environment feedback.
-- **TextGrad** ([Nature, 2025](https://www.nature.com/articles/s41586-025-08661-4)): textual feedback backpropagated through compound AI systems, optimizing components that include code.
-- **DSPy** ([Stanford, 2024](https://proceedings.iclr.cc/paper_files/paper/2024/file/f1cf02ce09757f57c3b93c0db83181e0-Paper-Conference.pdf)): LM pipelines optimized by teleprompters that propose instructions and score them on a devset.
+## Five systems built on the same loop
 
-Different domains, same loop: **a model proposes, an evaluator measures, a selector decides what survives.** The proposer is the easy part; every frontier model can draft plausible programs. The evaluator is engineering. The selector (*what is allowed to run next*) is where these systems differ most, and where almost everything interesting lives.
+Over the last two years, several research efforts arrived at this architecture separately:
 
-## The selector is a security boundary wearing a lab coat
+- **Darwin-Gödel Machine** ([Sakana AI / UBC, 2025](https://arxiv.org/abs/2505.22954)): an agent that rewrites its own code, keeps every variant in an archive, and validates each one on coding benchmarks. Its SWE-bench score rose from 20% to 50% through self-modification alone.
+- **AlphaEvolve** ([DeepMind, 2025](https://deepmind.google/blog/alphaevolve-a-gemini-powered-coding-agent-for-designing-advanced-algorithms/)): Gemini models propose program variants, automated evaluators score them, and an evolutionary database picks parents for the next round. It found a 4×4 matrix-multiplication algorithm that beat Strassen's, 56 years after Strassen's result.
+- **Voyager** ([MineDojo, 2023](https://arxiv.org/abs/2305.16291)): a Minecraft agent that builds a library of skills written as executable code, keeping each skill only after checking it against feedback from the environment.
+- **TextGrad** ([Nature, 2025](https://www.nature.com/articles/s41586-025-08661-4)): textual feedback propagated backward through compound AI systems to optimize their components, including code.
+- **DSPy** ([Stanford, 2024](https://proceedings.iclr.cc/paper_files/paper/2024/file/f1cf02ce09757f57c3b93c0db83181e0-Paper-Conference.pdf)): language-model pipelines optimized by teleprompters that propose instructions and score them on a development set.
 
-Strip away the benchmarks and the selector is answering one question: *does this proposed program get authority?* DGM's archive, AlphaEvolve's database, Voyager's skill library: each is a gate between "a model emitted bytes" and "bytes become behavior."
+The domains differ, and the loop is the same: a model proposes, an evaluator measures, a selector decides what survives. Every frontier model can draft plausible programs, and building an evaluator is ordinary engineering. The selector is where these systems differ most.
 
-Most implementations make that gate implicit: a Python process that happens to run whatever scored well. That works in a lab. It is a strange foundation for production, because the gate is exactly where you want the strongest guarantees, and where you get the least.
+## The selector decides what gets to act
 
-ALGAL's position is that the selection boundary should be a **contract**, not a convention:
+Set the benchmarks aside and the selector answers one question: does this proposed program get permission to run? DGM's archive, AlphaEvolve's database, and Voyager's skill library each sit between "a model emitted some code" and "that code now does things."
 
-1. **Proposals are data.** A program emits a candidate manifest (`algal.organism.v1`) as an ordinary value, through `spawn`, or by handing a manifest to the host. Proposing costs the proposer nothing and grants the candidate nothing.
-2. **Admission is checked.** A candidate compiles through the same contract as hand-written manifests: typed cells, bounded ports, closed budgets, no minted capabilities. Malformed or authority-widening proposals fail at the boundary, not in production.
-3. **Measurement is declared.** Foundry evaluates candidates on cases the host declared, the same cases every epoch, so "better" means better on the same ruler.
-4. **Selection is host-owned.** Promotion is a host decision recorded on the receipt: which candidate, which digest, which cases it passed. "Proposal is not promotion" is written on the diagram because it is the load-bearing fact.
+Most implementations leave that step implicit, as a Python process that runs whatever scored well. That is fine in a lab. In production it puts the least protection at the point that needs the most.
 
-The loop (propose → admit → measure → select) is what the [civilization doc](/docs/civilization/) calls an epoch. It is the same shape DGM and AlphaEvolve use; the difference is that every stage has a contract and a receipt rather than a Python convention.
+ALGAL makes each step of the loop part of the contract:
 
-## Why the program must be data
+1. **Proposals are data.** A program emits a candidate manifest (`algal.organism.v1`, the format of an ALGAL program, called an organism) as an ordinary value, either through `spawn` or by handing it to the host. Proposing costs the proposer nothing and gives the candidate nothing.
+2. **Candidates are checked before they run.** A candidate goes through the same checks as a hand-written manifest: typed cells, size-limited ports, closed budgets, and no self-created capabilities. A malformed proposal, or one that asks for more permission, is rejected before it runs.
+3. **Measurement uses declared cases.** The foundry evaluates candidates on cases the host declared, the same cases every epoch, so "better" is measured the same way each time.
+4. **The host selects.** Promotion is a host decision recorded on the receipt: which candidate, which digest, and which cases it passed. The tour's diagram is labeled "Proposal is not promotion" for this reason.
 
-There is a deeper requirement hiding under the selection boundary: **the candidates have to be inspectable objects.** You cannot meaningfully gate what you cannot cheaply examine.
+The [civilization doc](/docs/civilization/) calls one pass through propose, check, measure, and select an epoch. DGM and AlphaEvolve use the same shape; in ALGAL each stage has a contract and a receipt.
 
-DGM patches Python source; its gate is benchmark score plus human review of diffs. That works because the experiment is contained. But "program as arbitrary code" is a bad unit of selection for anything you want to trust incrementally: the diff surface is the whole language.
+## Candidates have to be cheap to inspect
 
-An ALGAL manifest is a small typed document. Diffing two candidates is diffing data. Admitting one is running a bounded checker, not auditing Turing-complete source. The candidate that cannot express the attack is cheaper to trust than the candidate that expresses everything. This is the same reason the manifest carries no host code at all; the only executable content is bounded `algal.expr.v1` evaluated under fuel by the contract's own evaluator.
+The selector also needs candidates it can examine cheaply, and you cannot check what you cannot inspect.
 
-It is also what makes a *population* practical: a store of manifests is a store of hashed documents: deduplicated, lineage-tracked, diffable. `algal civ` runs an epoch where an on-device ~3B model proposes plans, a host function compiles them into checked manifests, candidates run train and validation, and the winner promotes. Every step (proposal digests, case outcomes, the promoted manifest) lands on receipts that [verify offline](/tour/#fossils). The fossils are how you audit evolution after the fact.
+DGM patches Python source, and its checks are the benchmark score plus human review of the diffs. That works because the experiment is contained. For anything you want to trust a step at a time, arbitrary code is a poor unit of selection, because a diff can touch anything the language can express.
 
-## What stays honest
+An ALGAL manifest is a small typed document. Comparing two candidates means comparing data, and checking one means running a checker with fixed limits rather than auditing general-purpose source. A candidate that cannot express an attack is cheaper to trust than one that can express anything. For the same reason the manifest carries no host code: its only executable content is `algal.expr.v1` expressions, run under a fuel limit by the contract's own evaluator.
 
-Three disclaimers worth repeating, because they are the difference between self-evolving software and a demo:
+Programs as data also make a population practical. A store of manifests is a store of hashed documents that can be deduplicated, traced through their lineage, and compared. In one local run of `algal civ`, an on-device model of about 3B parameters proposed plans, a host function compiled them into checked manifests, candidates ran on training and validation cases, and the winner was promoted. Each step, including proposal digests, case outcomes, and the promoted manifest, is written to receipts that [verify offline](/tour/#fossils), so the evolution can be audited afterward.
 
-- **Exhaustion is not convergence.** A foundry epoch that promotes nothing is a valid epoch. The receipts record *that* selection happened and on what evidence, not that the best possible program was found.
-- **Replay proves consistency, not improvement.** A verified receipt means the run replays bit-for-bit. Whether the promoted candidate is actually better is a question about the cases, which is why the cases are host-declared and visible.
-- **The host remains the host.** Models propose. Hosts admit, measure, and select. A system where the proposer also picks the winner is not self-evolving software; it is an unreviewed code generator with extra steps.
+## What the receipts do not show
 
-## Where this goes
+- **An epoch that promotes nothing is still a valid epoch.** The receipts record that selection happened and on what evidence, not that the best possible program was found.
+- **Replay proves consistency, not improvement.** A verified receipt means the run replays bit-for-bit. Whether the promoted candidate is actually better depends on the cases, which is why the host declares them and they are visible.
+- **The host still decides.** Models propose; hosts check, measure, and select. If the proposer also picks the winner, the system is an unreviewed code generator, not self-evolving software.
 
-The research wave is answering "can programs improve themselves?" with an emphatic yes. The next question is the infrastructure question: *what is the substrate where proposed programs are cheap to check, cheap to measure, and safe to select?* A language where the program is data, a VM that treats runs as replayable fossils, and a selection boundary that is a contract rather than a convention: that is the bet ALGAL makes.
+## The open question is the substrate
 
-Read the machinery: [habitats](/docs/habitats/) · [civilization](/docs/civilization/) · [foundry spec](/docs/spec/foundry/). Or watch a program propose a child on the [tour](/tour/#grow).
+The research so far shows that programs can improve themselves. The next question is where proposed programs should live so that they are cheap to check, cheap to measure, and safe to select. ALGAL's bet is a language where the program is data, a VM whose runs replay from receipts, and a selection step that is a contract.
+
+Read how it works: [habitats](/docs/habitats/), [civilization](/docs/civilization/), and the [foundry spec](/docs/spec/foundry/). Or watch a program propose a child on the [tour](/tour/#grow).
