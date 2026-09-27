@@ -21,5 +21,5 @@
   .grow-page .living-workspace { grid-template-columns: 1fr; }
   .grow-page .living-editor-panel { border-left: 0; border-top: 1px solid var(--line); }
   .grow-page .living-signal-fields button { margin-left: 0; }
-  .grow-page .living-intro h1 { font-size: clamp(3rem, 11vw, 4.6rem); }
+  .grow-page .living-intro h1 { font-size: clamp(2.25rem, 9.5vw, 3.4rem); }
 }

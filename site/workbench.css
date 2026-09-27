@@ -2,9 +2,9 @@
 .workbench-page { --border: var(--line); --font-mono: var(--mono); }
 .workbench button:disabled { opacity:.45; cursor:default; }
 .workbench-intro { display:grid; grid-template-columns: 1fr 1fr; gap:4rem; padding:5rem 0 3rem; align-items:end; }
-.workbench-intro h1 { margin:.5rem 0 0; font-size:clamp(4rem,8vw,7rem); line-height:.95; letter-spacing:-.06em; }
-.workbench-intro h1 em { font-family:Georgia,serif; font-weight:400; }
-.workbench-mode { font-family:var(--font-mono,monospace); font-size:.75rem; text-transform:uppercase; letter-spacing:.07em; }
+.workbench-intro h1 { margin:.5rem 0 0; font-size:clamp(4rem,8vw,7rem); font-weight:var(--hraness-marketing-display-weight); line-height:.95; letter-spacing:-.06em; }
+.workbench-intro h1 em { font-style:normal; font-weight:400; }
+.workbench-mode { margin:1rem 0 0; font-family:var(--font-mono,monospace); font-size:.75rem; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); }
 .workbench { border:1px solid var(--border,#8884); border-radius:1rem; overflow:hidden; }
 .workbench-toolbar { display:flex; flex-wrap:wrap; gap:1rem; align-items:center; padding:1.15rem 1.5rem; border-bottom:1px solid var(--border,#8884); }
 .workbench-toolbar > div { margin-left:auto; display:flex; gap:1rem; align-items:center; }

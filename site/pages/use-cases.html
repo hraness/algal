@@ -22,16 +22,6 @@
 
   <section class="try-section" id="install" aria-labelledby="try-title">
     <div class="section-intro"><p class="eyebrow">Start with the working VM</p><h2 id="try-title" class="hraness-marketing-section__heading">Install one binary.<br>Come back to a review later.</h2><p>Download and verify a native prerelease. The built-in workbench needs no checkout, Bun, Cargo, credentials, or web server. Use a fresh directory for each demo.</p><a class="button hraness-marketing-action" data-emphasis="primary" href="https://github.com/hraness/algal/releases">Download the prerelease <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a><p><a href="/tour/">Or take the guided tour first <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-right"></use></svg></a></p></div>
-    <div class="terminal"><div class="terminal-bar"><span>Terminal · after installation</span><span>Keep / review / prove</span></div><pre><code><span class="code-comment"># Inspect the installed build identity</span>
-algal doctor
-
-<span class="code-comment"># Leave a VM process waiting for your decision</span>
-algal demo start ./my-review
-algal demo inspect ./my-review
-
-<span class="code-comment"># Open my-review/report.html for the exact decision command</span>
-
-<span class="code-comment"># Kill owned VM children and check their recovery</span>
-algal demo prove ./crash-laboratory</code></pre><p><code>crash-laboratory/proof.json</code> records an approval that publishes once, a denial that publishes nothing, completed writes reused after a crash during a read, and a write with an unknown outcome that is not sent again. The decisions are fixtures; everything else, including the processes, journals, and verification, runs in the VM.</p></div>
+    {{INSTALL_TERMINAL}}
   </section>
 </main>

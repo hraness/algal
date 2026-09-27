@@ -14,4 +14,17 @@ export const OG_IMAGE_ALT = "ALGAL card showing the tagline “Write agent progr
 
 /** Fit and prerelease limits, shown once on the home page and once on the use-cases page.
  * Each page states the receipt limit beside its own receipt copy. */
-export const ADOPTION_BOUNDARY = `<p>ALGAL fits local review queues, coding repairs checked by your own tests, reusable judgment pipelines, and run histories you need to inspect later. A single unstructured prompt may need less machinery, and a durable workflow engine you already run may meet your recovery needs.</p><p>ALGAL is an <strong>application VM prerelease</strong>. Its packages are unsigned and not notarized. Your host application stays responsible for tool permissions, confirming what happened when an external write's outcome is unknown, storage operations, and any OS isolation you need. Multi-tenant service use, distributed custody (moving process ownership between machines), and store-wide quotas are not built yet.</p>`;
+export const ADOPTION_BOUNDARY = `<p>ALGAL fits local review queues, coding repairs checked by your own tests, reusable judgment pipelines, and run histories you need to inspect later. A single unstructured prompt may need less machinery, and a durable workflow engine you already run may meet your recovery needs.</p><p>ALGAL is an <strong>application VM prerelease</strong>. Its packages are unsigned and not notarized. Your host application stays responsible for tool permissions, confirming what happened when an external write's outcome is unknown, storage operations, and any OS isolation you need. Multi-tenant service use, moving a running process to another machine, and store-wide quotas are not built yet.</p>`;
+
+/** The first-run terminal, shown on the home and use-cases install sections. */
+export const INSTALL_TERMINAL = `<div class="terminal"><div class="terminal-bar"><span>After installation</span></div><pre tabindex="0" aria-label="Commands to run after installation"><code><span class="code-comment"># Check the installed build and which model providers are available</span>
+algal doctor
+
+<span class="code-comment"># Start a VM process that waits for your decision</span>
+algal demo start ./my-review
+algal demo inspect ./my-review
+
+<span class="code-comment"># my-review/report.html shows the exact command to approve or deny</span>
+
+<span class="code-comment"># Crash the demo's own processes and check how they recover</span>
+algal demo prove ./crash-laboratory</code></pre><p><code>crash-laboratory/proof.json</code> records an approval that publishes once, a denial that publishes nothing, completed writes reused after a crash during a read, and a write with an unknown outcome that is not sent again. The decisions are fixtures; everything else, including the processes, journals, and verification, runs in the VM.</p></div>`;

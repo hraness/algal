@@ -23,7 +23,7 @@ import { renderIconSprite, siteIcon } from "./icons";
 import { buildSiteStyles } from "./assets";
 import { renderStatusPageHtml } from "@hraness/design-kit";
 import { pageDocument, type SitePageMeta } from "./chrome";
-import { ADOPTION_BOUNDARY, SITE_DESCRIPTION, SITE_TAGLINE } from "./copy";
+import { ADOPTION_BOUNDARY, INSTALL_TERMINAL, SITE_DESCRIPTION, SITE_TAGLINE } from "./copy";
 import { renderMarkdown, type LinkRewriter, type RenderedDoc } from "./markdown";
 import { buildSurfaceFixture } from "../examples/malleable-site/host";
 import { buildWorkbenchFixture } from "../examples/malleable-site/workbench-fixture";
@@ -367,17 +367,16 @@ for (const name of ["refine", "swarm", "habitat"] as const) {
   evolutionRuns.set(name, receipt);
 }
 
-// --- Hero specimen collage --------------------------------------------------
-// The hero leads with the language itself. A chooser steps through organisms;
-// each selection shows the same three artifacts — the compiled program graph,
-// the source/manifest text, and the recorded run evidence — as overlapping,
-// slightly rotated panels, like specimens pinned to a board.
+// --- Hero proof panel -------------------------------------------------------
+// The hero leads with the language itself. A chooser steps through example
+// programs; each selection shows the source (or manifest excerpt) beside the
+// facts of one recorded, replay-checked run. The graphs stay one link away.
 const heroReceiptCard = (receipt: RunReceipt) => {
   const cells = Object.values(receipt.cells);
   const committed = cells.filter(cell => cell.status === "committed").length;
   const skipped = cells.filter(cell => cell.status === "skipped").length;
   return {
-    evidenceLabel: `receipt · ${receipt.digest.slice(0, 19)}…`,
+    receiptDigest: `${receipt.digest.slice(0, 19)}…`,
     evidenceRows: [
       ["events", `${receipt.events.length}`],
       ["cells", `${committed} committed${skipped ? ` · ${skipped} skipped` : ""}`],
@@ -393,74 +392,65 @@ const habitatManifestExcerpt = JSON.stringify(manifestToJson(habitatManifest), n
 
 interface HeroExample {
   key: string; file: string; blurb: string;
-  graphTitle: string; graphSrc: string; graphView: string; graphAlt: string; objectPosition: string;
-  sourceHref: string; evidenceHref: string;
+  graphHref: string; sourceHref: string; evidenceHref: string;
   codeName: string; codeHtml: string;
-  evidenceLabel: string; evidenceRows: [string, string][];
-  chip: string;
+  receiptDigest: string; evidenceRows: [string, string][];
+  manifestDigest: string;
 }
 
-const heroChip = (receipt: RunReceipt) => `algal.organism.v1 · sha256:${receipt.manifestDigest.slice(7, 19)}…`;
+const heroManifestDigest = (receipt: RunReceipt) => `sha256:${receipt.manifestDigest.slice(7, 19)}…`;
 const routeHelp = routeRuns.find(run => run.choice === "help")!;
 
 const heroExamples: HeroExample[] = [
   {
     key: "route", file: "route.algal", blurb: "one decision picks one of three branches",
-    graphTitle: "route.algal · recorded run", graphSrc: "/diagrams/route-help.svg", graphView: "/diagrams/route-help.view.json", objectPosition: "50% 0%",
-    graphAlt: "Program graph of the route organism: an email input flows into a decide cell, a pure check, then a match with three arms (help, sales, and human review), overlaid with the states of one recorded run.",
+    graphHref: "/diagrams/route-help.svg",
     sourceHref: "/examples/route.algal", evidenceHref: "/receipts/route-help.receipt.json",
     codeName: "route.algal", codeHtml: highlightSource(routeSource.trimEnd()),
     ...heroReceiptCard(routeHelp.receipt),
-    chip: heroChip(routeHelp.receipt),
+    manifestDigest: heroManifestDigest(routeHelp.receipt),
   },
   {
     key: "reply", file: "reply.algal", blurb: "classify the email, then draft",
-    graphTitle: "reply.algal · recorded run", graphSrc: "/diagrams/reply-run.svg", graphView: "/diagrams/reply-run.view.json", objectPosition: "50% 0%",
-    graphAlt: "Program graph of the reply organism: an email input flows into a typed decide cell, a pure check, then generation, overlaid with the states of one recorded run.",
+    graphHref: "/diagrams/reply-run.svg",
     sourceHref: "/examples/reply.algal", evidenceHref: "/receipts/reply.receipt.json",
     codeName: "reply.algal", codeHtml: highlightSource(replySource.trimEnd()),
     ...heroReceiptCard(replyReceipt),
-    chip: heroChip(replyReceipt),
+    manifestDigest: heroManifestDigest(replyReceipt),
   },
   {
     key: "inbox", file: "inbox.algal", blurb: "reuse one helper across an inbox",
-    graphTitle: "inbox.algal · program graph", graphSrc: "/diagrams/inbox.svg", graphView: "/diagrams/inbox.view.json", objectPosition: "0% 0%",
-    graphAlt: "Program graph of the inbox organism: inputs feed a call to the draft organism and an each cell that maps drafts over a list, both merging into the result.",
+    graphHref: "/diagrams/inbox.svg",
     sourceHref: "/examples/projects/inbox/inbox.algal", evidenceHref: "/receipts/inbox.receipt.json",
     codeName: "inbox.algal", codeHtml: highlightSource(inbox.source.trimEnd()),
     ...heroReceiptCard(fullInbox.receipt),
-    chip: heroChip(fullInbox.receipt),
+    manifestDigest: heroManifestDigest(fullInbox.receipt),
   },
   {
-    key: "habitat", file: "habitat.algal.json", blurb: "a program emits a program",
-    graphTitle: "habitat · spawn, recorded", graphSrc: "/diagrams/habitat.svg", graphView: "/diagrams/habitat.view.json", objectPosition: "50% 0%",
-    graphAlt: "Program graph of the habitat organism: a goal flows into a planner, a spawn cell that checks and runs a child manifest, and the result, overlaid with the states of one recorded run.",
+    key: "habitat", file: "habitat.algal.json", blurb: "a program writes and runs a program",
+    graphHref: "/diagrams/habitat.svg",
     sourceHref: "/examples/habitat.algal.json", evidenceHref: "/receipts/habitat.receipt.json",
-    codeName: "habitat.algal.json · the program, as data", codeHtml: escapeHtml(habitatManifestExcerpt),
+    codeName: "habitat.algal.json · first 20 lines of the manifest", codeHtml: escapeHtml(habitatManifestExcerpt),
     ...heroReceiptCard(habitatReceipt),
-    chip: heroChip(habitatReceipt),
+    manifestDigest: heroManifestDigest(habitatReceipt),
   },
 ];
 
-const HERO_CHOOSER = `<div class="hero-chooser" role="group" aria-label="Choose an organism">${heroExamples.map((example, index) =>
-  `<button type="button" class="hero-choose" data-hero-choose="${example.key}" aria-pressed="${index === 0}"><span class="hc-file">${escapeHtml(example.file)}</span><span class="hc-blurb">${escapeHtml(example.blurb)}</span></button>`).join("")}</div>`;
+const HERO_CHOOSER = `<div class="hero-chooser" role="group" aria-label="Choose an example program">${heroExamples.map((example, index) =>
+  `<button type="button" class="hero-choose" data-hero-choose="${example.key}" aria-pressed="${index === 0}"><span class="hc-file">${escapeHtml(example.file).replaceAll(".", "<wbr>.")}</span><span class="hc-blurb">${escapeHtml(example.blurb)}</span></button>`).join("")}</div>`;
 
-const playIcon = `<svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#play"></use></svg>`;
+const heroIcon = (name: "arrow-up-right" | "download") => `<svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#${name}"></use></svg>`;
 const HERO_STAGE = `<div class="hero-stage" data-hero-stage>${heroExamples.map((example, index) => `
   <div class="hs-set" data-example-set="${example.key}"${index === 0 ? "" : " hidden"}>
-    <figure class="hs-card hs-graph">
-      <figcaption class="hs-bar"><span class="file-label">${playIcon}${example.graphTitle}</span><span class="hs-links"><a href="${example.sourceHref}" download>Source</a><a href="${example.evidenceHref}" download>Receipt</a></span></figcaption>
-      <div class="hs-viewport diagram-frame" data-diagram-view="${example.graphView}" data-diagram-canvas><img src="${example.graphSrc}" alt="${example.graphAlt}" style="object-position:${example.objectPosition}"${index === 0 ? ' fetchpriority="high"' : ' loading="lazy"'}></div>
+    <figure class="hs-code">
+      <figcaption class="hs-bar"><span class="file-label">${escapeHtml(example.codeName)}</span><a href="${example.sourceHref}" download>Source ${heroIcon("download")}</a></figcaption>
+      <pre class="hs-pre" tabindex="0" aria-label="${escapeHtml(example.file)} source"><code>${example.codeHtml}</code></pre>
     </figure>
-    <figure class="hs-card hs-code">
-      <figcaption class="hs-bar"><span class="file-label">${example.codeName}</span></figcaption>
-      <pre class="hs-pre" aria-hidden="true">${example.codeHtml}</pre>
+    <figure class="hs-evidence">
+      <figcaption class="hs-bar"><span class="file-label">Recorded run</span></figcaption>
+      <dl class="hs-dl">${example.evidenceRows.map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join("")}<div><dt>receipt</dt><dd><code>${escapeHtml(example.receiptDigest)}</code></dd></div><div><dt>program</dt><dd><code>${escapeHtml(example.manifestDigest)}</code></dd></div></dl>
+      <p class="hs-links"><a href="${example.evidenceHref}" download>Receipt ${heroIcon("download")}</a><a href="${example.graphHref}" target="_blank" rel="noopener">Program graph ${heroIcon("arrow-up-right")}</a></p>
     </figure>
-    <figure class="hs-card hs-evidence">
-      <figcaption class="hs-bar"><span class="file-label">${example.evidenceLabel}</span></figcaption>
-      <dl class="hs-dl">${example.evidenceRows.map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join("")}</dl>
-    </figure>
-    <span class="hs-chip">${example.chip}</span>
   </div>`).join("")}</div>`;
 
 const replacements: Record<string, string> = {
@@ -486,6 +476,8 @@ const replacements: Record<string, string> = {
   ROUTE_SOURCE: highlightSource(routeSource.trimEnd()),
   ROUTE_PANELS: routePanels,
   ADOPTION_BOUNDARY,
+  INSTALL_TERMINAL,
+  SITE_DESCRIPTION: escapeHtml(SITE_DESCRIPTION),
   REFINE_ROUNDS: String(refine.maxRounds),
   SWARM_ITEMS: String(swarm.maxItems),
 };
@@ -843,7 +835,7 @@ await emitDocPage({
   title: "ALGAL documentation",
   description: "Install and run the ALGAL VM, write programs in .algal source, and read the v1 contract specification. These pages render the repository's own Markdown.",
   ogTitle: "ALGAL documentation",
-}, `<section class="page-intro"><p class="eyebrow">Documentation</p><h1>The reference shelf.</h1><p class="lede">These pages render the same Markdown files kept in the repository's <code>docs/</code> and <code>spec/v1/</code> folders. Dated reviews, pilot results, and research notes stay in the repository.</p></section><div class="docs-layout">${docsRail("index", docTitles)}<div class="docs-article docs-index"><div class="docs-index-groups">${indexGroups}${indexSpec}</div></div></div>`);
+}, `<section class="page-intro"><p class="eyebrow">Documentation</p><h1>The reference shelf.</h1><p class="lede">Install the VM, write programs in <code>.algal</code> source, and read the v1 specification. Each page renders the Markdown in the repository's <code>docs/</code> and <code>spec/v1/</code> folders; dated reviews, pilot results, and research notes stay on GitHub.</p></section><div class="docs-layout">${docsRail("index", docTitles)}<div class="docs-article docs-index"><div class="docs-index-groups">${indexGroups}${indexSpec}</div></div></div>`);
 
 // --- Authored content: blog posts and comparison pages ---------------------
 // Same renderer as the docs mirror, but these pages are site-native: they
@@ -916,12 +908,13 @@ await emitMarkdownSection({
 });
 // --- Blog ------------------------------------------------------------------
 // Posts render through the shared article layer. Every post is readable at its
-// URL; only indexable posts reach the index, sitemap, feed, and llms.txt.
+// URL; only indexable posts reach the index, sitemap, feed, and llms.txt. The
+// index page is the list itself, so it carries no duplicate rail.
 const blogRail = (current: string) => {
   const listed = blogPosts.filter(post => post.indexable || post.slug === current);
   return docsNavigation("Posts",
-    current === "index" ? "Overview" : blogPosts.find(post => post.slug === current)!.title,
-    `<a class="docs-home" href="/blog/"${current === "index" ? ' aria-current="page"' : ""}>Posts</a><ul>${listed.map(post =>
+    blogPosts.find(post => post.slug === current)!.title,
+    `<a class="docs-home" href="/blog/">Posts</a><ul>${listed.map(post =>
       `<li><a href="${post.path}"${post.slug === current ? ' aria-current="page"' : ""}>${escapeHtml(post.title)}</a></li>`).join("")}</ul>`);
 };
 for (const post of blogPosts) {
@@ -940,7 +933,7 @@ await emitDocPage({
   page: "blog", path: BLOG_PATH,
   title: `${BLOG_TITLE} · ALGAL blog`, description: BLOG_DESCRIPTION, ogTitle: "ALGAL blog",
   jsonLd: [blogIndexJsonLd(blogPosts)],
-}, `<section class="page-intro"><p class="eyebrow">Blog</p><h1>${BLOG_TITLE}.</h1><p class="lede">Longer posts on how ALGAL works, how it is tested, and the design choices behind it.</p></section><div class="docs-layout">${blogRail("index")}<div class="docs-article docs-index">${renderBlogIndex(blogPosts)}</div></div>`);
+}, `<section class="page-intro"><p class="eyebrow">Blog</p><h1>${BLOG_TITLE}.</h1><p class="lede">Longer posts on how ALGAL works, how it is tested, and the design choices behind it.</p></section><div class="docs-index blog-index">${renderBlogIndex(blogPosts)}</div>`);
 await writeFile(join(DIST, "blog/feed.xml"), blogAtomFeed(blogPosts));
 const blogSitemap = blogSitemapEntries(blogPosts);
 
