@@ -804,3 +804,10 @@ export type {
   ApplicationResearchReport, ApplicationResearchVerdict, ApplicationResearchEvaluation,
   ApplicationResearchVerifier, ApplicationResearchVerifierContext,
 } from "./src/application-research";
+
+export { TASK_CONTRACT, TASK_BOUNDS, parseTaskDefinition, parseTaskArgs, parseTaskExample, compileTask, runTask } from "./src/task";
+export type { TaskDefinition, TaskEffectBudget, TaskExample, TaskCompilation, RunTaskOptions, TaskRun } from "./src/task";
+export { TASK_PARAMETER_PATCH_CONTRACT, TASK_PARAMETER_IDS, taskParameters, parseTaskParameterPatch, applyTaskParameterPatch } from "./src/task-parameters";
+export type { TaskParameterId, TaskParameter, TaskParameters, TaskParameterPatch } from "./src/task-parameters";
+export { TASK_OPTIMIZATION_CONTRACT, TASK_OPTIMIZER_BOUNDS, buildTaskReviser, parseTaskOptimizerLimits, parseTaskCases, selectTaskPortfolio, optimizeTask } from "./src/task-optimizer";
+export type { TaskCase, TaskOptimizerLimits, TaskReviser, TaskOptimizationOptions, TaskOptimizationCandidate, TaskRevision, TaskOptimizationReport } from "./src/task-optimizer";
