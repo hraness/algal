@@ -24,6 +24,7 @@ import {
   createBlogSitemapPaths,
   createFeedEntry,
   type ArticleDiscovery,
+  type ArticleParty,
   type SearchSite,
 } from "@hraness/web-discovery";
 import { OG_IMAGE_ALT, SITE_DESCRIPTION } from "./copy";
@@ -34,6 +35,13 @@ export const BLOG_PATH = "/blog/";
 export const BLOG_FEED_PATH = "/blog/feed.xml";
 export const BLOG_TITLE = "Notes on living programs";
 export const BLOG_DESCRIPTION = "Posts on how the ALGAL language and VM work, how it is tested, and the design choices behind it.";
+
+const BLOG_AUTHOR_PARTY: ArticleParty = {
+  kind: "Organization",
+  name: BLOG_AUTHOR.name,
+  sameAs: ["https://github.com/hraness"],
+  url: "https://hraness.com",
+};
 
 export const SEARCH_SITE: SearchSite = {
   name: "ALGAL",
@@ -136,8 +144,8 @@ export function articleDiscovery(post: BlogPost): ArticleDiscovery {
     description: post.dek,
     image: SOCIAL_IMAGE,
     publishedTime: timestamp(post.published),
-    authors: [{ kind: "Organization", name: BLOG_AUTHOR.name }],
-    publisher: { kind: "Organization", name: BLOG_AUTHOR.name },
+    authors: [BLOG_AUTHOR_PARTY],
+    publisher: BLOG_AUTHOR_PARTY,
     blogPath: BLOG_PATH,
     ...(post.eyebrow ? { section: post.eyebrow } : {}),
   };
@@ -172,7 +180,7 @@ export function renderBlogIndex(posts: readonly BlogPost[]): string {
 }
 
 export function blogIndexJsonLd(posts: readonly BlogPost[]) {
-  return blogJsonLd(SEARCH_SITE, { name: BLOG_TITLE, description: BLOG_DESCRIPTION, path: BLOG_PATH, publisher: { kind: "Organization", name: BLOG_AUTHOR.name } },
+  return blogJsonLd(SEARCH_SITE, { name: BLOG_TITLE, description: BLOG_DESCRIPTION, path: BLOG_PATH, publisher: BLOG_AUTHOR_PARTY },
     posts.filter(post => post.indexable).map(articleDiscovery));
 }
 
@@ -184,7 +192,7 @@ export function blogAtomFeed(posts: readonly BlogPost[]): string {
   const indexable = posts.filter(post => post.indexable);
   return createAtomFeed(SEARCH_SITE, {
     title: "ALGAL blog", description: BLOG_DESCRIPTION, homePath: BLOG_PATH, path: BLOG_FEED_PATH,
-    authors: [{ kind: "Organization", name: BLOG_AUTHOR.name }],
+    authors: [BLOG_AUTHOR_PARTY],
   }, indexable.map(post => createFeedEntry(articleDiscovery(post), { contentHtml: post.bodyHtml })));
 }
 
