@@ -1,0 +1,33 @@
+{"synthetic": false,
+ "schemaVersion": "2025-09-10",
+ "outputs":
+ {"o": ["250f59d1efc15f22.olean"],
+  "m": false,
+  "i": "37ab7bcb4071e085.ilean",
+  "c": "fae7fc6c9a24f9ec.c"},
+ "log":
+ [{"message":
+   ".> LEAN_PATH=/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean /Users/bg/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lean --threads=1 --memory=1024 /Users/bg/Documents/algal/verify/lean/Algal/Core/BinaryValue.lean -o /Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/BinaryValue.olean -i /Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/BinaryValue.ilean -c /Users/bg/Documents/algal/verify/lean/.lake/build/ir/Algal/Core/BinaryValue.c --setup /Users/bg/Documents/algal/verify/lean/.lake/build/ir/Algal/Core/BinaryValue.setup.json --json",
+   "level": "trace"}],
+ "inputs":
+ [["deps",
+   [["algalVerification/Algal:extraDep",
+     [["@algalVerification:extraDep", "00000000000006bb"]]],
+    ["imports",
+     [["Algal.Core.Binary64 transitive imports (legacy)", "00000000000006bb"],
+      ["Algal.Core.Binary64:importAllArts", "34a943f435855f4b"]]]]],
+  ["libs",
+   [["import dynlibs", "00000000000006bb"],
+    ["package external libraries", "00000000000006bb"],
+    ["module dynlibs", "00000000000006bb"],
+    ["module plugins", "00000000000006bb"]]],
+  ["Lean 4.34.0, commit 293d5d0c0c3f3dded4688b3ccd6a33939ac5102b",
+   "a1c6c7aa3e9abfe7"],
+  ["/Users/bg/Documents/algal/verify/lean/Algal/Core/BinaryValue.lean",
+   "d7f64976cea32907"],
+  ["options", "00000000000006bb"],
+  ["isModule: false", "feefd2a0d3a1847e"],
+  ["Module.name: Algal.Core.BinaryValue", "1b8816a4cea0bc2a"],
+  ["Package.id?: (some algalVerification)", "322e4bdf4ecfef12"],
+  ["Module.leanArgs: #[--threads=1, --memory=1024]", "42b59798c0f2dde0"]],
+ "depHash": "ab154c14413979ef"}

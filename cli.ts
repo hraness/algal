@@ -3822,7 +3822,7 @@ function usageError(msg: string): never {
   throw new AlgalError("PARSE_FAILED", `usage: ${msg}`);
 }
 
-void reportAlgalCliRun(PACKAGE_VERSION);
+void reportAlgalCliRun(PACKAGE_VERSION, process.env, process.argv.slice(2));
 main()
   .then((code) => process.exit(code))
   .catch(async (e) => {

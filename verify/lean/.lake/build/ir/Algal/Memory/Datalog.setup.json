@@ -1,0 +1,7 @@
+{"plugins": [],
+ "package": "algalVerification",
+ "options": {},
+ "name": "Algal.Memory.Datalog",
+ "isModule": false,
+ "importArts": {},
+ "dynlibs": []}

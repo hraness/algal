@@ -1,0 +1,13 @@
+{"plugins": [],
+ "package": "algalVerification",
+ "options": {},
+ "name": "Algal.Core.RoundingInterval",
+ "isModule": false,
+ "importArts":
+ {"Algal.Core.NumericInjectivity":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/NumericInjectivity.olean"]],
+  "Algal.Core.BinaryValue":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/BinaryValue.olean"]],
+  "Algal.Core.Binary64":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/Binary64.olean"]]},
+ "dynlibs": []}

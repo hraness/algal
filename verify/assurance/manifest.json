@@ -1,0 +1,4689 @@
+{
+  "contract": "algal.assurance-manifest.v1",
+  "registryDigest": "sha256:626d3f3a7b2440461a4e5988ee66d93bf973310f532036b9b002fb9a4afab6dd",
+  "toolchainsDigest": "sha256:3c4f47ae55d0853d3415499259e37ed5d012ae2b7b3ec5c021ec0a0688f3b1b4",
+  "distributionsDigest": "sha256:8667517782c5649a446874ce45217e5da10f96ac019d8f74ca07bc37154ecaa8",
+  "inputDigest": "sha256:0d5eaf46a3366f44ce6ba0f9ddb91673809975c5ad7fd2c32e776c4e0d9a06fb",
+  "claims": [
+    {
+      "id": "ADM-01",
+      "evidence": "not-started",
+      "suite": "boundary",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/canonical.rs",
+          "sha256": "sha256:ffd42453bb791861bc88c368f28b8c57762178b6749b87ca1db78072bb5eb9ef"
+        },
+        {
+          "path": "crates/algal/src/contract.rs",
+          "sha256": "sha256:3df89ad66768eaee7424b9474072957b1082fb58e8ce7d245d4f1da1cf709ff6"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/contract.ts",
+          "sha256": "sha256:feecd07ea1299f5e136721a8312089d4594e52e369954a14f45c7b3d70d6e338"
+        },
+        {
+          "path": "src/graph.ts",
+          "sha256": "sha256:4a08e73d2517870dd994aec0021c09e91a8a183ff2cde94595c40f602dfb06b4"
+        },
+        {
+          "path": "src/values.ts",
+          "sha256": "sha256:30306be6577723d9dfb92eed18a46bc79dbb323b8d0cf6fbbaabac5d737fed0f"
+        }
+      ]
+    },
+    {
+      "id": "ADM-02",
+      "evidence": "observed",
+      "suite": "boundary",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/canonical.rs",
+          "sha256": "sha256:ffd42453bb791861bc88c368f28b8c57762178b6749b87ca1db78072bb5eb9ef"
+        },
+        {
+          "path": "crates/algal/src/contract.rs",
+          "sha256": "sha256:3df89ad66768eaee7424b9474072957b1082fb58e8ce7d245d4f1da1cf709ff6"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/contract.ts",
+          "sha256": "sha256:feecd07ea1299f5e136721a8312089d4594e52e369954a14f45c7b3d70d6e338"
+        },
+        {
+          "path": "src/graph.ts",
+          "sha256": "sha256:4a08e73d2517870dd994aec0021c09e91a8a183ff2cde94595c40f602dfb06b4"
+        },
+        {
+          "path": "src/values.ts",
+          "sha256": "sha256:30306be6577723d9dfb92eed18a46bc79dbb323b8d0cf6fbbaabac5d737fed0f"
+        }
+      ]
+    },
+    {
+      "id": "ADM-03",
+      "evidence": "not-started",
+      "suite": "boundary",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/canonical.rs",
+          "sha256": "sha256:ffd42453bb791861bc88c368f28b8c57762178b6749b87ca1db78072bb5eb9ef"
+        },
+        {
+          "path": "crates/algal/src/contract.rs",
+          "sha256": "sha256:3df89ad66768eaee7424b9474072957b1082fb58e8ce7d245d4f1da1cf709ff6"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/contract.ts",
+          "sha256": "sha256:feecd07ea1299f5e136721a8312089d4594e52e369954a14f45c7b3d70d6e338"
+        },
+        {
+          "path": "src/graph.ts",
+          "sha256": "sha256:4a08e73d2517870dd994aec0021c09e91a8a183ff2cde94595c40f602dfb06b4"
+        },
+        {
+          "path": "src/values.ts",
+          "sha256": "sha256:30306be6577723d9dfb92eed18a46bc79dbb323b8d0cf6fbbaabac5d737fed0f"
+        }
+      ]
+    },
+    {
+      "id": "ADM-04",
+      "evidence": "observed",
+      "suite": "boundary",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/canonical.rs",
+          "sha256": "sha256:ffd42453bb791861bc88c368f28b8c57762178b6749b87ca1db78072bb5eb9ef"
+        },
+        {
+          "path": "crates/algal/src/contract.rs",
+          "sha256": "sha256:3df89ad66768eaee7424b9474072957b1082fb58e8ce7d245d4f1da1cf709ff6"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/contract.ts",
+          "sha256": "sha256:feecd07ea1299f5e136721a8312089d4594e52e369954a14f45c7b3d70d6e338"
+        },
+        {
+          "path": "src/graph.ts",
+          "sha256": "sha256:4a08e73d2517870dd994aec0021c09e91a8a183ff2cde94595c40f602dfb06b4"
+        },
+        {
+          "path": "src/host-state.ts",
+          "sha256": "sha256:ae40c39eb62409b6a1dad07d78eef9612994b39ad73ac971bc47fd06a1a81409"
+        },
+        {
+          "path": "src/store-memory.ts",
+          "sha256": "sha256:cd48c01ad188932561f293e0576ee7cea4ff0d4d891bced3d61cd0a82be7d4e8"
+        },
+        {
+          "path": "src/store.ts",
+          "sha256": "sha256:06ecefaaafbdcfa1af33350ce5527733e900de0a81c84551efdbdfc4e4d4e9b6"
+        },
+        {
+          "path": "src/values.ts",
+          "sha256": "sha256:30306be6577723d9dfb92eed18a46bc79dbb323b8d0cf6fbbaabac5d737fed0f"
+        }
+      ]
+    },
+    {
+      "id": "VAL-01",
+      "evidence": "not-started",
+      "suite": "lean-core",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/canonical.rs",
+          "sha256": "sha256:ffd42453bb791861bc88c368f28b8c57762178b6749b87ca1db78072bb5eb9ef"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/digest-type.ts",
+          "sha256": "sha256:b1302cdca6bbc5e814c90ff30569e42d550e2a84f04e5d8540519728249532f3"
+        },
+        {
+          "path": "src/digest.ts",
+          "sha256": "sha256:b1a2dfea2cb509dbd205046e121ca3ea3243e4e078b55dbd570811233bcf9d2a"
+        },
+        {
+          "path": "src/sha256.ts",
+          "sha256": "sha256:a0a8eace9cf5e3001a26fe63001c5bdade1a1bc5ed62320e113fd429fc9d8098"
+        },
+        {
+          "path": "src/utf8.ts",
+          "sha256": "sha256:d74625755dfbbfbae0bf707a0e9ead5aaa62d183dbb2416ad5192ac3430d526c"
+        },
+        {
+          "path": "src/values.ts",
+          "sha256": "sha256:30306be6577723d9dfb92eed18a46bc79dbb323b8d0cf6fbbaabac5d737fed0f"
+        }
+      ]
+    },
+    {
+      "id": "VAL-02",
+      "evidence": "not-started",
+      "suite": "lean-core",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/canonical.rs",
+          "sha256": "sha256:ffd42453bb791861bc88c368f28b8c57762178b6749b87ca1db78072bb5eb9ef"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/digest-type.ts",
+          "sha256": "sha256:b1302cdca6bbc5e814c90ff30569e42d550e2a84f04e5d8540519728249532f3"
+        },
+        {
+          "path": "src/digest.ts",
+          "sha256": "sha256:b1a2dfea2cb509dbd205046e121ca3ea3243e4e078b55dbd570811233bcf9d2a"
+        },
+        {
+          "path": "src/sha256.ts",
+          "sha256": "sha256:a0a8eace9cf5e3001a26fe63001c5bdade1a1bc5ed62320e113fd429fc9d8098"
+        },
+        {
+          "path": "src/utf8.ts",
+          "sha256": "sha256:d74625755dfbbfbae0bf707a0e9ead5aaa62d183dbb2416ad5192ac3430d526c"
+        },
+        {
+          "path": "src/values.ts",
+          "sha256": "sha256:30306be6577723d9dfb92eed18a46bc79dbb323b8d0cf6fbbaabac5d737fed0f"
+        }
+      ]
+    },
+    {
+      "id": "VAL-03",
+      "evidence": "not-started",
+      "suite": "lean-core",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/canonical.rs",
+          "sha256": "sha256:ffd42453bb791861bc88c368f28b8c57762178b6749b87ca1db78072bb5eb9ef"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/digest-type.ts",
+          "sha256": "sha256:b1302cdca6bbc5e814c90ff30569e42d550e2a84f04e5d8540519728249532f3"
+        },
+        {
+          "path": "src/digest.ts",
+          "sha256": "sha256:b1a2dfea2cb509dbd205046e121ca3ea3243e4e078b55dbd570811233bcf9d2a"
+        },
+        {
+          "path": "src/sha256.ts",
+          "sha256": "sha256:a0a8eace9cf5e3001a26fe63001c5bdade1a1bc5ed62320e113fd429fc9d8098"
+        },
+        {
+          "path": "src/utf8.ts",
+          "sha256": "sha256:d74625755dfbbfbae0bf707a0e9ead5aaa62d183dbb2416ad5192ac3430d526c"
+        },
+        {
+          "path": "src/values.ts",
+          "sha256": "sha256:30306be6577723d9dfb92eed18a46bc79dbb323b8d0cf6fbbaabac5d737fed0f"
+        }
+      ]
+    },
+    {
+      "id": "VAL-04",
+      "evidence": "not-started",
+      "suite": "lean-core",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/canonical.rs",
+          "sha256": "sha256:ffd42453bb791861bc88c368f28b8c57762178b6749b87ca1db78072bb5eb9ef"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/digest-type.ts",
+          "sha256": "sha256:b1302cdca6bbc5e814c90ff30569e42d550e2a84f04e5d8540519728249532f3"
+        },
+        {
+          "path": "src/digest.ts",
+          "sha256": "sha256:b1a2dfea2cb509dbd205046e121ca3ea3243e4e078b55dbd570811233bcf9d2a"
+        },
+        {
+          "path": "src/sha256.ts",
+          "sha256": "sha256:a0a8eace9cf5e3001a26fe63001c5bdade1a1bc5ed62320e113fd429fc9d8098"
+        },
+        {
+          "path": "src/utf8.ts",
+          "sha256": "sha256:d74625755dfbbfbae0bf707a0e9ead5aaa62d183dbb2416ad5192ac3430d526c"
+        },
+        {
+          "path": "src/values.ts",
+          "sha256": "sha256:30306be6577723d9dfb92eed18a46bc79dbb323b8d0cf6fbbaabac5d737fed0f"
+        }
+      ]
+    },
+    {
+      "id": "VAL-05",
+      "evidence": "not-started",
+      "suite": "lean-core",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/canonical.rs",
+          "sha256": "sha256:ffd42453bb791861bc88c368f28b8c57762178b6749b87ca1db78072bb5eb9ef"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/digest-type.ts",
+          "sha256": "sha256:b1302cdca6bbc5e814c90ff30569e42d550e2a84f04e5d8540519728249532f3"
+        },
+        {
+          "path": "src/digest.ts",
+          "sha256": "sha256:b1a2dfea2cb509dbd205046e121ca3ea3243e4e078b55dbd570811233bcf9d2a"
+        },
+        {
+          "path": "src/sha256.ts",
+          "sha256": "sha256:a0a8eace9cf5e3001a26fe63001c5bdade1a1bc5ed62320e113fd429fc9d8098"
+        },
+        {
+          "path": "src/utf8.ts",
+          "sha256": "sha256:d74625755dfbbfbae0bf707a0e9ead5aaa62d183dbb2416ad5192ac3430d526c"
+        },
+        {
+          "path": "src/values.ts",
+          "sha256": "sha256:30306be6577723d9dfb92eed18a46bc79dbb323b8d0cf6fbbaabac5d737fed0f"
+        }
+      ]
+    },
+    {
+      "id": "GRF-01",
+      "evidence": "observed",
+      "suite": "lean-core",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/contract.rs",
+          "sha256": "sha256:3df89ad66768eaee7424b9474072957b1082fb58e8ce7d245d4f1da1cf709ff6"
+        },
+        {
+          "path": "crates/algal/src/graph.rs",
+          "sha256": "sha256:135a14d6dd282129dd001d9b2d6e2138872a35f941ea13437c2807d281ccbaab"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/contract.ts",
+          "sha256": "sha256:feecd07ea1299f5e136721a8312089d4594e52e369954a14f45c7b3d70d6e338"
+        },
+        {
+          "path": "src/graph.ts",
+          "sha256": "sha256:4a08e73d2517870dd994aec0021c09e91a8a183ff2cde94595c40f602dfb06b4"
+        }
+      ]
+    },
+    {
+      "id": "GRF-02",
+      "evidence": "not-started",
+      "suite": "lean-core",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/contract.rs",
+          "sha256": "sha256:3df89ad66768eaee7424b9474072957b1082fb58e8ce7d245d4f1da1cf709ff6"
+        },
+        {
+          "path": "crates/algal/src/graph.rs",
+          "sha256": "sha256:135a14d6dd282129dd001d9b2d6e2138872a35f941ea13437c2807d281ccbaab"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/contract.ts",
+          "sha256": "sha256:feecd07ea1299f5e136721a8312089d4594e52e369954a14f45c7b3d70d6e338"
+        },
+        {
+          "path": "src/graph.ts",
+          "sha256": "sha256:4a08e73d2517870dd994aec0021c09e91a8a183ff2cde94595c40f602dfb06b4"
+        }
+      ]
+    },
+    {
+      "id": "GRF-03",
+      "evidence": "not-started",
+      "suite": "lean-core",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/contract.rs",
+          "sha256": "sha256:3df89ad66768eaee7424b9474072957b1082fb58e8ce7d245d4f1da1cf709ff6"
+        },
+        {
+          "path": "crates/algal/src/graph.rs",
+          "sha256": "sha256:135a14d6dd282129dd001d9b2d6e2138872a35f941ea13437c2807d281ccbaab"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/contract.ts",
+          "sha256": "sha256:feecd07ea1299f5e136721a8312089d4594e52e369954a14f45c7b3d70d6e338"
+        },
+        {
+          "path": "src/graph.ts",
+          "sha256": "sha256:4a08e73d2517870dd994aec0021c09e91a8a183ff2cde94595c40f602dfb06b4"
+        }
+      ]
+    },
+    {
+      "id": "GRF-04",
+      "evidence": "not-started",
+      "suite": "lean-core",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/contract.rs",
+          "sha256": "sha256:3df89ad66768eaee7424b9474072957b1082fb58e8ce7d245d4f1da1cf709ff6"
+        },
+        {
+          "path": "crates/algal/src/graph.rs",
+          "sha256": "sha256:135a14d6dd282129dd001d9b2d6e2138872a35f941ea13437c2807d281ccbaab"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/contract.ts",
+          "sha256": "sha256:feecd07ea1299f5e136721a8312089d4594e52e369954a14f45c7b3d70d6e338"
+        },
+        {
+          "path": "src/graph.ts",
+          "sha256": "sha256:4a08e73d2517870dd994aec0021c09e91a8a183ff2cde94595c40f602dfb06b4"
+        }
+      ]
+    },
+    {
+      "id": "GRF-05",
+      "evidence": "not-started",
+      "suite": "lean-core",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/contract.rs",
+          "sha256": "sha256:3df89ad66768eaee7424b9474072957b1082fb58e8ce7d245d4f1da1cf709ff6"
+        },
+        {
+          "path": "crates/algal/src/graph.rs",
+          "sha256": "sha256:135a14d6dd282129dd001d9b2d6e2138872a35f941ea13437c2807d281ccbaab"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/contract.ts",
+          "sha256": "sha256:feecd07ea1299f5e136721a8312089d4594e52e369954a14f45c7b3d70d6e338"
+        },
+        {
+          "path": "src/graph.ts",
+          "sha256": "sha256:4a08e73d2517870dd994aec0021c09e91a8a183ff2cde94595c40f602dfb06b4"
+        }
+      ]
+    },
+    {
+      "id": "EXE-01",
+      "evidence": "not-started",
+      "suite": "scheduler-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/registry.rs",
+          "sha256": "sha256:697d13eb9e531e40de66ea61605e576037252e32a6166f46073b5d9990c0b967"
+        },
+        {
+          "path": "crates/algal/src/runtime.rs",
+          "sha256": "sha256:67bbe3245b3b106d7723493158b27f98689516d8bd7ae5709a4154eedf5c6250"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/registry.ts",
+          "sha256": "sha256:00259d57ee1d62f9ab0fccead95558357c1b50cf732db7adcccdf36212d05ddf"
+        },
+        {
+          "path": "src/run.ts",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd"
+        }
+      ]
+    },
+    {
+      "id": "EXE-02",
+      "evidence": "not-started",
+      "suite": "scheduler-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/registry.rs",
+          "sha256": "sha256:697d13eb9e531e40de66ea61605e576037252e32a6166f46073b5d9990c0b967"
+        },
+        {
+          "path": "crates/algal/src/runtime.rs",
+          "sha256": "sha256:67bbe3245b3b106d7723493158b27f98689516d8bd7ae5709a4154eedf5c6250"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/registry.ts",
+          "sha256": "sha256:00259d57ee1d62f9ab0fccead95558357c1b50cf732db7adcccdf36212d05ddf"
+        },
+        {
+          "path": "src/run.ts",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd"
+        }
+      ]
+    },
+    {
+      "id": "EXE-03",
+      "evidence": "not-started",
+      "suite": "scheduler-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/registry.rs",
+          "sha256": "sha256:697d13eb9e531e40de66ea61605e576037252e32a6166f46073b5d9990c0b967"
+        },
+        {
+          "path": "crates/algal/src/runtime.rs",
+          "sha256": "sha256:67bbe3245b3b106d7723493158b27f98689516d8bd7ae5709a4154eedf5c6250"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/registry.ts",
+          "sha256": "sha256:00259d57ee1d62f9ab0fccead95558357c1b50cf732db7adcccdf36212d05ddf"
+        },
+        {
+          "path": "src/run.ts",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd"
+        }
+      ]
+    },
+    {
+      "id": "EXE-04",
+      "evidence": "observed",
+      "suite": "scheduler-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/registry.rs",
+          "sha256": "sha256:697d13eb9e531e40de66ea61605e576037252e32a6166f46073b5d9990c0b967"
+        },
+        {
+          "path": "crates/algal/src/runtime.rs",
+          "sha256": "sha256:67bbe3245b3b106d7723493158b27f98689516d8bd7ae5709a4154eedf5c6250"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/registry.ts",
+          "sha256": "sha256:00259d57ee1d62f9ab0fccead95558357c1b50cf732db7adcccdf36212d05ddf"
+        },
+        {
+          "path": "src/run.ts",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd"
+        }
+      ]
+    },
+    {
+      "id": "EXE-05",
+      "evidence": "not-started",
+      "suite": "scheduler-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/registry.rs",
+          "sha256": "sha256:697d13eb9e531e40de66ea61605e576037252e32a6166f46073b5d9990c0b967"
+        },
+        {
+          "path": "crates/algal/src/runtime.rs",
+          "sha256": "sha256:67bbe3245b3b106d7723493158b27f98689516d8bd7ae5709a4154eedf5c6250"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/registry.ts",
+          "sha256": "sha256:00259d57ee1d62f9ab0fccead95558357c1b50cf732db7adcccdf36212d05ddf"
+        },
+        {
+          "path": "src/run.ts",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd"
+        }
+      ]
+    },
+    {
+      "id": "EXE-06",
+      "evidence": "not-started",
+      "suite": "scheduler-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/registry.rs",
+          "sha256": "sha256:697d13eb9e531e40de66ea61605e576037252e32a6166f46073b5d9990c0b967"
+        },
+        {
+          "path": "crates/algal/src/runtime.rs",
+          "sha256": "sha256:67bbe3245b3b106d7723493158b27f98689516d8bd7ae5709a4154eedf5c6250"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/registry.ts",
+          "sha256": "sha256:00259d57ee1d62f9ab0fccead95558357c1b50cf732db7adcccdf36212d05ddf"
+        },
+        {
+          "path": "src/run.ts",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd"
+        }
+      ]
+    },
+    {
+      "id": "EXP-01",
+      "evidence": "not-started",
+      "suite": "lean-expr",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal-expr/src/lib.rs",
+          "sha256": "sha256:840cb242b0994813e0dd477a5152ddb4ff09346951edb54292ac964e0bd1249f"
+        },
+        {
+          "path": "spec/v1/expr.md",
+          "sha256": "sha256:31ed5ee66963cce36347a8e7efe5b02d88b9d5be9d5ec237e9fdbb87bcbcbe10"
+        },
+        {
+          "path": "src/algal_expr.wasm",
+          "sha256": "sha256:22b6777d0dbd88fdb4ac6090d9328f7737c7209e6cdae061189a2bc7590683c9"
+        },
+        {
+          "path": "src/expr.ts",
+          "sha256": "sha256:61951551af697bcae2da1722e94da77cd7873c43e5384ee0563305dc6beb6946"
+        }
+      ]
+    },
+    {
+      "id": "EXP-02",
+      "evidence": "not-started",
+      "suite": "lean-expr",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal-expr/src/lib.rs",
+          "sha256": "sha256:840cb242b0994813e0dd477a5152ddb4ff09346951edb54292ac964e0bd1249f"
+        },
+        {
+          "path": "spec/v1/expr.md",
+          "sha256": "sha256:31ed5ee66963cce36347a8e7efe5b02d88b9d5be9d5ec237e9fdbb87bcbcbe10"
+        },
+        {
+          "path": "src/algal_expr.wasm",
+          "sha256": "sha256:22b6777d0dbd88fdb4ac6090d9328f7737c7209e6cdae061189a2bc7590683c9"
+        },
+        {
+          "path": "src/expr.ts",
+          "sha256": "sha256:61951551af697bcae2da1722e94da77cd7873c43e5384ee0563305dc6beb6946"
+        }
+      ]
+    },
+    {
+      "id": "EXP-03",
+      "evidence": "not-started",
+      "suite": "lean-expr",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal-expr/src/lib.rs",
+          "sha256": "sha256:840cb242b0994813e0dd477a5152ddb4ff09346951edb54292ac964e0bd1249f"
+        },
+        {
+          "path": "spec/v1/expr.md",
+          "sha256": "sha256:31ed5ee66963cce36347a8e7efe5b02d88b9d5be9d5ec237e9fdbb87bcbcbe10"
+        },
+        {
+          "path": "src/algal_expr.wasm",
+          "sha256": "sha256:22b6777d0dbd88fdb4ac6090d9328f7737c7209e6cdae061189a2bc7590683c9"
+        },
+        {
+          "path": "src/expr.ts",
+          "sha256": "sha256:61951551af697bcae2da1722e94da77cd7873c43e5384ee0563305dc6beb6946"
+        }
+      ]
+    },
+    {
+      "id": "EXP-04",
+      "evidence": "not-started",
+      "suite": "lean-expr",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal-expr/src/lib.rs",
+          "sha256": "sha256:840cb242b0994813e0dd477a5152ddb4ff09346951edb54292ac964e0bd1249f"
+        },
+        {
+          "path": "spec/v1/expr.md",
+          "sha256": "sha256:31ed5ee66963cce36347a8e7efe5b02d88b9d5be9d5ec237e9fdbb87bcbcbe10"
+        },
+        {
+          "path": "src/algal_expr.wasm",
+          "sha256": "sha256:22b6777d0dbd88fdb4ac6090d9328f7737c7209e6cdae061189a2bc7590683c9"
+        },
+        {
+          "path": "src/expr.ts",
+          "sha256": "sha256:61951551af697bcae2da1722e94da77cd7873c43e5384ee0563305dc6beb6946"
+        }
+      ]
+    },
+    {
+      "id": "EXP-05",
+      "evidence": "observed",
+      "suite": "lean-expr",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal-expr/src/lib.rs",
+          "sha256": "sha256:840cb242b0994813e0dd477a5152ddb4ff09346951edb54292ac964e0bd1249f"
+        },
+        {
+          "path": "spec/v1/expr.md",
+          "sha256": "sha256:31ed5ee66963cce36347a8e7efe5b02d88b9d5be9d5ec237e9fdbb87bcbcbe10"
+        },
+        {
+          "path": "src/algal_expr.wasm",
+          "sha256": "sha256:22b6777d0dbd88fdb4ac6090d9328f7737c7209e6cdae061189a2bc7590683c9"
+        },
+        {
+          "path": "src/expr.ts",
+          "sha256": "sha256:61951551af697bcae2da1722e94da77cd7873c43e5384ee0563305dc6beb6946"
+        }
+      ]
+    },
+    {
+      "id": "SRC-01",
+      "evidence": "not-started",
+      "suite": "source-differential",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/main.rs",
+          "sha256": "sha256:951ac2e7c6578186d4e9b452431da5833a8a8d1314e2d0a89b7ac49b0e329a73"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/source-project.ts",
+          "sha256": "sha256:e1958704a044520777780f5c162f447650e52114647400303d31a09b3b692f6c"
+        },
+        {
+          "path": "src/source-trace.ts",
+          "sha256": "sha256:7dc6f32504e57a99fb3b4f4aa4dc9c77dc1e22707b7f72e6744acc22a8ecee8a"
+        },
+        {
+          "path": "src/source.ts",
+          "sha256": "sha256:d42501474b589190da1ca4b134a09cd1c9e50f3a3c0c1fda10e0e3004a34fff2"
+        }
+      ]
+    },
+    {
+      "id": "SRC-02",
+      "evidence": "not-started",
+      "suite": "source-differential",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/main.rs",
+          "sha256": "sha256:951ac2e7c6578186d4e9b452431da5833a8a8d1314e2d0a89b7ac49b0e329a73"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/source-project.ts",
+          "sha256": "sha256:e1958704a044520777780f5c162f447650e52114647400303d31a09b3b692f6c"
+        },
+        {
+          "path": "src/source-trace.ts",
+          "sha256": "sha256:7dc6f32504e57a99fb3b4f4aa4dc9c77dc1e22707b7f72e6744acc22a8ecee8a"
+        },
+        {
+          "path": "src/source.ts",
+          "sha256": "sha256:d42501474b589190da1ca4b134a09cd1c9e50f3a3c0c1fda10e0e3004a34fff2"
+        }
+      ]
+    },
+    {
+      "id": "SRC-03",
+      "evidence": "not-started",
+      "suite": "source-differential",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/main.rs",
+          "sha256": "sha256:951ac2e7c6578186d4e9b452431da5833a8a8d1314e2d0a89b7ac49b0e329a73"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/source-project.ts",
+          "sha256": "sha256:e1958704a044520777780f5c162f447650e52114647400303d31a09b3b692f6c"
+        },
+        {
+          "path": "src/source-trace.ts",
+          "sha256": "sha256:7dc6f32504e57a99fb3b4f4aa4dc9c77dc1e22707b7f72e6744acc22a8ecee8a"
+        },
+        {
+          "path": "src/source.ts",
+          "sha256": "sha256:d42501474b589190da1ca4b134a09cd1c9e50f3a3c0c1fda10e0e3004a34fff2"
+        }
+      ]
+    },
+    {
+      "id": "SRC-04",
+      "evidence": "not-started",
+      "suite": "source-differential",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/main.rs",
+          "sha256": "sha256:951ac2e7c6578186d4e9b452431da5833a8a8d1314e2d0a89b7ac49b0e329a73"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/source-project.ts",
+          "sha256": "sha256:e1958704a044520777780f5c162f447650e52114647400303d31a09b3b692f6c"
+        },
+        {
+          "path": "src/source-trace.ts",
+          "sha256": "sha256:7dc6f32504e57a99fb3b4f4aa4dc9c77dc1e22707b7f72e6744acc22a8ecee8a"
+        },
+        {
+          "path": "src/source.ts",
+          "sha256": "sha256:d42501474b589190da1ca4b134a09cd1c9e50f3a3c0c1fda10e0e3004a34fff2"
+        }
+      ]
+    },
+    {
+      "id": "RCP-01",
+      "evidence": "not-started",
+      "suite": "replay-isolation",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/process_evidence.rs",
+          "sha256": "sha256:f4ea2e0523e532460b4b4cc687820951ededabe334016772769c9b08075d24af"
+        },
+        {
+          "path": "crates/algal/src/receipt.rs",
+          "sha256": "sha256:1aad89398bb43d7cec70b68274ac57e2f4501e9d143be176ed68e32aa6e72c96"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "spec/v1/process-evidence.md",
+          "sha256": "sha256:4204c61892e1385638fbfd495063b4670810024672a18e6f27ff554fd79cc3c9"
+        },
+        {
+          "path": "src/process-evidence.ts",
+          "sha256": "sha256:8437890235d2d3f06a2f9e1af42104feabd8c81bb9922f8dfb51ef2ebce0be90"
+        },
+        {
+          "path": "src/run.ts",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd"
+        },
+        {
+          "path": "src/verify.ts",
+          "sha256": "sha256:1c81b005f5da8f5b44369a958b74d4c1ce687b55b8d5d9205b8fb3e30c4ffd71"
+        }
+      ]
+    },
+    {
+      "id": "RCP-02",
+      "evidence": "not-started",
+      "suite": "replay-isolation",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/process_evidence.rs",
+          "sha256": "sha256:f4ea2e0523e532460b4b4cc687820951ededabe334016772769c9b08075d24af"
+        },
+        {
+          "path": "crates/algal/src/receipt.rs",
+          "sha256": "sha256:1aad89398bb43d7cec70b68274ac57e2f4501e9d143be176ed68e32aa6e72c96"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "spec/v1/process-evidence.md",
+          "sha256": "sha256:4204c61892e1385638fbfd495063b4670810024672a18e6f27ff554fd79cc3c9"
+        },
+        {
+          "path": "src/process-evidence.ts",
+          "sha256": "sha256:8437890235d2d3f06a2f9e1af42104feabd8c81bb9922f8dfb51ef2ebce0be90"
+        },
+        {
+          "path": "src/run.ts",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd"
+        },
+        {
+          "path": "src/verify.ts",
+          "sha256": "sha256:1c81b005f5da8f5b44369a958b74d4c1ce687b55b8d5d9205b8fb3e30c4ffd71"
+        }
+      ]
+    },
+    {
+      "id": "RCP-03",
+      "evidence": "not-started",
+      "suite": "replay-isolation",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/process_evidence.rs",
+          "sha256": "sha256:f4ea2e0523e532460b4b4cc687820951ededabe334016772769c9b08075d24af"
+        },
+        {
+          "path": "crates/algal/src/receipt.rs",
+          "sha256": "sha256:1aad89398bb43d7cec70b68274ac57e2f4501e9d143be176ed68e32aa6e72c96"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "spec/v1/process-evidence.md",
+          "sha256": "sha256:4204c61892e1385638fbfd495063b4670810024672a18e6f27ff554fd79cc3c9"
+        },
+        {
+          "path": "src/process-evidence.ts",
+          "sha256": "sha256:8437890235d2d3f06a2f9e1af42104feabd8c81bb9922f8dfb51ef2ebce0be90"
+        },
+        {
+          "path": "src/run.ts",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd"
+        },
+        {
+          "path": "src/verify.ts",
+          "sha256": "sha256:1c81b005f5da8f5b44369a958b74d4c1ce687b55b8d5d9205b8fb3e30c4ffd71"
+        }
+      ]
+    },
+    {
+      "id": "RCP-04",
+      "evidence": "observed",
+      "suite": "replay-isolation",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/process_evidence.rs",
+          "sha256": "sha256:f4ea2e0523e532460b4b4cc687820951ededabe334016772769c9b08075d24af"
+        },
+        {
+          "path": "crates/algal/src/receipt.rs",
+          "sha256": "sha256:1aad89398bb43d7cec70b68274ac57e2f4501e9d143be176ed68e32aa6e72c96"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "spec/v1/process-evidence.md",
+          "sha256": "sha256:4204c61892e1385638fbfd495063b4670810024672a18e6f27ff554fd79cc3c9"
+        },
+        {
+          "path": "src/process-evidence.ts",
+          "sha256": "sha256:8437890235d2d3f06a2f9e1af42104feabd8c81bb9922f8dfb51ef2ebce0be90"
+        },
+        {
+          "path": "src/run.ts",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd"
+        },
+        {
+          "path": "src/verify.ts",
+          "sha256": "sha256:1c81b005f5da8f5b44369a958b74d4c1ce687b55b8d5d9205b8fb3e30c4ffd71"
+        }
+      ]
+    },
+    {
+      "id": "RCP-05",
+      "evidence": "observed",
+      "suite": "replay-isolation",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/process_evidence.rs",
+          "sha256": "sha256:f4ea2e0523e532460b4b4cc687820951ededabe334016772769c9b08075d24af"
+        },
+        {
+          "path": "crates/algal/src/receipt.rs",
+          "sha256": "sha256:1aad89398bb43d7cec70b68274ac57e2f4501e9d143be176ed68e32aa6e72c96"
+        },
+        {
+          "path": "crates/algal/src/runtime.rs",
+          "sha256": "sha256:67bbe3245b3b106d7723493158b27f98689516d8bd7ae5709a4154eedf5c6250"
+        },
+        {
+          "path": "crates/algal/src/store.rs",
+          "sha256": "sha256:5f5756ff757a913a7f8f5261aa3c5977851ec7e850c608d15ee8ee54de5d7faa"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "spec/v1/process-evidence.md",
+          "sha256": "sha256:4204c61892e1385638fbfd495063b4670810024672a18e6f27ff554fd79cc3c9"
+        },
+        {
+          "path": "src/bundle.ts",
+          "sha256": "sha256:477284c632259b7c2cfb9fa80ebb305388c78ea8f8323fa1179db60c92889255"
+        },
+        {
+          "path": "src/process-evidence.ts",
+          "sha256": "sha256:8437890235d2d3f06a2f9e1af42104feabd8c81bb9922f8dfb51ef2ebce0be90"
+        },
+        {
+          "path": "src/run.ts",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd"
+        },
+        {
+          "path": "src/verify.ts",
+          "sha256": "sha256:1c81b005f5da8f5b44369a958b74d4c1ce687b55b8d5d9205b8fb3e30c4ffd71"
+        }
+      ]
+    },
+    {
+      "id": "RCP-06",
+      "evidence": "not-started",
+      "suite": "replay-isolation",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/process_evidence.rs",
+          "sha256": "sha256:f4ea2e0523e532460b4b4cc687820951ededabe334016772769c9b08075d24af"
+        },
+        {
+          "path": "crates/algal/src/receipt.rs",
+          "sha256": "sha256:1aad89398bb43d7cec70b68274ac57e2f4501e9d143be176ed68e32aa6e72c96"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "spec/v1/process-evidence.md",
+          "sha256": "sha256:4204c61892e1385638fbfd495063b4670810024672a18e6f27ff554fd79cc3c9"
+        },
+        {
+          "path": "src/process-evidence.ts",
+          "sha256": "sha256:8437890235d2d3f06a2f9e1af42104feabd8c81bb9922f8dfb51ef2ebce0be90"
+        },
+        {
+          "path": "src/run.ts",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd"
+        },
+        {
+          "path": "src/verify.ts",
+          "sha256": "sha256:1c81b005f5da8f5b44369a958b74d4c1ce687b55b8d5d9205b8fb3e30c4ffd71"
+        }
+      ]
+    },
+    {
+      "id": "STO-01",
+      "evidence": "observed",
+      "suite": "publication",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/durable_fs.rs",
+          "sha256": "sha256:a2de515ac86d746a1f0bbf1a3b3f2cd6d0b70d1773a63b28a49d4d77a57be8c1"
+        },
+        {
+          "path": "crates/algal/src/lease.rs",
+          "sha256": "sha256:91c168f9b56260a54fd5151f3724ca2aa8d119a90626622c28e40e35b22c07ee"
+        },
+        {
+          "path": "crates/algal/src/store.rs",
+          "sha256": "sha256:5f5756ff757a913a7f8f5261aa3c5977851ec7e850c608d15ee8ee54de5d7faa"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "spec/v1/process.md",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe"
+        },
+        {
+          "path": "src/durable-fs.ts",
+          "sha256": "sha256:657515fbc68470a0872b74c09b0c12b7c6530133d4a3b2dd076763a8c58d899f"
+        },
+        {
+          "path": "src/host-state.ts",
+          "sha256": "sha256:ae40c39eb62409b6a1dad07d78eef9612994b39ad73ac971bc47fd06a1a81409"
+        },
+        {
+          "path": "src/store-memory.ts",
+          "sha256": "sha256:cd48c01ad188932561f293e0576ee7cea4ff0d4d891bced3d61cd0a82be7d4e8"
+        },
+        {
+          "path": "src/store.ts",
+          "sha256": "sha256:06ecefaaafbdcfa1af33350ce5527733e900de0a81c84551efdbdfc4e4d4e9b6"
+        }
+      ]
+    },
+    {
+      "id": "STO-02",
+      "evidence": "observed",
+      "suite": "publication",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/durable_fs.rs",
+          "sha256": "sha256:a2de515ac86d746a1f0bbf1a3b3f2cd6d0b70d1773a63b28a49d4d77a57be8c1"
+        },
+        {
+          "path": "crates/algal/src/lease.rs",
+          "sha256": "sha256:91c168f9b56260a54fd5151f3724ca2aa8d119a90626622c28e40e35b22c07ee"
+        },
+        {
+          "path": "crates/algal/src/store.rs",
+          "sha256": "sha256:5f5756ff757a913a7f8f5261aa3c5977851ec7e850c608d15ee8ee54de5d7faa"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "spec/v1/process.md",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe"
+        },
+        {
+          "path": "src/durable-fs.ts",
+          "sha256": "sha256:657515fbc68470a0872b74c09b0c12b7c6530133d4a3b2dd076763a8c58d899f"
+        },
+        {
+          "path": "src/host-state.ts",
+          "sha256": "sha256:ae40c39eb62409b6a1dad07d78eef9612994b39ad73ac971bc47fd06a1a81409"
+        },
+        {
+          "path": "src/store-memory.ts",
+          "sha256": "sha256:cd48c01ad188932561f293e0576ee7cea4ff0d4d891bced3d61cd0a82be7d4e8"
+        },
+        {
+          "path": "src/store.ts",
+          "sha256": "sha256:06ecefaaafbdcfa1af33350ce5527733e900de0a81c84551efdbdfc4e4d4e9b6"
+        }
+      ]
+    },
+    {
+      "id": "STO-03",
+      "evidence": "observed",
+      "suite": "publication",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/durable_fs.rs",
+          "sha256": "sha256:a2de515ac86d746a1f0bbf1a3b3f2cd6d0b70d1773a63b28a49d4d77a57be8c1"
+        },
+        {
+          "path": "crates/algal/src/lease.rs",
+          "sha256": "sha256:91c168f9b56260a54fd5151f3724ca2aa8d119a90626622c28e40e35b22c07ee"
+        },
+        {
+          "path": "crates/algal/src/store.rs",
+          "sha256": "sha256:5f5756ff757a913a7f8f5261aa3c5977851ec7e850c608d15ee8ee54de5d7faa"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "spec/v1/process.md",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe"
+        },
+        {
+          "path": "src/durable-fs.ts",
+          "sha256": "sha256:657515fbc68470a0872b74c09b0c12b7c6530133d4a3b2dd076763a8c58d899f"
+        },
+        {
+          "path": "src/host-state.ts",
+          "sha256": "sha256:ae40c39eb62409b6a1dad07d78eef9612994b39ad73ac971bc47fd06a1a81409"
+        },
+        {
+          "path": "src/store-memory.ts",
+          "sha256": "sha256:cd48c01ad188932561f293e0576ee7cea4ff0d4d891bced3d61cd0a82be7d4e8"
+        },
+        {
+          "path": "src/store.ts",
+          "sha256": "sha256:06ecefaaafbdcfa1af33350ce5527733e900de0a81c84551efdbdfc4e4d4e9b6"
+        }
+      ]
+    },
+    {
+      "id": "STO-04",
+      "evidence": "observed",
+      "suite": "publication",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/durable_fs.rs",
+          "sha256": "sha256:a2de515ac86d746a1f0bbf1a3b3f2cd6d0b70d1773a63b28a49d4d77a57be8c1"
+        },
+        {
+          "path": "crates/algal/src/lease.rs",
+          "sha256": "sha256:91c168f9b56260a54fd5151f3724ca2aa8d119a90626622c28e40e35b22c07ee"
+        },
+        {
+          "path": "crates/algal/src/store.rs",
+          "sha256": "sha256:5f5756ff757a913a7f8f5261aa3c5977851ec7e850c608d15ee8ee54de5d7faa"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "spec/v1/process.md",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe"
+        },
+        {
+          "path": "src/durable-fs.ts",
+          "sha256": "sha256:657515fbc68470a0872b74c09b0c12b7c6530133d4a3b2dd076763a8c58d899f"
+        },
+        {
+          "path": "src/host-state.ts",
+          "sha256": "sha256:ae40c39eb62409b6a1dad07d78eef9612994b39ad73ac971bc47fd06a1a81409"
+        },
+        {
+          "path": "src/store-memory.ts",
+          "sha256": "sha256:cd48c01ad188932561f293e0576ee7cea4ff0d4d891bced3d61cd0a82be7d4e8"
+        },
+        {
+          "path": "src/store.ts",
+          "sha256": "sha256:06ecefaaafbdcfa1af33350ce5527733e900de0a81c84551efdbdfc4e4d4e9b6"
+        }
+      ]
+    },
+    {
+      "id": "STO-05",
+      "evidence": "observed",
+      "suite": "publication",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/durable_fs.rs",
+          "sha256": "sha256:a2de515ac86d746a1f0bbf1a3b3f2cd6d0b70d1773a63b28a49d4d77a57be8c1"
+        },
+        {
+          "path": "crates/algal/src/lease.rs",
+          "sha256": "sha256:91c168f9b56260a54fd5151f3724ca2aa8d119a90626622c28e40e35b22c07ee"
+        },
+        {
+          "path": "crates/algal/src/store.rs",
+          "sha256": "sha256:5f5756ff757a913a7f8f5261aa3c5977851ec7e850c608d15ee8ee54de5d7faa"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "spec/v1/process.md",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe"
+        },
+        {
+          "path": "src/durable-fs.ts",
+          "sha256": "sha256:657515fbc68470a0872b74c09b0c12b7c6530133d4a3b2dd076763a8c58d899f"
+        },
+        {
+          "path": "src/host-state.ts",
+          "sha256": "sha256:ae40c39eb62409b6a1dad07d78eef9612994b39ad73ac971bc47fd06a1a81409"
+        },
+        {
+          "path": "src/store-memory.ts",
+          "sha256": "sha256:cd48c01ad188932561f293e0576ee7cea4ff0d4d891bced3d61cd0a82be7d4e8"
+        },
+        {
+          "path": "src/store.ts",
+          "sha256": "sha256:06ecefaaafbdcfa1af33350ce5527733e900de0a81c84551efdbdfc4e4d4e9b6"
+        }
+      ]
+    },
+    {
+      "id": "CUS-01",
+      "evidence": "observed",
+      "suite": "custody",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application.rs",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8"
+        },
+        {
+          "path": "crates/algal/src/lease.rs",
+          "sha256": "sha256:91c168f9b56260a54fd5151f3724ca2aa8d119a90626622c28e40e35b22c07ee"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "spec/v1/process.md",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe"
+        },
+        {
+          "path": "src/application-core.ts",
+          "sha256": "sha256:b9a2369ffdf011a706efa74e0abb82e8dcc73e8136d3c841df6953564c23f2a1"
+        },
+        {
+          "path": "src/application-filesystem.ts",
+          "sha256": "sha256:f5ffe5f8c5ad97c2e1ed9cbb8f0f4917004dd11606c41097a7bbf4bd4dc2009b"
+        },
+        {
+          "path": "src/application-storage.ts",
+          "sha256": "sha256:fedd14358bd5900c837967e1a5b66f2726bbac18f7773dc40cdb0143220112b4"
+        },
+        {
+          "path": "src/application.ts",
+          "sha256": "sha256:2674509bb45b061de65d4dc521de683603d6c3985789884a4c465be303be0fb2"
+        },
+        {
+          "path": "src/host-state.ts",
+          "sha256": "sha256:ae40c39eb62409b6a1dad07d78eef9612994b39ad73ac971bc47fd06a1a81409"
+        }
+      ]
+    },
+    {
+      "id": "CUS-02",
+      "evidence": "observed",
+      "suite": "custody",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application.rs",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8"
+        },
+        {
+          "path": "crates/algal/src/lease.rs",
+          "sha256": "sha256:91c168f9b56260a54fd5151f3724ca2aa8d119a90626622c28e40e35b22c07ee"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "spec/v1/process.md",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe"
+        },
+        {
+          "path": "src/application-core.ts",
+          "sha256": "sha256:b9a2369ffdf011a706efa74e0abb82e8dcc73e8136d3c841df6953564c23f2a1"
+        },
+        {
+          "path": "src/application-filesystem.ts",
+          "sha256": "sha256:f5ffe5f8c5ad97c2e1ed9cbb8f0f4917004dd11606c41097a7bbf4bd4dc2009b"
+        },
+        {
+          "path": "src/application-storage.ts",
+          "sha256": "sha256:fedd14358bd5900c837967e1a5b66f2726bbac18f7773dc40cdb0143220112b4"
+        },
+        {
+          "path": "src/application.ts",
+          "sha256": "sha256:2674509bb45b061de65d4dc521de683603d6c3985789884a4c465be303be0fb2"
+        },
+        {
+          "path": "src/host-state.ts",
+          "sha256": "sha256:ae40c39eb62409b6a1dad07d78eef9612994b39ad73ac971bc47fd06a1a81409"
+        }
+      ]
+    },
+    {
+      "id": "CUS-03",
+      "evidence": "not-started",
+      "suite": "custody",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application.rs",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8"
+        },
+        {
+          "path": "crates/algal/src/lease.rs",
+          "sha256": "sha256:91c168f9b56260a54fd5151f3724ca2aa8d119a90626622c28e40e35b22c07ee"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "spec/v1/process.md",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe"
+        },
+        {
+          "path": "src/application-core.ts",
+          "sha256": "sha256:b9a2369ffdf011a706efa74e0abb82e8dcc73e8136d3c841df6953564c23f2a1"
+        },
+        {
+          "path": "src/application-filesystem.ts",
+          "sha256": "sha256:f5ffe5f8c5ad97c2e1ed9cbb8f0f4917004dd11606c41097a7bbf4bd4dc2009b"
+        },
+        {
+          "path": "src/application-storage.ts",
+          "sha256": "sha256:fedd14358bd5900c837967e1a5b66f2726bbac18f7773dc40cdb0143220112b4"
+        },
+        {
+          "path": "src/application.ts",
+          "sha256": "sha256:2674509bb45b061de65d4dc521de683603d6c3985789884a4c465be303be0fb2"
+        },
+        {
+          "path": "src/host-state.ts",
+          "sha256": "sha256:ae40c39eb62409b6a1dad07d78eef9612994b39ad73ac971bc47fd06a1a81409"
+        }
+      ]
+    },
+    {
+      "id": "CUS-04",
+      "evidence": "not-started",
+      "suite": "custody",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application.rs",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8"
+        },
+        {
+          "path": "crates/algal/src/lease.rs",
+          "sha256": "sha256:91c168f9b56260a54fd5151f3724ca2aa8d119a90626622c28e40e35b22c07ee"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "spec/v1/process.md",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe"
+        },
+        {
+          "path": "src/application-core.ts",
+          "sha256": "sha256:b9a2369ffdf011a706efa74e0abb82e8dcc73e8136d3c841df6953564c23f2a1"
+        },
+        {
+          "path": "src/application-filesystem.ts",
+          "sha256": "sha256:f5ffe5f8c5ad97c2e1ed9cbb8f0f4917004dd11606c41097a7bbf4bd4dc2009b"
+        },
+        {
+          "path": "src/application-storage.ts",
+          "sha256": "sha256:fedd14358bd5900c837967e1a5b66f2726bbac18f7773dc40cdb0143220112b4"
+        },
+        {
+          "path": "src/application.ts",
+          "sha256": "sha256:2674509bb45b061de65d4dc521de683603d6c3985789884a4c465be303be0fb2"
+        },
+        {
+          "path": "src/host-state.ts",
+          "sha256": "sha256:ae40c39eb62409b6a1dad07d78eef9612994b39ad73ac971bc47fd06a1a81409"
+        }
+      ]
+    },
+    {
+      "id": "PRO-01",
+      "evidence": "not-started",
+      "suite": "process-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/journal.rs",
+          "sha256": "sha256:828f37b9b41c8e1851e3ad8cbf13050f74fa0fd0ce64b4f7fc2e83b3576bbf18"
+        },
+        {
+          "path": "crates/algal/src/process.rs",
+          "sha256": "sha256:dedf6bcf7554644f6341b470f7499c218687def2099596b5fae5427206d03e98"
+        },
+        {
+          "path": "spec/v1/process-journal.md",
+          "sha256": "sha256:14336118047b4040c1e65b74e41569773d17afaea90edf3120b96145a6e704d8"
+        },
+        {
+          "path": "spec/v1/process.md",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe"
+        },
+        {
+          "path": "src/process-journal.ts",
+          "sha256": "sha256:018703fb633180189d5f56379b8891aff96b3d277b98bb8f96635ee9842792f0"
+        },
+        {
+          "path": "src/process.ts",
+          "sha256": "sha256:ca052f982e32dc68c876748c426c546a62b99a2b1a4a55f81be7f33278777498"
+        }
+      ]
+    },
+    {
+      "id": "PRO-02",
+      "evidence": "not-started",
+      "suite": "process-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/journal.rs",
+          "sha256": "sha256:828f37b9b41c8e1851e3ad8cbf13050f74fa0fd0ce64b4f7fc2e83b3576bbf18"
+        },
+        {
+          "path": "crates/algal/src/process.rs",
+          "sha256": "sha256:dedf6bcf7554644f6341b470f7499c218687def2099596b5fae5427206d03e98"
+        },
+        {
+          "path": "spec/v1/process-journal.md",
+          "sha256": "sha256:14336118047b4040c1e65b74e41569773d17afaea90edf3120b96145a6e704d8"
+        },
+        {
+          "path": "spec/v1/process.md",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe"
+        },
+        {
+          "path": "src/process-journal.ts",
+          "sha256": "sha256:018703fb633180189d5f56379b8891aff96b3d277b98bb8f96635ee9842792f0"
+        },
+        {
+          "path": "src/process.ts",
+          "sha256": "sha256:ca052f982e32dc68c876748c426c546a62b99a2b1a4a55f81be7f33278777498"
+        }
+      ]
+    },
+    {
+      "id": "PRO-03",
+      "evidence": "not-started",
+      "suite": "process-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/journal.rs",
+          "sha256": "sha256:828f37b9b41c8e1851e3ad8cbf13050f74fa0fd0ce64b4f7fc2e83b3576bbf18"
+        },
+        {
+          "path": "crates/algal/src/process.rs",
+          "sha256": "sha256:dedf6bcf7554644f6341b470f7499c218687def2099596b5fae5427206d03e98"
+        },
+        {
+          "path": "spec/v1/process-journal.md",
+          "sha256": "sha256:14336118047b4040c1e65b74e41569773d17afaea90edf3120b96145a6e704d8"
+        },
+        {
+          "path": "spec/v1/process.md",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe"
+        },
+        {
+          "path": "src/process-journal.ts",
+          "sha256": "sha256:018703fb633180189d5f56379b8891aff96b3d277b98bb8f96635ee9842792f0"
+        },
+        {
+          "path": "src/process.ts",
+          "sha256": "sha256:ca052f982e32dc68c876748c426c546a62b99a2b1a4a55f81be7f33278777498"
+        }
+      ]
+    },
+    {
+      "id": "PRO-04",
+      "evidence": "not-started",
+      "suite": "process-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/journal.rs",
+          "sha256": "sha256:828f37b9b41c8e1851e3ad8cbf13050f74fa0fd0ce64b4f7fc2e83b3576bbf18"
+        },
+        {
+          "path": "crates/algal/src/process.rs",
+          "sha256": "sha256:dedf6bcf7554644f6341b470f7499c218687def2099596b5fae5427206d03e98"
+        },
+        {
+          "path": "spec/v1/process-journal.md",
+          "sha256": "sha256:14336118047b4040c1e65b74e41569773d17afaea90edf3120b96145a6e704d8"
+        },
+        {
+          "path": "spec/v1/process.md",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe"
+        },
+        {
+          "path": "src/process-journal.ts",
+          "sha256": "sha256:018703fb633180189d5f56379b8891aff96b3d277b98bb8f96635ee9842792f0"
+        },
+        {
+          "path": "src/process.ts",
+          "sha256": "sha256:ca052f982e32dc68c876748c426c546a62b99a2b1a4a55f81be7f33278777498"
+        }
+      ]
+    },
+    {
+      "id": "PRO-05",
+      "evidence": "not-started",
+      "suite": "process-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/journal.rs",
+          "sha256": "sha256:828f37b9b41c8e1851e3ad8cbf13050f74fa0fd0ce64b4f7fc2e83b3576bbf18"
+        },
+        {
+          "path": "crates/algal/src/process.rs",
+          "sha256": "sha256:dedf6bcf7554644f6341b470f7499c218687def2099596b5fae5427206d03e98"
+        },
+        {
+          "path": "spec/v1/process-journal.md",
+          "sha256": "sha256:14336118047b4040c1e65b74e41569773d17afaea90edf3120b96145a6e704d8"
+        },
+        {
+          "path": "spec/v1/process.md",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe"
+        },
+        {
+          "path": "src/process-journal.ts",
+          "sha256": "sha256:018703fb633180189d5f56379b8891aff96b3d277b98bb8f96635ee9842792f0"
+        },
+        {
+          "path": "src/process.ts",
+          "sha256": "sha256:ca052f982e32dc68c876748c426c546a62b99a2b1a4a55f81be7f33278777498"
+        }
+      ]
+    },
+    {
+      "id": "PRO-06",
+      "evidence": "not-started",
+      "suite": "process-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/journal.rs",
+          "sha256": "sha256:828f37b9b41c8e1851e3ad8cbf13050f74fa0fd0ce64b4f7fc2e83b3576bbf18"
+        },
+        {
+          "path": "crates/algal/src/process.rs",
+          "sha256": "sha256:dedf6bcf7554644f6341b470f7499c218687def2099596b5fae5427206d03e98"
+        },
+        {
+          "path": "spec/v1/process-journal.md",
+          "sha256": "sha256:14336118047b4040c1e65b74e41569773d17afaea90edf3120b96145a6e704d8"
+        },
+        {
+          "path": "spec/v1/process.md",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe"
+        },
+        {
+          "path": "src/process-journal.ts",
+          "sha256": "sha256:018703fb633180189d5f56379b8891aff96b3d277b98bb8f96635ee9842792f0"
+        },
+        {
+          "path": "src/process.ts",
+          "sha256": "sha256:ca052f982e32dc68c876748c426c546a62b99a2b1a4a55f81be7f33278777498"
+        }
+      ]
+    },
+    {
+      "id": "PRO-07",
+      "evidence": "not-started",
+      "suite": "process-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/journal.rs",
+          "sha256": "sha256:828f37b9b41c8e1851e3ad8cbf13050f74fa0fd0ce64b4f7fc2e83b3576bbf18"
+        },
+        {
+          "path": "crates/algal/src/process.rs",
+          "sha256": "sha256:dedf6bcf7554644f6341b470f7499c218687def2099596b5fae5427206d03e98"
+        },
+        {
+          "path": "spec/v1/process-journal.md",
+          "sha256": "sha256:14336118047b4040c1e65b74e41569773d17afaea90edf3120b96145a6e704d8"
+        },
+        {
+          "path": "spec/v1/process.md",
+          "sha256": "sha256:398aa50cebcc27924477619b105aaa7125d4405fd0c04bfae5374d9e7102ebbe"
+        },
+        {
+          "path": "src/process-journal.ts",
+          "sha256": "sha256:018703fb633180189d5f56379b8891aff96b3d277b98bb8f96635ee9842792f0"
+        },
+        {
+          "path": "src/process.ts",
+          "sha256": "sha256:ca052f982e32dc68c876748c426c546a62b99a2b1a4a55f81be7f33278777498"
+        }
+      ]
+    },
+    {
+      "id": "CAP-01",
+      "evidence": "not-started",
+      "suite": "authority-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/capabilities.rs",
+          "sha256": "sha256:21c359608406195fc61cbbb2ce0e5e59c8bbfb17f5e44ad20f42866a644850dc"
+        },
+        {
+          "path": "crates/algal/src/graph.rs",
+          "sha256": "sha256:135a14d6dd282129dd001d9b2d6e2138872a35f941ea13437c2807d281ccbaab"
+        },
+        {
+          "path": "spec/v1/mailbox.md",
+          "sha256": "sha256:7e44be76795ec418af99fe40a978bfbeb1426615b16ac8394a7d440d01bb9356"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/capabilities.ts",
+          "sha256": "sha256:d8741d6fd3869b6173132ee1df5e954d143c24befd87b856d42ca57ff034f424"
+        },
+        {
+          "path": "src/graph.ts",
+          "sha256": "sha256:4a08e73d2517870dd994aec0021c09e91a8a183ff2cde94595c40f602dfb06b4"
+        },
+        {
+          "path": "src/tools.ts",
+          "sha256": "sha256:2d076a9d4eb77ba070f784d476251fa2794146fbf09767ed24beaf1a680dc464"
+        }
+      ]
+    },
+    {
+      "id": "CAP-02",
+      "evidence": "not-started",
+      "suite": "authority-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/capabilities.rs",
+          "sha256": "sha256:21c359608406195fc61cbbb2ce0e5e59c8bbfb17f5e44ad20f42866a644850dc"
+        },
+        {
+          "path": "crates/algal/src/graph.rs",
+          "sha256": "sha256:135a14d6dd282129dd001d9b2d6e2138872a35f941ea13437c2807d281ccbaab"
+        },
+        {
+          "path": "spec/v1/mailbox.md",
+          "sha256": "sha256:7e44be76795ec418af99fe40a978bfbeb1426615b16ac8394a7d440d01bb9356"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/capabilities.ts",
+          "sha256": "sha256:d8741d6fd3869b6173132ee1df5e954d143c24befd87b856d42ca57ff034f424"
+        },
+        {
+          "path": "src/graph.ts",
+          "sha256": "sha256:4a08e73d2517870dd994aec0021c09e91a8a183ff2cde94595c40f602dfb06b4"
+        },
+        {
+          "path": "src/tools.ts",
+          "sha256": "sha256:2d076a9d4eb77ba070f784d476251fa2794146fbf09767ed24beaf1a680dc464"
+        }
+      ]
+    },
+    {
+      "id": "CAP-03",
+      "evidence": "not-started",
+      "suite": "authority-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/capabilities.rs",
+          "sha256": "sha256:21c359608406195fc61cbbb2ce0e5e59c8bbfb17f5e44ad20f42866a644850dc"
+        },
+        {
+          "path": "crates/algal/src/graph.rs",
+          "sha256": "sha256:135a14d6dd282129dd001d9b2d6e2138872a35f941ea13437c2807d281ccbaab"
+        },
+        {
+          "path": "spec/v1/mailbox.md",
+          "sha256": "sha256:7e44be76795ec418af99fe40a978bfbeb1426615b16ac8394a7d440d01bb9356"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/capabilities.ts",
+          "sha256": "sha256:d8741d6fd3869b6173132ee1df5e954d143c24befd87b856d42ca57ff034f424"
+        },
+        {
+          "path": "src/graph.ts",
+          "sha256": "sha256:4a08e73d2517870dd994aec0021c09e91a8a183ff2cde94595c40f602dfb06b4"
+        },
+        {
+          "path": "src/tools.ts",
+          "sha256": "sha256:2d076a9d4eb77ba070f784d476251fa2794146fbf09767ed24beaf1a680dc464"
+        }
+      ]
+    },
+    {
+      "id": "CAP-04",
+      "evidence": "not-started",
+      "suite": "authority-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/capabilities.rs",
+          "sha256": "sha256:21c359608406195fc61cbbb2ce0e5e59c8bbfb17f5e44ad20f42866a644850dc"
+        },
+        {
+          "path": "crates/algal/src/graph.rs",
+          "sha256": "sha256:135a14d6dd282129dd001d9b2d6e2138872a35f941ea13437c2807d281ccbaab"
+        },
+        {
+          "path": "spec/v1/mailbox.md",
+          "sha256": "sha256:7e44be76795ec418af99fe40a978bfbeb1426615b16ac8394a7d440d01bb9356"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/capabilities.ts",
+          "sha256": "sha256:d8741d6fd3869b6173132ee1df5e954d143c24befd87b856d42ca57ff034f424"
+        },
+        {
+          "path": "src/graph.ts",
+          "sha256": "sha256:4a08e73d2517870dd994aec0021c09e91a8a183ff2cde94595c40f602dfb06b4"
+        },
+        {
+          "path": "src/tools.ts",
+          "sha256": "sha256:2d076a9d4eb77ba070f784d476251fa2794146fbf09767ed24beaf1a680dc464"
+        }
+      ]
+    },
+    {
+      "id": "MBX-01",
+      "evidence": "not-started",
+      "suite": "mailbox-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/mailbox.rs",
+          "sha256": "sha256:d700be20f7096660fb15e88a73988bf6bbe49f4aaff80d4eddf708e85ca2adcf"
+        },
+        {
+          "path": "spec/v1/mailbox.md",
+          "sha256": "sha256:7e44be76795ec418af99fe40a978bfbeb1426615b16ac8394a7d440d01bb9356"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/mailbox.ts",
+          "sha256": "sha256:5cb49c0ec5b2fb56cce1223e5ffe0bf7e375666cede84676f6dde2a592b47ceb"
+        }
+      ]
+    },
+    {
+      "id": "MBX-02",
+      "evidence": "observed",
+      "suite": "mailbox-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/mailbox.rs",
+          "sha256": "sha256:d700be20f7096660fb15e88a73988bf6bbe49f4aaff80d4eddf708e85ca2adcf"
+        },
+        {
+          "path": "spec/v1/mailbox.md",
+          "sha256": "sha256:7e44be76795ec418af99fe40a978bfbeb1426615b16ac8394a7d440d01bb9356"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/mailbox.ts",
+          "sha256": "sha256:5cb49c0ec5b2fb56cce1223e5ffe0bf7e375666cede84676f6dde2a592b47ceb"
+        }
+      ]
+    },
+    {
+      "id": "MBX-03",
+      "evidence": "not-started",
+      "suite": "mailbox-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/mailbox.rs",
+          "sha256": "sha256:d700be20f7096660fb15e88a73988bf6bbe49f4aaff80d4eddf708e85ca2adcf"
+        },
+        {
+          "path": "spec/v1/mailbox.md",
+          "sha256": "sha256:7e44be76795ec418af99fe40a978bfbeb1426615b16ac8394a7d440d01bb9356"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/mailbox.ts",
+          "sha256": "sha256:5cb49c0ec5b2fb56cce1223e5ffe0bf7e375666cede84676f6dde2a592b47ceb"
+        }
+      ]
+    },
+    {
+      "id": "MBX-04",
+      "evidence": "not-started",
+      "suite": "mailbox-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/mailbox.rs",
+          "sha256": "sha256:d700be20f7096660fb15e88a73988bf6bbe49f4aaff80d4eddf708e85ca2adcf"
+        },
+        {
+          "path": "spec/v1/mailbox.md",
+          "sha256": "sha256:7e44be76795ec418af99fe40a978bfbeb1426615b16ac8394a7d440d01bb9356"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/mailbox.ts",
+          "sha256": "sha256:5cb49c0ec5b2fb56cce1223e5ffe0bf7e375666cede84676f6dde2a592b47ceb"
+        }
+      ]
+    },
+    {
+      "id": "MBX-05",
+      "evidence": "not-started",
+      "suite": "mailbox-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/mailbox.rs",
+          "sha256": "sha256:d700be20f7096660fb15e88a73988bf6bbe49f4aaff80d4eddf708e85ca2adcf"
+        },
+        {
+          "path": "spec/v1/mailbox.md",
+          "sha256": "sha256:7e44be76795ec418af99fe40a978bfbeb1426615b16ac8394a7d440d01bb9356"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/mailbox.ts",
+          "sha256": "sha256:5cb49c0ec5b2fb56cce1223e5ffe0bf7e375666cede84676f6dde2a592b47ceb"
+        }
+      ]
+    },
+    {
+      "id": "APP-01",
+      "evidence": "not-started",
+      "suite": "application-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application.rs",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8"
+        },
+        {
+          "path": "crates/algal/src/application_quota.rs",
+          "sha256": "sha256:620e7d3a4871527b116ef982dbbc1cefd10c09424c219c459f00fd447297e8e7"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "src/application-contract.ts",
+          "sha256": "sha256:5bd52ecca0bf70e9139cd721e9e5441111c8edfd362cb8b575563abbab78840a"
+        },
+        {
+          "path": "src/application-core.ts",
+          "sha256": "sha256:b9a2369ffdf011a706efa74e0abb82e8dcc73e8136d3c841df6953564c23f2a1"
+        },
+        {
+          "path": "src/application-filesystem.ts",
+          "sha256": "sha256:f5ffe5f8c5ad97c2e1ed9cbb8f0f4917004dd11606c41097a7bbf4bd4dc2009b"
+        },
+        {
+          "path": "src/application-quota.ts",
+          "sha256": "sha256:c99a1521c36913fade9484fd308b04380278ba5095201563ca9abdf1e502f911"
+        },
+        {
+          "path": "src/application-storage.ts",
+          "sha256": "sha256:fedd14358bd5900c837967e1a5b66f2726bbac18f7773dc40cdb0143220112b4"
+        },
+        {
+          "path": "src/application.ts",
+          "sha256": "sha256:2674509bb45b061de65d4dc521de683603d6c3985789884a4c465be303be0fb2"
+        }
+      ]
+    },
+    {
+      "id": "APP-02",
+      "evidence": "not-started",
+      "suite": "application-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application.rs",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8"
+        },
+        {
+          "path": "crates/algal/src/application_quota.rs",
+          "sha256": "sha256:620e7d3a4871527b116ef982dbbc1cefd10c09424c219c459f00fd447297e8e7"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "src/application-contract.ts",
+          "sha256": "sha256:5bd52ecca0bf70e9139cd721e9e5441111c8edfd362cb8b575563abbab78840a"
+        },
+        {
+          "path": "src/application-core.ts",
+          "sha256": "sha256:b9a2369ffdf011a706efa74e0abb82e8dcc73e8136d3c841df6953564c23f2a1"
+        },
+        {
+          "path": "src/application-filesystem.ts",
+          "sha256": "sha256:f5ffe5f8c5ad97c2e1ed9cbb8f0f4917004dd11606c41097a7bbf4bd4dc2009b"
+        },
+        {
+          "path": "src/application-quota.ts",
+          "sha256": "sha256:c99a1521c36913fade9484fd308b04380278ba5095201563ca9abdf1e502f911"
+        },
+        {
+          "path": "src/application-storage.ts",
+          "sha256": "sha256:fedd14358bd5900c837967e1a5b66f2726bbac18f7773dc40cdb0143220112b4"
+        },
+        {
+          "path": "src/application.ts",
+          "sha256": "sha256:2674509bb45b061de65d4dc521de683603d6c3985789884a4c465be303be0fb2"
+        }
+      ]
+    },
+    {
+      "id": "APP-03",
+      "evidence": "not-started",
+      "suite": "application-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application.rs",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8"
+        },
+        {
+          "path": "crates/algal/src/application_quota.rs",
+          "sha256": "sha256:620e7d3a4871527b116ef982dbbc1cefd10c09424c219c459f00fd447297e8e7"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "src/application-contract.ts",
+          "sha256": "sha256:5bd52ecca0bf70e9139cd721e9e5441111c8edfd362cb8b575563abbab78840a"
+        },
+        {
+          "path": "src/application-core.ts",
+          "sha256": "sha256:b9a2369ffdf011a706efa74e0abb82e8dcc73e8136d3c841df6953564c23f2a1"
+        },
+        {
+          "path": "src/application-filesystem.ts",
+          "sha256": "sha256:f5ffe5f8c5ad97c2e1ed9cbb8f0f4917004dd11606c41097a7bbf4bd4dc2009b"
+        },
+        {
+          "path": "src/application-quota.ts",
+          "sha256": "sha256:c99a1521c36913fade9484fd308b04380278ba5095201563ca9abdf1e502f911"
+        },
+        {
+          "path": "src/application-storage.ts",
+          "sha256": "sha256:fedd14358bd5900c837967e1a5b66f2726bbac18f7773dc40cdb0143220112b4"
+        },
+        {
+          "path": "src/application.ts",
+          "sha256": "sha256:2674509bb45b061de65d4dc521de683603d6c3985789884a4c465be303be0fb2"
+        }
+      ]
+    },
+    {
+      "id": "APP-04",
+      "evidence": "not-started",
+      "suite": "application-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application.rs",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8"
+        },
+        {
+          "path": "crates/algal/src/application_quota.rs",
+          "sha256": "sha256:620e7d3a4871527b116ef982dbbc1cefd10c09424c219c459f00fd447297e8e7"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "src/application-contract.ts",
+          "sha256": "sha256:5bd52ecca0bf70e9139cd721e9e5441111c8edfd362cb8b575563abbab78840a"
+        },
+        {
+          "path": "src/application-core.ts",
+          "sha256": "sha256:b9a2369ffdf011a706efa74e0abb82e8dcc73e8136d3c841df6953564c23f2a1"
+        },
+        {
+          "path": "src/application-filesystem.ts",
+          "sha256": "sha256:f5ffe5f8c5ad97c2e1ed9cbb8f0f4917004dd11606c41097a7bbf4bd4dc2009b"
+        },
+        {
+          "path": "src/application-quota.ts",
+          "sha256": "sha256:c99a1521c36913fade9484fd308b04380278ba5095201563ca9abdf1e502f911"
+        },
+        {
+          "path": "src/application-storage.ts",
+          "sha256": "sha256:fedd14358bd5900c837967e1a5b66f2726bbac18f7773dc40cdb0143220112b4"
+        },
+        {
+          "path": "src/application.ts",
+          "sha256": "sha256:2674509bb45b061de65d4dc521de683603d6c3985789884a4c465be303be0fb2"
+        }
+      ]
+    },
+    {
+      "id": "APP-05",
+      "evidence": "not-started",
+      "suite": "application-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application.rs",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8"
+        },
+        {
+          "path": "crates/algal/src/application_quota.rs",
+          "sha256": "sha256:620e7d3a4871527b116ef982dbbc1cefd10c09424c219c459f00fd447297e8e7"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "src/application-contract.ts",
+          "sha256": "sha256:5bd52ecca0bf70e9139cd721e9e5441111c8edfd362cb8b575563abbab78840a"
+        },
+        {
+          "path": "src/application-core.ts",
+          "sha256": "sha256:b9a2369ffdf011a706efa74e0abb82e8dcc73e8136d3c841df6953564c23f2a1"
+        },
+        {
+          "path": "src/application-filesystem.ts",
+          "sha256": "sha256:f5ffe5f8c5ad97c2e1ed9cbb8f0f4917004dd11606c41097a7bbf4bd4dc2009b"
+        },
+        {
+          "path": "src/application-quota.ts",
+          "sha256": "sha256:c99a1521c36913fade9484fd308b04380278ba5095201563ca9abdf1e502f911"
+        },
+        {
+          "path": "src/application-storage.ts",
+          "sha256": "sha256:fedd14358bd5900c837967e1a5b66f2726bbac18f7773dc40cdb0143220112b4"
+        },
+        {
+          "path": "src/application.ts",
+          "sha256": "sha256:2674509bb45b061de65d4dc521de683603d6c3985789884a4c465be303be0fb2"
+        }
+      ]
+    },
+    {
+      "id": "APP-06",
+      "evidence": "not-started",
+      "suite": "application-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application.rs",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8"
+        },
+        {
+          "path": "crates/algal/src/application_quota.rs",
+          "sha256": "sha256:620e7d3a4871527b116ef982dbbc1cefd10c09424c219c459f00fd447297e8e7"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "src/application-contract.ts",
+          "sha256": "sha256:5bd52ecca0bf70e9139cd721e9e5441111c8edfd362cb8b575563abbab78840a"
+        },
+        {
+          "path": "src/application-core.ts",
+          "sha256": "sha256:b9a2369ffdf011a706efa74e0abb82e8dcc73e8136d3c841df6953564c23f2a1"
+        },
+        {
+          "path": "src/application-filesystem.ts",
+          "sha256": "sha256:f5ffe5f8c5ad97c2e1ed9cbb8f0f4917004dd11606c41097a7bbf4bd4dc2009b"
+        },
+        {
+          "path": "src/application-quota.ts",
+          "sha256": "sha256:c99a1521c36913fade9484fd308b04380278ba5095201563ca9abdf1e502f911"
+        },
+        {
+          "path": "src/application-storage.ts",
+          "sha256": "sha256:fedd14358bd5900c837967e1a5b66f2726bbac18f7773dc40cdb0143220112b4"
+        },
+        {
+          "path": "src/application.ts",
+          "sha256": "sha256:2674509bb45b061de65d4dc521de683603d6c3985789884a4c465be303be0fb2"
+        }
+      ]
+    },
+    {
+      "id": "APP-07",
+      "evidence": "not-started",
+      "suite": "application-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application.rs",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8"
+        },
+        {
+          "path": "crates/algal/src/application_quota.rs",
+          "sha256": "sha256:620e7d3a4871527b116ef982dbbc1cefd10c09424c219c459f00fd447297e8e7"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "src/application-contract.ts",
+          "sha256": "sha256:5bd52ecca0bf70e9139cd721e9e5441111c8edfd362cb8b575563abbab78840a"
+        },
+        {
+          "path": "src/application-core.ts",
+          "sha256": "sha256:b9a2369ffdf011a706efa74e0abb82e8dcc73e8136d3c841df6953564c23f2a1"
+        },
+        {
+          "path": "src/application-filesystem.ts",
+          "sha256": "sha256:f5ffe5f8c5ad97c2e1ed9cbb8f0f4917004dd11606c41097a7bbf4bd4dc2009b"
+        },
+        {
+          "path": "src/application-quota.ts",
+          "sha256": "sha256:c99a1521c36913fade9484fd308b04380278ba5095201563ca9abdf1e502f911"
+        },
+        {
+          "path": "src/application-storage.ts",
+          "sha256": "sha256:fedd14358bd5900c837967e1a5b66f2726bbac18f7773dc40cdb0143220112b4"
+        },
+        {
+          "path": "src/application.ts",
+          "sha256": "sha256:2674509bb45b061de65d4dc521de683603d6c3985789884a4c465be303be0fb2"
+        }
+      ]
+    },
+    {
+      "id": "MEM-01",
+      "evidence": "not-started",
+      "suite": "memory-oracle",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application_memory.rs",
+          "sha256": "sha256:40ee1458ac2e5488c9a99fcf3f600826cd956b53c2dad96900c6b3f2a7d6642a"
+        },
+        {
+          "path": "crates/algal/src/memory.rs",
+          "sha256": "sha256:fd4796b789e2c2faedf9a075da81326e583439e15ef0a203bbb481615eb0806d"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "src/application-memory.ts",
+          "sha256": "sha256:f22b748220f89e79c65a05d3113f6796b4a34609e96fb4862ee1fca34ab95961"
+        },
+        {
+          "path": "src/application-observation.ts",
+          "sha256": "sha256:25d99a5dc876d092b22aa6171c98116aed25d01da50fe4388a4a0ffeddfef430"
+        },
+        {
+          "path": "src/application-rollover.ts",
+          "sha256": "sha256:59d0b76d45d64218f21b15250837da440bf9bba483b7194ef4eaeb0747457bc2"
+        }
+      ]
+    },
+    {
+      "id": "MEM-02",
+      "evidence": "not-started",
+      "suite": "memory-oracle",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application_memory.rs",
+          "sha256": "sha256:40ee1458ac2e5488c9a99fcf3f600826cd956b53c2dad96900c6b3f2a7d6642a"
+        },
+        {
+          "path": "crates/algal/src/memory.rs",
+          "sha256": "sha256:fd4796b789e2c2faedf9a075da81326e583439e15ef0a203bbb481615eb0806d"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "src/application-memory.ts",
+          "sha256": "sha256:f22b748220f89e79c65a05d3113f6796b4a34609e96fb4862ee1fca34ab95961"
+        },
+        {
+          "path": "src/application-observation.ts",
+          "sha256": "sha256:25d99a5dc876d092b22aa6171c98116aed25d01da50fe4388a4a0ffeddfef430"
+        },
+        {
+          "path": "src/application-rollover.ts",
+          "sha256": "sha256:59d0b76d45d64218f21b15250837da440bf9bba483b7194ef4eaeb0747457bc2"
+        }
+      ]
+    },
+    {
+      "id": "MEM-03",
+      "evidence": "not-started",
+      "suite": "memory-oracle",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application_memory.rs",
+          "sha256": "sha256:40ee1458ac2e5488c9a99fcf3f600826cd956b53c2dad96900c6b3f2a7d6642a"
+        },
+        {
+          "path": "crates/algal/src/memory.rs",
+          "sha256": "sha256:fd4796b789e2c2faedf9a075da81326e583439e15ef0a203bbb481615eb0806d"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "src/application-memory.ts",
+          "sha256": "sha256:f22b748220f89e79c65a05d3113f6796b4a34609e96fb4862ee1fca34ab95961"
+        },
+        {
+          "path": "src/application-observation.ts",
+          "sha256": "sha256:25d99a5dc876d092b22aa6171c98116aed25d01da50fe4388a4a0ffeddfef430"
+        },
+        {
+          "path": "src/application-rollover.ts",
+          "sha256": "sha256:59d0b76d45d64218f21b15250837da440bf9bba483b7194ef4eaeb0747457bc2"
+        }
+      ]
+    },
+    {
+      "id": "MEM-04",
+      "evidence": "not-started",
+      "suite": "memory-oracle",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application_memory.rs",
+          "sha256": "sha256:40ee1458ac2e5488c9a99fcf3f600826cd956b53c2dad96900c6b3f2a7d6642a"
+        },
+        {
+          "path": "crates/algal/src/memory.rs",
+          "sha256": "sha256:fd4796b789e2c2faedf9a075da81326e583439e15ef0a203bbb481615eb0806d"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "src/application-memory.ts",
+          "sha256": "sha256:f22b748220f89e79c65a05d3113f6796b4a34609e96fb4862ee1fca34ab95961"
+        },
+        {
+          "path": "src/application-observation.ts",
+          "sha256": "sha256:25d99a5dc876d092b22aa6171c98116aed25d01da50fe4388a4a0ffeddfef430"
+        },
+        {
+          "path": "src/application-rollover.ts",
+          "sha256": "sha256:59d0b76d45d64218f21b15250837da440bf9bba483b7194ef4eaeb0747457bc2"
+        }
+      ]
+    },
+    {
+      "id": "MEM-05",
+      "evidence": "not-started",
+      "suite": "memory-oracle",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application_memory.rs",
+          "sha256": "sha256:40ee1458ac2e5488c9a99fcf3f600826cd956b53c2dad96900c6b3f2a7d6642a"
+        },
+        {
+          "path": "crates/algal/src/memory.rs",
+          "sha256": "sha256:fd4796b789e2c2faedf9a075da81326e583439e15ef0a203bbb481615eb0806d"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "src/application-memory.ts",
+          "sha256": "sha256:f22b748220f89e79c65a05d3113f6796b4a34609e96fb4862ee1fca34ab95961"
+        },
+        {
+          "path": "src/application-observation.ts",
+          "sha256": "sha256:25d99a5dc876d092b22aa6171c98116aed25d01da50fe4388a4a0ffeddfef430"
+        },
+        {
+          "path": "src/application-rollover.ts",
+          "sha256": "sha256:59d0b76d45d64218f21b15250837da440bf9bba483b7194ef4eaeb0747457bc2"
+        }
+      ]
+    },
+    {
+      "id": "MEM-06",
+      "evidence": "not-started",
+      "suite": "memory-oracle",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application_memory.rs",
+          "sha256": "sha256:40ee1458ac2e5488c9a99fcf3f600826cd956b53c2dad96900c6b3f2a7d6642a"
+        },
+        {
+          "path": "crates/algal/src/memory.rs",
+          "sha256": "sha256:fd4796b789e2c2faedf9a075da81326e583439e15ef0a203bbb481615eb0806d"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "src/application-memory.ts",
+          "sha256": "sha256:f22b748220f89e79c65a05d3113f6796b4a34609e96fb4862ee1fca34ab95961"
+        },
+        {
+          "path": "src/application-observation.ts",
+          "sha256": "sha256:25d99a5dc876d092b22aa6171c98116aed25d01da50fe4388a4a0ffeddfef430"
+        },
+        {
+          "path": "src/application-rollover.ts",
+          "sha256": "sha256:59d0b76d45d64218f21b15250837da440bf9bba483b7194ef4eaeb0747457bc2"
+        }
+      ]
+    },
+    {
+      "id": "MEM-07",
+      "evidence": "not-started",
+      "suite": "memory-oracle",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application_memory.rs",
+          "sha256": "sha256:40ee1458ac2e5488c9a99fcf3f600826cd956b53c2dad96900c6b3f2a7d6642a"
+        },
+        {
+          "path": "crates/algal/src/memory.rs",
+          "sha256": "sha256:fd4796b789e2c2faedf9a075da81326e583439e15ef0a203bbb481615eb0806d"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "src/application-memory.ts",
+          "sha256": "sha256:f22b748220f89e79c65a05d3113f6796b4a34609e96fb4862ee1fca34ab95961"
+        },
+        {
+          "path": "src/application-observation.ts",
+          "sha256": "sha256:25d99a5dc876d092b22aa6171c98116aed25d01da50fe4388a4a0ffeddfef430"
+        },
+        {
+          "path": "src/application-rollover.ts",
+          "sha256": "sha256:59d0b76d45d64218f21b15250837da440bf9bba483b7194ef4eaeb0747457bc2"
+        }
+      ]
+    },
+    {
+      "id": "CTX-01",
+      "evidence": "not-started",
+      "suite": "context-laws",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/context.rs",
+          "sha256": "sha256:13d3c2342891c8d71ce1a631ded5302b0fde0f9ba5ace605ffb38b42daa39aab"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/tool-context.ts",
+          "sha256": "sha256:a15dadf8648874dc0fb55b9f2435aac8126f34d97a8eef3ff97d85600d40f677"
+        }
+      ]
+    },
+    {
+      "id": "CTX-02",
+      "evidence": "not-started",
+      "suite": "context-laws",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/context.rs",
+          "sha256": "sha256:13d3c2342891c8d71ce1a631ded5302b0fde0f9ba5ace605ffb38b42daa39aab"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/tool-context.ts",
+          "sha256": "sha256:a15dadf8648874dc0fb55b9f2435aac8126f34d97a8eef3ff97d85600d40f677"
+        }
+      ]
+    },
+    {
+      "id": "CTX-03",
+      "evidence": "not-started",
+      "suite": "context-laws",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/context.rs",
+          "sha256": "sha256:13d3c2342891c8d71ce1a631ded5302b0fde0f9ba5ace605ffb38b42daa39aab"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/tool-context.ts",
+          "sha256": "sha256:a15dadf8648874dc0fb55b9f2435aac8126f34d97a8eef3ff97d85600d40f677"
+        }
+      ]
+    },
+    {
+      "id": "RET-01",
+      "evidence": "not-started",
+      "suite": "host-conformance",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/embeddings.rs",
+          "sha256": "sha256:e525d8247730f9fe51dec83312af203cca73a6db54b79b0e9cfc469baf3100b7"
+        },
+        {
+          "path": "crates/algal/src/semantic.rs",
+          "sha256": "sha256:b66eed4c2fdf88851dfa36cfab54d34c29fbac25b852be0d59bce07ef11e044b"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/embeddings.ts",
+          "sha256": "sha256:cb03c2c208bed23f2e126c515e5c8a9dc858763a84ff1c3a2da8d15cff9b162a"
+        },
+        {
+          "path": "src/semantic-contract.ts",
+          "sha256": "sha256:e1a9486d999331a1670ac8b60a9bf85b2fd56937fc857d6e5b87f3638784f14b"
+        },
+        {
+          "path": "src/semantic.ts",
+          "sha256": "sha256:0a01a122831d41a61b4a5ed5552cb7384bcaacc76df713246da1d261b6aa5cd9"
+        }
+      ]
+    },
+    {
+      "id": "RET-02",
+      "evidence": "not-started",
+      "suite": "host-conformance",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/embeddings.rs",
+          "sha256": "sha256:e525d8247730f9fe51dec83312af203cca73a6db54b79b0e9cfc469baf3100b7"
+        },
+        {
+          "path": "crates/algal/src/semantic.rs",
+          "sha256": "sha256:b66eed4c2fdf88851dfa36cfab54d34c29fbac25b852be0d59bce07ef11e044b"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/embeddings.ts",
+          "sha256": "sha256:cb03c2c208bed23f2e126c515e5c8a9dc858763a84ff1c3a2da8d15cff9b162a"
+        },
+        {
+          "path": "src/semantic-contract.ts",
+          "sha256": "sha256:e1a9486d999331a1670ac8b60a9bf85b2fd56937fc857d6e5b87f3638784f14b"
+        },
+        {
+          "path": "src/semantic.ts",
+          "sha256": "sha256:0a01a122831d41a61b4a5ed5552cb7384bcaacc76df713246da1d261b6aa5cd9"
+        }
+      ]
+    },
+    {
+      "id": "RET-03",
+      "evidence": "not-started",
+      "suite": "host-conformance",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/embeddings.rs",
+          "sha256": "sha256:e525d8247730f9fe51dec83312af203cca73a6db54b79b0e9cfc469baf3100b7"
+        },
+        {
+          "path": "crates/algal/src/semantic.rs",
+          "sha256": "sha256:b66eed4c2fdf88851dfa36cfab54d34c29fbac25b852be0d59bce07ef11e044b"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/embeddings.ts",
+          "sha256": "sha256:cb03c2c208bed23f2e126c515e5c8a9dc858763a84ff1c3a2da8d15cff9b162a"
+        },
+        {
+          "path": "src/semantic-contract.ts",
+          "sha256": "sha256:e1a9486d999331a1670ac8b60a9bf85b2fd56937fc857d6e5b87f3638784f14b"
+        },
+        {
+          "path": "src/semantic.ts",
+          "sha256": "sha256:0a01a122831d41a61b4a5ed5552cb7384bcaacc76df713246da1d261b6aa5cd9"
+        }
+      ]
+    },
+    {
+      "id": "EVO-01",
+      "evidence": "not-started",
+      "suite": "policy-mutation",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application_adaptation.rs",
+          "sha256": "sha256:138ef3c78dd40a6e841e12938ad79bc1faa80833195a535b31b3c6c36bfb48eb"
+        },
+        {
+          "path": "crates/algal/src/application_selection.rs",
+          "sha256": "sha256:95e462324f28859f63a5693edcdb0d9fbd9e24be440753093a3411af8d331ce5"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "spec/v1/bench.md",
+          "sha256": "sha256:030ce075175235251f3bee39dfd097e6f10b8b53b9ab31be512dd0276351c8cd"
+        },
+        {
+          "path": "spec/v1/foundry.md",
+          "sha256": "sha256:36833a6a9f85cd071e8bbc04551f6665c324b1c1bef9bb191d5a80b86b2d4939"
+        },
+        {
+          "path": "src/application-adaptation.ts",
+          "sha256": "sha256:e2a1626bed43ed6553c6014d306f519b199b5e5dd311b637fe5c4dc1a866741e"
+        },
+        {
+          "path": "src/application-comparison.ts",
+          "sha256": "sha256:42ed80b0afc97770a873d80881d09ce5fcb155400773c377cdd1c530aedb337f"
+        },
+        {
+          "path": "src/application-proposal.ts",
+          "sha256": "sha256:3cc34b44b422090e3725296ce8e1d48387ee093ddd43f987db8d70c9b4eb50d2"
+        },
+        {
+          "path": "src/application-selection.ts",
+          "sha256": "sha256:f2adde46aeee984e97e5a4aede3f9f8811e39c8573d816a1e6cf1ca8a08449b7"
+        }
+      ]
+    },
+    {
+      "id": "EVO-02",
+      "evidence": "observed",
+      "suite": "policy-mutation",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application_adaptation.rs",
+          "sha256": "sha256:138ef3c78dd40a6e841e12938ad79bc1faa80833195a535b31b3c6c36bfb48eb"
+        },
+        {
+          "path": "crates/algal/src/application_selection.rs",
+          "sha256": "sha256:95e462324f28859f63a5693edcdb0d9fbd9e24be440753093a3411af8d331ce5"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "spec/v1/bench.md",
+          "sha256": "sha256:030ce075175235251f3bee39dfd097e6f10b8b53b9ab31be512dd0276351c8cd"
+        },
+        {
+          "path": "spec/v1/foundry.md",
+          "sha256": "sha256:36833a6a9f85cd071e8bbc04551f6665c324b1c1bef9bb191d5a80b86b2d4939"
+        },
+        {
+          "path": "src/application-adaptation.ts",
+          "sha256": "sha256:e2a1626bed43ed6553c6014d306f519b199b5e5dd311b637fe5c4dc1a866741e"
+        },
+        {
+          "path": "src/application-comparison.ts",
+          "sha256": "sha256:42ed80b0afc97770a873d80881d09ce5fcb155400773c377cdd1c530aedb337f"
+        },
+        {
+          "path": "src/application-proposal.ts",
+          "sha256": "sha256:3cc34b44b422090e3725296ce8e1d48387ee093ddd43f987db8d70c9b4eb50d2"
+        },
+        {
+          "path": "src/application-selection.ts",
+          "sha256": "sha256:f2adde46aeee984e97e5a4aede3f9f8811e39c8573d816a1e6cf1ca8a08449b7"
+        }
+      ]
+    },
+    {
+      "id": "EVO-03",
+      "evidence": "not-started",
+      "suite": "policy-mutation",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application_adaptation.rs",
+          "sha256": "sha256:138ef3c78dd40a6e841e12938ad79bc1faa80833195a535b31b3c6c36bfb48eb"
+        },
+        {
+          "path": "crates/algal/src/application_selection.rs",
+          "sha256": "sha256:95e462324f28859f63a5693edcdb0d9fbd9e24be440753093a3411af8d331ce5"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "spec/v1/bench.md",
+          "sha256": "sha256:030ce075175235251f3bee39dfd097e6f10b8b53b9ab31be512dd0276351c8cd"
+        },
+        {
+          "path": "spec/v1/foundry.md",
+          "sha256": "sha256:36833a6a9f85cd071e8bbc04551f6665c324b1c1bef9bb191d5a80b86b2d4939"
+        },
+        {
+          "path": "src/application-adaptation.ts",
+          "sha256": "sha256:e2a1626bed43ed6553c6014d306f519b199b5e5dd311b637fe5c4dc1a866741e"
+        },
+        {
+          "path": "src/application-comparison.ts",
+          "sha256": "sha256:42ed80b0afc97770a873d80881d09ce5fcb155400773c377cdd1c530aedb337f"
+        },
+        {
+          "path": "src/application-proposal.ts",
+          "sha256": "sha256:3cc34b44b422090e3725296ce8e1d48387ee093ddd43f987db8d70c9b4eb50d2"
+        },
+        {
+          "path": "src/application-selection.ts",
+          "sha256": "sha256:f2adde46aeee984e97e5a4aede3f9f8811e39c8573d816a1e6cf1ca8a08449b7"
+        }
+      ]
+    },
+    {
+      "id": "EVO-04",
+      "evidence": "not-started",
+      "suite": "policy-mutation",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application_adaptation.rs",
+          "sha256": "sha256:138ef3c78dd40a6e841e12938ad79bc1faa80833195a535b31b3c6c36bfb48eb"
+        },
+        {
+          "path": "crates/algal/src/application_selection.rs",
+          "sha256": "sha256:95e462324f28859f63a5693edcdb0d9fbd9e24be440753093a3411af8d331ce5"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "spec/v1/bench.md",
+          "sha256": "sha256:030ce075175235251f3bee39dfd097e6f10b8b53b9ab31be512dd0276351c8cd"
+        },
+        {
+          "path": "spec/v1/foundry.md",
+          "sha256": "sha256:36833a6a9f85cd071e8bbc04551f6665c324b1c1bef9bb191d5a80b86b2d4939"
+        },
+        {
+          "path": "src/application-adaptation.ts",
+          "sha256": "sha256:e2a1626bed43ed6553c6014d306f519b199b5e5dd311b637fe5c4dc1a866741e"
+        },
+        {
+          "path": "src/application-comparison.ts",
+          "sha256": "sha256:42ed80b0afc97770a873d80881d09ce5fcb155400773c377cdd1c530aedb337f"
+        },
+        {
+          "path": "src/application-proposal.ts",
+          "sha256": "sha256:3cc34b44b422090e3725296ce8e1d48387ee093ddd43f987db8d70c9b4eb50d2"
+        },
+        {
+          "path": "src/application-selection.ts",
+          "sha256": "sha256:f2adde46aeee984e97e5a4aede3f9f8811e39c8573d816a1e6cf1ca8a08449b7"
+        }
+      ]
+    },
+    {
+      "id": "EVO-05",
+      "evidence": "not-started",
+      "suite": "policy-mutation",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application_adaptation.rs",
+          "sha256": "sha256:138ef3c78dd40a6e841e12938ad79bc1faa80833195a535b31b3c6c36bfb48eb"
+        },
+        {
+          "path": "crates/algal/src/application_selection.rs",
+          "sha256": "sha256:95e462324f28859f63a5693edcdb0d9fbd9e24be440753093a3411af8d331ce5"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "spec/v1/bench.md",
+          "sha256": "sha256:030ce075175235251f3bee39dfd097e6f10b8b53b9ab31be512dd0276351c8cd"
+        },
+        {
+          "path": "spec/v1/foundry.md",
+          "sha256": "sha256:36833a6a9f85cd071e8bbc04551f6665c324b1c1bef9bb191d5a80b86b2d4939"
+        },
+        {
+          "path": "src/application-adaptation.ts",
+          "sha256": "sha256:e2a1626bed43ed6553c6014d306f519b199b5e5dd311b637fe5c4dc1a866741e"
+        },
+        {
+          "path": "src/application-comparison.ts",
+          "sha256": "sha256:42ed80b0afc97770a873d80881d09ce5fcb155400773c377cdd1c530aedb337f"
+        },
+        {
+          "path": "src/application-proposal.ts",
+          "sha256": "sha256:3cc34b44b422090e3725296ce8e1d48387ee093ddd43f987db8d70c9b4eb50d2"
+        },
+        {
+          "path": "src/application-selection.ts",
+          "sha256": "sha256:f2adde46aeee984e97e5a4aede3f9f8811e39c8573d816a1e6cf1ca8a08449b7"
+        }
+      ]
+    },
+    {
+      "id": "EVO-06",
+      "evidence": "not-started",
+      "suite": "policy-mutation",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application_adaptation.rs",
+          "sha256": "sha256:138ef3c78dd40a6e841e12938ad79bc1faa80833195a535b31b3c6c36bfb48eb"
+        },
+        {
+          "path": "crates/algal/src/application_selection.rs",
+          "sha256": "sha256:95e462324f28859f63a5693edcdb0d9fbd9e24be440753093a3411af8d331ce5"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "spec/v1/bench.md",
+          "sha256": "sha256:030ce075175235251f3bee39dfd097e6f10b8b53b9ab31be512dd0276351c8cd"
+        },
+        {
+          "path": "spec/v1/foundry.md",
+          "sha256": "sha256:36833a6a9f85cd071e8bbc04551f6665c324b1c1bef9bb191d5a80b86b2d4939"
+        },
+        {
+          "path": "src/application-adaptation.ts",
+          "sha256": "sha256:e2a1626bed43ed6553c6014d306f519b199b5e5dd311b637fe5c4dc1a866741e"
+        },
+        {
+          "path": "src/application-comparison.ts",
+          "sha256": "sha256:42ed80b0afc97770a873d80881d09ce5fcb155400773c377cdd1c530aedb337f"
+        },
+        {
+          "path": "src/application-proposal.ts",
+          "sha256": "sha256:3cc34b44b422090e3725296ce8e1d48387ee093ddd43f987db8d70c9b4eb50d2"
+        },
+        {
+          "path": "src/application-selection.ts",
+          "sha256": "sha256:f2adde46aeee984e97e5a4aede3f9f8811e39c8573d816a1e6cf1ca8a08449b7"
+        }
+      ]
+    },
+    {
+      "id": "HST-01",
+      "evidence": "not-started",
+      "suite": "host-conformance",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/acp.rs",
+          "sha256": "sha256:b0380248b513e99665da534a1c2f36dee1e38257c429c263865d2239d40613b0"
+        },
+        {
+          "path": "crates/algal/src/main.rs",
+          "sha256": "sha256:951ac2e7c6578186d4e9b452431da5833a8a8d1314e2d0a89b7ac49b0e329a73"
+        },
+        {
+          "path": "spec/v1/coding-operation.md",
+          "sha256": "sha256:81731a723367a234d7f4965e0efd645bcb3321135ffddb05787f1816c02cb51f"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/chat-completions.ts",
+          "sha256": "sha256:5a6ff036b97f6a394da359c997c12bdc94e845ab6b07c142564082130415af00"
+        },
+        {
+          "path": "src/coding-operations.ts",
+          "sha256": "sha256:aaafa9478efae9994e78454411597847b498d42d818d9b3dc6235f5c9b39f4ce"
+        },
+        {
+          "path": "src/credentials.ts",
+          "sha256": "sha256:1d95c0ada598434e40bac0503c78c33a81a3ad99df7acbf4baf48aeae0b756cb"
+        },
+        {
+          "path": "src/gateway-accounting.ts",
+          "sha256": "sha256:fe4463fe1ca7e3e2db9e623306d2ff682184c97c8e1e0245ab6bd9e4695b65cf"
+        },
+        {
+          "path": "src/gateway-observation.ts",
+          "sha256": "sha256:25bbb1aa4ddc5ec9bddf20af5352bc87ab055a32c1ae78aa33dd95447cbd6864"
+        },
+        {
+          "path": "src/gateway.ts",
+          "sha256": "sha256:3177ce4999a9b8009424327cd1f35576d777a42b73b616d36b3032a9f89cbb61"
+        },
+        {
+          "path": "src/host-events.ts",
+          "sha256": "sha256:edcc5335be88f21ea77d5d47c7169dcb153b139e99d63e4ec67527ef3c65167c"
+        },
+        {
+          "path": "src/io-runtime.ts",
+          "sha256": "sha256:fd0f09ffc30747b1b2d68fe36ae330917d4be8f7bb63de60002c17c61d646f81"
+        },
+        {
+          "path": "src/io.ts",
+          "sha256": "sha256:9cc36d093a1f5bbfc64c99873cd118413b7e1dbf4813a2244764395c7a9e26f9"
+        },
+        {
+          "path": "src/jev.ts",
+          "sha256": "sha256:26e2d9ddfbedd72e76c6026267b6bc5a1781086126ab1ba99330d22697a8a30e"
+        },
+        {
+          "path": "src/openai-compatible.ts",
+          "sha256": "sha256:f753dd1ba353a25e8183d990a0bef76d80b556c66e274e79c4568aaaf5d780ac"
+        },
+        {
+          "path": "src/xcb.ts",
+          "sha256": "sha256:4cb631810132f0b0ef43d4dc4f4a052bd8b6cd405871843ace4015b13db37490"
+        }
+      ]
+    },
+    {
+      "id": "HST-02",
+      "evidence": "not-started",
+      "suite": "host-conformance",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/acp.rs",
+          "sha256": "sha256:b0380248b513e99665da534a1c2f36dee1e38257c429c263865d2239d40613b0"
+        },
+        {
+          "path": "crates/algal/src/main.rs",
+          "sha256": "sha256:951ac2e7c6578186d4e9b452431da5833a8a8d1314e2d0a89b7ac49b0e329a73"
+        },
+        {
+          "path": "spec/v1/coding-operation.md",
+          "sha256": "sha256:81731a723367a234d7f4965e0efd645bcb3321135ffddb05787f1816c02cb51f"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/chat-completions.ts",
+          "sha256": "sha256:5a6ff036b97f6a394da359c997c12bdc94e845ab6b07c142564082130415af00"
+        },
+        {
+          "path": "src/coding-operations.ts",
+          "sha256": "sha256:aaafa9478efae9994e78454411597847b498d42d818d9b3dc6235f5c9b39f4ce"
+        },
+        {
+          "path": "src/credentials.ts",
+          "sha256": "sha256:1d95c0ada598434e40bac0503c78c33a81a3ad99df7acbf4baf48aeae0b756cb"
+        },
+        {
+          "path": "src/gateway-accounting.ts",
+          "sha256": "sha256:fe4463fe1ca7e3e2db9e623306d2ff682184c97c8e1e0245ab6bd9e4695b65cf"
+        },
+        {
+          "path": "src/gateway-observation.ts",
+          "sha256": "sha256:25bbb1aa4ddc5ec9bddf20af5352bc87ab055a32c1ae78aa33dd95447cbd6864"
+        },
+        {
+          "path": "src/gateway.ts",
+          "sha256": "sha256:3177ce4999a9b8009424327cd1f35576d777a42b73b616d36b3032a9f89cbb61"
+        },
+        {
+          "path": "src/host-events.ts",
+          "sha256": "sha256:edcc5335be88f21ea77d5d47c7169dcb153b139e99d63e4ec67527ef3c65167c"
+        },
+        {
+          "path": "src/io-runtime.ts",
+          "sha256": "sha256:fd0f09ffc30747b1b2d68fe36ae330917d4be8f7bb63de60002c17c61d646f81"
+        },
+        {
+          "path": "src/io.ts",
+          "sha256": "sha256:9cc36d093a1f5bbfc64c99873cd118413b7e1dbf4813a2244764395c7a9e26f9"
+        },
+        {
+          "path": "src/jev.ts",
+          "sha256": "sha256:26e2d9ddfbedd72e76c6026267b6bc5a1781086126ab1ba99330d22697a8a30e"
+        },
+        {
+          "path": "src/openai-compatible.ts",
+          "sha256": "sha256:f753dd1ba353a25e8183d990a0bef76d80b556c66e274e79c4568aaaf5d780ac"
+        },
+        {
+          "path": "src/xcb.ts",
+          "sha256": "sha256:4cb631810132f0b0ef43d4dc4f4a052bd8b6cd405871843ace4015b13db37490"
+        }
+      ]
+    },
+    {
+      "id": "HST-03",
+      "evidence": "not-started",
+      "suite": "host-conformance",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/acp.rs",
+          "sha256": "sha256:b0380248b513e99665da534a1c2f36dee1e38257c429c263865d2239d40613b0"
+        },
+        {
+          "path": "crates/algal/src/main.rs",
+          "sha256": "sha256:951ac2e7c6578186d4e9b452431da5833a8a8d1314e2d0a89b7ac49b0e329a73"
+        },
+        {
+          "path": "spec/v1/coding-operation.md",
+          "sha256": "sha256:81731a723367a234d7f4965e0efd645bcb3321135ffddb05787f1816c02cb51f"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/chat-completions.ts",
+          "sha256": "sha256:5a6ff036b97f6a394da359c997c12bdc94e845ab6b07c142564082130415af00"
+        },
+        {
+          "path": "src/coding-operations.ts",
+          "sha256": "sha256:aaafa9478efae9994e78454411597847b498d42d818d9b3dc6235f5c9b39f4ce"
+        },
+        {
+          "path": "src/credentials.ts",
+          "sha256": "sha256:1d95c0ada598434e40bac0503c78c33a81a3ad99df7acbf4baf48aeae0b756cb"
+        },
+        {
+          "path": "src/gateway-accounting.ts",
+          "sha256": "sha256:fe4463fe1ca7e3e2db9e623306d2ff682184c97c8e1e0245ab6bd9e4695b65cf"
+        },
+        {
+          "path": "src/gateway-observation.ts",
+          "sha256": "sha256:25bbb1aa4ddc5ec9bddf20af5352bc87ab055a32c1ae78aa33dd95447cbd6864"
+        },
+        {
+          "path": "src/gateway.ts",
+          "sha256": "sha256:3177ce4999a9b8009424327cd1f35576d777a42b73b616d36b3032a9f89cbb61"
+        },
+        {
+          "path": "src/host-events.ts",
+          "sha256": "sha256:edcc5335be88f21ea77d5d47c7169dcb153b139e99d63e4ec67527ef3c65167c"
+        },
+        {
+          "path": "src/io-runtime.ts",
+          "sha256": "sha256:fd0f09ffc30747b1b2d68fe36ae330917d4be8f7bb63de60002c17c61d646f81"
+        },
+        {
+          "path": "src/io.ts",
+          "sha256": "sha256:9cc36d093a1f5bbfc64c99873cd118413b7e1dbf4813a2244764395c7a9e26f9"
+        },
+        {
+          "path": "src/jev.ts",
+          "sha256": "sha256:26e2d9ddfbedd72e76c6026267b6bc5a1781086126ab1ba99330d22697a8a30e"
+        },
+        {
+          "path": "src/openai-compatible.ts",
+          "sha256": "sha256:f753dd1ba353a25e8183d990a0bef76d80b556c66e274e79c4568aaaf5d780ac"
+        },
+        {
+          "path": "src/xcb.ts",
+          "sha256": "sha256:4cb631810132f0b0ef43d4dc4f4a052bd8b6cd405871843ace4015b13db37490"
+        }
+      ]
+    },
+    {
+      "id": "HST-04",
+      "evidence": "not-started",
+      "suite": "host-conformance",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/acp.rs",
+          "sha256": "sha256:b0380248b513e99665da534a1c2f36dee1e38257c429c263865d2239d40613b0"
+        },
+        {
+          "path": "crates/algal/src/main.rs",
+          "sha256": "sha256:951ac2e7c6578186d4e9b452431da5833a8a8d1314e2d0a89b7ac49b0e329a73"
+        },
+        {
+          "path": "spec/v1/coding-operation.md",
+          "sha256": "sha256:81731a723367a234d7f4965e0efd645bcb3321135ffddb05787f1816c02cb51f"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/chat-completions.ts",
+          "sha256": "sha256:5a6ff036b97f6a394da359c997c12bdc94e845ab6b07c142564082130415af00"
+        },
+        {
+          "path": "src/coding-operations.ts",
+          "sha256": "sha256:aaafa9478efae9994e78454411597847b498d42d818d9b3dc6235f5c9b39f4ce"
+        },
+        {
+          "path": "src/credentials.ts",
+          "sha256": "sha256:1d95c0ada598434e40bac0503c78c33a81a3ad99df7acbf4baf48aeae0b756cb"
+        },
+        {
+          "path": "src/gateway-accounting.ts",
+          "sha256": "sha256:fe4463fe1ca7e3e2db9e623306d2ff682184c97c8e1e0245ab6bd9e4695b65cf"
+        },
+        {
+          "path": "src/gateway-observation.ts",
+          "sha256": "sha256:25bbb1aa4ddc5ec9bddf20af5352bc87ab055a32c1ae78aa33dd95447cbd6864"
+        },
+        {
+          "path": "src/gateway.ts",
+          "sha256": "sha256:3177ce4999a9b8009424327cd1f35576d777a42b73b616d36b3032a9f89cbb61"
+        },
+        {
+          "path": "src/host-events.ts",
+          "sha256": "sha256:edcc5335be88f21ea77d5d47c7169dcb153b139e99d63e4ec67527ef3c65167c"
+        },
+        {
+          "path": "src/io-runtime.ts",
+          "sha256": "sha256:fd0f09ffc30747b1b2d68fe36ae330917d4be8f7bb63de60002c17c61d646f81"
+        },
+        {
+          "path": "src/io.ts",
+          "sha256": "sha256:9cc36d093a1f5bbfc64c99873cd118413b7e1dbf4813a2244764395c7a9e26f9"
+        },
+        {
+          "path": "src/jev.ts",
+          "sha256": "sha256:26e2d9ddfbedd72e76c6026267b6bc5a1781086126ab1ba99330d22697a8a30e"
+        },
+        {
+          "path": "src/openai-compatible.ts",
+          "sha256": "sha256:f753dd1ba353a25e8183d990a0bef76d80b556c66e274e79c4568aaaf5d780ac"
+        },
+        {
+          "path": "src/xcb.ts",
+          "sha256": "sha256:4cb631810132f0b0ef43d4dc4f4a052bd8b6cd405871843ace4015b13db37490"
+        }
+      ]
+    },
+    {
+      "id": "HST-05",
+      "evidence": "not-started",
+      "suite": "host-conformance",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/acp.rs",
+          "sha256": "sha256:b0380248b513e99665da534a1c2f36dee1e38257c429c263865d2239d40613b0"
+        },
+        {
+          "path": "crates/algal/src/main.rs",
+          "sha256": "sha256:951ac2e7c6578186d4e9b452431da5833a8a8d1314e2d0a89b7ac49b0e329a73"
+        },
+        {
+          "path": "spec/v1/coding-operation.md",
+          "sha256": "sha256:81731a723367a234d7f4965e0efd645bcb3321135ffddb05787f1816c02cb51f"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/chat-completions.ts",
+          "sha256": "sha256:5a6ff036b97f6a394da359c997c12bdc94e845ab6b07c142564082130415af00"
+        },
+        {
+          "path": "src/coding-operations.ts",
+          "sha256": "sha256:aaafa9478efae9994e78454411597847b498d42d818d9b3dc6235f5c9b39f4ce"
+        },
+        {
+          "path": "src/credentials.ts",
+          "sha256": "sha256:1d95c0ada598434e40bac0503c78c33a81a3ad99df7acbf4baf48aeae0b756cb"
+        },
+        {
+          "path": "src/gateway-accounting.ts",
+          "sha256": "sha256:fe4463fe1ca7e3e2db9e623306d2ff682184c97c8e1e0245ab6bd9e4695b65cf"
+        },
+        {
+          "path": "src/gateway-observation.ts",
+          "sha256": "sha256:25bbb1aa4ddc5ec9bddf20af5352bc87ab055a32c1ae78aa33dd95447cbd6864"
+        },
+        {
+          "path": "src/gateway.ts",
+          "sha256": "sha256:3177ce4999a9b8009424327cd1f35576d777a42b73b616d36b3032a9f89cbb61"
+        },
+        {
+          "path": "src/host-events.ts",
+          "sha256": "sha256:edcc5335be88f21ea77d5d47c7169dcb153b139e99d63e4ec67527ef3c65167c"
+        },
+        {
+          "path": "src/io-runtime.ts",
+          "sha256": "sha256:fd0f09ffc30747b1b2d68fe36ae330917d4be8f7bb63de60002c17c61d646f81"
+        },
+        {
+          "path": "src/io.ts",
+          "sha256": "sha256:9cc36d093a1f5bbfc64c99873cd118413b7e1dbf4813a2244764395c7a9e26f9"
+        },
+        {
+          "path": "src/jev.ts",
+          "sha256": "sha256:26e2d9ddfbedd72e76c6026267b6bc5a1781086126ab1ba99330d22697a8a30e"
+        },
+        {
+          "path": "src/openai-compatible.ts",
+          "sha256": "sha256:f753dd1ba353a25e8183d990a0bef76d80b556c66e274e79c4568aaaf5d780ac"
+        },
+        {
+          "path": "src/xcb.ts",
+          "sha256": "sha256:4cb631810132f0b0ef43d4dc4f4a052bd8b6cd405871843ace4015b13db37490"
+        }
+      ]
+    },
+    {
+      "id": "HST-06",
+      "evidence": "not-started",
+      "suite": "host-conformance",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/acp.rs",
+          "sha256": "sha256:b0380248b513e99665da534a1c2f36dee1e38257c429c263865d2239d40613b0"
+        },
+        {
+          "path": "crates/algal/src/main.rs",
+          "sha256": "sha256:951ac2e7c6578186d4e9b452431da5833a8a8d1314e2d0a89b7ac49b0e329a73"
+        },
+        {
+          "path": "spec/v1/coding-operation.md",
+          "sha256": "sha256:81731a723367a234d7f4965e0efd645bcb3321135ffddb05787f1816c02cb51f"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/chat-completions.ts",
+          "sha256": "sha256:5a6ff036b97f6a394da359c997c12bdc94e845ab6b07c142564082130415af00"
+        },
+        {
+          "path": "src/coding-operations.ts",
+          "sha256": "sha256:aaafa9478efae9994e78454411597847b498d42d818d9b3dc6235f5c9b39f4ce"
+        },
+        {
+          "path": "src/credentials.ts",
+          "sha256": "sha256:1d95c0ada598434e40bac0503c78c33a81a3ad99df7acbf4baf48aeae0b756cb"
+        },
+        {
+          "path": "src/gateway-accounting.ts",
+          "sha256": "sha256:fe4463fe1ca7e3e2db9e623306d2ff682184c97c8e1e0245ab6bd9e4695b65cf"
+        },
+        {
+          "path": "src/gateway-observation.ts",
+          "sha256": "sha256:25bbb1aa4ddc5ec9bddf20af5352bc87ab055a32c1ae78aa33dd95447cbd6864"
+        },
+        {
+          "path": "src/gateway.ts",
+          "sha256": "sha256:3177ce4999a9b8009424327cd1f35576d777a42b73b616d36b3032a9f89cbb61"
+        },
+        {
+          "path": "src/host-events.ts",
+          "sha256": "sha256:edcc5335be88f21ea77d5d47c7169dcb153b139e99d63e4ec67527ef3c65167c"
+        },
+        {
+          "path": "src/io-runtime.ts",
+          "sha256": "sha256:fd0f09ffc30747b1b2d68fe36ae330917d4be8f7bb63de60002c17c61d646f81"
+        },
+        {
+          "path": "src/io.ts",
+          "sha256": "sha256:9cc36d093a1f5bbfc64c99873cd118413b7e1dbf4813a2244764395c7a9e26f9"
+        },
+        {
+          "path": "src/jev.ts",
+          "sha256": "sha256:26e2d9ddfbedd72e76c6026267b6bc5a1781086126ab1ba99330d22697a8a30e"
+        },
+        {
+          "path": "src/openai-compatible.ts",
+          "sha256": "sha256:f753dd1ba353a25e8183d990a0bef76d80b556c66e274e79c4568aaaf5d780ac"
+        },
+        {
+          "path": "src/xcb.ts",
+          "sha256": "sha256:4cb631810132f0b0ef43d4dc4f4a052bd8b6cd405871843ace4015b13db37490"
+        }
+      ]
+    },
+    {
+      "id": "HST-07",
+      "evidence": "not-started",
+      "suite": "host-conformance",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/acp.rs",
+          "sha256": "sha256:b0380248b513e99665da534a1c2f36dee1e38257c429c263865d2239d40613b0"
+        },
+        {
+          "path": "crates/algal/src/main.rs",
+          "sha256": "sha256:951ac2e7c6578186d4e9b452431da5833a8a8d1314e2d0a89b7ac49b0e329a73"
+        },
+        {
+          "path": "spec/v1/coding-operation.md",
+          "sha256": "sha256:81731a723367a234d7f4965e0efd645bcb3321135ffddb05787f1816c02cb51f"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/chat-completions.ts",
+          "sha256": "sha256:5a6ff036b97f6a394da359c997c12bdc94e845ab6b07c142564082130415af00"
+        },
+        {
+          "path": "src/coding-operations.ts",
+          "sha256": "sha256:aaafa9478efae9994e78454411597847b498d42d818d9b3dc6235f5c9b39f4ce"
+        },
+        {
+          "path": "src/credentials.ts",
+          "sha256": "sha256:1d95c0ada598434e40bac0503c78c33a81a3ad99df7acbf4baf48aeae0b756cb"
+        },
+        {
+          "path": "src/gateway-accounting.ts",
+          "sha256": "sha256:fe4463fe1ca7e3e2db9e623306d2ff682184c97c8e1e0245ab6bd9e4695b65cf"
+        },
+        {
+          "path": "src/gateway-observation.ts",
+          "sha256": "sha256:25bbb1aa4ddc5ec9bddf20af5352bc87ab055a32c1ae78aa33dd95447cbd6864"
+        },
+        {
+          "path": "src/gateway.ts",
+          "sha256": "sha256:3177ce4999a9b8009424327cd1f35576d777a42b73b616d36b3032a9f89cbb61"
+        },
+        {
+          "path": "src/host-events.ts",
+          "sha256": "sha256:edcc5335be88f21ea77d5d47c7169dcb153b139e99d63e4ec67527ef3c65167c"
+        },
+        {
+          "path": "src/io-runtime.ts",
+          "sha256": "sha256:fd0f09ffc30747b1b2d68fe36ae330917d4be8f7bb63de60002c17c61d646f81"
+        },
+        {
+          "path": "src/io.ts",
+          "sha256": "sha256:9cc36d093a1f5bbfc64c99873cd118413b7e1dbf4813a2244764395c7a9e26f9"
+        },
+        {
+          "path": "src/jev.ts",
+          "sha256": "sha256:26e2d9ddfbedd72e76c6026267b6bc5a1781086126ab1ba99330d22697a8a30e"
+        },
+        {
+          "path": "src/openai-compatible.ts",
+          "sha256": "sha256:f753dd1ba353a25e8183d990a0bef76d80b556c66e274e79c4568aaaf5d780ac"
+        },
+        {
+          "path": "src/xcb.ts",
+          "sha256": "sha256:4cb631810132f0b0ef43d4dc4f4a052bd8b6cd405871843ace4015b13db37490"
+        }
+      ]
+    },
+    {
+      "id": "PKG-01",
+      "evidence": "not-started",
+      "suite": "release-evidence",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "sha256": "sha256:15e1c66e146ab8b2320aafa5a54fdb783f782f0aef40caea30a8f78bea4b6259"
+        },
+        {
+          "path": ".github/workflows/release.yml",
+          "sha256": "sha256:a3d5c54a8833843ecc94cb0fb9bdfd9cda90661ad64ed7ec4ef4d6c4baa7ba5c"
+        },
+        {
+          "path": "crates/algal/build.rs",
+          "sha256": "sha256:89ea7d417df05970a4ab7422844c794a95b53e9133106f3e9e5a39580bb0cb43"
+        },
+        {
+          "path": "docs/native-release.md",
+          "sha256": "sha256:63a12f3ebab3dce245d001cc632c279288743213e3a9d861e0a4992f6325bead"
+        },
+        {
+          "path": "scripts/build-expr-wasm.sh",
+          "sha256": "sha256:7ddc2d7acb26051c8607ba2d5ce8c1aa832732ab997777a16dcd04f4048ecce2"
+        }
+      ]
+    },
+    {
+      "id": "PKG-02",
+      "evidence": "not-started",
+      "suite": "release-evidence",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "sha256": "sha256:15e1c66e146ab8b2320aafa5a54fdb783f782f0aef40caea30a8f78bea4b6259"
+        },
+        {
+          "path": ".github/workflows/release.yml",
+          "sha256": "sha256:a3d5c54a8833843ecc94cb0fb9bdfd9cda90661ad64ed7ec4ef4d6c4baa7ba5c"
+        },
+        {
+          "path": "crates/algal/build.rs",
+          "sha256": "sha256:89ea7d417df05970a4ab7422844c794a95b53e9133106f3e9e5a39580bb0cb43"
+        },
+        {
+          "path": "docs/native-release.md",
+          "sha256": "sha256:63a12f3ebab3dce245d001cc632c279288743213e3a9d861e0a4992f6325bead"
+        },
+        {
+          "path": "scripts/build-expr-wasm.sh",
+          "sha256": "sha256:7ddc2d7acb26051c8607ba2d5ce8c1aa832732ab997777a16dcd04f4048ecce2"
+        }
+      ]
+    },
+    {
+      "id": "PKG-03",
+      "evidence": "not-started",
+      "suite": "release-evidence",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "sha256": "sha256:15e1c66e146ab8b2320aafa5a54fdb783f782f0aef40caea30a8f78bea4b6259"
+        },
+        {
+          "path": ".github/workflows/release.yml",
+          "sha256": "sha256:a3d5c54a8833843ecc94cb0fb9bdfd9cda90661ad64ed7ec4ef4d6c4baa7ba5c"
+        },
+        {
+          "path": "crates/algal/build.rs",
+          "sha256": "sha256:89ea7d417df05970a4ab7422844c794a95b53e9133106f3e9e5a39580bb0cb43"
+        },
+        {
+          "path": "docs/native-release.md",
+          "sha256": "sha256:63a12f3ebab3dce245d001cc632c279288743213e3a9d861e0a4992f6325bead"
+        },
+        {
+          "path": "scripts/build-expr-wasm.sh",
+          "sha256": "sha256:7ddc2d7acb26051c8607ba2d5ce8c1aa832732ab997777a16dcd04f4048ecce2"
+        }
+      ]
+    },
+    {
+      "id": "PKG-04",
+      "evidence": "not-started",
+      "suite": "release-evidence",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "sha256": "sha256:15e1c66e146ab8b2320aafa5a54fdb783f782f0aef40caea30a8f78bea4b6259"
+        },
+        {
+          "path": ".github/workflows/release.yml",
+          "sha256": "sha256:a3d5c54a8833843ecc94cb0fb9bdfd9cda90661ad64ed7ec4ef4d6c4baa7ba5c"
+        },
+        {
+          "path": "crates/algal/build.rs",
+          "sha256": "sha256:89ea7d417df05970a4ab7422844c794a95b53e9133106f3e9e5a39580bb0cb43"
+        },
+        {
+          "path": "docs/native-release.md",
+          "sha256": "sha256:63a12f3ebab3dce245d001cc632c279288743213e3a9d861e0a4992f6325bead"
+        },
+        {
+          "path": "scripts/build-expr-wasm.sh",
+          "sha256": "sha256:7ddc2d7acb26051c8607ba2d5ce8c1aa832732ab997777a16dcd04f4048ecce2"
+        }
+      ]
+    },
+    {
+      "id": "PKG-05",
+      "evidence": "not-started",
+      "suite": "release-evidence",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "sha256": "sha256:15e1c66e146ab8b2320aafa5a54fdb783f782f0aef40caea30a8f78bea4b6259"
+        },
+        {
+          "path": ".github/workflows/release.yml",
+          "sha256": "sha256:a3d5c54a8833843ecc94cb0fb9bdfd9cda90661ad64ed7ec4ef4d6c4baa7ba5c"
+        },
+        {
+          "path": "crates/algal/build.rs",
+          "sha256": "sha256:89ea7d417df05970a4ab7422844c794a95b53e9133106f3e9e5a39580bb0cb43"
+        },
+        {
+          "path": "docs/native-release.md",
+          "sha256": "sha256:63a12f3ebab3dce245d001cc632c279288743213e3a9d861e0a4992f6325bead"
+        },
+        {
+          "path": "scripts/build-expr-wasm.sh",
+          "sha256": "sha256:7ddc2d7acb26051c8607ba2d5ce8c1aa832732ab997777a16dcd04f4048ecce2"
+        }
+      ]
+    },
+    {
+      "id": "CLD-01",
+      "evidence": "not-started",
+      "suite": "hosted-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application.rs",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8"
+        },
+        {
+          "path": "docs/formal-verification-plan.md",
+          "sha256": "sha256:e315f55dccafe184a42619d69df4a0078484cb99cb695423506f39c0635388da"
+        },
+        {
+          "path": "src/application-core.ts",
+          "sha256": "sha256:b9a2369ffdf011a706efa74e0abb82e8dcc73e8136d3c841df6953564c23f2a1"
+        },
+        {
+          "path": "src/application-filesystem.ts",
+          "sha256": "sha256:f5ffe5f8c5ad97c2e1ed9cbb8f0f4917004dd11606c41097a7bbf4bd4dc2009b"
+        },
+        {
+          "path": "src/application-storage.ts",
+          "sha256": "sha256:fedd14358bd5900c837967e1a5b66f2726bbac18f7773dc40cdb0143220112b4"
+        },
+        {
+          "path": "src/application.ts",
+          "sha256": "sha256:2674509bb45b061de65d4dc521de683603d6c3985789884a4c465be303be0fb2"
+        }
+      ]
+    },
+    {
+      "id": "CLD-02",
+      "evidence": "not-started",
+      "suite": "hosted-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application.rs",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8"
+        },
+        {
+          "path": "docs/formal-verification-plan.md",
+          "sha256": "sha256:e315f55dccafe184a42619d69df4a0078484cb99cb695423506f39c0635388da"
+        },
+        {
+          "path": "src/application-core.ts",
+          "sha256": "sha256:b9a2369ffdf011a706efa74e0abb82e8dcc73e8136d3c841df6953564c23f2a1"
+        },
+        {
+          "path": "src/application-filesystem.ts",
+          "sha256": "sha256:f5ffe5f8c5ad97c2e1ed9cbb8f0f4917004dd11606c41097a7bbf4bd4dc2009b"
+        },
+        {
+          "path": "src/application-storage.ts",
+          "sha256": "sha256:fedd14358bd5900c837967e1a5b66f2726bbac18f7773dc40cdb0143220112b4"
+        },
+        {
+          "path": "src/application.ts",
+          "sha256": "sha256:2674509bb45b061de65d4dc521de683603d6c3985789884a4c465be303be0fb2"
+        }
+      ]
+    },
+    {
+      "id": "CLD-03",
+      "evidence": "not-started",
+      "suite": "hosted-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application.rs",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8"
+        },
+        {
+          "path": "docs/formal-verification-plan.md",
+          "sha256": "sha256:e315f55dccafe184a42619d69df4a0078484cb99cb695423506f39c0635388da"
+        },
+        {
+          "path": "src/application-core.ts",
+          "sha256": "sha256:b9a2369ffdf011a706efa74e0abb82e8dcc73e8136d3c841df6953564c23f2a1"
+        },
+        {
+          "path": "src/application-filesystem.ts",
+          "sha256": "sha256:f5ffe5f8c5ad97c2e1ed9cbb8f0f4917004dd11606c41097a7bbf4bd4dc2009b"
+        },
+        {
+          "path": "src/application-storage.ts",
+          "sha256": "sha256:fedd14358bd5900c837967e1a5b66f2726bbac18f7773dc40cdb0143220112b4"
+        },
+        {
+          "path": "src/application.ts",
+          "sha256": "sha256:2674509bb45b061de65d4dc521de683603d6c3985789884a4c465be303be0fb2"
+        }
+      ]
+    },
+    {
+      "id": "CLD-04",
+      "evidence": "not-started",
+      "suite": "hosted-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application.rs",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8"
+        },
+        {
+          "path": "docs/formal-verification-plan.md",
+          "sha256": "sha256:e315f55dccafe184a42619d69df4a0078484cb99cb695423506f39c0635388da"
+        },
+        {
+          "path": "src/application-core.ts",
+          "sha256": "sha256:b9a2369ffdf011a706efa74e0abb82e8dcc73e8136d3c841df6953564c23f2a1"
+        },
+        {
+          "path": "src/application-filesystem.ts",
+          "sha256": "sha256:f5ffe5f8c5ad97c2e1ed9cbb8f0f4917004dd11606c41097a7bbf4bd4dc2009b"
+        },
+        {
+          "path": "src/application-storage.ts",
+          "sha256": "sha256:fedd14358bd5900c837967e1a5b66f2726bbac18f7773dc40cdb0143220112b4"
+        },
+        {
+          "path": "src/application.ts",
+          "sha256": "sha256:2674509bb45b061de65d4dc521de683603d6c3985789884a4c465be303be0fb2"
+        }
+      ]
+    },
+    {
+      "id": "CLD-05",
+      "evidence": "not-started",
+      "suite": "hosted-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application.rs",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8"
+        },
+        {
+          "path": "docs/formal-verification-plan.md",
+          "sha256": "sha256:e315f55dccafe184a42619d69df4a0078484cb99cb695423506f39c0635388da"
+        },
+        {
+          "path": "src/application-core.ts",
+          "sha256": "sha256:b9a2369ffdf011a706efa74e0abb82e8dcc73e8136d3c841df6953564c23f2a1"
+        },
+        {
+          "path": "src/application-filesystem.ts",
+          "sha256": "sha256:f5ffe5f8c5ad97c2e1ed9cbb8f0f4917004dd11606c41097a7bbf4bd4dc2009b"
+        },
+        {
+          "path": "src/application-storage.ts",
+          "sha256": "sha256:fedd14358bd5900c837967e1a5b66f2726bbac18f7773dc40cdb0143220112b4"
+        },
+        {
+          "path": "src/application.ts",
+          "sha256": "sha256:2674509bb45b061de65d4dc521de683603d6c3985789884a4c465be303be0fb2"
+        }
+      ]
+    },
+    {
+      "id": "CLD-06",
+      "evidence": "not-started",
+      "suite": "hosted-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application.rs",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8"
+        },
+        {
+          "path": "docs/formal-verification-plan.md",
+          "sha256": "sha256:e315f55dccafe184a42619d69df4a0078484cb99cb695423506f39c0635388da"
+        },
+        {
+          "path": "src/application-core.ts",
+          "sha256": "sha256:b9a2369ffdf011a706efa74e0abb82e8dcc73e8136d3c841df6953564c23f2a1"
+        },
+        {
+          "path": "src/application-filesystem.ts",
+          "sha256": "sha256:f5ffe5f8c5ad97c2e1ed9cbb8f0f4917004dd11606c41097a7bbf4bd4dc2009b"
+        },
+        {
+          "path": "src/application-storage.ts",
+          "sha256": "sha256:fedd14358bd5900c837967e1a5b66f2726bbac18f7773dc40cdb0143220112b4"
+        },
+        {
+          "path": "src/application.ts",
+          "sha256": "sha256:2674509bb45b061de65d4dc521de683603d6c3985789884a4c465be303be0fb2"
+        }
+      ]
+    },
+    {
+      "id": "CLD-07",
+      "evidence": "not-started",
+      "suite": "hosted-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application.rs",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8"
+        },
+        {
+          "path": "docs/formal-verification-plan.md",
+          "sha256": "sha256:e315f55dccafe184a42619d69df4a0078484cb99cb695423506f39c0635388da"
+        },
+        {
+          "path": "src/application-core.ts",
+          "sha256": "sha256:b9a2369ffdf011a706efa74e0abb82e8dcc73e8136d3c841df6953564c23f2a1"
+        },
+        {
+          "path": "src/application-filesystem.ts",
+          "sha256": "sha256:f5ffe5f8c5ad97c2e1ed9cbb8f0f4917004dd11606c41097a7bbf4bd4dc2009b"
+        },
+        {
+          "path": "src/application-storage.ts",
+          "sha256": "sha256:fedd14358bd5900c837967e1a5b66f2726bbac18f7773dc40cdb0143220112b4"
+        },
+        {
+          "path": "src/application.ts",
+          "sha256": "sha256:2674509bb45b061de65d4dc521de683603d6c3985789884a4c465be303be0fb2"
+        }
+      ]
+    },
+    {
+      "id": "APP-08",
+      "evidence": "not-started",
+      "suite": "application-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application.rs",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8"
+        },
+        {
+          "path": "crates/algal/src/application_drain.rs",
+          "sha256": "sha256:82d2df02f9a77c0fdaed95e420c5399e43855fd6e2e6097310b513d389bb6a5a"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "src/application-core.ts",
+          "sha256": "sha256:b9a2369ffdf011a706efa74e0abb82e8dcc73e8136d3c841df6953564c23f2a1"
+        },
+        {
+          "path": "src/application-drain.ts",
+          "sha256": "sha256:f083bb88a6561789c83c49cfdade0d6cd7e7dd658fdd13e50537e3bb5d0c73de"
+        },
+        {
+          "path": "src/application-filesystem.ts",
+          "sha256": "sha256:f5ffe5f8c5ad97c2e1ed9cbb8f0f4917004dd11606c41097a7bbf4bd4dc2009b"
+        },
+        {
+          "path": "src/application-storage.ts",
+          "sha256": "sha256:fedd14358bd5900c837967e1a5b66f2726bbac18f7773dc40cdb0143220112b4"
+        },
+        {
+          "path": "src/application.ts",
+          "sha256": "sha256:2674509bb45b061de65d4dc521de683603d6c3985789884a4c465be303be0fb2"
+        }
+      ]
+    },
+    {
+      "id": "APP-09",
+      "evidence": "not-started",
+      "suite": "application-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application.rs",
+          "sha256": "sha256:1a8ef4f0d225c70b28b7bba4bb52b787934de6477c0402f37589630d000825b8"
+        },
+        {
+          "path": "crates/algal/src/application_message.rs",
+          "sha256": "sha256:4bcb6afd403d4663c3ea563d25fa86e5255844cd214c32d553e1ae5a70779c5e"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "src/application-core.ts",
+          "sha256": "sha256:b9a2369ffdf011a706efa74e0abb82e8dcc73e8136d3c841df6953564c23f2a1"
+        },
+        {
+          "path": "src/application-filesystem.ts",
+          "sha256": "sha256:f5ffe5f8c5ad97c2e1ed9cbb8f0f4917004dd11606c41097a7bbf4bd4dc2009b"
+        },
+        {
+          "path": "src/application-message-contract.ts",
+          "sha256": "sha256:1b1d5f8ee83f0a165c6413f3c346c2980f83112e8519280ccf11d9686b568a84"
+        },
+        {
+          "path": "src/application-message.ts",
+          "sha256": "sha256:2c89abfa1f2ada9a64eb7b0eaaac7505cd88b14be4a0757b46e283057f323a30"
+        },
+        {
+          "path": "src/application-storage.ts",
+          "sha256": "sha256:fedd14358bd5900c837967e1a5b66f2726bbac18f7773dc40cdb0143220112b4"
+        },
+        {
+          "path": "src/application.ts",
+          "sha256": "sha256:2674509bb45b061de65d4dc521de683603d6c3985789884a4c465be303be0fb2"
+        }
+      ]
+    },
+    {
+      "id": "APP-10",
+      "evidence": "not-started",
+      "suite": "application-model",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application_contention.rs",
+          "sha256": "sha256:7366088316c9e5ed82f64f8ca9547ce2a31914225b0912cd1a98872641e0ac2e"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "src/application-contention.ts",
+          "sha256": "sha256:82601faef531dc7154a636022200ddf575893f0596b87883b7c0469e5ce4e231"
+        }
+      ]
+    },
+    {
+      "id": "EVO-07",
+      "evidence": "not-started",
+      "suite": "policy-mutation",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application_experiment.rs",
+          "sha256": "sha256:8206b100e7e4e4646e864f9bbf0a82f31a5f575a430c9904689582220ceb5712"
+        },
+        {
+          "path": "crates/algal/src/application_selection.rs",
+          "sha256": "sha256:95e462324f28859f63a5693edcdb0d9fbd9e24be440753093a3411af8d331ce5"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "spec/v1/bench.md",
+          "sha256": "sha256:030ce075175235251f3bee39dfd097e6f10b8b53b9ab31be512dd0276351c8cd"
+        },
+        {
+          "path": "spec/v1/foundry.md",
+          "sha256": "sha256:36833a6a9f85cd071e8bbc04551f6665c324b1c1bef9bb191d5a80b86b2d4939"
+        },
+        {
+          "path": "src/application-experiment.ts",
+          "sha256": "sha256:fb444e58cfac321656735d482f863dc80afd07e21dc6b638954c710c1e5ed358"
+        },
+        {
+          "path": "src/application-selection.ts",
+          "sha256": "sha256:f2adde46aeee984e97e5a4aede3f9f8811e39c8573d816a1e6cf1ca8a08449b7"
+        }
+      ]
+    },
+    {
+      "id": "EVO-08",
+      "evidence": "not-started",
+      "suite": "policy-mutation",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/application_host.rs",
+          "sha256": "sha256:bb10576d4330b62ab39147ae4b6d2ebab6554cec9a2764387304d9d59046b51f"
+        },
+        {
+          "path": "examples/application-research/study.ts",
+          "sha256": "sha256:291bc16dccbbed6a4ee074991f4568e62ef44542ce804ef82853bb33bf2325e9"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "spec/v1/bench.md",
+          "sha256": "sha256:030ce075175235251f3bee39dfd097e6f10b8b53b9ab31be512dd0276351c8cd"
+        },
+        {
+          "path": "spec/v1/foundry.md",
+          "sha256": "sha256:36833a6a9f85cd071e8bbc04551f6665c324b1c1bef9bb191d5a80b86b2d4939"
+        },
+        {
+          "path": "src/application-host.ts",
+          "sha256": "sha256:807b4f5deb9ba5d073011c9f18cb11cded531a19ae7c95b9d4a3aee17b1694b2"
+        },
+        {
+          "path": "src/application-research.ts",
+          "sha256": "sha256:4a3a9847622395524b6aad2714a1fa76bd1f218da204131a6204c270737ac272"
+        }
+      ]
+    },
+    {
+      "id": "HST-08",
+      "evidence": "not-started",
+      "suite": "host-conformance",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/effects.rs",
+          "sha256": "sha256:983548e933f1e09452c9d765a61fa3d45c0a74579963583ce31b806c3d59e535"
+        },
+        {
+          "path": "scripts/inference-parity.ts",
+          "sha256": "sha256:63f2d00284ff6a06d9937e0511657f470bb78928b5aaf7611cd0398b193b067f"
+        },
+        {
+          "path": "spec/v1/coding-operation.md",
+          "sha256": "sha256:81731a723367a234d7f4965e0efd645bcb3321135ffddb05787f1816c02cb51f"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/chat-completions.ts",
+          "sha256": "sha256:5a6ff036b97f6a394da359c997c12bdc94e845ab6b07c142564082130415af00"
+        },
+        {
+          "path": "src/gateway-accounting.ts",
+          "sha256": "sha256:fe4463fe1ca7e3e2db9e623306d2ff682184c97c8e1e0245ab6bd9e4695b65cf"
+        },
+        {
+          "path": "src/gateway-observation.ts",
+          "sha256": "sha256:25bbb1aa4ddc5ec9bddf20af5352bc87ab055a32c1ae78aa33dd95447cbd6864"
+        },
+        {
+          "path": "src/gateway.ts",
+          "sha256": "sha256:3177ce4999a9b8009424327cd1f35576d777a42b73b616d36b3032a9f89cbb61"
+        },
+        {
+          "path": "src/openai-compatible.ts",
+          "sha256": "sha256:f753dd1ba353a25e8183d990a0bef76d80b556c66e274e79c4568aaaf5d780ac"
+        }
+      ]
+    },
+    {
+      "id": "HST-09",
+      "evidence": "not-started",
+      "suite": "host-conformance",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "examples/coding-harness/inference-budget.ts",
+          "sha256": "sha256:e7264bff400eb6b6b0a6d2f251b694a8627a300ed1afb9888f631727013c9ff5"
+        },
+        {
+          "path": "examples/coding-harness/model.ts",
+          "sha256": "sha256:b1a3ea3532b7341a539909602bd587d5e53168cf0d838993e33565f97b96c5bc"
+        },
+        {
+          "path": "spec/v1/coding-operation.md",
+          "sha256": "sha256:81731a723367a234d7f4965e0efd645bcb3321135ffddb05787f1816c02cb51f"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        },
+        {
+          "path": "src/host-state.ts",
+          "sha256": "sha256:ae40c39eb62409b6a1dad07d78eef9612994b39ad73ac971bc47fd06a1a81409"
+        }
+      ]
+    },
+    {
+      "id": "HST-10",
+      "evidence": "not-started",
+      "suite": "host-conformance",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "docs/application-host-adapters.md",
+          "sha256": "sha256:535af12b441e2c63358844306d85d9c9178e28bf2f4af339c5cfcd0123cde59f"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        },
+        {
+          "path": "src/application-browser-storage.ts",
+          "sha256": "sha256:cb2fc47dd2c9b2a565b43a3254f3f7261ecfd6dad09ca61c3450ef2e4c58101d"
+        },
+        {
+          "path": "src/application-core.ts",
+          "sha256": "sha256:b9a2369ffdf011a706efa74e0abb82e8dcc73e8136d3c841df6953564c23f2a1"
+        },
+        {
+          "path": "src/application-filesystem.ts",
+          "sha256": "sha256:f5ffe5f8c5ad97c2e1ed9cbb8f0f4917004dd11606c41097a7bbf4bd4dc2009b"
+        },
+        {
+          "path": "src/application-quota.ts",
+          "sha256": "sha256:c99a1521c36913fade9484fd308b04380278ba5095201563ca9abdf1e502f911"
+        },
+        {
+          "path": "src/application-storage.ts",
+          "sha256": "sha256:fedd14358bd5900c837967e1a5b66f2726bbac18f7773dc40cdb0143220112b4"
+        },
+        {
+          "path": "src/application.ts",
+          "sha256": "sha256:2674509bb45b061de65d4dc521de683603d6c3985789884a4c465be303be0fb2"
+        },
+        {
+          "path": "src/runtime-journal-contract.ts",
+          "sha256": "sha256:81ecab1b2858f442031191f36b1bcd20d05bfd733e1accaa5ed7482f7332251a"
+        },
+        {
+          "path": "src/store-contract.ts",
+          "sha256": "sha256:979c959d060c130bb4d47ce67f08ed214e877475db64b8cb4ecf0c25927aad6b"
+        },
+        {
+          "path": "src/transport-contract.ts",
+          "sha256": "sha256:e2a89b016fc1d5eac7241890db8b1be352623e3b7ba42e23b8cee1745d09a23c"
+        }
+      ]
+    },
+    {
+      "id": "HST-11",
+      "evidence": "not-started",
+      "suite": "host-conformance",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "docs/malleable-site.md",
+          "sha256": "sha256:6dd044243376a5519b2b502b95a10a3b718535516c6670c20228b5e3c548f9ed"
+        },
+        {
+          "path": "examples/malleable-site/propose.ts",
+          "sha256": "sha256:3b5246d9d7982345d954a6c764a32803b72201311e2967b6812be1e0ea7188bd"
+        },
+        {
+          "path": "src/chat-completions.ts",
+          "sha256": "sha256:5a6ff036b97f6a394da359c997c12bdc94e845ab6b07c142564082130415af00"
+        },
+        {
+          "path": "src/effects.ts",
+          "sha256": "sha256:7f81f5ffe766bff3134fadc98c637f4f399236ec6d658c231e5428c18896fd38"
+        },
+        {
+          "path": "src/gateway-accounting.ts",
+          "sha256": "sha256:fe4463fe1ca7e3e2db9e623306d2ff682184c97c8e1e0245ab6bd9e4695b65cf"
+        },
+        {
+          "path": "src/gateway-observation.ts",
+          "sha256": "sha256:25bbb1aa4ddc5ec9bddf20af5352bc87ab055a32c1ae78aa33dd95447cbd6864"
+        },
+        {
+          "path": "src/gateway.ts",
+          "sha256": "sha256:3177ce4999a9b8009424327cd1f35576d777a42b73b616d36b3032a9f89cbb61"
+        },
+        {
+          "path": "src/run.ts",
+          "sha256": "sha256:1231b53637f99c21a5930022e044bdaf5e9875bb3f46b23b91c8adcb528db2dd"
+        }
+      ]
+    },
+    {
+      "id": "HST-12",
+      "evidence": "not-started",
+      "suite": "host-conformance",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "docs/local-triage.md",
+          "sha256": "sha256:2af940af929c255e56b8755fb9e9c04442015e98598fd5ef9513b25807b9c57a"
+        },
+        {
+          "path": "docs/malleable-workbench.md",
+          "sha256": "sha256:536c225e472bf456e2dceff3cae5ea160af68973ad47eb0589b8eed5637f9b86"
+        },
+        {
+          "path": "examples/browser-grow/controller.ts",
+          "sha256": "sha256:aa262147e610062cb6df10cce93195b97860ed8375c3d24214f0caa857a53c14"
+        },
+        {
+          "path": "examples/browser-grow/policy.ts",
+          "sha256": "sha256:b080ae99a504dc6af69948f8b869e90b9f4fb83e89a99f397aebc4ff37360f6b"
+        },
+        {
+          "path": "examples/local-triage-web/session.ts",
+          "sha256": "sha256:ab412310c973ac91bd5fc5230f81b9da392a7166a1b2ae6a53ce9c717e30c6d6"
+        },
+        {
+          "path": "examples/local-triage/contract.ts",
+          "sha256": "sha256:7791cd5c461447c9d2619d9c66d4644801bfa2f14764c164e7f80cfcd4e15cea"
+        },
+        {
+          "path": "examples/local-triage/host.ts",
+          "sha256": "sha256:46859a44fdd112f33dd4e60e0eb1a6a4e9b74dcb4fbc6095bd29a2d03724d83c"
+        },
+        {
+          "path": "examples/local-triage/renderers/src/lib.rs",
+          "sha256": "sha256:9a548d751150d1e57ce2ff1d6b7e57fc21d7013a500f4477aa236721617aacd6"
+        },
+        {
+          "path": "examples/malleable-site/core.ts",
+          "sha256": "sha256:2991eab2e7f9cf6a9af1bf0c2bd4fd5bb01f0ff948c1bf00f8230a9c86edc86a"
+        },
+        {
+          "path": "examples/malleable-site/host.ts",
+          "sha256": "sha256:b3654afab44e9737bb39a7bdb6fe81b9c81d14427354247ba87189e3245c9729"
+        },
+        {
+          "path": "examples/malleable-site/renderers/src/lib.rs",
+          "sha256": "sha256:9f40e88420ac148b400550ab0dd02c92021a872607901c2a6640c48d5e09d287"
+        },
+        {
+          "path": "examples/malleable-site/surface-manifests.ts",
+          "sha256": "sha256:a44e7b92c57728c44cbcf250e0728c542830ecf2a675a03c0e6826dba26aeefe"
+        },
+        {
+          "path": "examples/malleable-site/surface.ts",
+          "sha256": "sha256:01645cb974676f9ae257dfd870e271c747536d65b423c8412c6d0fa0af43581d"
+        },
+        {
+          "path": "examples/malleable-site/workbench-contract.ts",
+          "sha256": "sha256:8f4168ea3e1ba60bcf405c484dc6e5db41bb06c896cb51528eb9d61c0652c707"
+        },
+        {
+          "path": "examples/malleable-site/workbench.ts",
+          "sha256": "sha256:484a26474ab28f2d66477105ccf09b514fb5b8a398b721ee0a403170e2da00b1"
+        },
+        {
+          "path": "site/grow.ts",
+          "sha256": "sha256:7a80b0813ab884bac1623010da78b0b975d024c860e3cda8dbeddeba7f1025e7"
+        },
+        {
+          "path": "site/living.ts",
+          "sha256": "sha256:f77d477cbf1ff4369e499953462c8079e3f52fad7aafd6592dad563c75e9b6f0"
+        },
+        {
+          "path": "site/workbench.ts",
+          "sha256": "sha256:e906b11812a124e7704402c5170673031e35ab411ef6c1d7c1f1a36a613220bf"
+        },
+        {
+          "path": "spec/v1/application.md",
+          "sha256": "sha256:fe86d867ffa60ee678be48ee81eb07ca8dc5184654ef8b694d45ef31d87921b6"
+        }
+      ]
+    },
+    {
+      "id": "PKG-06",
+      "evidence": "not-started",
+      "suite": "release-evidence",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "README.md",
+          "sha256": "sha256:70a0cc487d27209d79cdd778d6de98b5e898daddffed078cd8ffa12c51b6b0fc"
+        },
+        {
+          "path": "docs/application-host-adapters.md",
+          "sha256": "sha256:535af12b441e2c63358844306d85d9c9178e28bf2f4af339c5cfcd0123cde59f"
+        },
+        {
+          "path": "examples/browser-grow/controller.ts",
+          "sha256": "sha256:aa262147e610062cb6df10cce93195b97860ed8375c3d24214f0caa857a53c14"
+        },
+        {
+          "path": "examples/local-triage/package-smoke.ts",
+          "sha256": "sha256:a0988346abb125d7b9503e29d1a248b6ceac9c2dfa0d952b5b49b921c7c4ac9f"
+        },
+        {
+          "path": "examples/local-triage/package.ts",
+          "sha256": "sha256:6dec9a7ee1d9201a81a542006d55f1fc2babad92a4af2110ac8eaf32489ccc65"
+        },
+        {
+          "path": "examples/malleable-site/core.ts",
+          "sha256": "sha256:2991eab2e7f9cf6a9af1bf0c2bd4fd5bb01f0ff948c1bf00f8230a9c86edc86a"
+        },
+        {
+          "path": "index.ts",
+          "sha256": "sha256:1867c4537e3f50a5a6e3fc9284b93ecfe336890f6c023187acfe30714d1b5f35"
+        },
+        {
+          "path": "package.json",
+          "sha256": "sha256:a6cc47795cf81773573375e3177a7b8ea6307515d989aad3373eb1060dfd4954"
+        },
+        {
+          "path": "scripts/browser-grow-qualification.mjs",
+          "sha256": "sha256:15ef77f3d2ef12cf2fb619cf9aed6c4f04c56faeb98efe9c0668605feb35dd29"
+        },
+        {
+          "path": "src/algal_expr.wasm.json",
+          "sha256": "sha256:09ab2301edf297d7814b816b531ac99a9a85786bf2399f41adf06acbcc2687a0"
+        },
+        {
+          "path": "src/application-browser-storage.ts",
+          "sha256": "sha256:cb2fc47dd2c9b2a565b43a3254f3f7261ecfd6dad09ca61c3450ef2e4c58101d"
+        },
+        {
+          "path": "src/application-core.ts",
+          "sha256": "sha256:b9a2369ffdf011a706efa74e0abb82e8dcc73e8136d3c841df6953564c23f2a1"
+        },
+        {
+          "path": "src/application-storage.ts",
+          "sha256": "sha256:fedd14358bd5900c837967e1a5b66f2726bbac18f7773dc40cdb0143220112b4"
+        },
+        {
+          "path": "src/expr.ts",
+          "sha256": "sha256:61951551af697bcae2da1722e94da77cd7873c43e5384ee0563305dc6beb6946"
+        },
+        {
+          "path": "src/runtime-journal-contract.ts",
+          "sha256": "sha256:81ecab1b2858f442031191f36b1bcd20d05bfd733e1accaa5ed7482f7332251a"
+        },
+        {
+          "path": "src/sha256.ts",
+          "sha256": "sha256:a0a8eace9cf5e3001a26fe63001c5bdade1a1bc5ed62320e113fd429fc9d8098"
+        },
+        {
+          "path": "src/store-contract.ts",
+          "sha256": "sha256:979c959d060c130bb4d47ce67f08ed214e877475db64b8cb4ecf0c25927aad6b"
+        },
+        {
+          "path": "src/store-memory.ts",
+          "sha256": "sha256:cd48c01ad188932561f293e0576ee7cea4ff0d4d891bced3d61cd0a82be7d4e8"
+        },
+        {
+          "path": "src/transport-contract.ts",
+          "sha256": "sha256:e2a89b016fc1d5eac7241890db8b1be352623e3b7ba42e23b8cee1745d09a23c"
+        },
+        {
+          "path": "src/utf8.ts",
+          "sha256": "sha256:d74625755dfbbfbae0bf707a0e9ead5aaa62d183dbb2416ad5192ac3430d526c"
+        },
+        {
+          "path": "tests/browser-grow-storage.ts",
+          "sha256": "sha256:c190ae4c943cd2fd1b7a225c847f65c3c554ca235acaaaa6b76e9fa4a0f0a7ae"
+        }
+      ]
+    },
+    {
+      "id": "HST-13",
+      "evidence": "not-started",
+      "suite": "host-conformance",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "crates/algal/src/effects.rs",
+          "sha256": "sha256:983548e933f1e09452c9d765a61fa3d45c0a74579963583ce31b806c3d59e535"
+        },
+        {
+          "path": "crates/algal/src/journal.rs",
+          "sha256": "sha256:828f37b9b41c8e1851e3ad8cbf13050f74fa0fd0ce64b4f7fc2e83b3576bbf18"
+        },
+        {
+          "path": "crates/algal/src/receipt.rs",
+          "sha256": "sha256:1aad89398bb43d7cec70b68274ac57e2f4501e9d143be176ed68e32aa6e72c96"
+        },
+        {
+          "path": "crates/algal/src/runtime.rs",
+          "sha256": "sha256:67bbe3245b3b106d7723493158b27f98689516d8bd7ae5709a4154eedf5c6250"
+        },
+        {
+          "path": "crates/algal/tests/host_executor.rs",
+          "sha256": "sha256:c4f7fc6b025a2e08708062f5f272d6d6d78d1e9ecbcf7109db8b39a5fd143c21"
+        },
+        {
+          "path": "spec/v1/organism.md",
+          "sha256": "sha256:0dd59749214da361520b81f48ad4278475b674c2c2b8156bd06478cdef39ef5f"
+        }
+      ]
+    },
+    {
+      "id": "HST-14",
+      "evidence": "not-started",
+      "suite": "host-conformance",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "docs/application-host-adapters.md",
+          "sha256": "sha256:535af12b441e2c63358844306d85d9c9178e28bf2f4af339c5cfcd0123cde59f"
+        },
+        {
+          "path": "docs/browser-grow.md",
+          "sha256": "sha256:65b8d3ae4a00da57c1a605a15e32800cf98430321616e1b14c57e85a38d1726f"
+        },
+        {
+          "path": "examples/browser-grow/controller.ts",
+          "sha256": "sha256:aa262147e610062cb6df10cce93195b97860ed8375c3d24214f0caa857a53c14"
+        },
+        {
+          "path": "examples/browser-grow/policy.ts",
+          "sha256": "sha256:b080ae99a504dc6af69948f8b869e90b9f4fb83e89a99f397aebc4ff37360f6b"
+        },
+        {
+          "path": "scripts/browser-grow-qualification.mjs",
+          "sha256": "sha256:15ef77f3d2ef12cf2fb619cf9aed6c4f04c56faeb98efe9c0668605feb35dd29"
+        },
+        {
+          "path": "site/build.ts",
+          "sha256": "sha256:374513479fdd24246aace6f7bdd37f1da8fb701a0b9efb3ea98f9fbe19923db2"
+        },
+        {
+          "path": "site/grow-offline.ts",
+          "sha256": "sha256:2326f313b71ceae0a9dd1340ad27250e8a2045d54e0e50182a0fb40e428f4e5a"
+        },
+        {
+          "path": "site/grow.ts",
+          "sha256": "sha256:7a80b0813ab884bac1623010da78b0b975d024c860e3cda8dbeddeba7f1025e7"
+        },
+        {
+          "path": "src/application-browser-storage.ts",
+          "sha256": "sha256:cb2fc47dd2c9b2a565b43a3254f3f7261ecfd6dad09ca61c3450ef2e4c58101d"
+        },
+        {
+          "path": "src/application-core.ts",
+          "sha256": "sha256:b9a2369ffdf011a706efa74e0abb82e8dcc73e8136d3c841df6953564c23f2a1"
+        },
+        {
+          "path": "src/application-storage.ts",
+          "sha256": "sha256:fedd14358bd5900c837967e1a5b66f2726bbac18f7773dc40cdb0143220112b4"
+        },
+        {
+          "path": "tests/browser-grow-storage.ts",
+          "sha256": "sha256:c190ae4c943cd2fd1b7a225c847f65c3c554ca235acaaaa6b76e9fa4a0f0a7ae"
+        }
+      ]
+    },
+    {
+      "id": "HST-15",
+      "evidence": "not-started",
+      "suite": "host-conformance",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "bun.lock",
+          "sha256": "sha256:c0c65c1fcec17e8215fc1dd2319bd83dfd165c2a6d33639cc0db6271134ee5a5"
+        },
+        {
+          "path": "docs/browser-grow.md",
+          "sha256": "sha256:65b8d3ae4a00da57c1a605a15e32800cf98430321616e1b14c57e85a38d1726f"
+        },
+        {
+          "path": "docs/browser-inference.md",
+          "sha256": "sha256:90a9a40d270d86c01a7b26899fe91089d8b081754bf34db341da6566b27a6456"
+        },
+        {
+          "path": "examples/browser-grow/controller.ts",
+          "sha256": "sha256:aa262147e610062cb6df10cce93195b97860ed8375c3d24214f0caa857a53c14"
+        },
+        {
+          "path": "package.json",
+          "sha256": "sha256:a6cc47795cf81773573375e3177a7b8ea6307515d989aad3373eb1060dfd4954"
+        },
+        {
+          "path": "scripts/browser-grow-qualification.mjs",
+          "sha256": "sha256:15ef77f3d2ef12cf2fb619cf9aed6c4f04c56faeb98efe9c0668605feb35dd29"
+        },
+        {
+          "path": "site/browser-inference-contract.ts",
+          "sha256": "sha256:e5efd388bd4869d29f3bca8a7716e385b5f56984954faabec04a7c11dcca7410"
+        },
+        {
+          "path": "site/browser-inference-worker.ts",
+          "sha256": "sha256:5bca15be9bf58ec3cf185d5c6713d1c7e536545d09bb4c388b3eaf128b381724"
+        },
+        {
+          "path": "site/browser-inference.test.ts",
+          "sha256": "sha256:b1f63be003daef17e5f94ad07b888a3a604815a0e8cc20705f2620da1484bc37"
+        },
+        {
+          "path": "site/browser-inference.ts",
+          "sha256": "sha256:0f492820d118c5d495c396a06d288134651b5bc615ffd9498ddd7698172e254d"
+        },
+        {
+          "path": "site/build.ts",
+          "sha256": "sha256:374513479fdd24246aace6f7bdd37f1da8fb701a0b9efb3ea98f9fbe19923db2"
+        },
+        {
+          "path": "site/grow-offline.ts",
+          "sha256": "sha256:2326f313b71ceae0a9dd1340ad27250e8a2045d54e0e50182a0fb40e428f4e5a"
+        },
+        {
+          "path": "site/grow.ts",
+          "sha256": "sha256:7a80b0813ab884bac1623010da78b0b975d024c860e3cda8dbeddeba7f1025e7"
+        }
+      ]
+    },
+    {
+      "id": "HST-16",
+      "evidence": "not-started",
+      "suite": "host-conformance",
+      "required": false,
+      "results": [],
+      "inputs": [
+        {
+          "path": "docs/application-host-adapters.md",
+          "sha256": "sha256:535af12b441e2c63358844306d85d9c9178e28bf2f4af339c5cfcd0123cde59f"
+        },
+        {
+          "path": "docs/browser-tasks.md",
+          "sha256": "sha256:d7e2c39be55a5500e6eaca95a316543ec82254183556037f2ab59347df702d7e"
+        },
+        {
+          "path": "docs/local-triage.md",
+          "sha256": "sha256:2af940af929c255e56b8755fb9e9c04442015e98598fd5ef9513b25807b9c57a"
+        },
+        {
+          "path": "examples/browser-triage/controller.test.ts",
+          "sha256": "sha256:f3dae8414652d89ce4f675f56fcae4505ffd4986d718aa7aea93e25bbb12f152"
+        },
+        {
+          "path": "examples/browser-triage/controller.ts",
+          "sha256": "sha256:ca4ff9b8fc0b63911df8257f57b076dec9fa62382aa3859c8ce8df15863fa235"
+        },
+        {
+          "path": "examples/local-triage/contract.ts",
+          "sha256": "sha256:7791cd5c461447c9d2619d9c66d4644801bfa2f14764c164e7f80cfcd4e15cea"
+        },
+        {
+          "path": "examples/local-triage/core.test.ts",
+          "sha256": "sha256:58f7d77f70bf4c1fdf982f77bb8e7ee33f6cd23097394a6ee88c57de83031afe"
+        },
+        {
+          "path": "examples/local-triage/core.ts",
+          "sha256": "sha256:d270b3419695413973058e42a88ba09c5550b04b3c24f63319083cfca4d083dd"
+        },
+        {
+          "path": "examples/local-triage/host.ts",
+          "sha256": "sha256:46859a44fdd112f33dd4e60e0eb1a6a4e9b74dcb4fbc6095bd29a2d03724d83c"
+        },
+        {
+          "path": "examples/local-triage/programs.ts",
+          "sha256": "sha256:34baf604ada84f6c7bd2199069b131bb10b252766c1dd3e3ba9b90a8f3c32fa9"
+        },
+        {
+          "path": "package.json",
+          "sha256": "sha256:a6cc47795cf81773573375e3177a7b8ea6307515d989aad3373eb1060dfd4954"
+        },
+        {
+          "path": "scripts/browser-triage-qualification.mjs",
+          "sha256": "sha256:0b2dfb22a7a5d8e11fac6f262b431ffaa5dd113d3c6d4766bb3c86bc86946bc8"
+        },
+        {
+          "path": "site/grow-offline.ts",
+          "sha256": "sha256:2326f313b71ceae0a9dd1340ad27250e8a2045d54e0e50182a0fb40e428f4e5a"
+        },
+        {
+          "path": "site/tasks-render.ts",
+          "sha256": "sha256:8bc9a251f025bc7b6eaf55a6def08472b7386800822c284330f6d09576fcb73e"
+        },
+        {
+          "path": "site/tasks.ts",
+          "sha256": "sha256:a0bdf0738ef096457286d79d72c6e2aa2bd0c249dac06c44712cf5a278dbb26c"
+        },
+        {
+          "path": "src/application-browser-storage.ts",
+          "sha256": "sha256:cb2fc47dd2c9b2a565b43a3254f3f7261ecfd6dad09ca61c3450ef2e4c58101d"
+        },
+        {
+          "path": "src/application-core.ts",
+          "sha256": "sha256:b9a2369ffdf011a706efa74e0abb82e8dcc73e8136d3c841df6953564c23f2a1"
+        },
+        {
+          "path": "src/application-filesystem.ts",
+          "sha256": "sha256:f5ffe5f8c5ad97c2e1ed9cbb8f0f4917004dd11606c41097a7bbf4bd4dc2009b"
+        },
+        {
+          "path": "src/application-memory.ts",
+          "sha256": "sha256:f22b748220f89e79c65a05d3113f6796b4a34609e96fb4862ee1fca34ab95961"
+        },
+        {
+          "path": "src/application-migration.ts",
+          "sha256": "sha256:65947c21465d8b0b3635554668e520e6c0c27398fd5baa158042b5580e3df048"
+        },
+        {
+          "path": "src/application-storage.ts",
+          "sha256": "sha256:fedd14358bd5900c837967e1a5b66f2726bbac18f7773dc40cdb0143220112b4"
+        },
+        {
+          "path": "src/durable-fs.ts",
+          "sha256": "sha256:657515fbc68470a0872b74c09b0c12b7c6530133d4a3b2dd076763a8c58d899f"
+        },
+        {
+          "path": "src/host-state.ts",
+          "sha256": "sha256:ae40c39eb62409b6a1dad07d78eef9612994b39ad73ac971bc47fd06a1a81409"
+        },
+        {
+          "path": "tests/browser-triage-storage.ts",
+          "sha256": "sha256:7bcd835442d2ed9bbc57a185185c38f48c60a4e73703f5400266ace24995e93b"
+        }
+      ]
+    }
+  ]
+}

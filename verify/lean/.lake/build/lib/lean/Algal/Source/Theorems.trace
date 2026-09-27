@@ -1,0 +1,48 @@
+{"synthetic": false,
+ "schemaVersion": "2025-09-10",
+ "outputs":
+ {"o": ["79ef3fd5b435f185.olean"],
+  "m": false,
+  "i": "b409a4c52001f854.ilean",
+  "c": "70dc41bd89c0475e.c"},
+ "log":
+ [{"message":
+   ".> LEAN_PATH=/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean /Users/bg/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lean --threads=1 --memory=1024 /Users/bg/Documents/algal/verify/lean/Algal/Source/Theorems.lean -o /Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Source/Theorems.olean -i /Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Source/Theorems.ilean -c /Users/bg/Documents/algal/verify/lean/.lake/build/ir/Algal/Source/Theorems.c --setup /Users/bg/Documents/algal/verify/lean/.lake/build/ir/Algal/Source/Theorems.setup.json --json",
+   "level": "trace"},
+  {"message":
+   "Algal/Source/Theorems.lean:55:26: `if_true` has been deprecated: Use `ite_true` instead",
+   "level": "warning"},
+  {"message":
+   "Algal/Source/Theorems.lean:128:28: `if_pos` has been deprecated: Use `ite_eq_left` instead",
+   "level": "warning"},
+  {"message":
+   "Algal/Source/Theorems.lean:138:28: `if_neg` has been deprecated: Use `ite_eq_right` instead",
+   "level": "warning"},
+  {"message":
+   "Algal/Source/Theorems.lean:152:6: `if_neg` has been deprecated: Use `ite_eq_right` instead",
+   "level": "warning"},
+  {"message":
+   "Algal/Source/Theorems.lean:165:6: `if_neg` has been deprecated: Use `ite_eq_right` instead",
+   "level": "warning"}],
+ "inputs":
+ [["deps",
+   [["algalVerification/Algal:extraDep",
+     [["@algalVerification:extraDep", "00000000000006bb"]]],
+    ["imports",
+     [["Algal.Source.Eval transitive imports (legacy)", "8d7c3c8ee9c3348d"],
+      ["Algal.Source.Eval:importAllArts", "9f41137f1e7a7953"]]]]],
+  ["libs",
+   [["import dynlibs", "00000000000006bb"],
+    ["package external libraries", "00000000000006bb"],
+    ["module dynlibs", "00000000000006bb"],
+    ["module plugins", "00000000000006bb"]]],
+  ["Lean 4.34.0, commit 293d5d0c0c3f3dded4688b3ccd6a33939ac5102b",
+   "a1c6c7aa3e9abfe7"],
+  ["/Users/bg/Documents/algal/verify/lean/Algal/Source/Theorems.lean",
+   "c9dcfb75dafaa2ad"],
+  ["options", "00000000000006bb"],
+  ["isModule: false", "feefd2a0d3a1847e"],
+  ["Module.name: Algal.Source.Theorems", "cc3097d224f5dd50"],
+  ["Package.id?: (some algalVerification)", "322e4bdf4ecfef12"],
+  ["Module.leanArgs: #[--threads=1, --memory=1024]", "42b59798c0f2dde0"]],
+ "depHash": "a67cb7d5070ac4e4"}

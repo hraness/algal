@@ -1,0 +1,33 @@
+{"synthetic": false,
+ "schemaVersion": "2025-09-10",
+ "outputs":
+ {"o": ["c8dc28efec995daf.olean"],
+  "m": false,
+  "i": "5b7beb2975d1426d.ilean",
+  "c": "c80957186db74b71.c"},
+ "log":
+ [{"message":
+   ".> LEAN_PATH=/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean /Users/bg/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lean --threads=1 --memory=1024 /Users/bg/Documents/algal/verify/lean/Algal/Core/Graph.lean -o /Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/Graph.olean -i /Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/Graph.ilean -c /Users/bg/Documents/algal/verify/lean/.lake/build/ir/Algal/Core/Graph.c --setup /Users/bg/Documents/algal/verify/lean/.lake/build/ir/Algal/Core/Graph.setup.json --json",
+   "level": "trace"}],
+ "inputs":
+ [["deps",
+   [["algalVerification/Algal:extraDep",
+     [["@algalVerification:extraDep", "00000000000006bb"]]],
+    ["imports",
+     [["Algal.Core.Ports transitive imports (legacy)", "5986480a02263ddd"],
+      ["Algal.Core.Ports:importAllArts", "e551b03fd86ddc53"]]]]],
+  ["libs",
+   [["import dynlibs", "00000000000006bb"],
+    ["package external libraries", "00000000000006bb"],
+    ["module dynlibs", "00000000000006bb"],
+    ["module plugins", "00000000000006bb"]]],
+  ["Lean 4.34.0, commit 293d5d0c0c3f3dded4688b3ccd6a33939ac5102b",
+   "a1c6c7aa3e9abfe7"],
+  ["/Users/bg/Documents/algal/verify/lean/Algal/Core/Graph.lean",
+   "68155c95961d34b1"],
+  ["options", "00000000000006bb"],
+  ["isModule: false", "feefd2a0d3a1847e"],
+  ["Module.name: Algal.Core.Graph", "3a476b334b4eb2c9"],
+  ["Package.id?: (some algalVerification)", "322e4bdf4ecfef12"],
+  ["Module.leanArgs: #[--threads=1, --memory=1024]", "42b59798c0f2dde0"]],
+ "depHash": "99facf255fd8e47f"}

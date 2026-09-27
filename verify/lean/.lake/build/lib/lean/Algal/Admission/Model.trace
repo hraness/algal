@@ -1,0 +1,33 @@
+{"synthetic": false,
+ "schemaVersion": "2025-09-10",
+ "outputs":
+ {"o": ["6b2105958aa3e54b.olean"],
+  "m": false,
+  "i": "e3a8510498416d9c.ilean",
+  "c": "68d976e7d9825430.c"},
+ "log":
+ [{"message":
+   ".> LEAN_PATH=/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean /private/tmp/algal-verification-tools/lean-4.34.0-darwin_aarch64/bin/lean --threads=1 --memory=1024 /Users/bg/Documents/algal/verify/lean/Algal/Admission/Model.lean -o /Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Admission/Model.olean -i /Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Admission/Model.ilean -c /Users/bg/Documents/algal/verify/lean/.lake/build/ir/Algal/Admission/Model.c --setup /Users/bg/Documents/algal/verify/lean/.lake/build/ir/Algal/Admission/Model.setup.json --json",
+   "level": "trace"}],
+ "inputs":
+ [["deps",
+   [["algalVerification/Algal:extraDep",
+     [["@algalVerification:extraDep", "00000000000006bb"]]],
+    ["imports",
+     [["Algal.Memory.Datalog transitive imports (legacy)", "00000000000006bb"],
+      ["Algal.Memory.Datalog:importAllArts", "ed60b0c3da98888c"]]]]],
+  ["libs",
+   [["import dynlibs", "00000000000006bb"],
+    ["package external libraries", "00000000000006bb"],
+    ["module dynlibs", "00000000000006bb"],
+    ["module plugins", "00000000000006bb"]]],
+  ["Lean 4.34.0, commit 293d5d0c0c3f3dded4688b3ccd6a33939ac5102b",
+   "a1c6c7aa3e9abfe7"],
+  ["/Users/bg/Documents/algal/verify/lean/Algal/Admission/Model.lean",
+   "0dad2f79c3731bdd"],
+  ["options", "00000000000006bb"],
+  ["isModule: false", "feefd2a0d3a1847e"],
+  ["Module.name: Algal.Admission.Model", "4e87fa62ea2e46bd"],
+  ["Package.id?: (some algalVerification)", "322e4bdf4ecfef12"],
+  ["Module.leanArgs: #[--threads=1, --memory=1024]", "42b59798c0f2dde0"]],
+ "depHash": "00e34d9569251ec7"}

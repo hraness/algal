@@ -1,0 +1,33 @@
+{"synthetic": false,
+ "schemaVersion": "2025-09-10",
+ "outputs":
+ {"o": ["c8bc3aed7abecdcb.olean"],
+  "m": false,
+  "i": "66c2bfa6563606df.ilean",
+  "c": "ab99f8fec2ac1fe8.c"},
+ "log":
+ [{"message":
+   ".> LEAN_PATH=/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean /private/tmp/algal-verification-tools/lean-4.34.0-darwin_aarch64/bin/lean --threads=1 --memory=1024 /Users/bg/Documents/algal/verify/lean/Algal/Replay/Theorems.lean -o /Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Replay/Theorems.olean -i /Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Replay/Theorems.ilean -c /Users/bg/Documents/algal/verify/lean/.lake/build/ir/Algal/Replay/Theorems.c --setup /Users/bg/Documents/algal/verify/lean/.lake/build/ir/Algal/Replay/Theorems.setup.json --json",
+   "level": "trace"}],
+ "inputs":
+ [["deps",
+   [["algalVerification/Algal:extraDep",
+     [["@algalVerification:extraDep", "00000000000006bb"]]],
+    ["imports",
+     [["Algal.Replay.Model transitive imports (legacy)", "f2e82dfdcfd4c354"],
+      ["Algal.Replay.Model:importAllArts", "25fd5060ff5c0eda"]]]]],
+  ["libs",
+   [["import dynlibs", "00000000000006bb"],
+    ["package external libraries", "00000000000006bb"],
+    ["module dynlibs", "00000000000006bb"],
+    ["module plugins", "00000000000006bb"]]],
+  ["Lean 4.34.0, commit 293d5d0c0c3f3dded4688b3ccd6a33939ac5102b",
+   "a1c6c7aa3e9abfe7"],
+  ["/Users/bg/Documents/algal/verify/lean/Algal/Replay/Theorems.lean",
+   "14fbb4848f6f4b5f"],
+  ["options", "00000000000006bb"],
+  ["isModule: false", "feefd2a0d3a1847e"],
+  ["Module.name: Algal.Replay.Theorems", "12b343d326adfdff"],
+  ["Package.id?: (some algalVerification)", "322e4bdf4ecfef12"],
+  ["Module.leanArgs: #[--threads=1, --memory=1024]", "42b59798c0f2dde0"]],
+ "depHash": "a92fb4fb2d258a09"}

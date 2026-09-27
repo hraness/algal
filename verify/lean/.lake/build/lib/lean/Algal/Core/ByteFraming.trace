@@ -1,0 +1,33 @@
+{"synthetic": false,
+ "schemaVersion": "2025-09-10",
+ "outputs":
+ {"o": ["8e105a14439f947a.olean"],
+  "m": false,
+  "i": "21d8014540c94a42.ilean",
+  "c": "ed639be243124543.c"},
+ "log":
+ [{"message":
+   ".> LEAN_PATH=/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean /Users/bg/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lean --threads=1 --memory=1024 /Users/bg/Documents/algal/verify/lean/Algal/Core/ByteFraming.lean -o /Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/ByteFraming.olean -i /Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/ByteFraming.ilean -c /Users/bg/Documents/algal/verify/lean/.lake/build/ir/Algal/Core/ByteFraming.c --setup /Users/bg/Documents/algal/verify/lean/.lake/build/ir/Algal/Core/ByteFraming.setup.json --json",
+   "level": "trace"}],
+ "inputs":
+ [["deps",
+   [["algalVerification/Algal:extraDep",
+     [["@algalVerification:extraDep", "00000000000006bb"]]],
+    ["imports",
+     [["Algal.Core.JsonString transitive imports (legacy)", "00000000000006bb"],
+      ["Algal.Core.JsonString:importAllArts", "42510b09911e7e24"]]]]],
+  ["libs",
+   [["import dynlibs", "00000000000006bb"],
+    ["package external libraries", "00000000000006bb"],
+    ["module dynlibs", "00000000000006bb"],
+    ["module plugins", "00000000000006bb"]]],
+  ["Lean 4.34.0, commit 293d5d0c0c3f3dded4688b3ccd6a33939ac5102b",
+   "a1c6c7aa3e9abfe7"],
+  ["/Users/bg/Documents/algal/verify/lean/Algal/Core/ByteFraming.lean",
+   "5046268e79eb10b1"],
+  ["options", "00000000000006bb"],
+  ["isModule: false", "feefd2a0d3a1847e"],
+  ["Module.name: Algal.Core.ByteFraming", "98f7996448aebb78"],
+  ["Package.id?: (some algalVerification)", "322e4bdf4ecfef12"],
+  ["Module.leanArgs: #[--threads=1, --memory=1024]", "42b59798c0f2dde0"]],
+ "depHash": "3a675bf455a548f1"}

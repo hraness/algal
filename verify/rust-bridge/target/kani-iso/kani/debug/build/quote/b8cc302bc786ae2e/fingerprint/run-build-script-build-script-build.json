@@ -1,0 +1,1 @@
+{"rustc":10798808662114738006,"features":"","declared_features":"","target":0,"profile":0,"path":0,"deps":[[8949245912927223590,"build_script_build",false,7612182659548944875]],"local":[{"RerunIfChanged":{"output":"debug/build/quote/b8cc302bc786ae2e/run/stdout","paths":["build.rs"]}}],"rustflags":["--cfg=kani_host"],"config":0,"compile_kind":0}

@@ -1,0 +1,9 @@
+{"plugins": [],
+ "package": "algalVerification",
+ "options": {},
+ "name": "Algal.Core.Accounting",
+ "isModule": false,
+ "importArts":
+ {"Algal.Core.Binary64":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/Binary64.olean"]]},
+ "dynlibs": []}

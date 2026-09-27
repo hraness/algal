@@ -1,0 +1,55 @@
+{"plugins": [],
+ "package": "algalVerification",
+ "options": {},
+ "name": "Algal.Core.All",
+ "isModule": false,
+ "importArts":
+ {"Algal.Core.Text":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/Text.olean"]],
+  "Algal.Core.SignedRounding":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/SignedRounding.olean"]],
+  "Algal.Core.RoundingInterval":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/RoundingInterval.olean"]],
+  "Algal.Core.RoundingEndpoints":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/RoundingEndpoints.olean"]],
+  "Algal.Core.RationalSelector":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/RationalSelector.olean"]],
+  "Algal.Core.RationalBracket":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/RationalBracket.olean"]],
+  "Algal.Core.Ports":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/Ports.olean"]],
+  "Algal.Core.OwnMap":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/OwnMap.olean"]],
+  "Algal.Core.Oracle":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/Oracle.olean"]],
+  "Algal.Core.NumericInjectivity":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/NumericInjectivity.olean"]],
+  "Algal.Core.Normalize":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/Normalize.olean"]],
+  "Algal.Core.NegativeEndpoints":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/NegativeEndpoints.olean"]],
+  "Algal.Core.KeyOrder":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/KeyOrder.olean"]],
+  "Algal.Core.JsonString":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/JsonString.olean"]],
+  "Algal.Core.JsonLayout":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/JsonLayout.olean"]],
+  "Algal.Core.Json":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/Json.olean"]],
+  "Algal.Core.IntervalSearch":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/IntervalSearch.olean"]],
+  "Algal.Core.Graph":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/Graph.olean"]],
+  "Algal.Core.FiniteNeighbors":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/FiniteNeighbors.olean"]],
+  "Algal.Core.DecimalSyntax":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/DecimalSyntax.olean"]],
+  "Algal.Core.ByteFraming":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/ByteFraming.olean"]],
+  "Algal.Core.BinaryValue":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/BinaryValue.olean"]],
+  "Algal.Core.Binary64":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/Binary64.olean"]],
+  "Algal.Core.Accounting":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/Accounting.olean"]]},
+ "dynlibs": []}

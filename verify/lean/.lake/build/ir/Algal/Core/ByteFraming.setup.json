@@ -1,0 +1,9 @@
+{"plugins": [],
+ "package": "algalVerification",
+ "options": {},
+ "name": "Algal.Core.ByteFraming",
+ "isModule": false,
+ "importArts":
+ {"Algal.Core.JsonString":
+  [["/Users/bg/Documents/algal/verify/lean/.lake/build/lib/lean/Algal/Core/JsonString.olean"]]},
+ "dynlibs": []}
