@@ -21,11 +21,11 @@ ALGAL is prerelease software. Unsigned native builds for macOS on Apple silicon 
 
 ## Comparisons
 
-- [ALGAL vs LangGraph](https://algal.computer/compare/langgraph/): agent orchestration framework versus a language and VM where the program is data
-- [ALGAL vs DSPy](https://algal.computer/compare/dspy/): prompt-space optimization inside a fixed pipeline versus measured search over program structure
-- [ALGAL vs Temporal](https://algal.computer/compare/temporal/): durable execution service versus portable, verifiable program artifacts
-- [ALGAL vs Restate](https://algal.computer/compare/restate/): journaled durable handlers in a single Rust binary versus agent programs as typed, replay-verified data
-- [ALGAL vs Inngest](https://algal.computer/compare/inngest/): checkpointed step functions on a metered cloud versus a program-as-data VM with offline-verifiable receipts
+- [ALGAL vs LangGraph](https://algal.computer/compare/langgraph/): LangGraph's agents are code in your process; ALGAL's programs are typed data a VM runs
+- [ALGAL vs DSPy](https://algal.computer/compare/dspy/): DSPy tunes prompts and weights inside a pipeline you design; ALGAL searches over whole programs
+- [ALGAL vs Temporal](https://algal.computer/compare/temporal/): Temporal keeps workflow history in its service; ALGAL writes each run to a receipt that verifies offline
+- [ALGAL vs Restate](https://algal.computer/compare/restate/): Restate journals handlers inside a Rust server; ALGAL needs no server between invocations
+- [ALGAL vs Inngest](https://algal.computer/compare/inngest/): Inngest checkpoints functions on a cloud that bills per step; ALGAL runs from a local binary with no meter
 
 ## Downloadable examples and receipts
 

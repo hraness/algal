@@ -1,57 +1,56 @@
 ---
 title: ALGAL vs Inngest
-description: Inngest checkpoints TypeScript, Python, and Go functions on a managed cloud. ALGAL's programs are typed data with receipts that replay offline.
+description: Inngest checkpoints TypeScript, Python, and Go functions and bills per step. ALGAL runs agent programs from a local binary with no per-step meter.
 order: 5
 ---
 
 # ALGAL vs Inngest
 
-**Inngest is durable execution as a service: your code stays ordinary TypeScript, Python, or Go, `step.run()` checkpoints each unit of work, and Inngest Cloud drives the run. ALGAL is a language and a virtual machine for agent programs.** Both answer the same question, "what survives a crash halfway through a long job," and differ on nearly everything else.
+Inngest is durable execution as a service. Your code stays ordinary TypeScript, Python, or Go, `step.run()` checkpoints each unit of work, and Inngest Cloud drives the run. ALGAL is a language and a virtual machine for agent programs. Both answer the question of what survives a crash halfway through a long job, and they differ on where the run lives, what it costs, and what record it leaves.
 
-## The shared spine
+## What both systems do
 
-- Finished work does not re-run: `step.run()` memoizes a step's result so retries resume from the last checkpoint; ALGAL records each effect cell's arguments and output on a receipt.
-- Waits do not hold compute: `step.sleep()` parks a run for up to a year (seven days on the free plan); an ALGAL wait is a checkpointed suspension that releases the process entirely.
-- Both sell the same promise: write the flow, and the platform worries about crashes.
+- Avoid re-running finished work. `step.run()` memoizes a step's result so a retry resumes from the last checkpoint; ALGAL records each effect cell's arguments and output on a receipt.
+- Let a run wait without holding compute. `step.sleep()` parks a run for up to a year (seven days on the free plan); an ALGAL wait is a checkpointed suspension that lets the process exit entirely.
 
-## Where they diverge
+## How they differ
 
 | | Inngest | ALGAL |
 |---|---|---|
 | The program is | host-language functions with `step.*` calls | typed data: an `algal.organism.v1` manifest |
-| Where the run lives | your compute, orchestrated by Inngest Cloud or a self-hosted server, which keeps run state | one binary and a store on your machine |
-| The record is | run state and traces inside the platform, retained per plan | a receipt file that replays bit-for-bit offline, no expiry |
+| Where the run lives | your compute, orchestrated by Inngest Cloud or a self-hosted server that keeps run state | one binary and a store on your machine |
+| The record is | run state and traces inside the platform, kept for as long as your plan allows | a receipt file that replays bit-for-bit offline and does not expire |
 | Nondeterminism | whatever code you wrap in `step.run()` | declared effect cells (agent, decide, tool), typed and budgeted |
-| Authority model | whatever your code calls | capabilities the host grants; a manifest cannot mint its own |
+| Permissions | whatever your code calls | capabilities the host grants; a manifest cannot create its own |
 | The meter | cloud executions: one per run plus one per step | no meter; the binary is free and open source |
 
 ## What an execution costs
 
-Inngest Cloud bills by execution, and the unit is fine-grained: a run counts once, then each `step.run()` inside it counts again, so a five-step function uses six executions. The free plan includes 50,000 executions a month; Pro starts at $99 a month with 1 million included. Granular steps are the design's strength, and they are also the meter.
+Inngest Cloud bills by execution, and the unit is small: a run counts once, then each `step.run()` inside it counts again, so a five-step function uses six executions. The free plan includes 50,000 executions a month, and Pro starts at $99 a month with 1 million included. Fine-grained steps are what make Inngest's retries precise, and they are also what it charges for.
 
-ALGAL has no meter because there is no service: you run the binary, you keep the store, and the costs that remain (disk, model accounts) are already yours.
+ALGAL has no meter because there is no service. You run the binary and keep the store, and the remaining costs, such as disk and model accounts, are ones you already pay.
 
-## The limits that come with a platform
+## Platform limits
 
-Inngest's documented platform limits: a step can sleep up to one year, each step times out at two hours, a function tops out at 1,000 steps, and total run state is capped at 32MiB. Reasonable bounds, and they exist because the run's state lives in the service. Self-hosting is supported as a single binary with SQLite persistence, though Inngest notes its support team does not guarantee direct support for self-hosted instances.
+Inngest documents these limits: a step can sleep for up to one year, each step times out after two hours, a function can have at most 1,000 steps, and total run state is capped at 32MiB. The limits exist because the run's state lives in the service. Self-hosting is supported as a single binary with SQLite persistence, though Inngest notes that its support team does not guarantee direct support for self-hosted instances.
 
-An ALGAL wait has no plan ceiling because there is no plan: the suspension is a checkpointed capability in your store that ends when its declared wake arrives. The bounds that exist are the contract's own: bounded lists, byte sizes, and budgets on cells.
+An ALGAL wait has no plan ceiling because there is no plan. The suspension is a checkpointed capability in your store, and it ends when its declared wake arrives. ALGAL's limits come from the manifest contract instead: maximum list lengths, byte sizes, and budgets on cells.
 
-## Where Inngest is the better fit
+## When to choose Inngest
 
 - You want durable execution with no infrastructure to run: a dev server, a managed cloud, tracing and observability, and a free tier to start on.
 - Your code is ordinary TypeScript, Python, or Go and should stay that way; steps wrap what you already have.
-- You want a vendor operating the platform your runs depend on.
+- You want a vendor to operate the platform your runs depend on.
 
-## Where ALGAL is the better fit
+## When to choose ALGAL
 
-- The program itself must be an artifact: a typed manifest that gets hashed, diffed, reviewed as data, or generated by another program through `spawn`.
-- Evidence must travel: receipts replay-verify offline with no store, no credentials, and no account, on machines that never ran the original.
-- Authority must be explicit: capabilities granted by the host, budgets on cells, and no minting power out of data.
+- The program itself must be something you can hash, diff, review as data, or generate from another program through `spawn`.
+- Someone else needs to check the run: receipts verify offline with no store, no credentials, and no account, on machines that never ran the original.
+- A program should get only the permissions you grant: capabilities from the host, budgets on cells, and no way to create permissions from data.
 - You want waits with no platform ceiling and no per-step meter: a binary and a store you own.
 
 ## Status and limits
 
-ALGAL is a prerelease application VM: unsigned packages, local stores, and no hosted service, so you operate it yourself. Inngest is a production platform with documented limits and a pricing page to match. If you need managed durable execution today, use Inngest. If you want to see what an agent program looks like when the program is data, [take the tour](/tour/) or [read the spec](/docs/spec/organism/).
+ALGAL is a prerelease application VM: unsigned packages, local stores, and no hosted service, so you operate it yourself. Inngest is a production platform with documented limits and published pricing. If you need managed durable execution today, use Inngest. To see an agent program written as data, [take the tour](/tour/) or [read the spec](/docs/spec/organism/).
 
 *Sources: [Inngest pricing](https://inngest.com/pricing), [Inngest steps](https://www.inngest.com/docs/learn/inngest-steps), the [usage limits reference](https://www.inngest.com/docs/usage-limits/inngest), and [self-hosting](https://www.inngest.com/docs/self-hosting), checked 2026-09-26.*
