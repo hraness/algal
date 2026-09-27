@@ -129,14 +129,18 @@ test("a child that exceeds a declared file-size limit dies inside the bound", as
   });
 });
 
-test("a child that exceeds a declared CPU limit is killed by signal", async () => {
+test("a Bun child that exceeds a declared CPU limit is killed by signal", async () => {
   await withTempDir(async (dir) => {
+    // Exercise a real child executable. A builtin-only /bin/sh loop can keep
+    // running past its reported CPU limit on macOS.
+    const bun = `'${process.execPath.replaceAll("'", "'\\''")}'`;
     const exec = isolatedCommandExecutor(
-      readThen("while :; do :; done"),
+      readThen(`exec ${bun} -e 'while (true) {}'`),
       { timeoutMs: 30_000, isolation: { cwd: dir, limits: { cpuSeconds: 1 } } },
     );
     await expect(exec.execute(request())).rejects.toMatchObject({
       code: "EFFECT_FAILED",
+      message: "executor terminated by signal; external completion uncertain",
       uncertain: true,
     });
   });
@@ -236,6 +240,10 @@ test("declared limits record what the platform enforces", () => {
     "darwin",
   );
   expect(darwin.descriptor.platform).toBe("darwin");
+  expect(darwin.descriptor.limits).toEqual({
+    cpuSeconds: { value: 30, enforced: false },
+  });
+  expect(darwin.script).toContain("ulimit -t 30 || exit 111");
 
   // Darwin cannot apply RLIMIT_AS at all — the declared knob is refused at
   // admission rather than silently skipped.

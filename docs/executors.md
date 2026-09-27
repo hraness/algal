@@ -209,8 +209,8 @@ commands in `--executors` maps, and `cmd:` bench specs):
   digested verbatim.
 - The child starts in `--executor-cwd` (default `.`). This fixes where it
   starts; it is not a filesystem sandbox.
-- A fixed wrapper script applies declared `ulimit` bounds before `exec`, so
-  the OS enforces them rather than the runner racing them: `cpuSeconds`
+- A fixed wrapper script asks the OS to apply declared `ulimit` bounds before
+  `exec`: `cpuSeconds`
   (RLIMIT_CPU), `fileSizeBlocks` (`ulimit -f` units; 512-byte POSIX blocks,
   1024 under bash-style shells), `openFiles`, `processes` (an RLIMIT_NPROC
   count charged per real uid), `addressSpaceKiB` (`ulimit -v`), `stackKiB`,
@@ -218,10 +218,16 @@ commands in `--executors` maps, and `cmd:` bench specs):
   `cpuSeconds=60,noCore`; `--executor-limits` restates the whole set, and
   `none` clears it.
 
-A limit the platform cannot apply is refused at admission instead of being
-silently skipped: macOS cannot set an address-space bound at all, so
-declaring `addressSpaceKiB` there fails the command line. The same honesty
-applies inside the receipts. The recorded executor identity
+On macOS, `cpuSeconds` is best effort: a shell builtin loop can exceed the
+configured CPU limit even when the shell reports that limit. The profile still
+sets it, but records `enforced: false` for CPU limits on macOS. Hosts that need
+an enforced CPU bound must reject that profile. The command executor's
+independent wall-clock timeout still limits how long it waits; it does not
+establish that the CPU budget was honored.
+
+A limit the platform cannot apply is rejected when the executor is configured:
+macOS cannot set an address-space bound at all, so declaring `addressSpaceKiB`
+there fails the command line. The recorded executor identity
 (`configurationDigest`) covers the environment allowlist, the working
 directory, every declared limit, each limit's enforcement status, and the
 platform that status was determined for, so a weaker posture can never
