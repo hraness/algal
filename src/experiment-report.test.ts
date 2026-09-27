@@ -17,6 +17,7 @@ import {
   type SkillExperimentConfig,
 } from "./experiment-report";
 import { verifyExperimentReport } from "./experiment-verify";
+import { parseExperimentCatalog, parseExperimentRun, parseExperimentSession, type ExperimentCatalog, type ExperimentRun } from "./experiment-run";
 import { receiptDigest, RUN_CONTRACT, type RunReceipt } from "./run";
 import { FileStore } from "./store";
 import type { JsonObject, JsonValue } from "./values";
@@ -37,7 +38,7 @@ function manifest(key: string, budgets = { maxWork: 100, maxAgentCalls: 4 }): Or
   });
 }
 
-function receipt(m: OrganismManifest, manifestDigest: Digest, work: { steps: number; agentCalls: number; units: number }, outcome = "complete"): RunReceipt {
+function receipt(m: OrganismManifest, manifestDigest: Digest, work: { steps: number; agentCalls: number; units: number }, outcome = "complete", output?: JsonValue): RunReceipt {
   const base = {
     contract: RUN_CONTRACT,
     runtime: { name: "algal", version: "fixture" },
@@ -45,7 +46,7 @@ function receipt(m: OrganismManifest, manifestDigest: Digest, work: { steps: num
     manifestKey: m.key,
     args: {},
     outcome,
-    cells: {},
+    cells: output === undefined ? {} : { out: { status: "committed", work: work.units, outputs: { value: output } } },
     effects: [],
     events: [],
     work,
@@ -106,7 +107,7 @@ type Fixture = {
  * acquisition task promotes a kept manifest that two later held-out tasks
  * reuse (one passes, one fails); a third held-out hit fails admission.
  * `fresh` generates every task and keeps nothing. */
-async function fixture(): Promise<Fixture> {
+async function fixture(sameRevisionManifest = false, revisionTrigger: "requalification" | "failed-run" | "missed-expectation" = "requalification"): Promise<Fixture> {
   const dir = await mkdtemp(join(tmpdir(), "algal-experiment-"));
   dirs.push(dir);
   const store = new FileStore(dir);
@@ -196,29 +197,37 @@ async function fixture(): Promise<Fixture> {
   ];
   // optimizer: one acquired entry, a stale-hit re-qualification that
   // demotes it, and a promoted revision that supersedes it — then a cite.
-  const [mV, mR] = [manifest("organism:revised"), manifest("organism:reviser")];
+  const mV = sameRevisionManifest ? mK : manifest("organism:revised");
+  const mR = parseOrganismManifest({
+    ...manifest("organism:reviser"),
+    interface: { inputs: {}, outputs: { manifest: { cell: "out", port: "value" } } },
+    cells: [{ id: "out", kind: "const", outputs: { value: { type: "json", value: mV } } }],
+  });
   const [dV, dR] = [await store.putManifest(mV), await store.putManifest(mR)];
   const opt = {
     gO: await store.putReceipt(receipt(mG, dG, { steps: 1, agentCalls: 1, units: 5 }) as unknown as JsonValue),
     rO0: await store.putReceipt(receipt(mK, dK, { steps: 1, agentCalls: 1, units: 10 }) as unknown as JsonValue),
     eO0: await store.putReceipt(receipt(mK, dK, { steps: 1, agentCalls: 1, units: 8 }) as unknown as JsonValue),
-    rO1: await store.putReceipt(receipt(mK, dK, { steps: 1, agentCalls: 1, units: 9 }) as unknown as JsonValue),
+    rO1: await store.putReceipt(receipt(mK, dK, { steps: 1, agentCalls: 1, units: 9 }, revisionTrigger === "failed-run" ? "failed" : "complete") as unknown as JsonValue),
     eO1: await store.putReceipt(receipt(mK, dK, { steps: 1, agentCalls: 1, units: 7 }) as unknown as JsonValue),
-    rV: await store.putReceipt(receipt(mR, dR, { steps: 1, agentCalls: 1, units: 6 }) as unknown as JsonValue),
+    rV: await store.putReceipt(receipt(mR, dR, { steps: 1, agentCalls: 1, units: 6 }, "complete", mV as unknown as JsonValue) as unknown as JsonValue),
     eV: await store.putReceipt(receipt(mV, dV, { steps: 1, agentCalls: 1, units: 5 }) as unknown as JsonValue),
     rO2: await store.putReceipt(receipt(mV, dV, { steps: 1, agentCalls: 1, units: 8 }) as unknown as JsonValue),
   };
   const sel0 = await store.putValue(selectionRecord(dK, { passed: 3, total: 3 }));
   const selBad = await store.putValue(selectionRecord(dK, { passed: 1, total: 3 }));
   const selGood = await store.putValue(selectionRecord(dV, { passed: 3, total: 3 }));
-  const ev1 = await store.putValue({ taskId: "t-stale-2", trigger: "requalification", report: selBad } as JsonValue);
+  const ev1 = await store.putValue(revisionTrigger === "requalification"
+    ? { taskId: "t-stale-2", trigger: revisionTrigger, report: selBad }
+    : { taskId: "t-stale-2", trigger: revisionTrigger, receipt: opt.rO1!, outcome: revisionTrigger === "failed-run" ? "failed" : "complete",
+      ...(revisionTrigger === "missed-expectation" ? { expect: {} } : {}) });
   const catalogO = await store.putValue({
     contract: "algal.experiment-catalog.v1",
     entries: [
       {
         family: "triage", manifest: dK, interfaceDigest: null,
         cases: [{ id: "t-1", split: "train" }, { id: "v-1", split: "validation" }],
-        report: sel0, taskId: "t-acq-1", retired: selBad,
+        report: sel0, taskId: "t-acq-1", retired: revisionTrigger === "requalification" ? selBad : ev1,
       },
       {
         family: "triage", manifest: dV, interfaceDigest: null,
@@ -240,11 +249,11 @@ async function fixture(): Promise<Fixture> {
       arm: "optimizer", taskId: "t-stale-2", phase: "unseen",
       consult: { outcome: "hit", entry: 0, manifest: dK },
       generator: null,
-      manifest: dK, args: argsK, receipt: opt.rO1, outcome: "complete",
+      manifest: dK, args: argsK, receipt: opt.rO1, outcome: revisionTrigger === "failed-run" ? "failed" : "complete",
       work: { units: 9, agentCalls: 1 }, failure: null,
-      promote: { evaluated: true, promoted: false, entry: 0, report: selBad, validation: { passed: 1, total: 3 }, demoted: true },
+      promote: revisionTrigger === "requalification" ? { evaluated: true, promoted: false, entry: 0, report: selBad, validation: { passed: 1, total: 3 }, demoted: true } : null,
       revise: {
-        trigger: "requalification", evidence: ev1,
+        trigger: revisionTrigger, evidence: ev1,
         generator: { manifest: dR, receipt: opt.rV },
         evaluated: true, promoted: true, report: selGood, validation: { passed: 3, total: 3 },
         entry: 1, supersedes: 0,
@@ -343,6 +352,19 @@ async function fixture(): Promise<Fixture> {
       manifests: { k: dK, f: dF, g: dG, v: dV },
     },
   };
+}
+
+/** Rebuild the content-addressed session after tampering with one revision.
+ * The verifier must reject the joins even when all enclosing digests agree. */
+async function rewriteRevision(f: Fixture, change: (run: ExperimentRun, catalog: ExperimentCatalog, store: FileStore) => Promise<void>): Promise<SkillExperimentConfig> {
+  const store = new FileStore(f.dir);
+  const session = parseExperimentSession(await store.getValue(f.digests.sessions.optimizer));
+  const run = parseExperimentRun(await store.getValue(session.tasks[1]!.run));
+  const catalog = parseExperimentCatalog(await store.getValue(session.catalog));
+  await change(run, catalog, store);
+  session.tasks[1]!.run = await store.putValue(run as unknown as JsonValue);
+  session.catalog = await store.putValue(catalog as unknown as JsonValue);
+  return { ...f.config, arms: [{ session: await store.putValue(session as unknown as JsonValue) }] };
 }
 
 describe("skill experiment rollup", () => {
@@ -495,7 +517,8 @@ describe("skill experiment rollup", () => {
     const report = await buildExperimentReport(dir, config);
     const { digest: _omit, ...base } = report as unknown as { digest: Digest } & Record<string, unknown>;
     const arms = (base.arms as JsonObject[]).map((arm, i) =>
-      i === 0 ? { ...arm, heldOutPassed: 2, tasksPassed: 3, correctionsTotal: 0 } : arm);
+      i === 0 ? { ...arm, heldOutPassed: 2, tasksPassed: 3, correctionsTotal: 0 } :
+        i === 2 ? { ...arm, revisionsTotal: 0, demotionsTotal: 0 } : arm);
     const doctored = { ...base, arms };
     const value = { ...doctored, digest: digestCanonical(doctored as unknown as JsonValue) } as JsonValue;
     const verified = await verifyExperimentReport(value, dir);
@@ -504,7 +527,127 @@ describe("skill experiment rollup", () => {
     expect(verified.mismatches.some((m) => m.includes("tasksPassed"))).toBe(true);
     // correctionsTotal is re-derived from the cited records, not trusted.
     expect(verified.mismatches.some((m) => m.includes("correctionsTotal: claimed 0, the cited records derive 2"))).toBe(true);
+    expect(verified.mismatches.some((m) => m.includes("revisionsTotal: claimed 0, the cited records derive 1"))).toBe(true);
+    expect(verified.mismatches.some((m) => m.includes("demotionsTotal: claimed 0, the cited records derive 1"))).toBe(true);
   });
+
+  test("attributes identical-manifest re-promotion to the catalog entry actually consulted", async () => {
+    const f = await fixture(true);
+    const report = await buildExperimentReport(f.dir, f.config);
+    const optimizer = report.arms[2]!;
+    expect(optimizer.reuse.map((entry) => ({ entry: entry.entry, runs: entry.runs }))).toEqual([
+      { entry: 0, runs: [f.digests.opt.rO1!] },
+      { entry: 1, runs: [f.digests.opt.rO2!] },
+    ]);
+    expect(optimizer.holdoutGaps.map((gap) => gap.heldOut)).toEqual([{ passed: 1, total: 1 }, { passed: 1, total: 1 }]);
+    expect((await verifyExperimentReport(report, f.dir)).mismatches).toEqual([]);
+    const forged = structuredClone(report);
+    forged.arms[2]!.reuse[0]!.runs.push(f.digests.opt.rO2!);
+    forged.arms[2]!.reuse[0]!.heldOutRuns.push(f.digests.opt.rO2!);
+    const { digest: _omit, ...base } = forged;
+    forged.digest = digestCanonical(base as unknown as JsonValue);
+    const checked = await verifyExperimentReport(forged, f.dir);
+    expect(checked.mismatches.some((m) => m.includes("reuse entry 0 does not match its consulted task receipts"))).toBe(true);
+  });
+
+  for (const trigger of ["failed-run", "missed-expectation"] as const) {
+    test(`verifies a ${trigger} revision retired by its triggering evidence`, async () => {
+      const f = await fixture(false, trigger);
+      const report = await buildExperimentReport(f.dir, f.config);
+      expect((await verifyExperimentReport(report, f.dir)).mismatches).toEqual([]);
+    });
+  }
+
+  test("rejects a passing revision selection and matching catalog that the reviser never emitted", async () => {
+    const f = await fixture();
+    const store = new FileStore(f.dir);
+    const session = parseExperimentSession(await store.getValue(f.digests.sessions.optimizer));
+    session.tasks.pop();
+    f.digests.sessions.optimizer = await store.putValue(session as unknown as JsonValue);
+    const config = await rewriteRevision(f, async (run, catalog, store) => {
+      run.revise!.report = await store.putValue(selectionRecord(run.manifest!, { passed: 3, total: 3 }));
+      catalog.entries[1]!.report = run.revise!.report;
+      catalog.entries[1]!.manifest = run.manifest!;
+    });
+    const report = await buildExperimentReport(f.dir, config);
+    const checked = await verifyExperimentReport(report, f.dir);
+    expect(checked.mismatches.some((m) => m.includes("evaluated a manifest absent from the reviser's declared outputs"))).toBe(true);
+  });
+
+  const revisionTampering: { name: string; expected: string; change: (run: ExperimentRun, catalog: ExperimentCatalog, store: FileStore) => Promise<void> }[] = [
+    {
+      name: "missing trigger evidence", expected: "revision evidence sha256:",
+      change: async (run) => { run.revise!.evidence = `sha256:${"f".repeat(64)}`; },
+    },
+    {
+      name: "borrowed trigger task", expected: "evidence names another task or trigger",
+      change: async (run, _catalog, store) => {
+        run.revise!.evidence = await store.putValue({ taskId: "another-task", trigger: "requalification", report: run.promote!.report! });
+      },
+    },
+    {
+      name: "borrowed requalification", expected: "evidence does not name its failed requalification",
+      change: async (run, catalog, store) => {
+        run.revise!.evidence = await store.putValue({ taskId: run.taskId, trigger: "requalification", report: catalog.entries[0]!.report });
+      },
+    },
+    {
+      name: "reviser identity", expected: "reviser receipt ran another manifest",
+      change: async (run) => { run.revise!.generator!.manifest = run.manifest!; },
+    },
+    {
+      name: "uncharged revision without account refusal", expected: "has no reviser receipt without an exhausted account",
+      change: async (run, catalog) => {
+        const prior = run.revise!;
+        run.revise = { ...prior, generator: null, evaluated: false, promoted: false, report: null, validation: null, entry: null };
+        delete catalog.entries[1]!.supersedes;
+      },
+    },
+    {
+      name: "missing revision evaluation", expected: "revision evaluation sha256:",
+      change: async (run, catalog) => {
+        run.revise!.report = `sha256:${"f".repeat(64)}`;
+        catalog.entries[1]!.report = run.revise!.report;
+      },
+    },
+    {
+      name: "revision validation score", expected: "validation does not match its evaluation",
+      change: async (run) => { run.revise!.validation = { passed: 0, total: 3 }; },
+    },
+    {
+      name: "borrowed evaluated candidate", expected: "promotion does not match the passing evaluated manifest",
+      change: async (run, catalog, store) => {
+        run.revise!.report = await store.putValue(selectionRecord(run.manifest!, { passed: 3, total: 3 }));
+        catalog.entries[1]!.report = run.revise!.report;
+      },
+    },
+    {
+      name: "unrelated superseded entry", expected: "does not supersede the optimizer's consulted entry",
+      change: async (run, catalog) => {
+        run.revise!.supersedes = 1;
+        catalog.entries[1]!.supersedes = 1;
+        catalog.entries[1]!.retired = run.revise!.evidence;
+      },
+    },
+    {
+      name: "unrelated retirement evidence", expected: "retirement does not cite its triggering evidence",
+      change: async (run, _catalog, store) => {
+        run.promote!.demoted = false;
+        run.revise!.trigger = "missed-expectation";
+        run.revise!.evidence = await store.putValue({ taskId: run.taskId, trigger: "missed-expectation", outcome: "complete", receipt: run.receipt!, expect: {} });
+      },
+    },
+  ];
+  for (const tamper of revisionTampering) {
+    test(`verify catches ${tamper.name} with recomputed record and report digests`, async () => {
+      const f = await fixture();
+      const config = await rewriteRevision(f, tamper.change);
+      const report = await buildExperimentReport(f.dir, config);
+      const checked = await verifyExperimentReport(report, f.dir);
+      expect(checked.ok).toBe(false);
+      expect(checked.mismatches.some((m) => m.includes(tamper.expected))).toBe(true);
+    });
+  }
 
   test("verify flags stored run records the session does not cite", async () => {
     const { dir, config, digests } = await fixture();

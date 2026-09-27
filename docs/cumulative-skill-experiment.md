@@ -1,10 +1,10 @@
 # Cumulative-skill experiment
 
-This page pre-registers the experiment described in
+This page records the experiment described in
 [the vision](vision.md#what-would-justify-the-claim): whether keeping and
 composing earlier procedures makes the system better at later work than
-equally resourced alternatives. It is a design record, not a result; nothing
-here claims the outcome.
+equally resourced alternatives. It preserves the original design and reports
+the exploratory studies below. The broader claim remains open.
 
 ## Claim under test
 
@@ -102,7 +102,9 @@ unless its marginal cost is small.
 - **Held-out success**: pass rate on the unseen and shift phases at matched
   cumulative account spend, using cases the task-generation never exposed.
 - **Cost per success**: total account work and executor attempts divided by
-  held-out passes, per arm.
+  held-out graded passes, per arm. The report's legacy `tasksPassed` and
+  `heldOutPassed` fields count completed executions. They do not grade the
+  output; correctness requires comparing outputs with expectations.
 - **Reuse contribution** (retained arm): which promoted catalog entries were
   run by later tasks, computed by joining catalog and revision records to
   run receipts in the program database, not by reading narratives.
@@ -114,9 +116,13 @@ unless its marginal cost is small.
 ## Pre-registered failure-mode checks
 
 - **Evaluation rewards the wrong thing.** Graders are deterministic; held-out
-  tasks come from a separately seeded generation, never visible to any arm.
-  For every promoted procedure the study reports the validation-versus-held-out
-  pass-rate gap as an overfitting signal.
+  tasks come from a separately seeded generation. In an online optimizer
+  study, a task's expectation becomes feedback after its original execution
+  is scored. Later tasks therefore measure adaptation with feedback, not a
+  frozen program evaluated on a sealed test set.
+  An overfitting check requires validation and held-out correctness measured
+  by the same grader. The legacy report's `holdoutGaps` combines validation
+  correctness with held-out completion, so it cannot establish that gap.
 - **Reuse creates complexity rather than competence.** The study counts
   catalog consultations that missed, vendored procedures that failed
   admission on reuse, and kept entries never run again.
@@ -141,12 +147,13 @@ unless its marginal cost is small.
   session record, and the rollup re-reads the account, catalog, and task
   records the session names, reconciles the account against stored receipts
   and manifests, joins kept manifests to later task receipts through the
-  program index, and recomputes the measures above. The report records
+  program index, and recomputes execution, accounting, and reuse counts. The report records
   counts and digests; conclusions are prose beside it, scoped to what the
   record shows. `experiment inspect` renders the same record as a table.
 - Independent evaluation: `algal experiment verify` re-derives every
-  reported aggregate from the cited session, account, catalog, and task
-  records, re-opens each promotion's stored evaluation, and flags stored
+  execution aggregate from the cited session, account, catalog, and task
+  records, checks revision and demotion evidence and each promotion's stored
+  evaluation, and flags stored
   task records a session does not cite; manifest runs can be
   cross-verified by the native runtime where covered. Run records carry
   the optional `corrections` list and the report counts it per arm, but
@@ -162,7 +169,7 @@ Verified report `sha256:6fdc8942991eff306886c90b039802fdc49ac8cbceef6f4f27f51a0c
 (80 records, zero mismatches, zero uncited), one live executor
 configuration across arms (xAI `grok-4.5`).
 
-| arm | tasks | held-out | work | runs | catalog |
+| arm | completed tasks | held-out completed | work | runs | catalog |
 |-----|-------|----------|------|------|---------|
 | fixed | 20/20 | 12/12 | 411,360 | 20 | - |
 | retained | 16/20 | 10/12 | 1,203,751 | 59 | 20 (18 hit, 2 miss), 1 promotion |
@@ -188,7 +195,7 @@ Verified report `sha256:117af73c0dee47f3472237fad40b9ec1cccf1a604fe2a18445616428
 (192 records, zero mismatches, zero uncited), same live executor
 configuration (xAI `grok-4.5`).
 
-| arm | tasks | held-out | work | runs | catalog |
+| arm | completed tasks | held-out completed | work | runs | catalog |
 |-----|-------|----------|------|------|---------|
 | fixed | 48/48 | 40/40 | 933,716 | 48 | - |
 | retained | 48/48 | 40/40 | 3,444,384 | 145 | 48 (47 hit, 1 miss), 1 promotion |
@@ -233,7 +240,7 @@ Verified report `sha256:57f4917c126dfd463ed6ef80725989651386fc63d7dba69f4836de10
 (192 records, zero mismatches), same corpus and executor (xAI `grok-4.5`),
 the fixed, ablation, and fresh sessions re-cited unchanged.
 
-| arm | tasks | held-out | work | runs | catalog |
+| arm | completed tasks | held-out completed | work | runs | catalog |
 |-----|-------|----------|------|------|---------|
 | fixed | 48/48 | 40/40 | 933,716 | 48 | - |
 | retained | 48/48 | 40/40 | 997,334 | 51 | 48 (47 hit, 1 miss), 1 promotion |
@@ -249,8 +256,8 @@ Findings:
 - Retention also hedged generation failure: the kept manifest ran all 47
   later tasks without a single invalid run, while ablation lost 10/48
   tasks (21%) to manifests that failed admission.
-- The kept procedure's held-out record is unchanged: validation 1/1,
-  held-out 40/40 across all hits.
+- The kept procedure passed validation 1/1 and completed 40/40 held-out
+  tasks across its hits. These counts measure different outcomes.
 - The policy comparison is a measured result: the same arm, corpus, and
   executor priced at 3.44M work under per-hit re-evaluation versus 0.997M
   under cite-on-hit — a 3.5x swing controlled by one declared arm option.
@@ -314,29 +321,66 @@ that classifier: a batch pipeline on grok-4.5 that reads the full task spec
 labels most v4 records correctly, so v4 separates weaker classifiers from
 stronger ones rather than making every record hard.
 
+#### v4 optimizer study · 2026-09-27
+
+Two exploratory runs used the same 48 tasks, configured xAI `grok-4.5`,
+and account ceilings of 40,000,000 work units, 1,024 attempts, and 512
+runs. One arm kept its first passing program and cited its promotion
+evaluation on later hits. The optimizer rechecked entries after two tasks
+and revised them after a missed expectation.
+
+The table grades each task's original output, before any revision. It
+combines the 32 unseen and 8 shift tasks, each with 12 records.
+
+| Measure | Retained, cite-on-hit | Optimizer |
+|---|---:|---:|
+| Completed unseen and shift tasks | 40/40 | 40/40 |
+| Correct labels | 385/480 (80.2%) | 466/480 (97.1%) |
+| Correct full records, including decisions | 385/480 (80.2%) | 466/480 (97.1%) |
+| Entire output exactly correct | 4/40 | 30/40 |
+| Passed the declared agreement scorer (threshold 0.9) | 8/40 | 33/40 |
+| Total work, including acquisition and maintenance | 1,084,705 | 3,214,973 |
+| Accounted run admissions | 51 | 120 |
+| Revisions / demotions | 0 / 0 | 9 / 9 |
+
+The optimizer's nine revisions all passed promotion evaluation. Its 47
+catalog hits include 21 rechecks and 26 citations of existing evaluation
+evidence. Promotion used the first acquisition task's train and validation
+batches; the foundry excluded its holdout batch. The original task output
+was never replaced by a revised answer in this table.
+
+This comparison does not isolate the effect of revision. The reviser was
+given an extra instruction to prefer the opening request when text mixes
+classes, matching how the synthetic corpus appends distractions. The
+retained generator lacked that hint, and the arms generated different
+initial programs. The harness graded each completed catalog hit and supplied
+the expectation to the reviser when that hit failed the scorer, including
+during unseen and shift phases. This is an online feedback evaluation.
+It used 2.96 times as much
+recorded work. The one run per arm supports neither a matched-spend win nor
+an estimate of variability across runs.
+
+The [v4 evidence package](https://github.com/hraness/algal/tree/main/experiments/cumulative-skill/results/v4)
+contains the two sessions, portable configuration builder, offline output
+grader, and compressed store. All 138 distinct execution receipts replay
+with recorded model responses; the 171 charged run admissions include
+repeated deterministic receipts. Report verification rechecks accounting
+and optimizer history. Output grading separately checks correctness.
+Neither check attests the provider's identity or makes model responses
+repeatable in a new live run.
+
 ## Status and limits
 
-The claim under test now holds within this family, on every pre-registered
-measure:
+These studies demonstrate saved-program reuse, revision, demotion, and
+offline replay in a synthetic family. They leave the claim of better unseen
+work at matched spending open. The earlier statement that every
+pre-registered measure had passed overstated the evidence: completion was
+counted as success, and equal budget ceilings did not imply equal spending.
 
-- **Held-out success**: the kept program scored 40/40 on unseen and shift
-  holdout, at or above every generative arm's completion.
-- **Cost per success**: under `citeKeptEvaluation` the retained arm is the
-  cheapest adaptive arm (997,334 units vs ablation's 1,304,446; the fixed
-  arm's 933,716 is the non-adaptive floor). Reuse hedges generation
-  failure too: the kept manifest never emits an invalid manifest, so the
-  retained arm completed 48/48 tasks where ablation lost 10.
-- **Reuse contribution**: 47 catalog hits joined to one promotion, all
-  through run receipts in the store, not narrative.
-- **Independent evaluation**: every report re-derives from records under
-  `experiment verify`; the Jev probe independently graded corpus and
-  classify quality at 99.48%.
-- **Human correction effort**: zero interventions recorded.
-
-What the study does not show: the task family is synthetic and saturating,
-so held-out success no longer discriminates between arms; nothing here is
-evidence that retained procedures generalize to production work. The
-optimizer arm now ships: revision and demotion land on run records and
-catalog entries with stored evidence, and aggregate to measured counts.
-The v4 corpus above is the harder synthetic family it runs against; a
-production-derived family remains the named next step.
+The v3 cite-on-hit run used less recorded work than its ablation while
+completing more tasks. Its nearly saturated corpus provided little room to
+measure improved correctness. The v4 optimizer comparison above measures
+an accuracy difference, but also changes instructions and spends more.
+Neither study establishes production generalization. Zero declared
+corrections means no task-level interventions were recorded; it does not
+measure the work spent designing prompts and the corpus.

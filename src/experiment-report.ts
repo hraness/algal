@@ -9,12 +9,10 @@
 // never wall-clock values.
 //
 // The pre-registered measures map to fields like so:
-//   held-out success     → heldOutPassed / heldOutTotal (unseen+shift tasks;
-//                          a task passes when its recorded outcome is
-//                          `complete` — deterministic grading is inside the
-//                          program, so `failed`, `stuck`, `invalid`, and
-//                          `exhausted` outcomes are not passes)
-//   cost per success     → workTotal, attemptsTotal, runsTotal ÷ heldOutPassed
+//   held-out completion  → heldOutPassed / heldOutTotal (unseen+shift tasks;
+//                          counts outcome `complete`, which does not imply
+//                          the outputs matched an expectation or grade)
+//   cost per completion  → workTotal, attemptsTotal, runsTotal ÷ heldOutPassed
 //   reuse contribution   → reuse[]: kept catalog manifests joined to later
 //                          task receipts through the program index's
 //                          receipts relation
@@ -124,8 +122,9 @@ export type SkillExperimentReuse = {
   heldOutRuns: Digest[];
 };
 
-/** One in-session promotion's validation-versus-held-out counts — the
- * overfitting signal as raw numbers; the gap is their difference. Entries
+/** One in-session promotion's validation correctness and held-out task
+ * completion counts. These measure different outcomes; a correctness gap
+ * requires grading the held-out outputs separately. Entries
  * the session inherited carry no validation record here. */
 export type SkillExperimentHoldoutGap = {
   manifest: Digest;
@@ -157,7 +156,8 @@ export type SkillExperimentArm = {
   tasksAttempted: number;
   /** Tasks whose recorded outcome is `complete`. */
   tasksPassed: number;
-  /** Held-out success: passing tasks in the unseen and shift phases. */
+  /** Tasks with outcome `complete` in the unseen and shift phases; this
+   * does not assert that their outputs matched the task's expectation. */
   heldOutPassed: number;
   heldOutTotal: number;
   /** Tasks that ended `invalid` or `exhausted`. */
@@ -660,15 +660,16 @@ export function aggregateExperimentArm(
       if (run.outcome === "complete") heldOutPassed += 1;
     }
   }
-  // Reuse join: for every catalog entry, the later task receipts that ran
-  // the kept manifest. An entry promoted inside the session orders after
+  // Reuse join: for every catalog entry, the later task receipts that
+  // consulted that entry and ran its manifest. The same manifest may be
+  // retired and promoted again under a new entry. An in-session entry orders after
   // its promoting task; an inherited entry predates the session.
   const reuse: SkillExperimentReuse[] = catalog.entries.map((entry, index) => {
     const inSession = promotedInSession.get(index);
-    const seededTask = session.tasks.findIndex((task) => task.taskId === entry.taskId);
-    const promoted = inSession?.taskIndex ?? (seededTask === -1 ? null : seededTask);
+    const promoted = inSession?.taskIndex ?? null;
     const later = records.filter(({ run }, i) =>
       (promoted === null || i > promoted) &&
+      run.consult.outcome === "hit" && run.consult.entry === index &&
       run.receipt !== null &&
       run.manifest === entry.manifest &&
       receiptsRanManifest(entry.manifest).has(run.receipt));
@@ -865,12 +866,12 @@ function ratio(part: number, whole: number): string {
   return `${part}/${whole}`;
 }
 
-function perSuccess(work: number, passed: number): string {
+function perCompletion(work: number, passed: number): string {
   return passed === 0 ? "-" : String(Math.round(work / passed));
 }
 
 /** The human summary table: one row per arm, the pre-registered measures as
- * columns, then each in-session promotion's validation-versus-held-out
+ * columns, then each in-session promotion's validation and held-out completion
  * counts. Rendered from the parsed report, so the numbers are exactly the
  * record's. */
 export function renderExperimentReport(report: SkillExperimentReport): string {
@@ -880,10 +881,10 @@ export function renderExperimentReport(report: SkillExperimentReport): string {
   lines.push("");
   const header = [
     pad("arm", 10),
-    pad("tasks", 8),
-    pad("held-out", 9),
+    pad("completed", 10),
+    pad("held-out done", 14),
     pad("work", 9),
-    pad("work/pass", 9),
+    pad("work/done", 9),
     pad("attempts", 8),
     pad("runs", 6),
     pad("catalog", 15),
@@ -901,10 +902,10 @@ export function renderExperimentReport(report: SkillExperimentReport): string {
       .join("+");
     const row = [
       pad(arm.accountOutcome === "exhausted" ? `${arm.name}*` : arm.name, 10),
-      pad(ratio(arm.tasksPassed, arm.tasksAttempted), 8),
-      pad(ratio(arm.heldOutPassed, arm.heldOutTotal), 9),
+      pad(ratio(arm.tasksPassed, arm.tasksAttempted), 10),
+      pad(ratio(arm.heldOutPassed, arm.heldOutTotal), 14),
       pad(String(arm.workTotal), 9),
-      pad(perSuccess(arm.workTotal, arm.heldOutPassed), 9),
+      pad(perCompletion(arm.workTotal, arm.heldOutPassed), 9),
       pad(String(arm.attemptsTotal), 8),
       pad(String(arm.runsTotal), 6),
       pad(catalog, 15),
@@ -913,6 +914,7 @@ export function renderExperimentReport(report: SkillExperimentReport): string {
     ].join(" ").replace(/\s+$/, "");
     lines.push(row);
   }
+  lines.push("Completed counts outcome complete; output correctness requires a separate grade.");
   if (report.arms.some((arm) => arm.accountOutcome === "exhausted")) {
     lines.push("* account exhausted: a reservation was refused before the arm finished");
   }
@@ -927,9 +929,9 @@ export function renderExperimentReport(report: SkillExperimentReport): string {
   const gaps = report.arms.flatMap((arm) => arm.holdoutGaps.map((gap) => ({ arm: arm.name, gap })));
   if (gaps.length > 0) {
     lines.push("");
-    lines.push("validation vs held-out per promoted procedure:");
+    lines.push("validation correctness and held-out completion per promoted procedure:");
     for (const { arm, gap } of gaps) {
-      lines.push(`  ${arm} ${gap.manifest} validation ${ratio(gap.validation.passed, gap.validation.total)} held-out ${ratio(gap.heldOut.passed, gap.heldOut.total)}`);
+      lines.push(`  ${arm} ${gap.manifest} validation ${ratio(gap.validation.passed, gap.validation.total)} held-out completed ${ratio(gap.heldOut.passed, gap.heldOut.total)}`);
     }
   }
   return `${lines.join("\n")}\n`;
