@@ -12,6 +12,18 @@ independent of these package versions.
 
 ## Unreleased
 
+## v0.2.0-vm.10 - 2026-09-26
+
+ALGAL's command line now starts where a new person starts, and the language
+and tools for sharing programs grow. At a terminal, bare `algal` prints a
+short start screen, errors read as one sentence and one next command, and
+`algal doctor` prints a checklist; scripts, pipes and agents keep the JSON.
+When Apple's on-device model can't be used, ALGAL says why and what to do.
+Source programs gain record and list types, `map`, `filter` and `fold`, typed
+`generate`, and `algal fmt`. New commands report a project's dependencies,
+pin it with `algal lock`, copy shared programs with `algal vendor`, replay a
+run against a revised program, and run cumulative-skill experiments.
+
 - Both CLIs read `HRANESS_AUDIENCE` in any letter case, ignoring surrounding
   spaces, and a nonempty `NO_COLOR` now wins over `FORCE_COLOR`, which
   accepts any value but `0` or `false`. This is the shared Hraness rule from
