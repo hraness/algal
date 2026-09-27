@@ -188,6 +188,8 @@ test("style helpers follow the shared contract", () => {
   expect(prefersAscii({ LANG: "en_US.UTF-8", HRANESS_ASCII: "1" })).toBe(true);
   expect(prefersColor({ NO_COLOR: "1" }, true)).toBe(false);
   expect(prefersColor({ FORCE_COLOR: "1" }, false)).toBe(true);
+  expect(prefersColor({ FORCE_COLOR: "1", NO_COLOR: "1" }, true)).toBe(false);
+  expect(prefersColor({ FORCE_COLOR: "0" }, false)).toBe(false);
   const ascii = terminalStyle({ TERM: "dumb" }, false);
   expect(["ok", "fail", "warn", "next", "skip"].map((name) => symbol(name as never, ascii)).join(" ")).toBe("OK FAIL WARN -> -");
   expect(renderFailure("Nope.", "algal --help", terminalStyle({ LANG: "en_US.UTF-8" }, false))).toBe("✗ Nope.\n→ algal --help\n");
@@ -196,5 +198,7 @@ test("style helpers follow the shared contract", () => {
   expect(detectAudience({ CODEX_HOME: "/x" }, true)).toBe("human");
   expect(detectAudience({ CODEX_SANDBOX: "seatbelt" }, true)).toBe("agent");
   expect(detectAudience({}, false)).toBe("quiet");
+  expect(detectAudience({ HRANESS_AUDIENCE: " Agent " }, true)).toBe("agent");
+  expect(detectAudience({ HRANESS_AUDIENCE: "OFF", CLAUDECODE: "1" }, true)).toBe("quiet");
   expect(closestMatch("verfy", commandWords())).toBe("verify");
 });

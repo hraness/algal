@@ -2,9 +2,11 @@
  * Terminal style for human CLI output: status symbols with ASCII fallbacks,
  * symbol-only color, and the shared audience rule.
  *
- * TODO(df-0.8): use detectAudience and cli-style from @hraness/desktop-foundation
- * once 0.8.0 is released. This file copies the Hraness CLI style contract
- * (audience rule and symbol table) verbatim so the output already matches it.
+ * This is the Hraness CLI style contract from @hraness/desktop-foundation 0.8
+ * (`detectAudience` and `cli-style`). ALGAL keeps it inline because the Bun
+ * CLI runs from source with zero runtime dependencies. The contract test in
+ * src/cli-style-contract.test.ts compares it with the SDK on every run, so
+ * any drift fails the check.
  */
 
 export type TerminalEnvironment = Readonly<Record<string, string | undefined>>;
@@ -36,10 +38,14 @@ export function prefersAscii(env: TerminalEnvironment): boolean {
   return locale === undefined || !/utf-?8/iu.test(locale);
 }
 
-/** Color only on a terminal that is not `dumb` and when `NO_COLOR` is unset or empty; `FORCE_COLOR=1` forces it. */
+/**
+ * Color only on a terminal that is not `dumb`. A nonempty `NO_COLOR` always
+ * turns it off; otherwise `FORCE_COLOR` set to anything but `0` or `false`
+ * turns it on.
+ */
 export function prefersColor(env: TerminalEnvironment, isTTY: boolean): boolean {
-  if (env.FORCE_COLOR === "1") return true;
   if (nonEmpty(env.NO_COLOR)) return false;
+  if (nonEmpty(env.FORCE_COLOR) && env.FORCE_COLOR !== "0" && env.FORCE_COLOR !== "false") return true;
   return isTTY && env.TERM !== "dumb";
 }
 
@@ -56,7 +62,7 @@ export function symbol(name: CliSymbol, style: TerminalStyle): string {
 
 export type Audience = "human" | "agent" | "quiet";
 
-const AGENT_MARKERS = [
+export const AGENT_MARKERS = [
   "AI_AGENT",
   "CLAUDECODE",
   "CODEX_SANDBOX",
@@ -66,13 +72,22 @@ const AGENT_MARKERS = [
 ] as const;
 
 /**
+ * The audience `HRANESS_AUDIENCE` names, in any letter case and ignoring
+ * surrounding spaces (`off` means quiet), or undefined when it names none.
+ */
+export function explicitAudience(env: TerminalEnvironment): Audience | undefined {
+  const explicit = env.HRANESS_AUDIENCE?.trim().toLowerCase();
+  if (explicit === "human" || explicit === "agent" || explicit === "quiet") return explicit;
+  return explicit === "off" ? "quiet" : undefined;
+}
+
+/**
  * Who reads stderr: `HRANESS_AUDIENCE` wins, then exact agent markers, then a
  * terminal on stderr means a person, and anything else stays quiet.
  */
 export function detectAudience(env: TerminalEnvironment, stderrIsTTY: boolean): Audience {
-  const explicit = env.HRANESS_AUDIENCE;
-  if (explicit === "human" || explicit === "agent" || explicit === "quiet") return explicit;
-  if (explicit === "off") return "quiet";
+  const explicit = explicitAudience(env);
+  if (explicit !== undefined) return explicit;
   if (AGENT_MARKERS.some((marker) => nonEmpty(env[marker]))) return "agent";
   return stderrIsTTY ? "human" : "quiet";
 }

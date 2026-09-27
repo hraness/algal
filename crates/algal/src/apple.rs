@@ -121,7 +121,8 @@ const AGENT_MARKERS: [&str; 6] = [
 ];
 
 pub fn detect_audience(env: &dyn Fn(&str) -> Option<String>, stderr_tty: bool) -> Audience {
-    match env("HRANESS_AUDIENCE").as_deref() {
+    let explicit = env("HRANESS_AUDIENCE").map(|value| value.trim().to_ascii_lowercase());
+    match explicit.as_deref() {
         Some("human") => return Audience::Human,
         Some("agent") => return Audience::Agent,
         Some("quiet" | "off") => return Audience::Quiet,
@@ -166,8 +167,10 @@ impl Style {
             })
         });
         Self {
-            color: env("FORCE_COLOR").as_deref() == Some("1")
-                || (is_tty && !dumb && env("NO_COLOR").is_none_or(|v| v.is_empty())),
+            // A nonempty NO_COLOR wins; FORCE_COLOR other than `0` or `false` forces color.
+            color: env("NO_COLOR").is_none_or(|v| v.is_empty())
+                && (env("FORCE_COLOR").is_some_and(|v| !v.is_empty() && v != "0" && v != "false")
+                    || (is_tty && !dumb)),
             ascii: dumb || !utf8 || env("HRANESS_ASCII").as_deref() == Some("1"),
         }
     }

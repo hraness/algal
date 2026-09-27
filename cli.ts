@@ -21,7 +21,7 @@ import {
 } from "./src/values";
 import packageJson from "./package.json" with { type: "json" };
 import { advancedHelp, commandHelp, commandWords, rootHelp, startHelp } from "./src/cli-help";
-import { closestMatch, detectAudience, renderFailure, sentence, symbol, terminalStyle, type Audience } from "./src/cli-style";
+import { closestMatch, detectAudience, explicitAudience, renderFailure, sentence, symbol, terminalStyle, type Audience } from "./src/cli-style";
 // Every other module arrives through `await import()` at the subcommand (or
 // helper) that needs it: `--help`, `store`, and the listing commands never
 // pay for the run graph, executors, or the job/repair/shepherd stack.
@@ -1006,7 +1006,7 @@ function humanErrors(argv: readonly string[]): boolean {
  * sentences.
  */
 function humanReport(argv: readonly string[]): boolean {
-  return humanErrors(argv) && (process.stdout.isTTY === true || process.env.HRANESS_AUDIENCE === "human");
+  return humanErrors(argv) && (process.stdout.isTTY === true || explicitAudience(process.env) === "human");
 }
 
 /**

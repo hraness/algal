@@ -12,6 +12,10 @@ independent of these package versions.
 
 ## Unreleased
 
+- Both CLIs read `HRANESS_AUDIENCE` in any letter case, ignoring surrounding
+  spaces, and a nonempty `NO_COLOR` now wins over `FORCE_COLOR`, which
+  accepts any value but `0` or `false`. This is the shared Hraness rule from
+  desktop-foundation 0.8; a test compares the Bun copy with it on every run.
 - CLI help is shorter and starts where a new person starts. Bare `algal`
   (Bun) prints a start screen of at most 25 lines. `algal --help` groups
   everyday commands, `algal help advanced` lists the research commands, and

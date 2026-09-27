@@ -3376,7 +3376,8 @@ async fn execute(cli: Cli) -> Result<bool> {
             let human = !json
                 && cli_style::audience() == cli_style::Audience::Human
                 && (io::stdout().is_terminal()
-                    || std::env::var("HRANESS_AUDIENCE").as_deref() == Ok("human"));
+                    || cli_style::explicit_audience(&cli_style::process_env)
+                        == Some(cli_style::Audience::Human));
             if jev {
                 let status = tokio::task::spawn_blocking(|| algal::credentials::status("jev"))
                     .await
