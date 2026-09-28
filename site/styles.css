@@ -65,6 +65,7 @@ nav a { font-size: .81rem; text-decoration: none; color: var(--muted); }
 .code-keyword { color: var(--plain-syntax-keyword); font-weight: 650; }
 .code-string { color: var(--plain-syntax-string); }
 .code-number { color: var(--plain-syntax-number); }
+.code-name { color: var(--plain-syntax-name); }
 .code-comment { color: var(--muted); }
 .source-annotation { margin-top: 2.3rem; display: flex; gap: .8rem; align-items: stretch; }
 .annotation-line { width: 3px; flex-shrink: 0; background: var(--line); border-radius: 2px; }

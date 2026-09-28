@@ -4,6 +4,7 @@ import { IndexedDbApplicationStorage } from "../src/application-browser-storage"
 import { changedFields } from "./living-render";
 import { loadSurfaceEvaluator, mountSurface, type SurfaceMount } from "./living";
 import { loadLocalModel, probeLocalModel, suggestConfig, unloadLocalModel } from "./browser-inference";
+import { highlightJson } from "./highlight";
 
 const DEFAULT_DATABASE = "algal-grow-v1";
 const DATABASE_KEY = "algal.grow.workspace.v1";
@@ -74,8 +75,8 @@ async function start(root: HTMLElement): Promise<void> {
     get("grow-sequence").textContent = `/ step ${next.sequence + 1}`;
     get("grow-head").textContent = next.head;
     get("grow-revision").textContent = next.revisionDigest;
-    get("grow-signal-evidence").textContent = JSON.stringify(next.signals);
-    get("grow-program").textContent = JSON.stringify(next.definition, null, 2);
+    get("grow-signal-evidence").innerHTML = highlightJson(JSON.stringify(next.signals));
+    get("grow-program").innerHTML = highlightJson(JSON.stringify(next.definition, null, 2));
     get("grow-history-count").textContent = `${next.history.length} history ${next.history.length === 1 ? "step" : "steps"} · ${next.remainingCandidates} ${next.remainingCandidates === 1 ? "proposal" : "proposals"} left`;
     get("grow-pause").textContent = next.controls.inferencePaused ? "Resume evolution" : "Pause evolution";
     get("grow-pin").textContent = next.controls.pinnedRevision ? "Unpin this version" : "Pin this version";
@@ -89,7 +90,7 @@ async function start(root: HTMLElement): Promise<void> {
       get("grow-source").textContent = pending.source === "rules" ? "Local rules · no AI call" : "Model proposal";
       get("grow-rationale").textContent = pending.proposal.rationale;
       get("grow-fit").textContent = `Fit score: ${pending.fit.before} → ${pending.fit.after} out of 4. ${pending.accepted ? "The proposal passed the checks and can be applied." : "The proposal did not pass all requirements and cannot be applied."}`;
-      get("grow-evaluation").textContent = JSON.stringify({ fit: pending.fit, shadow: pending.shadow.report }, null, 2);
+      get("grow-evaluation").innerHTML = highlightJson(JSON.stringify({ fit: pending.fit, shadow: pending.shadow.report }, null, 2));
       const changes = get("grow-changes"); changes.replaceChildren();
       for (const field of changedFields(next.definition.config, pending.proposal.config)) { const li = document.createElement("li"); li.textContent = field; changes.append(li); }
     }
