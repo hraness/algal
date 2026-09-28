@@ -6,6 +6,7 @@ import { IndexedDbApplicationStorage } from "../src/application-browser-storage"
 import type { Digest } from "../src/digest-type";
 import { loadSurfaceEvaluator } from "./living";
 import { checkLabel, draftAction, renderEditor, renderTaskGroups, triageWidgets, workflowSummary } from "./tasks-render";
+import { highlightJson } from "./highlight";
 
 type Workspace = { database: string; application: string };
 const DEFAULT_WORKSPACE: Workspace = { database: "algal-tasks-v1", application: "browser-triage" };
@@ -124,7 +125,7 @@ async function start(root: HTMLElement): Promise<void> {
     get("head").textContent = next.head; get("revision").textContent = next.revision; get("memory").textContent = next.memory;
     get("schema-status").textContent = `v${next.definition.schemaVersion}`;
     get("limits").textContent = `Each workspace holds up to ${MAX_TASKS} tasks, ${MAX_STATES} history steps, and ${MAX_EVALUATIONS} workflow proposals. At the task limit, edits remain available. A full history blocks task and workflow changes; the proposal limit blocks new previews. Saved records are not removed automatically.`;
-    if (draftConflict) get("saved-draft").textContent = JSON.stringify(next.sessionState.record?.session.draft ?? null, null, 2);
+    if (draftConflict) get("saved-draft").innerHTML = highlightJson(JSON.stringify(next.sessionState.record?.session.draft ?? null, null, 2));
     if (!workflowDirty) {
       const saved = next.pending?.evaluation.expectedHead === next.head ? next.pending.preview.definition : next.definition;
       get<HTMLSelectElement>("sort").value = saved.config.sort; get<HTMLSelectElement>("group").value = saved.config.group;

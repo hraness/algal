@@ -3,7 +3,8 @@
 // slug ids, paragraphs, nested lists, fenced code, tables, blockquotes,
 // horizontal rules, inline code, bold/emphasis, and links. Everything is
 // escaped before markup is emitted.
-import { highlightCode } from "./highlight";
+import { highlightCode } from "@hraness/design-kit/syntax-highlighting";
+import { highlightAlgal } from "./highlight";
 
 export interface RenderedDoc {
   title: string;
@@ -140,7 +141,13 @@ export function renderMarkdown(markdown: string, rewrite: LinkRewriter = href =>
       while (i < lines.length && !/^```\s*$/.test(lines[i]!)) { body.push(lines[i]!); i += 1; }
       i += 1;
       const label = lang ? `<span class="code-lang">${escapeHtml(lang)}</span>` : "";
-      html.push(`<div class="code-block">${label}<pre><code>${highlightCode(body.join("\n"), lang)}</code></pre></div>`);
+      const code = body.join("\n");
+      // .algal is ours; the shared kit highlighter covers the rest and infers
+      // a language conservatively when the fence has no tag.
+      const block = lang.toLowerCase() === "algal"
+        ? { html: highlightAlgal(code), className: "syntax-code language-algal" }
+        : highlightCode(code, lang, { styles: "classes" });
+      html.push(`<div class="code-block">${label}<pre><code class="${block.className}">${block.html}</code></pre></div>`);
       continue;
     }
 

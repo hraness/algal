@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { highlightAlgal, highlightCode } from "./highlight";
+import { highlightAlgal, highlightJson } from "./highlight";
 import { renderMarkdown } from "./markdown";
 
 test("algal keywords, strings, comments, and numbers get spans", () => {
@@ -43,11 +43,10 @@ test("highlighting escapes markup inside tokens and plain text", () => {
   expect(html).not.toContain("<b>");
   expect(html).toContain("&lt;b&gt;");
   expect(html).toContain("&amp;");
-  expect(highlightCode(`let <x>`, "unknown-lang")).toBe("let &lt;x&gt;");
 });
 
 test("json highlights keys, values, numbers, and literals", () => {
-  const html = highlightCode(`{"kind": "algal.organism.v1", "budget": {"cells": 8}, "ok": true, "err": null}`, "json");
+  const html = highlightJson(`{"kind": "algal.organism.v1", "budget": {"cells": 8}, "ok": true, "err": null}`);
   expect(html).toContain('<span class="code-name">&quot;kind&quot;</span>');
   expect(html).toContain('<span class="code-string">&quot;algal.organism.v1&quot;</span>');
   expect(html).toContain('<span class="code-number">8</span>');
@@ -55,37 +54,18 @@ test("json highlights keys, values, numbers, and literals", () => {
   expect(html).toContain('<span class="code-keyword">null</span>');
 });
 
-test("sh highlights commands, flags, comments, and strings", () => {
-  const html = highlightCode(`algal verify receipt.json --source main.algal  # replay offline\nexport TOKEN="a # not a comment"`, "sh");
-  expect(html).toContain('<span class="code-keyword">algal</span>');
-  expect(html).toContain('<span class="code-name">--source</span>');
-  expect(html).toContain('<span class="code-comment"># replay offline</span>');
-  expect(html).toContain('<span class="code-name">TOKEN</span>=');
-  expect(html).toContain('<span class="code-string">&quot;a # not a comment&quot;</span>');
-  expect(html).not.toContain('<span class="code-comment"># not a comment</span>');
-  // `in` inside `main` and `algal` after the dot are not keywords.
-  expect(html).toContain("main.algal");
-});
-
-test("sh keeps words whole inside paths and arguments", () => {
-  const html = highlightCode(`bun cli.ts diagram examples/source/reply.algal --out reply.svg`, "sh");
-  expect(html).toContain('<span class="code-keyword">bun</span>');
-  expect(html).toContain("cli.ts");
-  expect(html).toContain("reply.algal");
-  expect(html).toContain('<span class="code-name">--out</span>');
-});
-
-test("ts highlights keywords, strings, and comments", () => {
-  const html = highlightCode(`const run = async () => { // go\n  return "ok"; };`, "ts");
-  expect(html).toContain('<span class="code-keyword">const</span>');
-  expect(html).toContain('<span class="code-keyword">async</span>');
-  expect(html).toContain('<span class="code-comment">// go</span>');
-  expect(html).toContain('<span class="code-string">&quot;ok&quot;</span>');
-});
-
-test("markdown fenced blocks highlight known languages and escape the rest", () => {
-  const doc = renderMarkdown("```algal\nlet x = 1\n```\n\n```text\na < b\n```");
+test("markdown fences use the algal grammar for algal and the kit for the rest", () => {
+  const doc = renderMarkdown("```algal\nlet x = 1\n```\n\n```sh\nalgal verify r.json  # replay\n```\n\n```text\na < b\n```");
+  expect(doc.html).toContain('class="syntax-code language-algal"');
   expect(doc.html).toContain('<span class="code-keyword">let</span>');
-  expect(doc.html).toContain('<span class="code-lang">algal</span>');
+  expect(doc.html).toContain('class="syntax-code language-shell"');
+  expect(doc.html).toContain('syntax-token--command');
+  expect(doc.html).toContain('class="syntax-code language-text"');
   expect(doc.html).toContain("a &lt; b");
+});
+
+test("markdown infers a language for untagged fences conservatively", () => {
+  const doc = renderMarkdown("```\nbun run build\n```\n\n```\nplain prose diagram a → b\n```");
+  expect(doc.html).toContain('class="syntax-code language-shell"');
+  expect(doc.html).toContain('class="syntax-code language-text"');
 });

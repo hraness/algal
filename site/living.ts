@@ -5,6 +5,7 @@ import {
   type SurfaceNode, type SurfaceRevision, type SurfaceSignals, type SurfaceView,
 } from "../examples/malleable-site/surface";
 import { setExprExports, type EvalExports } from "../src/expr";
+import { highlightJson } from "./highlight";
 import {
   assertProposalBase, changedFields, parseDraft, parsePreviewFile,
   surfaceClass, surfaceTag, WORKSPACE_BYTES, WORKSPACE_LIMIT,
@@ -250,8 +251,10 @@ async function startWorkbench(root: HTMLElement): Promise<void> {
         get("living-changes").replaceChildren(...changes);
       }
       get("living-revision-digest").textContent = activeDigest;
-      get("living-signal-evidence").textContent = JSON.stringify(workspace.signals);
-      get("living-program").textContent = JSON.stringify(current(), null, 2);
+      // highlightJson escapes everything it emits, so model-proposed or
+      // imported program text stays inert markup.
+      get("living-signal-evidence").innerHTML = highlightJson(JSON.stringify(workspace.signals));
+      get("living-program").innerHTML = highlightJson(JSON.stringify(current(), null, 2));
       get("living-draft-status").textContent = changedFields(current().config, workspace.draft).length ? "Unapplied draft" : "Matches current version";
       history();
       setControls();

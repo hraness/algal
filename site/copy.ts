@@ -18,13 +18,13 @@ export const ADOPTION_BOUNDARY = `<p>ALGAL fits local review queues, coding repa
 
 /** The first-run terminal, shown on the home and use-cases install sections. */
 export const INSTALL_TERMINAL = `<div class="terminal"><div class="terminal-bar"><span>After installation</span></div><pre tabindex="0" aria-label="Commands to run after installation"><code><span class="code-comment"># Check the installed build and which model providers are available</span>
-algal doctor
+<span class="code-keyword">algal</span> doctor
 
 <span class="code-comment"># Start a VM process that waits for your decision</span>
-algal demo start ./my-review
-algal demo inspect ./my-review
+<span class="code-keyword">algal</span> demo start ./my-review
+<span class="code-keyword">algal</span> demo inspect ./my-review
 
 <span class="code-comment"># my-review/report.html shows the exact command to approve or deny</span>
 
 <span class="code-comment"># Crash the demo's own processes and check how they recover</span>
-algal demo prove ./crash-laboratory</code></pre><p><code>crash-laboratory/proof.json</code> records an approval that publishes once, a denial that publishes nothing, completed writes reused after a crash during a read, and a write with an unknown outcome that is not sent again. The decisions are fixtures; everything else, including the processes, journals, and verification, runs in the VM.</p></div>`;
+<span class="code-keyword">algal</span> demo prove ./crash-laboratory</code></pre><p><code>crash-laboratory/proof.json</code> records an approval that publishes once, a denial that publishes nothing, completed writes reused after a crash during a read, and a write with an unknown outcome that is not sent again. The decisions are fixtures; everything else, including the processes, journals, and verification, runs in the VM.</p></div>`;

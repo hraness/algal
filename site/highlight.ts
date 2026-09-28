@@ -1,13 +1,11 @@
-// Forgiving syntax highlighting for site code blocks. Each language is an
-// ordered list of anchored patterns tried at every position; the first match
-// wins and everything else passes through escaped. Highlighters never fail:
-// docs show fragments, so an unterminated string or comment is colored up to
-// the break rather than rejected. The algal grammar mirrors the token order
-// of the lexer in src/source.ts.
-
-// Every pattern is sticky (`y`): a match must start at the current position,
-// so no `^` anchor is needed. The one exception is the line-start shell
-// comment, which pairs `y` with `m` so `^` means start-of-line.
+// Forgiving syntax highlighting for the two languages the shared design-kit
+// highlighter does not know: .algal source and the JSON the browser viewers
+// render. Each grammar is an ordered list of sticky patterns tried at every
+// position; the first match wins and everything else passes through escaped.
+// Highlighters never fail: docs show fragments, so an unterminated string or
+// comment is colored up to the break rather than rejected. The algal grammar
+// mirrors the token order of the lexer in src/source.ts. This module stays
+// dependency-free so browser bundles can import it without sugar-high.
 type Rule = { pattern: RegExp; name: string | null };
 
 function escapeHtml(value: string): string {
@@ -64,62 +62,12 @@ const JSON_RULES: readonly Rule[] = [
   { pattern: /(?:true|false|null)\b/y, name: "keyword" },
 ];
 
-// A `#` opens a comment at the start of a line or after a blank, `;`, `|`,
-// or `&`. Inside quotes it stays part of the string.
-const SHELL_KEYWORDS =
-  "if|then|else|elif|fi|for|in|do|done|while|until|case|esac|function|return|exit|local|export|readonly|set|unset|source|shift|test|echo|printf|cd|algal|bun|bunx|cargo|npm|npx|node|git|gh|curl|sh|bash|zsh|cat|ls|cp|mv|rm|mkdir|chmod|ln|tar|unzip|grep|sed|awk|xargs|jq|docker|vercel";
-
-// Words stay whole: keywords, flags, and numbers require a preceding
-// boundary that is not a word character, `.`, `/`, or `-`, so paths like
-// `main.algal` and `b2-replies` do not match partway through.
-const SHELL: readonly Rule[] = [
-  { pattern: /"(?:\\[\s\S]|[^"\\\n])*"?/y, name: "string" },
-  { pattern: /'[^\n']*'?/y, name: "string" },
-  { pattern: /^#[^\n]*/my, name: "comment" },
-  { pattern: /(?<=[\s;|&])#[^\n]*/y, name: "comment" },
-  { pattern: new RegExp(`(?<![\\w./-])(?:${SHELL_KEYWORDS})\\b(?![\\w-])`, "y"), name: "keyword" },
-  { pattern: /(?<![\w./-])--?[A-Za-z][\w-]*/y, name: "name" },
-  { pattern: /\$(?:\w+|\{[^}]*\})/y, name: "name" },
-  { pattern: /(?<![\w./-])[A-Za-z_][A-Za-z0-9_]*(?==(?!=))/y, name: "name" },
-  { pattern: /(?<![\w:])\d+(?:\.\d+)*/y, name: "number" },
-];
-
-const TS_KEYWORDS =
-  "const|let|var|function|return|if|else|for|while|switch|case|default|break|continue|new|typeof|instanceof|in|of|class|extends|super|this|null|undefined|true|false|import|from|export|async|await|try|catch|finally|throw|yield|static|get|set|interface|type|implements|enum|namespace|declare|abstract|as|satisfies|keyof|readonly|void|never|unknown|any";
-
-const TYPESCRIPT: readonly Rule[] = [
-  { pattern: /\/\/[^\n]*/y, name: "comment" },
-  { pattern: /\/\*[\s\S]*?(?:\*\/|$)/y, name: "comment" },
-  { pattern: /"(?:\\.|[^"\\\n])*"?/y, name: "string" },
-  { pattern: /'(?:\\.|[^'\\\n])*'?/y, name: "string" },
-  { pattern: /`(?:\\.|[^`\\])*`?/y, name: "string" },
-  { pattern: new RegExp(`(?:${TS_KEYWORDS})\\b`, "y"), name: "keyword" },
-  { pattern: /(?:0x[\da-fA-F]+|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/y, name: "number" },
-  { pattern: /[A-Za-z_$][A-Za-z0-9_$]*/y, name: null },
-];
-
-const LANGUAGES: Record<string, readonly Rule[]> = {
-  algal: ALGAL,
-  json: JSON_RULES,
-  sh: SHELL,
-  bash: SHELL,
-  shell: SHELL,
-  zsh: SHELL,
-  ts: TYPESCRIPT,
-  typescript: TYPESCRIPT,
-  js: TYPESCRIPT,
-  javascript: TYPESCRIPT,
-  tsx: TYPESCRIPT,
-  jsx: TYPESCRIPT,
-};
-
-/** Highlight one code block. Unknown or empty languages get escaped text. */
-export function highlightCode(source: string, lang: string): string {
-  const rules = LANGUAGES[lang.toLowerCase()];
-  return rules ? highlightWith(source, rules) : escapeHtml(source);
-}
-
-/** Highlight .algal source; used for the executable examples in the build. */
+/** Highlight .algal source; used for executable examples and `algal` fences. */
 export function highlightAlgal(source: string): string {
   return highlightWith(source, ALGAL);
+}
+
+/** Highlight JSON; used by the browser program and evidence viewers. */
+export function highlightJson(source: string): string {
+  return highlightWith(source, JSON_RULES);
 }
