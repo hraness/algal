@@ -15,7 +15,7 @@ export interface SitePageMeta {
   description: string;
   ogTitle: string;
   /** Blog posts emit article metadata; everything else stays a website. */
-  article?: { published: string };
+  article?: { published: string; modified?: string };
   /** Quarantined posts stay readable but out of search indexes. */
   noindex?: boolean;
   /** Extra JSON-LD nodes, such as BlogPosting or Blog. */
@@ -51,7 +51,7 @@ export function pageDocument(meta: SitePageMeta, main: string): string {
 ${missing ? "" : `<link rel="canonical" href="${canonical}">\n`}<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<meta property="og:type" content="${meta.article ? "article" : "website"}">${meta.article ? `\n<meta property="article:published_time" content="${meta.article.published}">` : ""}
+<meta property="og:type" content="${meta.article ? "article" : "website"}">${meta.article ? `\n<meta property="article:published_time" content="${meta.article.published}">` : ""}${meta.article?.modified ? `\n<meta property="article:modified_time" content="${meta.article.modified}">` : ""}
 <meta property="og:site_name" content="ALGAL">
 <meta property="og:title" content="${ogTitle}">
 <meta property="og:description" content="${description}">

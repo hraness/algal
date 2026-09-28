@@ -2,6 +2,7 @@
 title: "Receipts are the fossil record of an execution"
 order: 2
 date: 2026-09-22
+updated: 2026-09-28
 description: An ALGAL receipt replays an agent run bit-for-bit offline, so someone who does not trust you can check what ran. What it records, and what it proves.
 ---
 

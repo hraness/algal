@@ -19,16 +19,16 @@ BAML and ALGAL both call themselves languages for agents. BAML is a TypeScript-l
 | | BAML | ALGAL |
 |---|---|---|
 | The program is | BAML source with TypeScript-like syntax, unions, generics, and interfaces, called from Python or TypeScript through generated SDKs or run with `baml run` | typed data: an `algal.organism.v1` manifest |
-| The history is | traces of BAML function calls, sent to the hosted Boundary Studio dashboard when you set an API key ([tracing docs](https://docs.boundaryml.com/guide/boundary-cloud/observability/tracking-usage)) | a receipt file that verifies offline, with no server or store |
-| Nondeterminism | model calls are functions with typed results and typed errors; BAML's documentation does not describe recording them for replay | declared effect cells (agent, decide, tool), each typed, budgeted, and recorded |
-| Long waits | BAML's documentation does not describe durable waits or resuming a run after a crash; the [codemode demo](https://github.com/BoundaryML/codemode) builds an approval log on top of BAML (see below) | a checkpointed wait on a declared capability that any later process can resume |
+| The history is | a profiler and workflow tooling that record LLM inputs and outputs ([Explore BAML](https://boundaryml.com/explore)); hosted observability is planned for BAML Cloud, which is not available yet ([pricing](https://boundaryml.com/pricing)), and the legacy v0 DSL sends traces to Boundary Studio when you set an API key ([v0 tracing docs](https://docs.boundaryml.com/guide/boundary-cloud/observability/tracking-usage)) | a receipt file that verifies offline, with no server or store |
+| Nondeterminism | model calls are native functions with typed results and typed errors, and BAML lists traces and replay as a design goal; its published documentation does not describe replaying a finished run from recorded model answers | declared effect cells (agent, decide, tool), each typed, budgeted, and recorded |
+| Long waits | BAML's published documentation does not describe durable waits or resuming a run after a crash; the [codemode demo](https://github.com/BoundaryML/codemode) builds an approval log on top of BAML (see below) | a checkpointed wait on a declared capability that a later process with the store can resume |
 | Who runs it | your Python or TypeScript process, or the `baml` CLI | one binary, or two runtimes that can hand a run to each other |
 | Permissions | whatever your BAML code and host application call | capabilities the host grants; a manifest cannot create its own |
 | Programs as values | BAML functions are source compiled by the BAML toolchain | manifests are data: hashed, diffed, moved between hosts, and emitted by `spawn` |
 
 ## Where BAML meets durability
 
-BoundaryML's [codemode](https://github.com/BoundaryML/codemode) repository is an early demo in which a model writes BAML, the server compiles and runs it in process, and a durable execution log records each connector call. An approval aborts the pass; after approval the same code runs again and earlier calls are answered from the log, and a call that does not match the log raises a replay-divergence error. The log is JSON on disk that survives restarts. The demo shows the pattern is possible in BAML. The BAML language documentation does not describe it as a language feature (checked 2026-09-28).
+Boundary's [codemode](https://github.com/BoundaryML/codemode) repository is an early demo in which a model writes BAML, the server compiles and runs it in process, and a durable execution log records each connector call. An approval aborts the pass; after approval the same code runs again and earlier calls are answered from the log, and a call that does not match the log raises a replay-divergence error. The log is JSON on disk that survives restarts. The demo shows the pattern is possible in BAML. BAML's published documentation does not describe it as a language feature (checked 2026-09-28).
 
 In ALGAL, the wait is part of the program contract. A wait-style cell suspends on a mailbox receive that the host granted, and the checkpoint records the manifest's digest. A different process, even the Rust runtime resuming a run that the TypeScript runtime on Bun started, verifies the recorded effects and continues. `algal verify` replays the finished receipt with no model, no store, and no credentials. The [process spec](/docs/spec/process/) has the mechanics.
 
@@ -36,7 +36,7 @@ In ALGAL, the wait is part of the program contract. A wait-style cell suspends o
 
 - You want reliable, typed model calls inside a Python or TypeScript app you already have, adopted one function at a time through generated SDKs.
 - You want prompt tests and evaluations next to the functions they check, with editor and CLI tooling built for that loop.
-- You want hosted traces of every model call in a dashboard.
+- You want a workflow graph, a profiler, and CLI tools such as `baml run` and `baml describe` built for coding agents.
 - You want a project with a company behind it and a larger community.
 
 ## When to choose ALGAL
@@ -48,6 +48,6 @@ In ALGAL, the wait is part of the program contract. A wait-style cell suspends o
 
 ## Status and limits
 
-ALGAL is a prerelease application VM: one binary, local stores, unsigned packages, and no hosted service, so you operate it yourself. It cannot guarantee exactly-once external effects across a crash; host tools own their own idempotency. BAML is pre-1.0: its documentation describes the new language as in public beta, and its current releases are 0.20 nightlies. It is Apache-2.0 licensed, with BoundaryML and a larger community behind it. If what you need is typed model calls inside an existing app, use BAML. To see ALGAL programs and their recorded runs, [take the tour](/tour/).
+ALGAL is a prerelease application VM: one binary, local stores, unsigned packages, and no hosted service, so you operate it yourself. It cannot guarantee exactly-once external effects across a crash; host tools own their own idempotency. BAML is pre-1.0: its documentation site covers the legacy v0 DSL and describes the new language as in public beta, and its latest stable release is 0.20.1, followed by nightly builds. It is Apache-2.0 licensed, with Boundary and a larger community behind it. If what you need is typed model calls inside an existing app, use BAML. To see ALGAL programs and their recorded runs, [take the tour](/tour/).
 
-*Sources: the [BAML homepage](https://www.boundaryml.com/), the [BAML README](https://github.com/BoundaryML/baml) and [releases](https://github.com/BoundaryML/baml/releases), the [BAML documentation](https://docs.boundaryml.com/home), [BAML tracing](https://docs.boundaryml.com/guide/boundary-cloud/observability/tracking-usage), and the [codemode demo](https://github.com/BoundaryML/codemode), checked 2026-09-28.*
+*Sources: the [BAML homepage](https://www.boundaryml.com/), [Explore BAML](https://boundaryml.com/explore), [BAML pricing](https://boundaryml.com/pricing), the [BAML README](https://github.com/BoundaryML/baml) and [releases](https://github.com/BoundaryML/baml/releases), the [BAML v0 documentation](https://docs.boundaryml.com/home) and its [tracing page](https://docs.boundaryml.com/guide/boundary-cloud/observability/tracking-usage), and the [codemode demo](https://github.com/BoundaryML/codemode), checked 2026-09-28.*

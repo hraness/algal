@@ -2,6 +2,7 @@
 title: "A program that can wait"
 order: 3
 date: 2026-09-22
+updated: 2026-09-28
 description: An ALGAL program can wait days for an approval, then resume in a new process or the other runtime, because the wait is saved as data in the store.
 ---
 
@@ -15,13 +16,13 @@ ALGAL handles the wait by saving it. An ALGAL program, called an organism, is ty
 
 Durable execution engines such as [Temporal](https://temporal.io/), Restate, Inngest, and DBOS solved waiting years ago, and they share a design. Workflow code runs under a deterministic replay model, the engine keeps the event history, and signals wake sleeping work.
 
-That design works, and it depends on a server. The history lives in the service, the code lives in your deployment, and the running system is the two together. A Temporal workflow is code, so the worker that replays it must run code that matches the recorded history, and that history lives in the service that ran it. Inside that service the arrangement is sound. The record is built to serve that service, not to be checked somewhere else.
+That design works, and it depends on a server. The history lives in the service, the code lives in your deployment, and the running system is the two together. A Temporal workflow is code, so the worker that replays it must run code that matches the recorded history, and that history lives in the service that ran it. You can export a history and replay it in a test with the SDK's replayer, but only against the workflow code that produced it. The arrangement is sound, and the history serves the system that produced it.
 
 ## A saved wait can resume in a new process or the other runtime
 
 A waiting ALGAL program is not a paused thread or a suspended coroutine. It is a checkpoint made of three things in the store: the manifest's digest, the effects the run has recorded so far, and the wake permission the host granted it. The process that created the checkpoint can exit. Days later, any process on the machine that holds the store can verify the checkpoint and continue: a fresh CLI invocation, a host application restarted after a crash, or the other runtime. Moving a waiting process to another machine is not built yet.
 
-That last case is the unusual one. A run can start in the TypeScript reference runtime, which runs on Bun, and resume in the Rust runtime, using the same manifest, store, and receipts. Neither runtime ever held the program as code, so either one can serve the next invocation. The handoff follows from the program being data, and the parity tests check that both runtimes agree for the program shapes they cover. [How ALGAL keeps its TypeScript and Rust in step](/blog/typescript-rust-parity/) describes the tests that keep the two runtimes agreeing.
+That last case is the unusual one. A run can start in the TypeScript reference runtime, which runs on Bun, and resume in the Rust runtime, using the same manifest, store, and receipts. Neither runtime ever held the program as code, so either one can serve the next invocation. The handoff follows from the program being data. [How ALGAL keeps its TypeScript and Rust in step](/blog/typescript-rust-parity/) describes the parity tests that check both runtimes agree, and the program shapes those tests leave uncompared.
 
 ## A program wakes with only the permission it was given
 

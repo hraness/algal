@@ -83,6 +83,7 @@ const WAIT_SOURCES: readonly Source[] = [
   reviewed("Process VM guide: the approval example, cross-runtime resume, and the limits on external effects", atReview("docs/vm.md")),
   reviewed("Adoption boundary: moving a running process to another machine is not built", atReview("site/copy.ts")),
   reviewed("Temporal event history", "https://docs.temporal.io/workflow-execution/event"),
+  reviewed("Temporal TypeScript testing: replaying an exported event history against workflow code", "https://docs.temporal.io/develop/typescript/testing-suite#replay"),
 ];
 
 const RECEIPT_SOURCES: readonly Source[] = [
@@ -186,6 +187,7 @@ export const BLOG_ADMISSIONS: readonly ArticleAdmission[] = [
       "The event list named only five kinds; src/run.ts also records cell.fail and cell.suspend, so the review added both.",
       "The post said a spawned run's own digest is written onto the parent's receipt. The organism spec runs a spawned program nested inside the parent and records the child manifest's digest, so the review corrected the claim.",
       "The post described process export as a size-limited bundle; the review named the JSON document and the verify-evidence command that checks it without a store.",
+      "A second AI run that did not draft or edit the post rechecked the event kinds, spawn provenance, and process export commands against src/run.ts, spec/v1/organism.md, and cli.ts on 2026-09-28 and found no further error.",
     ],
     scores: { readerUtility: 2, originalEvidence: 1, factualConfidence: 2, hostFit: 2, voiceIntegrity: 1, maintenanceValue: 1 },
     owner: "Hraness",
@@ -217,6 +219,7 @@ export const BLOG_ADMISSIONS: readonly ArticleAdmission[] = [
       "The post said a different host could resume a wait, which contradicts the adoption boundary on the home page; the review limited resume to processes on the machine that holds the store and states the limit.",
       "The approval example publishes a report to a local mailbox and deploys nothing; the review says so, matching the tour's own caption.",
       "The final receipt holds the whole approval run because each resumed generation must keep the earlier generation's effects as an exact prefix; the review added that reason from the process spec.",
+      "A second AI run that did not draft or edit the post rechecked every claim above against the same sources on 2026-09-28. It corrected the Temporal paragraph, which implied an event history cannot be checked outside the service; Temporal's SDKs replay an exported history against the workflow code in tests.",
     ],
     scores: { readerUtility: 2, originalEvidence: 1, factualConfidence: 2, hostFit: 2, voiceIntegrity: 2, maintenanceValue: 1 },
     owner: "Hraness",

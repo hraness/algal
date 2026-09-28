@@ -944,7 +944,7 @@ for (const post of blogPosts) {
     title: /\bALGAL\b/.test(post.title) ? post.title : `${post.title} · ALGAL`,
     description: post.dek,
     ogTitle: post.title,
-    article: { published: post.published },
+    article: { published: post.published, ...(post.updated ? { modified: post.updated } : {}) },
     ...(post.indexable ? {} : { noindex: true }),
     jsonLd: [postJsonLd(post), sectionBreadcrumb({ name: "Blog", path: BLOG_PATH }, post.title, post.path)],
   }, `<div class="docs-layout">${blogRail(post.slug)}<div class="docs-article blog-article">${renderPostArticle(post)}</div></div>`);
