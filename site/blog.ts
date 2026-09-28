@@ -26,7 +26,8 @@ import {
   type ArticleDiscovery,
   type SearchSite,
 } from "@hraness/web-discovery";
-import { OG_IMAGE_ALT, SITE_DESCRIPTION } from "./copy";
+import { SITE_DESCRIPTION } from "./copy";
+import { postSocialImage, SOCIAL_IMAGE_HEIGHT, SOCIAL_IMAGE_WIDTH } from "./social-image";
 import { escapeHtml, renderMarkdown } from "./markdown";
 import { ALGAL_USES_POSTS, BLOG_ADMISSIONS, BLOG_AUTHOR, BLOG_SOURCES, PENDING_CROSS_HOST_LINKS } from "./blog-posts";
 
@@ -43,7 +44,6 @@ export const SEARCH_SITE: SearchSite = {
   language: "en-US",
 };
 
-const SOCIAL_IMAGE = { path: "/og.png", width: 1200, height: 630, contentType: "image/png", alt: OG_IMAGE_ALT } as const;
 const USES_MARKER = "{{ALGALUSES}}";
 
 /** The Hraness org as a schema/feed party: a real entity with a canonical URL and profiles. */
@@ -146,7 +146,7 @@ export function articleDiscovery(post: BlogPost): ArticleDiscovery {
     canonicalPath: post.path,
     title: post.title,
     description: post.dek,
-    image: SOCIAL_IMAGE,
+    image: { ...postSocialImage(post), width: SOCIAL_IMAGE_WIDTH, height: SOCIAL_IMAGE_HEIGHT, contentType: "image/png" },
     publishedTime: timestamp(post.published),
     ...(post.updated ? { modifiedTime: timestamp(post.updated) } : {}),
     authors: [BLOG_PARTY],

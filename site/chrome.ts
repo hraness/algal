@@ -1,9 +1,10 @@
 // Shared document chrome: head, header, nav, and footer for every site page.
 // Per-page fragments supply only their <main> content and metadata.
-import { OG_IMAGE_ALT, SITE_DESCRIPTION, SITE_TAGLINE } from "./copy";
+import { SITE_DESCRIPTION, SITE_TAGLINE } from "./copy";
 import { siteIcon } from "./icons";
 import { escapeHtml } from "./markdown";
 import { serializeJsonLd } from "@hraness/web-discovery";
+import { SITE_SOCIAL_IMAGE, SOCIAL_IMAGE_HEIGHT, SOCIAL_IMAGE_WIDTH, type SocialImageRef } from "./social-image";
 
 export type SitePageId = "home" | "tour" | "use-cases" | "living" | "grow" | "tasks" | "workbench" | "docs" | "spec" | "blog" | "compare" | "not-found";
 
@@ -18,6 +19,8 @@ export interface SitePageMeta {
   article?: { published: string; modified?: string };
   /** Quarantined posts stay readable but out of search indexes. */
   noindex?: boolean;
+  /** A page card from site/social-image.ts; pages without one share the site card. */
+  socialImage?: SocialImageRef;
   /** Extra JSON-LD nodes, such as BlogPosting or Blog. */
   jsonLd?: readonly unknown[];
 }
@@ -41,6 +44,8 @@ export function pageDocument(meta: SitePageMeta, main: string): string {
   const title = escapeHtml(meta.title);
   const description = escapeHtml(meta.description);
   const ogTitle = escapeHtml(meta.ogTitle);
+  const image = meta.socialImage ?? SITE_SOCIAL_IMAGE;
+  const imageUrl = escapeHtml(`${ORIGIN}${image.path}`);
   return `<!doctype html>
 <html lang="en" data-hraness-theme="paper" data-hraness-marketing-preset="editorial" data-hraness-material="lantern" data-palette="tokyo-night" data-hraness-pattern="none">
 <head>
@@ -55,14 +60,15 @@ ${missing ? "" : `<link rel="canonical" href="${canonical}">\n`}<link rel="icon"
 <meta property="og:site_name" content="ALGAL">
 <meta property="og:title" content="${ogTitle}">
 <meta property="og:description" content="${description}">
-${missing ? "" : `<meta property="og:url" content="${canonical}">\n`}<meta property="og:image" content="${ORIGIN}/og.png">
-<meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="${escapeHtml(OG_IMAGE_ALT)}">
+${missing ? "" : `<meta property="og:url" content="${canonical}">\n`}<meta property="og:image" content="${imageUrl}">
+<meta property="og:image:width" content="${SOCIAL_IMAGE_WIDTH}">
+<meta property="og:image:height" content="${SOCIAL_IMAGE_HEIGHT}">
+<meta property="og:image:alt" content="${escapeHtml(image.alt)}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${ogTitle}">
 <meta name="twitter:description" content="${description}">
-<meta name="twitter:image" content="${ORIGIN}/og.png">
+<meta name="twitter:image" content="${imageUrl}">
+<meta name="twitter:image:alt" content="${escapeHtml(image.alt)}">
 <meta name="robots" content="${meta.noindex || missing ? "noindex, nofollow" : "index, follow"}">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"${ORIGIN}/#website","name":"ALGAL","url":"${ORIGIN}/","publisher":{"@id":"${PUBLISHER_ID}"}},{"@type":"SoftwareApplication","@id":"${ORIGIN}/#software","name":"ALGAL","url":"${ORIGIN}/","description":${JSON.stringify(SITE_DESCRIPTION)},"applicationCategory":"DeveloperApplication","operatingSystem":"macOS (Apple silicon), Linux x86_64","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"license":"https://opensource.org/license/mit","sameAs":["${REPO}"],"author":{"@id":"${PUBLISHER_ID}"},"publisher":{"@id":"${PUBLISHER_ID}"}},{"@type":"Organization","@id":"${PUBLISHER_ID}","name":"Hraness","url":"https://hraness.com/","sameAs":["https://github.com/hraness"]}]}
