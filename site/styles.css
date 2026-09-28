@@ -476,6 +476,8 @@ h2 em { font-style: normal; color: inherit; }
   .site-header nav a { font-size: .83rem; }
 }
 @media (max-width: 760px) {
+  /* The two-row phone header is about 124px tall; keep anchors below it. */
+  html { scroll-padding-top: 9rem; }
   .site-header-inner { flex-wrap: wrap; padding: .6rem 1.25rem; gap: .5rem 1rem; }
   .site-header nav { order: 3; flex-basis: 100%; justify-content: space-between; gap: 0; }
   .site-header nav a { font-size: .85rem; }

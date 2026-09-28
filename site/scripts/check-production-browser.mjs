@@ -89,6 +89,9 @@ try {
         currentPath = path;
         const preview = path === '/preview';
         const response = await page.goto(origin + path, { waitUntil: 'load' });
+        // Diagram frames swap their static fallback for the interactive view
+        // once its document arrives; measure the settled page, not the swap.
+        await page.waitForLoadState('networkidle');
         assert.equal(response.status(), path === '/missing-production-verification' ? 404 : 200, path);
         assert.equal(new URL(page.url()).origin, origin, 'Public pages must remain on the fixed origin');
         let previewCsp;
