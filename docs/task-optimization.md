@@ -101,3 +101,6 @@ judge was correct, that a public fixture represents production traffic, or that
 retained examples generalize. Report invalid outputs separately, include failed
 attempts in cost, and keep an untouched source-disjoint audit set. Compare any
 retained guidance against a fixed task under the same model and limits.
+
+Use the [task workflow CLI](task-workflow.md) to evaluate, optimize, inspect,
+compare, export and replay these tasks as bounded portable archives.

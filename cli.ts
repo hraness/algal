@@ -254,6 +254,16 @@ usage:
                                               alias for observe --follow
   algal diff <receipt-a.json> <receipt-b.json>
                                               compare two receipts, report divergence
+  algal task evaluate <config.json> --out <archive.json> [executor/store options]
+                                              evaluate the fixed task and preserve all receipts
+  algal task optimize <config.json> --out <archive.json> [executor/store options]
+                                              run the configured task optimization strategy
+  algal task inspect <archive.json>            summarize a bounded task archive
+  algal task compare <left.json> <right.json>   compare task archives and parameter changes
+  algal task export <archive.json> --out <artifact.json>
+                                              replay then export the selected portable task
+  algal task replay <archive.json>             reconstruct the campaign offline
+
   algal foundry <config.json> [--responses <file>] [--executor-cmd <command>]
       [--gateway-model <provider/model>]
       [--executors <file>] [--modules <dir>] [--transports <file>] [--tools <file>]
@@ -1066,6 +1076,16 @@ async function main(): Promise<number> {
     out(await verifyProcessEvidence(await readJsonBounded(resolve(positional[1]!),
       PROCESS_EVIDENCE_BOUNDS.maxBytes, "process evidence")) as unknown as JsonValue);
     return 0;
+  }
+  if (cmd === "task") {
+    const { taskWorkflowCli } = await import("./src/task-workflow-cli");
+    const dir = String(flags.dir ?? ".algal");
+    return taskWorkflowCli(positional, flags, {
+      readJson: readJsonBounded,
+      store: async () => new (await import("./src/store")).FileStore(dir),
+      executors: () => resolveExecutors(flags, dir),
+      out,
+    });
   }
   const dir = String(flags.dir ?? ".algal");
   const { FileStore } = await import("./src/store");

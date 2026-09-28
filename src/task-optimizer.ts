@@ -203,7 +203,7 @@ export function selectTaskPortfolio(candidates: FoundryCandidateResult[], maximu
   return chosen;
 }
 
-function parseReviser(value: unknown): TaskReviser {
+export function parseTaskReviser(value: unknown): TaskReviser {
   const raw = asObject(boundedJsonSnapshot(value, { ...TASK_OPTIMIZER_BOUNDS.cases, maxBytes: BOUNDS.maxManifestBytes, maxStringBytes: BOUNDS.maxManifestBytes }, "task reviser"), "task reviser");
   noUnknownKeys(raw, ["manifest", "input", "output", "args"], "task reviser");
   const manifest = parseOrganismManifest(raw.manifest);
@@ -255,7 +255,7 @@ export async function optimizeTask(options: TaskOptimizationOptions): Promise<Ta
   const strategy = options.strategy;
   if (strategy !== "fixed" && strategy !== "labeled" && strategy !== "feedback") fail("unknown strategy");
   assertTrainingExamples(initial.task, cases, limits.maxExamples);
-  const reviser = strategy === "feedback" ? parseReviser(options.reviser) : undefined;
+  const reviser = strategy === "feedback" ? parseTaskReviser(options.reviser) : undefined;
   if (strategy === "feedback" && limits.maxRounds === 0) fail("feedback requires a positive maxRounds");
   const datasetDigest = digestCanonical(cases as unknown as JsonValue);
   const account = new HabitatAccount("search", limits.budget);

@@ -811,3 +811,8 @@ export { TASK_PARAMETER_PATCH_CONTRACT, TASK_PARAMETER_IDS, taskParameters, pars
 export type { TaskParameterId, TaskParameter, TaskParameters, TaskParameterPatch } from "./src/task-parameters";
 export { TASK_OPTIMIZATION_CONTRACT, TASK_OPTIMIZER_BOUNDS, buildTaskReviser, parseTaskOptimizerLimits, parseTaskCases, selectTaskPortfolio, optimizeTask } from "./src/task-optimizer";
 export type { TaskCase, TaskOptimizerLimits, TaskReviser, TaskOptimizationOptions, TaskOptimizationCandidate, TaskRevision, TaskOptimizationReport } from "./src/task-optimizer";
+
+export { EVALUATED_TASK_CONTRACT, EVALUATED_TASK_BOUNDS, buildEvaluatedTaskArtifact, parseEvaluatedTaskArtifact, assertEvaluatedTaskCompatible } from "./src/task-artifact";
+export type { EvaluatedTaskArtifact } from "./src/task-artifact";
+export { TASK_WORKFLOW_CONTRACT, TASK_WORKFLOW_ARCHIVE_CONTRACT, TASK_WORKFLOW_BOUNDS, parseTaskWorkflowConfig, parseTaskOptimizationReport, buildTaskWorkflowArchive, parseTaskWorkflowArchive, verifyTaskWorkflowArchive, inspectTaskWorkflow, compareTaskWorkflows } from "./src/task-workflow";
+export type { TaskWorkflowConfig, TaskWorkflowArchive } from "./src/task-workflow";
