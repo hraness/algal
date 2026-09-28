@@ -477,7 +477,7 @@ h2 em { font-style: normal; color: inherit; }
 }
 @media (max-width: 760px) {
   .site-header-inner { flex-wrap: wrap; padding: .6rem 1.25rem; gap: .5rem 1rem; }
-  .site-header nav { order: 3; flex-basis: 100%; justify-content: space-between; gap: .5rem; }
+  .site-header nav { order: 3; flex-basis: 100%; justify-content: space-between; gap: 0; }
   .site-header nav a { font-size: .85rem; }
   .site-header-actions { gap: .5rem; }
   .site-header-actions > .hraness-marketing-action { font-size: .8rem; padding: .4rem .75rem; }
@@ -505,7 +505,8 @@ h2 em { font-style: normal; color: inherit; }
   .terminal code { font-size: .76rem; }
 }
 @media (pointer: coarse) {
-  .site-header nav a { min-block-size: 3rem; display: inline-flex; align-items: center; }
+  .site-header .wordmark { min-block-size: 2.75rem; }
+  .site-header nav a { min-block-size: 3rem; min-inline-size: 2.75rem; display: inline-flex; align-items: center; justify-content: center; }
   .route-tabs button, .example-tabs button, .composition-tabs button, summary { min-block-size: 3rem; }
 }
 
