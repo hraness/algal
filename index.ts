@@ -818,3 +818,26 @@ export { TASK_WORKFLOW_CONTRACT, TASK_WORKFLOW_ARCHIVE_CONTRACT, TASK_WORKFLOW_B
 export type { TaskWorkflowConfig, TaskWorkflowArchive } from "./src/task-workflow";
 export { EVALUATION_EVIDENCE_CONTRACT, HOST_PROFILE_CONTRACT, PROMOTION_DECISION_CONTRACT, HOST_LIFECYCLE_CONTRACT, HOST_CONTRACT_BOUNDS, parseEvaluationEvidence, buildEvaluationEvidence, verifyEvaluationEvidence, parseHostProfile, buildHostProfile, verifyHostProfile, parsePromotionDecision, buildPromotionDecision, verifyPromotionDecision, parseHostLifecycle, buildHostLifecycle, verifyHostLifecycle } from "./src/host-contract";
 export type { EvaluationEvidence, EvaluationOutcome, EvaluationOutcomeCase, HostProfile, PromotionDecision, HostLifecycle } from "./src/host-contract";
+
+export {
+  IMPROVE_BOUNDS,
+  IMPROVE_CONTRACT,
+  IMPROVE_SPLIT_POLICY,
+  improveReportRuns,
+  runImprovement,
+} from "./src/improve";
+export type {
+  ImproveArm,
+  ImproveArmResult,
+  ImproveCandidateResult,
+  ImproveCase,
+  ImproveCaseResult,
+  ImproveFixedArm,
+  ImproveGeneration,
+  ImproveGeneratorArm,
+  ImproveLabels,
+  ImproveOptions,
+  ImproveReport,
+  ImproveResult,
+  ImproveRollout,
+} from "./src/improve";
