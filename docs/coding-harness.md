@@ -4,6 +4,10 @@ The [completed first pilot](coding-harness-pilot-results.md) records the live
 development/proposal/frozen-holdout results and limitations. It established the
 integration path but no task-solving or policy-search benefit.
 
+The pilot's result summary is also published in the [ALGAL experiments
+dataset](https://huggingface.co/datasets/hranesscom/algal-experiments) on
+Hugging Face under MIT.
+
 The [memory follow-up](coding-harness-memory-spike.md) keeps the policy fixed and
 compares no persistent memory, episodic observations, and native logical queries.
 

@@ -15,7 +15,7 @@ export interface SitePageMeta {
   description: string;
   ogTitle: string;
   /** Blog posts emit article metadata; everything else stays a website. */
-  article?: { published: string };
+  article?: { published: string; modified?: string };
   /** Quarantined posts stay readable but out of search indexes. */
   noindex?: boolean;
   /** Extra JSON-LD nodes, such as BlogPosting or Blog. */
@@ -24,6 +24,8 @@ export interface SitePageMeta {
 
 const ORIGIN = "https://algal.computer";
 const REPO = "https://github.com/hraness/algal";
+// The studio entity is defined once on hraness.com; every product site points at it.
+const PUBLISHER_ID = "https://hraness.com/#organization";
 
 function navLink(page: SitePageId, id: SitePageId, href: string, label: string): string {
   const current = page === id ? ' aria-current="page"' : "";
@@ -47,7 +49,9 @@ export function pageDocument(meta: SitePageMeta, main: string): string {
 <title>${title}</title>
 <meta name="description" content="${description}">
 ${missing ? "" : `<link rel="canonical" href="${canonical}">\n`}<link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<meta property="og:type" content="${meta.article ? "article" : "website"}">${meta.article ? `\n<meta property="article:published_time" content="${meta.article.published}">` : ""}
+<link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta property="og:type" content="${meta.article ? "article" : "website"}">${meta.article ? `\n<meta property="article:published_time" content="${meta.article.published}">` : ""}${meta.article?.modified ? `\n<meta property="article:modified_time" content="${meta.article.modified}">` : ""}
 <meta property="og:site_name" content="ALGAL">
 <meta property="og:title" content="${ogTitle}">
 <meta property="og:description" content="${description}">
@@ -61,7 +65,7 @@ ${missing ? "" : `<meta property="og:url" content="${canonical}">\n`}<meta prope
 <meta name="twitter:image" content="${ORIGIN}/og.png">
 <meta name="robots" content="${meta.noindex || missing ? "noindex, nofollow" : "index, follow"}">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@graph":[{"@type":"WebSite","name":"ALGAL","url":"${ORIGIN}/"},{"@type":"SoftwareApplication","name":"ALGAL","url":"${ORIGIN}/","description":${JSON.stringify(SITE_DESCRIPTION)},"applicationCategory":"DeveloperApplication","codeRepository":"${REPO}","license":"https://opensource.org/license/mit","author":{"@id":"https://github.com/hraness#org"}},{"@type":"Organization","@id":"https://github.com/hraness#org","name":"hraness","url":"https://github.com/hraness","sameAs":["https://github.com/hraness"]}]}
+{"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"${ORIGIN}/#website","name":"ALGAL","url":"${ORIGIN}/","publisher":{"@id":"${PUBLISHER_ID}"}},{"@type":"SoftwareApplication","@id":"${ORIGIN}/#software","name":"ALGAL","url":"${ORIGIN}/","description":${JSON.stringify(SITE_DESCRIPTION)},"applicationCategory":"DeveloperApplication","operatingSystem":"macOS (Apple silicon), Linux x86_64","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"license":"https://opensource.org/license/mit","sameAs":["${REPO}"],"author":{"@id":"${PUBLISHER_ID}"},"publisher":{"@id":"${PUBLISHER_ID}"}},{"@type":"Organization","@id":"${PUBLISHER_ID}","name":"Hraness","url":"https://hraness.com/","sameAs":["https://github.com/hraness"]}]}
 </script>${(meta.jsonLd ?? []).map(node => `\n<script type="application/ld+json">${serializeJsonLd(node)}</script>`).join("")}${meta.page === "blog" ? '\n<link rel="alternate" type="application/atom+xml" title="ALGAL blog" href="/blog/feed.xml">' : ""}
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#e1e2e7">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1a1b26">
@@ -105,7 +109,7 @@ ${meta.page === "workbench" ? '<link rel="stylesheet" href="/living.css">\n<link
 
 ${main}
 
-<footer class="site-footer"><a class="wordmark" href="/" aria-label="ALGAL home"><img src="/favicon.svg" width="24" height="24" alt="">algal</a><p>${SITE_TAGLINE}</p><div><a href="${REPO}">Source</a><a href="/docs/">Documentation</a><a href="/living/">Living software</a><a href="/blog/">Blog</a><a href="/compare/">Compare</a><a href="/docs/spec/organism/">Spec</a><a href="/llms.txt">llms.txt</a><span>MIT · Preview · {{BUILD_STATS}}</span></div></footer>
+<footer class="site-footer"><a class="wordmark" href="/" aria-label="ALGAL home"><img src="/favicon.svg" width="24" height="24" alt="">algal</a><p>${SITE_TAGLINE}</p><div><a href="${REPO}">Source</a><a href="/docs/">Documentation</a><a href="/living/">Living software</a><a href="/blog/">Blog</a><a href="/compare/">Compare</a><a href="/docs/spec/organism/">Spec</a><a href="/llms.txt">llms.txt</a><a href="https://hraness.com">Made by Hraness</a><span>MIT · Preview · {{BUILD_STATS}}</span></div></footer>
 
 </body>
 </html>

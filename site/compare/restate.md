@@ -6,7 +6,7 @@ order: 4
 
 # ALGAL vs Restate
 
-Restate is a durable execution platform: a single self-contained Rust binary, built around a replicated log, that invokes handlers written in your own language. ALGAL is a language and a virtual machine for agent programs. Both keep long-running work alive across crashes by recording progress instead of trusting a process. They differ on what the program is and on who can inspect the record.
+Restate is a durable execution platform: a single self-contained Rust binary, built around a replicated log, that invokes handlers written in your own language. ALGAL is a language and a virtual machine for agent programs. Both keep long-running work alive across crashes by recording progress instead of trusting a process. Use Restate for production durable execution today. Use ALGAL when the program must be data and the run record must verify away from the server.
 
 ## What both systems do
 

@@ -99,6 +99,7 @@
     "docs:check": "bun scripts/docs-diagrams.ts --check",
     "build:site": "bun site/build.ts",
     "generate:og": "bun site/generate-og.tsx",
+    "generate:icons": "bun site/generate-icons.ts",
     "cli": "bun cli.ts"
   },
   "devDependencies": {

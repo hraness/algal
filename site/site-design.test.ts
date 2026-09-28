@@ -112,3 +112,27 @@ test("the 404 document names no canonical URL and stays out of search indexes", 
   expect(home).toContain('<link rel="canonical" href="https://algal.computer/">');
   expect(home).toContain('<meta name="robots" content="index, follow">');
 });
+
+test("every page points its software and site entities at the Hraness organization", () => {
+  const home = pageDocument({ page: "home", path: "/", title: "ALGAL", description: SITE_DESCRIPTION, ogTitle: "ALGAL" }, "<main id=\"main\"></main>");
+  const block = home.match(/<script type="application\/ld\+json">\n([^<]+)\n<\/script>/)?.[1];
+  expect(block).toBeDefined();
+  const graph = (JSON.parse(block!) as { "@graph": Record<string, unknown>[] })["@graph"];
+  const byType = Object.fromEntries(graph.map(node => [node["@type"], node]));
+  const hub = { "@id": "https://hraness.com/#organization" };
+  expect(byType.Organization).toMatchObject({ ...hub, name: "Hraness", url: "https://hraness.com/" });
+  expect(byType.WebSite).toMatchObject({ "@id": "https://algal.computer/#website", publisher: hub });
+  expect(byType.SoftwareApplication).toMatchObject({ "@id": "https://algal.computer/#software", author: hub, publisher: hub, sameAs: ["https://github.com/hraness/algal"] });
+  expect(home).not.toContain("github.com/hraness#org");
+  expect(home).toContain('<a href="https://hraness.com">Made by Hraness</a>');
+  for (const icon of ['href="/favicon-48.png"', 'rel="apple-touch-icon" href="/apple-touch-icon.png"']) expect(home).toContain(icon);
+});
+
+test("each Vercel alias host redirects on its own rule", () => {
+  const config = JSON.parse(readFileSync(join(SITE, "..", "vercel.json"), "utf8")) as { redirects: { has?: { type: string; value: string }[]; destination: string; permanent: boolean }[] };
+  // Vercel requires every `has` condition to match, so one rule per host.
+  for (const rule of config.redirects) expect(rule.has?.length).toBe(1);
+  const hosts = config.redirects.map(rule => rule.has![0]!.value);
+  for (const host of ["algal.vercel.app", "algal-hraness.vercel.app", "algal-teal.vercel.app", "algal.dev", "www.algal.dev", "www.algal.computer"]) expect(hosts).toContain(host);
+  for (const rule of config.redirects) expect(rule).toMatchObject({ destination: "https://algal.computer/$1", permanent: true });
+});

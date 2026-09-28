@@ -32,6 +32,7 @@ import { parseProposal } from "../examples/malleable-site/surface";
 import { renderSurfaceHtml } from "./living-render";
 import { offlineWorkerSource } from "./grow-offline";
 import { docsNavigation } from "./docs-navigation";
+import { breadcrumbJsonLd } from "@hraness/web-discovery";
 import { BLOG_PATH, BLOG_DESCRIPTION, BLOG_TITLE, blogAtomFeed, blogIndexJsonLd, blogLlmsList, blogSitemapEntries, loadBlogPosts, postJsonLd, renderBlogIndex, renderPostArticle } from "./blog";
 
 const SITE = dirname(fileURLToPath(import.meta.url));
@@ -619,7 +620,7 @@ if (await recordedProposal.exists()) {
 const modelEvidencePath = join(ROOT, "examples/malleable-site/model-evidence.json");
 if (await Bun.file(modelEvidencePath).exists()) await cp(modelEvidencePath, join(DIST, "living/model-evidence.json"));
 await cp(join(ROOT, "examples/malleable-site/model-cost-evidence.json"), join(DIST, "workbench/model-cost-evidence.json"));
-for (const f of ["robots.txt", "og.png", "favicon.svg", "algal-mark.svg"]) {
+for (const f of ["robots.txt", "og.png", "favicon.svg", "favicon-48.png", "apple-touch-icon.png", "algal-mark.svg"]) {
   await cp(join(SITE, f), join(DIST, f));
 }
 // Blog posts joined to their review records; see site/blog.ts.
@@ -785,6 +786,25 @@ const emitDocPage = async (meta: SitePageMeta, body: string) => {
 const docsSource = (kind: "docs" | "spec", slug: string) =>
   `<footer class="docs-source"><p>Mirrored from <a href="${GITHUB_BLOB(kind === "docs" ? `docs/${slug}.md` : `spec/v1/${slug}.md`)}">${kind === "docs" ? `docs/${slug}.md` : `spec/v1/${slug}.md`}</a>. The repository copy is the source of truth.</p></footer>`;
 
+const SITE_ORIGIN = "https://algal.computer";
+/** BreadcrumbList for a page one level below a section index. */
+const sectionBreadcrumb = (section: { name: string; path: `/${string}` }, name: string, path: `/${string}`) =>
+  breadcrumbJsonLd(SITE_ORIGIN, [section, { name, path }]);
+
+/** Readable page names for spec files whose H1 is only a schema identifier.
+ * The H1 and the spec file stay as written; only <title> and og:title change. */
+const SPEC_PAGE_NAMES: Readonly<Record<string, string>> = {
+  organism: "Program manifest format (algal.organism.v1)",
+  expr: "Expression language (algal.expr.v1)",
+  foundry: "Selecting programs by evidence (algal.foundry.v1)",
+  search: "Searching program variants (algal.search.v1)",
+  bench: "Comparing systems on one workload (algal.bench.v1)",
+  process: "Durable processes (algal.process.v1)",
+  "process-evidence": "Portable process evidence (algal.process-evidence.v1)",
+  replay: "Replay comparison and ordering reports",
+  vendor: "Vendoring programs from a catalog",
+};
+
 /** Page title for a mirrored file: name the brand once. */
 const mirroredTitle = (title: string, section: "docs" | "spec") =>
   /\bALGAL\b/.test(title) ? `${title} · ${section === "docs" ? "Docs" : "Spec"}` : `${title} · ALGAL ${section}`;
@@ -795,14 +815,18 @@ for (const [slug, doc] of docRenderers) {
     title: mirroredTitle(doc.title, "docs"),
     description: doc.description || `${doc.title}, from the ALGAL documentation.`,
     ogTitle: doc.title,
+    jsonLd: [sectionBreadcrumb({ name: "Docs", path: "/docs/" }, doc.title, `/docs/${slug}/`)],
   }, `<div class="docs-layout">${docsRail(slug, docTitles)}<article class="docs-article prose">${doc.html}${docsSource("docs", slug)}</article></div>`);
 }
 for (const [slug, doc] of specRenderers) {
+  const name = SPEC_PAGE_NAMES[slug];
+  const title = name ? `${name} · ALGAL spec` : mirroredTitle(doc.title, "spec");
   await emitDocPage({
     page: "spec", path: `/docs/spec/${slug}/`,
-    title: mirroredTitle(doc.title, "spec"),
+    title,
     description: doc.description || `${doc.title}, from the ALGAL contract specification.`,
-    ogTitle: mirroredTitle(doc.title, "spec"),
+    ogTitle: title,
+    jsonLd: [sectionBreadcrumb({ name: "Docs", path: "/docs/" }, name ?? doc.title, `/docs/spec/${slug}/`)],
   }, `<div class="docs-layout">${docsRail(`spec/${slug}`, docTitles)}<article class="docs-article prose docs-spec">${doc.html}${docsSource("spec", slug)}</article></div>`);
 }
 
@@ -841,6 +865,13 @@ function parseFrontmatter(source: string): { meta: ContentMeta; body: string } {
 
 const contentSectionUrls: string[] = [];
 
+// Durable-agent options that overlap less with ALGAL than the full comparison
+// pages. Recheck both descriptions against the linked docs when editing.
+const COMPARE_OTHER_OPTIONS = `<section class="docs-index-group docs-index-more prose"><h2>Other durable-agent options</h2><ul>`
+  + `<li><strong><a href="https://vercel.com/docs/workflows">Vercel Workflows</a></strong>: durable JavaScript, TypeScript, or Python functions on Vercel. Runs sleep or wait on hooks for external events such as approvals, resume after crashes and deployments, and keep their state in Vercel's managed persistence. Billing counts events, data written, and data retained. A good fit for an app already on Vercel.</li>`
+  + `<li><strong><a href="https://docs.dbos.dev/integrations/pydantic-ai">Pydantic AI with DBOS</a></strong>: a Python agent whose model and MCP calls DBOS checkpoints to a database from inside your process, SQLite to start and Postgres in production, so the run resumes after a restart. A good fit for Python agents next to an existing database.</li>`
+  + `</ul><p>ALGAL differs from both as it does from Temporal: the program is typed data, and each run leaves a receipt that verifies offline. Checked 2026-09-28.</p></section>`;
+
 async function emitMarkdownSection(options: {
   dir: "compare";
   page: "compare";
@@ -848,6 +879,8 @@ async function emitMarkdownSection(options: {
   indexIntro: { eyebrow: string; heading: string; lede: string };
   indexMeta: { title: string; description: string; ogTitle: string };
   sortBy: "date" | "order";
+  /** Extra HTML rendered below the index list, inside the same column. */
+  indexAfter?: string;
 }) {
   const files = (await readdir(join(SITE, options.dir))).filter(file => file.endsWith(".md")).sort();
   const entries: { slug: string; meta: ContentMeta; doc: RenderedDoc }[] = [];
@@ -872,6 +905,7 @@ async function emitMarkdownSection(options: {
       title: /\bALGAL\b/.test(entry.doc.title) ? entry.doc.title : `${entry.doc.title} · ALGAL`,
       description: entry.meta.description ?? entry.doc.description,
       ogTitle: entry.doc.title,
+      jsonLd: [sectionBreadcrumb({ name: options.railTitle, path: `/${options.dir}/` }, entry.doc.title, `/${options.dir}/${entry.slug}/`)],
     }, `<div class="docs-layout">${rail(entry.slug)}<article class="docs-article prose">${dateBlock}${entry.doc.html}</article></div>`);
     contentSectionUrls.push(`/${options.dir}/${entry.slug}/`);
   }
@@ -882,14 +916,15 @@ async function emitMarkdownSection(options: {
     page: options.page, path: `/${options.dir}/`,
     title: options.indexMeta.title, description: options.indexMeta.description,
     ogTitle: options.indexMeta.ogTitle,
-  }, `<section class="page-intro"><p class="eyebrow">${options.indexIntro.eyebrow}</p><h1>${options.indexIntro.heading}</h1><p class="lede">${options.indexIntro.lede}</p></section><div class="docs-layout">${rail("index")}<div class="docs-article docs-index"><ul class="docs-list docs-list-wide">${cards}</ul></div></div>`);
+  }, `<section class="page-intro"><p class="eyebrow">${options.indexIntro.eyebrow}</p><h1>${options.indexIntro.heading}</h1><p class="lede">${options.indexIntro.lede}</p></section><div class="docs-layout">${rail("index")}<div class="docs-article docs-index"><ul class="docs-list docs-list-wide">${cards}</ul>${options.indexAfter ?? ""}</div></div>`);
   contentSectionUrls.push(`/${options.dir}/`);
 }
 
 await emitMarkdownSection({
   dir: "compare", page: "compare", railTitle: "Comparisons", sortBy: "order",
-  indexIntro: { eyebrow: "Comparisons", heading: "How ALGAL compares with other tools", lede: "LangGraph, DSPy, Temporal, Restate, and Inngest each overlap with part of what ALGAL does. Each page shows where they differ, cites the other project's documentation, and says when to choose it instead." },
-  indexMeta: { title: "Compare ALGAL with LangGraph, DSPy, Temporal, and more", description: "How ALGAL compares with agent frameworks such as LangGraph and durable execution engines such as Temporal, and when each one is the better choice.", ogTitle: "Compare ALGAL" },
+  indexIntro: { eyebrow: "Comparisons", heading: "How ALGAL compares with other tools", lede: "LangGraph, BAML, DSPy, Temporal, Restate, and Inngest each overlap with part of what ALGAL does. Each page shows where they differ, cites the other project's documentation, and says when to choose it instead." },
+  indexMeta: { title: "Compare ALGAL with LangGraph, BAML, Temporal, and more", description: "How ALGAL compares with agent frameworks such as LangGraph and durable execution engines such as Temporal, and when each one is the better choice.", ogTitle: "Compare ALGAL" },
+  indexAfter: COMPARE_OTHER_OPTIONS,
 });
 // --- Blog ------------------------------------------------------------------
 // Posts render through the shared article layer. Every post is readable at its
@@ -909,9 +944,9 @@ for (const post of blogPosts) {
     title: /\bALGAL\b/.test(post.title) ? post.title : `${post.title} · ALGAL`,
     description: post.dek,
     ogTitle: post.title,
-    article: { published: post.published },
+    article: { published: post.published, ...(post.updated ? { modified: post.updated } : {}) },
     ...(post.indexable ? {} : { noindex: true }),
-    jsonLd: [postJsonLd(post)],
+    jsonLd: [postJsonLd(post), sectionBreadcrumb({ name: "Blog", path: BLOG_PATH }, post.title, post.path)],
   }, `<div class="docs-layout">${blogRail(post.slug)}<div class="docs-article blog-article">${renderPostArticle(post)}</div></div>`);
 }
 await emitDocPage({

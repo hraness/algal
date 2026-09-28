@@ -6,7 +6,7 @@ order: 1
 
 # ALGAL vs LangGraph
 
-LangGraph is a framework for orchestrating agents in Python or TypeScript. ALGAL is a programming language and a virtual machine. Both handle stateful graphs, human review, and long-running work, but in LangGraph the agent is code in your process, and in ALGAL the program is data that a VM runs. Most of the differences on this page follow from that one choice.
+LangGraph is a framework for orchestrating agents in Python or TypeScript. ALGAL is a programming language and a virtual machine. Both handle stateful graphs, human review, and long-running work, but in LangGraph the agent is code in your process, and in ALGAL the program is data that a VM runs. Use LangGraph for a mature framework with a hosted platform. Use ALGAL when the agent must be data you can hash, diff, and replay offline.
 
 ## Code in one, data in the other
 
