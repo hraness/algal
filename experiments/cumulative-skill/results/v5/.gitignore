@@ -1,0 +1,5 @@
+# Preserve the recovered scripted trial locally, separately from live evidence.
+/v4/
+/stores/
+/evidence-store/
+/records/

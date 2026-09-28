@@ -1,0 +1,114 @@
+{
+ "budgets": {
+  "maxAgentCalls": 1,
+  "maxContextBytes": 131072,
+  "maxDepth": 4,
+  "maxOutputBytes": 131072,
+  "maxSteps": 4,
+  "maxWork": 500000
+ },
+ "cells": [
+  {
+   "id": "spec",
+   "kind": "input",
+   "outputs": {
+    "value": {
+     "type": "json"
+    }
+   }
+  },
+  {
+   "id": "lib",
+   "kind": "input",
+   "outputs": {
+    "value": {
+     "type": "json"
+    }
+   }
+  },
+  {
+   "budget": {
+    "maxContextBytes": 262144,
+    "maxEffectMs": 600000,
+    "maxOutputBytes": 262144
+   },
+   "id": "writer",
+   "inputs": {
+    "library": {
+     "type": "json"
+    },
+    "task": {
+     "type": "json"
+    }
+   },
+   "kind": "agent",
+   "output": {
+    "kind": "json",
+    "schema": {
+     "properties": {
+      "manifest": {
+       "type": "object"
+      }
+     },
+     "required": [
+      "manifest"
+     ],
+     "type": "object"
+    }
+   },
+   "prompt": "Emit {\"manifest\": <object>} \u2014 one complete algal.organism.v1 manifest that runs the record-triage pipeline for the given task spec.\n\nBuild the same pipeline as the library manifest, adapted to this task:\n- an input cell `in` emitting ports `records` and `spec` (both \"json\")\n- an agent cell `classify` whose prompt instructs reading spec.taxonomy.classes (each class's id and about text), judging every record from its subject and body fields, and replying with a JSON object that maps every record id to its class id; its output is {\"kind\":\"json\",\"schema\":{\"type\":\"object\"}}\n- expr cells `apply`, `summarize`, `pack` whose `expr` programs you copy VERBATIM from the library manifest \u2014 they read records, spec, and labels generically\n- interface: inputs {\"records\": {\"cell\":\"in\",\"port\":\"records\"}, \"spec\": {\"cell\":\"in\",\"port\":\"spec\"}}, outputs {\"out\": {\"cell\":\"pack\",\"port\":\"out\"}}\n- the same edges as the library\n- budgets: {\"maxSteps\": 8, \"maxAgentCalls\": 2, \"maxWork\": 500000}\n- top-level fields: contract \"algal.organism.v1\", key \"organism:<taskId>-triage\", a name, cells, edges, interface, budgets; each agent cell carries view {inputs:[...]} and budget {maxContextBytes: 262144, maxOutputBytes: 262144, maxEffectMs: 600000}\n\nCell ids, port names, and view.inputs entries must be lowercase kebab-case. Reply only with the JSON object {\"manifest\": {...}}.",
+   "retry": {
+    "attempts": 2
+   },
+   "view": {
+    "inputs": [
+     "task",
+     "library"
+    ]
+   }
+  }
+ ],
+ "contract": "algal.organism.v1",
+ "edges": [
+  {
+   "from": {
+    "cell": "spec",
+    "port": "value"
+   },
+   "to": {
+    "cell": "writer",
+    "port": "task"
+   }
+  },
+  {
+   "from": {
+    "cell": "lib",
+    "port": "value"
+   },
+   "to": {
+    "cell": "writer",
+    "port": "library"
+   }
+  }
+ ],
+ "interface": {
+  "inputs": {
+   "library": {
+    "cell": "lib",
+    "port": "value"
+   },
+   "task": {
+    "cell": "spec",
+    "port": "value"
+   }
+  },
+  "outputs": {
+   "manifest": {
+    "cell": "writer",
+    "port": "out"
+   }
+  }
+ },
+ "key": "organism:record-triage-generator-v5",
+ "name": "Record-triage pipeline generator (v5 matched study)"
+}

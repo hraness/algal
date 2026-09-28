@@ -1,0 +1,9 @@
+{
+ "contract": "algal.skill-experiment.config.v1",
+ "study": "cumulative-skill-v5-matched",
+ "arms": [
+  {
+   "session": "sha256:d06234adea39d2a6a3a7da6709ca6469386205667a1b6b790d0adeb533325179"
+  }
+ ]
+}

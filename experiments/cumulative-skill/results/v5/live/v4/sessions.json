@@ -1,0 +1,10 @@
+{
+ "fixed": "sha256:737c4d1c7405bc87356c0657b4e288b1bb7e166114a00789b0c80d9e39d2e7fc",
+ "fixed.outcome": "complete",
+ "optimizer": "sha256:d06234adea39d2a6a3a7da6709ca6469386205667a1b6b790d0adeb533325179",
+ "optimizer-raw": "sha256:51ec06bc58ae3303e4162e8499cac5266f71921c5cb2c0be139d748c9e4e33f6",
+ "optimizer-raw.outcome": "complete",
+ "optimizer.outcome": "complete",
+ "retained": "sha256:3120475c7b1b0b8abd50a88d2d93b2c5f8b16f7a3bd6fec738866f7e4a723686",
+ "retained.outcome": "complete"
+}

@@ -1,0 +1,935 @@
+{
+  "session": "sha256:51ec06bc58ae3303e4162e8499cac5266f71921c5cb2c0be139d748c9e4e33f6",
+  "arm": "optimizer",
+  "family": "record-triage",
+  "configDigest": "sha256:0b71f9da8636be0cde2d1fc2dbedfa84eeea38bcf9cb93ad52c3f2043ff0986f",
+  "taskSetDigest": "sha256:5185ece0ef27abcedab69159db5450846fd3680b84b4aeaa50933f59d2410e6c",
+  "corpusDigest": "sha256:4d581393b01b87a26598fdd009ea5b89160632f261dc0ebd6de7abc2bb190cb7",
+  "scorerDigest": "sha256:e12673e1bf4818473b8477724ee2cad483533a7a3ff1816eff10d8a911516239",
+  "provenance": {
+    "account": "sha256:f4e0936b9c3e1dde2a0cc449d3b4440cfb32348ffde9fcd2adfdbecc6deb4584",
+    "catalog": "sha256:8655eec627011ab68715c4761b8dabb548f174f0557641dfd37c14bf691562f2",
+    "charged": {
+      "work": 3655140,
+      "attempts": 135,
+      "runs": 135
+    },
+    "sessionOutcome": "complete",
+    "distinctChargedReceipts": 116,
+    "plannedTasks": 40,
+    "recordedTasks": 40,
+    "corpusBinding": "task-spec-args-truth",
+    "generatorManifests": [
+      "sha256:e3c7c732eb3f04fab65910679bf015f84a739815dd54f3f9a5c1f7cfd518e31e"
+    ],
+    "reviserManifests": [
+      "sha256:985e107eff1b4329a82ad4cd7032fe093d17aaef0666ab2bc76b24dcda316d87"
+    ],
+    "observedModels": [
+      "grok-4.5"
+    ],
+    "effectConfigurations": [
+      "sha256:298f30e820497830238d982c39f387169301eba3be77bdf5ebfd2ea9a823e79b"
+    ],
+    "limits": [
+      "Ground truth is machine-generated corpus holdout truth, not human judgment or provider attestation.",
+      "Session records do not bind the original complete arm config; the supplied evaluation config is fingerprinted here.",
+      "Model names and effect configuration digests are receipt claims, not provider attestations or dollar costs.",
+      "Offline scoring does not replace experiment report verification or establish independent repetitions."
+    ]
+  },
+  "groups": {
+    "all": {
+      "tasks": 40,
+      "complete": 40,
+      "labelsCorrect": 413,
+      "recordsCorrect": 413,
+      "recordsTotal": 480,
+      "summariesExact": 22,
+      "outputsExact": 14,
+      "scorerPassed": 16
+    },
+    "acquisition": {
+      "tasks": 8,
+      "complete": 8,
+      "labelsCorrect": 71,
+      "recordsCorrect": 71,
+      "recordsTotal": 96,
+      "summariesExact": 2,
+      "outputsExact": 0,
+      "scorerPassed": 1
+    },
+    "unseen": {
+      "tasks": 32,
+      "complete": 32,
+      "labelsCorrect": 342,
+      "recordsCorrect": 342,
+      "recordsTotal": 384,
+      "summariesExact": 20,
+      "outputsExact": 14,
+      "scorerPassed": 15
+    },
+    "shift": {
+      "tasks": 0,
+      "complete": 0,
+      "labelsCorrect": 0,
+      "recordsCorrect": 0,
+      "recordsTotal": 0,
+      "summariesExact": 0,
+      "outputsExact": 0,
+      "scorerPassed": 0
+    },
+    "unseen+shift": {
+      "tasks": 32,
+      "complete": 32,
+      "labelsCorrect": 342,
+      "recordsCorrect": 342,
+      "recordsTotal": 384,
+      "summariesExact": 20,
+      "outputsExact": 14,
+      "scorerPassed": 15
+    }
+  },
+  "tasks": [
+    {
+      "taskId": "acquisition-01",
+      "phase": "acquisition",
+      "run": "sha256:8f95c22c7b5e79ad784b5c9c4e9d5ee8ca540947acd5867917763b2d60615729",
+      "receipt": "sha256:df71dc838b881ae70333634afa242933da12feedcfbb07910afa8da7052843ad",
+      "manifest": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 8,
+        "recordsCorrect": 8,
+        "recordsTotal": 12,
+        "summariesExact": 0,
+        "outputsExact": 0,
+        "scorerPassed": 0
+      },
+      "problems": []
+    },
+    {
+      "taskId": "acquisition-02",
+      "phase": "acquisition",
+      "run": "sha256:6f58b4f18a84e94d8a71b3f07c002dafe86e1213260393480de43f65ec4161f3",
+      "receipt": "sha256:f1e04c515aada06574ff7aebdcac7aac720691ff09d4a5dbed6f0ae2647e3fb8",
+      "manifest": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "miss",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 11,
+        "recordsCorrect": 11,
+        "recordsTotal": 12,
+        "summariesExact": 1,
+        "outputsExact": 0,
+        "scorerPassed": 1
+      },
+      "problems": []
+    },
+    {
+      "taskId": "acquisition-03",
+      "phase": "acquisition",
+      "run": "sha256:8a6bed3b7cb1f2564daf0767be55496c6724b262b0598d95593f954d37642b11",
+      "receipt": "sha256:cdeb6a6a61eb33554c7a931dfc2c4b8157b26b6f1d80574918f750d0bb5de757",
+      "manifest": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 11,
+        "recordsCorrect": 11,
+        "recordsTotal": 12,
+        "summariesExact": 0,
+        "outputsExact": 0,
+        "scorerPassed": 0
+      },
+      "problems": []
+    },
+    {
+      "taskId": "acquisition-04",
+      "phase": "acquisition",
+      "run": "sha256:05040814d7ea9cafe8809de51a7abc123db58148c71c04821505fdb32069df84",
+      "receipt": "sha256:8729ac8dc2425b62a86d2ed9959e435b741b071b5bf0ad1e59cfc1aba31938a9",
+      "manifest": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "miss",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 8,
+        "recordsCorrect": 8,
+        "recordsTotal": 12,
+        "summariesExact": 0,
+        "outputsExact": 0,
+        "scorerPassed": 0
+      },
+      "problems": []
+    },
+    {
+      "taskId": "acquisition-05",
+      "phase": "acquisition",
+      "run": "sha256:1bd2afc9bc9ac6bee391caf7f56ac39bae1e7f6869aed3845a85588ff8dd5739",
+      "receipt": "sha256:5654754b2bdf80d5f67ea347f877d40a8a9b5413a458287246c3c10edc10e935",
+      "manifest": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 9,
+        "recordsCorrect": 9,
+        "recordsTotal": 12,
+        "summariesExact": 0,
+        "outputsExact": 0,
+        "scorerPassed": 0
+      },
+      "problems": []
+    },
+    {
+      "taskId": "acquisition-06",
+      "phase": "acquisition",
+      "run": "sha256:9debb45ee5cc65a730dba1aef26e2f34fb9c2db7d27d8434bfce7ecbb3fa2cab",
+      "receipt": "sha256:1a09361e90a93701a907fb49ee685b7d8b931a3d8ee3af239c3ef33c995cafe4",
+      "manifest": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "miss",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 7,
+        "recordsCorrect": 7,
+        "recordsTotal": 12,
+        "summariesExact": 0,
+        "outputsExact": 0,
+        "scorerPassed": 0
+      },
+      "problems": []
+    },
+    {
+      "taskId": "acquisition-07",
+      "phase": "acquisition",
+      "run": "sha256:c9e11a4d17da9b3202a220f27b7832b2d6700af842196d53c3cc26f95c4bf803",
+      "receipt": "sha256:78d8acf8571fb2137d3972375d13ea9d651133192e9fc0a0bb6451c3e619ca65",
+      "manifest": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 9,
+        "recordsCorrect": 9,
+        "recordsTotal": 12,
+        "summariesExact": 0,
+        "outputsExact": 0,
+        "scorerPassed": 0
+      },
+      "problems": []
+    },
+    {
+      "taskId": "acquisition-08",
+      "phase": "acquisition",
+      "run": "sha256:83627558140f7e95f88e8c1809e11ee732caed5afd51bb13f8acdcf672d92767",
+      "receipt": "sha256:8f67ceb6285f3565b1171c30110e3acaa9c8058af98c1587cd7ca0848d8a3066",
+      "manifest": "sha256:9686eb0ec5fb63abf32cb1a769e0197fee70f0d3adaee0d8eed70296110e2790",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 8,
+        "recordsCorrect": 8,
+        "recordsTotal": 12,
+        "summariesExact": 1,
+        "outputsExact": 0,
+        "scorerPassed": 0
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-01",
+      "phase": "unseen",
+      "run": "sha256:604858932a425a12aa5fe4f35586d4ccc90edc6d20b0fc86b167b463d663c007",
+      "receipt": "sha256:624192abc62667762bcb0d8aa20ecc6169b207cc0121811784d97927989b534b",
+      "manifest": "sha256:b9d0e7272b1a10ad46d718b39fa814005caff49918c4c1ad3e4968c60d1ac18d",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 9,
+        "recordsCorrect": 9,
+        "recordsTotal": 12,
+        "summariesExact": 1,
+        "outputsExact": 0,
+        "scorerPassed": 0
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-02",
+      "phase": "unseen",
+      "run": "sha256:9500984741afd2936e382c046a1d8da97583ac87452d8e6d68b0d8b9ff42035c",
+      "receipt": "sha256:3dd502187906c709aeb0d9aea4a347d7c7dcf40b9aa09f4ecf86ff2bd8de1f25",
+      "manifest": "sha256:8a8b1713d8fb310211e1cb7510f21bd6ef92aa22d0ec7bfb66e88a974e0f75d6",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "miss",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 12,
+        "recordsCorrect": 12,
+        "recordsTotal": 12,
+        "summariesExact": 1,
+        "outputsExact": 1,
+        "scorerPassed": 1
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-03",
+      "phase": "unseen",
+      "run": "sha256:dcbb6e0b88ea36a8d82896f5c5defb41907e8cd3a9241f04190fbbacb7af5956",
+      "receipt": "sha256:5ce45337025b71486fcb9eee9b82a1958a8ebcf36db8ff0839f2f2f1f6c70816",
+      "manifest": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "miss",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 11,
+        "recordsCorrect": 11,
+        "recordsTotal": 12,
+        "summariesExact": 0,
+        "outputsExact": 0,
+        "scorerPassed": 0
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-04",
+      "phase": "unseen",
+      "run": "sha256:4c06aff529bc27970026d92b1b67d1897e47ad6f022dff91317788be72d964ce",
+      "receipt": "sha256:fc8ee8b68301492cc2d0ee3191b57029be6b5e5c1555f18cf72ac4e1a34dc109",
+      "manifest": "sha256:8a8b1713d8fb310211e1cb7510f21bd6ef92aa22d0ec7bfb66e88a974e0f75d6",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "miss",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 11,
+        "recordsCorrect": 11,
+        "recordsTotal": 12,
+        "summariesExact": 1,
+        "outputsExact": 0,
+        "scorerPassed": 1
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-05",
+      "phase": "unseen",
+      "run": "sha256:208e260816c90ec511a2f5b89ad26c0914998dfcbd6483f6f013fc08e3215a7c",
+      "receipt": "sha256:ab285d4d4c6179959087b2be13c7468901c24a6baf5c30cbbda57f9056f90c4e",
+      "manifest": "sha256:8a8b1713d8fb310211e1cb7510f21bd6ef92aa22d0ec7bfb66e88a974e0f75d6",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 10,
+        "recordsCorrect": 10,
+        "recordsTotal": 12,
+        "summariesExact": 1,
+        "outputsExact": 0,
+        "scorerPassed": 0
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-06",
+      "phase": "unseen",
+      "run": "sha256:3241a34ee5a6ce07a4608e1641a59fbf8fe63b20db9f9af145cd615e3cee3b3b",
+      "receipt": "sha256:e77995d45675d866e84e3dd4f22607f7715e597ab250f272ed5020573981be58",
+      "manifest": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "miss",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 8,
+        "recordsCorrect": 8,
+        "recordsTotal": 12,
+        "summariesExact": 0,
+        "outputsExact": 0,
+        "scorerPassed": 0
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-07",
+      "phase": "unseen",
+      "run": "sha256:f178ea3d6285b8deec8e1631df223e6ca0063ec0d78104dfc94a76c08bb1e82c",
+      "receipt": "sha256:85e89c73a4eef2ec6432679e15a53e10374de4101390c3c8765e5e609606ac3a",
+      "manifest": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 10,
+        "recordsCorrect": 10,
+        "recordsTotal": 12,
+        "summariesExact": 1,
+        "outputsExact": 0,
+        "scorerPassed": 0
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-08",
+      "phase": "unseen",
+      "run": "sha256:94fb92b6a9a753c903142ae9727c271cac59b2a28589b687aaefb76c7450e7e0",
+      "receipt": "sha256:e30e64d1ea5cd05a7741651fd7bb190b254d776a36e437b35c2f9da2c25b5b6d",
+      "manifest": "sha256:99ae3fb33e330c9b4810cc0ae1a0affb8b4399d291d94a809f93008de628e582",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 7,
+        "recordsCorrect": 7,
+        "recordsTotal": 12,
+        "summariesExact": 0,
+        "outputsExact": 0,
+        "scorerPassed": 0
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-09",
+      "phase": "unseen",
+      "run": "sha256:1eed726b6af022e5028ab1dbc15c61d029743d6b836f6b442557a0f82bf0ac1a",
+      "receipt": "sha256:461d7f5c848df009b4d7cd7445da50f402756d9d9d8f64ede618da352bd61733",
+      "manifest": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "miss",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 10,
+        "recordsCorrect": 10,
+        "recordsTotal": 12,
+        "summariesExact": 0,
+        "outputsExact": 0,
+        "scorerPassed": 0
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-10",
+      "phase": "unseen",
+      "run": "sha256:e875495c3d5e481e5ea28bd8165cafcaf2dca67701c1567313bd79802367615e",
+      "receipt": "sha256:e45b4244a8b476a6165ec166089dc73762f73dfd2cd805400d77b0546b1bfa1c",
+      "manifest": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 9,
+        "recordsCorrect": 9,
+        "recordsTotal": 12,
+        "summariesExact": 0,
+        "outputsExact": 0,
+        "scorerPassed": 0
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-11",
+      "phase": "unseen",
+      "run": "sha256:ebe08ae8e85967d3e49c323103220bb0403d93c5b5814af37f7c7e63cc7e4eb3",
+      "receipt": "sha256:41ff8f7c25d022229b61d7e16f64641af36da32b12d3d2ee1eee2cc55c53229f",
+      "manifest": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "miss",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 8,
+        "recordsCorrect": 8,
+        "recordsTotal": 12,
+        "summariesExact": 0,
+        "outputsExact": 0,
+        "scorerPassed": 0
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-12",
+      "phase": "unseen",
+      "run": "sha256:ee1af4c56d17fb24deb03f13fdfe2db9bad7cc13fedee09c6c11b2e6df269f98",
+      "receipt": "sha256:a1316a9296e414015f0b30c7f1f72b69dcd569402ddb21cf68c0ac48c2a2e8e9",
+      "manifest": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 10,
+        "recordsCorrect": 10,
+        "recordsTotal": 12,
+        "summariesExact": 0,
+        "outputsExact": 0,
+        "scorerPassed": 0
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-13",
+      "phase": "unseen",
+      "run": "sha256:ab29fcb39805357844c7ab58ceb60f19369c70fc20e5465119c30d4f9014f9cd",
+      "receipt": "sha256:bd96c1ee8ab4c7b4fb6ffc7bc03532c76ef0767f26479ff444d2e2ca3ceb34c8",
+      "manifest": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "miss",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 11,
+        "recordsCorrect": 11,
+        "recordsTotal": 12,
+        "summariesExact": 0,
+        "outputsExact": 0,
+        "scorerPassed": 0
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-14",
+      "phase": "unseen",
+      "run": "sha256:199fdcd846a8d3a6b0b0ac3d6ddc2f66498a6e684fb6ed1309d5eddf78a4c653",
+      "receipt": "sha256:dd5a4a5b4524ee0cbbe63ea23e2056a7f41f74987d12971440e5cea7b7263722",
+      "manifest": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 10,
+        "recordsCorrect": 10,
+        "recordsTotal": 12,
+        "summariesExact": 1,
+        "outputsExact": 0,
+        "scorerPassed": 0
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-15",
+      "phase": "unseen",
+      "run": "sha256:44a87f218a81b143bf809707ed087144fb36d36060d7f15c32f7ece12d96024e",
+      "receipt": "sha256:fff593f8ba2cae19a892367433322de0a48308bf5a6a98f1581d0b20e27ea04a",
+      "manifest": "sha256:820e4afe1126d3f87ae80eb0d404d2deee35ceca9e416ca95c0c99a810c543d2",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 9,
+        "recordsCorrect": 9,
+        "recordsTotal": 12,
+        "summariesExact": 1,
+        "outputsExact": 0,
+        "scorerPassed": 0
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-16",
+      "phase": "unseen",
+      "run": "sha256:8b937cf6d3f0dee27e194cc31b3478377a2dd6ca62fa3f2dc95379f57f91109c",
+      "receipt": "sha256:9ce0fef1f1322f7f319aa3f5da52dd84a8913e38b89f846aa00202f6958fed87",
+      "manifest": "sha256:16bda628f13562c2b9f2bff08f3867e6d2fdba88382bc90b9c520e97266f0784",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 12,
+        "recordsCorrect": 12,
+        "recordsTotal": 12,
+        "summariesExact": 1,
+        "outputsExact": 1,
+        "scorerPassed": 1
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-17",
+      "phase": "unseen",
+      "run": "sha256:b37570a381f165292d619b061265951c237ff58cae801d7d2210c4d678fba86b",
+      "receipt": "sha256:52aee93ae30d22cac283c8963a8a2f16af36bb021e77522ef877a0ed493bc8b4",
+      "manifest": "sha256:16bda628f13562c2b9f2bff08f3867e6d2fdba88382bc90b9c520e97266f0784",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 12,
+        "recordsCorrect": 12,
+        "recordsTotal": 12,
+        "summariesExact": 1,
+        "outputsExact": 1,
+        "scorerPassed": 1
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-18",
+      "phase": "unseen",
+      "run": "sha256:839177aa87a63b01d4e12eec1f3d7c698bafe317bfa3e32c0daeab0eeac8b7b2",
+      "receipt": "sha256:bfd82c235d5890af181cf8546057b1a5c5fbd5e01564ca987752e0d897806102",
+      "manifest": "sha256:16bda628f13562c2b9f2bff08f3867e6d2fdba88382bc90b9c520e97266f0784",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 12,
+        "recordsCorrect": 12,
+        "recordsTotal": 12,
+        "summariesExact": 1,
+        "outputsExact": 1,
+        "scorerPassed": 1
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-19",
+      "phase": "unseen",
+      "run": "sha256:2d7f233f6ff84c08b3d5e01b0d4b7031a879198ea819b006d56dffa97b46e65f",
+      "receipt": "sha256:295f78ca4e2c1c6490a85c62b5094e256c500965e9312f6efa07724c1a772207",
+      "manifest": "sha256:16bda628f13562c2b9f2bff08f3867e6d2fdba88382bc90b9c520e97266f0784",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 12,
+        "recordsCorrect": 12,
+        "recordsTotal": 12,
+        "summariesExact": 1,
+        "outputsExact": 1,
+        "scorerPassed": 1
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-20",
+      "phase": "unseen",
+      "run": "sha256:147426a8f3a06aaff2cfe2e9c54e3e1660d3860a253c67922b1a338d5ae5dd1a",
+      "receipt": "sha256:99d79c528982dfd72570d0d5c41d03f527b404458e4c9de0b56b51592f940a42",
+      "manifest": "sha256:16bda628f13562c2b9f2bff08f3867e6d2fdba88382bc90b9c520e97266f0784",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 12,
+        "recordsCorrect": 12,
+        "recordsTotal": 12,
+        "summariesExact": 1,
+        "outputsExact": 1,
+        "scorerPassed": 1
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-21",
+      "phase": "unseen",
+      "run": "sha256:dac2bc0f668822b7e8cd4479b1fa36414f61a3382ab62c0e061e5d9edb079423",
+      "receipt": "sha256:efedc10427925f14cd20bbae7ca040230bfe475321a4221806122fa661f33b00",
+      "manifest": "sha256:16bda628f13562c2b9f2bff08f3867e6d2fdba88382bc90b9c520e97266f0784",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 12,
+        "recordsCorrect": 12,
+        "recordsTotal": 12,
+        "summariesExact": 1,
+        "outputsExact": 1,
+        "scorerPassed": 1
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-22",
+      "phase": "unseen",
+      "run": "sha256:0c3d691ad598c7a79e23b0089651dcc971743b0df8c3d9494909ccd6069da1e1",
+      "receipt": "sha256:4cb4335b5902b4531d8001fad42842fba30f0d7ba836a5aab55b7a9af60c2f19",
+      "manifest": "sha256:16bda628f13562c2b9f2bff08f3867e6d2fdba88382bc90b9c520e97266f0784",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 12,
+        "recordsCorrect": 12,
+        "recordsTotal": 12,
+        "summariesExact": 1,
+        "outputsExact": 1,
+        "scorerPassed": 1
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-23",
+      "phase": "unseen",
+      "run": "sha256:30afb9b5a08f1e298ac783414fca2076a8df4110e04e0a25e77d56ded725b25f",
+      "receipt": "sha256:7207eda429e4e828e0b59b063ad3980b53414cb65a72c31ddfb3ccd906d84f03",
+      "manifest": "sha256:16bda628f13562c2b9f2bff08f3867e6d2fdba88382bc90b9c520e97266f0784",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 12,
+        "recordsCorrect": 12,
+        "recordsTotal": 12,
+        "summariesExact": 1,
+        "outputsExact": 1,
+        "scorerPassed": 1
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-24",
+      "phase": "unseen",
+      "run": "sha256:19ccfd11830a4487a89e1387e98295671a9d55983025cc3cfada7b815b4b2539",
+      "receipt": "sha256:e95f5f95b9beb9063458fa89937f8aa9696e93847ebf834f7315ac8c000c95db",
+      "manifest": "sha256:16bda628f13562c2b9f2bff08f3867e6d2fdba88382bc90b9c520e97266f0784",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 11,
+        "recordsCorrect": 11,
+        "recordsTotal": 12,
+        "summariesExact": 0,
+        "outputsExact": 0,
+        "scorerPassed": 0
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-25",
+      "phase": "unseen",
+      "run": "sha256:487311e48a791e3afd6dd9a21c18f89faf8fca86fa99b0faf5ee45afad9fdc76",
+      "receipt": "sha256:3ffae69cd4a3ceede4a93041c716f7b4a2ccb1468877657b51d6bafeda83c9f1",
+      "manifest": "sha256:fb0dd1b3e5132f2235f740af81ddde7bf8eb3f9dd0af0887b11722ad8b49385f",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 12,
+        "recordsCorrect": 12,
+        "recordsTotal": 12,
+        "summariesExact": 1,
+        "outputsExact": 1,
+        "scorerPassed": 1
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-26",
+      "phase": "unseen",
+      "run": "sha256:1fd658d8d176e064cd19509962c9f63f859a032feeabe3241f201445efe94f88",
+      "receipt": "sha256:45217060f71d400a507bc9e45b701088513f65eda35d302562e6a62264e9e28b",
+      "manifest": "sha256:fb0dd1b3e5132f2235f740af81ddde7bf8eb3f9dd0af0887b11722ad8b49385f",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 12,
+        "recordsCorrect": 12,
+        "recordsTotal": 12,
+        "summariesExact": 1,
+        "outputsExact": 1,
+        "scorerPassed": 1
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-27",
+      "phase": "unseen",
+      "run": "sha256:dbdca75b4b56f27fbfe7a45d3b8aea78bdcec0f0df6ecee9dc58ab6473c40447",
+      "receipt": "sha256:f251af8f1e4f891162ff6b0c7f26d96180b0131f8fddf3f67e8ed2fc073f7397",
+      "manifest": "sha256:fb0dd1b3e5132f2235f740af81ddde7bf8eb3f9dd0af0887b11722ad8b49385f",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 12,
+        "recordsCorrect": 12,
+        "recordsTotal": 12,
+        "summariesExact": 1,
+        "outputsExact": 1,
+        "scorerPassed": 1
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-28",
+      "phase": "unseen",
+      "run": "sha256:c81b64c5b4639140eac14e11a5afe80d38a89af598624a2c39ef5cd3cc5823a0",
+      "receipt": "sha256:bc70da652e84f1baae7133df99f193e3f03c2d5733f0df8984bdb7615d527a35",
+      "manifest": "sha256:fb0dd1b3e5132f2235f740af81ddde7bf8eb3f9dd0af0887b11722ad8b49385f",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 12,
+        "recordsCorrect": 12,
+        "recordsTotal": 12,
+        "summariesExact": 1,
+        "outputsExact": 1,
+        "scorerPassed": 1
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-29",
+      "phase": "unseen",
+      "run": "sha256:6c44635d696064df9e31a2ee14c8a654254041faab35b6b9beaad06e0df9cd1c",
+      "receipt": "sha256:9942d2a69c609939fe198e86d5e0edd72fd3b1fc59c26cfb6c605a983cd090bf",
+      "manifest": "sha256:fb0dd1b3e5132f2235f740af81ddde7bf8eb3f9dd0af0887b11722ad8b49385f",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 12,
+        "recordsCorrect": 12,
+        "recordsTotal": 12,
+        "summariesExact": 1,
+        "outputsExact": 1,
+        "scorerPassed": 1
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-30",
+      "phase": "unseen",
+      "run": "sha256:43454222a2ac33a618b796dbc927b38be96aa64c6b134442905231eab9e74ecf",
+      "receipt": "sha256:795ee4b2869a4fab37eb6e49ded0f6acae46fa88843ff949872019110815b48a",
+      "manifest": "sha256:fb0dd1b3e5132f2235f740af81ddde7bf8eb3f9dd0af0887b11722ad8b49385f",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 11,
+        "recordsCorrect": 11,
+        "recordsTotal": 12,
+        "summariesExact": 0,
+        "outputsExact": 0,
+        "scorerPassed": 0
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-31",
+      "phase": "unseen",
+      "run": "sha256:c99a74afa5d3df8b8d755f9924946ab225bb9ba7a821d11ed0fb257c3384dd08",
+      "receipt": "sha256:64a8088ac41202f7d62e1abf836fe7ae8763aa53df0921786f8de92c29bb168d",
+      "manifest": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "miss",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 10,
+        "recordsCorrect": 10,
+        "recordsTotal": 12,
+        "summariesExact": 0,
+        "outputsExact": 0,
+        "scorerPassed": 0
+      },
+      "problems": []
+    },
+    {
+      "taskId": "unseen-32",
+      "phase": "unseen",
+      "run": "sha256:fe78b996242e80cd038b0cc45b70c1050018ae07f168bd64a6d364fe00c1144e",
+      "receipt": "sha256:13232e53762a616c15c3ec9c6d4f65e954e1216c4cf9fdf65bd6f7da3bb3cd11",
+      "manifest": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+      "outcome": "complete",
+      "executionOutcome": "complete",
+      "consult": "hit",
+      "counts": {
+        "tasks": 1,
+        "complete": 1,
+        "labelsCorrect": 9,
+        "recordsCorrect": 9,
+        "recordsTotal": 12,
+        "summariesExact": 0,
+        "outputsExact": 0,
+        "scorerPassed": 0
+      },
+      "problems": []
+    }
+  ]
+}

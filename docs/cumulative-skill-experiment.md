@@ -369,6 +369,121 @@ and optimizer history. Output grading separately checks correctness.
 Neither check attests the provider's identity or makes model responses
 repeatable in a new live run.
 
+### v5 · shared starting programs and a frozen final evaluation
+
+The planned three-corpus comparison produced insufficient evidence: only the
+v4 corpus yielded a starting program that passed validation. Both fresh
+corpora, `v5-b` and `v5-c`, exhausted their eight generation attempts without
+a passing program. Their failures remain part of the study and its cost. A
+comparison completed on v4 alone cannot establish the planned result across
+three corpora.
+
+#### Methods
+
+The [v5 protocol](../experiments/cumulative-skill/arms/v5/README.md) uses the
+v4 task definitions and two further corpora generated from fresh seeds with
+the same task structure and text difficulty. Each corpus supplies eight
+acquisition tasks and 32 further learning tasks. All calls use the recorded
+xAI `grok-4.5` connection. The seeded task generator supplies correct answers;
+no human task labels or corrections enter the run.
+
+Each corpus first searches for a shared starting program through the ordinary
+`retained` strategy. It evaluates generated programs on the first acquisition
+task's train and validation batches and keeps the first program that passes
+validation. This search allows eight generations, eight million ALGAL work
+units, 64 executor attempts, and 64 runs. Failed attempts count toward these
+limits and remain in the saved record. A failed search prevents all four arms
+from starting on that corpus.
+
+Where seeding succeeds, all four arms begin with the same generated program:
+
+| Arm | Behavior during learning |
+|---|---|
+| `fixed` | Runs the starting program throughout the session |
+| `retained` | Reuses the saved program and refers to its original passing evaluation |
+| `optimizer` | Rechecks saved programs after two tasks and revises them after failures, with supported format repairs for generated programs |
+| `optimizer-raw` | Uses the same optimizer with those format repairs disabled |
+
+The generator and reviser share the task instructions. The reviser also sees
+the saved program and observed failure feedback. It receives no extra advice
+about how the synthetic text was constructed. Each learning session has the
+same limit of 40 million work units, 1,024 executor attempts, and 512 runs.
+These are equal limits, not equal actual spending.
+
+Learning scores describe each task's original output before feedback can
+change the program for later tasks. The tasks stored under `unseen` also
+provide feedback during learning; they are not the final test set. After
+learning, each arm's final program is held fixed. ALGAL's improvement
+comparison evaluates it on eight fresh shifted tasks whose ancestor tasks
+were also excluded from learning. It includes one acquisition and one
+further-learning task as train and validation cases, with a single fixed
+program per arm. No final evaluation result can trigger another revision.
+
+Final pass rates divide by all eight planned test tasks, including failures
+and unexecuted tasks. A task passes when its agreement score reaches 0.9.
+The score gives full-record agreement four-fifths of the weight and exact
+summary agreement one-fifth. The output must contain exactly 12 result rows;
+otherwise its score is zero. Passing requires at least 11 matching full records
+and an exact summary. Each strategy's total
+work includes the shared seed search, learning, and final evaluation. The
+realized cost of running the whole study counts each shared seed search once,
+including failed searches. Work units and model-call counts are execution
+accounting.
+
+#### Seed and learning outcomes
+
+The v4 seed passed validation on its first generation. Neither `v5-b` nor
+`v5-c` passed on any of its eight attempts, so those corpora produced no
+learning sessions. The saved seed summaries preserve these outcomes for
+[v4](../experiments/cumulative-skill/results/v5/live/v4/seed-summary.json),
+[v5-b](../experiments/cumulative-skill/results/v5/live/v5-b/seed-summary.json),
+and [v5-c](../experiments/cumulative-skill/results/v5/live/v5-c/seed-summary.json).
+
+All four v4 arms completed their 40 learning tasks. Across the 480 records in
+those tasks, the fixed arm classified 378 correctly, retained 374, optimizer
+390, and optimizer-raw 413. These are online learning scores for the programs
+used during the session, not final scores for the frozen programs. The
+optimizer variants make separate model calls, so their difference alone
+cannot isolate the effect of format repair.
+
+#### Final evaluation and cost
+
+All four v4 programs completed the eight final test tasks. These results
+describe the fixed programs selected after learning, tested on 96 fresh
+records. The pass counts use the batch scorer defined above; they are not
+counts of correctly classified records or exactly correct outputs.
+
+| Arm | Final tasks passed | Total work | Model calls | Work per passed task, rounded |
+|---|---:|---:|---:|---:|
+| `fixed` | 1/8 | 1,160,362 | 54 | 1,160,362 |
+| `retained` | 2/8 | 1,160,423 | 54 | 580,212 |
+| `optimizer` | 8/8 | 4,338,695 | 163 | 542,337 |
+| `optimizer-raw` | 7/8 | 3,995,065 | 149 | 570,724 |
+
+Each row includes the full shared v4 seed cost of 120,966 work units and four
+model calls, plus that arm's learning and final evaluation. Final evaluation
+used 10 calls per arm: two on the learning selection cases and eight on the
+fresh test tasks. The fixed and retained arms evaluated the identical saved
+program; their separate model calls produced different answers.
+
+ALGAL's single-corpus comparison selected `optimizer` for v4. It passed seven
+more final tasks than fixed at 3.74 times the total work, with lower work per
+passing task in this pilot. The one completed corpus and eight test tasks
+provide a descriptive comparison without an estimate of variability across
+independent study repetitions.
+
+The whole study recorded 12,118,751 work units, 472 model calls, and 472 runs.
+That total counts the shared v4 seed once and includes 1,827,104 work units
+for the failed seed searches on `v5-b` and `v5-c`. Recorded usage was
+1,641,157 input tokens and 173,158 output tokens. Provider dollar cost is
+unavailable.
+
+The [result summary](cumulative-skill-results-2026-09-28.json) separates
+learning scores, final evaluation, and costs by stage. The
+[full study index](../experiments/cumulative-skill/results/v5/live/records/index.json)
+links the program, execution, and evaluation records and preserves the
+insufficient finding for all three planned comparisons against fixed.
+
 ## Status and limits
 
 These studies demonstrate saved-program reuse, revision, demotion, and

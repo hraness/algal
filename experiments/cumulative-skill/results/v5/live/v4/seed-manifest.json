@@ -1,0 +1,658 @@
+{
+ "contract": "algal.organism.v1",
+ "key": "organism:experiment-record-triage",
+ "name": "Record triage task pipeline",
+ "budgets": {
+  "maxAgentCalls": 2,
+  "maxContextBytes": 65536,
+  "maxDepth": 4,
+  "maxOutputBytes": 65536,
+  "maxSteps": 8,
+  "maxWork": 500000
+ },
+ "cells": [
+  {
+   "id": "in",
+   "kind": "input",
+   "outputs": {
+    "records": {
+     "type": "json"
+    },
+    "spec": {
+     "type": "json"
+    }
+   }
+  },
+  {
+   "id": "classify",
+   "kind": "agent",
+   "prompt": "Assign each record its issue class. The spec's taxonomy.classes list the valid class ids; each class's about text describes it. Read each record's subject and body and reply with a JSON object mapping every record id to its best-matching class id. Judge from the text alone; the pipeline applies the declared rules afterward.",
+   "view": {
+    "inputs": [
+     "records",
+     "spec"
+    ]
+   },
+   "output": {
+    "kind": "json",
+    "schema": {
+     "type": "object"
+    }
+   },
+   "inputs": {
+    "records": {
+     "type": "json"
+    },
+    "spec": {
+     "type": "json"
+    }
+   },
+   "budget": {
+    "maxContextBytes": 262144,
+    "maxOutputBytes": 262144,
+    "maxEffectMs": 600000
+   }
+  },
+  {
+   "id": "apply",
+   "kind": "expr",
+   "expr": {
+    "contract": "algal.expr.v1",
+    "program": [
+     "map",
+     [
+      "get",
+      "records"
+     ],
+     "r",
+     [
+      "merge",
+      {
+       "label": [
+        "get",
+        "labels",
+        [
+         "get",
+         "r",
+         "id"
+        ]
+       ],
+       "recordId": [
+        "get",
+        "r",
+        "id"
+       ]
+      },
+      [
+       "fold",
+       [
+        "get",
+        "spec",
+        "rules"
+       ],
+       {},
+       "acc",
+       "rule",
+       [
+        "if",
+        [
+         "fold",
+         [
+          "keys",
+          [
+           "get",
+           "rule",
+           "when"
+          ]
+         ],
+         true,
+         "ok",
+         "slot",
+         [
+          "and",
+          [
+           "get",
+           "ok"
+          ],
+          [
+           "let",
+           "c",
+           [
+            "get",
+            "rule",
+            "when",
+            [
+             "get",
+             "slot"
+            ]
+           ],
+           [
+            "let",
+            "sv",
+            [
+             "if",
+             [
+              "eq",
+              [
+               "get",
+               "slot"
+              ],
+              "label"
+             ],
+             [
+              "get",
+              "labels",
+              [
+               "get",
+               "r",
+               "id"
+              ]
+             ],
+             [
+              "get",
+              "r",
+              [
+               "get",
+               "slot"
+              ]
+             ]
+            ],
+            [
+             "if",
+             [
+              "isMap",
+              [
+               "get",
+               "c"
+              ]
+             ],
+             [
+              "if",
+              [
+               "has",
+               [
+                "get",
+                "c"
+               ],
+               "in"
+              ],
+              [
+               "contains",
+               [
+                "get",
+                "c",
+                "in"
+               ],
+               [
+                "get",
+                "sv"
+               ]
+              ],
+              [
+               "and",
+               [
+                "if",
+                [
+                 "has",
+                 [
+                  "get",
+                  "c"
+                 ],
+                 "min"
+                ],
+                [
+                 "gte",
+                 [
+                  "get",
+                  "sv"
+                 ],
+                 [
+                  "get",
+                  "c",
+                  "min"
+                 ]
+                ],
+                true
+               ],
+               [
+                "if",
+                [
+                 "has",
+                 [
+                  "get",
+                  "c"
+                 ],
+                 "max"
+                ],
+                [
+                 "lte",
+                 [
+                  "get",
+                  "sv"
+                 ],
+                 [
+                  "get",
+                  "c",
+                  "max"
+                 ]
+                ],
+                true
+               ],
+               [
+                "if",
+                [
+                 "has",
+                 [
+                  "get",
+                  "c"
+                 ],
+                 "eq"
+                ],
+                [
+                 "eq",
+                 [
+                  "get",
+                  "sv"
+                 ],
+                 [
+                  "get",
+                  "c",
+                  "eq"
+                 ]
+                ],
+                true
+               ]
+              ]
+             ],
+             [
+              "eq",
+              [
+               "get",
+               "c"
+              ],
+              [
+               "get",
+               "sv"
+              ]
+             ]
+            ]
+           ]
+          ]
+         ]
+        ],
+        [
+         "merge",
+         [
+          "get",
+          "acc"
+         ],
+         [
+          "get",
+          "rule",
+          "then"
+         ]
+        ],
+        [
+         "get",
+         "acc"
+        ]
+       ]
+      ]
+     ]
+    ]
+   },
+   "output": {
+    "kind": "json",
+    "schema": {
+     "type": "array"
+    }
+   },
+   "inputs": {
+    "labels": {
+     "type": "json"
+    },
+    "records": {
+     "type": "json"
+    },
+    "spec": {
+     "type": "json"
+    }
+   }
+  },
+  {
+   "id": "summarize",
+   "kind": "expr",
+   "expr": {
+    "contract": "algal.expr.v1",
+    "program": [
+     "map",
+     [
+      "get",
+      "spec",
+      "outputFormat",
+      "summaries"
+     ],
+     "sname",
+     [
+      "if",
+      [
+       "eq",
+       [
+        "get",
+        "sname"
+       ],
+       "total"
+      ],
+      {
+       "counts": [
+        "list",
+        {
+         "count": [
+          "len",
+          [
+           "get",
+           "results"
+          ]
+         ],
+         "key": "records"
+        }
+       ],
+       "name": "total"
+      },
+      [
+       "if",
+       [
+        "eq",
+        [
+         "get",
+         "sname"
+        ],
+        "perLabel"
+       ],
+       {
+        "counts": [
+         "map",
+         [
+          "get",
+          "spec",
+          "taxonomy",
+          "classes"
+         ],
+         "c",
+         {
+          "count": [
+           "len",
+           [
+            "filter",
+            [
+             "get",
+             "results"
+            ],
+            "r",
+            [
+             "eq",
+             [
+              "get",
+              "r",
+              "label"
+             ],
+             [
+              "get",
+              "c",
+              "id"
+             ]
+            ]
+           ]
+          ],
+          "key": [
+           "get",
+           "c",
+           "id"
+          ]
+         }
+        ],
+        "name": "perLabel"
+       },
+       [
+        "let",
+        "fld",
+        [
+         "if",
+         [
+          "eq",
+          [
+           "get",
+           "sname"
+          ],
+          "perDecision"
+         ],
+         "decision",
+         [
+          "if",
+          [
+           "eq",
+           [
+            "get",
+            "sname"
+           ],
+           "perPriority"
+          ],
+          "priority",
+          "queue"
+         ]
+        ],
+        {
+         "counts": [
+          "map",
+          [
+           "get",
+           "spec",
+           "outputFormat",
+           "fields",
+           [
+            "get",
+            "fld"
+           ]
+          ],
+          "L",
+          {
+           "count": [
+            "len",
+            [
+             "filter",
+             [
+              "get",
+              "results"
+             ],
+             "r",
+             [
+              "eq",
+              [
+               "get",
+               "r",
+               [
+                "get",
+                "fld"
+               ]
+              ],
+              [
+               "get",
+               "L"
+              ]
+             ]
+            ]
+           ],
+           "key": [
+            "get",
+            "L"
+           ]
+          }
+         ],
+         "name": [
+          "get",
+          "sname"
+         ]
+        }
+       ]
+      ]
+     ]
+    ]
+   },
+   "output": {
+    "kind": "json",
+    "schema": {
+     "type": "array"
+    }
+   },
+   "inputs": {
+    "results": {
+     "type": "json"
+    },
+    "spec": {
+     "type": "json"
+    }
+   }
+  },
+  {
+   "id": "pack",
+   "kind": "expr",
+   "expr": {
+    "contract": "algal.expr.v1",
+    "program": {
+     "results": [
+      "get",
+      "results"
+     ],
+     "summary": [
+      "get",
+      "summary"
+     ]
+    }
+   },
+   "output": {
+    "kind": "json",
+    "schema": {
+     "type": "object"
+    }
+   },
+   "inputs": {
+    "results": {
+     "type": "json"
+    },
+    "summary": {
+     "type": "json"
+    }
+   }
+  }
+ ],
+ "edges": [
+  {
+   "from": {
+    "cell": "in",
+    "port": "records"
+   },
+   "to": {
+    "cell": "classify",
+    "port": "records"
+   }
+  },
+  {
+   "from": {
+    "cell": "in",
+    "port": "spec"
+   },
+   "to": {
+    "cell": "classify",
+    "port": "spec"
+   }
+  },
+  {
+   "from": {
+    "cell": "in",
+    "port": "records"
+   },
+   "to": {
+    "cell": "apply",
+    "port": "records"
+   }
+  },
+  {
+   "from": {
+    "cell": "in",
+    "port": "spec"
+   },
+   "to": {
+    "cell": "apply",
+    "port": "spec"
+   }
+  },
+  {
+   "from": {
+    "cell": "classify",
+    "port": "out"
+   },
+   "to": {
+    "cell": "apply",
+    "port": "labels"
+   }
+  },
+  {
+   "from": {
+    "cell": "apply",
+    "port": "out"
+   },
+   "to": {
+    "cell": "summarize",
+    "port": "results"
+   }
+  },
+  {
+   "from": {
+    "cell": "in",
+    "port": "spec"
+   },
+   "to": {
+    "cell": "summarize",
+    "port": "spec"
+   }
+  },
+  {
+   "from": {
+    "cell": "apply",
+    "port": "out"
+   },
+   "to": {
+    "cell": "pack",
+    "port": "results"
+   }
+  },
+  {
+   "from": {
+    "cell": "summarize",
+    "port": "out"
+   },
+   "to": {
+    "cell": "pack",
+    "port": "summary"
+   }
+  }
+ ],
+ "interface": {
+  "inputs": {
+   "records": {
+    "cell": "in",
+    "port": "records"
+   },
+   "spec": {
+    "cell": "in",
+    "port": "spec"
+   }
+  },
+  "outputs": {
+   "out": {
+    "cell": "pack",
+    "port": "out"
+   }
+  }
+ }
+}

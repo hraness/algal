@@ -1,0 +1,22 @@
+{
+ "contract": "algal.experiment-catalog.v1",
+ "entries": [
+  {
+   "family": "record-triage",
+   "manifest": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+   "interfaceDigest": "sha256:9c9d87823a6d8a381a77459b5fe129c32c08aac2d11325bcc95762b71d92df0a",
+   "cases": [
+    {
+     "id": "acquisition-01-train",
+     "split": "train"
+    },
+    {
+     "id": "acquisition-01-validation",
+     "split": "validation"
+    }
+   ],
+   "report": "sha256:6cc0f6e39b0739171d0b6f615c8c94186f5fe00135e92f7535f11bf4db3051d6",
+   "taskId": "seed-acquisition-01-1"
+  }
+ ]
+}
