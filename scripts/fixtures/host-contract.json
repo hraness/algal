@@ -1,0 +1,562 @@
+{
+  "contract": "algal.host-contract-fixtures.v1",
+  "valid": {
+    "evaluationEvidence": {
+      "contract": "algal.evaluation-evidence.v1",
+      "baseArtifact": "sha256:4d7f7ce0ab506ceb1a45c35b6c39af106ed91fe7fb92ce558bf4a820557a75e3",
+      "candidateArtifact": "sha256:e576269035c2dce3a16d480c7c75fc2bb2e2a68fe15cb690ab5265e0dc0448f0",
+      "dataset": {
+        "digest": "sha256:4104e9b39e5ec43dca2a2e0ea95715e69e5f6f60e2e4ab8422993f2675019232",
+        "groups": [
+          "eval-a",
+          "eval-b",
+          "eval-c"
+        ],
+        "splitPolicy": "group-disjoint train/validation/holdout over eval-* groups",
+        "labelProvenance": "independent annotation; labels excluded from the archive",
+        "redactionPolicy": "contact text replaced with opaque case ids"
+      },
+      "evaluator": {
+        "scorerDigest": "sha256:36337e0518467cd8f59a56903036d6be781f55a4e5f0b5f06d45f75bde6ca3a3",
+        "runtimeDigest": "sha256:bbcea2806f75ad9128e35776f2651bc8f477fe0fdc3a9ab34202498b9776a5ab",
+        "routeDigest": null
+      },
+      "usage": {
+        "modelCalls": 0,
+        "tokensIn": 0,
+        "tokensOut": 0,
+        "units": "scripted"
+      },
+      "charges": {
+        "reserved": 12,
+        "settled": 9,
+        "unit": "scripted-run"
+      },
+      "outcomes": {
+        "train": {
+          "passed": 2,
+          "total": 3,
+          "score": 0.66,
+          "cases": [
+            {
+              "id": "train-1",
+              "group": "eval-a",
+              "outcome": "complete",
+              "passed": true,
+              "score": 1,
+              "receipt": "sha256:a5eb68ddeb0bfc53130227f2154b35f86ac274fa1c6078d17acf36442d6870d2",
+              "feedback": "selected the cited source"
+            },
+            {
+              "id": "train-2",
+              "group": "eval-a",
+              "outcome": "complete",
+              "passed": true,
+              "score": 1,
+              "receipt": "sha256:ba1df6981ac0dd19b3301f44de6cbb5d325c6c4513f630abcfbf19f186e3eca8",
+              "feedback": null
+            },
+            {
+              "id": "train-3",
+              "group": "eval-b",
+              "outcome": "failed",
+              "passed": false,
+              "score": 0,
+              "receipt": "sha256:4b938d460536ab1a74883a6e1a728d393f0b23122d587a93aaf2b664d6abd4d2",
+              "feedback": "truncated the citation"
+            }
+          ]
+        },
+        "validation": {
+          "passed": 2,
+          "total": 3,
+          "score": 0.66,
+          "cases": [
+            {
+              "id": "val-1",
+              "group": "eval-b",
+              "outcome": "complete",
+              "passed": true,
+              "score": 1,
+              "receipt": "sha256:93cf65a0db9ecb313eb50039d080e45396541dd56c086c41226ed1cd67ae5bf8",
+              "feedback": null
+            },
+            {
+              "id": "val-2",
+              "group": "eval-c",
+              "outcome": "complete",
+              "passed": false,
+              "score": 0.5,
+              "receipt": "sha256:2e40cb1024d9e49b085a9397dd5f9e5bc67c9edf595ebc27d28a963cff8e5cc9",
+              "feedback": "answered without evidence"
+            },
+            {
+              "id": "val-3",
+              "group": "eval-c",
+              "outcome": "uncertain",
+              "passed": true,
+              "score": 0.5,
+              "receipt": null,
+              "feedback": "executor timed out after emitting"
+            }
+          ]
+        },
+        "holdout": {
+          "passed": 2,
+          "total": 3,
+          "score": 0.66,
+          "cases": [
+            {
+              "id": "hold-1",
+              "group": "eval-c",
+              "outcome": "complete",
+              "passed": true,
+              "score": 1,
+              "receipt": "sha256:08a312e90a4d67bce01104d3ba051497aff3c5f2a9ccaff3ee3c61ec901ae122",
+              "feedback": null
+            },
+            {
+              "id": "hold-2",
+              "group": "eval-c",
+              "outcome": "complete",
+              "passed": true,
+              "score": 1,
+              "receipt": "sha256:c3e696e1e5407107c97c8788b22e6a05eb9507155da060e229d358d9743cfc91",
+              "feedback": null
+            },
+            {
+              "id": "hold-3",
+              "group": "eval-c",
+              "outcome": "complete",
+              "passed": false,
+              "score": 0,
+              "receipt": "sha256:f3bda8c332307c0dcc3138136946848b3d906b564320787b20c8a00184c109b1",
+              "feedback": "missed the qualifying constraint"
+            }
+          ]
+        }
+      },
+      "independentReview": {
+        "status": "reviewed",
+        "reviewer": "fixture-reviewer",
+        "notes": "replayed offline; labels not independently verified"
+      },
+      "claimCategory": "replay",
+      "limitations": [
+        "fixture evidence only; no provider was invoked",
+        "single scorer identity"
+      ],
+      "digest": "sha256:053dce94c8f5248090e822b0b366135ca0c1d9d4a20a93ebf6ce72273ec67260"
+    },
+    "hostProfile": {
+      "contract": "algal.host-profile.v1",
+      "host": {
+        "id": "xcb-context",
+        "kind": "subscription-cli",
+        "version": "0.0.0-fixture"
+      },
+      "runtime": {
+        "runtimeDigest": "sha256:dae9a7c213a7673623b3ac3379a41c8f604458f267b675a0ed102583b57edcc6",
+        "evaluatorDigest": "sha256:e9d6b30b01e03253fe0660a06fe4d23315d8d2b092337e9ec0162441e7a01434",
+        "supportedContracts": [
+          "algal.evaluation-evidence.v1",
+          "algal.host-lifecycle.v1",
+          "algal.task-workflow.v1"
+        ]
+      },
+      "route": {
+        "profileDigest": "sha256:5fa98979b94fb58b64464eff5aef00e8b2261e8904ac4c47c56ecc7a1096b6cb",
+        "scopeDigest": "sha256:76710e19999ce8c7bc2251d045d40bab7fa08d1dc92b55bb0a4a91a387aa7f09",
+        "accountScopeDigest": "sha256:6f5774a127eea136f56447d5324c3b546a4db0f865b54abce507eee52eefe0a8"
+      },
+      "limits": {
+        "maxConcurrent": 2,
+        "maxQueue": 8,
+        "maxInputBytes": 262144,
+        "maxOutputBytes": 262144,
+        "maxWork": 1000
+      },
+      "usageUnits": {
+        "name": "subscription-quota",
+        "semantics": "provider subscription allowance, never API dollars"
+      },
+      "resultRetention": {
+        "mode": "digest-only",
+        "maxBytes": 65536,
+        "originalRetrieval": false
+      },
+      "uncertainEffectPolicy": "reconcile-required",
+      "probes": [
+        {
+          "id": "account-scope",
+          "status": "passed",
+          "evidence": "sha256:73020274ea675a58952da7c982efc189eaf3176f8733dc38ce85d9d8b5123a71"
+        },
+        {
+          "id": "cancellation",
+          "status": "not-run",
+          "evidence": null
+        },
+        {
+          "id": "uncertain-reconcile",
+          "status": "passed",
+          "evidence": "sha256:4b01a36f00df733c52426c4e42a7ec2740fd29ca5b2dc976c135fc6abdc63c1d"
+        }
+      ],
+      "absentCapabilities": [
+        "message-send",
+        "paid-api-routes",
+        "production-activation"
+      ],
+      "digest": "sha256:d56d6c3acac883a6e613f11b9cc4e671dc996cda75859acb83715190f6c116a9"
+    },
+    "promotionDecision": {
+      "contract": "algal.promotion-decision.v1",
+      "incumbent": "sha256:4d7f7ce0ab506ceb1a45c35b6c39af106ed91fe7fb92ce558bf4a820557a75e3",
+      "candidate": "sha256:e576269035c2dce3a16d480c7c75fc2bb2e2a68fe15cb690ab5265e0dc0448f0",
+      "evidence": "sha256:d18d00d7960979065bfa2270a9a9ced578d1d3a4f2faffc0359e520f8f22f1e9",
+      "policy": "sha256:7d60d6afb3287eb924417db6667b21cc277b6e4285b5eee42ec9e16802f5200c",
+      "scope": {
+        "environment": "shadow",
+        "tenant": null,
+        "contact": null
+      },
+      "rollout": {
+        "mode": "shadow",
+        "sampleLimit": 32,
+        "trafficLimit": 0,
+        "expiresAfter": 16
+      },
+      "reviewer": {
+        "id": "fixture-reviewer",
+        "status": "approved"
+      },
+      "rollback": {
+        "target": "sha256:4d7f7ce0ab506ceb1a45c35b6c39af106ed91fe7fb92ce558bf4a820557a75e3",
+        "compatibility": "sha256:c08fafce1735ead0fe06faad9ccf7278520b6e404fca69808b372bdca26b1e73",
+        "reason": "candidate failed holdout parity"
+      },
+      "observedMetrics": {
+        "holdout.passed": 2,
+        "holdout.score": 0.66,
+        "usage.scripted-run": 9
+      },
+      "digest": "sha256:60424773d2958fadf24086b19d24e969e034ab42a64974c04494fa917bdecd70"
+    },
+    "hostLifecycle": {
+      "contract": "algal.host-lifecycle.v1",
+      "owner": "operator:fixture",
+      "generation": 3,
+      "state": "uncertain",
+      "pendingIntent": "sha256:7fa6da469eefa0f9b7a13ed1a40535a23790356d4d2b34ffe8be1dd1a324639c",
+      "backlog": {
+        "queued": 1,
+        "active": 0
+      },
+      "heldAuthority": [
+        "inspect",
+        "read-store"
+      ],
+      "usage": {
+        "units": 9,
+        "charges": 9,
+        "unit": "scripted-run"
+      },
+      "receipt": "sha256:9f8bfa599c206314594235af2486cfb2a2807c1b1fc91d2898b8c350e126f0c2",
+      "permittedOperatorActions": [
+        "inspect",
+        "reconcile",
+        "stop"
+      ],
+      "digest": "sha256:f941df62194a535a7b864c7a3c76e86c793a24b14382da81593c2e1163cd13dc"
+    }
+  },
+  "invalid": [
+    {
+      "name": "evaluation-unknown-key",
+      "record": "evaluationEvidence",
+      "ops": [
+        [
+          "set",
+          [
+            "foreign"
+          ],
+          true
+        ]
+      ],
+      "error": "PARSE_FAILED"
+    },
+    {
+      "name": "evaluation-wrong-contract",
+      "record": "evaluationEvidence",
+      "ops": [
+        [
+          "set",
+          [
+            "contract"
+          ],
+          "algal.organism.v1"
+        ]
+      ],
+      "error": "PARSE_FAILED"
+    },
+    {
+      "name": "evaluation-digest",
+      "record": "evaluationEvidence",
+      "ops": [
+        [
+          "set",
+          [
+            "digest"
+          ],
+          "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+        ]
+      ],
+      "error": "DIGEST_MISMATCH"
+    },
+    {
+      "name": "evaluation-settled-over-reserved",
+      "record": "evaluationEvidence",
+      "ops": [
+        [
+          "set",
+          [
+            "charges",
+            "settled"
+          ],
+          13
+        ]
+      ],
+      "error": "PARSE_FAILED"
+    },
+    {
+      "name": "evaluation-unsorted-groups",
+      "record": "evaluationEvidence",
+      "ops": [
+        [
+          "set",
+          [
+            "dataset",
+            "groups"
+          ],
+          [
+            "eval-b",
+            "eval-a",
+            "eval-c"
+          ]
+        ]
+      ],
+      "error": "PARSE_FAILED"
+    },
+    {
+      "name": "evaluation-case-total",
+      "record": "evaluationEvidence",
+      "ops": [
+        [
+          "set",
+          [
+            "outcomes",
+            "train",
+            "total"
+          ],
+          4
+        ]
+      ],
+      "error": "PARSE_FAILED"
+    },
+    {
+      "name": "evaluation-case-outcome",
+      "record": "evaluationEvidence",
+      "ops": [
+        [
+          "set",
+          [
+            "outcomes",
+            "train",
+            "cases",
+            0,
+            "outcome"
+          ],
+          "skipped"
+        ]
+      ],
+      "error": "PARSE_FAILED"
+    },
+    {
+      "name": "evaluation-unknown-case-key",
+      "record": "evaluationEvidence",
+      "ops": [
+        [
+          "set",
+          [
+            "outcomes",
+            "holdout",
+            "cases",
+            0,
+            "note"
+          ],
+          "foreign"
+        ]
+      ],
+      "error": "PARSE_FAILED"
+    },
+    {
+      "name": "evaluation-bad-category",
+      "record": "evaluationEvidence",
+      "ops": [
+        [
+          "set",
+          [
+            "claimCategory"
+          ],
+          "proof"
+        ]
+      ],
+      "error": "PARSE_FAILED"
+    },
+    {
+      "name": "profile-probe-order",
+      "record": "hostProfile",
+      "ops": [
+        [
+          "set",
+          [
+            "probes"
+          ],
+          [
+            {
+              "id": "uncertain-reconcile",
+              "status": "passed",
+              "evidence": null
+            },
+            {
+              "id": "account-scope",
+              "status": "passed",
+              "evidence": null
+            }
+          ]
+        ]
+      ],
+      "error": "PARSE_FAILED"
+    },
+    {
+      "name": "profile-bad-policy",
+      "record": "hostProfile",
+      "ops": [
+        [
+          "set",
+          [
+            "uncertainEffectPolicy"
+          ],
+          "auto-retry"
+        ]
+      ],
+      "error": "PARSE_FAILED"
+    },
+    {
+      "name": "profile-nested-key",
+      "record": "hostProfile",
+      "ops": [
+        [
+          "set",
+          [
+            "limits",
+            "maxPower"
+          ],
+          9
+        ]
+      ],
+      "error": "PARSE_FAILED"
+    },
+    {
+      "name": "promotion-same-artifacts",
+      "record": "promotionDecision",
+      "ops": [
+        [
+          "set",
+          [
+            "candidate"
+          ],
+          "sha256:4d7f7ce0ab506ceb1a45c35b6c39af106ed91fe7fb92ce558bf4a820557a75e3"
+        ]
+      ],
+      "error": "PARSE_FAILED"
+    },
+    {
+      "name": "promotion-bad-mode",
+      "record": "promotionDecision",
+      "ops": [
+        [
+          "set",
+          [
+            "rollout",
+            "mode"
+          ],
+          "full"
+        ]
+      ],
+      "error": "PARSE_FAILED"
+    },
+    {
+      "name": "lifecycle-uncertain-no-intent",
+      "record": "hostLifecycle",
+      "ops": [
+        [
+          "set",
+          [
+            "pendingIntent"
+          ],
+          null
+        ]
+      ],
+      "error": "PARSE_FAILED"
+    },
+    {
+      "name": "lifecycle-intent-on-ready",
+      "record": "hostLifecycle",
+      "ops": [
+        [
+          "set",
+          [
+            "state"
+          ],
+          "ready"
+        ]
+      ],
+      "error": "PARSE_FAILED"
+    },
+    {
+      "name": "lifecycle-duplicate-actions",
+      "record": "hostLifecycle",
+      "ops": [
+        [
+          "set",
+          [
+            "permittedOperatorActions"
+          ],
+          [
+            "inspect",
+            "inspect"
+          ]
+        ]
+      ],
+      "error": "PARSE_FAILED"
+    },
+    {
+      "name": "lifecycle-bad-action",
+      "record": "hostLifecycle",
+      "ops": [
+        [
+          "set",
+          [
+            "permittedOperatorActions"
+          ],
+          [
+            "delete"
+          ]
+        ]
+      ],
+      "error": "PARSE_FAILED"
+    }
+  ]
+}

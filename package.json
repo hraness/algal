@@ -60,6 +60,7 @@
     "./task-optimizer": "./src/task-optimizer.ts",
     "./task-artifact": "./src/task-artifact.ts",
     "./task-workflow": "./src/task-workflow.ts",
+    "./host-contract": "./src/host-contract.ts",
     "./graph": "./src/graph.ts",
     "./tools": "./src/tools.ts",
     "./tool-context": "./src/tool-context.ts"
