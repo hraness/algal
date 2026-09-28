@@ -50,16 +50,24 @@ test("CLI saves a bounded exhausted archive and returns failure", async () => {
   const directory = await mkdtemp(join(tmpdir(), "algal-task-exhausted-"));
   try {
     const fixture = await evaluatedTaskFixture();
-    fixture.config.limits.budget.runs = 1;
+    const exhaustedConfig = structuredClone(fixture.config);
+    exhaustedConfig.limits.budget.runs = 1;
     const config = join(directory, "config.json");
     const output = join(directory, "exhausted.json");
     const responses = join(directory, "responses.json");
-    await writeFile(config, JSON.stringify(fixture.config));
+    await writeFile(config, JSON.stringify(exhaustedConfig));
     await writeFile(responses, JSON.stringify({ task: "reply" }));
     const result = await cli(["optimize", config, "--responses", responses, "--dir", join(directory, "store"), "--out", output]);
     expect(result.code, result.stderr).toBe(1);
     expect(parseTaskWorkflowArchive(JSON.parse(await readFile(output, "utf8"))).report.budget.runs).toHaveLength(1);
     expect((await cli(["replay", output])).code).toBe(0);
     expect((await cli(["export", output, "--out", join(directory, "artifact.json")])).code).not.toBe(0);
+    // The exhausted configuration must not lower the shared fixture's budget
+    // for later tests. Exercise that later consumer in this same test so the
+    // regression is independent of platform-specific test discovery order.
+    const next = await evaluatedTaskFixture();
+    expect(next.report.status).toBe("complete");
+    expect(next.config.limits.budget.runs).toBe(20);
+    expect(next.report.budget.runs).toHaveLength(7);
   } finally { await rm(directory, { recursive: true, force: true }); }
 }, 30_000);
