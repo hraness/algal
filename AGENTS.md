@@ -20,7 +20,8 @@
   bundles (`bundle.ts`), transports (`transport.ts`), the shared
   evaluation/host/promotion/lifecycle evidence records (`host-contract.ts`,
   mirrored in `crates/algal/src/host_contract.rs`, with the shared fixture
-  `scripts/fixtures/host-contract.json`),
+  `scripts/fixtures/host-contract.json`), the bounded strategy-comparison
+  improvement loop (`improve.ts`),
   the `algal.expr.v1` WASM loader (`expr.ts` + committed `algal_expr.wasm`),
   canonical values and digests, and colocated tests.
 - `crates/algal-expr/` — the one expression evaluator (Rust): linked into
@@ -37,7 +38,7 @@
 - `examples/` — bundled manifests and scripted responses used by `suite`.
 - `spec/v1/organism.md`, `spec/v1/expr.md`, `spec/v1/foundry.md`,
   `spec/v1/search.md`, `spec/v1/bench.md`, `spec/v1/vendor.md`, `spec/v1/process.md`,
-  `spec/v1/application.md`, `spec/v1/host-contract.md` — authoritative
+  `spec/v1/application.md`, `spec/v1/host-contract.md`, `spec/v1/improve.md` — authoritative
   contract prose, including the bounded durable process filesystem ABI.
 - `site/` — the static algal.computer source; `build.ts` writes `site/dist`.
   Blog posts are `site/blog/*.md`; their review records live in
