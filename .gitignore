@@ -13,3 +13,4 @@ promoted/
 .vercel
 coverage/
 .env*
+site/.production-browser/
