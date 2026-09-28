@@ -670,6 +670,8 @@ nav a[aria-current="page"] { color: var(--ink); }
 .docs-source { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); font-size: .8rem; color: var(--muted); }
 .docs-index-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2rem 2rem; max-width: none; }
 .docs-index-group h2 { font-size: .95rem; margin: 0 0 .6rem; }
+.docs-index-more { margin-top: 2rem; }
+.docs-index-more h2 { font-size: 1.1rem; margin: 0 0 .75rem; }
 .docs-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .5rem; }
 .docs-list a { display: block; padding: .7rem .9rem; border: 1px solid var(--ui-surface-edge, var(--hraness-material-seam)); border-radius: var(--radius-md); background: var(--white); text-decoration: none;  box-shadow: var(--elevation-low); }
 .docs-list a:hover { box-shadow: var(--elevation-raised); }

@@ -24,11 +24,19 @@
     },
     {
       "source": "/(.*)",
-      "has": [
-        { "type": "host", "value": "algal.vercel.app" },
-        { "type": "host", "value": "algal-hraness.vercel.app" },
-        { "type": "host", "value": "algal-teal.vercel.app" }
-      ],
+      "has": [{ "type": "host", "value": "algal.vercel.app" }],
+      "destination": "https://algal.computer/$1",
+      "permanent": true
+    },
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "algal-hraness.vercel.app" }],
+      "destination": "https://algal.computer/$1",
+      "permanent": true
+    },
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "algal-teal.vercel.app" }],
       "destination": "https://algal.computer/$1",
       "permanent": true
     }

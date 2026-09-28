@@ -6,7 +6,7 @@ order: 2
 
 # ALGAL vs DSPy
 
-Of the tools compared on this site, DSPy is closest to what ALGAL is for, and it works at a different layer. DSPy treats language-model pipelines as programs to optimize: optimizers such as MIPROv2 search instruction and few-shot candidates against a metric, and DSPy can also tune model weights. ALGAL treats the program itself as data that can be proposed, measured, and selected, and it gives that loop a runtime, a type system, receipts, and a rule that only the host decides which program is promoted.
+Of the tools compared on this site, DSPy is closest to what ALGAL is for, and it works at a different layer. DSPy treats language-model pipelines as programs to optimize: optimizers such as MIPROv2 search instruction and few-shot candidates against a metric, and DSPy can also tune model weights. ALGAL treats the program itself as data that can be proposed, measured, and selected, and it gives that loop a runtime, a type system, receipts, and a rule that only the host decides which program is promoted. If you want better prompts on a fixed pipeline, use DSPy.
 
 ## Tuning a pipeline versus choosing one
 

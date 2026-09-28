@@ -6,7 +6,7 @@ order: 5
 
 # ALGAL vs Inngest
 
-Inngest is durable execution as a service. Your code stays ordinary TypeScript, Python, or Go, `step.run()` checkpoints each unit of work, and Inngest Cloud drives the run. ALGAL is a language and a virtual machine for agent programs. Both answer the question of what survives a crash halfway through a long job, and they differ on where the run lives, what it costs, and what record it leaves.
+Inngest is durable execution as a service. Your code stays ordinary TypeScript, Python, or Go, `step.run()` checkpoints each unit of work, and Inngest Cloud drives the run. ALGAL is a language and a virtual machine for agent programs. Use Inngest for managed durable execution with a dashboard. Use ALGAL to run locally with no per-step bill and keep a run record that verifies offline.
 
 ## What both systems do
 
