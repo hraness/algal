@@ -21,8 +21,8 @@ test("lifecycles match the reviewed set", () => {
     "/blog/built-on-algal/": "indexable",
     "/blog/software-that-accumulates-competence/": "quarantined",
     "/blog/self-evolving-software-selection-boundary/": "quarantined",
-    "/blog/receipts-fossil-record/": "quarantined",
-    "/blog/programs-that-wait/": "quarantined",
+    "/blog/receipts-fossil-record/": "indexable",
+    "/blog/programs-that-wait/": "indexable",
   });
 });
 
@@ -47,7 +47,7 @@ test("every post shows the Hraness byline and the provenance note from its recor
 
 test("only indexable posts reach the index, feed, sitemap, and llms.txt", () => {
   const indexable = posts.filter(post => post.indexable).map(post => post.path);
-  expect(indexable).toEqual(["/blog/built-on-algal/", "/blog/typescript-rust-parity/"]);
+  expect(indexable).toEqual(["/blog/built-on-algal/", "/blog/typescript-rust-parity/", "/blog/receipts-fossil-record/", "/blog/programs-that-wait/"]);
   const index = renderBlogIndex(posts);
   const feed = blogAtomFeed(posts);
   const llms = blogLlmsList(posts);
@@ -56,6 +56,8 @@ test("only indexable posts reach the index, feed, sitemap, and llms.txt", () => 
     { path: "/blog/", lastModified: "2026-09-24" },
     { path: "/blog/built-on-algal/", lastModified: "2026-09-24" },
     { path: "/blog/typescript-rust-parity/", lastModified: "2026-09-24" },
+    { path: "/blog/receipts-fossil-record/", lastModified: "2026-09-22" },
+    { path: "/blog/programs-that-wait/", lastModified: "2026-09-22" },
   ]);
   for (const post of posts) {
     const listed = post.indexable;
