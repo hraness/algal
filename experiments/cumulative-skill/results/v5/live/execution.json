@@ -1,0 +1,11 @@
+{
+ "bunVersion": "1.3.14",
+ "contract": "algal.study-execution.v1",
+ "executor": {
+  "baseUrl": "https://api.x.ai/v1",
+  "credentialEnv": "XAI_API_KEY",
+  "model": "grok-4.5"
+ },
+ "executorArgumentsDigest": "sha256:39a461da43fd2fdde8880817e83d065e463483f2b720c72e0c50f9ff734278b4",
+ "runtimeSourcesDigest": "sha256:541bc581bdd7408cedbcc1054263a079969888b4949436a921014d02400caf45"
+}

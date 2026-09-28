@@ -1,0 +1,196 @@
+{
+ "contract": "algal.study-seed.v1",
+ "corpus": "experiments/cumulative-skill/tasks/v5/b",
+ "taskId": "acquisition-01",
+ "taskDigest": "sha256:67a83fdfbf7aa43a22dad1cb69d4bdaaf9fcf5b71a6bdfad136c96c091389729",
+ "manifest": null,
+ "report": null,
+ "catalog": null,
+ "account": "sha256:6c7274a9099f73a7d9ca649206047ade3a1dc5fb8adc3bc1dde5dbbba11264c3",
+ "validation": null,
+ "train": null,
+ "qualified": false,
+ "termination": "generation-limit",
+ "maxGenerations": 8,
+ "attempts": [
+  {
+   "generation": 1,
+   "session": "sha256:f4dd65ab8c2eabce4b90bfb7b3b09f20675d08d72fd349294fbef87d20b7d59a",
+   "run": "sha256:337d6d52c73dead56ab5e9a3866a629049150de4c76a7474b8f0a1ed868a8a6a",
+   "account": "sha256:6e3826521ab0e0eb67980b75f6e9f91e3f9c1273ec4ae3c6f5e286579ff6b910",
+   "manifest": "sha256:1457cd96356e2766259ffcb8d1fe6f9780996798a625dff1d35e217a745e1023",
+   "report": "sha256:d035d0fa83fd95a5bd6624e101d00afb053cb0e4a5c87ed889a3ae8a115c3a94",
+   "generator": {
+    "manifest": "sha256:e3c7c732eb3f04fab65910679bf015f84a739815dd54f3f9a5c1f7cfd518e31e",
+    "receipt": "sha256:d3e7eed3dff240317c00fe988f9ac1325993ae9fb6edb3e95e18a15a2825ecae",
+    "normalized": [
+     "view-inputs-wildcard"
+    ]
+   },
+   "outcome": "complete",
+   "failure": null,
+   "train": {
+    "passed": 0,
+    "total": 1
+   },
+   "validation": {
+    "passed": 0,
+    "total": 1
+   }
+  },
+  {
+   "generation": 2,
+   "session": "sha256:190eb1234dfc69464859ae3eb9c7ff9cd751b9fd18364a63af48a8000b0a38c1",
+   "run": "sha256:162b8d880c76633a0e961a0d96f3f986d8ed345ad5e263ef8eecaeace9ecf48d",
+   "account": "sha256:c3a23a337383a6fa95a4faee075cf657204ac010da3595eeb58f5b616f9ff62a",
+   "manifest": "sha256:8a8b1713d8fb310211e1cb7510f21bd6ef92aa22d0ec7bfb66e88a974e0f75d6",
+   "report": "sha256:45490d59d3eaf5414cd0835b9a301b9571090fa5a08fde6d2e7f50d0a81607d4",
+   "generator": {
+    "manifest": "sha256:e3c7c732eb3f04fab65910679bf015f84a739815dd54f3f9a5c1f7cfd518e31e",
+    "receipt": "sha256:68dc3a1a58e076bcbb1078610a9f7f6813e5afdc99a4826cca99e4f08f5b03ce"
+   },
+   "outcome": "complete",
+   "failure": null,
+   "train": {
+    "passed": 0,
+    "total": 1
+   },
+   "validation": {
+    "passed": 0,
+    "total": 1
+   }
+  },
+  {
+   "generation": 3,
+   "session": "sha256:af6f7346bea69e6c9a68b5583cda9a570e75548bb64c5ca47038b082f86e2517",
+   "run": "sha256:92f9bbec037ddb14325c248fa07672b52fe2062f31af2fdfdae6d94a863e5e81",
+   "account": "sha256:ecd8482ae2e3d7806c21bea694fad7d2449284ef4652a3a75164675469d832db",
+   "manifest": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+   "report": "sha256:1d6d21446afaf8a21918269785457169c48e5603fba52100d43cacd4cb3b937c",
+   "generator": {
+    "manifest": "sha256:e3c7c732eb3f04fab65910679bf015f84a739815dd54f3f9a5c1f7cfd518e31e",
+    "receipt": "sha256:bade4e4d7f102a7325a1ed5f99b8bb0f7d6343528bf87238959b163ab995ee8b"
+   },
+   "outcome": "complete",
+   "failure": null,
+   "train": {
+    "passed": 0,
+    "total": 1
+   },
+   "validation": {
+    "passed": 0,
+    "total": 1
+   }
+  },
+  {
+   "generation": 4,
+   "session": "sha256:52f88055a8dd37c0fd664c152bf4297bee83e0c43b2dfd6cbad9f658fe6b7ac6",
+   "run": "sha256:c23ed23f846732b3fc22fad3529c1b61cffd431f7aca88901f40b7f517e5b51c",
+   "account": "sha256:7d99472e4444a5c3f7d8fcb7951b60e72be4147594c8dd8f5bceda09846eda4a",
+   "manifest": "sha256:8a8b1713d8fb310211e1cb7510f21bd6ef92aa22d0ec7bfb66e88a974e0f75d6",
+   "report": "sha256:676290847e9b28c37e3d03e907f051e5b3b7ceccd05c0cc1d6db81f4f7a23088",
+   "generator": {
+    "manifest": "sha256:e3c7c732eb3f04fab65910679bf015f84a739815dd54f3f9a5c1f7cfd518e31e",
+    "receipt": "sha256:68dc3a1a58e076bcbb1078610a9f7f6813e5afdc99a4826cca99e4f08f5b03ce"
+   },
+   "outcome": "complete",
+   "failure": null,
+   "train": {
+    "passed": 0,
+    "total": 1
+   },
+   "validation": {
+    "passed": 0,
+    "total": 1
+   }
+  },
+  {
+   "generation": 5,
+   "session": "sha256:d9e010230425983e90ed2122bebc297db1d389347c508023874802ae48f77488",
+   "run": "sha256:567178646ab9b6e11aa8ae9108df67acef9dd07399961ea53cf4642f71e48c6b",
+   "account": "sha256:e8b9e510993371a1766a137f00092e2e7757350ab71b1744d68dc395b4373fb4",
+   "manifest": "sha256:8a8b1713d8fb310211e1cb7510f21bd6ef92aa22d0ec7bfb66e88a974e0f75d6",
+   "report": "sha256:9da1fee6e0fc2d256785bfd14a36e2130d3f4c86cd975ef9b30241cebb399fd3",
+   "generator": {
+    "manifest": "sha256:e3c7c732eb3f04fab65910679bf015f84a739815dd54f3f9a5c1f7cfd518e31e",
+    "receipt": "sha256:68dc3a1a58e076bcbb1078610a9f7f6813e5afdc99a4826cca99e4f08f5b03ce"
+   },
+   "outcome": "complete",
+   "failure": null,
+   "train": {
+    "passed": 0,
+    "total": 1
+   },
+   "validation": {
+    "passed": 0,
+    "total": 1
+   }
+  },
+  {
+   "generation": 6,
+   "session": "sha256:32af0a5c2192d6efc0e9c2a9bc3fb8bbfee33a260b31747048c102b136cc09dd",
+   "run": "sha256:b4d70ae4c14556af70101dc0072d0065d9ac37dca1efbbb7821e5549b5e34f23",
+   "account": "sha256:2bbb5b884b2c7d766dda791fb6316983961c458633062c35a36622671e5a4af0",
+   "manifest": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+   "report": "sha256:a5972a9b8b528f803bfc651ca23ee864d427519264710110a9f0de8445aab379",
+   "generator": {
+    "manifest": "sha256:e3c7c732eb3f04fab65910679bf015f84a739815dd54f3f9a5c1f7cfd518e31e",
+    "receipt": "sha256:9047863baa1e87d4980b51db6c3a466a3d273224a4b791cae7b5b9fc72e8c232"
+   },
+   "outcome": "complete",
+   "failure": null,
+   "train": {
+    "passed": 0,
+    "total": 1
+   },
+   "validation": {
+    "passed": 0,
+    "total": 1
+   }
+  },
+  {
+   "generation": 7,
+   "session": "sha256:8fcab658755280be220668230d8e3e6ded8c5c5064b93c8927723585315c3cd7",
+   "run": "sha256:0f3be53c3abe315a3ecb0dcf20d5a1652aead604c57363a55347bd00382a0f0d",
+   "account": "sha256:437e701bcf6a0fa3cdc01230d13370d33fac5b7a5b649ecd19fef212518eb022",
+   "manifest": "sha256:1457cd96356e2766259ffcb8d1fe6f9780996798a625dff1d35e217a745e1023",
+   "report": "sha256:6e0de9b5305bb716dbcb3ae688772944ac5b368a1378e68dd745b3e743aed364",
+   "generator": {
+    "manifest": "sha256:e3c7c732eb3f04fab65910679bf015f84a739815dd54f3f9a5c1f7cfd518e31e",
+    "receipt": "sha256:1888e314304c54ca50b39e502f694da542c931c17bf1fd21ad1409f40367773b"
+   },
+   "outcome": "complete",
+   "failure": null,
+   "train": {
+    "passed": 0,
+    "total": 1
+   },
+   "validation": {
+    "passed": 0,
+    "total": 1
+   }
+  },
+  {
+   "generation": 8,
+   "session": "sha256:89254c66e684a8a231c68c2a2ffb79cf40d1eac25b8e523afc3d5850a62fb017",
+   "run": "sha256:28b2a07371713b02150967745ecc74f7b5c24fc1c61a8d0aa811420a530e0ced",
+   "account": "sha256:ef0dd6c2768ba218e515672b2a3fb4d4ca6da125d913912b6ca77820ff2121d9",
+   "manifest": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+   "report": "sha256:1d6d21446afaf8a21918269785457169c48e5603fba52100d43cacd4cb3b937c",
+   "generator": {
+    "manifest": "sha256:e3c7c732eb3f04fab65910679bf015f84a739815dd54f3f9a5c1f7cfd518e31e",
+    "receipt": "sha256:9047863baa1e87d4980b51db6c3a466a3d273224a4b791cae7b5b9fc72e8c232"
+   },
+   "outcome": "complete",
+   "failure": null,
+   "train": {
+    "passed": 0,
+    "total": 1
+   },
+   "validation": {
+    "passed": 0,
+    "total": 1
+   }
+  }
+ ]
+}

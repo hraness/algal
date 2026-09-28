@@ -1,0 +1,45 @@
+{
+ "contract": "algal.study-seed.v1",
+ "corpus": "experiments/cumulative-skill/tasks/v4",
+ "taskId": "acquisition-01",
+ "taskDigest": "sha256:9a6a2b22b34017c4a68ba3bdcf472f2ebb2fa5e551374bd43b4d8d850e48800c",
+ "manifest": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+ "report": "sha256:6cc0f6e39b0739171d0b6f615c8c94186f5fe00135e92f7535f11bf4db3051d6",
+ "catalog": "sha256:fb1318242f75cfbe07a7e933cfa68cbd6fc4f6c272b903cee4787569e693096b",
+ "account": "sha256:10d86eb45a88ae60a09e92a34006a841a84e0b332361dc270e588f467b7ea69b",
+ "validation": {
+  "passed": 1,
+  "total": 1
+ },
+ "train": {
+  "passed": 0,
+  "total": 1
+ },
+ "qualified": true,
+ "termination": "qualified",
+ "maxGenerations": 8,
+ "attempts": [
+  {
+   "generation": 1,
+   "session": "sha256:ae12b9e3f6326e58c58684d9f185e6d050cc57b7a94a10da0ff28469c5fe2fa9",
+   "run": "sha256:ca8623b0404c5a40b9d663c8a86ea9496d8326d98ee6071bc4034f1ac5e521e8",
+   "account": "sha256:10d86eb45a88ae60a09e92a34006a841a84e0b332361dc270e588f467b7ea69b",
+   "manifest": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+   "report": "sha256:6cc0f6e39b0739171d0b6f615c8c94186f5fe00135e92f7535f11bf4db3051d6",
+   "generator": {
+    "manifest": "sha256:e3c7c732eb3f04fab65910679bf015f84a739815dd54f3f9a5c1f7cfd518e31e",
+    "receipt": "sha256:df7feb5df3936ba11ff27ef56932f5794ec759e5cf5ea975f05cf14a62a75a8c"
+   },
+   "outcome": "complete",
+   "failure": null,
+   "train": {
+    "passed": 0,
+    "total": 1
+   },
+   "validation": {
+    "passed": 1,
+    "total": 1
+   }
+  }
+ ]
+}

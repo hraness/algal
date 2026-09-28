@@ -1,0 +1,6 @@
+# Content-addressed stores are distributed in evidence.tar.gz after replay.
+/stores/
+/evidence-store/
+/*/attempts/
+/*/seed.attempt/
+/frozen-evaluation.attempt/

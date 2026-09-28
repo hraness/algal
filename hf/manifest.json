@@ -17,6 +17,11 @@
       "sha256": "afa304111f052faef1c0205d8d39c88bf7b8fe6e4c014e8fe7a4c3816acea1d2"
     },
     {
+      "source": "docs/cumulative-skill-results-2026-09-28.json",
+      "destination": "studies/cumulative-skill-v5-2026-09-28/results.json",
+      "sha256": "741387086751b4e7058ebc587ea3f03b6b9383a35221f36764a27e8226cb7a03"
+    },
+    {
       "source": "LICENSE",
       "destination": "LICENSE",
       "sha256": "74b69bf37c8f340c9c2a54d431a15218738d9c463d0e014fa6a8bb8edce4e539"

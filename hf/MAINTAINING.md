@@ -14,7 +14,7 @@ dataset card; `manifest.json` is the explicit source/destination/checksum list.
 2. Review the exact content and redistribution terms before adding it to
    `manifest.json`. Keep provider credentials, user inputs, raw execution stores, third-party Terminal-Bench task content, private traces,
    signing material, and provider account records out. The current export
-   includes only the two existing public JSON summaries and the root license.
+   includes only the three reviewed public JSON summaries and the root license.
 3. Add explicit paths and SHA-256 values, plus the exact source/destination pair
    in `stage.py`. New studies need new immutable `studies/<study-id>/` paths.
    Do not glob `docs/` or export a workspace. A changed checksum requires reviewing the changed bytes. Update
@@ -78,3 +78,10 @@ provider run, new benchmark, or product release is required by dataset sync.
 Dataset card and runbook drafted by the Codex ALGAL Hugging Face worker.
 Publication permission is recorded above; successful uploads require their own
 remote commit and verification evidence.
+
+On 2026-09-28, Codex reviewed redistribution of
+`docs/cumulative-skill-results-2026-09-28.json` for the existing MIT dataset.
+It contains project-owned synthetic-study methods, aggregate measurements,
+content hashes, failures, and limitations. The export contains no task text,
+raw stores, private traces, credentials, or provider account records. Provider
+charges remain unknown. The earlier two study files and license are unchanged.

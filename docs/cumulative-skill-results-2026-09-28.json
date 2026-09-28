@@ -1,0 +1,564 @@
+{
+  "schema": "algal.public-study-summary.v1",
+  "study": "cumulative-skill-v5-matched",
+  "date": "2026-09-28",
+  "title": "Four strategies on synthetic record-triage tasks",
+  "source": {
+    "repository": "https://github.com/hraness/algal",
+    "baseCommit": "c1aa146d3b8a0f34112814fe2240ad28cbd0c87e",
+    "methods": "experiments/cumulative-skill/arms/v5/README.md",
+    "results": "experiments/cumulative-skill/results/v5/live/records/index.json",
+    "studyIndexDigest": "sha256:7f8ef20e0e5b1048c0fa8c94cd69c568ad8986c9acc5bd036db982c4cdac2e6f",
+    "studyIndexFileSha256": "1f84c3d30941d260ee72d4c02e3900fc7f4c706d63a9bd83cd4e0276495bad8b",
+    "executionDigest": "sha256:1d2f9f44ff8bd556723f795aea797dbc70c9296c6d4b2b7609eababc739f8c10",
+    "runtimeSourcesDigest": "sha256:541bc581bdd7408cedbcc1054263a079969888b4949436a921014d02400caf45",
+    "executorArgumentsDigest": "sha256:39a461da43fd2fdde8880817e83d065e463483f2b720c72e0c50f9ff734278b4",
+    "bunVersion": "1.3.14",
+    "model": "grok-4.5",
+    "baseUrl": "https://api.x.ai/v1"
+  },
+  "protocol": {
+    "plannedCorpora": 3,
+    "sessionsPerArmPerCorpus": 1,
+    "arms": {
+      "fixed": "Run the shared seed program directly on every learning task.",
+      "retained": "Reuse the same saved seed and its original passing evaluation.",
+      "optimizer": "Recheck and revise saved programs, repairing supported generated-program format errors.",
+      "optimizer-raw": "Use the optimizer with generated-program format repairs disabled."
+    },
+    "seed": {
+      "maximumGenerations": 8,
+      "ceiling": {
+        "workUnits": 8000000,
+        "modelCalls": 64,
+        "runs": 64
+      },
+      "selection": "First generated program passing validation; every arm receives that exact program."
+    },
+    "learning": {
+      "acquisitionTasks": 8,
+      "furtherTasks": 32,
+      "recordsPerTask": 12,
+      "ceilingPerArm": {
+        "workUnits": 40000000,
+        "modelCalls": 1024,
+        "runs": 512
+      }
+    },
+    "frozenEvaluation": {
+      "selectionCasesFromLearning": 2,
+      "freshShiftedHoldoutTasks": 8,
+      "recordsPerTask": 12,
+      "ceilingPerArm": {
+        "workUnits": 40000000,
+        "modelCalls": 1024,
+        "runs": 512
+      },
+      "policy": "strict-holdout-improvement",
+      "tiePromotion": false,
+      "revisionsAfterEvaluation": false,
+      "lineage": "Final holdouts and their ancestors are excluded from learning."
+    },
+    "scoring": {
+      "learning": "Correct record labels out of all 480 planned records; other learning quality counts are retained separately.",
+      "frozen": "The output must contain exactly 12 result rows; otherwise its score is zero. With 12 rows, a task passes when (4 * matching complete result rows / 12 + exact-summary indicator) / 5 >= 0.9. This requires at least 11 matching rows and an exact summary.",
+      "labels": "Deterministic synthetic generator; no human labels or corrections."
+    },
+    "matching": "Same passing seed, generator/reviser task instructions, model route, and per-arm resource ceilings. Realized spending differs.",
+    "productionTrafficEnabled": false
+  },
+  "corpora": {
+    "v4": {
+      "corpusSnapshotDigest": "sha256:4d581393b01b87a26598fdd009ea5b89160632f261dc0ebd6de7abc2bb190cb7",
+      "seed": {
+        "passedValidation": true,
+        "generations": 1,
+        "termination": "qualified",
+        "manifest": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+        "summaryDigest": "sha256:7d1b994448f65c59eadf0ccd2c8475735102088b613f583ef605c437e81748d2",
+        "cost": {
+          "admittedRuns": 4,
+          "effectsMissingUsage": 0,
+          "modelCalls": 4,
+          "tokensIn": 13732,
+          "tokensOut": 1908,
+          "workUnits": 120966
+        }
+      },
+      "learning": {
+        "fixed": {
+          "session": "sha256:737c4d1c7405bc87356c0657b4e288b1bb7e166114a00789b0c80d9e39d2e7fc",
+          "outcome": "complete",
+          "configDigest": "sha256:175aae5d2540e6e94457c7e64f9b4c2122990a05c2dad40238e38b39d1bf03a3",
+          "taskSetDigest": "sha256:5185ece0ef27abcedab69159db5450846fd3680b84b4aeaa50933f59d2410e6c",
+          "scorerDigest": "sha256:e12673e1bf4818473b8477724ee2cad483533a7a3ff1816eff10d8a911516239",
+          "quality": {
+            "tasks": 40,
+            "complete": 40,
+            "labelsCorrect": 378,
+            "recordsCorrect": 378,
+            "recordsTotal": 480,
+            "summariesExact": 9,
+            "outputsExact": 1,
+            "scorerPassed": 6
+          },
+          "cost": {
+            "admittedRuns": 40,
+            "effectsMissingUsage": 0,
+            "modelCalls": 40,
+            "tokensIn": 106854,
+            "tokensOut": 4940,
+            "workUnits": 820876
+          }
+        },
+        "retained": {
+          "session": "sha256:3120475c7b1b0b8abd50a88d2d93b2c5f8b16f7a3bd6fec738866f7e4a723686",
+          "outcome": "complete",
+          "configDigest": "sha256:fabbb5ab30719042cd0f19b6bada78506f504766f54b1a6c1587c88713b29a2e",
+          "taskSetDigest": "sha256:5185ece0ef27abcedab69159db5450846fd3680b84b4aeaa50933f59d2410e6c",
+          "scorerDigest": "sha256:e12673e1bf4818473b8477724ee2cad483533a7a3ff1816eff10d8a911516239",
+          "quality": {
+            "tasks": 40,
+            "complete": 40,
+            "labelsCorrect": 374,
+            "recordsCorrect": 374,
+            "recordsTotal": 480,
+            "summariesExact": 11,
+            "outputsExact": 2,
+            "scorerPassed": 4
+          },
+          "cost": {
+            "admittedRuns": 40,
+            "effectsMissingUsage": 0,
+            "modelCalls": 40,
+            "tokensIn": 106854,
+            "tokensOut": 4946,
+            "workUnits": 820974
+          }
+        },
+        "optimizer": {
+          "session": "sha256:d06234adea39d2a6a3a7da6709ca6469386205667a1b6b790d0adeb533325179",
+          "outcome": "complete",
+          "configDigest": "sha256:83e40a1518e195dfa0feb236df02c3cd3f292438c914fe2f559bf0a5dc45ee27",
+          "taskSetDigest": "sha256:5185ece0ef27abcedab69159db5450846fd3680b84b4aeaa50933f59d2410e6c",
+          "scorerDigest": "sha256:e12673e1bf4818473b8477724ee2cad483533a7a3ff1816eff10d8a911516239",
+          "quality": {
+            "tasks": 40,
+            "complete": 40,
+            "labelsCorrect": 390,
+            "recordsCorrect": 390,
+            "recordsTotal": 480,
+            "summariesExact": 16,
+            "outputsExact": 5,
+            "scorerPassed": 9
+          },
+          "cost": {
+            "admittedRuns": 149,
+            "effectsMissingUsage": 0,
+            "modelCalls": 149,
+            "tokensIn": 555916,
+            "tokensOut": 66802,
+            "workUnits": 3998922
+          }
+        },
+        "optimizer-raw": {
+          "session": "sha256:51ec06bc58ae3303e4162e8499cac5266f71921c5cb2c0be139d748c9e4e33f6",
+          "outcome": "complete",
+          "configDigest": "sha256:0b71f9da8636be0cde2d1fc2dbedfa84eeea38bcf9cb93ad52c3f2043ff0986f",
+          "taskSetDigest": "sha256:5185ece0ef27abcedab69159db5450846fd3680b84b4aeaa50933f59d2410e6c",
+          "scorerDigest": "sha256:e12673e1bf4818473b8477724ee2cad483533a7a3ff1816eff10d8a911516239",
+          "quality": {
+            "tasks": 40,
+            "complete": 40,
+            "labelsCorrect": 413,
+            "recordsCorrect": 413,
+            "recordsTotal": 480,
+            "summariesExact": 22,
+            "outputsExact": 14,
+            "scorerPassed": 16
+          },
+          "cost": {
+            "admittedRuns": 135,
+            "effectsMissingUsage": 0,
+            "modelCalls": 135,
+            "tokensIn": 520935,
+            "tokensOut": 58791,
+            "workUnits": 3655140
+          }
+        }
+      },
+      "frozen": {
+        "plan": "sha256:b5fb8d21f051226fe7af7a5cdb841c12e6fe686bcc488c17866f63202e9f650a",
+        "report": {
+          "recordDigest": "sha256:2bbf5834f89443c3cefad74a4f2903451a2b194d32c3d69cc411ca4b526790a9",
+          "valueDigest": "sha256:028a8001863ace4ec29f17c5d8de3cbfb7ab0b0c493ef1d491c1b4feca932ebd"
+        },
+        "nativeComparison": "decisive",
+        "nativeWinner": "optimizer",
+        "arms": {
+          "fixed": {
+            "callsPerPassedHoldout": 54,
+            "complete": true,
+            "costs": {
+              "frozenEvaluation": {
+                "admittedRuns": 10,
+                "effectsMissingUsage": 0,
+                "modelCalls": 10,
+                "tokensIn": 29153,
+                "tokensOut": 1232,
+                "workUnits": 218520
+              },
+              "learning": {
+                "admittedRuns": 40,
+                "effectsMissingUsage": 0,
+                "modelCalls": 40,
+                "tokensIn": 106854,
+                "tokensOut": 4940,
+                "workUnits": 820876
+              },
+              "seed": {
+                "admittedRuns": 4,
+                "effectsMissingUsage": 0,
+                "modelCalls": 4,
+                "tokensIn": 13732,
+                "tokensOut": 1908,
+                "workUnits": 120966
+              },
+              "total": {
+                "admittedRuns": 54,
+                "effectsMissingUsage": 0,
+                "modelCalls": 54,
+                "tokensIn": 149739,
+                "tokensOut": 8080,
+                "workUnits": 1160362
+              }
+            },
+            "decision": null,
+            "evidence": "sha256:d2ea26a578e601af059c628c78f58d76c3bf5a326b6647ffb85480fb9da01862",
+            "head": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+            "observed": 8,
+            "passed": 1,
+            "planned": 8,
+            "score": 0.125,
+            "workPerPassedHoldout": 1160362
+          },
+          "optimizer": {
+            "callsPerPassedHoldout": 20.375,
+            "complete": true,
+            "costs": {
+              "frozenEvaluation": {
+                "admittedRuns": 10,
+                "effectsMissingUsage": 0,
+                "modelCalls": 10,
+                "tokensIn": 29663,
+                "tokensOut": 1233,
+                "workUnits": 218807
+              },
+              "learning": {
+                "admittedRuns": 149,
+                "effectsMissingUsage": 0,
+                "modelCalls": 149,
+                "tokensIn": 555916,
+                "tokensOut": 66802,
+                "workUnits": 3998922
+              },
+              "seed": {
+                "admittedRuns": 4,
+                "effectsMissingUsage": 0,
+                "modelCalls": 4,
+                "tokensIn": 13732,
+                "tokensOut": 1908,
+                "workUnits": 120966
+              },
+              "total": {
+                "admittedRuns": 163,
+                "effectsMissingUsage": 0,
+                "modelCalls": 163,
+                "tokensIn": 599311,
+                "tokensOut": 69943,
+                "workUnits": 4338695
+              }
+            },
+            "decision": "sha256:f2e1e981170e991d9eeff597cbe21d3d53127c3d60e972bd40b4cb47f2334d90",
+            "evidence": "sha256:b4d6ea67d0c8fd3b6fdb24df62fd0599cbca01bedc4c7cbfc67aedb21421a7a9",
+            "head": "sha256:89d75e29b9d96a5b86e465fa4a89e0498ce15ce5683819eab7f9b69dd3aa9a82",
+            "observed": 8,
+            "passed": 8,
+            "planned": 8,
+            "score": 1,
+            "workPerPassedHoldout": 542336.875
+          },
+          "optimizer-raw": {
+            "callsPerPassedHoldout": 21.285714285714285,
+            "complete": true,
+            "costs": {
+              "frozenEvaluation": {
+                "admittedRuns": 10,
+                "effectsMissingUsage": 0,
+                "modelCalls": 10,
+                "tokensIn": 31633,
+                "tokensOut": 1233,
+                "workUnits": 218959
+              },
+              "learning": {
+                "admittedRuns": 135,
+                "effectsMissingUsage": 0,
+                "modelCalls": 135,
+                "tokensIn": 520935,
+                "tokensOut": 58791,
+                "workUnits": 3655140
+              },
+              "seed": {
+                "admittedRuns": 4,
+                "effectsMissingUsage": 0,
+                "modelCalls": 4,
+                "tokensIn": 13732,
+                "tokensOut": 1908,
+                "workUnits": 120966
+              },
+              "total": {
+                "admittedRuns": 149,
+                "effectsMissingUsage": 0,
+                "modelCalls": 149,
+                "tokensIn": 566300,
+                "tokensOut": 61932,
+                "workUnits": 3995065
+              }
+            },
+            "decision": "sha256:f8cb87660f3931d59a03526bddb0ae7163f2813b5b584794b54674e930038e3d",
+            "evidence": "sha256:c6ace55b126bb256defa6ec90be544ae91a686a0735c107763a34cfee71febd4",
+            "head": "sha256:b76c73e8c0d70eb59e2cfd5b29c854194be66067dba073cb1b84f8b38f7fa687",
+            "observed": 8,
+            "passed": 7,
+            "planned": 8,
+            "score": 0.875,
+            "workPerPassedHoldout": 570723.5714285715
+          },
+          "retained": {
+            "callsPerPassedHoldout": 27,
+            "complete": true,
+            "costs": {
+              "frozenEvaluation": {
+                "admittedRuns": 10,
+                "effectsMissingUsage": 0,
+                "modelCalls": 10,
+                "tokensIn": 29153,
+                "tokensOut": 1232,
+                "workUnits": 218483
+              },
+              "learning": {
+                "admittedRuns": 40,
+                "effectsMissingUsage": 0,
+                "modelCalls": 40,
+                "tokensIn": 106854,
+                "tokensOut": 4946,
+                "workUnits": 820974
+              },
+              "seed": {
+                "admittedRuns": 4,
+                "effectsMissingUsage": 0,
+                "modelCalls": 4,
+                "tokensIn": 13732,
+                "tokensOut": 1908,
+                "workUnits": 120966
+              },
+              "total": {
+                "admittedRuns": 54,
+                "effectsMissingUsage": 0,
+                "modelCalls": 54,
+                "tokensIn": 149739,
+                "tokensOut": 8086,
+                "workUnits": 1160423
+              }
+            },
+            "decision": null,
+            "evidence": "sha256:71e89014a4470200815313eb2e005f22aca3cde73c15d64b6e5e2384083c08eb",
+            "head": "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+            "observed": 8,
+            "passed": 2,
+            "planned": 8,
+            "score": 0.25,
+            "workPerPassedHoldout": 580211.5
+          }
+        }
+      },
+      "nativeVerdict": {
+        "reasons": [],
+        "status": "decisive",
+        "winner": "optimizer"
+      }
+    },
+    "v5-b": {
+      "corpusSnapshotDigest": "sha256:a566b69ed2da2d1d6633887ea347cf17466a84e36e9631a39a772a8d6e809c25",
+      "seed": {
+        "passedValidation": false,
+        "generations": 8,
+        "termination": "generation-limit",
+        "manifest": null,
+        "summaryDigest": "sha256:6bd8be693700a20f3e5426745d8acb8a7b910aa75b603e9e730f3c175f8cd740",
+        "cost": {
+          "admittedRuns": 32,
+          "effectsMissingUsage": 0,
+          "modelCalls": 32,
+          "tokensIn": 110784,
+          "tokensOut": 15473,
+          "workUnits": 1041145
+        }
+      },
+      "learning": {},
+      "frozen": null,
+      "nativeVerdict": {
+        "reasons": [
+          "shared seed did not qualify: generation-limit"
+        ],
+        "status": "insufficient",
+        "winner": null
+      }
+    },
+    "v5-c": {
+      "corpusSnapshotDigest": "sha256:ed329cd8f35bce7b700910a5ae8326eeb6bac0db0fb7c14ce892afef21190cbf",
+      "seed": {
+        "passedValidation": false,
+        "generations": 8,
+        "termination": "generation-limit",
+        "manifest": null,
+        "summaryDigest": "sha256:b74d328bed9e476f2dfe529d142a8c6d5d7cc0a3273e067b1986e2513a94b006",
+        "cost": {
+          "admittedRuns": 32,
+          "effectsMissingUsage": 0,
+          "modelCalls": 32,
+          "tokensIn": 106480,
+          "tokensOut": 15368,
+          "workUnits": 785959
+        }
+      },
+      "learning": {},
+      "frozen": null,
+      "nativeVerdict": {
+        "reasons": [
+          "shared seed did not qualify: generation-limit"
+        ],
+        "status": "insufficient",
+        "winner": null
+      }
+    }
+  },
+  "overall": {
+    "finding": "insufficient",
+    "winner": null,
+    "comparisons": [
+      {
+        "arm": "retained",
+        "cohorts": 1,
+        "complete": false,
+        "finding": "insufficient",
+        "maxDelta": 0.125,
+        "meanDelta": 0.125,
+        "minDelta": 0.125,
+        "negative": 0,
+        "pairs": [
+          {
+            "baseline": 0.125,
+            "candidate": 0.25,
+            "complete": true,
+            "corpus": "v4",
+            "delta": 0.125,
+            "modelCallDelta": 0,
+            "workDelta": 61
+          }
+        ],
+        "positive": 1,
+        "tied": 0
+      },
+      {
+        "arm": "optimizer",
+        "cohorts": 1,
+        "complete": false,
+        "finding": "insufficient",
+        "maxDelta": 0.875,
+        "meanDelta": 0.875,
+        "minDelta": 0.875,
+        "negative": 0,
+        "pairs": [
+          {
+            "baseline": 0.125,
+            "candidate": 1,
+            "complete": true,
+            "corpus": "v4",
+            "delta": 0.875,
+            "modelCallDelta": 109,
+            "workDelta": 3178333
+          }
+        ],
+        "positive": 1,
+        "tied": 0
+      },
+      {
+        "arm": "optimizer-raw",
+        "cohorts": 1,
+        "complete": false,
+        "finding": "insufficient",
+        "maxDelta": 0.75,
+        "meanDelta": 0.75,
+        "minDelta": 0.75,
+        "negative": 0,
+        "pairs": [
+          {
+            "baseline": 0.125,
+            "candidate": 0.875,
+            "complete": true,
+            "corpus": "v4",
+            "delta": 0.75,
+            "modelCallDelta": 95,
+            "workDelta": 2834703
+          }
+        ],
+        "positive": 1,
+        "tied": 0
+      }
+    ],
+    "complete": false,
+    "frozenCorpora": 1,
+    "incompleteFrozenCosts": [],
+    "knownAccountedCost": {
+      "admittedRuns": 472,
+      "effectsMissingUsage": 0,
+      "modelCalls": 472,
+      "tokensIn": 1641157,
+      "tokensOut": 173158,
+      "workUnits": 12118751
+    },
+    "limits": [
+      "Three corpus seeds, one session per arm and seed; task batches are not independent study repetitions.",
+      "Descriptive paired differences only; no significance or production-effectiveness claim.",
+      "Scores divide by all planned holdouts, including failed and unexecuted cases.",
+      "Standalone strategy costs include the full common seed cost; realized study cost counts that seed once.",
+      "Work and model-call counts are receipt accounting, not provider billing; absent token usage remains null."
+    ],
+    "plannedCorpora": 3,
+    "realizedCost": {
+      "admittedRuns": 472,
+      "effectsMissingUsage": 0,
+      "modelCalls": 472,
+      "tokensIn": 1641157,
+      "tokensOut": 173158,
+      "workUnits": 12118751
+    },
+    "seedFailures": [
+      "v5-b",
+      "v5-c"
+    ],
+    "providerCostUsd": null
+  },
+  "limitations": [
+    "Two of three corpora failed to produce a passing seed. The completed corpus is a pilot; it does not replace the missing comparisons.",
+    "One session per strategy on the completed corpus; its eight task batches are not eight independent study repetitions.",
+    "The native single-corpus decision and the overall three-corpus finding have different scopes.",
+    "Equal resource ceilings do not mean equal spending. Per-strategy totals include the full shared seed cost; the realized study total counts that seed once and includes both failed seed searches.",
+    "Model calls are independent. Fixed and retained use the same program but can return different outputs; the optimizer comparison does not isolate the causal effect of format repairs.",
+    "Learning label accuracy and the final task pass rate measure different things. Final programs are held fixed, but still make model calls.",
+    "Work units, model calls, and token usage are recorded runtime accounting, not provider billing. Provider charges are unavailable.",
+    "Content hashes and offline replay check recorded execution; they are not cryptographic signatures, independent labels, or provider attestation.",
+    "Synthetic tasks, one model route, and the reused v4 learning corpus do not establish general or production effectiveness."
+  ]
+}
