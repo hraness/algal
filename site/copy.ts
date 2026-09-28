@@ -6,11 +6,9 @@
 
 export const SITE_TAGLINE = "Write agent programs that wait, resume, and replay.";
 
-/** The home page description, JSON-LD description, and social card text. */
+/** The home page description and JSON-LD description. The social card uses the tagline. */
 export const SITE_DESCRIPTION = "ALGAL is a programming language and VM for AI agent programs that wait for approval and leave receipts you can replay.";
 
-/** Every page shares one social image, so every page shares its alt text. */
-export const OG_IMAGE_ALT = "ALGAL card showing the tagline “Write agent programs that wait, resume, and replay.” and the algal.computer address";
 
 /** Fit and prerelease limits, shown once on the home page and once on the use-cases page.
  * Each page states the receipt limit beside its own receipt copy. */
