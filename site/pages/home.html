@@ -21,6 +21,7 @@
     <div><p class="eyebrow">The idea</p><h2 id="idea-title" class="hraness-marketing-section__heading">Software that<br><em>accumulates competence.</em></h2></div>
     <div class="idea-copy">
       <p>ALGAL is built on one bet: a computer can accumulate tested ways of acting, not only produce new answers or new code. A model proposes a procedure. ALGAL checks it and measures it on cases you declare, and the host decides whether to keep it. Those mechanisms work today. Whether kept procedures make later work measurably better is an open experiment.</p>
+      <p>LangGraph agents are Python or TypeScript code in your process. Temporal, Restate, and Inngest make workflow code durable through a server that keeps its history. An ALGAL program is typed data that the ALGAL VM runs, and each run leaves a receipt anyone can replay offline. LangGraph and Temporal are the mature choices today. <a href="/compare/">Compare ALGAL with other tools</a>.</p>
       <p><a href="/docs/vision/">Read the vision <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a><a href="/docs/lineage/">Where the idea comes from <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a></p>
     </div>
   </section>
@@ -65,7 +66,7 @@
   </section>
 
   <section class="habitat-section" id="habitat" aria-labelledby="habitat-title">
-    <div class="section-heading"><div><p class="eyebrow">The habitat</p><h2 id="habitat-title" class="hraness-marketing-section__heading">The computer<br><em>organisms live on.</em></h2></div><p>An ALGAL program, which the spec calls an organism, runs inside a habitat: the store, the function and tool registries, and the model executors your host application provides, all under limits the host sets.</p></div>
+    <div class="section-heading"><div><p class="eyebrow">The habitat</p><h2 id="habitat-title" class="hraness-marketing-section__heading">Your host sets<br><em>the tools, models, and limits.</em></h2></div><p>An ALGAL program, which the spec calls an organism, runs inside a habitat: the store, the function and tool registries, and the model executors your host application provides, all under limits the host sets.</p></div>
     <div class="habitat-grid">
       <div class="habitat-copy">
         <p>The native Rust kernel and the TypeScript reference runtime execute the same manifest. A saved run can pause in one runtime and resume in the other on a shared local store.</p>
@@ -85,7 +86,7 @@
   </section>
 
   <section class="artifact-section" id="fossils" aria-labelledby="fossils-title">
-    <div class="section-intro"><p class="eyebrow">Receipts</p><h2 id="fossils-title" class="hraness-marketing-section__heading">Every run<br><em>leaves a fossil.</em></h2><p>Each run leaves a receipt: a record, named by its content hash, that you can replay and inspect after the run ends.</p><p><a class="text-link" href="/tour/">See recorded runs on the tour <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-right"></use></svg></a></p></div>
+    <div class="section-intro"><p class="eyebrow">Receipts</p><h2 id="fossils-title" class="hraness-marketing-section__heading">Every run<br><em>can be replayed offline.</em></h2><p>Each run leaves a receipt: a record, named by its content hash, that you can replay and inspect after the run ends.</p><p><a class="text-link" href="/tour/">See recorded runs on the tour <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-right"></use></svg></a></p></div>
     <ol class="artifact-flow">
       <li><span class="step-number">01</span><h3>Verify</h3><p>Replay a run offline. Recorded effects stay fixed while the orchestration is recomputed bit-for-bit, with no model, store, or credentials needed.</p><code>algal verify receipt.json</code></li>
       <li><span class="step-number">02</span><h3>Diff</h3><p>Compare two runs: which cells diverged, and where their work counts differ.</p><code>algal diff a.json b.json</code></li>
@@ -96,7 +97,7 @@
 
   <section class="evolution-section" id="evolution" aria-labelledby="evolution-title">
     <p class="eyebrow">Reproduction and selection</p>
-    <div class="section-heading"><h2 id="evolution-title" class="hraness-marketing-section__heading">Programs propose.<br><em>The habitat selects.</em></h2><p>An organism can emit a new manifest as data. <code>spawn</code> checks it and runs it within the parent's budgets. A generated program is a manifest, not host code. Foundries and the civilization loop measure candidates on cases you declare, and the host decides which to keep.</p></div>
+    <div class="section-heading"><h2 id="evolution-title" class="hraness-marketing-section__heading">Programs write programs.<br><em>Your host picks which to keep.</em></h2><p>An organism can emit a new manifest as data. <code>spawn</code> checks it and runs it within the parent's budgets. A generated program is a manifest, not host code. Foundries and the civilization loop measure candidates on cases you declare, and the host decides which to keep.</p></div>
     <ol class="lineage-flow" aria-label="Conceptual program selection lifecycle, not an execution trace">
       <li><span>01 / propose</span><strong>Candidate artifacts</strong><p>Model-produced plans or manifests</p></li>
       <li><span>02 / check</span><strong>Typed programs with declared limits</strong><p>Host compilation and checks</p></li>

@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { articleProvenanceFromAdmission, articleProvenanceSentence, assertArticleAdmissions } from "@hraness/design-kit";
 import { ALGAL_USES_POSTS, BLOG_ADMISSIONS, BLOG_AUTHOR, PENDING_CROSS_HOST_LINKS } from "./blog-posts";
-import { algalUsesEntries, blogAtomFeed, blogLlmsList, blogSitemapEntries, loadBlogPosts, renderBlogIndex, renderPostArticle, unlinkPending } from "./blog";
+import { algalUsesEntries, blogAtomFeed, blogLlmsList, blogSitemapEntries, loadBlogPosts, postJsonLd, renderBlogIndex, renderPostArticle, unlinkPending } from "./blog";
 
 const BLOG = join(import.meta.dir, "blog");
 const posts = await loadBlogPosts(BLOG);
@@ -21,8 +21,8 @@ test("lifecycles match the reviewed set", () => {
     "/blog/built-on-algal/": "indexable",
     "/blog/software-that-accumulates-competence/": "quarantined",
     "/blog/self-evolving-software-selection-boundary/": "quarantined",
-    "/blog/receipts-fossil-record/": "quarantined",
-    "/blog/programs-that-wait/": "quarantined",
+    "/blog/receipts-fossil-record/": "indexable",
+    "/blog/programs-that-wait/": "indexable",
   });
 });
 
@@ -47,15 +47,17 @@ test("every post shows the Hraness byline and the provenance note from its recor
 
 test("only indexable posts reach the index, feed, sitemap, and llms.txt", () => {
   const indexable = posts.filter(post => post.indexable).map(post => post.path);
-  expect(indexable).toEqual(["/blog/built-on-algal/", "/blog/typescript-rust-parity/"]);
+  expect(indexable).toEqual(["/blog/built-on-algal/", "/blog/typescript-rust-parity/", "/blog/receipts-fossil-record/", "/blog/programs-that-wait/"]);
   const index = renderBlogIndex(posts);
   const feed = blogAtomFeed(posts);
   const llms = blogLlmsList(posts);
   const sitemap = blogSitemapEntries(posts);
   expect(sitemap).toEqual([
-    { path: "/blog/", lastModified: "2026-09-24" },
+    { path: "/blog/", lastModified: "2026-09-28" },
     { path: "/blog/built-on-algal/", lastModified: "2026-09-24" },
     { path: "/blog/typescript-rust-parity/", lastModified: "2026-09-24" },
+    { path: "/blog/receipts-fossil-record/", lastModified: "2026-09-28" },
+    { path: "/blog/programs-that-wait/", lastModified: "2026-09-28" },
   ]);
   for (const post of posts) {
     const listed = post.indexable;
@@ -63,6 +65,16 @@ test("only indexable posts reach the index, feed, sitemap, and llms.txt", () => 
     expect(feed.includes(`https://algal.computer${post.path}<`)).toBe(listed);
     expect(llms.includes(`https://algal.computer${post.path})`)).toBe(listed);
   }
+});
+
+test("a revised post shows its updated date and reports it as dateModified", () => {
+  const wait = posts.find(post => post.slug === "programs-that-wait")!;
+  expect(wait).toMatchObject({ published: "2026-09-22", updated: "2026-09-28" });
+  expect(renderPostArticle(wait)).toContain('Updated <time dateTime="2026-09-28">');
+  expect(JSON.stringify(postJsonLd(wait))).toContain('"dateModified":"2026-09-28T00:00:00.000Z"');
+  const parity = posts.find(post => post.slug === "typescript-rust-parity")!;
+  expect(parity.updated).toBeUndefined();
+  expect(JSON.stringify(postJsonLd(parity))).not.toContain("dateModified");
 });
 
 test("the hub stays unpublished until a registered relation has a live post", () => {

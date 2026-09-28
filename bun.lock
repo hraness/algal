@@ -9,11 +9,12 @@
         "@hraness/design-kit": "github:hraness/design-kit#v0.21.0",
         "@hraness/desktop-foundation": "https://github.com/hraness/desktop-foundation/releases/download/v0.8.0/hraness-desktop-foundation-0.8.0.tgz",
         "@hraness/ui": "github:hraness/ui#v0.5.18",
-        "@hraness/web-discovery": "github:hraness/web-discovery#v0.9.0",
+        "@hraness/web-discovery": "github:hraness/web-discovery#v0.10.0",
         "@hugeicons/core-free-icons": "4.3.0",
         "@mlc-ai/web-llm": "0.2.85",
         "@resvg/resvg-js": "2.6.2",
         "@types/bun": "^1.2.0",
+        "@types/react": "19.2.7",
         "eslint": "^9.13.0",
         "playwright-core": "1.63.0",
         "react": "19.2.3",
@@ -51,7 +52,7 @@
 
     "@hraness/ui": ["@hraness/ui@github:hraness/ui#1d43aa9", { "dependencies": { "@hugeicons/core-free-icons": "4.2.3", "@hugeicons/react": "^1.1.9", "@stylexjs/stylex": "0.19.0", "clsx": "^2.1.1", "parse5": "8.0.1", "react-aria": "3.50.0", "react-aria-components": "1.19.0" }, "peerDependencies": { "@babel/core": "7.29.7", "@stylexjs/babel-plugin": "0.19.0", "@types/babel__core": "7.20.5", "@types/bun": "1.3.14", "@types/node": "^20.19.0 || >=22.12.0", "lightningcss": "1.33.0", "next": "16.2.12 || 16.3.3", "react": ">=18 <20", "react-dom": ">=18 <20", "typescript": "6.0.3", "vite": "7.3.6 || 8.2.1" }, "optionalPeers": ["@babel/core", "@stylexjs/babel-plugin", "@types/babel__core", "@types/bun", "@types/node", "lightningcss", "next", "typescript", "vite"] }, "hraness-ui-1d43aa9", "sha512-KH4pv6P1/DoG1moNhSj4ekFtpPMilqgPzFGOWKL2I0gWVJgfXwDnoJLj3FIjWLItTMvSfm1B8Yt8pg77/a1vmg=="],
 
-    "@hraness/web-discovery": ["@hraness/web-discovery@github:hraness/web-discovery#c50a2b0", { "dependencies": { "@hraness/design-kit": "github:hraness/design-kit#v0.5.0" }, "peerDependencies": { "next": ">=16.2.0 <17.0.0", "react": ">=19.0.0 <20.0.0" } }, "hraness-web-discovery-c50a2b0", "sha512-r/ZxtWzBM3nGDX3RbW6VPkdqaOVJG7qo3Cs9ohi/0H5l3jU8DReoJHwL7qrAJH6OHLdFcIdNENzyi4rkfLVBBw=="],
+    "@hraness/web-discovery": ["@hraness/web-discovery@github:hraness/web-discovery#d3fe6c7", { "dependencies": { "@hraness/design-kit": "github:hraness/design-kit#v0.5.0" }, "peerDependencies": { "next": ">=16.2.0 <17.0.0", "react": ">=19.0.0 <20.0.0" } }, "hraness-web-discovery-d3fe6c7", "sha512-RMh+sXbZjZzkBfTEGtXBjGXhES4Qp4tx+yiGNeLAeIi/qOXjv2fSVKNtmEzDhtHqG5RwEPdYuSL+5ayO70PJiw=="],
 
     "@hugeicons/core-free-icons": ["@hugeicons/core-free-icons@4.3.0", "", {}, "sha512-5DC5gq2psNDKBQThOjpuFCtMco8nl2FkrBzZgG15cFGM0kSwUoych/pw0DmjBygF9qRDITdBPtmzJqLsOeImMg=="],
 
@@ -213,6 +214,8 @@
 
     "@types/node": ["@types/node@22.20.3", "", { "dependencies": { "undici-types": "~6.21.0" } }, "sha512-DZmzkmwHzXrLPAXPyKNDzlIwMMUZCVacoD25ywdy5YTKGbOx/2ld+Q38Im2zJ0vBuZP5Prd3VZutKZyXwkOS8A=="],
 
+    "@types/react": ["@types/react@19.2.7", "", { "dependencies": { "csstype": "^3.2.2" } }, "sha512-MWtvHrGZLFttgeEj28VXHxpmwYbor/ATPYbBfSFZEIRK0ecCFLl2Qo55z52Hss+UV9CRN7trSeq1zbgx7YDWWg=="],
+
     "@types/use-sync-external-store": ["@types/use-sync-external-store@0.0.6", "", {}, "sha512-zFDAD+tlpf2r4asuHEj0XH6pY6i0g5NeAHPn+15wk3BV6JA69eERFXC1gyGThDkVa1zCyKr5jox1+2LbV/AMLg=="],
 
     "@typescript-eslint/eslint-plugin": ["@typescript-eslint/eslint-plugin@8.70.0", "", { "dependencies": { "@eslint-community/regexpp": "^4.12.2", "@typescript-eslint/scope-manager": "8.70.0", "@typescript-eslint/type-utils": "8.70.0", "@typescript-eslint/utils": "8.70.0", "@typescript-eslint/visitor-keys": "8.70.0", "ignore": "^7.0.5", "natural-compare": "^1.4.0", "ts-api-utils": "^2.5.0" }, "peerDependencies": { "@typescript-eslint/parser": "^8.70.0", "eslint": "^8.57.0 || ^9.0.0 || ^10.0.0", "typescript": ">=4.8.4 <6.1.0" } }, "sha512-/v8HZt6RlyIZxB3ntehELOcUcfxKPVGWXnQdJuHRmzrqgF8nQypcC/oxGW+Ot4VGKDq81XugPKxx0n5PBtf9PA=="],
@@ -288,6 +291,8 @@
     "css-mediaquery": ["css-mediaquery@0.1.2", "", {}, "sha512-COtn4EROW5dBGlE/4PiKnh6rZpAPxDeFLaEEwt4i10jpDMFt2EhQGS79QmmrO+iKCHv0PU/HrOWEhijFd1x99Q=="],
 
     "css-to-react-native": ["css-to-react-native@3.2.0", "", { "dependencies": { "camelize": "^1.0.0", "css-color-keywords": "^1.0.0", "postcss-value-parser": "^4.0.2" } }, "sha512-e8RKaLXMOFii+02mOlqwjbD00KSEKqblnpO9e++1aXS1fPQOpS1YoqdVHBqPjHNoxeF2mimzVqawm2KCbEdtHQ=="],
+
+    "csstype": ["csstype@3.2.3", "", {}, "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ=="],
 
     "d3-array": ["d3-array@3.2.4", "", { "dependencies": { "internmap": "1 - 2" } }, "sha512-tdQAmyA18i4J7wprpYq8ClcxZy3SC31QMeByyCFyRt7BVHdREQZ5lpzoe5mFEYZUWe+oq8HBvk9JjpibyEV4Jg=="],
 

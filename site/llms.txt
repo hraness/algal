@@ -13,7 +13,7 @@ ALGAL is prerelease software. Unsigned native builds for macOS on Apple silicon 
 - [Put living programs to work](https://algal.computer/use-cases/): change review, checked coding repairs, portable run histories, reusable routing, and current limits
 - [Documentation index](https://algal.computer/docs/): the repository docs rendered for the web, covering install, the source language, the process VM, habitats, civilization, and executors
 - [Notes on living programs](https://algal.computer/blog/): longer posts on how the language works, how it is tested, and the design choices behind it
-- [Comparisons](https://algal.computer/compare/): how ALGAL compares with LangGraph, DSPy, Temporal, Restate, and Inngest
+- [Comparisons](https://algal.computer/compare/): how ALGAL compares with LangGraph, BAML, DSPy, Temporal, Restate, and Inngest
 
 ## Blog
 
@@ -26,6 +26,7 @@ ALGAL is prerelease software. Unsigned native builds for macOS on Apple silicon 
 - [ALGAL vs Temporal](https://algal.computer/compare/temporal/): Temporal keeps workflow history in its service; ALGAL writes each run to a receipt that verifies offline
 - [ALGAL vs Restate](https://algal.computer/compare/restate/): Restate journals handlers inside a Rust server; ALGAL needs no server between invocations
 - [ALGAL vs Inngest](https://algal.computer/compare/inngest/): Inngest checkpoints functions on a cloud that bills per step; ALGAL runs from a local binary with no meter
+- [ALGAL vs BAML](https://algal.computer/compare/baml/): BAML types LLM functions your app calls; ALGAL runs agent programs that wait, resume, and replay offline
 
 ## Downloadable examples and receipts
 
@@ -72,6 +73,7 @@ The documentation below renders the repository's own `docs/` and `spec/v1/` Mark
 - [Expression spec](https://algal.computer/docs/spec/expr/)
 - [Foundry spec](https://algal.computer/docs/spec/foundry/)
 - [Process spec](https://algal.computer/docs/spec/process/)
+- [ALGAL experiments dataset on Hugging Face](https://huggingface.co/datasets/hranesscom/algal-experiments): published result summaries, including negative findings
 
 ## Limits
 

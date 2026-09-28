@@ -16,7 +16,13 @@ const algal = (path: string) => `https://github.com/hraness/algal/blob/${ALGAL_E
 const CHECKED: ArticleIsoDate = "2026-09-24";
 
 type Source = ArticleSourceItem & Readonly<{ public: boolean }>;
-const source = (title: string, href: string, isPublic = true): Source => ({ title, href, checkedOn: CHECKED, public: isPublic });
+const source = (title: string, href: string, isPublic = true, checkedOn: ArticleIsoDate = CHECKED): Source => ({ title, href, checkedOn, public: isPublic });
+
+// The 2026-09-28 review of the two design posts checked claims at this commit.
+const REVIEW_EVIDENCE = "57c0d8aa0ae2398119b5635edafa370af7d9072a";
+const REVIEWED: ArticleIsoDate = "2026-09-28";
+const reviewed = (title: string, href: string) => source(title, href, true, REVIEWED);
+const atReview = (path: string) => `https://github.com/hraness/algal/blob/${REVIEW_EVIDENCE}/${path}`;
 
 /** Posts written before review records existed. They carry no review, so
  * they stay quarantined until an independent review is recorded. */
@@ -69,6 +75,24 @@ const HUB_SOURCES: readonly Source[] = [
   source("xcb reflexes", "https://github.com/hraness/xcb/blob/6437bcb844017e74b3e3930ff5c6076ea55c5f06/docs/reflexes.md"),
   source("Clankdar evaluator section", "https://github.com/hraness/clankdar/blob/664d64e4ce4c429ee999f914d054facf6dcbb8d9/README.md"),
   source("Slopcamera behavior bake", "https://github.com/hraness/slopcamera/blob/7e7027521f134aaaaa8404efebdc5bac24be6252/src/spatial-scene/behavior-bake.ts"),
+];
+
+const WAIT_SOURCES: readonly Source[] = [
+  reviewed("Process spec: the process record (manifest digest, receipt, wake list), resume rules, and the exact-prefix rule for resumed generations", atReview("spec/v1/process.md")),
+  reviewed("Mailbox spec: message count and size limits, delivery dedupe, and consumed-message records", atReview("spec/v1/mailbox.md")),
+  reviewed("Process VM guide: the approval example, cross-runtime resume, and the limits on external effects", atReview("docs/vm.md")),
+  reviewed("Adoption boundary: moving a running process to another machine is not built", atReview("site/copy.ts")),
+  reviewed("Temporal event history", "https://docs.temporal.io/workflow-execution/event"),
+  reviewed("Temporal TypeScript testing: replaying an exported event history against workflow code", "https://docs.temporal.io/develop/typescript/testing-suite#replay"),
+];
+
+const RECEIPT_SOURCES: readonly Source[] = [
+  reviewed("Run event kinds and the cached flag on effects", atReview("src/run.ts")),
+  reviewed("Organism spec: spawn cells run nested under the parent and emit the child manifest digest", atReview("spec/v1/organism.md")),
+  reviewed("Process evidence spec: the exported document and its size limits", atReview("spec/v1/process-evidence.md")),
+  reviewed("Foundry spec: reports list each run with its manifest and receipt", atReview("spec/v1/foundry.md")),
+  reviewed("Replay spec: replaying a revised program against a recorded run", atReview("spec/v1/replay.md")),
+  reviewed("CLI entry point: verify, diff, diagnose, and process export", atReview("cli.ts")),
 ];
 
 const stripPublic = (sources: readonly Source[]) => sources.map(({ public: _public, ...rest }) => ({ title: rest.title, url: rest.href, checkedOn: rest.checkedOn }));
@@ -147,18 +171,78 @@ export const BLOG_ADMISSIONS: readonly ArticleAdmission[] = [
   unreviewed("self-evolving-software-selection-boundary",
     "See how self-improving program research decides which proposed program gets to run.",
     "Published systems converge on propose, evaluate, select; ALGAL makes the selection step a checked contract instead of a convention."),
-  unreviewed("receipts-fossil-record",
-    "Learn what an ALGAL run record contains and what replaying it offline proves.",
-    "Replay shows a run was internally consistent, not that a model's answer was true."),
-  unreviewed("programs-that-wait",
-    "Understand how an ALGAL program can wait for days and resume in a different process or runtime.",
-    "The wait is saved as data with the permission it was granted, so any process with the store can resume it."),
+  {
+    href: "/blog/receipts-fossil-record/",
+    lifecycle: "indexable",
+    readerJob: "Learn what an ALGAL run record contains and what replaying it offline proves.",
+    nonObviousAnswer: "Replay shows a run was internally consistent with its recorded model answers, not that a model's answer was true; resume, exported evidence, and audited program selection all rest on that same record.",
+    originalContribution: "Separates logs, traces, orchestrator history, and replayable receipts by whom each asks you to trust, and ties each ALGAL feature that depends on receipts to the command or spec that implements it.",
+    hostFit: "Explains ALGAL's own run record, with commands a reader can run against the receipts this site publishes.",
+    nearestUrls: [
+      { url: "/compare/temporal/", distinction: "Compares ALGAL's receipts with Temporal's event history to help choose a tool; this post explains what a receipt holds and what replay proves." },
+      { url: "/docs/spec/replay/", distinction: "The contract for replaying a revised program against a recorded run; this post covers verifying the original run." },
+    ],
+    sources: stripPublic(RECEIPT_SOURCES),
+    observations: [
+      "The event list named only five kinds; src/run.ts also records cell.fail and cell.suspend, so the review added both.",
+      "The post said a spawned run's own digest is written onto the parent's receipt. The organism spec runs a spawned program nested inside the parent and records the child manifest's digest, so the review corrected the claim.",
+      "The post described process export as a size-limited bundle; the review named the JSON document and the verify-evidence command that checks it without a store.",
+      "A second AI run that did not draft or edit the post rechecked the event kinds, spawn provenance, and process export commands against src/run.ts, spec/v1/organism.md, and cli.ts on 2026-09-28 and found no further error.",
+    ],
+    scores: { readerUtility: 2, originalEvidence: 1, factualConfidence: 2, hostFit: 2, voiceIntegrity: 1, maintenanceValue: 1 },
+    owner: "Hraness",
+    drafting: "ai-assisted",
+    review: { reviewer: AI_REVIEWER, reviewerType: "ai", reviewedOn: REVIEWED },
+    humanReview: null,
+    reassessOn: "2026-11-09",
+    harmIfWrong: "A reader could treat a verified receipt as proof that a model's answer was correct, or expect replay to cover a command or event the runtime does not record.",
+    refreshTriggers: [
+      "A change to the RunEvent kinds or the cached flag in src/run.ts",
+      "A change to spawn provenance in spec/v1/organism.md",
+      "A rename or removal of algal verify, algal diff, algal diagnose, or algal process export",
+      "A move of the linked blog posts",
+    ],
+  },
+  {
+    href: "/blog/programs-that-wait/",
+    lifecycle: "indexable",
+    readerJob: "Understand how an ALGAL program can wait for days for an approval and resume in a new process or the other runtime.",
+    nonObviousAnswer: "The wait is saved in the store as the manifest digest, the recorded effects, and the wake permission the host granted, so a later process on the same machine, running either runtime, can verify the checkpoint and continue with no permission it did not have before.",
+    originalContribution: "Walks one approval example from checkpoint to final receipt and states where the design stops: a waiting process does not move to another machine.",
+    hostFit: "Describes ALGAL's durable process contract and the approval example on this site's tour.",
+    nearestUrls: [
+      { url: "/compare/temporal/", distinction: "Decides between Temporal and ALGAL; this post explains how an ALGAL wait is stored and resumed." },
+      { url: "/docs/vm/", distinction: "The runnable demonstration with measured behavior; this post explains the design behind it without the setup steps." },
+    ],
+    sources: stripPublic(WAIT_SOURCES),
+    observations: [
+      "The post said a different host could resume a wait, which contradicts the adoption boundary on the home page; the review limited resume to processes on the machine that holds the store and states the limit.",
+      "The approval example publishes a report to a local mailbox and deploys nothing; the review says so, matching the tour's own caption.",
+      "The final receipt holds the whole approval run because each resumed generation must keep the earlier generation's effects as an exact prefix; the review added that reason from the process spec.",
+      "A second AI run that did not draft or edit the post rechecked every claim above against the same sources on 2026-09-28. It corrected the Temporal paragraph, which implied an event history cannot be checked outside the service; Temporal's SDKs replay an exported history against the workflow code in tests.",
+    ],
+    scores: { readerUtility: 2, originalEvidence: 1, factualConfidence: 2, hostFit: 2, voiceIntegrity: 2, maintenanceValue: 1 },
+    owner: "Hraness",
+    drafting: "ai-assisted",
+    review: { reviewer: AI_REVIEWER, reviewerType: "ai", reviewedOn: REVIEWED },
+    humanReview: null,
+    reassessOn: "2026-11-09",
+    harmIfWrong: "A reader could plan to move a waiting process between machines, or expect the approval example to gate a real deployment.",
+    refreshTriggers: [
+      "Moving a running process to another machine becoming supported",
+      "A change to the process record fields or resume rules in spec/v1/process.md",
+      "A change to mailbox limits or delivery dedupe in spec/v1/mailbox.md",
+      "A change to the approval example on the tour",
+    ],
+  },
 ];
 
 /** Sources shown under each post. Private repositories stay in the record only. */
 export const BLOG_SOURCES: Readonly<Record<string, readonly ArticleSourceItem[]>> = {
   "typescript-rust-parity": PARITY_SOURCES.filter(item => item.public).map(({ public: _public, ...rest }) => rest),
   "built-on-algal": HUB_SOURCES.filter(item => item.public).map(({ public: _public, ...rest }) => rest),
+  "receipts-fossil-record": RECEIPT_SOURCES.map(({ public: _public, ...rest }) => rest),
+  "programs-that-wait": WAIT_SOURCES.map(({ public: _public, ...rest }) => rest),
 };
 
 /** Cross-host posts from the blog program that are not live yet. Links to

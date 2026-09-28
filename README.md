@@ -14,9 +14,9 @@ CLI and a Bun runtime that runs on its own implement the same specifications
 for programs, receipts, and durable processes. [algal.computer](https://algal.computer)
 has the tour, the docs, and the blog.
 
-Preview: the current native build is
-[v0.2.0-vm.9](https://github.com/hraness/algal/releases) for macOS on Apple
-silicon and Linux x86_64, and the Bun runtime runs from this checkout.
+Preview: native prereleases for macOS on Apple silicon and Linux x86_64 are on
+the [releases page](https://github.com/hraness/algal/releases), and the Bun
+runtime runs from this checkout.
 
 ## The idea
 
@@ -1249,6 +1249,14 @@ forged-output detection.
 - `docs/` — design notes as they land.
 
 ## Related work
+
+Outside Hraness, the nearest tools are LangGraph, where the agent is Python or
+TypeScript code in your process; Temporal, Restate, and Inngest, which make
+workflow code durable through a server that keeps its history; DSPy, which
+tunes prompts inside a pipeline you write; and BAML, a language for typed LLM
+functions. In ALGAL the whole program is typed data, and each run leaves a
+receipt you can verify offline. The [comparison
+pages](https://algal.computer/compare/) say when each tool is the better choice.
 
 ALGAL is a Hraness project. It shares conventions with Oh
 (content-addressed canonical records), `platonik` (bounded organisms and

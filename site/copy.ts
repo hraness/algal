@@ -6,15 +6,13 @@
 
 export const SITE_TAGLINE = "Write agent programs that wait, resume, and replay.";
 
-/** The home page description, JSON-LD description, and social card text. */
+/** The home page description and JSON-LD description. The social card uses the tagline. */
 export const SITE_DESCRIPTION = "ALGAL is a programming language and VM for AI agent programs that wait for approval and leave receipts you can replay.";
 
-/** Every page shares one social image, so every page shares its alt text. */
-export const OG_IMAGE_ALT = "ALGAL card showing the tagline “Write agent programs that wait, resume, and replay.” and the algal.computer address";
 
 /** Fit and prerelease limits, shown once on the home page and once on the use-cases page.
  * Each page states the receipt limit beside its own receipt copy. */
-export const ADOPTION_BOUNDARY = `<p>ALGAL fits local review queues, coding repairs checked by your own tests, reusable judgment pipelines, and run histories you need to inspect later. A single unstructured prompt may need less machinery, and a durable workflow engine you already run may meet your recovery needs.</p><p>ALGAL is an <strong>application VM prerelease</strong>. Its packages are unsigned and not notarized. Your host application stays responsible for tool permissions, confirming what happened when an external write's outcome is unknown, storage operations, and any OS isolation you need. Multi-tenant service use, moving a running process to another machine, and store-wide quotas are not built yet.</p>`;
+export const ADOPTION_BOUNDARY = `<p>ALGAL fits local review queues, coding repairs checked by your own tests, reusable judgment pipelines, and run histories you need to inspect later. A single unstructured prompt may need less machinery, and Temporal, Restate, or Inngest, if you already run one, may meet your recovery needs.</p><p>ALGAL is an <strong>application VM prerelease</strong>. Its packages are unsigned and not notarized. Your host application stays responsible for tool permissions, confirming what happened when an external write's outcome is unknown, storage operations, and any OS isolation you need. Multi-tenant service use, moving a running process to another machine, and store-wide quotas are not built yet.</p>`;
 
 /** The first-run terminal, shown on the home and use-cases install sections. */
 export const INSTALL_TERMINAL = `<div class="terminal"><div class="terminal-bar"><span>After installation</span></div><pre tabindex="0" aria-label="Commands to run after installation"><code><span class="code-comment"># Check the installed build and which model providers are available</span>

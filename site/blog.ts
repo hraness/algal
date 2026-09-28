@@ -26,7 +26,8 @@ import {
   type ArticleDiscovery,
   type SearchSite,
 } from "@hraness/web-discovery";
-import { OG_IMAGE_ALT, SITE_DESCRIPTION } from "./copy";
+import { SITE_DESCRIPTION } from "./copy";
+import { postSocialImage, SOCIAL_IMAGE_HEIGHT, SOCIAL_IMAGE_WIDTH } from "./social-image";
 import { escapeHtml, renderMarkdown } from "./markdown";
 import { ALGAL_USES_POSTS, BLOG_ADMISSIONS, BLOG_AUTHOR, BLOG_SOURCES, PENDING_CROSS_HOST_LINKS } from "./blog-posts";
 
@@ -43,7 +44,6 @@ export const SEARCH_SITE: SearchSite = {
   language: "en-US",
 };
 
-const SOCIAL_IMAGE = { path: "/og.png", width: 1200, height: 630, contentType: "image/png", alt: OG_IMAGE_ALT } as const;
 const USES_MARKER = "{{ALGALUSES}}";
 
 /** The Hraness org as a schema/feed party: a real entity with a canonical URL and profiles. */
@@ -61,6 +61,8 @@ export interface BlogPost {
   dek: string;
   eyebrow?: string;
   published: ArticleIsoDate;
+  /** Last material revision, from the optional `updated` frontmatter date. */
+  updated?: ArticleIsoDate;
   order: string;
   admission: ArticleAdmission;
   /** Rendered body, without the Markdown title heading. */
@@ -70,7 +72,7 @@ export interface BlogPost {
   emit: boolean;
 }
 
-interface Frontmatter { title?: string; date?: string; description?: string; order?: string; eyebrow?: string }
+interface Frontmatter { title?: string; date?: string; updated?: string; description?: string; order?: string; eyebrow?: string }
 
 export function parseFrontmatter(source: string): { meta: Frontmatter; body: string } {
   const match = source.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
@@ -114,6 +116,7 @@ export async function loadBlogPosts(dir: string): Promise<BlogPost[]> {
     records.delete(path);
     const { meta, body } = parseFrontmatter(await readFile(join(dir, file), "utf8"));
     if (!meta.title || !meta.description || !isArticleIsoDate(meta.date)) throw new Error(`site/blog/${file} needs title, description, and a YYYY-MM-DD date`);
+    if (meta.updated !== undefined && (!isArticleIsoDate(meta.updated) || meta.updated < meta.date)) throw new Error(`site/blog/${file} has an updated date that is not a YYYY-MM-DD date on or after its date`);
     // The article header shows the title, so drop a leading Markdown H1.
     const markdown = unlinkPending(body.replace(/^\s*# [^\n]*\n/, ""));
     let bodyHtml = renderMarkdown(markdown).html;
@@ -126,6 +129,7 @@ export async function loadBlogPosts(dir: string): Promise<BlogPost[]> {
     const indexable = isArticleIndexable(admission) && emit;
     posts.push({
       slug, path, title: meta.title, dek: meta.description, published: meta.date, order: meta.order ?? "9",
+      ...(meta.updated ? { updated: meta.updated } : {}),
       admission, bodyHtml, indexable, emit,
       ...(meta.eyebrow ? { eyebrow: meta.eyebrow } : {}),
     });
@@ -142,8 +146,9 @@ export function articleDiscovery(post: BlogPost): ArticleDiscovery {
     canonicalPath: post.path,
     title: post.title,
     description: post.dek,
-    image: SOCIAL_IMAGE,
+    image: { ...postSocialImage(post), width: SOCIAL_IMAGE_WIDTH, height: SOCIAL_IMAGE_HEIGHT, contentType: "image/png" },
     publishedTime: timestamp(post.published),
+    ...(post.updated ? { modifiedTime: timestamp(post.updated) } : {}),
     authors: [BLOG_PARTY],
     publisher: BLOG_PARTY,
     blogPath: BLOG_PATH,
@@ -162,6 +167,7 @@ export function renderPostArticle(post: BlogPost): string {
     ...(post.eyebrow ? { eyebrow: post.eyebrow } : {}),
     author: BLOG_AUTHOR,
     published: post.published,
+    ...(post.updated ? { updated: post.updated } : {}),
     provenance: articleProvenanceFromAdmission(post.admission),
     bodyHtml: `<div class="prose">${post.bodyHtml}</div>`,
     ...(after ? { afterHtml: after } : {}),
@@ -174,6 +180,7 @@ export function renderBlogIndex(posts: readonly BlogPost[]): string {
     headingId: "blog-posts",
     items: posts.filter(post => post.indexable).map(post => ({
       href: post.path, title: post.title, dek: post.dek, published: post.published,
+      ...(post.updated ? { updated: post.updated } : {}),
       ...(post.eyebrow ? { eyebrow: post.eyebrow } : {}),
     })),
   });

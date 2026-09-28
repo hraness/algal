@@ -6,7 +6,7 @@ order: 3
 
 # ALGAL vs Temporal
 
-Temporal is a durable execution engine: you write workflows as code in one of its SDKs, and the Temporal Service stores each workflow's event history so the run survives a crash. ALGAL is a language and virtual machine for agent programs. An ALGAL program is typed data rather than code, and each run leaves a receipt file that someone else can verify offline. People reach both with the same question, "will my long-running work survive?", so this page shows where the answers differ and when to pick each.
+Temporal is a durable execution engine: you write workflows as code in one of its SDKs, and the Temporal Service stores each workflow's event history so the run survives a crash. ALGAL is a language and virtual machine for agent programs. An ALGAL program is typed data rather than code, and each run leaves a receipt file that someone else can verify offline. Use Temporal for production backend orchestration. Use ALGAL when someone else must verify the run from a file, or when another program must inspect or generate the workflow itself.
 
 ## What both systems do
 
