@@ -1,4 +1,8 @@
+/* global document, getComputedStyle, innerHeight, innerWidth, matchMedia, requestAnimationFrame, window */
 import assert from 'node:assert/strict';
+import console from 'node:console';
+import { clearTimeout, setTimeout } from 'node:timers';
+import { URL } from 'node:url';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { isAbsolute, resolve } from 'node:path';
 import process from 'node:process';
