@@ -3,6 +3,7 @@
 // slug ids, paragraphs, nested lists, fenced code, tables, blockquotes,
 // horizontal rules, inline code, bold/emphasis, and links. Everything is
 // escaped before markup is emitted.
+import { highlightCode } from "./highlight";
 
 export interface RenderedDoc {
   title: string;
@@ -139,7 +140,7 @@ export function renderMarkdown(markdown: string, rewrite: LinkRewriter = href =>
       while (i < lines.length && !/^```\s*$/.test(lines[i]!)) { body.push(lines[i]!); i += 1; }
       i += 1;
       const label = lang ? `<span class="code-lang">${escapeHtml(lang)}</span>` : "";
-      html.push(`<div class="code-block">${label}<pre><code>${escapeHtml(body.join("\n"))}</code></pre></div>`);
+      html.push(`<div class="code-block">${label}<pre><code>${highlightCode(body.join("\n"), lang)}</code></pre></div>`);
       continue;
     }
 

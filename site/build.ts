@@ -25,6 +25,7 @@ import { renderStatusPageHtml } from "@hraness/design-kit";
 import { pageDocument, type SitePageMeta } from "./chrome";
 import { ADOPTION_BOUNDARY, INSTALL_TERMINAL, SITE_DESCRIPTION, SITE_TAGLINE } from "./copy";
 import { renderMarkdown, type LinkRewriter, type RenderedDoc } from "./markdown";
+import { highlightAlgal } from "./highlight";
 import { buildSurfaceFixture } from "../examples/malleable-site/host";
 import { buildWorkbenchFixture } from "../examples/malleable-site/workbench-fixture";
 import { parseProposal } from "../examples/malleable-site/surface";
@@ -40,22 +41,6 @@ const DIST = join(SITE, "dist");
 function escapeHtml(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
-}
-
-function highlightSource(source: string): string {
-  // Highlight only lexical tokens and escape all source text before injection.
-  const tokens = /"(?:\\.|[^"\\])*"|\/\/[^\n]*|\b(?:program|budget|let|decide|using|as|choice|match|return|generate|if|else|true|false|text|number|boolean|json|import|from|call|each|over|in|max_items)\b|\b\d+(?:\.\d+)?\b/g;
-  let result = "";
-  let cursor = 0;
-  for (const match of source.matchAll(tokens)) {
-    const token = match[0];
-    const index = match.index;
-    result += escapeHtml(source.slice(cursor, index));
-    const kind = token.startsWith('"') ? "string" : token.startsWith("//") ? "comment" : /^\d/.test(token) ? "number" : "keyword";
-    result += `<span class="code-${kind}">${escapeHtml(token)}</span>`;
-    cursor = index + token.length;
-  }
-  return result + escapeHtml(source.slice(cursor));
 }
 
 let verifiedRuns = 0;
@@ -406,7 +391,7 @@ const heroExamples: HeroExample[] = [
     key: "route", file: "route.algal", blurb: "one decision picks one of three branches",
     graphHref: "/diagrams/route-help.svg",
     sourceHref: "/examples/route.algal", evidenceHref: "/receipts/route-help.receipt.json",
-    codeName: "route.algal", codeHtml: highlightSource(routeSource.trimEnd()),
+    codeName: "route.algal", codeHtml: highlightAlgal(routeSource.trimEnd()),
     ...heroReceiptCard(routeHelp.receipt),
     manifestDigest: heroManifestDigest(routeHelp.receipt),
   },
@@ -414,7 +399,7 @@ const heroExamples: HeroExample[] = [
     key: "reply", file: "reply.algal", blurb: "classify the email, then draft",
     graphHref: "/diagrams/reply-run.svg",
     sourceHref: "/examples/reply.algal", evidenceHref: "/receipts/reply.receipt.json",
-    codeName: "reply.algal", codeHtml: highlightSource(replySource.trimEnd()),
+    codeName: "reply.algal", codeHtml: highlightAlgal(replySource.trimEnd()),
     ...heroReceiptCard(replyReceipt),
     manifestDigest: heroManifestDigest(replyReceipt),
   },
@@ -422,7 +407,7 @@ const heroExamples: HeroExample[] = [
     key: "inbox", file: "inbox.algal", blurb: "reuse one helper across an inbox",
     graphHref: "/diagrams/inbox.svg",
     sourceHref: "/examples/projects/inbox/inbox.algal", evidenceHref: "/receipts/inbox.receipt.json",
-    codeName: "inbox.algal", codeHtml: highlightSource(inbox.source.trimEnd()),
+    codeName: "inbox.algal", codeHtml: highlightAlgal(inbox.source.trimEnd()),
     ...heroReceiptCard(fullInbox.receipt),
     manifestDigest: heroManifestDigest(fullInbox.receipt),
   },
@@ -456,11 +441,11 @@ const HERO_STAGE = `<div class="hero-stage" data-hero-stage>${heroExamples.map((
 const replacements: Record<string, string> = {
   HERO_CHOOSER: HERO_CHOOSER,
   HERO_STAGE: HERO_STAGE,
-  REPLY_SOURCE: highlightSource(replySource.trimEnd()),
+  REPLY_SOURCE: highlightAlgal(replySource.trimEnd()),
   REPLY_MAX_AGENT_CALLS: String(reply.manifest.budgets.maxAgentCalls),
   REPLY_RECEIPT_SHORT: escapeHtml(replyReceipt.digest.slice(0, 23)),
-  INBOX_SOURCE: highlightSource(inbox.source.trimEnd()),
-  DRAFT_SOURCE: highlightSource(draftSource.trimEnd()),
+  INBOX_SOURCE: highlightAlgal(inbox.source.trimEnd()),
+  DRAFT_SOURCE: highlightAlgal(draftSource.trimEnd()),
   INBOX_MAX_ITEMS: String(inboxEach.maxItems),
   INBOX_STATIC_CALLS: String(inbox.analysis.maxAgentCalls),
   INBOX_REQUIRED_DEPTH: String(inbox.analysis.requiredDepth),
@@ -473,7 +458,7 @@ const replacements: Record<string, string> = {
   INBOX_CHILD_PANELS: childPanels,
   SOURCE_DIAGNOSTIC: escapeHtml(renderSourceDiagnostics(ratioReport)),
   AUTHORING_ERROR: escapeHtml(renderSourceError(authoringReport)),
-  ROUTE_SOURCE: highlightSource(routeSource.trimEnd()),
+  ROUTE_SOURCE: highlightAlgal(routeSource.trimEnd()),
   ROUTE_PANELS: routePanels,
   ADOPTION_BOUNDARY,
   INSTALL_TERMINAL,
