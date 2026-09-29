@@ -151,8 +151,9 @@ export type ExperimentFamilyConfig = {
   phase: ExperimentPhase;
   /** Number of task specs to emit (1..32). */
   tasks: number;
-  /** Records per input batch; every split is required, total ≤ 64. */
-  splits: { train: number; validation: number; holdout: number };
+  /** Records per input batch; train, validation, and holdout are required,
+   * `development` is an optional scored fourth batch, total ≤ 64. */
+  splits: { train: number; validation: number; holdout: number; development?: number };
   shape: {
     classes: [number, number];
     optionalFields: [number, number];
@@ -230,14 +231,18 @@ export function parseExperimentFamilyConfig(value: unknown): ExperimentFamilyCon
     fail(`phase must be one of ${EXPERIMENT_PHASES.join(", ")}`);
   }
   const tasks = asInt(reqField(config, "tasks", "experiment family config"), "experiment family config.tasks", 1, EXPERIMENT_FAMILY_BOUNDS.maxTasks);
-  const splitsRaw = closedRecord(reqField(config, "splits", "experiment family config"), ["train", "validation", "holdout"], "splits");
-  const splits = {
+  const splitsRaw = closedRecord(reqField(config, "splits", "experiment family config"), ["train", "validation", "holdout", "development"], "splits");
+  const splits: ExperimentFamilyConfig["splits"] = {
     train: asInt(reqField(splitsRaw, "train", "experiment family splits"), "experiment family splits.train", 1, EXPERIMENT_FAMILY_BOUNDS.maxSplitRecords),
     validation: asInt(reqField(splitsRaw, "validation", "experiment family splits"), "experiment family splits.validation", 1, EXPERIMENT_FAMILY_BOUNDS.maxSplitRecords),
     holdout: asInt(reqField(splitsRaw, "holdout", "experiment family splits"), "experiment family splits.holdout", 1, EXPERIMENT_FAMILY_BOUNDS.maxSplitRecords),
   };
-  if (splits.train + splits.validation + splits.holdout > EXPERIMENT_TASK_BOUNDS.maxRecords) {
-    fail(`splits total ${splits.train + splits.validation + splits.holdout} records exceeds ${EXPERIMENT_TASK_BOUNDS.maxRecords}`);
+  if (splitsRaw["development"] !== undefined) {
+    splits.development = asInt(splitsRaw["development"], "experiment family splits.development", 1, EXPERIMENT_FAMILY_BOUNDS.maxSplitRecords);
+  }
+  const totalRecords = splits.train + splits.validation + splits.holdout + (splits.development ?? 0);
+  if (totalRecords > EXPERIMENT_TASK_BOUNDS.maxRecords) {
+    fail(`splits total ${totalRecords} records exceeds ${EXPERIMENT_TASK_BOUNDS.maxRecords}`);
   }
   const shapeRaw = closedRecord(reqField(config, "shape", "experiment family config"), ["classes", "optionalFields", "rules", "decisionLabels", "queueLabels", "summaries", "grader", "scorerPassAt", "difficulty"], "shape");
   const grader = reqField(shapeRaw, "grader", "experiment family shape");
@@ -667,11 +672,14 @@ function generateSkeleton(config: ExperimentFamilyConfig, index: number): TaskSk
     [...CORE_FIELDS, ...optional].find((spec) => spec.name === name)?.value;
   const templateFor = new Map(classTemplates.map((entry) => [entry.id, entry]));
   const difficulty = config.shape.difficulty ?? DEFAULT_DIFFICULTY;
-  const batches = (["train", "validation", "holdout"] as const).map((split, splitIndex) => {
+  // The optional development batch forks after the three required splits, so
+  // their records are byte-identical with or without it.
+  const splitNames: ExperimentSplit[] = ["train", "validation", "holdout", ...(config.splits.development !== undefined ? ["development" as const] : [])];
+  const batches = splitNames.map((split, splitIndex) => {
     const records: JsonObject[] = [];
     const labels: string[] = [];
     const batchRng = rng.fork(1_000 + splitIndex);
-    const count = config.splits[split];
+    const count = config.splits[split]!;
     for (let i = 0; i < count; i++) {
       const truth = batchRng.pick(classIds);
       const template = templateFor.get(truth)!;
