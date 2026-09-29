@@ -4,7 +4,7 @@ import { renderInstallScript } from "./install-script";
 
 test("the install panel lists macOS, Linux, then Windows through WSL2", () => {
   const html = renderPlatformInstall();
-  const tabs = [...html.matchAll(/role="tab"[^>]*>[\s\S]*?<span>([^<]+)<\/span>/gu)].map(match => match[1]);
+  const tabs = [...html.matchAll(/role="tab"[^>]*>[\s\S]*?<span class="hraness-platform-install__tab-label[^"]*">([^<]+)<\/span>/gu)].map(match => match[1]);
   expect(tabs).toEqual(["macOS", "Linux", "Windows"]);
   expect(html.split(`>${INSTALL_COMMAND}</code>`)).toHaveLength(4);
   expect(html).toContain("Apple silicon");
@@ -13,6 +13,8 @@ test("the install panel lists macOS, Linux, then Windows through WSL2", () => {
   expect(html).toContain("Runs in WSL2 (Ubuntu 24.04) with the Linux command.");
   expect(html).toContain('id="algal-install-tab-macos"');
   expect(html).not.toMatch(/_R_/u);
+  // Each platform mark is drawn once as a <symbol> and reused by <use>.
+  expect(html.match(/<symbol /gu)).toHaveLength(3);
   expect(renderPlatformInstall()).toBe(html);
 });
 
