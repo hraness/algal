@@ -12,6 +12,7 @@ SOURCE_DESTINATIONS = {
     "docs/coding-harness-pilot-evidence.json": "studies/coding-harness-pilot-2026-09-20/results.json",
     "docs/application-research-results-2026-09-23.json": "studies/application-research-2026-09-23/results.json",
     "docs/cumulative-skill-results-2026-09-28.json": "studies/cumulative-skill-v5-2026-09-28/results.json",
+    "docs/cumulative-skill-v6-results-2026-09-28.json": "studies/cumulative-skill-v6-2026-09-28/results.json",
     "LICENSE": "LICENSE",
 }
 
