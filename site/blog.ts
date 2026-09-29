@@ -60,6 +60,10 @@ export interface BlogPost {
   title: string;
   dek: string;
   eyebrow?: string;
+  /** Share-card headline and description, from the optional `cardTitle` and
+   * `cardDescription` frontmatter, when the title or dek does not fit the card. */
+  cardTitle?: string;
+  cardDescription?: string;
   published: ArticleIsoDate;
   /** Last material revision, from the optional `updated` frontmatter date. */
   updated?: ArticleIsoDate;
@@ -72,7 +76,7 @@ export interface BlogPost {
   emit: boolean;
 }
 
-interface Frontmatter { title?: string; date?: string; updated?: string; description?: string; order?: string; eyebrow?: string }
+interface Frontmatter { title?: string; date?: string; updated?: string; description?: string; order?: string; eyebrow?: string; cardTitle?: string; cardDescription?: string }
 
 export function parseFrontmatter(source: string): { meta: Frontmatter; body: string } {
   const match = source.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
@@ -132,6 +136,8 @@ export async function loadBlogPosts(dir: string): Promise<BlogPost[]> {
       ...(meta.updated ? { updated: meta.updated } : {}),
       admission, bodyHtml, indexable, emit,
       ...(meta.eyebrow ? { eyebrow: meta.eyebrow } : {}),
+      ...(meta.cardTitle ? { cardTitle: meta.cardTitle } : {}),
+      ...(meta.cardDescription ? { cardDescription: meta.cardDescription } : {}),
     });
   }
   if (records.size > 0) throw new Error(`Review records without a post: ${[...records.keys()].join(", ")}`);

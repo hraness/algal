@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { articleDiscovery, loadBlogPosts } from "./blog";
 import { pageDocument } from "./chrome";
 import { SITE_TAGLINE } from "./copy";
+import { createSocialImageCard, socialImageFit, socialImageSiteDetails } from "@hraness/web-discovery/social-image/card";
 import { postSocialImage, postSocialPage, renderSocialImage, SITE_SOCIAL_IMAGE, SOCIAL_SITE } from "./social-image";
 
 const posts = await loadBlogPosts(join(import.meta.dir, "blog"));
@@ -32,12 +33,33 @@ test("pages share the site card and posts get their own card from page copy only
   expect(home).toContain('<meta name="twitter:image" content="https://algal.computer/og.png">');
 
   const post = posts.find(entry => entry.slug === "typescript-rust-parity")!;
-  expect(postSocialPage(post)).toEqual({ eyebrow: "Technique", headline: post.title, description: post.dek });
+  expect(postSocialPage(post)).toEqual({ eyebrow: "Technique", headline: post.cardTitle!, description: post.cardDescription! });
   const image = postSocialImage(post);
-  expect(image).toEqual({ path: "/og/blog/typescript-rust-parity.png", alt: `${post.title}, from ALGAL` });
+  expect(image).toEqual({ path: "/og/blog/typescript-rust-parity.png", alt: `${post.cardTitle}, from ALGAL` });
   const page = pageDocument({ ...meta, page: "blog", path: post.path, socialImage: image }, "<main id=\"main\"></main>");
   expect(page).toContain(`<meta property="og:image" content="https://algal.computer${image.path}">`);
   expect(page).toContain(`<meta name="twitter:image" content="https://algal.computer${image.path}">`);
   expect(articleDiscovery(post).image).toMatchObject({ path: image.path, width: 1200, height: 630, contentType: "image/png" });
-  expect(postSocialPage(posts.find(entry => entry.eyebrow === undefined)!).eyebrow).toBe("Blog");
+  const plain = { slug: "plain", title: "A title", dek: "A dek." };
+  expect(postSocialPage(plain)).toEqual({ eyebrow: "Blog", headline: "A title", description: "A dek." });
+});
+
+test("every post names its category in the card eyebrow", () => {
+  for (const post of posts) expect([post.slug, postSocialPage(post).eyebrow]).toEqual([post.slug, expect.stringMatching(/^(Essay|Integration|Technique)$/)]);
+});
+
+test("the home card and every post card fit as written, with nothing cut, shrunk, or stripped", () => {
+  const cards = [{ slug: "home", details: socialImageSiteDetails(SOCIAL_SITE) },
+    ...posts.filter(post => post.emit).map(post => ({ slug: post.slug, details: socialImageSiteDetails(SOCIAL_SITE, postSocialPage(post)) }))];
+  for (const { slug, details } of cards) {
+    const fit = socialImageFit(details);
+    expect({ slug, issues: fit.issues }).toEqual({ slug, issues: [] });
+    expect(fit.eyebrow).toBe(slug === "home" ? undefined : postSocialPage(posts.find(post => post.slug === slug)!).eyebrow);
+    expect(() => createSocialImageCard({ ...details, strict: true })).not.toThrow();
+  }
+});
+
+test("the build refuses a post card that would be cut", async () => {
+  const long = { eyebrow: "Essay", headline: "A headline", description: "A description that runs on well past two lines of the card, so the shared template would have to cut it at a clause, and the build should stop instead of publishing a shortened card." };
+  await expect(renderSocialImage(long)).rejects.toThrow(/does not fit as written/);
 });

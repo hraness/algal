@@ -44,19 +44,24 @@ export interface SocialImagePost {
   title: string;
   dek: string;
   eyebrow?: string;
+  /** Shorter card copy for a title or dek that does not fit the card as written. */
+  cardTitle?: string;
+  cardDescription?: string;
 }
 
 export function postSocialPage(post: SocialImagePost): SocialImagePage {
-  return { eyebrow: post.eyebrow ?? "Blog", headline: post.title, description: post.dek };
+  return { eyebrow: post.eyebrow ?? "Blog", headline: post.cardTitle ?? post.title, description: post.cardDescription ?? post.dek };
 }
 
 export function postSocialImage(post: SocialImagePost): SocialImageRef {
   return { path: `/og/blog/${post.slug}.png`, alt: socialImageAlt(SOCIAL_SITE, postSocialPage(post)) };
 }
 
-/** Rasterize one card from the site declaration plus optional page copy. */
+/** Rasterize one card from the site declaration plus optional page copy. The
+ * card is strict: copy the template would cut, shrink, or strip fails the
+ * build, so give the post a shorter `cardTitle` or `cardDescription`. */
 export async function renderSocialImage(page: SocialImagePage = {}): Promise<Uint8Array> {
-  const card = createSocialImageCard(socialImageSiteDetails(SOCIAL_SITE, page));
+  const card = createSocialImageCard({ ...socialImageSiteDetails(SOCIAL_SITE, page), strict: true });
   const svg = await satori(card.element, {
     fonts: card.fonts.map(font => ({ data: font.data, name: font.name, style: font.style, weight: font.weight })),
     height: card.height,
