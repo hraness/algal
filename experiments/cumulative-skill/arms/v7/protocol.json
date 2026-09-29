@@ -128,7 +128,7 @@
     "primary": "optimizer-versus-fixed",
     "successRule": "optimizer strictly wins at least two of three blocks in every group and wins aggregate passes",
     "requiredCoverage": [
-      "all four seeds",
+      "all nine confirmatory blocks",
       "fixed arm",
       "optimizer arm"
     ],

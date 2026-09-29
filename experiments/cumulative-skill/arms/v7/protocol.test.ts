@@ -6,7 +6,7 @@ type Block = { id: string; seeds: Record<string, number> };
 type Protocol = {
   contract: string; status: string; blocks: Block[]; previousSeeds: number[];
   seed: { roundSchedule: string[]; developmentFeedback: { labels: boolean }; writerNeverReceives: string[] };
-  calibration: { proceed: string }; replication: { successRule: string };
+  calibration: { proceed: string }; replication: { successRule: string; requiredCoverage: string[] };
 };
 const protocol = JSON.parse(readFileSync(join(import.meta.dir, "protocol.json"), "utf8")) as Protocol;
 
@@ -22,6 +22,7 @@ test("v7 is a frozen design without live study artifacts", () => {
   expect(protocol.seed.writerNeverReceives).toContain("selection scores");
   expect(protocol.calibration.proceed).toContain("all four seed searches qualify");
   expect(protocol.replication.successRule).toContain("at least two of three");
+  expect(protocol.replication.requiredCoverage).toEqual(["all nine confirmatory blocks", "fixed arm", "optimizer arm"]);
 });
 
 test("v7 task and ancestor seeds are unique and disjoint from the v6 ledger", () => {
