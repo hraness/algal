@@ -15,3 +15,14 @@ unsafe_code = "forbid"
 lto = "thin"
 codegen-units = 1
 strip = "debuginfo"
+
+# CI-only: the application parity binary. Optimized like release, but it
+# keeps debug assertions and overflow checks so parity exercises the same
+# checked arithmetic as a debug build. Never used for shipped binaries.
+[profile.ci-parity]
+inherits = "release"
+debug-assertions = true
+overflow-checks = true
+lto = false
+codegen-units = 16
+incremental = false
