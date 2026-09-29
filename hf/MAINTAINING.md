@@ -14,7 +14,7 @@ dataset card; `manifest.json` is the explicit source/destination/checksum list.
 2. Review the exact content and redistribution terms before adding it to
    `manifest.json`. Keep provider credentials, user inputs, raw execution stores, third-party Terminal-Bench task content, private traces,
    signing material, and provider account records out. The current export
-   includes only the three reviewed public JSON summaries and the root license.
+   includes only the reviewed public JSON summaries and the root license.
 3. Add explicit paths and SHA-256 values, plus the exact source/destination pair
    in `stage.py`. New studies need new immutable `studies/<study-id>/` paths.
    Do not glob `docs/` or export a workspace. A changed checksum requires reviewing the changed bytes. Update
@@ -85,3 +85,10 @@ It contains project-owned synthetic-study methods, aggregate measurements,
 content hashes, failures, and limitations. The export contains no task text,
 raw stores, private traces, credentials, or provider account records. Provider
 charges remain unknown. The earlier two study files and license are unchanged.
+
+On 2026-09-29, Codex reviewed redistribution of
+`docs/cumulative-skill-v6-results-2026-09-28.json`. It contains the stopped
+calibration aggregate, execution identities, partial token accounting, archive
+hash, failures, and limits. The raw GitHub evidence archive, synthetic task
+text, model responses, recovery diagnosis, and provider account records remain
+outside the Hugging Face export. Provider charges remain unknown.

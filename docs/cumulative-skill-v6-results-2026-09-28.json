@@ -1,0 +1,633 @@
+{
+  "archive": {
+    "files": 239,
+    "frozenReplay": "passed",
+    "path": "experiments/cumulative-skill/results/v6/calibration-2026-09-28/evidence.tar.gz",
+    "receiptFiles": 43,
+    "sha256": "3d536bf21475745992461730b07a6fea7561759cdae80a5cccce0178159fff79",
+    "uncompressedBytes": 19484593
+  },
+  "bunVersion": "1.3.14",
+  "calibration": {
+    "decision": {
+      "cost": {
+        "admittedRuns": 72,
+        "effectsMissingUsage": 1,
+        "modelCalls": 72,
+        "tokensIn": null,
+        "tokensOut": null,
+        "workUnits": 2441155
+      },
+      "headroomBlocks": 2,
+      "proceed": false,
+      "reasons": [
+        "a calibration seed did not qualify"
+      ]
+    },
+    "rows": [
+      {
+        "block": "cal-a",
+        "fixedEvaluation": {
+          "cost": {
+            "admittedRuns": 8,
+            "effectsMissingUsage": 1,
+            "modelCalls": 8,
+            "tokensIn": null,
+            "tokensOut": null,
+            "workUnits": 163654
+          },
+          "counts": {
+            "complete": 7,
+            "labelsCorrect": 75,
+            "outputsExact": 0,
+            "recordsCorrect": 75,
+            "recordsTotal": 96,
+            "scorerPassed": 2,
+            "summariesExact": 2,
+            "tasks": 8
+          },
+          "head": "sha256:58f13040b248046452b53a700680073e5212585f64033468ce46a283234badcb",
+          "observedTasks": 8,
+          "outcome": "complete",
+          "session": "sha256:ab9394f25e38744357b5a721569d381c2a1f737c107b2a93199610c8629f818a"
+        },
+        "seed": {
+          "account": "sha256:f69465242a33e1baa8a7547266ba8cb2b67b1aea0ef8857e10e2e50c3e526885",
+          "attempts": [
+            {
+              "failureCode": null,
+              "generation": 1,
+              "manifest": "sha256:ea3396d87f5f94ca0531acf4b765276bb294cef88f0f2cab5c8f442ffcbe8ed4",
+              "mode": "generate",
+              "outcome": "complete",
+              "trainingBatches": {
+                "passed": 0,
+                "total": 1
+              },
+              "validationBatches": {
+                "passed": 0,
+                "total": 1
+              }
+            },
+            {
+              "failureCode": null,
+              "generation": 2,
+              "manifest": "sha256:0540b15434fb55e0140f6d7477ee9228b5fa4b7dbf2d3a5eb10b8b8a90ed897e",
+              "mode": "revise",
+              "outcome": "complete",
+              "trainingBatches": {
+                "passed": 0,
+                "total": 1
+              },
+              "validationBatches": {
+                "passed": 0,
+                "total": 1
+              }
+            },
+            {
+              "failureCode": null,
+              "generation": 3,
+              "manifest": "sha256:05ed6dea82a34625060a872f50645d567ad0137655c71780b889822ff734999f",
+              "mode": "revise",
+              "outcome": "complete",
+              "trainingBatches": {
+                "passed": 0,
+                "total": 1
+              },
+              "validationBatches": {
+                "passed": 0,
+                "total": 1
+              }
+            },
+            {
+              "failureCode": null,
+              "generation": 4,
+              "manifest": "sha256:05ed6dea82a34625060a872f50645d567ad0137655c71780b889822ff734999f",
+              "mode": "revise",
+              "outcome": "complete",
+              "trainingBatches": {
+                "passed": 0,
+                "total": 1
+              },
+              "validationBatches": {
+                "passed": 0,
+                "total": 1
+              }
+            },
+            {
+              "failureCode": null,
+              "generation": 5,
+              "manifest": "sha256:58f13040b248046452b53a700680073e5212585f64033468ce46a283234badcb",
+              "mode": "revise",
+              "outcome": "complete",
+              "trainingBatches": {
+                "passed": 1,
+                "total": 1
+              },
+              "validationBatches": {
+                "passed": 1,
+                "total": 1
+              }
+            }
+          ],
+          "cost": {
+            "admittedRuns": 20,
+            "effectsMissingUsage": 0,
+            "modelCalls": 20,
+            "tokensIn": 116528,
+            "tokensOut": 12413,
+            "workUnits": 799170
+          },
+          "generations": 5,
+          "manifest": "sha256:58f13040b248046452b53a700680073e5212585f64033468ce46a283234badcb",
+          "qualified": true,
+          "termination": "qualified"
+        }
+      },
+      {
+        "block": "cal-b",
+        "fixedEvaluation": {
+          "cost": {
+            "admittedRuns": 8,
+            "effectsMissingUsage": 0,
+            "modelCalls": 8,
+            "tokensIn": 28166,
+            "tokensOut": 980,
+            "workUnits": 180588
+          },
+          "counts": {
+            "complete": 8,
+            "labelsCorrect": 80,
+            "outputsExact": 2,
+            "recordsCorrect": 80,
+            "recordsTotal": 96,
+            "scorerPassed": 3,
+            "summariesExact": 3,
+            "tasks": 8
+          },
+          "head": "sha256:9ec62d06556415a1926a57f518c36c30cd7ecab815380e19ecd40a2bb9869142",
+          "observedTasks": 8,
+          "outcome": "complete",
+          "session": "sha256:b219fa7cbd721c8973b44c4b44d34de837e60ebf814c4de5e8385406c57d52ed"
+        },
+        "seed": {
+          "account": "sha256:c6ab2ad38e24f9b579afc487e4ed8e139d4cc9ca60d0b0c2eece298a269e02d6",
+          "attempts": [
+            {
+              "failureCode": null,
+              "generation": 1,
+              "manifest": "sha256:9ec62d06556415a1926a57f518c36c30cd7ecab815380e19ecd40a2bb9869142",
+              "mode": "generate",
+              "outcome": "complete",
+              "trainingBatches": {
+                "passed": 0,
+                "total": 1
+              },
+              "validationBatches": {
+                "passed": 1,
+                "total": 1
+              }
+            }
+          ],
+          "cost": {
+            "admittedRuns": 4,
+            "effectsMissingUsage": 0,
+            "modelCalls": 4,
+            "tokensIn": 17972,
+            "tokensOut": 2532,
+            "workUnits": 120545
+          },
+          "generations": 1,
+          "manifest": "sha256:9ec62d06556415a1926a57f518c36c30cd7ecab815380e19ecd40a2bb9869142",
+          "qualified": true,
+          "termination": "qualified"
+        }
+      },
+      {
+        "block": "cal-c",
+        "fixedEvaluation": null,
+        "seed": {
+          "account": "sha256:1831f76fc5e2f8c5772a7eca1b24e506a573604c0559ab872954d5a855209520",
+          "attempts": [
+            {
+              "failureCode": null,
+              "generation": 1,
+              "manifest": "sha256:e53ee023fe26547fc7dd02a1e5633393ef8fb4c2d012c0ed8543953d337df7a0",
+              "mode": "generate",
+              "outcome": "complete",
+              "trainingBatches": {
+                "passed": 0,
+                "total": 1
+              },
+              "validationBatches": {
+                "passed": 0,
+                "total": 1
+              }
+            },
+            {
+              "failureCode": null,
+              "generation": 2,
+              "manifest": "sha256:39993e34022a4f9477a91c85009902b0e9095c909824084f061541cb6fa0d8b2",
+              "mode": "revise",
+              "outcome": "complete",
+              "trainingBatches": {
+                "passed": 1,
+                "total": 1
+              },
+              "validationBatches": {
+                "passed": 0,
+                "total": 1
+              }
+            },
+            {
+              "failureCode": null,
+              "generation": 3,
+              "manifest": "sha256:39993e34022a4f9477a91c85009902b0e9095c909824084f061541cb6fa0d8b2",
+              "mode": "revise",
+              "outcome": "complete",
+              "trainingBatches": {
+                "passed": 1,
+                "total": 1
+              },
+              "validationBatches": {
+                "passed": 0,
+                "total": 1
+              }
+            },
+            {
+              "failureCode": null,
+              "generation": 4,
+              "manifest": "sha256:39993e34022a4f9477a91c85009902b0e9095c909824084f061541cb6fa0d8b2",
+              "mode": "revise",
+              "outcome": "complete",
+              "trainingBatches": {
+                "passed": 1,
+                "total": 1
+              },
+              "validationBatches": {
+                "passed": 0,
+                "total": 1
+              }
+            },
+            {
+              "failureCode": null,
+              "generation": 5,
+              "manifest": "sha256:39993e34022a4f9477a91c85009902b0e9095c909824084f061541cb6fa0d8b2",
+              "mode": "revise",
+              "outcome": "complete",
+              "trainingBatches": {
+                "passed": 1,
+                "total": 1
+              },
+              "validationBatches": {
+                "passed": 0,
+                "total": 1
+              }
+            },
+            {
+              "failureCode": null,
+              "generation": 6,
+              "manifest": "sha256:39993e34022a4f9477a91c85009902b0e9095c909824084f061541cb6fa0d8b2",
+              "mode": "revise",
+              "outcome": "complete",
+              "trainingBatches": {
+                "passed": 1,
+                "total": 1
+              },
+              "validationBatches": {
+                "passed": 0,
+                "total": 1
+              }
+            },
+            {
+              "failureCode": null,
+              "generation": 7,
+              "manifest": "sha256:39993e34022a4f9477a91c85009902b0e9095c909824084f061541cb6fa0d8b2",
+              "mode": "revise",
+              "outcome": "complete",
+              "trainingBatches": {
+                "passed": 1,
+                "total": 1
+              },
+              "validationBatches": {
+                "passed": 0,
+                "total": 1
+              }
+            },
+            {
+              "failureCode": null,
+              "generation": 8,
+              "manifest": "sha256:39993e34022a4f9477a91c85009902b0e9095c909824084f061541cb6fa0d8b2",
+              "mode": "revise",
+              "outcome": "complete",
+              "trainingBatches": {
+                "passed": 1,
+                "total": 1
+              },
+              "validationBatches": {
+                "passed": 0,
+                "total": 1
+              }
+            }
+          ],
+          "cost": {
+            "admittedRuns": 32,
+            "effectsMissingUsage": 0,
+            "modelCalls": 32,
+            "tokensIn": 198379,
+            "tokensOut": 20884,
+            "workUnits": 1177198
+          },
+          "generations": 8,
+          "manifest": null,
+          "qualified": false,
+          "termination": "generation-limit"
+        }
+      }
+    ]
+  },
+  "confirmatory": {
+    "observedBlocks": 0,
+    "plannedBlocks": 9,
+    "primaryClaim": null
+  },
+  "costDefinitions": {
+    "modelCalls": "Charged executor attempts; no provider billing attestation.",
+    "providerDollars": null,
+    "tokens": "Recorded usage counted per admitted run, including content-identical receipts. One missing usage makes full totals null.",
+    "workUnits": "Runtime work accounting, including every failed or repeated admission."
+  },
+  "dateTimeZone": "America/Puerto_Rico",
+  "diagnosis": {
+    "scope": "offline calibration cost, transport-failure, and repeated-request diagnosis; no raw prompts or responses",
+    "sha256": "47d7dd6d655727e59b01df1b41e604c83970997c1c71f03a114a5146907bda31"
+  },
+  "executor": {
+    "baseUrl": "https://api.x.ai/v1",
+    "model": "grok-4.5"
+  },
+  "failedSeedRepetition": {
+    "block": "cal-c",
+    "cacheEvidence": "No cached effects or memoization wrapper; content-identical receipts do not establish cache hits or fewer provider requests.",
+    "distinctParsedWriterResponses": 2,
+    "distinctWriterRequestDigests": 3,
+    "identicalFeedbackGenerations": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "interpretation": "Later writer requests repeated already-correct training feedback while validation continued to fail. These attempts are not independent task samples.",
+    "trainingActualEqualsExpected": true,
+    "writerAdmissions": 8
+  },
+  "identity": {
+    "datasets": "sha256:805cea9df0da8f93ab24212dd54f10708eec42091bc614169ef607da107ac299",
+    "freeze": "sha256:0beca4ec2f85482adb8806506fa902702e4b36eb32a5adb166bc487e254d8a27",
+    "nativeResults": "sha256:e70b3166628a752021a21a85e5e4937e38581190f7feac545d7e035540372e23",
+    "protocol": "sha256:d46e15194616532179b99b7e5ce81ee54df65437fba81c22a89d229bfa6a67a2"
+  },
+  "limitations": [
+    "Two passing calibration seeds and one failed search do not establish reliable seed acquisition.",
+    "No optimizer or other confirmatory learning arm ran; there is no optimizer advantage or nine-block repeatability result.",
+    "Fresh draws from one shared synthetic template family do not represent separate domains or human-adjudicated support messages.",
+    "The v5 and v6 draws differ; this is not a paired causal estimate of the training-feedback change.",
+    "Validation selected seeds repeatedly and is not an untouched final test.",
+    "One transport-aborted call has uncertain external completion and missing usage; full token totals and provider charges remain unknown."
+  ],
+  "method": {
+    "budgets": {
+      "frozen": {
+        "attempts": 1024,
+        "runs": 512,
+        "work": 40000000
+      },
+      "learning": {
+        "attempts": 1024,
+        "runs": 512,
+        "work": 40000000
+      },
+      "seed": {
+        "attempts": 64,
+        "runs": 64,
+        "work": 8000000
+      }
+    },
+    "calibrationRule": {
+      "headroomMaxPassed": 6,
+      "headroomMinimumBlocks": 2,
+      "requiredSeeds": 3
+    },
+    "family": "synthetic record triage",
+    "fixedRecordsPerTask": 12,
+    "maximumSeedGenerations": 8,
+    "plannedConfirmatoryComparison": {
+      "aggregate": "strict-win",
+      "baseline": "fixed",
+      "corpora": [
+        "a",
+        "b",
+        "c"
+      ],
+      "minimumWinsPerCorpus": 2,
+      "primary": "optimizer",
+      "repetitions": 3,
+      "requireAllBlocks": true,
+      "requiredArms": [
+        "fixed",
+        "optimizer"
+      ],
+      "secondaryFailures": "report-separately"
+    },
+    "score": "(4 * exact full-record fraction + exact-summary indicator) / 5",
+    "scorerPassAt": 0.9,
+    "seedTrainingRecords": 24,
+    "seedValidationRecords": 12,
+    "taskSeeds": [
+      {
+        "id": "cal-a",
+        "seeds": {
+          "acquisition": 61000001,
+          "ancestor": 61000004,
+          "shift": 61000003,
+          "unseen": 61000002
+        },
+        "stage": "calibration"
+      },
+      {
+        "id": "cal-b",
+        "seeds": {
+          "acquisition": 61000005,
+          "ancestor": 61000008,
+          "shift": 61000007,
+          "unseen": 61000006
+        },
+        "stage": "calibration"
+      },
+      {
+        "id": "cal-c",
+        "seeds": {
+          "acquisition": 61000009,
+          "ancestor": 61000012,
+          "shift": 61000011,
+          "unseen": 61000010
+        },
+        "stage": "calibration"
+      },
+      {
+        "id": "a-r1",
+        "seeds": {
+          "acquisition": 61000013,
+          "ancestor": 61000016,
+          "shift": 61000015,
+          "unseen": 61000014
+        },
+        "stage": "confirmatory"
+      },
+      {
+        "id": "a-r2",
+        "seeds": {
+          "acquisition": 61000017,
+          "ancestor": 61000020,
+          "shift": 61000019,
+          "unseen": 61000018
+        },
+        "stage": "confirmatory"
+      },
+      {
+        "id": "a-r3",
+        "seeds": {
+          "acquisition": 61000021,
+          "ancestor": 61000024,
+          "shift": 61000023,
+          "unseen": 61000022
+        },
+        "stage": "confirmatory"
+      },
+      {
+        "id": "b-r1",
+        "seeds": {
+          "acquisition": 61000025,
+          "ancestor": 61000028,
+          "shift": 61000027,
+          "unseen": 61000026
+        },
+        "stage": "confirmatory"
+      },
+      {
+        "id": "b-r2",
+        "seeds": {
+          "acquisition": 61000029,
+          "ancestor": 61000032,
+          "shift": 61000031,
+          "unseen": 61000030
+        },
+        "stage": "confirmatory"
+      },
+      {
+        "id": "b-r3",
+        "seeds": {
+          "acquisition": 61000033,
+          "ancestor": 61000036,
+          "shift": 61000035,
+          "unseen": 61000034
+        },
+        "stage": "confirmatory"
+      },
+      {
+        "id": "c-r1",
+        "seeds": {
+          "acquisition": 61000037,
+          "ancestor": 61000040,
+          "shift": 61000039,
+          "unseen": 61000038
+        },
+        "stage": "confirmatory"
+      },
+      {
+        "id": "c-r2",
+        "seeds": {
+          "acquisition": 61000041,
+          "ancestor": 61000044,
+          "shift": 61000043,
+          "unseen": 61000042
+        },
+        "stage": "confirmatory"
+      },
+      {
+        "id": "c-r3",
+        "seeds": {
+          "acquisition": 61000045,
+          "ancestor": 61000048,
+          "shift": 61000047,
+          "unseen": 61000046
+        },
+        "stage": "confirmatory"
+      }
+    ],
+    "validationUse": "Repeated selection of the first passing candidate; validation labels, outputs, and scores excluded from writer requests.",
+    "writerFeedback": "Training examples and previous training output beside expected training output only.",
+    "wrongRowCountScore": 0
+  },
+  "partialTokenUsage": {
+    "completeTotalsKnown": false,
+    "inputTokens": 387413,
+    "missingUsageOccurrences": 1,
+    "outputTokens": 37679,
+    "recordedEffectOccurrencesWithUsage": 71
+  },
+  "recordedFailure": {
+    "block": "cal-a",
+    "category": "transport aborted; external completion uncertain",
+    "code": "BUDGET_EXHAUSTED",
+    "countsAsFailedTask": true,
+    "limit": "The record does not establish the exact abort cause, provider completion, or billing.",
+    "retried": false,
+    "taskId": "shift-03",
+    "usageKnown": false
+  },
+  "schema": "algal.cumulative-skill-public.v6",
+  "sourceCommit": "f8ddcf9dc0fb82e638c0a9405d2b0df289b09274",
+  "sourceRepository": "https://github.com/hraness/algal",
+  "status": "stopped-after-calibration",
+  "study": "cumulative-skill-v6-calibration",
+  "studyDate": "2026-09-28",
+  "totalRealizedCost": {
+    "admittedRuns": 72,
+    "effectsMissingUsage": 1,
+    "modelCalls": 72,
+    "tokensIn": null,
+    "tokensOut": null,
+    "workUnits": 2441155
+  },
+  "verification": {
+    "countScope": "Receipt files per store; copied seed receipts are counted in every store that contains them.",
+    "interpretation": "Recorded execution replay is separate from task correctness and provider billing.",
+    "offlineReplayPassed": true,
+    "receiptFilesChecked": 43,
+    "stores": [
+      {
+        "checkedReceipts": 8,
+        "store": "cal-a/frozen-fixed"
+      },
+      {
+        "checkedReceipts": 15,
+        "store": "cal-a/seed"
+      },
+      {
+        "checkedReceipts": 8,
+        "store": "cal-b/frozen-fixed"
+      },
+      {
+        "checkedReceipts": 4,
+        "store": "cal-b/seed"
+      },
+      {
+        "checkedReceipts": 8,
+        "store": "cal-c/seed"
+      }
+    ]
+  }
+}

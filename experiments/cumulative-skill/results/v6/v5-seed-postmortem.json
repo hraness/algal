@@ -1,0 +1,156 @@
+{
+  "aggregate": {
+    "cost": {
+      "admittedRuns": 64,
+      "cachedEffects": 0,
+      "chargedAttempts": 64,
+      "effectErrors": 0,
+      "effects": 64,
+      "effectsMissingUsage": 0,
+      "modelCalls": 64,
+      "tokensIn": 217264,
+      "tokensOut": 30841,
+      "workUnits": 1827104
+    },
+    "generations": 16,
+    "invalidEffectiveManifests": 0,
+    "rawManifestFormatRepairs": 2,
+    "recordedClassificationRuns": 48,
+    "recordedGenerationRuns": 16,
+    "runtimeOrExecutorFailures": 0,
+    "scoredBatches": 32,
+    "scoredBatchesPassed": 0
+  },
+  "contract": "algal.seed-postmortem-summary.v1",
+  "corpora": [
+    {
+      "account": "sha256:6c7274a9099f73a7d9ca649206047ade3a1dc5fb8adc3bc1dde5dbbba11264c3",
+      "bySplit": {
+        "selection-train": {
+          "agreementRange": [
+            0.5666666666666667,
+            0.7
+          ],
+          "batches": 8,
+          "labelsCorrect": 156,
+          "passed": 0,
+          "records": 192,
+          "recordsCorrect": 156,
+          "summariesExact": 0
+        },
+        "selection-validation": {
+          "agreementRange": [
+            0.6666666666666667,
+            0.7333333333333333
+          ],
+          "batches": 8,
+          "labelsCorrect": 82,
+          "passed": 0,
+          "records": 96,
+          "recordsCorrect": 82,
+          "summariesExact": 0
+        }
+      },
+      "cost": {
+        "admittedRuns": 32,
+        "cachedEffects": 0,
+        "chargedAttempts": 32,
+        "effectErrors": 0,
+        "effects": 32,
+        "effectsMissingUsage": 0,
+        "modelCalls": 32,
+        "tokensIn": 110784,
+        "tokensOut": 15473,
+        "workUnits": 1041145
+      },
+      "failedScoredBatches": 16,
+      "generationCount": 8,
+      "invalidEffectiveManifests": 0,
+      "qualified": false,
+      "rawManifestRepairs": [
+        {
+          "generation": 1,
+          "repairs": [
+            "view-inputs-wildcard"
+          ]
+        }
+      ],
+      "runtimeOrExecutorFailures": 0,
+      "slug": "v5-b",
+      "termination": "generation-limit",
+      "uniqueCandidateManifests": [
+        "sha256:1457cd96356e2766259ffcb8d1fe6f9780996798a625dff1d35e217a745e1023",
+        "sha256:8a8b1713d8fb310211e1cb7510f21bd6ef92aa22d0ec7bfb66e88a974e0f75d6",
+        "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24"
+      ],
+      "uniqueGeneratorRequests": [
+        "sha256:d42d0f44e519437ad2b4fe66446120bf5337aefd17dc53c86602deb0ecc276a7"
+      ]
+    },
+    {
+      "account": "sha256:5a654a7f41989226ba61f4284cdeec3715225d43e0bf3abf704d10f099284099",
+      "bySplit": {
+        "selection-train": {
+          "agreementRange": [
+            0.6333333333333333,
+            0.7333333333333333
+          ],
+          "batches": 8,
+          "labelsCorrect": 167,
+          "passed": 0,
+          "records": 192,
+          "recordsCorrect": 167,
+          "summariesExact": 0
+        },
+        "selection-validation": {
+          "agreementRange": [
+            0.4666666666666667,
+            0.5333333333333333
+          ],
+          "batches": 8,
+          "labelsCorrect": 58,
+          "passed": 0,
+          "records": 96,
+          "recordsCorrect": 58,
+          "summariesExact": 0
+        }
+      },
+      "cost": {
+        "admittedRuns": 32,
+        "cachedEffects": 0,
+        "chargedAttempts": 32,
+        "effectErrors": 0,
+        "effects": 32,
+        "effectsMissingUsage": 0,
+        "modelCalls": 32,
+        "tokensIn": 106480,
+        "tokensOut": 15368,
+        "workUnits": 785959
+      },
+      "failedScoredBatches": 16,
+      "generationCount": 8,
+      "invalidEffectiveManifests": 0,
+      "qualified": false,
+      "rawManifestRepairs": [
+        {
+          "generation": 2,
+          "repairs": [
+            "view-inputs-wildcard"
+          ]
+        }
+      ],
+      "runtimeOrExecutorFailures": 0,
+      "slug": "v5-c",
+      "termination": "generation-limit",
+      "uniqueCandidateManifests": [
+        "sha256:b9025a99437de1a18c72cb24077b9dc173ff0a4bbee707f6efa57ceeb1aa8e24",
+        "sha256:8a8b1713d8fb310211e1cb7510f21bd6ef92aa22d0ec7bfb66e88a974e0f75d6"
+      ],
+      "uniqueGeneratorRequests": [
+        "sha256:6595058280084fe1036678c1078d78b9d79556363118366bbc746e57458283ea"
+      ]
+    }
+  ],
+  "sourceCommit": "57c0d8aa0ae2398119b5635edafa370af7d9072a",
+  "study": "cumulative-skill-v5-matched"
+}

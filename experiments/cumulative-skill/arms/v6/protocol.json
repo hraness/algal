@@ -1,0 +1,346 @@
+{
+  "contract": "algal.study-protocol.v1",
+  "study": "cumulative-skill-v6",
+  "executor": {
+    "baseUrl": "https://api.x.ai/v1",
+    "model": "grok-4.5",
+    "credentialEnv": "XAI_API_KEY"
+  },
+  "arms": [
+    "fixed",
+    "retained",
+    "optimizer",
+    "optimizer-raw"
+  ],
+  "concurrency": 3,
+  "budgets": {
+    "seed": {
+      "work": 8000000,
+      "attempts": 64,
+      "runs": 64
+    },
+    "learning": {
+      "work": 40000000,
+      "attempts": 1024,
+      "runs": 512
+    },
+    "frozen": {
+      "work": 40000000,
+      "attempts": 1024,
+      "runs": 512
+    }
+  },
+  "seed": {
+    "maxGenerations": 8,
+    "feedback": "train-only",
+    "selection": "first-validation-pass",
+    "normalizeEmitted": true
+  },
+  "tasks": {
+    "acquisition": 8,
+    "unseen": 32,
+    "frozen": 8,
+    "splits": {
+      "train": 24,
+      "validation": 12,
+      "holdout": 12
+    },
+    "shape": {
+      "classes": [
+        10,
+        14
+      ],
+      "optionalFields": [
+        3,
+        4
+      ],
+      "rules": [
+        6,
+        10
+      ],
+      "decisionLabels": [
+        3,
+        5
+      ],
+      "queueLabels": [
+        3,
+        5
+      ],
+      "summaries": [
+        2,
+        4
+      ],
+      "grader": "mixed",
+      "scorerPassAt": 0.9,
+      "difficulty": {
+        "hintLeak": 0.5,
+        "noiseSentences": [
+          0,
+          2
+        ],
+        "confusable": 0.7,
+        "subjectMislead": 0.25
+      }
+    },
+    "evolve": {
+      "fromPhase": "acquisition",
+      "addFields": 3,
+      "reviseClasses": 2,
+      "jitterRules": 4
+    }
+  },
+  "calibration": {
+    "requiredSeeds": 3,
+    "headroomMaxPassed": 6,
+    "headroomMinimumBlocks": 2
+  },
+  "replication": {
+    "corpora": [
+      "a",
+      "b",
+      "c"
+    ],
+    "repetitions": 3,
+    "primary": "optimizer",
+    "baseline": "fixed",
+    "minimumWinsPerCorpus": 2,
+    "aggregate": "strict-win",
+    "requireAllBlocks": true,
+    "requiredArms": [
+      "fixed",
+      "optimizer"
+    ],
+    "secondaryFailures": "report-separately"
+  },
+  "frozen": {
+    "mode": "fixed-task-execution",
+    "allLearningHeadsBeforeEvaluation": true,
+    "feedback": false
+  },
+  "previousSeeds": [
+    57019,
+    99733,
+    271828,
+    314159,
+    644901,
+    739391,
+    20260927,
+    20261028,
+    20261029,
+    41000001,
+    41000002,
+    41000003,
+    41000004,
+    41000005,
+    41000006
+  ],
+  "blocks": [
+    {
+      "id": "cal-a",
+      "stage": "calibration",
+      "corpus": "a",
+      "repetition": 1,
+      "armOrder": [
+        "fixed"
+      ],
+      "seeds": {
+        "acquisition": 61000001,
+        "unseen": 61000002,
+        "shift": 61000003,
+        "ancestor": 61000004
+      }
+    },
+    {
+      "id": "cal-b",
+      "stage": "calibration",
+      "corpus": "b",
+      "repetition": 1,
+      "armOrder": [
+        "fixed"
+      ],
+      "seeds": {
+        "acquisition": 61000005,
+        "unseen": 61000006,
+        "shift": 61000007,
+        "ancestor": 61000008
+      }
+    },
+    {
+      "id": "cal-c",
+      "stage": "calibration",
+      "corpus": "c",
+      "repetition": 1,
+      "armOrder": [
+        "fixed"
+      ],
+      "seeds": {
+        "acquisition": 61000009,
+        "unseen": 61000010,
+        "shift": 61000011,
+        "ancestor": 61000012
+      }
+    },
+    {
+      "id": "a-r1",
+      "stage": "confirmatory",
+      "corpus": "a",
+      "repetition": 1,
+      "armOrder": [
+        "fixed",
+        "retained",
+        "optimizer",
+        "optimizer-raw"
+      ],
+      "seeds": {
+        "acquisition": 61000013,
+        "unseen": 61000014,
+        "shift": 61000015,
+        "ancestor": 61000016
+      }
+    },
+    {
+      "id": "a-r2",
+      "stage": "confirmatory",
+      "corpus": "a",
+      "repetition": 2,
+      "armOrder": [
+        "retained",
+        "optimizer",
+        "optimizer-raw",
+        "fixed"
+      ],
+      "seeds": {
+        "acquisition": 61000017,
+        "unseen": 61000018,
+        "shift": 61000019,
+        "ancestor": 61000020
+      }
+    },
+    {
+      "id": "a-r3",
+      "stage": "confirmatory",
+      "corpus": "a",
+      "repetition": 3,
+      "armOrder": [
+        "optimizer",
+        "optimizer-raw",
+        "fixed",
+        "retained"
+      ],
+      "seeds": {
+        "acquisition": 61000021,
+        "unseen": 61000022,
+        "shift": 61000023,
+        "ancestor": 61000024
+      }
+    },
+    {
+      "id": "b-r1",
+      "stage": "confirmatory",
+      "corpus": "b",
+      "repetition": 1,
+      "armOrder": [
+        "optimizer-raw",
+        "fixed",
+        "retained",
+        "optimizer"
+      ],
+      "seeds": {
+        "acquisition": 61000025,
+        "unseen": 61000026,
+        "shift": 61000027,
+        "ancestor": 61000028
+      }
+    },
+    {
+      "id": "b-r2",
+      "stage": "confirmatory",
+      "corpus": "b",
+      "repetition": 2,
+      "armOrder": [
+        "fixed",
+        "retained",
+        "optimizer",
+        "optimizer-raw"
+      ],
+      "seeds": {
+        "acquisition": 61000029,
+        "unseen": 61000030,
+        "shift": 61000031,
+        "ancestor": 61000032
+      }
+    },
+    {
+      "id": "b-r3",
+      "stage": "confirmatory",
+      "corpus": "b",
+      "repetition": 3,
+      "armOrder": [
+        "retained",
+        "optimizer",
+        "optimizer-raw",
+        "fixed"
+      ],
+      "seeds": {
+        "acquisition": 61000033,
+        "unseen": 61000034,
+        "shift": 61000035,
+        "ancestor": 61000036
+      }
+    },
+    {
+      "id": "c-r1",
+      "stage": "confirmatory",
+      "corpus": "c",
+      "repetition": 1,
+      "armOrder": [
+        "optimizer",
+        "optimizer-raw",
+        "fixed",
+        "retained"
+      ],
+      "seeds": {
+        "acquisition": 61000037,
+        "unseen": 61000038,
+        "shift": 61000039,
+        "ancestor": 61000040
+      }
+    },
+    {
+      "id": "c-r2",
+      "stage": "confirmatory",
+      "corpus": "c",
+      "repetition": 2,
+      "armOrder": [
+        "optimizer-raw",
+        "fixed",
+        "retained",
+        "optimizer"
+      ],
+      "seeds": {
+        "acquisition": 61000041,
+        "unseen": 61000042,
+        "shift": 61000043,
+        "ancestor": 61000044
+      }
+    },
+    {
+      "id": "c-r3",
+      "stage": "confirmatory",
+      "corpus": "c",
+      "repetition": 3,
+      "armOrder": [
+        "fixed",
+        "retained",
+        "optimizer",
+        "optimizer-raw"
+      ],
+      "seeds": {
+        "acquisition": 61000045,
+        "unseen": 61000046,
+        "shift": 61000047,
+        "ancestor": 61000048
+      }
+    }
+  ]
+}

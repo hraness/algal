@@ -1,7 +1,6 @@
 import { attachFoil, attachStatusPage } from "@hraness/design-kit/browser";
 
-const header = document.querySelector<HTMLElement>(".site-header");
-if (header) attachFoil(header);
+attachFoil(document.documentElement);
 
 // The 404 page: dot-field glyph, "Did you mean" for a mistyped address, and a
 // Back link when the reader came from another page on this site.

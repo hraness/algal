@@ -484,6 +484,20 @@ learning scores, final evaluation, and costs by stage. The
 links the program, execution, and evaluation records and preserves the
 insufficient finding for all three planned comparisons against fixed.
 
+### v6 · calibration with training examples and feedback
+
+The [seed postmortem](cumulative-skill-seed-postmortem.md) examines why both
+fresh v5 corpora failed to produce a passing starting program. V6 supplied
+training examples and recorded training feedback to its seed writer. Two
+of three fresh calibration corpora produced passing seeds; the third
+exhausted eight attempts. The required calibration gate stopped the study,
+so none of the nine planned comparison blocks ran.
+
+The [v6 report](cumulative-skill-v6.md) preserves that outcome, the fixed-seed
+test results, and all 2,441,155 recorded work units. Its fresh task draws do
+not provide a paired comparison with v5. The v5 results above remain the
+record of the original study.
+
 ## Status and limits
 
 These studies demonstrate saved-program reuse, revision, demotion, and

@@ -9,10 +9,18 @@
  *
  *   bun scripts/application-parity.ts            # target/debug/algal
  *   ALGAL_BIN=/path/to/algal bun scripts/application-parity.ts
+ *   ALGAL_PARITY_TIMING=timing.json bun scripts/application-parity.ts
+ *
+ * A timing summary (phase wall time, native CLI and native memory engine
+ * subprocess time, slowest steps) always prints at the end. With
+ * ALGAL_PARITY_TIMING set, every step also prints one timing line and the
+ * full per-step report is written to that path as JSON. Timing is diagnostic
+ * only and never affects the verdict.
  *
  * Exit 0 = identical outputs on every step; nonzero prints the first
  * divergence. */
 import { createHash } from "node:crypto";
+import { performance } from "node:perf_hooks";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -50,6 +58,47 @@ import { canonicalize, canonicalBytes, type JsonValue } from "../src/values";
 const root = resolve(import.meta.dir, "..");
 const binary = process.env.ALGAL_BIN ?? join(root, "target/debug/algal");
 const binaryHex = createHash("sha256").update(await readFile(binary)).digest("hex");
+
+/** Diagnostic timing: wall time per phase and step, split into the native
+ * CLI leg and the native memory engine subprocesses the TypeScript leg
+ * drives. Counters are cumulative; step and phase deltas are differences. */
+const timingPath = process.env.ALGAL_PARITY_TIMING;
+const timing = { nativeCliMs: 0, nativeCliCalls: 0, engineMs: 0, engineCalls: 0 };
+const elapsed = (start: number) => Math.round(performance.now() - start);
+class TimedNativeMemoryQueryEngine extends NativeMemoryQueryEngine {
+  override async query(...args: Parameters<NativeMemoryQueryEngine["query"]>): ReturnType<NativeMemoryQueryEngine["query"]> {
+    const start = performance.now();
+    try { return await super.query(...args); } finally { timing.engineMs += performance.now() - start; timing.engineCalls++; }
+  }
+  override async verify(...args: Parameters<NativeMemoryQueryEngine["verify"]>): ReturnType<NativeMemoryQueryEngine["verify"]> {
+    const start = performance.now();
+    try { return await super.verify(...args); } finally { timing.engineMs += performance.now() - start; timing.engineCalls++; }
+  }
+}
+type StepTiming = { name: string; tsMs: number; engineMs: number; engineCalls: number; nativeMs: number };
+type PhaseTiming = { name: string; wallMs: number; nativeCliMs: number; nativeCliCalls: number; engineMs: number; engineCalls: number };
+const stepTimings: StepTiming[] = [];
+const phaseTimings: PhaseTiming[] = [];
+async function timedPhase(name: string, body: () => Promise<void>): Promise<void> {
+  const start = performance.now(), before = { ...timing };
+  try { await body(); } finally {
+    phaseTimings.push({
+      name, wallMs: elapsed(start),
+      nativeCliMs: Math.round(timing.nativeCliMs - before.nativeCliMs), nativeCliCalls: timing.nativeCliCalls - before.nativeCliCalls,
+      engineMs: Math.round(timing.engineMs - before.engineMs), engineCalls: timing.engineCalls - before.engineCalls,
+    });
+  }
+}
+async function reportTiming(): Promise<void> {
+  const total = phaseTimings.reduce((sum, phase) => sum + phase.wallMs, 0);
+  console.log(`application parity timing: ${total} ms total; native CLI ${Math.round(timing.nativeCliMs)} ms over ${timing.nativeCliCalls} calls; native memory engine ${Math.round(timing.engineMs)} ms over ${timing.engineCalls} calls`);
+  for (const phase of phaseTimings) {
+    console.log(`  phase ${phase.name}: ${phase.wallMs} ms wall, native CLI ${phase.nativeCliMs} ms/${phase.nativeCliCalls}, engine ${phase.engineMs} ms/${phase.engineCalls}`);
+  }
+  const slowest = [...stepTimings].sort((a, b) => (b.tsMs + b.nativeMs) - (a.tsMs + a.nativeMs)).slice(0, 10);
+  for (const step of slowest) console.log(`  slow step ${JSON.stringify(step.name)}: ts ${step.tsMs} ms (engine ${step.engineMs} ms/${step.engineCalls}), native ${step.nativeMs} ms`);
+  if (timingPath) await writeFile(timingPath, JSON.stringify({ binary, phases: phaseTimings, steps: stepTimings, totals: { wallMs: total, ...timing } }, null, 2) + "\n", "utf8");
+}
 const temporary = await mkdtemp(join(tmpdir(), "algal-app-parity-"));
 const fixtureDir = join(temporary, "fixtures");
 await mkdir(fixtureDir, { recursive: true });
@@ -251,7 +300,7 @@ const inspectShape = (s: ApplicationSnapshot | null) =>
 
 const tsDir = join(temporary, "ts");
 const nativeDir = join(temporary, "native");
-const engine = new NativeMemoryQueryEngine({ executable: binary, expectedSha256: binaryHex });
+const engine = new TimedNativeMemoryQueryEngine({ executable: binary, expectedSha256: binaryHex });
 const host = createApplicationPolicyHost(policy, { channelsDir: join(tsDir, "channels"), memoryEngine: engine });
 const service = new ApplicationService(tsDir, host);
 const memory = new ApplicationMemoryService({ store: service.store, engine, admission: host });
@@ -785,6 +834,10 @@ steps.push(
 );
 
 const runNativeAttempt = async (args: string[], directory = nativeDir) => {
+  const start = performance.now();
+  try { return await spawnNative(args, directory); } finally { timing.nativeCliMs += performance.now() - start; timing.nativeCliCalls++; }
+};
+const spawnNative = async (args: string[], directory: string) => {
   const proc = Bun.spawn([binary, "--dir", directory, ...args], { stdout: "pipe", stderr: "pipe" });
   let timedOut = false;
   const timer = setTimeout(() => { timedOut = true; proc.kill("SIGKILL"); }, 30_000);
@@ -1475,13 +1528,24 @@ async function checkGoalAndQuotaParity(): Promise<void> {
   equal("quota aggregate rejection preserves native ledger", await ledger(aggregate.native), aggregateBefore);
 }
 try {
-  for (const step of steps) {
+  await timedPhase("lifecycle", async () => { for (const step of steps) {
     // Native arguments are functions of the pre-step state; build them before
     // the TypeScript leg mutates head/memoryRef.
     const args = await step.native();
+    const engineBefore = { ms: timing.engineMs, calls: timing.engineCalls };
+    let tsStart = performance.now(), tsMs = 0, nativeMs = 0;
+    const record = () => {
+      const row = { name: step.name, tsMs, engineMs: Math.round(timing.engineMs - engineBefore.ms), engineCalls: timing.engineCalls - engineBefore.calls, nativeMs };
+      stepTimings.push(row);
+      if (timingPath) console.log(`parity-step ${JSON.stringify(row.name)} ts=${row.tsMs}ms engine=${row.engineMs}ms/${row.engineCalls} native=${row.nativeMs}ms`);
+    };
     if (step.fails) {
       const tsError: unknown = await step.ts().then(() => null, error => error ?? new Error("rejected"));
+      tsMs = elapsed(tsStart);
+      const nativeStart = performance.now();
       const { code, stderr } = await runNativeAttempt(args);
+      nativeMs = elapsed(nativeStart);
+      record();
       if (tsError === null || code !== 2) {
         console.error(`PARITY DIVERGENCE at "${step.name}": expected rejection — ts ${tsError === null ? "accepted" : "rejected"}, native exit ${code}`);
         process.exit(1);
@@ -1498,8 +1562,13 @@ try {
       checked++;
       continue;
     }
+    tsStart = performance.now();
     const tsOut = await step.ts();
+    tsMs = elapsed(tsStart);
+    const nativeStart = performance.now();
     const nativeOut = await runNative(args);
+    nativeMs = elapsed(nativeStart);
+    record();
     if (!same(tsOut, nativeOut)) {
       console.error(`PARITY DIVERGENCE at "${step.name}"`);
       console.error(`  ts:     ${canonicalize(tsOut as JsonValue)}`);
@@ -1521,10 +1590,11 @@ try {
       wedgeIntent = episode.intent;
     }
     checked++;
-  }
-  await checkEvidenceParity();
-  await checkGoalAndQuotaParity();
+  } });
+  await timedPhase("evidence", checkEvidenceParity);
+  await timedPhase("goal-quota", checkGoalAndQuotaParity);
 } finally {
   await rm(temporary, { recursive: true, force: true });
 }
+await reportTiming();
 console.log(`application parity: ${checked} steps identical across TypeScript and native`);
