@@ -241,12 +241,17 @@ export class HabitatLinkClient {
   async sendMessage(message: HabitatMessage): Promise<{ deliveryId: string }> {
     const parsed = parseHabitatMessage(message);
     const value = parsed as unknown as JsonValue;
-    // The capability and idempotency key are transport metadata. The mailbox
-    // value is the signed Habitat Message envelope itself.
-    const result = await this.request(`/m/${this.options.habitat}/${encodeURIComponent(parsed.recipient)}`, "POST", value, { "idempotency-key": parsed.messageId });
-    const obj = asObject(boundedJson(result, "message delivery", 4096), "message delivery");
-    const deliveryId = asString(obj.deliveryId, "deliveryId", 256);
-    if (deliveryId.length === 0) fail("deliveryId must not be empty");
+    // The grant-verified route: the target resolves the envelope's grant
+    // before it retains anything, and the message id is the retry identity.
+    // The whole signed envelope is what lands in the recipient mailbox.
+    const result = await this.request(`/v1/habitats/${this.options.habitat}/habitat-link/messages`, "POST", value, { "idempotency-key": parsed.messageId });
+    const obj = asObject(boundedJson(result, "message acceptance", 4096), "message acceptance");
+    if (obj.contract !== "algal.habitat-message-acceptance.v1") fail("message acceptance contract mismatch");
+    if (obj.messageId !== parsed.messageId) fail("message acceptance names another message");
+    if (obj.message !== digestCanonical(value)) fail("message acceptance digest mismatch");
+    if (obj.status !== "accepted") fail("message was not accepted");
+    const deliveryId = asString(obj.delivery, "delivery", 256);
+    if (deliveryId.length === 0) fail("delivery must not be empty");
     return { deliveryId };
   }
 }

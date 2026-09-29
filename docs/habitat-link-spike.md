@@ -123,8 +123,11 @@ The cloud worker exposes:
 
 - `POST /v1/habitats/:h/habitat-link/invocations` — submit an invocation;
 - `GET /v1/habitats/:h/habitat-link/invocations/:operationId` — read its status;
-- `POST /m/:h/:capability` — deliver a `habitat-message` envelope with the
-  existing idempotency-key semantics.
+- `POST /v1/habitats/:h/habitat-link/messages` — deliver a `habitat-message`
+  envelope; the target resolves the envelope's grant before retaining
+  anything and answers an `algal.habitat-message-acceptance.v1` record
+  naming the delivery. The message id is the idempotency key.
+- `PUT /v1/habitats/:h/habitat-link/grants` — enroll a signed grant.
 
 The worker uses the existing tenant owner check. A native peer profile
 replaces that ambient tenant credential with the signed audience-bound grant

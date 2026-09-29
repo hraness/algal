@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { digestCanonical } from "./digest";
 import { AlgalError } from "./errors";
+import type { JsonValue } from "./values";
 import {
   HabitatLinkClient,
   habitatInvocationDigest,
@@ -55,7 +57,10 @@ describe("habitat-link records", () => {
       fetch: async (input, init) => {
         const request = new Request(String(input), init);
         seen.push(request);
-        if (new URL(request.url).pathname.startsWith("/m/")) return Response.json({ deliveryId: "sha256:" + "1".repeat(64) });
+        if (new URL(request.url).pathname.endsWith("/habitat-link/messages")) {
+          const sent = await request.clone().json() as { messageId: string };
+          return Response.json({ contract: "algal.habitat-message-acceptance.v1", messageId: sent.messageId, message: digestCanonical(sent as unknown as JsonValue), status: "accepted", target: invocation().sender.habitat, delivery: "sha256:" + "1".repeat(64), replayed: false });
+        }
         if (request.method === "POST") return Response.json({ contract: "algal.habitat-acceptance.v1", operationId: invocation().operationId, invocation: digest(), status: "accepted", target: invocation().sender.habitat, process: "link-0123456789abcdef0123456789abcdef", replayed: false });
         return Response.json({ contract: "algal.habitat-result.v1", operationId: invocation().operationId, invocation: digest(), status: "complete", process: "link-0123456789abcdef0123456789abcdef", receipt: digest("d") });
       },
@@ -67,7 +72,9 @@ describe("habitat-link records", () => {
     expect(seen[0]!.headers.get("idempotency-key")).toBe(invocation().operationId);
     const message = { contract: "algal.habitat-message.v1", messageId: invocation().operationId, sender: invocation().sender, recipient: `cap:mailbox-send:sha256:${"e".repeat(64)}`, body: { hello: "world" }, grant: digest("f") } as const;
     const delivery = await client.sendMessage(message);
-    expect(delivery.deliveryId).toBeDefined();
+    expect(delivery.deliveryId).toBe("sha256:" + "1".repeat(64));
+    expect(new URL(seen[2]!.url).pathname).toBe(`/v1/habitats/${invocation().sender.habitat}/habitat-link/messages`);
+    expect(seen[2]!.headers.get("idempotency-key")).toBe(message.messageId);
     expect(JSON.parse(await seen[2]!.text()).contract).toBe("algal.habitat-message.v1");
   });
 });
