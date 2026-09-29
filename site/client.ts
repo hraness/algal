@@ -1,6 +1,8 @@
 import { attachFoil, attachStatusPage } from "@hraness/design-kit/browser";
+import { enhancePlatformInstalls } from "./platform-install-client";
 
 attachFoil(document.documentElement);
+enhancePlatformInstalls();
 
 // The 404 page: dot-field glyph, "Did you mean" for a mistyped address, and a
 // Back link when the reader came from another page on this site.

@@ -761,6 +761,8 @@ nav a[aria-current="page"] { color: var(--ink); }
    In the install grid the frame keeps its own height instead of stretching to
    the intro column, as the retired .terminal frame did. */
 .try-section .hraness-marketing-proof-frame { align-self: start; min-width: 0; }
+.try-steps { display: grid; gap: 1.5rem; align-self: start; min-width: 0; }
+.try-section .section-intro > .hraness-platform-badges { margin-top: 1.1rem; }
 .algal-terminal-code { margin: 0; padding: 1rem 1.2rem; overflow-x: auto; }
 .algal-terminal-code code { font-size: .8rem; line-height: 1.8; }
 .evolution-section .algal-terminal-code code { background: transparent; color: var(--hraness-marketing-ink); }

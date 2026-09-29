@@ -2,10 +2,16 @@
  * Bun 1.3.14 can retain or merge this rule when bundling Lantern and the marketing
  * preset. Keep the first copy only after proving the later copy cannot change
  * the cascade. This is deliberately not a general CSS optimizer. */
-const PATTERNS = ["cells", "weave", "contour", "mesh"] as const;
-const SELECTORS = ["-webkit-any", "-moz-any", "is"].map(name =>
-  `:${name}(${PATTERNS.map(pattern => `[data-hraness-pattern=${pattern}]`).join(",")})`);
-const RESET = "--hraness-material-wall-images:initial;--hraness-pattern-decoration:initial";
+const familySelectors = (patterns: readonly string[]): string[] => ["-webkit-any", "-moz-any", "is"].map(name =>
+  `:${name}(${patterns.map(pattern => `[data-hraness-pattern=${pattern}]`).join(",")})`);
+/** design-kit before 0.23 resets the textured patterns; 0.23 and later render
+ * every pattern, including `none`, flat with one rule family. */
+const FAMILIES = [
+  { selectors: familySelectors(["cells", "weave", "contour", "mesh"]),
+    reset: "--hraness-material-wall-images:initial;--hraness-pattern-decoration:initial" },
+  { selectors: familySelectors(["cells", "weave", "contour", "mesh", "none"]),
+    reset: "--hraness-pattern-image:none;--hraness-pattern-decoration:none;--hraness-marketing-field-images:none;--hraness-material-wall-images:none" },
+] as const;
 const PROPERTY = /--hraness-(?:material-wall-images|pattern-decoration)\s*:/;
 const LAYER = "@layer components.hraness-design-kit.legacy";
 const MAX_CSS_BYTES = 2_097_152;
@@ -97,6 +103,9 @@ function rules(css: string): Rule[] {
 export function normalizeSitePatternResets(css: string): string {
   requireCondition(Buffer.byteLength(css) <= MAX_CSS_BYTES, "CSS exceeds 2 MiB");
   const all = rules(css);
+  const family = FAMILIES.find(candidate => all.some(rule => rule.selector === candidate.selectors[0] && writesReset(rule.body)));
+  requireCondition(family !== undefined, "expected one or two complete reset families");
+  const SELECTORS: readonly string[] = family.selectors, RESET = family.reset;
   const resets = all.filter(rule => SELECTORS.includes(rule.selector) && writesReset(rule.body));
   requireCondition(resets.length === 3 || resets.length === 6, "expected one or two complete reset families");
   for (const [i, rule] of resets.entries()) {

@@ -26,6 +26,7 @@ import { highlightCode } from "@hraness/design-kit/syntax-highlighting";
 import { pageDocument, type SitePageMeta } from "./chrome";
 import { ADOPTION_BOUNDARY, CIVILIZATION_EXAMPLE, INSTALL_TERMINAL, SITE_DESCRIPTION, SITE_TAGLINE } from "./copy";
 import { renderInstallScript } from "./install-script";
+import { renderPlatformBadges, renderPlatformInstall } from "./platform-install";
 import { renderMarkdown, type LinkRewriter, type RenderedDoc } from "./markdown";
 import { highlightAlgal } from "./highlight";
 import { buildSurfaceFixture } from "../examples/malleable-site/host";
@@ -466,6 +467,8 @@ const replacements: Record<string, string> = {
   ROUTE_PANELS: routePanels,
   ADOPTION_BOUNDARY,
   INSTALL_TERMINAL,
+  PLATFORM_INSTALL: renderPlatformInstall(),
+  PLATFORM_BADGES: renderPlatformBadges(),
   CIVILIZATION_EXAMPLE,
   SITE_DESCRIPTION: escapeHtml(SITE_DESCRIPTION),
   REFINE_ROUNDS: String(refine.maxRounds),
