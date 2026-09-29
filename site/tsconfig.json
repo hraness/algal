@@ -1,7 +1,7 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": {
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": ["ES2022", "ES2023.Array", "DOM", "DOM.Iterable"],
     "types": []
   },
   "include": ["appearance.ts", "client.ts", "living.ts", "workbench.ts", "grow.ts", "tasks.ts", "browser-inference.ts"],

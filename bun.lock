@@ -6,7 +6,7 @@
       "name": "@hraness/morphogen",
       "devDependencies": {
         "@eslint/js": "^9.13.0",
-        "@hraness/design-kit": "github:hraness/design-kit#v0.21.0",
+        "@hraness/design-kit": "github:hraness/design-kit#v0.29.1",
         "@hraness/desktop-foundation": "https://github.com/hraness/desktop-foundation/releases/download/v0.8.0/hraness-desktop-foundation-0.8.0.tgz",
         "@hraness/ui": "github:hraness/ui#v0.5.18",
         "@hraness/web-discovery": "github:hraness/web-discovery#v0.11.0",
@@ -15,6 +15,7 @@
         "@resvg/resvg-js": "2.6.2",
         "@types/bun": "^1.2.0",
         "@types/react": "19.2.7",
+        "@types/react-dom": "19.2.3",
         "eslint": "^9.13.0",
         "playwright-core": "1.63.0",
         "react": "19.2.3",
@@ -46,7 +47,7 @@
 
     "@eslint/plugin-kit": ["@eslint/plugin-kit@0.4.1", "", { "dependencies": { "@eslint/core": "^0.17.0", "levn": "^0.4.1" } }, "sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA=="],
 
-    "@hraness/design-kit": ["@hraness/design-kit@github:hraness/design-kit#4c3f7c9", { "dependencies": { "@hugeicons/core-free-icons": "4.2.3", "@stylexjs/stylex": "0.19.0", "motion": "12.42.0", "next-themes": "0.4.6", "react-aria-components": "1.19.0", "recharts": "3.8.0", "sugar-high": "^1.2.1", "web-haptics": "0.0.6" }, "peerDependencies": { "@hraness/ui": ">=0.5.16 <0.6.0", "react": ">=18 <20", "react-dom": ">=18 <20" }, "optionalPeers": ["@hraness/ui"] }, "hraness-design-kit-4c3f7c9", "sha512-7SfYsa39IMWkb67vXWBK5xJ5l7nrotVERD/KnhogvJObxLBfvxLLl6qBY9Q6QK0uxBE5LTzRT/huciboQf91nw=="],
+    "@hraness/design-kit": ["@hraness/design-kit@github:hraness/design-kit#a310119", { "dependencies": { "@hugeicons/core-free-icons": "4.2.3", "@stylexjs/stylex": "0.19.0", "motion": "12.42.0", "next-themes": "0.4.6", "react-aria-components": "1.19.0", "recharts": "3.8.0", "sugar-high": "^1.2.1", "web-haptics": "0.0.6" }, "peerDependencies": { "@hraness/ui": ">=0.5.16 <0.6.0", "react": ">=18 <20", "react-dom": ">=18 <20" }, "optionalPeers": ["@hraness/ui"] }, "hraness-design-kit-a310119", "sha512-6c4SX8rnpEW4gNOnkEWuj3sLM/Err6zbSrnD5DL2ZTBGGl6j1Br6UOX19MnvpYEAzbTQ7kFUuAojkxIN39O9iA=="],
 
     "@hraness/desktop-foundation": ["@hraness/desktop-foundation@https://github.com/hraness/desktop-foundation/releases/download/v0.8.0/hraness-desktop-foundation-0.8.0.tgz", { "bin": { "companion": "./dist/src/cli.js" } }, "sha512-VvuyeA+KwOj+SR7Opeivhy5p2uNHlGBhEBV8860105kAPOauUuttcSUSTV93dqkNQYBBUwhVZx9CchRj/dmhHw=="],
 
@@ -215,6 +216,8 @@
     "@types/node": ["@types/node@22.20.3", "", { "dependencies": { "undici-types": "~6.21.0" } }, "sha512-DZmzkmwHzXrLPAXPyKNDzlIwMMUZCVacoD25ywdy5YTKGbOx/2ld+Q38Im2zJ0vBuZP5Prd3VZutKZyXwkOS8A=="],
 
     "@types/react": ["@types/react@19.2.7", "", { "dependencies": { "csstype": "^3.2.2" } }, "sha512-MWtvHrGZLFttgeEj28VXHxpmwYbor/ATPYbBfSFZEIRK0ecCFLl2Qo55z52Hss+UV9CRN7trSeq1zbgx7YDWWg=="],
+
+    "@types/react-dom": ["@types/react-dom@19.2.3", "", { "peerDependencies": { "@types/react": "^19.2.0" } }, "sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ=="],
 
     "@types/use-sync-external-store": ["@types/use-sync-external-store@0.0.6", "", {}, "sha512-zFDAD+tlpf2r4asuHEj0XH6pY6i0g5NeAHPn+15wk3BV6JA69eERFXC1gyGThDkVa1zCyKr5jox1+2LbV/AMLg=="],
 

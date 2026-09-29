@@ -53,3 +53,14 @@ test("malformed or oversized input is rejected", () => {
     expect(() => normalizeSitePatternResets(css)).toThrow();
   }
 });
+
+test("the flat pattern family from design-kit 0.23 and later is deduplicated the same way", () => {
+  const flatSelectors = ["-webkit-any", "-moz-any", "is"].map(name =>
+    `:${name}([data-hraness-pattern=cells],[data-hraness-pattern=weave],[data-hraness-pattern=contour],[data-hraness-pattern=mesh],[data-hraness-pattern=none])`);
+  const flat = flatSelectors.map(selector => `${selector}{--hraness-pattern-image:none;--hraness-pattern-decoration:none;--hraness-marketing-field-images:none;--hraness-material-wall-images:none}`).join("");
+  const once = layer(flat + ".middle{color:red}");
+  expect(normalizeSitePatternResets(once)).toBe(once);
+  expect(normalizeSitePatternResets(`${once}${layer(`.a{color:red}${flat}.b{color:blue}`)}`))
+    .toBe(`${once}${layer(".a{color:red}.b{color:blue}")}`);
+  expect(() => normalizeSitePatternResets(layer(flat + ".field{--hraness-pattern-decoration:url(x)}" + flat))).toThrow("intervening write");
+});

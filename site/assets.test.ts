@@ -13,7 +13,7 @@ test("site CSS references separate hashed fonts with exact shared font bytes", a
     if (!result.success) throw new AggregateError(result.logs, "Site style build failed");
     const css = await readFile(join(directory, "styles.css"), "utf8");
     expect(normalizeSitePatternResets(css)).toBe(css);
-    expect(css.match(/--hraness-material-wall-images:initial;--hraness-pattern-decoration:initial/g)).toHaveLength(3);
+    expect(css.match(/--hraness-pattern-image:none;--hraness-pattern-decoration:none;--hraness-marketing-field-images:none;--hraness-material-wall-images:none}/g)).toHaveLength(3);
     const faces = css.match(/@font-face\s*\{[^}]*\}/g) ?? [];
     const fontsDirectory = join(import.meta.dir, "../node_modules/@hraness/design-kit/src/fonts");
     const originals = new Set<string>();
