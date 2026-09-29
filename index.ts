@@ -72,6 +72,28 @@ export type {
   HabitatGrantPermission,
   SignedHabitatDescriptor,
 } from "./src/habitat-link-authority";
+export {
+  HABITAT_INVOKE,
+  HABITAT_INVOKE_TOOL,
+  HABITAT_LINK_CAPABILITY_CONTRACT,
+  HABITAT_LINK_HOST_BOUNDS,
+  HABITAT_LINK_REPLY_CONTRACT,
+  HABITAT_MESSAGE,
+  HABITAT_SEND_TOOL,
+  HabitatLinkService,
+  LocalHabitatAcceptor,
+  messageIdempotencyKey,
+  parseHabitatLinkCapabilityRecord,
+  parseHabitatLinkReply,
+} from "./src/habitat-link-host";
+export type {
+  HabitatLinkCapabilityRecord,
+  HabitatLinkPeer,
+  HabitatLinkPending,
+  HabitatLinkReply,
+  HabitatLinkServiceOptions,
+  LocalHabitatAcceptorOptions,
+} from "./src/habitat-link-host";
 export { checkVendoredFiles, loadVendoredSources, parseVendorRecord, parseVendorRegistries, readVendorRegistries, registryOrigins, vendorRecordToJson, vendorRegistriesToJson, vendorRegistryOrigin, VENDOR_BOUNDS, VENDOR_CONTRACT, VENDOR_RECORD_FILE, VENDOR_REGISTRIES_CONTRACT, VENDOR_REGISTRIES_FILE, VENDOR_REGISTRY_BOUNDS } from "./src/vendor-record";
 export type { VendorDifference, VendoredSources, VendorFile, VendorRecord, VendorRegistries } from "./src/vendor-record";
 export { vendorCatalogEntry, openVendorCatalog, VENDOR_FETCH_BOUNDS } from "./src/vendor";

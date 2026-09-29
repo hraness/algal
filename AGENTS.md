@@ -14,7 +14,11 @@
   the derived semantic index plus recall executor (`semantic.ts`), foundry
   evaluation and search (`foundry.ts`, `search.ts`) with the habitat-wide
   work account (`habitat-budget.ts`) and its round-robin scheduler and
-  resumable journal (`habitat-schedule.ts`), benchmark comparison (`bench.ts`,
+  resumable journal (`habitat-schedule.ts`), the Habitat Link records and
+  client (`habitat-link.ts`), signed descriptors and grants
+  (`habitat-link-authority.ts`), and the caller tools plus local acceptor
+  that bind them to processes (`habitat-link-host.ts`, spike notes in
+  `docs/habitat-link-spike.md`), benchmark comparison (`bench.ts`,
   `bench-verify.ts`), the cumulative-skill experiment arm runner and report
   (`experiment-run.ts`, `experiment-report.ts`, `experiment-verify.ts`),
   bundles (`bundle.ts`), transports (`transport.ts`), the shared

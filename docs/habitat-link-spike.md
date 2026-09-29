@@ -126,8 +126,118 @@ The cloud worker exposes:
 - `POST /m/:h/:capability` — deliver a `habitat-message` envelope with the
   existing idempotency-key semantics.
 
-The worker uses the existing tenant owner check. A native peer profile will
-replace that ambient tenant credential with a signed audience-bound grant.
+The worker uses the existing tenant owner check. A native peer profile
+replaces that ambient tenant credential with the signed audience-bound grant
+below.
+
+## Signed authority
+
+`src/habitat-link-authority.ts` adds two signed records over Ed25519 with the
+existing canonical-JSON digest as the signed payload.
+
+### `algal.habitat-descriptor.v1` (signed)
+
+The descriptor above is wrapped as `{ descriptor, publicKey, signature }`.
+`descriptor.key` must equal the digest of the public key, so the identity
+a peer quotes is the key that signed it. A caller `connect`s a signed
+descriptor only when its public key is already in the caller's trusted set.
+
+### `algal.habitat-grant.v1`
+
+```json
+{
+  "contract":"algal.habitat-grant.v1",
+  "issuer":"h_<32 lowercase hex>",
+  "subject":{"habitat":"h_<32 lowercase hex>","principal":"<safe id>"},
+  "audience":"h_<32 lowercase hex>",
+  "permissions":["invoke"],
+  "application":"<safe id>",
+  "entrypoint":"<safe id>",
+  "interface":"sha256:<64 lowercase hex>",
+  "terms":{"maxWork":1000,"maxAgentCalls":0,"maxBytes":4096,"maxHops":1},
+  "notBefore":0,
+  "expires":500,
+  "nonce":"<safe id>",
+  "publicKey":"<base64>",
+  "signature":"<base64>"
+}
+```
+
+A grant is issued by the target habitat, names one subject (habitat and
+principal), one audience, and a ceiling on terms. `invoke` grants may pin an
+application, entrypoint, and interface digest; `message` grants may not.
+Verification checks the signature, the validity window against host-supplied
+logical time, the audience, the enrolled key set, the permission, and, when a
+request is supplied, that the request carries this grant's digest, that its
+sender is the subject, that its target matches any pinned fields, and that its
+terms (or message body bytes) stay inside the ceiling. Every gate is
+independent and fails closed.
+
+## Host integration
+
+`src/habitat-link-host.ts` connects the records to processes on both ends.
+
+### Caller
+
+`HabitatLinkService` holds trusted descriptors, admitted grants, and a ledger
+of outstanding operations. `admit({ capability, grant })` mints a
+`habitat-invoke` or `habitat-message` capability handle whose record carries
+the grant digest, so the handle cannot outlive or widen the grant. `tools()`
+returns two write tools for organisms:
+
+- `habitat.invoke.v1` takes the peer handle, a `mailbox-send` reply handle,
+  the target `application`, `entrypoint`, `manifest`, `interface`, and `args`.
+  The operation id is derived from the process idempotency key, so a journaled
+  retry submits the same operation and the target replays instead of
+  admitting a second process. The tool returns the acceptance.
+- `habitat.send.v1` takes the peer handle and a body and delivers a
+  `habitat-message` envelope; the message id is derived the same way.
+
+`reconcile()` polls every outstanding operation, verifies that the result
+names the pending invocation digest, and on a terminal status writes an
+`algal.habitat-link-reply.v1` envelope into the reply mailbox under the
+operation as the wake key. The caller's continuation is an ordinary durable
+process suspended on `mailbox.receive.v1`; it wakes once, with the peer's
+outputs and receipt digest, and never more than once per operation.
+
+Verification of the caller's processes replays retained effects. The link
+tools are never called during verification; the host tests replace them with
+throwing stubs and verify both the call and the continuation.
+
+### Target
+
+`LocalHabitatAcceptor` is the in-process peer profile. It `enroll`s grants
+signed by its own keys, `register`s an application entrypoint as a manifest
+with an interface plus host-bound process args (the target's own
+capabilities, which a caller can neither supply nor override), and admits
+invocations by pinning a durable process named `link-<operationId>` whose
+args are the interface inputs. The durable process is the acceptance record:
+after a restart the acceptor recognises the pinned process and answers
+`replayed: true`, and a reused operation id with a different invocation is a
+`RECEIPT_MISMATCH`. Terms above the grant are `CAPABILITY_DENIED`; terms
+inside the grant but above the entrypoint's budgets are `BUDGET_EXHAUSTED`.
+`getInvocation` projects the process head into a result and names the
+target's receipt, which verifies offline on the target with no link.
+
+`sendMessage` verifies the grant against the envelope, then delivers it into
+the recipient mailbox with the message id as the idempotency key. Acceptance
+means the message is durably in the mailbox; reading it is a separate
+transition the recipient owns.
+
+### Delivery states
+
+- `submitted`: the caller's ledger has the operation, but no acceptance was
+  retained. A journaled process that died here is `uncertain`; the kernel
+  refuses to re-run the write, and `reconcile()` asks the target about the
+  same operation id instead of resending.
+- `accepted`: the target retained the invocation and pinned a process.
+- terminal (`complete`, `failed`, `cancelled`, `uncertain`): the reply
+  envelope is delivered once and the operation leaves the ledger.
+
+`src/habitat-link-host.test.ts` runs two habitats in one process through
+this profile: invoke, suspend, deliver, resume, replay under a lost
+acknowledgement, operation-id reuse, every authority gate, message
+acceptance before read, and restart from durable state on both ends.
 
 ## Non-goals
 
