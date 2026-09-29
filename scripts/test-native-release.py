@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import shutil
 import subprocess
 import tempfile
 import tarfile
@@ -31,7 +32,8 @@ def call(argv, success=True, **kwargs):
 def check(binary, commit, rustc_version):
     call([sys.executable, str(ROOT / "scripts/test-release-workflow.py")])
     binary = binary.resolve(strict=True)
-    target = {"Darwin": "aarch64-apple-darwin", "Linux": "x86_64-unknown-linux-gnu"}[platform.system()]
+    target = {("Darwin", "arm64"): "aarch64-apple-darwin", ("Linux", "x86_64"): "x86_64-unknown-linux-gnu",
+              ("Linux", "aarch64"): "aarch64-unknown-linux-gnu"}[(platform.system(), platform.machine())]
     with tempfile.TemporaryDirectory(prefix="algal-release-test-") as temporary:
         directory = Path(temporary)
         archives = directory / "archives"
@@ -69,6 +71,26 @@ def check(binary, commit, rustc_version):
               "--tag", f"v{version}-test", "--commit", commit, "--rustc-version", rustc_version, "--out", str(archives), "--allow-dirty"])
         archive = next(archives.glob("*.tar.gz"))
         checksum = archive.with_suffix(".gz.sha256")
+        # The hosted installer (algal.computer/install.sh) needs no checkout or
+        # Python: it verifies the same archive from a download base and keeps
+        # the same hash-keyed release record.
+        hosted_prefix = directory / "hosted"
+        hosted = ["sh", str(ROOT / "site/install.sh")]
+        hosted_environment = {**os.environ, "ALGAL_VERSION": f"v{version}-test",
+                              "ALGAL_DOWNLOAD_BASE": archives.resolve().as_uri(), "ALGAL_INSTALL_PREFIX": str(hosted_prefix)}
+        call(hosted, env=hosted_environment)
+        hosted_binary = hosted_prefix / "bin/algal"
+        assert hashlib.sha256(hosted_binary.read_bytes()).hexdigest() == hashlib.sha256(binary.read_bytes()).hexdigest()
+        hosted_release = json.loads(call([str(hosted_binary), "doctor"]).stdout)["build"]["release"]
+        assert hosted_release["status"] == "matched" and hosted_release["metadata"]["tag"] == f"v{version}-test"
+        call(hosted, env=hosted_environment)  # rerunning upgrades in place
+        tampered = directory / "hosted-tampered"
+        shutil.copytree(archives, tampered)
+        tampered_archive = tampered / archive.name
+        tampered_archive.write_bytes(tampered_archive.read_bytes() + b"tampered")
+        call(hosted, env={**hosted_environment, "ALGAL_DOWNLOAD_BASE": tampered.resolve().as_uri()}, success=False)
+        assert hashlib.sha256(hosted_binary.read_bytes()).hexdigest() == hashlib.sha256(binary.read_bytes()).hexdigest()
+        call(hosted, env={**hosted_environment, "ALGAL_VERSION": "not-a-tag"}, success=False)
         prefix = directory / "installed"
         install = ["sh", str(ROOT / "scripts/install-native.sh"), str(prefix), "--archive", str(archive), "--checksum", str(checksum)]
         call(install)
@@ -182,7 +204,7 @@ def check(binary, commit, rustc_version):
         assert (directory / "custom-target/release/algal").is_file()
         assert (directory / "source-installed/bin/algal").is_file()
         assert not list((prefix / "bin").glob(".algal-install.*"))
-    print(json.dumps({"ok": True, "checks": ["release-source-admission", "embedded-source-input-binding", "unchanged-semver", "package-extracted-smoke", "verified-install", "retained-hash-bound-release-identity", "conflicting-release-identity-refusal", "metadata-symlink-refusal", "untrusted-sidecar-refusal", "overwrite-refusal", "explicit-force", "tampered-checksum-refusal", "existing-binary-preserved", "relative-CARGO_TARGET_DIR", "staging-cleanup", "oversized-PAX-refusal", "bounded-gzip-expansion"]}))
+    print(json.dumps({"ok": True, "checks": ["release-source-admission", "embedded-source-input-binding", "unchanged-semver", "package-extracted-smoke", "hosted-install", "verified-install", "retained-hash-bound-release-identity", "conflicting-release-identity-refusal", "metadata-symlink-refusal", "untrusted-sidecar-refusal", "overwrite-refusal", "explicit-force", "tampered-checksum-refusal", "existing-binary-preserved", "relative-CARGO_TARGET_DIR", "staging-cleanup", "oversized-PAX-refusal", "bounded-gzip-expansion"]}))
 
 
 if __name__ == "__main__":

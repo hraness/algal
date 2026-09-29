@@ -71,6 +71,8 @@ jobs:
         include:
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
           - os: macos-14
             target: aarch64-apple-darwin
     runs-on: ${{ matrix.os }}
@@ -150,16 +152,16 @@ jobs:
           python3 - "$RELEASE_TAG" "$RELEASE_SHA" <<'PY'
           import glob,hashlib,json,pathlib,sys
           metadata=glob.glob("artifacts/*.release.json")
-          if len(metadata)!=2: raise SystemExit("Expected two qualified native packages")
+          if len(metadata)!=3: raise SystemExit("Expected three qualified native packages")
           targets=set()
           checksums=glob.glob("artifacts/*.sha256")
-          if len(checksums)!=2 or len(glob.glob("artifacts/*.tar.gz"))!=2: raise SystemExit("Expected two archive/checksum pairs")
+          if len(checksums)!=3 or len(glob.glob("artifacts/*.tar.gz"))!=3: raise SystemExit("Expected three archive/checksum pairs")
           for path in metadata:
               value=json.load(open(path))
               if value["tag"]!=sys.argv[1] or value["commit"]!=sys.argv[2] or value["sourceState"]!="clean": raise SystemExit("Artifact source identity mismatch")
               if pathlib.Path(value["archive"]).name!=value["archive"] or hashlib.sha256(pathlib.Path("artifacts",value["archive"]).read_bytes()).hexdigest()!=value["archiveSha256"]: raise SystemExit("Manifest archive digest mismatch")
               targets.add(value["target"])
-          if targets!={"x86_64-unknown-linux-gnu","aarch64-apple-darwin"}: raise SystemExit("Artifact target mismatch")
+          if targets!={"x86_64-unknown-linux-gnu","aarch64-unknown-linux-gnu","aarch64-apple-darwin"}: raise SystemExit("Artifact target mismatch")
           for path in checksums:
               expected,name=pathlib.Path(path).read_text().split()
               if pathlib.Path(name).name!=name or hashlib.sha256(pathlib.Path("artifacts",name).read_bytes()).hexdigest()!=expected: raise SystemExit("Artifact checksum mismatch")

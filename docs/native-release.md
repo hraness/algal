@@ -1,11 +1,12 @@
 # Native prerelease distribution
 
 The native process VM can run without Bun, Cargo, or a repository checkout.
-Binary packages are qualified on two targets:
+Binary packages are tested on three targets:
 
 | Archive target | Supported qualification environment |
 | --- | --- |
 | `x86_64-unknown-linux-gnu` | Ubuntu 24.04 x86_64, glibc 2.39 or newer |
+| `aarch64-unknown-linux-gnu` | Ubuntu 24.04 arm64, glibc 2.39 or newer (from the release after `v0.2.0-vm.10`) |
 | `aarch64-apple-darwin` | macOS 14 or newer on Apple silicon |
 
 These are prerelease targets. Other Linux architectures, older glibc systems,
@@ -13,7 +14,27 @@ Intel Macs, and Windows do not yet have equivalent package qualification.
 The Apple Foundation Models bridge is a separate optional build requiring
 compatible macOS/Xcode; it is not part of the portable CLI package.
 
-## Verify and install
+## Install with one command
+
+On a supported target, this downloads the current prerelease for your
+platform from GitHub Releases and installs `~/.local/bin/algal`:
+
+```sh
+curl -fsSL https://algal.computer/install.sh | sh
+```
+
+The script needs only `sh`, `curl`, `tar`, and `sha256sum` or `shasum`. It
+checks the archive against its `.sha256` file, accepts only the four files an
+archive holds, checks `bin/algal` against the `binarySha256` and target in the
+archive's `release.json`, and runs `algal --version` before it moves the
+executable into place. Rerunning it upgrades in place. It also keeps the release
+record at `~/.local/bin/.algal-releases/BINARY_SHA256.json`, so `algal doctor`
+reports `build.release.status: "matched"`. Set `ALGAL_VERSION=<tag>` to install
+one exact release, or `ALGAL_INSTALL_PREFIX` to install somewhere other than
+`~/.local`. The script's source is `site/install.sh`; the site fills in the
+default release tag from `site/published-release.json`.
+
+## Verify and install by hand
 
 Download the target's `.tar.gz` and matching `.tar.gz.sha256` from the same
 [GitHub release](https://github.com/hraness/algal/releases). The native workbench
