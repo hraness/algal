@@ -386,7 +386,17 @@ jobs:
           path: ${{ runner.temp }}
       - name: Restore the debug binary built by the native job
         run: mkdir -p target/debug && tar -C target/debug -xf "$RUNNER_TEMP/algal-debug.tar" && target/debug/algal --version
+      # Per-step TypeScript / native timing, to decide how to shorten this job.
       - run: bun scripts/application-parity.ts
+        env:
+          ALGAL_PARITY_TIMING: ${{ runner.temp }}/application-parity-timing.json
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: application-parity-timing
+          path: ${{ runner.temp }}/application-parity-timing.json
+          if-no-files-found: ignore
+          retention-days: 14
 
   demos:
     name: Native demos
