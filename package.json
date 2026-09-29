@@ -65,7 +65,10 @@
     "./graph": "./src/graph.ts",
     "./tools": "./src/tools.ts",
     "./tool-context": "./src/tool-context.ts",
-    "./habitat-link": "./src/habitat-link.ts"
+    "./habitat-link": "./src/habitat-link.ts",
+    "./habitat-link-authority": "./src/habitat-link-authority.ts",
+    "./habitat-link-host": "./src/habitat-link-host.ts",
+    "./habitat-link-socket": "./src/habitat-link-socket.ts"
   },
   "bin": {
     "algal": "./cli.ts"

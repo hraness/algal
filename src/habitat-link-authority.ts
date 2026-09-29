@@ -4,7 +4,7 @@
  * Habitat Link requests carry only a digest-sized grant reference. The grant
  * itself is an immutable, signed record that can be stored in a habitat CAS or
  * exchanged out of band. Verification is deliberately pure: callers provide
- * the current logical time and trusted issuer keys, so replay never depends on
+ * the current Unix time in milliseconds and trusted issuer keys, so replay never depends on
  * wall-clock state hidden inside a receipt.
  */
 import { createPublicKey, generateKeyPairSync, sign, verify, type KeyObject } from "node:crypto";
@@ -29,6 +29,7 @@ export const HABITAT_AUTHORITY_BOUNDS = Object.freeze({
   maxGrantBytes: 16_384,
   maxKeys: 64,
   maxPermissions: 4,
+  maxTimestamp: 8_640_000_000_000_000,
 });
 
 export type SignedHabitatDescriptor = {
@@ -48,8 +49,12 @@ export type HabitatGrant = {
   application?: string;
   entrypoint?: string;
   interface?: Digest;
+  /** Exact executable manifest authorized by this grant. */
+  manifest?: Digest;
   terms: { maxWork: number; maxAgentCalls: number; maxBytes: number; maxHops: number };
+  /** Inclusive Unix milliseconds since 1970-01-01T00:00:00Z. */
   notBefore: number;
+  /** Inclusive Unix milliseconds, at most the ECMAScript Date limit. */
   expires: number;
   nonce: string;
   publicKey: string;
@@ -131,7 +136,7 @@ export function parseSignedHabitatDescriptor(value: unknown): SignedHabitatDescr
 }
 
 export function parseHabitatGrant(value: unknown): HabitatGrant {
-  const v = obj(value, "habitat grant", ["contract", "issuer", "subject", "audience", "permissions", "application", "entrypoint", "interface", "terms", "notBefore", "expires", "nonce", "publicKey", "signature"]);
+  const v = obj(value, "habitat grant", ["contract", "issuer", "subject", "audience", "permissions", "application", "entrypoint", "interface", "manifest", "terms", "notBefore", "expires", "nonce", "publicKey", "signature"]);
   if (v.contract !== HABITAT_GRANT_CONTRACT) fail("invalid habitat grant contract");
   const subject = obj(v.subject, "grant.subject", ["habitat", "principal"]);
   const terms = obj(v.terms, "grant.terms", ["maxWork", "maxAgentCalls", "maxBytes", "maxHops"]);
@@ -150,9 +155,10 @@ export function parseHabitatGrant(value: unknown): HabitatGrant {
     ...(v.application === undefined ? {} : { application: safeId(v.application, "grant.application") }),
     ...(v.entrypoint === undefined ? {} : { entrypoint: safeId(v.entrypoint, "grant.entrypoint") }),
     ...(v.interface === undefined ? {} : { interface: asDigest(v.interface, "grant.interface") }),
+    ...(v.manifest === undefined ? {} : { manifest: asDigest(v.manifest, "grant.manifest") }),
     terms: { maxWork: int(terms.maxWork, "grant.terms.maxWork", 1, HABITAT_LINK_BOUNDS.maxWork), maxAgentCalls: int(terms.maxAgentCalls, "grant.terms.maxAgentCalls", 0, HABITAT_LINK_BOUNDS.maxAgentCalls), maxBytes: int(terms.maxBytes, "grant.terms.maxBytes", 1, HABITAT_LINK_BOUNDS.maxBytes), maxHops: int(terms.maxHops, "grant.terms.maxHops", 0, HABITAT_LINK_BOUNDS.maxHops) },
-    notBefore: int(v.notBefore, "grant.notBefore", 0, Number.MAX_SAFE_INTEGER),
-    expires: int(v.expires, "grant.expires", 0, Number.MAX_SAFE_INTEGER),
+    notBefore: int(v.notBefore, "grant.notBefore (Unix milliseconds)", 0, HABITAT_AUTHORITY_BOUNDS.maxTimestamp),
+    expires: int(v.expires, "grant.expires (Unix milliseconds)", 0, HABITAT_AUTHORITY_BOUNDS.maxTimestamp),
     nonce: asString(v.nonce, "grant.nonce", 128),
     publicKey: base64(v.publicKey, "grant.publicKey", HABITAT_AUTHORITY_BOUNDS.maxKeyBytes),
     signature: base64(v.signature, "grant.signature", HABITAT_AUTHORITY_BOUNDS.maxSignatureBytes),
@@ -196,7 +202,7 @@ export function verifyHabitatDescriptor(value: SignedHabitatDescriptor, trustedK
 export type HabitatGrantCheck = {
   /** Enrolled issuer keys; an unknown key fails even with a valid signature. */
   trustedKeys?: readonly string[];
-  /** Caller-supplied logical time; grants never read the wall clock. */
+  /** Caller-supplied Unix milliseconds; grants never read the wall clock. */
   now?: number;
   /** The verifying habitat. A grant addressed to another habitat is void here. */
   audience?: HabitatId;
@@ -213,7 +219,7 @@ export function verifyHabitatGrant(value: HabitatGrant, options: HabitatGrantChe
   const grant = parseHabitatGrant(value);
   if (options.trustedKeys !== undefined && !options.trustedKeys.includes(grant.publicKey)) return false;
   if (!verify(null, Buffer.from(canonicalize(unsignedGrant(grant))), publicKeyObject(grant.publicKey), Buffer.from(grant.signature, "base64"))) return false;
-  if (options.now !== undefined && (options.now < grant.notBefore || options.now > grant.expires)) return false;
+  if (options.now !== undefined && (!Number.isSafeInteger(options.now) || options.now < 0 || options.now > HABITAT_AUTHORITY_BOUNDS.maxTimestamp || options.now < grant.notBefore || options.now > grant.expires)) return false;
   if (options.audience !== undefined && grant.audience !== options.audience) return false;
   if (options.required !== undefined && !grant.permissions.includes(options.required)) return false;
   const digest = grantDigest(grant);
@@ -224,6 +230,7 @@ export function verifyHabitatGrant(value: HabitatGrant, options: HabitatGrantChe
     if (grant.application !== undefined && grant.application !== invocation.target.application) return false;
     if (grant.entrypoint !== undefined && grant.entrypoint !== invocation.target.entrypoint) return false;
     if (grant.interface !== undefined && grant.interface !== invocation.target.interface) return false;
+    if (grant.manifest !== undefined && grant.manifest !== invocation.target.manifest) return false;
     if (invocation.terms.maxWork > grant.terms.maxWork || invocation.terms.maxAgentCalls > grant.terms.maxAgentCalls || invocation.terms.maxBytes > grant.terms.maxBytes || invocation.terms.maxHops > grant.terms.maxHops) return false;
   }
   const message = options.message;

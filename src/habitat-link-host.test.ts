@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseOrganismManifest, type OrganismManifest } from "./contract";
+import { manifestToJson, parseOrganismManifest, type OrganismManifest } from "./contract";
 import { digestCanonical, type Digest } from "./digest";
 import { AlgalError } from "./errors";
 import type { HabitatAcceptance, HabitatId, HabitatInvocation, HabitatResult, HabitatMessage } from "./habitat-link";
@@ -39,6 +39,7 @@ function specialistManifest(): OrganismManifest {
     contract: "algal.organism.v1",
     key: "organism:specialist",
     name: "Specialist",
+    budgets: { maxWork: 1000, maxAgentCalls: 0 },
     interface: { inputs: { seed: { cell: "src", port: "seed" } }, outputs: { label: { cell: "wait", port: "message" }, seed: { cell: "src", port: "seed" } } },
     cells: [
       { id: "src", kind: "input", outputs: { seed: { type: "json" }, inbox: { type: "cap", capability: "mailbox-receive" } } },
@@ -172,6 +173,35 @@ function callArgs(p: Planner, s: Specialist, peer: string, seed: unknown = "oak"
 }
 
 describe("two habitats over Habitat Link", () => {
+  test("the process issuing invoke suspends and wakes with its result", async () => {
+    const now = () => 100;
+    const s = await specialist(now);
+    const p = await planner(s, s.acceptor, now);
+    const grant = s.grant(["invoke"]);
+    s.acceptor.enroll(grant);
+    const cap = p.service.admit({ capability: HABITAT_INVOKE, grant });
+    const combined = plannerCallManifest();
+    const source = combined.cells[0]!;
+    if (source.kind !== "input") throw new Error("expected input source");
+    source.outputs.inbox = { type: "cap", capability: "mailbox-receive" };
+    combined.cells.push({ id: "wait", kind: "tool", tool: "mailbox.receive.v1" });
+    combined.edges.push({ from: { cell: "src", port: "inbox" }, to: { cell: "wait", port: "mailbox" } });
+    const args = callArgs(p, s, cap.handle);
+    await p.supervisor.create("planner", parseOrganismManifest(manifestToJson(combined)), { src: { ...args.src, inbox: p.reply.receive } });
+    expect((await p.supervisor.tick("planner"))?.process.status).toBe("suspended");
+    const operation = p.service.pendingOperations()[0]!;
+    await s.supervisor.schedule();
+    await s.mailbox.send(s.inbox.send, "tree", externalWakeKey());
+    await s.supervisor.schedule();
+    expect(await p.service.reconcile()).toEqual({ polled: 1, settled: 1, pending: 0 });
+    const woke = await p.supervisor.schedule();
+    expect(woke.processes[0]!.process).toMatchObject({ name: "planner", status: "complete" });
+    const receipt = await p.supervisor.store.getReceipt(woke.processes[0]!.process.receipt!) as { cells: Record<string, { outputs?: Record<string, unknown> }> };
+    expect(parseHabitatLinkReply(receipt.cells.wait!.outputs!.message)).toMatchObject({ operationId: operation.operationId, result: { outputs: { label: "tree", seed: "oak" } } });
+    expect(await p.supervisor.verify("planner")).toMatchObject({ ok: true, generations: 2 });
+    expect(await p.service.reconcile()).toEqual({ polled: 0, settled: 0, pending: 0 });
+  });
+
   test("planner invokes, suspends on a reply mailbox, resumes with a verified result", async () => {
     const now = () => 100;
     const s = await specialist(now);
@@ -346,7 +376,7 @@ describe("two habitats over Habitat Link", () => {
     await expect(s.acceptor.invoke(request({ terms: { ...grant.terms, maxWork: grant.terms.maxWork + 1 } }))).rejects.toMatchObject({ code: "CAPABILITY_DENIED" });
     const wide = s.grant(["invoke"], { terms: { maxWork: 1_000_000, maxAgentCalls: 128, maxBytes: 4_096, maxHops: 1 }, nonce: "wide" });
     s.acceptor.enroll(wide);
-    await expect(s.acceptor.invoke(request({ grant: grantDigest(wide), terms: wide.terms }))).rejects.toMatchObject({ code: "BUDGET_EXHAUSTED" });
+    await expect(s.acceptor.invoke(request({ grant: grantDigest(wide), terms: { ...wide.terms, maxWork: 999 } }))).rejects.toMatchObject({ code: "BUDGET_EXHAUSTED" });
     // Undeclared and host-bound interface inputs are refused.
     await expect(s.acceptor.invoke(request({ args: { seed: "oak", extra: 1 } }))).rejects.toMatchObject({ code: "INPUT_MISSING" });
     // Expiry is logical time supplied by the host, on both sides.
@@ -419,6 +449,10 @@ describe("two habitats over Habitat Link", () => {
     const again = new HabitatLinkService({ habitat: PLANNER, mailboxes: p.mailbox, now, trustedKeys: [s.descriptor.publicKey] });
     again.restore(p.service.snapshot());
     again.connect(s.descriptor, restarted);
+    const retainedRequest: HabitatInvocation = { contract: "algal.habitat-invocation.v1", operationId: first.operationId, sender: { habitat: PLANNER, principal: "planner" }, target: { application: "specialist", entrypoint: "classify", ...s.target }, args: { seed: "oak" }, reply: { kind: "poll", reference: first.operationId }, terms: grant.terms, grant: grantDigest(grant) };
+    // A fresh index must bind every field, even when manifest and args match.
+    await expect(restarted.invoke({ ...retainedRequest, reply: { kind: "poll", reference: "changed" } })).rejects.toMatchObject({ code: "RECEIPT_MISMATCH" });
+    expect((await restarted.queryInvocation(first.operationId, grantDigest(grant), retainedRequest.sender)).status).toBe("accepted");
     const replayed = await again.invoke(input, key);
     expect(replayed).toEqual({ ...first, replayed: true });
     expect((await restarted.getInvocation(first.operationId)).status).toBe("accepted");
