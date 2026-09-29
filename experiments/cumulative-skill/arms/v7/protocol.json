@@ -1,0 +1,434 @@
+{
+  "contract": "algal.study-protocol.v2",
+  "study": "cumulative-skill-v7",
+  "status": "design-only-no-inference",
+  "executor": {
+    "baseUrl": "https://api.x.ai/v1",
+    "model": "grok-4.5",
+    "credentialEnv": "XAI_API_KEY"
+  },
+  "basis": {
+    "v6Protocol": "f8ddcf9dc0fb82e638c0a9405d2b0df289b09274",
+    "v6Finding": "cal-c reached its eight-generation limit after training feedback became correct while every selection batch still failed",
+    "change": "Add bounded development-score feedback, a predeclared round schedule, and a separate untouched selection split"
+  },
+  "unchanged": {
+    "family": "record-triage",
+    "scorerPassAt": 0.9,
+    "modelRoute": "same as v6",
+    "resourceCeilings": "same as v6",
+    "confirmatoryArms": [
+      "fixed",
+      "retained",
+      "optimizer",
+      "optimizer-raw"
+    ],
+    "claims": "supervised seed acquisition in one synthetic template family only"
+  },
+  "tasks": {
+    "acquisition": 8,
+    "unseen": 32,
+    "frozen": 8,
+    "seedSplits": {
+      "train": 24,
+      "development": 12,
+      "selection": 12
+    },
+    "frozenRecordsPerTask": 12,
+    "shape": "same as v6",
+    "freshLineages": true,
+    "v5AndV6AncestorsExcluded": true
+  },
+  "seed": {
+    "maxGenerations": 8,
+    "selection": "first-selection-pass",
+    "trainingFeedback": "exact-record training output beside expected training output",
+    "developmentFeedback": {
+      "visibility": "bounded-score-only",
+      "fields": [
+        "passed",
+        "total",
+        "generation",
+        "round"
+      ],
+      "labels": false,
+      "records": false,
+      "outputs": false,
+      "summaries": false,
+      "purpose": "tell the writer whether a distinct development batch improved without exposing selection answers"
+    },
+    "roundSchedule": [
+      "contrastive-examples",
+      "error-analysis",
+      "invariant-extraction",
+      "counterexample-search",
+      "minimal-rule-rewrite",
+      "fresh-synthesis",
+      "fresh-synthesis",
+      "fresh-synthesis"
+    ],
+    "writerReceives": [
+      "task specification",
+      "library program",
+      "24 labeled training records",
+      "prior training actual and expected output",
+      "development score history",
+      "generation number",
+      "predeclared round mode"
+    ],
+    "writerNeverReceives": [
+      "selection labels",
+      "selection records",
+      "selection outputs",
+      "selection scores",
+      "full selection reports",
+      "frozen tasks or labels",
+      "human-authored target convention"
+    ],
+    "duplicateRequestRule": "Every generation includes its fixed round number and mode; identical writer request digests are recorded as a protocol failure and are never silently retried",
+    "duplicateManifestRule": "A repeated manifest remains a charged observed attempt and cannot qualify unless it independently passes the untouched selection split"
+  },
+  "budgets": {
+    "seed": {
+      "work": 8000000,
+      "attempts": 64,
+      "runs": 64
+    },
+    "learning": {
+      "work": 40000000,
+      "attempts": 1024,
+      "runs": 512
+    },
+    "frozen": {
+      "work": 40000000,
+      "attempts": 1024,
+      "runs": 512
+    }
+  },
+  "calibration": {
+    "blocks": [
+      "cal-a",
+      "cal-b",
+      "cal-c",
+      "cal-d"
+    ],
+    "requiredSeeds": 4,
+    "headroomRule": "at least three fixed seeds pass no more than six of eight fresh frozen tasks",
+    "proceed": "all four seed searches qualify and headroomRule passes",
+    "failure": "collect and replay the negative calibration; do not start confirmatory blocks or tune this protocol"
+  },
+  "replication": {
+    "blocks": 9,
+    "groups": [
+      "a",
+      "b",
+      "c"
+    ],
+    "repetitionsPerGroup": 3,
+    "primary": "optimizer-versus-fixed",
+    "successRule": "optimizer strictly wins at least two of three blocks in every group and wins aggregate passes",
+    "requiredCoverage": [
+      "all four seeds",
+      "fixed arm",
+      "optimizer arm"
+    ],
+    "secondaryFailures": "report separately",
+    "frozenBeforeEvaluation": true,
+    "productionActivation": false
+  },
+  "costAccounting": {
+    "seedSharedPerBlock": true,
+    "failedAndRepeatedAttemptsIncluded": true,
+    "providerBilling": "not inferred from runtime work, calls, tokens, or receipt identity"
+  },
+  "freezeRule": "Before any provider call, commit this protocol, the v7 implementation, task snapshots, route, Bun version, and source hashes. After freeze, no prompt, split, threshold, seed, round schedule, or budget changes are allowed.",
+  "previousSeeds": [
+    57019,
+    99733,
+    271828,
+    314159,
+    644901,
+    739391,
+    20260927,
+    20261028,
+    20261029,
+    41000001,
+    41000002,
+    41000003,
+    41000004,
+    41000005,
+    41000006,
+    61000001,
+    61000002,
+    61000003,
+    61000004,
+    61000005,
+    61000006,
+    61000007,
+    61000008,
+    61000009,
+    61000010,
+    61000011,
+    61000012,
+    61000013,
+    61000014,
+    61000015,
+    61000016,
+    61000017,
+    61000018,
+    61000019,
+    61000020,
+    61000021,
+    61000022,
+    61000023,
+    61000024,
+    61000025,
+    61000026,
+    61000027,
+    61000028,
+    61000029,
+    61000030,
+    61000031,
+    61000032,
+    61000033,
+    61000034,
+    61000035,
+    61000036,
+    61000037,
+    61000038,
+    61000039,
+    61000040,
+    61000041,
+    61000042,
+    61000043,
+    61000044,
+    61000045,
+    61000046,
+    61000047,
+    61000048
+  ],
+  "blocks": [
+    {
+      "id": "cal-a",
+      "stage": "calibration",
+      "corpus": "a",
+      "repetition": 1,
+      "armOrder": [
+        "fixed"
+      ],
+      "seeds": {
+        "acquisition": 71000001,
+        "unseen": 71000002,
+        "shift": 71000003,
+        "ancestor": 71000004
+      }
+    },
+    {
+      "id": "cal-b",
+      "stage": "calibration",
+      "corpus": "b",
+      "repetition": 1,
+      "armOrder": [
+        "fixed"
+      ],
+      "seeds": {
+        "acquisition": 71000005,
+        "unseen": 71000006,
+        "shift": 71000007,
+        "ancestor": 71000008
+      }
+    },
+    {
+      "id": "cal-c",
+      "stage": "calibration",
+      "corpus": "c",
+      "repetition": 1,
+      "armOrder": [
+        "fixed"
+      ],
+      "seeds": {
+        "acquisition": 71000009,
+        "unseen": 71000010,
+        "shift": 71000011,
+        "ancestor": 71000012
+      }
+    },
+    {
+      "id": "cal-d",
+      "stage": "calibration",
+      "corpus": "d",
+      "repetition": 1,
+      "armOrder": [
+        "fixed"
+      ],
+      "seeds": {
+        "acquisition": 71000013,
+        "unseen": 71000014,
+        "shift": 71000015,
+        "ancestor": 71000016
+      }
+    },
+    {
+      "id": "a-r1",
+      "stage": "confirmatory",
+      "corpus": "a",
+      "repetition": 1,
+      "armOrder": [
+        "fixed",
+        "retained",
+        "optimizer",
+        "optimizer-raw"
+      ],
+      "seeds": {
+        "acquisition": 71000017,
+        "unseen": 71000018,
+        "shift": 71000019,
+        "ancestor": 71000020
+      }
+    },
+    {
+      "id": "a-r2",
+      "stage": "confirmatory",
+      "corpus": "a",
+      "repetition": 2,
+      "armOrder": [
+        "retained",
+        "optimizer",
+        "optimizer-raw",
+        "fixed"
+      ],
+      "seeds": {
+        "acquisition": 71000021,
+        "unseen": 71000022,
+        "shift": 71000023,
+        "ancestor": 71000024
+      }
+    },
+    {
+      "id": "a-r3",
+      "stage": "confirmatory",
+      "corpus": "a",
+      "repetition": 3,
+      "armOrder": [
+        "optimizer",
+        "optimizer-raw",
+        "fixed",
+        "retained"
+      ],
+      "seeds": {
+        "acquisition": 71000025,
+        "unseen": 71000026,
+        "shift": 71000027,
+        "ancestor": 71000028
+      }
+    },
+    {
+      "id": "b-r1",
+      "stage": "confirmatory",
+      "corpus": "b",
+      "repetition": 1,
+      "armOrder": [
+        "optimizer-raw",
+        "fixed",
+        "retained",
+        "optimizer"
+      ],
+      "seeds": {
+        "acquisition": 71000029,
+        "unseen": 71000030,
+        "shift": 71000031,
+        "ancestor": 71000032
+      }
+    },
+    {
+      "id": "b-r2",
+      "stage": "confirmatory",
+      "corpus": "b",
+      "repetition": 2,
+      "armOrder": [
+        "fixed",
+        "retained",
+        "optimizer",
+        "optimizer-raw"
+      ],
+      "seeds": {
+        "acquisition": 71000033,
+        "unseen": 71000034,
+        "shift": 71000035,
+        "ancestor": 71000036
+      }
+    },
+    {
+      "id": "b-r3",
+      "stage": "confirmatory",
+      "corpus": "b",
+      "repetition": 3,
+      "armOrder": [
+        "retained",
+        "optimizer",
+        "optimizer-raw",
+        "fixed"
+      ],
+      "seeds": {
+        "acquisition": 71000037,
+        "unseen": 71000038,
+        "shift": 71000039,
+        "ancestor": 71000040
+      }
+    },
+    {
+      "id": "c-r1",
+      "stage": "confirmatory",
+      "corpus": "c",
+      "repetition": 1,
+      "armOrder": [
+        "optimizer",
+        "optimizer-raw",
+        "fixed",
+        "retained"
+      ],
+      "seeds": {
+        "acquisition": 71000041,
+        "unseen": 71000042,
+        "shift": 71000043,
+        "ancestor": 71000044
+      }
+    },
+    {
+      "id": "c-r2",
+      "stage": "confirmatory",
+      "corpus": "c",
+      "repetition": 2,
+      "armOrder": [
+        "optimizer-raw",
+        "fixed",
+        "retained",
+        "optimizer"
+      ],
+      "seeds": {
+        "acquisition": 71000045,
+        "unseen": 71000046,
+        "shift": 71000047,
+        "ancestor": 71000048
+      }
+    },
+    {
+      "id": "c-r3",
+      "stage": "confirmatory",
+      "corpus": "c",
+      "repetition": 3,
+      "armOrder": [
+        "fixed",
+        "retained",
+        "optimizer",
+        "optimizer-raw"
+      ],
+      "seeds": {
+        "acquisition": 71000049,
+        "unseen": 71000050,
+        "shift": 71000051,
+        "ancestor": 71000052
+      }
+    }
+  ]
+}
