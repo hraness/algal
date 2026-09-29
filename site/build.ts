@@ -35,6 +35,7 @@ import { offlineWorkerSource } from "./grow-offline";
 import { docsNavigation } from "./docs-navigation";
 import { breadcrumbJsonLd } from "@hraness/web-discovery";
 import { BLOG_PATH, BLOG_DESCRIPTION, BLOG_TITLE, blogAtomFeed, blogIndexJsonLd, blogLlmsList, blogSitemapEntries, loadBlogPosts, postJsonLd, renderBlogIndex, renderPostArticle } from "./blog";
+import { postSocialImage, postSocialPage, renderSocialImage, SITE_SOCIAL_IMAGE } from "./social-image";
 
 const SITE = dirname(fileURLToPath(import.meta.url));
 const ROOT = dirname(SITE);
@@ -622,11 +623,17 @@ if (await recordedProposal.exists()) {
 const modelEvidencePath = join(ROOT, "examples/malleable-site/model-evidence.json");
 if (await Bun.file(modelEvidencePath).exists()) await cp(modelEvidencePath, join(DIST, "living/model-evidence.json"));
 await cp(join(ROOT, "examples/malleable-site/model-cost-evidence.json"), join(DIST, "workbench/model-cost-evidence.json"));
-for (const f of ["robots.txt", "og.png", "favicon.svg", "favicon-48.png", "apple-touch-icon.png", "algal-mark.svg"]) {
+for (const f of ["robots.txt", "favicon.svg", "favicon-48.png", "apple-touch-icon.png", "algal-mark.svg"]) {
   await cp(join(SITE, f), join(DIST, f));
 }
 // Blog posts joined to their review records; see site/blog.ts.
 const blogPosts = await loadBlogPosts(join(SITE, "blog"));
+// Share images come only from the site declaration in site/social-image.ts.
+await writeFile(join(DIST, SITE_SOCIAL_IMAGE.path), await renderSocialImage());
+await mkdir(join(DIST, "og/blog"), { recursive: true });
+for (const post of blogPosts) {
+  if (post.emit) await writeFile(join(DIST, postSocialImage(post).path), await renderSocialImage(postSocialPage(post)));
+}
 // llms.txt leads with the same description as the home page metadata.
 const llms = (await readFile(join(SITE, "llms.txt"), "utf8")).replaceAll("{{SITE_DESCRIPTION}}", SITE_DESCRIPTION)
   .replaceAll("{{BLOG_POSTS}}", blogLlmsList(blogPosts));
@@ -946,6 +953,7 @@ for (const post of blogPosts) {
     title: /\bALGAL\b/.test(post.title) ? post.title : `${post.title} · ALGAL`,
     description: post.dek,
     ogTitle: post.title,
+    socialImage: postSocialImage(post),
     article: { published: post.published, ...(post.updated ? { modified: post.updated } : {}) },
     ...(post.indexable ? {} : { noindex: true }),
     jsonLd: [postJsonLd(post), sectionBreadcrumb({ name: "Blog", path: BLOG_PATH }, post.title, post.path)],
