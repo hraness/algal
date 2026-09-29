@@ -259,7 +259,7 @@ class PublishStep(unittest.TestCase):
         self.assertEqual(release["name"], f"ALGAL {TAG}")
         self.assertTrue(release["body"].startswith("Mailboxes now reject oversized messages"))
         self.assertTrue(release["body"].endswith(" -->"))
-        self.assertEqual(len(release["assets"]), 6)
+        self.assertEqual(len(release["assets"]), 3 * len(notes.TARGETS))
         self.assertIn("create", [call[1] for call in calls if call[0] == "release"])
 
     def test_missing_or_unreleased_section_fails_before_any_release_call(self):

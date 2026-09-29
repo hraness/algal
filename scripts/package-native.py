@@ -20,6 +20,7 @@ sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parent.parent
 TARGETS = {"x86_64-unknown-linux-gnu": ("linux", "x86_64", "Ubuntu 24.04 / glibc 2.39 or newer"),
+           "aarch64-unknown-linux-gnu": ("linux", "aarch64", "Ubuntu 24.04 arm64 / glibc 2.39 or newer"),
            "aarch64-apple-darwin": ("darwin", "arm64", "macOS 14 or newer; unsigned/not notarized")}
 BUILD_FIELDS = {"contract", "version", "sourceCommit", "sourceState", "sourceInputsSha256",
                 "target", "rustc", "exactTagsAtBuild"}

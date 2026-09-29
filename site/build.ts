@@ -25,6 +25,7 @@ import { renderStatusPageHtml } from "@hraness/design-kit";
 import { highlightCode } from "@hraness/design-kit/syntax-highlighting";
 import { pageDocument, type SitePageMeta } from "./chrome";
 import { ADOPTION_BOUNDARY, CIVILIZATION_EXAMPLE, INSTALL_TERMINAL, SITE_DESCRIPTION, SITE_TAGLINE } from "./copy";
+import { renderInstallScript } from "./install-script";
 import { renderMarkdown, type LinkRewriter, type RenderedDoc } from "./markdown";
 import { highlightAlgal } from "./highlight";
 import { buildSurfaceFixture } from "../examples/malleable-site/host";
@@ -639,6 +640,9 @@ const llms = (await readFile(join(SITE, "llms.txt"), "utf8")).replaceAll("{{SITE
   .replaceAll("{{BLOG_POSTS}}", blogLlmsList(blogPosts));
 if (/\{\{[A-Z_]+\}\}/.test(llms)) throw new Error("Unresolved site build placeholder in llms.txt");
 await writeFile(join(DIST, "llms.txt"), llms);
+// `curl -fsSL https://algal.computer/install.sh | sh` installs the release
+// named by site/published-release.json.
+await writeFile(join(DIST, "install.sh"), await renderInstallScript(SITE));
 // Shared presentation and iconography are build-time dependencies only. The
 // shipped site has self-hosted fonts/assets; the CLI gains no browser runtime.
 const styles = await buildSiteStyles(DIST);
