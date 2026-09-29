@@ -498,14 +498,16 @@ test results, and all 2,441,155 recorded work units. Its fresh task draws do
 not provide a paired comparison with v5. The v5 results above remain the
 record of the original study.
 
-### v7 · protocol design after the calibration stop
+### v7 · implemented protocol after the calibration stop
 
-V7 is a separate design for the observed v6 seed-search failure. It adds a
+V7 is a separate protocol for the observed v6 seed-search failure. It adds a
 bounded development-score signal and eight predeclared revision modes while
 keeping selection answers outside writer requests. Four fresh calibration
-blocks must qualify before any confirmatory block can run. The [v7 protocol
-design](../experiments/cumulative-skill/arms/v7/README.md) records the plan;
-no v7 inference or provider call has occurred.
+blocks must qualify before any confirmatory block can run. The [v7
+protocol](cumulative-skill-v7-protocol.md) records the design and the
+[v7 driver](../experiments/cumulative-skill/arms/v7/README.md) implements
+it with offline verification; no v7 study has been frozen and no v7
+inference or provider call has occurred.
 
 ## Status and limits
 

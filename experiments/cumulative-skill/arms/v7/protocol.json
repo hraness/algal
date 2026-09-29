@@ -1,12 +1,13 @@
 {
   "contract": "algal.study-protocol.v2",
   "study": "cumulative-skill-v7",
-  "status": "design-only-no-inference",
+  "status": "implemented-no-inference",
   "executor": {
     "baseUrl": "https://api.x.ai/v1",
     "model": "grok-4.5",
     "credentialEnv": "XAI_API_KEY"
   },
+  "concurrency": 3,
   "basis": {
     "v6Protocol": "f8ddcf9dc0fb82e638c0a9405d2b0df289b09274",
     "v6Finding": "cal-c reached its eight-generation limit after training feedback became correct while every selection batch still failed",
@@ -29,19 +30,75 @@
     "acquisition": 8,
     "unseen": 32,
     "frozen": 8,
+    "splits": {
+      "train": 24,
+      "validation": 12,
+      "holdout": 12
+    },
     "seedSplits": {
       "train": 24,
-      "development": 12,
-      "selection": 12
+      "validation": 12,
+      "holdout": 12,
+      "development": 12
+    },
+    "seedRoles": {
+      "train": "writer sees records and labels",
+      "development": "writer sees a bounded score only",
+      "validation": "selection gate; never enters a writer request",
+      "holdout": "execution batch; never enters a writer request"
     },
     "frozenRecordsPerTask": 12,
-    "shape": "same as v6",
+    "shape": {
+      "classes": [
+        10,
+        14
+      ],
+      "optionalFields": [
+        3,
+        4
+      ],
+      "rules": [
+        6,
+        10
+      ],
+      "decisionLabels": [
+        3,
+        5
+      ],
+      "queueLabels": [
+        3,
+        5
+      ],
+      "summaries": [
+        2,
+        4
+      ],
+      "grader": "mixed",
+      "scorerPassAt": 0.9,
+      "difficulty": {
+        "hintLeak": 0.5,
+        "noiseSentences": [
+          0,
+          2
+        ],
+        "confusable": 0.7,
+        "subjectMislead": 0.25
+      }
+    },
+    "evolve": {
+      "fromPhase": "acquisition",
+      "addFields": 3,
+      "reviseClasses": 2,
+      "jitterRules": 4
+    },
     "freshLineages": true,
     "v5AndV6AncestorsExcluded": true
   },
   "seed": {
     "maxGenerations": 8,
     "selection": "first-selection-pass",
+    "selectionSplit": "validation",
+    "normalizeEmitted": true,
     "trainingFeedback": "exact-record training output beside expected training output",
     "developmentFeedback": {
       "visibility": "bounded-score-only",
