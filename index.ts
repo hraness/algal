@@ -25,6 +25,75 @@ export type { SourceDependencyApplication, SourceDependencyApplicationActivation
 export { createSourceLock, parseSourceLock, parseSourceLockCases, renderSourceLockVerification, sourceLockFixtureKeys, sourceLockToJson, verifySourceLock, SOURCE_LOCK_BOUNDS, SOURCE_LOCK_CONTRACT, SOURCE_LOCK_VERIFICATION_CONTRACT } from "./src/source-lock";
 export type { SourceLock, SourceLockCase, SourceLockDrift, SourceLockDriftKind, SourceLockEvaluation, SourceLockEvaluationCase, SourceLockFixture, SourceLockOptions, SourceLockUnit, SourceLockVerification, SourceLockVerifyOptions } from "./src/source-lock";
 export type { SourceLockVendored } from "./src/source-lock";
+
+export {
+  HABITAT_LINK_BOUNDS,
+  HABITAT_LINK_CONTRACT,
+  HabitatLinkClient,
+  habitatInvocationDigest,
+  parseHabitatAcceptance,
+  parseHabitatDescriptor,
+  parseHabitatInvocation,
+  parseHabitatMessage,
+  parseHabitatResult,
+} from "./src/habitat-link";
+export type {
+  HabitatAcceptance,
+  HabitatDescriptor,
+  HabitatId,
+  HabitatInvocation,
+  HabitatLinkClientOptions,
+  HabitatLinkFetch,
+  HabitatLinkGrant,
+  HabitatMessage,
+  HabitatResult,
+  HabitatTransport,
+  LinkStatus,
+  OperationId,
+} from "./src/habitat-link";
+export {
+  HABITAT_AUTHORITY_BOUNDS,
+  HABITAT_DESCRIPTOR_SIGNED_CONTRACT,
+  HABITAT_GRANT_CONTRACT,
+  descriptorDigest,
+  generateHabitatAuthorityKeyPair,
+  grantDigest,
+  parseHabitatGrant,
+  parseSignedHabitatDescriptor,
+  signHabitatDescriptor,
+  signHabitatGrant,
+  verifyHabitatDescriptor,
+  verifyHabitatGrant,
+} from "./src/habitat-link-authority";
+export type {
+  HabitatAuthorityKeyset,
+  HabitatGrant,
+  HabitatGrantCheck,
+  HabitatGrantPermission,
+  SignedHabitatDescriptor,
+} from "./src/habitat-link-authority";
+export {
+  HABITAT_INVOKE,
+  HABITAT_INVOKE_TOOL,
+  HABITAT_LINK_CAPABILITY_CONTRACT,
+  HABITAT_LINK_HOST_BOUNDS,
+  HABITAT_LINK_REPLY_CONTRACT,
+  HABITAT_MESSAGE,
+  HABITAT_SEND_TOOL,
+  HabitatLinkService,
+  LocalHabitatAcceptor,
+  messageIdempotencyKey,
+  parseHabitatLinkCapabilityRecord,
+  parseHabitatLinkReply,
+} from "./src/habitat-link-host";
+export type {
+  HabitatLinkCapabilityRecord,
+  HabitatLinkPeer,
+  HabitatLinkPending,
+  HabitatLinkReply,
+  HabitatLinkServiceOptions,
+  LocalHabitatAcceptorOptions,
+} from "./src/habitat-link-host";
 export { checkVendoredFiles, loadVendoredSources, parseVendorRecord, parseVendorRegistries, readVendorRegistries, registryOrigins, vendorRecordToJson, vendorRegistriesToJson, vendorRegistryOrigin, VENDOR_BOUNDS, VENDOR_CONTRACT, VENDOR_RECORD_FILE, VENDOR_REGISTRIES_CONTRACT, VENDOR_REGISTRIES_FILE, VENDOR_REGISTRY_BOUNDS } from "./src/vendor-record";
 export type { VendorDifference, VendoredSources, VendorFile, VendorRecord, VendorRegistries } from "./src/vendor-record";
 export { vendorCatalogEntry, openVendorCatalog, VENDOR_FETCH_BOUNDS } from "./src/vendor";

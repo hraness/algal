@@ -64,7 +64,8 @@
     "./improve": "./src/improve.ts",
     "./graph": "./src/graph.ts",
     "./tools": "./src/tools.ts",
-    "./tool-context": "./src/tool-context.ts"
+    "./tool-context": "./src/tool-context.ts",
+    "./habitat-link": "./src/habitat-link.ts"
   },
   "bin": {
     "algal": "./cli.ts"
