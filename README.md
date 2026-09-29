@@ -1139,7 +1139,8 @@ Both CLIs support Gateway and OpenAI-compatible endpoints. Hosted endpoints may
 use `--credential-env MY_PROVIDER_KEY`; local endpoints need no credential by
 default. The library exports `openAICompatibleExecutor({ baseUrl, model })`.
 See [executors](docs/executors.md) for structured-output modes, provider bounds,
-and the native Apple adapter. xcb remains the separate delegated coding path.
+and the native Apple adapter. Excalibur (xcb) remains the separate delegated
+coding path.
 
 ### External tools
 
@@ -1261,7 +1262,7 @@ pages](https://algal.computer/compare/) say when each tool is the better choice.
 ALGAL is a Hraness project. It shares conventions with Oh
 (content-addressed canonical records), `platonik` (bounded organisms and
 symbolization), Valhalla (authority boundaries and witness execution), and
-xcb (execution custody and model routing), but it is
+Excalibur (xcb), which owns execution custody and model routing, but it is
 standalone: the store and executor seams are where those foundations attach.
 
 ## License
