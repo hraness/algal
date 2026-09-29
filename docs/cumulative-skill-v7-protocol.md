@@ -87,6 +87,8 @@ Offline verification recomputes every request, score, flag, and account from
 the store. In the task contract the selection split is the `validation`
 batch and the execution batch is `holdout`; neither enters a writer request.
 
-No study directory has been initialized and no provider call has occurred.
-A fresh study requires a new source freeze on the committed implementation
-before reviewed provider access is considered.
+The study was frozen from source commit `741f19ec` and calibrated on
+September 29, 2026. The gate failed: two of four seed searches did not
+qualify, and only two blocks could show headroom. The [v7
+report](cumulative-skill-v7.md) records the outcome; the preregistered
+`protocol.json` is unchanged, including its pre-run `status` field.

@@ -498,16 +498,21 @@ test results, and all 2,441,155 recorded work units. Its fresh task draws do
 not provide a paired comparison with v5. The v5 results above remain the
 record of the original study.
 
-### v7 · implemented protocol after the calibration stop
+### v7 · calibration with bounded development feedback
 
 V7 is a separate protocol for the observed v6 seed-search failure. It adds a
 bounded development-score signal and eight predeclared revision modes while
 keeping selection answers outside writer requests. Four fresh calibration
-blocks must qualify before any confirmatory block can run. The [v7
-protocol](cumulative-skill-v7-protocol.md) records the design and the
-[v7 driver](../experiments/cumulative-skill/arms/v7/README.md) implements
-it with offline verification; no v7 study has been frozen and no v7
-inference or provider call has occurred.
+blocks had to qualify before any confirmatory block could run. Two of the
+four produced passing seeds; the other two exhausted eight attempts, and
+every scored development batch failed, so the new signal was constant at
+zero. The required calibration gate stopped the study, so none of the nine
+planned comparison blocks ran.
+
+The [v7 report](cumulative-skill-v7.md) preserves that outcome, the
+fixed-seed test results, and all 3,814,053 recorded work units. The [v7
+protocol](cumulative-skill-v7-protocol.md) records the design. Its fresh
+task draws do not provide a paired comparison with v6.
 
 ## Status and limits
 
