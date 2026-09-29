@@ -63,6 +63,13 @@
   recorded scope, rights review, validation, and history-preservation requirements.
 - Use the supported `hf` CLI from a reviewed stage after rights review and normal
   repository checks. Record the remote commit and verify downloaded file hashes.
+- Publishing is part of every study's delivery, not a separate request. When a
+  study closes with a public summary JSON in `docs/`, the same change adds its
+  stage pair, manifest entry, card row, and runbook rights record; after the
+  change integrates, stage from the clean merged checkout, upload, verify the
+  remote hashes, and record the Hub commit before closing out. Ben confirmed
+  this standing rule on 2026-09-29: do not ask whether to publish a closed
+  study. Ask only for a new destination, private data, or historical deletion.
 
 # Guidelines
 
