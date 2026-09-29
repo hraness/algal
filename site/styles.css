@@ -1,3 +1,4 @@
+@import "./vendor/hraness-site-shell/site-shell.css";
 @import "@hraness/design-kit/styles.css";
 @import "@hraness/design-kit/syntax-highlighting.css";
 @import "@hraness/design-kit/paper-theme.css";
@@ -36,7 +37,7 @@ h1, h2, .example-copy h3 { font-family: var(--serif); }
 h1 { font-size: clamp(3.25rem, 6.8vw, 6.15rem); line-height: 1.02; letter-spacing: -.055em; }
 h1 em, h2 em { color: var(--green); font-weight: 400; }
 h2 { font-size: clamp(2.4rem, 4vw, 3.6rem); line-height: 1.11; letter-spacing: -.045em; }
-.site-header, main, footer { max-width: 1240px; margin: 0 auto; padding-left: 3rem; padding-right: 3rem; }
+.site-header, main, footer { width: 100%; max-width: 1240px; margin: 0 auto; padding-left: 3rem; padding-right: 3rem; }
 .site-header { display: flex; align-items: center; justify-content: space-between; padding-top: 2rem; padding-bottom: 2rem; border-bottom: 1px solid var(--line); }
 .wordmark { display: flex; align-items: center; gap: .7rem; font: 550 1.12rem/1 var(--sans); letter-spacing: .11em; text-decoration: none; color: var(--ink); }
 .site-header .brand-mark { --hraness-foil-size: 28px; }
