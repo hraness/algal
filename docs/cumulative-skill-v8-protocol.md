@@ -7,7 +7,7 @@ score history was a list of zeros, and the searches on `cal-b` and `cal-c`
 reached generation eight without a selection pass. A pass indicator at a
 threshold no candidate reached carries no information about which revisions
 moved closer to it. V8 is a new protocol for that failure. It does not alter
-V7 source, task data, results, or claims. No V8 provider call has occurred.
+V7 source, task data, results, or claims.
 
 ## Design change
 
@@ -73,3 +73,13 @@ the agreement program and rejects a score that differs by a hundredth. The
 protocol parser pins the feedback fields, the V7 basis commit, and the line
 rule. Task and ancestor seeds `81000001`–`81000052` are checked against the
 115 seeds used by V5, V6, and V7.
+
+The study was frozen from source commit `dc64c02f` and calibrated on
+September 29, 2026. The gate failed: one seed search exhausted eight
+generations, two fixed seeds showed headroom, and the fourth search was
+interrupted by the launching session during generation seven and not
+retried. The graded score varied (0.33 to 0.80) but no scored candidate
+reached the threshold. Under the line rule the development-feedback seed
+line ends. The [v8 report](cumulative-skill-v8.md) records the outcome; the
+preregistered `protocol.json` is unchanged, including its pre-run `status`
+field.
