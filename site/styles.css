@@ -1,4 +1,5 @@
 @import "@hraness/design-kit/styles.css";
+@import "@hraness/design-kit/syntax-highlighting.css";
 @import "@hraness/design-kit/paper-theme.css";
 @import "@hraness/design-kit/palette-system.css";
 @import "@hraness/design-kit/product-marketing-preset.css";
@@ -754,3 +755,11 @@ nav a[aria-current="page"] { color: var(--ink); }
    the unlayered element rules above would restyle its title, its next-links
    heading, and its nav. Hand those elements back to the shared layer. */
 .hraness-status-page :is(h1, h2, nav, nav a) { all: revert-layer; }
+
+/* Shared terminal frames keep code readable in both the page and accent section. */
+.algal-terminal-code { margin: 0; padding: 1rem 1.2rem; overflow-x: auto; }
+.algal-terminal-code code { font-size: .8rem; line-height: 1.8; }
+.evolution-section .algal-terminal-code code { background: transparent; color: var(--hraness-marketing-ink); }
+
+.hs-output { margin: 0; padding: 1rem 1.2rem; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--foreground); }
+.hs-output code { font-size: .8rem; line-height: 1.65; }
