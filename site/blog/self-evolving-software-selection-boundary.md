@@ -3,6 +3,9 @@ title: Self-evolving software needs a selection boundary
 order: 1
 date: 2026-09-22
 description: Darwin-Gödel Machine, AlphaEvolve, and Voyager share one loop: propose, evaluate, select. ALGAL makes the select step a checked contract.
+eyebrow: Essay
+cardTitle: "Self-evolving code needs a selection boundary"
+cardDescription: "Darwin-Gödel Machine, AlphaEvolve, and Voyager share one loop: propose, evaluate, select."
 ---
 
 # Self-evolving software needs a selection boundary
