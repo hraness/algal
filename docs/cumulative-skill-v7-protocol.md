@@ -71,8 +71,22 @@ benefit. The calibration gate is a feasibility rule for this sample, and
 failure would remain a negative result rather than a reason to revise the
 protocol during the run.
 
-The implementation phase must add a versioned task split contract, a bounded
-development-score receipt, a writer-request identity that includes the fixed
-round mode, duplicate-request accounting, offline verification, and a new
-source freeze. Only after those checks pass can a fresh study directory be
-initialized and reviewed provider access considered.
+## Implementation
+
+The implementation adds an optional `development` split to the experiment
+task and family contracts, and the seed task carries it as a fourth batch
+after the three v6 splits (those three keep their v6 bytes). The v7 seed
+driver keeps the development batch out of the selection foundry, executes a
+failed candidate on it once under the remaining seed budget, and stores an
+`algal.study-development-score.v1` record that carries the pass count, the
+generation, the round mode, and the charged account. Each attempt records the
+writer request identity (the executed writer program and its exact arguments,
+which include the generation, round mode, and score history), a duplicate
+flag that ends the search as a protocol failure, and a repeated-manifest flag.
+Offline verification recomputes every request, score, flag, and account from
+the store. In the task contract the selection split is the `validation`
+batch and the execution batch is `holdout`; neither enters a writer request.
+
+No study directory has been initialized and no provider call has occurred.
+A fresh study requires a new source freeze on the committed implementation
+before reviewed provider access is considered.

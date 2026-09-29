@@ -244,6 +244,25 @@ describe("parseExperimentTaskSpec", () => {
     expectParseError(noHoldout, "include a holdout batch");
   });
 
+  test("accepts one optional development batch after the required splits", () => {
+    const spec = minimalSpec();
+    const holdout = (spec.inputs as JsonObject[])[2]!;
+    const development = JSON.parse(JSON.stringify({ ...holdout, id: "development", split: "development" })) as JsonObject;
+    for (const record of development.records as JsonObject[]) record["id"] = String(record["id"]).replace("holdout", "development");
+    (spec.inputs as JsonObject[]).push(development);
+    const task = parse(reseal(spec, (batch) => [batch.split === "validation" ? "billing-inquiry" : "bug-report"]));
+    expect(task.inputs.map((batch) => batch.split)).toEqual(["train", "validation", "holdout", "development"]);
+    expect(task.inputs[3]!.records[0]!["id"]).toBe("development-01");
+
+    const twice = minimalSpec();
+    (twice.inputs as JsonObject[]).push(development, { ...development, id: "development-again" });
+    expectParseError(reseal(twice, () => ["bug-report"]), 'repeats "development"');
+
+    const unknown = minimalSpec();
+    (unknown.inputs as JsonObject[]).push({ ...development, split: "probe" });
+    expectParseError(reseal(unknown, () => ["bug-report"]), "split must be one of train, validation, holdout, development");
+  });
+
   test("rejects tampered digests", () => {
     const spec = minimalSpec();
     spec["digest"] = "sha256:" + "0".repeat(64);
