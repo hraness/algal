@@ -115,7 +115,7 @@ ${meta.page === "workbench" ? '<link rel="stylesheet" href="/living.css">\n<link
 
 ${main}
 
-<footer class="site-footer"><a class="wordmark" href="/" aria-label="ALGAL home"><img src="/favicon.svg" width="24" height="24" alt="">algal</a><p>${SITE_TAGLINE}</p><div><a href="${REPO}">Source</a><a href="/docs/">Documentation</a><a href="/living/">Living software</a><a href="/blog/">Blog</a><a href="/compare/">Compare</a><a href="/docs/spec/organism/">Spec</a><a href="/llms.txt">llms.txt</a><a href="https://hraness.com">Made by Hraness</a><span>MIT · Preview · {{BUILD_STATS}}</span></div></footer>
+<footer class="site-footer"><a class="wordmark hraness-foil-text" data-foil="" href="/" aria-label="ALGAL home"><span class="hraness-foil-mark" data-foil="" style="--hraness-foil-mask: url('/algal-mark.svg'); --hraness-foil-size: 24px" aria-hidden="true"><img class="hraness-foil-mark__image" src="/algal-mark.svg" width="24" height="24" alt=""><span class="hraness-foil-mark__paint" aria-hidden="true"></span></span>algal</a><p>${SITE_TAGLINE}</p><div><a href="${REPO}">Source</a><a href="/docs/">Documentation</a><a href="/living/">Living software</a><a href="/blog/">Blog</a><a href="/compare/">Compare</a><a href="/docs/spec/organism/">Spec</a><a href="/llms.txt">llms.txt</a><a href="https://hraness.com">Made by Hraness</a><span>MIT · Preview · {{BUILD_STATS}}</span></div></footer>
 
 </body>
 </html>
