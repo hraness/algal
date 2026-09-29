@@ -1,6 +1,6 @@
 # Forced-colors compatibility snapshot
 
-Unmodified official `@hraness/design-kit` stylesheet for marketing actions and status-page actions. This narrow snapshot preserves this site's existing package version and normal light/dark appearance.
+Unmodified official `@hraness/design-kit` stylesheet for marketing actions. This narrow snapshot preserves this site's existing package version and normal light/dark appearance.
 
 - Repository: https://github.com/hraness/design-kit
 - Release: `v0.29.1`
