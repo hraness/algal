@@ -25,6 +25,32 @@ export type { SourceDependencyApplication, SourceDependencyApplicationActivation
 export { createSourceLock, parseSourceLock, parseSourceLockCases, renderSourceLockVerification, sourceLockFixtureKeys, sourceLockToJson, verifySourceLock, SOURCE_LOCK_BOUNDS, SOURCE_LOCK_CONTRACT, SOURCE_LOCK_VERIFICATION_CONTRACT } from "./src/source-lock";
 export type { SourceLock, SourceLockCase, SourceLockDrift, SourceLockDriftKind, SourceLockEvaluation, SourceLockEvaluationCase, SourceLockFixture, SourceLockOptions, SourceLockUnit, SourceLockVerification, SourceLockVerifyOptions } from "./src/source-lock";
 export type { SourceLockVendored } from "./src/source-lock";
+
+export {
+  HABITAT_LINK_BOUNDS,
+  HABITAT_LINK_CONTRACT,
+  HabitatLinkClient,
+  habitatInvocationDigest,
+  parseHabitatAcceptance,
+  parseHabitatDescriptor,
+  parseHabitatInvocation,
+  parseHabitatMessage,
+  parseHabitatResult,
+} from "./src/habitat-link";
+export type {
+  HabitatAcceptance,
+  HabitatDescriptor,
+  HabitatId,
+  HabitatInvocation,
+  HabitatLinkClientOptions,
+  HabitatLinkFetch,
+  HabitatLinkGrant,
+  HabitatMessage,
+  HabitatResult,
+  HabitatTransport,
+  LinkStatus,
+  OperationId,
+} from "./src/habitat-link";
 export { checkVendoredFiles, loadVendoredSources, parseVendorRecord, parseVendorRegistries, readVendorRegistries, registryOrigins, vendorRecordToJson, vendorRegistriesToJson, vendorRegistryOrigin, VENDOR_BOUNDS, VENDOR_CONTRACT, VENDOR_RECORD_FILE, VENDOR_REGISTRIES_CONTRACT, VENDOR_REGISTRIES_FILE, VENDOR_REGISTRY_BOUNDS } from "./src/vendor-record";
 export type { VendorDifference, VendoredSources, VendorFile, VendorRecord, VendorRegistries } from "./src/vendor-record";
 export { vendorCatalogEntry, openVendorCatalog, VENDOR_FETCH_BOUNDS } from "./src/vendor";
