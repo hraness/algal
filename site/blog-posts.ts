@@ -71,10 +71,10 @@ const HUB_SOURCES: readonly Source[] = [
   source("Provider hub shape", "https://github.com/hraness/design-kit/blob/v0.17.0/ARTICLE_COPY.md"),
   source("ALGAL site description and prerelease limits", algal("site/copy.ts")),
   source("ALGAL thesis post", algal("site/blog/software-that-accumulates-competence.md")),
-  source("Textbutler habitat programs", "https://github.com/hraness/textbutler/blob/0f83a82ead83f4f00a98cc13f32afd4f9c8f8fd1/packages/textbutler/src/habitat-program.ts"),
-  source("xcb reflexes", "https://github.com/hraness/xcb/blob/6437bcb844017e74b3e3930ff5c6076ea55c5f06/docs/reflexes.md"),
+  source("TextButler habitat programs", "https://github.com/hraness/textbutler/blob/0f83a82ead83f4f00a98cc13f32afd4f9c8f8fd1/packages/textbutler/src/habitat-program.ts"),
+  source("Excalibur (xcb) reflexes", "https://github.com/hraness/xcb/blob/6437bcb844017e74b3e3930ff5c6076ea55c5f06/docs/reflexes.md"),
   source("Clankdar evaluator section", "https://github.com/hraness/clankdar/blob/664d64e4ce4c429ee999f914d054facf6dcbb8d9/README.md"),
-  source("Slopcamera behavior bake", "https://github.com/hraness/slopcamera/blob/7e7027521f134aaaaa8404efebdc5bac24be6252/src/spatial-scene/behavior-bake.ts"),
+  source("SlopCamera behavior bake", "https://github.com/hraness/slopcamera/blob/7e7027521f134aaaaa8404efebdc5bac24be6252/src/spatial-scene/behavior-bake.ts"),
 ];
 
 const WAIT_SOURCES: readonly Source[] = [
@@ -138,7 +138,7 @@ export const BLOG_ADMISSIONS: readonly ArticleAdmission[] = [
     href: "/blog/built-on-algal/",
     lifecycle: "indexable",
     readerJob: "Find which Hraness products run on ALGAL and open the post that shows how each one uses it.",
-    nonObviousAnswer: "ALGAL is in use outside its own repo: Textbutler gates per-contact reply plans with it, xcb replays task history through it, Clankdar computes puzzle answers with its pinned evaluator, and Slopcamera bakes character behavior as tool-free organisms.",
+    nonObviousAnswer: "ALGAL is in use outside its own repo: TextButler gates per-contact reply plans with it, Excalibur (xcb) replays task history through it, Clankdar computes puzzle answers with its pinned evaluator, and SlopCamera bakes character behavior as tool-free organisms.",
     originalContribution: "An index of registered relations; each entry is the relation's reviewed sentence and one link.",
     hostFit: "The provider hub for ALGAL, on ALGAL's own site.",
     nearestUrls: [
@@ -162,7 +162,7 @@ export const BLOG_ADMISSIONS: readonly ArticleAdmission[] = [
       "The @hraness/design-kit/portfolio subpath regenerating with ALGAL relations",
       "Any linked 'How <product> uses ALGAL' post going live, moving or being archived",
       "An ALGAL release or status change in site/copy.ts",
-      "A rename of ALGAL or of Textbutler, xcb, Clankdar or Slopcamera",
+      "A rename of ALGAL or of TextButler, Excalibur (xcb), Clankdar or SlopCamera",
     ],
   },
   unreviewed("software-that-accumulates-competence",
