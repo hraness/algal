@@ -11,9 +11,10 @@ processes, mailboxes, executors, capabilities, and admission policy. A remote
 operation never receives ambient network access and never mutates another
 habitat's state directly.
 
-The first steel thread uses HTTP and the existing cloud tenant authentication.
-The envelope and state machine are transport-independent. Iroh and Valhalla
-adapters can carry the same records later.
+The HTTP profile uses cloud tenant authentication for routing and requires an
+enrolled signed grant on every submission. The Iroh profile uses Valhalla
+with a Unix socket bridge to an ALGAL host. Both carry the same invocation,
+acceptance, message, and result records.
 
 ## Records
 
@@ -34,8 +35,7 @@ parsing. Large bodies are represented by origin-qualified CAS references.
 ```
 
 `key` identifies the descriptor signing key in the spike. The cloud adapter
-authenticates the request with its existing tenant bearer credential; a later
-profile adds detached signatures without changing the record identity.
+also authenticates tenant ownership; that credential cannot replace a grant.
 
 ### `algal.habitat-invocation.v1`
 
@@ -129,9 +129,9 @@ The cloud worker exposes:
   naming the delivery. The message id is the idempotency key.
 - `PUT /v1/habitats/:h/habitat-link/grants` — enroll a signed grant.
 
-The worker uses the existing tenant owner check. A native peer profile
-replaces that ambient tenant credential with the signed audience-bound grant
-below.
+The worker checks tenant ownership and the enrolled, signed, audience-bound
+grant independently. The native peer profile checks the same grant through
+`LocalHabitatAcceptor`.
 
 ## Signed authority
 
@@ -154,6 +154,7 @@ descriptor only when its public key is already in the caller's trusted set.
   "subject":{"habitat":"h_<32 lowercase hex>","principal":"<safe id>"},
   "audience":"h_<32 lowercase hex>",
   "permissions":["invoke"],
+  "manifest":"sha256:<64 lowercase hex>",
   "application":"<safe id>",
   "entrypoint":"<safe id>",
   "interface":"sha256:<64 lowercase hex>",
@@ -168,13 +169,26 @@ descriptor only when its public key is already in the caller's trusted set.
 
 A grant is issued by the target habitat, names one subject (habitat and
 principal), one audience, and a ceiling on terms. `invoke` grants may pin an
-application, entrypoint, and interface digest; `message` grants may not.
+application, entrypoint, interface digest, and executable `manifest` digest.
+These pins constrain invocations; message permission checks the sender and body.
+The hosted HTTP profile requires a manifest pin on every invoke grant, at
+enrollment and submission. Enrolling it registers that executable for the
+granted application and entrypoint: a different installed program with the
+same interface remains forbidden. Local acceptors also check their registered
+entrypoint mapping. The field is optional in the transport-neutral record so
+existing grants used by those local registrations remain readable.
 Verification checks the signature, the validity window against host-supplied
-logical time, the audience, the enrolled key set, the permission, and, when a
+Unix milliseconds, the audience, the enrolled key set, the permission, and, when a
 request is supplied, that the request carries this grant's digest, that its
 sender is the subject, that its target matches any pinned fields, and that its
 terms (or message body bytes) stay inside the ceiling. Every gate is
 independent and fails closed.
+
+`notBefore` and `expires` are inclusive Unix timestamps in milliseconds since
+1970-01-01T00:00:00Z, from 0 through 8,640,000,000,000,000. The supplied `now`
+uses that unit too. Parsers reject fractional and out-of-range timestamps;
+verification rejects invalid clocks. A value expressed in seconds is interpreted
+as milliseconds, so a modern seconds-based expiration is already expired.
 
 ## Host integration
 
@@ -214,11 +228,13 @@ signed by its own keys, `register`s an application entrypoint as a manifest
 with an interface plus host-bound process args (the target's own
 capabilities, which a caller can neither supply nor override), and admits
 invocations by pinning a durable process named `link-<operationId>` whose
-args are the interface inputs. The durable process is the acceptance record:
-after a restart the acceptor recognises the pinned process and answers
+args are the interface inputs. An immutable invocation binding preserves the
+complete request before process creation. The durable process is the acceptance
+record: after a restart the acceptor checks both records and answers
 `replayed: true`, and a reused operation id with a different invocation is a
 `RECEIPT_MISMATCH`. Terms above the grant are `CAPABILITY_DENIED`; terms
-inside the grant but above the entrypoint's budgets are `BUDGET_EXHAUSTED`.
+below the entrypoint's budgets are `BUDGET_EXHAUSTED`: the process cannot
+run a manifest whose work ceiling exceeds the caller's terms.
 `getInvocation` projects the process head into a result and names the
 target's receipt, which verifies offline on the target with no link.
 
@@ -241,6 +257,50 @@ transition the recipient owns.
 this profile: invoke, suspend, deliver, resume, replay under a lost
 acknowledgement, operation-id reuse, every authority gate, message
 acceptance before read, and restart from durable state on both ends.
+
+## Iroh host bridge
+
+`serveHabitatLinkSocket` from `@hraness/algal/habitat-link-socket` serves an
+already configured `LocalHabitatAcceptor`. Give it an absolute socket path in
+a private host-owned directory, the acceptor, and an optional
+`accepted(process)` hook that schedules the durable process. The hook also runs
+on retries: use `supervisor.tick(process, true)` for automatic scheduling so
+completed processes remain terminal. The host enrolls
+grants and registers entrypoints before opening the listener. The socket has
+mode 0600; an existing socket path is never removed to start another server.
+
+Valhalla's opt-in `--habitat-link-socket` handler forwards one frame per
+connection. Frames have a four-byte big-endian byte length followed by UTF-8
+JSON, capped at 256 KiB. The client keeps its write side open while waiting
+for the server to return one frame and close. The length prefix completes the
+request; extra bytes never start another request. If extra bytes arrive after
+acceptance, closing the connection does not undo the accepted operation.
+The bridge accepts at most 64 local connections with a ten-second deadline. Failed requests close without a result,
+so a lost reply requires reconciliation of the same operation id.
+
+An invocation returns an acceptance. To read its result, send:
+
+```json
+{
+  "contract": "algal.habitat-query.v1",
+  "operationId": "<32 lowercase hex>",
+  "grant": "sha256:<64 lowercase hex>",
+  "sender": {"habitat": "h_<32 lowercase hex>", "principal": "<safe id>"}
+}
+```
+
+The query must name the invocation's original grant and subject. The acceptor
+checks that the grant remains enrolled and valid before returning the result.
+Revocation refuses retries and queries; re-enrolling the same revoked digest
+in that acceptor instance fails. Host configuration must preserve revoked
+grants across restarts. After restarting the local acceptor, result queries read the immutable request
+binding and the durable process. Legacy processes without a full request binding
+fail closed and require host reconciliation.
+
+The optional `ALGAL_IROH_PROBE` environment variable points the socket test at
+Valhalla's `habitat-link-probe` example. It exchanges records through Iroh
+loopback endpoints and the socket adapter. It does not establish relay or NAT
+behavior on two machines.
 
 ## Non-goals
 

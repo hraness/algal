@@ -22,6 +22,8 @@
  * the records: the HTTP client, a local acceptor, or a test wrapper that
  * drops acknowledgements.
  */
+import { join } from "node:path";
+import { hostLease, hostNames, hostRead, hostWrite, SHARED_LEASE_RETRY } from "./host-state";
 import { capabilityHandle, parseCapabilityHandle, type CapabilityHandle } from "./capabilities";
 import { manifestToJson, type OrganismManifest } from "./contract";
 import { asDigest, digestCanonical, type Digest } from "./digest";
@@ -195,7 +197,7 @@ export type HabitatLinkServiceOptions = {
   habitat: HabitatId;
   /** Where replies land; the same service the local processes wake on. */
   mailboxes: MailboxService;
-  /** Logical time for grant validity windows; never a hidden wall clock. */
+  /** Unix milliseconds for grant validity windows; never a hidden wall clock. */
   now: () => number;
   /** Descriptor keys this habitat trusts. Empty means no peer can connect. */
   trustedKeys?: readonly string[];
@@ -223,7 +225,7 @@ export class HabitatLinkService {
   }
 
   /** Register a peer behind a signed descriptor. The descriptor must verify
-   * under a trusted key and be unexpired at the host's logical time. */
+   * under a trusted key and be unexpired at the host's supplied Unix millisecond timestamp. */
   connect(descriptor: SignedHabitatDescriptor, peer: HabitatLinkPeer): HabitatId {
     const signed = parseSignedHabitatDescriptor(descriptor);
     if (!verifyHabitatDescriptor(signed, this.trustedKeys)) fail("CAPABILITY_DENIED", "habitat descriptor is not trusted");
@@ -465,7 +467,7 @@ export type LocalHabitatAcceptorOptions = {
   trustedKeys: readonly string[];
 };
 
-type AcceptedInvocation = { operationId: OperationId; invocation: Digest; process: string; failed?: boolean };
+type AcceptedInvocation = { operationId: OperationId; invocation: Digest; process: string; request: HabitatInvocation; failed?: boolean };
 
 /** Target-side reference acceptor. Applications are registered by name with
  * entrypoint organisms; every entrypoint must declare an interface, which is
@@ -477,6 +479,7 @@ export class LocalHabitatAcceptor implements HabitatLinkPeer {
   private readonly now: () => number;
   private readonly trustedKeys: readonly string[];
   private readonly grants = new Map<Digest, HabitatGrant>();
+  private readonly revokedGrants = new Set<Digest>();
   private readonly applications = new Map<string, Map<string, { manifest: OrganismManifest; hostArgs: Record<string, Record<string, JsonValue>> }>>();
   private readonly accepted = new Map<OperationId, AcceptedInvocation>();
 
@@ -496,13 +499,17 @@ export class LocalHabitatAcceptor implements HabitatLinkPeer {
     if (parsed.audience !== this.habitat) fail("CAPABILITY_DENIED", "grant audience is another habitat");
     if (!verifyHabitatGrant(parsed, { trustedKeys: this.trustedKeys })) fail("CAPABILITY_DENIED", "grant is not signed by a trusted issuer");
     const digest = grantDigest(parsed);
-    if (!this.grants.has(digest) && this.grants.size >= HABITAT_LINK_HOST_BOUNDS.maxCapabilities) fail("BUDGET_EXHAUSTED", "enrolled grant count exhausted");
+    if (this.revokedGrants.has(digest)) fail("CAPABILITY_DENIED", "grant was revoked");
+    if (!this.grants.has(digest) && this.grants.size + this.revokedGrants.size >= HABITAT_LINK_HOST_BOUNDS.maxCapabilities) fail("BUDGET_EXHAUSTED", "enrolled grant count exhausted");
     this.grants.set(digest, parsed);
     return digest;
   }
 
   revoke(grant: Digest): void {
-    this.grants.delete(asDigest(grant, "grant"));
+    const digest = asDigest(grant, "grant");
+    if (!this.grants.has(digest)) return;
+    this.grants.delete(digest);
+    this.revokedGrants.add(digest);
   }
 
   /** Register an entrypoint. `hostArgs` are process args this habitat binds
@@ -533,19 +540,25 @@ export class LocalHabitatAcceptor implements HabitatLinkPeer {
 
   async invoke(request: HabitatInvocation): Promise<HabitatAcceptance> {
     const invocation = parseHabitatInvocation(request);
+    this.grantFor(invocation.grant, { required: "invoke", invocation });
+    return hostLease(join(this.supervisor.dir, ".habitat-link-acceptance"), "habitat-link", () => this.invokeLocked(invocation), SHARED_LEASE_RETRY);
+  }
+
+  private async invokeLocked(request: HabitatInvocation): Promise<HabitatAcceptance> {
+    const invocation = parseHabitatInvocation(request);
     const digest = habitatInvocationDigest(invocation);
+    this.grantFor(invocation.grant, { required: "invoke", invocation });
     const existing = this.accepted.get(invocation.operationId);
     if (existing !== undefined) {
       if (existing.invocation !== digest) fail("RECEIPT_MISMATCH", "operation id was reused with a different invocation");
       return { contract: "algal.habitat-acceptance.v1", operationId: invocation.operationId, invocation: digest, status: "accepted", target: this.habitat, process: existing.process, replayed: true };
     }
-    this.grantFor(invocation.grant, { required: "invoke", invocation });
     const registered = this.applications.get(invocation.target.application)?.get(invocation.target.entrypoint);
     if (!registered) fail("CAPABILITY_DENIED", "target application entrypoint is not registered");
     const { manifest, hostArgs } = registered;
     if (digestCanonical(manifestToJson(manifest)) !== invocation.target.manifest) fail("DIGEST_MISMATCH", "target manifest digest does not match the registered entrypoint");
     if (interfaceDigest(manifest) !== invocation.target.interface) fail("INTERFACE_MISMATCH", "target interface digest does not match the registered entrypoint");
-    if (invocation.terms.maxWork > manifest.budgets.maxWork || invocation.terms.maxAgentCalls > manifest.budgets.maxAgentCalls) fail("BUDGET_EXHAUSTED", "invocation terms exceed the entrypoint budget");
+    if (manifest.budgets.maxWork > invocation.terms.maxWork || manifest.budgets.maxAgentCalls > invocation.terms.maxAgentCalls) fail("BUDGET_EXHAUSTED", "entrypoint budget exceeds invocation terms");
     if (this.accepted.size >= HABITAT_LINK_HOST_BOUNDS.maxAcceptedInvocations) fail("BUDGET_EXHAUSTED", "accepted invocation capacity exhausted");
     const iface = manifest.interface!;
     const args = asObject(invocation.args, "invocation args");
@@ -561,14 +574,27 @@ export class LocalHabitatAcceptor implements HabitatLinkPeer {
     // in-memory index is empty, so a retried invocation is matched against
     // the pinned process on disk and replays instead of colliding.
     let replayed = false;
+    const bindingDirectory = join(this.supervisor.dir, "habitat-link", "invocations");
+    const bindingPath = join(bindingDirectory, `${invocation.operationId}.json`);
+    const bound = await hostRead(bindingPath, HABITAT_LINK_BOUNDS.maxRecordBytes);
+    if (bound !== undefined && habitatInvocationDigest(parseHabitatInvocation(bound)) !== digest) fail("RECEIPT_MISMATCH", "operation id was reused with a different invocation");
     const prior = await this.existingProcess(process);
+    if (bound === undefined) {
+      // A legacy process without the complete signed request cannot prove ownership.
+      if (prior !== undefined) fail("RECEIPT_MISMATCH", "process lacks a durable Habitat Link invocation binding");
+      const names = await hostNames(bindingDirectory, HABITAT_LINK_HOST_BOUNDS.maxAcceptedInvocations, /^[0-9a-f]{32}\.json$/);
+      if (names.length >= HABITAT_LINK_HOST_BOUNDS.maxAcceptedInvocations) fail("BUDGET_EXHAUSTED", "accepted invocation capacity exhausted");
+      try { await hostWrite(bindingPath, invocation as unknown as JsonValue, HABITAT_LINK_BOUNDS.maxRecordBytes); }
+      catch (error) { if (error instanceof AlgalError && error.code === "DIGEST_MISMATCH") fail("RECEIPT_MISMATCH", "operation id was reused with a different invocation"); throw error; }
+    }
     if (prior !== undefined) {
       if (prior.manifestDigest !== invocation.target.manifest || digestCanonical(prior.args) !== digestCanonical(processArgs)) fail("RECEIPT_MISMATCH", "operation id was reused with a different invocation");
       replayed = true;
     } else {
+      this.grantFor(invocation.grant, { required: "invoke", invocation });
       await this.supervisor.create(process, manifest, processArgs);
     }
-    this.accepted.set(invocation.operationId, { operationId: invocation.operationId, invocation: digest, process });
+    this.accepted.set(invocation.operationId, { operationId: invocation.operationId, invocation: digest, process, request: invocation });
     return { contract: "algal.habitat-acceptance.v1", operationId: invocation.operationId, invocation: digest, status: "accepted", target: this.habitat, process, replayed };
   }
 
@@ -582,9 +608,39 @@ export class LocalHabitatAcceptor implements HabitatLinkPeer {
     }
   }
 
+  private async acceptedInvocation(operationId: OperationId): Promise<AcceptedInvocation> {
+    if (!/^[0-9a-f]{32}$/.test(operationId)) fail("PARSE_FAILED", "invalid operation id");
+    const existing = this.accepted.get(operationId);
+    if (existing) return existing;
+    const value = await hostRead(join(this.supervisor.dir, "habitat-link", "invocations", `${operationId}.json`), HABITAT_LINK_BOUNDS.maxRecordBytes);
+    if (value === undefined) fail("STORE_MISS", "habitat-link invocation not found");
+    const request = parseHabitatInvocation(value);
+    if (request.operationId !== operationId) fail("RECEIPT_MISMATCH", "invocation binding names another operation");
+    const entry = { operationId, invocation: habitatInvocationDigest(request), process: `link-${operationId}`, request };
+    const process = await this.existingProcess(entry.process);
+    if (process === undefined) fail("STORE_MISS", "habitat-link invocation has not been accepted");
+    const registered = this.applications.get(request.target.application)?.get(request.target.entrypoint);
+    if (!registered || digestCanonical(manifestToJson(registered.manifest)) !== request.target.manifest) fail("CAPABILITY_DENIED", "invocation entrypoint is no longer registered");
+    const expectedArgs = structuredClone(registered.hostArgs);
+    for (const [name, value] of Object.entries(asObject(request.args, "invocation args"))) {
+      const binding = registered.manifest.interface!.inputs[name];
+      if (!binding || expectedArgs[binding.cell]?.[binding.port] !== undefined) fail("CAPABILITY_DENIED", "invalid retained invocation input");
+      (expectedArgs[binding.cell] ??= {})[binding.port] = value;
+    }
+    if (process.manifestDigest !== request.target.manifest || digestCanonical(process.args) !== digestCanonical(expectedArgs)) fail("RECEIPT_MISMATCH", "process does not match its retained invocation");
+    return entry;
+  }
+
+  /** Network reads require the same enrolled grant and subject as submission. */
+  async queryInvocation(operationId: OperationId, grant: Digest, sender: HabitatInvocation["sender"]): Promise<HabitatResult> {
+    const entry = await this.acceptedInvocation(operationId);
+    if (entry.request.grant !== grant || entry.request.sender.habitat !== sender.habitat || entry.request.sender.principal !== sender.principal) fail("CAPABILITY_DENIED", "query does not own this invocation");
+    this.grantFor(grant, { required: "invoke", invocation: entry.request });
+    return this.getInvocation(operationId);
+  }
+
   async getInvocation(operationId: OperationId): Promise<HabitatResult> {
-    const entry = this.accepted.get(asString(operationId, "operationId", 32));
-    if (!entry) fail("STORE_MISS", "habitat-link invocation not found");
+    const entry = await this.acceptedInvocation(operationId);
     const result: HabitatResult = { contract: "algal.habitat-result.v1", operationId: entry.operationId, invocation: entry.invocation, status: "accepted", process: entry.process };
     const snapshot = await this.supervisor.inspect(entry.process);
     const status = snapshot.process.status;
@@ -611,6 +667,33 @@ export class LocalHabitatAcceptor implements HabitatLinkPeer {
       for (const { manifest } of entrypoints.values())
         if (digestCanonical(manifestToJson(manifest)) === manifestDigest) return manifest.interface!;
     fail("STORE_MISS", "invocation manifest is no longer registered");
+  }
+
+  /** Durable message acknowledgment shared by native and hosted profiles. */
+  async acceptMessage(message: HabitatMessage): Promise<JsonValue> {
+    const parsed = parseHabitatMessage(message);
+    this.grantFor(parsed.grant, { required: "message", message: parsed });
+    return hostLease(join(this.supervisor.dir, ".habitat-link-acceptance"), "habitat-link", () => this.acceptMessageLocked(parsed), SHARED_LEASE_RETRY);
+  }
+
+  private async acceptMessageLocked(message: HabitatMessage): Promise<JsonValue> {
+    const parsed = parseHabitatMessage(message);
+    this.grantFor(parsed.grant, { required: "message", message: parsed });
+    const directory = join(this.supervisor.dir, "habitat-link", "messages");
+    const path = join(directory, `${parsed.messageId}.json`);
+    const prior = await hostRead(path, HABITAT_LINK_BOUNDS.maxRecordBytes);
+    const digest = digestCanonical(parsed as unknown as JsonValue);
+    if (prior !== undefined) {
+      const record = asObject(prior, "message acceptance");
+      if (record.message !== digest) fail("RECEIPT_MISMATCH", "message id was reused with a different envelope");
+      return { ...record, replayed: true };
+    }
+    const names = await hostNames(directory, HABITAT_LINK_HOST_BOUNDS.maxAcceptedInvocations, /^[0-9a-f]{32}\.json$/);
+    if (names.length >= HABITAT_LINK_HOST_BOUNDS.maxAcceptedInvocations) fail("BUDGET_EXHAUSTED", "accepted message capacity exhausted");
+    const { deliveryId } = await this.sendMessage(parsed);
+    const record = { contract: "algal.habitat-message-acceptance.v1", messageId: parsed.messageId, message: digest, target: this.habitat, delivery: deliveryId, status: "accepted", replayed: false };
+    await hostWrite(path, record, HABITAT_LINK_BOUNDS.maxRecordBytes);
+    return record;
   }
 
   async sendMessage(message: HabitatMessage): Promise<{ deliveryId: string }> {

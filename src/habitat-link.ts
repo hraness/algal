@@ -220,7 +220,7 @@ export class HabitatLinkClient {
       let value: unknown;
       try { value = await response.json(); } catch { throw new AlgalError("IO_FAILED", "habitat-link response was not JSON", undefined, { uncertain: !response.ok }); }
       if (!response.ok) {
-        const code = response.status === 401 ? "CAPABILITY_DENIED" : response.status === 413 ? "BUDGET_EXHAUSTED" : response.status === 409 ? "RECEIPT_MISMATCH" : "IO_FAILED";
+        const code = (response.status === 401 || response.status === 403) ? "CAPABILITY_DENIED" : response.status === 404 ? "STORE_MISS" : response.status === 413 ? "BUDGET_EXHAUSTED" : response.status === 409 ? "RECEIPT_MISMATCH" : "IO_FAILED";
         const message = value && typeof value === "object" && "error" in value && typeof (value as { error?: unknown }).error === "object" ? String(((value as { error: { message?: unknown } }).error).message ?? code) : code;
         throw new AlgalError(code, message, undefined, { uncertain: response.status >= 500 });
       }

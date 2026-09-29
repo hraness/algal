@@ -54,6 +54,7 @@ describe("signed Habitat Link authority", () => {
       application: "garden",
       entrypoint: "grow",
       interface: digest("interface"),
+      manifest: digest("manifest"),
       terms: { maxWork: 100, maxAgentCalls: 2, maxBytes: 1024, maxHops: 2 },
       notBefore: 10,
       expires: 20,
@@ -73,6 +74,8 @@ describe("signed Habitat Link authority", () => {
     expect(verifyHabitatGrant(grant, { invocation: { ...bound, sender: { habitat, principal: "stranger" } } })).toBe(false);
     expect(verifyHabitatGrant(grant, { invocation: { ...bound, target: { ...bound.target, entrypoint: "prune" } } })).toBe(false);
     expect(verifyHabitatGrant(grant, { invocation: { ...bound, target: { ...bound.target, interface: digest("other-interface") } } })).toBe(false);
+    expect(verifyHabitatGrant(grant, { invocation: { ...bound, target: { ...bound.target, manifest: digest("different-code-same-interface") } } })).toBe(false);
+    expect(() => parseHabitatGrant({ ...grant, manifest: "not-a-digest" })).toThrow();
     expect(verifyHabitatGrant(grant, { invocation: { ...bound, terms: { ...bound.terms, maxWork: 101 } } })).toBe(false);
     // Tampering with any signed field breaks the signature.
     expect(verifyHabitatGrant({ ...grant, expires: 40 }, { now: 15 })).toBe(false);
@@ -101,4 +104,19 @@ describe("signed Habitat Link authority", () => {
     expect(() => parseHabitatGrant({ ...grant, permissions: ["invoke", "invoke"] })).toThrow();
     expect(() => parseHabitatGrant({ ...grant, entrypoint: "grow" })).toThrow();
   });
+});
+
+
+test("grant windows use inclusive Unix milliseconds and reject invalid clocks", () => {
+  const keys = generateHabitatAuthorityKeyPair();
+  const start = Date.UTC(2026, 8, 29);
+  const grant = signHabitatGrant({
+    contract: "algal.habitat-grant.v1", issuer: other,
+    subject: { habitat, principal: "scout" }, audience: other, permissions: ["invoke"],
+    terms: { maxWork: 1, maxAgentCalls: 0, maxBytes: 32, maxHops: 0 },
+    notBefore: start, expires: start + 1000, nonce: "milliseconds",
+  }, keys.privateKey);
+  for (const now of [start, start + 1, start + 1000]) expect(verifyHabitatGrant(grant, { now })).toBe(true);
+  for (const now of [start / 1000, start - 1, start + 1001, NaN, Infinity, -1, start + 0.5]) expect(verifyHabitatGrant(grant, { now })).toBe(false);
+  for (const expires of [8_640_000_000_000_001, NaN, Infinity, start + 0.5]) expect(() => parseHabitatGrant({ ...grant, expires })).toThrow();
 });

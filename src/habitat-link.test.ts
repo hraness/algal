@@ -48,6 +48,14 @@ describe("habitat-link records", () => {
     expect(() => parseHabitatMessage({ contract: "algal.habitat-message.v1", messageId: invocation().operationId, sender: invocation().sender, recipient: "cap:wrong:sha256:" + "e".repeat(64), body: {}, grant: digest() })).toThrow(AlgalError);
   });
 
+  test("client distinguishes grant denials and missing operations from transport failures", async () => {
+    for (const [status, code] of [[403, "CAPABILITY_DENIED"], [404, "STORE_MISS"]] as const) {
+      const client = new HabitatLinkClient({ baseUrl: "https://habitat.invalid/", habitat: invocation().sender.habitat,
+        fetch: async () => Response.json({ error: { message: "denied or absent" } }, { status }) });
+      await expect(client.getInvocation(invocation().operationId)).rejects.toMatchObject({ code, uncertain: false });
+    }
+  });
+
   test("client submits and reads a durable invocation", async () => {
     const seen: Request[] = [];
     const client = new HabitatLinkClient({
