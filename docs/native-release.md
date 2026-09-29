@@ -6,7 +6,7 @@ Binary packages are tested on three targets:
 | Archive target | Supported qualification environment |
 | --- | --- |
 | `x86_64-unknown-linux-gnu` | Ubuntu 24.04 x86_64, glibc 2.39 or newer |
-| `aarch64-unknown-linux-gnu` | Ubuntu 24.04 arm64, glibc 2.39 or newer (from the release after `v0.2.0-vm.10`) |
+| `aarch64-unknown-linux-gnu` | Ubuntu 24.04 arm64, glibc 2.39 or newer (from `v0.2.0-vm.11`) |
 | `aarch64-apple-darwin` | macOS 14 or newer on Apple silicon |
 
 These are prerelease targets. Other Linux architectures, older glibc systems,

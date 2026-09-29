@@ -4,7 +4,7 @@
 
 Agent programs today are scripts: they run start to finish and leave a log. ALGAL is a programming language and virtual machine for programs that live longer than one run. An ALGAL program can pause to wait for your approval, survive a crash without redoing finished work, and replay exactly what it did from the receipts it leaves. The VM is previewing now, and the language toolchain ships with it. ALGAL is free and open source.
 
-ALGAL is prerelease software. Unsigned native builds for macOS on Apple silicon and Linux x86_64 are published as GitHub prereleases.
+ALGAL is prerelease software. Unsigned native builds for macOS on Apple silicon and Linux x86_64 and arm64 are published as GitHub prereleases; `curl -fsSL https://algal.computer/install.sh | sh` installs one into ~/.local/bin.
 
 ## Pages
 

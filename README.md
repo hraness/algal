@@ -14,9 +14,10 @@ CLI and a Bun runtime that runs on its own implement the same specifications
 for programs, receipts, and durable processes. [algal.computer](https://algal.computer)
 has the tour, the docs, and the blog.
 
-Preview: native prereleases for macOS on Apple silicon and Linux x86_64 are on
-the [releases page](https://github.com/hraness/algal/releases), and the Bun
-runtime runs from this checkout.
+Preview: native prereleases for macOS on Apple silicon and Linux x86_64 and
+arm64 are on the [releases page](https://github.com/hraness/algal/releases)
+(`curl -fsSL https://algal.computer/install.sh | sh`), and the Bun runtime runs
+from this checkout.
 
 ## The idea
 
@@ -61,7 +62,7 @@ once the workflow proves useful.
 ## Try the VM with one executable
 
 Install the native prerelease into `~/.local/bin` on macOS (Apple silicon) or
-Linux x86_64. The script checks the archive's SHA-256 and the executable's
+Linux (x86_64 or arm64). The script checks the archive's SHA-256 and the executable's
 recorded digest before it installs anything:
 
 ```sh
