@@ -3,6 +3,7 @@
 @import "@hraness/design-kit/paper-theme.css";
 @import "@hraness/design-kit/palette-system.css";
 @import "@hraness/design-kit/product-marketing-preset.css";
+@import "./vendor/hraness-forced-colors/marketing-forced-colors.css";
 
 /* Product-owned layout. Shared packages own fonts, theme, marketing grammar,
  * material paint, accessible appearance behavior, and standard icon geometry. */
@@ -766,3 +767,14 @@ nav a[aria-current="page"] { color: var(--ink); }
 
 .hs-output { margin: 0; padding: 1rem 1.2rem; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--foreground); }
 .hs-output code { font-size: .8rem; line-height: 1.65; }
+
+/* Local button hover paint must preserve the shared forced-colors action surface. */
+@media (forced-colors: active) {
+  .button.hraness-marketing-action,
+  .button.hraness-marketing-action:hover,
+  .button.hraness-marketing-action:focus-visible {
+    color: ButtonText;
+    background: ButtonFace;
+    border-color: ButtonText;
+  }
+}
