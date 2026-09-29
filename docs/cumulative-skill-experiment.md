@@ -518,11 +518,21 @@ task draws do not provide a paired comparison with v6.
 
 V8 keeps every v7 rule and changes one input: the writer receives the
 development batch's agreement value in [0,1] instead of its pass indicator,
-so a partially correct revision is distinguishable from a wrong one. The
-[v8 protocol](cumulative-skill-v8-protocol.md) records the design, a
-calibration gate identical to v7's, and a line rule: if v8's calibration
-fails, the development-feedback seed line ends. No v8 study has been frozen
-and no v8 provider call has occurred.
+so a partially correct revision is distinguishable from a wrong one. Its
+calibration gate is v7's, plus a line rule fixed before inference: if v8's
+calibration fails, the development-feedback seed line ends. Two of four
+fresh calibration seeds passed, one search exhausted eight generations, and
+the fourth was interrupted by the launching session during generation seven
+and, by protocol, not retried. The graded score varied from 0.33 to 0.80 and
+rose on later generations, so the writer received a non-constant signal
+this time; no scored candidate reached the 0.9 threshold. The gate failed
+on the three complete blocks alone, so none of the nine planned comparison
+blocks ran and the line ended.
+
+The [v8 report](cumulative-skill-v8.md) preserves that outcome, the
+interruption, the fixed-seed test results, and all 3,169,604 recorded work
+units. The [v8 protocol](cumulative-skill-v8-protocol.md) records the
+design. Its fresh task draws do not provide a paired comparison with v7.
 
 ## Status and limits
 

@@ -101,3 +101,13 @@ accounting, one recorded transport failure, and limits. The raw evidence
 archive in the source repository, synthetic task text, model responses, and
 provider account records remain outside the Hugging Face export. Provider
 charges remain unknown.
+
+On 2026-09-29, Claude Code reviewed redistribution of
+`docs/cumulative-skill-v8-results-2026-09-29.json`. It contains the
+interrupted calibration aggregate with per-generation round modes, batch
+pass counts, graded development scores, writer-request and manifest
+digests, the interruption record, execution identities, complete token
+accounting, and limits. The raw evidence archive and reconciliation record
+in the source repository, synthetic task text, model responses, and provider
+account records remain outside the Hugging Face export. Provider charges
+remain unknown.
