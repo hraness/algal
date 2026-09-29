@@ -514,6 +514,16 @@ fixed-seed test results, and all 3,814,053 recorded work units. The [v7
 protocol](cumulative-skill-v7-protocol.md) records the design. Its fresh
 task draws do not provide a paired comparison with v6.
 
+### v8 · graded development score
+
+V8 keeps every v7 rule and changes one input: the writer receives the
+development batch's agreement value in [0,1] instead of its pass indicator,
+so a partially correct revision is distinguishable from a wrong one. The
+[v8 protocol](cumulative-skill-v8-protocol.md) records the design, a
+calibration gate identical to v7's, and a line rule: if v8's calibration
+fails, the development-feedback seed line ends. No v8 study has been frozen
+and no v8 provider call has occurred.
+
 ## Status and limits
 
 These studies demonstrate saved-program reuse, revision, demotion, and
