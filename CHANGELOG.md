@@ -12,6 +12,17 @@ independent of these package versions.
 
 ## Unreleased
 
+## v0.2.0-vm.11 - 2026-09-29
+
+ALGAL now installs with one command and runs on Linux arm64. `curl -fsSL
+https://algal.computer/install.sh | sh` downloads the archive for your
+platform, checks its SHA-256 and the executable's recorded digest, and
+installs `~/.local/bin/algal`, with no checkout or Python. Releases add an
+archive for Linux arm64 next to macOS on Apple silicon and Linux x86_64. The
+cumulative-skill experiment gains an `optimizer` arm that revises and retires
+saved programs, a harder v4 task corpus, and the v4 optimizer study. That
+study leaves improvement at matched spend unproven.
+
 - `curl -fsSL https://algal.computer/install.sh | sh` installs the native
   CLI into `~/.local/bin` without a checkout or Python. It checks the
   archive's SHA-256 and the executable's recorded digest, keeps the release
@@ -20,7 +31,6 @@ independent of these package versions.
 - Native releases add a Linux arm64 archive
   (`aarch64-unknown-linux-gnu`, Ubuntu 24.04 arm64, glibc 2.39 or newer),
   built and tested on an arm64 runner like the other two targets.
-
 - The v4 optimizer study includes its saved executions, portable arm
   configurations, an offline replay command, and a grader that separates
   completion from output correctness. On unseen and shift tasks the
