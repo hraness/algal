@@ -4,18 +4,36 @@ import { join } from "node:path";
 import { articleDiscovery, loadBlogPosts } from "./blog";
 import { pageDocument } from "./chrome";
 import { SITE_TAGLINE } from "./copy";
-import { createSocialImageCard, socialImageFit, socialImageSiteDetails } from "@hraness/web-discovery/social-image/card";
+import {
+  createSocialImageCard,
+  defineSocialImageSite,
+  SOCIAL_IMAGE_MIN_PALETTE_DISTANCE,
+  socialImageFit,
+  socialImageLookAlikes,
+  socialImagePalette,
+  socialImagePaletteDistance,
+  socialImageSiteDetails,
+  socialImageSitePalette,
+} from "@hraness/web-discovery/social-image/card";
 import { postSocialImage, postSocialPage, renderSocialImage, SITE_SOCIAL_IMAGE, SOCIAL_SITE } from "./social-image";
 
 const posts = await loadBlogPosts(join(import.meta.dir, "blog"));
 
-test("the site declares its card once with the real app icon and Tokyo Night light theme", () => {
+test("the site declares its card once with the real app icon, Tokyo Night light theme, and olive wash", () => {
   expect(SOCIAL_SITE.name).toBe("ALGAL");
   expect(SOCIAL_SITE.domain).toBe("algal.computer");
   expect(SOCIAL_SITE.description).toBe(SITE_TAGLINE);
   const favicon = readFileSync(join(import.meta.dir, "favicon.svg")).toString("base64");
   expect(SOCIAL_SITE.icon).toEqual({ kind: "app", src: `data:image/svg+xml;base64,${favicon}` });
-  expect(SOCIAL_SITE.theme).toEqual({ accent: "#1d4e90", background: "#e1e2e7", foreground: "#1c3161", muted: "#414c76" });
+  expect(SOCIAL_SITE.theme).toEqual({ accent: "#1d4e90", background: "#e1e2e7", foreground: "#1c3161", muted: "#414c76", wash: "#6b8e23" });
+});
+
+test("the olive wash keeps ALGAL's cards apart from Sys1, which shares the Tokyo Night light base", () => {
+  // Sys1's card declaration (hraness/sysone scripts/social-cards.ts) uses the same theme with no wash.
+  const { wash: _wash, ...tokyoNight } = SOCIAL_SITE.theme!;
+  const sys1 = defineSocialImageSite({ name: "Sys1", domain: "sys1.io", description: "Stop spending big-model tokens on small decisions.", theme: tokyoNight });
+  expect(socialImageLookAlikes([SOCIAL_SITE, sys1])).toEqual([]);
+  expect(socialImagePaletteDistance(socialImageSitePalette(SOCIAL_SITE), socialImagePalette(tokyoNight))).toBeGreaterThan(2 * SOCIAL_IMAGE_MIN_PALETTE_DISTANCE);
 });
 
 test("the rendered card is a 1200 × 630 PNG", async () => {
@@ -33,7 +51,7 @@ test("pages share the site card and posts get their own card from page copy only
   expect(home).toContain('<meta name="twitter:image" content="https://algal.computer/og.png">');
 
   const post = posts.find(entry => entry.slug === "typescript-rust-parity")!;
-  expect(postSocialPage(post)).toEqual({ eyebrow: "Technique", headline: post.cardTitle!, description: post.cardDescription! });
+  expect(postSocialPage(post)).toEqual({ eyebrow: "Technique", headline: post.cardTitle!, description: post.cardDescription!, path: post.path });
   const image = postSocialImage(post);
   expect(image).toEqual({ path: "/og/blog/typescript-rust-parity.png", alt: `${post.cardTitle}, from ALGAL` });
   const page = pageDocument({ ...meta, page: "blog", path: post.path, socialImage: image }, "<main id=\"main\"></main>");
@@ -48,13 +66,14 @@ test("every post names its category in the card eyebrow", () => {
   for (const post of posts) expect([post.slug, postSocialPage(post).eyebrow]).toEqual([post.slug, expect.stringMatching(/^(Essay|Integration|Technique)$/)]);
 });
 
-test("the home card and every post card fit as written, with nothing cut, shrunk, or stripped", () => {
+test("the home card and every post card fit as written, with no template finding", () => {
   const cards = [{ slug: "home", details: socialImageSiteDetails(SOCIAL_SITE) },
     ...posts.filter(post => post.emit).map(post => ({ slug: post.slug, details: socialImageSiteDetails(SOCIAL_SITE, postSocialPage(post)) }))];
   for (const { slug, details } of cards) {
     const fit = socialImageFit(details);
-    expect({ slug, issues: fit.issues }).toEqual({ slug, issues: [] });
-    expect(fit.eyebrow).toBe(slug === "home" ? undefined : postSocialPage(posts.find(post => post.slug === slug)!).eyebrow);
+    // findings covers the v0.12 review codes too (reduced description, missing eyebrow, repeated tagline).
+    expect({ slug, findings: fit.findings }).toEqual({ slug, findings: [] });
+    expect(fit.eyebrow).toBe(slug === "home" ? undefined : postSocialPage(posts.find(post => post.slug === slug)!).eyebrow || undefined);
     expect(() => createSocialImageCard({ ...details, strict: true })).not.toThrow();
   }
 });

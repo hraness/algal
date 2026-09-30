@@ -5,7 +5,7 @@ date: 2026-09-22
 updated: 2026-09-28
 description: An ALGAL program can wait days for an approval, then resume in a new process or the other runtime, because the wait is saved as data in the store.
 eyebrow: Technique
-cardDescription: "An ALGAL program can wait days for an approval, then resume in a new process."
+cardDescription: "It waits days for an approval, then resumes."
 ---
 
 # A program that can wait
