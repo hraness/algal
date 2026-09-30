@@ -6,7 +6,9 @@ test("the install panel lists macOS, Linux, then Windows through WSL2", () => {
   const html = renderPlatformInstall();
   const tabs = [...html.matchAll(/role="tab"[^>]*>[\s\S]*?<span class="hraness-platform-install__tab-label[^"]*">([^<]+)<\/span>/gu)].map(match => match[1]);
   expect(tabs).toEqual(["macOS", "Linux", "Windows"]);
-  expect(html.split(`>${INSTALL_COMMAND}</code>`)).toHaveLength(4);
+  const commands = [...html.matchAll(/<code\b[^>]*>([\s\S]*?)<\/code>/gu)]
+    .map(match => match[1]!.replace(/<[^>]*>/gu, ""));
+  expect(commands).toEqual([INSTALL_COMMAND, INSTALL_COMMAND, INSTALL_COMMAND]);
   expect(html).toContain("Apple silicon");
   expect(html).toContain("x86_64 and ARM64, glibc 2.39+ (Ubuntu 24.04+)");
   expect(html).toContain('data-availability="unavailable" data-platform="windows"');

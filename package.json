@@ -108,7 +108,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
-    "@hraness/design-kit": "github:hraness/design-kit#v0.32.0",
+    "@hraness/design-kit": "github:hraness/design-kit#v0.35.0",
     "@hraness/desktop-foundation": "https://github.com/hraness/desktop-foundation/releases/download/v0.8.0/hraness-desktop-foundation-0.8.0.tgz",
     "@hraness/ui": "github:hraness/ui#v0.5.18",
     "@hraness/web-discovery": "github:hraness/web-discovery#v0.13.0",

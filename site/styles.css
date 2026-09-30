@@ -26,7 +26,7 @@
 html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; scroll-padding-top: 2rem; }
 body { margin: 0; background: var(--paper); color: var(--ink); font: 400 16px/1.65 var(--sans); }
 [hidden] { display: none !important; }
-a:where(:not(.hraness-marketing-action)) { color: var(--green); text-underline-offset: .22em; }
+a:where(:not(.hraness-marketing-action)) { color: var(--green); text-underline-offset: .22em; text-decoration-style: dotted; }
 a:where(:not(.hraness-marketing-action)):hover { color: var(--foreground); }
 button, a { -webkit-tap-highlight-color: transparent; }
 a:focus-visible, button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline: 3px solid var(--focus); outline-offset: 5px; border-radius: 3px; }
@@ -196,8 +196,9 @@ figcaption { font-size: .75rem; line-height: 1.6; color: var(--muted); }
 .bound-card .eyebrow { display: block; font-size: .75rem; margin-bottom: .55rem; }
 .bound-card strong { display: block; font-size: .81rem; font-weight: 500; margin-bottom: .35rem; }
 .bound-card p { font-size: .75rem; color: var(--muted); margin: 0; line-height: 1.75; }
-.text-link { font-size: .76rem; text-decoration: none; }
-.text-link:hover { text-decoration: underline; }
+.text-link { font-size: .76rem; }
+.text-link, .hero-secondary { text-decoration: underline dotted; text-decoration-color: color-mix(in oklab, currentColor 45%, transparent); }
+.text-link:hover, .hero-secondary:hover { text-decoration-color: currentColor; }
 .detail-link { margin-top: 1.2rem; font-size: .75rem; color: var(--muted); }
 .detail-link summary { cursor: pointer; }
 .detail-link img { display: block; height: auto; margin: 1rem auto .75rem; background: var(--white); }
@@ -526,7 +527,7 @@ nav a[aria-current="page"] { color: var(--ink); }
 .page-intro h1 em { font-style: normal; }
 .page-intro .lede { font-size: 1.08rem; line-height: 1.65; color: var(--muted); max-width: 46rem; }
 .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1.3rem; margin-top: 2rem; }
-.hero-secondary { font-size: .95rem; text-decoration: none; display: inline-flex; align-items: center; gap: .25rem; min-block-size: 2.75rem; }
+.hero-secondary { font-size: .95rem; display: inline-flex; align-items: center; gap: .25rem; min-block-size: 2.75rem; }
 .hero-meta { margin: 1.25rem 0 0; font-size: .85rem; color: var(--hraness-marketing-field-muted, var(--muted)); }
 
 /* Hero proof: one example program's source beside the facts of its recorded
