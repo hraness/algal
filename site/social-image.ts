@@ -13,7 +13,7 @@ import {
 import { Resvg } from "@resvg/resvg-js";
 import satori from "satori";
 
-import { SITE_TAGLINE, SITE_NAME } from "./copy";
+import { SITE_TAGLINE, SITE_NAME, productMessaging } from "./copy";
 
 /** The header's foil mark (chrome.ts paints /algal-mark.svg in foil beside the name). */
 const BRAND_MARK = readFileSync(new URL("./algal-mark.svg", import.meta.url), "utf8");
@@ -38,8 +38,18 @@ export interface SocialImageRef {
 export const SOCIAL_IMAGE_WIDTH = 1200;
 export const SOCIAL_IMAGE_HEIGHT = 630;
 
+/** The home card matches the hero: the category eyebrow and the hero H1, from
+ * the same messaging record home.html renders ({{SITE_CATEGORY}}, {{SITE_HERO_HEADING}}). */
+export const HOME_SOCIAL_PAGE: SocialImagePage = {
+  layout: "product",
+  eyebrow: productMessaging.category,
+  headline: productMessaging.hero.heading,
+  // No tagline line: it would repeat the site description (description-repeats-tagline).
+  description: "",
+};
+
 /** The site card that every page without its own copy shares. */
-export const SITE_SOCIAL_IMAGE: SocialImageRef = { path: "/og.png", alt: socialImageAlt(SOCIAL_SITE) };
+export const SITE_SOCIAL_IMAGE: SocialImageRef = { path: "/og.png", alt: `${SITE_NAME}: ${productMessaging.hero.heading}` };
 
 export interface SocialImagePost {
   slug: string;

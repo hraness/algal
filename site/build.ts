@@ -38,7 +38,7 @@ import { offlineWorkerSource } from "./grow-offline";
 import { docsNavigation } from "./docs-navigation";
 import { breadcrumbJsonLd } from "@hraness/web-discovery";
 import { BLOG_PATH, BLOG_DESCRIPTION, BLOG_TITLE, blogAtomFeed, blogIndexJsonLd, blogLlmsList, blogSitemapEntries, loadBlogPosts, postJsonLd, renderBlogIndex, renderPostArticle } from "./blog";
-import { postSocialImage, postSocialPage, renderSocialImage, SITE_SOCIAL_IMAGE } from "./social-image";
+import { HOME_SOCIAL_PAGE, postSocialImage, postSocialPage, renderSocialImage, SITE_SOCIAL_IMAGE } from "./social-image";
 
 const SITE = dirname(fileURLToPath(import.meta.url));
 const ROOT = dirname(SITE);
@@ -655,7 +655,7 @@ for (const f of ["robots.txt", "favicon.svg", "favicon-48.png", "apple-touch-ico
 // Blog posts joined to their review records; see site/blog.ts.
 const blogPosts = await loadBlogPosts(join(SITE, "blog"));
 // Share images come only from the site declaration in site/social-image.ts.
-await writeFile(join(DIST, SITE_SOCIAL_IMAGE.path), await renderSocialImage());
+await writeFile(join(DIST, SITE_SOCIAL_IMAGE.path), await renderSocialImage(HOME_SOCIAL_PAGE));
 await mkdir(join(DIST, "og/blog"), { recursive: true });
 for (const post of blogPosts) {
   if (post.emit) await writeFile(join(DIST, postSocialImage(post).path), await renderSocialImage(postSocialPage(post)));

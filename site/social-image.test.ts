@@ -3,13 +3,13 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { articleDiscovery, loadBlogPosts } from "./blog";
 import { pageDocument } from "./chrome";
-import { SITE_TAGLINE } from "./copy";
+import { productMessaging, SITE_TAGLINE } from "./copy";
 import {
   createSocialImageCard,
   socialImageFit,
   socialImageSiteDetails,
 } from "@hraness/web-discovery/social-image/card";
-import { postSocialImage, postSocialPage, renderSocialImage, SITE_SOCIAL_IMAGE, SOCIAL_SITE } from "./social-image";
+import { HOME_SOCIAL_PAGE, postSocialImage, postSocialPage, renderSocialImage, SITE_SOCIAL_IMAGE, SOCIAL_SITE } from "./social-image";
 
 const posts = await loadBlogPosts(join(import.meta.dir, "blog"));
 
@@ -26,8 +26,17 @@ test("the site declares its card once with the header's foil mark, name, and Tok
   expect(SOCIAL_SITE.theme).toBeUndefined();
 });
 
+test("the home card shows the hero's eyebrow and H1 from the messaging record home.html renders", () => {
+  const home = readFileSync(join(import.meta.dir, "pages", "home.html"), "utf8");
+  expect(home).toContain("{{SITE_CATEGORY}}</p>");
+  expect(home).toContain('class="hraness-marketing-hero__heading">{{SITE_HERO_HEADING}}</h1>');
+  expect(HOME_SOCIAL_PAGE).toEqual({ layout: "product", eyebrow: productMessaging.category, headline: productMessaging.hero.heading, description: "" });
+  expect(HOME_SOCIAL_PAGE.eyebrow).toBe("Agent programming language");
+  expect(HOME_SOCIAL_PAGE.headline).toBe("Write agent programs that wait, resume, and replay.");
+});
+
 test("the rendered card is a 1200 × 630 PNG", async () => {
-  const png = await renderSocialImage();
+  const png = await renderSocialImage(HOME_SOCIAL_PAGE);
   expect([...png.subarray(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   const header = Buffer.from(png.buffer, png.byteOffset, png.byteLength);
   expect([header.readUInt32BE(16), header.readUInt32BE(20)]).toEqual([1200, 630]);
@@ -36,7 +45,7 @@ test("the rendered card is a 1200 × 630 PNG", async () => {
 test("pages share the site card and posts get their own card from page copy only", () => {
   const meta = { page: "home", path: "/", title: "ALGAL", description: "d", ogTitle: "ALGAL" } as const;
   const home = pageDocument(meta, "<main id=\"main\"></main>");
-  expect(SITE_SOCIAL_IMAGE).toEqual({ path: "/og.png", alt: `ALGAL: ${SITE_TAGLINE}` });
+  expect(SITE_SOCIAL_IMAGE).toEqual({ path: "/og.png", alt: "ALGAL: Write agent programs that wait, resume, and replay." });
   expect(home).toContain('<meta property="og:image" content="https://algal.computer/og.png">');
   expect(home).toContain('<meta name="twitter:image" content="https://algal.computer/og.png">');
 
@@ -57,13 +66,13 @@ test("every post names its category in the card eyebrow", () => {
 });
 
 test("the home card and every post card fit as written, with no template finding", () => {
-  const cards = [{ slug: "home", details: socialImageSiteDetails(SOCIAL_SITE) },
+  const cards = [{ slug: "home", details: socialImageSiteDetails(SOCIAL_SITE, HOME_SOCIAL_PAGE) },
     ...posts.filter(post => post.emit).map(post => ({ slug: post.slug, details: socialImageSiteDetails(SOCIAL_SITE, postSocialPage(post)) }))];
   for (const { slug, details } of cards) {
     const fit = socialImageFit(details);
     // findings covers the v0.12 review codes too (reduced description, missing eyebrow, repeated tagline).
     expect({ slug, findings: fit.findings }).toEqual({ slug, findings: [] });
-    expect(fit.eyebrow).toBe(slug === "home" ? undefined : postSocialPage(posts.find(post => post.slug === slug)!).eyebrow || undefined);
+    expect(fit.eyebrow).toBe(slug === "home" ? "Agent programming language" : postSocialPage(posts.find(post => post.slug === slug)!).eyebrow || undefined);
     expect(() => createSocialImageCard({ ...details, strict: true })).not.toThrow();
   }
 });
