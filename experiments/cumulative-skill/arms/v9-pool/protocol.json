@@ -1,0 +1,661 @@
+{
+  "contract": "algal.study-protocol.v3",
+  "study": "cumulative-skill-v9-pool",
+  "status": "implemented-no-inference",
+  "executor": {
+    "baseUrl": "https://api.x.ai/v1",
+    "model": "grok-4.5",
+    "credentialEnv": "XAI_API_KEY"
+  },
+  "concurrency": 3,
+  "basis": {
+    "v8Protocol": "dc64c02f9274ae92f5475cc9a9a2a4f2c8e4fd57",
+    "v8Finding": "the v8 calibration gate failed: of four fresh seed searches two qualified, one exhausted eight generations, and one was interrupted at generation seven by a session-bounded runner and by protocol not retried; only two fixed seeds showed headroom, no confirmatory block ran, and the development-feedback seed line ended",
+    "change": "The seed procedure is v8 verbatim; the design changes. The estimand moves from planned denominators that count failed seed searches to a claim conditional on seed qualification, a pre-treatment event shared by all four arms: sixteen fresh blocks are seeded in protocol order at concurrency 3 until six closed searches qualify, cap sixteen, and the four arms run only on the six lowest-index qualified blocks. The v8 design needed thirteen qualifications before any comparison (P = 3.7e-4 at the recorded rate 0.545; 0.25 at 0.9), so its gate was infeasible rather than informative. The pool size 16, primary size 6, and win count 5 were derived from the v6-v8 seed-qualification rates and from no optimizer or fixed outcome, none of which exists. The selection plausibly favors the optimizer: a qualified block is one where the same writer already solved the convention from examples, and recorded fixed baselines on qualified seeds passed 1 to 4 of 8 frozen tasks, so a met rule is conditional and plausibly an upper bound.",
+    "lineRule": "If fewer than six of sixteen seed searches qualify, or the primary rule is not met, the conditional-pool line ends; no larger pool, smaller primary set, lower win count, redrawn blocks, extra arms, or changed comparison rule is proposed on this axis."
+  },
+  "unchanged": {
+    "family": "record-triage",
+    "scorerPassAt": 0.9,
+    "modelRoute": "same as v6, v7, and v8",
+    "resourceCeilings": "same as v6, v7, and v8",
+    "confirmatoryArms": [
+      "fixed",
+      "retained",
+      "optimizer",
+      "optimizer-raw"
+    ],
+    "claims": "supervised seed acquisition in one synthetic template family only",
+    "roundSchedule": "same as v7 and v8",
+    "seedProcedure": "same as v8: prompts, feedback fields, score definition, round schedule, generation limit, threshold, splits, and seed budget; the writer manifest digest is byte-identical to v8's"
+  },
+  "tasks": {
+    "acquisition": 8,
+    "unseen": 32,
+    "frozen": 8,
+    "splits": {
+      "train": 24,
+      "validation": 12,
+      "holdout": 12
+    },
+    "seedSplits": {
+      "train": 24,
+      "validation": 12,
+      "holdout": 12,
+      "development": 12
+    },
+    "seedRoles": {
+      "train": "writer sees records and labels",
+      "development": "writer sees a bounded agreement score only",
+      "validation": "selection gate; never enters a writer request",
+      "holdout": "execution batch; never enters a writer request"
+    },
+    "frozenRecordsPerTask": 12,
+    "shape": {
+      "classes": [
+        10,
+        14
+      ],
+      "optionalFields": [
+        3,
+        4
+      ],
+      "rules": [
+        6,
+        10
+      ],
+      "decisionLabels": [
+        3,
+        5
+      ],
+      "queueLabels": [
+        3,
+        5
+      ],
+      "summaries": [
+        2,
+        4
+      ],
+      "grader": "mixed",
+      "scorerPassAt": 0.9,
+      "difficulty": {
+        "hintLeak": 0.5,
+        "noiseSentences": [
+          0,
+          2
+        ],
+        "confusable": 0.7,
+        "subjectMislead": 0.25
+      }
+    },
+    "evolve": {
+      "fromPhase": "acquisition",
+      "addFields": 3,
+      "reviseClasses": 2,
+      "jitterRules": 4
+    },
+    "freshLineages": true,
+    "v5ToV8AncestorsExcluded": true
+  },
+  "seed": {
+    "maxGenerations": 8,
+    "selection": "first-selection-pass",
+    "selectionSplit": "validation",
+    "normalizeEmitted": true,
+    "trainingFeedback": "exact-record training output beside expected training output",
+    "developmentFeedback": {
+      "visibility": "bounded-agreement-score-only",
+      "fields": [
+        "score",
+        "generation",
+        "round"
+      ],
+      "score": "the v6 agreement program's value on the development batch, in [0,1], rounded to hundredths; 0 for an incomplete or refused run",
+      "labels": false,
+      "records": false,
+      "outputs": false,
+      "summaries": false,
+      "purpose": "give the writer the graded value the 0.9 gate hides, so a partially correct revision is distinguishable from a wrong one, without exposing selection answers"
+    },
+    "roundSchedule": [
+      "contrastive-examples",
+      "error-analysis",
+      "invariant-extraction",
+      "counterexample-search",
+      "minimal-rule-rewrite",
+      "fresh-synthesis",
+      "fresh-synthesis",
+      "fresh-synthesis"
+    ],
+    "writerReceives": [
+      "task specification",
+      "library program",
+      "24 labeled training records",
+      "prior training actual and expected output",
+      "development agreement-score history",
+      "generation number",
+      "predeclared round mode"
+    ],
+    "writerNeverReceives": [
+      "selection labels",
+      "selection records",
+      "selection outputs",
+      "selection scores",
+      "full selection reports",
+      "frozen tasks or labels",
+      "human-authored target convention"
+    ],
+    "duplicateRequestRule": "Every generation includes its fixed round number and mode; identical writer request digests are recorded as a protocol failure and are never silently retried",
+    "duplicateManifestRule": "A repeated manifest remains a charged observed attempt and cannot qualify unless it independently passes the untouched selection split"
+  },
+  "budgets": {
+    "seed": {
+      "work": 8000000,
+      "attempts": 64,
+      "runs": 64
+    },
+    "learning": {
+      "work": 40000000,
+      "attempts": 1024,
+      "runs": 512
+    },
+    "frozen": {
+      "work": 40000000,
+      "attempts": 1024,
+      "runs": 512
+    }
+  },
+  "pool": {
+    "size": 16,
+    "launchOrder": "protocol-index",
+    "concurrency": 3,
+    "launchCap": 16,
+    "stopLaunching": "no new seed search launches once six closed searches have terminated qualified; every launched search runs to its own termination",
+    "qualified": "summary.qualified true, termination qualified, validation.passed equal to validation.total, duplicateRequests 0, manifest and catalog present",
+    "interruptedSeed": "a seed stage closed by reconcile counts as launched and not qualified",
+    "minimumQualified": 6,
+    "primarySize": 6,
+    "primarySelection": "the six lowest-index qualified blocks among launched blocks; every other launched block is qualified-not-compared, unqualified, or interrupted",
+    "winsRequired": 5,
+    "frozenTasksPrimary": 48,
+    "nullTail": "P(at least 5 of 6) = 7/64 = 0.109 under a no-tie null; v8's rule was 0.125",
+    "decision": "written once to pool.json when every launched seed stage has result.json and hash-checked before any learning call",
+    "insufficient": "if launches reached sixteen and fewer than six qualified: status insufficient, learn refuses, collect writes the negative result, no arm call",
+    "headroom": "the count of PRIMARY blocks whose fixed frozen scorerPassed is at most 6 is reported and never selects or excludes a block"
+  },
+  "comparison": {
+    "primary": "optimizer-versus-fixed",
+    "coverage": "all six PRIMARY blocks have fixed and optimizer learning outcome complete with 40 observed of 40 tasks and frozen outcome complete with 8 observed of 8; a reconciled fixed or optimizer stage on a PRIMARY block makes the primary insufficient with no replacement block",
+    "wins": "PRIMARY blocks where optimizer frozen scorerPassed strictly exceeds fixed frozen scorerPassed; at least pool.winsRequired of pool.primarySize",
+    "aggregate": "the sum of optimizer frozen scorerPassed strictly exceeds the sum of fixed frozen scorerPassed over the 48 PRIMARY frozen tasks",
+    "tiesWin": false,
+    "aggregateStrict": true,
+    "successRule": "descriptive-repeatability-rule-met if and only if coverage, wins, and aggregate all hold; otherwise not-met, or insufficient when coverage fails",
+    "matchedSpend": "not tested; work per passed frozen task per arm and the optimizer to fixed work ratio are reported",
+    "requiredCoverage": [
+      "six primary blocks",
+      "fixed arm",
+      "optimizer arm"
+    ],
+    "secondaryArms": [
+      "retained",
+      "optimizer-raw"
+    ],
+    "secondaryFailures": "report separately",
+    "offlineAnalyses": "per attempt of every launched search: exact train rows of 24, train summary exact, exact validation rows of 12, validation summary exact, missed validation record ids, labelsCorrect on train, validation, and development; per search: max exact validation rows, persistent misses, first generation at or above 11 and 10 exact rows, per-label summary declared; computed from stored receipts after collect, never a gate",
+    "offlineReading": "the threshold hypothesis predicts that unqualified searches split into single-persistent-miss searches reaching 11/12 and multi-miss searches that do not; the archived v7/v8 rate was 2 of 5 exhausted searches at 11/12",
+    "frozenBeforeEvaluation": true,
+    "productionActivation": false
+  },
+  "runDiscipline": "Each paid command (seed, learn, evaluate) runs as a detached background job that writes a log; monitors only tail the log; no session-bounded runner may own a paid stage. The v8 cal-d search was killed by a thirty-minute session monitor during generation seven, and by protocol it was not retried.",
+  "costAccounting": {
+    "seedSharedPerBlock": true,
+    "failedAndRepeatedAttemptsIncluded": true,
+    "providerBilling": "not inferred from runtime work, calls, tokens, or receipt identity",
+    "nonPrimarySeedCost": "the seed cost of qualified-not-compared, unqualified, and interrupted blocks is reported as poolCost and never added to an arm's cost"
+  },
+  "freezeRule": "Before any provider call, commit this protocol, the v9-pool implementation, the seeds ledger, task snapshots, route, Bun version, and source hashes. After freeze, no prompt, split, threshold, seed, round schedule, budget, pool size, primary size, or win count changes are allowed.",
+  "previousSeeds": [
+    57019,
+    99733,
+    271828,
+    314159,
+    644901,
+    739391,
+    20260927,
+    20261028,
+    20261029,
+    41000001,
+    41000002,
+    41000003,
+    41000004,
+    41000005,
+    41000006,
+    61000001,
+    61000002,
+    61000003,
+    61000004,
+    61000005,
+    61000006,
+    61000007,
+    61000008,
+    61000009,
+    61000010,
+    61000011,
+    61000012,
+    61000013,
+    61000014,
+    61000015,
+    61000016,
+    61000017,
+    61000018,
+    61000019,
+    61000020,
+    61000021,
+    61000022,
+    61000023,
+    61000024,
+    61000025,
+    61000026,
+    61000027,
+    61000028,
+    61000029,
+    61000030,
+    61000031,
+    61000032,
+    61000033,
+    61000034,
+    61000035,
+    61000036,
+    61000037,
+    61000038,
+    61000039,
+    61000040,
+    61000041,
+    61000042,
+    61000043,
+    61000044,
+    61000045,
+    61000046,
+    61000047,
+    61000048,
+    71000001,
+    71000002,
+    71000003,
+    71000004,
+    71000005,
+    71000006,
+    71000007,
+    71000008,
+    71000009,
+    71000010,
+    71000011,
+    71000012,
+    71000013,
+    71000014,
+    71000015,
+    71000016,
+    71000017,
+    71000018,
+    71000019,
+    71000020,
+    71000021,
+    71000022,
+    71000023,
+    71000024,
+    71000025,
+    71000026,
+    71000027,
+    71000028,
+    71000029,
+    71000030,
+    71000031,
+    71000032,
+    71000033,
+    71000034,
+    71000035,
+    71000036,
+    71000037,
+    71000038,
+    71000039,
+    71000040,
+    71000041,
+    71000042,
+    71000043,
+    71000044,
+    71000045,
+    71000046,
+    71000047,
+    71000048,
+    71000049,
+    71000050,
+    71000051,
+    71000052,
+    81000001,
+    81000002,
+    81000003,
+    81000004,
+    81000005,
+    81000006,
+    81000007,
+    81000008,
+    81000009,
+    81000010,
+    81000011,
+    81000012,
+    81000013,
+    81000014,
+    81000015,
+    81000016,
+    81000017,
+    81000018,
+    81000019,
+    81000020,
+    81000021,
+    81000022,
+    81000023,
+    81000024,
+    81000025,
+    81000026,
+    81000027,
+    81000028,
+    81000029,
+    81000030,
+    81000031,
+    81000032,
+    81000033,
+    81000034,
+    81000035,
+    81000036,
+    81000037,
+    81000038,
+    81000039,
+    81000040,
+    81000041,
+    81000042,
+    81000043,
+    81000044,
+    81000045,
+    81000046,
+    81000047,
+    81000048,
+    81000049,
+    81000050,
+    81000051,
+    81000052
+  ],
+  "blocks": [
+    {
+      "id": "p-01",
+      "stage": "pool",
+      "repetition": 1,
+      "armOrder": [
+        "fixed",
+        "retained",
+        "optimizer",
+        "optimizer-raw"
+      ],
+      "seeds": {
+        "acquisition": 93000001,
+        "unseen": 93000002,
+        "shift": 93000003,
+        "ancestor": 93000004
+      }
+    },
+    {
+      "id": "p-02",
+      "stage": "pool",
+      "repetition": 2,
+      "armOrder": [
+        "retained",
+        "optimizer",
+        "optimizer-raw",
+        "fixed"
+      ],
+      "seeds": {
+        "acquisition": 93000005,
+        "unseen": 93000006,
+        "shift": 93000007,
+        "ancestor": 93000008
+      }
+    },
+    {
+      "id": "p-03",
+      "stage": "pool",
+      "repetition": 3,
+      "armOrder": [
+        "optimizer",
+        "optimizer-raw",
+        "fixed",
+        "retained"
+      ],
+      "seeds": {
+        "acquisition": 93000009,
+        "unseen": 93000010,
+        "shift": 93000011,
+        "ancestor": 93000012
+      }
+    },
+    {
+      "id": "p-04",
+      "stage": "pool",
+      "repetition": 4,
+      "armOrder": [
+        "optimizer-raw",
+        "fixed",
+        "retained",
+        "optimizer"
+      ],
+      "seeds": {
+        "acquisition": 93000013,
+        "unseen": 93000014,
+        "shift": 93000015,
+        "ancestor": 93000016
+      }
+    },
+    {
+      "id": "p-05",
+      "stage": "pool",
+      "repetition": 5,
+      "armOrder": [
+        "fixed",
+        "retained",
+        "optimizer",
+        "optimizer-raw"
+      ],
+      "seeds": {
+        "acquisition": 93000017,
+        "unseen": 93000018,
+        "shift": 93000019,
+        "ancestor": 93000020
+      }
+    },
+    {
+      "id": "p-06",
+      "stage": "pool",
+      "repetition": 6,
+      "armOrder": [
+        "retained",
+        "optimizer",
+        "optimizer-raw",
+        "fixed"
+      ],
+      "seeds": {
+        "acquisition": 93000021,
+        "unseen": 93000022,
+        "shift": 93000023,
+        "ancestor": 93000024
+      }
+    },
+    {
+      "id": "p-07",
+      "stage": "pool",
+      "repetition": 7,
+      "armOrder": [
+        "optimizer",
+        "optimizer-raw",
+        "fixed",
+        "retained"
+      ],
+      "seeds": {
+        "acquisition": 93000025,
+        "unseen": 93000026,
+        "shift": 93000027,
+        "ancestor": 93000028
+      }
+    },
+    {
+      "id": "p-08",
+      "stage": "pool",
+      "repetition": 8,
+      "armOrder": [
+        "optimizer-raw",
+        "fixed",
+        "retained",
+        "optimizer"
+      ],
+      "seeds": {
+        "acquisition": 93000029,
+        "unseen": 93000030,
+        "shift": 93000031,
+        "ancestor": 93000032
+      }
+    },
+    {
+      "id": "p-09",
+      "stage": "pool",
+      "repetition": 9,
+      "armOrder": [
+        "fixed",
+        "retained",
+        "optimizer",
+        "optimizer-raw"
+      ],
+      "seeds": {
+        "acquisition": 93000033,
+        "unseen": 93000034,
+        "shift": 93000035,
+        "ancestor": 93000036
+      }
+    },
+    {
+      "id": "p-10",
+      "stage": "pool",
+      "repetition": 10,
+      "armOrder": [
+        "retained",
+        "optimizer",
+        "optimizer-raw",
+        "fixed"
+      ],
+      "seeds": {
+        "acquisition": 93000037,
+        "unseen": 93000038,
+        "shift": 93000039,
+        "ancestor": 93000040
+      }
+    },
+    {
+      "id": "p-11",
+      "stage": "pool",
+      "repetition": 11,
+      "armOrder": [
+        "optimizer",
+        "optimizer-raw",
+        "fixed",
+        "retained"
+      ],
+      "seeds": {
+        "acquisition": 93000041,
+        "unseen": 93000042,
+        "shift": 93000043,
+        "ancestor": 93000044
+      }
+    },
+    {
+      "id": "p-12",
+      "stage": "pool",
+      "repetition": 12,
+      "armOrder": [
+        "optimizer-raw",
+        "fixed",
+        "retained",
+        "optimizer"
+      ],
+      "seeds": {
+        "acquisition": 93000045,
+        "unseen": 93000046,
+        "shift": 93000047,
+        "ancestor": 93000048
+      }
+    },
+    {
+      "id": "p-13",
+      "stage": "pool",
+      "repetition": 13,
+      "armOrder": [
+        "fixed",
+        "retained",
+        "optimizer",
+        "optimizer-raw"
+      ],
+      "seeds": {
+        "acquisition": 93000049,
+        "unseen": 93000050,
+        "shift": 93000051,
+        "ancestor": 93000052
+      }
+    },
+    {
+      "id": "p-14",
+      "stage": "pool",
+      "repetition": 14,
+      "armOrder": [
+        "retained",
+        "optimizer",
+        "optimizer-raw",
+        "fixed"
+      ],
+      "seeds": {
+        "acquisition": 93000053,
+        "unseen": 93000054,
+        "shift": 93000055,
+        "ancestor": 93000056
+      }
+    },
+    {
+      "id": "p-15",
+      "stage": "pool",
+      "repetition": 15,
+      "armOrder": [
+        "optimizer",
+        "optimizer-raw",
+        "fixed",
+        "retained"
+      ],
+      "seeds": {
+        "acquisition": 93000057,
+        "unseen": 93000058,
+        "shift": 93000059,
+        "ancestor": 93000060
+      }
+    },
+    {
+      "id": "p-16",
+      "stage": "pool",
+      "repetition": 16,
+      "armOrder": [
+        "optimizer-raw",
+        "fixed",
+        "retained",
+        "optimizer"
+      ],
+      "seeds": {
+        "acquisition": 93000061,
+        "unseen": 93000062,
+        "shift": 93000063,
+        "ancestor": 93000064
+      }
+    }
+  ]
+}

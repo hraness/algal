@@ -22,8 +22,11 @@ import { verifyReceipt } from "../src/verify";
 import { renderIconSprite, siteIcon } from "./icons";
 import { buildSiteStyles } from "./assets";
 import { renderStatusPageHtml } from "@hraness/design-kit";
+import { highlightCode } from "@hraness/design-kit/syntax-highlighting";
 import { pageDocument, type SitePageMeta } from "./chrome";
-import { ADOPTION_BOUNDARY, INSTALL_TERMINAL, SITE_DESCRIPTION, SITE_TAGLINE } from "./copy";
+import { ADOPTION_BOUNDARY, CIVILIZATION_EXAMPLE, INSTALL_TERMINAL, SITE_DESCRIPTION, SITE_TAGLINE } from "./copy";
+import { renderInstallScript } from "./install-script";
+import { renderPlatformBadges, renderPlatformInstall } from "./platform-install";
 import { renderMarkdown, type LinkRewriter, type RenderedDoc } from "./markdown";
 import { highlightAlgal } from "./highlight";
 import { buildSurfaceFixture } from "../examples/malleable-site/host";
@@ -358,17 +361,22 @@ for (const name of ["refine", "swarm", "habitat"] as const) {
 // The hero leads with the language itself. A chooser steps through example
 // programs; each selection shows the source (or manifest excerpt) beside the
 // facts of one recorded, replay-checked run. The graphs stay one link away.
-const heroReceiptCard = (receipt: RunReceipt) => {
-  const cells = Object.values(receipt.cells);
-  const committed = cells.filter(cell => cell.status === "committed").length;
-  const skipped = cells.filter(cell => cell.status === "skipped").length;
+const heroReceiptCard = (manifest: OrganismManifest, receipt: RunReceipt) => {
+  const outputs = Object.entries(manifest.interface?.outputs ?? {}).map(([name, endpoint]) => {
+    const value = receipt.cells[endpoint.cell]?.outputs?.[endpoint.port];
+    if (value === undefined) throw new Error(`Hero example is missing its ${name} output`);
+    return [name, value] as const;
+  });
+  if (outputs.length === 0) throw new Error("Hero examples need an output to show");
+  const result = outputs.length === 1 ? outputs[0]![1] : Object.fromEntries(outputs);
+  const text = typeof result === "string" ? result : JSON.stringify(result, null, 2);
+  if (Buffer.byteLength(text, "utf8") > 4096) throw new Error("Hero example output exceeds 4 KiB");
+  const output = highlightCode(text, typeof result === "string" ? "text" : "json", { styles: "classes" });
   return {
-    receiptDigest: `${receipt.digest.slice(0, 19)}…`,
+    output,
     evidenceRows: [
-      ["events", `${receipt.events.length}`],
-      ["cells", `${committed} committed${skipped ? ` · ${skipped} skipped` : ""}`],
-      ["effects", `${receipt.effects.length} recorded`],
-      ["outcome", receipt.outcome],
+      ["model calls", `${receipt.work.agentCalls}`],
+      ["result", receipt.outcome],
     ] as [string, string][],
   };
 };
@@ -380,12 +388,10 @@ const habitatManifestExcerpt = JSON.stringify(manifestToJson(habitatManifest), n
 interface HeroExample {
   key: string; file: string; blurb: string;
   graphHref: string; sourceHref: string; evidenceHref: string;
-  codeName: string; codeHtml: string;
-  receiptDigest: string; evidenceRows: [string, string][];
-  manifestDigest: string;
+  codeName: string; codeHtml: string; codeLanguage: "algal" | "json";
+  output: ReturnType<typeof highlightCode>; evidenceRows: [string, string][];
 }
 
-const heroManifestDigest = (receipt: RunReceipt) => `sha256:${receipt.manifestDigest.slice(7, 19)}…`;
 const routeHelp = routeRuns.find(run => run.choice === "help")!;
 
 const heroExamples: HeroExample[] = [
@@ -393,33 +399,29 @@ const heroExamples: HeroExample[] = [
     key: "route", file: "route.algal", blurb: "one decision picks one of three branches",
     graphHref: "/diagrams/route-help.svg",
     sourceHref: "/examples/route.algal", evidenceHref: "/receipts/route-help.receipt.json",
-    codeName: "route.algal", codeHtml: highlightAlgal(routeSource.trimEnd()),
-    ...heroReceiptCard(routeHelp.receipt),
-    manifestDigest: heroManifestDigest(routeHelp.receipt),
+    codeName: "route.algal", codeHtml: highlightAlgal(routeSource.trimEnd()), codeLanguage: "algal",
+    ...heroReceiptCard(route.manifest, routeHelp.receipt),
   },
   {
     key: "reply", file: "reply.algal", blurb: "classify the email, then draft",
     graphHref: "/diagrams/reply-run.svg",
     sourceHref: "/examples/reply.algal", evidenceHref: "/receipts/reply.receipt.json",
-    codeName: "reply.algal", codeHtml: highlightAlgal(replySource.trimEnd()),
-    ...heroReceiptCard(replyReceipt),
-    manifestDigest: heroManifestDigest(replyReceipt),
+    codeName: "reply.algal", codeHtml: highlightAlgal(replySource.trimEnd()), codeLanguage: "algal",
+    ...heroReceiptCard(reply.manifest, replyReceipt),
   },
   {
     key: "inbox", file: "inbox.algal", blurb: "reuse one helper across an inbox",
     graphHref: "/diagrams/inbox.svg",
     sourceHref: "/examples/projects/inbox/inbox.algal", evidenceHref: "/receipts/inbox.receipt.json",
-    codeName: "inbox.algal", codeHtml: highlightAlgal(inbox.source.trimEnd()),
-    ...heroReceiptCard(fullInbox.receipt),
-    manifestDigest: heroManifestDigest(fullInbox.receipt),
+    codeName: "inbox.algal", codeHtml: highlightAlgal(inbox.source.trimEnd()), codeLanguage: "algal",
+    ...heroReceiptCard(inbox.manifest, fullInbox.receipt),
   },
   {
     key: "habitat", file: "habitat.algal.json", blurb: "a program writes and runs a program",
     graphHref: "/diagrams/habitat.svg",
     sourceHref: "/examples/habitat.algal.json", evidenceHref: "/receipts/habitat.receipt.json",
-    codeName: "habitat.algal.json · first 20 lines of the manifest", codeHtml: escapeHtml(habitatManifestExcerpt),
-    ...heroReceiptCard(habitatReceipt),
-    manifestDigest: heroManifestDigest(habitatReceipt),
+    codeName: "habitat.algal.json · first 20 lines of the manifest", codeHtml: highlightCode(habitatManifestExcerpt, "json", { styles: "classes" }).html, codeLanguage: "json",
+    ...heroReceiptCard(habitatManifest, habitatReceipt),
   },
 ];
 
@@ -431,12 +433,13 @@ const HERO_STAGE = `<div class="hero-stage" data-hero-stage>${heroExamples.map((
   <div class="hs-set" data-example-set="${example.key}"${index === 0 ? "" : " hidden"}>
     <figure class="hs-code">
       <figcaption class="hs-bar"><span class="file-label">${escapeHtml(example.codeName)}</span><a href="${example.sourceHref}" download>Source ${heroIcon("download")}</a></figcaption>
-      <pre class="hs-pre" tabindex="0" aria-label="${escapeHtml(example.file)} source"><code>${example.codeHtml}</code></pre>
+      <pre class="hs-pre" tabindex="0" aria-label="${escapeHtml(example.file)} source"><code class="syntax-code language-${example.codeLanguage}" data-language="${example.codeLanguage}">${example.codeHtml}</code></pre>
     </figure>
     <figure class="hs-evidence">
-      <figcaption class="hs-bar"><span class="file-label">Recorded run</span></figcaption>
-      <dl class="hs-dl">${example.evidenceRows.map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join("")}<div><dt>receipt</dt><dd><code>${escapeHtml(example.receiptDigest)}</code></dd></div><div><dt>program</dt><dd><code>${escapeHtml(example.manifestDigest)}</code></dd></div></dl>
-      <p class="hs-links"><a href="${example.evidenceHref}" download>Receipt ${heroIcon("download")}</a><a href="${example.graphHref}" target="_blank" rel="noopener">Program graph ${heroIcon("arrow-up-right")}</a></p>
+      <figcaption class="hs-bar"><span class="file-label">Result · scripted model answers</span></figcaption>
+      <pre class="hs-output" tabindex="0"><code class="${example.output.className}" data-language="${example.output.language}">${example.output.html}</code></pre>
+      <dl class="hs-dl">${example.evidenceRows.map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join("")}</dl>
+      <p class="hs-links"><a href="${example.evidenceHref}" download>Run record ${heroIcon("download")}</a><a href="${example.graphHref}" target="_blank" rel="noopener">Program graph ${heroIcon("arrow-up-right")}</a></p>
     </figure>
   </div>`).join("")}</div>`;
 
@@ -464,6 +467,9 @@ const replacements: Record<string, string> = {
   ROUTE_PANELS: routePanels,
   ADOPTION_BOUNDARY,
   INSTALL_TERMINAL,
+  PLATFORM_INSTALL: renderPlatformInstall(),
+  PLATFORM_BADGES: renderPlatformBadges(),
+  CIVILIZATION_EXAMPLE,
   SITE_DESCRIPTION: escapeHtml(SITE_DESCRIPTION),
   REFINE_ROUNDS: String(refine.maxRounds),
   SWARM_ITEMS: String(swarm.maxItems),
@@ -637,6 +643,9 @@ const llms = (await readFile(join(SITE, "llms.txt"), "utf8")).replaceAll("{{SITE
   .replaceAll("{{BLOG_POSTS}}", blogLlmsList(blogPosts));
 if (/\{\{[A-Z_]+\}\}/.test(llms)) throw new Error("Unresolved site build placeholder in llms.txt");
 await writeFile(join(DIST, "llms.txt"), llms);
+// `curl -fsSL https://algal.computer/install.sh | sh` installs the release
+// named by site/published-release.json.
+await writeFile(join(DIST, "install.sh"), await renderInstallScript(SITE));
 // Shared presentation and iconography are build-time dependencies only. The
 // shipped site has self-hosted fonts/assets; the CLI gains no browser runtime.
 const styles = await buildSiteStyles(DIST);

@@ -1,0 +1,546 @@
+{
+  "contract": "algal.study-protocol.v2",
+  "study": "cumulative-skill-v8",
+  "status": "implemented-no-inference",
+  "executor": {
+    "baseUrl": "https://api.x.ai/v1",
+    "model": "grok-4.5",
+    "credentialEnv": "XAI_API_KEY"
+  },
+  "concurrency": 3,
+  "basis": {
+    "v7Protocol": "741f19ec9f0e82bb8d87a89ff39eeee6e82d01e3",
+    "v7Finding": "all 22 scored development batches failed at the 0.9 threshold, so the writer's score history was constant at zero on every corpus and two of four seed searches reached the eight-generation limit",
+    "change": "Replace the development batch pass indicator with the batch's agreement value in [0,1], rounded to hundredths; nothing else changes",
+    "lineRule": "If this calibration fails, the development-feedback seed line ends; a further protocol on this axis needs a new hypothesis, not a retuned signal"
+  },
+  "unchanged": {
+    "family": "record-triage",
+    "scorerPassAt": 0.9,
+    "modelRoute": "same as v6 and v7",
+    "resourceCeilings": "same as v6 and v7",
+    "confirmatoryArms": [
+      "fixed",
+      "retained",
+      "optimizer",
+      "optimizer-raw"
+    ],
+    "claims": "supervised seed acquisition in one synthetic template family only",
+    "roundSchedule": "same as v7",
+    "calibrationGate": "same as v7"
+  },
+  "tasks": {
+    "acquisition": 8,
+    "unseen": 32,
+    "frozen": 8,
+    "splits": {
+      "train": 24,
+      "validation": 12,
+      "holdout": 12
+    },
+    "seedSplits": {
+      "train": 24,
+      "validation": 12,
+      "holdout": 12,
+      "development": 12
+    },
+    "seedRoles": {
+      "train": "writer sees records and labels",
+      "development": "writer sees a bounded agreement score only",
+      "validation": "selection gate; never enters a writer request",
+      "holdout": "execution batch; never enters a writer request"
+    },
+    "frozenRecordsPerTask": 12,
+    "shape": {
+      "classes": [
+        10,
+        14
+      ],
+      "optionalFields": [
+        3,
+        4
+      ],
+      "rules": [
+        6,
+        10
+      ],
+      "decisionLabels": [
+        3,
+        5
+      ],
+      "queueLabels": [
+        3,
+        5
+      ],
+      "summaries": [
+        2,
+        4
+      ],
+      "grader": "mixed",
+      "scorerPassAt": 0.9,
+      "difficulty": {
+        "hintLeak": 0.5,
+        "noiseSentences": [
+          0,
+          2
+        ],
+        "confusable": 0.7,
+        "subjectMislead": 0.25
+      }
+    },
+    "evolve": {
+      "fromPhase": "acquisition",
+      "addFields": 3,
+      "reviseClasses": 2,
+      "jitterRules": 4
+    },
+    "freshLineages": true,
+    "v5ToV7AncestorsExcluded": true
+  },
+  "seed": {
+    "maxGenerations": 8,
+    "selection": "first-selection-pass",
+    "selectionSplit": "validation",
+    "normalizeEmitted": true,
+    "trainingFeedback": "exact-record training output beside expected training output",
+    "developmentFeedback": {
+      "visibility": "bounded-agreement-score-only",
+      "fields": [
+        "score",
+        "generation",
+        "round"
+      ],
+      "score": "the v6 agreement program's value on the development batch, in [0,1], rounded to hundredths; 0 for an incomplete or refused run",
+      "labels": false,
+      "records": false,
+      "outputs": false,
+      "summaries": false,
+      "purpose": "give the writer the graded value the 0.9 gate hides, so a partially correct revision is distinguishable from a wrong one, without exposing selection answers"
+    },
+    "roundSchedule": [
+      "contrastive-examples",
+      "error-analysis",
+      "invariant-extraction",
+      "counterexample-search",
+      "minimal-rule-rewrite",
+      "fresh-synthesis",
+      "fresh-synthesis",
+      "fresh-synthesis"
+    ],
+    "writerReceives": [
+      "task specification",
+      "library program",
+      "24 labeled training records",
+      "prior training actual and expected output",
+      "development agreement-score history",
+      "generation number",
+      "predeclared round mode"
+    ],
+    "writerNeverReceives": [
+      "selection labels",
+      "selection records",
+      "selection outputs",
+      "selection scores",
+      "full selection reports",
+      "frozen tasks or labels",
+      "human-authored target convention"
+    ],
+    "duplicateRequestRule": "Every generation includes its fixed round number and mode; identical writer request digests are recorded as a protocol failure and are never silently retried",
+    "duplicateManifestRule": "A repeated manifest remains a charged observed attempt and cannot qualify unless it independently passes the untouched selection split"
+  },
+  "budgets": {
+    "seed": {
+      "work": 8000000,
+      "attempts": 64,
+      "runs": 64
+    },
+    "learning": {
+      "work": 40000000,
+      "attempts": 1024,
+      "runs": 512
+    },
+    "frozen": {
+      "work": 40000000,
+      "attempts": 1024,
+      "runs": 512
+    }
+  },
+  "calibration": {
+    "blocks": [
+      "cal-a",
+      "cal-b",
+      "cal-c",
+      "cal-d"
+    ],
+    "requiredSeeds": 4,
+    "headroomRule": "at least three fixed seeds pass no more than six of eight fresh frozen tasks",
+    "proceed": "all four seed searches qualify and headroomRule passes",
+    "failure": "collect and replay the negative calibration; do not start confirmatory blocks or tune this protocol; the development-feedback seed line ends"
+  },
+  "replication": {
+    "blocks": 9,
+    "groups": [
+      "a",
+      "b",
+      "c"
+    ],
+    "repetitionsPerGroup": 3,
+    "primary": "optimizer-versus-fixed",
+    "successRule": "optimizer strictly wins at least two of three blocks in every group and wins aggregate passes",
+    "requiredCoverage": [
+      "all nine confirmatory blocks",
+      "fixed arm",
+      "optimizer arm"
+    ],
+    "secondaryFailures": "report separately",
+    "frozenBeforeEvaluation": true,
+    "productionActivation": false
+  },
+  "costAccounting": {
+    "seedSharedPerBlock": true,
+    "failedAndRepeatedAttemptsIncluded": true,
+    "providerBilling": "not inferred from runtime work, calls, tokens, or receipt identity"
+  },
+  "freezeRule": "Before any provider call, commit this protocol, the v8 implementation, task snapshots, route, Bun version, and source hashes. After freeze, no prompt, split, threshold, seed, round schedule, or budget changes are allowed.",
+  "previousSeeds": [
+    57019,
+    99733,
+    271828,
+    314159,
+    644901,
+    739391,
+    20260927,
+    20261028,
+    20261029,
+    41000001,
+    41000002,
+    41000003,
+    41000004,
+    41000005,
+    41000006,
+    61000001,
+    61000002,
+    61000003,
+    61000004,
+    61000005,
+    61000006,
+    61000007,
+    61000008,
+    61000009,
+    61000010,
+    61000011,
+    61000012,
+    61000013,
+    61000014,
+    61000015,
+    61000016,
+    61000017,
+    61000018,
+    61000019,
+    61000020,
+    61000021,
+    61000022,
+    61000023,
+    61000024,
+    61000025,
+    61000026,
+    61000027,
+    61000028,
+    61000029,
+    61000030,
+    61000031,
+    61000032,
+    61000033,
+    61000034,
+    61000035,
+    61000036,
+    61000037,
+    61000038,
+    61000039,
+    61000040,
+    61000041,
+    61000042,
+    61000043,
+    61000044,
+    61000045,
+    61000046,
+    61000047,
+    61000048,
+    71000001,
+    71000002,
+    71000003,
+    71000004,
+    71000005,
+    71000006,
+    71000007,
+    71000008,
+    71000009,
+    71000010,
+    71000011,
+    71000012,
+    71000013,
+    71000014,
+    71000015,
+    71000016,
+    71000017,
+    71000018,
+    71000019,
+    71000020,
+    71000021,
+    71000022,
+    71000023,
+    71000024,
+    71000025,
+    71000026,
+    71000027,
+    71000028,
+    71000029,
+    71000030,
+    71000031,
+    71000032,
+    71000033,
+    71000034,
+    71000035,
+    71000036,
+    71000037,
+    71000038,
+    71000039,
+    71000040,
+    71000041,
+    71000042,
+    71000043,
+    71000044,
+    71000045,
+    71000046,
+    71000047,
+    71000048,
+    71000049,
+    71000050,
+    71000051,
+    71000052
+  ],
+  "blocks": [
+    {
+      "id": "cal-a",
+      "stage": "calibration",
+      "corpus": "a",
+      "repetition": 1,
+      "armOrder": [
+        "fixed"
+      ],
+      "seeds": {
+        "acquisition": 81000001,
+        "unseen": 81000002,
+        "shift": 81000003,
+        "ancestor": 81000004
+      }
+    },
+    {
+      "id": "cal-b",
+      "stage": "calibration",
+      "corpus": "b",
+      "repetition": 1,
+      "armOrder": [
+        "fixed"
+      ],
+      "seeds": {
+        "acquisition": 81000005,
+        "unseen": 81000006,
+        "shift": 81000007,
+        "ancestor": 81000008
+      }
+    },
+    {
+      "id": "cal-c",
+      "stage": "calibration",
+      "corpus": "c",
+      "repetition": 1,
+      "armOrder": [
+        "fixed"
+      ],
+      "seeds": {
+        "acquisition": 81000009,
+        "unseen": 81000010,
+        "shift": 81000011,
+        "ancestor": 81000012
+      }
+    },
+    {
+      "id": "cal-d",
+      "stage": "calibration",
+      "corpus": "d",
+      "repetition": 1,
+      "armOrder": [
+        "fixed"
+      ],
+      "seeds": {
+        "acquisition": 81000013,
+        "unseen": 81000014,
+        "shift": 81000015,
+        "ancestor": 81000016
+      }
+    },
+    {
+      "id": "a-r1",
+      "stage": "confirmatory",
+      "corpus": "a",
+      "repetition": 1,
+      "armOrder": [
+        "fixed",
+        "retained",
+        "optimizer",
+        "optimizer-raw"
+      ],
+      "seeds": {
+        "acquisition": 81000017,
+        "unseen": 81000018,
+        "shift": 81000019,
+        "ancestor": 81000020
+      }
+    },
+    {
+      "id": "a-r2",
+      "stage": "confirmatory",
+      "corpus": "a",
+      "repetition": 2,
+      "armOrder": [
+        "retained",
+        "optimizer",
+        "optimizer-raw",
+        "fixed"
+      ],
+      "seeds": {
+        "acquisition": 81000021,
+        "unseen": 81000022,
+        "shift": 81000023,
+        "ancestor": 81000024
+      }
+    },
+    {
+      "id": "a-r3",
+      "stage": "confirmatory",
+      "corpus": "a",
+      "repetition": 3,
+      "armOrder": [
+        "optimizer",
+        "optimizer-raw",
+        "fixed",
+        "retained"
+      ],
+      "seeds": {
+        "acquisition": 81000025,
+        "unseen": 81000026,
+        "shift": 81000027,
+        "ancestor": 81000028
+      }
+    },
+    {
+      "id": "b-r1",
+      "stage": "confirmatory",
+      "corpus": "b",
+      "repetition": 1,
+      "armOrder": [
+        "optimizer-raw",
+        "fixed",
+        "retained",
+        "optimizer"
+      ],
+      "seeds": {
+        "acquisition": 81000029,
+        "unseen": 81000030,
+        "shift": 81000031,
+        "ancestor": 81000032
+      }
+    },
+    {
+      "id": "b-r2",
+      "stage": "confirmatory",
+      "corpus": "b",
+      "repetition": 2,
+      "armOrder": [
+        "fixed",
+        "retained",
+        "optimizer",
+        "optimizer-raw"
+      ],
+      "seeds": {
+        "acquisition": 81000033,
+        "unseen": 81000034,
+        "shift": 81000035,
+        "ancestor": 81000036
+      }
+    },
+    {
+      "id": "b-r3",
+      "stage": "confirmatory",
+      "corpus": "b",
+      "repetition": 3,
+      "armOrder": [
+        "retained",
+        "optimizer",
+        "optimizer-raw",
+        "fixed"
+      ],
+      "seeds": {
+        "acquisition": 81000037,
+        "unseen": 81000038,
+        "shift": 81000039,
+        "ancestor": 81000040
+      }
+    },
+    {
+      "id": "c-r1",
+      "stage": "confirmatory",
+      "corpus": "c",
+      "repetition": 1,
+      "armOrder": [
+        "optimizer",
+        "optimizer-raw",
+        "fixed",
+        "retained"
+      ],
+      "seeds": {
+        "acquisition": 81000041,
+        "unseen": 81000042,
+        "shift": 81000043,
+        "ancestor": 81000044
+      }
+    },
+    {
+      "id": "c-r2",
+      "stage": "confirmatory",
+      "corpus": "c",
+      "repetition": 2,
+      "armOrder": [
+        "optimizer-raw",
+        "fixed",
+        "retained",
+        "optimizer"
+      ],
+      "seeds": {
+        "acquisition": 81000045,
+        "unseen": 81000046,
+        "shift": 81000047,
+        "ancestor": 81000048
+      }
+    },
+    {
+      "id": "c-r3",
+      "stage": "confirmatory",
+      "corpus": "c",
+      "repetition": 3,
+      "armOrder": [
+        "fixed",
+        "retained",
+        "optimizer",
+        "optimizer-raw"
+      ],
+      "seeds": {
+        "acquisition": 81000049,
+        "unseen": 81000050,
+        "shift": 81000051,
+        "ancestor": 81000052
+      }
+    }
+  ]
+}

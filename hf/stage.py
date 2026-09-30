@@ -13,6 +13,8 @@ SOURCE_DESTINATIONS = {
     "docs/application-research-results-2026-09-23.json": "studies/application-research-2026-09-23/results.json",
     "docs/cumulative-skill-results-2026-09-28.json": "studies/cumulative-skill-v5-2026-09-28/results.json",
     "docs/cumulative-skill-v6-results-2026-09-28.json": "studies/cumulative-skill-v6-2026-09-28/results.json",
+    "docs/cumulative-skill-v7-results-2026-09-29.json": "studies/cumulative-skill-v7-2026-09-29/results.json",
+    "docs/cumulative-skill-v8-results-2026-09-29.json": "studies/cumulative-skill-v8-2026-09-29/results.json",
     "LICENSE": "LICENSE",
 }
 

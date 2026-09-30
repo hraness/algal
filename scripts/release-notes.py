@@ -30,6 +30,7 @@ DIGEST_PATTERN = re.compile(r"[0-9a-f]{64}")
 TARGETS = {
     "aarch64-apple-darwin": "macOS 14 or newer on Apple silicon (unsigned and not notarized)",
     "x86_64-unknown-linux-gnu": "Ubuntu 24.04 x86_64, glibc 2.39 or newer",
+    "aarch64-unknown-linux-gnu": "Ubuntu 24.04 arm64, glibc 2.39 or newer",
 }
 
 
@@ -129,10 +130,18 @@ def install_section(identity):
     lines = [
         "## Install",
         "",
-        "Download the archive for your platform with its checksum, then install it with the "
-        f"installer from the `{tag}` source. The installer needs Python 3 and checks the archive "
-        "checksum and the binary digest before it installs anything. The installed `algal` needs "
-        "no Bun, Cargo, or checkout.",
+        "On macOS (Apple silicon) or Linux (x86_64 or arm64), this installs the release into "
+        "`~/.local/bin`. The script checks the archive against its `.sha256` file and the "
+        "executable against the digest recorded in the archive before it installs anything. "
+        "The installed `algal` needs no Bun, Cargo, or checkout.",
+        "",
+        "```sh",
+        f"curl -fsSL https://algal.computer/install.sh | ALGAL_VERSION={tag} sh",
+        "\"$HOME/.local/bin/algal\" doctor",
+        "```",
+        "",
+        "Or download the archive for your platform with its checksum and install it with the "
+        f"installer from the `{tag}` source, which needs Python 3 and checks the same digests.",
         "",
         "```sh",
         f"git clone --depth 1 --branch {tag} https://github.com/{REPOSITORY} algal-{tag}",

@@ -10,9 +10,10 @@ permissions:
   contents: read
 
 # Pull request runs are superseded by the next push; main runs finish, because
-# release.yml qualifies a tag against the completed main push run.
+# release.yml qualifies a tag against the completed main push run. Main runs
+# group per commit, so a later merge never replaces a pending main run.
 concurrency:
-  group: check-${{ github.ref }}
+  group: check-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -71,7 +72,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
-      - uses: actions/cache@v6
+      - uses: actions/cache/restore@v6
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
@@ -83,9 +84,21 @@ jobs:
       - run: bun run build:site
       - run: python3 scripts/test-release-notes.py
       - run: bun run check:hf
+      # Pull requests only restore caches; main saves the one bun cache.
+      - uses: actions/cache/save@v6
+        if: github.event_name == 'push'
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
 
+  # Three file-level shards; the slowest file (the 32-task browser triage
+  # capacity case, ~2 min) sets the floor of one shard.
   test:
-    name: Test
+    name: Test (${{ matrix.shard }}/3)
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -93,13 +106,13 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
-      - uses: actions/cache@v6
+      - uses: actions/cache/restore@v6
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
       - run: bun install --frozen-lockfile
-      - run: bun run test
+      - run: bun run test --shard=${{ matrix.shard }}/3
 
   coding-harness:
     name: Coding harness adapter
@@ -112,7 +125,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
-      - uses: actions/cache@v6
+      - uses: actions/cache/restore@v6
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
@@ -120,10 +133,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
-          cache-dependency-path: examples/coding-harness/requirements-harbor.txt
+      - uses: actions/cache/restore@v6
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('examples/coding-harness/requirements-harbor.txt') }}
       - run: bun install --frozen-lockfile
       - run: python -m pip install -r examples/coding-harness/requirements-harbor.txt
+      - uses: actions/cache/save@v6
+        if: github.event_name == 'push'
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('examples/coding-harness/requirements-harbor.txt') }}
       - run: python -m unittest discover -s examples/coding-harness -p 'test_*.py'
 
   browser-grow:
@@ -140,7 +160,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "24"
-      - uses: actions/cache@v6
+      - uses: actions/cache/restore@v6
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
@@ -150,11 +170,16 @@ jobs:
       - name: Resolve installed Playwright version
         id: playwright
         run: echo "version=$(bun -p 'require("./node_modules/playwright-core/package.json").version')" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v6
+      - uses: actions/cache/restore@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
       - run: node node_modules/playwright-core/cli.js install --with-deps chromium
+      - uses: actions/cache/save@v6
+        if: github.event_name == 'push'
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
       - name: Real browser persistence, custody and offline lifecycle
         run: |
           export ALGAL_PLAYWRIGHT_MODULE="$PWD/node_modules/playwright-core/index.mjs"
@@ -334,6 +359,8 @@ jobs:
         include:
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
           - os: macos-14
             target: aarch64-apple-darwin
     runs-on: ${{ matrix.os }}
@@ -367,7 +394,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
-      - uses: actions/cache@v6
+      - uses: actions/cache/restore@v6
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
@@ -403,7 +430,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
-      - uses: actions/cache@v6
+      - uses: actions/cache/restore@v6
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
@@ -439,7 +466,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
-      - uses: actions/cache@v6
+      - uses: actions/cache/restore@v6
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}

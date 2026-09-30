@@ -105,7 +105,11 @@ export const CONDITION_SLOTS = [
 export const OUTPUT_FIELDS = ["decision", "priority", "queue"] as const;
 export const SUMMARY_NAMES = ["total", "perLabel", "perDecision", "perPriority", "perQueue"] as const;
 export const EXPERIMENT_PHASES = ["acquisition", "unseen", "shift"] as const;
-export const EXPERIMENT_SPLITS = ["train", "validation", "holdout"] as const;
+/** `train`, `validation`, and `holdout` are required; `development` is an
+ * optional fourth batch a study may score for bounded search feedback
+ * without touching the selecting or sealed splits. */
+export const EXPERIMENT_SPLITS = ["train", "validation", "holdout", "development"] as const;
+export const REQUIRED_EXPERIMENT_SPLITS = ["train", "validation", "holdout"] as const;
 
 export type ExperimentPhase = (typeof EXPERIMENT_PHASES)[number];
 export type ExperimentSplit = (typeof EXPERIMENT_SPLITS)[number];
@@ -549,9 +553,9 @@ export function parseExperimentTaskSpec(value: unknown): ExperimentTaskSpec {
     const expect = parseExpect(reqField(batch, "expect", `experiment task ${at}`), parsedRecords, classIds, outputFormat, `${at}.expect`);
     return { id, split: split as ExperimentSplit, records: parsedRecords, expect };
   });
-  if (!splits.has("train")) fail("inputs must include a train batch");
-  if (!splits.has("validation")) fail("inputs must include a validation batch");
-  if (!splits.has("holdout")) fail("inputs must include a holdout batch");
+  for (const split of REQUIRED_EXPERIMENT_SPLITS) {
+    if (!splits.has(split)) fail(`inputs must include a ${split} batch`);
+  }
 
   const grader = parseExperimentGrader(reqField(spec, "grader", "experiment task record"));
   const digest = asDigest(reqField(spec, "digest", "experiment task record"), "experiment task digest");
@@ -784,7 +788,7 @@ export function parseExperimentGrade(value: unknown): ExperimentGrade {
   const taskDigest = asDigest(reqField(record, "taskDigest", "experiment grade record"), "experiment grade taskDigest");
   const caseId = safeId(reqField(record, "case", "experiment grade record"), "grade.case");
   const split = reqField(record, "split", "experiment grade record");
-  if (typeof split !== "string" || !(EXPERIMENT_SPLITS as readonly string[]).includes(split)) fail("grade.split must be train, validation, or holdout");
+  if (typeof split !== "string" || !(EXPERIMENT_SPLITS as readonly string[]).includes(split)) fail(`grade.split must be one of ${EXPERIMENT_SPLITS.join(", ")}`);
   const score = reqField(record, "score", "experiment grade record");
   if (typeof score !== "number" || !Number.isFinite(score) || score < 0 || score > 1) fail("grade.score must be a number in [0,1]");
   const passAt = reqField(record, "passAt", "experiment grade record");

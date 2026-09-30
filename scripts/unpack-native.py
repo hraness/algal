@@ -104,7 +104,8 @@ def unpack(archive, checksum, out, retain_metadata=False):
         raise ValueError("checksum file must identify exactly this archive")
     if hashlib.sha256(archive_data).hexdigest() != expected[0]:
         raise ValueError("release checksum mismatch")
-    target = {("Linux", "x86_64"): "x86_64-unknown-linux-gnu", ("Darwin", "arm64"): "aarch64-apple-darwin"}.get((platform.system(), platform.machine()))
+    target = {("Linux", "x86_64"): "x86_64-unknown-linux-gnu", ("Linux", "aarch64"): "aarch64-unknown-linux-gnu",
+              ("Darwin", "arm64"): "aarch64-apple-darwin"}.get((platform.system(), platform.machine()))
     if target is None:
         raise ValueError("unsupported native platform")
     with bounded_tar(archive_data) as expanded, tarfile.open(fileobj=expanded, mode="r:") as tar:

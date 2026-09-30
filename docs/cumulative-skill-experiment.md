@@ -498,6 +498,63 @@ test results, and all 2,441,155 recorded work units. Its fresh task draws do
 not provide a paired comparison with v5. The v5 results above remain the
 record of the original study.
 
+### v7 · calibration with bounded development feedback
+
+V7 is a separate protocol for the observed v6 seed-search failure. It adds a
+bounded development-score signal and eight predeclared revision modes while
+keeping selection answers outside writer requests. Four fresh calibration
+blocks had to qualify before any confirmatory block could run. Two of the
+four produced passing seeds; the other two exhausted eight attempts, and
+every scored development batch failed, so the new signal was constant at
+zero. The required calibration gate stopped the study, so none of the nine
+planned comparison blocks ran.
+
+The [v7 report](cumulative-skill-v7.md) preserves that outcome, the
+fixed-seed test results, and all 3,814,053 recorded work units. The [v7
+protocol](cumulative-skill-v7-protocol.md) records the design. Its fresh
+task draws do not provide a paired comparison with v6.
+
+### v8 · graded development score
+
+V8 keeps every v7 rule and changes one input: the writer receives the
+development batch's agreement value in [0,1] instead of its pass indicator,
+so a partially correct revision is distinguishable from a wrong one. Its
+calibration gate is v7's, plus a line rule fixed before inference: if v8's
+calibration fails, the development-feedback seed line ends. Two of four
+fresh calibration seeds passed, one search exhausted eight generations, and
+the fourth was interrupted by the launching session during generation seven
+and, by protocol, not retried. The graded score varied from 0.33 to 0.80 and
+rose on later generations, so the writer received a non-constant signal
+this time; no scored candidate reached the 0.9 threshold. The gate failed
+on the three complete blocks alone, so none of the nine planned comparison
+blocks ran and the line ended.
+
+The [v8 report](cumulative-skill-v8.md) preserves that outcome, the
+interruption, the fixed-seed test results, and all 3,169,604 recorded work
+units. The [v8 protocol](cumulative-skill-v8-protocol.md) records the
+design. Its fresh task draws do not provide a paired comparison with v7.
+
+### v9-pool · proposal, not yet run: a comparison conditional on seed qualification
+
+V9-pool is a proposal on the study-design axis rather than the seed axis.
+It keeps the v8 seed procedure byte for byte and changes the gate: 16 fresh
+blocks are seeded in protocol order, three at a time, until six searches
+qualify, and the four arms run only on the six lowest-index qualified
+blocks. The claim becomes one about blocks on which the unchanged seed
+procedure produced a passing seed, an event that precedes every arm and is
+shared by all four. That selection plausibly favors the optimizer, so a met
+rule would be a conditional result and plausibly an upper bound. The primary
+rule is a strict optimizer win over fixed on at least five of the six blocks
+and in aggregate over 48 frozen tasks. If fewer than six of the 16 searches
+qualify, no arm runs and the line ends.
+
+The protocol is implemented and not frozen, and no v9-pool provider call has
+occurred. Whether the comparison runs depends on the seed stage. The
+[v9-pool protocol](cumulative-skill-v9-pool-protocol.md) records the design
+and its cost derivation, and the [v9 lines page](cumulative-skill-v9-lines.md)
+records the two other candidate lines designed the same day and why they
+are not run.
+
 ## Status and limits
 
 These studies demonstrate saved-program reuse, revision, demotion, and

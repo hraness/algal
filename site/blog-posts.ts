@@ -19,6 +19,9 @@ type Source = ArticleSourceItem & Readonly<{ public: boolean }>;
 const source = (title: string, href: string, isPublic = true, checkedOn: ArticleIsoDate = CHECKED): Source => ({ title, href, checkedOn, public: isPublic });
 
 // The 2026-09-28 review of the two design posts checked claims at this commit.
+// Ben Guo decided on 2026-09-29 to keep receipts-fossil-record and
+// programs-that-wait indexable on that AI-only review. No person has reviewed
+// either post, so humanReview stays null and each page names its AI reviewer.
 const REVIEW_EVIDENCE = "57c0d8aa0ae2398119b5635edafa370af7d9072a";
 const REVIEWED: ArticleIsoDate = "2026-09-28";
 const reviewed = (title: string, href: string) => source(title, href, true, REVIEWED);

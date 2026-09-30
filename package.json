@@ -64,7 +64,11 @@
     "./improve": "./src/improve.ts",
     "./graph": "./src/graph.ts",
     "./tools": "./src/tools.ts",
-    "./tool-context": "./src/tool-context.ts"
+    "./tool-context": "./src/tool-context.ts",
+    "./habitat-link": "./src/habitat-link.ts",
+    "./habitat-link-authority": "./src/habitat-link-authority.ts",
+    "./habitat-link-host": "./src/habitat-link-host.ts",
+    "./habitat-link-socket": "./src/habitat-link-socket.ts"
   },
   "bin": {
     "algal": "./cli.ts"
@@ -103,15 +107,16 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
-    "@hraness/design-kit": "github:hraness/design-kit#v0.21.0",
+    "@hraness/design-kit": "github:hraness/design-kit#v0.30.2",
     "@hraness/desktop-foundation": "https://github.com/hraness/desktop-foundation/releases/download/v0.8.0/hraness-desktop-foundation-0.8.0.tgz",
     "@hraness/ui": "github:hraness/ui#v0.5.18",
-    "@hraness/web-discovery": "github:hraness/web-discovery#v0.10.0",
+    "@hraness/web-discovery": "github:hraness/web-discovery#v0.11.0",
     "@hugeicons/core-free-icons": "4.3.0",
     "@mlc-ai/web-llm": "0.2.85",
     "@resvg/resvg-js": "2.6.2",
     "@types/bun": "^1.2.0",
     "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
     "eslint": "^9.13.0",
     "playwright-core": "1.63.0",
     "react": "19.2.3",

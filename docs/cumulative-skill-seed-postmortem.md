@@ -88,3 +88,9 @@ improvement to be measured.
 The preregistered rule either permits the nine-block study or stops it. A seed
 that already solves nearly every calibration task would leave little room for
 an optimizer to improve.
+
+V6 stopped at that gate because one seed search exhausted its eight attempts.
+The [V7 protocol design](../experiments/cumulative-skill/arms/v7/README.md)
+keeps the V6 family and scorer while adding a bounded development signal,
+predeclared revision modes, and a separate untouched selection split. No V7
+provider call has occurred.

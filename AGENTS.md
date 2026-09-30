@@ -14,7 +14,11 @@
   the derived semantic index plus recall executor (`semantic.ts`), foundry
   evaluation and search (`foundry.ts`, `search.ts`) with the habitat-wide
   work account (`habitat-budget.ts`) and its round-robin scheduler and
-  resumable journal (`habitat-schedule.ts`), benchmark comparison (`bench.ts`,
+  resumable journal (`habitat-schedule.ts`), the Habitat Link records and
+  client (`habitat-link.ts`), signed descriptors and grants
+  (`habitat-link-authority.ts`), and the caller tools plus local acceptor
+  that bind them to processes (`habitat-link-host.ts`, spike notes in
+  `docs/habitat-link-spike.md`), benchmark comparison (`bench.ts`,
   `bench-verify.ts`), the cumulative-skill experiment arm runner and report
   (`experiment-run.ts`, `experiment-report.ts`, `experiment-verify.ts`),
   bundles (`bundle.ts`), transports (`transport.ts`), the shared
@@ -63,6 +67,13 @@
   recorded scope, rights review, validation, and history-preservation requirements.
 - Use the supported `hf` CLI from a reviewed stage after rights review and normal
   repository checks. Record the remote commit and verify downloaded file hashes.
+- Publishing is part of every study's delivery, not a separate request. When a
+  study closes with a public summary JSON in `docs/`, the same change adds its
+  stage pair, manifest entry, card row, and runbook rights record; after the
+  change integrates, stage from the clean merged checkout, upload, verify the
+  remote hashes, and record the Hub commit before closing out. Ben confirmed
+  this standing rule on 2026-09-29: do not ask whether to publish a closed
+  study. Ask only for a new destination, private data, or historical deletion.
 
 # Guidelines
 

@@ -105,6 +105,17 @@ describe("parseExperimentFamilyConfig", () => {
     expectConfigError({ ...config(), shape: { ...BASE_SHAPE, classes: [9, 6] } }, "exceeds");
   });
 
+  test("an optional development split is bounded and counts toward the record total", () => {
+    expect(config().splits.development).toBeUndefined();
+    expect(config({ splits: { train: 24, validation: 12, holdout: 12, development: 12 } }).splits.development).toBe(12);
+    expectConfigError({ ...config(), splits: { train: 24, validation: 12, holdout: 12, development: 0 } }, "splits.development");
+    expectConfigError(
+      { ...config(), splits: { train: 24, validation: 12, holdout: 12, development: 17 } },
+      `splits total 65 records exceeds ${EXPERIMENT_TASK_BOUNDS.maxRecords}`,
+    );
+    expectConfigError({ ...config(), splits: { train: 24, validation: 12, holdout: 12, extra: 1 } }, 'unknown key "extra"');
+  });
+
   test("evolve is required for shift and forbidden elsewhere", () => {
     expectConfigError({ ...config(), phase: "shift" }, "requires evolve");
     expectConfigError(
@@ -125,6 +136,29 @@ describe("generateExperimentTasks", () => {
       const b = generateExperimentTasks(config({ seed }));
       expect(canonicalize(a.tasks as unknown as JsonValue)).toBe(canonicalize(b.tasks as unknown as JsonValue));
       expect(canonicalize(a.set as unknown as JsonValue)).toBe(canonicalize(b.set as unknown as JsonValue));
+    }
+  });
+
+  test("a development split appends a fourth scored batch without changing the required batches", () => {
+    const base = generateExperimentTasks(config({ seed: 20260925 }));
+    const withDevelopment = generateExperimentTasks(config({ seed: 20260925, splits: { train: 24, validation: 12, holdout: 12, development: 12 } }));
+    expect(withDevelopment.tasks).toHaveLength(base.tasks.length);
+    for (const [i, task] of withDevelopment.tasks.entries()) {
+      const original = base.tasks[i]!;
+      expect(task.inputs.map((batch) => batch.split)).toEqual(["train", "validation", "holdout", "development"]);
+      expect(canonicalize(task.inputs.slice(0, 3) as unknown as JsonValue)).toBe(canonicalize(original.inputs as unknown as JsonValue));
+      const development = task.inputs[3]!;
+      expect(development.id).toBe("development");
+      expect(development.records).toHaveLength(12);
+      expect(development.records.map((record) => record["id"])).toEqual(
+        Array.from({ length: 12 }, (_, j) => `development-${String(j + 1).padStart(2, "0")}`),
+      );
+      expect(development.expect.out.results).toHaveLength(12);
+      expect(canonicalize(development.records as unknown as JsonValue)).not.toBe(canonicalize(original.inputs[0]!.records as unknown as JsonValue));
+      expect(task.family.config).not.toBe(original.family.config);
+      expect(task.digest).not.toBe(original.digest);
+      expect(canonicalize({ ...task, inputs: null, family: null, digest: null } as unknown as JsonValue))
+        .toBe(canonicalize({ ...original, inputs: null, family: null, digest: null } as unknown as JsonValue));
     }
   });
 

@@ -1,0 +1,10 @@
+{
+  "repository": "https://github.com/hraness/design-kit",
+  "version": "0.30.0",
+  "tag": "v0.30.0",
+  "commit": "27a3a33aa8f8015dd56bfce0a8025bd1e476bbbe",
+  "path": "src/site-shell.css",
+  "source": "https://github.com/hraness/design-kit/blob/v0.30.0/src/site-shell.css",
+  "sha256": "ff45b53be4d26f70c14a5749e75ed03236299d8d36c10ed01680a62d04573e33",
+  "license": "MIT"
+}

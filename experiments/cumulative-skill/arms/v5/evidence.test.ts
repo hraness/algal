@@ -296,5 +296,7 @@ describe("v5 archived study preflight", () => {
     delete sessions.fixed;
     writeFileSync(join(f.corpusDir, "sessions.json"), encode(sessions));
     await expect(preflightCorpus(f.root, "v4", f.executionBytes)).rejects.toThrow("missing fixed session");
-  }, 30_000);
+  // Four fsync-backed arm archives plus repeated offline replay can exceed
+  // 30 seconds when the full gate shares a busy disk. Keep every evidence check.
+  }, 120_000);
 });

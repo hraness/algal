@@ -1,13 +1,20 @@
 name: Production public site browser
+# Runs after every successful Vercel Production deployment, and on demand.
+# Vercel also reports Preview deployments; those runs skip every job.
 on:
   workflow_dispatch:
+  deployment_status:
 permissions:
   contents: read
 concurrency:
-  group: production-public-browser
+  group: production-public-browser-${{ github.event_name }}-${{ github.event.deployment.environment || 'dispatch' }}-${{ github.sha }}
   cancel-in-progress: false
 jobs:
   browser:
+    name: Production browser
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.deployment.environment == 'Production' && github.event.deployment_status.state == 'success')
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
@@ -33,9 +40,11 @@ jobs:
           include-hidden-files: true
           retention-days: 7
           if-no-files-found: error
-  required:
-    name: Required
-    if: always()
+  # Not named `Required`: that name is the branch policy's check, and this
+  # workflow reports on deployed commits, never on pull request heads.
+  verdict:
+    name: Production browser verdict
+    if: always() && needs.browser.result != 'skipped'
     needs: browser
     runs-on: ubuntu-24.04
     timeout-minutes: 5

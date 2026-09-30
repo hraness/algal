@@ -84,7 +84,7 @@ ${meta.page === "grow" ? '<link rel="stylesheet" href="/living.css">\n<link rel=
 ${meta.page === "tasks" ? '<link rel="stylesheet" href="/living.css">\n<link rel="stylesheet" href="/tasks.css">\n<script src="/tasks.js" type="module"></script>' : ""}
 ${meta.page === "workbench" ? '<link rel="stylesheet" href="/living.css">\n<link rel="stylesheet" href="/workbench.css">\n<script src="/workbench.js" type="module"></script>' : ""}
 </head>
-<body class="algal-site">
+<body class="algal-site hraness-site-shell">
 <a class="skip-link" href="#main">Skip to content</a>
 <header class="site-header hraness-marketing-header hraness-marketing-header-surface">
   <div class="site-header-inner hraness-marketing-header__inner">

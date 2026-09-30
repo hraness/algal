@@ -14,9 +14,10 @@ CLI and a Bun runtime that runs on its own implement the same specifications
 for programs, receipts, and durable processes. [algal.computer](https://algal.computer)
 has the tour, the docs, and the blog.
 
-Preview: native prereleases for macOS on Apple silicon and Linux x86_64 are on
-the [releases page](https://github.com/hraness/algal/releases), and the Bun
-runtime runs from this checkout.
+Preview: native prereleases for macOS on Apple silicon and Linux x86_64 and
+arm64 are on the [releases page](https://github.com/hraness/algal/releases)
+(`curl -fsSL https://algal.computer/install.sh | sh`), and the Bun runtime runs
+from this checkout.
 
 ## The idea
 
@@ -60,11 +61,19 @@ once the workflow proves useful.
 
 ## Try the VM with one executable
 
-[Download and verify the native prerelease](docs/native-release.md)
+Install the native prerelease into `~/.local/bin` on macOS (Apple silicon) or
+Linux (x86_64 or arm64). The script checks the archive's SHA-256 and the executable's
+recorded digest before it installs anything:
+
+```sh
+curl -fsSL https://algal.computer/install.sh | sh
+```
+
+`ALGAL_VERSION=<tag>` installs one exact release and `ALGAL_INSTALL_PREFIX`
+changes the prefix. The [release guide](docs/native-release.md) covers manual
+verification and the checkout installer
 ([published packages](https://github.com/hraness/algal/releases)).
-The workbench needs no Bun, Cargo, credentials, or web server; the archive
-installer script runs from a checkout (see the release guide), or unpack the
-archive by hand.
+The workbench needs no Bun, Cargo, credentials, or web server.
 Use fresh output directories:
 
 ```sh
