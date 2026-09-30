@@ -23,8 +23,10 @@ platform from GitHub Releases and installs `~/.local/bin/algal`:
 curl -fsSL https://algal.computer/install.sh | sh
 ```
 
-The script needs only `sh`, `curl`, `tar`, and `sha256sum` or `shasum`. It
-checks the archive against its `.sha256` file, accepts only the four files an
+The script uses `sh`, `curl`, `tar`, and `sha256sum` or `shasum`. Current
+update-enabled releases also need the [GitHub CLI](https://cli.github.com/)
+(`gh`) authenticated with github.com to verify immutable release files.
+Install `gh` and run `gh auth login` before installing. The script checks the archive against its `.sha256` file, accepts only the four files an
 archive holds, checks `bin/algal` against the `binarySha256` and target in the
 archive's `release.json`, and runs `algal --version` before it moves the
 executable into place. Rerunning it upgrades in place. It also keeps the release
@@ -36,7 +38,7 @@ default release tag from `site/published-release.json`.
 
 ## Updates
 
-From `v0.2.0-vm.13`, verified native installs on macOS and Linux check for a
+From `v0.2.0-vm.14`, verified native installs on macOS and Linux check for a
 newer `vm` preview before product work, at most once a day. Automatic updates
 are enabled by default. They keep the current platform and preview channel,
 and compare the full release tag and build SHA rather than the `0.2.0` package

@@ -220,10 +220,10 @@ Topics: Developer Tools, Artificial Intelligence, Open Source
 
 ## Facts and their records
 
-- status: Preview. site/published-release.json tag v0.2.0-vm.11; a prerelease tag maps to the STYLE.md label Preview
-- version: v0.2.0-vm.11. site/published-release.json
+- status: Preview. site/published-release.json tag v0.2.0-vm.14; a prerelease tag maps to the STYLE.md label Preview
+- version: v0.2.0-vm.14. site/published-release.json
 - license: MIT. LICENSE and the home page meta line
-- platforms: macOS on Apple silicon, and Linux on x86_64 and Arm. docs/native-release.md platform table; release assets for v0.2.0-vm.11
+- platforms: macOS on Apple silicon, and Linux on x86_64 and Arm. docs/native-release.md platform table; release assets for v0.2.0-vm.14
 - crashCount: twice. `algal demo prove --help`: approval, denial, detached verification, and two owned crashes
 - deniedPublications: 0. site/launch/demo-fixture.json, captured from algal 0.2.0: prove.denial.publications
 - approvedPublications: 1. site/launch/demo-fixture.json, captured from algal 0.2.0: prove.approval.publications
