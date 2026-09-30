@@ -50,7 +50,7 @@ jobs:
         run: |
           set -euo pipefail
           (( ${#RELEASE_TAG} <= 256 ))
-          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]] || exit 1
           test "$WORKFLOW_REF" = "refs/tags/$RELEASE_TAG"
           sha=$(git rev-parse HEAD)
           test "$sha" = "$RELEASE_SHA"
@@ -190,7 +190,7 @@ jobs:
           ARTIFACT_DIGEST: ${{ needs.macos_build.outputs.artifact_digest }}
         run: |
           set -euo pipefail
-          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ && "$ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ && "$ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]] || exit 1
           gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID" > "$RUNNER_TEMP/artifact.json"
           jq -e --arg id "$ARTIFACT_ID" --arg digest "sha256:$ARTIFACT_DIGEST" --arg run "$GITHUB_RUN_ID" --arg sha "$GITHUB_SHA" --arg name "algal-unsigned-$GITHUB_RUN_ATTEMPT" '
             (.id | tostring) == $id and .digest == $digest and .expired == false and
@@ -257,7 +257,7 @@ jobs:
           ARTIFACT_DIGEST: ${{ needs.macos_sign.outputs.artifact_digest }}
         run: |
           set -euo pipefail
-          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ && "$ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ && "$ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]] || exit 1
           gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID" > "$RUNNER_TEMP/artifact.json"
           jq -e --arg id "$ARTIFACT_ID" --arg digest "sha256:$ARTIFACT_DIGEST" --arg run "$GITHUB_RUN_ID" --arg sha "$GITHUB_SHA" --arg name "algal-signed-$GITHUB_RUN_ATTEMPT" '
             (.id | tostring) == $id and .digest == $digest and .expired == false and
