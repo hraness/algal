@@ -3,6 +3,7 @@ import { constants, readFileSync } from 'node:fs';
 import { access, realpath, stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join } from 'node:path';
+import { URL } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const requiredDisabledFeatures = ['PaintHolding', 'MacAppCodeSignClone'];

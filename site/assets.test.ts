@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { gzipSync } from "node:zlib";
 import { buildSiteStyles } from "./assets";
 import { normalizeSitePatternResets } from "./style-normalization";
 
@@ -22,7 +23,10 @@ test("site CSS references separate hashed fonts with exact shared font bytes", a
     }
     expect(faces.length).toBe(originals.size);
     expect(faces.length).toBeGreaterThan(0);
-    expect(Buffer.byteLength(css)).toBeLessThan(589_824);
+    // Design-kit 0.35 includes the shared marketing controls: 593,201 bytes,
+    // 89,673 with gzip. Retain a bounded raw budget and a transport-size guard.
+    expect(Buffer.byteLength(css)).toBeLessThan(598_016);
+    expect(gzipSync(css).byteLength).toBeLessThan(98_304);
     const references = new Set<string>();
     const hashes = new Set<string>();
     for (const face of faces) {
