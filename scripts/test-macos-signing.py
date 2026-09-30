@@ -6,9 +6,11 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import stat
 import struct
 import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -41,6 +43,8 @@ class SigningTests(unittest.TestCase):
                          "Timestamp=Sep 30, 2026 at 2:00:00 AM\n")
         self.identity_team = TEAM
         self.tool_failure = None
+        self.keychain_search_list = ["/Users/runner/Library/Keychains/login.keychain-db",
+                                     "/Library/Keychains/custom fixture.keychain-db"]
         self.environment = {
             "RUNNER_TEMP": str(self.root), "HOME": str(self.root),
             "APPLE_DEVELOPER_ID_P12_BASE64": base64.b64encode(b"fake private p12").decode(),
@@ -78,7 +82,20 @@ class SigningTests(unittest.TestCase):
             for path in (self.work / "credentials").iterdir():
                 self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
         if "find-identity" in args:
+            self.assertIn(str(self.work / "credentials/signing.keychain-db"), self.keychain_search_list)
             return f'  1) {"A" * 40} "Developer ID Application: Example ({self.identity_team})"\n'
+        if "list-keychains" in args:
+            if "-s" in args:
+                self.keychain_search_list = args[args.index("-s") + 1:]
+            else:
+                return "\n".join(json.dumps(path) for path in self.keychain_search_list)
+        if "delete-keychain" in args:
+            if args[-1] in self.keychain_search_list:
+                self.keychain_search_list.remove(args[-1])
+        if "--requirements" in args:
+            self.assertEqual(args[args.index("--requirements") + 1], "=designated => " + signing.apple_requirement())
+        if "--test-requirement" in args:
+            self.assertEqual(args[args.index("--test-requirement") + 1], "=" + signing.apple_requirement())
         if "--display" in args:
             return self.metadata
         if "notarytool" in args:
@@ -97,7 +114,9 @@ class SigningTests(unittest.TestCase):
         signing.sign(self.archive, VERSION, self.output, self.work)
 
     def test_final_archive_is_signed_then_notarized_and_keychain_is_removed(self):
+        original_search_list = self.keychain_search_list.copy()
         self.sign()
+        self.assertEqual(self.keychain_search_list, original_search_list)
         final = self.output / signing.archive_name(VERSION)
         self.assertTrue(final.is_file())
         self.assertEqual(Path(str(final) + ".sha256").read_text().strip(), signing.digest(final.read_bytes()))
@@ -121,15 +140,28 @@ class SigningTests(unittest.TestCase):
         self.assertEqual(receipt["signedBinarySha256"], signing.digest(self.binary))
 
     def test_notary_rejection_removes_credentials_and_never_creates_release(self):
+        original_search_list = self.keychain_search_list.copy()
         self.status = "Invalid"
         with self.assertRaisesRegex(signing.SigningError, "not Accepted"):
             self.sign()
         self.assertFalse(self.output.exists())
         self.assertFalse(self.work.exists())
+        self.assertEqual(self.keychain_search_list, original_search_list)
         self.assertTrue(any("delete-keychain" in args for args in self.calls))
         receipt = json.loads((self.root / "algal-apple-notarization.json").read_text())
         self.assertEqual(receipt["submissionId"], UUID)
         self.assertEqual(receipt["status"], "Invalid")
+
+    def test_search_list_failure_removes_owned_keychain_before_signing(self):
+        original_search_list = self.keychain_search_list.copy()
+        self.tool_failure = "list-keychains"
+        with self.assertRaises(signing.SigningError):
+            self.sign()
+        self.assertFalse(self.output.exists())
+        self.assertFalse(self.work.exists())
+        self.assertEqual(self.keychain_search_list, original_search_list)
+        self.assertFalse(any("--sign" in args for args in self.calls))
+        self.assertTrue(any("delete-keychain" in args for args in self.calls))
 
     def test_incomplete_notary_status_is_not_success(self):
         self.status = "In Progress"
@@ -319,6 +351,10 @@ class SigningTests(unittest.TestCase):
 
 
 class HistoricalInstallTests(unittest.TestCase):
+    def test_installer_supplies_literal_requirement_to_codesign(self):
+        installer = (Path(__file__).resolve().parent.parent / "site/install.sh").read_text()
+        self.assertIn('--test-requirement "=$requirement"', installer)
+
     def test_only_explicit_historical_tags_skip_signature_verification(self):
         for tag in ("v0.1.9", "v0.2.0-vm.1", "v0.2.0-vm.11"):
             self.assertFalse(signing.requires_signature(tag), tag)
@@ -341,6 +377,27 @@ class ToolBoundaryTests(unittest.TestCase):
         with patch.object(signing.subprocess, "run", return_value=result):
             with self.assertRaisesRegex(signing.SigningError, "^Apple tool failed: security$"):
                 signing.run(["/usr/bin/security", "-p", "private"])
+
+
+@unittest.skipUnless(sys.platform == "darwin", "requires macOS codesign")
+class NativeRequirementTests(unittest.TestCase):
+    def test_codesign_parses_literal_requirements_without_credentials(self):
+        with tempfile.TemporaryDirectory(prefix="algal-codesign-literal-") as temporary:
+            binary = Path(temporary) / "fixture"
+            shutil.copyfile("/usr/bin/true", binary)
+            binary.chmod(0o700)
+            requirement = 'identifier "dev.hraness.algal.requirement-fixture"'
+            def call(*arguments):
+                return subprocess.run(["/usr/bin/codesign", *arguments, str(binary)],
+                                      capture_output=True, text=True, timeout=30)
+            signed = call("--force", "--sign", "-", "--identifier", "dev.hraness.algal.requirement-fixture",
+                          "--requirements", "=designated => " + requirement)
+            self.assertEqual(signed.returncode, 0, signed.stderr)
+            verified = call("--verify", "--strict", "--test-requirement", "=" + requirement)
+            self.assertEqual(verified.returncode, 0, verified.stderr)
+            rejected = call("--verify", "--strict", "--test-requirement", "=" + signing.apple_requirement())
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("failed to satisfy", rejected.stderr)
 
 
 if __name__ == "__main__":

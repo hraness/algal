@@ -95,7 +95,7 @@ main() {
     esac
     if [ "$historical" = false ]; then
       requirement='identifier "dev.hraness.algal" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = "8AAP53VTW3"'
-      /usr/bin/codesign --verify --strict --check-notarization --test-requirement "$requirement" "$staged" \
+      /usr/bin/codesign --verify --strict --check-notarization --test-requirement "=$requirement" "$staged" \
         || fail "Developer ID or Apple notarization verification failed; nothing was installed"
       signature=$(/usr/bin/codesign --display --verbose=4 "$staged" 2>&1) \
         || fail "could not inspect the release signature"

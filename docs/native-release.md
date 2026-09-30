@@ -166,6 +166,10 @@ with no reviewer requirement or wait timer. Configure its five secrets:
 `APPLE_DEVELOPER_ID_P12_BASE64`, `APPLE_DEVELOPER_ID_P12_PASSWORD`,
 `APPLE_NOTARY_KEY_P8_BASE64`, `APPLE_NOTARY_KEY_ID`, and
 `APPLE_NOTARY_ISSUER_ID`. Keep credentials out of build and packaging jobs.
+Include the Developer ID Application certificate, its private key, and its
+issuing Apple intermediate certificate in the PKCS#12 bundle. The current
+identity uses Developer ID Certification Authority G2; a clean runner needs
+that intermediate to validate the signing identity.
 
 Dispatch `Native release` with the workflow ref set to the exact version tag
 and `tag` set to the same value. A dispatch from `main` is rejected even when
@@ -176,6 +180,9 @@ and source commit before signing. The signing runner never executes the binary.
 A fresh runner verifies and tests signed bytes, then creates the final archive,
 manifest, and provenance. Publication checks the archive binary against the
 hash recorded by the signing job.
+When rerunning failed jobs, successful producers from earlier attempts remain
+usable through their exact artifact IDs and digests. New uploads use separate
+attempt names, and publication downloads only the selected producer outputs.
 
 Apple review has a 15-minute wait limit. A timeout, rejection, or interruption
 fails closed and does not publish. The `algal-apple-notarization-*` workflow
