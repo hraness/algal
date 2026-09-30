@@ -19,3 +19,5 @@
 - Share images come only from the shared `@hraness/web-discovery` social-image template via the single `defineSocialImageSite` declaration in `social-image.ts`. Pages pass copy only (headline, description, eyebrow); add no per-site drawing code, custom card layouts, or committed card PNGs.
 - The header mark and wordmark share the released recipe. Retain the original image underneath the alpha mask for forced colors and unsupported masks.
 - Run the repository's `bun run check` and inspect the built header at phone and desktop sizes before delivery. Preserve required remote checks and exact production identity verification.
+
+- Website names, product descriptions, hero copy, and named headings read the website-local `portfolio-messaging.generated.json` projection of `https://hraness.com/portfolio.json`. Edit the canonical Jungle portfolio registry and refresh that snapshot; ordinary builds never fetch or rewrite it.

@@ -1,6 +1,6 @@
 // Shared document chrome: head, header, nav, and footer for every site page.
 // Per-page fragments supply only their <main> content and metadata.
-import { SITE_DESCRIPTION, SITE_TAGLINE } from "./copy";
+import { SITE_DESCRIPTION, SITE_TAGLINE, SITE_NAME, serializeMarketingJson } from "./copy";
 import { siteIcon } from "./icons";
 import { escapeHtml } from "./markdown";
 import { serializeJsonLd } from "@hraness/web-discovery";
@@ -57,7 +57,7 @@ ${missing ? "" : `<link rel="canonical" href="${canonical}">\n`}<link rel="icon"
 <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta property="og:type" content="${meta.article ? "article" : "website"}">${meta.article ? `\n<meta property="article:published_time" content="${meta.article.published}">` : ""}${meta.article?.modified ? `\n<meta property="article:modified_time" content="${meta.article.modified}">` : ""}
-<meta property="og:site_name" content="ALGAL">
+<meta property="og:site_name" content="${escapeHtml(SITE_NAME)}">
 <meta property="og:title" content="${ogTitle}">
 <meta property="og:description" content="${description}">
 ${missing ? "" : `<meta property="og:url" content="${canonical}">\n`}<meta property="og:image" content="${imageUrl}">
@@ -71,7 +71,7 @@ ${missing ? "" : `<meta property="og:url" content="${canonical}">\n`}<meta prope
 <meta name="twitter:image:alt" content="${escapeHtml(image.alt)}">
 <meta name="robots" content="${meta.noindex || missing ? "noindex, nofollow" : "index, follow"}">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"${ORIGIN}/#website","name":"ALGAL","url":"${ORIGIN}/","publisher":{"@id":"${PUBLISHER_ID}"}},{"@type":"SoftwareApplication","@id":"${ORIGIN}/#software","name":"ALGAL","url":"${ORIGIN}/","description":${JSON.stringify(SITE_DESCRIPTION)},"applicationCategory":"DeveloperApplication","operatingSystem":"macOS (Apple silicon), Linux x86_64","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"license":"https://opensource.org/license/mit","sameAs":["${REPO}"],"author":{"@id":"${PUBLISHER_ID}"},"publisher":{"@id":"${PUBLISHER_ID}"}},{"@type":"Organization","@id":"${PUBLISHER_ID}","name":"Hraness","url":"https://hraness.com/","sameAs":["https://github.com/hraness"]}]}
+{"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"${ORIGIN}/#website","name":${serializeMarketingJson(SITE_NAME)},"url":"${ORIGIN}/","publisher":{"@id":"${PUBLISHER_ID}"}},{"@type":"SoftwareApplication","@id":"${ORIGIN}/#software","name":${serializeMarketingJson(SITE_NAME)},"url":"${ORIGIN}/","description":${serializeMarketingJson(SITE_DESCRIPTION)},"applicationCategory":"DeveloperApplication","operatingSystem":"macOS (Apple silicon), Linux x86_64","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"license":"https://opensource.org/license/mit","sameAs":["${REPO}"],"author":{"@id":"${PUBLISHER_ID}"},"publisher":{"@id":"${PUBLISHER_ID}"}},{"@type":"Organization","@id":"${PUBLISHER_ID}","name":"Hraness","url":"https://hraness.com/","sameAs":["https://github.com/hraness"]}]}
 </script>${(meta.jsonLd ?? []).map(node => `\n<script type="application/ld+json">${serializeJsonLd(node)}</script>`).join("")}${meta.page === "blog" ? '\n<link rel="alternate" type="application/atom+xml" title="ALGAL blog" href="/blog/feed.xml">' : ""}
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#e1e2e7">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1a1b26">
@@ -88,7 +88,7 @@ ${meta.page === "workbench" ? '<link rel="stylesheet" href="/living.css">\n<link
 <a class="skip-link" href="#main">Skip to content</a>
 <header class="site-header hraness-marketing-header hraness-marketing-header-surface">
   <div class="site-header-inner hraness-marketing-header__inner">
-    <a class="wordmark hraness-foil-text" data-foil="" href="/" aria-label="ALGAL home"><span class="brand-mark hraness-foil-mark" data-foil="" style="--hraness-foil-mask: url('/algal-mark.svg')" aria-hidden="true"><img class="hraness-foil-mark__image" src="/algal-mark.svg" width="28" height="28" alt=""><span class="hraness-foil-mark__paint" aria-hidden="true"></span></span>algal</a>
+    <a class="wordmark hraness-foil-text" data-foil="" href="/" aria-label="${escapeHtml(SITE_NAME)} home"><span class="brand-mark hraness-foil-mark" data-foil="" style="--hraness-foil-mask: url('/algal-mark.svg')" aria-hidden="true"><img class="hraness-foil-mark__image" src="/algal-mark.svg" width="28" height="28" alt=""><span class="hraness-foil-mark__paint" aria-hidden="true"></span></span>${escapeHtml(SITE_NAME)}</a>
     <nav aria-label="Main navigation">
       ${navLink(meta.page, "tour", "/tour/", "Tour")}
       ${navLink(meta.page, "use-cases", "/use-cases/", "Use cases")}
@@ -115,7 +115,7 @@ ${meta.page === "workbench" ? '<link rel="stylesheet" href="/living.css">\n<link
 
 ${main}
 
-<footer class="site-footer"><a class="wordmark hraness-foil-text" data-foil="" href="/" aria-label="ALGAL home"><span class="hraness-foil-mark" data-foil="" style="--hraness-foil-mask: url('/algal-mark.svg'); --hraness-foil-size: 24px" aria-hidden="true"><img class="hraness-foil-mark__image" src="/algal-mark.svg" width="24" height="24" alt=""><span class="hraness-foil-mark__paint" aria-hidden="true"></span></span>algal</a><p>${SITE_TAGLINE}</p><div><a href="${REPO}">Source</a><a href="/docs/">Documentation</a><a href="/living/">Living software</a><a href="/blog/">Blog</a><a href="/compare/">Compare</a><a href="/docs/spec/organism/">Spec</a><a href="/llms.txt">llms.txt</a><a href="https://hraness.com">Made by Hraness</a><span>MIT · Preview · {{BUILD_STATS}}</span></div></footer>
+<footer class="site-footer"><a class="wordmark hraness-foil-text" data-foil="" href="/" aria-label="${escapeHtml(SITE_NAME)} home"><span class="hraness-foil-mark" data-foil="" style="--hraness-foil-mask: url('/algal-mark.svg'); --hraness-foil-size: 24px" aria-hidden="true"><img class="hraness-foil-mark__image" src="/algal-mark.svg" width="24" height="24" alt=""><span class="hraness-foil-mark__paint" aria-hidden="true"></span></span>${escapeHtml(SITE_NAME)}</a><p>${escapeHtml(SITE_TAGLINE)}</p><div><a href="${REPO}">Source</a><a href="/docs/">Documentation</a><a href="/living/">Living software</a><a href="/blog/">Blog</a><a href="/compare/">Compare</a><a href="/docs/spec/organism/">Spec</a><a href="/llms.txt">llms.txt</a><a href="https://hraness.com">Made by Hraness</a><span>MIT · Preview · {{BUILD_STATS}}</span></div></footer>
 
 </body>
 </html>

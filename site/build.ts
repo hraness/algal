@@ -24,7 +24,7 @@ import { buildSiteStyles } from "./assets";
 import { renderStatusPageHtml } from "@hraness/design-kit";
 import { highlightCode } from "@hraness/design-kit/syntax-highlighting";
 import { pageDocument, type SitePageMeta } from "./chrome";
-import { ADOPTION_BOUNDARY, CIVILIZATION_EXAMPLE, INSTALL_TERMINAL, SITE_DESCRIPTION, SITE_TAGLINE } from "./copy";
+import { ADOPTION_BOUNDARY, CIVILIZATION_EXAMPLE, INSTALL_TERMINAL, SITE_DESCRIPTION, SITE_NAME, productMessaging } from "./copy";
 import { renderInstallScript } from "./install-script";
 import { renderPlatformBadges, renderPlatformInstall } from "./platform-install";
 import { renderMarkdown, type LinkRewriter, type RenderedDoc } from "./markdown";
@@ -443,6 +443,17 @@ const HERO_STAGE = `<div class="hero-stage" data-hero-stage>${heroExamples.map((
     </figure>
   </div>`).join("")}</div>`;
 
+// Presentation keeps the site's line break and emphasis without copying words.
+function marketingHeading(heading: string, breakAfter: number): string {
+  const words = heading.split(" ");
+  const boundary = Math.min(breakAfter, words.length);
+  return `${escapeHtml(words.slice(0, boundary).join(" "))}<br><em>${escapeHtml(words.slice(boundary).join(" "))}</em>`;
+}
+const headingBreaks: Record<string, number> = {
+  "home-draft": 3, "home-process": 4, "home-host": 5, "home-replay": 2,
+  "home-evolution": 3, "home-install": 3, "home-research": 3, "home-limits": 2,
+};
+
 const replacements: Record<string, string> = {
   HERO_CHOOSER: HERO_CHOOSER,
   HERO_STAGE: HERO_STAGE,
@@ -471,6 +482,13 @@ const replacements: Record<string, string> = {
   PLATFORM_BADGES: renderPlatformBadges(),
   CIVILIZATION_EXAMPLE,
   SITE_DESCRIPTION: escapeHtml(SITE_DESCRIPTION),
+  SITE_HERO_HEADING: marketingHeading(productMessaging.hero.heading, 5),
+  SITE_HERO_SUMMARY: escapeHtml(productMessaging.hero.summary),
+  SITE_PRIMARY_ACTION: escapeHtml(productMessaging.hero.primaryAction),
+  SITE_SECONDARY_ACTION: escapeHtml(productMessaging.hero.secondaryAction),
+  SITE_CATEGORY: escapeHtml(productMessaging.category),
+  ...Object.fromEntries(Object.entries(productMessaging.headings).map(([key, value]) =>
+    [`HEADING_${key.replaceAll("-", "_").toUpperCase()}`, headingBreaks[key] === undefined ? escapeHtml(value) : marketingHeading(value, headingBreaks[key])])),
   REFINE_ROUNDS: String(refine.maxRounds),
   SWARM_ITEMS: String(swarm.maxItems),
 };
@@ -512,9 +530,9 @@ const pages: { file: string; out: string; meta: SitePageMeta }[] = [
     file: "pages/home.html", out: "index.html",
     meta: {
       page: "home", path: "/",
-      title: `ALGAL · ${SITE_TAGLINE.replace(/\.$/, "")}`,
+      title: `${SITE_NAME} · ${productMessaging.hero.heading.replace(/\.$/u, "")}`,
       description: SITE_DESCRIPTION,
-      ogTitle: `ALGAL · ${SITE_TAGLINE.replace(/\.$/, "")}`,
+      ogTitle: `${SITE_NAME} · ${productMessaging.hero.heading.replace(/\.$/u, "")}`,
     },
   },
   {

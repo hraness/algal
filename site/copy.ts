@@ -1,16 +1,20 @@
+import snapshot from "./portfolio-messaging.generated.json";
+
 import { highlightCode } from "@hraness/design-kit/syntax-highlighting";
 
-// Site-wide copy rendered in more than one place: the home page metadata, the
-// JSON-LD description, the footer, the social card, and the limits section
-// shared by the home and use-cases pages. Change these strings here only.
-// Public copy follows STYLE.md; the tagline and description are the canonical
-// lines from the portfolio messaging record for ALGAL.
+if (snapshot.contract !== "hraness.product-messaging/v1" || snapshot.productId !== "algal") {
+  throw new Error("The website requires the canonical ALGAL messaging snapshot.");
+}
 
-export const SITE_TAGLINE = "Write agent programs that wait, resume, and replay.";
+export const productMessaging = snapshot.messaging;
+export const SITE_NAME = productMessaging.names.name;
+export const SITE_TAGLINE = productMessaging.tagline;
+export const SITE_DESCRIPTION = productMessaging.meta;
 
-/** The home page description and JSON-LD description. The social card uses the tagline. */
-export const SITE_DESCRIPTION = "ALGAL is a programming language and VM for AI agent programs that wait for approval and leave receipts you can replay.";
-
+/** Keep canonical text inside a JSON-LD script's text boundary. */
+export function serializeMarketingJson(value: string): string {
+  return JSON.stringify(value).replace(/</gu, "\\u003c");
+}
 
 /** Fit and prerelease limits, shown once on the home page and once on the use-cases page.
  * Each page states the receipt limit beside its own receipt copy. */
