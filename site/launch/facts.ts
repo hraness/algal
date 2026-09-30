@@ -29,7 +29,7 @@ export const launchFacts = {
   status: { value: LAUNCH_STATUS, source: `site/published-release.json tag ${RELEASE_TAG}; a prerelease tag maps to the STYLE.md label Preview` },
   version: { value: RELEASE_TAG, source: "site/published-release.json" },
   license: { value: "MIT", source: "LICENSE and the home page meta line" },
-  platforms: { value: "macOS on Apple silicon, and Linux on x86_64 and Arm", source: "docs/native-release.md platform table; release assets for v0.2.0-vm.11" },
+  platforms: { value: "macOS on Apple silicon, and Linux on x86_64 and Arm", source: `docs/native-release.md platform table; release assets for ${RELEASE_TAG}` },
   crashCount: { value: "twice", source: "`algal demo prove --help`: approval, denial, detached verification, and two owned crashes" },
   deniedPublications: { value: String(demo.prove.denial.publications), source: `${FIXTURE}: prove.denial.publications` },
   approvedPublications: { value: String(demo.prove.approval.publications), source: `${FIXTURE}: prove.approval.publications` },

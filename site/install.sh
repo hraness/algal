@@ -7,7 +7,8 @@
 # This script downloads the archive for your platform from the GitHub Release,
 # checks it against the release's .sha256 file, checks the executable against
 # the digest recorded inside the archive, and installs ~/.local/bin/algal.
-# Nothing runs as root, and it needs only sh, curl, tar, and sha256sum or shasum.
+# Nothing runs as root. It uses sh, curl, tar, and sha256sum or shasum.
+# Current update-enabled releases also require authenticated GitHub CLI (gh).
 # Options (environment): ALGAL_VERSION (a release tag such as v0.2.0-vm.11),
 # ALGAL_INSTALL_PREFIX (default ~/.local).
 # Source: https://github.com/hraness/algal/blob/main/site/install.sh
