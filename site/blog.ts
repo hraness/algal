@@ -29,6 +29,7 @@ import {
 import { SITE_DESCRIPTION } from "./copy";
 import { postSocialImage, SOCIAL_IMAGE_HEIGHT, SOCIAL_IMAGE_WIDTH } from "./social-image";
 import { escapeHtml, renderMarkdown } from "./markdown";
+import { launchBeatsHtml, launchFilmHtml, launchStatusHtml } from "./launch/render";
 import { ALGAL_USES_POSTS, BLOG_ADMISSIONS, BLOG_AUTHOR, BLOG_SOURCES, PENDING_CROSS_HOST_LINKS } from "./blog-posts";
 
 export const BLOG_PATH = "/blog/";
@@ -45,6 +46,12 @@ export const SEARCH_SITE: SearchSite = {
 };
 
 const USES_MARKER = "{{ALGALUSES}}";
+/** Replaced with the launch beats from site/launch/beats.ts. */
+const LAUNCH_BEATS_MARKER = "{{LAUNCHBEATS}}";
+/** Replaced with the launch film, or nothing while the film is not rendered. */
+const LAUNCH_FILM_MARKER = "{{LAUNCHFILM}}";
+/** Replaced with the status line from the release record. */
+const LAUNCH_STATUS_MARKER = "{{LAUNCHSTATUS}}";
 
 /** The Hraness org as a schema/feed party: a real entity with a canonical URL and profiles. */
 const BLOG_PARTY = {
@@ -130,6 +137,9 @@ export async function loadBlogPosts(dir: string): Promise<BlogPost[]> {
       emit = entries.length > 0;
       bodyHtml = bodyHtml.replace(`<p>${USES_MARKER}</p>`, usesListHtml(entries));
     }
+    if (bodyHtml.includes(LAUNCH_BEATS_MARKER)) bodyHtml = bodyHtml.replace(`<p>${LAUNCH_BEATS_MARKER}</p>`, () => launchBeatsHtml());
+    if (bodyHtml.includes(LAUNCH_STATUS_MARKER)) bodyHtml = bodyHtml.replace(`<p>${LAUNCH_STATUS_MARKER}</p>`, () => launchStatusHtml());
+    if (bodyHtml.includes(LAUNCH_FILM_MARKER)) bodyHtml = bodyHtml.replace(`<p>${LAUNCH_FILM_MARKER}</p>`, () => launchFilmHtml());
     const indexable = isArticleIndexable(admission) && emit;
     posts.push({
       slug, path, title: meta.title, dek: meta.description, published: meta.date, order: meta.order ?? "9",

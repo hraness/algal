@@ -26,6 +26,7 @@
   ],
   "exclude": [
     "node_modules",
+    "video",
     "site/dist",
     "site/appearance.ts",
     "site/client.ts",

@@ -37,7 +37,7 @@ When a field names a language, write only that language. Keep names, product nam
 
 ## Addenda by form
 
-Add the one that matches your output after the block. Essays and blog posts have their own addendum below.
+Add the one that matches your output after the block. Essays and blog posts, and launch beats and social posts, have their own addenda below.
 
 **News summary and ranking rationale.** The title states the event in plain words; the summary gives who, what, where, when, and the source in two or three sentences. A published rationale is one sentence about consequences beyond the story, taken from the input. It never mentions the candidates, duplicates, scores, rankings, or comments that produced it.
 
@@ -78,3 +78,21 @@ This addendum covers the “Introducing” essay on a product's own site, the te
 **Links.** Link to another post or product only where it is the reader's next step: along a registered relation between two products, or between a technique post on hraness.com and a product's post about the same technique. Add no link lists, reciprocal links, or related-post sections to reach a count.
 
 **Style.** Everything in the block applies, including no em dashes and dates written as dates. End each post on its last supported point.
+
+## Launch beats and social posts addendum
+
+This addendum covers the beats of an “Introducing {product}” post and the social posts made from them: an X thread, Bluesky, Threads, a LinkedIn post, and the captions of a vertical video. `ARTICLE_COPY.md` in `@hraness/design-kit` defines the beats shape under “Introducing a product”, and `MESSAGING.md` gives each channel's limits. Paste the block above into the drafting prompt, then the essay addendum, then this addendum.
+
+**One claim per post.** Each beat is also a post, and each post stands alone: a reader who sees only that post learns one true thing about the product. Do not continue a sentence across posts or refer to “above” or “the next post”.
+
+**First post.** The first post says what the product does, in the words of its messaging record. Do not open with a question, a teaser, “here's why”, a cliffhanger, or a promise of what the thread will reveal.
+
+**Facts.** Take every number, version, size, rate, and status from the product's launch facts module, which the post, its social posts, the film captions, and the store listing all import. Do not type a number into a post.
+
+**Visuals.** Each post carries at most one visual, taken from the beat it came from, with alt text. A mockup or diagram stays labelled as an illustration wherever it appears.
+
+**Last post.** The last post gives the status label and the canonical URL of the launch post, without tracking parameters. Add an install link only when the release record shows a public install.
+
+**Defaults.** No hashtags, no emoji, and no thread numbering or thread markers. No competitor names; comparisons stay in companion posts and comparison pages.
+
+**Consumer-friendly.** Write for a person who has never heard of the product: plain words, second person, short sentences, and one concrete case they would recognize. Consumer-friendly never means hype. Everything in the block and in `STYLE.md` still applies.

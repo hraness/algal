@@ -98,9 +98,54 @@ const RECEIPT_SOURCES: readonly Source[] = [
   reviewed("CLI entry point: verify, diff, diagnose, and process export", atReview("cli.ts")),
 ];
 
+// Every launch source is pinned to the origin/main commit the post was drafted from.
+const LAUNCH_EVIDENCE = "dc5fef50122060aecfee9368af2379697bf01cdf";
+const LAUNCH_CHECKED: ArticleIsoDate = "2026-09-29";
+const atLaunch = (path: string) => source(path, `https://github.com/hraness/algal/blob/${LAUNCH_EVIDENCE}/${path}`, true, LAUNCH_CHECKED);
+const LAUNCH_SOURCES: readonly Source[] = [
+  { ...atLaunch("crates/algal/src/demo.rs"), title: "Demo scenario: start, approve, deny, export, verify, and the two owned crashes" },
+  { ...atLaunch("docs/native-workbench.md"), title: "Native workbench guide: the report page and the approve and deny commands" },
+  { ...atLaunch("docs/native-release.md"), title: "Native release: platforms, install script, and unsigned prerelease packages" },
+  { ...atLaunch("site/copy.ts"), title: "Adoption boundary: what ALGAL does not do yet" },
+  { ...atLaunch("docs/vision.md"), title: "Vision: the bet and the evidence it still needs" },
+  { ...atLaunch("site/launch/facts.ts"), title: "Launch facts: every count and status in this post, with its source" },
+];
+
 const stripPublic = (sources: readonly Source[]) => sources.map(({ public: _public, ...rest }) => ({ title: rest.title, url: rest.href, checkedOn: rest.checkedOn }));
 
 export const BLOG_ADMISSIONS: readonly ArticleAdmission[] = [
+  {
+    href: "/blog/introducing-algal/",
+    // Drafted by an AI run and not yet reviewed by a second run or a person,
+    // so it ships noindex. Index it only after a review scores 9 of 12 or better.
+    lifecycle: "quarantined",
+    readerJob: "decide whether to try it",
+    nonObviousAnswer: "ALGAL's demo shows the behavior before you trust it: a program stops for an exact decision, and when it crashes mid-write it refuses to send that write again instead of guessing.",
+    originalContribution: "Short standalone sections, each drawn from a recorded run of algal demo, that double as the launch social posts.",
+    hostFit: "The product introduction on ALGAL's own site.",
+    nearestUrls: [
+      { url: "/blog/programs-that-wait/", distinction: "Explains how a waiting process is saved and resumed; this post introduces the product and links there for depth." },
+      { url: "/blog/receipts-fossil-record/", distinction: "Explains what a run record holds; this post shows the demo's offline check in one section." },
+    ],
+    sources: stripPublic(LAUNCH_SOURCES),
+    observations: [
+      "Every count comes from site/launch/facts.ts, read from a captured algal demo run in site/launch/demo-fixture.json; the status comes from site/published-release.json.",
+      "The crash section follows crates/algal/src/demo.rs: after the read crash the finished step is reused; after the write crash, recovery is refused and the write is not sent again.",
+    ],
+    scores: { readerUtility: 2, originalEvidence: 1, factualConfidence: 2, hostFit: 2, voiceIntegrity: 1, maintenanceValue: 1 },
+    owner: "Hraness",
+    drafting: "ai-from-source",
+    review: null,
+    humanReview: null,
+    reassessOn: "2026-10-29",
+    harmIfWrong: "A reader could expect ALGAL to control tool permissions, sign packages, or prove who ran a program, none of which it does today.",
+    refreshTriggers: [
+      "A new ALGAL release tag in site/published-release.json",
+      "A change to algal demo output or its crash cases in crates/algal/src/demo.rs",
+      "A change to the adoption boundary in site/copy.ts",
+      "The launch film being rendered or re-cut",
+    ],
+  },
   {
     href: "/blog/typescript-rust-parity/",
     lifecycle: "indexable",
@@ -246,6 +291,7 @@ export const BLOG_SOURCES: Readonly<Record<string, readonly ArticleSourceItem[]>
   "built-on-algal": HUB_SOURCES.filter(item => item.public).map(({ public: _public, ...rest }) => rest),
   "receipts-fossil-record": RECEIPT_SOURCES.map(({ public: _public, ...rest }) => rest),
   "programs-that-wait": WAIT_SOURCES.map(({ public: _public, ...rest }) => rest),
+  "introducing-algal": LAUNCH_SOURCES.map(({ public: _public, ...rest }) => rest),
 };
 
 /** Cross-host posts from the blog program that are not live yet. Links to

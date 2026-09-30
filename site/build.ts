@@ -2,6 +2,7 @@
 // examples so the public demonstration cannot drift into illustrative syntax.
 // Interactive diagram viewers consume algal.diagram-view.v1 documents emitted
 // alongside each SVG — the same layout pass drives both.
+import { homeTourHtml } from "./launch/render";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -445,6 +446,7 @@ const HERO_STAGE = `<div class="hero-stage" data-hero-stage>${heroExamples.map((
 
 const replacements: Record<string, string> = {
   HERO_CHOOSER: HERO_CHOOSER,
+  HOME_TOUR: homeTourHtml(),
   HERO_STAGE: HERO_STAGE,
   REPLY_SOURCE: highlightAlgal(replySource.trimEnd()),
   REPLY_MAX_AGENT_CALLS: String(reply.manifest.budgets.maxAgentCalls),

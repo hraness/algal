@@ -5,7 +5,7 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    ignores: ["site/dist/**", "dist/**", "**/target/**", "examples/malleable-site/renderers/dist/**", "examples/local-triage/dist/**", "node_modules/**", ".algal/**"],
+    ignores: ["site/dist/**", "dist/**", "**/target/**", "examples/malleable-site/renderers/dist/**", "examples/local-triage/dist/**", "node_modules/**", ".algal/**", "video/node_modules/**", "video/out/**", "video/artifacts/**", "video/film.js"],
   },
   {
     rules: {

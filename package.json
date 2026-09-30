@@ -103,7 +103,8 @@
     "docs:check": "bun scripts/docs-diagrams.ts --check",
     "build:site": "bun site/build.ts",
     "generate:icons": "bun site/generate-icons.ts",
-    "cli": "bun cli.ts"
+    "cli": "bun cli.ts",
+    "launch:kit": "bun site/scripts/write-social-kit.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
