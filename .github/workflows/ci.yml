@@ -293,6 +293,35 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  # Application parity replays ~270 lifecycle steps, each spawning the
+  # native CLI; on a debug build those calls take ~2 s each. This job builds
+  # the same kernel with the `ci-parity` profile (optimized, debug assertions
+  # and overflow checks kept) in parallel with the debug build.
+  native-parity-build:
+    name: Native parity binary (ubuntu-24.04)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: native-ci-parity
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo build --locked --profile ci-parity -p algal --bin algal
+      - name: Package the ci-parity binary
+        run: tar -C target/ci-parity -cf "$RUNNER_TEMP/algal-ci-parity.tar" algal
+      - uses: actions/upload-artifact@v7
+        with:
+          name: algal-ci-parity-linux
+          path: ${{ runner.temp }}/algal-ci-parity.tar
+          if-no-files-found: error
+          retention-days: 1
+
   # macOS runs the OS-specific kernel surface only: the Apple Foundation
   # Models bridge tests are `cfg(target_os = "macos")` and clippy covers the
   # macOS-only code paths. Formatting and the parity scripts are platform
@@ -392,7 +421,7 @@ jobs:
 
   application-parity:
     name: Application parity
-    needs: [changes, native]
+    needs: [changes, native-parity-build]
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -409,13 +438,14 @@ jobs:
       - run: bun install --frozen-lockfile
       - uses: actions/download-artifact@v8
         with:
-          name: algal-debug-linux
+          name: algal-ci-parity-linux
           path: ${{ runner.temp }}
-      - name: Restore the debug binary built by the native job
-        run: mkdir -p target/debug && tar -C target/debug -xf "$RUNNER_TEMP/algal-debug.tar" && target/debug/algal --version
-      # Per-step TypeScript / native timing, to decide how to shorten this job.
+      - name: Restore the ci-parity binary
+        run: mkdir -p target/ci-parity && tar -C target/ci-parity -xf "$RUNNER_TEMP/algal-ci-parity.tar" && target/ci-parity/algal --version
+      # Per-step TypeScript / native timing is kept as a regression signal.
       - run: bun scripts/application-parity.ts
         env:
+          ALGAL_BIN: ${{ github.workspace }}/target/ci-parity/algal
           ALGAL_PARITY_TIMING: ${{ runner.temp }}/application-parity-timing.json
       - uses: actions/upload-artifact@v7
         if: always()
@@ -468,6 +498,7 @@ jobs:
       - surface-renderers
       - surface-renderers-macos
       - native
+      - native-parity-build
       - native-macos
       - native-release
       - parity
@@ -488,6 +519,7 @@ jobs:
           SURFACE_RENDERERS: ${{ needs.surface-renderers.result }}
           SURFACE_RENDERERS_MACOS: ${{ needs.surface-renderers-macos.result }}
           NATIVE: ${{ needs.native.result }}
+          NATIVE_PARITY_BUILD: ${{ needs.native-parity-build.result }}
           NATIVE_MACOS: ${{ needs.native-macos.result }}
           NATIVE_RELEASE: ${{ needs.native-release.result }}
           PARITY: ${{ needs.parity.result }}
@@ -514,6 +546,7 @@ jobs:
           require surface-renderers "$SURFACE_RENDERERS" "$code_skip"
           require surface-renderers-macos "$SURFACE_RENDERERS_MACOS" "$code_skip"
           require native "$NATIVE" "$code_skip"
+          require native-parity-build "$NATIVE_PARITY_BUILD" "$code_skip"
           require native-macos "$NATIVE_MACOS" "$code_skip"
           require native-release "$NATIVE_RELEASE" "$code_skip"
           require parity "$PARITY" "$code_skip"
