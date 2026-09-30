@@ -116,9 +116,11 @@ const stripPublic = (sources: readonly Source[]) => sources.map(({ public: _publ
 export const BLOG_ADMISSIONS: readonly ArticleAdmission[] = [
   {
     href: "/blog/introducing-algal/",
-    // Drafted by an AI run and not yet reviewed by a second run or a person,
-    // so it ships noindex. Index it only after a review scores 9 of 12 or better.
-    lifecycle: "quarantined",
+    // Drafted by an AI run. A separate AI run that did not draft or edit the
+    // post reviewed it on 2026-09-30 and scored it 10 of 12 with no zero once
+    // its History, deny, and verify wording was corrected, which clears the
+    // owner's 9 of 12 bar for indexing. No person has reviewed it.
+    lifecycle: "indexable",
     readerJob: "decide whether to try it",
     nonObviousAnswer: "ALGAL's demo shows the behavior before you trust it: a program stops for an exact decision, and when it crashes mid-write it refuses to send that write again instead of guessing.",
     originalContribution: "Short standalone sections, each drawn from a recorded run of algal demo, that double as the launch social posts.",
@@ -131,11 +133,12 @@ export const BLOG_ADMISSIONS: readonly ArticleAdmission[] = [
     observations: [
       "Every count comes from site/launch/facts.ts, read from a captured algal demo run in site/launch/demo-fixture.json; the status comes from site/published-release.json.",
       "The crash section follows crates/algal/src/demo.rs: after the read crash the finished step is reused; after the write crash, recovery is refused and the write is not sent again.",
+      "A second AI run that did not draft or edit the post checked every count against demo-fixture.json and demo.rs on 2026-09-30 and corrected the History tab, deny, and verify wording: deny withholds the publication but still records the decision, and verify needs the algal executable on a listed platform.",
     ],
-    scores: { readerUtility: 2, originalEvidence: 1, factualConfidence: 2, hostFit: 2, voiceIntegrity: 1, maintenanceValue: 1 },
+    scores: { readerUtility: 2, originalEvidence: 1, factualConfidence: 2, hostFit: 2, voiceIntegrity: 1, maintenanceValue: 2 },
     owner: "Hraness",
     drafting: "ai-from-source",
-    review: null,
+    review: { reviewer: AI_REVIEWER, reviewerType: "ai", reviewedOn: "2026-09-30" },
     humanReview: null,
     reassessOn: "2026-10-29",
     harmIfWrong: "A reader could expect ALGAL to control tool permissions, sign packages, or prove who ran a program, none of which it does today.",

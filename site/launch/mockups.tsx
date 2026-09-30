@@ -66,7 +66,7 @@ export function CrashTerminal({ theme }: Readonly<{ theme?: "light" | "dark" }> 
 export const VERIFY_LINES: readonly TerminalLine[] = [
   { kind: "input", text: "algal demo export ./my-review > review.algal.json", beat: "export" },
   { kind: "input", text: "algal demo verify review.algal.json", beat: "verify" },
-  { kind: "output", text: `{ "ok": ${String(demo.verify.ok)}, "generations": ${demo.verify.generations}, "receipts": ${demo.verify.receipts}, "status": ${q(demo.verify.status)}, … }`, tone: "ok", beat: "verify" },
+  { kind: "output", text: `{ "ok": ${String(demo.verify.ok)}, "generations": ${demo.verify.generations}, "status": ${q(demo.verify.status)}, … }`, tone: "ok", beat: "verify" },
   { kind: "comment", text: "checks the history is consistent; it does not prove who wrote it", beat: "limit" },
 ];
 
@@ -84,9 +84,9 @@ export function VerifyTerminal({ theme }: Readonly<{ theme?: "light" | "dark" }>
 export type ReportView = "decision" | "history" | "approved";
 
 const STEPS: Readonly<Record<ReportView, readonly (readonly [string, string, "done" | "wait" | "held"])[]>> = {
-  decision: [["Evidence", "captured", "done"], ["Proposal", "retained", "done"], ["Approval", "waiting", "wait"], ["Publication", "held", "held"]],
-  history: [["Evidence", "captured", "done"], ["Proposal", "retained", "done"], ["Approval", "waiting", "wait"], ["Publication", "held", "held"]],
-  approved: [["Evidence", "captured", "done"], ["Proposal", "retained", "done"], ["Approval", "approved", "done"], ["Publication", "written", "done"]],
+  decision: [["Evidence", "saved", "done"], ["Proposal", "saved", "done"], ["Approval", "waiting", "wait"], ["Publication", "held", "held"]],
+  history: [["Evidence", "saved", "done"], ["Proposal", "saved", "done"], ["Approval", "waiting", "wait"], ["Publication", "held", "held"]],
+  approved: [["Evidence", "saved", "done"], ["Proposal", "saved", "done"], ["Approval", "approved", "done"], ["Publication", "written", "done"]],
 };
 
 const MARK = { done: "✓", wait: "◷", held: "○" } as const;
@@ -127,7 +127,7 @@ export function ApprovalPage({ theme, view = "decision" }: Readonly<{ theme?: "l
         ) : (
           <div className="al-report__decision" data-film="decision">
             <p className="al-report__label">Your decision.</p>
-            <p className="al-report__lede">The program can propose. Only your next command can authorize the exact retained action.</p>
+            <p className="al-report__lede">The program can propose. Only your next command can authorize the exact saved action.</p>
             <dl>
               <div><dt>Allowed action</dt><dd><code>{proposal.action}</code></dd></div>
               <div><dt>Destination</dt><dd><code>{proposal.target}</code></dd></div>
