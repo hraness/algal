@@ -672,8 +672,8 @@ await writeFile(join(DIST, "install.sh"), await renderInstallScript(SITE));
 // shipped site has self-hosted fonts/assets; the CLI gains no browser runtime.
 const styles = await buildSiteStyles(DIST);
 const browserScripts = await Bun.build({
-  entrypoints: [join(SITE, "appearance.ts"), join(SITE, "client.ts"), join(SITE, "viewer.ts")], outdir: DIST,
-  target: "browser", format: "iife", minify: true,
+  entrypoints: [join(SITE, "analytics.ts"), join(SITE, "appearance.ts"), join(SITE, "client.ts"), join(SITE, "viewer.ts")], outdir: DIST,
+  target: "browser", format: "iife", minify: true, define: { "process.env.NODE_ENV": '"production"' },
   naming: { entry: "[name].js", asset: "assets/[name]-[hash].[ext]" },
 });
 const surfaceModule = await Bun.build({

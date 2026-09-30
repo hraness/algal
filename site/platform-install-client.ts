@@ -75,6 +75,7 @@ export function enhancePlatformInstalls(root: ParentNode = document): void {
       const subject = pre.getAttribute("aria-label") ?? "install command";
       button.addEventListener("click", async () => {
         const ok = await copyText(pre.textContent ?? "", pre);
+        if (ok) document.dispatchEvent(new CustomEvent("analytics-install-copied", { detail: /\bbrew\b/.test(pre.textContent ?? "") ? "brew" : "curl" }));
         if (!ok) selectContents(pre);
         for (const other of block.querySelectorAll<HTMLElement>("[data-copy-state]")) other.dataset.copyState = "idle";
         command.dataset.copyState = button.dataset.copyState = ok ? "copied" : "failed";
