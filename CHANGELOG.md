@@ -12,6 +12,17 @@ independent of these package versions.
 
 ## Unreleased
 
+## v0.2.0-vm.13 - 2026-09-30
+
+Verified native installations on macOS and Linux update automatically within
+the `vm` preview channel. The Bun runtime keeps its existing update workflow.
+
+- Add `algal update`, with `check`, `status`, `enable`, and `disable` actions and JSON output. Automatic checks run before product work at most once a day; every running command protects its executable until it finishes.
+- Compare the full preview tag and source SHA embedded by the official release build. Archive, checksum and release-record downloads must match the immutable GitHub release. macOS retains Developer ID, notarization, hardened-runtime and timestamp checks.
+- Preserve hash-keyed `.algal-releases` records through installation and rollback. Re-running the public installer can enroll a verified `vm.11` copy; explicitly selected versions stay pinned.
+- Skip automatic updates in CI, offline verification, memory queries and hash-pinned SDK calls. `--no-update` or `HRANESS_NO_UPDATE=1` skips one invocation. Saved opt-outs survive reinstallation.
+- Keep the SDK's existing executable hash pin across process startup and check it while the native command holds its update lock. Source and package Bun installs print manual guidance without replacing their runtime.
+
 ## v0.2.0-vm.12 - 2026-09-30
 
 macOS releases use one Developer ID identity across upgrades, so system

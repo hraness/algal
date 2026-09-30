@@ -34,6 +34,47 @@ one exact release, or `ALGAL_INSTALL_PREFIX` to install somewhere other than
 `~/.local`. The script's source is `site/install.sh`; the site fills in the
 default release tag from `site/published-release.json`.
 
+## Updates
+
+From `v0.2.0-vm.13`, verified native installs on macOS and Linux check for a
+newer `vm` preview before product work, at most once a day. Automatic updates
+are enabled by default. They keep the current platform and preview channel,
+and compare the full release tag and build SHA rather than the `0.2.0` package
+version shared by the previews.
+
+```sh
+algal update
+algal update check --json
+algal update status
+algal update disable
+algal update enable
+```
+
+The updater verifies the immutable GitHub release, archive and checksum
+digests, and the release record stored both inside and beside the archive.
+macOS also requires the expected Developer ID, Apple notarization, hardened
+runtime and secure timestamp before executing the candidate. Every running
+command protects the installed executable until it finishes. Updates wait
+for another invocation when a command is active; they do not restart services.
+A failed replacement restores the previous executable and install record.
+Hash-keyed `.algal-releases` records stay with the bytes they describe.
+
+CI, offline verification, memory queries and existing SDK executable pins skip
+automatic updates. Use `--no-update` or `HRANESS_NO_UPDATE=1` to skip a single
+invocation. `ALGAL_VERSION` and manually installed archives pin the chosen
+release; an ordinary reinstall preserves that pin and saved update preferences.
+Re-run the public installer to enroll a `vm.11` native copy whose bytes match
+the fixed historical hashes recorded in the updater. That older release was
+mutable and unsigned. A `vm.12` copy can migrate when its canonical release
+is immutable. Unknown copies need their original update workflow or a new
+`ALGAL_INSTALL_PREFIX`.
+
+Source and package Bun installations retain their original update workflow.
+Their `algal update` command prints manual guidance without network access,
+installation changes or a switch to the native runtime. Native updates do
+not rebuild the Apple bridge or change a downstream application's executable
+pin.
+
 ## Verify and install by hand
 
 Download the target's `.tar.gz` and matching `.tar.gz.sha256` from the same

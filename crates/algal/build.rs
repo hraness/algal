@@ -110,6 +110,7 @@ fn set(name: &str, value: &str) {
 }
 
 fn main() {
+    println!("cargo:rerun-if-env-changed=ALGAL_RELEASE_BUILD_TAG");
     let manifest = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
     let root = manifest.parent().unwrap().parent().unwrap();
     watch(&root.join(".git"));
@@ -168,4 +169,28 @@ fn main() {
     set("TARGET", &env::var("TARGET").unwrap_or_default());
     set("RUSTC", rustc.trim());
     set("TAGS", &tags);
+    if let Ok(tag) = env::var("ALGAL_RELEASE_BUILD_TAG") {
+        let prefix = format!("v{}-vm.", env::var("CARGO_PKG_VERSION").unwrap());
+        let suffix = tag
+            .strip_prefix(&prefix)
+            .expect("official builds need the full vm release tag");
+        assert!(
+            !suffix.is_empty()
+                && !suffix.starts_with('0')
+                && suffix.bytes().all(|byte| byte.is_ascii_digit())
+                && suffix.parse::<u64>().is_ok(),
+            "release number must be canonical"
+        );
+        assert_eq!(
+            state, "clean",
+            "official release builds require clean source"
+        );
+        assert!(
+            commit.is_some() && tags.split(',').any(|exact| exact == tag),
+            "official build tag must name the checked-out commit"
+        );
+        set("RELEASE_TAG", &tag);
+    } else {
+        set("RELEASE_TAG", "");
+    }
 }

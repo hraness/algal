@@ -36,6 +36,7 @@ Store and share
 Setup
   auth jev                        Save a TypeSafe Jev key on this computer
   doctor                          Check that ALGAL is ready
+  update                          Show this Bun runtime's manual update workflow
 
 Options
   -h, --help                      Show help. Also: algal <command> --help

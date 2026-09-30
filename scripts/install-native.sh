@@ -35,6 +35,7 @@ else
   [ -z "$checksum" ] || { printf '%s\n' '--checksum requires --archive' >&2; exit 2; }
 fi
 mkdir -p "$prefix/bin"
+prefix=$(CDPATH= cd -- "$prefix" && pwd -P)
 staging=$(mktemp -d "$prefix/bin/.algal-install.XXXXXX")
 trap 'rm -rf "$staging"' EXIT
 trap 'exit 1' HUP INT TERM
@@ -47,6 +48,31 @@ else
   cp "$build_dir/release/algal" "$staging/algal"
 fi
 chmod 755 "$staging/algal"
+if [ -n "$archive" ]; then
+  # Older candidates lack this hidden command. New official builds use their
+  # own verifier and lock owner; a source build never gains release ownership.
+  identity=$("$staging/algal" __build-identity 2>/dev/null || true)
+  official=$(printf '%s' "$identity" | python3 -c 'import hashlib,json,pathlib,sys
+try:
+    value=json.load(sys.stdin)
+    tag=value.get("releaseTag")
+    executable=pathlib.Path(sys.argv[1])
+    digest=hashlib.sha256(executable.read_bytes()).hexdigest()
+    metadata=json.loads((executable.parent/".algal-releases"/(digest+".json")).read_text())
+    print("yes" if value.get("schema")=="algal.build.v1" and isinstance(tag,str)
+          and metadata.get("tag")==tag and metadata.get("sourceState")=="clean" else "no")
+except (OSError, ValueError, TypeError, AttributeError):
+    print("no")' "$staging/algal")
+  if [ "$official" = yes ]; then
+    "$staging/algal" __install-release --archive "$archive" --checksum "$checksum" --prefix "$prefix" --pinned
+    printf '%s\n' 'Optional Apple bridge: build separately with scripts/build-apple.sh.'
+    exit 0
+  fi
+fi
+if [ -e "$prefix/bin/.hraness-cli-update-algal" ] || [ -L "$prefix/bin/.hraness-cli-update-algal" ]; then
+  printf '%s\n' 'This installation uses native updates; use algal update or choose a new prefix.' >&2
+  exit 1
+fi
 "$staging/algal" doctor > "$staging/doctor.json"
 # Metadata is immutable and addressed by the verified executable bytes. Publish
 # it first: interruption cannot attach a new release label to the old binary.

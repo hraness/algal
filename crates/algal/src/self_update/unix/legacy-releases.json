@@ -1,0 +1,77 @@
+[
+  {
+    "tag": "v0.2.0-vm.11",
+    "releaseId": 399320510,
+    "platform": "aarch64-apple-darwin",
+    "archive": {
+      "id": 598643811,
+      "name": "algal-v0.2.0-vm.11-aarch64-apple-darwin.tar.gz",
+      "size": 5449316,
+      "sha256": "877cdf10bbb21c5673c17c1024c6389df15089f02da7adabc95d0e8d43be6bee"
+    },
+    "checksum": {
+      "id": 598643815,
+      "name": "algal-v0.2.0-vm.11-aarch64-apple-darwin.tar.gz.sha256",
+      "size": 113,
+      "sha256": "bef3263cf7b9081e95db2d31df1664b8df4a65ca910eea6c9dd86954d66665e3"
+    },
+    "binarySize": 12439392,
+    "binarySha256": "1012355edb66b0993f22d3f2711c5ccf8759e6d795470c00f4a031eaf21f425c",
+    "metadata": {
+      "id": 598643814,
+      "name": "algal-v0.2.0-vm.11-aarch64-apple-darwin.release.json",
+      "size": 1459,
+      "sha256": "274ec2e22d5f3463da01c2370b3a36c6648816f75428f4c5b24479c9f67cf0ff"
+    }
+  },
+  {
+    "tag": "v0.2.0-vm.11",
+    "releaseId": 399320510,
+    "platform": "aarch64-unknown-linux-gnu",
+    "archive": {
+      "id": 598643812,
+      "name": "algal-v0.2.0-vm.11-aarch64-unknown-linux-gnu.tar.gz",
+      "size": 5735506,
+      "sha256": "a84c24436e571bfe90ea9d5e51ac861741562b2ddf824fd673faf6cb8e82332d"
+    },
+    "checksum": {
+      "id": 598643833,
+      "name": "algal-v0.2.0-vm.11-aarch64-unknown-linux-gnu.tar.gz.sha256",
+      "size": 118,
+      "sha256": "dd41c0794a3c1246b562ace1bd4992e5de65dc787ce14aaf100b9d1dc2596d7b"
+    },
+    "binarySize": 13281448,
+    "binarySha256": "c3822089f1e1d737e2a545817dcbba7d45f0d03634f56ad387a6fea25bf4e0b9",
+    "metadata": {
+      "id": 598643813,
+      "name": "algal-v0.2.0-vm.11-aarch64-unknown-linux-gnu.release.json",
+      "size": 1473,
+      "sha256": "df8851a68518201e2c845450f62c104fbd2db5df48e544f90645a18d3144729a"
+    }
+  },
+  {
+    "tag": "v0.2.0-vm.11",
+    "releaseId": 399320510,
+    "platform": "x86_64-unknown-linux-gnu",
+    "archive": {
+      "id": 598643842,
+      "name": "algal-v0.2.0-vm.11-x86_64-unknown-linux-gnu.tar.gz",
+      "size": 5990602,
+      "sha256": "406669852e9600b15f568e39b6a7d2f16e2ab64ce7fe1db1e0df33c260703ebb"
+    },
+    "checksum": {
+      "id": 598643847,
+      "name": "algal-v0.2.0-vm.11-x86_64-unknown-linux-gnu.tar.gz.sha256",
+      "size": 117,
+      "sha256": "a24e818d51e5ac7d6523eb913be86c351fad9ffe89dc9f5d3396a1a4efae53df"
+    },
+    "binarySize": 14948000,
+    "binarySha256": "e9973c863ba01066b360390b59737d33823f77c616c7a1cd19a4a4b341db0a8d",
+    "metadata": {
+      "id": 598643837,
+      "name": "algal-v0.2.0-vm.11-x86_64-unknown-linux-gnu.release.json",
+      "size": 1464,
+      "sha256": "b1b87f838ebe1b39cae083b7f6d9721e7814f190cb87e7db73fb64d57bef5595"
+    }
+  }
+]
