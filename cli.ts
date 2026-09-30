@@ -95,6 +95,8 @@ async function recallSpecExecutor(spec: string, dir: string): Promise<Executor |
 const USAGE = `algal: Language and VM for agent programs that wait for approval and resume
 
 usage:
+  algal update [check|status|enable|disable] [--json]
+                                              show this Bun runtime's manual update workflow
   algal compile <program.algal> [--out <manifest.json>] [--source-map <map.json>]
       [--bundle-out <bundle.json>] [--source-root <dir>]
                                               compile source; bundle its complete local import closure
@@ -1061,6 +1063,17 @@ async function main(): Promise<number> {
   if (help !== undefined) {
     process.stdout.write(help.text);
     return help.code;
+  }
+  if (argv[0] === "update") {
+    const tokens = argv.slice(1), actions = tokens.filter(token => token !== "--json");
+    if (actions.length > 1 || tokens.filter(token => token === "--json").length > 1
+      || actions.some(action => !["install", "check", "status", "enable", "disable"].includes(action))) {
+      usageError("algal update [check|status|enable|disable] [--json]");
+    }
+    const instructions = "This Bun runtime uses its original source or package-manager update workflow. Update the checkout or package through that workflow; it stays on Bun.";
+    if (tokens.includes("--json")) out({schema: "hraness.cli-update.result.v1", product: "algal", status: "unsupported", policy: "disabled", supported: false, automatic: false, current: PACKAGE_VERSION, latest: null, reason: "Source and package Bun installs update through their original workflow.", instructions});
+    else process.stdout.write(`${instructions}\n`);
+    return 0;
   }
   const { cmd, positional, flags } = parseArgs(argv);
   const requestedDiagnosticFormat = artifactFlag(flags, "diagnostic-format") ?? (humanErrors(argv) ? "text" : "json");
@@ -3948,7 +3961,7 @@ function usageError(msg: string): never {
   throw new AlgalError("PARSE_FAILED", `usage: ${msg}`);
 }
 
-void reportAlgalCliRun(PACKAGE_VERSION);
+if (process.argv[2] !== "update") void reportAlgalCliRun(PACKAGE_VERSION);
 main()
   .then((code) => process.exit(code))
   .catch(async (e) => {

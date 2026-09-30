@@ -19,6 +19,13 @@ arm64 are on the [releases page](https://github.com/hraness/algal/releases)
 (`curl -fsSL https://algal.computer/install.sh | sh`), and the Bun runtime runs
 from this checkout.
 
+From `v0.2.0-vm.13`, verified macOS and Linux installs update automatically
+within the `vm` preview channel. `algal update disable` turns automatic updates
+off; `algal update` installs a newer verified preview now. Explicit versions,
+CI, offline verification and hash-pinned SDK calls stay fixed. The Bun runtime
+keeps its existing source or package-manager update workflow. See
+[native CLI updates](docs/native-release.md#updates).
+
 ## The idea
 
 The bet behind ALGAL is that a computer can accumulate tested ways of acting,

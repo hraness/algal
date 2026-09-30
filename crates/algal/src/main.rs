@@ -23,6 +23,7 @@ use std::{
 };
 
 mod cli_style;
+mod self_update;
 
 /// Reject-all admission used when no `--policy` record is supplied; read-only
 /// commands still work, every trusted boundary denies.
@@ -76,6 +77,9 @@ impl app_memory::MemoryAdmission for NoAdmission {
     about = "ALGAL is a programming language and VM for AI agent programs that wait for approval and leave receipts you can replay."
 )]
 struct Cli {
+    /// Skip the automatic release check for this invocation.
+    #[arg(long, global = true)]
+    no_update: bool,
     /// Store directory: manifests, receipts, values, slots, and process state.
     #[arg(long, global = true, default_value = ".algal")]
     dir: PathBuf,
@@ -149,6 +153,12 @@ struct Execution {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Update a verified native install or change automatic-update settings.
+    Update(self_update::UpdateArgs),
+    #[command(name = "__install-release", hide = true)]
+    InstallRelease(self_update::InitialInstall),
+    #[command(name = "__build-identity", hide = true)]
+    BuildIdentity,
     /// Run one civilization epoch: propose plans, admit them, measure, and promote.
     Civ {
         /// Use a live executor for the designer instead of the recorded fixture.
@@ -1434,6 +1444,9 @@ async fn execute(cli: Cli) -> Result<bool> {
         return Ok(true);
     }
     match cli.command {
+        Commands::Update(_) | Commands::InstallRelease(_) | Commands::BuildIdentity => {
+            unreachable!("maintenance precedes product work")
+        }
         Commands::Demo { command } => {
             if std::env::args().any(|arg| arg == "--dir" || arg.starts_with("--dir=")) {
                 return Err(Error::invalid(
@@ -3667,9 +3680,9 @@ fn read_secret_line(prompt: &str) -> Result<String> {
 
 /// Commands a new person reaches for, in the order they run them. Root help
 /// lists these first; every other visible command follows in its own order.
-const FIRST_COMMANDS: [&str; 12] = [
-    "demo", "doctor", "run", "check", "verify", "resume", "inspect", "explain", "diff", "example",
-    "suite", "process",
+const FIRST_COMMANDS: [&str; 13] = [
+    "demo", "doctor", "update", "run", "check", "verify", "resume", "inspect", "explain", "diff",
+    "example", "suite", "process",
 ];
 
 /// Research and maintainer commands: hidden from root help, listed by
@@ -3766,7 +3779,8 @@ async fn main() {
     };
     let next = next_step(&matches);
     let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|error| error.exit());
-    let code = match execute(cli).await {
+    let mut update_lease = None;
+    let code = match execute_with_update(cli, &mut update_lease).await {
         Ok(true) => 0,
         Ok(false) => 1,
         Err(error) => {
@@ -3794,5 +3808,127 @@ async fn main() {
             2
         }
     };
+    drop(update_lease);
     std::process::exit(code);
+}
+
+async fn execute_with_update(
+    cli: Cli,
+    update_lease: &mut Option<hraness_cli_update::ActiveLease>,
+) -> Result<bool> {
+    let update_error = |error: anyhow::Error| Error::new("UPDATE_FAILED", format!("{error:#}"));
+    match &cli.command {
+        Commands::Update(args) => {
+            return self_update::explicit(args)
+                .map(|_| true)
+                .map_err(update_error);
+        }
+        Commands::InstallRelease(args) => {
+            return self_update::initial_install(args)
+                .map(|_| true)
+                .map_err(update_error);
+        }
+        Commands::BuildIdentity => {
+            self_update::build_identity();
+            return Ok(true);
+        }
+        _ => {}
+    }
+    *update_lease =
+        self_update::startup(offline_command(&cli.command), cli.no_update).map_err(update_error)?;
+    execute(cli).await
+}
+
+fn offline_command(command: &Commands) -> bool {
+    matches!(
+        command,
+        Commands::Verify { .. }
+            | Commands::Check { .. }
+            | Commands::Inspect { .. }
+            | Commands::Explain { .. }
+            | Commands::Diff { .. }
+            | Commands::Digest { .. }
+            | Commands::Replay { .. }
+            | Commands::Ordering { .. }
+            | Commands::Memory { .. }
+            | Commands::Context { .. }
+            | Commands::CivVerify { .. }
+            | Commands::Demo { .. }
+            | Commands::Doctor { .. }
+            | Commands::Bench {
+                command: Some(BenchCommand::Verify { .. } | BenchCommand::Inspect { .. }),
+                ..
+            }
+            | Commands::Foundry {
+                command: Some(
+                    FoundryCommand::Verify { .. }
+                        | FoundryCommand::Inspect { .. }
+                        | FoundryCommand::Pack { .. }
+                        | FoundryCommand::SearchVerify { .. }
+                        | FoundryCommand::SearchInspect { .. }
+                        | FoundryCommand::SearchPack { .. }
+                        | FoundryCommand::ScheduleVerify { .. }
+                ),
+                ..
+            }
+            | Commands::Process {
+                command: ProcessCommand::Verify { .. }
+                    | ProcessCommand::VerifyEvidence { .. }
+                    | ProcessCommand::Replay { .. }
+                    | ProcessCommand::Export { .. }
+                    | ProcessCommand::Inspect { .. }
+                    | ProcessCommand::List
+                    | ProcessCommand::Journal { .. }
+            }
+            | Commands::Application {
+                command: ApplicationCommand::VerifyEvaluation { .. }
+                    | ApplicationCommand::VerifyComparison { .. }
+                    | ApplicationCommand::VerifyProposal { .. }
+                    | ApplicationCommand::VerifySelection { .. }
+                    | ApplicationCommand::VerifyExperiment { .. }
+                    | ApplicationCommand::VerifyDrain { .. }
+                    | ApplicationCommand::VerifyMessage { .. }
+                    | ApplicationCommand::VerifyContention { .. },
+                ..
+            }
+    )
+}
+
+#[cfg(test)]
+mod self_update_tests {
+    use super::*;
+
+    #[test]
+    fn replay_and_verification_commands_skip_automatic_network_access() {
+        for arguments in [
+            "doctor",
+            "verify receipt.json",
+            "check manifest.json",
+            "replay receipt.json --with revised.json",
+            "civ-verify population.json",
+            "demo verify evidence.json",
+            "process verify job",
+            "process replay job --with revised.json",
+            "process verify-evidence evidence.json",
+            "bench verify report.json",
+            "foundry verify report.json",
+            "foundry search-verify report.json",
+            "foundry schedule-verify record.json",
+            "application verify-evaluation input.json",
+            "application verify-comparison input.json",
+            "application verify-proposal input.json",
+            "application verify-selection input.json",
+            "application verify-experiment input.json",
+            "application verify-drain input.json",
+            "application verify-message input.json",
+            "application verify-contention input.json",
+        ] {
+            let cli =
+                Cli::try_parse_from(std::iter::once("algal").chain(arguments.split_whitespace()))
+                    .unwrap();
+            assert!(offline_command(&cli.command), "{arguments}");
+        }
+        let cli = Cli::try_parse_from(["algal", "run", "program.json"]).unwrap();
+        assert!(!offline_command(&cli.command));
+    }
 }

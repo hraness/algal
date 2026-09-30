@@ -207,50 +207,23 @@ class RenderedBody(unittest.TestCase):
             notes.load_manifests(Path(self.temporary.name) / "empty", TAG, COMMIT)
 
 
-FAKE_GH = f"#!{sys.executable}\n" + r'''import json, os, pathlib, sys
-state_path = pathlib.Path(os.environ["FAKE_GH_STATE"])
-state = json.loads(state_path.read_text())
-argv = sys.argv[1:]
-with open(os.environ["FAKE_GH_LOG"], "a") as log:
-    log.write(json.dumps(argv) + "\n")
-def option(name):
-    return argv[argv.index(name) + 1]
-if argv[:3] == ["api", "--hostname", "github.com"]:
-    print(json.dumps({"sha": os.environ["RELEASE_SHA"], "type": "commit"}))
-elif argv[:2] == ["release", "view"]:
-    release = state.get("release")
-    if release is None:
-        sys.exit(1)
-    print(json.dumps({key: release[key] for key in option("--json").split(",")}))
-elif argv[:2] in (["release", "create"], ["release", "edit"]):
-    release = state.get("release") or {"isDraft": False, "isPrerelease": True, "assets": []}
-    if argv[1] == "create" and state.get("release") is not None:
-        sys.exit("release exists")
-    release["name"] = option("--title")
-    release["body"] = pathlib.Path(option("--notes-file")).read_text()
-    if os.environ.get("FAKE_GH_MANGLE"):
-        release["body"] = release["body"].replace("64 KiB", "65 KiB")
-    state["release"] = release
-elif argv[:2] == ["release", "upload"]:
-    names = [pathlib.Path(path).name for path in argv[3:]]
-    if set(names) & set(state["release"]["assets"]):
-        sys.exit("asset exists")
-    state["release"]["assets"] += names
-else:
-    sys.exit("unexpected gh command")
-state_path.write_text(json.dumps(state))
-'''
+FAKE_GH = f"#!{sys.executable}\n" + (ROOT / "scripts/fixtures/native-release-gh.py").read_text()
 
 
 class PublishStep(unittest.TestCase):
     """Runs the workflow's actual publish script against an offline gh."""
 
-    def run_publish(self, changelog=CHANGELOG, release=None, mangle=False, mac_binary=b"signed fixture"):
+    @staticmethod
+    def mutations(calls):
+        return [call for call in calls if call[0] == "api" and "--method" in call]
+
+    def run_publish(self, changelog=CHANGELOG, release=None, mangle=False, mac_binary=b"signed fixture", bad_asset=False, extra_env=None):
         with tempfile.TemporaryDirectory(prefix="algal-release-publish-") as temporary:
             tree = Path(temporary)
             (tree / "scripts").mkdir()
             shutil.copy(ROOT / "scripts/release-notes.py", tree / "scripts/release-notes.py")
             shutil.copy(ROOT / "scripts/unpack-native.py", tree / "scripts/unpack-native.py")
+            shutil.copy(ROOT / "scripts/publish-native-release.py", tree / "scripts/publish-native-release.py")
             (tree / "CHANGELOG.md").write_text(changelog)
             manifests(tree / "artifacts", mac_binary=mac_binary)
             (tree / "runner").mkdir()
@@ -266,8 +239,11 @@ class PublishStep(unittest.TestCase):
                            "RELEASE_TAG": TAG, "RELEASE_SHA": COMMIT, "GH_REPO": "hraness/algal",
                            "GH_TOKEN": "offline-fixture", "RUNNER_TEMP": str(tree / "runner"),
                            "FAKE_GH_STATE": str(state), "FAKE_GH_LOG": str(log)}
+            environment.update(extra_env or {})
             if mangle:
                 environment["FAKE_GH_MANGLE"] = "1"
+            if bad_asset:
+                environment["FAKE_GH_BAD_ASSET"] = "1"
             result = subprocess.run(["bash", "-c", PUBLISH], cwd=tree, env=environment,
                                     capture_output=True, text=True, timeout=60)
             calls = [json.loads(line) for line in log.read_text().splitlines()]
@@ -287,7 +263,22 @@ class PublishStep(unittest.TestCase):
         self.assertTrue(release["body"].startswith("Mailboxes now reject oversized messages"))
         self.assertTrue(release["body"].endswith(" -->"))
         self.assertEqual(len(release["assets"]), 3 * len(notes.TARGETS))
-        self.assertIn("create", [call[1] for call in calls if call[0] == "release"])
+        self.assertTrue(any(call[3] == "repos/hraness/algal/releases" and "POST" in call for call in self.mutations(calls)))
+        self.assertTrue(release["immutable"])
+        self.assertFalse(release["isDraft"])
+        uploaded = max(i for i, call in enumerate(calls) if call[0] == "api" and call[3].startswith("https://uploads.github.com/"))
+        published = next(i for i, call in enumerate(calls) if call[0] == "fixture-patch" and call[1].get("draft") is False)
+        self.assertLess(uploaded, published)
+        self.assertTrue(any(call[:3] == ["api", "--hostname", "github.com"] and call[3] == "repos/hraness/algal/releases/42"
+                            for call in calls[uploaded + 1:published]))
+        self.assertFalse(any(call[0] == "api" and "/releases/tags/" in call[3] for call in calls))
+
+    def test_uploaded_digest_mismatch_keeps_the_release_draft(self):
+        result, release, calls = self.run_publish(bad_asset=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("asset bytes differ", result.stderr)
+        self.assertTrue(release["isDraft"])
+        self.assertFalse(any(call[0] == "fixture-patch" and call[1].get("draft") is False for call in calls))
 
     def test_missing_or_unreleased_section_fails_before_any_release_call(self):
         for changelog in [CHANGELOG.replace(f"## {TAG} - 2026-10-01", "## v9.9.9"),
@@ -309,19 +300,21 @@ class PublishStep(unittest.TestCase):
     def test_retry_with_matching_page_uploads(self):
         first, release, _ = self.run_publish()
         self.assertEqual(first.returncode, 0, first.stderr)
-        result, release, calls = self.run_publish(release={**release, "assets": []})
+        result, release, calls = self.run_publish(release={**release, "isDraft": True, "immutable": False, "assets": [], "assetProofs": {}})
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertFalse([call for call in calls if call[:2] in (["release", "create"], ["release", "edit"])])
+        self.assertFalse(any(call[3] == "repos/hraness/algal/releases" for call in self.mutations(calls)))
+        patches = [call[1] for call in calls if call[0] == "fixture-patch"]
+        self.assertEqual(patches, [{"draft": False, "prerelease": True, "make_latest": "false"}])
 
     def test_hand_edited_page_is_refused(self):
         first, release, _ = self.run_publish()
         self.assertEqual(first.returncode, 0, first.stderr)
-        edited = {**release, "assets": [], "body": release["body"].replace("64 KiB", "32 KiB")}
+        edited = {**release, "isDraft": True, "immutable": False, "assets": [], "body": release["body"].replace("64 KiB", "32 KiB")}
         result, after, calls = self.run_publish(release=edited)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("differ", result.stderr)
         self.assertEqual(after["assets"], [])
-        self.assertFalse([call for call in calls if call[:2] == ["release", "upload"]])
+        self.assertFalse(self.mutations(calls))
 
     def test_body_changed_after_publication_fails_the_run(self):
         result, _, _ = self.run_publish(mangle=True)
@@ -333,6 +326,63 @@ class PublishStep(unittest.TestCase):
         result, release, calls = self.run_publish(release=stable)
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(release, stable)
+        self.assertFalse(self.mutations(calls))
+
+    def test_published_prerelease_is_never_mutated(self):
+        for immutable in (False, True):
+            with self.subTest(immutable=immutable):
+                published = {"isDraft": False, "isPrerelease": True, "immutable": immutable, "name": "x", "body": "x", "assets": []}
+                result, release, calls = self.run_publish(release=published)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(release, published)
+                self.assertFalse(self.mutations(calls))
+
+    def test_partial_draft_preserves_existing_assets_and_uploads_only_missing(self):
+        first, release, _ = self.run_publish()
+        self.assertEqual(first.returncode, 0, first.stderr)
+        retained = release["assets"][:2]
+        draft = {**release, "isDraft": True, "immutable": False, "assets": retained,
+                 "assetProofs": {name: release["assetProofs"][name] for name in retained},
+                 "payloads": {name: release["payloads"][name] for name in retained}}
+        result, published, calls = self.run_publish(release=draft)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        uploads = [call for call in self.mutations(calls) if call[3].startswith("https://uploads.github.com/")]
+        self.assertEqual(len(uploads), 7)
+        for name in retained:
+            self.assertEqual(published["assetProofs"][name], release["assetProofs"][name])
+
+    def test_matching_published_release_is_read_only_after_uncertain_response(self):
+        first, release, _ = self.run_publish(extra_env={"FAKE_GH_PUBLISH_UNCERTAIN": "1"})
+        self.assertNotEqual(first.returncode, 0)
+        self.assertTrue(release["immutable"])
+        second, after, calls = self.run_publish(release=release)
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertEqual(after, release)
+        self.assertFalse(self.mutations(calls))
+
+    def test_conflicting_existing_asset_is_preserved_without_mutation(self):
+        first, release, _ = self.run_publish()
+        self.assertEqual(first.returncode, 0, first.stderr)
+        release["isDraft"] = True
+        release["immutable"] = False
+        release["assetProofs"][release["assets"][0]]["digest"] = "sha256:" + "0" * 64
+        result, after, calls = self.run_publish(release=release)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(after, release)
+        self.assertFalse(self.mutations(calls))
+
+    def test_download_digest_mismatch_keeps_the_release_draft(self):
+        result, release, calls = self.run_publish(extra_env={"FAKE_GH_BAD_DOWNLOAD": "1"})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(release["isDraft"])
+        self.assertFalse(any(call[0] == "fixture-patch" and call[1].get("draft") is False for call in calls))
+
+    def test_release_inventory_has_a_finite_page_bound(self):
+        result, release, calls = self.run_publish(extra_env={"FAKE_GH_FULL_PAGES": "1"})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIsNone(release)
+        self.assertEqual(sum(call[0] == "api" and "/releases?" in call[3] for call in calls), 10)
+        self.assertFalse(self.mutations(calls))
 
 
 if __name__ == "__main__":

@@ -34,6 +34,47 @@ one exact release, or `ALGAL_INSTALL_PREFIX` to install somewhere other than
 `~/.local`. The script's source is `site/install.sh`; the site fills in the
 default release tag from `site/published-release.json`.
 
+## Updates
+
+From `v0.2.0-vm.13`, verified native installs on macOS and Linux check for a
+newer `vm` preview before product work, at most once a day. Automatic updates
+are enabled by default. They keep the current platform and preview channel,
+and compare the full release tag and build SHA rather than the `0.2.0` package
+version shared by the previews.
+
+```sh
+algal update
+algal update check --json
+algal update status
+algal update disable
+algal update enable
+```
+
+The updater verifies the immutable GitHub release, archive and checksum
+digests, and the release record stored both inside and beside the archive.
+macOS also requires the expected Developer ID, Apple notarization, hardened
+runtime and secure timestamp before executing the candidate. Every running
+command protects the installed executable until it finishes. Updates wait
+for another invocation when a command is active; they do not restart services.
+A failed replacement restores the previous executable and install record.
+Hash-keyed `.algal-releases` records stay with the bytes they describe.
+
+CI, offline verification, memory queries and existing SDK executable pins skip
+automatic updates. Use `--no-update` or `HRANESS_NO_UPDATE=1` to skip a single
+invocation. `ALGAL_VERSION` and manually installed archives pin the chosen
+release; an ordinary reinstall preserves that pin and saved update preferences.
+Re-run the public installer to enroll a `vm.11` native copy whose bytes match
+the fixed historical hashes recorded in the updater. That older release was
+mutable and unsigned. A `vm.12` copy can migrate when its canonical release
+is immutable. Unknown copies need their original update workflow or a new
+`ALGAL_INSTALL_PREFIX`.
+
+Source and package Bun installations retain their original update workflow.
+Their `algal update` command prints manual guidance without network access,
+installation changes or a switch to the native runtime. Native updates do
+not rebuild the Apple bridge or change a downstream application's executable
+pin.
+
 ## Verify and install by hand
 
 Download the target's `.tar.gz` and matching `.tar.gz.sha256` from the same
@@ -130,10 +171,17 @@ runs the extracted binary smoke again and emits an archive, checksum file,
 and metadata. No Bun installation is needed in these release jobs.
 
 With `publish=false` (the default), artifacts remain on the workflow run for
-review. `publish=true` attaches verified assets to a draft or prerelease,
-creating a prerelease if needed. Stable releases and existing asset names are
-never overwritten. Publishing is one explicit owner-operated workflow action;
+review. `publish=true` stages all nine assets in a draft and compares GitHub's
+recorded sizes and SHA-256 digests with the qualified local files before it
+publishes an immutable prerelease. Already published releases and existing
+asset names are never overwritten. Publishing is one explicit owner-operated workflow action;
 merging source alone does not publish binaries.
+
+A retry preserves matching assets in a partial draft and uploads only the
+missing files. An exactly matching immutable release is verified without
+changing it. Retain the original qualified artifacts and rerun only the failed
+publisher job after an uncertain publication response; rebuilding signed
+bytes for the same tag can produce a different package.
 
 The release page is titled `ALGAL <tag>`. Its summary and `## Changes` come from
 the tag's section of `CHANGELOG.md` (`## <tag>` with an optional ` - YYYY-MM-DD`
@@ -143,8 +191,8 @@ or edits the release when that section is missing, empty, or still says
 Unreleased. The body ends with an `algal.release-page.v1` HTML comment that
 records the tag, source commit, and archive digests. A retry accepts an existing
 page only when its notes match the rendered changelog section exactly, so a
-hand-edited page is refused; correct a published page by changing the page and
-the changelog together.
+hand-edited draft is refused. Published releases are immutable; corrections
+need a new changelog section and release tag.
 
 The native semver remains `0.2.0`. The embedded commit/input digest and installed
 package tag distinguish prerelease builds even when `algal --version` is identical. These packages

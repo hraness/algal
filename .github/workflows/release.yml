@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       publish:
-        description: Attach verified assets to a draft or prerelease (create a prerelease if absent)
+        description: Stage and verify complete assets in a draft, then publish an immutable prerelease
         required: true
         default: false
         type: boolean
@@ -104,6 +104,7 @@ jobs:
       - name: Build locked release executable
         env:
           CARGO_BUILD_TARGET: ${{ matrix.target }}
+          ALGAL_RELEASE_BUILD_TAG: ${{ inputs.tag }}
         run: cargo +1.97.1 build --release --locked -p algal --bin algal
       - name: Qualify archive and installer
         env:
@@ -165,6 +166,7 @@ jobs:
       - name: Build and qualify the unsigned executable
         env:
           CARGO_BUILD_TARGET: aarch64-apple-darwin
+          ALGAL_RELEASE_BUILD_TAG: ${{ inputs.tag }}
         run: |
           cargo +1.97.1 build --release --locked -p algal --bin algal
           python3 scripts/test-native-release.py --binary target/aarch64-apple-darwin/release/algal --commit "$GITHUB_SHA" --rustc-version "$(rustc +1.97.1 --version)"
@@ -398,37 +400,4 @@ jobs:
           notes="$RUNNER_TEMP/release-body.md"
           title=$(python3 scripts/release-notes.py title --tag "$RELEASE_TAG")
           python3 scripts/release-notes.py render --tag "$RELEASE_TAG" --commit "$RELEASE_SHA" --manifests artifacts --out "$notes"
-          check_page() {
-            gh release view "$RELEASE_TAG" --json name,body > "$RUNNER_TEMP/release-page.json"
-            python3 - "$RUNNER_TEMP/release-page.json" "$RUNNER_TEMP/release-page.md" "$title" <<'PYPAGE'
-          import json, pathlib, sys
-          page = json.loads(pathlib.Path(sys.argv[1]).read_text())
-          if page["name"] != sys.argv[3]:
-              raise SystemExit("Release title differs from the product name and tag")
-          pathlib.Path(sys.argv[2]).write_bytes(page["body"].encode())
-          PYPAGE
-            python3 scripts/release-notes.py verify --tag "$RELEASE_TAG" --commit "$RELEASE_SHA" --manifests artifacts --body "$RUNNER_TEMP/release-page.md"
-          }
-          if gh release view "$RELEASE_TAG" --json isDraft,isPrerelease,body > "$RUNNER_TEMP/release.json"; then
-            existing=$(python3 - "$RUNNER_TEMP/release.json" <<'PYEXISTING'
-          import json, sys
-          r = json.load(open(sys.argv[1]))
-          assert r["isDraft"] or r["isPrerelease"], "Refusing to mutate a stable release"
-          print("page" if "<!-- algal.release-page.v1 " in r["body"] else "draft")
-          PYEXISTING
-            )
-            # A page this workflow wrote must still match exactly (a retry);
-            # a draft without an identity record gets the rendered page.
-            if [ "$existing" = page ]; then
-              check_page
-            else
-              verify_release_tag
-              gh release edit "$RELEASE_TAG" --title "$title" --notes-file "$notes"
-            fi
-          else
-            verify_release_tag
-            gh release create "$RELEASE_TAG" --verify-tag --prerelease --title "$title" --notes-file "$notes"
-          fi
-          verify_release_tag
-          gh release upload "$RELEASE_TAG" artifacts/*
-          check_page
+          python3 scripts/publish-native-release.py --artifacts artifacts --notes "$notes" --title "$title"

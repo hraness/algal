@@ -59,6 +59,7 @@ const GROUPS: readonly Group[] = [
     rows: [
       ["auth jev", "Save a TypeSafe Jev key on this computer"],
       ["doctor", "Check that ALGAL is ready"],
+      ["update", "Show this Bun runtime's manual update workflow"],
     ],
   },
 ];

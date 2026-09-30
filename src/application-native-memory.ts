@@ -71,7 +71,10 @@ export class NativeMemoryQueryEngine implements MemoryQueryEngine {
       const args = [this.executable, "memory", command, join(dir, "snapshot.json"), join(dir, "program.json")];
       if (result !== undefined) { await writeFile(join(dir, "result.json"), canonicalize(result), { flag: "wx", mode: 0o600 }); args.push(join(dir, "result.json")); }
       if (signal?.aborted) return { failure: { kind: "incomplete", status: "cancelled", reason: "cancelled-before-dispatch", work: null } };
-      const child = Bun.spawn(args, { stdin: "ignore", stdout: "pipe", stderr: "pipe" });
+      const child = Bun.spawn(args, {
+        stdin: "ignore", stdout: "pipe", stderr: "pipe",
+        env: { ...process.env, HRANESS_NO_UPDATE: "1", ALGAL_EXPECTED_BINARY_SHA256: this.expectedSha256 },
+      });
       let stopReason: "cancelled" | "timeout" | "output-limit" | undefined;
       let force: ReturnType<typeof setTimeout> | undefined;
       const stop = (reason: typeof stopReason) => {

@@ -54,6 +54,7 @@ main() {
   name="algal-$tag-$target"
 
   temporary=$(mktemp -d "${TMPDIR:-/tmp}/algal-install.XXXXXX")
+  temporary=$(cd "$temporary" && pwd -P)
   trap 'rm -rf "$temporary"' EXIT
   trap 'exit 1' HUP INT TERM
 
@@ -122,6 +123,23 @@ main() {
   had_algal=0
   [ -e "$bin/algal" ] && had_algal=1
   mkdir -p "$bin"
+  prefix=$(cd "$prefix" && pwd -P)
+  bin="$prefix/bin"
+
+  modern=true
+  case "$tag" in v0.0.*|v0.1.*|v0.2.0-vm.[1-9]|v0.2.0-vm.10|v0.2.0-vm.11|v0.2.0-vm.12) modern=false ;; esac
+  if [ "$modern" = true ] && [ -z "${ALGAL_DOWNLOAD_BASE:-}" ]; then
+    # The verified candidate independently verifies the immutable public release
+    # and performs final writes, rollback, and record publication under its lock.
+    if [ -n "${ALGAL_VERSION:-}" ]; then
+      "$staged" __install-release --archive "$temporary/$name.tar.gz" --checksum "$temporary/$name.tar.gz.sha256" --prefix "$prefix" --pinned
+    else
+      "$staged" __install-release --archive "$temporary/$name.tar.gz" --checksum "$temporary/$name.tar.gz.sha256" --prefix "$prefix"
+    fi
+  else
+  if [ -e "$bin/.hraness-cli-update-algal" ] || [ -L "$bin/.hraness-cli-update-algal" ]; then
+    fail "this installation uses native updates; use algal update or choose a new ALGAL_INSTALL_PREFIX"
+  fi
 
   # Keep the release record keyed by the executable's digest, so `algal doctor`
   # reports which release it came from. Never replace a different record.
@@ -142,6 +160,7 @@ main() {
   cp "$staged" "$bin/.algal-install.$$"
   chmod 755 "$bin/.algal-install.$$"
   mv -f "$bin/.algal-install.$$" "$bin/algal"
+  fi
 
   echo "Installed $version at $bin/algal"
   case ":${PATH:-}:" in

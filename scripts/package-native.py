@@ -158,6 +158,11 @@ def package(args):
         report = json.loads(bounded_output([str(frozen), "doctor"], 16_384))
         version = report["version"]
         build = validate_build(report.get("build"), args, version, source_digest)
+        if not args.allow_dirty:
+            identity = json.loads(bounded_output([str(frozen), "__build-identity"], 16_384))
+            if (identity.get("schema") != "algal.build.v1" or identity.get("releaseTag") != args.tag
+                    or identity.get("buildSha") != args.commit or identity.get("build") != build):
+                raise ValueError("release executable lacks its exact official tag and build SHA")
         if args.tag[1:].split("-", 1)[0] != version:
             raise ValueError("release tag base does not match the binary version")
         smoke = module.smoke(frozen)

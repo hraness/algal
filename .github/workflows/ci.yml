@@ -459,7 +459,7 @@ jobs:
 
   demos:
     name: Native demos
-    needs: [changes, native]
+    needs: [changes, native-parity-build]
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -476,17 +476,21 @@ jobs:
       - run: bun install --frozen-lockfile
       - uses: actions/download-artifact@v8
         with:
-          name: algal-debug-linux
+          name: algal-ci-parity-linux
           path: ${{ runner.temp }}
-      - name: Restore the debug binary built by the native job
-        run: mkdir -p target/debug && tar -C target/debug -xf "$RUNNER_TEMP/algal-debug.tar" && target/debug/algal --version
-      - run: ALGAL_MEMORY_NATIVE="$PWD/target/debug/algal" bun test examples/coding-harness/memory-records.test.ts examples/coding-harness/memory.test.ts
-      - run: ALGAL_MEMORY_NATIVE="$PWD/target/debug/algal" bun test examples/adaptive-inventory/run.test.ts
-      - run: bun scripts/vm-demo.ts --native ./target/debug/algal
-      - run: bun scripts/recovery-demo.ts --native ./target/debug/algal
-      - run: bun scripts/repair-demo.ts --native ./target/debug/algal
-      - run: bun scripts/coding-recovery-demo.ts --native ./target/debug/algal
-      - run: bun scripts/process-evidence-demo.ts --native ./target/debug/algal
+      # SDK children verify their executable hash on every invocation. Reuse
+      # the existing optimized binary while retaining debug assertions and
+      # overflow checks, so hashing full debug symbols cannot consume a demo's
+      # unchanged process deadline.
+      - name: Restore the ci-parity binary
+        run: mkdir -p target/ci-parity && tar -C target/ci-parity -xf "$RUNNER_TEMP/algal-ci-parity.tar" && target/ci-parity/algal --version
+      - run: ALGAL_MEMORY_NATIVE="$PWD/target/ci-parity/algal" bun test examples/coding-harness/memory-records.test.ts examples/coding-harness/memory.test.ts
+      - run: ALGAL_MEMORY_NATIVE="$PWD/target/ci-parity/algal" bun test examples/adaptive-inventory/run.test.ts
+      - run: bun scripts/vm-demo.ts --native ./target/ci-parity/algal
+      - run: bun scripts/recovery-demo.ts --native ./target/ci-parity/algal
+      - run: bun scripts/repair-demo.ts --native ./target/ci-parity/algal
+      - run: bun scripts/coding-recovery-demo.ts --native ./target/ci-parity/algal
+      - run: bun scripts/process-evidence-demo.ts --native ./target/ci-parity/algal
 
   required:
     name: Required
