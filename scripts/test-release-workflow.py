@@ -117,6 +117,20 @@ print(os.environ["CI_RESPONSE"])
         self.assertNotIn("secrets.", package)
         self.assertIn("SIGNED_BINARY_SHA256", package)
 
+    def test_release_python_imports_do_not_dirty_the_source_checkout(self):
+        # Exercise the release workflow's environment instead of ignoring caches
+        # in the clean-source packaging check.
+        setting = re.search(r'(?m)^  PYTHONDONTWRITEBYTECODE: "([^"\n]+)"$', WORKFLOW)
+        self.assertIsNotNone(setting)
+        with tempfile.TemporaryDirectory(prefix="algal-release-import-") as directory:
+            root = Path(directory)
+            (root / "qualification_helper.py").write_text("VALUE = 42\n")
+            result = subprocess.run([sys.executable, "-c", "import qualification_helper"],
+                                    cwd=root, env={**os.environ, "PYTHONDONTWRITEBYTECODE": setting[1]},
+                                    capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(sorted(path.name for path in root.iterdir()), ["qualification_helper.py"])
+
     def test_current_lightweight_tag(self):
         self.assertTrue(self.admit())
 

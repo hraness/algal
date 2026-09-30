@@ -22,6 +22,8 @@ concurrency:
 
 env:
   RUST_TOOLCHAIN: "1.97.1"
+  # Qualification imports source helpers; keep the checkout clean for packaging.
+  PYTHONDONTWRITEBYTECODE: "1"
   CARGO_INCREMENTAL: "0"
   CARGO_TERM_COLOR: always
   CARGO_NET_RETRY: "10"
