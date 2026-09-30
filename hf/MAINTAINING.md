@@ -111,3 +111,18 @@ accounting, and limits. The raw evidence archive and reconciliation record
 in the source repository, synthetic task text, model responses, and provider
 account records remain outside the Hugging Face export. Provider charges
 remain unknown.
+
+On 2026-09-30, Codex comparison_coordinator reviewed redistribution of
+`docs/cumulative-skill-v9-pool-results-2026-09-30.json` for the existing MIT
+dataset. The 199,817-byte file has SHA-256
+`3966a7b4109bd3db43ed25ec62cfacdd526b3c0d8fca61387115ad81b8673f7d`.
+It contains project-owned synthetic-study methods, seed and arm counts,
+per-generation diagnostics and synthetic record identifiers, execution
+identities, content hashes, incomplete primary coverage, transport failures,
+partial token accounting, replay counts, and limitations. Task text, model
+responses, raw stores and evidence archives, private traces, credentials,
+signing material, and provider account records remain outside this export.
+Provider charges and full token totals remain unknown. The historical study
+entries and license are unchanged. This agent drafted and fact-checked the
+new dataset-card text against that file; repository integration and remote
+publication verification remain separate delivery steps.
