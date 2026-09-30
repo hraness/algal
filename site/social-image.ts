@@ -13,13 +13,13 @@ import {
 import { Resvg } from "@resvg/resvg-js";
 import satori from "satori";
 
-import { SITE_TAGLINE } from "./copy";
+import { SITE_TAGLINE, SITE_NAME } from "./copy";
 
 /** The favicon and apple-touch-icon source, embedded as a finished app icon. */
 const APP_ICON = `data:image/svg+xml;base64,${readFileSync(new URL("./favicon.svg", import.meta.url)).toString("base64")}`;
 
 export const SOCIAL_SITE = defineSocialImageSite({
-  name: "ALGAL",
+  name: SITE_NAME,
   domain: "algal.computer",
   description: SITE_TAGLINE,
   icon: { kind: "app", src: APP_ICON },
