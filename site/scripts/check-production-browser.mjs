@@ -4,17 +4,19 @@ import console from 'node:console';
 import { clearTimeout, setTimeout } from 'node:timers';
 import { URL } from 'node:url';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { isAbsolute, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import process from 'node:process';
 import { chromium } from 'playwright-core';
+import { ownedChromiumLaunchOptions, pinnedBrowserExecutable, pinnedChromiumDefinition, verifyOwnedChromium } from '../../scripts/owned-browser.mjs';
 
 // Only public read-only production pages: no application commands, credentials,
 // personal data, form submission, or deployment operations are used here.
 const origin = "https://algal.computer";
 const paths = ["/", "/tour/", "/use-cases/", "/docs/", "/blog/", "/living/", "/workbench/", "/grow/", "/tasks/", "/compare/", "/docs/spec/organism/", "/blog/built-on-algal/", "/missing-production-verification"];
 const artifacts = resolve(import.meta.dirname, '../.production-browser', String(Date.now()));
-const executablePath = process.env.PRODUCTION_BROWSER_EXECUTABLE;
-assert.ok(executablePath && isAbsolute(executablePath), 'An absolute installed Chromium executable is required.');
+const definition = pinnedChromiumDefinition();
+const executablePath = await pinnedBrowserExecutable(chromium.executablePath(), process.env.PRODUCTION_BROWSER_EXECUTABLE);
+const launchOptions = ownedChromiumLaunchOptions(executablePath, definition.defaultArgs);
 await mkdir(artifacts, { recursive: true });
 const report = { origin, verifierSha: process.env.GITHUB_SHA ?? null, startedAt: new Date().toISOString(),
   passed: false, records: [], errors: [], blockedWrites: [], cleanup: false };
@@ -54,8 +56,10 @@ const terminate = reason => terminating ??= (async () => {
 const timer = setTimeout(() => { void terminate('Eight-minute deadline exceeded'); }, 480_000);
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => { void terminate(`Interrupted: ${signal}`); });
 try {
-  launching = chromium.launch({ executablePath, headless: true, timeout: 20_000 });
+  launching = chromium.launch({ ...launchOptions, timeout: 20_000 });
   browser = await launching;
+  report.browser = await verifyOwnedChromium(browser, executablePath, definition.expectedVersion);
+  console.log(`Browser: ${executablePath}\nVersion: ${report.browser.browserVersion}`);
   for (const width of [360, 390, 1440]) for (const theme of ['light', 'dark']) {
     const mobile = width < 500;
     const context = await browser.newContext({ viewport: { width, height: width === 360 ? 740 : width === 390 ? 844 : 900 },

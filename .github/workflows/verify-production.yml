@@ -27,9 +27,9 @@ jobs:
       - name: Install locked verifier dependencies
         working-directory: .
         run: bun install --frozen-lockfile --ignore-scripts
+      - name: Provision the locked Playwright browser
+        run: bun ./node_modules/playwright-core/cli.js install --with-deps chromium
       - name: Inspect public production pages without writes
-        env:
-          PRODUCTION_BROWSER_EXECUTABLE: /usr/bin/google-chrome
         run: bun site/scripts/check-production-browser.mjs
       - name: Retain production screenshots and receipt
         if: always()
