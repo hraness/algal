@@ -37,10 +37,10 @@ fn root_help_leads_with_first_run_commands_and_hides_research_ones() {
         .lines()
         .skip_while(|line| *line != "Commands:")
         .skip(1)
-        .take(4)
+        .take(5)
         .map(|line| line.split_whitespace().next().unwrap_or(""))
         .collect();
-    assert_eq!(commands, ["demo", "doctor", "run", "check"]);
+    assert_eq!(commands, ["demo", "doctor", "update", "run", "check"]);
     for hidden in ["civ", "civ-verify", "bench", "foundry", "acp"] {
         assert!(
             !help
