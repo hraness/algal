@@ -28,7 +28,7 @@ SHA_PATTERN = re.compile(r"[0-9a-f]{40}")
 DIGEST_PATTERN = re.compile(r"[0-9a-f]{64}")
 # Target order on the page and the platform each archive is tested on.
 TARGETS = {
-    "aarch64-apple-darwin": "macOS 14 or newer on Apple silicon (unsigned and not notarized)",
+    "aarch64-apple-darwin": "macOS 14 or newer on Apple silicon",
     "x86_64-unknown-linux-gnu": "Ubuntu 24.04 x86_64, glibc 2.39 or newer",
     "aarch64-unknown-linux-gnu": "Ubuntu 24.04 arm64, glibc 2.39 or newer",
 }

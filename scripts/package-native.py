@@ -21,7 +21,7 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parent.parent
 TARGETS = {"x86_64-unknown-linux-gnu": ("linux", "x86_64", "Ubuntu 24.04 / glibc 2.39 or newer"),
            "aarch64-unknown-linux-gnu": ("linux", "aarch64", "Ubuntu 24.04 arm64 / glibc 2.39 or newer"),
-           "aarch64-apple-darwin": ("darwin", "arm64", "macOS 14 or newer; unsigned/not notarized")}
+           "aarch64-apple-darwin": ("darwin", "arm64", "macOS 14 or newer")}
 BUILD_FIELDS = {"contract", "version", "sourceCommit", "sourceState", "sourceInputsSha256",
                 "target", "rustc", "exactTagsAtBuild"}
 
@@ -147,6 +147,14 @@ def package(args):
         frozen = Path(temporary) / "algal"
         frozen.write_bytes(binary_data)
         frozen.chmod(0o755)
+        signed = False
+        if args.target == "aarch64-apple-darwin":
+            signing_spec = importlib.util.spec_from_file_location("macos_signing", ROOT / "scripts/sign-macos-release.py")
+            signing = importlib.util.module_from_spec(signing_spec)
+            signing_spec.loader.exec_module(signing)
+            if signing.requires_signature(args.tag):
+                signing.verify_signature(frozen)
+                signed = True
         report = json.loads(bounded_output([str(frozen), "doctor"], 16_384))
         version = report["version"]
         build = validate_build(report.get("build"), args, version, source_digest)
@@ -159,7 +167,7 @@ def package(args):
                     "commit": args.commit, "sourceState": "dirty-test-fixture" if dirty or build["sourceState"] != "clean" else "clean",
                     "target": args.target, "rustc": args.rustc_version, "build": build,
                     "minimumPlatform": support, "binarySha256": hashlib.sha256(binary_data).hexdigest(),
-                    "signed": False, "smoke": smoke}
+                    "signed": signed, "smoke": smoke}
         metadata_bytes = (json.dumps(metadata, sort_keys=True, separators=(",", ":")) + "\n").encode()
         if len(metadata_bytes) > 16_384:
             raise ValueError("release metadata byte limit")

@@ -2,6 +2,7 @@
 """Verify a local release archive and extract only its admitted executable."""
 import argparse
 import hashlib
+import importlib.util
 import gzip
 import io
 import json
@@ -135,6 +136,14 @@ def unpack(archive, checksum, out, retain_metadata=False):
         with out.open("xb") as destination:
             destination.write(data)
         out.chmod(0o755)
+        if target == "aarch64-apple-darwin":
+            spec = importlib.util.spec_from_file_location("macos_signing", Path(__file__).with_name("sign-macos-release.py"))
+            signing = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(signing)
+            if signing.requires_signature(metadata.get("tag", "")):
+                if metadata.get("signed") is not True:
+                    raise ValueError("release requires Developer ID signing")
+                signing.verify_signature(out)
         if retain_metadata:
             records = out.parent / ".algal-releases"
             records.mkdir(mode=0o755)

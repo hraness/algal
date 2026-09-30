@@ -86,6 +86,26 @@ main() {
     || fail "the executable does not match its release record; nothing was installed"
   grep -q "\"target\":\"$target\"" "$metadata" \
     || fail "the archive is for another platform; nothing was installed"
+  # Preserve exact historical version installs. All new Mac release tags need
+  # the stable publisher identity and Apple's online notarization verdict.
+  if [ "$os" = Darwin ]; then
+    historical=false
+    case "$tag" in
+      v0.0.*|v0.1.*|v0.2.0-vm.[1-9]|v0.2.0-vm.10|v0.2.0-vm.11) historical=true ;;
+    esac
+    if [ "$historical" = false ]; then
+      requirement='identifier "dev.hraness.algal" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = "8AAP53VTW3"'
+      /usr/bin/codesign --verify --strict --check-notarization --test-requirement "$requirement" "$staged" \
+        || fail "Developer ID or Apple notarization verification failed; nothing was installed"
+      signature=$(/usr/bin/codesign --display --verbose=4 "$staged" 2>&1) \
+        || fail "could not inspect the release signature"
+      printf '%s\n' "$signature" | grep -Eq '^CodeDirectory .*flags=.*\(.*runtime.*\)' \
+        || fail "release lacks hardened runtime"
+      printf '%s\n' "$signature" | grep -Eq '^Timestamp=.+' \
+        || fail "release lacks a secure timestamp"
+      grep -q '"signed":true' "$metadata" || fail "release record is not signed"
+    fi
+  fi
   chmod 755 "$staged"
   version=$("$staged" --version 2>/dev/null) || {
     if [ "$os" = Linux ]; then

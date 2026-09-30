@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Offline tests for the release page renderer and the workflow step that publishes it."""
 import hashlib
+import gzip
+import io
+import tarfile
 import importlib.util
 import json
 import os
@@ -50,18 +53,33 @@ Older release.
 """
 
 
-def manifests(directory, tag=TAG, commit=COMMIT, *, archives=True):
+def manifests(directory, tag=TAG, commit=COMMIT, *, archives=True, mac_binary=b"signed fixture"):
     directory.mkdir(parents=True, exist_ok=True)
     for target in notes.TARGETS:
         name = f"algal-{tag}-{target}.tar.gz"
+        metadata = {
+            "contract": "algal.native-release.v1", "tag": tag, "commit": commit, "sourceState": "clean",
+            "target": target, "signed": target == "aarch64-apple-darwin",
+            "binarySha256": hashlib.sha256(b"signed fixture").hexdigest(),
+        }
         data = f"archive for {target}\n".encode()
+        if target == "aarch64-apple-darwin":
+            stream = io.BytesIO()
+            with tarfile.open(fileobj=stream, mode="w:", format=tarfile.USTAR_FORMAT) as archive:
+                for member_name in ("bin/algal", "LICENSE", "release.json", "smoke.py"):
+                    payload = mac_binary if member_name == "bin/algal" else b"fixture"
+                    if member_name == "release.json":
+                        payload = json.dumps(metadata).encode()
+                    member = tarfile.TarInfo(f"algal-{tag}-{target}/{member_name}")
+                    member.size = len(payload)
+                    archive.addfile(member, io.BytesIO(payload))
+            data = gzip.compress(stream.getvalue(), mtime=0)
         digest = hashlib.sha256(data).hexdigest()
         if archives:
             (directory / name).write_bytes(data)
             (directory / f"{name}.sha256").write_text(f"{digest}  {name}\n")
         (directory / f"algal-{tag}-{target}.release.json").write_text(json.dumps({
-            "contract": "algal.native-release.v1", "tag": tag, "commit": commit, "sourceState": "clean",
-            "target": target, "archive": name, "archiveSha256": digest,
+            **metadata, "archive": name, "archiveSha256": digest,
         }, sort_keys=True, indent=2) + "\n")
     return directory
 
@@ -227,13 +245,14 @@ state_path.write_text(json.dumps(state))
 class PublishStep(unittest.TestCase):
     """Runs the workflow's actual publish script against an offline gh."""
 
-    def run_publish(self, changelog=CHANGELOG, release=None, mangle=False):
+    def run_publish(self, changelog=CHANGELOG, release=None, mangle=False, mac_binary=b"signed fixture"):
         with tempfile.TemporaryDirectory(prefix="algal-release-publish-") as temporary:
             tree = Path(temporary)
             (tree / "scripts").mkdir()
             shutil.copy(ROOT / "scripts/release-notes.py", tree / "scripts/release-notes.py")
+            shutil.copy(ROOT / "scripts/unpack-native.py", tree / "scripts/unpack-native.py")
             (tree / "CHANGELOG.md").write_text(changelog)
-            manifests(tree / "artifacts")
+            manifests(tree / "artifacts", mac_binary=mac_binary)
             (tree / "runner").mkdir()
             (tree / "bin").mkdir()
             (tree / "bin/gh").write_text(FAKE_GH)
@@ -243,6 +262,7 @@ class PublishStep(unittest.TestCase):
             log = tree / "gh.log"
             log.write_text("")
             environment = {**os.environ, "PATH": f"{tree / 'bin'}{os.pathsep}{os.environ['PATH']}",
+                           "SIGNED_BINARY_SHA256": hashlib.sha256(b"signed fixture").hexdigest(),
                            "RELEASE_TAG": TAG, "RELEASE_SHA": COMMIT, "GH_REPO": "hraness/algal",
                            "GH_TOKEN": "offline-fixture", "RUNNER_TEMP": str(tree / "runner"),
                            "FAKE_GH_STATE": str(state), "FAKE_GH_LOG": str(log)}
@@ -252,6 +272,13 @@ class PublishStep(unittest.TestCase):
                                     capture_output=True, text=True, timeout=60)
             calls = [json.loads(line) for line in log.read_text().splitlines()]
             return result, json.loads(state.read_text())["release"], calls
+
+    def test_changed_mac_payload_cannot_publish_under_forged_manifest_hash(self):
+        result, release, calls = self.run_publish(mac_binary=b"substituted after signing")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("signed bytes mismatch", result.stderr)
+        self.assertIsNone(release)
+        self.assertEqual(calls, [])
 
     def test_new_release_gets_title_and_rendered_body(self):
         result, release, calls = self.run_publish()

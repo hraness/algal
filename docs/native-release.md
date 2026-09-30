@@ -99,10 +99,10 @@ suspends on a mailbox, wakes and resumes it in separate CLI invocations, and
 verifies both generations offline with no provider credentials.
 
 Checksums detect corruption and accidental substitution against the checksum
-file you trust. They are not a publisher signature. macOS packages are unsigned
-and not notarized; this workflow does not request signing credentials or remove
-quarantine attributes. Follow your organization's policy for downloaded CLI
-binaries. Production signing/notarization remains separate work.
+file you trust. They are not a publisher signature. The currently published
+`vm.11` macOS package is unsigned and not notarized. Starting with `vm.12`,
+release packaging and installation require Developer ID and Apple notarization,
+as described below. No installer removes quarantine attributes.
 The embedded identity and `matched` local package attribution are diagnostics,
 not authentication: they cannot prove who built or published a binary. A package
 record's historical smoke result is retained on disk but is not re-attested by
@@ -112,7 +112,7 @@ record's historical smoke result is retained on disk but is not re-attested by
 
 `.github/workflows/release.yml` is manually dispatched at the desired release
 ref with an existing version tag as input. Select that tag as the workflow ref
-for an older release commit; selecting `main` works only when its current commit
+for every release; selecting `main` is rejected even when its current commit
 matches the tag. The tag must resolve to the workflow event commit, which must
 have a completed successful main push CI run. The tag input never selects code
 to execute: every checkout uses the workflow event commit. The workflow builds
@@ -151,3 +151,44 @@ package tag distinguish prerelease builds even when `algal --version` is identic
 distribute the native kernel and process CLI. GitHub shepherd, coding-job
 reconciliation, and repair validation currently run through the Bun host; the
 native CLI independently verifies their portable process histories.
+
+## Developer ID release setup
+
+Starting with `v0.2.0-vm.12`, the macOS release pipeline requires Developer ID
+Application signing for team `8AAP53VTW3`, identifier `dev.hraness.algal`, hardened
+runtime, and a secure timestamp. Apple must return `Accepted`; `codesign
+--check-notarization` must also pass before the binary can enter a release.
+This source change alone does not publish a signed release or change the
+published version record.
+
+The `hraness-apple-release` GitHub environment must permit version tags only,
+with no reviewer requirement or wait timer. Configure its five secrets:
+`APPLE_DEVELOPER_ID_P12_BASE64`, `APPLE_DEVELOPER_ID_P12_PASSWORD`,
+`APPLE_NOTARY_KEY_P8_BASE64`, `APPLE_NOTARY_KEY_ID`, and
+`APPLE_NOTARY_ISSUER_ID`. Keep credentials out of build and packaging jobs.
+
+Dispatch `Native release` with the workflow ref set to the exact version tag
+and `tag` set to the same value. A dispatch from `main` is rejected even when
+its commit matches the tag. Successful CI for that exact main commit is still
+required. The unsigned build artifact is selected by immutable artifact ID,
+verified against its uploaded ZIP digest, and checked against the current run
+and source commit before signing. The signing runner never executes the binary.
+A fresh runner verifies and tests signed bytes, then creates the final archive,
+manifest, and provenance. Publication checks the archive binary against the
+hash recorded by the signing job.
+
+Apple review has a 15-minute wait limit. A timeout, rejection, or interruption
+fails closed and does not publish. The `algal-apple-notarization-*` workflow
+artifact retains the submission UUID and input, executable, and upload hashes
+without credentials. Query that existing submission before deciding on another
+release attempt; rerunning the signing job submits again. Do not automatically
+retry. The temporary keychain and credential files are removed in the helper's
+cleanup and an unconditional workflow cleanup step. Hard runner termination
+may prevent final diagnostic upload; inspect the completed submission log.
+
+The installers verify the team, identifier, Developer ID certificate, hardened
+runtime, timestamp, and online notarization before executing new Mac releases.
+Explicit `vm.1` through `vm.11` and earlier versions remain installable under
+the historical checksum checks. Linux installation behavior is unchanged.
+A stable signing identity helps macOS recognize an upgrade; it does not grant
+or replace Accessibility, Screen Recording, or other user permissions.
