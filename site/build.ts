@@ -610,6 +610,8 @@ await mkdir(join(DIST, "receipts"), { recursive: true });
 await mkdir(join(DIST, "living"), { recursive: true });
 await mkdir(join(DIST, "grow"), { recursive: true });
 await cp(join(SITE, "grow.css"), join(DIST, "grow.css"));
+// The launch film and its social cuts, served at /launch/ (see site/launch/film.ts).
+await cp(join(SITE, "launch/film"), join(DIST, "launch"), { recursive: true });
 await mkdir(join(DIST, "tasks"), { recursive: true });
 await cp(join(SITE, "tasks.css"), join(DIST, "tasks.css"));
 await mkdir(join(DIST, "workbench"), { recursive: true });

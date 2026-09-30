@@ -1,6 +1,7 @@
 // The launch film's record. The rendered files live in site/launch/film/ and
-// are copied to /launch/ by build.ts. Until the film is rendered (see
-// video/README.md), launchFilm() returns null and the post shows no player.
+// are copied to /launch/ by build.ts, with the 1:1 and 9:16 social cuts.
+// launchFilm() returns null if the files are missing, and the post then shows
+// no player.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
@@ -17,7 +18,10 @@ export function launchFilm(dir: string = FILM_DIR): ArticleVideoRecord | null {
   return {
     name: "Introducing ALGAL",
     description: "ALGAL's built-in demo: a program stops for approval, survives two crashes without resending a write, and its history is checked offline.",
-    sources: [{ src: `${FILM_PATH}launch.mp4`, type: "video/mp4" }],
+    sources: [
+      { src: `${FILM_PATH}launch.webm`, type: "video/webm" },
+      { src: `${FILM_PATH}launch.mp4`, type: "video/mp4" },
+    ],
     poster: `${FILM_PATH}launch-poster.jpg`,
     captions: `${FILM_PATH}launch.vtt`,
     width: 1920,

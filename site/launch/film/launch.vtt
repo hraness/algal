@@ -1,0 +1,37 @@
+WEBVTT
+
+open
+00:00:00.000 --> 00:00:04.400
+Most agent programs run start to finish. When one acts wrongly, you find out after.
+
+title
+00:00:04.400 --> 00:00:07.600
+ALGAL. Write agent programs that wait, resume, and replay.
+
+step-1
+00:00:07.600 --> 00:00:12.000
+Start. The demo program stops before it acts, with status waiting.
+
+step-2
+00:00:12.000 --> 00:00:16.400
+Decide. The report page names the one action. You approve or deny it.
+
+step-3
+00:00:16.400 --> 00:00:20.800
+Crash. Killed twice on purpose. Finished steps are reused, and an uncertain write is not resent.
+
+step-4
+00:00:20.800 --> 00:00:24.700
+Verify. Export the run to one file and check its history offline.
+
+proof
+00:00:24.700 --> 00:00:29.200
+0 writes after you deny. 1 delivery of a finished step, crash or not. 1 send of an interrupted write, never repeated
+
+limits
+00:00:29.200 --> 00:00:33.200
+What it does not do yet. Packages are unsigned. Your own app still decides which tools a program may use.
+
+end
+00:00:33.200 --> 00:00:37.700
+ALGAL. algal.computer. Preview. Free and open source.
