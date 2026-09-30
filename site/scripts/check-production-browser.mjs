@@ -181,7 +181,7 @@ try {
       await page.keyboard.press('Escape');
       assert.equal(await menu.getByText('System', { exact: true }).isVisible(), false, 'Escape closes appearance');
       assert.equal(await trigger.evaluate(element => document.activeElement === element), true, 'Escape restores trigger focus');
-      await page.locator('main a[href="#install"]').first().click();
+      await page.locator('header a[href="/#install"]').first().click();
       await page.waitForURL(origin + '/#install');
       assert.ok(await page.locator('#install').evaluate(element => element.getBoundingClientRect().top >= document.querySelector('header').getBoundingClientRect().bottom - 1), 'Install section clears the sticky header');
     } catch (error) {
