@@ -1,4 +1,4 @@
-import snapshot from "../portfolio-messaging.generated.json";
+import snapshot from "./portfolio-messaging.generated.json";
 
 import { highlightCode } from "@hraness/design-kit/syntax-highlighting";
 
