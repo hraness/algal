@@ -83,6 +83,7 @@ jobs:
       - run: bun run docs:check
       - run: bun run build:site
       - run: python3 scripts/test-release-notes.py
+      - run: python3 -B scripts/test-macos-signing.py
       - run: bun run check:hf
       # Pull requests only restore caches; main saves the one bun cache.
       - uses: actions/cache/save@v6

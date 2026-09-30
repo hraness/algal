@@ -68,7 +68,7 @@ def check(binary, commit, rustc_version):
             except ValueError:
                 pass
         call(["python3", str(ROOT / "scripts/package-native.py"), "--binary", str(binary), "--target", target,
-              "--tag", f"v{version}-test", "--commit", commit, "--rustc-version", rustc_version, "--out", str(archives), "--allow-dirty"])
+              "--tag", f"v{version}-vm.1", "--commit", commit, "--rustc-version", rustc_version, "--out", str(archives), "--allow-dirty"])
         archive = next(archives.glob("*.tar.gz"))
         checksum = archive.with_suffix(".gz.sha256")
         # The hosted installer (algal.computer/install.sh) needs no checkout or
@@ -76,13 +76,13 @@ def check(binary, commit, rustc_version):
         # the same hash-keyed release record.
         hosted_prefix = directory / "hosted"
         hosted = ["sh", str(ROOT / "site/install.sh")]
-        hosted_environment = {**os.environ, "ALGAL_VERSION": f"v{version}-test",
+        hosted_environment = {**os.environ, "ALGAL_VERSION": f"v{version}-vm.1",
                               "ALGAL_DOWNLOAD_BASE": archives.resolve().as_uri(), "ALGAL_INSTALL_PREFIX": str(hosted_prefix)}
         call(hosted, env=hosted_environment)
         hosted_binary = hosted_prefix / "bin/algal"
         assert hashlib.sha256(hosted_binary.read_bytes()).hexdigest() == hashlib.sha256(binary.read_bytes()).hexdigest()
         hosted_release = json.loads(call([str(hosted_binary), "doctor"]).stdout)["build"]["release"]
-        assert hosted_release["status"] == "matched" and hosted_release["metadata"]["tag"] == f"v{version}-test"
+        assert hosted_release["status"] == "matched" and hosted_release["metadata"]["tag"] == f"v{version}-vm.1"
         call(hosted, env=hosted_environment)  # rerunning upgrades in place
         tampered = directory / "hosted-tampered"
         shutil.copytree(archives, tampered)
@@ -104,7 +104,7 @@ def check(binary, commit, rustc_version):
         assert metadata["binarySha256"] == expected
         installed_diagnostic = json.loads(call([str(installed), "doctor"]).stdout)["build"]
         assert installed_diagnostic["release"]["status"] == "matched"
-        assert installed_diagnostic["release"]["metadata"]["tag"] == f"v{version}-test"
+        assert installed_diagnostic["release"]["metadata"]["tag"] == f"v{version}-vm.1"
         assert installed_diagnostic["sourceCommit"] == commit
         call(install, success=False)
         call([*install, "--force"])
@@ -115,9 +115,9 @@ def check(binary, commit, rustc_version):
         call(["sh", str(ROOT / "scripts/install-native.sh"), str(prefix), "--archive", str(corrupted), "--checksum", str(checksum), "--force"], success=False)
         assert hashlib.sha256(installed.read_bytes()).hexdigest() == expected
         assert retained.read_bytes() == original_metadata
-        # Sidecars cannot claim signatures, accept foreign fields, or substitute
+        # Sidecars cannot mistype signatures, accept foreign fields, or substitute
         # another source commit while retaining the binary's filename/hash.
-        for mutation in [{"signed": True}, {"extra": "untrusted"}, {"commit": "0" * 40}]:
+        for mutation in [{"signed": "true"}, {"extra": "untrusted"}, {"commit": "0" * 40}]:
             retained.write_text(json.dumps({**metadata, **mutation}))
             rejected = json.loads(call([str(installed), "doctor"]).stdout)["build"]
             assert rejected["release"]["status"] == "rejected"
@@ -136,6 +136,11 @@ def check(binary, commit, rustc_version):
             proof.write_text(hashlib.sha256(path.read_bytes()).hexdigest() + f"  {path.name}\n")
             return ["sh", str(ROOT / "scripts/install-native.sh"), str(prefix), "--archive", str(path), "--checksum", str(proof), "--force"]
 
+        if target == "aarch64-apple-darwin":
+            # Matching outer hashes and a forged signed flag cannot authorize
+            # an unsigned payload under the new release identity.
+            call(changed_archive("forged-signed-release", {"tag": "v0.2.0-vm.12", "signed": True}), success=False)
+            assert hashlib.sha256(installed.read_bytes()).hexdigest() == expected
         call(changed_archive("wrong-embedded-commit", {"commit": "0" * 40}), success=False)
         call(changed_archive("stripped-build-identity", {"build": None}), success=False)
         call(changed_archive("conflicting-release-tag", {"tag": f"v{version}-other"}), success=False)

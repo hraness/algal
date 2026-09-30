@@ -126,7 +126,8 @@ fn release(path: &Path, hash: &str, build: &Value) -> std::result::Result<Option
             Some("clean" | "dirty-test-fixture")
         )
         || (metadata["sourceState"] == "clean" && build["sourceState"] != "clean")
-        || metadata["signed"] != false
+        || !metadata["signed"].is_boolean()
+        || (metadata["signed"] == true && metadata["target"] != "aarch64-apple-darwin")
         || !metadata["minimumPlatform"]
             .as_str()
             .is_some_and(|value| value.len() <= 256)
@@ -138,11 +139,13 @@ fn release(path: &Path, hash: &str, build: &Value) -> std::result::Result<Option
     }
     // The package's full smoke report is retained on disk, but this diagnostic
     // exposes only the fields whose local binary binding was checked above.
+    // `signed` is the package declaration, not a live signature check. The
+    // installer verifies Developer ID before ever executing a new Mac release.
     Ok(Some(json!({
         "tag": metadata["tag"], "commit": metadata["commit"],
         "version": metadata["version"], "target": metadata["target"],
         "sourceState": metadata["sourceState"], "binarySha256": metadata["binarySha256"],
-        "signed": false
+        "signed": metadata["signed"]
     })))
 }
 
@@ -198,6 +201,26 @@ mod tests {
                 diagnostic_at(Some(&executable))["release"]["status"],
                 "matched"
             );
+        }
+        if !embedded()["sourceCommit"].is_null() {
+            metadata["signed"] = json!(true);
+            fs::write(&path, serde_json::to_vec(&metadata).unwrap()).unwrap();
+            let expected = if embedded()["target"] == "aarch64-apple-darwin" {
+                "matched"
+            } else {
+                "rejected"
+            };
+            assert_eq!(
+                diagnostic_at(Some(&executable))["release"]["status"],
+                expected
+            );
+            metadata["signed"] = json!("true");
+            fs::write(&path, serde_json::to_vec(&metadata).unwrap()).unwrap();
+            assert_eq!(
+                diagnostic_at(Some(&executable))["release"]["status"],
+                "rejected"
+            );
+            metadata["signed"] = json!(false);
         }
         metadata["commit"] = json!("0000000000000000000000000000000000000000");
         fs::write(&path, serde_json::to_vec(&metadata).unwrap()).unwrap();

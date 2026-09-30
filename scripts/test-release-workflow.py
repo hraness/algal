@@ -62,7 +62,7 @@ print(os.environ["CI_RESPONSE"])
         return subprocess.run(["git", *arguments], cwd=cwd, env=cls.environment,
                               check=True, capture_output=True, text=True, timeout=10).stdout.strip()
 
-    def admit(self, tag="v0.2.0-vm.3", *, checkout=None, event=None, ci=None, success=True):
+    def admit(self, tag="v0.2.0-vm.3", *, checkout=None, event=None, ci=None, workflow_ref=None, success=True):
         checkout = checkout or self.current
         event = event or checkout
         with tempfile.TemporaryDirectory(dir=self.root) as directory:
@@ -73,7 +73,7 @@ print(os.environ["CI_RESPONSE"])
             identity = (tree / "identity").read_bytes()
             runs = [{"headSha": checkout, "headBranch": "main", "status": "completed", "conclusion": "success"}]
             result = subprocess.run(["bash", "-c", ADMISSION], cwd=tree, env={
-                **self.environment, "RELEASE_TAG": tag, "RELEASE_SHA": event,
+                **self.environment, "RELEASE_TAG": tag, "RELEASE_SHA": event, "WORKFLOW_REF": workflow_ref or "refs/tags/" + tag,
                 "GH_TOKEN": "offline-fixture", "GH_REPO": "fixture/release",
                 "EXPECTED_CI_SHA": checkout, "CI_RESPONSE": json.dumps(runs if ci is None else ci),
             }, capture_output=True, text=True, timeout=10)
@@ -84,13 +84,30 @@ print(os.environ["CI_RESPONSE"])
 
     def test_default_checkouts_are_not_selected_by_inputs_or_job_outputs(self):
         checkouts = re.findall(r"(?m)^      - uses: actions/checkout@[^\s]+[^\n]*\n((?:[ ]{8,}[^\n]*\n)*)", WORKFLOW)
-        self.assertEqual(len(checkouts), 3)
+        self.assertEqual(len(checkouts), 6)
         for checkout in checkouts:
             self.assertNotRegex(checkout, r"(?m)^\s+ref:")
             self.assertIn("persist-credentials: false", checkout)
         self.assertNotIn("needs.qualify.outputs", WORKFLOW)
         bindings = re.findall(r"(?m)^\s+RELEASE_SHA: (.*)$", WORKFLOW)
         self.assertEqual(bindings, ["${{ github.sha }}"] * 4)
+
+    def test_matching_commit_on_main_cannot_enter_signing_environment(self):
+        self.assertFalse(self.admit(workflow_ref="refs/heads/main", success=False))
+        self.assertFalse(self.admit(workflow_ref="refs/tags/v0.2.0-vm.4", success=False))
+
+    def test_signer_never_builds_or_executes_payload(self):
+        job = WORKFLOW.split("\n  macos_sign:", 1)[1].split("\n  macos_package:", 1)[0]
+        self.assertIn("environment: hraness-apple-release", job)
+        self.assertNotIn("cargo", job)
+        self.assertNotIn("package-native.py", job)
+        self.assertIn("cleanup", job)
+        self.assertIn("if: always()", job)
+        self.assertIn(".workflow_run.head_sha == $sha", job)
+        self.assertIn("ARTIFACT_DIGEST", job)
+        package = WORKFLOW.split("\n  macos_package:", 1)[1].split("\n  publish:", 1)[0]
+        self.assertNotIn("secrets.", package)
+        self.assertIn("SIGNED_BINARY_SHA256", package)
 
     def test_current_lightweight_tag(self):
         self.assertTrue(self.admit())

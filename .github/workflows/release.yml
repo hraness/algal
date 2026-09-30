@@ -17,7 +17,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: native-release-${{ inputs.tag }}
+  group: native-release-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -43,13 +43,15 @@ jobs:
         env:
           RELEASE_TAG: ${{ inputs.tag }}
           RELEASE_SHA: ${{ github.sha }}
+          WORKFLOW_REF: ${{ github.ref }}
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         shell: bash
         run: |
           set -euo pipefail
           (( ${#RELEASE_TAG} <= 256 ))
-          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]] || exit 1
+          test "$WORKFLOW_REF" = "refs/tags/$RELEASE_TAG"
           sha=$(git rev-parse HEAD)
           test "$sha" = "$RELEASE_SHA"
           # Fetch the requested identity, but never check out input-selected code.
@@ -73,8 +75,6 @@ jobs:
             target: x86_64-unknown-linux-gnu
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-          - os: macos-14
-            target: aarch64-apple-darwin
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -122,9 +122,170 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+
+  macos_build:
+    name: Build unsigned macOS executable without Apple credentials
+    needs: qualify
+    runs-on: macos-14
+    timeout-minutes: 30
+    outputs:
+      artifact_id: ${{ steps.unsigned.outputs.artifact-id }}
+      artifact_digest: ${{ steps.unsigned.outputs.artifact-digest }}
+      rustc: ${{ steps.compiler.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: native-release-aarch64-apple-darwin
+          save-if: false
+      - name: Build and qualify the unsigned executable
+        env:
+          CARGO_BUILD_TARGET: aarch64-apple-darwin
+        run: |
+          cargo +1.97.1 build --release --locked -p algal --bin algal
+          python3 scripts/test-native-release.py --binary target/aarch64-apple-darwin/release/algal --commit "$GITHUB_SHA" --rustc-version "$(rustc +1.97.1 --version)"
+      - name: Record compiler and prepare the single-file signing input
+        id: compiler
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          printf 'version=%s\n' "$(rustc +1.97.1 --version)" >> "$GITHUB_OUTPUT"
+          python3 -I scripts/sign-macos-release.py prepare target/aarch64-apple-darwin/release/algal "$RELEASE_TAG" "$RUNNER_TEMP/algal-unsigned"
+      - uses: actions/upload-artifact@v7
+        id: unsigned
+        with:
+          name: algal-unsigned-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/algal-unsigned/*
+          if-no-files-found: error
+          retention-days: 14
+
+  macos_sign:
+    name: Sign and notarize without executing the payload
+    needs: [qualify, macos_build]
+    environment: hraness-apple-release
+    runs-on: macos-14
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      artifact_id: ${{ steps.signed.outputs.artifact-id }}
+      artifact_digest: ${{ steps.signed.outputs.artifact-digest }}
+      binary_sha256: ${{ steps.identity.outputs.binary_sha256 }}
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Download exact same-run unsigned bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ needs.macos_build.outputs.artifact_id }}
+          ARTIFACT_DIGEST: ${{ needs.macos_build.outputs.artifact_digest }}
+        run: |
+          set -euo pipefail
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ && "$ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]] || exit 1
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID" > "$RUNNER_TEMP/artifact.json"
+          jq -e --arg id "$ARTIFACT_ID" --arg digest "sha256:$ARTIFACT_DIGEST" --arg run "$GITHUB_RUN_ID" --arg sha "$GITHUB_SHA" --arg name "algal-unsigned-$GITHUB_RUN_ATTEMPT" '
+            (.id | tostring) == $id and .digest == $digest and .expired == false and
+            (.workflow_run.id | tostring) == $run and .workflow_run.head_sha == $sha and
+            .name == $name and .size_in_bytes > 0 and .size_in_bytes <= 134217728
+          ' "$RUNNER_TEMP/artifact.json" > /dev/null
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" > "$RUNNER_TEMP/unsigned.zip"
+          python3 -I scripts/sign-macos-release.py extract-artifact "$RUNNER_TEMP/unsigned.zip" "$ARTIFACT_DIGEST" "$RELEASE_TAG" "$RUNNER_TEMP/unsigned-input"
+      - name: Sign with Developer ID and require Apple Accepted
+        env:
+          APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
+          APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+          APPLE_NOTARY_KEY_P8_BASE64: ${{ secrets.APPLE_NOTARY_KEY_P8_BASE64 }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+        run: python3 -I scripts/sign-macos-release.py sign "$RUNNER_TEMP/unsigned-input/algal-$RELEASE_TAG-aarch64-apple-darwin.unsigned.tar.gz" "$RELEASE_TAG" "$RUNNER_TEMP/signed-output" "$RUNNER_TEMP/algal-apple-signing"
+      - name: Remove temporary credentials after failure or cancellation
+        if: always()
+        run: python3 -I scripts/sign-macos-release.py cleanup "$RUNNER_TEMP/algal-apple-signing"
+      - name: Record exact signed binary identity before any execution
+        id: identity
+        run: |
+          hash=$(jq -er '.signedBinarySha256 | select(test("^[0-9a-f]{64}$"))' "$RUNNER_TEMP/algal-apple-notarization.json")
+          printf 'binary_sha256=%s\n' "$hash" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v7
+        id: signed
+        with:
+          name: algal-signed-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/signed-output/*
+          if-no-files-found: error
+          retention-days: 14
+      - name: Preserve non-secret submission UUID and hashes
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: algal-apple-notarization-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/algal-apple-notarization.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  macos_package:
+    name: Package and execute signed bytes on a fresh credential-free runner
+    needs: [qualify, macos_build, macos_sign]
+    runs-on: macos-14
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+      attestations: write
+      id-token: write
+    outputs:
+      artifact_id: ${{ steps.package.outputs.artifact-id }}
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+      SIGNED_BINARY_SHA256: ${{ needs.macos_sign.outputs.binary_sha256 }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Download and verify exact signed intermediate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ needs.macos_sign.outputs.artifact_id }}
+          ARTIFACT_DIGEST: ${{ needs.macos_sign.outputs.artifact_digest }}
+        run: |
+          set -euo pipefail
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ && "$ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]] || exit 1
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID" > "$RUNNER_TEMP/artifact.json"
+          jq -e --arg id "$ARTIFACT_ID" --arg digest "sha256:$ARTIFACT_DIGEST" --arg run "$GITHUB_RUN_ID" --arg sha "$GITHUB_SHA" --arg name "algal-signed-$GITHUB_RUN_ATTEMPT" '
+            (.id | tostring) == $id and .digest == $digest and .expired == false and
+            (.workflow_run.id | tostring) == $run and .workflow_run.head_sha == $sha and
+            .name == $name and .size_in_bytes > 0 and .size_in_bytes <= 134217728
+          ' "$RUNNER_TEMP/artifact.json" > /dev/null
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" > "$RUNNER_TEMP/signed.zip"
+          python3 -I scripts/sign-macos-release.py extract-artifact "$RUNNER_TEMP/signed.zip" "$ARTIFACT_DIGEST" "$RELEASE_TAG" "$RUNNER_TEMP/signed-input" --signed
+          python3 -I scripts/sign-macos-release.py extract-signed "$RUNNER_TEMP/signed-input/algal-$RELEASE_TAG-aarch64-apple-darwin.signed.tar.gz" "$RELEASE_TAG" "$RUNNER_TEMP/algal"
+          test "$(shasum -a 256 "$RUNNER_TEMP/algal" | cut -d ' ' -f 1)" = "$SIGNED_BINARY_SHA256"
+      - name: Create final archive and metadata from signed executable
+        env:
+          RUSTC_VERSION: ${{ needs.macos_build.outputs.rustc }}
+        run: python3 scripts/package-native.py --binary "$RUNNER_TEMP/algal" --target aarch64-apple-darwin --tag "$RELEASE_TAG" --commit "$GITHUB_SHA" --rustc-version "$RUSTC_VERSION" --out "$RUNNER_TEMP/artifacts"
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: ${{ runner.temp }}/artifacts/*.tar.gz
+      - uses: actions/upload-artifact@v7
+        id: package
+        with:
+          name: native-aarch64-apple-darwin
+          path: ${{ runner.temp }}/artifacts/*
+          if-no-files-found: error
+          retention-days: 14
+
   publish:
     if: inputs.publish
-    needs: [qualify, build]
+    needs: [qualify, build, macos_sign, macos_package]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -137,11 +298,17 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@v8
         with:
-          pattern: native-*
+          pattern: native-*-unknown-linux-gnu
+          path: artifacts
+          merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.macos_package.outputs.artifact_id }}
           path: artifacts
           merge-multiple: true
       - name: Publish only verified prerelease assets
         env:
+          SIGNED_BINARY_SHA256: ${{ needs.macos_sign.outputs.binary_sha256 }}
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.tag }}
@@ -150,7 +317,10 @@ jobs:
         run: |
           set -euo pipefail
           python3 - "$RELEASE_TAG" "$RELEASE_SHA" <<'PY'
-          import glob,hashlib,json,pathlib,sys
+          import glob,hashlib,importlib.util,json,os,pathlib,sys,tarfile
+          spec=importlib.util.spec_from_file_location("unpack", "scripts/unpack-native.py")
+          unpack=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(unpack)
           metadata=glob.glob("artifacts/*.release.json")
           if len(metadata)!=3: raise SystemExit("Expected three qualified native packages")
           targets=set()
@@ -160,6 +330,18 @@ jobs:
               value=json.load(open(path))
               if value["tag"]!=sys.argv[1] or value["commit"]!=sys.argv[2] or value["sourceState"]!="clean": raise SystemExit("Artifact source identity mismatch")
               if pathlib.Path(value["archive"]).name!=value["archive"] or hashlib.sha256(pathlib.Path("artifacts",value["archive"]).read_bytes()).hexdigest()!=value["archiveSha256"]: raise SystemExit("Manifest archive digest mismatch")
+              if value["target"]=="aarch64-apple-darwin":
+                  if value["signed"] is not True or value["binarySha256"]!=os.environ["SIGNED_BINARY_SHA256"]: raise SystemExit("Mac package differs from signing identity")
+                  with unpack.bounded_tar(pathlib.Path("artifacts",value["archive"]).read_bytes()) as data, tarfile.open(fileobj=data,mode="r:") as archive:
+                      prefix=f"algal-{sys.argv[1]}-aarch64-apple-darwin"
+                      members=[]
+                      for member in archive:
+                          if len(members)>=4: raise SystemExit("Too many Mac archive entries")
+                          members.append(member)
+                      if len(members)!=4 or {m.name for m in members}!={f"{prefix}/{name}" for name in ("bin/algal","LICENSE","release.json","smoke.py")} or any(not m.isfile() for m in members): raise SystemExit("Invalid Mac archive")
+                      if hashlib.sha256(archive.extractfile(f"{prefix}/bin/algal").read(100_000_001)).hexdigest()!=os.environ["SIGNED_BINARY_SHA256"]: raise SystemExit("Mac archive signed bytes mismatch")
+                      embedded=json.loads(archive.extractfile(f"{prefix}/release.json").read(16_385))
+                      if embedded!={key:item for key,item in value.items() if key not in ("archive","archiveSha256")}: raise SystemExit("Mac archive metadata differs from its manifest")
               targets.add(value["target"])
           if targets!={"x86_64-unknown-linux-gnu","aarch64-unknown-linux-gnu","aarch64-apple-darwin"}: raise SystemExit("Artifact target mismatch")
           for path in checksums:

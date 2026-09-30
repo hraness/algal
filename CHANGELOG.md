@@ -12,6 +12,21 @@ independent of these package versions.
 
 ## Unreleased
 
+## v0.2.0-vm.12 - 2026-09-30
+
+macOS releases use one Developer ID identity across upgrades, so system
+permissions can recognize the same publisher and executable identifier.
+
+- Sign and notarize the Apple silicon executable with team `8AAP53VTW3` and
+  identifier `dev.hraness.algal` before creating release archives and hashes.
+- Build, sign, and test in separate jobs. The signing job never runs the
+  executable and removes its temporary keychain on success, failure, or cancellation.
+- Require Apple's `Accepted` result and online notarization verification.
+  Keep the submission UUID and hashes when a review times out; do not retry it automatically.
+- Verify the publisher identity before installers execute new macOS releases.
+  Explicit historical releases and Linux retain their existing installation behavior.
+- Require release dispatch from the exact version tag after successful main CI.
+
 ## v0.2.0-vm.11 - 2026-09-29
 
 ALGAL now installs with one command and runs on Linux arm64. `curl -fsSL
