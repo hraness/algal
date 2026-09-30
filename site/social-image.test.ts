@@ -6,34 +6,24 @@ import { pageDocument } from "./chrome";
 import { SITE_TAGLINE } from "./copy";
 import {
   createSocialImageCard,
-  defineSocialImageSite,
-  SOCIAL_IMAGE_MIN_PALETTE_DISTANCE,
   socialImageFit,
-  socialImageLookAlikes,
-  socialImagePalette,
-  socialImagePaletteDistance,
   socialImageSiteDetails,
-  socialImageSitePalette,
 } from "@hraness/web-discovery/social-image/card";
 import { postSocialImage, postSocialPage, renderSocialImage, SITE_SOCIAL_IMAGE, SOCIAL_SITE } from "./social-image";
 
 const posts = await loadBlogPosts(join(import.meta.dir, "blog"));
 
-test("the site declares its card once with the real app icon, Tokyo Night light theme, and olive wash", () => {
+test("the site declares its card once with the header's foil mark, name, and Tokyo Night palette", () => {
   expect(SOCIAL_SITE.name).toBe("ALGAL");
+  expect(SOCIAL_SITE.brand).toBe("ALGAL");
   expect(SOCIAL_SITE.domain).toBe("algal.computer");
   expect(SOCIAL_SITE.description).toBe(SITE_TAGLINE);
-  const favicon = readFileSync(join(import.meta.dir, "favicon.svg")).toString("base64");
-  expect(SOCIAL_SITE.icon).toEqual({ kind: "app", src: `data:image/svg+xml;base64,${favicon}` });
-  expect(SOCIAL_SITE.theme).toEqual({ accent: "#1d4e90", background: "#e1e2e7", foreground: "#1c3161", muted: "#414c76", wash: "#6b8e23" });
-});
-
-test("the olive wash keeps ALGAL's cards apart from Sys1, which shares the Tokyo Night light base", () => {
-  // Sys1's card declaration (hraness/sysone scripts/social-cards.ts) uses the same theme with no wash.
-  const { wash: _wash, ...tokyoNight } = SOCIAL_SITE.theme!;
-  const sys1 = defineSocialImageSite({ name: "Sys1", domain: "sys1.io", description: "Stop spending big-model tokens on small decisions.", theme: tokyoNight });
-  expect(socialImageLookAlikes([SOCIAL_SITE, sys1])).toEqual([]);
-  expect(socialImagePaletteDistance(socialImageSitePalette(SOCIAL_SITE), socialImagePalette(tokyoNight))).toBeGreaterThan(2 * SOCIAL_IMAGE_MIN_PALETTE_DISTANCE);
+  // chrome.ts sets data-palette="tokyo-night" and paints /algal-mark.svg in foil in the header.
+  expect(SOCIAL_SITE.palette).toBe("tokyo-night");
+  expect(pageDocument({ page: "home", path: "/", title: "ALGAL", description: "d", ogTitle: "ALGAL" }, "")).toContain('data-palette="tokyo-night"');
+  expect(SOCIAL_SITE.brandMark).toBe(readFileSync(join(import.meta.dir, "algal-mark.svg"), "utf8"));
+  expect(SOCIAL_SITE.icon).toBeUndefined();
+  expect(SOCIAL_SITE.theme).toBeUndefined();
 });
 
 test("the rendered card is a 1200 × 630 PNG", async () => {
