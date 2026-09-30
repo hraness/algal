@@ -15,18 +15,18 @@ import satori from "satori";
 
 import { SITE_TAGLINE, SITE_NAME } from "./copy";
 
-/** The favicon and apple-touch-icon source, embedded as a finished app icon. */
-const APP_ICON = `data:image/svg+xml;base64,${readFileSync(new URL("./favicon.svg", import.meta.url)).toString("base64")}`;
+/** The header's foil mark (chrome.ts paints /algal-mark.svg in foil beside the name). */
+const BRAND_MARK = readFileSync(new URL("./algal-mark.svg", import.meta.url), "utf8");
 
 export const SOCIAL_SITE = defineSocialImageSite({
   name: SITE_NAME,
   domain: "algal.computer",
   description: SITE_TAGLINE,
-  icon: { kind: "app", src: APP_ICON },
-  // Tokyo Night light, the palette chrome.ts selects (Design Kit palette-system.css).
-  // The olive wash keeps ALGAL's cards apart from Sys1 (hraness/sysone), which shares
-  // this Tokyo Night base, and sits beside the green rings of the app icon.
-  theme: { accent: "#1d4e90", background: "#e1e2e7", foreground: "#1c3161", muted: "#414c76", wash: "#6b8e23" },
+  // The card matches the sticky header: the Tokyo Night palette chrome.ts selects
+  // (data-palette="tokyo-night"), the foil mark, and the name as the nav shows it.
+  palette: "tokyo-night",
+  brandMark: BRAND_MARK,
+  brand: SITE_NAME,
 });
 
 export interface SocialImageRef {
