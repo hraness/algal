@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import shlex
 import shutil
 import signal
 import stat
@@ -154,8 +155,8 @@ def cleanup_credentials(work):
         return
     require(credentials.is_dir() and not credentials.is_symlink(), "unsafe credential directory")
     keychain = credentials / "signing.keychain-db"
-    # Never add this keychain to the user's search list. Delete through the
-    # supported API before removing the exact private directory.
+    # The supported deletion API also removes only this temporary keychain
+    # from the search list, preserving every other entry.
     try:
         if keychain.exists():
             run(["/usr/bin/security", "delete-keychain", keychain])
@@ -227,13 +228,18 @@ def sign(archive, version, output, work):
                  "-P", values["APPLE_DEVELOPER_ID_P12_PASSWORD"], "-T", "/usr/bin/codesign", "-T", "/usr/bin/security"])
             run(["/usr/bin/security", "set-key-partition-list", "-S", "apple-tool:,apple:,codesign:",
                  "-s", "-k", password, keychain])
+            search_list = shlex.split(run(["/usr/bin/security", "list-keychains", "-d", "user"]))
+            require(len(search_list) <= 128 and all(path.startswith("/") for path in search_list),
+                    "invalid user keychain search list")
+            if str(keychain) not in search_list:
+                run(["/usr/bin/security", "list-keychains", "-d", "user", "-s", *search_list, keychain])
             identities = run(["/usr/bin/security", "find-identity", "-v", "-p", "codesigning", keychain])
             matches = re.findall(r'\b([0-9A-Fa-f]{40}) "Developer ID Application: [^"\n]+ \(' + TEAM_ID + r'\)"', identities)
             require(len(matches) == 1, "keychain must contain exactly one expected Developer ID Application identity")
             run(["/usr/bin/codesign", "--force", "--sign", matches[0], "--keychain", keychain,
                  "--identifier", IDENTIFIER, "--options", "runtime", "--timestamp",
-                 "--requirements", "designated => " + requirement, binary], timeout=180)
-            run(["/usr/bin/codesign", "--verify", "--strict", "--test-requirement", requirement, binary])
+                 "--requirements", "=designated => " + requirement, binary], timeout=180)
+            run(["/usr/bin/codesign", "--verify", "--strict", "--test-requirement", "=" + requirement, binary])
             metadata = run(["/usr/bin/codesign", "--display", "--verbose=4", binary])
             require(f"Identifier={IDENTIFIER}\n" in metadata and f"TeamIdentifier={TEAM_ID}\n" in metadata,
                     "signed binary identity mismatch")
@@ -279,7 +285,7 @@ def sign(archive, version, output, work):
             # Raw CLI tarballs cannot carry stapled tickets. Apple's online
             # notarization check must recognize the signed executable itself.
             run(["/usr/bin/codesign", "--verify", "--strict", "--check-notarization",
-                 "--test-requirement", requirement, binary], timeout=180)
+                 "--test-requirement", "=" + requirement, binary], timeout=180)
             receipt["state"] = "verified"
             diagnostic(receipt_path, receipt)
         finally:
@@ -328,7 +334,7 @@ def requires_signature(tag):
 def verify_signature(binary):
     require(sys.platform == "darwin", "macOS signature verification requires macOS")
     run(["/usr/bin/codesign", "--verify", "--strict", "--check-notarization",
-         "--test-requirement", apple_requirement(), binary], timeout=180)
+         "--test-requirement", "=" + apple_requirement(), binary], timeout=180)
     metadata = run(["/usr/bin/codesign", "--display", "--verbose=4", binary])
     require(f"Identifier={IDENTIFIER}\n" in metadata and f"TeamIdentifier={TEAM_ID}\n" in metadata,
             "signed binary identity mismatch")

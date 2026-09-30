@@ -67,14 +67,21 @@ jobs:
 
   build:
     needs: qualify
+    outputs:
+      linux_x64_artifact_id: ${{ steps.producer.outputs.linux_x64_artifact_id }}
+      linux_x64_artifact_digest: ${{ steps.producer.outputs.linux_x64_artifact_digest }}
+      linux_arm64_artifact_id: ${{ steps.producer.outputs.linux_arm64_artifact_id }}
+      linux_arm64_artifact_digest: ${{ steps.producer.outputs.linux_arm64_artifact_digest }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
+            producer: linux_x64
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
+            producer: linux_arm64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -116,12 +123,24 @@ jobs:
           set -euo pipefail
           python3 scripts/package-native.py --binary "target/$TARGET/release/algal" --target "$TARGET" --tag "$RELEASE_TAG" --commit "$RELEASE_SHA" --rustc-version "$(rustc +1.97.1 --version)" --out artifacts
       - uses: actions/upload-artifact@v7
+        id: native
         with:
-          name: native-${{ matrix.target }}
+          name: native-${{ matrix.target }}-${{ github.run_attempt }}
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
 
+      - name: Preserve this native producer's immutable artifact identity
+        id: producer
+        env:
+          PRODUCER: ${{ matrix.producer }}
+          ARTIFACT_ID: ${{ steps.native.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ steps.native.outputs.artifact-digest }}
+        run: |
+          set -euo pipefail
+          case "$PRODUCER" in linux_x64|linux_arm64) ;; *) exit 1 ;; esac
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ && "$ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]] || exit 1
+          printf '%s_artifact_id=%s\n%s_artifact_digest=%s\n' "$PRODUCER" "$ARTIFACT_ID" "$PRODUCER" "$ARTIFACT_DIGEST" >> "$GITHUB_OUTPUT"
 
   macos_build:
     name: Build unsigned macOS executable without Apple credentials
@@ -192,11 +211,7 @@ jobs:
           set -euo pipefail
           [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ && "$ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]] || exit 1
           gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID" > "$RUNNER_TEMP/artifact.json"
-          jq -e --arg id "$ARTIFACT_ID" --arg digest "sha256:$ARTIFACT_DIGEST" --arg run "$GITHUB_RUN_ID" --arg sha "$GITHUB_SHA" --arg name "algal-unsigned-$GITHUB_RUN_ATTEMPT" '
-            (.id | tostring) == $id and .digest == $digest and .expired == false and
-            (.workflow_run.id | tostring) == $run and .workflow_run.head_sha == $sha and
-            .name == $name and .size_in_bytes > 0 and .size_in_bytes <= 134217728
-          ' "$RUNNER_TEMP/artifact.json" > /dev/null
+          python3 -I scripts/release-artifacts.py verify-metadata "$RUNNER_TEMP/artifact.json" algal-unsigned "$ARTIFACT_ID" "$ARTIFACT_DIGEST"
           gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" > "$RUNNER_TEMP/unsigned.zip"
           python3 -I scripts/sign-macos-release.py extract-artifact "$RUNNER_TEMP/unsigned.zip" "$ARTIFACT_DIGEST" "$RELEASE_TAG" "$RUNNER_TEMP/unsigned-input"
       - name: Sign with Developer ID and require Apple Accepted
@@ -243,6 +258,7 @@ jobs:
       id-token: write
     outputs:
       artifact_id: ${{ steps.package.outputs.artifact-id }}
+      artifact_digest: ${{ steps.package.outputs.artifact-digest }}
     env:
       RELEASE_TAG: ${{ inputs.tag }}
       SIGNED_BINARY_SHA256: ${{ needs.macos_sign.outputs.binary_sha256 }}
@@ -259,11 +275,7 @@ jobs:
           set -euo pipefail
           [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ && "$ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]] || exit 1
           gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID" > "$RUNNER_TEMP/artifact.json"
-          jq -e --arg id "$ARTIFACT_ID" --arg digest "sha256:$ARTIFACT_DIGEST" --arg run "$GITHUB_RUN_ID" --arg sha "$GITHUB_SHA" --arg name "algal-signed-$GITHUB_RUN_ATTEMPT" '
-            (.id | tostring) == $id and .digest == $digest and .expired == false and
-            (.workflow_run.id | tostring) == $run and .workflow_run.head_sha == $sha and
-            .name == $name and .size_in_bytes > 0 and .size_in_bytes <= 134217728
-          ' "$RUNNER_TEMP/artifact.json" > /dev/null
+          python3 -I scripts/release-artifacts.py verify-metadata "$RUNNER_TEMP/artifact.json" algal-signed "$ARTIFACT_ID" "$ARTIFACT_DIGEST"
           gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" > "$RUNNER_TEMP/signed.zip"
           python3 -I scripts/sign-macos-release.py extract-artifact "$RUNNER_TEMP/signed.zip" "$ARTIFACT_DIGEST" "$RELEASE_TAG" "$RUNNER_TEMP/signed-input" --signed
           python3 -I scripts/sign-macos-release.py extract-signed "$RUNNER_TEMP/signed-input/algal-$RELEASE_TAG-aarch64-apple-darwin.signed.tar.gz" "$RELEASE_TAG" "$RUNNER_TEMP/algal"
@@ -278,7 +290,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         id: package
         with:
-          name: native-aarch64-apple-darwin
+          name: native-aarch64-apple-darwin-${{ github.run_attempt }}
           path: ${{ runner.temp }}/artifacts/*
           if-no-files-found: error
           retention-days: 14
@@ -290,22 +302,24 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
+      actions: read
     steps:
       # The workflow event commit is the tagged, qualified source; its
       # CHANGELOG.md supplies the release notes.
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@v8
-        with:
-          pattern: native-*-unknown-linux-gnu
-          path: artifacts
-          merge-multiple: true
-      - uses: actions/download-artifact@v8
-        with:
-          artifact-ids: ${{ needs.macos_package.outputs.artifact_id }}
-          path: artifacts
-          merge-multiple: true
+      - name: Download exact native producer artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          LINUX_X64_ARTIFACT_ID: ${{ needs.build.outputs.linux_x64_artifact_id }}
+          LINUX_X64_ARTIFACT_DIGEST: ${{ needs.build.outputs.linux_x64_artifact_digest }}
+          LINUX_ARM64_ARTIFACT_ID: ${{ needs.build.outputs.linux_arm64_artifact_id }}
+          LINUX_ARM64_ARTIFACT_DIGEST: ${{ needs.build.outputs.linux_arm64_artifact_digest }}
+          MACOS_ARTIFACT_ID: ${{ needs.macos_package.outputs.artifact_id }}
+          MACOS_ARTIFACT_DIGEST: ${{ needs.macos_package.outputs.artifact_digest }}
+        run: python3 -I scripts/release-artifacts.py fetch-native artifacts
       - name: Publish only verified prerelease assets
         env:
           SIGNED_BINARY_SHA256: ${{ needs.macos_sign.outputs.binary_sha256 }}
