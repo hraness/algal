@@ -4,7 +4,7 @@ order: 0
 date: 2026-09-23
 description: ALGAL bets that a computer can keep tested procedures, combine them, and get better at later work. The thesis, how to test it, and what would settle it.
 eyebrow: Essay
-cardDescription: "ALGAL bets that a computer can keep tested procedures, combine them, and get better at later work."
+cardDescription: "The bet, and how to test it."
 ---
 
 # Software that accumulates competence

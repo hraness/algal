@@ -24,7 +24,9 @@ export const SOCIAL_SITE = defineSocialImageSite({
   description: SITE_TAGLINE,
   icon: { kind: "app", src: APP_ICON },
   // Tokyo Night light, the palette chrome.ts selects (Design Kit palette-system.css).
-  theme: { accent: "#1d4e90", background: "#e1e2e7", foreground: "#1c3161", muted: "#414c76" },
+  // The olive wash keeps ALGAL's cards apart from Sys1 (hraness/sysone), which shares
+  // this Tokyo Night base, and sits beside the green rings of the app icon.
+  theme: { accent: "#1d4e90", background: "#e1e2e7", foreground: "#1c3161", muted: "#414c76", wash: "#6b8e23" },
 });
 
 export interface SocialImageRef {
@@ -44,13 +46,20 @@ export interface SocialImagePost {
   title: string;
   dek: string;
   eyebrow?: string;
+  /** The post's route, which names the card's section when it has no eyebrow. */
+  path?: `/${string}`;
   /** Shorter card copy for a title or dek that does not fit the card as written. */
   cardTitle?: string;
   cardDescription?: string;
 }
 
 export function postSocialPage(post: SocialImagePost): SocialImagePage {
-  return { eyebrow: post.eyebrow ?? "Blog", headline: post.cardTitle ?? post.title, description: post.cardDescription ?? post.dek };
+  return {
+    eyebrow: post.eyebrow ?? "Blog",
+    headline: post.cardTitle ?? post.title,
+    description: post.cardDescription ?? post.dek,
+    ...(post.path === undefined ? {} : { path: post.path }),
+  };
 }
 
 export function postSocialImage(post: SocialImagePost): SocialImageRef {

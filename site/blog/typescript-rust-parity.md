@@ -4,7 +4,7 @@ date: 2026-09-24
 eyebrow: Technique
 description: "ALGAL runs the same programs through its TypeScript and Rust runtimes in CI and fails if a compared field differs or either rejects the other's run record."
 cardTitle: "Keeping TypeScript and Rust in step"
-cardDescription: "CI runs the same programs through both ALGAL runtimes and fails on any difference."
+cardDescription: "CI runs both and fails on any difference."
 ---
 
 An ALGAL program can start in one runtime and finish in another. The TypeScript runtime, which runs on Bun, can create a process that waits for an approval, and the native Rust runtime can pick it up from the same local store after the first process has exited. That handoff works only if both runtimes mean the same thing by every program, every error, and every record they write. ALGAL keeps them in step by running the same programs through both on every change and failing the build on any difference. Each runtime also has to accept the other's record of the run, so neither one serves as the answer key.
