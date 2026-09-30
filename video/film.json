@@ -1,0 +1,66 @@
+{
+  "name": "Introducing ALGAL",
+  "aspect": "16:9",
+  "fps": 30,
+  "seed": 20260929,
+  "background": "#15161c",
+  "accent": "#8ea3ff",
+  "copy": {
+    "name": "ALGAL",
+    "promise": "Write agent programs that wait, resume, and replay.",
+    "url": "algal.computer",
+    "open": [
+      "Most agent programs run start to finish.",
+      "When one acts wrongly, you find out after."
+    ],
+    "steps": [
+      {
+        "heading": "Start",
+        "body": "The demo program stops before it acts, with status waiting.",
+        "focus": "start",
+        "target": "start",
+        "highlight": "start",
+        "zoom": 1.0
+      },
+      {
+        "heading": "Decide",
+        "body": "The report page names the one action. You approve or deny it.",
+        "focus": "page",
+        "target": "approve",
+        "highlight": "decision",
+        "zoom": 1.0
+      },
+      {
+        "heading": "Crash",
+        "body": "Killed twice on purpose. Finished steps are reused, and an uncertain write is not resent.",
+        "focus": "crash",
+        "target": "crash",
+        "highlight": "crash",
+        "zoom": 1.0
+      },
+      {
+        "heading": "Verify",
+        "body": "Export the run to one file and check its history offline.",
+        "focus": "verify",
+        "target": "verify",
+        "highlight": "verify",
+        "zoom": 1.0
+      }
+    ],
+    "proof": {
+      "caption": "Counts from a recorded run of algal demo prove.",
+      "items": []
+    },
+    "limits": {
+      "heading": "What it does not do yet",
+      "body": "Packages are unsigned. Your own app still decides which tools a program may use."
+    },
+    "end": {
+      "line": ""
+    }
+  },
+  "productCss": [
+    "../site/launch/launch.css",
+    "film-product.css"
+  ]
+}

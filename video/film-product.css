@@ -1,0 +1,16 @@
+/* The film's desk of demo surfaces, stacked in one column so each fits the
+   window width when the camera frames it. Mockup styles come from
+   site/launch/launch.css and @hraness/design-kit/mockups.css. */
+.al-desk {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  padding: 32px;
+  width: 1080px;
+  background: #1b1c23;
+}
+.al-desk__cell > * { margin: 0; width: 100%; }
+.al-desk figcaption { display: none; }
+
+/* The desk is dark; keep the window around it dark so no white band shows at the edges. */
+#win, #win-surface { background: #1b1c23; }

@@ -1,0 +1,144 @@
+{
+  "_note": "Captured from algal 0.2.0 (native CLI) on 2026-09-29: algal demo start ./my-review, algal demo export, algal demo verify, and algal demo prove. Paths are shortened to ./my-review and the binary to algal; nothing else is edited.",
+  "start": {
+    "contract": "algal.demo-report.v1",
+    "fixture": "deterministic embedded decision; no live provider",
+    "name": "review",
+    "scenario": "Inspect an exact proposal, approve or deny its local publication, and verify retained execution without activating tools.",
+    "stage": "suspended",
+    "status": "waiting",
+    "counters": {
+      "decisions": 1,
+      "proposals": 1,
+      "publications": 0
+    },
+    "history": [
+      {
+        "digest": "sha256:5f5d53d3dcd13531e9703d4bcf863bdfe4700da073f42a206922c7f0e2bed4ca",
+        "generation": 0,
+        "receipt": null,
+        "status": "ready"
+      },
+      {
+        "digest": "sha256:c073b66773ae8a312842e0303424f1859701ff3da86839dcef5110f78d41b524",
+        "generation": 1,
+        "receipt": null,
+        "status": "uncertain"
+      },
+      {
+        "digest": "sha256:2fe679dffe24864383677d5fee602ae1a9f619938348d25a58746d49143e2f76",
+        "generation": 1,
+        "receipt": "sha256:5187a5d9f0100a714c544ed5eebccf5f17b61eafc539dfe75cb5bde6e52e440d",
+        "status": "suspended"
+      }
+    ],
+    "verification": {
+      "digest": "sha256:2fe679dffe24864383677d5fee602ae1a9f619938348d25a58746d49143e2f76",
+      "generations": 1,
+      "ok": true,
+      "receipts": 1,
+      "status": "suspended"
+    },
+    "commands": {
+      "approve": [
+        "algal",
+        "demo",
+        "approve",
+        "./my-review",
+        "--proposal",
+        "sha256:5c48f41906c23dc73b8bacf5b109aa0786de2f245095d35c1a1d35e8ba63f4aa",
+        "--action",
+        "publish-local-report"
+      ],
+      "deny": [
+        "algal",
+        "demo",
+        "deny",
+        "./my-review",
+        "--proposal",
+        "sha256:5c48f41906c23dc73b8bacf5b109aa0786de2f245095d35c1a1d35e8ba63f4aa",
+        "--action",
+        "publish-local-report"
+      ],
+      "export": [
+        "algal",
+        "demo",
+        "export",
+        "./my-review"
+      ],
+      "inspect": [
+        "algal",
+        "demo",
+        "inspect",
+        "./my-review"
+      ],
+      "verify": [
+        "algal",
+        "demo",
+        "verify",
+        "./my-review/evidence.algal.json"
+      ]
+    }
+  },
+  "proposal": {
+    "title": "Local evidence review report",
+    "summary": "Publish this exact evidence record locally only if its contents and target are acceptable. This deterministic fixture does not assess factual accuracy.",
+    "action": "publish-local-report",
+    "recommendation": "human-review-required",
+    "target": "publication.json",
+    "digest": "sha256:5c48f41906c23dc73b8bacf5b109aa0786de2f245095d35c1a1d35e8ba63f4aa"
+  },
+  "evidence": {
+    "checks": [
+      {
+        "name": "unit tests",
+        "status": "pass"
+      },
+      {
+        "name": "recovery demonstration",
+        "status": "pass"
+      }
+    ],
+    "note": "Deterministic sample evidence, not results from your project.",
+    "subject": "Example release readiness"
+  },
+  "verify": {
+    "digest": "sha256:2fe679dffe24864383677d5fee602ae1a9f619938348d25a58746d49143e2f76",
+    "evidenceDigest": "sha256:c50418b0bcfcaaa02e4ebe463c208d2e5944fc9fdd785d595de9400d94993789",
+    "generations": 1,
+    "ok": true,
+    "receipts": 1,
+    "status": "suspended"
+  },
+  "prove": {
+    "approval": {
+      "initialStatus": "waiting",
+      "status": "approved",
+      "publications": 1,
+      "duplicateApprovalSameHead": true
+    },
+    "denial": {
+      "status": "denied",
+      "publications": 0
+    },
+    "readCrash": {
+      "pendingWritePublications": 0,
+      "prefixPublications": 1,
+      "scheduledTicks": 0
+    },
+    "writeCrash": {
+      "pendingWritePublications": 1,
+      "prefixPublications": 1,
+      "scheduledTicks": 0
+    },
+    "portable": {
+      "sourceMovedAway": true,
+      "verification": {
+        "ok": true,
+        "generations": 2,
+        "receipts": 2,
+        "status": "complete"
+      }
+    }
+  }
+}

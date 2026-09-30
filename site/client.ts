@@ -81,3 +81,31 @@ document.querySelectorAll<HTMLElement>(".hero-chooser").forEach(chooser => {
   };
   for (const button of buttons) button.addEventListener("click", () => selectExample(button.dataset.heroChoose!));
 });
+
+// Homepage demo tour: tabs over the launch mockups. Without JavaScript the
+// tab list stays hidden and only the first step shows.
+document.querySelectorAll<HTMLElement>("[data-al-tour]").forEach(tour => {
+  const tablist = tour.querySelector<HTMLElement>('[role="tablist"]');
+  const tabs = Array.from(tour.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+  const panels = Array.from(tour.querySelectorAll<HTMLElement>('[role="tabpanel"]'));
+  if (!tablist || tabs.length === 0 || tabs.length !== panels.length) return;
+  const select = (index: number, focus: boolean) => {
+    tabs.forEach((tab, i) => {
+      tab.setAttribute("aria-selected", String(i === index));
+      tab.tabIndex = i === index ? 0 : -1;
+      panels[i]!.hidden = i !== index;
+    });
+    if (focus) tabs[index]!.focus();
+  };
+  tabs.forEach((tab, index) => {
+    tab.addEventListener("click", () => select(index, false));
+    tab.addEventListener("keydown", event => {
+      const next = event.key === "ArrowRight" ? index + 1 : event.key === "ArrowLeft" ? index - 1 : event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : null;
+      if (next === null) return;
+      event.preventDefault();
+      select((next + tabs.length) % tabs.length, true);
+    });
+  });
+  tablist.hidden = false;
+  tour.dataset.ready = "";
+});

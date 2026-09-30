@@ -23,6 +23,7 @@ test("lifecycles match the reviewed set", () => {
     "/blog/self-evolving-software-selection-boundary/": "quarantined",
     "/blog/receipts-fossil-record/": "indexable",
     "/blog/programs-that-wait/": "indexable",
+    "/blog/introducing-algal/": "quarantined",
   });
 });
 

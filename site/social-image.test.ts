@@ -63,7 +63,7 @@ test("pages share the site card and posts get their own card from page copy only
 });
 
 test("every post names its category in the card eyebrow", () => {
-  for (const post of posts) expect([post.slug, postSocialPage(post).eyebrow]).toEqual([post.slug, expect.stringMatching(/^(Essay|Integration|Technique)$/)]);
+  for (const post of posts) expect([post.slug, postSocialPage(post).eyebrow]).toEqual([post.slug, expect.stringMatching(/^(Essay|Integration|Technique|Launch)$/)]);
 });
 
 test("the home card and every post card fit as written, with no template finding", () => {

@@ -2,6 +2,7 @@
 // examples so the public demonstration cannot drift into illustrative syntax.
 // Interactive diagram viewers consume algal.diagram-view.v1 documents emitted
 // alongside each SVG — the same layout pass drives both.
+import { homeTourHtml } from "./launch/render";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -456,6 +457,7 @@ const headingBreaks: Record<string, number> = {
 
 const replacements: Record<string, string> = {
   HERO_CHOOSER: HERO_CHOOSER,
+  HOME_TOUR: homeTourHtml(),
   HERO_STAGE: HERO_STAGE,
   REPLY_SOURCE: highlightAlgal(replySource.trimEnd()),
   REPLY_MAX_AGENT_CALLS: String(reply.manifest.budgets.maxAgentCalls),
@@ -626,6 +628,8 @@ await mkdir(join(DIST, "receipts"), { recursive: true });
 await mkdir(join(DIST, "living"), { recursive: true });
 await mkdir(join(DIST, "grow"), { recursive: true });
 await cp(join(SITE, "grow.css"), join(DIST, "grow.css"));
+// The launch film and its social cuts, served at /launch/ (see site/launch/film.ts).
+await cp(join(SITE, "launch/film"), join(DIST, "launch"), { recursive: true });
 await mkdir(join(DIST, "tasks"), { recursive: true });
 await cp(join(SITE, "tasks.css"), join(DIST, "tasks.css"));
 await mkdir(join(DIST, "workbench"), { recursive: true });

@@ -1,0 +1,138 @@
+/* Launch mockups: the report page, the status card, the homepage tour, and
+   the launch beats. Shared by the site build and the launch film (video/).
+   Colors come from the Design Kit mockup tokens so light and dark follow the
+   frame the component sits in. */
+
+.al-report {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1.25rem 1.4rem 1.4rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  text-align: left;
+}
+.al-report__eyebrow,
+.al-status__title {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.66;
+}
+.al-report__title { margin: 0; font-size: 1.2rem; }
+.al-report__steps,
+.al-report__history {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.al-report__steps { grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); }
+.al-report__steps li {
+  display: flex;
+  gap: 0.4rem;
+  align-items: baseline;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  border-radius: 0.5rem;
+  font-size: 0.8rem;
+}
+.al-report__steps li[data-tone="done"] span { color: #33a06f; }
+.al-report__steps li[data-tone="wait"] { border-color: #d4a13a; }
+.al-report__steps li[data-tone="wait"] span { color: #d4a13a; }
+.al-report__steps li[data-tone="held"] { opacity: 0.7; }
+.al-report__tabs {
+  display: flex;
+  gap: 1rem;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  font-size: 0.8rem;
+}
+.al-report__tabs span { padding-bottom: 0.4rem; opacity: 0.66; }
+.al-report__tabs span[data-on] { border-bottom: 2px solid currentColor; opacity: 1; font-weight: 600; }
+.al-report__decision { display: grid; gap: 0.6rem; }
+.al-report__decision p { margin: 0; }
+.al-report__label { font-weight: 700; font-size: 1rem; }
+.al-report__lede, .al-report__note { opacity: 0.8; }
+.al-report__note { font-size: 0.78rem; }
+.al-report__decision dl { display: grid; gap: 0.35rem; margin: 0; }
+.al-report__decision dl div { display: grid; grid-template-columns: 8rem 1fr; gap: 0.5rem; }
+.al-report__decision dt { opacity: 0.66; }
+.al-report__decision dd { margin: 0; overflow-wrap: anywhere; }
+.al-report__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.al-report__button {
+  padding: 0.45rem 0.8rem;
+  border-radius: 0.45rem;
+  background: #3d59a1;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.al-report__button--quiet {
+  background: transparent;
+  color: inherit;
+  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+}
+.al-report__done { color: #33a06f; font-weight: 700; }
+.al-report__history li {
+  display: grid;
+  grid-template-columns: 7rem 5.5rem 1fr;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+  font-size: 0.8rem;
+}
+.al-report__history code { opacity: 0.75; overflow-wrap: anywhere; }
+
+.al-status {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.25rem 1.4rem;
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  border-radius: 0.8rem;
+  text-align: left;
+}
+.al-status ul { display: grid; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
+.al-status li { display: grid; grid-template-columns: 1.2rem 1fr; column-gap: 0.4rem; font-size: 0.9rem; }
+.al-status li span { grid-row: span 2; font-weight: 700; }
+.al-status li[data-state="yes"] span { color: #33a06f; }
+.al-status li[data-state="no"] { opacity: 0.75; }
+.al-status small { grid-column: 2; opacity: 0.7; }
+
+.al-beat-diagram { display: block; width: 100%; height: auto; max-height: 34rem; object-fit: contain; }
+
+.al-tour { display: grid; gap: 0.9rem; }
+.al-tour__tabs { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.al-tour:not([data-ready]) .al-tour__tabs { display: none; }
+.al-tour__tab {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.al-tour__tab[aria-selected="true"] { background: color-mix(in srgb, currentColor 12%, transparent); font-weight: 600; }
+.al-tour__tab:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.al-tour__index { opacity: 0.6; font-variant-numeric: tabular-nums; }
+.al-tour__panel { display: grid; gap: 0.6rem; min-width: 0; }
+.al-tour__panel[hidden] { display: none; }
+.al-tour__note { margin: 0; }
+.al-tour__caption { margin: 0; font-size: 0.8rem; opacity: 0.7; }
+
+@media (max-width: 36rem) {
+  .al-report { padding: 1rem; }
+  .al-report__decision dl div { grid-template-columns: 1fr; gap: 0.1rem; }
+  .al-report__history li { grid-template-columns: 1fr 1fr; }
+  .al-report__history code { grid-column: 1 / -1; }
+}
+
+.demo-tour-section { display: grid; gap: var(--space-5, 1.5rem); }
+.al-tour__tabs[hidden] { display: none; }
+.al-launch-status { font-size: 0.95rem; }
