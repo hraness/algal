@@ -2,8 +2,8 @@
 
 V8 failed its calibration gate and ended the development-feedback seed line.
 Across v6, v7, and v8, six of 11 fresh seed searches qualified (10 completed,
-one interrupted and by protocol not retried), and no study since v5 has run
-its optimizer-versus-fixed comparison, because each design required every
+one interrupted and by protocol not retried), and none of those three studies
+ran its optimizer-versus-fixed comparison, because each design required every
 planned block to hold a qualified seed before any arm could start. V8's
 design required 13 qualifications: four calibration seeds and, inside
 `learn`, a fresh search on each of nine confirmatory blocks. At that recorded
@@ -15,9 +15,12 @@ procedure byte for byte and changes what is compared: a pool of 16 fresh
 blocks is seeded in order until six qualify, and the four arms run only on
 those six. It does not alter v8 source, task data, results, or claims.
 
-This protocol is a proposal. It is implemented and not frozen, and no
-v9-pool provider call has occurred. Nothing here claims that the comparison
-will run; whether it runs depends on the seed stage.
+This protocol was frozen before inference at source commit
+`dc5fef50122060aecfee9368af2379697bf01cdf`. The September 30, 2026 study
+closed with an `insufficient` primary comparison: six seed searches passed,
+but five optimizer arms had no final program for frozen evaluation. The
+[result report](cumulative-skill-v9-pool.md) records the outcomes. The design,
+pre-run estimates, and stopping rules below remain the preregistered plan.
 
 ## What changes: the estimand
 
@@ -38,7 +41,7 @@ rule is therefore a conditional result and plausibly an upper bound.
 
 The protocol's `basis.change` field records this, and records that the
 numbers 16, six, and five were derived from the v6 to v8 seed-qualification
-rates and from no optimizer or fixed outcome, none of which exists. The
+rates before any v9-pool optimizer or fixed outcome existed. The
 scientific hypothesis is v5's: on blocks with a qualified seed, a revising
 optimizer passes strictly more frozen shift tasks than the same seed held
 fixed, repeatably.

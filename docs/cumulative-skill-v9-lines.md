@@ -7,17 +7,21 @@ and each was given its own reserved seed range. The same day the decision
 was to implement one of them, the conditional pool, and to record the other
 two as proposals with the reasons they are not run. All three reserved
 ranges stay in the shared seeds ledger so no later protocol reuses them by
-accident. None of the three has made a provider call.
+accident. Only the pool line ran; it closed on September 30, 2026 with an
+insufficient primary comparison. The threshold and diagnostic lines have
+not made provider calls.
 
 | Line | Axis | Change from v8 | Reserved seeds | Status |
 |---|---|---|---|---|
 | threshold | seed qualification measure | Removes the development batch, returns the writer to training-only feedback, and adds a second qualification tier: after eight generations without a strict pass, the candidate with the most exact validation rows qualifies when it has at least 11 of 12 | `91000001` to `91000084` (52, plus 32 for spare blocks) | Proposal, not run |
 | diagnostic | seed writer feedback | Replaces each development history entry's score with bounded class-confusion counts (expected class, emitted class, count) beside the score, row count, and summary flag | `92000001` to `92000052` | Proposal, not run |
-| pool | study design | Seed procedure v8 verbatim; 16 fresh blocks seeded in order until six qualify; the four arms run on the six lowest-index qualified blocks | `93000001` to `93000064` | Implemented, not frozen |
+| pool | study design | Seed procedure v8 verbatim; 16 fresh blocks seeded in order until six qualify; the four arms run on the six lowest-index qualified blocks | `93000001` to `93000064` | Closed September 30, 2026; primary comparison insufficient |
 
-The [v9-pool protocol](cumulative-skill-v9-pool-protocol.md) records the
-implemented line. This page records the other two and the retrodiction that
-bears on all three.
+The [v9-pool protocol](cumulative-skill-v9-pool-protocol.md) records its
+preregistered design, and the [report](cumulative-skill-v9-pool.md) explains
+why five optimizer arms lacked a final program to test after learning.
+This page preserves the other two proposals and the earlier retrodiction
+that informed all three.
 
 ## The threshold line
 
@@ -47,11 +51,14 @@ about 6.9M more. Adding six spare confirmatory blocks would raise the
 coverage chance to about 0.91, at a whole-study cost near 100M work units.
 The line's tier-two hypothesis, that unqualified searches split into
 single-persistent-miss searches at 11 of 12 and multi-miss searches that
-stay below it, can be tested at zero provider cost on the stored seed
-receipts of the pool line, whose seed stage is the v8 procedure on up to 16
-fresh draws. The v9-pool protocol therefore carries that hypothesis as a
-preregistered offline analysis, and any decision to run the threshold line
-with spares waits on that reading.
+stay below it, was examined without additional provider calls on the pool
+line's stored seed records. That preregistered offline analysis found one
+of eight failed searches with a single persistent miss reaching 11, two
+with multiple persistent misses below 11, and five in neither category.
+Two failed searches reached 11 exact rows in total. The
+[pool report](cumulative-skill-v9-pool.md#offline-reading-of-seed-failures)
+preserves the per-search results; no relaxed-threshold search or comparison
+was run.
 
 ## The diagnostic line
 
@@ -125,7 +132,8 @@ These are design records. The threshold and diagnostic figures are those
 lines' own estimates from the v6 to v8 archives, which pool three writer
 regimes (no rounds, a pass indicator, a graded score); no archived search
 ran either line's writer, so the rates are borrowed rather than measured.
-The pool line's protocol is implemented and not frozen. Whether its
-comparison runs depends on its seed stage, and its
-[protocol page](cumulative-skill-v9-pool-protocol.md) states what a result
-would and would not establish.
+The pool line used the unchanged v8 seed procedure and selected six passing
+searches from 14 launches. Its comparison closed as insufficient because
+five optimizer heads were absent. That outcome and its offline analyses
+measure neither proposed writer, and they do not change either line's
+unrun status or the earlier development-feedback line rule.

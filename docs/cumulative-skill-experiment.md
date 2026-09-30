@@ -534,26 +534,30 @@ interruption, the fixed-seed test results, and all 3,169,604 recorded work
 units. The [v8 protocol](cumulative-skill-v8-protocol.md) records the
 design. Its fresh task draws do not provide a paired comparison with v7.
 
-### v9-pool · proposal, not yet run: a comparison conditional on seed qualification
+### v9-pool · an insufficient comparison after seed selection
 
-V9-pool is a proposal on the study-design axis rather than the seed axis.
-It keeps the v8 seed procedure byte for byte and changes the gate: 16 fresh
-blocks are seeded in protocol order, three at a time, until six searches
-qualify, and the four arms run only on the six lowest-index qualified
-blocks. The claim becomes one about blocks on which the unchanged seed
-procedure produced a passing seed, an event that precedes every arm and is
-shared by all four. That selection plausibly favors the optimizer, so a met
-rule would be a conditional result and plausibly an upper bound. The primary
-rule is a strict optimizer win over fixed on at least five of the six blocks
-and in aggregate over 48 frozen tasks. If fewer than six of the 16 searches
-qualify, no arm runs and the line ends.
+V9-pool kept the v8 seed procedure and selected six passing searches from
+up to 16 fresh blocks before running the four learning arms. Six of 14
+launched searches passed. The claim was conditional on that seed selection,
+which plausibly favors the optimizer. The primary rule required complete
+coverage, a strict optimizer win over fixed on at least five of six blocks,
+and more passes in aggregate over 48 planned frozen tasks per arm.
 
-The protocol is implemented and not frozen, and no v9-pool provider call has
-occurred. Whether the comparison runs depends on the seed stage. The
-[v9-pool protocol](cumulative-skill-v9-pool-protocol.md) records the design
-and its cost derivation, and the [v9 lines page](cumulative-skill-v9-lines.md)
-records the two other candidate lines designed the same day and why they
-are not run.
+The September 30, 2026 study ended `insufficient`. All 24 learning sessions
+recorded 40 tasks, but five optimizer arms finished with every saved program
+retired and no final program to evaluate. Only `p-14` completed the primary
+comparison, with eight optimizer passes and two fixed passes. The aggregate
+counts of eight passes for each arm are not a tie: the optimizer had five
+missing frozen stages. Retained passed 11 tasks with complete coverage;
+optimizer-raw passed 17 with three of six frozen stages missing. The
+conditional-pool line closes with this result.
+
+The [v9-pool report](cumulative-skill-v9-pool.md) explains the missing heads,
+the offline seed analyses, 70,064,208 recorded work units, and 12 transport
+failures with missing usage. The [protocol](cumulative-skill-v9-pool-protocol.md)
+preserves the design and cost estimates fixed before inference. The
+[threshold and diagnostic lines](cumulative-skill-v9-lines.md) remain
+proposals and have not run.
 
 ## Status and limits
 
