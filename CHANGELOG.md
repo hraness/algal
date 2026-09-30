@@ -12,6 +12,14 @@ independent of these package versions.
 
 ## Unreleased
 
+## v0.2.0-vm.14 - 2026-09-30
+
+Native release checks keep the source checkout clean while testing archives
+and installers. This preview includes verified automatic native updates.
+
+- Prevent Python qualification imports from leaving bytecode in the source tree before packaging. The clean-source requirement stays enforced.
+- Include the automatic update commands, verified archives, saved opt-outs, and per-command installation locks from the vm.13 candidate.
+
 ## v0.2.0-vm.13 - 2026-09-30
 
 Verified native installations on macOS and Linux update automatically within
