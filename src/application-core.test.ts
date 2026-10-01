@@ -184,20 +184,28 @@ test("portable hosts retain identical proposal, restoration, migration and drain
 });
 
 test("portable application bundle has no eager filesystem or SQLite dependency", async () => {
-  const forbidden: string[] = [];
-  const result = await Bun.build({
-    entrypoints: [join(import.meta.dir, "application-core.ts"), join(import.meta.dir, "application-storage.ts")],
-    target: "browser", external: ["node:crypto"],
-    plugins: [{ name: "no-host-filesystem", setup(build) {
-      build.onResolve({ filter: /^(?:node:fs(?:\/.*)?|bun:sqlite)$/ }, args => {
-        forbidden.push(`${args.importer}: ${args.path}`);
-        throw new Error("Portable application imported " + args.path);
-      });
-    } }],
-  });
-  expect(forbidden).toEqual([]);
+  // Keep the bundler's process-global workers out of the application tests.
+  const child = Bun.spawn([process.execPath, "--eval", `
+    const forbidden = [];
+    const result = await Bun.build({
+      entrypoints: ${JSON.stringify([join(import.meta.dir, "application-core.ts"), join(import.meta.dir, "application-storage.ts")])},
+      target: "browser", external: ["node:crypto"],
+      plugins: [{ name: "no-host-filesystem", setup(build) {
+        build.onResolve({ filter: /^(?:node:fs(?:\\/.*)?|bun:sqlite)$/ }, args => {
+          forbidden.push(args.importer + ": " + args.path);
+          throw new Error("Portable application imported " + args.path);
+        });
+      } }],
+    });
+    console.log(JSON.stringify({ forbidden, success: result.success, outputs: result.outputs.length }));
+  `], { cwd: join(import.meta.dir, ".."), stdin: "ignore", stdout: "pipe", stderr: "pipe", timeout: 15_000, killSignal: "SIGKILL" });
+  const [exitCode, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+  expect(stderr).toBe("");
+  expect(exitCode).toBe(0);
+  const result = JSON.parse(stdout) as { forbidden: string[]; success: boolean; outputs: number };
+  expect(result.forbidden).toEqual([]);
   expect(result.success).toBe(true);
-  expect(result.outputs.length).toBeGreaterThan(0);
+  expect(result.outputs).toBeGreaterThan(0);
 });
 
 test("injected namespace publication fences competing first writers at capacity", async () => {

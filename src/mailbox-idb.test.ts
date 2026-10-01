@@ -5,6 +5,7 @@
  * driver: deterministic digests, idempotent sends, delivery dedupe,
  * capability checks, bounds, and durable state across connections. */
 import { beforeAll, describe, expect, test } from "bun:test";
+import { join } from "node:path";
 import { AlgalError } from "./errors";
 import { digestText, type Digest } from "./digest";
 import { asIdbFactory, installFakeIdb } from "./idb-fake";
@@ -140,28 +141,34 @@ describe("IndexedDbMailboxService", () => {
     expect(await code(service.list())).toBe("IO_FAILED");
   });
   test("the browser subpaths bundle from package source without Node or Bun imports", async () => {
-    const consumer = "idb-consumer.ts";
-    const result = await Bun.build({
-      entrypoints: [consumer],
-      files: {
-        [consumer]: [
-          'export * from "@hraness/algal/mailbox-idb";',
-          'export * from "@hraness/algal/mailbox-core";',
-          'export * from "@hraness/algal/host-events-idb";',
-          'export * from "@hraness/algal/host-events-core";',
-        ].join("\n"),
-      },
-      target: "browser",
-      format: "esm",
-      metafile: true,
-      throw: false,
-    });
-    expect(result.logs.map((log) => `${log.level}: ${log.message}`)).toEqual([]);
+    // Package resolution runs in a fresh bundler process, outside the IDB harness.
+    const child = Bun.spawn([process.execPath, "--eval", `
+      const consumer = "idb-consumer.ts";
+      const result = await Bun.build({
+        entrypoints: [consumer],
+        files: {
+          [consumer]: [
+            'export * from "@hraness/algal/mailbox-idb";',
+            'export * from "@hraness/algal/mailbox-core";',
+            'export * from "@hraness/algal/host-events-idb";',
+            'export * from "@hraness/algal/host-events-core";',
+          ].join("\\n"),
+        },
+        target: "browser", format: "esm", metafile: true, throw: false,
+      });
+      console.log(JSON.stringify({
+        logs: result.logs.map(log => log.level + ": " + log.message),
+        success: result.success,
+        externals: Object.values(result.metafile.inputs)
+          .flatMap(input => input.imports).filter(item => item.external).map(item => item.path),
+      }));
+    `], { cwd: join(import.meta.dir, ".."), stdin: "ignore", stdout: "pipe", stderr: "pipe", timeout: 15_000, killSignal: "SIGKILL" });
+    const [exitCode, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const result = JSON.parse(stdout) as { logs: string[]; success: boolean; externals: string[] };
+    expect(result.logs).toEqual([]);
     expect(result.success).toBe(true);
-    const externals = Object.values(result.metafile!.inputs)
-      .flatMap((input) => input.imports)
-      .filter((item) => item.external)
-      .map((item) => item.path);
-    expect(externals).toEqual([]);
+    expect(result.externals).toEqual([]);
   });
 });
