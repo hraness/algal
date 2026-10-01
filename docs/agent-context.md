@@ -80,6 +80,40 @@ reader's permission or per-entry read limit.
 replay uses the recorded tool results. Verifying a receipt checks execution,
 not the truth of the stored observation.
 
+## Read a cell's original view
+
+Declare `agent.context.local.v1` in an agent or classifier cell's `tools` list
+to use the runtime-managed reader. Compilation recognizes its reserved
+signature without a host callback. A standalone tool cell cannot use it.
+
+At each model turn the runtime saves the original cell prompt, exact inputs
+selected by `cell.view`, selected ancestor outputs, and successful local tool
+results before compaction. Entry 0 is the instruction and entry 1 the permitted
+inputs. Selected ancestors, when present, follow at entry 2; tool records
+follow in order. `inspect` provides the current labels and indices.
+
+```json
+{"tool":"agent.context.local.v1","inputs":{"query":{"op":"read","index":1}}}
+```
+
+The query operations match the host-supplied reader above, with a 4,096-byte
+read or slice limit and at most 16 search matches. This name cannot replace or
+widen an application's `agent.context.query.v1` grant. The runtime rejects
+caller-defined functions and mismatched tool signatures under the reserved
+name, and never executes a supplied implementation under that name.
+
+Capturing each turn's exact text costs its canonical encoded byte count from
+`maxWork`. Queries use the existing turn, model-call, context, output, and
+effect limits. A shortened tool log does not erase the saved original, and
+resumption reconstructs the same reader from the verified prior effects. The
+tool's configuration digest binds the immutable source selection. Source
+capture still uses the application's store quota and retention policy.
+
+Only cells that declare this tool receive the added query instructions or
+source-capture work. Existing cells and host tool inventories keep their
+previous behavior and portable evidence identities. No model performance
+improvement is claimed by these execution and replay tests.
+
 ## Use training traces during revision
 
 `buildContextTaskReviser` from `@hraness/algal/task-optimizer` extends the

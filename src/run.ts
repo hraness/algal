@@ -52,6 +52,7 @@ import type { Store } from "./store-contract";
 import type { Transport } from "./transport-contract";
 import type { ToolRegistry } from "./tools";
 import { elideToolContext } from "./tool-context";
+import { LOCAL_AGENT_CONTEXT_TOOL, localAgentContextTools, prepareLocalAgentContext } from "./agent-context-runtime";
 import type { JournalBinding, JournalTicket, RuntimeJournal } from "./runtime-journal-contract";
 import { bindRecallOutput, recallOutputSchema } from "./semantic-contract";
 import { asDigest, digestCanonical, type Digest } from "./digest";
@@ -225,6 +226,8 @@ function checkRunArgs(args: unknown): void {
 }
 
 export async function runOrganism(opts: RunOptions): Promise<RunReceipt> {
+  if (opts.fns.has(LOCAL_AGENT_CONTEXT_TOOL)) throw new AlgalError("CAPABILITY_DENIED", "local context tool name is reserved by the runtime");
+  opts = { ...opts, tools: localAgentContextTools(opts.tools) };
   checkRunArgs(opts.args ?? {});
   if (opts.processName !== undefined) asSafeId(opts.processName, "process name");
   opts.journal?.assertHealthy();
@@ -1196,6 +1199,8 @@ async function activate(
         if (wanted === "*" || wanted.includes(k)) viewInputs[k] = v;
       }
       const toolLog: { fn: string; inputs: JsonValue; output: JsonValue }[] = [];
+      const exactToolLog: typeof toolLog = [];
+      const localContext = tools?.includes(LOCAL_AGENT_CONTEXT_TOOL) === true;
 
       // declared cross-cell context: records of ancestor cells in this scope.
       // `path` is this cell's own path; the scope is its parent prefix.
@@ -1346,6 +1351,10 @@ async function activate(
         if (toolLog.length) {
           context.toolLog = toolLog as unknown as JsonValue;
         }
+        const local = localContext ? await prepareLocalAgentContext({ store: ctx.opts.store, prompt: cell.prompt ?? "",
+          inputs: viewInputs, ...(cellView ? { cells: cellView } : {}), toolLog: exactToolLog as JsonValue[],
+          remainingWork: budgets.maxWork - ctx.work.units }) : undefined;
+        if (local) ctx.work.units += local.work;
         if (cell.kind === "agent" && cell.compact?.mode === "elide") {
           context = elideToolContext(context, cell.compact, maxCtx);
         }
@@ -1361,7 +1370,7 @@ async function activate(
           contract: "algal.effect.v1",
           cellId: cell.id,
           kind: cell.kind,
-          prompt: cell.prompt ?? "",
+          prompt: local?.prompt ?? cell.prompt ?? "",
           context,
           output: resolvedOutput,
           budget: { maxContextBytes: maxCtx, maxOutputBytes: maxOut },
@@ -1464,10 +1473,12 @@ async function activate(
         // result, re-request with the updated tool log
         const call = settled;
         const fn = ctx.opts.fns.get(call.fn);
-        const external = ctx.opts.tools?.get(call.fn);
+        const external = local?.tools.get(call.fn) ?? ctx.opts.tools?.get(call.fn);
         const signature = fn?.signature ?? external?.signature;
         if (!signature) throw new AlgalError("TOOL_UNKNOWN", `tool "${call.fn}" is not configured`);
-        for (const name of Object.keys(call.inputs as Record<string, JsonValue>)) {
+        const inputNames = Object.keys(call.inputs as Record<string, JsonValue>);
+        if (call.fn === LOCAL_AGENT_CONTEXT_TOOL) inputNames.sort();
+        for (const name of inputNames) {
           if (!Object.hasOwn(signature.inputs, name)) {
             throw new AlgalError("TYPE_MISMATCH", `tool ${call.fn} received undeclared input ${name}`);
           }
@@ -1526,7 +1537,9 @@ async function activate(
           ctx.work.units += tool.signature.cost + bytes;
         }
         checkOutputs(cell, signature.outputs, toolOut);
-        toolLog.push({ fn: call.fn, inputs: call.inputs, output: toolOut as JsonValue });
+        const logged = { fn: call.fn, inputs: call.inputs, output: toolOut as JsonValue };
+        toolLog.push(logged);
+        if (localContext) exactToolLog.push(structuredClone(logged));
       }
     }
     case "organism": {

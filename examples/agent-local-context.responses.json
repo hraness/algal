@@ -1,0 +1,8 @@
+{
+  "agent": [
+    {"tool":"format.v1","inputs":{"prefix":"HISTORICAL-","value":"violet details survive a smaller prompt. violet details survive a smaller prompt. violet details survive a smaller prompt. violet details survive a smaller prompt. violet details survive a smaller prompt. violet details survive a smaller prompt."}},
+    {"tool":"format.v1","inputs":{"prefix":"RECENT-","value":"result"}},
+    {"tool":"agent.context.local.v1","inputs":{"query":{"op":"read","index":3}}},
+    "The exact original tool result was read within the declared cell view."
+  ]
+}

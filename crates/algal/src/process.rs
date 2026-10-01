@@ -561,6 +561,7 @@ impl ProcessService {
                 check_value(port, value)?;
             }
         }
+        crate::agent_context_runtime::validate_host(host)?;
         compile(
             manifest.clone(),
             &mut self.store,
@@ -677,6 +678,7 @@ impl ProcessService {
         journal: bool,
         max_recoveries: usize,
     ) -> Result<ProcessState> {
+        crate::agent_context_runtime::validate_host(host)?;
         let _lease = OwnerLease::acquire(&self.directory(name)?, name)?;
         let current = self.inspect(name)?;
         if !["ready", "suspended"].contains(&current.process.status.as_str()) {
@@ -785,6 +787,7 @@ impl ProcessService {
         host: &mut Host,
         transports: &Transports,
     ) -> Result<ProcessState> {
+        crate::agent_context_runtime::validate_host(host)?;
         check_digest(expected_intent)?;
         let _lease = OwnerLease::acquire(&self.directory(name)?, name)?;
         let intent = self.inspect(name)?;
@@ -1089,6 +1092,7 @@ pub async fn verify_process_snapshot(
     store: &Store,
     host: &Host,
 ) -> Result<Value> {
+    crate::agent_context_runtime::validate_host(host)?;
     let root = Manifest::parse(&stored(
         store,
         "manifests",

@@ -70,7 +70,8 @@
     "./habitat-link": "./src/habitat-link.ts",
     "./habitat-link-authority": "./src/habitat-link-authority.ts",
     "./habitat-link-host": "./src/habitat-link-host.ts",
-    "./habitat-link-socket": "./src/habitat-link-socket.ts"
+    "./habitat-link-socket": "./src/habitat-link-socket.ts",
+    "./agent-context-runtime": "./src/agent-context-runtime.ts"
   },
   "bin": {
     "algal": "./cli.ts"

@@ -147,10 +147,11 @@ pub fn compile(
     transports: &Transports,
     depth: usize,
 ) -> Result<Compiled> {
+    let tools = crate::agent_context_runtime::signatures(tools)?;
     compile_with_budget(
         manifest,
         store,
-        tools,
+        &tools,
         transports,
         depth,
         &mut CompilationBudget::default(),

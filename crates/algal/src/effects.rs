@@ -553,6 +553,8 @@ async fn hosted(
 
 #[derive(Clone)]
 pub enum ToolBackend {
+    /// Created by the runtime for exactly one agent turn; None is inert.
+    LocalAgentContext(Option<crate::agent_context::AgentContextRef>),
     /// Evidence tools carry signatures only and can never activate.
     EvidenceDenied(std::sync::Arc<std::sync::atomic::AtomicBool>),
     External(Backend),
@@ -985,16 +987,15 @@ impl Host {
                 descriptor["responses"] = responses.clone();
             }
             let configuration_digest = Some(digest(&descriptor)?);
-            self.tools.insert(
-                name.clone(),
-                Tool {
-                    signature,
-                    effect,
-                    max_bytes,
-                    backend: ToolBackend::External(backend),
-                    configuration_digest,
-                },
-            );
+            let tool = Tool {
+                signature,
+                effect,
+                max_bytes,
+                backend: ToolBackend::External(backend),
+                configuration_digest,
+            };
+            crate::agent_context_runtime::validate_tool(name, &tool)?;
+            self.tools.insert(name.clone(), tool);
         }
         Ok(())
     }

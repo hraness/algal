@@ -1,0 +1,23 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:agent-local-context",
+  "name": "Read exact permitted context after tool output elision",
+  "cells": [
+    {"id":"source","kind":"input","outputs":{"visible":"text","hidden":"text"}},
+    {
+      "id": "agent",
+      "kind": "agent",
+      "inputs": {"visible":"text","hidden":"text"},
+      "view": {"inputs":["visible"],"cells":[{"cell":"source","ports":["visible"]}]},
+      "prompt": "Process two strings, read the original first result after elision, and report completion.",
+      "output": {"kind":"text"},
+      "tools": ["format.v1","agent.context.local.v1"],
+      "compact": {"mode":"elide","maxLogBytes":512,"keepRecent":1},
+      "budget": {"maxTurns":4,"maxContextBytes":4096,"maxOutputBytes":4096}
+    }
+  ],
+  "edges": [
+    {"from":{"cell":"source","port":"visible"},"to":{"cell":"agent","port":"visible"}},
+    {"from":{"cell":"source","port":"hidden"},"to":{"cell":"agent","port":"hidden"}}
+  ]
+}

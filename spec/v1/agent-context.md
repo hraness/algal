@@ -45,3 +45,34 @@ quotas belong to the host. Reads check the values returned by the store against
 their hashes and recorded byte lengths. Missing or changed returned values fail.
 The storage adapter controls persistence and caching; this interface does not
 independently reread the backing filesystem when an adapter serves cached data.
+
+## Runtime local context
+
+An agent or classifier cell can declare `agent.context.local.v1`. Both runtimes
+provide its reserved read-only signature: `{query: json} -> {result: json}`,
+cost 100, and maximum encoded output 65,536 bytes. Host implementations cannot
+replace it. A standalone tool cell receives an inert declaration and cannot
+read another cell's context.
+
+Before each model turn, the runtime captures the original instruction, the
+cell's filtered input map, its explicitly selected ancestor ports when present,
+and each original result in its own tool history. Each is an ordered entry;
+ancestor and tool records use canonical JSON text. Hidden inputs and other
+cells' unselected outputs are excluded. Prompt compaction does not alter the
+original history. Capture charges the canonical JSON byte lengths of all entry
+texts against the existing work budget before writing a snapshot or dispatching
+that agent turn. Any preceding compaction decision remains separately charged
+under the existing model-call and work limits.
+
+The read configuration grants at most 4,096 text bytes per read or slice and
+16 search matches. Queries cannot supply references, paths, or new grants.
+The local protocol validates foreign JSON before reading; object-key checks
+use UTF-16 lexical order so errors replay identically across runtimes. The
+existing host-bound `agent.context.query.v1` keeps its original parsing behavior.
+
+The local tool configuration digest is the canonical digest of
+`{contract: "algal.agent-context-local-tool.v1", query}`, where `query` is the
+digest of `{contract: "algal.agent-context-tool.v1", reference}`. Each turn
+therefore binds its exact source selection for journal recovery. The runtime
+reconstructs the snapshot from the filtered view and verified earlier effects
+during replay; a declaration adds no permission to the host's tool inventory.

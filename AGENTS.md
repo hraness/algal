@@ -10,6 +10,8 @@
   scoped exact-context storage (`agent-context.ts`, mirrored in
   `crates/algal/src/agent_context.rs`) and model query/selection tools
   (`agent-context-tools.ts`, shared fixture `scripts/fixtures/agent-context.json`),
+  the runtime-owned local reader (`agent-context-runtime.ts`, native mirror
+  `agent_context_runtime.rs`, fixture `scripts/fixtures/agent-local-context.json`),
   the effect seam (`effects.ts`), the isolated subprocess executor profile
   (`isolation.ts`), the store (`store.ts`), verification
   (`verify.ts`), Vercel AI Gateway execution (`gateway.ts`) and portable
@@ -192,6 +194,9 @@
   `bun scripts/inference-parity.ts` compares all three Chat Completions
   formats against a loopback fixture, including exact receipt and offline
   replay parity; it does not qualify a real local language model.
+  `bun scripts/agent-local-context-parity.ts` checks local-reader view limits,
+  exact history after elision, rejected references, work limits, isolated tool
+  cells, and identical receipts with replay in both runtimes.
 - The Foundation Models bridge comes from the pinned `apple-foundation`
   crate (`hraness/apple-foundation`); `sh scripts/build-apple.sh` emits its
   embedded source and builds it with Xcode 26 on Apple Silicon, and the

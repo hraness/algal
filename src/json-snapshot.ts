@@ -1,7 +1,7 @@
 import { AlgalError } from "./errors";
 import type { JsonObject, JsonValue } from "./values";
 
-export type SnapshotLimits = { readonly maxBytes: number; readonly maxDepth: number; readonly maxNodes: number; readonly maxEntries: number; readonly maxStringBytes: number };
+export type SnapshotLimits = { readonly maxBytes: number; readonly maxDepth: number; readonly maxNodes: number; readonly maxEntries: number; readonly maxStringBytes: number; readonly sortObjectKeys?: boolean };
 /** UTF-8 length of `JSON.stringify(text)`, counted without building the
  * escaped text: quotes, backslash and C0 escapes, lone surrogates as `\uXXXX`. */
 function jsonStringBytes(text: string): number {
@@ -90,6 +90,9 @@ export function boundedJsonSnapshot(value: unknown, limits: SnapshotLimits, labe
       if (keys.length > limits.maxEntries) budget(`object exceeds ${limits.maxEntries} entries`);
       if (keys.some(key => typeof key === "symbol")) return invalid("symbol-keyed properties are not JSON");
       const names = keys as string[];
+      // Canonical JSON orders property names by UTF-16 code units. Opt-in
+      // traversal also makes competing malformed-field errors reproducible.
+      if (limits.sortObjectKeys) names.sort();
       charge(2 + Math.max(0, names.length - 1));
       const out: JsonObject = {};
       for (const name of names) {
@@ -103,4 +106,3 @@ export function boundedJsonSnapshot(value: unknown, limits: SnapshotLimits, labe
   };
   return visit(value, 0);
 }
-
