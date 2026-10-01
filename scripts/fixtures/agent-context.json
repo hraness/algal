@@ -1,0 +1,82 @@
+{
+  "entries": [
+    {
+      "kind": "instruction",
+      "label": "original",
+      "text": "Keep exact 🐚 instructions.\n"
+    },
+    {
+      "kind": "input",
+      "label": "private",
+      "text": "separate owner"
+    },
+    {
+      "kind": "observation",
+      "label": "tool",
+      "text": "é🌱 needle needle"
+    }
+  ],
+  "indices": [
+    0,
+    2
+  ],
+  "limits": {
+    "maxReadBytes": 4096,
+    "maxScanBytes": 4096,
+    "maxSearchResults": 4
+  },
+  "expected": {
+    "snapshot": "sha256:23be040d16dee3f8efa717821c7cc1dcfa78c85853186453d103fe29f88178e4",
+    "ref": {
+      "schema": "algal.agent-context-ref.v1",
+      "snapshot": "sha256:23be040d16dee3f8efa717821c7cc1dcfa78c85853186453d103fe29f88178e4",
+      "capability": "cap:agent-context:sha256:dea9e88cbd3b2f170705d41c36805912c46bd01fa517ac54bb4741e6d05ea534"
+    },
+    "child": {
+      "schema": "algal.agent-context-ref.v1",
+      "snapshot": "sha256:23be040d16dee3f8efa717821c7cc1dcfa78c85853186453d103fe29f88178e4",
+      "capability": "cap:agent-context:sha256:c196f888bd68a72c24aff41021f7fa85171258569379a712e7691035519a3ec5"
+    },
+    "inspect": {
+      "snapshot": "sha256:23be040d16dee3f8efa717821c7cc1dcfa78c85853186453d103fe29f88178e4",
+      "entries": [
+        {
+          "index": 0,
+          "digest": "sha256:2dec9c98d4617b41a7140891dd320701719227bbf4096e167cc65be1b78acfce",
+          "kind": "instruction",
+          "label": "original",
+          "bytes": 30
+        },
+        {
+          "index": 2,
+          "digest": "sha256:6c351eb6d7df4067204e4afefa01ffef917d506cc39a613902d59290ad7007f4",
+          "kind": "observation",
+          "label": "tool",
+          "bytes": 20
+        }
+      ]
+    },
+    "read": {
+      "kind": "instruction",
+      "label": "original",
+      "text": "Keep exact 🐚 instructions.\n"
+    },
+    "slice": "é🌱",
+    "search": {
+      "matches": [
+        {
+          "index": 2,
+          "startByte": 7,
+          "endByte": 13
+        },
+        {
+          "index": 2,
+          "startByte": 14,
+          "endByte": 20
+        }
+      ],
+      "scannedBytes": 20,
+      "complete": true
+    }
+  }
+}
