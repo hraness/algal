@@ -20,6 +20,8 @@
     "./expr": "./src/expr.ts",
     "./algal_expr.wasm": "./src/algal_expr.wasm",
     "./capabilities": "./src/capabilities.ts",
+    "./agent-context": "./src/agent-context.ts",
+    "./agent-context-tools": "./src/agent-context-tools.ts",
     "./mailbox": "./src/mailbox.ts",
     "./mailbox-core": "./src/mailbox-core.ts",
     "./mailbox-idb": "./src/mailbox-idb.ts",

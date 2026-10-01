@@ -878,7 +878,7 @@ export { TASK_CONTRACT, TASK_BOUNDS, parseTaskDefinition, parseTaskArgs, parseTa
 export type { TaskDefinition, TaskEffectBudget, TaskExample, TaskCompilation, RunTaskOptions, TaskRun } from "./src/task";
 export { TASK_PARAMETER_PATCH_CONTRACT, TASK_PARAMETER_IDS, taskParameters, parseTaskParameterPatch, applyTaskParameterPatch } from "./src/task-parameters";
 export type { TaskParameterId, TaskParameter, TaskParameters, TaskParameterPatch } from "./src/task-parameters";
-export { TASK_OPTIMIZATION_CONTRACT, TASK_OPTIMIZER_BOUNDS, buildTaskReviser, parseTaskOptimizerLimits, parseTaskCases, selectTaskPortfolio, optimizeTask } from "./src/task-optimizer";
+export { TASK_OPTIMIZATION_CONTRACT, TASK_OPTIMIZER_BOUNDS, buildTaskReviser, buildContextTaskReviser, parseTaskOptimizerLimits, parseTaskCases, selectTaskPortfolio, optimizeTask } from "./src/task-optimizer";
 export type { TaskCase, TaskOptimizerLimits, TaskReviser, TaskOptimizationOptions, TaskOptimizationCandidate, TaskRevision, TaskOptimizationReport } from "./src/task-optimizer";
 
 export { EVALUATED_TASK_CONTRACT, EVALUATED_TASK_BOUNDS, buildEvaluatedTaskArtifact, parseEvaluatedTaskArtifact, assertEvaluatedTaskCompatible } from "./src/task-artifact";
@@ -910,3 +910,5 @@ export type {
   ImproveResult,
   ImproveRollout,
 } from "./src/improve";
+export * from "./src/agent-context";
+export * from "./src/agent-context-tools";

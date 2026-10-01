@@ -7,6 +7,9 @@
 # Contents
 
 - `src/` — the contract (`contract.ts`, `graph.ts`), the scheduler (`run.ts`),
+  scoped exact-context storage (`agent-context.ts`, mirrored in
+  `crates/algal/src/agent_context.rs`) and model query/selection tools
+  (`agent-context-tools.ts`, shared fixture `scripts/fixtures/agent-context.json`),
   the effect seam (`effects.ts`), the isolated subprocess executor profile
   (`isolation.ts`), the store (`store.ts`), verification
   (`verify.ts`), Vercel AI Gateway execution (`gateway.ts`) and portable
