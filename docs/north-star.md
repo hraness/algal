@@ -268,6 +268,44 @@ The existing broker remains an executor boundary. XCB and Ghostget remain
 credential-owning provider/tool systems. The habitat never receives upstream
 provider credentials.
 
+## The live-world dimension
+
+The supplied `world` sketch adds an important dimension to the BEAM comparison:
+a live, distributed, capability-oriented object space with a small Lisp-like core.
+Its useful ideas are stable object identity, inspectable and mutable running code,
+capability references that work locally or remotely, one eventual-send operation,
+and semantic operations for people, editors and agents.
+
+ALGAL should incorporate these ideas at the habitat boundary, with stricter
+durability rules:
+
+- A behavior, actor, state object or evaluator is addressed by a stable digest or
+  named capability, not by an accidental process address.
+- Inspection is a first-class read model. It shows the current behavior, state,
+  mailbox, pending effects, supervisor status and evidence links from one
+  captured habitat snapshot.
+- Mutation is a semantic operation: propose, preview, migrate, activate, pause,
+  resume or fork. It is never an arbitrary write to a live object.
+- Eventual send is the common local and remote message operation. The local and
+  remote paths share an envelope, idempotency identity, capability check and
+  settled/uncertain outcome.
+- A live edit creates a candidate revision and preserves the running incumbent
+  until compatibility, migration and activation policy permit the change.
+- Humans, editors and agents use the same typed operations. Their authority and
+  presentation can differ, but they do not get separate mutation semantics.
+
+This gives ALGAL a useful three-way synthesis:
+
+| Source of inspiration | What ALGAL takes | What ALGAL adds or constrains |
+|---|---|---|
+| BEAM/OTP | processes, mailboxes, supervision, distribution, upgrades | durable evidence, bounded resources and explicit uncertain effects |
+| Live World/Lisp environment | stable identity, live inspection, semantic mutation, capability eventual-send | revision heads, migrations, replay and host-admitted authority |
+| ALGAL today | manifests, receipts, replay, habitats, foundry and application lifecycle | a single actor/event model that joins them |
+
+The first implementation should not attempt a universal live object database. A
+small actor registry plus content-addressed behavior and state projections is
+enough to prove the model.
+
 ## Inspiration from current programming-language research
 
 The research scan used PLDB on 2026-10-01, which indexes 33,580 programming
