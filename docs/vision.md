@@ -1,5 +1,7 @@
 # Software that accumulates competence
 
+> **Runtime north star:** ALGAL is a portable, evidence-carrying actor runtime for evolving software habitats. See [the detailed north-star plan](north-star.md) for the measurable language, runtime, cloud and consumer roadmap.
+
 ALGAL is built on one bet: a computer can accumulate tested ways of acting,
 not only produce new answers or new code. A model proposes a bounded,
 executable procedure. The procedure is checked, measured on declared cases,
