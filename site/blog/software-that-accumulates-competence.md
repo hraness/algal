@@ -5,11 +5,12 @@ date: 2026-09-23
 description: ALGAL bets that a computer can keep tested procedures, combine them, and get better at later work. The thesis, how to test it, and what would settle it.
 eyebrow: Essay
 cardDescription: "The bet, and how to test it."
+updated: 2026-10-01
 ---
 
 # Software that accumulates competence
 
-ALGAL bets that a computer can accumulate tested ways of acting, so that doing useful work leaves it with a better, reusable way to do the next piece of work. That is a narrower claim than "AI writes software", which every frontier model can already do in draft form. It is also not established: ALGAL has the mechanisms, and this post ends with the experiment that would show whether they work. The [vision page](/docs/vision/) has the full argument.
+ALGAL bets that a computer can accumulate tested ways of acting, so that doing useful work leaves it with a better, reusable way to do the next piece of work. That is a narrower claim than "AI writes software", which every frontier model can already do in draft form. Treat this as a research hypothesis. This post describes the experiment needed to test it. The [vision page](/docs/vision/) has the full argument.
 
 ## Two ways to think about software
 
@@ -29,7 +30,7 @@ ALGAL is a language and an application VM, not a new processor or an operating s
 
 **The representation is built to be generated.** Manifests carry no host code. They hold a size-limited graph of typed cells and, where needed, short expressions that the contract's own evaluator runs under a fuel limit. Hand-written and model-generated procedures enter through the same checks. The model proposes inside a structured space; the compiler and runtime enforce the contract. The design question ALGAL is organized around is what representation makes software easy enough to generate and constrained enough to evaluate and operate.
 
-**AI supplies judgment; ordinary computation supplies discipline.** A model call is a typed cell that declares the context it may see, the output shape it must return, and its budget. Everything around it is dataflow. The rule is to use a model where a judgment must be inferred, and ordinary code where the procedure can be written down. The hoped-for consequence, which is a hypothesis and not a measured result, is a system that grows more capable while spending less unconstrained reasoning on familiar work.
+**AI supplies judgment; ordinary computation supplies discipline.** A model call is a typed cell that declares the context it may see, the output shape it must return, and its budget. Everything around it is dataflow. The rule is to use a model where a judgment must be inferred, and ordinary code where the procedure can be written down. The experiment should test whether reusable procedures reduce the reasoning needed for familiar work.
 
 **Evidence and permission are part of the mechanism.** The foundry ties candidate identities, per-case results, resource accounting, selection, and verification together, and keeps holdout cases apart from selection cases. A program cannot promote itself or grant itself capabilities. The host decides, and the foundry's report records the decision. A system cannot accumulate improvements reliably unless it can say what changed, what was tested, what happened, and who allowed it. Recording where each change came from, and checking it before it runs, is what keeps accumulated change under control.
 
@@ -43,7 +44,7 @@ Generation produces possibilities. Selection filters them. Composition is what c
 
 A program that generates another program is not evidence. The decisive result would show that accumulated procedures make the system better at later work than equally resourced alternatives. Choose a family of substantial recurring tasks. Let the system acquire procedures on an initial set. Introduce unseen related tasks. Compare against a strong fixed agent, an agent that synthesizes fresh solutions without a library, and a workflow with an optimizer, under the same models, tools, and budgets. Run the one ablation that matters: the same system with and without access to what it accumulated. Count the cost of search, evaluation, and library maintenance, not only execution.
 
-Today's demos run the mechanisms on small goals with scripted or deterministic proposals. They show that the machinery works, not that software evolves on its own.
+For the billing example, hold back a set of complaints with unfamiliar combinations of discrepancies. Measure accuracy, unresolved cases, model calls and total acquisition cost. If a saved procedure helps only on the examples used to select it, the experiment has found specialization rather than transferable competence. Link each result to its evaluation cases and compare repeated trials before drawing a conclusion.
 
 ## Where the idea comes from
 

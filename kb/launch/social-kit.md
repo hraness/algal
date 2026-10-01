@@ -12,16 +12,16 @@ Post 1 of 8, 175 characters
 ALGAL is a programming language and VM for AI agent programs. A program can stop before it acts, hold until you say yes, pick up after a crash, and replay exactly what it did.
 ```
 
-Post 2 of 8, 183 characters
+Post 2 of 8, 177 characters
 
 ```text
-When an ALGAL program wants to act, it writes down the exact action and stops. You read it on a local page, then approve or deny it with one command. Deny it and nothing is published.
+The demo records a proposed local publication and waits. Read the action on its report page, then approve or deny it with one command. Denying it leaves that publication undone.
 ```
 
-Post 3 of 8, 198 characters
+Post 3 of 8, 153 characters
 
 ```text
-Each step an ALGAL program takes is saved to disk with its own fingerprint. The report page lists every saved step, what the program read, and what it proposed, so you never guess what an agent did.
+The demo saves its steps to disk with content fingerprints. Its report page lets you inspect the recorded inputs, proposed action and decisions together.
 ```
 
 Post 4 of 8, 183 characters
@@ -64,16 +64,16 @@ Post 1 of 8, 175 characters
 ALGAL is a programming language and VM for AI agent programs. A program can stop before it acts, hold until you say yes, pick up after a crash, and replay exactly what it did.
 ```
 
-Post 2 of 8, 183 characters
+Post 2 of 8, 177 characters
 
 ```text
-When an ALGAL program wants to act, it writes down the exact action and stops. You read it on a local page, then approve or deny it with one command. Deny it and nothing is published.
+The demo records a proposed local publication and waits. Read the action on its report page, then approve or deny it with one command. Denying it leaves that publication undone.
 ```
 
-Post 3 of 8, 198 characters
+Post 3 of 8, 153 characters
 
 ```text
-Each step an ALGAL program takes is saved to disk with its own fingerprint. The report page lists every saved step, what the program read, and what it proposed, so you never guess what an agent did.
+The demo saves its steps to disk with content fingerprints. Its report page lets you inspect the recorded inputs, proposed action and decisions together.
 ```
 
 Post 4 of 8, 183 characters
@@ -116,16 +116,16 @@ Post 1 of 8, 175 characters
 ALGAL is a programming language and VM for AI agent programs. A program can stop before it acts, hold until you say yes, pick up after a crash, and replay exactly what it did.
 ```
 
-Post 2 of 8, 183 characters
+Post 2 of 8, 177 characters
 
 ```text
-When an ALGAL program wants to act, it writes down the exact action and stops. You read it on a local page, then approve or deny it with one command. Deny it and nothing is published.
+The demo records a proposed local publication and waits. Read the action on its report page, then approve or deny it with one command. Denying it leaves that publication undone.
 ```
 
-Post 3 of 8, 198 characters
+Post 3 of 8, 153 characters
 
 ```text
-Each step an ALGAL program takes is saved to disk with its own fingerprint. The report page lists every saved step, what the program read, and what it proposed, so you never guess what an agent did.
+The demo saves its steps to disk with content fingerprints. Its report page lets you inspect the recorded inputs, proposed action and decisions together.
 ```
 
 Post 4 of 8, 183 characters
@@ -165,9 +165,9 @@ https://algal.computer/blog/introducing-algal/
 ```text
 ALGAL is a programming language and VM for AI agent programs. A program can stop before it acts, hold until you say yes, pick up after a crash, and replay exactly what it did.
 
-When an ALGAL program wants to act, it writes down the exact action and stops. You read it on a local page, then approve or deny it with one command. Deny it and nothing is published.
+The demo records a proposed local publication and waits. Read the action on its report page, then approve or deny it with one command. Denying it leaves that publication undone.
 
-Each step an ALGAL program takes is saved to disk with its own fingerprint. The report page lists every saved step, what the program read, and what it proposed, so you never guess what an agent did.
+The demo saves its steps to disk with content fingerprints. Its report page lets you inspect the recorded inputs, proposed action and decisions together.
 
 The built-in demo crashes a program twice on purpose. Finished steps are picked up, not redone. When ALGAL cannot tell whether a write went out, it stops and refuses to send it again.
 
@@ -198,8 +198,8 @@ Topics: Developer Tools, Artificial Intelligence, Open Source
 
 - Write agent programs that wait, resume, and replay.
 - ALGAL is a programming language and VM for AI agent programs. A program can stop before it acts, hold until you say yes, pick up after a crash, and replay exactly what it did.
-- When an ALGAL program wants to act, it writes down the exact action and stops. You read it on a local page, then approve or deny it with one command. Deny it and nothing is published.
-- Each step an ALGAL program takes is saved to disk with its own fingerprint. The report page lists every saved step, what the program read, and what it proposed, so you never guess what an agent did.
+- The demo records a proposed local publication and waits. Read the action on its report page, then approve or deny it with one command. Denying it leaves that publication undone.
+- The demo saves its steps to disk with content fingerprints. Its report page lets you inspect the recorded inputs, proposed action and decisions together.
 - The built-in demo crashes a program twice on purpose. Finished steps are picked up, not redone. When ALGAL cannot tell whether a write went out, it stops and refuses to send it again.
 - Export a run to one file and check it on another machine with algal demo verify. It replays the saved history and confirms every step lines up.
 - ALGAL is for developers whose agents send messages, change code, or publish files, where one wrong action costs something.
@@ -209,13 +209,13 @@ Topics: Developer Tools, Artificial Intelligence, Open Source
 ## Beats
 
 1. ALGAL runs agent programs that stop and wait for you
-2. Nothing happens until you say yes
+2. Review the proposed action before it runs
 3. Every step is saved as it happens
-4. Kill it mid-task and it does not repeat itself
+4. Resume finished work after a crash
 5. Check a whole run on another machine
 6. For agents that touch real things
 7. The bet: software that gets better at its job
-8. What it does not do yet
+8. Keep host permissions explicit
 9. Try it in one command
 
 ## Facts and their records

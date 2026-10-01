@@ -1,35 +1,36 @@
 ---
-title: "How ALGAL keeps its TypeScript and Rust in step"
+title: "Comparing runtimes with differential tests"
 date: 2026-09-24
 eyebrow: Technique
-description: "ALGAL runs the same programs through its TypeScript and Rust runtimes in CI and fails if a compared field differs or either rejects the other's run record."
-cardTitle: "Keeping TypeScript and Rust in step"
-cardDescription: "CI runs both and fails on any difference."
+description: "Compare results, errors and execution records across implementations, then test the assumptions their shared code cannot reveal."
+cardTitle: "Comparing runtimes"
+cardDescription: "Use the same inputs to find disagreements in results, errors and records."
+updated: 2026-10-01
 ---
 
-An ALGAL program can start in one runtime and finish in another. The TypeScript runtime, which runs on Bun, can create a process that waits for an approval, and the native Rust runtime can pick it up from the same local store after the first process has exited. That handoff works only if both runtimes mean the same thing by every program, every error, and every record they write. ALGAL keeps them in step by running the same programs through both on every change and failing the build on any difference. Each runtime also has to accept the other's record of the run, so neither one serves as the answer key.
+Two implementations of a runtime can each pass their own tests while disagreeing on a valid input. Differential testing gives both the same program and compares what they do. Cross-checking their saved records adds another question: can each implementation understand the other's account of the run?
 
-**Status:** Preview. ALGAL is working prerelease software for workflows your own host application controls, and its native packages are unsigned and not notarized.
+ALGAL uses this method for its TypeScript and Rust runtimes. A program can wait in one runtime and resume in the other through the same local store, so agreement must cover outputs, errors and the state needed to continue.
 
 ## Two versions of the same program drift apart
 
-A second implementation is easy to produce now. A model ports a library to a faster language in an afternoon, the tests that came with the original pass, and the port ships. The port looks finished and handles the examples, and it still disagrees with the original somewhere nobody looked. Anything built on it assumes the two versions are interchangeable, and that assumption has never been checked.
+Separate test suites may use different examples or encode different assumptions about the same input. A direct comparison makes those assumptions visible before work moves between runtimes.
 
 The disagreements are small. One version sorts text slightly differently. One rejects a malformed value that the other quietly accepts. One counts the length of a string with an emoji in it as 2 and the other as 4. Each difference stays invisible until a user moves work from one runtime to the other and gets a different answer, or a record that the second runtime refuses to read.
 
-ALGAL depends on those two versions agreeing. A run's record is meant to be checkable by someone other than the machine that produced it, and a paused process is meant to be resumable elsewhere. If the two runtimes disagree about what a program did, both promises break at once.
+ALGAL depends on those two versions agreeing. A run's record is meant to be checkable by someone other than the machine that produced it, and a paused process can resume in another runtime sharing its store. If the two runtimes disagree about what a program did, both promises break at once.
 
 ## Comparing outputs and cross-checking records
 
 The fix is to stop a disagreement from shipping unnoticed. Keep both implementations, run them side by side on the same inputs, and fail the build on the first field that differs. Then ask each runtime to verify the record the other one wrote. The comparison catches a difference in output, and the cross-check catches a difference in how each runtime reads records back.
 
-With that running on every change, a user can pick either runtime for any program in the test set and get the same outcome, the same values, the same errors, and the same accounting of work. Moving a process from one runtime to the other is an ordinary resume.
+Choose comparison cases that exercise successful results, errors and recovery. Matching ordinary outputs alone can leave incompatible failure records or resume behavior undiscovered.
 
-## Running every example through both runtimes
+## Give both runtimes the same inputs
 
-ALGAL has a TypeScript reference runtime and a native Rust runtime. The main parity script takes every committed example program, plus programs compiled from ALGAL's readable source language and two multi-file source projects, and runs each one through both. The TypeScript side runs in process. The Rust side runs as the command-line binary built from the same commit, so the test drives the same commands a user runs rather than an internal library call.
+ALGAL has a TypeScript reference runtime and a native Rust runtime. The parity suite includes example programs, compiled source programs and projects whose code spans multiple files. The TypeScript side runs in process. The Rust side runs as the command-line binary built from the same commit, so the test drives the same commands a user runs rather than an internal library call.
 
-Both runtimes get the same compiled program, the same arguments, and the same scripted model responses. No live model or provider is called, so the runtimes are the only thing that can vary between the two runs.
+Both runtimes get the same compiled program, the same arguments, and the same scripted model responses. Scripted responses hold the model input fixed so provider variation cannot explain a difference.
 
 The script then compares a fixed list of fields from the two run records, each written as canonical JSON, a single agreed spelling for every value:
 
@@ -77,7 +78,7 @@ fn key_order(a: &str, b: &str) -> Ordering {
 }
 ```
 
-ALGAL's expression language makes the same choice: string comparison uses UTF-16 order, and string length counts UTF-16 code units, so an emoji has length 2 in both runtimes. The parity tests hold these rules in place. Without them, a cleanup on either side could switch to that language's natural order and nothing else would notice.
+ALGAL's expression language makes the same choice: string comparison uses UTF-16 order, and string length counts UTF-16 code units, so an emoji has length 2 in both runtimes. The parity tests hold these rules in place. These cases catch a cleanup that accidentally switches either runtime to its language's natural order.
 
 ## The expression evaluator has one implementation
 
@@ -93,7 +94,7 @@ The main script covers single runs. Sibling scripts apply the same method to the
 - **Applications.** One durable application lifecycle is replayed through the TypeScript services and the native application commands, and every digest and record must match.
 - **The store and the command line.** Storage and listing commands, and the public commands including failed and suspended runs, are compared record by record along with their exit status.
 
-The CI workflow's Native VM job builds the Rust binary and runs these scripts, along with sibling parity scripts for inference, compilation, and mailboxes, on Ubuntu and on macOS for every pull request and every push to the main branch.
+Use the linked comparison scripts to inspect the cases and fields covered, then add cases for the language features and recovery paths your applications depend on.
 
 ## Limits
 

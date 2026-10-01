@@ -2,7 +2,7 @@ WEBVTT
 
 open
 00:00:00.000 --> 00:00:04.400
-Most agent programs run start to finish. When one acts wrongly, you find out after.
+A program can wait before it acts. Save the work, then resume when the decision arrives.
 
 title
 00:00:04.400 --> 00:00:07.600
@@ -30,8 +30,8 @@ proof
 
 limits
 00:00:29.200 --> 00:00:33.200
-What it does not do yet. Packages are unsigned. Your own app still decides which tools a program may use.
+Runtime and host. Keep the local store to resume a run. Your app chooses the tools and permissions a program receives.
 
 end
 00:00:33.200 --> 00:00:37.700
-ALGAL. algal.computer. Preview. Free and open source.
+ALGAL. algal.computer. Free and open source.

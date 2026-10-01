@@ -7,6 +7,7 @@ import { algalUsesEntries, blogAtomFeed, blogLlmsList, blogSitemapEntries, loadB
 
 const BLOG = join(import.meta.dir, "blog");
 const posts = await loadBlogPosts(BLOG);
+const editorialReview = JSON.parse(readFileSync(join(import.meta.dir, "editorial-review-20261001.json"), "utf8"));
 
 test("every blog post has a valid review record", () => {
   expect(() => assertArticleAdmissions(BLOG_ADMISSIONS)).not.toThrow();
@@ -19,8 +20,8 @@ test("lifecycles match the reviewed set", () => {
   expect(lifecycle).toEqual({
     "/blog/typescript-rust-parity/": "indexable",
     "/blog/built-on-algal/": "indexable",
-    "/blog/software-that-accumulates-competence/": "quarantined",
-    "/blog/self-evolving-software-selection-boundary/": "quarantined",
+    "/blog/software-that-accumulates-competence/": "indexable",
+    "/blog/self-evolving-software-selection-boundary/": "indexable",
     "/blog/receipts-fossil-record/": "indexable",
     "/blog/programs-that-wait/": "indexable",
     "/blog/introducing-algal/": "indexable",
@@ -30,7 +31,8 @@ test("lifecycles match the reviewed set", () => {
 test("AI review is recorded as AI and never as human review", () => {
   for (const record of BLOG_ADMISSIONS) {
     expect(record.humanReview).toBeNull();
-    if (record.review) expect(record.review.reviewerType).toBe("ai");
+    expect(record.review).toEqual({ reviewer: editorialReview.reviewer, reviewerType: "ai", reviewedOn: editorialReview.reviewedOn });
+    expect(record.scores).toEqual(editorialReview.scores);
   }
 });
 
@@ -43,24 +45,17 @@ test("every post shows the Hraness byline and the provenance note from its recor
     expect(html).toContain(sentence.replaceAll("'", "&#x27;"));
   }
   const parity = posts.find(post => post.slug === "typescript-rust-parity")!;
-  expect(renderPostArticle(parity)).toContain("Drafted with AI from the source code and reviewed by Claude Opus 5.5 (claude-opus-5-5) editorial review.");
+  expect(renderPostArticle(parity)).toContain(editorialReview.reviewer);
 });
 
 test("only indexable posts reach the index, feed, sitemap, and llms.txt", () => {
   const indexable = posts.filter(post => post.indexable).map(post => post.path);
-  expect(indexable).toEqual(["/blog/introducing-algal/", "/blog/built-on-algal/", "/blog/typescript-rust-parity/", "/blog/receipts-fossil-record/", "/blog/programs-that-wait/"]);
+  expect(indexable).toHaveLength(7);
   const index = renderBlogIndex(posts);
   const feed = blogAtomFeed(posts);
   const llms = blogLlmsList(posts);
   const sitemap = blogSitemapEntries(posts);
-  expect(sitemap).toEqual([
-    { path: "/blog/", lastModified: "2026-09-30" },
-    { path: "/blog/introducing-algal/", lastModified: "2026-09-30" },
-    { path: "/blog/built-on-algal/", lastModified: "2026-09-24" },
-    { path: "/blog/typescript-rust-parity/", lastModified: "2026-09-24" },
-    { path: "/blog/receipts-fossil-record/", lastModified: "2026-09-28" },
-    { path: "/blog/programs-that-wait/", lastModified: "2026-09-28" },
-  ]);
+  expect(sitemap).toEqual(["/blog/", ...indexable].map(path => ({ path, lastModified: "2026-10-01" })));
   for (const post of posts) {
     const listed = post.indexable;
     expect(index.includes(`href="${post.path}"`)).toBe(listed);
@@ -69,19 +64,21 @@ test("only indexable posts reach the index, feed, sitemap, and llms.txt", () => 
   }
 });
 
-test("a revised post shows its updated date and reports it as dateModified", () => {
-  const wait = posts.find(post => post.slug === "programs-that-wait")!;
-  expect(wait).toMatchObject({ published: "2026-09-22", updated: "2026-09-28" });
-  expect(renderPostArticle(wait)).toContain('Updated <time dateTime="2026-09-28">');
-  expect(JSON.stringify(postJsonLd(wait))).toContain('"dateModified":"2026-09-28T00:00:00.000Z"');
-  const parity = posts.find(post => post.slug === "typescript-rust-parity")!;
-  expect(parity.updated).toBeUndefined();
-  expect(JSON.stringify(postJsonLd(parity))).not.toContain("dateModified");
+test("reading pages hide dates while discovery records accurate revisions", () => {
+  for (const post of posts) {
+    expect(post.updated).toBe("2026-10-01");
+    expect(renderPostArticle(post)).not.toContain("<time");
+    expect(renderPostArticle(post)).not.toContain(">Checked ");
+    expect(JSON.stringify(postJsonLd(post))).toContain('"dateModified":"2026-10-01T00:00:00.000Z"');
+  }
+  expect(renderBlogIndex(posts)).not.toContain("<time");
 });
 
 test("the hub stays unpublished until a registered relation has a live post", () => {
   const hub = posts.find(post => post.slug === "built-on-algal")!;
   const entries = algalUsesEntries();
+  expect(entries.filter(entry => entry.name === "Excalibur (xcb)")).toHaveLength(1);
+  expect(entries.some(entry => entry.detail.startsWith("ALGAL’s xcb executor") || entry.detail.startsWith("ALGAL's xcb executor"))).toBe(false);
   expect(hub.emit).toBe(entries.length > 0);
   for (const entry of entries) expect(Object.values(ALGAL_USES_POSTS).some(post => post.live && post.url === entry.url)).toBe(true);
 });

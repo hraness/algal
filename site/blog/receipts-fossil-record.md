@@ -1,18 +1,18 @@
 ---
-title: "Receipts are the fossil record of an execution"
+title: "What a replayable receipt proves"
 order: 2
 date: 2026-09-22
-updated: 2026-09-28
-description: An ALGAL receipt replays an agent run bit-for-bit offline, so someone who does not trust you can check what ran. What it records, and what it proves.
+description: An ALGAL receipt lets another person replay a recorded run offline and check how its inputs and saved answers produced its outputs.
 eyebrow: Technique
 cardDescription: "An ALGAL receipt replays an agent run offline."
+updated: 2026-10-01
 ---
 
-# Receipts are the fossil record of an execution
+# What a replayable receipt proves
 
-Ask what an agent run did, and the usual answer is that the logs say it worked. That answer asks you to take the system's word for it.
+A release report says “approve.” To understand that answer, you need to know which evidence the program used, which answer the model returned and which rule turned that answer into the report.
 
-Every ALGAL run instead writes a receipt: a file that someone else can replay offline to check what ran, without your model, your store, or your credentials. A log is a story a process tells about itself. A receipt works more like a fossil, the structure left after the organism is gone, detailed enough that someone who was not there can reconstruct what happened. (In ALGAL an organism is a program: a typed manifest the runtime executes.)
+An ALGAL receipt packages those inputs, recorded effects and execution steps into a file that another person can replay offline. Verification checks whether the supplied record is internally consistent. It needs no live model, original store or credentials. In ALGAL, an organism is a program: a typed manifest the runtime executes.
 
 ## What a receipt records
 
@@ -24,22 +24,17 @@ A receipt is a content-addressed JSON document. It records:
 - **work accounting**: how much of the declared budget each cell spent;
 - the **run's own digest**, which covers all of the above. A program started by another program's `spawn` cell runs nested inside the parent's receipt, and the parent records the child manifest's digest.
 
-That is enough to replay the run. `algal verify` reconstructs it bit-for-bit, with no model calls, no store, and no credentials, and fails if any byte disagrees. `algal diff` compares two runs and reports where they diverged. You can export a receipt, delete the store it came from, and a stranger with the CLI can still check your work.
+That is enough to replay the run. `algal verify` reconstructs it bit-for-bit, with no model calls, no store, and no credentials, and fails when the reconstructed record disagrees. `algal diff` compares two runs and reports where they diverged. You can export a receipt, delete the store it came from, and another person with the CLI can still check the recorded execution.
 
-## Replay turns a claim into something you can check
+## Follow an answer through the program
 
-Records of what a system did differ in whom they ask you to trust:
+In the release example, replay uses the model answer saved in the receipt. It runs the declared checks again and reconstructs the report. If the record says the model recommended “reject” but claims that a check requiring “approve” passed, verification fails.
 
-1. **Logs** are the process's own account, so you trust the process.
-2. **Traces**, such as LangSmith or OpenTelemetry, are structured observation, so you trust the pipeline that collected them.
-3. **Event history**, as in Temporal, is the orchestrator's record, so you trust the service that kept it.
-4. **Replayable receipts** re-execute the same way anywhere, so you do not have to trust the host's account of how the run used its recorded answers.
-
-ALGAL's receipts are the fourth kind. Replay needs the same inputs, the same recorded answers, and the same event order, or the digest does not match. The [diagrams on the tour](/tour/) replay each receipt's recorded event order rather than animating an illustration, so what you see is the run itself.
+This makes the receipt useful for investigating a result or comparing two runs. `algal diff` can locate where they diverged, while the [tour's diagrams](/tour/) show each recorded step in order. Logs and traces can supply context around the run; the receipt supplies the data needed for this particular replay.
 
 ## Replay proves consistency, not truth
 
-Receipts are easy to oversell, so the limit belongs here. A receipt shows that the recorded model answers, passed through the declared cells, produce the recorded outputs. It does not show that the model was right, that its answers were good, or that the provider actually served the request. A receipt is strong evidence about what ran. It says nothing about whether the result is true of the world.
+A receipt shows that the recorded model answers, passed through the declared cells, produce the recorded outputs. It does not show that the model was right, that its answers were good, or that the provider actually served the request. It also cannot establish that every real attempt was recorded. Checking a supplied execution record and independently verifying the events outside it are separate jobs.
 
 ## Other ALGAL features rest on receipts
 
@@ -52,6 +47,8 @@ Several ALGAL features depend on receipts rather than sitting beside them:
 
 ## Receipts show failures too
 
-A receipt cannot quietly drop an inconvenient fact. If a model call was answered from cache, the receipt says `cached: true`, and replay reproduces the flag. If a tool call failed and the run recovered, the failure is on the receipt. If a run ended `stuck`, that is the recorded outcome. Because failures cannot be hidden, a successful receipt means more.
+Within a supplied receipt, replay checks the recorded event order and outcome. A recorded cache hit carries `cached: true`; a recorded recovery includes the failed step; a run that ended `stuck` keeps that outcome. Removing one of those steps while leaving dependent records unchanged breaks verification.
 
-You can check this on the site. Every diagram on the [tour](/tour/) ships its [receipt](/receipts/reply.receipt.json), and the footer shows how many recorded runs were replay-verified during each build.
+A producer can still withhold an entire failed run or supply fabricated external answers. Publish the complete evaluation set and corroborating evidence when the question is how often a system succeeds, rather than whether one receipt is consistent.
+
+Download the [tour’s example receipt](/receipts/reply.receipt.json), check it with `algal verify`, and compare its recorded steps with the [tour diagram](/tour/).

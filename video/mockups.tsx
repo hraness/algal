@@ -19,14 +19,14 @@ export function ProductMockup() {
   );
 }
 
-/** Cold-open cards: made-up lines from an agent that acts without asking. */
+/** Cold-open cards: illustrative tasks waiting for an external decision. */
 const AGENT_LOG = [
-  ["email", "Sent 40 replies to the support queue"],
-  ["deploy", "Pushed a config change to production"],
-  ["files", "Deleted 12 drafts it thought were stale"],
-  ["billing", "Issued a refund on ticket 881"],
-  ["repo", "Merged its own pull request"],
-  ["posts", "Published the announcement early"],
+  ["email", "Reply drafted · waiting for review"],
+  ["deploy", "Change prepared · waiting for approval"],
+  ["files", "Draft saved · ready to resume"],
+  ["billing", "Refund proposed · decision needed"],
+  ["repo", "Checks finished · waiting for review"],
+  ["posts", "Announcement ready · awaiting approval"],
 ] as const;
 
 export function OpenCard({ index }: { index: number }) {

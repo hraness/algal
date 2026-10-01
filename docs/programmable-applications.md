@@ -1,19 +1,16 @@
-> Implementation and qualification are tracked separately. The durable application
-> lifecycle, memory services, policy host, evaluation and migration, captured views,
-> and episode dispatcher have reference/native implementations. The shared
-> application and CLI parity drivers gate their common behavior. The
-> [completion review](2026-09-22-review.md) records the design-to-evidence map,
-> adversarial repairs, and remaining research limitations; the
-> [adaptive inventory application](adaptive-inventory.md) exercises a second domain.
-> Live coding/memory qualification resumes only after deterministic gates, under
-> a small, explicitly budgeted paid-inference allowance. No model-quality benefit is
-> inferred from deterministic fixtures or the earlier cancelled pilot.
+# Programmable applications
 
-# ALGAL: programmable organisms
+An ALGAL application keeps its procedures, state, observations and history as
+inspectable data. This guide explains how those parts fit together and how a
+host evaluates proposed changes before selecting what runs next.
 
-Build program, 2026-09-20. This expands the coding-harness memory spike into a
-reusable application architecture. The harness remains the first demanding user
-of that architecture and a continuing evaluation surface.
+The application lifecycle, memory services, policy host, evaluation and
+migration have TypeScript and native implementations. Shared parity tests
+compare their behavior. Those checks establish agreement on the tested cases;
+they do not demonstrate that a model learns better procedures from experience.
+The [adaptive inventory application](adaptive-inventory.md) gives a concrete
+example, and the [vision](vision.md) describes the evidence needed to test the
+broader research hypothesis.
 
 ## Product thesis
 

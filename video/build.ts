@@ -46,9 +46,8 @@ mkdirSync(join(out, "fonts"), { recursive: true });
 
 const filmJson = JSON.parse(readFileSync(join(here, "film.json"), "utf8")) as FilmConfig;
 /**
- * Numbers and status come from the site's launch facts module, never film.json:
- * the proof counts are from the captured demo run and the end line is the
- * release status.
+ * Numbers come from the site's launch facts module, never film.json.
+ * The proof counts describe the captured demo run.
  */
 const film: FilmConfig = {
   ...filmJson,
@@ -62,7 +61,6 @@ const film: FilmConfig = {
         { value: Number(launchFacts.inFlightWriteDeliveries.value), label: "send of an interrupted write, never repeated" },
       ],
     },
-    end: { line: `${launchFacts.status.value}. Free and open source.` },
   },
 };
 function flag(name: string): string | undefined {
