@@ -8,7 +8,7 @@
         "@eslint/js": "^9.13.0",
         "@hraness/design-kit": "github:hraness/design-kit#v0.35.2",
         "@hraness/desktop-foundation": "https://github.com/hraness/desktop-foundation/releases/download/v0.8.0/hraness-desktop-foundation-0.8.0.tgz",
-        "@hraness/posthog": "https://github.com/hraness/posthog/releases/download/v0.3.8/hraness-posthog-0.3.8.tgz",
+        "@hraness/posthog": "https://github.com/hraness/posthog/releases/download/v0.3.11/hraness-posthog-0.3.11.tgz",
         "@hraness/ui": "github:hraness/ui#v0.5.18",
         "@hraness/web-discovery": "github:hraness/web-discovery#v0.13.0",
         "@hugeicons/core-free-icons": "4.3.0",
@@ -52,7 +52,7 @@
 
     "@hraness/desktop-foundation": ["@hraness/desktop-foundation@https://github.com/hraness/desktop-foundation/releases/download/v0.8.0/hraness-desktop-foundation-0.8.0.tgz", { "bin": { "companion": "./dist/src/cli.js" } }, "sha512-VvuyeA+KwOj+SR7Opeivhy5p2uNHlGBhEBV8860105kAPOauUuttcSUSTV93dqkNQYBBUwhVZx9CchRj/dmhHw=="],
 
-    "@hraness/posthog": ["@hraness/posthog@https://github.com/hraness/posthog/releases/download/v0.3.8/hraness-posthog-0.3.8.tgz", { "dependencies": { "@posthog/nextjs-config": "1.10.0", "posthog-js": "1.422.5", "posthog-node": "5.51.4" }, "peerDependencies": { "next": ">=16.2.0 <17.0.0", "react": ">=19.2.0 <20.0.0" }, "optionalPeers": ["next", "react"] }, "sha512-JQuzV/t7E9EOhWOF3OXp+/vsNWOus1N+z/54u0Obhq1UbbVQKLarkt3h0GbnvIa01PMA2aM8bOniSR/myDZ9WA=="],
+    "@hraness/posthog": ["@hraness/posthog@https://github.com/hraness/posthog/releases/download/v0.3.11/hraness-posthog-0.3.11.tgz", { "dependencies": { "@posthog/nextjs-config": "1.10.0", "posthog-js": "1.422.5", "posthog-node": "5.51.4" }, "peerDependencies": { "next": ">=16.2.0 <17.0.0", "react": ">=19.2.0 <20.0.0" }, "optionalPeers": ["next", "react"] }, "sha512-XIHWP+tivJOUAw7KVbdPYO3UteM4O0IYf/mD4ZJZugPPJ5ZEHP033Xh/qbAIDv2lSVI245UE4CLpzkznDT/pVg=="],
 
     "@hraness/ui": ["@hraness/ui@github:hraness/ui#1d43aa9", { "dependencies": { "@hugeicons/core-free-icons": "4.2.3", "@hugeicons/react": "^1.1.9", "@stylexjs/stylex": "0.19.0", "clsx": "^2.1.1", "parse5": "8.0.1", "react-aria": "3.50.0", "react-aria-components": "1.19.0" }, "peerDependencies": { "@babel/core": "7.29.7", "@stylexjs/babel-plugin": "0.19.0", "@types/babel__core": "7.20.5", "@types/bun": "1.3.14", "@types/node": "^20.19.0 || >=22.12.0", "lightningcss": "1.33.0", "next": "16.2.12 || 16.3.3", "react": ">=18 <20", "react-dom": ">=18 <20", "typescript": "6.0.3", "vite": "7.3.6 || 8.2.1" }, "optionalPeers": ["@babel/core", "@stylexjs/babel-plugin", "@types/babel__core", "@types/bun", "@types/node", "lightningcss", "next", "typescript", "vite"] }, "hraness-ui-1d43aa9", "sha512-KH4pv6P1/DoG1moNhSj4ekFtpPMilqgPzFGOWKL2I0gWVJgfXwDnoJLj3FIjWLItTMvSfm1B8Yt8pg77/a1vmg=="],
 
