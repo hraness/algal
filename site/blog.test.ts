@@ -78,7 +78,7 @@ test("the hub stays unpublished until a registered relation has a live post", ()
   const hub = posts.find(post => post.slug === "built-on-algal")!;
   const entries = algalUsesEntries();
   expect(entries.filter(entry => entry.name === "Excalibur (xcb)")).toHaveLength(1);
-  expect(entries.some(entry => entry.detail.startsWith("ALGAL’s xcb executor") || entry.detail.startsWith("ALGAL\'s xcb executor"))).toBe(false);
+  expect(entries.some(entry => entry.detail.startsWith("ALGAL’s xcb executor") || entry.detail.startsWith("ALGAL's xcb executor"))).toBe(false);
   expect(hub.emit).toBe(entries.length > 0);
   for (const entry of entries) expect(Object.values(ALGAL_USES_POSTS).some(post => post.live && post.url === entry.url)).toBe(true);
 });

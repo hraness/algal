@@ -57,7 +57,7 @@
     "sha256": {
       "site/blog.ts": "7d8226644d4e11682fc941c6e2973c7f28d0c0e07b72881aead841337571dbff",
       "site/blog-posts.ts": "acd9565af60541d8876d0825654c34203ec15d2d488adfc2517f621a64ac447d",
-      "site/blog.test.ts": "771574b600ede0a8370cae7150605587cec912400f5a813396095ceda18cb140",
+      "site/blog.test.ts": "aacad8320d09ea9d23b386afa5e16a61feec6396271892d47ef9b598018851f5",
       "site/editorial-history-20261001.json": "8b1e58d549caef27086f213e26fa389f303f1324c4e7949e59d14c2133a7f1c2"
     }
   }
