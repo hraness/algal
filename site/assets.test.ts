@@ -23,9 +23,9 @@ test("site CSS references separate hashed fonts with exact shared font bytes", a
     }
     expect(faces.length).toBe(originals.size);
     expect(faces.length).toBeGreaterThan(0);
-    // Design-kit 0.35 includes the shared marketing controls: 593,201 bytes,
-    // 89,673 with gzip. Retain a bounded raw budget and a transport-size guard.
-    expect(Buffer.byteLength(css)).toBeLessThan(598_016);
+    // Design-kit 0.36.3 includes the shared marketing controls: 605,499 bytes,
+    // 90,697 with gzip. Allow 600 KiB raw; retain the 96 KiB transport guard.
+    expect(Buffer.byteLength(css)).toBeLessThan(614_400);
     expect(gzipSync(css).byteLength).toBeLessThan(98_304);
     const references = new Set<string>();
     const hashes = new Set<string>();
