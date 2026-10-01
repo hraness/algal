@@ -6,6 +6,9 @@ import type { LaunchBeat } from "@hraness/design-kit/launch";
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import refineManifest from "../../examples/refine.algal.json";
+import { parseOrganismManifest } from "../../src/contract";
+import { createProgramDiagram, layoutDiagram } from "../../src/diagram";
 import { launchBeats } from "./beats";
 import { launchFacts } from "./facts";
 import { launchFilm } from "./film";
@@ -15,6 +18,11 @@ function isMockupId(id: string): id is LaunchMockupId {
   return Object.hasOwn(LAUNCH_MOCKUPS, id);
 }
 
+// Match emitDiagram in site/build.ts so lazy diagrams reserve their final size.
+const diagramSizes: Readonly<Record<string, Readonly<{ width: number; height: number }>>> = {
+  "/diagrams/refine.svg": layoutDiagram(createProgramDiagram(parseOrganismManifest(refineManifest)), { compact: true, header: false }),
+};
+
 function renderVisual(beat: LaunchBeat): ReactNode {
   const { visual } = beat;
   switch (visual.kind) {
@@ -22,8 +30,11 @@ function renderVisual(beat: LaunchBeat): ReactNode {
       if (!isMockupId(visual.id)) throw new Error(`Beat ${beat.id} names an unknown mockup ${visual.id}.`);
       return LAUNCH_MOCKUPS[visual.id](visual.state);
     }
-    case "diagram":
-      return <img alt="" className="al-beat-diagram" decoding="async" loading="lazy" src={visual.src} />;
+    case "diagram": {
+      const size = diagramSizes[visual.src];
+      if (size === undefined) throw new Error(`Beat ${beat.id} names a diagram without dimensions: ${visual.src}.`);
+      return <img alt="" className="al-beat-diagram" decoding="async" height={size.height} loading="lazy" src={visual.src} width={size.width} />;
+    }
     case "clip":
       throw new Error(`Beat ${beat.id} names a film clip; the ALGAL post uses mockups and diagrams.`);
   }

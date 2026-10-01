@@ -12,7 +12,7 @@ import { ownedChromiumLaunchOptions, pinnedBrowserExecutable, pinnedChromiumDefi
 // Only public read-only production pages: no application commands, credentials,
 // personal data, form submission, or deployment operations are used here.
 const origin = "https://algal.computer";
-const paths = ["/", "/tour/", "/use-cases/", "/docs/", "/blog/", "/living/", "/workbench/", "/grow/", "/tasks/", "/compare/", "/docs/spec/organism/", "/blog/built-on-algal/", "/missing-production-verification"];
+const paths = ["/", "/tour/", "/use-cases/", "/docs/", "/blog/", "/living/", "/workbench/", "/grow/", "/tasks/", "/compare/", "/docs/spec/organism/", "/blog/built-on-algal/", "/blog/introducing-algal/", "/missing-production-verification"];
 const artifacts = resolve(import.meta.dirname, '../.production-browser', String(Date.now()));
 const definition = pinnedChromiumDefinition();
 const executablePath = await pinnedBrowserExecutable(chromium.executablePath(), process.env.PRODUCTION_BROWSER_EXECUTABLE);
