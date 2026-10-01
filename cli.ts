@@ -3961,7 +3961,7 @@ function usageError(msg: string): never {
   throw new AlgalError("PARSE_FAILED", `usage: ${msg}`);
 }
 
-if (process.argv[2] !== "update") void reportAlgalCliRun(PACKAGE_VERSION);
+if (process.argv[2] !== "update") void reportAlgalCliRun(PACKAGE_VERSION, process.env, process.argv.slice(2));
 main()
   .then((code) => process.exit(code))
   .catch(async (e) => {

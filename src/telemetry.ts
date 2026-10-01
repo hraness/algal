@@ -6,7 +6,8 @@ import { connect as connectTls } from "node:tls";
 
 /**
  * Aggregate run telemetry. One bounded POST per CLI invocation reports the
- * product name and version only — never arguments, paths, or output. A
+ * product name, version, and an allowlisted command family — never free-form
+ * arguments, paths, or output. A
  * locally minted install token joins daily-active counts; it is not synced
  * and carries no account identity. HRANESS_TELEMETRY=off or
  * ALGAL_TELEMETRY=off disables it entirely.
@@ -75,16 +76,37 @@ function sendTelemetryPost(body: string): void {
   } catch { void 0; }
 }
 
+const COMMAND_FAMILIES: ReadonlySet<string> = new Set([
+  "compile", "fmt", "diagram", "diagnose", "dependencies", "envelope",
+  "lock", "vendor", "examples", "example", "run", "check", "explain",
+  "verify", "resume", "replay", "ordering", "process", "job", "repair",
+  "shepherd", "inspect", "runs", "observe", "digest", "diff", "store",
+  "manifests", "manifest", "slots", "slot", "mailbox", "pack", "unpack",
+  "application", "library", "experiment", "suite", "index", "search",
+  "auth", "doctor", "foundry", "bench", "task", "call", "tool-def", "tail", "db",
+]);
+
+/** Unknown arguments never become telemetry, even when they look like words. */
+export function telemetryCommandFamily(rawArguments: readonly string[]): string | undefined {
+  const command = rawArguments[0];
+  return typeof command === "string" && COMMAND_FAMILIES.has(command)
+    ? command
+    : undefined;
+}
+
 export async function reportAlgalCliRun(
   version: string,
   environment: Readonly<Record<string, string | undefined>> = process.env,
+  rawArguments: readonly string[] = [],
 ): Promise<void> {
   if (telemetryDisabled(environment)) return;
   try {
     const install = await installToken(environment);
+    const command = telemetryCommandFamily(rawArguments);
     sendTelemetryPost(JSON.stringify({
       cli: "algal",
       ...(install === null ? {} : { install }),
+      ...(command === undefined ? {} : { command }),
       v: 1,
       version,
     }));
