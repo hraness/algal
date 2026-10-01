@@ -27,7 +27,7 @@ export function launchFilm(dir: string = FILM_DIR): ArticleVideoRecord | null {
     width: 1920,
     height: 1080,
     duration: FILM_DURATION,
-    uploadDate: "2026-09-30",
+    uploadDate: "2026-10-01",
   };
 }
 

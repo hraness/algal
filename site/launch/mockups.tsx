@@ -166,20 +166,20 @@ export function InstallTerminal({ theme }: Readonly<{ theme?: "light" | "dark" }
   );
 }
 
-/** What works today and what is not built yet, from site/copy.ts ADOPTION_BOUNDARY. */
+/** Responsibilities of the runtime and the application hosting it. */
 export const STATUS_ROWS: readonly (readonly [string, "yes" | "no", string])[] = [
   ["Wait for approval, then act", "yes", "one exact action per decision"],
   ["Resume after a crash", "yes", "finished steps are not redone"],
   ["Replay and check a run offline", "yes", "consistency, not identity"],
-  ["Signed, notarized packages", "no", "unsigned prerelease builds"],
+  ["Transfer a running process", "no", "resume from the same local store"],
   ["Tool permissions and OS isolation", "no", "your host app decides"],
-  ["Multi-tenant service", "no", "not built yet"],
+  ["Choose what a program may do", "no", "the host supplies its capabilities"],
 ];
 
 export function StatusCard() {
   return (
-    <div aria-label="Illustration of a status card: what ALGAL does today and what is not built yet." className="al-status" role="img">
-      <p className="al-status__title">ALGAL today</p>
+    <div aria-label="Illustration of runtime checks and responsibilities that belong to the host." className="al-status" role="img">
+      <p className="al-status__title">Runtime and host</p>
       <ul>
         {STATUS_ROWS.map(([name, state, note]) => (
           <li data-state={state} key={name}>

@@ -2,15 +2,15 @@
 title: "Introducing ALGAL"
 order: 1
 date: 2026-09-29
-updated: 2026-09-30
 description: Language and VM for agent programs that wait for approval and resume.
 eyebrow: Launch
 cardDescription: "ALGAL runs agent programs that stop for your yes, survive a crash, and replay what they did."
+updated: 2026-10-01
 ---
 
 # Introducing ALGAL
 
-{{LAUNCHSTATUS}}
+Start with a local approval task: inspect a proposed publication, approve or deny it, then replay its saved history. The built-in demo shows how an agent program can wait and recover while the host keeps control of its actions.
 
 {{LAUNCHFILM}}
 

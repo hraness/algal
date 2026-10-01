@@ -104,7 +104,7 @@ export function unlinkPending(markdown: string, pending: ReadonlySet<string> = P
 /** Hub entries: registered ALGAL relations whose "How X uses ALGAL" post is live. */
 export function algalUsesEntries(): { name: string; detail: string; url: string }[] {
   return usesPairs().flatMap(pair => {
-    const consumer = pair.source.id === "algal" ? pair.target : pair.target.id === "algal" ? pair.source : null;
+    const consumer = pair.target.id === "algal" ? pair.source : null;
     const post = consumer ? ALGAL_USES_POSTS[consumer.id] : undefined;
     return consumer && post?.live ? [{ name: consumer.name, detail: pair.relation.detail, url: post.url }] : [];
   });
@@ -176,9 +176,10 @@ export function articleDiscovery(post: BlogPost): ArticleDiscovery {
 export function renderPostArticle(post: BlogPost): string {
   const sources = BLOG_SOURCES[post.slug] ?? [];
   const related = relatedFor("algal").slice(0, 3).map(item => ({ href: item.href, name: item.name, relationship: item.relationship }));
-  const after = renderArticleSourcesHtml({ sources }) + renderArticleRelatedHtml({ items: related });
+  const after = renderArticleSourcesHtml({ sources, showDates: false }) + renderArticleRelatedHtml({ items: related });
   return renderArticleHtml({
     heading: post.title,
+    showDates: false,
     dek: post.dek,
     ...(post.eyebrow ? { eyebrow: post.eyebrow } : {}),
     author: BLOG_AUTHOR,
@@ -193,6 +194,7 @@ export function renderPostArticle(post: BlogPost): string {
 export function renderBlogIndex(posts: readonly BlogPost[]): string {
   return renderArticleIndexHtml({
     heading: "Posts",
+    showDates: false,
     headingId: "blog-posts",
     items: posts.filter(post => post.indexable).map(post => ({
       href: post.path, title: post.title, dek: post.dek, published: post.published,

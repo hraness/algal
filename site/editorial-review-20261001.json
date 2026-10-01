@@ -1,0 +1,64 @@
+{
+  "reviewer": "Codex (GPT-6), independent AI editorial review",
+  "reviewerType": "ai",
+  "reviewedOn": "2026-10-01",
+  "humanReview": null,
+  "verdict": "approved",
+  "scores": {
+    "readerUtility": 2,
+    "originalEvidence": 1,
+    "factualConfidence": 2,
+    "hostFit": 2,
+    "voiceIntegrity": 2,
+    "maintenanceValue": 2
+  },
+  "total": 11,
+  "scope": "All seven article bodies, nine launch beats, and the four resolved consumer hub entries; follow-up sentence repetition removed. Film visual and command execution checks are separate.",
+  "limits": [
+    "Historical source-check dates are preserved; this review does not claim every unchanged external URL was fetched again.",
+    "The AlphaEvolve primary-source verification is recorded in alphaevolve-source-20261001.html."
+  ],
+  "sha256": {
+    "site/blog/built-on-algal.md": "68321ad3e5a697c18438b9e2765099601e6ec9851a866795826c1b442e94b444",
+    "site/blog/introducing-algal.md": "0a07dbd7b61be0bcf292d7272c530583b3dc2ffd4ec077907443b08d8dbc015a",
+    "site/blog/programs-that-wait.md": "f3c7ee86abcbbeef8d958559fb14de32e956974cebdc7f927aa736595a15b6e2",
+    "site/blog/receipts-fossil-record.md": "cfdd354a0852cce4d742b1f21580e93fd7230c7aa861bfad924cbef93ec16bde",
+    "site/blog/self-evolving-software-selection-boundary.md": "9a470ebd04b32fd44b8b557e9093d1abdfa3bcc362523a02a7c769e911666580",
+    "site/blog/software-that-accumulates-competence.md": "899965be32fea7f75acb838a2065250f1f4ad51d6f2da0e1ade1b22ca622b304",
+    "site/blog/typescript-rust-parity.md": "f3b9fc9f3cd8195d66e8ff4bed0758421defe57b72b918e62999e67ff5d75379"
+  },
+  "filmCopyReview": {
+    "reviewer": "Codex (GPT-6), independent AI editorial review",
+    "reviewedOn": "2026-10-01",
+    "verdict": "approved",
+    "scope": "Complete copy/build/mockup delta; opening sequence repaired exactly to Save the work, then resume when the decision arrives. Visual, rendering and derived-media checks are separate.",
+    "sha256": {
+      "video/film.json": "36006d3646e21fe92a92bd64f1f513eb4c047231536914b604727bb6ee04d63a",
+      "video/build.ts": "ca56b441a62d9b640d6e6f46915f25655d165a9d4488073732f237dda91a082f",
+      "video/mockups.tsx": "1b7e87dc142519f35000bd29ce626bc1dd1f771f0716ef3eed10331abca165e8"
+    }
+  },
+  "docsReview": {
+    "reviewer": "Codex (GPT-6), independent AI editorial review",
+    "reviewedOn": "2026-10-01",
+    "verdict": "approved",
+    "scope": "Narrow public-guide diff removes unsupported novelty and internal chronology while retaining parity-versus-learning limits and concrete guide links.",
+    "sha256": {
+      "docs/lineage.md": "5c464036f7f3f084adaacceaa988130ae1f2f90e033a5d63b9a5397399d03e9f",
+      "docs/why-unique.md": "3082771eb9bfa4ca076e85c05d3d7b828cdeeeb1db3dd8ffbbc3e2e9db54568d",
+      "docs/programmable-applications.md": "fd257a1587c20d5a1c962a581b532816b688c08349632c36b08bfa622f3f11e9"
+    }
+  },
+  "integrationReview": {
+    "reviewer": "Codex (GPT-6), independent AI editorial review",
+    "reviewedOn": "2026-10-01",
+    "verdict": "approved",
+    "scope": "Renderer, date/discovery contracts, directional consumer hub, current admission metadata and preserved review history. Programs-that-wait contribution aligned to the revised same-store/authority explanation. Query-engine shared-code limit remains substantiated in parity article Limits.",
+    "sha256": {
+      "site/blog.ts": "7d8226644d4e11682fc941c6e2973c7f28d0c0e07b72881aead841337571dbff",
+      "site/blog-posts.ts": "acd9565af60541d8876d0825654c34203ec15d2d488adfc2517f621a64ac447d",
+      "site/blog.test.ts": "771574b600ede0a8370cae7150605587cec912400f5a813396095ceda18cb140",
+      "site/editorial-history-20261001.json": "8b1e58d549caef27086f213e26fa389f303f1324c4e7949e59d14c2133a7f1c2"
+    }
+  }
+}

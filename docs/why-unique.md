@@ -68,7 +68,7 @@ machinery for many single-call applications.
 
 The comparisons identify design choices, not missing capabilities in other
 products. They do not establish that an equivalent design could not be built
-on another workflow system. Sources were consulted on 2026-09-19.
+on another workflow system.
 
 ## Evidence and trust
 

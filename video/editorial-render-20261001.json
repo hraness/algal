@@ -1,0 +1,23 @@
+{
+  "engine": "SlopCamera 3.9.1",
+  "renderedOn": "2026-10-01",
+  "durationSeconds": 37.7,
+  "visualReview": "Decoded final film frames inspected at the first frame, both opening lines, title, all four demo steps, proof, runtime/host card and final frame. Square and portrait derivatives inspected. Text is readable and the corrected sentence appears in the final video and captions. The film is intentionally silent.",
+  "sourceSha256": {
+    "video/film.json": "36006d3646e21fe92a92bd64f1f513eb4c047231536914b604727bb6ee04d63a",
+    "video/build.ts": "ca56b441a62d9b640d6e6f46915f25655d165a9d4488073732f237dda91a082f",
+    "video/mockups.tsx": "1b7e87dc142519f35000bd29ce626bc1dd1f771f0716ef3eed10331abca165e8",
+    "site/launch/mockups.tsx": "2a0ae146a51ca8c621526271f56574b06a95c8f0d61c7cf335f2ef8800849e24",
+    "site/launch/beats.ts": "a4acf8d4abe0b0ba16da748aaf36b118266a64aee621bb15237fc45eaa90e3a4"
+  },
+  "assetSha256": {
+    "site/launch/film/launch.mp4": "fc7f955fec4d415792bfe8bb4880b42f0106c491df859fc3a740a910157327b4",
+    "site/launch/film/launch.webm": "a017c4c442538bb3a67b2603567ade3c133dfd58c47ada66c888205ea9deda1e",
+    "site/launch/film/launch-poster.jpg": "5aed7158300f0483d68083fb3f2e2c21db3318f98f9179ef293e82cda81b50f7",
+    "site/launch/film/launch-1x1.mp4": "494a0c2b7f37271d7c2cb5f52c96485a717afc0efce86085bc92e758e71c86d8",
+    "site/launch/film/launch-9x16.mp4": "1a0131e94e50551b47e06e09773402362fc0c059fe199ffea8f9329d2e40ba83",
+    "site/launch/film/launch.vtt": "2c3e65a8885450ab9269040e2b8ff925b01b30ace36d52284a700127e3fe1255"
+  },
+  "deliveryWithinBudget": true,
+  "previousAttempt": "A render containing the previous opening sentence was cancelled cleanly before publication; its cancelled operation record is preserved separately."
+}

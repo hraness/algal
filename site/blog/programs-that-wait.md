@@ -2,29 +2,29 @@
 title: "A program that can wait"
 order: 3
 date: 2026-09-22
-updated: 2026-09-28
 description: An ALGAL program can wait days for an approval, then resume in a new process or the other runtime, because the wait is saved as data in the store.
 eyebrow: Technique
 cardDescription: "It waits days for an approval, then resumes."
+updated: 2026-10-01
 ---
 
 # A program that can wait
 
-Agent work spends most of its life waiting. An approval takes a day, a dependency takes a week, and the person who has to answer goes on holiday. A design that keeps a process alive for all of that will eventually lose the process.
+Agent programs often wait on external events: an approval, a dependency or a reply. The wait may outlast the process that started it. Saving enough state to resume makes that wait independent of one process staying alive.
 
-ALGAL handles the wait by saving it. An ALGAL program, called an organism, is typed data rather than code, so a paused program is a checkpoint in a store. Any later process on the machine that holds the store can check the checkpoint and continue, including a process running the other ALGAL runtime.
+ALGAL handles the wait by saving it. An ALGAL program, called an organism, has a typed manifest. The runtime saves its progress as a checkpoint in a store. A later process can check the checkpoint and continue when it has the same local store and required host capabilities. It can even use the other ALGAL runtime.
 
-## How durable execution engines wait
+## What must survive a restart
 
-Durable execution engines such as [Temporal](https://temporal.io/), Restate, Inngest, and DBOS solved waiting years ago, and they share a design. Workflow code runs under a deterministic replay model, the engine keeps the event history, and signals wake sleeping work.
+Consider a release review that waits for someone to answer. Saving only the prompt leaves the next process guessing: which release was reviewed, which model answer was accepted, and which approval should wake the work?
 
-That design works, and it depends on a server. The history lives in the service, the code lives in your deployment, and the running system is the two together. A Temporal workflow is code, so the worker that replays it must run code that matches the recorded history, and that history lives in the service that ran it. You can export a history and replay it in a test with the SDK's replayer, but only against the workflow code that produced it. The arrangement is sound, and the history serves the system that produced it.
+The restart needs the program's identity, its completed effects and the permission to receive the answer. Keeping those as checked data lets a later process reconstruct the completed work before it continues. It also makes a duplicate or unrelated answer something the program can reject explicitly.
 
 ## A saved wait can resume in a new process or the other runtime
 
-A waiting ALGAL program is not a paused thread or a suspended coroutine. It is a checkpoint made of three things in the store: the manifest's digest, the effects the run has recorded so far, and the wake permission the host granted it. The process that created the checkpoint can exit. Days later, any process on the machine that holds the store can verify the checkpoint and continue: a fresh CLI invocation, a host application restarted after a crash, or the other runtime. Moving a waiting process to another machine is not built yet.
+A waiting ALGAL program is not a paused thread or a suspended coroutine. It is a checkpoint made of three things in the store: the manifest's digest, the effects the run has recorded so far, and the wake permission the host granted it. The process that created the checkpoint can exit. Days later, a process with that store and the required capabilities can verify the checkpoint and continue: a fresh CLI invocation, a host application restarted after a crash, or the other runtime. Copying a receipt does not transfer the saved process, its store or its host permissions to another machine.
 
-That last case is the unusual one. A run can start in the TypeScript reference runtime, which runs on Bun, and resume in the Rust runtime, using the same manifest, store, and receipts. Neither runtime ever held the program as code, so either one can serve the next invocation. The handoff follows from the program being data. [How ALGAL keeps its TypeScript and Rust in step](/blog/typescript-rust-parity/) describes the parity tests that check both runtimes agree, and the program shapes those tests leave uncompared.
+That last case is the unusual one. A run can start in the TypeScript reference runtime, which runs on Bun, and resume in the Rust runtime, using the same manifest, store, and receipts. The manifest and checkpoint identify the work without preserving a live language-level continuation. Either runtime can reconstruct that state for the next invocation. [Comparing runtimes with differential tests](/blog/typescript-rust-parity/) describes the parity tests that check both runtimes agree, and the program shapes those tests leave uncompared.
 
 ## A program wakes with only the permission it was given
 
@@ -38,8 +38,8 @@ The [durable approval](/tour/) example on the tour shows the pattern. A model re
 
 Each resumed generation keeps the earlier generation's effects as an exact prefix, so the final [receipt](/blog/receipts-fossil-record/) holds the recommendation, the wait, the approval, and the publication, and it replays offline.
 
-## What you give up
+## Who keeps the work running
 
-Durable execution engines are mature, with clustering, retries at scale, very long waits, and tooling for operating them in production. ALGAL is one binary and a store. You get durable waits without running a service, and in exchange you run the binary and keep the store yourself. [ALGAL vs Temporal](/compare/temporal/) covers when each is the better fit.
+ALGAL gives the host a saved wait it can verify and resume. You still have to keep the store, run the process again and supply the capabilities it needs. A checkpoint does not schedule its own wake-up or operate a service for you.
 
-In return, a wait is a file-backed record that a new process, or the other runtime, can resume, and its receipt verifies offline wherever you copy it. No server has to remember the program, because the wait is part of the program's own data.
+Choose a managed workflow service when you need that service's operations and deployment model. Choose a local ALGAL process when the host should own the store and execution. [ALGAL vs Temporal](/compare/temporal/) compares those responsibilities in more detail.

@@ -10,8 +10,8 @@
     "promise": "Write agent programs that wait, resume, and replay.",
     "url": "algal.computer",
     "open": [
-      "Most agent programs run start to finish.",
-      "When one acts wrongly, you find out after."
+      "A program can wait before it acts.",
+      "Save the work, then resume when the decision arrives."
     ],
     "steps": [
       {
@@ -52,11 +52,11 @@
       "items": []
     },
     "limits": {
-      "heading": "What it does not do yet",
-      "body": "Packages are unsigned. Your own app still decides which tools a program may use."
+      "heading": "Runtime and host",
+      "body": "Keep the local store to resume a run. Your app chooses the tools and permissions a program receives."
     },
     "end": {
-      "line": ""
+      "line": "Free and open source."
     }
   },
   "productCss": [

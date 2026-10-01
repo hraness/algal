@@ -2,15 +2,14 @@
 
 ALGAL belongs to a tradition of computing as a medium you can reshape from
 within, rather than a set of finished applications you operate. Lisp, Emacs,
-Smalltalk, and Urbit approach that idea from different directions. ALGAL adds
-a question none of them asked: what happens when generating, evaluating, and
-retaining new procedures becomes part of the environment, with an AI as a
-disciplined participant.
+Smalltalk, and Urbit approach that idea from different directions. ALGAL
+explores how generating, evaluating, and retaining new procedures can become
+part of such an environment, with an AI proposing changes that the host
+evaluates before use.
 
 This page is a reference for that lineage and for the research results the
 [vision](vision.md) depends on. The resemblances are convergent, not a claim
-that ALGAL's design was derived from each source. Sources were consulted on
-2026-09-23 and 2026-09-24.
+that ALGAL's design was derived from each source.
 
 ## Four traditions and one addition
 
