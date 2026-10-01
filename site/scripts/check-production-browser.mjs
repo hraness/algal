@@ -184,6 +184,23 @@ try {
       await page.locator('header a[href="/#install"]').first().click();
       await page.waitForURL(origin + '/#install');
       assert.ok(await page.locator('#install').evaluate(element => element.getBoundingClientRect().top >= document.querySelector('header').getBoundingClientRect().bottom - 1), 'Install section clears the sticky header');
+      const macTab = page.locator('#algal-install-tab-macos');
+      const linuxTab = page.locator('#algal-install-tab-linux');
+      await macTab.click();
+      const selectedClass = await macTab.getAttribute('class');
+      const idleClass = await linuxTab.getAttribute('class');
+      assert.notEqual(selectedClass, idleClass, 'Install tabs expose distinct selected styles');
+      const selectedPaint = await macTab.evaluate(element => getComputedStyle(element).backgroundColor);
+      await linuxTab.click();
+      assert.equal(await linuxTab.getAttribute('class'), selectedClass, 'Linux receives the selected SSR styles');
+      assert.equal(await macTab.getAttribute('class'), idleClass, 'macOS loses the selected SSR styles');
+      assert.equal(await linuxTab.getAttribute('aria-selected'), 'true');
+      assert.equal(await linuxTab.evaluate(element => getComputedStyle(element).backgroundColor), selectedPaint);
+      await linuxTab.press('Home');
+      assert.equal(await macTab.getAttribute('class'), selectedClass, 'Keyboard selection updates visible styles');
+      assert.equal(await linuxTab.getAttribute('class'), idleClass);
+      assert.equal(await macTab.evaluate(element => document.activeElement === element), true);
+
     } catch (error) {
       if (page && !page.isClosed()) await page.screenshot({ path: resolve(artifacts, 'failure.png'), }).catch(() => {});
       throw error;

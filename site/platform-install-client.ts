@@ -36,6 +36,10 @@ export function enhancePlatformInstalls(root: ParentNode = document): void {
     const tabs = [...block.querySelectorAll<HTMLButtonElement>("[role=tab]")];
     const panels = [...block.querySelectorAll<HTMLElement>("[role=tabpanel]")];
     if (tablist === null || status === null || tabs.length === 0 || tabs.length !== panels.length) continue;
+    // StyleX encodes selected appearance in classes, so preserve both SSR states
+    // before OS detection or a visitor changes the selected platform.
+    const selectedClass = tabs.find(tab => tab.getAttribute("aria-selected") === "true")?.className;
+    const idleClass = tabs.find(tab => tab.getAttribute("aria-selected") !== "true")?.className;
     const ids = tabs.map(tab => tab.dataset.platform ?? "");
     let chosen = false;
     const select = (id: string, source: "default" | "detected" | "chosen", focus: boolean) => {
@@ -45,6 +49,8 @@ export function enhancePlatformInstalls(root: ParentNode = document): void {
         const selected = tab.dataset.platform === id;
         tab.setAttribute("aria-selected", String(selected));
         tab.tabIndex = selected ? 0 : -1;
+        const stateClass = selected ? selectedClass : idleClass;
+        if (stateClass !== undefined) tab.className = stateClass;
         if (selected && focus) tab.focus();
       }
       for (const panel of panels) panel.hidden = panel.dataset.platform !== id;
