@@ -83,7 +83,7 @@ const COMMAND_FAMILIES: ReadonlySet<string> = new Set([
   "shepherd", "inspect", "runs", "observe", "digest", "diff", "store",
   "manifests", "manifest", "slots", "slot", "mailbox", "pack", "unpack",
   "application", "library", "experiment", "suite", "index", "search",
-  "auth", "doctor", "foundry", "bench",
+  "auth", "doctor", "foundry", "bench", "task", "call", "tool-def", "tail", "db",
 ]);
 
 /** Unknown arguments never become telemetry, even when they look like words. */
