@@ -5,7 +5,7 @@ import { telemetryCommandFamily } from "./telemetry";
 describe("aggregate command telemetry", () => {
   test("covers the current CLI's top-level dispatch without accepting subcommands", () => {
     const cli = readFileSync(new URL("../cli.ts", import.meta.url), "utf8").split("async function main(): Promise<number> {")[1]!;
-    const commands = [...cli.matchAll(/^    case "([a-z-]+)":/gmu)].map(match => match[1]!);
+    const commands = [...cli.matchAll(/^ {4}case "([a-z-]+)":/gmu)].map(match => match[1]!);
     expect(commands.length).toBeGreaterThan(30);
     for (const command of [...commands, "task"]) {
       expect(telemetryCommandFamily([command])).toBe(command);
