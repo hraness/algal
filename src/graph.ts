@@ -18,6 +18,7 @@ import { unpackBundle } from "./bundle";
 import type { Transport } from "./transport-contract";
 import type { ToolRegistry } from "./tools";
 import { canonicalBytes, type JsonValue } from "./values";
+import { LOCAL_AGENT_CONTEXT_TOOL, localAgentContextTools } from "./agent-context-runtime";
 
 export type CellPorts = { inputs: PortMap; outputs: PortMap };
 
@@ -388,7 +389,8 @@ export async function compileOrganism(
   transports?: Record<string, Transport>,
   tools?: ToolRegistry,
 ): Promise<CompiledOrganism> {
-  return compileWithBudget(manifest, fns, store, depth, transports, tools, { instances: 0, cells: 0, edges: 0, bytes: 0 });
+  if (fns.has(LOCAL_AGENT_CONTEXT_TOOL)) throw new AlgalError("CAPABILITY_DENIED", "local context tool name is reserved by the runtime");
+  return compileWithBudget(manifest, fns, store, depth, transports, localAgentContextTools(tools), { instances: 0, cells: 0, edges: 0, bytes: 0 });
 }
 
 async function compileWithBudget(

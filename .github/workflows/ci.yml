@@ -409,6 +409,7 @@ jobs:
       - name: Restore the debug binary built by the native job
         run: mkdir -p target/debug && tar -C target/debug -xf "$RUNNER_TEMP/algal-debug.tar" && target/debug/algal --version
       - run: bun scripts/native-parity.ts
+      - run: bun scripts/agent-local-context-parity.ts
       - run: bun scripts/process-parity.ts
       - run: bun scripts/store-parity.ts
       - run: bun scripts/cli-parity.ts

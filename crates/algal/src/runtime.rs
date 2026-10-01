@@ -2,7 +2,7 @@ use crate::{
     Error, Result,
     canonical::{canonical, digest},
     contract::{Budgets, Manifest, Ports, bind_output, check_value, labels, object},
-    effects::{Backend, Host, ToolBackend},
+    effects::{Backend, Host, Tool, ToolBackend},
     graph::{Compiled, Transports, compile, interface_args},
     registry,
     store::Store,
@@ -80,6 +80,15 @@ struct BoundedEffect<'a> {
     attempts: u64,
     context_bytes: usize,
     max_output: usize,
+}
+
+struct ToolRequest<'a> {
+    name: &'a str,
+    inputs: &'a Value,
+    request_path: &'a str,
+    event_path: &'a str,
+    timeout: u64,
+    local: Option<&'a Tool>,
 }
 
 struct Runtime<'a> {
@@ -436,20 +445,27 @@ impl Runtime<'_> {
         Ok(self.inner_outputs(compiled, path))
     }
 
-    async fn tool(
-        &mut self,
-        name: &str,
-        inputs: &Value,
-        request_path: &str,
-        event_path: &str,
-        timeout: u64,
-    ) -> Result<(Value, String)> {
-        let tool = self
-            .host
-            .tools
-            .get(name)
-            .cloned()
-            .ok_or_else(|| Error::new("TOOL_UNKNOWN", "tool not configured"))?;
+    async fn tool(&mut self, request: ToolRequest<'_>) -> Result<(Value, String)> {
+        let ToolRequest {
+            name,
+            inputs,
+            request_path,
+            event_path,
+            timeout,
+            local,
+        } = request;
+        let tool = if name == crate::agent_context_runtime::TOOL {
+            match local {
+                Some(tool) => tool.clone(),
+                None => crate::agent_context_runtime::declaration()?,
+            }
+        } else {
+            self.host
+                .tools
+                .get(name)
+                .cloned()
+                .ok_or_else(|| Error::new("TOOL_UNKNOWN", "tool not configured"))?
+        };
         let request_digest = digest(
             &json!({"contract":"algal.tool-effect.v1","path":request_path,"tool":name,"effect":tool.effect,"inputs":inputs}),
         )?;
@@ -501,6 +517,7 @@ impl Runtime<'_> {
             Some(receipt) => receipt,
             None => {
                 let result = match &tool.backend {
+                    ToolBackend::LocalAgentContext(reference) => crate::agent_context_runtime::query(self.store, reference.as_ref(), inputs),
                     ToolBackend::EvidenceDenied(activated) => {
                         activated.store(true, std::sync::atomic::Ordering::Relaxed);
                         Err(Error::new("VERIFY_FAILED", "portable evidence cannot activate tools"))
@@ -821,13 +838,14 @@ impl Runtime<'_> {
             "tool" => {
                 let timeout = cell["budget"]["maxEffectMs"].as_u64().unwrap_or(30_000);
                 let (output, effect) = self
-                    .tool(
-                        cell["tool"].as_str().unwrap(),
+                    .tool(ToolRequest {
+                        name: cell["tool"].as_str().unwrap(),
                         inputs,
-                        cell_path,
-                        cell_path,
+                        request_path: cell_path,
+                        event_path: cell_path,
                         timeout,
-                    )
+                        local: None,
+                    })
                     .await?;
                 Ok(json!({"outputs":output,"effectDigest":effect}))
             }
@@ -1216,6 +1234,8 @@ impl Runtime<'_> {
             cell_view.insert(target.to_owned(), value);
         }
         let mut log: Vec<Value> = Vec::new();
+        let mut exact_log: Vec<Value> = Vec::new();
+        let local_context = tools.contains(&crate::agent_context_runtime::TOOL);
         for turn in 0..max_turns {
             // recorded tool-log compaction: over-threshold logs are triaged
             // by a decide effect (keep = noul >= 0.5). The effect rides the
@@ -1324,6 +1344,20 @@ impl Runtime<'_> {
             if !log.is_empty() {
                 context["toolLog"] = json!(log);
             }
+            let local = if local_context {
+                let local = crate::agent_context_runtime::prepare(
+                    self.store,
+                    cell["prompt"].as_str().unwrap_or(""),
+                    &json!(view_inputs),
+                    (!cell_view.is_empty()).then_some(&json!(cell_view)),
+                    &exact_log,
+                    self.budgets.max_work.saturating_sub(self.work),
+                )?;
+                self.work += local.work;
+                Some(local)
+            } else {
+                None
+            };
             if cell["kind"] == "agent" && cell["compact"]["mode"] == "elide" {
                 context =
                     crate::context::elide_tool_context(&context, &cell["compact"], max_context)?;
@@ -1335,6 +1369,9 @@ impl Runtime<'_> {
                 )));
             }
             let mut request = json!({"contract":"algal.effect.v1","cellId":name,"kind":cell["kind"],"prompt":cell.get("prompt").cloned().unwrap_or(json!("")),"context":context,"output":output_contract,"budget":{"maxContextBytes":max_context,"maxOutputBytes":max_output}});
+            if let Some(local) = &local {
+                request["prompt"] = json!(local.prompt);
+            }
             if let Some(route) = cell.get("route") {
                 request["route"] = route.clone();
             }
@@ -1427,9 +1464,19 @@ impl Runtime<'_> {
             let function = registry::signature(tool).ok();
             let signature = function
                 .clone()
+                .or_else(|| {
+                    local
+                        .as_ref()
+                        .filter(|_| tool == crate::agent_context_runtime::TOOL)
+                        .map(|local| local.tool.signature.clone())
+                })
                 .or_else(|| self.host.tools.get(tool).map(|t| t.signature.clone()))
                 .ok_or_else(|| Error::new("TOOL_UNKNOWN", "agent tool is not configured"))?;
-            for name in object(&call["inputs"])?.keys() {
+            let mut input_names: Vec<_> = object(&call["inputs"])?.keys().collect();
+            if tool == crate::agent_context_runtime::TOOL {
+                input_names.sort_by(|left, right| left.encode_utf16().cmp(right.encode_utf16()));
+            }
+            for name in input_names {
                 if !signature.inputs.contains_key(name) {
                     return Err(Error::new(
                         "TYPE_MISMATCH",
@@ -1441,6 +1488,14 @@ impl Runtime<'_> {
                 if let Some(value) = call["inputs"].get(port) {
                     check_value(decl, value)?;
                 } else if decl["optional"] != true {
+                    if tool == crate::agent_context_runtime::TOOL {
+                        return Err(Error::new(
+                            "EFFECT_FAILED",
+                            format!(
+                                "cell \"{name}\" tool call to {tool} missing required input \"{port}\""
+                            ),
+                        ));
+                    }
                     return Err(Error::new("EFFECT_FAILED", "tool missing required input"));
                 }
             }
@@ -1450,18 +1505,26 @@ impl Runtime<'_> {
                 self.work += extra;
                 value
             } else {
-                self.tool(
-                    tool,
-                    &call["inputs"],
-                    &format!("{cell_path}/t{turn}"),
-                    cell_path,
+                self.tool(ToolRequest {
+                    name: tool,
+                    inputs: &call["inputs"],
+                    request_path: &format!("{cell_path}/t{turn}"),
+                    event_path: cell_path,
                     timeout,
-                )
+                    local: local
+                        .as_ref()
+                        .filter(|_| tool == crate::agent_context_runtime::TOOL)
+                        .map(|local| &local.tool),
+                })
                 .await?
                 .0
             };
             check_outputs(&signature.outputs, &output, name)?;
-            log.push(json!({"fn":tool,"inputs":call["inputs"],"output":output}));
+            let logged = json!({"fn":tool,"inputs":call["inputs"],"output":output});
+            if local_context {
+                exact_log.push(logged.clone());
+            }
+            log.push(logged);
         }
         Err(Error::limit(format!(
             "cell \"{name}\" produced no final output within maxTurns {max_turns}"
@@ -1477,6 +1540,7 @@ pub async fn run(
     transports: &Transports,
     replay: Option<&Value>,
 ) -> Result<Value> {
+    crate::agent_context_runtime::validate_host(host)?;
     object(&args)?;
     if canonical(&args)?.len() > 1_048_576 {
         return Err(Error::limit("run argument bytes"));

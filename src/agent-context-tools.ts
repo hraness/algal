@@ -20,24 +20,31 @@ export type AgentContextQuery =
   | { op: "slice"; index: number; startByte: number; endByte: number }
   | { op: "search"; query: string; maxResults?: number; maxScanBytes?: number };
 
-export function parseAgentContextQuery(value: unknown): AgentContextQuery {
+export function parseAgentContextQuery(value: unknown, canonicalOrder = false): AgentContextQuery {
   const raw = asObject(boundedJsonSnapshot(value, {
     maxBytes: 8192, maxDepth: 2, maxNodes: 16, maxEntries: 8, maxStringBytes: 4096,
+    sortObjectKeys: canonicalOrder,
   }, "agent context query"), "agent context query");
+  const queryKeys = (allowed: readonly string[], label: string): void => {
+    if (!canonicalOrder) return noUnknownKeys(raw, allowed, label);
+    // Object.keys reorders integer-like names even after sorted insertion.
+    const unknown = Object.keys(raw).sort().find(key => !allowed.includes(key));
+    if (unknown !== undefined) throw new AlgalError("PARSE_FAILED", `${label} has unknown key "${unknown}"`);
+  };
   switch (raw.op) {
     case "inspect":
-      noUnknownKeys(raw, ["op", "offset", "limit"], "context inspect");
+      queryKeys(["op", "offset", "limit"], "context inspect");
       return { op: raw.op, offset: asInt(raw.offset ?? 0, "context offset", 0, 1024), limit: asInt(raw.limit ?? 16, "context limit", 1, 64) };
     case "read":
-      noUnknownKeys(raw, ["op", "index"], "context read");
+      queryKeys(["op", "index"], "context read");
       return { op: raw.op, index: asInt(raw.index, "context index", 0, 1023) };
     case "slice":
-      noUnknownKeys(raw, ["op", "index", "startByte", "endByte"], "context slice");
+      queryKeys(["op", "index", "startByte", "endByte"], "context slice");
       return { op: raw.op, index: asInt(raw.index, "context index", 0, 1023),
         startByte: asInt(raw.startByte, "context startByte", 0, 1_048_576),
         endByte: asInt(raw.endByte, "context endByte", 0, 1_048_576) };
     case "search": {
-      noUnknownKeys(raw, ["op", "query", "maxResults", "maxScanBytes"], "context search");
+      queryKeys(["op", "query", "maxResults", "maxScanBytes"], "context search");
       const query = asString(raw.query, "context search query", 1024);
       if (query.length === 0) throw new AlgalError("PARSE_FAILED", "context search query must not be empty");
       return { op: raw.op, query,
@@ -51,8 +58,8 @@ export function parseAgentContextQuery(value: unknown): AgentContextQuery {
 
 /** A bridge for a provider's own tool interface. It uses the same parser and
  * reader as the ALGAL registry; no provider credentials or SDK are required. */
-export async function queryAgentContext(reader: AgentContextReader, input: unknown): Promise<JsonValue> {
-  const query = parseAgentContextQuery(input);
+export async function queryAgentContext(reader: AgentContextReader, input: unknown, canonicalOrder = false): Promise<JsonValue> {
+  const query = parseAgentContextQuery(input, canonicalOrder);
   let result: unknown;
   switch (query.op) {
     case "inspect": {

@@ -86,6 +86,7 @@ pub fn evidence_host(raw: &Value) -> Result<Host> {
             },
         );
     }
+    crate::agent_context_runtime::validate_host(&host)?;
     Ok(host)
 }
 
