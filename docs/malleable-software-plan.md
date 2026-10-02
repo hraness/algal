@@ -4,6 +4,12 @@ Research and proposed architecture, 2026-09-23. This records the design before i
 
 **Recommendation.** Make an ALGAL application a durable, inspectable combination of behavior, state, knowledge, presentation, and change policy. Give humans and models the same structured ways to propose changes. Keep a small trusted host responsible for executing effects, rendering, and admitting revisions. Use Elm's interaction model, investigate Dioxus as a renderer, and preserve independent terminal and platform-specific renderers.
 
+This application is the first concrete habitat surface for the wider ALGAL
+North Star. It gives people and agents a place where procedures, state,
+knowledge, presentation and change policy can accumulate under one captured
+authority. It is not the whole ecology: later work must test composition across
+roles, retained alternatives, replacement and federation between habitats.
+
 The user selected an evolving component embedded in an existing marketing site as the first end-to-end demonstration. Begin in a preview of that site. A small local/native and terminal conformance example should accompany the early UI work so portability is tested before the design becomes web-specific.
 
 **The previous strategy should remain inactive.** Its proposal exceeded the admission bound, and the measured treatment scored 5/8 against the incumbent's 6/8. Eight synthetic cases establish neither a general Datalog benefit nor a reliable general deficit. They do show why proposal validity, execution evidence, and quality evidence must remain separate. Retain that experiment unchanged; design new experiments for new hypotheses. [Recorded result](https://github.com/hraness/algal/blob/353a5cac4ea2b2ae40e00bf9c2805606265a5378/docs/application-research-results-2026-09-23.json)
@@ -25,6 +31,21 @@ There are three different kinds of change:
 | Evolution | Replace the layout rule or introduce a new workflow | New application revision, compatibility checks, evaluation and activation |
 
 This distinction prevents every responsive behavior from becoming a model call or a program upgrade.
+
+### Relationship to the broader North Star
+
+The application lifecycle supplies the single-habitat layer of the ecology
+roadmap. A component or application can become a durable local capability when
+its behavior has an identity, its state and evidence are captured together,
+and its revisions pass compatibility and activation policy. Multiple such
+capabilities can later form an ecology through typed composition and bounded
+coordination. Habitat Link then provides a separate path for exchanging
+evidence-bearing procedures between governed environments.
+
+The current application work should therefore be judged by preservation of
+identity, data, explainability and user control. It does not claim that a
+browser-local application has learned a general procedure, that an online
+optimizer has improved live traffic, or that a federation is already trusted.
 
 ## 2. Existing foundations and actual gaps
 
@@ -209,6 +230,12 @@ The control surface must remain usable when the application under inspection is 
 | G. Richer evolution | Schema/workflow changes, collaborative forks, domain widget kits and optional browser-local core | Migration and compatibility proofs across retained data, explicit conflict policies, lifecycle conformance and a second materially different application |
 
 These are dependency gates rather than calendar estimates. Local and TUI feasibility belongs in Stage A; the polished product in Stage F should not be the first portability test. Stages B–D can use a local/reference host while cloud alignment proceeds toward Stage E. Stage C and cloud alignment can proceed in parallel after their shared contracts stabilize. Keep one owner for shared contracts and integration, with separate renderer, hosting/signals and evaluation/workbench lanes.
+
+Stages A–G are the current application and habitat proof path. The next ecology
+round begins only after the relevant join evidence is complete: first a
+single-habitat cumulative-construction comparison, then a two-habitat handoff
+with local evidence verification. These later rounds must count search,
+evaluation, execution, maintenance and human correction costs together.
 
 The smallest credible first experience is a marketing hero/FAQ component that a person can inspect and edit live, that reacts to one admitted domain signal, and that can preview one model-generated revision without replacing the live site. A tiny local task-triage application using the same semantic widgets pressure-tests forms, persistent user state and terminal presentation. These demonstrate malleability before claiming autonomous improvement.
 

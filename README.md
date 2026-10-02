@@ -6,6 +6,11 @@ ALGAL is a programming language and VM for AI agent programs. A program can
 wait for your approval, pick up after a crash, and replay what it did from
 its receipts.
 
+The long-term direction is a substrate where these programs become durable,
+composable capabilities inside governed agent ecologies. The [vision](docs/vision.md)
+and [North Star plan](docs/north-star.md) describe that direction and the
+evidence required to earn it.
+
 Use it when an AI-assisted task needs to wait for a person, survive a CLI
 restart, reuse completed work, or explain what happened without calling the
 model again. Your host application chooses the tools and permissions; the

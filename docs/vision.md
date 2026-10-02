@@ -1,6 +1,8 @@
 # Software that accumulates competence
 
-> **Runtime north star:** ALGAL is a portable, evidence-carrying actor runtime for evolving software habitats. See [the detailed north-star plan](north-star.md) for the measurable language, runtime, cloud and consumer roadmap.
+> **North Star:** ALGAL makes useful intelligence accumulate as durable, inspectable, composable capability in the environments where work happens.
+>
+> **Runtime direction:** ALGAL is a portable, evidence-carrying actor runtime for evolving software habitats. See [the detailed north-star plan](north-star.md) for the measurable language, runtime, cloud and consumer roadmap.
 
 ALGAL is built on one bet: a computer can accumulate tested ways of acting,
 not only produce new answers or new code. A model proposes a bounded,
@@ -13,6 +15,29 @@ This page states that bet, names the mechanisms in ALGAL that make it
 testable, describes what it could make possible, and says what evidence would
 be needed before anyone calls it proven. The
 [lineage page](lineage.md) places the idea among the systems it resembles.
+
+## From organisms to ecologies
+
+An ALGAL **organism** is a bounded, typed, content-addressed executable
+procedure. An **agent** is a durable process using organisms, memory, tools and
+judgment. A **habitat** is the governed environment that stores, schedules,
+evaluates and permits those processes. An **ecology** is a population of agents
+and organisms that coordinate, reuse procedures, retain evidence and change
+under policy. A **civilization** is a federation of habitats connected by
+explicit trust, capability and evidence protocols.
+
+This hierarchy gives the larger thesis a concrete shape. A model can propose a
+procedure, but the habitat decides what may run, what evidence is retained and
+which revision can become active. An ecology becomes useful when it preserves
+capability across tasks, agents and model replacements. A civilization extends
+that continuity across separately governed habitats; it is not a shared mutable
+runtime or a global process registry.
+
+The hierarchy is a direction for the project, not a claim that ALGAL has already
+demonstrated an established ecology. Current work proves pieces of the habitat
+and application machinery. The cumulative-skill experiment remains the test of
+whether retaining and composing procedures improves later work under comparable
+models, tools and total budgets.
 
 ## Two models of software
 
@@ -191,6 +216,14 @@ retained, and governed. Human engineering does not disappear. More of its
 effort moves toward defining interfaces, constraints, evaluators, and the
 conditions for accepting change.
 
+An established ecology would add continuity around those procedures. It would
+have durable institutional memory, stable role and interface conventions,
+portable capabilities with evidence, recovery when an agent or model is
+replaced, and clear ways for people to inspect, pause, revoke and revise its
+behavior. The useful question is not how many agents it contains, but whether
+coordination leaves the environment more capable at later work without making
+authority or failure opaque.
+
 ## What would justify the claim
 
 A demo in which a program generates another program is too weak. The
@@ -240,6 +273,13 @@ Three failure modes deserve specific investigation:
 A compelling result would read: under a fixed model and a controlled budget,
 retaining and composing earlier procedures measurably improves performance on
 later unseen tasks, and the improvement survives independent evaluation.
+
+An ecology-level result would need additional evidence: retained procedures
+must transfer between related contexts, compose into later capabilities, survive
+agent or model replacement, and reduce repeated work or human correction after
+the cost of search, evaluation and maintenance is counted. Federation adds a
+separate gate: a receiving habitat must verify provenance and evidence locally
+before it grants a transferred procedure any authority.
 
 ## Status and limits
 

@@ -12,7 +12,7 @@ mechanisms and the still-open cumulative-skill hypothesis.
 ## Executive summary
 
 ALGAL should become **a portable, evidence-carrying actor runtime for evolving
-software habitats**.
+software habitats and established agent ecologies**.
 
 The BEAM analogy is useful at the runtime boundary. ALGAL should borrow
 lightweight processes, mailboxes, supervision, failure isolation, scheduling,
@@ -48,6 +48,15 @@ a small actor/event laboratory that demonstrates the same behavior in the Bun
 reference runtime, the Rust kernel and a hosted habitat, with exact traces and
 measured authoring and execution costs.
 
+The long-term unit of progress is an ecology, not an agent count. An organism
+is a bounded executable procedure; an agent is a durable process using one or
+more organisms; a habitat supplies storage, scheduling, capabilities, evidence
+and permission; an ecology is the population of organisms and processes that
+coordinate and improve inside that habitat; and a civilization is a federation
+of separately governed habitats. The runtime plan proves the substrate one
+layer at a time. It does not claim that current demos establish cumulative
+general intelligence.
+
 ## What ALGAL is and is not
 
 ALGAL is a language, portable execution contract, durable process runtime and
@@ -71,6 +80,11 @@ inbound event -> fast loop -> agent.request -> durable process -> typed result -
 ```
 
 An agent is a slow effect selected by the program. It is not the actor runtime.
+
+The same boundary applies at ecology scale. An ecology may contain many agents,
+but its continuity comes from shared contracts, retained evidence, scoped
+memory, role interfaces, supervision and explicit activation policy. More
+processes do not by themselves constitute a more capable ecology.
 
 ## Design principles
 
@@ -407,6 +421,24 @@ or network effects.
 These are local engineering targets. They are not hosted SLOs until qualified by
 `algal-cloud` under its own capacity and failure gates.
 
+## Ecology progression
+
+The runtime scorecard is the first layer of a longer progression. Each layer
+has a separate proof obligation; completing a lower layer does not establish
+the next one.
+
+| Horizon | Goal | Entry and exit evidence |
+| --- | --- | --- |
+| Habitat substrate | Durable organisms, processes, effects, receipts, revision and activation policy | Existing contract, parity, replay and recovery evidence; current demos remain mechanism evidence |
+| Single-habitat ecology | Reusable roles, procedure composition, retained alternatives, shared scoped memory and population-level budgets | Held-out cumulative-construction result under equal total resources, plus replacement and recovery fixtures |
+| Federated habitats | Durable messages and invocations, signed grants, local evaluation, evidence exchange and explicit revocation | Two habitats complete a typed handoff, offline receipt verification and receiving-side promotion decision |
+| Established ecologies | Institutional continuity, portable practices, resilient replacement, human inspection and measurable reduction in repeated work | Longitudinal workload evidence that includes maintenance, correction, evaluation and governance costs |
+
+The current language and actor/event plan primarily addresses the habitat
+substrate. The consumer, lab and Habitat Link lanes provide the path toward the
+next two horizons. The final horizon remains a research program, not a shipped
+capability claim.
+
 ### Evidence and safety targets
 
 - 100% of fast-loop programs compile without provider credentials.
@@ -707,6 +739,16 @@ Deliverables:
 
 Exit gate: a procedure can run locally, suspend on provider work, resume and
 verify offline without copying provider credentials into ALGAL.
+
+For bounded development inference, use the private Oh memory-lab transport
+described in [inference development](inference-development.md). Its direct API
+profile uses `VERTEX_API_KEY` or `GEMINI_API_KEY` for Gemini and `XAI_API_KEY`
+for xAI, with one explicit budget ledger shared by qualification, readers and
+judges. The profile contains environment-variable names and private input
+paths, never credential values. Future ALGAL agents must use the transport's
+freeze, reservation, no-retry and uncertain-outcome rules; a documentation or
+architecture change does not authorize a live call. Consumer pilots continue
+to use XCB or Ghostget for provider subscription and credential custody.
 
 ### P11: lab and evolution integration
 

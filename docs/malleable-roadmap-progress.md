@@ -12,8 +12,10 @@ live conversion improvement. Missing provider measurements remain unknown.
 The earlier rejected strategy stays inactive.
 
 The subsequent browser-local continuation now advances the work deferred by
-stage G. Its north star is a self-evolving application that can reopen and work
-entirely inside the browser, with optional WebGPU inference. See
+stage G. Its near-term objective is a bounded self-evolving application that
+can reopen and work entirely inside the browser, with optional WebGPU
+inference. This is the application-level proof of the wider ALGAL North Star:
+useful capability should accumulate inside a durable, inspectable habitat. See
 [the browser workspace](browser-grow.md) for its deliberately bounded first
 application and separate persistence, offline, and inference claims.
 
@@ -22,6 +24,27 @@ IndexedDB, with saved drafts and evaluated workflow/schema changes. Its
 acceptance test is preservation of user tasks through a category migration,
 reload, and further editing with networking disabled. The implementation and
 test record are tracked alongside [the task workspace guide](browser-tasks.md).
+
+## Relation to the long-term North Star
+
+The A–G roadmap proves application and habitat mechanisms: durable state,
+captured explanations, typed changes, revision compatibility, offline work and
+explicit activation. It does not yet prove that a population of procedures
+improves later work or that a transferred procedure deserves authority in a
+different habitat.
+
+After the current join, the next roadmap horizons are:
+
+| Horizon | Purpose | Required evidence |
+| --- | --- | --- |
+| Single-habitat ecology | Compose reusable procedures and roles, retain alternatives, and account for population-wide work | Held-out cumulative-construction improvement at comparable total resources, including maintenance cost |
+| Federated habitats | Exchange typed work and evidence through Habitat Link | Two-habitat handoff, duplicate/lost-ack/revocation recovery, offline verification and receiving-side evaluation |
+| Established ecology | Preserve institutional capability across agent and model replacement | Longitudinal work showing useful transfer, recovery, human control and lower repeated-work cost |
+
+These are dependency gates rather than calendar promises. Current browser,
+cloud and consumer evidence remains scoped to the stage and platform that
+produced it. Synthetic fixtures, A/A instrumentation and deterministic demos do
+not establish live conversion improvement or general autonomous evolution.
 
 ## Dependency and ownership graph
 
