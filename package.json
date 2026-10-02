@@ -104,6 +104,7 @@
     "check": "bun run typecheck && bun run lint && bun run test && bun run docs:check && bun run build:site",
     "docs:diagrams": "bun scripts/docs-diagrams.ts",
     "docs:check": "bun scripts/docs-diagrams.ts --check",
+    "inference:status": "bun scripts/inference-status.ts",
     "build:site": "bun site/build.ts",
     "generate:icons": "bun site/generate-icons.ts",
     "cli": "bun cli.ts",

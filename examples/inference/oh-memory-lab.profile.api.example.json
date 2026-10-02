@@ -1,0 +1,28 @@
+{
+  "protocol": "oh-memory-lab-api.v1",
+  "transport": "direct-api",
+  "readerProfile": "gemini-3-8-flash-algal-reader",
+  "judgeProfile": "grok-4-7-algal-judge",
+  "judgeProtocol": "development-only typed judgment; low reasoning; no automatic retry",
+  "api": {
+    "budgetPath": "/absolute/private/oh-memory-lab/budget.json",
+    "reader": {
+      "id": "gemini-3-8-flash-algal-reader",
+      "model": "gemini-3.8-flash",
+      "keyEnv": "VERTEX_API_KEY",
+      "maximumOutput": 4096
+    },
+    "judge": {
+      "id": "grok-4-7-algal-judge",
+      "model": "grok-4.7",
+      "keyEnv": "XAI_API_KEY",
+      "maximumOutput": 2048
+    }
+  },
+  "devData": "/absolute/private/verified-development/dataset-selected.json",
+  "devContexts": {
+    "development": "/absolute/private/verified-development/contexts.jsonl"
+  },
+  "scorerTemplates": "/absolute/private/released-scorer/templates.json",
+  "paidSpend": "one explicit combined budget.json ledger for qualification, readers and judges"
+}
