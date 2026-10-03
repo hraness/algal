@@ -855,6 +855,141 @@ The architecture should be revised if any of these fail:
 A failed target is useful evidence. It should produce a changed target,
 architectural simplification or explicit non-goal, not silent benchmark removal.
 
+## Robustness, coverage, and hill-climbing strategy
+
+The architecture above needs an explicit assurance contract for the cases where
+an actor, host, provider, or candidate behavior is under pressure. This section
+turns the north star into a testable improvement discipline. It supplements the
+runtime scorecard and phase exit gates; it does not turn current mechanisms or
+demos into evidence of cumulative capability.
+
+### Three execution lanes
+
+A mature ALGAL workload has three speeds:
+
+1. **Hot path:** deterministic routing, validation, and bounded state updates run
+   for every event.
+2. **Warm path:** durable queues, timers, retries, typed decisions, and
+   replayable effects handle work that needs continuity.
+3. **Cold path:** a model is requested for ambiguity, novelty, repair, or a
+   proposed procedure change.
+
+The model is an explicit effect requested by a program. It is not the default
+scheduler or control plane. Familiar work should stay on tested organisms, and
+every escalation should retain the context, budget, result, and evidence needed
+to replay or reconcile it.
+
+### Robustness is part of capability
+
+These are product invariants, not optional test features:
+
+| Invariant family | Required behavior |
+| --- | --- |
+| Representation and bounds | Every input, count, depth, byte size, expression, and effect has a declared limit. Unknown fields and invalid states fail before mutation. |
+| Deterministic execution | Pure cells produce the same result in Bun and Rust. Receipts replay bit for bit; nondeterminism enters only through recorded executor results. |
+| Authority and effects | A manifest cannot mint a capability, widen a port, or approve its own successor. Host effects are typed, idempotent where possible, and explicit about uncertain completion. |
+| Durable lifecycle | Queue delivery, suspension, retry, timer, journal, restart, and recovery preserve the committed prefix and never silently repeat an uncertain effect. |
+| Evaluation integrity | Development, selection, holdout, and frozen cases remain disjoint. Candidate cost, failures, inconclusive results, and maintenance work are retained. |
+| Portability | The reference runtime, native kernel, expression WASM target, and supported adapters agree on canonical values, rejection behavior, and evidence. |
+
+### Test coverage contract
+
+Every change to a contract or runtime seam adds the smallest fixture set that
+proves both its behavior and its refusal behavior:
+
+- each field has valid, missing, unknown, maximum, over-limit, and malformed
+  cases;
+- each state transition has success, rejection, duplicate, retry,
+  interruption, reopen, and uncertain-effect cases where that transition can
+  occur;
+- each invariant has a generated or model-checked test plus one deliberately
+  broken mutation that the test must catch;
+- each pure or serialization-heavy seam has metamorphic properties and a
+  coverage-guided fuzz corpus. Every minimized crash, hang, or unexpected
+  acceptance becomes a deterministic regression fixture;
+- each effect adapter has idempotency, timeout, partial-output, and restart
+  coverage;
+- each portable artifact has reference, native, and WASM or cross-process
+  differential checks where the target exists; and
+- every promoted procedure has a held-out task family, a negative control, and
+  a record of its candidate and evaluation budget.
+
+The evidence ladder is ordered by feedback time:
+
+1. static checks, format, type, and contract validation;
+2. deterministic unit and example tests;
+3. property, metamorphic, coverage-guided fuzz, and bounded state-machine tests
+   over generated inputs and event orderings;
+4. differential replay across runtimes and canonical serialization checks;
+5. mutation tests for invariants, authority boundaries, and recovery paths;
+6. fault injection for crashes, duplicate or reordered delivery, provider
+   timeouts, and partial writes; and
+7. held-out capability evaluation, independent verification, and bounded soak
+   or live qualification on the supported host.
+
+The fast tiers run on every change. The expensive tiers run when their inputs
+change and before promotion. A timeout, missing coverage, or unexplained flaky
+result is unresolved, not a pass. Retain the minimized failing input, exact
+source and toolchain identity, and the receipt needed to replay it.
+
+### Lexicographic hill climbing
+
+Each improvement is a small, reviewable experiment against a frozen incumbent.
+The proposer may change only the declared scope. It cannot change the
+evaluator, limits, permissions, holdout, or promotion rule as part of the same
+candidate.
+
+1. **State a falsifiable hypothesis.** Name the workload, expected benefit,
+   risk, budget, and invariant that could disprove it.
+2. **Freeze the comparison.** Pin the incumbent digest, model and tool
+   versions, task splits, random seeds, environment, and total work budget.
+3. **Generate bounded variants.** Prefer a small change to routing, procedure
+   composition, representation, or resource policy. Keep weaker ancestors when
+   they expose useful components or diversity.
+4. **Run hard gates.** Reject candidates that fail parsing, bounds, authority,
+   replay, parity, invariant, mutation, or fault checks. No quality score can
+   compensate for a safety or evidence failure.
+5. **Evaluate in stages.** Use development cases for search, a frozen selection
+   set for promotion, and an untouched holdout for confirmation. Include a
+   no-change control and a fresh-synthesis control with comparable budgets.
+6. **Score eligible candidates.** First require every hard gate. Then compare
+   held-out quality and worst-slice quality, followed by fault survival and
+   recovery, total cost and latency, and finally artifact size and maintenance
+   complexity. Reject a candidate that wins on average by creating a severe tail
+   regression.
+7. **Retain the lineage.** Store the candidate, receipt, tests, costs, failures,
+   inconclusive cases, and counterexamples. Keep a small diverse archive rather
+   than only the current winner.
+8. **Promote and observe.** Activate only through host policy, canary live
+   effects, compare retained holdout behavior, and make rollback a tested
+   transition. Feed observed failures into the next hypothesis.
+
+The improvement value is positive only when later savings and quality gains
+repay candidate generation, evaluation, maintenance, and operational risk.
+Repeatedly selecting a higher score on the same visible cases is search, not
+evidence of cumulative capability.
+
+The objective is lexicographic: preserve authority, privacy, durability, and
+protocol invariants first; improve successful work under adversarial schedules
+second; reduce latency, memory, and storage third; and reduce code and
+operating complexity fourth. No average score overrides a hard gate.
+
+### Maturity gates
+
+| Gate | Evidence required |
+| --- | --- |
+| Contract | Versioned input/output, identity, bounds, effects, and rejection fixtures |
+| Replay | Deterministic receipt and restart recovery from the committed prefix |
+| Parity | Cross-runtime or cross-target canonical and failure behavior |
+| Adversarial | Generated schedules, mutation controls, malformed inputs, and fault injection |
+| Capability | Independent held-out improvement at comparable total budget |
+| Operation | Bounded soak, resource measurements, rollback, and an owner-visible recovery path |
+
+The current system is strongest at contract, replay, and evidence layers. The
+north-star work should deepen adversarial and capability layers before widening
+the language or adding a faster backend. A JIT or eBPF experiment stays behind
+the same event-loop contract and cannot be a correctness shortcut.
+
 ## Delivery records
 
 This plan should be accompanied by:
