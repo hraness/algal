@@ -56,7 +56,7 @@ The documentation below renders the repository's own `docs/` and `spec/v1/` Mark
 
 - [Repository](https://github.com/hraness/algal)
 - [Native VM and release artifacts](https://algal.computer/docs/native-release/)
-- [Try the native VM](https://algal.computer/docs/native-workbench/)
+- [Try the native VM](https://algal.computer/docs/native-workbench/): leave a program waiting for your approval, approve it in a later command, and run its crash tests; the decision is a fixture, not a model
 - [The ALGAL process VM](https://algal.computer/docs/vm/)
 - [Readable source language](https://algal.computer/docs/source-language/)
 - [Software that accumulates competence](https://algal.computer/docs/vision/): the bet behind ALGAL, the four properties that make it testable, and the evidence that would settle it
@@ -69,6 +69,7 @@ The documentation below renders the repository's own `docs/` and `spec/v1/` Mark
 - [Habitats and self-reproduction](https://algal.computer/docs/habitats/)
 - [Civilization loop](https://algal.computer/docs/civilization/)
 - [Use cases and adoption boundary](https://algal.computer/docs/use-cases/)
+- [ALGAL as an agent tool](https://algal.computer/docs/agent-tool/): generate an OpenAI or Anthropic tool definition, call a program from Claude Code or Codex through the shell, and verify its receipt offline
 - [Organism manifest spec](https://algal.computer/docs/spec/organism/)
 - [Expression spec](https://algal.computer/docs/spec/expr/)
 - [Foundry spec](https://algal.computer/docs/spec/foundry/)
