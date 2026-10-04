@@ -284,9 +284,9 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
-      - run: cargo build --locked
+      - run: cargo build --all-targets --locked
       - name: Package the debug binary for the parity jobs
-        run: tar -C target/debug -cf "$RUNNER_TEMP/algal-debug.tar" algal
+        run: tar -C target/debug -cf "$RUNNER_TEMP/algal-debug.tar" algal examples/context_history_parity
       - uses: actions/upload-artifact@v7
         with:
           name: algal-debug-linux
@@ -410,6 +410,7 @@ jobs:
         run: mkdir -p target/debug && tar -C target/debug -xf "$RUNNER_TEMP/algal-debug.tar" && target/debug/algal --version
       - run: bun scripts/native-parity.ts
       - run: bun scripts/agent-local-context-parity.ts
+      - run: bun scripts/context-history-parity.ts
       - run: bun scripts/process-parity.ts
       - run: bun scripts/store-parity.ts
       - run: bun scripts/cli-parity.ts

@@ -15,6 +15,13 @@ The [lineage comparison](lineage.md#invariant-driven-agent-execution) records
 the supplied Geoffrey Huntley image as design input, not implementation evidence.
 All implementation phases below are **Not started**.
 
+Source-preserving memory is a separate, related increment. The optional
+[progressive reader](../spec/v1/context-history.md) is implemented in Bun and Rust
+and leaves existing context behavior unchanged by default. Recorded summary
+maintenance, consumer adapters, and longitudinal evaluation remain planned.
+The [scoped-memory direction](north-star.md#scoped-memory-and-progressive-context)
+tracks that work; its reader foundation does not complete C0 through C4 below.
+
 ## Constraints
 
 - Models propose typed programs or transitions. The host owns permissions,

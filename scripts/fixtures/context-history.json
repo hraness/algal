@@ -1,0 +1,231 @@
+{
+  "sources": [
+    {"schema":"algal.agent-context-entry.v1","kind":"instruction","label":"policy","text":"Keep original evidence.\n"},
+    {"schema":"algal.agent-context-entry.v1","kind":"input","label":"project","text":"東京 é"},
+    {"schema":"algal.agent-context-entry.v1","kind":"observation","label":"decision","text":"Use the cache.\u0000"},
+    {"schema":"algal.agent-context-entry.v1","kind":"output","label":"correction","text":"Keep the source instead."}
+  ],
+  "snapshot": {
+    "schema":"algal.agent-context.v1",
+    "entries":[
+      {"digest":"sha256:9d4d4f807e79cca927e5d3dd2e0079e9d2796ab49481fecc35aa7b0ad11cf380","bytes":24},
+      {"digest":"sha256:5e4e669b793b048d837c372a56a82f8337f7dcbc2da8fe36d8d0dd3103a856d5","bytes":9},
+      {"digest":"sha256:69a94a7eae0830d033709c1597117d11eeb44292dd39580551ff1080a9e785b2","bytes":15},
+      {"digest":"sha256:9f265b5e8204af358b5f243b0ea21724b556075f971c2276cd0f4aafc54048fd","bytes":24}
+    ]
+  },
+  "selection": {
+    "request":"sha256:21dd9a019104b3786c038c4666c7d7c2ee2b759d7a299d58a3358611be1795cb",
+    "digest":"sha256:53bb352311c4429f3ebce82d6985ac777d3200ad9e57e31ca356593ea02e54bb"
+  },
+  "records": {
+    "history": {
+      "schema":"algal.context-history.v1",
+      "scope":{"application":"sample","realm":"local","workspace":"project","task":"decision","audience":"owner"},
+      "head":"sha256:a2b64840f20b295071c116f34f0ca4ea16c7a8480740eff569acbe68dce97331",
+      "snapshot":"sha256:06469a0915ba287f1061bc32b49269dc38aabd1319509445ca28ce68045587c6",
+      "epoch":0,"firstPosition":0,
+      "leaves":[
+        {"position":0,"event":"sha256:3ee2c63a5532b5a4830864bf82639b9aa4a88a58a9514c566ee74a33f96ff8f9","sourceIndex":0,"entry":"sha256:9d4d4f807e79cca927e5d3dd2e0079e9d2796ab49481fecc35aa7b0ad11cf380","bytes":24,"kind":"instruction","label":"policy"},
+        {"position":1,"event":"sha256:2dd9ffca745682ada2593d8fe1daf673f76375c02578fed557e46025ef643b0c","sourceIndex":1,"entry":"sha256:5e4e669b793b048d837c372a56a82f8337f7dcbc2da8fe36d8d0dd3103a856d5","bytes":9,"kind":"input","label":"project"},
+        {"position":2,"event":"sha256:4da21170281ce49117a882412e56e2c5b5b4dfd6774b5ff41bac101e7541300a","sourceIndex":2,"entry":"sha256:69a94a7eae0830d033709c1597117d11eeb44292dd39580551ff1080a9e785b2","bytes":15,"kind":"observation","label":"decision"},
+        {"position":3,"event":"sha256:3d255390cfa4340152827731e10581a2d1aba6571453a18b01a44ac6ae44e08e","sourceIndex":3,"entry":"sha256:9f265b5e8204af358b5f243b0ea21724b556075f971c2276cd0f4aafc54048fd","bytes":24,"kind":"output","label":"correction"}
+      ]
+    },
+    "leaf0":{"schema":"algal.context-history-node.v1","history":"sha256:c4aba58d6c16a6ab7e582f82643078d7c8129e46f256b2d0a23e2c713e236d4f","start":0,"end":1,"sources":"sha256:8215074631d5d767c2edd92646e3921cfeeb6c5cb629f917c466c2a1b0bcbfaa"},
+    "leaf1":{"schema":"algal.context-history-node.v1","history":"sha256:c4aba58d6c16a6ab7e582f82643078d7c8129e46f256b2d0a23e2c713e236d4f","start":1,"end":2,"sources":"sha256:fc86735cacfb1a3e89648fa7913048b00130aa89d40af0f9068f4530e1d3dbe2"},
+    "leaf2":{"schema":"algal.context-history-node.v1","history":"sha256:c4aba58d6c16a6ab7e582f82643078d7c8129e46f256b2d0a23e2c713e236d4f","start":2,"end":3,"sources":"sha256:d7fc57e78a4e30331a1957ce9d0f3146e33657f4c6f721d4a402a8b35e53941b"},
+    "leaf3":{"schema":"algal.context-history-node.v1","history":"sha256:c4aba58d6c16a6ab7e582f82643078d7c8129e46f256b2d0a23e2c713e236d4f","start":3,"end":4,"sources":"sha256:cbca1ad78cdab85aa4195ab5e6d30dcab53c2a7eacc9a63db297e73073dd133a"},
+    "left":{"schema":"algal.context-history-node.v1","history":"sha256:c4aba58d6c16a6ab7e582f82643078d7c8129e46f256b2d0a23e2c713e236d4f","start":0,"end":2,"sources":"sha256:f140926de35fa5af45c00743c7cb6e49664786250c430a5855828c370539456a"},
+    "right":{"schema":"algal.context-history-node.v1","history":"sha256:c4aba58d6c16a6ab7e582f82643078d7c8129e46f256b2d0a23e2c713e236d4f","start":2,"end":4,"sources":"sha256:43e976d118a3d07d0b26d632668aaba86c702becf43cceafbda1ddcb8a411bfa"},
+    "root":{"schema":"algal.context-history-node.v1","history":"sha256:c4aba58d6c16a6ab7e582f82643078d7c8129e46f256b2d0a23e2c713e236d4f","start":0,"end":4,"sources":"sha256:699cca20005f84bccc19d1a5893dd73bae6a6cccb84d7e7a250bba77d37f7138"},
+    "summaryLeft":{
+      "schema":"algal.context-history-summary.v1","history":"sha256:c4aba58d6c16a6ab7e582f82643078d7c8129e46f256b2d0a23e2c713e236d4f",
+      "node":"sha256:ba9b5c3eb7bd973a4dc7c0e5ad5e38689b442b706b49aaccd3991389b5a1d6c9","sources":"sha256:f140926de35fa5af45c00743c7cb6e49664786250c430a5855828c370539456a",
+      "children":[],"prompt":"sha256:f8d499d82c4af6ca39e8e592d1339383d03990cc6c05a4d54b2d11b257d5977f","policy":"sha256:51e60e8cf86cd3c7eb63a0f38b9f499d272d379d224ffea62cb37892e800895f","summarizer":"sha256:ab91c1d8297cd2c8317dbdd9aecfcdb71660da69161d0d7b425c9420e485c0f2",
+      "body":"Keep evidence for 東京."
+    },
+    "summaryRight":{
+      "schema":"algal.context-history-summary.v1","history":"sha256:c4aba58d6c16a6ab7e582f82643078d7c8129e46f256b2d0a23e2c713e236d4f",
+      "node":"sha256:fa69f77a2701b585db31c1b8821fcf04468fbe19245c7a576375d34a1ce1e01c","sources":"sha256:43e976d118a3d07d0b26d632668aaba86c702becf43cceafbda1ddcb8a411bfa",
+      "children":[],"prompt":"sha256:f8d499d82c4af6ca39e8e592d1339383d03990cc6c05a4d54b2d11b257d5977f","policy":"sha256:51e60e8cf86cd3c7eb63a0f38b9f499d272d379d224ffea62cb37892e800895f","summarizer":"sha256:ab91c1d8297cd2c8317dbdd9aecfcdb71660da69161d0d7b425c9420e485c0f2",
+      "body":"A later correction keeps the source."
+    },
+    "summaryRoot":{
+      "schema":"algal.context-history-summary.v1","history":"sha256:c4aba58d6c16a6ab7e582f82643078d7c8129e46f256b2d0a23e2c713e236d4f",
+      "node":"sha256:c2d53d26d53e50ebd394de591171527e620b6dc1bedeb480ec367b638a7cf295","sources":"sha256:699cca20005f84bccc19d1a5893dd73bae6a6cccb84d7e7a250bba77d37f7138",
+      "children":["sha256:2d33ffbc4d2f6f2125a51f10df75f9cd071d49711e2920f374c68136024a9776","sha256:8102ef3b9f61052ba0714f42830725dc2e6b7de6eb0c24d1ca4d7e32ff675b7a"],
+      "prompt":"sha256:f8d499d82c4af6ca39e8e592d1339383d03990cc6c05a4d54b2d11b257d5977f","policy":"sha256:51e60e8cf86cd3c7eb63a0f38b9f499d272d379d224ffea62cb37892e800895f","summarizer":"sha256:ab91c1d8297cd2c8317dbdd9aecfcdb71660da69161d0d7b425c9420e485c0f2",
+      "body":"Keep original evidence; the cache decision was corrected."
+    },
+    "request":{
+      "schema":"algal.context-history-summary-request.v1","history":"sha256:c4aba58d6c16a6ab7e582f82643078d7c8129e46f256b2d0a23e2c713e236d4f",
+      "node":"sha256:c2d53d26d53e50ebd394de591171527e620b6dc1bedeb480ec367b638a7cf295","sources":"sha256:699cca20005f84bccc19d1a5893dd73bae6a6cccb84d7e7a250bba77d37f7138",
+      "children":["sha256:2d33ffbc4d2f6f2125a51f10df75f9cd071d49711e2920f374c68136024a9776","sha256:8102ef3b9f61052ba0714f42830725dc2e6b7de6eb0c24d1ca4d7e32ff675b7a"],
+      "prompt":"sha256:f8d499d82c4af6ca39e8e592d1339383d03990cc6c05a4d54b2d11b257d5977f","policy":"sha256:51e60e8cf86cd3c7eb63a0f38b9f499d272d379d224ffea62cb37892e800895f","summarizer":"sha256:ab91c1d8297cd2c8317dbdd9aecfcdb71660da69161d0d7b425c9420e485c0f2",
+      "generation":0,"limits":{"maxSourceBytes":65536,"maxInputBytes":131072,"maxOutputBytes":32768,"maxWork":4096,"maxModelCalls":1}
+    },
+    "result":{
+      "schema":"algal.context-history-summary-result.v1","request":"sha256:e74bf0e0e9149ba8f871247ac432532f62872b4aebd63505ef704e14dbf4e11f","status":"complete",
+      "summary":"sha256:71ce21f217460c55d1fd27be4af01627588245561b73db84517456b234893b65","receipt":"sha256:c12445ab281adbf0de4bce834df24d258ab74628e5bd608bcfc0f226ec7f19ed",
+      "usage":{"inputBytes":1206,"outputBytes":775,"work":100,"modelCalls":0},"reason":null
+    },
+    "generation":{
+      "schema":"algal.context-history-generation.v1","history":"sha256:c4aba58d6c16a6ab7e582f82643078d7c8129e46f256b2d0a23e2c713e236d4f","generation":0,
+      "prompt":"sha256:f8d499d82c4af6ca39e8e592d1339383d03990cc6c05a4d54b2d11b257d5977f","policy":"sha256:51e60e8cf86cd3c7eb63a0f38b9f499d272d379d224ffea62cb37892e800895f","summarizer":"sha256:ab91c1d8297cd2c8317dbdd9aecfcdb71660da69161d0d7b425c9420e485c0f2",
+      "summaries":[
+        {"node":"sha256:ba9b5c3eb7bd973a4dc7c0e5ad5e38689b442b706b49aaccd3991389b5a1d6c9","summary":"sha256:2d33ffbc4d2f6f2125a51f10df75f9cd071d49711e2920f374c68136024a9776"},
+        {"node":"sha256:fa69f77a2701b585db31c1b8821fcf04468fbe19245c7a576375d34a1ce1e01c","summary":"sha256:8102ef3b9f61052ba0714f42830725dc2e6b7de6eb0c24d1ca4d7e32ff675b7a"},
+        {"node":"sha256:c2d53d26d53e50ebd394de591171527e620b6dc1bedeb480ec367b638a7cf295","summary":"sha256:71ce21f217460c55d1fd27be4af01627588245561b73db84517456b234893b65"}
+      ]
+    },
+    "cursor":{
+      "schema":"algal.context-history-cursor.v1",
+      "binding":{"history":"sha256:c4aba58d6c16a6ab7e582f82643078d7c8129e46f256b2d0a23e2c713e236d4f","head":"sha256:a2b64840f20b295071c116f34f0ca4ea16c7a8480740eff569acbe68dce97331","audience":"owner","generation":"sha256:d973138436bbd25d2083fecf0e7e693abd294ef974c4c58419a122b9e3982e94","policy":"sha256:51e60e8cf86cd3c7eb63a0f38b9f499d272d379d224ffea62cb37892e800895f","budget":"sha256:9c0879a8626fec229b90b7a43b9048863ca9ae55fa3771da61613360048fc989","selection":"sha256:002fa07bfafa284743c489f7d306e2052057307be84e6c2886b03551aa5e454e"},"offset":2
+    },
+    "view":{
+      "schema":"algal.context-history-view.v1",
+      "binding":{"history":"sha256:c4aba58d6c16a6ab7e582f82643078d7c8129e46f256b2d0a23e2c713e236d4f","head":"sha256:a2b64840f20b295071c116f34f0ca4ea16c7a8480740eff569acbe68dce97331","audience":"owner","generation":"sha256:d973138436bbd25d2083fecf0e7e693abd294ef974c4c58419a122b9e3982e94","policy":"sha256:51e60e8cf86cd3c7eb63a0f38b9f499d272d379d224ffea62cb37892e800895f","budget":"sha256:9c0879a8626fec229b90b7a43b9048863ca9ae55fa3771da61613360048fc989","selection":"sha256:002fa07bfafa284743c489f7d306e2052057307be84e6c2886b03551aa5e454e"},
+      "limits":{"maxReadBytes":65536,"maxScanBytes":8388608,"maxOutputBytes":65536,"maxNodes":2047,"maxWork":67108864,"maxSearchResults":128},"start":0,"end":2,
+      "items":[{"kind":"summary","node":"sha256:ba9b5c3eb7bd973a4dc7c0e5ad5e38689b442b706b49aaccd3991389b5a1d6c9","start":0,"end":2,"summary":"sha256:2d33ffbc4d2f6f2125a51f10df75f9cd071d49711e2920f374c68136024a9776","text":"Keep evidence for 東京."}],
+      "status":"incomplete","reason":"page-limit",
+      "cursor":{"schema":"algal.context-history-cursor.v1","binding":{"history":"sha256:c4aba58d6c16a6ab7e582f82643078d7c8129e46f256b2d0a23e2c713e236d4f","head":"sha256:a2b64840f20b295071c116f34f0ca4ea16c7a8480740eff569acbe68dce97331","audience":"owner","generation":"sha256:d973138436bbd25d2083fecf0e7e693abd294ef974c4c58419a122b9e3982e94","policy":"sha256:51e60e8cf86cd3c7eb63a0f38b9f499d272d379d224ffea62cb37892e800895f","budget":"sha256:9c0879a8626fec229b90b7a43b9048863ca9ae55fa3771da61613360048fc989","selection":"sha256:002fa07bfafa284743c489f7d306e2052057307be84e6c2886b03551aa5e454e"},"offset":2},
+      "usage":{"readBytes":25,"scanBytes":0,"nodeVisits":1,"work":100}
+    },
+    "tail":{
+      "schema":"algal.context-history-view.v1",
+      "binding":{"history":"sha256:c4aba58d6c16a6ab7e582f82643078d7c8129e46f256b2d0a23e2c713e236d4f","head":"sha256:a2b64840f20b295071c116f34f0ca4ea16c7a8480740eff569acbe68dce97331","audience":"owner","generation":"sha256:d973138436bbd25d2083fecf0e7e693abd294ef974c4c58419a122b9e3982e94","policy":"sha256:51e60e8cf86cd3c7eb63a0f38b9f499d272d379d224ffea62cb37892e800895f","budget":"sha256:9c0879a8626fec229b90b7a43b9048863ca9ae55fa3771da61613360048fc989","selection":"sha256:002fa07bfafa284743c489f7d306e2052057307be84e6c2886b03551aa5e454e"},
+      "limits":{"maxReadBytes":65536,"maxScanBytes":8388608,"maxOutputBytes":65536,"maxNodes":2047,"maxWork":67108864,"maxSearchResults":128},"start":2,"end":4,
+      "items":[{"kind":"summary","node":"sha256:fa69f77a2701b585db31c1b8821fcf04468fbe19245c7a576375d34a1ce1e01c","start":2,"end":4,"summary":"sha256:8102ef3b9f61052ba0714f42830725dc2e6b7de6eb0c24d1ca4d7e32ff675b7a","text":"A later correction keeps the source."}],
+      "status":"complete","reason":null,"cursor":null,"usage":{"readBytes":36,"scanBytes":0,"nodeVisits":1,"work":100}
+    },
+    "grant":{"schema":"algal.context-history-grant.v1","history":"sha256:c4aba58d6c16a6ab7e582f82643078d7c8129e46f256b2d0a23e2c713e236d4f","scope":{"application":"sample","realm":"local","workspace":"project","task":"decision","audience":"owner"},"indices":[0,1,2,3],"limits":{"maxReadBytes":65536,"maxScanBytes":8388608,"maxOutputBytes":65536,"maxNodes":2047,"maxWork":67108864,"maxSearchResults":128}},
+    "access":{"schema":"algal.context-history-access.v1","history":"sha256:c4aba58d6c16a6ab7e582f82643078d7c8129e46f256b2d0a23e2c713e236d4f","scope":{"application":"sample","realm":"local","workspace":"project","task":"decision","audience":"owner"},"head":"sha256:a2b64840f20b295071c116f34f0ca4ea16c7a8480740eff569acbe68dce97331","snapshot":"sha256:06469a0915ba287f1061bc32b49269dc38aabd1319509445ca28ce68045587c6","revision":0,"indices":[0,1,2,3],"state":"active"},
+    "ref":{"schema":"algal.context-history-ref.v1","history":"sha256:c4aba58d6c16a6ab7e582f82643078d7c8129e46f256b2d0a23e2c713e236d4f","capability":"cap:context-history:sha256:68fb1f5ae28be4a2f3c160b47f41509e9fc833282b40f11d797d2d36f19f3d66"},
+    "queue":{"schema":"algal.context-history-queue.v1","history":"sha256:c4aba58d6c16a6ab7e582f82643078d7c8129e46f256b2d0a23e2c713e236d4f","generation":0,"requests":["sha256:e74bf0e0e9149ba8f871247ac432532f62872b4aebd63505ef704e14dbf4e11f"],"batchSize":1,"work":4096}
+  },
+  "digests": {
+    "history":"sha256:c4aba58d6c16a6ab7e582f82643078d7c8129e46f256b2d0a23e2c713e236d4f",
+    "leaf0":"sha256:227e34e2a656afa13d5bb5f3d626de34903ba87c1b5d42e178a368e0d055c364",
+    "leaf1":"sha256:655d826cde9e0396b7b1ff12ee575db034672d0b6034e89cebe161bc39db3110",
+    "leaf2":"sha256:2dafb2d58c0f1d4b1f588d79d73f97ff28d56fa881a7451065dd94df65288cc9",
+    "leaf3":"sha256:feb801809b291c3f5edcaa5bd8001d987a235b656ac261bbb85b9e31e22725e5",
+    "left":"sha256:ba9b5c3eb7bd973a4dc7c0e5ad5e38689b442b706b49aaccd3991389b5a1d6c9",
+    "right":"sha256:fa69f77a2701b585db31c1b8821fcf04468fbe19245c7a576375d34a1ce1e01c",
+    "root":"sha256:c2d53d26d53e50ebd394de591171527e620b6dc1bedeb480ec367b638a7cf295",
+    "summaryLeft":"sha256:2d33ffbc4d2f6f2125a51f10df75f9cd071d49711e2920f374c68136024a9776",
+    "summaryRight":"sha256:8102ef3b9f61052ba0714f42830725dc2e6b7de6eb0c24d1ca4d7e32ff675b7a",
+    "summaryRoot":"sha256:71ce21f217460c55d1fd27be4af01627588245561b73db84517456b234893b65",
+    "request":"sha256:e74bf0e0e9149ba8f871247ac432532f62872b4aebd63505ef704e14dbf4e11f",
+    "result":"sha256:9df2b750a11cb6ddcca0598683ddd21a5ed7794d75a5cc6aaafa24ab44f520a7",
+    "generation":"sha256:d973138436bbd25d2083fecf0e7e693abd294ef974c4c58419a122b9e3982e94",
+    "cursor":"sha256:d96e58ab347420081f3b9ecf8bca0013d9fd7ae687875d343053e1438e590dba",
+    "view":"sha256:5eabe24b1a6474009e193ae6cd46896f0362c2f7232ef275404b0cc29d7bc7b9",
+    "tail":"sha256:547d231202043361f0af9b2222e0cc12b2894de5893a6a46664a59f83dcb8449",
+    "grant":"sha256:68fb1f5ae28be4a2f3c160b47f41509e9fc833282b40f11d797d2d36f19f3d66",
+    "access":"sha256:22ac23a0b798d16ff2b00e960fc531c399f1436d4d8e737b893c8148b93a798a",
+    "ref":"sha256:70e86b0e98e408eb36c6a0df723909e96906de9b50b4bff67d9ccea24dc8ff3c",
+    "queue":"sha256:ae135a26f657b77cff169287446506e2dc21895f8a863c5ec00a580e48dbecd7"
+  },
+  "validViews": [
+    {"base":"tail","digest":"sha256:71a01b2aa45a32c26526290d5acef5b021ffc4ae21b64adda9fcc930dd672b4b","changes":[
+      {"path":["start"],"value":0},
+      {"path":["items"],"value":[{"kind":"exact","node":"sha256:227e34e2a656afa13d5bb5f3d626de34903ba87c1b5d42e178a368e0d055c364","start":0,"end":1,"text":"Keep original evidence.\n"},{"kind":"exact","node":"sha256:655d826cde9e0396b7b1ff12ee575db034672d0b6034e89cebe161bc39db3110","start":1,"end":2,"text":"東京 é"},{"kind":"summary","node":"sha256:fa69f77a2701b585db31c1b8821fcf04468fbe19245c7a576375d34a1ce1e01c","start":2,"end":4,"summary":"sha256:8102ef3b9f61052ba0714f42830725dc2e6b7de6eb0c24d1ca4d7e32ff675b7a","text":"A later correction keeps the source."}]},
+      {"path":["usage"],"value":{"readBytes":69,"scanBytes":0,"nodeVisits":3,"work":100}}
+    ]},
+    {"base":"tail","digest":"sha256:2bac2d07300262750c7fb15514f33d05bfffa2aff7ffe34363d2fca50ff008c7","changes":[
+      {"path":["start"],"value":0},{"path":["items"],"value":[{"kind":"pending","node":"sha256:c2d53d26d53e50ebd394de591171527e620b6dc1bedeb480ec367b638a7cf295","start":0,"end":4,"reason":"missing-summary"}]},
+      {"path":["status"],"value":"incomplete"},{"path":["reason"],"value":"missing-summary"},{"path":["usage"],"value":{"readBytes":0,"scanBytes":0,"nodeVisits":1,"work":1}}
+    ]},
+    {"base":"tail","digest":"sha256:1d0257007d1d937295358ce7f0d1a352234a0cb883517c2f4c45e9faee1971d4","changes":[
+      {"path":["start"],"value":0},{"path":["items"],"value":[{"kind":"unavailable","node":"sha256:c2d53d26d53e50ebd394de591171527e620b6dc1bedeb480ec367b638a7cf295","start":0,"end":4,"reason":"source-unavailable"}]},
+      {"path":["status"],"value":"unavailable"},{"path":["reason"],"value":"source-unavailable"},{"path":["usage"],"value":{"readBytes":0,"scanBytes":0,"nodeVisits":1,"work":1}}
+    ]},
+    {"base":"view","digest":"sha256:a173a782f0fea98646c831a316bb8b45f330560930346035ba3e9ec6fa103397","changes":[
+      {"path":["end"],"value":0},{"path":["items"],"value":[]},{"path":["status"],"value":"budget-exhausted"},{"path":["reason"],"value":"protected-overflow"},{"path":["cursor","offset"],"value":0},{"path":["usage"],"value":{"readBytes":0,"scanBytes":0,"nodeVisits":0,"work":0}}
+    ]}
+  ],
+  "validResults": [
+    {"base":"result","digest":"sha256:a80ccca030c9258636ee82ce98b5281b56b7a02003b4e4f10898a45835a9cfa7","changes":[{"path":["status"],"value":"failed"},{"path":["summary"],"value":null},{"path":["receipt"],"value":null},{"path":["reason"],"value":"failed"},{"path":["usage"],"value":{"inputBytes":0,"outputBytes":0,"work":0,"modelCalls":0}}]},
+    {"base":"result","digest":"sha256:2f9997cabc5ff98f7e22991f25f94c488c3c8f14228d450e426b80e5a64fe850","changes":[{"path":["status"],"value":"cancelled"},{"path":["summary"],"value":null},{"path":["receipt"],"value":null},{"path":["reason"],"value":"cancelled"},{"path":["usage"],"value":{"inputBytes":0,"outputBytes":0,"work":0,"modelCalls":0}}]},
+    {"base":"result","digest":"sha256:e51caf2ee8ef982672b4a5a8a64110a19280b655c96b824f63344d3eb67a3f49","changes":[{"path":["status"],"value":"uncertain"},{"path":["summary"],"value":null},{"path":["receipt"],"value":null},{"path":["reason"],"value":"uncertain"},{"path":["usage"],"value":{"inputBytes":0,"outputBytes":0,"work":0,"modelCalls":1}}]},
+    {"base":"result","digest":"sha256:c78903bc6a1514e8feb70569290a136f120b3e5429150f6dfd22cab94a14b359","changes":[{"path":["status"],"value":"budget-exhausted"},{"path":["summary"],"value":null},{"path":["receipt"],"value":null},{"path":["reason"],"value":"budget-exhausted"},{"path":["usage"],"value":{"inputBytes":0,"outputBytes":0,"work":0,"modelCalls":0}}]}
+  ],
+  "refusals": [
+    {"record":"history","path":["scope","audience"],"value":""},
+    {"record":"history","path":["scope","realm"],"value":"OTHER"},
+    {"record":"history","path":["leaves",1,"event"],"value":"sha256:3ee2c63a5532b5a4830864bf82639b9aa4a88a58a9514c566ee74a33f96ff8f9"},
+    {"record":"history","path":["leaves",1,"sourceIndex"],"value":0},
+    {"record":"history","path":["leaves",1,"position"],"value":3},
+    {"record":"history","path":["leaves",1,"entry"],"value":"sha256:9d4d4f807e79cca927e5d3dd2e0079e9d2796ab49481fecc35aa7b0ad11cf380"},
+    {"record":"root","path":["start"],"value":1},
+    {"record":"root","path":["end"],"value":3},
+    {"record":"root","path":["sources"],"value":"sha256:ABC"},
+    {"record":"summaryRoot","path":["children"],"value":["sha256:2d33ffbc4d2f6f2125a51f10df75f9cd071d49711e2920f374c68136024a9776"]},
+    {"record":"summaryRoot","path":["children"],"value":["sha256:2d33ffbc4d2f6f2125a51f10df75f9cd071d49711e2920f374c68136024a9776","sha256:2d33ffbc4d2f6f2125a51f10df75f9cd071d49711e2920f374c68136024a9776"]},
+    {"record":"summaryRoot","path":["claims"],"value":[]},
+    {"record":"request","path":["limits","maxModelCalls"],"value":2},
+    {"record":"result","path":["summary"],"value":null},
+    {"record":"result","path":["receipt"],"value":null},
+    {"record":"result","path":["status"],"value":"uncertain"},
+    {"record":"generation","path":["summaries",1,"node"],"value":"sha256:ba9b5c3eb7bd973a4dc7c0e5ad5e38689b442b706b49aaccd3991389b5a1d6c9"},
+    {"record":"view","path":["cursor","offset"],"value":3},
+    {"record":"view","path":["items",0,"end"],"value":3},
+    {"record":"tail","path":["status"],"value":"unavailable"},
+    {"record":"grant","path":["indices"],"value":[1,0]},
+    {"record":"grant","path":["indices"],"value":[0,0]},
+    {"record":"access","path":["state"],"value":"trusted"},
+    {"record":"ref","path":["capability"],"value":"cap:agent-context:sha256:68fb1f5ae28be4a2f3c160b47f41509e9fc833282b40f11d797d2d36f19f3d66"},
+    {"record":"queue","path":["requests"],"value":["sha256:e74bf0e0e9149ba8f871247ac432532f62872b4aebd63505ef704e14dbf4e11f","sha256:e74bf0e0e9149ba8f871247ac432532f62872b4aebd63505ef704e14dbf4e11f"]}
+  ],
+  "numericBounds": [
+    {"record":"history","path":["epoch"],"max":127},
+    {"record":"history","path":["firstPosition"],"max":131072},
+    {"record":"history","path":["leaves",0,"position"],"max":131071},
+    {"record":"history","path":["leaves",0,"sourceIndex"],"max":1023},
+    {"record":"history","path":["leaves",0,"bytes"],"max":1048576},
+    {"record":"root","path":["start"],"max":1023},
+    {"record":"root","path":["end"],"max":1024},
+    {"record":"request","path":["generation"],"max":4095},
+    {"record":"request","path":["limits","maxSourceBytes"],"max":65536},
+    {"record":"request","path":["limits","maxInputBytes"],"max":131072},
+    {"record":"request","path":["limits","maxOutputBytes"],"max":32768},
+    {"record":"request","path":["limits","maxWork"],"max":16777216},
+    {"record":"request","path":["limits","maxModelCalls"],"max":1},
+    {"record":"result","path":["usage","inputBytes"],"max":131072},
+    {"record":"result","path":["usage","outputBytes"],"max":32768},
+    {"record":"result","path":["usage","work"],"max":16777216},
+    {"record":"result","path":["usage","modelCalls"],"max":1},
+    {"record":"generation","path":["generation"],"max":4095},
+    {"record":"cursor","path":["offset"],"max":1024},
+    {"record":"view","path":["start"],"max":1024},
+    {"record":"view","path":["end"],"max":1024},
+    {"record":"view","path":["limits","maxReadBytes"],"max":65536},
+    {"record":"view","path":["limits","maxScanBytes"],"max":8388608},
+    {"record":"view","path":["limits","maxOutputBytes"],"max":65536},
+    {"record":"view","path":["limits","maxNodes"],"max":2047},
+    {"record":"view","path":["limits","maxWork"],"max":67108864},
+    {"record":"view","path":["limits","maxSearchResults"],"max":128},
+    {"record":"view","path":["usage","readBytes"],"max":65536},
+    {"record":"view","path":["usage","scanBytes"],"max":8388608},
+    {"record":"view","path":["usage","nodeVisits"],"max":2047},
+    {"record":"view","path":["usage","work"],"max":67108864},
+    {"record":"grant","path":["indices",0],"max":1023},
+    {"record":"access","path":["revision"],"max":4095},
+    {"record":"access","path":["indices",0],"max":1023},
+    {"record":"queue","path":["generation"],"max":4095},
+    {"record":"queue","path":["batchSize"],"max":32},
+    {"record":"queue","path":["work"],"max":67108864}
+  ],
+  "accessRefusals": [
+    {"name":"revoked-summary","node":"root","path":["state"],"value":"revoked"},
+    {"name":"revoked-metadata","node":null,"path":["state"],"value":"revoked"},
+    {"name":"missing-descendant","node":"root","path":["indices"],"value":[0,1]},
+    {"name":"narrow-metadata","node":null,"path":["indices"],"value":[0,1]},
+    {"name":"cross-audience","node":"left","path":["scope","audience"],"value":"child"},
+    {"name":"cross-history","node":"root","path":["history"],"value":"sha256:a2b64840f20b295071c116f34f0ca4ea16c7a8480740eff569acbe68dce97331"},
+    {"name":"changed-head","node":"root","path":["head"],"value":"sha256:06469a0915ba287f1061bc32b49269dc38aabd1319509445ca28ce68045587c6"},
+    {"name":"changed-snapshot","node":"root","path":["snapshot"],"value":"sha256:a2b64840f20b295071c116f34f0ca4ea16c7a8480740eff569acbe68dce97331"},
+    {"name":"unavailable-retention","node":"root","path":["state"],"value":"unavailable"}
+  ]
+}

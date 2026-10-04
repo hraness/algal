@@ -913,3 +913,6 @@ export type {
 export * from "./src/agent-context";
 export * from "./src/agent-context-tools";
 export * from "./src/agent-context-runtime";
+export * from "./src/context-history-contract";
+export * from "./src/context-history-access";
+export * from "./src/context-history";

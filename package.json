@@ -71,7 +71,10 @@
     "./habitat-link-authority": "./src/habitat-link-authority.ts",
     "./habitat-link-host": "./src/habitat-link-host.ts",
     "./habitat-link-socket": "./src/habitat-link-socket.ts",
-    "./agent-context-runtime": "./src/agent-context-runtime.ts"
+    "./agent-context-runtime": "./src/agent-context-runtime.ts",
+    "./context-history-contract": "./src/context-history-contract.ts",
+    "./context-history-access": "./src/context-history-access.ts",
+    "./context-history": "./src/context-history.ts"
   },
   "bin": {
     "algal": "./cli.ts"
@@ -100,6 +103,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p site/tsconfig.json && tsc --noEmit -p site/tsconfig.inference-worker.json",
     "lint": "eslint .",
     "test": "bun test --timeout 20000",
+    "test:context-history-parity": "bun scripts/context-history-parity.ts",
     "check:hf": "python3 -B hf/stage.py && python3 -B hf/test_stage.py",
     "check": "bun run typecheck && bun run lint && bun run test && bun run docs:check && bun run build:site",
     "docs:diagrams": "bun scripts/docs-diagrams.ts",
