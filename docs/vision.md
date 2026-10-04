@@ -138,11 +138,13 @@ evidence and controlled adoption, not self-modification without limits.
 
 ## The north-star loop
 
-The intended loop has five connected stages:
+The intended loop has six connected stages:
 
 1. **Declare a responsibility.** State the required inputs, maintained
-   outputs, continuity triggers, limits, capabilities, failure states, and
-   postconditions. A maintained output is a claim about what the program
+   outputs, continuity triggers, limits, capabilities, failure states, safety
+   invariants, and completion predicates. Safety invariants must hold at every
+   transition; completion predicates determine when the responsibility has
+   been fulfilled. A maintained output is a claim about what the program
    records and supports; it is not an assertion that the outside world is
    true.
 2. **Compile the composition.** Resolve dependencies into a typed, bounded,
@@ -163,6 +165,12 @@ The intended loop has five connected stages:
    into later work only when the total result earns that reuse, and activate a
    successor through the existing proposal, evaluation, and host-admission
    path.
+6. **Carry improvements into consumers.** Update affected applications,
+   adapters, libraries, and agent workflows with the contracts and procedures
+   they use. Test each integration against its own responsibilities, preserve
+   its data and effect history, and record what has been adopted and what
+   remains outstanding. Reuse across applications is part of the work, not an
+   assumed consequence of publishing the runtime.
 
 The loop gives ALGAL a place for OpenProse-style responsibilities and Pi-style
 durable tasks without making either product's surface area the goal. The
@@ -211,6 +219,56 @@ retrieval and query-directed expansion on later unseen work, including correctio
 and old counterevidence. Measure the cost of maintaining the summaries and whether
 the reader uses the recovered evidence correctly. Saving more history or showing
 fewer bytes does not establish that the environment has become more capable.
+
+## State-driven progress and recovery
+
+The intended operating loop observes current state, proposes one limited
+transition, checks it against the observed version and permissions, records
+its outcome, and observes again. Several typed cells may implement that
+transition; the model does not receive permission to evaluate arbitrary host
+code. A stale proposal must be reconsidered before any new effect starts.
+
+Completion follows owner-declared predicates over recorded state and the
+required external evidence. A model's final answer, a passing safety check,
+or an exhausted budget cannot alone establish that the task is complete.
+Missing evidence, unresolved children, and uncertain effects remain visible.
+The model may propose a procedure but cannot redefine the task's goals,
+checks, permissions, or runtime through that proposal.
+
+A rejected pure change leaves the accepted state in place. Recovery from work
+that may have affected the outside world requires its recorded effect
+identity and independent reconciliation. A snapshot cannot unsend a message,
+undo a provider operation, erase current user data, or prove a process exited.
+The existing [strategy restoration contract](../spec/v1/application.md#explicit-pure-strategy-restoration)
+creates a forward revision while preserving current memory and effect history.
+
+Failures should retain a limited set of permitted next actions, tied to the
+failed step and current state, until an authorized participant selects one or
+stops the task. This extends the continuity model; it does not promise a
+shipped general-purpose restart interface or a permanent UI.
+
+## Portfolio adoption
+
+ALGAL's north-star work includes maintaining every ALGAL consumer throughout
+the Hraness portfolio. The integration owner is responsible for finding
+consumers, coordinating their changes, and following adoption through their
+own checks and deployment requirements. Consumer owners retain responsibility
+for product behavior, permissions, data, and acceptance criteria.
+
+That responsibility covers direct and transitive package dependencies, native
+embeddings, browser and cloud adapters, CLI callers, installed agent workflows,
+and stored or scheduled programs. A dependency update is incomplete when the
+integration still uses an incompatible contract or misses the intended
+behavior. Existing compatible workloads need only the mechanisms their
+responsibility requires; every consumer need not become an autonomous agent.
+
+Core publication and portfolio adoption are separate outcomes. An artifact
+may ship through its normal checks while consumer changes proceed in stages.
+An unsupported integration, an unknown consumer, or an owner-assigned
+compatibility hold remains outstanding adoption work. Historical experiments
+keep their original programs and evidence; new experiments use new identities.
+The [execution plan](north-star-execution.md) defines the census, migration
+sequence, and evidence required to call a portfolio update complete.
 
 ## Selection rules for new mechanisms
 
