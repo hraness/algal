@@ -102,6 +102,18 @@ that proposal locally; denial completes without publication. Repeating the same
 decision preserves the completed VM head and creates no second publication.
 For your own small JSON evidence, add `--evidence ./checks.json` to `demo start`.
 
+To check the result, reopen `report.html`: approval creates
+`my-review/publication.json`; denial creates no publication. Keep the review
+directory at its original path while it is active. Follow the
+[native workbench guide](docs/native-workbench.md) to export and verify its
+history without the original store.
+
+If `algal` is not found after installing, add `~/.local/bin` to your `PATH`
+or use `~/.local/bin/algal`. If the output directory already exists, inspect
+that review or choose a new directory rather than deleting saved work.
+If approval rejects a proposal or action, copy the command from that review's
+report; do not substitute a digest from another run.
+
 `crash-laboratory/proof.json` records actual owned-process SIGKILL tests: recover
 an interrupted read without repeating the completed prefix write, and stop
 before redispatching an uncertain write. It also checks approval, denial, and
