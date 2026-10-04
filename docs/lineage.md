@@ -59,6 +59,23 @@ successors that the host may admit. Lisp supplies a precedent for the
 material; ALGAL supplies a discipline for generating and selecting things made
 from it.
 
+### Invariant-driven agent execution
+
+[Geoffrey Huntley's illustrated agent loop](https://x.com/geoffreyhuntley/status/2106616065728172267?s=46)
+provides a compact design comparison. The supplied image, reviewed on
+2026-10-04, shows an agent observing again before proposing one form, checking
+protected state, taking a snapshot, and retaining a restart choice. This
+comparison concerns the image; the surrounding post and thread were not
+verified.
+
+ALGAL can use that operating pattern while keeping proposals as typed data
+and permissions in the host. Safety invariants constrain each transition;
+separate completion predicates determine whether a responsibility is done.
+Restoring local computation does not reverse external effects. ALGAL's
+recorded effects and forward-only strategy restoration supply the distinction
+that an effectful consumer needs. The [execution plan](north-star-execution.md)
+turns these requirements into integration and recovery work.
+
 ## Emacs: using the tool and extending it are one activity
 
 Emacs has a Lisp interpreter at its core. You add commands in Emacs Lisp and
