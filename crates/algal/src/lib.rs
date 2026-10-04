@@ -27,6 +27,8 @@ pub mod canonical;
 pub mod capabilities;
 pub mod civilization;
 pub mod context;
+pub mod context_history_access;
+pub mod context_history_contract;
 pub mod contract;
 pub mod credentials;
 pub mod decisions;
