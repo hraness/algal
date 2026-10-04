@@ -1,43 +1,29 @@
 # Software that accumulates competence
 
-> **North Star:** ALGAL makes useful intelligence accumulate as durable, inspectable, composable capability in the environments where work happens.
->
-> **Runtime direction:** ALGAL is a portable, evidence-carrying actor runtime for evolving software habitats. See [the detailed north-star plan](north-star.md) for the measurable language, runtime, cloud and consumer roadmap.
+ALGAL's north star is a durable, inspectable loop that turns successful
+judgment into reusable capability. A computer should be able to declare what a
+responsibility requires and maintains, compile that declaration into bounded
+typed programs, run it through explicit continuity and recovery, evaluate what
+happened, and retain only improvements that remain useful under later work.
 
-ALGAL is built on one bet: a computer can accumulate tested ways of acting,
-not only produce new answers or new code. A model proposes a bounded,
-executable procedure. The procedure is checked, measured on declared cases,
-kept with its evidence, composed into larger procedures, and revised under
-explicit rules. Useful work should leave the computer with a more capable,
-reusable way of doing the next piece of work.
+This is the original bet in a more operational form: a computer can accumulate
+tested ways of acting, not only produce new answers or new code. A model
+proposes a bounded, executable procedure. The procedure is checked, measured
+on declared cases, kept with its evidence, composed into larger procedures,
+and revised under explicit rules. Useful work should leave the computer with a
+more capable, reusable way of doing the next piece of work.
 
 This page states that bet, names the mechanisms in ALGAL that make it
 testable, describes what it could make possible, and says what evidence would
 be needed before anyone calls it proven. The
 [lineage page](lineage.md) places the idea among the systems it resembles.
 
-## From organisms to ecologies
-
-An ALGAL **organism** is a bounded, typed, content-addressed executable
-procedure. An **agent** is a durable process using organisms, memory, tools and
-judgment. A **habitat** is the governed environment that stores, schedules,
-evaluates and permits those processes. An **ecology** is a population of agents
-and organisms that coordinate, reuse procedures, retain evidence and change
-under policy. A **civilization** is a federation of habitats connected by
-explicit trust, capability and evidence protocols.
-
-This hierarchy gives the larger thesis a concrete shape. A model can propose a
-procedure, but the habitat decides what may run, what evidence is retained and
-which revision can become active. An ecology becomes useful when it preserves
-capability across tasks, agents and model replacements. A civilization extends
-that continuity across separately governed habitats; it is not a shared mutable
-runtime or a global process registry.
-
-The hierarchy is a direction for the project, not a claim that ALGAL has already
-demonstrated an established ecology. Current work proves pieces of the habitat
-and application machinery. The cumulative-skill experiment remains the test of
-whether retaining and composing procedures improves later work under comparable
-models, tools and total budgets.
+The responsibility and continuity language is informed by [OpenProse's
+contract-authoring and compile/run ideas](https://prose.md/) and by [Pi
+Durable's task, checkpoint, and storage
+interfaces](https://earendil.com/posts/pi-durable/).
+Those projects are references for design choices, not dependencies or proof
+that the ALGAL bet has been established.
 
 ## Two models of software
 
@@ -150,6 +136,95 @@ correctness of the evaluator, and interpreting a bounded manifest does not
 isolate the host's tools. The idea is structured experimentation with retained
 evidence and controlled adoption, not self-modification without limits.
 
+## The north-star loop
+
+The intended loop has five connected stages:
+
+1. **Declare a responsibility.** State the required inputs, maintained
+   outputs, continuity triggers, limits, capabilities, failure states, and
+   postconditions. A maintained output is a claim about what the program
+   records and supports; it is not an assertion that the outside world is
+   true.
+2. **Compile the composition.** Resolve dependencies into a typed, bounded,
+   content-addressed graph. Compilation may use model judgment to suggest a
+   binding, but admission must resolve ambiguity, types, capabilities, cycles,
+   and budgets deterministically. The running system follows the admitted
+   graph rather than asking a model to rediscover its wiring.
+3. **Run with continuity.** Host events, approvals, timers, and messages wake
+   durable processes. Each meaningful step leaves a checkpoint or effect
+   receipt so a restart resumes from retained state and does not silently
+   repeat an uncertain external mutation.
+4. **Reconcile changed evidence.** Compare fingerprints of the facts and
+   maintained outputs a responsibility depends on. Unchanged inputs can reuse
+   retained work; changed, stale, conflicting, or unknown inputs propagate
+   bounded reconsideration and preserve the earlier history.
+5. **Retain and improve.** Keep a procedure, its interface, evidence,
+   evaluation conditions, cost, and required authority together. Compose it
+   into later work only when the total result earns that reuse, and activate a
+   successor through the existing proposal, evaluation, and host-admission
+   path.
+
+The loop gives ALGAL a place for OpenProse-style responsibilities and Pi-style
+durable tasks without making either product's surface area the goal. The
+responsibility layer remains a source layer above ALGAL organisms and
+application contracts; it does not create a second runtime or bypass their
+evidence and admission rules. The durable process is valuable when it
+preserves a useful method, the compiler is valuable when it removes repeated
+ambiguity, and the reconciler is valuable when it reduces repeated work while
+keeping uncertainty visible.
+
+Durable work should use an explicit ownership tree. A process records its
+parent, owner, foreground or background policy, cancellation propagation,
+required child joins, and the checkpoints and effect receipts that establish
+progress. A checkpoint names the logical step, input and capability digests,
+the last settled effect, and the next resumable step. It also states whether
+replay is safe, forbidden, or requires reconciliation. This lets ALGAL resume
+useful work without silently repeating an uncertain external mutation.
+
+Storage backends are replaceable only behind one conformance contract. Local
+stores and future transports must agree on append, replay, bounded paging,
+duplicate delivery, body conflicts, crash recovery, retention, and uncertain
+settlement. A backend earns admission through those receipts and a migration
+record that preserves ownership, event identity, and effect history.
+
+## Selection rules for new mechanisms
+
+The north star is a filter, not a mandate to add every attractive orchestration
+feature. A proposed primitive earns a place only when it passes these tests:
+
+- **It improves later work.** Measure held-out success, correction effort,
+  total cost, and maintenance cost against a fresh-synthesis or conventional
+  baseline. Persistence, composition, and a larger library are not benefits by
+  themselves.
+- **It has a durable owner and evidence.** Requirements, maintained outputs,
+  task checkpoints, forks, extensions, and subscriptions must resolve to
+  content-addressed records with explicit authority and recovery behavior.
+- **It preserves ALGAL's truth boundaries.** A receipt proves replayable
+  internal consistency. It does not prove an external fact, grant a
+  capability, or turn a plausible model judgment into a verified claim.
+- **It fails closed under ambiguity.** Semantic matching can propose edges, but
+  an unresolved or multiply matched dependency remains a diagnostic. Runtime
+  wakeups, retries, and task ownership cannot silently widen authority.
+- **It earns its operational cost.** A reconciler needs measured savings over
+  full recomputation; a durable task layer needs fewer lost or duplicated
+  logical actions; a package needs evidence and evals that make reuse cheaper
+  than rediscovery.
+
+These rules make the adoption boundary explicit. Responsibility contracts,
+compile-time topology, fingerprinted reconciliation, task ownership,
+checkpointing, portable storage, and packages that carry their evaluations are
+strong candidates. Hosted execution, multiplayer presentation, mutable
+extension replacement, and prose-only runtime wiring stay outside the north
+star until they clear the same evidence bar. Pi's terminal UI and
+provider-specific choices are useful product references, but they are not
+north-star requirements.
+
+The kernel may support signed, capability-scoped extension manifests for
+adapters and evaluators when their owner, digest, interface, and evaluation
+record are explicit. Ambient mutable extensions, provider-specific UI, and
+live document collaboration do not belong in the north star merely because
+they make a product surface more convenient.
+
 ## The interesting outcome is cumulative construction
 
 A population that keeps generating slightly different workflows is not
@@ -216,14 +291,6 @@ retained, and governed. Human engineering does not disappear. More of its
 effort moves toward defining interfaces, constraints, evaluators, and the
 conditions for accepting change.
 
-An established ecology would add continuity around those procedures. It would
-have durable institutional memory, stable role and interface conventions,
-portable capabilities with evidence, recovery when an agent or model is
-replaced, and clear ways for people to inspect, pause, revoke and revise its
-behavior. The useful question is not how many agents it contains, but whether
-coordination leaves the environment more capable at later work without making
-authority or failure opaque.
-
 ## What would justify the claim
 
 A demo in which a program generates another program is too weak. The
@@ -253,6 +320,13 @@ The experiment to run is a cumulative-skill test:
    capabilities. Count the cost of generating candidates, running evaluations,
    and maintaining the library, not only the final execution cost.
 
+The study should also isolate the proposed mechanisms. Compare declared
+responsibilities and compiled topology with an equally bounded manually wired
+version; fingerprinted reconciliation with full recomputation; and
+checkpointed, owned tasks with restart-from-scratch execution. These are
+useful only if they reduce total work or improve recovery and later-task
+quality while preserving the same authority and evidence boundaries.
+
 For repeated tasks the condition is that future execution savings exceed the
 combined search, evaluation, and maintenance cost, at comparable quality and
 acceptable risk.
@@ -273,13 +347,6 @@ Three failure modes deserve specific investigation:
 A compelling result would read: under a fixed model and a controlled budget,
 retaining and composing earlier procedures measurably improves performance on
 later unseen tasks, and the improvement survives independent evaluation.
-
-An ecology-level result would need additional evidence: retained procedures
-must transfer between related contexts, compose into later capabilities, survive
-agent or model replacement, and reduce repeated work or human correction after
-the cost of search, evaluation and maintenance is counted. Federation adds a
-separate gate: a receiving habitat must verify provenance and evidence locally
-before it grants a transferred procedure any authority.
 
 ## Status and limits
 
