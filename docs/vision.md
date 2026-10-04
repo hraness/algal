@@ -187,6 +187,28 @@ duplicate delivery, body conflicts, crash recovery, retention, and uncertain
 settlement. A backend earns admission through those receipts and a migration
 record that preserves ownership, event identity, and effect history.
 
+### Remembered evidence must remain recoverable
+
+Continuity also requires a way to recover the evidence behind an earlier decision.
+A useful procedure may depend on an old constraint or a failed attempt that no
+longer fits the working prompt. ALGAL's [exact-context readers](agent-context.md)
+can retrieve admitted original text under a host-selected grant. A proposed
+multiresolution view would add recent detail and expandable older summaries over
+those sources, following the [source-preserving memory design reference](lineage.md#source-preserving-memory).
+
+The original remains distinct from the summary, and remembered history remains
+distinct from current support. An older model answer cannot become a logical fact
+because it appears in an overview. A changed source, withdrawn observation, or
+narrower permission must change what the agent may rely on or read, even when a
+cached summary survives. Summary creation and repair use the same total work
+allowance as the task; they are not hidden computation on every startup.
+
+This is another part of the bet to test. Compare chronological views with existing
+retrieval and query-directed expansion on later unseen work, including corrections
+and old counterevidence. Measure the cost of maintaining the summaries and whether
+the reader uses the recovered evidence correctly. Saving more history or showing
+fewer bytes does not establish that the environment has become more capable.
+
 ## Selection rules for new mechanisms
 
 The north star is a filter, not a mandate to add every attractive orchestration

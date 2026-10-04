@@ -282,6 +282,67 @@ The existing broker remains an executor boundary. XCB and Ghostget remain
 credential-owning provider/tool systems. The habitat never receives upstream
 provider credentials.
 
+### Scoped memory and progressive context
+
+Memory direction updated 2026-10-04. An agent should resume with a small view of
+its permitted history and recover original evidence when an older decision
+matters. The reference is [OptMem's source/cache split and progressive detail](lineage.md#source-preserving-memory),
+not its machine-wide identity or mandatory compression loop.
+
+ALGAL already has two distinct mechanisms: [exact agent-context snapshots](agent-context.md)
+with host-selected read grants, and application memory with admitted observations,
+current applicability checks, withdrawals, and archived selections. The next step
+is an optional multiresolution view, meaning different levels of detail over the
+same captured sources. It must reuse those mechanisms rather than replace them
+with a second memory store.
+
+The proposed reading contract should provide:
+
+- a captured source head, explicit audience/selection, and logical event order;
+- protected task constraints and unresolved items, recent exact entries, older
+  summary ranges, and a query-relevant overlay within one encoded context budget;
+- expansion to children and original leaves, plus bounded exact source search
+  independent of summary quality;
+- continuations tied to the source and summary generations, so concurrent appends
+  or cache rebuilds cannot shift an earlier page;
+- explicit incomplete, unavailable, pending, and insufficient-budget outcomes;
+- source-preserving corrections and derivative invalidation without reviving
+  archived or withdrawn observations as current facts.
+
+Source digests identify bytes, not permission. A summary is readable only when
+all contributing sources remain inside the reader's grant. A broad summary cannot
+be delegated to a narrower child by hiding its citations. Current authorization,
+source availability, and logical applicability remain separate checks.
+
+Summary creation is a cold-path agent effect, not a scheduler operation or a
+side effect of reading. Its job identity includes the source/child digests, scope,
+policy, and summarizer configuration. Record its output and work in the existing
+process/effect machinery; replay reuses the recorded result. Queue depth, merge
+bursts, rebuild work, and aggregate inference all need limits. A missing summary
+must permit a bounded raw view or expose a pending range without compulsory
+model work before the user's task can proceed.
+
+A summary is a navigation aid, not an admitted logical observation or proof of
+world state. Protect original user intent, retain the original admitted text, and
+measure recursive-summary omissions against those originals. Reading allowance
+and storage retention are separate policies. Hierarchical views do not enlarge
+application memory, archive, context-snapshot, or process capacity limits.
+
+The first implementation is a local deterministic view with scripted summaries,
+Bun/Rust vectors, scoped exact reads, and a rollover/correction consumer fixture.
+It does not wait for the actor language, cloud habitat, or federation work. Oh can
+adapt the reading rules over its own store without an ALGAL runtime dependency;
+xcb remains the provider/process owner, and Sponge remains the research-policy
+owner. Consumers adopt immutable artifacts independently.
+
+Measure startup and expansion bytes/latency, exact source recovery, stale-belief
+persistence, correction effort, maintenance backlog, and total work on later unseen
+tasks. Compare recent raw, lexical, tree-only, and query-directed views under the
+same reader and total allowance, including summary creation and failures. Default
+activation requires fresh quality/correction evidence and a tested rollback;
+source recovery and a smaller prompt alone do not establish cumulative competence
+or provider savings.
+
 ## The live-world dimension
 
 The supplied `world` sketch adds an important dimension to the BEAM comparison:

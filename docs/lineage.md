@@ -154,6 +154,22 @@ generates a new script is ordinary. A system whose retained methods make later
 toolmaking more effective is a much stronger proposition, and a hypothesis to
 demonstrate rather than a consequence of making programs self-referential.
 
+## Source-preserving memory
+
+[OptMem](https://github.com/VictorTaelin/OptMem) separates an append-only log of
+agent-selected notes from a rebuildable binary summary tree. Its
+[implementation at `1fb164c`](https://github.com/VictorTaelin/OptMem/blob/1fb164cf39028047781f72ac3bb1e5a691c1dcb0/memo)
+allocates finer detail near the present, expands ranges into children, searches
+original notes, and fixes a captured log prefix across startup pages. These are
+references for an optional ALGAL reading view over retained original sources.
+
+Its [tests at the same revision](https://github.com/VictorTaelin/OptMem/blob/1fb164cf39028047781f72ac3bb1e5a691c1dcb0/test.py)
+exercise structural and storage invariants with a fake compressor. They do not
+establish semantic recall or task improvement. ALGAL's source selection, read
+grants, recorded model effects, applicability checks, and total budgets remain
+its own requirements; the OptMem installer and global instruction block are not
+part of the integration.
+
 ## Research precedents
 
 The claim that nobody has thought of evolving AI programs would not survive
